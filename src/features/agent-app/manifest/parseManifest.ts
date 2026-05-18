@@ -29,6 +29,7 @@ const DEFAULT_VALUE_LAYER_FIELDS: readonly ManifestValueLayerField[] = [
   { source: "boundaries", target: "boundary" },
   { source: "integrations", target: "integrations" },
   { source: "operations", target: "operations" },
+  { source: "install", target: "install" },
   { source: "readiness", target: "readiness" },
   { source: "health", target: "health" },
 ];

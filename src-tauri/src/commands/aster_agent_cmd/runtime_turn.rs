@@ -7192,6 +7192,49 @@ fn extract_content_factory_workspace_patch_from_value(
     }
 }
 
+fn repair_unescaped_string_quotes(value: &str) -> String {
+    let chars = value.chars().collect::<Vec<_>>();
+    let mut output = String::new();
+    let mut in_string = false;
+    let mut escaped = false;
+
+    for (index, character) in chars.iter().enumerate() {
+        if escaped {
+            output.push(*character);
+            escaped = false;
+            continue;
+        }
+        if in_string && *character == '\\' {
+            output.push(*character);
+            escaped = true;
+            continue;
+        }
+        if *character == '"' {
+            if !in_string {
+                in_string = true;
+                output.push(*character);
+                continue;
+            }
+            let next = chars
+                .iter()
+                .skip(index + 1)
+                .find(|candidate| !candidate.is_whitespace())
+                .copied();
+            if next.is_none_or(|next| matches!(next, ',' | '}' | ']' | ':')) {
+                in_string = false;
+                output.push(*character);
+            } else {
+                output.push('\\');
+                output.push(*character);
+            }
+            continue;
+        }
+        output.push(*character);
+    }
+
+    output
+}
+
 fn parse_json_candidate(candidate: &str) -> Option<serde_json::Value> {
     let candidate = candidate.trim();
     if candidate.is_empty() {
@@ -7200,12 +7243,28 @@ fn parse_json_candidate(candidate: &str) -> Option<serde_json::Value> {
     serde_json::from_str::<serde_json::Value>(candidate)
         .ok()
         .or_else(|| {
+            let repaired = repair_unescaped_string_quotes(candidate);
+            if repaired == candidate {
+                return None;
+            }
+            serde_json::from_str::<serde_json::Value>(repaired.as_str()).ok()
+        })
+        .or_else(|| {
             let start = candidate.find('{')?;
             let end = candidate.rfind('}')?;
             if start >= end {
                 return None;
             }
-            serde_json::from_str::<serde_json::Value>(&candidate[start..=end]).ok()
+            let sliced = &candidate[start..=end];
+            serde_json::from_str::<serde_json::Value>(sliced)
+                .ok()
+                .or_else(|| {
+                    let repaired = repair_unescaped_string_quotes(sliced);
+                    if repaired == sliced {
+                        return None;
+                    }
+                    serde_json::from_str::<serde_json::Value>(repaired.as_str()).ok()
+                })
         })
 }
 
@@ -11662,6 +11721,54 @@ mod tests {
         assert_eq!(patch.get("projectId"), Some(&json!("active-project-1")));
         assert_eq!(patch.get("artifactKind"), Some(&json!("scene_table")));
         assert_eq!(patch.pointer("/sceneTable/actualCount"), Some(&json!(120)));
+    }
+
+    #[test]
+    fn agent_app_output_contract_should_repair_unescaped_quotes_in_model_patch() {
+        let metadata = json!({
+            "contentFactory": {
+                "projectId": "active-project-1"
+            },
+            "harness": {
+                "agent_app_runtime": {
+                    "app_id": "content-factory-app",
+                    "task_id": "task-1",
+                    "task_kind": "content_factory.copy.generate"
+                },
+                "agent_app_runtime_output_contract": {
+                    "artifact_kind": "content_batch",
+                    "artifact_metadata_kind": "content_factory.workspace_patch"
+                }
+            }
+        });
+        let final_text = r#"```json
+{
+  "contentFactoryWorkspacePatch": {
+    "kind": "content_factory.workspace_patch",
+    "artifactKind": "content_batch",
+    "projectId": "sample_content_factory_spring",
+    "contentBatch": {
+      "items": [{
+        "id": "copy-1",
+        "title": "厨房清洁",
+        "content": "灶台实拍，突出"一擦即净"这类用户原话时仍需保留引号。"
+      }]
+    }
+  }
+}
+```"#;
+
+        let patch = build_agent_app_output_contract_workspace_patch(Some(&metadata), final_text)
+            .expect("workspace patch with unescaped quotes should be repaired");
+
+        assert_eq!(patch.get("projectId"), Some(&json!("active-project-1")));
+        assert_eq!(patch.get("artifactKind"), Some(&json!("content_batch")));
+        assert_eq!(
+            patch.pointer("/contentBatch/items/0/content"),
+            Some(&json!(
+                "灶台实拍，突出\"一擦即净\"这类用户原话时仍需保留引号。"
+            ))
+        );
     }
 
     #[test]

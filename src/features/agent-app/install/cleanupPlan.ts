@@ -45,6 +45,7 @@ export function buildCleanupPlan(params: {
   return {
     mode: "dry-run",
     appId,
+    installMode: projection.install.preferredMode,
     packageHash,
     generatedAt: params.generatedAt ?? new Date().toISOString(),
     installedStatePaths: [

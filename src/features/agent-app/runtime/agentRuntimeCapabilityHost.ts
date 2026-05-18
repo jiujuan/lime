@@ -16,6 +16,7 @@ import {
 import type { AgentRuntimeRespondActionRequest } from "@/lib/api/agentRuntime/types";
 import { getOrCreateDefaultProject } from "@/lib/api/project";
 import type {
+  AgentAppTaskLookup,
   CapabilityHost,
   LimeAgentCapability,
   LimeAppSdk,
@@ -516,6 +517,9 @@ function buildTaskRecord(
   return {
     taskId: state.taskId,
     traceId: state.traceId,
+    sessionId: state.sessionId,
+    turnId: state.turnId,
+    workspaceId: state.workspaceId,
     appId: state.appId,
     entryKey: state.entryKey,
     retryOfTaskId: state.retryOfTaskId,
@@ -565,6 +569,37 @@ function buildTaskRecord(
 
 function readRuntimeRequest(input: AgentAppTaskRequest): RuntimeAgentTaskRequest {
   return input as RuntimeAgentTaskRequest;
+}
+
+function normalizeTaskLookup(task: string | AgentAppTaskLookup): AgentAppTaskLookup {
+  return typeof task === "string" ? { taskId: task } : task;
+}
+
+function readLatestTurnId(threadRead: unknown): string | undefined {
+  if (!isRecord(threadRead)) {
+    return undefined;
+  }
+  const direct =
+    readRecordString(threadRead, "turnId") ??
+    readRecordString(threadRead, "turn_id");
+  if (direct) {
+    return direct;
+  }
+  const turns = Array.isArray(threadRead.turns) ? threadRead.turns : [];
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const turn = turns[index];
+    if (!isRecord(turn)) {
+      continue;
+    }
+    const turnId =
+      readRecordString(turn, "turnId") ??
+      readRecordString(turn, "turn_id") ??
+      readRecordString(turn, "id");
+    if (turnId) {
+      return turnId;
+    }
+  }
+  return undefined;
 }
 
 function buildRetryRequest(
@@ -654,13 +689,13 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
   private createAgentCapability(entryKey: string): LimeAgentCapability {
     return {
       startTask: (input) => this.startRuntimeTask(entryKey, input),
-      streamTask: async (taskId) => {
-        const task = await this.getRuntimeTask(taskId);
+      streamTask: async (taskLookup) => {
+        const task = await this.getRuntimeTask(entryKey, taskLookup);
         return task?.events ?? [];
       },
-      getTask: (taskId) => this.getRuntimeTask(taskId),
-      cancelTask: (taskId) => this.cancelRuntimeTask(taskId),
-      retryTask: (taskId) => this.retryRuntimeTask(entryKey, taskId),
+      getTask: (taskLookup) => this.getRuntimeTask(entryKey, taskLookup),
+      cancelTask: (taskLookup) => this.cancelRuntimeTask(taskLookup),
+      retryTask: (taskLookup) => this.retryRuntimeTask(entryKey, taskLookup),
       submitHostResponse: (input) => this.submitRuntimeHostResponse(input),
       listTasks: async () => this.getTasks({ appId: this.appId }),
     };
@@ -747,24 +782,72 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
   }
 
   private async getRuntimeTask(
-    taskId: string,
+    entryKey: string,
+    taskLookup: string | AgentAppTaskLookup,
   ): Promise<AgentAppTaskRecord | null> {
+    const lookup = normalizeTaskLookup(taskLookup);
     const state =
-      this.tasks.get(taskId) ?? this.loadPersistedRuntimeTaskState(taskId);
-    if (!state) {
+      this.tasks.get(lookup.taskId) ?? this.loadPersistedRuntimeTaskState(lookup.taskId);
+    const sessionId = state?.sessionId ?? normalizeString(lookup.sessionId);
+    if (!sessionId) {
       return null;
     }
     const snapshot = await this.api.getTask({
-      appId: state.appId,
-      taskId: state.taskId,
-      sessionId: state.sessionId,
+      appId: state?.appId ?? this.appId,
+      taskId: state?.taskId ?? lookup.taskId,
+      sessionId,
     });
-    state.latestSnapshot = snapshot;
-    this.tasks.set(state.taskId, state);
-    return buildTaskRecord(state, snapshot);
+    const nextState =
+      state ?? (await this.buildRuntimeTaskStateFromLookup(entryKey, lookup, snapshot));
+    if (!nextState.request.expectedOutput && lookup.expectedOutput !== undefined) {
+      nextState.request = {
+        ...nextState.request,
+        expectedOutput: lookup.expectedOutput,
+      };
+    }
+    nextState.latestSnapshot = snapshot;
+    this.tasks.set(nextState.taskId, nextState);
+    await this.persistRuntimeTaskState(nextState);
+    return buildTaskRecord(nextState, snapshot);
   }
 
-  private async cancelRuntimeTask(taskId: string): Promise<AgentAppTaskRecord> {
+  private async buildRuntimeTaskStateFromLookup(
+    entryKey: string,
+    lookup: AgentAppTaskLookup,
+    snapshot: AgentAppRuntimeTaskSnapshot,
+  ): Promise<RuntimeTaskState> {
+    const taskKind = normalizeString(lookup.taskKind) ?? "agent_app.task";
+    const workspaceId =
+      normalizeString(lookup.workspaceId) ??
+      normalizeString(this.workspaceId) ??
+      (await this.workspaceIdResolver());
+    return {
+      appId: snapshot.appId || this.appId,
+      appVersion: this.appVersion,
+      packageHash: this.packageHash,
+      manifestHash: this.manifestHash,
+      entryKey,
+      taskId: lookup.taskId,
+      traceId: normalizeString(lookup.traceId) ?? lookup.taskId,
+      sessionId: normalizeString(lookup.sessionId) ?? snapshot.sessionId,
+      turnId:
+        normalizeString(lookup.turnId) ??
+        readLatestTurnId(snapshot.threadRead) ??
+        "",
+      workspaceId,
+      taskKind,
+      startedAt: normalizeString(lookup.startedAt) ?? this.now(),
+      request: {
+        title: normalizeString(lookup.title) ?? "Agent App 任务",
+        taskKind,
+        input: lookup.input,
+        expectedOutput: lookup.expectedOutput,
+      },
+    };
+  }
+
+  private async cancelRuntimeTask(taskLookup: string | AgentAppTaskLookup): Promise<AgentAppTaskRecord> {
+    const taskId = normalizeTaskLookup(taskLookup).taskId;
     const state = await this.requireTask(taskId);
     await this.api.cancelTask({
       appId: state.appId,
@@ -794,8 +877,9 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
 
   private async retryRuntimeTask(
     entryKey: string,
-    taskId: string,
+    taskLookup: string | AgentAppTaskLookup,
   ): Promise<AgentAppTaskRecord> {
+    const taskId = normalizeTaskLookup(taskLookup).taskId;
     const source = await this.requireTask(taskId);
     const retryAttempt = (source.retryAttempt ?? 0) + 1;
     return this.startRuntimeTask(

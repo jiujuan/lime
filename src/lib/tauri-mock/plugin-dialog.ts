@@ -25,10 +25,11 @@ export async function open(
 ): Promise<string | string[] | null> {
   console.log("[Mock] Dialog open:", options);
 
-  // 在浏览器中返回 null（用户取消）
-  // 可以通过 prompt 来模拟用户输入
+  // 浏览器预览拿不到本机绝对目录路径；不能伪造目录，否则会让发布链路误以为已选中真实目录。
   if (options?.directory) {
-    return "/mock/path/to/directory";
+    throw new Error(
+      "Tauri native directory dialog is unavailable in browser preview.",
+    );
   }
 
   if (options?.multiple) {

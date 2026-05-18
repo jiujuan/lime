@@ -1,13 +1,20 @@
 import type {
   AgentAppHostFlags,
+  AgentAppInstallMode,
   AgentAppPackageVerificationResult,
   AgentAppProvenance,
   CapabilityRequirement,
   CapabilitySupport,
   InstalledAppPreview,
+  LimeRuntimeProfile,
+  LimeRuntimeShellKind,
   ProjectedEntry,
   ReadinessIssue,
 } from "../types";
+import {
+  runtimeProfileIssueForInstallMode,
+  summarizeRuntimeProfile,
+} from "../runtime-profile";
 import type {
   AgentAppRuntimePackageDescriptor,
   AgentAppRuntimePackageLoadResult,
@@ -75,6 +82,15 @@ export interface AgentAppPermissionPromptSetupItem {
   remediation?: string;
 }
 
+export interface AgentAppPermissionPromptRuntimeProfile {
+  runtimeId: string;
+  runtimeVersion: string;
+  shellKind: LimeRuntimeShellKind;
+  installMode: AgentAppInstallMode;
+  availableCapabilityCount: number;
+  unavailableCapabilityCount: number;
+}
+
 export interface AgentAppPermissionPromptDescriptor {
   appId: string;
   appVersion: string;
@@ -94,6 +110,7 @@ export interface AgentAppPermissionPromptDescriptor {
     | "rawTauriAllowed"
     | "nodeApiAllowed"
   >;
+  runtimeProfile?: AgentAppPermissionPromptRuntimeProfile;
   secretSlots: Array<{
     key: string;
     provider?: string;
@@ -127,6 +144,8 @@ export interface EvaluateAgentAppEntryRuntimeGuardParams {
   packageVerification?: AgentAppPackageVerificationResult;
   permissionDecision?: AgentAppPermissionDecision;
   lifecycle?: AgentAppEntryRuntimeLifecycleState;
+  installMode?: AgentAppInstallMode;
+  runtimeProfile?: LimeRuntimeProfile;
 }
 
 function toGuardIssue(issue: ReadinessIssue): AgentAppEntryRuntimeGuardIssue {
@@ -207,6 +226,37 @@ function lifecycleIssues(
     });
   }
   return issues;
+}
+
+function runtimeProfileIssues(params: {
+  runtimeProfile?: LimeRuntimeProfile;
+  installMode: AgentAppInstallMode;
+  entryKey: string;
+}): AgentAppEntryRuntimeGuardIssue[] {
+  if (!params.runtimeProfile) {
+    if (params.installMode === "in_lime") {
+      return [];
+    }
+    return [
+      {
+        code: "RUNTIME_PROFILE_MISSING",
+        severity: "blocker",
+        message: `Runtime profile is required before launching install mode ${params.installMode}.`,
+        entryKey: params.entryKey,
+        kind: "install-mode",
+        key: params.installMode,
+        required: true,
+        remediation:
+          "Resolve LimeRuntimeProfile through RuntimeProfilePort before launching this Agent App entry.",
+      },
+    ];
+  }
+
+  const issue = runtimeProfileIssueForInstallMode({
+    profile: params.runtimeProfile,
+    installMode: params.installMode,
+  });
+  return issue ? [{ ...toGuardIssue(issue), entryKey: params.entryKey }] : [];
 }
 
 function uniqueCapabilities(
@@ -306,8 +356,9 @@ function buildPromptDescriptor(params: {
   issues: AgentAppEntryRuntimeGuardIssue[];
   descriptor?: AgentAppRuntimePackageDescriptor;
   decision: AgentAppPermissionDecision;
+  runtimeProfile?: LimeRuntimeProfile;
 }): AgentAppPermissionPromptDescriptor {
-  return {
+  const prompt: AgentAppPermissionPromptDescriptor = {
     appId: params.preview.identity.appId,
     appVersion: params.preview.identity.appVersion,
     entryKey: params.entry.key,
@@ -330,6 +381,10 @@ function buildPromptDescriptor(params: {
       .filter((issue) => issue.severity === "warning")
       .map((issue) => issue.message),
   };
+  if (params.runtimeProfile) {
+    prompt.runtimeProfile = summarizeRuntimeProfile(params.runtimeProfile);
+  }
+  return prompt;
 }
 
 function operationIssues(params: {
@@ -405,6 +460,7 @@ export function evaluateAgentAppEntryRuntimeGuard(
 
   const descriptor = params.runtimeDescriptor ?? params.runtimePackageLoad?.descriptor;
   const verification = params.packageVerification ?? params.runtimePackageLoad?.verification;
+  const installMode = params.installMode ?? params.preview.projection.install.preferredMode;
   const blockers: AgentAppEntryRuntimeGuardIssue[] = [];
   const warnings: AgentAppEntryRuntimeGuardIssue[] = [];
   const packageIssue = packageVerificationIssue(verification);
@@ -412,6 +468,13 @@ export function evaluateAgentAppEntryRuntimeGuard(
     blockers.push(packageIssue);
   }
   blockers.push(...lifecycleIssues(params.lifecycle, entry.key));
+  blockers.push(
+    ...runtimeProfileIssues({
+      runtimeProfile: params.runtimeProfile,
+      installMode,
+      entryKey: entry.key,
+    }),
+  );
   blockers.push(...runtimeLoadIssues(params.runtimePackageLoad));
   blockers.push(
     ...operationIssues({
@@ -451,6 +514,7 @@ export function evaluateAgentAppEntryRuntimeGuard(
     issues: [...blockers, ...warnings],
     descriptor,
     decision,
+    runtimeProfile: params.runtimeProfile,
   });
 
   if (blockers.length > 0) {

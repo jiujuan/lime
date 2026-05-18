@@ -53,6 +53,7 @@ export const LIME_CAPABILITY_DEFINITIONS = [
       "navigate",
       "openExternal",
       "download",
+      "selectDirectory",
       "getSnapshot",
       "openAgentRun",
       "updateAgentRun",

@@ -58,6 +58,7 @@ export interface LimeHostBridgeCapabilityInvoker extends LimeCapabilityInvoker {
     openExternalHost(payload: LimeHostBridgeOpenExternalPayload): Promise<LimeCapabilityInvokeResponse<{
         opened: true;
     }>>;
+    selectDirectoryHost(payload?: LimeHostBridgeSelectDirectoryPayload, options?: LimeHostBridgeLegacyRequestOptions): Promise<LimeCapabilityInvokeResponse<LimeHostBridgeSelectDirectoryResult>>;
     downloadHost(payload: LimeHostBridgeDownloadPayload, options?: LimeHostBridgeLegacyRequestOptions): Promise<LimeCapabilityInvokeResponse<{
         downloaded: true;
     }>>;
@@ -104,6 +105,14 @@ export interface LimeHostBridgeNavigatePayload {
 }
 export interface LimeHostBridgeOpenExternalPayload {
     url: string;
+}
+export interface LimeHostBridgeSelectDirectoryPayload {
+    title?: string;
+}
+export interface LimeHostBridgeSelectDirectoryResult {
+    path: string | null;
+    cancelled: boolean;
+    message?: string;
 }
 export type LimeHostBridgeEventHandler = (payload: unknown) => void;
 export interface LimeHostBridgeCapabilitySubscribeRequest {

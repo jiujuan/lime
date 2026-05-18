@@ -812,7 +812,7 @@ export function AgentRunRenderer({
   process,
   taskId,
   t,
-  className = "flex-1 space-y-3 overflow-auto p-4",
+  className = "min-h-0 flex-1 overscroll-contain [scrollbar-gutter:stable] space-y-3 overflow-auto p-4",
   onAction,
 }: AgentRunRendererProps) {
   const projectionView = buildAgentRunProjectionViewModelFromState(run);
@@ -900,7 +900,7 @@ export function AgentRunHostDrawer({
     return (
       <button
         type="button"
-        className="absolute right-4 top-4 z-20 flex w-[min(360px,calc(100%-2rem))] items-start gap-3 rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-left shadow-xl shadow-slate-950/10 transition hover:border-emerald-300 hover:shadow-2xl hover:shadow-slate-950/15"
+        className="absolute bottom-4 right-4 z-20 flex w-[min(320px,calc(100%-2rem))] items-start gap-3 rounded-2xl border border-emerald-200 bg-white/95 px-3 py-2.5 text-left shadow-xl shadow-slate-950/10 backdrop-blur transition hover:border-emerald-300 hover:shadow-2xl hover:shadow-slate-950/15"
         data-testid="agent-app-host-agent-run-dock"
         onClick={onExpand}
         aria-label={t("agentApp.apps.runtime.agentRun.expand")}
@@ -957,7 +957,17 @@ export function AgentRunHostDrawer({
             <button
               type="button"
               className="rounded-full border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
-              onClick={onClose}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onClose();
+              }}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onClose();
+              }}
+              data-testid="agent-app-host-agent-run-close"
               aria-label={t("agentApp.apps.runtime.agentRun.close")}
             >
               <X size={16} />

@@ -2823,48 +2823,49 @@ impl ApiKeyProviderService {
         provider_id_hint: Option<&str>,
         client_type: Option<&lime_core::models::client_type::ClientType>,
     ) -> Result<Option<RuntimeProviderCredential>, String> {
-        eprintln!(
+        tracing::debug!(
             "[select_runtime_credential] 开始查找: runtime_provider_type={runtime_provider_type:?}, provider_id_hint={provider_id_hint:?}"
         );
 
         // 策略 1: 优先通过 provider_id 直接查找 (支持 deepseek, moonshot 等 60+ Provider)
         // 这些 Provider 在 API Key Provider 中有独立配置，应该优先使用
         if let Some(provider_id) = provider_id_hint {
-            eprintln!("[select_runtime_credential] 尝试按 provider_id '{provider_id}' 查找");
+            tracing::debug!("[select_runtime_credential] 尝试按 provider_id '{provider_id}' 查找");
             if let Some(cred) = self
                 .find_by_provider_id(db, provider_id, client_type)
                 .await?
             {
-                eprintln!(
+                tracing::debug!(
                     "[select_runtime_credential] 通过 provider_id '{}' 找到凭证: {:?}",
-                    provider_id, cred.name
+                    provider_id,
+                    cred.name
                 );
                 return Ok(Some(cred));
             }
-            eprintln!("[select_runtime_credential] provider_id '{provider_id}' 未找到凭证");
+            tracing::debug!("[select_runtime_credential] provider_id '{provider_id}' 未找到凭证");
         }
 
         // 策略 2: 通过类型映射查找。
         let Some(runtime_provider_type) = runtime_provider_type else {
-            eprintln!(
+            tracing::debug!(
                 "[select_runtime_credential] provider_id_hint={provider_id_hint:?} 未命中，且 Provider 类型已退役"
             );
             return Ok(None);
         };
 
         let api_type = runtime_provider_type_to_api_type(runtime_provider_type);
-        eprintln!(
+        tracing::debug!(
             "[select_runtime_credential] 尝试类型映射: {runtime_provider_type:?} -> {api_type:?}"
         );
         if let Some(cred) = self.find_by_api_type(db, runtime_provider_type, &api_type)? {
-            eprintln!(
+            tracing::debug!(
                 "[select_runtime_credential] 通过类型映射找到凭证: {:?}",
                 cred.name
             );
             return Ok(Some(cred));
         }
 
-        eprintln!(
+        tracing::debug!(
             "[select_runtime_credential] 未找到 {runtime_provider_type:?} 的运行时凭证 (provider_id_hint: {provider_id_hint:?})"
         );
         Ok(None)
@@ -2955,18 +2956,18 @@ impl ApiKeyProviderService {
 
             let provider = match provider {
                 Some(p) if p.enabled => {
-                    eprintln!(
+                    tracing::debug!(
                         "[find_by_provider_id] 找到已启用的 provider: id={}, name={}, api_host={}, type={:?}",
                         p.id, p.name, p.api_host, p.provider_type
                     );
                     p
                 }
                 Some(_p) => {
-                    eprintln!("[find_by_provider_id] provider '{provider_id}' 存在但未启用");
+                    tracing::debug!("[find_by_provider_id] provider '{provider_id}' 存在但未启用");
                     return Ok(None);
                 }
                 None => {
-                    eprintln!("[find_by_provider_id] provider '{provider_id}' 不存在");
+                    tracing::debug!("[find_by_provider_id] provider '{provider_id}' 不存在");
                     return Ok(None);
                 }
             };
@@ -2976,11 +2977,13 @@ impl ApiKeyProviderService {
                 .map_err(|e| e.to_string())?;
 
             if keys.is_empty() {
-                eprintln!("[find_by_provider_id] provider '{provider_id}' 没有启用的 API Key");
+                tracing::debug!(
+                    "[find_by_provider_id] provider '{provider_id}' 没有启用的 API Key"
+                );
                 return Ok(None);
             }
 
-            eprintln!(
+            tracing::debug!(
                 "[find_by_provider_id] provider '{}' 有 {} 个启用的 API Key",
                 provider_id,
                 keys.len()
@@ -3035,7 +3038,7 @@ impl ApiKeyProviderService {
                         .await
                     {
                         if e.contains("CLAUDE_CODE_ONLY") {
-                            eprintln!(
+                            tracing::debug!(
                                 "[find_by_provider_id] API Key {} 是 Claude Code 专用，跳过 (客户端: {:?})",
                                 candidate_key.alias.as_deref().unwrap_or(&candidate_key.id),
                                 client
@@ -3054,7 +3057,7 @@ impl ApiKeyProviderService {
         let selected_key = match selected_key {
             Some(key) => key,
             None => {
-                eprintln!(
+                tracing::debug!(
                     "[find_by_provider_id] provider '{provider_id}' 的所有 API Key 都不兼容当前客户端 ({client_type:?})"
                 );
                 return Ok(None);
@@ -3332,12 +3335,12 @@ impl ApiKeyProviderService {
             }
             _ => {
                 // OpenAI 兼容类型，优先使用 /models 端点
-                eprintln!("[TEST_CONNECTION] model_name param: {model_name:?}");
-                eprintln!(
+                tracing::debug!("[TEST_CONNECTION] model_name param: {model_name:?}");
+                tracing::debug!(
                     "[TEST_CONNECTION] provider.custom_models: {:?}",
                     provider.custom_models
                 );
-                eprintln!(
+                tracing::debug!(
                     "[TEST_CONNECTION] local_fallback_models_count: {}",
                     fallback_models.len()
                 );
@@ -3361,14 +3364,14 @@ impl ApiKeyProviderService {
                             &image_test_model,
                         )
                         .await;
-                    eprintln!("[TEST_CONNECTION] image_generation result: {image_result:?}");
+                    tracing::debug!("[TEST_CONNECTION] image_generation result: {image_result:?}");
                     image_result
                 } else {
                     let models_result = self
                         .test_openai_models_endpoint(&api_key, &provider.api_host)
                         .await;
 
-                    eprintln!("[TEST_CONNECTION] models_result: {models_result:?}");
+                    tracing::debug!("[TEST_CONNECTION] models_result: {models_result:?}");
 
                     // 如果 /models 端点失败：
                     // 1) 优先用传入的 model_name
@@ -3380,7 +3383,7 @@ impl ApiKeyProviderService {
                             &fallback_models,
                         );
 
-                        eprintln!("[TEST_CONNECTION] fallback test_model: {test_model:?}");
+                        tracing::debug!("[TEST_CONNECTION] fallback test_model: {test_model:?}");
 
                         if let Some(test_model) = test_model {
                             let chat_result = self
@@ -3390,7 +3393,9 @@ impl ApiKeyProviderService {
                                     &test_model,
                                 )
                                 .await;
-                            eprintln!("[TEST_CONNECTION] chat_completion result: {chat_result:?}");
+                            tracing::debug!(
+                                "[TEST_CONNECTION] chat_completion result: {chat_result:?}"
+                            );
                             chat_result
                         } else {
                             models_result

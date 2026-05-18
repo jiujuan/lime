@@ -17,6 +17,7 @@ import {
   compatibleAgentAppStandardVersions,
   p0HostCapabilityProfile,
 } from "./hostCapabilityProfile";
+import { checkInstallModesReadiness } from "../install-mode";
 
 function supportsManifestRuntime(manifest: NormalizedAppManifest): boolean {
   return (
@@ -476,10 +477,20 @@ export function checkReadiness(params: {
     params.projection,
     params.setup,
   );
+  const installModes = checkInstallModesReadiness({
+    install: params.manifest.install,
+    profile,
+  });
+  const preferredInstallMode = installModes.find(
+    (mode) => mode.mode === params.manifest.install.preferredMode,
+  );
   blockers.push(...cloudIssues.blockers);
   warnings.push(...cloudIssues.warnings);
   blockers.push(...setupIssues.blockers);
   warnings.push(...setupIssues.warnings);
+  if (preferredInstallMode?.status === "blocked") {
+    blockers.push(...preferredInstallMode.blockers);
+  }
 
   const packageIssue = packageVerificationIssue(params.packageVerification);
   if (packageIssue) {
@@ -598,5 +609,6 @@ export function checkReadiness(params: {
       },
     ),
     entryReadiness,
+    installModes,
   };
 }

@@ -12,8 +12,10 @@ import type {
 import {
   getAgentAppCloudCatalog,
   installLocalAgentAppPackage,
+  launchAgentAppShell,
   reviewCloudAgentAppRelease,
   reviewLocalAgentAppPackage,
+  selectAgentAppDirectory,
   selectLocalAgentAppDirectory,
   startAgentAppUiRuntime,
   stopAgentAppUiRuntime,
@@ -21,14 +23,6 @@ import {
 } from "./agentApps";
 
 const LOCAL_APP_DIR = "/tmp/lime/content-factory-app";
-
-const dialogMocks = vi.hoisted(() => ({
-  open: vi.fn(),
-}));
-
-vi.mock("@tauri-apps/plugin-dialog", () => ({
-  open: dialogMocks.open,
-}));
 
 vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
@@ -71,7 +65,6 @@ function buildCloudApp(overrides: Partial<CloudBootstrapApp> = {}): CloudBootstr
 describe("agentApps API", () => {
   beforeEach(() => {
     vi.mocked(safeInvoke).mockReset();
-    dialogMocks.open.mockReset();
     delete window.__LIME_BOOTSTRAP__;
     delete window.__LIME_OEM_CLOUD__;
     delete window.__LIME_SESSION_TOKEN__;
@@ -85,15 +78,16 @@ describe("agentApps API", () => {
   });
 
   it("选择本地 Agent App 目录时应使用系统目录选择器", async () => {
-    dialogMocks.open.mockResolvedValue(LOCAL_APP_DIR);
+    vi.mocked(safeInvoke).mockResolvedValue({
+      path: LOCAL_APP_DIR,
+      cancelled: false,
+    });
 
     await expect(
       selectLocalAgentAppDirectory({ title: "选择 Agent App 目录" }),
     ).resolves.toBe(LOCAL_APP_DIR);
-    expect(dialogMocks.open).toHaveBeenCalledWith({
-      directory: true,
-      multiple: false,
-      title: "选择 Agent App 目录",
+    expect(safeInvoke).toHaveBeenCalledWith("agent_app_select_directory", {
+      request: { title: "选择 Agent App 目录" },
     });
   });
 
@@ -702,5 +696,82 @@ describe("agentApps API", () => {
         },
       },
     );
+  });
+
+  it("Agent App 宿主目录选择网关应走 current Tauri 命令", async () => {
+    vi.mocked(safeInvoke).mockResolvedValue({
+      path: LOCAL_APP_DIR,
+      cancelled: false,
+    });
+
+    await expect(
+      selectAgentAppDirectory({ title: "选择应用目录" }),
+    ).resolves.toMatchObject({
+      path: LOCAL_APP_DIR,
+      cancelled: false,
+    });
+    expect(safeInvoke).toHaveBeenCalledWith("agent_app_select_directory", {
+      request: { title: "选择应用目录" },
+    });
+  });
+
+  it("Agent App Shell launch 网关应通过 current 命令提交 descriptor", async () => {
+    const descriptor = {
+      descriptorVersion: 1,
+      appId: "content-factory-app",
+      packageHash: PACKAGE_HASH,
+      manifestHash: MANIFEST_HASH,
+      installMode: "standalone",
+      runtimeProfile: {
+        runtimeId: "lime-runtime-local",
+        runtimeVersion: "0.8.0",
+        shellKind: "app_shell",
+        installMode: "standalone",
+      },
+      entry: {
+        entryKey: "dashboard",
+        kind: "page",
+        title: "首页",
+        route: "/dashboard",
+      },
+      isolation: {
+        packageMount: "read-only",
+        secrets: "refs-only",
+        sideEffects: "runtime-broker",
+        evidence: "runtime-provenance",
+        storageNamespace: "content-factory-app",
+      },
+      branding: {
+        name: "内容工厂",
+        windowTitle: "内容工厂",
+      },
+      packageIdentity: {
+        sourceKind: "local_folder",
+        sourceUri: LOCAL_APP_DIR,
+        appId: "content-factory-app",
+        appVersion: "0.8.0",
+        packageHash: PACKAGE_HASH,
+        manifestHash: MANIFEST_HASH,
+        loadedAt: "2026-05-15T00:00:00.000Z",
+      },
+    } as const;
+    vi.mocked(safeInvoke).mockResolvedValue({
+      appId: "content-factory-app",
+      status: "launched",
+      installMode: "standalone",
+      shellKind: "app_shell",
+      descriptorVersion: 1,
+      devShell: true,
+      blockerCodes: [],
+      launchedAt: "2026-05-15T00:00:00.000Z",
+    });
+
+    await expect(launchAgentAppShell({ descriptor })).resolves.toMatchObject({
+      status: "launched",
+      devShell: true,
+    });
+    expect(safeInvoke).toHaveBeenCalledWith("agent_app_launch_shell", {
+      request: { descriptor },
+    });
   });
 });

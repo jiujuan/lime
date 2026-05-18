@@ -42,6 +42,11 @@ fn should_enable_single_instance() -> bool {
     !env_flag_enabled(DISABLE_SINGLE_INSTANCE_ENV)
 }
 
+fn should_forward_deep_link_argument(value: &str) -> bool {
+    value.starts_with("lime://")
+        || crate::services::agent_app_shell_window::is_agent_app_shell_deep_link_url(value)
+}
+
 fn compiled_updater_public_key() -> Option<&'static str> {
     option_env!("LIME_UPDATER_PUBLIC_KEY")
         .map(str::trim)
@@ -50,6 +55,12 @@ fn compiled_updater_public_key() -> Option<&'static str> {
 
 fn should_minimize_to_tray(window_label: &str, minimize_to_tray: bool) -> bool {
     minimize_to_tray && window_label == MAIN_WINDOW_LABEL
+}
+
+fn should_hide_window_on_close(window_label: &str, minimize_to_tray: bool) -> bool {
+    crate::services::agent_app_shell_window::should_hide_agent_app_shell_window_on_close(
+        window_label,
+    ) || should_minimize_to_tray(window_label, minimize_to_tray)
 }
 
 fn report_fatal_startup_error(stage: &str, error: &str) {
@@ -212,7 +223,7 @@ pub fn run() {
                     .iter()
                     .filter_map(|arg| {
                         let value = arg.trim();
-                        if value.starts_with("lime://") {
+                        if should_forward_deep_link_argument(value) {
                             Some(value.to_string())
                         } else {
                             None
@@ -273,7 +284,7 @@ pub fn run() {
                         state.config.minimize_to_tray
                     });
 
-                    if should_minimize_to_tray(&window_label, minimize_to_tray) {
+                    if should_hide_window_on_close(&window_label, minimize_to_tray) {
                         // 阻止默认关闭行为
                         api.prevent_close();
                         // 隐藏窗口而不是关闭
@@ -603,6 +614,15 @@ pub fn run() {
             // _Requirements: 1.4_
             #[cfg(desktop)]
             {
+                app.on_menu_event(|app, event| {
+                    let item_id = event.id().as_ref();
+                    if crate::services::agent_app_shell_window::handle_agent_app_shell_native_menu_event(
+                        app, item_id,
+                    ) {
+                        tracing::info!("[Agent App Shell] 已处理 native menu 事件: {}", item_id);
+                    }
+                });
+
                 let app_handle = app.handle().clone();
                 app.listen("deep-link://new-url", move |event| {
                     let urls = event.payload().to_string();
@@ -613,6 +633,28 @@ pub fn run() {
                             // 尝试解析为 JSON 数组（Tauri deep-link 插件返回的格式）
                             if let Ok(url_list) = serde_json::from_str::<Vec<String>>(&urls) {
                                 for url in url_list {
+                                    if crate::services::agent_app_shell_window::is_agent_app_shell_deep_link_url(&url) {
+                                        match crate::services::agent_app_shell_window::handle_agent_app_shell_deep_link_url(&app_handle_clone, &url) {
+                                            Ok(request) => {
+                                                tracing::info!(
+                                                    "[Agent App Shell] 已处理 deep link: app_id={} entry_key={}",
+                                                    request.app_id,
+                                                    request.entry_key
+                                                );
+                                            }
+                                            Err(error) => {
+                                                tracing::error!(
+                                                    "[Agent App Shell] 解析 deep link 失败: {}",
+                                                    error
+                                                );
+                                                let _ = app_handle_clone.emit(
+                                                    "agent-app-shell://deep-link-error",
+                                                    &format!("{error}"),
+                                                );
+                                            }
+                                        }
+                                        continue;
+                                    }
                                     if url.starts_with("lime://connect") {
                                         // 调用 handle_deep_link 命令
                                         if let Some(state) = app_handle_clone
@@ -650,6 +692,26 @@ pub fn run() {
                                                 }
                                             }
                                         }
+                                    }
+                                }
+                            } else if crate::services::agent_app_shell_window::is_agent_app_shell_deep_link_url(&urls) {
+                                match crate::services::agent_app_shell_window::handle_agent_app_shell_deep_link_url(&app_handle_clone, &urls) {
+                                    Ok(request) => {
+                                        tracing::info!(
+                                            "[Agent App Shell] 已处理 deep link: app_id={} entry_key={}",
+                                            request.app_id,
+                                            request.entry_key
+                                        );
+                                    }
+                                    Err(error) => {
+                                        tracing::error!(
+                                            "[Agent App Shell] 解析 deep link 失败: {}",
+                                            error
+                                        );
+                                        let _ = app_handle_clone.emit(
+                                            "agent-app-shell://deep-link-error",
+                                            &format!("{error}"),
+                                        );
                                     }
                                 }
                             } else if urls.starts_with("lime://connect") {
@@ -1087,6 +1149,8 @@ pub fn run() {
             commands::agent_app_cmd::agent_app_start_ui_runtime,
             commands::agent_app_cmd::agent_app_get_ui_runtime_status,
             commands::agent_app_cmd::agent_app_stop_ui_runtime,
+            commands::agent_app_cmd::agent_app_select_directory,
+            commands::agent_app_cmd::agent_app_launch_shell,
             commands::agent_app_runtime_cmd::start_task::agent_app_runtime_start_task,
             commands::agent_app_runtime_cmd::cancel_task::agent_app_runtime_cancel_task,
             commands::agent_app_runtime_cmd::task_snapshot::agent_app_runtime_get_task,
@@ -1605,7 +1669,8 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        should_enable_single_instance, should_minimize_to_tray, DISABLE_SINGLE_INSTANCE_ENV,
+        should_enable_single_instance, should_forward_deep_link_argument,
+        should_hide_window_on_close, should_minimize_to_tray, DISABLE_SINGLE_INSTANCE_ENV,
     };
 
     #[test]
@@ -1613,6 +1678,15 @@ mod tests {
         assert!(should_minimize_to_tray("main", true));
         assert!(!should_minimize_to_tray("secondary-window", true));
         assert!(!should_minimize_to_tray("main", false));
+    }
+
+    #[test]
+    fn should_hide_agent_app_shell_window_on_close_without_global_tray_setting() {
+        assert!(should_hide_window_on_close(
+            "agent-app-shell-content-factory-app-standalone",
+            false
+        ));
+        assert!(!should_hide_window_on_close("secondary-window", false));
     }
 
     #[test]
@@ -1630,5 +1704,18 @@ mod tests {
         unsafe {
             std::env::remove_var(DISABLE_SINGLE_INSTANCE_ENV);
         }
+    }
+
+    #[test]
+    fn should_forward_agent_app_shell_deep_links_to_primary_instance() {
+        assert!(should_forward_deep_link_argument(
+            "lime://connect?token=abc"
+        ));
+        assert!(should_forward_deep_link_argument(
+            "lime-agent-content-factory-app://open?entry=dashboard"
+        ));
+        assert!(!should_forward_deep_link_argument(
+            "https://lime.local/agent-apps/content-factory-app"
+        ));
     }
 }

@@ -290,17 +290,17 @@ pub fn convert_openai_to_antigravity_with_context(
     request: &ChatCompletionRequest,
     project_id: &str,
 ) -> serde_json::Value {
-    eprintln!("========== [CONVERT] OpenAI -> Antigravity 转换开始 ==========");
-    eprintln!("[CONVERT] 原始模型: {}", request.model);
-    eprintln!("[CONVERT] 项目ID: {project_id}");
-    eprintln!("[CONVERT] 消息数量: {}", request.messages.len());
-    eprintln!("[CONVERT] 流式: {}", request.stream);
+    tracing::debug!("========== [CONVERT] OpenAI -> Antigravity 转换开始 ==========");
+    tracing::debug!("[CONVERT] 原始模型: {}", request.model);
+    tracing::debug!("[CONVERT] 项目ID: {project_id}");
+    tracing::debug!("[CONVERT] 消息数量: {}", request.messages.len());
+    tracing::debug!("[CONVERT] 流式: {}", request.stream);
 
     let actual_model = model_mapping(&request.model);
-    eprintln!("[CONVERT] 映射后模型: {actual_model}");
+    tracing::debug!("[CONVERT] 映射后模型: {actual_model}");
 
     let supports_thinking = model_supports_thinking(actual_model);
-    eprintln!("[CONVERT] 支持思维链: {supports_thinking}");
+    tracing::debug!("[CONVERT] 支持思维链: {supports_thinking}");
 
     let mut contents: Vec<GeminiContent> = Vec::new();
     let mut system_instruction: Option<GeminiContent> = None;
@@ -575,9 +575,11 @@ pub fn convert_openai_to_antigravity_with_context(
             "[ANTIGRAVITY] 图片生成模型 {} 已启用 IMAGE 响应模态",
             actual_model
         );
-        eprintln!("[ANTIGRAVITY] 图片生成模型 {actual_model} 已启用 IMAGE 响应模态");
+        tracing::debug!("[ANTIGRAVITY] 图片生成模型 {actual_model} 已启用 IMAGE 响应模态");
     } else {
-        eprintln!("[ANTIGRAVITY] 模型 {actual_model} 不是图片生成模型，不启用 IMAGE 响应模态");
+        tracing::debug!(
+            "[ANTIGRAVITY] 模型 {actual_model} 不是图片生成模型，不启用 IMAGE 响应模态"
+        );
     }
 
     // 处理 reasoning_effort（思维链配置）
@@ -684,7 +686,7 @@ pub fn convert_openai_to_antigravity_with_context(
 
     // 使用 SessionManager 生成稳定的会话 ID
     let session_id = SessionManager::extract_session_id(request);
-    eprintln!("[CONVERT] 生成的稳定 SessionId: {session_id}");
+    tracing::debug!("[CONVERT] 生成的稳定 SessionId: {session_id}");
 
     let inner = AntigravityRequestInner {
         contents,
@@ -716,11 +718,11 @@ pub fn convert_openai_to_antigravity_with_context(
         "requestType": request_type
     });
 
-    eprintln!(
+    tracing::debug!(
         "[CONVERT] 转换后的请求体: {}",
         serde_json::to_string_pretty(&result).unwrap_or_default()
     );
-    eprintln!("========== [CONVERT] OpenAI -> Antigravity 转换完成 ==========");
+    tracing::debug!("========== [CONVERT] OpenAI -> Antigravity 转换完成 ==========");
 
     result
 }

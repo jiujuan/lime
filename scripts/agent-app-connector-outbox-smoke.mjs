@@ -32,6 +32,8 @@ const DEFAULTS = {
   expectSecretDeliveryLeaseHandleStatus: "",
   expectSecretDeliveryCredentialMaterialExposed: "",
   expectSecretDeliveryTokenExposed: "",
+  expectDeliveryStatus: "",
+  expectDeliveryExternalPlatformDelivered: "",
 };
 
 const TOOL_METADATA_BEGIN = "[Lime \u5de5\u5177\u5143\u6570\u636e\u5f00\u59cb]";
@@ -73,7 +75,7 @@ function parseArgs(argv) {
     options.expectAdapterReadiness ||=
       "host_managed_secret_delivery_adapter_ready";
     options.expectExternalStatus ||= "not_delivered";
-    options.expectNextRequired ||= "cloud_overlay_worker_delivery";
+    options.expectNextRequired ||= "external_platform_delivery";
     options.expectSecretDeliveryStatus ||= "ready";
     options.expectSecretDeliverySource ||= "host_managed_secret_delivery_fact";
     options.expectSecretDeliveryTarget ||= "cloud_overlay_worker";
@@ -82,6 +84,8 @@ function parseArgs(argv) {
     options.expectSecretDeliveryLeaseHandleStatus ||= "host_managed";
     options.expectSecretDeliveryCredentialMaterialExposed ||= "false";
     options.expectSecretDeliveryTokenExposed ||= "false";
+    options.expectDeliveryStatus ||= "accepted_by_local_cloud_overlay_worker";
+    options.expectDeliveryExternalPlatformDelivered ||= "false";
   }
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0) {
     throw new Error("--timeout-ms must be a positive number");
@@ -123,7 +127,7 @@ Options:
   --title <title>                  Live connector input title.
   --expect-adapter-readiness <v>   Optional replay assertion; live defaults to host_managed_secret_delivery_adapter_ready.
   --expect-external-status <v>     Optional replay assertion; live defaults to not_delivered.
-  --expect-next-required <v>       Optional replay assertion; live defaults to cloud_overlay_worker_delivery.
+  --expect-next-required <v>       Optional replay assertion; live defaults to external_platform_delivery.
   --expect-secret-delivery-status <v>
                                    Optional replay assertion; live defaults to ready.
   --expect-secret-delivery-source <v>
@@ -139,6 +143,9 @@ Options:
   --expect-secret-delivery-credential-material-exposed <true|false>
                                    Optional replay assertion; live defaults to false.
   --expect-secret-delivery-token-exposed <true|false>
+                                   Optional replay assertion; live defaults to false.
+  --expect-delivery-status <v>     Optional replay assertion; live defaults to accepted_by_local_cloud_overlay_worker.
+  --expect-delivery-external-platform-delivered <true|false>
                                    Optional replay assertion; live defaults to false.
   --output <path>                  Evidence JSON path.
 `);
@@ -232,6 +239,10 @@ function collectOutboxRefs(...groups) {
   return uniqueStrings(groups.flat().filter((value) => value.startsWith("outbox://")));
 }
 
+function collectDeliveryRefs(...groups) {
+  return uniqueStrings(groups.flat().filter((value) => value.startsWith("delivery://")));
+}
+
 function getToolEvidenceRefs(toolCall) {
   return toolCall?.evidence_refs || toolCall?.evidenceRefs || [];
 }
@@ -269,6 +280,14 @@ function parseToolOutputPayload(output) {
   return metadata?.result && typeof metadata.result === "object"
     ? metadata.result
     : metadata;
+}
+
+function isTrustedConnectorOutputPayload(payload) {
+  const source = String(payload?.source || payload?.result?.source || "").trim();
+  return [
+    "agent_app_connector_cloud_overlay_outbox_adapter",
+    "agent_app_connector_fixture_adapter",
+  ].includes(source);
 }
 
 function toolNameFor(connectorId, action) {
@@ -657,6 +676,13 @@ function buildSummary(options, health, result) {
   const output = toolOutput(matchingToolCall);
   const outputPayload = parseToolOutputPayload(output);
   const secretDelivery = outputPayload?.secretDelivery || {};
+  const delivery = outputPayload?.delivery || {};
+  const deliveryReceiptRef =
+    typeof delivery?.receiptRef === "string" ? delivery.receiptRef : "";
+  const outputContainsBoundedMetadata =
+    output.includes(TOOL_METADATA_BEGIN) && output.includes(TOOL_METADATA_END);
+  const outputContainsTrustedConnectorJson =
+    isTrustedConnectorOutputPayload(outputPayload);
   const outputPayloadText = JSON.stringify(outputPayload ?? {});
   const assertions = {
     devBridgeHealthy: health?.status === "ok" || Boolean(health),
@@ -664,8 +690,8 @@ function buildSummary(options, health, result) {
     connectorToolCallProjected:
       (matchingToolCall?.tool_name || matchingToolCall?.toolName) ===
       result.expectedToolName,
-    outputHadBoundedMetadata:
-      output.includes(TOOL_METADATA_BEGIN) && output.includes(TOOL_METADATA_END),
+    outputEvidenceSourceObserved:
+      outputContainsBoundedMetadata || outputContainsTrustedConnectorJson,
     outboxEvidenceRefObserved: Boolean(expectedRef),
     toolCallEvidenceProjected: expectedRef
       ? toolEvidenceRefs.includes(expectedRef)
@@ -758,6 +784,38 @@ function buildSummary(options, health, result) {
     secretDelivery?.tokenExposed,
     options.expectSecretDeliveryTokenExposed,
   );
+  addExpectedAssertion(
+    assertions,
+    expectations,
+    "deliveryStatusExpected",
+    delivery?.status,
+    options.expectDeliveryStatus,
+  );
+  addExpectedAssertion(
+    assertions,
+    expectations,
+    "deliveryExternalPlatformDeliveredExpected",
+    delivery?.externalPlatformDelivered,
+    options.expectDeliveryExternalPlatformDelivered,
+  );
+  if (options.expectDeliveryStatus || options.expectDeliveryExternalPlatformDelivered) {
+    assertions.deliveryReceiptRefObserved =
+      deliveryReceiptRef.startsWith("delivery://");
+    assertions.deliveryToolCallEvidenceProjected = deliveryReceiptRef
+      ? toolEvidenceRefs.includes(deliveryReceiptRef)
+      : false;
+    assertions.deliveryThreadEvidenceProjected = deliveryReceiptRef
+      ? threadEvidenceRefs.includes(deliveryReceiptRef)
+      : false;
+    assertions.deliveryTaskEventEvidenceProjected = deliveryReceiptRef
+      ? taskEvidenceRefs.includes(deliveryReceiptRef)
+      : false;
+  }
+  const deliveryEvidenceRefs = collectDeliveryRefs(
+    toolEvidenceRefs,
+    threadEvidenceRefs,
+    taskEvidenceRefs,
+  );
 
   return {
     kind: "p18-7-e-connector-outbox-runtime-smoke",
@@ -778,8 +836,8 @@ function buildSummary(options, health, result) {
       firstToolName: matchingToolCall?.tool_name || matchingToolCall?.toolName || null,
       toolEvidenceRefs,
       evidenceSummaryRefs: threadEvidenceRefs,
-      outputContainsBoundedMetadata:
-        output.includes(TOOL_METADATA_BEGIN) && output.includes(TOOL_METADATA_END),
+      outputContainsBoundedMetadata,
+      outputContainsTrustedConnectorJson,
       adapterReadiness: outputPayload?.adapterReadiness || null,
       externalStatus: outputPayload?.externalStatus || null,
       nextRequired: outputPayload?.next?.required || null,
@@ -795,6 +853,11 @@ function buildSummary(options, health, result) {
       secretDeliveryCredentialMaterialExposed:
         secretDelivery?.credentialMaterialExposed ?? null,
       secretDeliveryTokenExposed: secretDelivery?.tokenExposed ?? null,
+      deliveryStatus: delivery?.status || null,
+      deliveryReceiptRef: deliveryReceiptRef || null,
+      deliveryEvidenceRefs,
+      deliveryExternalPlatformDelivered:
+        delivery?.externalPlatformDelivered ?? null,
     },
     agentAppTask: {
       status: task?.status || null,
@@ -809,7 +872,7 @@ function buildSummary(options, health, result) {
       result.mode === "replay"
         ? "Replay mode reads an existing runtime session and does not call the model provider."
         : "Live mode submits a new AgentRuntime turn and may call the configured model provider.",
-      "This proves runtime outbox/evidence projection and host-managed secret-delivery facts, not external OAuth handshake, raw secret material delivery, or cloud delivery.",
+      "This proves runtime outbox/evidence projection, host-managed secret-delivery facts, and local cloud-overlay worker intake receipts; it does not prove external OAuth handshake, raw secret material exposure to the App/model, or external platform delivery.",
     ],
   };
 }

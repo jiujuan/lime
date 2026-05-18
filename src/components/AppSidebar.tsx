@@ -2666,7 +2666,7 @@ export function AppSidebar({
       const result = await listInstalledAgentApps();
       setInstalledAgentAppNavStates(result.states);
     } catch (error) {
-      console.error("加载 Agent App 导航失败:", error);
+      console.warn("加载 Agent App 导航失败，将保持静态导航:", error);
       setInstalledAgentAppNavStates([]);
     }
   }, []);

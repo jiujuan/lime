@@ -40,6 +40,7 @@ const REQUIRED_PROJECTION_OBJECTS = [
   "runtimePackage",
   "provenance",
   "lifecycle",
+  "install",
 ] as const;
 
 const SETUP_READINESS_CODES = new Set<string>([
@@ -189,7 +190,7 @@ export function validateReadinessSchemaCoverage(
   const issues: AgentAppSchemaGateIssue[] = [];
   const record = readiness as unknown as Record<string, unknown>;
 
-  ["blockers", "warnings", "supportedCapabilities", "missingCapabilities", "entryReadiness"].forEach(
+  ["blockers", "warnings", "supportedCapabilities", "missingCapabilities", "entryReadiness", "installModes"].forEach(
     (field) => validateArrayField(record[field], `$.${field}`, issues),
   );
 

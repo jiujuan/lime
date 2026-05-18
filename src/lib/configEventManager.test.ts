@@ -1,31 +1,53 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-vi.mock("@/lib/dev-bridge", () => ({
-  safeListen: vi.fn(),
-}));
-
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriInvokeCapability: vi.fn(() => true),
-}));
-
-import { safeListen } from "@/lib/dev-bridge";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
-import { configEventManager } from "./configEventManager";
+import type { UnlistenFn } from "@tauri-apps/api/event";
+import {
+  ConfigEventManager,
+  type ConfigEventManagerDependencies,
+} from "./configEventManager";
 
 describe("configEventManager", () => {
+  let safeListen: ReturnType<typeof vi.fn>;
+  let hasTauriInvokeCapability: ReturnType<typeof vi.fn>;
+  let configEventManager: ConfigEventManager;
+
   beforeEach(() => {
-    vi.clearAllMocks();
-    configEventManager.unsubscribe();
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(true);
-    vi.mocked(safeListen).mockResolvedValue(vi.fn());
+    safeListen = vi.fn(async () => vi.fn());
+    hasTauriInvokeCapability = vi.fn(() => true);
+    configEventManager = new ConfigEventManager({
+      safeListen:
+        safeListen as unknown as ConfigEventManagerDependencies["safeListen"],
+      hasTauriInvokeCapability:
+        hasTauriInvokeCapability as unknown as ConfigEventManagerDependencies["hasTauriInvokeCapability"],
+    });
   });
 
   it("浏览器开发模式下不应占用 config-changed 事件桥连接", async () => {
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(false);
+    hasTauriInvokeCapability.mockReturnValue(false);
 
     await configEventManager.subscribe();
 
     expect(safeListen).not.toHaveBeenCalled();
+    expect(configEventManager.isSubscribed()).toBe(false);
+  });
+
+  it("取消订阅应阻止进行中的订阅回写状态", async () => {
+    let resolveListen: (unlisten: UnlistenFn) => void = () => {};
+    safeListen.mockReturnValue(
+      new Promise<UnlistenFn>((resolve) => {
+        resolveListen = resolve;
+      }),
+    );
+
+    const subscribePromise = configEventManager.subscribe();
+
+    expect(configEventManager.getState().subscribing).toBe(true);
+
+    const staleUnlisten = vi.fn();
+    configEventManager.unsubscribe();
+    resolveListen(staleUnlisten);
+    await subscribePromise;
+
+    expect(staleUnlisten).toHaveBeenCalled();
     expect(configEventManager.isSubscribed()).toBe(false);
   });
 });

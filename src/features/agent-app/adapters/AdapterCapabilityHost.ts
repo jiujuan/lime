@@ -17,6 +17,7 @@ import type {
 } from "../types";
 import { AgentAppCapabilityError } from "../sdk/capabilityErrors";
 import type {
+  AgentAppTaskLookup,
   CapabilityHost,
   LimeAppSdk,
   LimeAgentCapability,
@@ -63,6 +64,10 @@ function withRetainedTarget(target: CleanupTarget): CleanupTarget {
     exists: true,
     safeToDelete: false,
   };
+}
+
+function readTaskLookupId(task: string | AgentAppTaskLookup): string {
+  return typeof task === "string" ? task : task.taskId;
 }
 
 export class AdapterCapabilityHost implements CapabilityHost {
@@ -454,10 +459,11 @@ export class AdapterCapabilityHost implements CapabilityHost {
           }),
         );
       },
-      streamTask: async (taskId) => this.store.getTask(taskId)?.events ?? [],
-      getTask: async (taskId) => this.store.getTask(taskId),
-      cancelTask: async (taskId) =>
-        this.store.updateTask(taskId, (task) => {
+      streamTask: async (task) =>
+        this.store.getTask(readTaskLookupId(task))?.events ?? [],
+      getTask: async (task) => this.store.getTask(readTaskLookupId(task)),
+      cancelTask: async (task) =>
+        this.store.updateTask(readTaskLookupId(task), (task) => {
           const timestamp = this.now();
           return {
             ...appendAgentAppTaskEvent(task, {
@@ -471,7 +477,8 @@ export class AdapterCapabilityHost implements CapabilityHost {
             finishedAt: timestamp,
           };
         }),
-      retryTask: async (taskId) => {
+      retryTask: async (task) => {
+        const taskId = readTaskLookupId(task);
         const sourceTask = this.store.getTask(taskId);
         if (!sourceTask) {
           throw new AgentAppCapabilityError({

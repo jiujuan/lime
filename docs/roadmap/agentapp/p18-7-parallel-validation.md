@@ -1,6 +1,6 @@
 # Agent App P18.7 并行验证记录
 
-更新时间：2026-05-17 22:54
+更新时间：2026-05-19 00:25
 
 ## 主目标
 
@@ -13,6 +13,50 @@
 | 隔壁进程 | 外部 `content-factory-app`、前端 Agent App runtime/UI 写集、Agent Apps smoke | 只读审阅和验证；不接管外部 App / default skills / 正在运行的 GUI smoke 写集。 |
 | 前序本进程 | `AGENTS.md`、`docs/aiprompts/README.md`、`docs/aiprompts/parallel-agent-collaboration.md`、`src/features/agent-app/**`、本文档 | 已记录并行协作规则、P18.7-B/C/D/E first-cut 和 GUI 主路径验证证据。 |
 | 2026-05-16 23:35 follow-up | `scripts/agent-apps-smoke.mjs`、`docs/roadmap/agentapp/p18-7-parallel-validation.md`、`docs/roadmap/agentapp/p18-7-full-lime-capability-surface.md` | 只修可选内容工厂真实按钮 E2E gate 的等待 / 断言与对应证据记录。 |
+| 2026-05-18 07:26 audit | 当前隔壁 dirty 写集：`scripts/agent-apps-content-factory-flow.mjs`、`src/features/agent-app/runtime/agentRuntimeCapabilityHost.ts`、`hostBridge.ts`、`capabilityDispatcher.ts`、SDK Host 接口与相关测试 | 本进程只读审阅并跑贴边界测试；不夹写这些文件，避免覆盖正在跑的 content-factory GUI flow。 |
+| 2026-05-18 07:50 P18.7-F focused validation | `docs/roadmap/agentapp/p18-7-parallel-validation.md` 与只读/运行证据；不修改隔壁源码 dirty 写集 | DevBridge 恢复 healthy 后仅跑 `run-production` focused flow；运行中又检测到隔壁启动 `run-scenarios,run-production`，因此本轮结果只作为 P18.7-F run-production 复绿证据，不扩大为全量完成结论。 |
+
+## Completion audit（2026-05-18 07:26）
+
+| 成功标准 | 现有证据 | 判定 |
+| --- | --- | --- |
+| P18.7-B 标准兼容：`manifestVersion: 0.6.0`、layered manifest、reference cross-check 复绿 | `parseManifest` / `referenceCliCrossCheck` / readiness / SDK surface 定向测试已通过并记录在本文件早期验证表 | 已覆盖 |
+| P18.7-C Host capability discovery：`lime.capabilities` catalog/profile/readiness 可由 App 读取 | `capabilityDispatcher`、Host Bridge、Runtime Page、SDK adapter 定向测试与 2026-05-16 GUI smoke 已通过 | 已覆盖 |
+| P18.7-D AgentRuntime resource projection：models/usage/skills/memory/context/task facts 来自 Host / AgentRuntime | Agent App 定向套件、typecheck 与多轮 GUI smoke 已记录通过 | 已覆盖 |
+| P18.7-E Tool / Integration execution gate：App 只能发 intent，执行、policy、progress、evidence 归 Host / ToolRuntime | `capabilityDispatcher.test.ts`、`agent_app_connector` Rust tests、focused connector outbox smoke、bounded/trusted JSON evidence projection、secret lease visibility gate、custom provider delivery receipt live summary 均已有证据 | current gate、local worker receipt projection 与 Host-managed local webhook external delivery first-cut 已覆盖；真实 OAuth / raw secret material adapter / 生产 external delivery 未覆盖 |
+| P18.7-F 内容工厂真实闭环：业务 App 页面内完成 action，生成过程、Skills、模型、Token、artifact、evidence 都在 App 内可见且来自 Host projection | 早期 completion gates 多动作通过；但 2026-05-18 最新 GUI evidence 仍有 `run-production` 按钮不可见、workspace patch materialization 未稳定、DevBridge 当前不可连接 | 未完成 |
+| 当前并行写集是否可作为完成证据 | 2026-05-18 07:22 `npm test -- "src/features/agent-app/runtime/agentRuntimeCapabilityHost.test.ts" "src/features/agent-app/runtime/hostBridge.test.ts" "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` 39 tests passed；`npm run typecheck` 通过 | 只证明隔壁 API fallback / task lookup 改动的静态与单测边界，不替代 GUI 产品完成证据 |
+
+结论：不能标记整体目标完成。下一刀必须等正在运行的 content-factory GUI flow 产出结果，或在不抢 GUI 的前提下继续缩小 P18.7-F 的 materialization / task lookup 缺口；不能用单测、typecheck 或旧成功 smoke 代替最新 GUI 失败证据。
+
+## Focused validation update（2026-05-18 07:50）
+
+| 项目 | 证据 | 判定 |
+| --- | --- | --- |
+| 并行状态 | 07:27 headless Tauri 正在重编译期间 DevBridge 一度不可连接；07:38 后 `curl http://127.0.0.1:3030/health` 返回 `{"service":"DevBridge","status":"ok","version":"1.0.0"}`。本进程启动 focused flow 后，隔壁又启动 `content-factory-short-scenarios-production-current-after-sample-round-fix-20260518`。 | 不再启动新 GUI flow，不杀任何既有 flow；本轮只记录 focused 证据。 |
+| 静态/定向边界 | `npm test -- "src/features/agent-app/runtime/agentRuntimeCapabilityHost.test.ts" "src/features/agent-app/runtime/hostBridge.test.ts" "src/features/agent-app/runtime/capabilityDispatcher.test.ts"`：3 files / 39 tests passed；`npm run typecheck` passed；`CARGO_TARGET_DIR="/tmp/lime-codex-target-p18f" cargo check --manifest-path "src-tauri/Cargo.toml" -p lime --lib --message-format short` passed；`node --check "scripts/agent-apps-content-factory-flow.mjs"` passed；`git diff --check` passed。 | 隔壁 task lookup / Host Bridge / dispatcher 写集当前基础健康；仍不替代 GUI 产品证据。 |
+| P18.7-F run-production focused flow | `node "scripts/agent-apps-content-factory-flow.mjs" --actions run-production --timeout-ms 300000 --completion-timeout-ms 900000 --prefix content-factory-run-production-p18f-session-replay-20260518-codex` passed，summary：`.lime/qc/gui-evidence/agent-apps/content-factory-run-production-p18f-session-replay-20260518-codex-summary.json`。 | `sameIframeContext / allActionsCompleted / allActionsUsedExpectedSkills / allActionsHaveModelUsageCost / allActionsHaveWorkspacePatch / allActionsFullRuntimeReady / processVisibleAfterEachAction / noHostFallback / noConsoleErrors` 均为 true。 |
+| 业务物化 | summary 中 `taskId=agent-app-task-83dac6fe-d534-4f8f-8116-41dd9e6fefe8`、`sessionId=agent-app-runtime-2e96f2c0-aceb-4521-9961-94e42d291dde`；`invokedSkillNames=["article-writer","content-reviewer"]`；页面物化 `已更新20条内容、8条脚本、7条图片需求`、`第4轮内容20/20 条`，无 Host fallback。 | 最新 focused run-production 已复绿，覆盖此前 `run-production` materialization 失败的一条主缺口。 |
+| 剩余口径 | 仍有隔壁 `run-scenarios,run-production` flow 未收口；真实 Connector OAuth / external delivery 仍未覆盖；本轮没有重跑 full-flow。 | 整体目标仍不能标记完成；下一刀等隔壁 flow 结果，或在其结束后跑不并发的 run-scenarios + run-production / full-flow 复核。 |
+
+## Follow-up materialization audit（2026-05-18 09:03）
+
+| 项目 | 证据 | 判定 |
+| --- | --- | --- |
+| `run-scenarios,run-production` retry 失败口径 | `.lime/qc/gui-evidence/agent-apps/content-factory-short-scenarios-production-current-after-sample-round-fix-20260518-failure.json`：业务页面已物化 `120/120` 场景与 `20/20` 内容，但旧脚本仍把 `same iframe JS context` 当硬 gate，导致 false negative。当前工作树的 `scripts/agent-apps-content-factory-flow.mjs` 已把 `sameIframeContext` 降级为诊断项。 | 不是业务闭环失败，但该失败文件本身不能作为 green 证据。 |
+| 并发/环境失败口径 | 08:26 两条并发 combined flow 失败：`content-factory-short-scenarios-production-current-same-context-relaxed-20260518-codex-failure.json` 与 `content-factory-short-scenarios-production-current-after-sample-round-fix-retry-20260518-failure.json` 均显示 `directRecord.status=0 / This operation was aborted`，同时页面请求 `http://127.0.0.1:1420/` 出现 `ERR_CONNECTION_REFUSED`。 | 主要是 Tauri/Vite 被重启导致的环境噪音；不能当成产品 green，也不应扩大修复范围。 |
+| `run-scenarios` 真实缺口 | `.lime/qc/gui-evidence/agent-apps/content-factory-run-scenarios-p18f-current-recheck-20260518-codex-failure.json`：direct runtime 已 `completed`，`artifactCount=1`、`toolCallCount=2`、`hasWorkspacePatch=true`，`workspacePatch.artifactKind=scene_table`、`actualCount=126`、Skills 为 `knowledge-builder/content-reviewer`；但页面未观察到 materialization，`frameTextSources=[]`，`hostRecord=null`。 | 缺口收敛为 Host/App task replay 到 iframe 页面物化不稳定，而不是模型执行或 workspace patch 生成失败。 |
+| 本轮最小代码修复 | `src/features/agent-app/types.ts` 与 `src/features/agent-app/runtime/agentRuntimeCapabilityHost.ts` 现在把 Host 已知的 `sessionId / turnId / workspaceId` 投影到 `AgentAppTaskRecord` 顶层；`agentRuntimeCapabilityHost.test.ts` 增加 startTask / direct replay 断言。 | 业务 App 可从 `lime.agent.startTask/getTask` 结果直接拿到 replay lookup 所需 session/thread facts，减少 iframe 重载或 Host record 丢失时只剩 `taskId` 的情况。 |
+| 本轮验证 | `npm test -- "src/features/agent-app/runtime/agentRuntimeCapabilityHost.test.ts" "src/features/agent-app/runtime/hostBridge.test.ts" "src/features/agent-app/runtime/capabilityDispatcher.test.ts"`：3 files / 39 tests passed；`git diff --check` passed；`node --check "scripts/agent-apps-content-factory-flow.mjs"` passed。`npm run typecheck` 在本地连续被系统终止为 code `-1` 且无 TypeScript diagnostic，未得到可用结论。 | TS/Rust/GUI 全量可交付门槛仍未达成；需在 DevBridge/App 稳定后重跑 typecheck 与 focused `run-scenarios`。 |
+
+## Follow-up validation update（2026-05-18 09:17）
+
+| 项目 | 证据 | 判定 |
+| --- | --- | --- |
+| UI / Host replay 回归 | `npm test -- "src/features/agent-app/ui/AgentAppRuntimePage.test.tsx" "src/features/agent-app/runtime/agentRuntimeCapabilityHost.test.ts" "src/features/agent-app/runtime/hostBridge.test.ts" "src/features/agent-app/runtime/capabilityDispatcher.test.ts"`：4 files / 52 tests passed。 | 覆盖 Host Runtime Page、task replay、Host Bridge subscription 与 dispatcher 当前边界。 |
+| Contract 回归 | `npm run test:contracts` passed：command contracts、Harness contracts、modality runtime contracts 与 cleanup report contract 均通过。 | 当前写集没有破坏命令 / bridge / harness 契约。 |
+| `run-scenarios` 复测环境 | 09:13 后隔壁/后台启动 `content-factory-run-scenarios-current-direct-materialize-fallback-wait2-20260518-codex`，但最终只留下 `.pid/.log`，没有 summary 或 failure JSON；随后 DevBridge 断开，`curl http://127.0.0.1:3030/health` 返回 connection refused。 | 没有新的 GUI green evidence；不能据此推进完成判定。 |
+| TypeScript 全量校验 | `npm run typecheck` 仍在无 diagnostic 情况下被终止为 code `-1`。 | 当前环境下无法证明全量 typecheck；保留为阻塞项。 |
 
 ## 已验证
 
@@ -254,10 +298,40 @@
 1. `docs/roadmap/agentapp/lime-capability-surface.md` 已是受版本控制的历史摘要；当前唯一 P18.7 主入口是 `docs/roadmap/agentapp/p18-7-full-lime-capability-surface.md`，不再按未跟踪冲突处理。
 2. P18.7-C first-cut 已可通过 Host Bridge 投影 catalog 摘要、stage、owner、enabled、implementation 和 unavailable reason；Agent App Runtime Page 已把 `lime.capabilities` 暴露给 iframe，并补了 `getProfile` 回归。外部 `content-factory-app` 当前已调用 `lime.capabilities.getProfile` 做 0.5/0.6 能力包展示和 AI 任务能力缺失降级，外部测试 63 项通过；该外部仓库写集仍由隔壁持有，本进程只记录验证证据。
 3. P18.7-D first-cut 已可通过 Host Bridge 为声明了 `lime.models` / `lime.usage` / `lime.skills` / `lime.memory` / `lime.context` / `lime.tasks` 的 App 投影 `runtimeProcess`、App-scoped task、threadRead diagnostics、thread/turn ids 中的模型、模型约束、Token、成本、预算 limit/cost facts、Skill 调用、workspace binding readiness、memory/context gate 和记忆/上下文状态；`lime.skills.bind/invoke`、`lime.memory.write/compact`、`lime.context.attach/detach` 仍明确返回 `not_available`，不伪造可变更或执行成功。
-4. P18.7-E 已完成 `tools/search/browser/documents/media/mcp/terminal/connectors` Host first-cut，并补到 AgentRuntime `threadRead.tool_calls / turns[].tool_calls` 的只读执行证据 first-cut、`executionGate / authorizationGate` 合同 first-cut、P18.7-E1 `executionGate.request` envelope、P18.7-E2 AgentRuntime handoff first-cut、P18.7-E3 owner binding first-cut、Connector ToolRuntime preview/readiness seam、Host connector runtime facts envelope、Host-managed fixture mutation/evidence proof、Cloud Overlay outbox adapter first-cut、metadata/output 双路径 outbox evidence projection first-cut、focused live runtime smoke harness、Host Bridge handoff、P18.7-E4 cancellation first-cut、Rust `threadRead.tool_calls` arguments/output preview/时间戳/evidence refs 回写 first-cut，以及 connector authorization request handoff / snapshot projection first-cut；真实 Connector OAuth/raw secret material delivery 和产品级 non-fixture mutation GUI smoke 仍未完成。
+4. P18.7-E 已完成 `tools/search/browser/documents/media/mcp/terminal/connectors` Host first-cut，并补到 AgentRuntime `threadRead.tool_calls / turns[].tool_calls` 的只读执行证据 first-cut、`executionGate / authorizationGate` 合同 first-cut、P18.7-E1 `executionGate.request` envelope、P18.7-E2 AgentRuntime handoff first-cut、P18.7-E3 owner binding first-cut、Connector ToolRuntime preview/readiness seam、Host connector runtime facts envelope、Host-managed fixture mutation/evidence proof、Cloud Overlay outbox adapter first-cut、metadata/output 双路径 outbox evidence projection first-cut、focused live runtime smoke harness、Host Bridge handoff、P18.7-E4 cancellation first-cut、Rust `threadRead.tool_calls` arguments/output preview/时间戳/evidence refs 回写 first-cut，以及 connector authorization request handoff / snapshot projection first-cut；真实 Connector OAuth/raw secret material delivery、生产 external delivery 和产品级 non-fixture mutation GUI smoke 仍未完成。
 5. P18.7-F 内容工厂按钮完成态已覆盖，且 20:49 run-scenarios / 22:13 run-strategy / 22:19 run-review 当前 GUI flow 均已有通过证据，22:33 五动作 full-flow action gates 也通过但仍有 console 噪声；剩余工作应回到 P18.7-D/E 的全局能力深水位，尤其是真实 ToolRuntime mutation / Connector auth execution gate，而不是继续围绕内容工厂按钮重复跑同类 completion gate。
 
 ## 下一刀归属
 
 - 外部 `content-factory-app` profile 降级展示已由隔壁写集实现并经本进程只读验证；本进程不接管外部文件，只在 Lime 文档记录证据。
 - P18.7 全局 completion audit 已确认：A/B/C 完成 first-cut，D/F first-cut 或 completion gate 已覆盖，E 已补 threadRead execution evidence、gate contract first-cut、E1 request envelope、E2 AgentRuntime handoff first-cut、E3 ToolRuntime owner binding first-cut、E4 cancellation first-cut、tool output/progress/evidence refs 回写 first-cut、connector authorization request handoff / snapshot projection first-cut、Host-managed fixture mutation/evidence proof 与 Host Bridge handoff；P18.7-E 深水位执行计划已落到 `docs/roadmap/agentapp/p18-7-e-toolruntime-execution-gate-plan.md`，下一刀进入 Connector OAuth/secret 完整执行与非 fixture 产品级真实 ToolRuntime mutation smoke，而不是继续重复内容工厂按钮 smoke。
+
+## 2026-05-18 P18.7-F runtime idle 根因与修复
+
+- `content-factory-run-scenarios-agent-runtime-0-1-0-recheck-20260518-codex-failure.json` 仍复现 `agent_app_runtime_start_task` accepted 后 `directRecord.taskStatus=idle`，task `agent-app-task-7ab6c2e6-85fb-4a31-a8a1-8ddb3cfad31f` / session `agent-app-runtime-2330643e-3b1c-4756-b6d7-50f4d62a8c0c` 没有 `terminalReady/modelReady`。
+- 随后用带 SSE 监听的最小 `agent_app_runtime_start_task` probe 复现后台错误：先收到 `runtime_status preparing`，随后收到 `RuntimeAgentEvent::Error`，payload 为 `runtime turn 后台任务 panic: failed printing to stderr: Broken pipe (os error 32)`。这说明 idle 不是内容工厂页面点击或 Host task 记录问题，而是 detached Tauri 进程 stderr 已断开时，runtime turn 第一批 tracing 输出触发 panic，导致没有落 `agent_runs / agent_thread_turns / runtime.db`。
+- 已在 `src-tauri/src/profiling.rs` 把 tracing fmt writer 切到 `NonPanickingStderr`，对 `BrokenPipe` 写入/flush 返回成功，同时保留其他 IO error；`Profiling` 初始化失败兜底输出也复用同一 writer，避免 detached GUI / headless 进程因 stderr broken pipe 中断后台 runtime turn。
+- 验证：`CARGO_TARGET_DIR="/tmp/lime-codex-target-p18f" cargo test --manifest-path "src-tauri/Cargo.toml" -p lime profiling::tests --lib` 通过，`CARGO_TARGET_DIR="/tmp/lime-codex-target-p18f" cargo check --manifest-path "src-tauri/Cargo.toml" -p lime --lib --message-format short` 通过，`git diff --check -- "src-tauri/src/profiling.rs"` 通过。
+- 尚未宣称 P18.7-F combined green：当前 `127.0.0.1:3030` 仍由修复前启动的 `target/debug/lime` 提供，按并行协作约束未强杀长期 GUI / DevBridge 进程；下一刀需要在确认可重启后，用新 binary 复跑 focused runtime probe，再复跑 `run-scenarios,run-production` combined evidence。
+
+## 2026-05-18 P18.7-F combined rerun 收口
+
+- 新 binary 已由并行会话重启并复跑 focused probe / focused action 后继续做 combined GUI 证据；本进程只读监控并避免双跑。前几轮 combined failure 均与并行前端写入触发 Vite reload / DevBridge transient timeout 相关，不再作为 runtime 业务失败归因：`content-factory-scenarios-production-final-after-stderr-fix-20260518-codex-failure.json` 已显示 `run-production` 页面实际有 `内容20/20` 与脚本图片需求；后续 `after-runtime-surface-recover` / `after-server-scene-preserve-and-surface-recover` 也均已物化业务结果，但分别卡在 runtime surface reload 或 transient console warning。
+- 最终 combined summary：`.lime/qc/gui-evidence/agent-apps/content-factory-scenarios-production-after-sidebar-nav-warning-20260518-codex-summary.json`，动作 `run-scenarios / run-production`，生成时间 `2026-05-18T05:26:00.306Z`。断言 `actionCount / allActionsCompleted / allActionsUsedExpectedSkills / allActionsHaveModelUsageCost / allActionsHaveWorkspacePatch / allActionsFullRuntimeReady / processVisibleAfterEachAction / noHostFallback / noConsoleErrors` 均为 true，`consoleErrorCount=0`。
+- `run-scenarios` task `agent-app-task-941ec95e-5a44-439e-a879-12e31a0c9153` / session `agent-app-runtime-9108b30c-7118-4ab7-b22b-d2e9aca9383c`：`taskStatus=completed`、`profileStatus=completed`、`artifactCount=1`、`toolCallCount=2`、model `deepseek-v4-flash`，required Skills `knowledge-builder / content-reviewer` 均命中，workspace patch kind `scene_table`，usage 证据来自 `direct_runtime_estimate`，cost 证据来自 `direct_runtime_snapshot`。
+- `run-production` task `agent-app-task-f2837498-3e0f-4822-87bd-c4f8be148692` / session `agent-app-runtime-a3375dc3-c5f2-4919-82aa-6d7a0bc913da`：`taskStatus=completed`、`profileStatus=completed`、`artifactCount=1`、`toolCallCount=2`、model `deepseek-v4-flash`，required Skills `article-writer / content-reviewer` 均命中，workspace patch kind `content_batch`，页面 materialization 来源为 `content_factory_page`。
+- 该 combined summary 仍记录收尾阶段 `net::ERR_ABORTED` failedRequests，因此本证据只声明 P18.7-F `run-scenarios,run-production` 产品闭环、runtime / Skill / usage / cost / workspace patch / no Host fallback / no console errors gate 已通过；不把它扩展为“所有开发态网络请求零噪声”。
+
+## 2026-05-18 P18.7-E delivery receipt live audit
+
+- `p18-7-e-connector-outbox-runtime-smoke-replay-delivery-receipt-projection-fixed-20260518-summary.json` 已证明旧 live session 的 `outbox://...` 与 `delivery://...` 同时投影到 tool call、thread evidence summary 和 Agent App task events；该 replay 不调用 provider。
+- 21:35 复跑当前 runtime live：`.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-live-delivery-receipt-projection-current-20260518-summary.json`。DevBridge healthy，但自动 provider 选择 `deepseek/deepseek-v4-flash` 后返回 `402 Payment Required: Insufficient Balance`，`threadRead.status=failed`、`toolCallCount=0`，所以没有形成新的 delivery receipt live green。
+- 23:20 custom provider live 复跑通过：`.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-live-delivery-receipt-projection-custom-provider-20260518-codex-summary.json` 使用显式 `custom-da3283c4-8405-45e9-81cd-12991ffdf41c / claude-sonnet-4-6`，task `agent-app-connector-outbox-runtime-1779117534688-37651` / session `38eb0886-1c4e-4fe4-a5b0-aba73bcefa89`，`threadReadCompleted / connectorToolCallProjected / outputEvidenceSourceObserved / outboxEvidenceRefObserved / toolCallEvidenceProjected / threadEvidenceProjected / taskEventEvidenceProjected / deliveryReceiptRefObserved / deliveryToolCallEvidenceProjected / deliveryThreadEvidenceProjected / deliveryTaskEventEvidenceProjected` 全为 true；`threadRead` 显示 `nextRequired=external_platform_delivery`、`deliveryStatus=accepted_by_local_cloud_overlay_worker`、`deliveryExternalPlatformDelivered=false`。
+- 结论：P18.7-E delivery receipt projection 已有当前 binary + custom provider focused live green；下一刀不再是复跑同一 focused smoke，而是补真实 Connector OAuth / raw secret material adapter / 外部平台真实 delivery，并用产品级 GUI evidence 证明外部送达。
+
+## 2026-05-19 P18.7-E webhook external delivery first-cut
+
+- 本轮没有接管隔壁 v2 / standalone / content-factory flow，也没有抢 default `src-tauri/target`；代码写集只限 connector ToolRuntime seam。
+- Rust seam 新增 Host-managed webhook external delivery：internal request 提供 `secretDelivery.externalDelivery` 时，Cloud Overlay adapter 可把脱敏 connector mutation payload POST 到 Host-managed webhook，并把 delivery receipt 从 `accepted_by_local_cloud_overlay_worker` 推进到 `delivered_to_external_platform`。
+- 公开 evidence 只允许 target hash / label / HTTP status / deliveredAt / delivered boolean；webhook URL、raw token、raw credential、concrete lease ref 不进入 ToolResult output、threadRead 或 Agent App task events。
+- completion 口径保持不变：local webhook first-cut 不是生产外部平台 delivery；P18.7-E 深水位仍缺真实 Connector OAuth、secret store raw material adapter、生产平台 delivery 和产品级 GUI evidence。

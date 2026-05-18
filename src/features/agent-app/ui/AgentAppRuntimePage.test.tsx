@@ -11,6 +11,11 @@ import { buildInstalledAgentAppState } from "../install/installedAppState";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { buildAgentAppLabResolvedSetupState } from "../install/labInstallFlow";
 import { buildPackageIdentity } from "../install/packageIdentity";
+import {
+  compatibleAgentAppStandardVersions,
+  currentAgentAppHostRuntimeVersion,
+  currentAgentAppStandardVersion,
+} from "../readiness/hostCapabilityProfile";
 import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
 import type { AppManifest, InstalledAgentAppState } from "../types";
 import { AgentAppRuntimePage } from "./AgentAppRuntimePage";
@@ -355,6 +360,7 @@ describe("AgentAppRuntimePage", () => {
     }
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+    window.sessionStorage.clear();
     document.documentElement.removeAttribute("style");
   });
 
@@ -677,6 +683,9 @@ describe("AgentAppRuntimePage", () => {
       '[data-testid="agent-app-host-agent-run-dock"]',
     ) as HTMLButtonElement;
     expect(dock).not.toBeNull();
+    expect(dock.className).toContain("bottom-4");
+    expect(dock.className).not.toContain("top-4");
+    expect(dock.className).toContain("min(320px");
     expect(container.textContent).toContain("查看运行现场");
 
     await act(async () => {
@@ -863,6 +872,262 @@ describe("AgentAppRuntimePage", () => {
     ).toBeNull();
   });
 
+  it("用户关闭 Host 级 AI 运行面板后，同一任务轮询更新不会自动重开", async () => {
+    const container = await renderPage();
+    await flush();
+    const frame = getRuntimeFrame(container);
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.ui",
+        method: "openAgentRun",
+        input: {
+          taskId: "agent-app-task-dismissed",
+          bridgeAction: "content_factory.production",
+          title: "生成内容批次",
+          mode: "drawer",
+          runtimeProcess: {
+            terminal: false,
+            timeline: [
+              {
+                kind: "execution",
+                title: "正在生成内容",
+                message: "内容工厂正在轮询运行状态。",
+                statusText: "running",
+              },
+            ],
+          },
+        },
+      },
+      "agent-run-open-dismissible",
+    );
+
+    const dock = container.querySelector<HTMLButtonElement>(
+      '[data-testid="agent-app-host-agent-run-dock"]',
+    );
+    expect(dock).not.toBeNull();
+
+    await act(async () => {
+      dock?.click();
+    });
+    await flush();
+
+    expect(
+      container.querySelector('[data-testid="agent-app-host-agent-run-drawer"]'),
+    ).not.toBeNull();
+    const closeButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="agent-app-host-agent-run-close"]',
+    );
+    expect(closeButton).not.toBeNull();
+
+    await act(async () => {
+      closeButton?.click();
+    });
+    await flush();
+
+    expect(
+      container.querySelector('[data-testid="agent-app-host-agent-run-drawer"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="agent-app-host-agent-run-dock"]'),
+    ).toBeNull();
+
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.ui",
+        method: "updateAgentRun",
+        input: {
+          taskId: "agent-app-task-dismissed",
+          bridgeAction: "content_factory.production",
+          runtimeProcess: {
+            terminal: false,
+            timeline: [
+              {
+                kind: "execution",
+                title: "轮询更新",
+                message: "这条更新不应重新打开右侧面板。",
+                statusText: "running",
+              },
+            ],
+          },
+        },
+      },
+      "agent-run-update-after-user-close",
+    );
+    await flush();
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:response",
+        requestId: "agent-run-update-after-user-close",
+        payload: expect.objectContaining({
+          ok: true,
+          result: expect.objectContaining({
+            updated: true,
+            surface: "host_agent_run",
+            taskId: "agent-app-task-dismissed",
+          }),
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+    expect(
+      container.querySelector('[data-testid="agent-app-host-agent-run-drawer"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="agent-app-host-agent-run-dock"]'),
+    ).toBeNull();
+    expect(container.textContent).not.toContain("轮询更新");
+
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.ui",
+        method: "openAgentRun",
+        input: {
+          taskId: "agent-app-task-dismissed",
+          bridgeAction: "content_factory.production",
+          title: "重新查看运行",
+          mode: "drawer",
+        },
+      },
+      "agent-run-open-after-user-close",
+    );
+    await flush();
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:response",
+        requestId: "agent-run-open-after-user-close",
+        payload: expect.objectContaining({
+          ok: true,
+          result: expect.objectContaining({
+            opened: true,
+            surface: "host_agent_run",
+            taskId: "agent-app-task-dismissed",
+          }),
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+    expect(
+      container.querySelector('[data-testid="agent-app-host-agent-run-dock"]'),
+    ).toBeNull();
+    expect(container.textContent).not.toContain("重新查看运行");
+
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.ui",
+        method: "openAgentRun",
+        input: {
+          taskId: "agent-app-task-same-action",
+          bridgeAction: "content_factory.production",
+          title: "同一业务动作的新任务不应出现",
+          mode: "drawer",
+        },
+      },
+      "agent-run-open-same-action",
+    );
+    await flush();
+
+    expect(
+      container.querySelector('[data-testid="agent-app-host-agent-run-dock"]'),
+    ).toBeNull();
+    expect(container.textContent).not.toContain("同一业务动作的新任务不应出现");
+
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.ui",
+        method: "openAgentRun",
+        input: {
+          taskId: "agent-app-task-next",
+          bridgeAction: "content_factory.review",
+          title: "下一次运行",
+          mode: "drawer",
+        },
+      },
+      "agent-run-open-next-task",
+    );
+    await flush();
+
+    expect(
+      container.querySelector('[data-testid="agent-app-host-agent-run-dock"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("下一次运行");
+  });
+
+  it("Host 级 AI 运行面板在 runtime surface 重挂载后仍保留折叠入口", async () => {
+    const state = buildReadyState();
+    const container = await renderPage(state);
+    await flush();
+    const frame = getRuntimeFrame(container);
+
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.ui",
+        method: "openAgentRun",
+        input: {
+          taskId: "agent-app-task-persisted",
+          bridgeAction: "content_factory.production",
+          title: "生成本轮内容",
+          mode: "drawer",
+          runtimeProcess: {
+            terminal: true,
+            collapsedByDefault: true,
+            timeline: [
+              {
+                kind: "completed",
+                title: "本轮内容已写回",
+                message: "运行过程需要在完成后继续保留。",
+                statusText: "completed",
+              },
+            ],
+            streamText: "已生成 20 条草稿。",
+          },
+        },
+      },
+      "agent-run-open-persisted",
+    );
+    await flush();
+
+    expect(
+      container.querySelector('[data-testid="agent-app-host-agent-run-dock"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("生成本轮内容");
+
+    const mounted = mountedPages.pop();
+    expect(mounted).toBeDefined();
+    await act(async () => {
+      mounted?.root.unmount();
+    });
+    mounted?.container.remove();
+
+    const restoredContainer = await renderPage(state);
+    await flush();
+
+    expect(
+      restoredContainer.querySelector(
+        '[data-testid="agent-app-host-agent-run-dock"]',
+      ),
+    ).not.toBeNull();
+    expect(restoredContainer.textContent).toContain("生成本轮内容");
+    expect(restoredContainer.textContent).toContain(
+      "运行过程已折叠，点击查看完整现场",
+    );
+  });
+
   it("App 可通过 lime.capabilities.getProfile 发现 Host capability profile", async () => {
     const container = await renderPage();
     await flush();
@@ -886,11 +1151,23 @@ describe("AgentAppRuntimePage", () => {
         payload: expect.objectContaining({
           ok: true,
           result: expect.objectContaining({
-            appRuntimeVersion: "0.7.0",
+            appRuntimeVersion: currentAgentAppHostRuntimeVersion,
             standardVersions: {
-              current: "0.7",
-              compatible: ["0.5", "0.6", "0.7"],
+              current: currentAgentAppStandardVersion,
+              compatible: compatibleAgentAppStandardVersions,
             },
+            runtimeProfile: expect.objectContaining({
+              runtimeId: "content-factory-app:in_lime:0.8.0",
+              runtimeVersion: currentAgentAppHostRuntimeVersion,
+              shellKind: "desktop",
+              installMode: "in_lime",
+            }),
+            runtimeCapabilities: expect.objectContaining({
+              "lime.agent": expect.objectContaining({
+                available: true,
+                implementation: "adapter",
+              }),
+            }),
             standards: expect.objectContaining({
               layeredManifest: expect.objectContaining({
                 version: "0.5",
@@ -1018,10 +1295,10 @@ describe("AgentAppRuntimePage", () => {
         payload: expect.objectContaining({
           ok: true,
           result: expect.objectContaining({
-            appRuntimeVersion: "0.7.0",
+            appRuntimeVersion: currentAgentAppHostRuntimeVersion,
             standardVersions: {
-              current: "0.7",
-              compatible: ["0.5", "0.6", "0.7"],
+              current: currentAgentAppStandardVersion,
+              compatible: compatibleAgentAppStandardVersions,
             },
             standards: expect.objectContaining({
               layeredManifest: expect.objectContaining({
@@ -1133,10 +1410,10 @@ describe("AgentAppRuntimePage", () => {
         payload: expect.objectContaining({
           ok: true,
           result: expect.objectContaining({
-            appRuntimeVersion: "0.7.0",
+            appRuntimeVersion: currentAgentAppHostRuntimeVersion,
             standardVersions: {
-              current: "0.7",
-              compatible: ["0.5", "0.6", "0.7"],
+              current: currentAgentAppStandardVersion,
+              compatible: compatibleAgentAppStandardVersions,
             },
             requirements,
             boundary,

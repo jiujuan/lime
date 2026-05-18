@@ -1,6 +1,10 @@
 # Agent App 客户端路线图
 
-更新时间：2026-05-16
+更新时间：2026-05-18
+
+## v2 迭代入口
+
+v2 独立安装与 Runtime 底座拆分规划见 [`v2/prd.md`](./v2/prd.md)。该方向固定“Agent App 是产品、Lime Runtime 是底座、Lime Desktop 是多 App 工作台、Lime App Shell 是独立单 App 宿主”，用于承接 Agent App v0.8 标准。
 
 ## 定位
 

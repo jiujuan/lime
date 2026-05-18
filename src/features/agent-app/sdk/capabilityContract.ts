@@ -76,6 +76,10 @@ export interface LimeCapabilityContractMap {
       args: { url: string; fileName?: string };
       value: { downloaded: true };
     };
+    selectDirectory: {
+      args: { title?: string } | undefined;
+      value: { path: string | null; cancelled: boolean };
+    };
     getSnapshot: {
       args: undefined;
       value: unknown;

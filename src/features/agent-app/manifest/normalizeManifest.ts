@@ -6,6 +6,7 @@ import type {
   NormalizedRequires,
   RuntimeTarget,
 } from "../types";
+import { normalizeInstallContract } from "../install-mode";
 
 function slugifyAppId(value: string): string {
   const normalized = value
@@ -18,7 +19,10 @@ function slugifyAppId(value: string): string {
 
 function normalizeManifestVersion(
   version: string,
-): "0.2" | "0.3" | "0.5" | "0.6" | "0.7" {
+): "0.2" | "0.3" | "0.5" | "0.6" | "0.7" | "0.8" {
+  if (version.startsWith("0.8")) {
+    return "0.8";
+  }
   if (version.startsWith("0.7")) {
     return "0.7";
   }
@@ -93,11 +97,12 @@ export function normalizeManifest(
   );
   const storageRetention =
     manifest.storage?.retention ?? manifest.storage?.uninstallPolicy ?? "ask";
+  const displayName = manifest.displayName ?? manifest.title ?? manifest.name;
 
   return {
     manifestVersion: normalizeManifestVersion(manifest.manifestVersion),
     appId,
-    displayName: manifest.displayName ?? manifest.title ?? manifest.name,
+    displayName,
     version: manifest.version,
     status: manifest.status ?? "draft",
     appType: manifest.appType ?? "domain-app",
@@ -137,6 +142,10 @@ export function normalizeManifest(
     overlayTemplates: manifest.overlayTemplates ?? [],
     ui: manifest.ui,
     lifecycle: manifest.lifecycle ?? {},
+    install: normalizeInstallContract({
+      input: manifest.install,
+      fallbackName: displayName,
+    }),
     agentRuntime: manifest.agentRuntime,
     requirements: manifest.requirements,
     boundary: manifest.boundary,

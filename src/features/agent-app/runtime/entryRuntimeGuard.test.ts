@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { buildAgentAppPackageCacheEntry } from "../install/packageCache";
 import type { AgentAppSetupState, InstalledAppPreview } from "../types";
+import { buildLimeRuntimeProfileFromHostProfile } from "../runtime-profile";
 import { buildUiRuntimeCapabilityProfile } from "./uiRuntimeCapabilityProfile";
 import { loadRuntimePackageDescriptor } from "./runtimePackageLoader";
 import { evaluateAgentAppEntryRuntimeGuard } from "./entryRuntimeGuard";
@@ -36,6 +37,20 @@ function buildPreview(setup?: AgentAppSetupState): InstalledAppPreview {
   });
 }
 
+function buildRuntimeProfile(
+  preview: InstalledAppPreview,
+  installMode: "in_lime" | "standalone" = "in_lime",
+) {
+  return buildLimeRuntimeProfileFromHostProfile({
+    appId: preview.identity.appId,
+    installMode,
+    hostProfile: buildUiRuntimeCapabilityProfile({
+      realAdapterEnabled: true,
+      uiRuntimeEnabled: true,
+    }),
+  });
+}
+
 function loadRuntime(preview: InstalledAppPreview, actualPackageHash?: string) {
   const cacheEntry = buildAgentAppPackageCacheEntry({
     identity: preview.identity,
@@ -65,6 +80,7 @@ describe("EntryRuntimeGuard P14", () => {
       operation: "mount-ui",
       runtimePackageLoad,
       permissionDecision: "accepted",
+      runtimeProfile: buildRuntimeProfile(preview),
     });
 
     expect(result.status).toBe("allow");
@@ -79,10 +95,99 @@ describe("EntryRuntimeGuard P14", () => {
         rawTauriAllowed: false,
         nodeApiAllowed: false,
       },
+      runtimeProfile: {
+        runtimeId: "content-factory-app:in_lime:0.8.0",
+        runtimeVersion: "0.8.0",
+        shellKind: "desktop",
+        installMode: "in_lime",
+      },
     });
     expect(result.prompt?.requestedCapabilities.map((item) => item.capability)).toEqual(
       expect.arrayContaining(["lime.ui", "lime.storage", "lime.agent"]),
     );
+  });
+
+  it("install mode 与 Runtime Profile 匹配时，guard 只读 profile 而不依赖 shell class", () => {
+    const preview = buildPreview(resolvedSetup);
+    const runtimePackageLoad = loadRuntime(preview);
+    const runtimeProfile = buildRuntimeProfile(preview);
+    const result = evaluateAgentAppEntryRuntimeGuard({
+      preview,
+      entryKey: "dashboard",
+      flags: buildUiRuntimeCapabilityProfile({
+        realAdapterEnabled: true,
+        uiRuntimeEnabled: true,
+      }).featureFlags,
+      operation: "mount-ui",
+      runtimePackageLoad,
+      permissionDecision: "accepted",
+      installMode: "in_lime",
+      runtimeProfile,
+    });
+
+    expect(result.status).toBe("allow");
+    expect(result.prompt?.runtimeProfile).toMatchObject({
+      runtimeId: runtimeProfile.runtimeId,
+      runtimeVersion: runtimeProfile.runtimeVersion,
+      shellKind: "desktop",
+      installMode: "in_lime",
+    });
+  });
+
+  it("standalone 启动缺少 Runtime Profile 时会被隔离阻断", () => {
+    const preview = buildPreview(resolvedSetup);
+    const runtimePackageLoad = loadRuntime(preview);
+    const result = evaluateAgentAppEntryRuntimeGuard({
+      preview,
+      entryKey: "dashboard",
+      flags: buildUiRuntimeCapabilityProfile({
+        realAdapterEnabled: true,
+        uiRuntimeEnabled: true,
+      }).featureFlags,
+      operation: "mount-ui",
+      runtimePackageLoad,
+      permissionDecision: "accepted",
+      installMode: "standalone",
+    });
+
+    expect(result.status).toBe("blocked");
+    expect(result.blockers).toContainEqual(
+      expect.objectContaining({
+        code: "RUNTIME_PROFILE_MISSING",
+        kind: "install-mode",
+        key: "standalone",
+      }),
+    );
+  });
+
+  it("Runtime Profile 与选定 install mode 不一致时，不能绕过 guard", () => {
+    const preview = buildPreview(resolvedSetup);
+    const runtimePackageLoad = loadRuntime(preview);
+    const result = evaluateAgentAppEntryRuntimeGuard({
+      preview,
+      entryKey: "dashboard",
+      flags: buildUiRuntimeCapabilityProfile({
+        realAdapterEnabled: true,
+        uiRuntimeEnabled: true,
+      }).featureFlags,
+      operation: "mount-ui",
+      runtimePackageLoad,
+      permissionDecision: "accepted",
+      installMode: "standalone",
+      runtimeProfile: buildRuntimeProfile(preview, "in_lime"),
+    });
+
+    expect(result.status).toBe("blocked");
+    expect(result.blockers).toContainEqual(
+      expect.objectContaining({
+        code: "RUNTIME_PROFILE_MISSING",
+        key: "standalone",
+      }),
+    );
+    expect(result.prompt?.runtimeProfile).toMatchObject({
+      installMode: "in_lime",
+      shellKind: "desktop",
+    });
   });
 
   it("UI page entry 可在非本入口的 app-level blocker 下打开并展示降级警告", () => {

@@ -88,6 +88,10 @@ export interface LimeHostBridgeCapabilityInvoker extends LimeCapabilityInvoker {
   openExternalHost(
     payload: LimeHostBridgeOpenExternalPayload,
   ): Promise<LimeCapabilityInvokeResponse<{ opened: true }>>;
+  selectDirectoryHost(
+    payload?: LimeHostBridgeSelectDirectoryPayload,
+    options?: LimeHostBridgeLegacyRequestOptions,
+  ): Promise<LimeCapabilityInvokeResponse<LimeHostBridgeSelectDirectoryResult>>;
   downloadHost(
     payload: LimeHostBridgeDownloadPayload,
     options?: LimeHostBridgeLegacyRequestOptions,
@@ -170,6 +174,16 @@ export interface LimeHostBridgeOpenExternalPayload {
   url: string;
 }
 
+export interface LimeHostBridgeSelectDirectoryPayload {
+  title?: string;
+}
+
+export interface LimeHostBridgeSelectDirectoryResult {
+  path: string | null;
+  cancelled: boolean;
+  message?: string;
+}
+
 export type LimeHostBridgeEventHandler = (payload: unknown) => void;
 
 export interface LimeHostBridgeCapabilitySubscribeRequest {
@@ -219,6 +233,7 @@ interface PendingBridgeRequest {
 }
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
+const DEFAULT_DIRECTORY_PICKER_TIMEOUT_MS = 5 * 60_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -496,6 +511,37 @@ class BrowserLimeHostBridgeCapabilityInvoker
       payload,
       request,
     ) as Promise<LimeCapabilityInvokeResponse<{ opened: true }>>;
+  }
+
+  selectDirectoryHost(
+    payload: LimeHostBridgeSelectDirectoryPayload = {},
+    options: LimeHostBridgeLegacyRequestOptions = {},
+  ): Promise<LimeCapabilityInvokeResponse<LimeHostBridgeSelectDirectoryResult>> {
+    const request = {
+      capability: "lime.ui",
+      method: "selectDirectory",
+      args: payload,
+      requestId:
+        options.requestId ??
+        this.nextRequestId({
+          capability: "lime.ui",
+          method: "selectDirectory",
+        } as LimeCapabilityInvokeRequest),
+    } as LimeCapabilityInvokeRequest;
+    this.callLog.push({
+      capability: request.capability,
+      method: request.method,
+      args: payload,
+    });
+    return this.requestBridgeAction(
+      "capability:invoke",
+      buildBridgePayload(request),
+      request,
+      {
+        ...options,
+        timeoutMs: options.timeoutMs ?? DEFAULT_DIRECTORY_PICKER_TIMEOUT_MS,
+      },
+    ) as Promise<LimeCapabilityInvokeResponse<LimeHostBridgeSelectDirectoryResult>>;
   }
 
   downloadHost(

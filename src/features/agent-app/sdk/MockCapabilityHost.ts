@@ -18,6 +18,7 @@ import type {
 } from "../types";
 import { AgentAppCapabilityError } from "./capabilityErrors";
 import type {
+  AgentAppTaskLookup,
   CapabilityHost,
   LimeAppSdk,
   LimeAgentCapability,
@@ -63,6 +64,10 @@ function withRetainedTarget(target: CleanupTarget): CleanupTarget {
     exists: true,
     safeToDelete: false,
   };
+}
+
+function readTaskLookupId(task: string | AgentAppTaskLookup): string {
+  return typeof task === "string" ? task : task.taskId;
 }
 
 export class MockCapabilityHost implements CapabilityHost {
@@ -384,13 +389,15 @@ export class MockCapabilityHost implements CapabilityHost {
         this.tasks.push(task);
         return task;
       },
-      streamTask: async (taskId) => {
-        const task = this.tasks.find((item) => item.taskId === taskId);
-        return task ? [...task.events] : [];
+      streamTask: async (task) => {
+        const taskId = readTaskLookupId(task);
+        const record = this.tasks.find((item) => item.taskId === taskId);
+        return record ? [...record.events] : [];
       },
-      getTask: async (taskId) =>
-        this.tasks.find((task) => task.taskId === taskId) ?? null,
-      cancelTask: async (taskId) => {
+      getTask: async (task) =>
+        this.tasks.find((item) => item.taskId === readTaskLookupId(task)) ?? null,
+      cancelTask: async (taskLookup) => {
+        const taskId = readTaskLookupId(taskLookup);
         const index = this.tasks.findIndex((task) => task.taskId === taskId);
         if (index < 0) {
           throw new AgentAppCapabilityError({
@@ -414,7 +421,8 @@ export class MockCapabilityHost implements CapabilityHost {
         this.tasks[index] = task;
         return task;
       },
-      retryTask: async (taskId) => {
+      retryTask: async (task) => {
+        const taskId = readTaskLookupId(task);
         const sourceTask = this.tasks.find((task) => task.taskId === taskId);
         if (!sourceTask) {
           throw new AgentAppCapabilityError({

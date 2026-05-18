@@ -86,6 +86,17 @@ export type {
 export { uninstallApp } from "./install/uninstallApp";
 export type { AgentAppInstalledStateRepository } from "./install/uninstallApp";
 export {
+  AgentAppInstallContractError,
+  InstallModeRegistry,
+  checkInstallModeReadiness,
+  checkInstallModesReadiness,
+  defaultInstallModeRegistry,
+  listAgentAppInstallModes,
+  normalizeInstallContract,
+  parseInstallContract,
+  projectInstallContract,
+} from "./install-mode";
+export {
   AgentAppCloudBootstrapError,
   buildCloudBootstrapInstalledAppPreview,
   buildCloudBootstrapPackageSource,
@@ -99,6 +110,46 @@ export { normalizeManifest } from "./manifest/normalizeManifest";
 export { projectApp } from "./projection/projectApp";
 export { checkReadiness } from "./readiness/checkReadiness";
 export { p0HostCapabilityProfile } from "./readiness/hostCapabilityProfile";
+export {
+  StaticRuntimeProfilePort,
+  buildLimeRuntimeProfileForInstalledState,
+  buildLimeRuntimeProfileForPreview,
+  buildLimeRuntimeProfileFromHostProfile,
+  buildRuntimeCapabilityMatrix,
+  runtimeProfileIssueForInstallMode,
+  shellKindForInstallMode,
+  summarizeRuntimeProfile,
+} from "./runtime-profile";
+export type {
+  RuntimeProfilePort,
+  RuntimeProfileResolveInput,
+} from "./runtime-profile";
+export {
+  buildRuntimeBackedDescriptor,
+  buildShellDescriptor,
+  buildShellIsolationPolicy,
+  buildStandaloneShellDescriptor,
+  InMemoryShellLaunchPort,
+  resolveShellLaunchDescriptorForInstalledEntry,
+} from "./shell";
+export type {
+  ShellDescriptor,
+  ShellEntryDescriptor,
+  ShellIsolationPolicy,
+  ShellLaunchDescriptorResolution,
+  ShellLaunchPort,
+  ShellLaunchReadiness,
+  ShellLaunchResult,
+} from "./shell";
+export {
+  buildPackageDescriptor,
+  validatePackageTarget,
+} from "./packaging";
+export type {
+  AgentAppPackageDescriptor,
+  AgentAppPackageTarget,
+  AgentAppPackageTargetKind,
+} from "./packaging";
 export {
   AgentAppCapabilityError,
   LIME_CAPABILITY_ERROR_CODES,

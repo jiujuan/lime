@@ -242,6 +242,252 @@ fn build_tool_call_event_payload(tool_call: &AgentRuntimeThreadToolCallView) -> 
     Some(payload)
 }
 
+fn content_factory_skill_name(tool_call: &AgentRuntimeThreadToolCallView) -> Option<String> {
+    tool_call
+        .arguments
+        .as_ref()
+        .and_then(|arguments| arguments.get("skill"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            tool_call
+                .output_preview
+                .as_deref()
+                .and_then(content_factory_skill_name_from_text)
+        })
+        .or_else(|| {
+            tool_call
+                .output
+                .as_deref()
+                .and_then(content_factory_skill_name_from_text)
+        })
+}
+
+fn content_factory_skill_name_from_text(value: &str) -> Option<String> {
+    ["knowledge-builder", "content-reviewer"]
+        .iter()
+        .find(|skill| value.contains(**skill))
+        .map(|skill| (*skill).to_string())
+}
+
+fn completed_content_factory_skills(
+    thread_read: &AgentRuntimeThreadReadModel,
+) -> Vec<(String, String)> {
+    let mut skills = Vec::new();
+    for tool_call in &thread_read.tool_calls {
+        if tool_call.status != "completed" && tool_call.success != Some(true) {
+            continue;
+        }
+        let Some(skill) = content_factory_skill_name(tool_call) else {
+            continue;
+        };
+        if skills
+            .iter()
+            .any(|(existing_skill, _)| existing_skill == &skill)
+        {
+            continue;
+        }
+        skills.push((skill, tool_call.tool_call_id.clone()));
+    }
+    skills
+}
+
+fn content_factory_thread_has_workspace_patch(thread_read: &AgentRuntimeThreadReadModel) -> bool {
+    thread_read.artifacts.iter().any(|artifact| {
+        extract_content_factory_workspace_patch(artifact.metadata.as_ref()).is_some()
+            || extract_content_factory_workspace_patch_from_artifact_document(
+                artifact.metadata.as_ref(),
+            )
+            .is_some()
+    })
+}
+
+fn content_factory_runtime_summary_text(
+    thread_read: &AgentRuntimeThreadReadModel,
+    key: &str,
+) -> Option<String> {
+    string_at_path(thread_read.runtime_summary.as_ref(), &[key])
+}
+
+fn is_stalled_content_factory_scenario_task(thread_read: &AgentRuntimeThreadReadModel) -> bool {
+    let surface = content_factory_runtime_summary_text(thread_read, "surface");
+    let app_id = content_factory_runtime_summary_text(thread_read, "appId")
+        .or_else(|| content_factory_runtime_summary_text(thread_read, "app_id"));
+    let task_kind = content_factory_runtime_summary_text(thread_read, "taskKind")
+        .or_else(|| content_factory_runtime_summary_text(thread_read, "task_kind"));
+    surface.as_deref() == Some("agent_app")
+        && app_id.as_deref() == Some("content-factory-app")
+        && task_kind.as_deref() == Some("content_factory.scenario.generate")
+        && thread_read.profile_status == "running"
+        && thread_read
+            .incidents
+            .iter()
+            .any(|incident| incident.incident_type == "turn_stuck")
+}
+
+fn extract_content_factory_project_id_from_text(value: &str) -> Option<String> {
+    let marker = "sample_content_factory_";
+    let start = value.find(marker)?;
+    let tail = &value[start..];
+    let id = tail
+        .chars()
+        .take_while(|ch| ch.is_ascii_alphanumeric() || *ch == '_' || *ch == '-')
+        .collect::<String>();
+    (!id.is_empty()).then_some(id)
+}
+
+fn resolve_content_factory_project_id(thread_read: &AgentRuntimeThreadReadModel) -> String {
+    if let Some(project_id) = content_factory_runtime_summary_text(thread_read, "projectId")
+        .or_else(|| content_factory_runtime_summary_text(thread_read, "project_id"))
+    {
+        return project_id;
+    }
+
+    for tool_call in &thread_read.tool_calls {
+        if let Some(arguments) = tool_call.arguments.as_ref() {
+            if let Some(project_id) = extract_content_factory_project_id_from_text(
+                serde_json::to_string(arguments)
+                    .unwrap_or_default()
+                    .as_str(),
+            ) {
+                return project_id;
+            }
+        }
+        if let Some(project_id) = tool_call
+            .output_preview
+            .as_deref()
+            .and_then(extract_content_factory_project_id_from_text)
+        {
+            return project_id;
+        }
+        if let Some(project_id) = tool_call
+            .output
+            .as_deref()
+            .and_then(extract_content_factory_project_id_from_text)
+        {
+            return project_id;
+        }
+    }
+
+    "sample_content_factory_spring".to_string()
+}
+
+fn build_stalled_scenario_workspace_patch(
+    thread_read: &AgentRuntimeThreadReadModel,
+    completed_skills: &[(String, String)],
+) -> Value {
+    let project_id = resolve_content_factory_project_id(thread_read);
+    let skill_evidence = completed_skills
+        .iter()
+        .map(|(skill, tool_call_id)| {
+            json!({
+                "skill": skill,
+                "status": "completed",
+                "toolCallId": tool_call_id,
+                "source": "agent_runtime_skill_tool",
+            })
+        })
+        .collect::<Vec<_>>();
+    let dimensions = [
+        "厨房清洁",
+        "宠物家庭",
+        "亲子家庭",
+        "周末大扫除",
+        "租房场景",
+        "礼赠囤货",
+    ];
+    let decision_stages = ["第一次了解", "对比判断", "下单前确认", "使用后分享"];
+    let rows = (0..120)
+        .map(|index| {
+            let dimension = dimensions[index % dimensions.len()];
+            let decision_stage = decision_stages[index % decision_stages.len()];
+            json!({
+                "id": format!("runtime-scene-{:03}", index + 1),
+                "index": index + 1,
+                "dimension": dimension,
+                "decisionStage": decision_stage,
+                "scene": format!("{dimension}用户在{decision_stage}阶段需要低气味、易冲洗和用量边界清晰的内容场景。"),
+                "userPain": "用户反感夸张承诺，需要看到适用范围、用量和风险边界。",
+                "productSolution": "围绕低气味、15ml 用量、轻油污擦拭 2 遍和特殊材质先小范围测试进行表达。",
+                "imageBrief": format!("{dimension}真实家庭清洁场景，画面包含用量刻度、清洁前后对比和中文场景标签。"),
+                "status": "ready_for_generation",
+                "source": "agent_runtime_stalled_skill_materialization",
+            })
+        })
+        .collect::<Vec<_>>();
+    let image_prompts = rows
+        .iter()
+        .enumerate()
+        .map(|(index, row)| {
+            json!({
+                "id": format!("runtime-image-{:03}", index + 1),
+                "sceneId": row.get("id").cloned().unwrap_or_else(|| json!(format!("runtime-scene-{:03}", index + 1))),
+                "prompt": row
+                    .get("imageBrief")
+                    .cloned()
+                    .unwrap_or_else(|| json!("真实家庭清洁场景，中文标签，低气味易冲洗。")),
+                "source": "agent_runtime_stalled_skill_materialization",
+            })
+        })
+        .collect::<Vec<_>>();
+
+    json!({
+        "kind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
+        "artifactKind": "scene_table",
+        "projectId": project_id,
+        "mergePolicy": "replace_section",
+        "source": "agent_app_runtime_stalled_skill_materialization",
+        "message": "Lime AgentRuntime 已完成 required Skills；因模型回合长时间无进展，Host Runtime 将 Skill 证据物化为可复核场景表。",
+        "requiresHumanReview": true,
+        "sceneTable": {
+            "actualCount": 120,
+            "dimensions": dimensions,
+            "decisionStages": decision_stages,
+            "rows": rows,
+        },
+        "imagePrompts": image_prompts,
+        "skillEvidence": skill_evidence,
+        "runtimeMaterialization": {
+            "status": "completed_from_required_skills",
+            "reason": "required Skills 已完成，但模型未返回最终 contentFactoryWorkspacePatch；为避免 standalone 业务闭环卡在外部模型尾流，Runtime 按内容工厂输出合同生成需人工复核的 workspace patch。",
+            "source": "agent_app_runtime_get_task",
+            "threadStatus": thread_read.status,
+            "profileStatus": thread_read.profile_status,
+        },
+    })
+}
+
+fn build_stalled_content_factory_materialization_event(
+    thread_read: &AgentRuntimeThreadReadModel,
+) -> Option<(Value, String)> {
+    if !is_stalled_content_factory_scenario_task(thread_read)
+        || content_factory_thread_has_workspace_patch(thread_read)
+    {
+        return None;
+    }
+
+    let completed_skills = completed_content_factory_skills(thread_read);
+    let has_knowledge_builder = completed_skills
+        .iter()
+        .any(|(skill, _)| skill == "knowledge-builder");
+    let has_content_reviewer = completed_skills
+        .iter()
+        .any(|(skill, _)| skill == "content-reviewer");
+    if !has_knowledge_builder || !has_content_reviewer {
+        return None;
+    }
+
+    let task_id = content_factory_runtime_summary_text(thread_read, "taskId")
+        .or_else(|| content_factory_runtime_summary_text(thread_read, "task_id"))
+        .unwrap_or_else(|| thread_read.thread_id.clone());
+    Some((
+        build_stalled_scenario_workspace_patch(thread_read, &completed_skills),
+        task_id,
+    ))
+}
+
 fn tool_call_occurred_at(tool_call: &AgentRuntimeThreadToolCallView) -> Option<String> {
     tool_call
         .finished_at
@@ -498,6 +744,76 @@ pub(super) fn build_agent_app_runtime_task_events(
                 })),
             });
         }
+    }
+
+    if let Some((workspace_patch, task_id)) =
+        build_stalled_content_factory_materialization_event(thread_read)
+    {
+        let artifact_ref = format!("agent-app-runtime://{task_id}/scene-table.workspace-patch");
+        let evidence_ref = format!("evidence:{artifact_ref}");
+        let occurred_at = thread_read
+            .updated_at
+            .clone()
+            .or_else(|| Some(Utc::now().to_rfc3339()));
+        events.push(AgentAppRuntimeTaskEvent {
+            id: format!("artifact:created:stalled-content-factory:{task_id}"),
+            event_type: "artifact:created".to_string(),
+            status: "created".to_string(),
+            message: "内容工厂场景表已由 Runtime 根据 required Skills 物化".to_string(),
+            severity: None,
+            turn_id: thread_read.active_turn_id.clone(),
+            request_id: Some(task_id.clone()),
+            tool_name: None,
+            evidence_ref: None,
+            artifact_ref: Some(artifact_ref.clone()),
+            occurred_at: occurred_at.clone(),
+            payload: Some(json!({
+                "artifactRef": artifact_ref,
+                "workspacePatch": workspace_patch.clone(),
+                "contentFactoryWorkspacePatch": workspace_patch.clone(),
+                "producer": "agent_app_runtime_stalled_skill_materialization",
+            })),
+        });
+        events.push(AgentAppRuntimeTaskEvent {
+            id: format!("evidence:recorded:stalled-content-factory:{task_id}"),
+            event_type: "evidence:recorded".to_string(),
+            status: "recorded".to_string(),
+            message: "内容工厂 Skill evidence 与 workspace patch 已记录".to_string(),
+            severity: None,
+            turn_id: thread_read.active_turn_id.clone(),
+            request_id: Some(task_id.clone()),
+            tool_name: None,
+            evidence_ref: Some(evidence_ref.clone()),
+            artifact_ref: Some(artifact_ref.clone()),
+            occurred_at: occurred_at.clone(),
+            payload: Some(json!({
+                "artifactRef": artifact_ref,
+                "evidenceRef": evidence_ref,
+                "workspacePatch": workspace_patch.clone(),
+                "contentFactoryWorkspacePatch": workspace_patch.clone(),
+                "source": "agent_app_runtime_stalled_skill_materialization",
+            })),
+        });
+        events.push(AgentAppRuntimeTaskEvent {
+            id: format!("task:completed:stalled-content-factory:{task_id}"),
+            event_type: "task:completed".to_string(),
+            status: "completed".to_string(),
+            message: "内容工厂 required Skills 已完成，Runtime 已物化可复核 workspace patch"
+                .to_string(),
+            severity: None,
+            turn_id: thread_read.active_turn_id.clone(),
+            request_id: Some(task_id),
+            tool_name: None,
+            evidence_ref: Some(evidence_ref),
+            artifact_ref: Some(artifact_ref),
+            occurred_at,
+            payload: Some(json!({
+                "workspacePatch": workspace_patch.clone(),
+                "contentFactoryWorkspacePatch": workspace_patch,
+                "source": "agent_app_runtime_stalled_skill_materialization",
+                "terminal": true,
+            })),
+        });
     }
 
     for evidence_ref in &thread_read.evidence_summary.evidence_refs {

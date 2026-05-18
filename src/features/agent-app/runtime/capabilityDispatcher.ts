@@ -3,6 +3,7 @@ import {
   currentAgentAppStandardVersion,
   p0HostCapabilityProfile,
 } from "../readiness/hostCapabilityProfile";
+import { summarizeRuntimeProfile } from "../runtime-profile";
 import type { CapabilityHost, LimeAppSdk } from "../sdk/CapabilityHost";
 import {
   LIME_CAPABILITY_DEFINITIONS,
@@ -18,6 +19,7 @@ import type {
   AgentAppTaskRecord,
   AgentAppTaskRequest,
   HostCapabilityProfile,
+  LimeRuntimeProfile,
 } from "../types";
 import type { AgentAppHostBridgeCapabilityRequest } from "./hostBridge";
 
@@ -31,6 +33,7 @@ export interface CreateAgentAppCapabilityDispatcherOptions {
   entryKey: string;
   runId?: string;
   profile?: HostCapabilityProfile;
+  runtimeProfile?: LimeRuntimeProfile;
   manifestVersion?: string;
   agentRuntime?: unknown;
   requirements?: unknown;
@@ -891,16 +894,28 @@ async function dispatchAgent(
     return sdk.agent.startTask(input as unknown as AgentAppTaskRequest);
   }
   if (request.method === "streamTask") {
-    return sdk.agent.streamTask(readStringParam(request, "taskId", 0));
+    const input = readOptionalInputRecord(request);
+    const taskId = readStringParam(request, "taskId", 0);
+    const sessionId = readString(input.sessionId);
+    return sdk.agent.streamTask(sessionId ? { ...input, taskId, sessionId } : taskId);
   }
   if (request.method === "getTask") {
-    return sdk.agent.getTask(readStringParam(request, "taskId", 0));
+    const input = readOptionalInputRecord(request);
+    const taskId = readStringParam(request, "taskId", 0);
+    const sessionId = readString(input.sessionId);
+    return sdk.agent.getTask(sessionId ? { ...input, taskId, sessionId } : taskId);
   }
   if (request.method === "cancelTask") {
-    return sdk.agent.cancelTask(readStringParam(request, "taskId", 0));
+    const input = readOptionalInputRecord(request);
+    const taskId = readStringParam(request, "taskId", 0);
+    const sessionId = readString(input.sessionId);
+    return sdk.agent.cancelTask(sessionId ? { ...input, taskId, sessionId } : taskId);
   }
   if (request.method === "retryTask") {
-    return sdk.agent.retryTask(readStringParam(request, "taskId", 0));
+    const input = readOptionalInputRecord(request);
+    const taskId = readStringParam(request, "taskId", 0);
+    const sessionId = readString(input.sessionId);
+    return sdk.agent.retryTask(sessionId ? { ...input, taskId, sessionId } : taskId);
   }
   if (
     request.method === "submitHostResponse" ||
@@ -945,28 +960,33 @@ function resolveCapabilityDefinition(
 function buildCapabilityDiscoveryEntry(
   definition: LimeCapabilityDefinitionRecord,
   profile: HostCapabilityProfile,
+  runtimeProfile?: LimeRuntimeProfile,
 ): CapabilityDiscoveryEntry {
   const support = resolveCapabilityProfileSupport(definition, profile);
+  const runtimeSupport = runtimeProfile?.capabilities[definition.name];
   const implementation = support?.implementation ?? "none";
-  const enabled = support?.enabled === true && implementation !== "none";
+  const effectiveImplementation = runtimeSupport?.implementation ?? implementation;
+  const enabled = runtimeSupport
+    ? runtimeSupport.available === true && effectiveImplementation !== "none"
+    : support?.enabled === true && effectiveImplementation !== "none";
   const unavailableReason = enabled
     ? undefined
     : String(definition.stage) === "planned"
       ? "planned"
-      : implementation === "none"
+      : effectiveImplementation === "none"
         ? "not_implemented"
         : "disabled";
 
   const entry: CapabilityDiscoveryEntry = {
     name: definition.name,
-    version: support?.version ?? definition.version,
+    version: runtimeSupport?.version ?? support?.version ?? definition.version,
     group: definition.group,
     stage: definition.stage,
     owner: definition.owner,
     methods: [...definition.methods],
     summary: definition.summary,
     enabled,
-    implementation,
+    implementation: effectiveImplementation,
   };
   return unavailableReason ? { ...entry, unavailableReason } : entry;
 }
@@ -1121,6 +1141,7 @@ function buildAgentAppStandardProfile(params: {
 function dispatchCapabilities(
   request: AgentAppHostBridgeCapabilityRequest,
   profile: HostCapabilityProfile,
+  runtimeProfile: LimeRuntimeProfile | undefined,
   standardProfile: {
     manifestVersion?: string;
     agentRuntime?: unknown;
@@ -1132,7 +1153,7 @@ function dispatchCapabilities(
 ): unknown {
   if (request.method === "list") {
     return LIME_CAPABILITY_DEFINITIONS.map((definition) =>
-      buildCapabilityDiscoveryEntry(definition, profile),
+      buildCapabilityDiscoveryEntry(definition, profile, runtimeProfile),
     );
   }
   if (request.method === "get") {
@@ -1140,6 +1161,7 @@ function dispatchCapabilities(
     return buildCapabilityDiscoveryEntry(
       resolveCapabilityDefinition(capability),
       profile,
+      runtimeProfile,
     );
   }
   if (request.method === "getProfile") {
@@ -1154,7 +1176,7 @@ function dispatchCapabilities(
       capabilities: Object.fromEntries(
         LIME_CAPABILITY_DEFINITIONS.map((definition) => [
           definition.name,
-          buildCapabilityDiscoveryEntry(definition, profile),
+          buildCapabilityDiscoveryEntry(definition, profile, runtimeProfile),
         ]),
       ),
       standards: buildAgentAppStandardProfile({
@@ -1169,6 +1191,10 @@ function dispatchCapabilities(
     };
     if (agentRuntime !== undefined) {
       payload.agentRuntime = agentRuntime;
+    }
+    if (runtimeProfile) {
+      payload.runtimeProfile = summarizeRuntimeProfile(runtimeProfile);
+      payload.runtimeCapabilities = runtimeProfile.capabilities;
     }
     if (standardProfile.requirements !== undefined) {
       payload.requirements = standardProfile.requirements;
@@ -4120,6 +4146,7 @@ export function createAgentAppCapabilityDispatcher({
   entryKey,
   runId,
   profile = p0HostCapabilityProfile,
+  runtimeProfile,
   manifestVersion,
   agentRuntime,
   requirements,
@@ -4129,7 +4156,7 @@ export function createAgentAppCapabilityDispatcher({
 }: CreateAgentAppCapabilityDispatcherOptions): AgentAppCapabilityDispatcher {
   return async (request) => {
     if (request.capability === "lime.capabilities") {
-      return dispatchCapabilities(request, profile, {
+      return dispatchCapabilities(request, profile, runtimeProfile, {
         manifestVersion,
         agentRuntime,
         requirements,

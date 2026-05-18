@@ -1,4 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const agentAppApiMocks = vi.hoisted(() => ({
+  selectAgentAppDirectory: vi.fn(),
+}));
+
+vi.mock("@/lib/api/agentApps", () => ({
+  selectAgentAppDirectory: agentAppApiMocks.selectAgentAppDirectory,
+}));
+
 import {
   AGENT_APP_BRIDGE_PROTOCOL,
   AGENT_APP_BRIDGE_VERSION,
@@ -41,8 +50,9 @@ function buildAppMessage(type: string, payload?: unknown, requestId = "req-1") {
 }
 
 async function flushBridgeTasks() {
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let index = 0; index < 6; index += 1) {
+    await Promise.resolve();
+  }
 }
 
 describe("AgentAppHostBridge", () => {
@@ -50,6 +60,7 @@ describe("AgentAppHostBridge", () => {
     document.body.innerHTML = "";
     document.documentElement.removeAttribute("lang");
     document.documentElement.removeAttribute("style");
+    agentAppApiMocks.selectAgentAppDirectory.mockReset();
     vi.restoreAllMocks();
   });
 
@@ -461,6 +472,55 @@ describe("AgentAppHostBridge", () => {
     cleanup();
   });
 
+  it("lime.ui selectDirectory 应调用宿主封装目录选择命令", async () => {
+    agentAppApiMocks.selectAgentAppDirectory.mockResolvedValue({
+      path: "/Users/example/agent-app",
+      cancelled: false,
+    });
+    const { frame, postMessage } = buildFrame();
+    const bridge = new AgentAppHostBridge({
+      frame,
+      appId,
+      entryKey,
+      displayName: "内容工厂",
+      entryRoute: "/dashboard",
+      entryUrl,
+    });
+    const cleanup = bridge.start();
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: buildAppMessage("capability:invoke", {
+          capability: "lime.ui",
+          method: "selectDirectory",
+          input: { title: "选择应用目录" },
+        }),
+        origin: runtimeOrigin,
+        source: frame.contentWindow,
+      }),
+    );
+    await flushBridgeTasks();
+
+    expect(agentAppApiMocks.selectAgentAppDirectory).toHaveBeenCalledWith({
+      title: "选择应用目录",
+    });
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:response",
+        payload: expect.objectContaining({
+          ok: true,
+          value: {
+            path: "/Users/example/agent-app",
+            cancelled: false,
+          },
+        }),
+      }),
+      runtimeOrigin,
+    );
+
+    cleanup();
+  });
+
   it("开放 capability dispatcher 时应把 App 作用域请求转给 Host 并返回结果", async () => {
     const { frame, postMessage } = buildFrame();
     const dispatchCapability = vi.fn().mockResolvedValue({
@@ -679,6 +739,81 @@ describe("AgentAppHostBridge", () => {
             subscriptionId: "agent-app-subscription-1",
             unsubscribed: true,
           },
+        }),
+        runtimeOrigin,
+      );
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+    }
+  });
+
+  it("订阅 lime.agent task 时应把 sessionId 一起用于 replay 轮询", async () => {
+    vi.useFakeTimers();
+    const { frame, postMessage } = buildFrame();
+    const dispatchCapability = vi.fn().mockResolvedValue({
+      taskId: "task-1",
+      sessionId: "session-1",
+      taskStatus: "completed",
+      taskEvents: [{ eventType: "task:completed", message: "任务已完成" }],
+    });
+    const bridge = new AgentAppHostBridge({
+      frame,
+      appId,
+      entryKey,
+      displayName: "内容工厂",
+      entryRoute: "/dashboard",
+      entryUrl,
+      dispatchCapability,
+      listenRuntimeEvent: async () => () => undefined,
+      now: () => "2026-05-16T00:00:00.000Z",
+    });
+    const cleanup = bridge.start();
+
+    try {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: buildAppMessage("capability:subscribe", {
+            capability: "lime.agent",
+            topic: "task",
+            input: {
+              taskId: "task-1",
+              sessionId: "session-1",
+              bridgeAction: "contentFactoryProduction",
+            },
+            pollIntervalMs: 250,
+          }),
+          origin: runtimeOrigin,
+          source: frame.contentWindow,
+        }),
+      );
+      await flushBridgeTasks();
+
+      expect(dispatchCapability).toHaveBeenCalledWith(
+        expect.objectContaining({
+          capability: "lime.agent",
+          method: "getTask",
+          input: { taskId: "task-1", sessionId: "session-1" },
+        }),
+      );
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "host:response",
+          payload: expect.objectContaining({
+            subscriptionId: "agent-app-subscription-1",
+            taskId: "task-1",
+            sessionId: "session-1",
+          }),
+        }),
+        runtimeOrigin,
+      );
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "capability:event",
+          payload: expect.objectContaining({
+            taskId: "task-1",
+            sessionId: "session-1",
+          }),
         }),
         runtimeOrigin,
       );

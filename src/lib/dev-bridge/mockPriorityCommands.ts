@@ -80,6 +80,8 @@ const bridgeTruthCommands = new Set<string>([
   "agent_app_start_ui_runtime",
   "agent_app_get_ui_runtime_status",
   "agent_app_stop_ui_runtime",
+  "agent_app_select_directory",
+  "agent_app_launch_shell",
   "agent_app_runtime_start_task",
   "agent_app_runtime_cancel_task",
   "agent_app_runtime_get_task",

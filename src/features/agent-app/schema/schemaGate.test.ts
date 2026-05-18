@@ -47,6 +47,7 @@ describe("Agent App P7 schema gate", () => {
         "overlayTemplates",
         "ui",
         "lifecycle",
+        "install",
       ]),
     );
   });
@@ -70,6 +71,9 @@ describe("Agent App P7 schema gate", () => {
         "WORKFLOW_REQUIRED",
       ]),
     );
+    expect(readiness.installModes).toEqual([
+      expect.objectContaining({ mode: "in_lime", status: "ready" }),
+    ]);
   });
 
   it("缺失 v0.3 projection 字段时应失败", () => {

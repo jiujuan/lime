@@ -765,6 +765,7 @@ fn test_agent_app_runtime_task_events_project_thread_read_facts() {
 #[test]
 fn test_agent_app_runtime_task_events_project_connector_outbox_evidence() {
     let outbox_ref = "outbox://connector/notion/createPage/notion-create-page-1";
+    let delivery_ref = "delivery://connector/notion/createPage/notion-create-page-1";
     let mut thread_read = base_thread_read();
     thread_read.profile_status = "completed".to_string();
     thread_read.tool_calls = vec![AgentRuntimeThreadToolCallView {
@@ -784,10 +785,10 @@ fn test_agent_app_runtime_task_events_project_connector_outbox_evidence() {
         output_preview: Some("queued_for_cloud_overlay".to_string()),
         success: Some(true),
         error: None,
-        evidence_refs: vec![outbox_ref.to_string()],
+        evidence_refs: vec![outbox_ref.to_string(), delivery_ref.to_string()],
     }];
     thread_read.evidence_summary = AgentRuntimeThreadEvidenceSummary {
-        evidence_refs: vec![outbox_ref.to_string()],
+        evidence_refs: vec![outbox_ref.to_string(), delivery_ref.to_string()],
         verification_outcomes: Vec::new(),
     };
 
@@ -815,6 +816,10 @@ fn test_agent_app_runtime_task_events_project_connector_outbox_evidence() {
     );
     assert!(events.iter().any(|event| {
         event.event_type == "evidence:recorded" && event.evidence_ref.as_deref() == Some(outbox_ref)
+    }));
+    assert!(events.iter().any(|event| {
+        event.event_type == "evidence:recorded"
+            && event.evidence_ref.as_deref() == Some(delivery_ref)
     }));
 }
 
@@ -878,6 +883,107 @@ fn test_agent_app_runtime_task_events_project_report_workspace_patch_fields() {
                 .and_then(|payload| payload.get("workspacePatch"))
                 .and_then(|patch| patch.get("pptOutline"))
                 .is_some()
+    }));
+}
+
+#[test]
+fn test_agent_app_runtime_task_events_materialize_stalled_content_factory_scenario() {
+    let mut thread_read = base_thread_read();
+    thread_read.runtime_summary = Some(json!({
+        "surface": "agent_app",
+        "appId": "content-factory-app",
+        "taskId": "agent-app-task-1",
+        "taskKind": "content_factory.scenario.generate"
+    }));
+    thread_read.incidents = vec![AgentRuntimeIncidentView {
+        id: "incident-stuck-1".to_string(),
+        thread_id: "thread-1".to_string(),
+        turn_id: Some("turn-1".to_string()),
+        item_id: None,
+        incident_type: "turn_stuck".to_string(),
+        severity: "high".to_string(),
+        status: "active".to_string(),
+        title: "当前回合长时间无进展".to_string(),
+        details: None,
+        detected_at: Some("2026-05-16T00:10:00.000Z".to_string()),
+        cleared_at: None,
+    }];
+    thread_read.tool_calls = vec![
+        AgentRuntimeThreadToolCallView {
+            tool_call_id: "tool-knowledge".to_string(),
+            turn_id: "turn-1".to_string(),
+            tool_name: "Skill".to_string(),
+            status: "completed".to_string(),
+            started_at: Some("2026-05-16T00:00:01.000Z".to_string()),
+            finished_at: Some("2026-05-16T00:00:02.000Z".to_string()),
+            updated_at: Some("2026-05-16T00:00:02.000Z".to_string()),
+            arguments: Some(json!({
+                "skill": "knowledge-builder",
+                "args": "项目：春季新品内容项目（sample_content_factory_spring）"
+            })),
+            output: Some("{\"status\":\"completed\"}".to_string()),
+            output_preview: Some("knowledge-builder completed".to_string()),
+            success: Some(true),
+            error: None,
+            evidence_refs: Vec::new(),
+        },
+        AgentRuntimeThreadToolCallView {
+            tool_call_id: "tool-reviewer".to_string(),
+            turn_id: "turn-1".to_string(),
+            tool_name: "Skill".to_string(),
+            status: "completed".to_string(),
+            started_at: Some("2026-05-16T00:00:03.000Z".to_string()),
+            finished_at: Some("2026-05-16T00:00:04.000Z".to_string()),
+            updated_at: Some("2026-05-16T00:00:04.000Z".to_string()),
+            arguments: Some(json!({ "skill": "content-reviewer" })),
+            output: Some("{\"status\":\"completed\"}".to_string()),
+            output_preview: Some("content-reviewer completed".to_string()),
+            success: Some(true),
+            error: None,
+            evidence_refs: Vec::new(),
+        },
+    ];
+
+    let events = build_agent_app_runtime_task_events(&thread_read);
+
+    let artifact_event = events
+        .iter()
+        .find(|event| event.id == "artifact:created:stalled-content-factory:agent-app-task-1")
+        .expect("stalled materialized artifact event");
+    assert_eq!(artifact_event.status, "created");
+    assert_eq!(
+        artifact_event
+            .payload
+            .as_ref()
+            .and_then(|payload| payload.get("contentFactoryWorkspacePatch"))
+            .and_then(|patch| patch.get("projectId")),
+        Some(&json!("sample_content_factory_spring"))
+    );
+    assert_eq!(
+        artifact_event
+            .payload
+            .as_ref()
+            .and_then(|payload| payload.get("contentFactoryWorkspacePatch"))
+            .and_then(|patch| patch.pointer("/sceneTable/actualCount")),
+        Some(&json!(120))
+    );
+    assert!(events.iter().any(|event| {
+        event.event_type == "task:completed"
+            && event
+                .payload
+                .as_ref()
+                .and_then(|payload| payload.get("source"))
+                == Some(&json!("agent_app_runtime_stalled_skill_materialization"))
+    }));
+    assert!(events.iter().any(|event| {
+        event.event_type == "evidence:recorded"
+            && event
+                .payload
+                .as_ref()
+                .and_then(|payload| payload.get("contentFactoryWorkspacePatch"))
+                .and_then(|patch| patch.get("skillEvidence"))
+                .and_then(Value::as_array)
+                .is_some_and(|items| items.len() == 2)
     }));
 }
 

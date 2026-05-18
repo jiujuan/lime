@@ -142,7 +142,7 @@ impl NovitaProvider {
 
         let url = self.build_url("chat/completions");
 
-        eprintln!("[NOVITA] call_api URL: {url} model: {}", request.model);
+        tracing::debug!("[NOVITA] call_api URL: {url} model: {}", request.model);
 
         let payload =
             serde_json::to_value(request).map_err(|e| format!("序列化 Novita 请求失败: {e}"))?;
@@ -186,7 +186,7 @@ impl NovitaProvider {
 
         let url = self.build_url("chat/completions");
 
-        eprintln!("[NOVITA] chat_completions URL: {url}");
+        tracing::debug!("[NOVITA] chat_completions URL: {url}");
 
         let resp = self
             .client
@@ -224,7 +224,7 @@ impl NovitaProvider {
 
         let url = self.build_url("models");
 
-        eprintln!("[NOVITA] list_models URL: {url}");
+        tracing::debug!("[NOVITA] list_models URL: {url}");
 
         let resp = self
             .client
@@ -236,7 +236,7 @@ impl NovitaProvider {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            eprintln!("[NOVITA] list_models 失败: {status} - {body}");
+            tracing::debug!("[NOVITA] list_models 失败: {status} - {body}");
             return Err(format!("Failed to list Novita models: {status} - {body}").into());
         }
 

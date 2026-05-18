@@ -1,4 +1,3 @@
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { safeInvoke } from "@/lib/dev-bridge";
 import {
   getClientAgentApps,
@@ -17,6 +16,7 @@ import {
   buildInstalledAgentAppState,
   type InstalledAgentAppStateListResult,
 } from "@/features/agent-app/install/installedAppState";
+import type { ShellDescriptor } from "@/features/agent-app/shell";
 import { buildInstalledAppPreview } from "@/features/agent-app/install/installedAppPreview";
 import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
 import { buildAgentAppLabResolvedSetupState } from "@/features/agent-app/install/labInstallFlow";
@@ -144,6 +144,20 @@ export interface AgentAppUiRuntimeStopRequest {
   appId: string;
 }
 
+export interface AgentAppShellLaunchRequest {
+  descriptor: ShellDescriptor;
+}
+
+export interface AgentAppSelectDirectoryRequest {
+  title?: string;
+}
+
+export interface AgentAppSelectDirectoryResult {
+  path: string | null;
+  cancelled: boolean;
+  message?: string;
+}
+
 export interface AgentAppUiRuntimeStatus {
   appId: string;
   status: "starting" | "running" | "stopped" | "failed";
@@ -154,6 +168,45 @@ export interface AgentAppUiRuntimeStatus {
   message?: string;
   entryKey?: string;
   route?: string;
+}
+
+export interface AgentAppShellPackageMount {
+  kind: "local_dir" | "mock";
+  path: string;
+  readOnly: boolean;
+  packageHash: string;
+  manifestHash: string;
+}
+
+export interface AgentAppShellWindowInfo {
+  label: string;
+  title: string;
+  url: string;
+  reused: boolean;
+  chrome?: {
+    deepLinkScheme: string;
+    openEntryKey: string;
+    trayEnabled: boolean;
+    closePolicy: "hide_to_tray" | "quit" | string;
+    menuItemIds: string[];
+    multiAppManagement: boolean;
+    runtimeBypass: boolean;
+  };
+}
+
+export interface AgentAppShellLaunchResult {
+  appId?: string;
+  status: "launched" | "blocked";
+  installMode?: ShellDescriptor["installMode"];
+  shellKind?: ShellDescriptor["runtimeProfile"]["shellKind"];
+  descriptorVersion?: ShellDescriptor["descriptorVersion"];
+  devShell: boolean;
+  blockerCodes: string[];
+  message?: string;
+  packageMount?: AgentAppShellPackageMount;
+  runtimeStatus?: AgentAppUiRuntimeStatus;
+  shellWindow?: AgentAppShellWindowInfo;
+  launchedAt: string;
 }
 
 export interface AgentAppFetchCloudPackageRequest {
@@ -312,16 +365,8 @@ export async function inspectLocalAgentAppPackage(
 export async function selectLocalAgentAppDirectory(
   options: SelectLocalAgentAppDirectoryOptions = {},
 ): Promise<string | null> {
-  const selected = await openDialog({
-    directory: true,
-    multiple: false,
-    title: options.title,
-  });
-
-  if (Array.isArray(selected)) {
-    return selected[0] ?? null;
-  }
-  return selected;
+  const selected = await selectAgentAppDirectory({ title: options.title });
+  return selected.cancelled ? null : selected.path;
 }
 
 export async function listInstalledAgentApps(): Promise<InstalledAgentAppStateListResult> {
@@ -665,6 +710,22 @@ export async function stopAgentAppUiRuntime(
   request: AgentAppUiRuntimeStopRequest,
 ): Promise<AgentAppUiRuntimeStatus> {
   return safeInvoke<AgentAppUiRuntimeStatus>("agent_app_stop_ui_runtime", {
+    request,
+  });
+}
+
+export async function selectAgentAppDirectory(
+  request: AgentAppSelectDirectoryRequest = {},
+): Promise<AgentAppSelectDirectoryResult> {
+  return safeInvoke<AgentAppSelectDirectoryResult>("agent_app_select_directory", {
+    request,
+  });
+}
+
+export async function launchAgentAppShell(
+  request: AgentAppShellLaunchRequest,
+): Promise<AgentAppShellLaunchResult> {
+  return safeInvoke<AgentAppShellLaunchResult>("agent_app_launch_shell", {
     request,
   });
 }

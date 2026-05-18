@@ -107,6 +107,52 @@ describe("tauri-mock/core invoke", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
+  it("Agent App shell launch mock 应返回 dev shell 启动结果", async () => {
+    await expect(
+      invokeMockOnly("agent_app_launch_shell", {
+        request: {
+          descriptor: {
+            descriptorVersion: 1,
+            appId: "content-factory-app",
+            packageHash: "package-fnv1a-mock",
+            manifestHash: "manifest-fnv1a-mock",
+            installMode: "standalone",
+            runtimeProfile: {
+              shellKind: "app_shell",
+              installMode: "standalone",
+            },
+            entry: {
+              entryKey: "dashboard",
+            },
+          },
+        },
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        appId: "content-factory-app",
+        status: "launched",
+        devShell: true,
+        blockerCodes: [],
+        runtimeStatus: expect.objectContaining({
+          status: "running",
+        }),
+        shellWindow: expect.objectContaining({
+          label: "agent-app-shell-content-factory-app-standalone",
+          url: "http://127.0.0.1:4199/dashboard",
+          chrome: expect.objectContaining({
+            deepLinkScheme: "lime-agent-content-factory-app",
+            openEntryKey: "dashboard",
+            trayEnabled: true,
+            multiAppManagement: false,
+            runtimeBypass: false,
+          }),
+        }),
+      }),
+    );
+
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
   it("通用工作台执行状态 mock 应返回空闲态", async () => {
     await expect(
       invokeMockOnly("execution_run_get_general_workbench_state", {

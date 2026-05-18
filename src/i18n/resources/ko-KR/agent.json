@@ -411,6 +411,8 @@
   "agentApp.apps.launch.uiMounted": "{{title}} 마운트 완료({{route}}).",
   "agentApp.apps.launch.workflowCompleted": "{{title}} workflow 완료: {{runId}}.",
   "agentApp.apps.launch.entryCompleted": "{{title}} entry 완료: {{runId}}.",
+  "agentApp.apps.launch.shellLaunched": "{{title}} 독립 실행 항목을 시작했습니다({{target}}).",
+  "agentApp.apps.launch.shellBlocked": "독립 실행 항목을 아직 시작할 수 없습니다: {{codes}}.",
   "agentApp.apps.uninstallPreview.title": "제거 리허설",
   "agentApp.apps.uninstallPreview.summary": "{{deleted}}개를 삭제하고 {{retained}}개를 유지합니다.",
   "agentApp.apps.action.confirmUninstall": "제거 확인",

@@ -76,6 +76,13 @@ describe("Agent App readiness P0", () => {
     expect(
       readiness.warnings.find((issue) => issue.code === "KNOWLEDGE_BINDING_REQUIRED"),
     ).toHaveProperty("remediation");
+    expect(readiness.installModes).toEqual([
+      expect.objectContaining({
+        mode: "in_lime",
+        status: "ready",
+        evidencePolicy: "required",
+      }),
+    ]);
   });
 
   it("能力启用后仍应进入 needs-setup 而不是假装 ready", () => {
@@ -153,6 +160,72 @@ describe("Agent App readiness P0", () => {
     expect(manifest.manifestVersion).toBe("0.7");
     expect(readiness.blockers.map((issue) => issue.code)).not.toContain(
       "MANIFEST_VERSION_UNSUPPORTED",
+    );
+  });
+
+  it("应接受 v0.8 install modes，并把 web_host 保留为 blocked", () => {
+    const rawManifest = parseManifest({
+      manifestVersion: "0.8.0",
+      name: "content-factory-app",
+      version: "0.8.0",
+      requires: {
+        sdk: "@lime/app-sdk@^0.8.0",
+        capabilities: ["lime.agent"],
+      },
+      entries: [{ key: "dashboard", kind: "page" }],
+      install: {
+        modes: ["standalone", "runtime_backed", "web_host"],
+        runtime: { minVersion: "0.8.0" },
+        standalone: { shell: "lime-app-shell" },
+        runtimeBacked: { requires: "lime-runtime", minVersion: "0.8.0" },
+      },
+    });
+    const manifest = normalizeManifest(rawManifest);
+    const identity = buildPackageIdentity({ manifest: rawManifest });
+    const projection = projectApp({ manifest, identity });
+    const readiness = checkReadiness({ manifest, projection });
+
+    expect(readiness.installModes).toEqual([
+      expect.objectContaining({ mode: "standalone", status: "ready" }),
+      expect.objectContaining({ mode: "runtime_backed", status: "ready" }),
+      expect.objectContaining({
+        mode: "web_host",
+        status: "blocked",
+        blockers: [
+          expect.objectContaining({ code: "INSTALL_MODE_UNSUPPORTED" }),
+        ],
+      }),
+    ]);
+    expect(readiness.blockers.map((issue) => issue.code)).not.toContain(
+      "INSTALL_MODE_UNSUPPORTED",
+    );
+  });
+
+  it("preferred install mode 不满足 runtime 版本时应阻断 readiness", () => {
+    const rawManifest = parseManifest({
+      manifestVersion: "0.8.0",
+      name: "future-standalone-app",
+      version: "0.8.0",
+      entries: [{ key: "dashboard", kind: "page" }],
+      install: {
+        modes: ["standalone"],
+        runtime: { minVersion: "0.9.0" },
+        standalone: { shell: "lime-app-shell" },
+      },
+    });
+    const manifest = normalizeManifest(rawManifest);
+    const identity = buildPackageIdentity({ manifest: rawManifest });
+    const projection = projectApp({ manifest, identity });
+    const readiness = checkReadiness({ manifest, projection });
+
+    expect(readiness.status).toBe("blocked");
+    expect(readiness.blockers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "RUNTIME_VERSION_UNSUPPORTED",
+          key: "standalone",
+        }),
+      ]),
     );
   });
 

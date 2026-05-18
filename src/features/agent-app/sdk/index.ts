@@ -115,6 +115,8 @@ export type {
   LimeHostBridgeNavigatePayload,
   LimeHostBridgeNotifyPayload,
   LimeHostBridgeOpenExternalPayload,
+  LimeHostBridgeSelectDirectoryPayload,
+  LimeHostBridgeSelectDirectoryResult,
 } from "./hostBridgeClient";
 export { MockCapabilityHost } from "./MockCapabilityHost";
 export type {

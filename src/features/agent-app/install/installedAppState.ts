@@ -1,4 +1,6 @@
 import type {
+  AgentAppInstallMode,
+  AgentAppRuntimeProfileSummary,
   AgentAppSetupState,
   InstalledAgentAppState,
   InstalledAppPreview,
@@ -7,6 +9,7 @@ import {
   validateProjectionSchemaCoverage,
   validateReadinessSchemaCoverage,
 } from "../schema/schemaGate";
+import { shellKindForInstallMode } from "../runtime-profile";
 
 const INSTALLED_STATE_SCHEMA_VERSION = 1;
 const DEFAULT_AGENT_APP_DATA_ROOT = "<LimeAppData>/agent-apps";
@@ -128,6 +131,8 @@ function validateInstalledAgentAppStateShape(
     !isRecord(value.manifest) ||
     !isRecord(value.projection) ||
     !isRecord(value.readiness) ||
+    typeof value.installMode !== "string" ||
+    !isRecord(value.runtimeProfileSummary) ||
     !isRecord(value.setup) ||
     typeof value.disabled !== "boolean" ||
     typeof value.installedAt !== "string" ||
@@ -189,6 +194,22 @@ function validateInstalledAgentAppStateShape(
   };
 }
 
+function buildRuntimeProfileSummary(params: {
+  preview: InstalledAppPreview;
+  installMode: AgentAppInstallMode;
+}): AgentAppRuntimeProfileSummary {
+  const modeReadiness = params.preview.readiness.installModes.find(
+    (mode) => mode.mode === params.installMode,
+  );
+  return {
+    installMode: params.installMode,
+    shellKind: shellKindForInstallMode(params.installMode),
+    runtimeVersion: modeReadiness?.runtimeVersion,
+    runtimeMinVersion: params.preview.manifest.install.runtime.minVersion,
+    checkedAt: params.preview.readiness.checkedAt,
+  };
+}
+
 function parseInstalledStateEnvelope(
   content: string,
   path: string,
@@ -241,18 +262,25 @@ function serializeJson(value: unknown): string {
 
 export function buildInstalledAgentAppState(params: {
   preview: InstalledAppPreview;
+  installMode?: AgentAppInstallMode;
   setup?: AgentAppSetupState;
   disabled?: boolean;
   installedAt?: string;
   updatedAt?: string;
 }): InstalledAgentAppState {
   const timestamp = params.updatedAt ?? new Date().toISOString();
+  const installMode = params.installMode ?? params.preview.projection.install.preferredMode;
   return {
     appId: params.preview.identity.appId,
     identity: params.preview.identity,
     manifest: params.preview.manifest,
     projection: params.preview.projection,
     readiness: params.preview.readiness,
+    installMode,
+    runtimeProfileSummary: buildRuntimeProfileSummary({
+      preview: params.preview,
+      installMode,
+    }),
     setup: params.setup ?? {},
     disabled: params.disabled ?? false,
     installedAt: params.installedAt ?? timestamp,

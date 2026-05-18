@@ -44,6 +44,13 @@ function buildInstalledState(): InstalledAgentAppState {
     manifest: {} as InstalledAgentAppState["manifest"],
     projection: {} as InstalledAgentAppState["projection"],
     readiness: {} as InstalledAgentAppState["readiness"],
+    installMode: "in_lime",
+    runtimeProfileSummary: {
+      installMode: "in_lime",
+      shellKind: "desktop",
+      runtimeVersion: "0.8.0",
+      checkedAt: "2026-05-15T00:00:00.000Z",
+    },
     setup: {} as InstalledAgentAppState["setup"],
     disabled: false,
     installedAt: "2026-05-15T00:00:00.000Z",

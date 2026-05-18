@@ -148,10 +148,13 @@ Agent App current 安装 / package / runtime 主链不得在页面或 feature is
 - `agent_app_start_ui_runtime`
 - `agent_app_get_ui_runtime_status`
 - `agent_app_stop_ui_runtime`
+- `agent_app_launch_shell`
 - `agent_app_runtime_start_task`
 - `agent_app_runtime_cancel_task`
 - `agent_app_runtime_get_task`
 - `agent_app_runtime_submit_host_response`
+
+`agent_app_launch_shell` 是 Agent App v2 App Shell dev adapter 的 current 命令入口：前端只能经由 `src/lib/api/agentApps.ts -> launchAgentAppShell` 提交 `ShellDescriptor`；Rust 侧必须先校验 installed state、package / manifest hash、install mode、runtime profile shell kind 与只读隔离策略，再复用 current UI runtime 启动 dev shell，并通过 `agent_app_shell_window` 打开独立 Tauri WebviewWindow。浏览器 DevBridge smoke 也必须桥接到同一个 Rust application service，不得落回 mock 或平行 shell launcher。它不是第二套 Runtime，也不得让 Standalone App 绕过 `@lime/app-sdk`、Host Bridge、policy 或 evidence 主链。
 
 `agent_app_fetch_cloud_package` 只负责 `packageUrl -> staging/cache -> APP.md manifest extraction -> sha256 package / manifest verification`，不生成 projection、不写 installed state、不绕过 P17.2 install review；Cloud / LimeCore 仍只提供 release metadata。
 

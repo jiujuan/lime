@@ -219,6 +219,13 @@ describe("P18.3 / P18.4 core capability adapters", () => {
               taskId: (request.args as { taskId?: string }).taskId,
             };
           },
+          selectDirectory: (request) => {
+            requests.push(request);
+            return {
+              path: "/Users/example/agent-app",
+              cancelled: false,
+            };
+          },
         },
         "lime.storage": {
           set: (request) => {
@@ -310,6 +317,10 @@ describe("P18.3 / P18.4 core capability adapters", () => {
       },
       { requestId: "req-ui-agent-run" },
     );
+    const selectedDirectory = await adapters.ui.selectDirectory(
+      { title: "选择应用目录" },
+      { requestId: "req-ui-select-directory" },
+    );
     const stored = await adapters.storage.set(
       { key: "drafts/scenario", value: { title: "内容场景草稿" } },
       {
@@ -349,6 +360,10 @@ describe("P18.3 / P18.4 core capability adapters", () => {
       mode: "drawer",
       taskId: "agent-task-1",
     });
+    expect(selectedDirectory).toEqual({
+      path: "/Users/example/agent-app",
+      cancelled: false,
+    });
     expect(stored).toMatchObject({
       key: "drafts/scenario",
       value: { title: "内容场景草稿" },
@@ -371,6 +386,13 @@ describe("P18.3 / P18.4 core capability adapters", () => {
         capability: "lime.ui",
         method: "openAgentRun",
         requestId: "req-ui-agent-run",
+        provenance,
+      }),
+      expect.objectContaining({
+        capability: "lime.ui",
+        method: "selectDirectory",
+        args: { title: "选择应用目录" },
+        requestId: "req-ui-select-directory",
         provenance,
       }),
       expect.objectContaining({

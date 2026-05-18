@@ -7,6 +7,7 @@ import type {
   PackageIdentity,
   ProjectedEntry,
 } from "../types";
+import { projectInstallContract } from "../install-mode";
 
 function createProvenance(
   identity: PackageIdentity,
@@ -235,6 +236,7 @@ export function projectApp(params: {
     })),
     ui: manifest.ui,
     lifecycle: manifest.lifecycle,
+    install: projectInstallContract(manifest.install),
     readinessHints: [
       {
         code: "LAB_ONLY",

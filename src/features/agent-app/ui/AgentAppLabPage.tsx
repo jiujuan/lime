@@ -51,6 +51,7 @@ import { WorkflowRuntimeHost } from "../runtime/workflowRuntimeHost";
 import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
 import { UiExtensionHost } from "../runtime/uiExtensionHost";
 import { buildUiRuntimeCapabilityProfile } from "../runtime/uiRuntimeCapabilityProfile";
+import { buildLimeRuntimeProfileForPreview } from "../runtime-profile";
 import type { CapabilityHost } from "../sdk/CapabilityHost";
 import { MockCapabilityHost } from "../sdk/MockCapabilityHost";
 import { buildMockCapabilityProfile } from "../sdk/mockCapabilityProfile";
@@ -1195,9 +1196,15 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
         operation: lastLaunch?.operation ?? "mount-ui",
         permissionDecision: "accepted",
         launchRequested: Boolean(lastLaunch),
+        runtimeProfile: capabilityProfile
+          ? buildLimeRuntimeProfileForPreview({
+              preview,
+              hostProfile: capabilityProfile,
+            })
+          : undefined,
         now: "2026-05-15T00:00:00.000Z",
       }),
-    [labSetup, lastLaunch, preview, resolvedFlags],
+    [capabilityProfile, labSetup, lastLaunch, preview, resolvedFlags],
   );
   const managerCompanionInstalledState = useMemo(
     () =>
@@ -1315,6 +1322,13 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
     state?: InstalledAgentAppState,
   ): AgentAppEntryRuntimeGuardResult => {
     const guardPreview = state ? buildPreviewFromInstalledState(state) : preview;
+    const runtimeProfile = capabilityProfile
+      ? buildLimeRuntimeProfileForPreview({
+          preview: guardPreview,
+          hostProfile: capabilityProfile,
+          installMode: state?.installMode,
+        })
+      : undefined;
     const result = evaluateAgentAppEntryRuntimeGuard({
       preview: guardPreview,
       entryKey,
@@ -1324,6 +1338,8 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
         ? buildRuntimePackageLoadForPreview(guardPreview)
         : runtimePackageLoad,
       permissionDecision: "accepted",
+      installMode: state?.installMode ?? guardPreview.projection.install.preferredMode,
+      runtimeProfile,
       lifecycle: {
         disabled: state?.disabled ?? false,
       },

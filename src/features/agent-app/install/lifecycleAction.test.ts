@@ -3,6 +3,8 @@ import contentFactoryFixture from "../fixtures/content-factory-app.json";
 import { buildInstalledAppPreview } from "./installedAppPreview";
 import { buildInstalledAgentAppState } from "./installedAppState";
 import {
+  buildAgentAppDeleteDataConfirmationPhrase,
+  buildAgentAppDeleteDataExecutionGate,
   buildAgentAppLifecycleActionDescriptor,
   buildAgentAppLifecycleLaunchGate,
   buildAgentAppLifecycleToggleDescriptor,
@@ -125,6 +127,91 @@ describe("Agent App P17.3 lifecycle action descriptor", () => {
     expect(descriptor.blockerCodes).toContain("OUT_OF_SCOPE");
     expect(descriptor.cleanupEvidence.blockedTargetCount).toBe(1);
     expect(descriptor.realDeleteAllowed).toBe(false);
+  });
+
+  it("delete-data 真实执行 gate 必须要求精确确认短语", () => {
+    const { preview, state } = buildInstalledStateFixture();
+    const descriptor = buildAgentAppLifecycleUninstallRehearsalDescriptor({
+      state,
+      cleanupPlan: preview.cleanupPlan,
+      mode: "delete-data",
+      generatedAt: now,
+    });
+    const confirmationPhrase = buildAgentAppDeleteDataConfirmationPhrase(descriptor);
+
+    expect(
+      buildAgentAppDeleteDataExecutionGate({
+        descriptor,
+        confirmationPhrase: "delete it",
+        generatedAt: now,
+      }),
+    ).toMatchObject({
+      allowed: false,
+      blockerCodes: ["CONFIRMATION_MISMATCH"],
+      confirmationPhrase,
+    });
+
+    expect(
+      buildAgentAppDeleteDataExecutionGate({
+        descriptor,
+        confirmationPhrase,
+        generatedAt: now,
+      }),
+    ).toMatchObject({
+      allowed: true,
+      appId: "content-factory-app",
+      pendingDeletionCount: descriptor.residualAudit.pendingDeletionCount,
+      confirmationPhrase,
+    });
+  });
+
+  it("delete-data gate 应拒绝 keep-data 或越界 rehearsal", () => {
+    const { preview, state } = buildInstalledStateFixture();
+    const keepData = buildAgentAppLifecycleUninstallRehearsalDescriptor({
+      state,
+      cleanupPlan: preview.cleanupPlan,
+      mode: "keep-data",
+      generatedAt: now,
+    });
+    expect(
+      buildAgentAppDeleteDataExecutionGate({
+        descriptor: keepData,
+        confirmationPhrase: buildAgentAppDeleteDataConfirmationPhrase(keepData),
+        generatedAt: now,
+      }),
+    ).toMatchObject({
+      allowed: false,
+      blockerCodes: ["MODE_NOT_DELETE_DATA"],
+    });
+
+    const outOfScope = buildAgentAppLifecycleUninstallRehearsalDescriptor({
+      state,
+      cleanupPlan: {
+        ...preview.cleanupPlan,
+        storageNamespaces: [
+          ...preview.cleanupPlan.storageNamespaces,
+          {
+            kind: "path",
+            value: "/Users/example/Documents/customer-notes.md",
+            exists: "unknown",
+            safeToDelete: true,
+            reason: "Out-of-scope user document should never be deleted.",
+          },
+        ],
+      },
+      mode: "delete-data",
+      generatedAt: now,
+    });
+    expect(
+      buildAgentAppDeleteDataExecutionGate({
+        descriptor: outOfScope,
+        confirmationPhrase: buildAgentAppDeleteDataConfirmationPhrase(outOfScope),
+        generatedAt: now,
+      }),
+    ).toMatchObject({
+      allowed: false,
+      blockerCodes: ["REHEARSAL_BLOCKED", "OUT_OF_SCOPE_TARGETS"],
+    });
   });
 
   it("应给 disabled App 生成启动阻断 gate", () => {

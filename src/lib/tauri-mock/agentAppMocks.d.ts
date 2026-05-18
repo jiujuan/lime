@@ -74,6 +74,67 @@ export declare const agentAppMocks: {
         status: string;
         message: string;
     }>;
+    agent_app_select_directory: () => Promise<{
+        path: null;
+        cancelled: boolean;
+        message: string;
+    }>;
+    agent_app_launch_shell: (args: any) => Promise<{
+        appId: string;
+        status: string;
+        installMode: string;
+        shellKind: string;
+        descriptorVersion: any;
+        devShell: boolean;
+        blockerCodes: string[];
+        message: string;
+        launchedAt: string;
+        packageMount?: undefined;
+        runtimeStatus?: undefined;
+        shellWindow?: undefined;
+    } | {
+        appId: string;
+        status: string;
+        installMode: string;
+        shellKind: string;
+        descriptorVersion: any;
+        devShell: boolean;
+        blockerCodes: string[];
+        message: string;
+        packageMount: {
+            kind: string;
+            path: string;
+            readOnly: boolean;
+            packageHash: string;
+            manifestHash: string;
+        };
+        runtimeStatus: {
+            appId: string;
+            status: string;
+            baseUrl: string;
+            entryUrl: string;
+            port: number;
+            pid: number;
+            entryKey: string;
+            route: string;
+        };
+        shellWindow: {
+            label: string;
+            title: string;
+            url: string;
+            reused: boolean;
+            chrome: {
+                deepLinkScheme: string;
+                openEntryKey: string;
+                trayEnabled: boolean;
+                closePolicy: string;
+                menuItemIds: string[];
+                multiAppManagement: boolean;
+                runtimeBypass: boolean;
+            };
+        };
+        launchedAt: string;
+    }>;
     agent_app_runtime_start_task: (args: any) => Promise<{
         appId: string;
         entryKey: any;

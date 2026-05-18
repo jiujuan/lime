@@ -156,6 +156,9 @@ describe("AgentRuntimeCapabilityHost", () => {
     expect(started).toMatchObject({
       taskId: "agent-app-task-1",
       traceId: "agent-app-trace-1",
+      sessionId: "session-1",
+      turnId: "turn-1",
+      workspaceId: "workspace-1",
       status: "running",
       provenance: expect.objectContaining({
         appVersion: "0.3.0",
@@ -391,6 +394,114 @@ describe("AgentRuntimeCapabilityHost", () => {
       status: "submitted",
       submittedAt: "2026-05-15T00:00:04.000Z",
     });
+  });
+
+  it("getTask 携带 sessionId 时可直接 replay 未持久化的 runtime task", async () => {
+    const api = {
+      startTask: vi.fn(),
+      getTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        taskId: request.taskId,
+        sessionId: request.sessionId,
+        status: "thread_read_available" as const,
+        taskStatus: "completed",
+        taskEvents: [
+          {
+            id: "task:completed",
+            eventType: "task:completed",
+            status: "completed",
+            message: "任务已完成",
+            occurredAt: "2026-05-15T00:00:02.000Z",
+          },
+        ],
+        threadRead: {
+          session_id: request.sessionId,
+          profile_status: "completed",
+          turns: [{ id: "turn-direct-replay" }],
+          artifacts: [
+            {
+              item_id: "artifact-direct-replay",
+              path: ".lime/artifacts/content-batch.json",
+              title: "内容批次",
+              status: "completed",
+              metadata: {
+                contentFactoryWorkspacePatch: {
+                  kind: "content_factory.workspace_patch",
+                  artifactKind: "content_batch",
+                  contentBatch: { count: 20 },
+                },
+              },
+            },
+          ],
+        },
+      })),
+      cancelTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        taskId: request.taskId,
+        sessionId: request.sessionId,
+        cancelled: true,
+        status: "cancelled" as const,
+      })),
+      submitHostResponse: vi.fn(async (request) => ({
+        appId: request.appId,
+        taskId: request.taskId,
+        status: "submitted" as const,
+      })),
+    };
+    const host = new AgentRuntimeCapabilityHost({
+      delegate: buildDelegateHost(),
+      appId: "content-factory-app",
+      appVersion: "0.3.0",
+      packageHash: "package-hash-1",
+      manifestHash: "manifest-hash-1",
+      workspaceIdResolver: async () => "workspace-1",
+      api,
+      now: () => "2026-05-15T00:00:03.000Z",
+    });
+    const sdk = host.createSdkContext("dashboard");
+
+    const restored = await sdk.agent.getTask({
+      taskId: "agent-app-task-direct-replay",
+      sessionId: "session-direct-replay",
+      title: "恢复内容批次",
+      taskKind: "content.copy.generate",
+      expectedOutput: { artifactKind: "content_batch" },
+    });
+    const stream = await sdk.agent.streamTask({
+      taskId: "agent-app-task-direct-replay",
+      sessionId: "session-direct-replay",
+    });
+
+    expect(api.getTask).toHaveBeenCalledWith({
+      appId: "content-factory-app",
+      taskId: "agent-app-task-direct-replay",
+      sessionId: "session-direct-replay",
+    });
+    expect(restored).toMatchObject({
+      taskId: "agent-app-task-direct-replay",
+      sessionId: "session-direct-replay",
+      turnId: "turn-direct-replay",
+      workspaceId: "workspace-1",
+      title: "恢复内容批次",
+      taskKind: "content.copy.generate",
+      expectedOutput: { artifactKind: "content_batch" },
+      status: "succeeded",
+      events: expect.arrayContaining([
+        expect.objectContaining({
+          type: "artifact:created",
+          payload: expect.objectContaining({
+            contentFactoryWorkspacePatch: expect.objectContaining({
+              contentBatch: { count: 20 },
+            }),
+          }),
+        }),
+      ]),
+    });
+    expect(stream).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "artifact:created" }),
+      ]),
+    );
   });
 
   it("在主 App 侧封装 Claw 式运行过程，包含模型、Token、费用和 Skill", async () => {

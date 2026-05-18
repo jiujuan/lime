@@ -192,7 +192,7 @@ impl OpenAICustomProvider {
         if (status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN)
             && url.contains("/api/anthropic")
         {
-            eprintln!(
+            tracing::debug!(
                 "[OPENAI_CUSTOM] 提示: URL '{url}' 返回 {status}，疑似协议不匹配。若上游是 Anthropic 兼容网关，请改用 /v1/messages + x-api-key。"
             );
         }
@@ -441,7 +441,7 @@ impl OpenAICustomProvider {
         let urls = self.build_urls_with_fallbacks("chat/completions");
         let mut last_resp: Option<reqwest::Response> = None;
 
-        eprintln!(
+        tracing::debug!(
             "[OPENAI_CUSTOM] call_api testing with model: {}",
             request.model
         );
@@ -451,7 +451,7 @@ impl OpenAICustomProvider {
         self.normalize_openai_request_payload(&mut payload);
 
         for url in &urls {
-            eprintln!("[OPENAI_CUSTOM] call_api trying URL: {url}");
+            tracing::debug!("[OPENAI_CUSTOM] call_api trying URL: {url}");
             let resp = self
                 .apply_json_headers(self.client.post(url), api_key)
                 .json(&payload)
@@ -481,8 +481,8 @@ impl OpenAICustomProvider {
 
         let url = self.build_url("chat/completions");
 
-        eprintln!("[OPENAI_CUSTOM] chat_completions URL: {url}");
-        eprintln!(
+        tracing::debug!("[OPENAI_CUSTOM] chat_completions URL: {url}");
+        tracing::debug!(
             "[OPENAI_CUSTOM] chat_completions base_url: {}",
             self.get_base_url()
         );
@@ -527,7 +527,7 @@ impl OpenAICustomProvider {
         let mut resp: Option<reqwest::Response> = None;
 
         for url in urls {
-            eprintln!("[OPENAI_CUSTOM] list_models URL: {url}");
+            tracing::debug!("[OPENAI_CUSTOM] list_models URL: {url}");
             tried_urls.push(url.clone());
             let r = self
                 .apply_auth_headers(self.client.get(&url), api_key)
@@ -546,7 +546,7 @@ impl OpenAICustomProvider {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            eprintln!("[OPENAI_CUSTOM] list_models 失败: {status} - {body}");
+            tracing::debug!("[OPENAI_CUSTOM] list_models 失败: {status} - {body}");
             return Err(format!(
                 "Failed to list models: {status} - {body} (tried: {})",
                 tried_urls.join(", ")

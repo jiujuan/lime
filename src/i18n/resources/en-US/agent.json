@@ -411,6 +411,8 @@
   "agentApp.apps.launch.uiMounted": "Mounted {{title}} ({{route}}).",
   "agentApp.apps.launch.workflowCompleted": "{{title}} workflow completed: {{runId}}.",
   "agentApp.apps.launch.entryCompleted": "{{title}} entry completed: {{runId}}.",
+  "agentApp.apps.launch.shellLaunched": "Started the standalone entry for {{title}} ({{target}}).",
+  "agentApp.apps.launch.shellBlocked": "The standalone entry cannot start yet: {{codes}}.",
   "agentApp.apps.uninstallPreview.title": "Uninstall rehearsal",
   "agentApp.apps.uninstallPreview.summary": "Will delete {{deleted}} items and retain {{retained}} items.",
   "agentApp.apps.action.confirmUninstall": "Confirm uninstall",

@@ -472,6 +472,34 @@ describe("AppSidebar", () => {
     expect(accountMenu?.textContent).not.toContain("内容工厂");
   });
 
+  it("Agent App 动态导航加载失败时应降级为静态导航而不输出控制台错误", async () => {
+    const navError = new Error("timeout after 5000ms");
+    mockListInstalledAgentApps.mockRejectedValueOnce(navError);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const container = mountSidebarContainer();
+      await flushEffects(2);
+
+      expect(container.textContent).not.toContain("内容工厂");
+      expect(
+        errorSpy.mock.calls.map(([message]) => String(message)),
+      ).not.toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("加载 Agent App 导航失败"),
+        ]),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        "加载 Agent App 导航失败，将保持静态导航:",
+        navError,
+      );
+    } finally {
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+  });
+
   it("新建任务页应自动展开导航栏", async () => {
     localStorage.setItem(APP_SIDEBAR_COLLAPSED_STORAGE_KEY, "true");
 

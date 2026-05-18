@@ -12,6 +12,8 @@ const OPTIMIZED_DEP_FILES = [
   "react-dom_client.js",
   "react_jsx-dev-runtime.js",
 ];
+const HOST_BRIDGE_MODULE_PATH = "/src/features/agent-app/runtime/hostBridge.ts";
+const TAURI_DIALOG_MOCK_MARKER = "/src/lib/tauri-mock/plugin-dialog";
 
 function isLimeDevShell(html) {
   return ROOT_MARKERS.some((marker) => html.includes(marker));
@@ -47,6 +49,9 @@ function createEnv({ browserBridge }) {
   if (browserBridge) {
     delete env.TAURI_ENV_PLATFORM;
     env.LIME_BROWSER_BRIDGE = "1";
+  } else if (!env.TAURI_ENV_PLATFORM) {
+    // Tauri dev server 必须强制进入 Tauri 解析模式，否则 Vite 会把 dialog 解析到浏览器 mock。
+    env.TAURI_ENV_PLATFORM = process.platform;
   }
 
   return env;
@@ -57,6 +62,10 @@ function resolveOptimizedDepUrls(url, { browserBridge }) {
   return OPTIMIZED_DEP_FILES.map((file) =>
     new URL(`/node_modules/${depsDir}/deps/${file}`, url).toString(),
   );
+}
+
+function describeExpectedRuntimeMode({ browserBridge }) {
+  return browserBridge ? "浏览器 DevBridge mock 模式" : "Tauri 原生模式";
 }
 
 async function probeExistingDevServer(url, options) {
@@ -70,6 +79,7 @@ async function probeExistingDevServer(url, options) {
 
     let entryModuleReady = false;
     let optimizedDepsReady = false;
+    let runtimeModeReady = false;
 
     if (limeDevShellReady) {
       try {
@@ -100,6 +110,22 @@ async function probeExistingDevServer(url, options) {
         );
         optimizedDepsReady = optimizedDepResults.every(Boolean);
       }
+
+      if (entryModuleReady) {
+        try {
+          const hostBridgeUrl = new URL(HOST_BRIDGE_MODULE_PATH, url).toString();
+          const { response: bridgeResponse, text: bridgeCode } = await fetchText(
+            hostBridgeUrl,
+            ENTRY_MODULE_TIMEOUT_MS,
+          );
+          const usesDialogMock = bridgeCode.includes(TAURI_DIALOG_MOCK_MARKER);
+          runtimeModeReady =
+            bridgeResponse.ok &&
+            (options.browserBridge ? usesDialogMock : !usesDialogMock);
+        } catch {
+          runtimeModeReady = false;
+        }
+      }
     }
 
     return {
@@ -109,6 +135,7 @@ async function probeExistingDevServer(url, options) {
       isLimeDevShell: limeDevShellReady,
       isEntryModuleReady: entryModuleReady,
       areOptimizedDepsReady: optimizedDepsReady,
+      isRuntimeModeReady: runtimeModeReady,
     };
   } catch {
     return { reachable: false };
@@ -126,7 +153,8 @@ async function waitForExistingDevServer(url, options) {
       lastProbe.reachable &&
       lastProbe.isLimeDevShell &&
       lastProbe.isEntryModuleReady &&
-      lastProbe.areOptimizedDepsReady
+      lastProbe.areOptimizedDepsReady &&
+      lastProbe.isRuntimeModeReady
     ) {
       return lastProbe;
     }
@@ -135,6 +163,18 @@ async function waitForExistingDevServer(url, options) {
       const statusLabel = `${lastProbe.status} ${lastProbe.statusText}`.trim();
       throw new Error(
         `[${options.logLabel}] ${options.devUrl} 已被其他服务占用，且返回内容不是 Lime dev shell（${statusLabel}）。请先关闭占用进程后重试。`,
+      );
+    }
+
+    if (
+      lastProbe.reachable &&
+      lastProbe.isLimeDevShell &&
+      lastProbe.isEntryModuleReady &&
+      lastProbe.areOptimizedDepsReady &&
+      !lastProbe.isRuntimeModeReady
+    ) {
+      throw new Error(
+        `[${options.logLabel}] ${options.devUrl} 当前不是${describeExpectedRuntimeMode(options)}。请先关闭现有 Vite dev server 后重启，避免 Tauri dialog 继续落到浏览器 mock。`,
       );
     }
 
@@ -228,7 +268,8 @@ export async function runViteDevServerBootstrap({
 
     if (
       !existingServer.isEntryModuleReady ||
-      !existingServer.areOptimizedDepsReady
+      !existingServer.areOptimizedDepsReady ||
+      !existingServer.isRuntimeModeReady
     ) {
       await waitForExistingDevServer(devUrl, options);
     }

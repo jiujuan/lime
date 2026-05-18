@@ -1,8 +1,10 @@
 use chrono::Local;
 use lime_core::app_paths;
 use std::env;
+use std::io::{self, Write};
 use std::path::PathBuf;
 use tracing::Subscriber;
+use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::layer::Layer;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::registry::LookupSpan;
@@ -15,6 +17,45 @@ use std::fs::{self, File};
 type TraceFlushGuard = tracing_chrome::FlushGuard;
 #[cfg(not(feature = "dev-profiling"))]
 type TraceFlushGuard = ();
+
+#[derive(Clone, Copy, Debug, Default)]
+struct NonPanickingStderr;
+
+struct IgnoreBrokenPipeWriter<W> {
+    inner: W,
+}
+
+impl<W> IgnoreBrokenPipeWriter<W> {
+    fn new(inner: W) -> Self {
+        Self { inner }
+    }
+}
+
+impl<W: Write> Write for IgnoreBrokenPipeWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self.inner.write(buf) {
+            Ok(written) => Ok(written),
+            Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(buf.len()),
+            Err(error) => Err(error),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self.inner.flush() {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+            Err(error) => Err(error),
+        }
+    }
+}
+
+impl<'writer> MakeWriter<'writer> for NonPanickingStderr {
+    type Writer = IgnoreBrokenPipeWriter<io::Stderr>;
+
+    fn make_writer(&'writer self) -> Self::Writer {
+        IgnoreBrokenPipeWriter::new(io::stderr())
+    }
+}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct ProfileModes {
@@ -179,7 +220,10 @@ pub fn init() -> ProfilingGuard {
             guard
         }
         Err(error) => {
-            eprintln!("[Profiling] 初始化失败: {error}");
+            let _ = writeln!(
+                IgnoreBrokenPipeWriter::new(io::stderr()),
+                "[Profiling] 初始化失败: {error}"
+            );
             ProfilingGuard::default()
         }
     }
@@ -196,7 +240,8 @@ fn try_init(config: &ProfilingConfig) -> Result<ProfilingGuard, String> {
         .with_thread_ids(true)
         .with_thread_names(true)
         .with_file(true)
-        .with_line_number(true);
+        .with_line_number(true)
+        .with_writer(NonPanickingStderr);
 
     let subscriber = tracing_subscriber::registry()
         .with(filter_layer)
@@ -333,4 +378,52 @@ fn resolve_tokio_console_bind() -> String {
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "127.0.0.1:6669".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct AlwaysBrokenPipe;
+
+    impl Write for AlwaysBrokenPipe {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::new(io::ErrorKind::BrokenPipe, "closed stderr"))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Err(io::Error::new(io::ErrorKind::BrokenPipe, "closed stderr"))
+        }
+    }
+
+    struct AlwaysOtherError;
+
+    impl Write for AlwaysOtherError {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::new(io::ErrorKind::Other, "disk full"))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Err(io::Error::new(io::ErrorKind::Other, "disk full"))
+        }
+    }
+
+    #[test]
+    fn tracing_writer_ignores_broken_pipe() {
+        let mut writer = IgnoreBrokenPipeWriter::new(AlwaysBrokenPipe);
+
+        assert_eq!(writer.write(b"hello").unwrap(), 5);
+        assert!(writer.flush().is_ok());
+    }
+
+    #[test]
+    fn tracing_writer_keeps_non_pipe_errors_visible() {
+        let mut writer = IgnoreBrokenPipeWriter::new(AlwaysOtherError);
+
+        assert_eq!(
+            writer.write(b"hello").unwrap_err().kind(),
+            io::ErrorKind::Other
+        );
+        assert_eq!(writer.flush().unwrap_err().kind(), io::ErrorKind::Other);
+    }
 }

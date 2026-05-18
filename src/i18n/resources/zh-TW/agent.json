@@ -411,6 +411,8 @@
   "agentApp.apps.launch.uiMounted": "已掛載 {{title}}（{{route}}）。",
   "agentApp.apps.launch.workflowCompleted": "{{title}} workflow 已完成：{{runId}}。",
   "agentApp.apps.launch.entryCompleted": "{{title}} entry 已完成：{{runId}}。",
+  "agentApp.apps.launch.shellLaunched": "已啟動 {{title}} 的獨立入口（{{target}}）。",
+  "agentApp.apps.launch.shellBlocked": "獨立入口暫不可啟動：{{codes}}。",
   "agentApp.apps.uninstallPreview.title": "卸載演練",
   "agentApp.apps.uninstallPreview.summary": "將刪除 {{deleted}} 項，保留 {{retained}} 項。",
   "agentApp.apps.action.confirmUninstall": "確認卸載",

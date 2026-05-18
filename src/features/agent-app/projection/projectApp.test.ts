@@ -83,6 +83,78 @@ describe("Agent App projection P0", () => {
       "workspace_content_rules",
     ]);
     expect(projection.ui?.routes).toHaveLength(2);
+    expect(projection.install).toMatchObject({
+      supportedModes: ["in_lime"],
+      preferredMode: "in_lime",
+      branding: {
+        name: "内容工厂",
+        windowTitle: "内容工厂",
+      },
+    });
+  });
+
+  it("应把 v0.8 app.install.yaml contract 投影为 install projection", () => {
+    const manifest = parseManifest({
+      manifestVersion: "0.8.0",
+      name: "content-factory-app",
+      displayName: "内容工厂",
+      version: "0.8.0",
+      requires: {
+        capabilities: ["lime.agent"],
+      },
+      entries: [{ key: "dashboard", kind: "page" }],
+      install: {
+        modes: ["in_lime", "standalone", "runtime_backed"],
+        runtime: {
+          minVersion: "0.8.0",
+          distribution: {
+            standalone: { embedRuntime: true, shell: "lime-app-shell" },
+            runtimeBacked: { requires: "lime-runtime", minVersion: "0.8.0" },
+          },
+        },
+        standalone: {
+          shell: "lime-app-shell",
+          bundleId: "ai.limecloud.contentfactory",
+          platforms: ["macos", "windows"],
+        },
+        runtimeBacked: {
+          requires: "lime-runtime",
+          minVersion: "0.8.0",
+        },
+        branding: {
+          name: "Content Factory",
+          icon: "./assets/icon.svg",
+          windowTitle: "Content Factory",
+        },
+      },
+    });
+    const normalized = normalizeManifest(manifest);
+    const identity = buildPackageIdentity({ manifest });
+    const projection = projectApp({ manifest: normalized, identity });
+
+    expect(projection.install).toMatchObject({
+      supportedModes: ["in_lime", "standalone", "runtime_backed"],
+      preferredMode: "in_lime",
+      runtimeRequirements: [
+        { mode: "in_lime", minVersion: "0.8.0" },
+        { mode: "standalone", minVersion: "0.8.0" },
+        { mode: "runtime_backed", minVersion: "0.8.0", requires: "lime-runtime" },
+      ],
+      shellRequirements: [
+        {
+          mode: "standalone",
+          shell: "lime-app-shell",
+          bundleId: "ai.limecloud.contentfactory",
+          platforms: ["macos", "windows"],
+        },
+        { mode: "runtime_backed" },
+      ],
+      branding: {
+        name: "Content Factory",
+        icon: "./assets/icon.svg",
+        windowTitle: "Content Factory",
+      },
+    });
   });
 
   it("应从 projection 生成 cleanup dry-run", () => {
@@ -97,6 +169,7 @@ describe("Agent App projection P0", () => {
     });
 
     expect(plan.mode).toBe("dry-run");
+    expect(plan.installMode).toBe("in_lime");
     expect(plan.installedStatePaths[0].value).toBe(
       "/tmp/lime/agent-apps/installed/content-factory-app.json",
     );

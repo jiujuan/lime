@@ -31,6 +31,7 @@ const apiMocks = vi.hoisted(() => ({
   getAgentAppCloudCatalog: vi.fn(),
   installCloudAgentAppRelease: vi.fn(),
   installLocalAgentAppPackage: vi.fn(),
+  launchAgentAppShell: vi.fn(),
   listInstalledAgentApps: vi.fn(),
   selectLocalAgentAppDirectory: vi.fn(),
   reviewCloudAgentAppRelease: vi.fn(),
@@ -62,6 +63,12 @@ vi.mock("react-i18next", () => ({
       if (key === "agentApp.apps.launch.entryCompleted") {
         return `entry:${String(params?.title)}:${String(params?.runId)}`;
       }
+      if (key === "agentApp.apps.launch.shellLaunched") {
+        return `shell:${String(params?.title)}:${String(params?.target)}`;
+      }
+      if (key === "agentApp.apps.launch.shellBlocked") {
+        return `blocked:${String(params?.codes)}`;
+      }
       if (key === "agentApp.apps.uninstallPreview.summary") {
         return `delete:${String(params?.deleted)} retain:${String(
           params?.retained,
@@ -83,6 +90,7 @@ vi.mock("@/lib/api/agentApps", () => ({
   getAgentAppCloudCatalog: apiMocks.getAgentAppCloudCatalog,
   installCloudAgentAppRelease: apiMocks.installCloudAgentAppRelease,
   installLocalAgentAppPackage: apiMocks.installLocalAgentAppPackage,
+  launchAgentAppShell: apiMocks.launchAgentAppShell,
   listInstalledAgentApps: apiMocks.listInstalledAgentApps,
   previewAgentAppUninstall: apiMocks.previewAgentAppUninstall,
   reviewCloudAgentAppRelease: apiMocks.reviewCloudAgentAppRelease,
@@ -105,10 +113,12 @@ const installedStates: InstalledAgentAppState[] = [];
 function buildReadyState(
   params: {
     disabled?: boolean;
+    installMode?: InstalledAgentAppState["installMode"];
+    manifest?: AppManifest;
     profile?: HostCapabilityProfile;
   } = {},
 ): InstalledAgentAppState {
-  const manifest = contentFactoryFixture as AppManifest;
+  const manifest = params.manifest ?? (contentFactoryFixture as AppManifest);
   const loadedAt = "2026-05-15T00:00:00.000Z";
   const identity = buildPackageIdentity({
     manifest,
@@ -137,10 +147,42 @@ function buildReadyState(
 
   return buildInstalledAgentAppState({
     preview,
+    installMode: params.installMode,
     setup,
     disabled: params.disabled,
     installedAt: loadedAt,
     updatedAt: loadedAt,
+  });
+}
+
+function buildStandaloneState(): InstalledAgentAppState {
+  return buildReadyState({
+    installMode: "standalone",
+    manifest: {
+      ...(contentFactoryFixture as AppManifest),
+      manifestVersion: "0.8.0",
+      install: {
+        modes: ["in_lime", "standalone", "runtime_backed"],
+        runtime: { minVersion: "0.8.0" },
+        standalone: {
+          shell: "lime-app-shell",
+          bundleId: "ai.limecloud.contentfactory",
+        },
+        runtimeBacked: {
+          requires: "lime-runtime",
+          minVersion: "0.8.0",
+        },
+        branding: {
+          name: "内容工厂",
+          windowTitle: "内容工厂",
+        },
+      },
+    },
+    profile: buildWorkflowRuntimeCapabilityProfile({
+      realAdapterEnabled: true,
+      uiRuntimeEnabled: true,
+      workerRuntimeEnabled: true,
+    }),
   });
 }
 
@@ -264,6 +306,30 @@ function setupDefaultApiMocks() {
     states: installedStates.map((state) => structuredClone(state)),
     issues: [],
   }));
+  apiMocks.launchAgentAppShell.mockResolvedValue({
+    appId: "content-factory-app",
+    status: "launched",
+    installMode: "standalone",
+    shellKind: "app_shell",
+    descriptorVersion: 1,
+    devShell: true,
+    blockerCodes: [],
+    runtimeStatus: {
+      appId: "content-factory-app",
+      status: "running",
+      baseUrl: "http://127.0.0.1:4199",
+      entryUrl: "http://127.0.0.1:4199/dashboard",
+      entryKey: "dashboard",
+      route: "/dashboard",
+    },
+    shellWindow: {
+      label: "agent-app-shell-content-factory-app-standalone",
+      title: "内容工厂",
+      url: "http://127.0.0.1:4199/dashboard",
+      reused: false,
+    },
+    launchedAt: "2026-05-15T00:00:00.000Z",
+  });
   apiMocks.selectLocalAgentAppDirectory.mockResolvedValue(LOCAL_APP_DIR);
   apiMocks.reviewLocalAgentAppPackage.mockImplementation(async () =>
     buildReviewResult(buildReadyState()),
@@ -1015,6 +1081,54 @@ describe("AgentAppsPage", () => {
     expect(
       container.querySelector('[data-testid="agent-apps-mounted-ui"]'),
     ).toBeNull();
+  });
+
+  it("standalone App 点击 UI entry 时应通过 Shell launch 命令启动", async () => {
+    installedStates.push(buildStandaloneState());
+    const onNavigate = vi.fn();
+    const container = await renderPage(undefined, onNavigate);
+    await flush();
+
+    await openAppDetail(container);
+
+    const launchButton = container.querySelector(
+      '[data-testid="agent-apps-launch-entry-dashboard"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      launchButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(apiMocks.launchAgentAppShell).toHaveBeenCalledWith({
+      descriptor: expect.objectContaining({
+        appId: "content-factory-app",
+        installMode: "standalone",
+        runtimeProfile: expect.objectContaining({
+          installMode: "standalone",
+          shellKind: "app_shell",
+        }),
+        entry: expect.objectContaining({
+          entryKey: "dashboard",
+          route: "/dashboard",
+        }),
+        isolation: expect.objectContaining({
+          packageMount: "read-only",
+          secrets: "refs-only",
+          sideEffects: "runtime-broker",
+          evidence: "runtime-provenance",
+        }),
+      }),
+    });
+    expect(onNavigate).not.toHaveBeenCalled();
+    expect(
+      container.querySelector('[data-testid="agent-apps-launch-summary"]')
+        ?.textContent,
+    ).toContain("shell:项目首页:http://127.0.0.1:4199/dashboard");
+    expect(toast.success).toHaveBeenCalledWith(
+      "shell:项目首页:http://127.0.0.1:4199/dashboard",
+    );
   });
 
   it("普通用户首屏不暴露本地路径，更多信息展开后才显示诊断细节", async () => {

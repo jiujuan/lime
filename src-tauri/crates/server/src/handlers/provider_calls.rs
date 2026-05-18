@@ -83,7 +83,7 @@ pub async fn call_provider_anthropic(
                         match resp.text().await {
                             Ok(body) => {
                                 // 记录原始响应以便调试
-                                eprintln!("[PROVIDER_CALL] OpenAI 响应: {}", &body[..body.len().min(500)]);
+                                tracing::debug!("[PROVIDER_CALL] OpenAI 响应: {}", &body[..body.len().min(500)]);
 
                                 if let Ok(openai_resp) =
                                     serde_json::from_str::<serde_json::Value>(&body)
@@ -114,7 +114,7 @@ pub async fn call_provider_anthropic(
                                     }
                                 } else {
                                     // 记录解析失败和原始响应
-                                    eprintln!("[PROVIDER_CALL] 解析 OpenAI 响应失败，原始响应: {}", &body);
+                                    tracing::debug!("[PROVIDER_CALL] 解析 OpenAI 响应失败，原始响应: {}", &body);
                                     if let Some(db) = &state.db {
                                         let _ = state.mark_credential_unhealthy(
                                             db,
@@ -147,7 +147,7 @@ pub async fn call_provider_anthropic(
                     } else {
                         let status_code = status.as_u16();
                         let body = resp.text().await.unwrap_or_default();
-                        eprintln!("[PROVIDER_CALL] OpenAI 请求失败: status={} body={}", status_code, &body[..body.len().min(500)]);
+                        tracing::debug!("[PROVIDER_CALL] OpenAI 请求失败: status={} body={}", status_code, &body[..body.len().min(500)]);
                         // 只有 5xx 错误才标记为不健康，4xx 错误（如模型不支持）不应该标记凭证为不健康
                         if status_code >= 500 {
                             if let Some(db) = &state.db {
@@ -1383,7 +1383,7 @@ fn is_lime_debug_enabled() -> bool {
 /// }
 /// ```
 fn parse_antigravity_accumulated_response(data: &str, model: &str) -> Result<String, String> {
-    eprintln!(
+    tracing::debug!(
         "[ANTIGRAVITY_PARSE] 开始解析累积数据，大小: {} bytes",
         data.len()
     );
@@ -1398,11 +1398,11 @@ fn parse_antigravity_accumulated_response(data: &str, model: &str) -> Result<Str
             let _ = std::fs::create_dir_all(debug_dir);
         }
         let _ = std::fs::write(&debug_file, data);
-        eprintln!("[ANTIGRAVITY_PARSE] 原始数据已保存到: {debug_file:?}");
+        tracing::debug!("[ANTIGRAVITY_PARSE] 原始数据已保存到: {debug_file:?}");
     }
 
     if debug_enabled {
-        eprintln!(
+        tracing::debug!(
             "[ANTIGRAVITY_PARSE] 数据前1000字符:\n{}",
             &data[..data.len().min(1000)]
         );
@@ -1414,12 +1414,12 @@ fn parse_antigravity_accumulated_response(data: &str, model: &str) -> Result<Str
 
     // 首先尝试直接解析为单个 JSON
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
-        eprintln!("[ANTIGRAVITY_PARSE] 单个 JSON 解析成功");
+        tracing::debug!("[ANTIGRAVITY_PARSE] 单个 JSON 解析成功");
         return parse_antigravity_json(&json, model);
     }
 
     // 如果失败，尝试按行解析，找到包含 candidates 的 JSON
-    eprintln!("[ANTIGRAVITY_PARSE] 单个 JSON 解析失败，尝试按行解析");
+    tracing::debug!("[ANTIGRAVITY_PARSE] 单个 JSON 解析失败，尝试按行解析");
 
     let mut all_text = String::new();
     let mut all_images: Vec<(String, String)> = Vec::new(); // (mime_type, data)
@@ -1442,7 +1442,7 @@ fn parse_antigravity_accumulated_response(data: &str, model: &str) -> Result<Str
     }
 
     if found_any {
-        eprintln!(
+        tracing::debug!(
             "[ANTIGRAVITY_PARSE] 按行解析成功，文本长度: {}, 图片数: {}",
             all_text.len(),
             all_images.len()
@@ -1451,7 +1451,7 @@ fn parse_antigravity_accumulated_response(data: &str, model: &str) -> Result<Str
     }
 
     // 如果还是失败，尝试找到 JSON 对象的边界
-    eprintln!("[ANTIGRAVITY_PARSE] 按行解析失败，尝试查找 JSON 边界");
+    tracing::debug!("[ANTIGRAVITY_PARSE] 按行解析失败，尝试查找 JSON 边界");
 
     // 查找所有 { 开头的位置，尝试解析
     let mut start = 0;
@@ -1459,7 +1459,7 @@ fn parse_antigravity_accumulated_response(data: &str, model: &str) -> Result<Str
         let json_start = start + pos;
         // 尝试从这个位置解析 JSON
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&data[json_start..]) {
-            eprintln!("[ANTIGRAVITY_PARSE] 在位置 {json_start} 找到有效 JSON");
+            tracing::debug!("[ANTIGRAVITY_PARSE] 在位置 {json_start} 找到有效 JSON");
             return parse_antigravity_json(&json, model);
         }
         start = json_start + 1;
@@ -1515,7 +1515,7 @@ fn extract_content_from_json(json: &serde_json::Value) -> Option<(String, Vec<(S
                     .and_then(|s| s.as_str())
                 {
                     if !sig.is_empty() {
-                        eprintln!(
+                        tracing::debug!(
                             "[ANTIGRAVITY_PARSE] 捕获 thoughtSignature (长度: {})",
                             sig.len()
                         );
@@ -1581,7 +1581,7 @@ fn extract_content_from_json(json: &serde_json::Value) -> Option<(String, Vec<(S
 
 /// 解析 Antigravity JSON 响应
 fn parse_antigravity_json(json: &serde_json::Value, model: &str) -> Result<String, String> {
-    eprintln!(
+    tracing::debug!(
         "[ANTIGRAVITY_PARSE] 解析 JSON，顶层类型: {}",
         if json.is_object() {
             "object"
@@ -1593,7 +1593,7 @@ fn parse_antigravity_json(json: &serde_json::Value, model: &str) -> Result<Strin
     );
 
     if let Some(obj) = json.as_object() {
-        eprintln!(
+        tracing::debug!(
             "[ANTIGRAVITY_PARSE] 顶层 keys: {:?}",
             obj.keys().collect::<Vec<_>>()
         );
@@ -1605,7 +1605,7 @@ fn parse_antigravity_json(json: &serde_json::Value, model: &str) -> Result<Strin
 
     // 如果是数组，尝试处理每个元素
     if let Some(arr) = json.as_array() {
-        eprintln!("[ANTIGRAVITY_PARSE] 顶层是数组，长度: {}", arr.len());
+        tracing::debug!("[ANTIGRAVITY_PARSE] 顶层是数组，长度: {}", arr.len());
         let mut all_text = String::new();
         let mut all_images = Vec::new();
 
@@ -1638,7 +1638,7 @@ fn build_sse_response(
         content.push_str(&format!("\n\n![Generated Image]({image_url})"));
     }
 
-    eprintln!("[ANTIGRAVITY_PARSE] 构建 SSE，内容长度: {}", content.len());
+    tracing::debug!("[ANTIGRAVITY_PARSE] 构建 SSE，内容长度: {}", content.len());
 
     let chunk_id = format!("chatcmpl-{}", uuid::Uuid::new_v4());
     let created = chrono::Utc::now().timestamp();

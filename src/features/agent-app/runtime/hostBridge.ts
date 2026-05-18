@@ -3,6 +3,7 @@ import {
   loadLimeColorSchemeId,
   type LimeColorSchemeId,
 } from "@/lib/appearance/colorSchemes";
+import { selectAgentAppDirectory } from "@/lib/api/agentApps";
 import {
   getEffectiveLimeThemeMode,
   LIME_THEME_CHANGED_EVENT,
@@ -81,6 +82,7 @@ export type AgentAppHostAgentRunUiMode = "drawer" | "modal" | "page";
 
 export interface AgentAppHostAgentRunUiRequest {
   taskId?: string;
+  sessionId?: string;
   bridgeAction?: string;
   title?: string;
   mode?: AgentAppHostAgentRunUiMode;
@@ -109,6 +111,12 @@ export interface AgentAppHostAgentRunUiCloseResult {
   closed: true;
   surface: "host_agent_run";
   taskId?: string;
+}
+
+export interface AgentAppHostSelectDirectoryResult {
+  path: string | null;
+  cancelled: boolean;
+  message?: string;
 }
 
 export interface AgentAppHostBridgeCapabilityRequest {
@@ -246,6 +254,23 @@ function readTaskIdFromPayload(payload: Record<string, unknown>): string | undef
   return Array.isArray(payload.args) && typeof payload.args[0] === "string"
     ? payload.args[0].trim()
     : undefined;
+}
+
+function readSessionIdFromPayload(
+  payload: Record<string, unknown>,
+): string | undefined {
+  const directSessionId =
+    readString(payload, "sessionId") ?? readString(payload, "session_id");
+  if (directSessionId) {
+    return directSessionId;
+  }
+  if (isRecord(payload.input)) {
+    return (
+      readString(payload.input, "sessionId") ??
+      readString(payload.input, "session_id")
+    );
+  }
+  return undefined;
 }
 
 function readRuntimeEventNameFromPayload(
@@ -604,6 +629,7 @@ function hasWorkspacePatchPayload(value: unknown): boolean {
 interface AgentAppTaskSubscription {
   subscriptionId: string;
   taskId: string;
+  sessionId?: string;
   pollIntervalMs: number;
   bridgeAction?: string;
   runtimeEventName?: string;
@@ -1050,7 +1076,7 @@ export class AgentAppHostBridge {
     if (provenance) {
       request.provenance = provenance;
     }
-    const uiResult = this.handleUiCapabilityInvoke(request);
+    const uiResult = await this.handleUiCapabilityInvoke(request);
     if (uiResult) {
       return {
         ...createLimeCapabilitySuccessResponse(uiResult),
@@ -1075,7 +1101,7 @@ export class AgentAppHostBridge {
 
   private handleUiCapabilityInvoke(
     request: AgentAppHostBridgeCapabilityRequest,
-  ): unknown | null {
+  ): unknown | Promise<unknown> | null {
     if (request.capability !== "lime.ui") {
       return null;
     }
@@ -1103,6 +1129,9 @@ export class AgentAppHostBridge {
       const url = this.resolveSameOriginActionUrl(request.input, ["url", "href"]);
       this.downloadSameOriginUrl(url, request.input);
       return { downloaded: true };
+    }
+    if (request.method === "selectDirectory") {
+      return this.selectDirectory(request.input);
     }
     if (request.method === "getSnapshot") {
       return buildAgentAppHostSnapshot({
@@ -1156,6 +1185,7 @@ export class AgentAppHostBridge {
     const mode = readString(input, "mode");
     return {
       taskId: this.readAgentRunUiTaskId(input),
+      sessionId: readString(input, "sessionId"),
       bridgeAction: readString(input, "bridgeAction"),
       title: readString(input, "title"),
       mode: mode === "modal" || mode === "page" ? mode : "drawer",
@@ -1181,6 +1211,17 @@ export class AgentAppHostBridge {
       (isRecord(input.task) ? readString(input.task, "taskId") : undefined) ??
       (isRecord(input.snapshot) ? readString(input.snapshot, "taskId") : undefined)
     );
+  }
+
+  private async selectDirectory(input: unknown): Promise<AgentAppHostSelectDirectoryResult> {
+    const title = isRecord(input) ? readString(input, "title") : undefined;
+    const selected = await selectAgentAppDirectory({ title });
+    const path = selected.path ?? null;
+    return {
+      path,
+      cancelled: selected.cancelled || !path,
+      message: selected.message,
+    };
   }
 
   private enrichAgentCapabilityResult(
@@ -1240,6 +1281,7 @@ export class AgentAppHostBridge {
     const topic =
       readString(message.payload, "topic") ?? readString(message.payload, "method");
     const taskId = readTaskIdFromPayload(message.payload);
+    const sessionId = readSessionIdFromPayload(message.payload);
     if (capability !== "lime.agent" || !topic || !topic.startsWith("task") || !taskId) {
       throw new AgentAppHostBridgeActionError(
         "INVALID_PAYLOAD",
@@ -1270,6 +1312,7 @@ export class AgentAppHostBridge {
     this.taskSubscriptions.set(subscriptionId, {
       subscriptionId,
       taskId,
+      sessionId,
       pollIntervalMs,
       bridgeAction,
       runtimeEventName,
@@ -1285,6 +1328,7 @@ export class AgentAppHostBridge {
       capability,
       topic: "task",
       taskId,
+      sessionId,
       pollIntervalMs,
       bridgeAction,
       runtimeEventName,
@@ -1343,6 +1387,7 @@ export class AgentAppHostBridge {
         topic: "task",
         eventType: "task:eventStreamUnavailable",
         taskId: subscription.taskId,
+        sessionId: subscription.sessionId,
         bridgeAction: subscription.bridgeAction,
         runtimeEventName: subscription.runtimeEventName,
         error: this.buildHostErrorPayload(
@@ -1377,6 +1422,7 @@ export class AgentAppHostBridge {
       topic: "task",
       eventType: "task:runtimeEvent",
       taskId: subscription.taskId,
+      sessionId: subscription.sessionId,
       bridgeAction: subscription.bridgeAction,
       runtimeEventName: subscription.runtimeEventName,
       runtimeEvent: payload,
@@ -1459,6 +1505,7 @@ export class AgentAppHostBridge {
         topic: "task",
         eventType: "task:update",
         taskId: subscription.taskId,
+        sessionId: subscription.sessionId,
         bridgeAction: subscription.bridgeAction,
         task: result,
         events,
@@ -1486,6 +1533,7 @@ export class AgentAppHostBridge {
         topic: "task",
         eventType: "task:error",
         taskId: subscription.taskId,
+        sessionId: subscription.sessionId,
         bridgeAction: subscription.bridgeAction,
         error: this.buildHostErrorPayload(
           {
@@ -1517,7 +1565,10 @@ export class AgentAppHostBridge {
   private buildTaskSubscriptionPollRequest(
     subscription: AgentAppTaskSubscription,
   ): AgentAppHostBridgeCapabilityRequest {
-    const input = { taskId: subscription.taskId };
+    const input: Record<string, string> = { taskId: subscription.taskId };
+    if (subscription.sessionId) {
+      input.sessionId = subscription.sessionId;
+    }
     const invokeRequest = buildLimeCapabilityInvokeRequest({
       capability: "lime.agent",
       method: "getTask" as never,

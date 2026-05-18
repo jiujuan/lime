@@ -48,12 +48,25 @@ export interface LimeKnowledgeCapability {
   }): Promise<AgentAppKnowledgeSearchResult>;
 }
 
+export interface AgentAppTaskLookup {
+  taskId: string;
+  sessionId?: string;
+  traceId?: string;
+  turnId?: string;
+  workspaceId?: string;
+  title?: string;
+  taskKind?: string;
+  input?: unknown;
+  expectedOutput?: unknown;
+  startedAt?: string;
+}
+
 export interface LimeAgentCapability {
   startTask(input: AgentAppTaskRequest): Promise<AgentAppTaskRecord>;
-  streamTask(taskId: string): Promise<AgentAppTaskStreamEvent[]>;
-  getTask(taskId: string): Promise<AgentAppTaskRecord | null>;
-  cancelTask(taskId: string): Promise<AgentAppTaskRecord>;
-  retryTask(taskId: string): Promise<AgentAppTaskRecord>;
+  streamTask(task: string | AgentAppTaskLookup): Promise<AgentAppTaskStreamEvent[]>;
+  getTask(task: string | AgentAppTaskLookup): Promise<AgentAppTaskRecord | null>;
+  cancelTask(task: string | AgentAppTaskLookup): Promise<AgentAppTaskRecord>;
+  retryTask(task: string | AgentAppTaskLookup): Promise<AgentAppTaskRecord>;
   submitHostResponse(
     input: AgentAppTaskHostResponseRequest,
   ): Promise<AgentAppTaskHostResponseResult>;

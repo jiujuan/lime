@@ -26,6 +26,7 @@ import type {
   AppCleanupPlan,
   InstalledAgentAppState,
   InstalledAppPreview,
+  LimeRuntimeProfile,
   ReadinessStatus,
 } from "../types";
 
@@ -98,6 +99,7 @@ export interface EvaluateAgentAppLabInstallFlowParams {
   installedStore?: InMemoryInstalledAgentAppStateStore;
   actualPackageHash?: string;
   actualManifestHash?: string;
+  runtimeProfile?: LimeRuntimeProfile;
   now?: string;
 }
 
@@ -303,6 +305,8 @@ export function evaluateAgentAppLabInstallFlow(
     operation: params.operation ?? "run-entry",
     runtimePackageLoad,
     permissionDecision: params.permissionDecision ?? "requires-review",
+    installMode: params.preview.projection.install.preferredMode,
+    runtimeProfile: params.runtimeProfile,
   });
   const guardStatus = statusFromGuard(guard);
   if (guardStatus !== "permission-review") {

@@ -411,6 +411,8 @@
   "agentApp.apps.launch.uiMounted": "{{title}} をマウントしました（{{route}}）。",
   "agentApp.apps.launch.workflowCompleted": "{{title}} workflow が完了しました: {{runId}}。",
   "agentApp.apps.launch.entryCompleted": "{{title}} entry が完了しました: {{runId}}。",
+  "agentApp.apps.launch.shellLaunched": "{{title}} の独立エントリを起動しました（{{target}}）。",
+  "agentApp.apps.launch.shellBlocked": "独立エントリはまだ起動できません: {{codes}}。",
   "agentApp.apps.uninstallPreview.title": "アンインストール予行",
   "agentApp.apps.uninstallPreview.summary": "{{deleted}} 件を削除し、{{retained}} 件を保持します。",
   "agentApp.apps.action.confirmUninstall": "アンインストールを確定",

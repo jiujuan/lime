@@ -98,21 +98,33 @@ type ConfigEventCallback = (event: ConfigChangeEvent) => void;
 /** Tauri 事件名称 */
 const CONFIG_CHANGED_EVENT = "config-changed";
 
+export interface ConfigEventManagerDependencies {
+  safeListen?: typeof safeListen;
+  hasTauriInvokeCapability?: typeof hasTauriInvokeCapability;
+}
+
 /**
  * 配置事件全局管理器
  *
  * 单例模式，确保全应用只有一个事件订阅实例。
  */
-class ConfigEventManager {
+export class ConfigEventManager {
   private static instance: ConfigEventManager;
   private unlisten: UnlistenFn | null = null;
   private subscribed = false;
   private subscribing = false;
+  private subscriptionGeneration = 0;
   private callbacks: Set<ConfigEventCallback> = new Set();
   private lastEvent: ConfigChangeEvent | null = null;
   private error: string | null = null;
+  private readonly safeListen: typeof safeListen;
+  private readonly hasTauriInvokeCapability: typeof hasTauriInvokeCapability;
 
-  private constructor() {}
+  constructor(dependencies: ConfigEventManagerDependencies = {}) {
+    this.safeListen = dependencies.safeListen ?? safeListen;
+    this.hasTauriInvokeCapability =
+      dependencies.hasTauriInvokeCapability ?? hasTauriInvokeCapability;
+  }
 
   static getInstance(): ConfigEventManager {
     if (!ConfigEventManager.instance) {
@@ -131,27 +143,44 @@ class ConfigEventManager {
 
     // 浏览器开发模式下优先让出 DevBridge 事件连接给聊天主链，
     // 配置热更新监听不再默认占用一个长期 SSE 连接。
-    if (!hasTauriInvokeCapability()) {
+    if (!this.hasTauriInvokeCapability()) {
       this.error = null;
       return;
     }
 
     this.subscribing = true;
     this.error = null;
+    const generation = ++this.subscriptionGeneration;
 
     try {
       // 监听 Tauri 配置变更事件
-      this.unlisten = await safeListen<ConfigChangeEvent>(
+      const unlisten = await this.safeListen<ConfigChangeEvent>(
         CONFIG_CHANGED_EVENT,
         (event) => {
           this.handleEvent(event.payload);
         },
       );
 
+      if (
+        generation !== this.subscriptionGeneration ||
+        !this.hasTauriInvokeCapability()
+      ) {
+        unlisten();
+        if (generation === this.subscriptionGeneration) {
+          this.subscribed = false;
+          this.subscribing = false;
+        }
+        return;
+      }
+
+      this.unlisten = unlisten;
       this.subscribed = true;
       this.subscribing = false;
       console.log("[ConfigEventManager] 已订阅配置变更事件");
     } catch (e) {
+      if (generation !== this.subscriptionGeneration) {
+        return;
+      }
       this.subscribing = false;
       this.error = e instanceof Error ? e.message : "订阅失败";
       console.error("[ConfigEventManager] 订阅配置变更事件失败:", e);
@@ -162,6 +191,7 @@ class ConfigEventManager {
    * 取消订阅
    */
   unsubscribe(): void {
+    this.subscriptionGeneration += 1;
     if (this.unlisten) {
       this.unlisten();
       this.unlisten = null;

@@ -40,6 +40,7 @@ const LAYERED_MANIFEST_FILES = [
   "app.i18n.yaml",
   "app.signature.yaml",
   "app.runtime.yaml",
+  "app.install.yaml",
   "evals/readiness.yaml",
   "evals/health.yaml",
 ] as const;
@@ -94,6 +95,13 @@ interface ReferenceProjection {
   overlayTemplates: ReferenceProjectionItem[];
   permissions: ReferenceProjectionItem[];
   lifecycle: Record<string, unknown>;
+  install?: {
+    modes?: string[];
+    runtime?: Record<string, unknown>;
+    standalone?: Record<string, unknown>;
+    runtimeBacked?: Record<string, unknown>;
+    branding?: Record<string, unknown>;
+  };
   provenance: {
     appName: string;
     appVersion: string;
@@ -314,6 +322,7 @@ describeIfReferenceAvailable(
         secrets: "secrets",
         overlayTemplates: "overlayTemplates",
         lifecycle: "lifecycle",
+        install: "install",
         provenance: "provenance",
       };
       const acceptedDivergences: Record<string, string> = {
@@ -420,6 +429,12 @@ describeIfReferenceAvailable(
       ).toEqual(keys(referenceProjection.overlayTemplates));
       expect(projection.storage?.namespace).toBe(
         referenceProjection.storage?.namespace,
+      );
+      expect(projection.install.supportedModes).toEqual(
+        referenceProjection.install?.modes ?? ["in_lime"],
+      );
+      expect(projection.install.branding.name).toBe(
+        String(referenceProjection.install?.branding?.name ?? projection.app.displayName),
       );
     });
 

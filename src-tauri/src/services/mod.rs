@@ -5,6 +5,7 @@
 
 // 保留在主 crate 的 Tauri 相关服务
 pub mod agent_app_runtime_capability_catalog_service;
+pub mod agent_app_shell_window;
 pub mod agent_timeline_service;
 pub mod artifact_diff_service;
 pub mod artifact_document_service;

@@ -7,6 +7,9 @@
 use crate::app::AppState;
 use crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState;
 use crate::database::DbConnection;
+use crate::services::agent_app_shell_window::{
+    open_agent_app_shell_window, AgentAppShellWindowInfo, AgentAppShellWindowOpenRequest,
+};
 use chrono::Utc;
 use lime_core::agent_app_runtime_token::issue_agent_app_runtime_token;
 use lime_core::config::Config;
@@ -27,6 +30,7 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
+use tauri_plugin_dialog::DialogExt;
 use tokio::time::{sleep, Duration, Instant};
 use url::Url;
 use zip::ZipArchive;
@@ -45,6 +49,7 @@ const AGENT_APP_VALUE_LAYER_FILES: &[(&str, &str, &str)] = &[
     ("app.i18n.yaml", "i18n", "i18n"),
     ("app.signature.yaml", "signature", "signature"),
     ("app.runtime.yaml", "agentRuntime", "agentRuntime"),
+    ("app.install.yaml", "install", "install"),
     ("evals/readiness.yaml", "readiness", "readiness"),
     ("evals/health.yaml", "health", "health"),
 ];
@@ -169,6 +174,27 @@ pub struct AgentAppUiRuntimeStopRequest {
     pub app_id: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppShellLaunchRequest {
+    pub descriptor: Value,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppSelectDirectoryRequest {
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppSelectDirectoryResult {
+    pub path: Option<String>,
+    pub cancelled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentAppUiRuntimeStatus {
@@ -188,6 +214,53 @@ pub struct AgentAppUiRuntimeStatus {
     pub entry_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub route: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppShellPackageMount {
+    pub kind: String,
+    pub path: String,
+    pub read_only: bool,
+    pub package_hash: String,
+    pub manifest_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppShellLaunchResult {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app_id: Option<String>,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub install_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shell_kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub descriptor_version: Option<u64>,
+    pub dev_shell: bool,
+    pub blocker_codes: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub package_mount: Option<AgentAppShellPackageMount>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub runtime_status: Option<AgentAppUiRuntimeStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shell_window: Option<AgentAppShellWindowInfo>,
+    pub launched_at: String,
+}
+
+#[derive(Debug, Clone)]
+struct AgentAppShellDescriptorFields {
+    descriptor_version: u64,
+    app_id: String,
+    install_mode: String,
+    shell_kind: String,
+    package_hash: String,
+    manifest_hash: String,
+    entry_key: String,
+    window_title: String,
 }
 
 #[derive(Debug, Clone)]
@@ -630,6 +703,348 @@ pub async fn agent_app_stop_ui_runtime(
         entry_key: Some(process.entry_key),
         route: Some(process.route),
     })
+}
+
+#[tauri::command]
+pub async fn agent_app_select_directory(
+    request: Option<AgentAppSelectDirectoryRequest>,
+    window: tauri::WebviewWindow,
+) -> Result<AgentAppSelectDirectoryResult, String> {
+    Ok(agent_app_select_directory_from_window(request, &window))
+}
+
+pub fn agent_app_select_directory_from_window(
+    request: Option<AgentAppSelectDirectoryRequest>,
+    window: &tauri::WebviewWindow,
+) -> AgentAppSelectDirectoryResult {
+    let title = request
+        .and_then(|request| non_empty_string(request.title.as_deref()))
+        .unwrap_or_else(|| "选择 Agent App 目录".to_string());
+    let selected = window
+        .dialog()
+        .file()
+        .set_title(title)
+        .set_parent(window)
+        .blocking_pick_folder();
+    agent_app_select_directory_result(selected)
+}
+
+#[tauri::command]
+pub async fn agent_app_launch_shell(
+    request: AgentAppShellLaunchRequest,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    db: tauri::State<'_, DbConnection>,
+    api_key_provider_service: tauri::State<'_, ApiKeyProviderServiceState>,
+) -> Result<AgentAppShellLaunchResult, String> {
+    let config = { state.read().await.config.clone() };
+    launch_agent_app_shell_with_context(
+        request,
+        &app,
+        &config,
+        Some(&db),
+        Some(api_key_provider_service.0.as_ref()),
+    )
+    .await
+}
+
+#[cfg(debug_assertions)]
+pub async fn agent_app_launch_shell_for_dev_bridge(
+    request: AgentAppShellLaunchRequest,
+    app: &tauri::AppHandle,
+    config: &Config,
+    db: Option<&DbConnection>,
+    api_key_provider_service: Option<&ApiKeyProviderService>,
+) -> Result<AgentAppShellLaunchResult, String> {
+    launch_agent_app_shell_with_context(request, app, config, db, api_key_provider_service).await
+}
+
+async fn launch_agent_app_shell_with_context(
+    request: AgentAppShellLaunchRequest,
+    app: &tauri::AppHandle,
+    config: &Config,
+    db: Option<&DbConnection>,
+    api_key_provider_service: Option<&ApiKeyProviderService>,
+) -> Result<AgentAppShellLaunchResult, String> {
+    let launched_at = now_iso();
+    let fields = match parse_agent_app_shell_descriptor(&request.descriptor) {
+        Ok(fields) => fields,
+        Err(blocker_codes) => {
+            return Ok(build_shell_launch_result(
+                None,
+                "blocked",
+                blocker_codes,
+                Some("Agent App shell descriptor 未通过启动前校验。".to_string()),
+                None,
+                None,
+                None,
+                launched_at,
+            ));
+        }
+    };
+
+    let installed_state = match read_installed_agent_app_state(&fields.app_id) {
+        Ok(state) => state,
+        Err(error) => {
+            return Ok(build_shell_launch_result(
+                Some(&fields),
+                "blocked",
+                vec!["INSTALLED_STATE_MISSING".to_string()],
+                Some(error),
+                None,
+                None,
+                None,
+                launched_at,
+            ));
+        }
+    };
+
+    let state_blockers = validate_shell_launch_against_installed_state(&fields, &installed_state);
+    if !state_blockers.is_empty() {
+        return Ok(build_shell_launch_result(
+            Some(&fields),
+            "blocked",
+            state_blockers,
+            Some("Agent App shell descriptor 与 installed state 不一致。".to_string()),
+            None,
+            None,
+            None,
+            launched_at,
+        ));
+    }
+
+    let app_dir = match resolve_agent_app_runtime_dir(&installed_state) {
+        Ok(app_dir) => app_dir,
+        Err(error) => {
+            return Ok(build_shell_launch_result(
+                Some(&fields),
+                "blocked",
+                vec!["PACKAGE_MOUNT_UNAVAILABLE".to_string()],
+                Some(error),
+                None,
+                None,
+                None,
+                launched_at,
+            ));
+        }
+    };
+    let package_mount = build_shell_package_mount(&fields, &app_dir);
+
+    let runtime_env =
+        build_agent_app_ui_runtime_env(&fields.app_id, config, db, api_key_provider_service);
+    let runtime_request = AgentAppUiRuntimeStartRequest {
+        app_id: fields.app_id.clone(),
+        entry_key: Some(fields.entry_key.clone()),
+    };
+    match start_agent_app_ui_runtime_with_env(runtime_request, runtime_env).await {
+        Ok(runtime_status) => {
+            let Some(entry_url) = runtime_status.entry_url.clone() else {
+                return Ok(build_shell_launch_result(
+                    Some(&fields),
+                    "blocked",
+                    vec!["SHELL_ENTRY_URL_MISSING".to_string()],
+                    Some("Agent App UI runtime 未返回可打开的 entry URL。".to_string()),
+                    Some(package_mount),
+                    Some(runtime_status),
+                    None,
+                    launched_at,
+                ));
+            };
+            let shell_window = match open_agent_app_shell_window(
+                app,
+                AgentAppShellWindowOpenRequest {
+                    app_id: fields.app_id.clone(),
+                    install_mode: fields.install_mode.clone(),
+                    entry_key: fields.entry_key.clone(),
+                    title: fields.window_title.clone(),
+                    entry_url,
+                },
+            ) {
+                Ok(shell_window) => shell_window,
+                Err(error) => {
+                    return Ok(build_shell_launch_result(
+                        Some(&fields),
+                        "blocked",
+                        vec!["SHELL_WINDOW_OPEN_FAILED".to_string()],
+                        Some(format!("Agent App dev shell 窗口打开失败: {error}")),
+                        Some(package_mount),
+                        Some(runtime_status),
+                        None,
+                        launched_at,
+                    ));
+                }
+            };
+            Ok(build_shell_launch_result(
+                Some(&fields),
+                "launched",
+                Vec::new(),
+                Some("Agent App dev shell 已复用 current UI runtime 并打开独立窗口。".to_string()),
+                Some(package_mount),
+                Some(runtime_status),
+                Some(shell_window),
+                launched_at,
+            ))
+        }
+        Err(error) => Ok(build_shell_launch_result(
+            Some(&fields),
+            "blocked",
+            vec!["SHELL_DEV_RUNTIME_START_FAILED".to_string()],
+            Some(error),
+            Some(package_mount),
+            None,
+            None,
+            launched_at,
+        )),
+    }
+}
+
+fn parse_agent_app_shell_descriptor(
+    descriptor: &Value,
+) -> Result<AgentAppShellDescriptorFields, Vec<String>> {
+    let mut blocker_codes = Vec::new();
+    let descriptor_version = read_u64(descriptor, &["descriptorVersion"]).unwrap_or(0);
+    if descriptor_version != 1 {
+        blocker_codes.push("SHELL_DESCRIPTOR_VERSION_UNSUPPORTED".to_string());
+    }
+
+    let app_id = read_string(descriptor, &["appId"]).unwrap_or_default();
+    if validate_safe_app_id(&app_id).is_err() {
+        blocker_codes.push("APP_ID_INVALID".to_string());
+    }
+
+    let install_mode = read_string(descriptor, &["installMode"]).unwrap_or_default();
+    if !matches!(install_mode.as_str(), "standalone" | "runtime_backed") {
+        blocker_codes.push("SHELL_INSTALL_MODE_UNSUPPORTED".to_string());
+    }
+
+    let shell_kind = read_string(descriptor, &["runtimeProfile", "shellKind"]).unwrap_or_default();
+    if !shell_kind_matches_install_mode(&shell_kind, &install_mode) {
+        blocker_codes.push("SHELL_KIND_MISMATCH".to_string());
+    }
+
+    let runtime_install_mode =
+        read_string(descriptor, &["runtimeProfile", "installMode"]).unwrap_or_default();
+    if runtime_install_mode != install_mode {
+        blocker_codes.push("RUNTIME_PROFILE_MISMATCH".to_string());
+    }
+
+    let package_hash = read_string(descriptor, &["packageHash"]).unwrap_or_default();
+    let manifest_hash = read_string(descriptor, &["manifestHash"]).unwrap_or_default();
+    if package_hash.trim().is_empty() || manifest_hash.trim().is_empty() {
+        blocker_codes.push("PACKAGE_IDENTITY_MISSING".to_string());
+    }
+
+    if read_string(descriptor, &["isolation", "packageMount"]).as_deref() != Some("read-only")
+        || read_string(descriptor, &["isolation", "secrets"]).as_deref() != Some("refs-only")
+        || read_string(descriptor, &["isolation", "sideEffects"]).as_deref()
+            != Some("runtime-broker")
+        || read_string(descriptor, &["isolation", "evidence"]).as_deref()
+            != Some("runtime-provenance")
+    {
+        blocker_codes.push("ISOLATION_POLICY_INVALID".to_string());
+    }
+
+    let entry_key = read_string(descriptor, &["entry", "entryKey"]).unwrap_or_default();
+    if entry_key.trim().is_empty() {
+        blocker_codes.push("ENTRY_KEY_MISSING".to_string());
+    }
+    let window_title = read_string(descriptor, &["branding", "windowTitle"])
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| read_string(descriptor, &["branding", "name"]))
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| app_id.clone());
+
+    if !blocker_codes.is_empty() {
+        blocker_codes.sort();
+        blocker_codes.dedup();
+        return Err(blocker_codes);
+    }
+
+    Ok(AgentAppShellDescriptorFields {
+        descriptor_version,
+        app_id,
+        install_mode,
+        shell_kind,
+        package_hash,
+        manifest_hash,
+        entry_key,
+        window_title,
+    })
+}
+
+fn shell_kind_matches_install_mode(shell_kind: &str, install_mode: &str) -> bool {
+    matches!(
+        (install_mode, shell_kind),
+        ("standalone", "app_shell") | ("runtime_backed", "runtime_backed")
+    )
+}
+
+fn validate_shell_launch_against_installed_state(
+    fields: &AgentAppShellDescriptorFields,
+    state: &Value,
+) -> Vec<String> {
+    let mut blockers = Vec::new();
+    if read_string(state, &["installMode"]).as_deref() != Some(fields.install_mode.as_str()) {
+        blockers.push("INSTALL_MODE_MISMATCH".to_string());
+    }
+    if read_string(state, &["runtimeProfileSummary", "shellKind"]).as_deref()
+        != Some(fields.shell_kind.as_str())
+    {
+        blockers.push("RUNTIME_PROFILE_MISMATCH".to_string());
+    }
+    if read_string(state, &["identity", "packageHash"]).as_deref()
+        != Some(fields.package_hash.as_str())
+    {
+        blockers.push("PACKAGE_HASH_MISMATCH".to_string());
+    }
+    if read_string(state, &["identity", "manifestHash"]).as_deref()
+        != Some(fields.manifest_hash.as_str())
+    {
+        blockers.push("MANIFEST_HASH_MISMATCH".to_string());
+    }
+    if read_bool(state, &["disabled"]) == Some(true) {
+        blockers.push("APP_DISABLED".to_string());
+    }
+    blockers
+}
+
+fn build_shell_package_mount(
+    fields: &AgentAppShellDescriptorFields,
+    app_dir: &Path,
+) -> AgentAppShellPackageMount {
+    AgentAppShellPackageMount {
+        kind: "local_dir".to_string(),
+        path: app_dir.to_string_lossy().to_string(),
+        read_only: true,
+        package_hash: fields.package_hash.clone(),
+        manifest_hash: fields.manifest_hash.clone(),
+    }
+}
+
+fn build_shell_launch_result(
+    fields: Option<&AgentAppShellDescriptorFields>,
+    status: &str,
+    blocker_codes: Vec<String>,
+    message: Option<String>,
+    package_mount: Option<AgentAppShellPackageMount>,
+    runtime_status: Option<AgentAppUiRuntimeStatus>,
+    shell_window: Option<AgentAppShellWindowInfo>,
+    launched_at: String,
+) -> AgentAppShellLaunchResult {
+    AgentAppShellLaunchResult {
+        app_id: fields.map(|fields| fields.app_id.clone()),
+        status: status.to_string(),
+        install_mode: fields.map(|fields| fields.install_mode.clone()),
+        shell_kind: fields.map(|fields| fields.shell_kind.clone()),
+        descriptor_version: fields.map(|fields| fields.descriptor_version),
+        dev_shell: true,
+        blocker_codes,
+        message,
+        package_mount,
+        runtime_status,
+        shell_window,
+        launched_at,
+    }
 }
 
 fn build_agent_app_uninstall_rehearsal(
@@ -1261,6 +1676,23 @@ fn agent_app_protocol_for_provider(_provider: &ApiKeyProvider) -> String {
     "openai_chat".to_string()
 }
 
+fn agent_app_select_directory_result(
+    selected: Option<tauri_plugin_dialog::FilePath>,
+) -> AgentAppSelectDirectoryResult {
+    let path = selected.and_then(|file_path| {
+        file_path
+            .into_path()
+            .ok()
+            .map(|path| path.to_string_lossy().to_string())
+            .and_then(|path| non_empty_string(Some(path.as_str())))
+    });
+    AgentAppSelectDirectoryResult {
+        cancelled: path.is_none(),
+        path,
+        message: None,
+    }
+}
+
 fn first_provider_model(provider: &ApiKeyProvider) -> Option<String> {
     provider
         .custom_models
@@ -1833,6 +2265,22 @@ fn read_string(value: &Value, path: &[&str]) -> Option<String> {
     current.as_str().map(ToString::to_string)
 }
 
+fn read_bool(value: &Value, path: &[&str]) -> Option<bool> {
+    let mut current = value;
+    for key in path {
+        current = current.get(*key)?;
+    }
+    current.as_bool()
+}
+
+fn read_u64(value: &Value, path: &[&str]) -> Option<u64> {
+    let mut current = value;
+    for key in path {
+        current = current.get(*key)?;
+    }
+    current.as_u64()
+}
+
 fn write_installed_state(app_id: &str, state: &Value, saved_at: &str) -> Result<(), String> {
     fs::create_dir_all(installed_dir()?)
         .map_err(|error| format!("创建 Agent App installed 目录失败: {error}"))?;
@@ -1959,6 +2407,35 @@ mod tests {
         }
     }
 
+    fn sample_shell_descriptor() -> Value {
+        serde_json::json!({
+            "descriptorVersion": 1,
+            "appId": "content-factory-app",
+            "packageHash": "package-fnv1a-aaaaaaaa",
+            "manifestHash": "manifest-fnv1a-bbbbbbbb",
+            "installMode": "standalone",
+            "runtimeProfile": {
+                "runtimeId": "lime-runtime-local",
+                "runtimeVersion": "0.8.0",
+                "shellKind": "app_shell",
+                "installMode": "standalone"
+            },
+            "entry": {
+                "entryKey": "dashboard",
+                "kind": "page",
+                "title": "首页",
+                "route": "/dashboard"
+            },
+            "isolation": {
+                "packageMount": "read-only",
+                "secrets": "refs-only",
+                "sideEffects": "runtime-broker",
+                "evidence": "runtime-provenance",
+                "storageNamespace": "content-factory-app"
+            }
+        })
+    }
+
     fn build_sample_zip() -> Vec<u8> {
         let mut buffer = Cursor::new(Vec::new());
         {
@@ -1974,6 +2451,19 @@ mod tests {
             zip.finish().unwrap();
         }
         buffer.into_inner()
+    }
+
+    #[test]
+    fn select_directory_result_projects_path_and_cancel_state() {
+        let result = agent_app_select_directory_result(Some(tauri_plugin_dialog::FilePath::Path(
+            PathBuf::from("/tmp/lime-agent-app"),
+        )));
+        assert_eq!(result.path.as_deref(), Some("/tmp/lime-agent-app"));
+        assert!(!result.cancelled);
+
+        let cancelled = agent_app_select_directory_result(None);
+        assert!(cancelled.path.is_none());
+        assert!(cancelled.cancelled);
     }
 
     fn sample_provider(
@@ -2065,6 +2555,42 @@ mod tests {
     }
 
     #[test]
+    fn shell_descriptor_validation_blocks_runtime_bypass() {
+        let fields = parse_agent_app_shell_descriptor(&sample_shell_descriptor()).unwrap();
+        assert_eq!(fields.app_id, "content-factory-app");
+        assert_eq!(fields.install_mode, "standalone");
+        assert_eq!(fields.shell_kind, "app_shell");
+
+        let mut invalid = sample_shell_descriptor();
+        invalid["runtimeProfile"]["shellKind"] = Value::String("desktop".to_string());
+        let blockers = parse_agent_app_shell_descriptor(&invalid).unwrap_err();
+        assert!(blockers.contains(&"SHELL_KIND_MISMATCH".to_string()));
+    }
+
+    #[test]
+    fn shell_launch_requires_installed_state_identity_match() {
+        let fields = parse_agent_app_shell_descriptor(&sample_shell_descriptor()).unwrap();
+        let state = serde_json::json!({
+            "appId": "content-factory-app",
+            "identity": {
+                "packageHash": "package-fnv1a-aaaaaaaa",
+                "manifestHash": "manifest-fnv1a-bbbbbbbb"
+            },
+            "installMode": "standalone",
+            "runtimeProfileSummary": {
+                "shellKind": "app_shell"
+            },
+            "disabled": false
+        });
+        assert!(validate_shell_launch_against_installed_state(&fields, &state).is_empty());
+
+        let mut mismatch = state.clone();
+        mismatch["identity"]["packageHash"] = Value::String("package-fnv1a-changed".to_string());
+        let blockers = validate_shell_launch_against_installed_state(&fields, &mismatch);
+        assert!(blockers.contains(&"PACKAGE_HASH_MISMATCH".to_string()));
+    }
+
+    #[test]
     fn cloud_release_descriptor_requires_https_and_sha256_hashes() {
         let descriptor = sample_descriptor(
             "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
@@ -2128,6 +2654,11 @@ mod tests {
             "agentRuntime:\n  agentTask:\n    eventSchema: lime.agent-task-event.v1\n",
         )
         .unwrap();
+        fs::write(
+            app_dir.join("app.install.yaml"),
+            "install:\n  contractVersion: 0.8.0\n  modes:\n    - mode: in_lime\n      default: true\n    - mode: standalone\n      shell:\n        kind: app_shell\n  runtime:\n    minVersion: 0.8.0\n",
+        )
+        .unwrap();
         fs::create_dir_all(app_dir.join("evals")).unwrap();
         fs::write(
             app_dir.join("evals/readiness.yaml"),
@@ -2149,6 +2680,8 @@ mod tests {
             manifest["agentRuntime"]["agentTask"]["eventSchema"],
             "lime.agent-task-event.v1"
         );
+        assert_eq!(manifest["install"]["modes"][1]["mode"], "standalone");
+        assert_eq!(manifest["install"]["runtime"]["minVersion"], "0.8.0");
         assert_eq!(manifest["readiness"]["required"][0]["check"], "sdk_version");
     }
 

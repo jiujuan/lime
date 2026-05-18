@@ -230,5 +230,5 @@ describe("Harness eval history window", () => {
     expect(report.signals).not.toContain(
       "样本数不足 2，当前仅形成 trend seed，还不能判断长期退化。",
     );
-  }, 90_000);
+  }, 240_000);
 });

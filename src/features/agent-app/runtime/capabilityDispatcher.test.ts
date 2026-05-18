@@ -2,6 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { AdapterCapabilityHost } from "../adapters/AdapterCapabilityHost";
 import { InMemoryAgentAppCapabilityStore } from "../adapters/InMemoryAgentAppCapabilityStore";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
+import {
+  compatibleAgentAppStandardVersions,
+  currentAgentAppHostRuntimeVersion,
+  currentAgentAppStandardVersion,
+} from "../readiness/hostCapabilityProfile";
+import { buildLimeRuntimeProfileForPreview } from "../runtime-profile";
 import type { CapabilityHost } from "../sdk/CapabilityHost";
 import type {
   AgentAppArtifactRecord,
@@ -76,6 +82,10 @@ function buildDispatcher(
     entryKey: "dashboard",
     runId: "bridge-run-1",
     profile,
+    runtimeProfile: buildLimeRuntimeProfileForPreview({
+      preview,
+      hostProfile: profile,
+    }),
     ...standardProfile,
   });
   return (request: CapabilityRequestFixture) =>
@@ -786,10 +796,10 @@ describe("createAgentAppCapabilityDispatcher", () => {
       },
     })) as Record<string, unknown>;
     expect(profile).toMatchObject({
-      appRuntimeVersion: "0.7.0",
+      appRuntimeVersion: currentAgentAppHostRuntimeVersion,
       standardVersions: {
-        current: "0.7",
-        compatible: ["0.5", "0.6", "0.7"],
+        current: currentAgentAppStandardVersion,
+        compatible: compatibleAgentAppStandardVersions,
       },
       standards: expect.objectContaining({
         layeredManifest: expect.objectContaining({
@@ -813,6 +823,18 @@ describe("createAgentAppCapabilityDispatcher", () => {
           ]),
           hostCloudManagedExecution: true,
           externalSideEffectsRequireApproval: true,
+        }),
+      }),
+      runtimeProfile: expect.objectContaining({
+        runtimeId: "content-factory-app:in_lime:0.8.0",
+        runtimeVersion: currentAgentAppHostRuntimeVersion,
+        shellKind: "desktop",
+        installMode: "in_lime",
+      }),
+      runtimeCapabilities: expect.objectContaining({
+        "lime.agent": expect.objectContaining({
+          available: true,
+          implementation: "adapter",
         }),
       }),
       runtimeTargets: ["local"],
@@ -950,10 +972,10 @@ describe("createAgentAppCapabilityDispatcher", () => {
     })) as Record<string, unknown>;
 
     expect(profile).toMatchObject({
-      appRuntimeVersion: "0.7.0",
+      appRuntimeVersion: currentAgentAppHostRuntimeVersion,
       standardVersions: {
-        current: "0.7",
-        compatible: ["0.5", "0.6", "0.7"],
+        current: currentAgentAppStandardVersion,
+        compatible: compatibleAgentAppStandardVersions,
       },
       requirements,
       boundary,

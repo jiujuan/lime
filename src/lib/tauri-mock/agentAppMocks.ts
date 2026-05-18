@@ -210,6 +210,91 @@ export const agentAppMocks = {
       message: "Agent App UI runtime 已停止。",
     };
   },
+  agent_app_select_directory: async () => ({
+    path: null,
+    cancelled: true,
+    message: "浏览器预览无法打开本机目录选择器，请在 Lime 桌面端使用。",
+  }),
+  agent_app_launch_shell: async (args: any) => {
+    const descriptor = args?.request?.descriptor ?? {};
+    const appId = String(descriptor.appId ?? "content-factory-app");
+    const installMode = String(descriptor.installMode ?? "standalone");
+    const shellKind = String(descriptor.runtimeProfile?.shellKind ?? "app_shell");
+    const packageHash = String(descriptor.packageHash ?? "");
+    const manifestHash = String(descriptor.manifestHash ?? "");
+    const blockerCodes: string[] = [];
+
+    if (!["standalone", "runtime_backed"].includes(installMode)) {
+      blockerCodes.push("SHELL_INSTALL_MODE_UNSUPPORTED");
+    }
+    if (
+      (installMode === "standalone" && shellKind !== "app_shell") ||
+      (installMode === "runtime_backed" && shellKind !== "runtime_backed")
+    ) {
+      blockerCodes.push("SHELL_KIND_MISMATCH");
+    }
+    if (!packageHash || !manifestHash) {
+      blockerCodes.push("PACKAGE_IDENTITY_MISSING");
+    }
+
+    if (blockerCodes.length > 0) {
+      return {
+        appId,
+        status: "blocked",
+        installMode,
+        shellKind,
+        descriptorVersion: descriptor.descriptorVersion,
+        devShell: true,
+        blockerCodes,
+        message: "Agent App shell descriptor 未通过 mock 启动前校验。",
+        launchedAt: now(),
+      };
+    }
+
+    const runtimeStatus = await resolveMockRuntimeStatus({
+      request: {
+        appId,
+        entryKey: descriptor.entry?.entryKey,
+      },
+    });
+    const shellWindow = {
+      label: `agent-app-shell-${appId}-${installMode}`,
+      title: String(
+        descriptor.branding?.windowTitle ?? descriptor.branding?.name ?? appId,
+      ),
+      url: runtimeStatus.entryUrl,
+      reused: false,
+      chrome: {
+        deepLinkScheme: `lime-agent-${appId.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`,
+        openEntryKey: String(descriptor.entry?.entryKey ?? "dashboard"),
+        trayEnabled: true,
+        closePolicy: "hide_to_tray",
+        menuItemIds: ["open", "check_updates", "quit"],
+        multiAppManagement: false,
+        runtimeBypass: false,
+      },
+    };
+    return {
+      appId,
+      status: "launched",
+      installMode,
+      shellKind,
+      descriptorVersion: descriptor.descriptorVersion ?? 1,
+      devShell: true,
+      blockerCodes: [],
+      message: "Agent App dev shell mock 已复用 current UI runtime 启动。",
+      packageMount: {
+        kind: "mock",
+        path: `/mock/agent-apps/${appId}`,
+        readOnly: true,
+        packageHash,
+        manifestHash,
+      },
+      runtimeStatus,
+      shellWindow,
+      launchedAt: now(),
+    };
+  },
   agent_app_runtime_start_task: async (args: any) => {
     const { appId, taskKind, taskId, sessionId, turnId } = mockTaskIds(args);
     const request = args?.request ?? {};

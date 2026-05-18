@@ -65,6 +65,12 @@ pub(crate) fn collect_runtime_evidence_projection_summary_from_tool_output(
     };
 
     let mut summary = RuntimeEvidenceProjectionSummary::default();
+    if let Some(value) = parse_trusted_connector_tool_output_json(output) {
+        merge_summary(
+            &mut summary,
+            collect_runtime_evidence_projection_summary_from_value(&value),
+        );
+    }
     let mut rest = output;
     while let Some(begin_index) = rest.find(LIME_TOOL_METADATA_BEGIN) {
         let after_begin = &rest[begin_index + LIME_TOOL_METADATA_BEGIN.len()..];
@@ -79,6 +85,34 @@ pub(crate) fn collect_runtime_evidence_projection_summary_from_tool_output(
         rest = &after_begin[end_index + LIME_TOOL_METADATA_END.len()..];
     }
     summary
+}
+
+fn parse_trusted_connector_tool_output_json(output: &str) -> Option<Value> {
+    let trimmed = output.trim();
+    let json_candidate = trimmed
+        .split_once(LIME_TOOL_METADATA_BEGIN)
+        .map(|(prefix, _)| prefix.trim())
+        .unwrap_or(trimmed);
+    if !(json_candidate.starts_with('{') && json_candidate.ends_with('}')) {
+        return None;
+    }
+    let value = serde_json::from_str::<Value>(json_candidate).ok()?;
+    trusted_connector_tool_output_source(&value).then_some(value)
+}
+
+fn trusted_connector_tool_output_source(value: &Value) -> bool {
+    let source = value
+        .get("source")
+        .or_else(|| value.get("result").and_then(|result| result.get("source")))
+        .and_then(Value::as_str)
+        .map(str::trim);
+    matches!(
+        source,
+        Some(
+            "agent_app_connector_cloud_overlay_outbox_adapter"
+                | "agent_app_connector_fixture_adapter"
+        )
+    )
 }
 
 pub(crate) fn evidence_ref_from_artifact_path(path: &str) -> Option<String> {
@@ -217,6 +251,76 @@ mod tests {
                 .and_then(Value::as_str),
             Some("passed")
         );
+    }
+
+    #[test]
+    fn collects_evidence_refs_from_trusted_connector_tool_output_json() {
+        let output = r#"{
+          "source": "agent_app_connector_cloud_overlay_outbox_adapter",
+          "evidenceRefs": [
+            {
+              "ref": "outbox://connector/notion/createPage/mutation-1",
+              "storage": "workspace_local"
+            },
+            {
+              "ref": "delivery://connector/notion/createPage/mutation-1",
+              "storage": "workspace_local"
+            }
+          ]
+        }"#;
+
+        let summary = collect_runtime_evidence_projection_summary_from_tool_output(Some(output));
+
+        assert_eq!(
+            summary.evidence_refs,
+            vec![
+                "outbox://connector/notion/createPage/mutation-1".to_string(),
+                "delivery://connector/notion/createPage/mutation-1".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn collects_evidence_refs_from_trusted_connector_json_prefix_before_metadata() {
+        let output = format!(
+            "{}\n\n{begin}\n{{\"result\":{{\"evidenceRefs\":[",
+            r#"{
+              "source": "agent_app_connector_cloud_overlay_outbox_adapter",
+              "evidenceRefs": [
+                {
+                  "ref": "outbox://connector/notion/createPage/mutation-1",
+                  "storage": "workspace_local"
+                },
+                {
+                  "ref": "delivery://connector/notion/createPage/mutation-1",
+                  "storage": "workspace_local"
+                }
+              ]
+            }"#,
+            begin = LIME_TOOL_METADATA_BEGIN
+        );
+
+        let summary = collect_runtime_evidence_projection_summary_from_tool_output(Some(&output));
+
+        assert_eq!(
+            summary.evidence_refs,
+            vec![
+                "outbox://connector/notion/createPage/mutation-1".to_string(),
+                "delivery://connector/notion/createPage/mutation-1".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn ignores_untrusted_json_tool_output_evidence_refs() {
+        let output = r#"{
+          "source": "model_summary",
+          "evidenceRefs": ["outbox://connector/notion/createPage/forged"]
+        }"#;
+
+        let summary = collect_runtime_evidence_projection_summary_from_tool_output(Some(output));
+
+        assert!(summary.evidence_refs.is_empty());
     }
 }
 

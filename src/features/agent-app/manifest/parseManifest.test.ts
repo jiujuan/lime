@@ -128,6 +128,63 @@ describe("Agent App manifest P0", () => {
     });
   });
 
+  it("应消费 v0.8 install contract 并投影 install modes", () => {
+    const normalized = normalizeManifest(
+      parseManifest({
+        manifestVersion: "0.8.0",
+        name: "Content Factory App",
+        displayName: "内容工厂",
+        version: "0.8.0",
+        requires: {
+          sdk: "@lime/app-sdk@^0.8.0",
+          capabilities: ["lime.agent", "lime.storage"],
+        },
+        entries: [{ key: "dashboard", kind: "page" }],
+        install: {
+          modes: ["in_lime", "standalone", "runtime_backed"],
+          runtime: {
+            minVersion: "0.8.0",
+            distribution: {
+              standalone: {
+                embedRuntime: true,
+                shell: "lime-app-shell",
+              },
+              runtimeBacked: {
+                requires: "lime-runtime",
+                minVersion: "0.8.0",
+              },
+            },
+          },
+          standalone: {
+            shell: "lime-app-shell",
+            bundleId: "ai.limecloud.contentfactory",
+            platforms: ["macos", "windows"],
+            autoUpdate: true,
+          },
+          branding: {
+            name: "Content Factory",
+            windowTitle: "Content Factory",
+          },
+        },
+      }),
+    );
+
+    expect(normalized.manifestVersion).toBe("0.8");
+    expect(normalized.install).toMatchObject({
+      supportedModes: ["in_lime", "standalone", "runtime_backed"],
+      preferredMode: "in_lime",
+      runtime: {
+        minVersion: "0.8.0",
+      },
+      standalone: {
+        shell: "lime-app-shell",
+        bundleId: "ai.limecloud.contentfactory",
+        platforms: ["macos", "windows"],
+        autoUpdate: true,
+      },
+    });
+  });
+
   it("应按 v0.5 分层 manifest 文件合并发现面和治理配置", () => {
     const manifest = mergeLayeredManifest(
       {
@@ -182,6 +239,9 @@ describe("Agent App manifest P0", () => {
           health: {
             probes: [{ key: "ui_entry", path: "/dashboard" }],
           },
+          install: {
+            modes: ["in_lime", "standalone"],
+          },
         },
       ],
     );
@@ -229,6 +289,9 @@ describe("Agent App manifest P0", () => {
     });
     expect((manifest as unknown as Record<string, unknown>).health).toEqual({
       probes: [{ key: "ui_entry", path: "/dashboard" }],
+    });
+    expect((manifest as unknown as Record<string, unknown>).install).toEqual({
+      modes: ["in_lime", "standalone"],
     });
     expect(
       (manifest as unknown as Record<string, unknown>).agentRuntime,

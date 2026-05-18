@@ -53,6 +53,12 @@ describe("InstalledAgentAppState P10", () => {
         appId: "content-factory-app",
         appVersion: "0.3.0",
       },
+      installMode: "in_lime",
+      runtimeProfileSummary: {
+        installMode: "in_lime",
+        shellKind: "desktop",
+        runtimeVersion: "0.8.0",
+      },
       setup: {
         knowledgeBindings: {
           project_knowledge: true,
@@ -65,6 +71,43 @@ describe("InstalledAgentAppState P10", () => {
       },
     });
     expect(JSON.stringify(state)).not.toContain("secret-value");
+  });
+
+  it("应持久化用户选择的 install mode 和 runtime profile 摘要", () => {
+    const setup = buildSetupStateFromBindings([], "content-factory-app");
+    const preview = buildInstalledAppPreview({
+      fixture: {
+        ...contentFactoryFixture,
+        manifestVersion: "0.8.0",
+        version: "0.8.0",
+        install: {
+          modes: ["in_lime", "standalone", "runtime_backed"],
+          runtime: { minVersion: "0.8.0" },
+          standalone: { shell: "lime-app-shell" },
+        },
+      },
+      setup,
+      checkedAt: now,
+      loadedAt: now,
+      generatedAt: now,
+    });
+    const state = buildInstalledAgentAppState({
+      preview,
+      setup,
+      installMode: "standalone",
+      installedAt: now,
+      updatedAt: now,
+    });
+
+    expect(state).toMatchObject({
+      installMode: "standalone",
+      runtimeProfileSummary: {
+        installMode: "standalone",
+        shellKind: "app_shell",
+        runtimeVersion: "0.8.0",
+        checkedAt: now,
+      },
+    });
   });
 
   it("store 应支持 upsert、get、list、disable 和 remove", () => {

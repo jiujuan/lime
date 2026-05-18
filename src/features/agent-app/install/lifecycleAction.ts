@@ -52,6 +52,30 @@ export interface AgentAppLifecycleUninstallRehearsalDescriptor
   residualAudit: AgentAppCleanupResidualAuditSummary;
 }
 
+export type AgentAppDeleteDataExecutionGateBlockerCode =
+  | "CONFIRMATION_MISMATCH"
+  | "MODE_NOT_DELETE_DATA"
+  | "OUT_OF_SCOPE_TARGETS"
+  | "REHEARSAL_BLOCKED";
+
+export type AgentAppDeleteDataExecutionGate =
+  | {
+      allowed: true;
+      appId: string;
+      packageHash: string;
+      confirmationPhrase: string;
+      pendingDeletionCount: number;
+      generatedAt: string;
+    }
+  | {
+      allowed: false;
+      appId: string;
+      packageHash: string;
+      confirmationPhrase: string;
+      blockerCodes: AgentAppDeleteDataExecutionGateBlockerCode[];
+      generatedAt: string;
+    };
+
 export type AgentAppLifecycleActionDescriptor =
   | AgentAppLifecycleToggleDescriptor
   | AgentAppLifecycleUninstallRehearsalDescriptor;
@@ -187,5 +211,55 @@ export function buildAgentAppLifecycleLaunchGate(state: InstalledAgentAppState):
   return {
     allowed: true,
     appId: state.appId,
+  };
+}
+
+export function buildAgentAppDeleteDataConfirmationPhrase(
+  descriptor: AgentAppLifecycleUninstallRehearsalDescriptor,
+): string {
+  return `DELETE_AGENT_APP_DATA ${descriptor.appId} ${descriptor.packageHash}`;
+}
+
+export function buildAgentAppDeleteDataExecutionGate(params: {
+  descriptor: AgentAppLifecycleUninstallRehearsalDescriptor;
+  confirmationPhrase: string;
+  generatedAt?: string;
+}): AgentAppDeleteDataExecutionGate {
+  const { descriptor } = params;
+  const expected = buildAgentAppDeleteDataConfirmationPhrase(descriptor);
+  const blockerCodes: AgentAppDeleteDataExecutionGateBlockerCode[] = [];
+
+  if (descriptor.mode !== "delete-data") {
+    blockerCodes.push("MODE_NOT_DELETE_DATA");
+  }
+  if (descriptor.status !== "ready") {
+    blockerCodes.push("REHEARSAL_BLOCKED");
+  }
+  if (descriptor.cleanupEvidence.blockedTargetCount > 0) {
+    blockerCodes.push("OUT_OF_SCOPE_TARGETS");
+  }
+  if (params.confirmationPhrase !== expected) {
+    blockerCodes.push("CONFIRMATION_MISMATCH");
+  }
+
+  const generatedAt = params.generatedAt ?? new Date().toISOString();
+  if (blockerCodes.length > 0) {
+    return {
+      allowed: false,
+      appId: descriptor.appId,
+      packageHash: descriptor.packageHash,
+      confirmationPhrase: expected,
+      blockerCodes,
+      generatedAt,
+    };
+  }
+
+  return {
+    allowed: true,
+    appId: descriptor.appId,
+    packageHash: descriptor.packageHash,
+    confirmationPhrase: expected,
+    pendingDeletionCount: descriptor.residualAudit.pendingDeletionCount,
+    generatedAt,
   };
 }

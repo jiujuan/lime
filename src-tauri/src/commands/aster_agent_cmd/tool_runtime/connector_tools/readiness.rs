@@ -9,7 +9,15 @@ pub(super) struct ConnectorAdapterReadiness {
     pub(super) secret_delivery_target: &'static str,
     pub(super) secret_delivery_lease_ref: Option<String>,
     pub(super) secret_delivery_expires_at: Option<String>,
+    pub(super) external_delivery: Option<ConnectorExternalDelivery>,
     pub(super) executable: bool,
+}
+
+#[derive(Clone)]
+pub(super) struct ConnectorExternalDelivery {
+    pub(super) channel: String,
+    pub(super) target: String,
+    pub(super) target_label: Option<String>,
 }
 
 struct ConnectorSecretDeliveryFact {
@@ -29,6 +37,7 @@ impl ConnectorAdapterReadiness {
             secret_delivery_target: "not_ready",
             secret_delivery_lease_ref: None,
             secret_delivery_expires_at: None,
+            external_delivery: None,
             executable: false,
         }
     }
@@ -44,11 +53,15 @@ impl ConnectorAdapterReadiness {
             secret_delivery_target: "desktop_system",
             secret_delivery_lease_ref: None,
             secret_delivery_expires_at: None,
+            external_delivery: None,
             executable: false,
         }
     }
 
-    fn cloud_overlay_authorized(secret_delivery_fact: Option<ConnectorSecretDeliveryFact>) -> Self {
+    fn cloud_overlay_authorized(
+        secret_delivery_fact: Option<ConnectorSecretDeliveryFact>,
+        external_delivery: Option<ConnectorExternalDelivery>,
+    ) -> Self {
         if let Some(secret_delivery_fact) = secret_delivery_fact {
             return Self {
                 kind: "cloud_overlay",
@@ -60,6 +73,7 @@ impl ConnectorAdapterReadiness {
                 secret_delivery_target: "cloud_overlay_worker",
                 secret_delivery_lease_ref: Some(secret_delivery_fact.lease_ref),
                 secret_delivery_expires_at: secret_delivery_fact.expires_at,
+                external_delivery,
                 executable: true,
             };
         }
@@ -74,6 +88,7 @@ impl ConnectorAdapterReadiness {
             secret_delivery_target: "cloud_overlay_worker",
             secret_delivery_lease_ref: None,
             secret_delivery_expires_at: None,
+            external_delivery: None,
             executable: true,
         }
     }
@@ -89,6 +104,7 @@ impl ConnectorAdapterReadiness {
             secret_delivery_target: "host_fixture",
             secret_delivery_lease_ref: None,
             secret_delivery_expires_at: None,
+            external_delivery: None,
             executable: true,
         }
     }
@@ -109,9 +125,13 @@ impl ConnectorAdapterReadiness {
         }
 
         if connector_authorized_runtime_fact_observed(request_metadata) {
-            return Self::cloud_overlay_authorized(connector_secret_delivery_ready_fact(
-                request_metadata,
-            ));
+            let secret_delivery_fact = connector_secret_delivery_ready_fact(request_metadata);
+            let external_delivery = if secret_delivery_fact.is_some() {
+                connector_external_delivery_config(request_metadata)
+            } else {
+                None
+            };
+            return Self::cloud_overlay_authorized(secret_delivery_fact, external_delivery);
         }
 
         Self::default_unconfigured()
@@ -170,6 +190,25 @@ fn connector_request_value<'a>(
         &["agentAppToolExecution", "request"][..],
         &["harness", "agent_app_tool_execution", "request"][..],
         &["harness", "agentAppToolExecution", "request"][..],
+    ]
+    .iter()
+    .find_map(|path| connector_value_at_path(request_metadata, path))
+    .filter(|value| value.is_object())
+}
+
+fn connector_internal_request_value<'a>(
+    request_metadata: Option<&'a serde_json::Value>,
+) -> Option<&'a serde_json::Value> {
+    [
+        &["agent_app_tool_execution", "internalRequest"][..],
+        &["agent_app_tool_execution", "internal_request"][..],
+        &["agent_app_tool_execution", "requestInternal"][..],
+        &["agentAppToolExecution", "internalRequest"][..],
+        &["agentAppToolExecution", "requestInternal"][..],
+        &["harness", "agent_app_tool_execution", "internalRequest"][..],
+        &["harness", "agent_app_tool_execution", "requestInternal"][..],
+        &["harness", "agentAppToolExecution", "internalRequest"][..],
+        &["harness", "agentAppToolExecution", "requestInternal"][..],
     ]
     .iter()
     .find_map(|path| connector_value_at_path(request_metadata, path))
@@ -506,6 +545,103 @@ fn connector_secret_delivery_expires_at(request: &serde_json::Value) -> Option<S
 
 fn valid_secret_delivery_lease_ref(lease_ref: &str) -> bool {
     lease_ref.starts_with("secret-lease://connector/")
+}
+
+fn connector_external_delivery_config(
+    request_metadata: Option<&serde_json::Value>,
+) -> Option<ConnectorExternalDelivery> {
+    let request = connector_internal_request_value(request_metadata)?;
+    let config = [
+        &[
+            "connectorRuntimeFacts",
+            "secretDelivery",
+            "externalDelivery",
+        ][..],
+        &[
+            "connectorRuntimeFacts",
+            "secret_delivery",
+            "external_delivery",
+        ][..],
+        &[
+            "input",
+            "connectorRuntimeFacts",
+            "secretDelivery",
+            "externalDelivery",
+        ][..],
+        &[
+            "input",
+            "connectorRuntimeFacts",
+            "secret_delivery",
+            "external_delivery",
+        ][..],
+        &["input", "externalDelivery"][..],
+        &["externalDelivery"][..],
+    ]
+    .iter()
+    .find_map(|path| connector_value_at_path(Some(request), path))
+    .filter(|value| value.is_object())?;
+    let status = connector_first_string_at_paths(
+        config,
+        &[
+            &["status"][..],
+            &["deliveryStatus"][..],
+            &["delivery_status"][..],
+        ],
+    )?;
+    if !matches!(status.to_ascii_lowercase().as_str(), "ready" | "available") {
+        return None;
+    }
+    if !connector_any_string_at_paths(config, &[&["binding"][..]], "host_managed") {
+        return None;
+    }
+    if !connector_external_delivery_false_flag(config, "targetExposed", "target_exposed")
+        || !connector_external_delivery_false_flag(
+            config,
+            "credentialMaterialExposed",
+            "credential_material_exposed",
+        )
+        || !connector_external_delivery_false_flag(config, "tokenExposed", "token_exposed")
+    {
+        return None;
+    }
+    let channel = connector_first_string_at_paths(config, &[&["channel"][..]])?;
+    if !channel.eq_ignore_ascii_case("webhook") {
+        return None;
+    }
+    let target = connector_first_string_at_paths(config, &[&["target"][..], &["targetUrl"][..]])?;
+    if !valid_external_delivery_target(&target) {
+        return None;
+    }
+    Some(ConnectorExternalDelivery {
+        channel: "webhook".to_string(),
+        target: target.trim().to_string(),
+        target_label: connector_first_string_at_paths(
+            config,
+            &[&["targetLabel"][..], &["target_label"][..]],
+        ),
+    })
+}
+
+fn connector_external_delivery_false_flag(
+    config: &serde_json::Value,
+    camel_key: &str,
+    snake_key: &str,
+) -> bool {
+    [camel_key, snake_key]
+        .iter()
+        .filter_map(|key| connector_value_at_path(Some(config), &[*key]))
+        .any(|value| match value {
+            serde_json::Value::Bool(exposed) => !exposed,
+            serde_json::Value::String(text) => text.trim().eq_ignore_ascii_case("false"),
+            _ => false,
+        })
+}
+
+fn valid_external_delivery_target(target: &str) -> bool {
+    let trimmed = target.trim();
+    trimmed.starts_with("https://")
+        || trimmed.starts_with("http://127.0.0.1:")
+        || trimmed.starts_with("http://localhost:")
 }
 
 fn connector_secret_material_not_exposed(request: &serde_json::Value) -> bool {

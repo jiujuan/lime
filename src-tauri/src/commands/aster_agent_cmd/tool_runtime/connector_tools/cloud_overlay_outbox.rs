@@ -2,6 +2,7 @@ use super::readiness::connector_value_at_path;
 use super::readiness::ConnectorAdapterReadiness;
 use super::sanitize::sanitized_connector_input;
 use super::*;
+use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
 
 fn cloud_overlay_mutation_id(params: &serde_json::Value) -> String {
@@ -20,6 +21,124 @@ fn cloud_overlay_mutation_id(params: &serde_json::Value) -> String {
     .unwrap_or_else(|| format!("cloud-overlay-mutation-{}", Uuid::new_v4()))
 }
 
+async fn append_json_line(path: &Path, payload: &serde_json::Value) -> Result<(), ToolError> {
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+
+    let mut line = serde_json::to_string(payload)
+        .map_err(|error| ToolError::execution_failed(error.to_string()))?;
+    line.push('\n');
+    let mut file = tokio::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .await?;
+    file.write_all(line.as_bytes()).await?;
+    file.flush().await?;
+    Ok(())
+}
+
+fn external_delivery_target_hash(target: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(target.trim().as_bytes());
+    format!("sha256:{}", hex::encode(hasher.finalize()))
+}
+
+fn external_delivery_error_code(error: &reqwest::Error) -> &'static str {
+    if error.is_timeout() {
+        "timeout"
+    } else if error.is_connect() {
+        "connect_failed"
+    } else if error.is_request() {
+        "request_build_failed"
+    } else {
+        "request_failed"
+    }
+}
+
+fn external_delivery_client(target: &str) -> Result<reqwest::Client, reqwest::Error> {
+    let builder = reqwest::Client::builder();
+    let trimmed = target.trim();
+    let builder =
+        if trimmed.starts_with("http://127.0.0.1:") || trimmed.starts_with("http://localhost:") {
+            builder.no_proxy()
+        } else {
+            builder
+        };
+    builder.build()
+}
+
+async fn deliver_external_platform(
+    connector_id: &str,
+    action: &str,
+    mutation_id: &str,
+    evidence_ref: &str,
+    delivery_ref: &str,
+    input_preview: &serde_json::Value,
+    adapter: &ConnectorAdapterReadiness,
+) -> serde_json::Value {
+    let Some(config) = adapter.external_delivery.as_ref() else {
+        return serde_json::json!({
+            "status": "not_configured",
+            "externalPlatformDelivered": false
+        });
+    };
+    let target_hash = external_delivery_target_hash(config.target.as_str());
+    let delivered_at = chrono::Utc::now().to_rfc3339();
+    let request_payload = serde_json::json!({
+        "connectorId": connector_id,
+        "action": action,
+        "mutationId": mutation_id,
+        "outboxRef": evidence_ref,
+        "deliveryRef": delivery_ref,
+        "inputPreview": input_preview,
+        "source": "agent_app_connector_cloud_overlay_external_delivery_adapter"
+    });
+    let response = match external_delivery_client(config.target.as_str()) {
+        Ok(client) => {
+            client
+                .post(config.target.as_str())
+                .header("X-Lime-Connector-Delivery-Ref", delivery_ref)
+                .json(&request_payload)
+                .timeout(std::time::Duration::from_secs(10))
+                .send()
+                .await
+        }
+        Err(error) => Err(error),
+    };
+    match response {
+        Ok(response) => {
+            let http_status = response.status().as_u16();
+            let delivered = response.status().is_success();
+            serde_json::json!({
+                "status": if delivered { "delivered_to_external_platform" } else { "external_platform_delivery_failed" },
+                "channel": config.channel.as_str(),
+                "targetHash": target_hash,
+                "targetLabel": config.target_label.as_deref(),
+                "targetExposed": false,
+                "credentialMaterialExposed": false,
+                "tokenExposed": false,
+                "httpStatus": http_status,
+                "deliveredAt": delivered_at,
+                "externalPlatformDelivered": delivered
+            })
+        }
+        Err(error) => serde_json::json!({
+            "status": "external_platform_delivery_failed",
+            "channel": config.channel.as_str(),
+            "targetHash": target_hash,
+            "targetLabel": config.target_label.as_deref(),
+            "targetExposed": false,
+            "credentialMaterialExposed": false,
+            "tokenExposed": false,
+            "error": external_delivery_error_code(&error),
+            "deliveredAt": delivered_at,
+            "externalPlatformDelivered": false
+        }),
+    }
+}
+
 pub(super) async fn enqueue_cloud_overlay_connector_mutation(
     connector_id: &str,
     action: &str,
@@ -34,13 +153,35 @@ pub(super) async fn enqueue_cloud_overlay_connector_mutation(
         .join("cloud-overlay")
         .join("outbox.jsonl");
     let outbox_path = context.working_directory.join(&relative_path);
-    if let Some(parent) = outbox_path.parent() {
-        tokio::fs::create_dir_all(parent).await?;
-    }
+    let delivery_relative_path = Path::new(".lime")
+        .join("agent-app-connectors")
+        .join("cloud-overlay")
+        .join("delivery-receipts.jsonl");
+    let delivery_path = context.working_directory.join(&delivery_relative_path);
 
     let input_preview = sanitized_connector_input(params);
     let evidence_ref = format!("outbox://connector/{connector_id}/{action}/{mutation_id}");
     let lease_observed = adapter.secret_delivery_lease_ref.is_some();
+    let delivery_ref = adapter
+        .secret_delivery_lease_ref
+        .as_ref()
+        .map(|_| format!("delivery://connector/{connector_id}/{action}/{mutation_id}"));
+    let external_delivery = if let Some(delivery_ref) = delivery_ref.as_deref() {
+        Some(
+            deliver_external_platform(
+                connector_id,
+                action,
+                &mutation_id,
+                &evidence_ref,
+                delivery_ref,
+                &input_preview,
+                adapter,
+            )
+            .await,
+        )
+    } else {
+        None
+    };
     let secret_delivery = serde_json::json!({
         "status": adapter.secret_delivery_status,
         "binding": "host_managed",
@@ -52,10 +193,67 @@ pub(super) async fn enqueue_cloud_overlay_connector_mutation(
         "credentialMaterialExposed": false,
         "tokenExposed": false
     });
-    let result_payload = serde_json::json!({
+    let mut evidence_refs = vec![serde_json::json!({
+        "kind": "connector_cloud_overlay_outbox",
+        "ref": evidence_ref,
+        "storage": "workspace_local",
+        "relativePath": ".lime/agent-app-connectors/cloud-overlay/outbox.jsonl"
+    })];
+    let delivery_receipt = delivery_ref.as_deref().map(|delivery_ref| {
+        let external_delivery = external_delivery.clone().unwrap_or_else(|| {
+            serde_json::json!({
+                "status": "not_configured",
+                "externalPlatformDelivered": false
+            })
+        });
+        let external_platform_delivered = external_delivery
+            .get("externalPlatformDelivered")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        let delivery_status = external_delivery
+            .get("status")
+            .and_then(serde_json::Value::as_str)
+            .filter(|status| *status != "not_configured")
+            .unwrap_or("accepted_by_local_cloud_overlay_worker");
+        evidence_refs.push(serde_json::json!({
+            "kind": "connector_cloud_overlay_worker_delivery_receipt",
+            "ref": delivery_ref,
+            "storage": "workspace_local",
+            "relativePath": ".lime/agent-app-connectors/cloud-overlay/delivery-receipts.jsonl"
+        }));
+        serde_json::json!({
+            "status": delivery_status,
+            "receiptRef": delivery_ref,
+            "outboxRef": evidence_ref,
+            "storage": "workspace_local",
+            "relativePath": ".lime/agent-app-connectors/cloud-overlay/delivery-receipts.jsonl",
+            "externalPlatformDelivered": external_platform_delivered,
+            "externalDelivery": external_delivery,
+            "credentialMaterialExposed": false,
+            "tokenExposed": false
+        })
+    });
+    let external_platform_delivered = external_delivery
+        .as_ref()
+        .and_then(|value| value.get("externalPlatformDelivered"))
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let next_required = if external_platform_delivered {
+        "external_platform_delivery_complete"
+    } else if delivery_ref.is_some() {
+        "external_platform_delivery"
+    } else {
+        adapter.next_required
+    };
+    let external_status = if external_platform_delivered {
+        "delivered"
+    } else {
+        "not_delivered"
+    };
+    let mut result_payload = serde_json::json!({
         "success": true,
         "status": "queued_for_cloud_overlay",
-        "externalStatus": "not_delivered",
+        "externalStatus": external_status,
         "connectorId": connector_id,
         "action": action,
         "mutationId": mutation_id,
@@ -67,17 +265,15 @@ pub(super) async fn enqueue_cloud_overlay_connector_mutation(
         "secretDelivery": secret_delivery,
         "source": "agent_app_connector_cloud_overlay_outbox_adapter",
         "inputPreview": input_preview,
-        "evidenceRefs": [{
-            "kind": "connector_cloud_overlay_outbox",
-            "ref": evidence_ref,
-            "storage": "workspace_local",
-            "relativePath": ".lime/agent-app-connectors/cloud-overlay/outbox.jsonl"
-        }],
+        "evidenceRefs": evidence_refs,
         "next": {
             "owner": "lime_cloud_overlay_connector_worker",
-            "required": adapter.next_required
+            "required": next_required
         }
     });
+    if let Some(delivery_receipt) = delivery_receipt.clone() {
+        result_payload["delivery"] = delivery_receipt;
+    }
     let mut outbox_payload = result_payload.clone();
     if let Some(lease_ref) = adapter.secret_delivery_lease_ref.as_deref() {
         outbox_payload["secretDeliveryInternal"] = serde_json::json!({
@@ -90,16 +286,30 @@ pub(super) async fn enqueue_cloud_overlay_connector_mutation(
             "tokenExposed": false
         });
     }
-    let mut line = serde_json::to_string(&outbox_payload)
-        .map_err(|error| ToolError::execution_failed(error.to_string()))?;
-    line.push('\n');
-    tokio::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&outbox_path)
-        .await?
-        .write_all(line.as_bytes())
-        .await?;
+    append_json_line(&outbox_path, &outbox_payload).await?;
+    if let (Some(delivery_receipt), Some(lease_ref)) = (
+        delivery_receipt,
+        adapter.secret_delivery_lease_ref.as_deref(),
+    ) {
+        let mut delivery_payload = delivery_receipt;
+        delivery_payload["connectorId"] = serde_json::json!(connector_id);
+        delivery_payload["action"] = serde_json::json!(action);
+        delivery_payload["mutationId"] = serde_json::json!(mutation_id);
+        delivery_payload["occurredAt"] = serde_json::json!(occurred_at);
+        delivery_payload["source"] =
+            serde_json::json!("agent_app_connector_cloud_overlay_outbox_adapter");
+        delivery_payload["target"] = serde_json::json!("local_cloud_overlay_worker_delivery_proof");
+        delivery_payload["secretDeliveryInternal"] = serde_json::json!({
+            "binding": "host_managed",
+            "source": adapter.secret_delivery_source,
+            "target": adapter.secret_delivery_target,
+            "leaseRef": lease_ref,
+            "expiresAt": adapter.secret_delivery_expires_at.as_deref(),
+            "credentialMaterialExposed": false,
+            "tokenExposed": false
+        });
+        append_json_line(&delivery_path, &delivery_payload).await?;
+    }
 
     let output = serde_json::to_string_pretty(&result_payload)
         .unwrap_or_else(|_| result_payload.to_string());

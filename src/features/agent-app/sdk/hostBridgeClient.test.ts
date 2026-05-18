@@ -422,6 +422,29 @@ describe("P18.5 Host Bridge SDK client", () => {
       value: { opened: true },
     });
 
+    const selectDirectoryPromise = invoker.selectDirectoryHost({
+      title: "选择应用目录",
+    });
+    const selectDirectoryRequest = latestBridgeRequest(fake);
+    expect(selectDirectoryRequest).toMatchObject({
+      type: "capability:invoke",
+      payload: {
+        capability: "lime.ui",
+        method: "selectDirectory",
+        input: { title: "选择应用目录" },
+      },
+    });
+    fake.emit(
+      hostResponse(selectDirectoryRequest, {
+        ok: true,
+        value: { path: "/Users/example/agent-app", cancelled: false },
+      }),
+    );
+    await expect(selectDirectoryPromise).resolves.toMatchObject({
+      ok: true,
+      value: { path: "/Users/example/agent-app", cancelled: false },
+    });
+
     const downloadPromise = invoker.downloadHost({
       url: "/exports/content-batch.csv",
       fileName: "content-batch.csv",

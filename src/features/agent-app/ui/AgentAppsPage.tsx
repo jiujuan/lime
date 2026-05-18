@@ -17,6 +17,7 @@ import {
 import { toast } from "sonner";
 import {
   AGENT_APPS_CHANGED_EVENT,
+  launchAgentAppShell,
   saveInstalledAgentAppState,
   getAgentAppCloudCatalog,
   listInstalledAgentApps,
@@ -36,6 +37,8 @@ import { resolveAgentAppHostFlags } from "../featureFlag";
 import { InMemoryAgentAppCapabilityStore } from "../adapters/InMemoryAgentAppCapabilityStore";
 import { AdapterCapabilityHost } from "../adapters/AdapterCapabilityHost";
 import { buildCleanupPlan } from "../install/cleanupPlan";
+import { buildLimeRuntimeProfileForInstalledState } from "../runtime-profile";
+import { resolveShellLaunchDescriptorForInstalledEntry } from "../shell";
 import {
   buildAgentAppLifecycleLaunchGate,
   buildAgentAppLifecycleToggleDescriptor,
@@ -757,6 +760,11 @@ export function AgentAppsPage({
       }
       await runBusy(`launch:${state.appId}:${entry.key}`, async () => {
         const preview = buildPreviewFromInstalledState(state);
+        const hostProfile = buildProfile();
+        const runtimeProfile = buildLimeRuntimeProfileForInstalledState({
+          state,
+          hostProfile,
+        });
         const guard = evaluateAgentAppEntryRuntimeGuard({
           preview,
           entryKey: entry.key,
@@ -764,6 +772,8 @@ export function AgentAppsPage({
           operation: isUiEntry(entry) ? "mount-ui" : "run-entry",
           runtimePackageLoad: buildRuntimePackageLoadForPreview(preview),
           permissionDecision: "accepted",
+          installMode: state.installMode,
+          runtimeProfile,
           lifecycle: {
             disabled: state.disabled,
             cleanupStatus:
@@ -779,6 +789,41 @@ export function AgentAppsPage({
         });
         if (guard.status !== "allow") {
           setLaunchSummary(t(`agentApp.lab.guard.summary.${guard.status}`));
+          return;
+        }
+
+        const shellLaunch = resolveShellLaunchDescriptorForInstalledEntry({
+          state,
+          preview,
+          runtimeProfile,
+          entry,
+        });
+        if (shellLaunch.status === "ready") {
+          const result = await launchAgentAppShell({
+            descriptor: shellLaunch.descriptor,
+          });
+          if (result.status === "blocked") {
+            const summary = t("agentApp.apps.launch.shellBlocked", {
+              codes: result.blockerCodes.join(", "),
+            });
+            setLaunchSummary(summary);
+            toast.error(t("agentApp.apps.toast.failed"), {
+              description: result.message ?? summary,
+            });
+            return;
+          }
+          const summary = t("agentApp.apps.launch.shellLaunched", {
+            title: entry.title,
+            target:
+              result.shellWindow?.url ??
+              result.runtimeStatus?.entryUrl ??
+              result.packageMount?.path ??
+              entry.route ??
+              entry.key,
+          });
+          setMountedUi(null);
+          setLaunchSummary(summary);
+          toast.success(summary);
           return;
         }
 

@@ -28,7 +28,7 @@ export declare const LIME_CAPABILITY_DEFINITIONS: readonly [{
     readonly group: "app_surface";
     readonly stage: "current";
     readonly owner: "desktop_host";
-    readonly methods: readonly ["toast", "navigate", "openExternal", "download", "getSnapshot", "openAgentRun", "updateAgentRun", "closeAgentRun"];
+    readonly methods: readonly ["toast", "navigate", "openExternal", "download", "selectDirectory", "getSnapshot", "openAgentRun", "updateAgentRun", "closeAgentRun"];
     readonly summary: "Lime 桌面壳的提示、导航、下载、主题、快照和统一 Agent Run UI 能力。";
     readonly appResponsibility: "决定业务页面如何展示和何时触发 Host action。";
     readonly limeResponsibility: "校验入口、同步主题语言、执行受控导航和下载，并提供通用 AI 运行现场。";

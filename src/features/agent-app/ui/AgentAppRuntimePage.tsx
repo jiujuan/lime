@@ -11,6 +11,7 @@ import type { AgentAppPageParams } from "@/types/page";
 import { AdapterCapabilityHost } from "../adapters/AdapterCapabilityHost";
 import { InMemoryAgentAppCapabilityStore } from "../adapters/InMemoryAgentAppCapabilityStore";
 import { buildCleanupPlan } from "../install/cleanupPlan";
+import { buildLimeRuntimeProfileForInstalledState } from "../runtime-profile";
 import { createAgentAppCapabilityDispatcher } from "../runtime/capabilityDispatcher";
 import { evaluateAgentAppEntryRuntimeGuard } from "../runtime/entryRuntimeGuard";
 import {
@@ -72,6 +73,7 @@ const RUNTIME_PAGE_FLAGS = RUNTIME_PAGE_PROFILE.featureFlags;
 const NEGATIVE_AGENT_RUN_ACTION_CONTROLS = new Set<
   AgentAppRunProjectionActionControl
 >(["reject", "interrupt", "stop"]);
+const AGENT_RUN_UI_STORAGE_PREFIX = "lime.agentApp.hostAgentRunUi.v1";
 
 function isUiEntry(entry: ProjectedEntry): boolean {
   return ["page", "panel", "settings"].includes(entry.kind);
@@ -176,6 +178,59 @@ function buildAgentRunActionResponse(control: AgentAppRunProjectionActionControl
     confirmed: !NEGATIVE_AGENT_RUN_ACTION_CONTROLS.has(control),
     response: control,
   };
+}
+
+function buildAgentRunUiStorageKey(
+  appId: string | undefined,
+  entryKey: string | undefined,
+): string | null {
+  if (!appId || !entryKey) {
+    return null;
+  }
+  return `${AGENT_RUN_UI_STORAGE_PREFIX}:${appId}:${entryKey}`;
+}
+
+function readStoredAgentRunUi(storageKey: string | null): AgentRunUiState | null {
+  if (!storageKey || typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const raw = window.sessionStorage.getItem(storageKey);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isRecord(parsed)) {
+      return null;
+    }
+    return {
+      ...parsed,
+      mode:
+        parsed.mode === "modal" || parsed.mode === "page"
+          ? parsed.mode
+          : "drawer",
+    } as AgentRunUiState;
+  } catch {
+    return null;
+  }
+}
+
+function persistAgentRunUi(
+  storageKey: string | null,
+  run: AgentRunUiState | null,
+) {
+  if (!storageKey || typeof window === "undefined") {
+    return;
+  }
+  try {
+    if (!run) {
+      window.sessionStorage.removeItem(storageKey);
+      return;
+    }
+    window.sessionStorage.setItem(storageKey, JSON.stringify(run));
+  } catch {
+    // sessionStorage can be unavailable in hardened WebViews; UI state remains in memory.
+  }
 }
 
 function readAgentRunItemKey(item: unknown, index: number): string {
@@ -300,6 +355,77 @@ function shouldMergeAgentRunUi(
   return true;
 }
 
+interface AgentRunDismissalKey {
+  taskId: string | null;
+  bridgeAction: string | null;
+}
+
+function buildAgentRunDismissalKey(value: unknown): AgentRunDismissalKey {
+  return {
+    taskId: readAgentRunTaskId(value),
+    bridgeAction: isRecord(value) ? readString(value.bridgeAction) : null,
+  };
+}
+
+function hasAgentRunDismissalKey(key: AgentRunDismissalKey): boolean {
+  return Boolean(key.taskId || key.bridgeAction);
+}
+
+function mergeAgentRunDismissalKey(
+  requestKey: AgentRunDismissalKey,
+  previousKey: AgentRunDismissalKey,
+): AgentRunDismissalKey {
+  return {
+    taskId: requestKey.taskId ?? previousKey.taskId,
+    bridgeAction: requestKey.bridgeAction ?? previousKey.bridgeAction,
+  };
+}
+
+function matchesDismissedAgentRun(
+  dismissed: AgentRunDismissalKey | null,
+  request: AgentAppHostAgentRunUiRequest,
+): boolean {
+  if (!dismissed) {
+    return false;
+  }
+  const next = buildAgentRunDismissalKey(request);
+  let compared = false;
+  if (dismissed.taskId && next.taskId) {
+    compared = true;
+    if (dismissed.taskId === next.taskId) {
+      return true;
+    }
+  }
+  if (dismissed.bridgeAction && next.bridgeAction) {
+    compared = true;
+    if (dismissed.bridgeAction === next.bridgeAction) {
+      return true;
+    }
+  }
+  return (
+    !compared &&
+    !hasAgentRunDismissalKey(dismissed) &&
+    !hasAgentRunDismissalKey(next)
+  );
+}
+
+function shouldCloseAgentRunUi(
+  previous: AgentRunUiState,
+  request: Pick<AgentAppHostAgentRunUiRequest, "taskId" | "bridgeAction">,
+): boolean {
+  const previousKey = buildAgentRunDismissalKey(previous);
+  const requestKey = buildAgentRunDismissalKey(request);
+  const sameTask =
+    !requestKey.taskId ||
+    !previousKey.taskId ||
+    previousKey.taskId === requestKey.taskId;
+  const sameBridgeAction =
+    !requestKey.bridgeAction ||
+    !previousKey.bridgeAction ||
+    previousKey.bridgeAction === requestKey.bridgeAction;
+  return sameTask && sameBridgeAction;
+}
+
 function mergeAgentRunUiState(
   previous: AgentRunUiState | null,
   request: AgentAppHostAgentRunUiRequest,
@@ -344,6 +470,7 @@ export function AgentAppRuntimePage({
   const [agentRunExpanded, setAgentRunExpanded] = useState(false);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const hostBridgeRef = useRef<AgentAppHostBridge | null>(null);
+  const dismissedAgentRunRef = useRef<AgentRunDismissalKey | null>(null);
 
   const selected = useMemo(
     () =>
@@ -355,6 +482,11 @@ export function AgentAppRuntimePage({
   const activeEntry = selected
     ? resolveActiveEntry(selected, pageParams?.entryKey)
     : undefined;
+  const agentRunStorageKey = useMemo(
+    () => buildAgentRunUiStorageKey(selected?.appId, activeEntry?.key),
+    [activeEntry?.key, selected?.appId],
+  );
+  const agentRunStorageKeyRef = useRef<string | null>(agentRunStorageKey);
   const displayName = selected
     ? resolveInstalledAgentAppDisplayName(selected)
     : t("agentApp.apps.runtime.unavailable");
@@ -378,8 +510,18 @@ export function AgentAppRuntimePage({
     () => (selected ? resolveHostBridgeCapabilities(selected) : undefined),
     [selected],
   );
+  const runtimeProfile = useMemo(
+    () =>
+      selected
+        ? buildLimeRuntimeProfileForInstalledState({
+            state: selected,
+            hostProfile: RUNTIME_PAGE_PROFILE,
+          })
+        : null,
+    [selected],
+  );
   const dispatchCapability = useMemo(() => {
-    if (!selected || !capabilityHost || !activeEntry) {
+    if (!selected || !capabilityHost || !activeEntry || !runtimeProfile) {
       return undefined;
     }
     return createAgentAppCapabilityDispatcher({
@@ -387,6 +529,7 @@ export function AgentAppRuntimePage({
       projection: selected.projection,
       entryKey: activeEntry.key,
       profile: RUNTIME_PAGE_PROFILE,
+      runtimeProfile,
       manifestVersion: selected.manifest.manifestVersion,
       agentRuntime: selected.manifest.agentRuntime,
       requirements: selected.manifest.requirements,
@@ -394,7 +537,7 @@ export function AgentAppRuntimePage({
       integrations: selected.manifest.integrations,
       operations: selected.manifest.operations,
     });
-  }, [activeEntry, capabilityHost, selected]);
+  }, [activeEntry, capabilityHost, runtimeProfile, selected]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -414,7 +557,7 @@ export function AgentAppRuntimePage({
   }, [refresh]);
 
   const openRuntime = useCallback(async () => {
-    if (!selected || !activeEntry) {
+    if (!selected || !activeEntry || !runtimeProfile) {
       setRuntime(null);
       setRuntimeError(t("agentApp.apps.runtime.unavailable"));
       return;
@@ -432,6 +575,8 @@ export function AgentAppRuntimePage({
         operation: "mount-ui",
         runtimePackageLoad: buildRuntimePackageLoadForPreview(preview),
         permissionDecision: "accepted",
+        installMode: selected.installMode,
+        runtimeProfile,
         lifecycle: {
           disabled: selected.disabled,
         },
@@ -454,7 +599,7 @@ export function AgentAppRuntimePage({
     } finally {
       setRuntimeLoading(false);
     }
-  }, [activeEntry, selected, t]);
+  }, [activeEntry, runtimeProfile, selected, t]);
 
   useEffect(() => {
     if (loading || !selected) {
@@ -483,16 +628,27 @@ export function AgentAppRuntimePage({
   );
 
   useEffect(() => {
-    setAgentRunUi(null);
+    dismissedAgentRunRef.current = null;
+    agentRunStorageKeyRef.current = agentRunStorageKey;
+    setAgentRunUi(readStoredAgentRunUi(agentRunStorageKey));
     setAgentRunExpanded(false);
-  }, [selected?.appId, activeEntry?.key]);
+  }, [agentRunStorageKey]);
 
   const openAgentRunUi = useCallback((request: AgentAppHostAgentRunUiRequest) => {
     const now = new Date().toISOString();
     const mode = request.mode ?? "drawer";
-    setAgentRunUi((previous) =>
-      mergeAgentRunUiState(previous, request, now, mode),
-    );
+    setAgentRunUi((previous) => {
+      if (
+        !previous &&
+        matchesDismissedAgentRun(dismissedAgentRunRef.current, request)
+      ) {
+        return null;
+      }
+      dismissedAgentRunRef.current = null;
+      const next = mergeAgentRunUiState(previous, request, now, mode);
+      persistAgentRunUi(agentRunStorageKeyRef.current, next);
+      return next;
+    });
     return {
       opened: true as const,
       surface: "host_agent_run" as const,
@@ -503,9 +659,22 @@ export function AgentAppRuntimePage({
 
   const updateAgentRunUi = useCallback((request: AgentAppHostAgentRunUiRequest) => {
     const now = new Date().toISOString();
-    setAgentRunUi((previous) =>
-      mergeAgentRunUiState(previous, request, now, previous?.mode ?? "drawer"),
-    );
+    setAgentRunUi((previous) => {
+      if (
+        !previous &&
+        matchesDismissedAgentRun(dismissedAgentRunRef.current, request)
+      ) {
+        return null;
+      }
+      const next = mergeAgentRunUiState(
+        previous,
+        request,
+        now,
+        previous?.mode ?? "drawer",
+      );
+      persistAgentRunUi(agentRunStorageKeyRef.current, next);
+      return next;
+    });
     return {
       updated: true as const,
       surface: "host_agent_run" as const,
@@ -515,17 +684,22 @@ export function AgentAppRuntimePage({
 
   const closeAgentRunUi = useCallback(
     (request: Pick<AgentAppHostAgentRunUiRequest, "taskId" | "bridgeAction">) => {
+      const requestKey = buildAgentRunDismissalKey(request);
       setAgentRunUi((previous) => {
         if (!previous) {
+          dismissedAgentRunRef.current = requestKey;
+          persistAgentRunUi(agentRunStorageKeyRef.current, null);
           return null;
         }
-        const sameTask =
-          !request.taskId || !previous.taskId || previous.taskId === request.taskId;
-        const sameBridgeAction =
-          !request.bridgeAction ||
-          !previous.bridgeAction ||
-          previous.bridgeAction === request.bridgeAction;
-        return sameTask && sameBridgeAction ? null : previous;
+        if (!shouldCloseAgentRunUi(previous, request)) {
+          return previous;
+        }
+        dismissedAgentRunRef.current = mergeAgentRunDismissalKey(
+          requestKey,
+          buildAgentRunDismissalKey(previous),
+        );
+        persistAgentRunUi(agentRunStorageKeyRef.current, null);
+        return null;
       });
       return {
         closed: true as const,
@@ -591,8 +765,8 @@ export function AgentAppRuntimePage({
           rawPayload: invokeRequest as unknown as Record<string, unknown>,
         });
         const now = new Date().toISOString();
-        setAgentRunUi((previous) =>
-          mergeAgentRunUiState(
+        setAgentRunUi((previous) => {
+          const next = mergeAgentRunUiState(
             previous,
             {
               taskId,
@@ -615,8 +789,10 @@ export function AgentAppRuntimePage({
             },
             now,
             previous?.mode ?? "drawer",
-          ),
-        );
+          );
+          persistAgentRunUi(agentRunStorageKeyRef.current, next);
+          return next;
+        });
       } catch (error) {
         toast.error(normalizeErrorMessage(error));
       }
@@ -739,7 +915,7 @@ export function AgentAppRuntimePage({
         className="h-full w-full border-0 bg-white"
         data-testid="agent-app-runtime-frame"
         onLoad={handleFrameLoad}
-        sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"
+        sandbox="allow-scripts allow-forms allow-same-origin allow-downloads allow-modals"
       />
       {agentRunUi ? (
         <AgentRunHostDrawer
@@ -755,7 +931,7 @@ export function AgentAppRuntimePage({
           onClose={() => {
             setAgentRunExpanded(false);
             closeAgentRunUi({
-              taskId: agentRunUi.taskId,
+              taskId: readAgentRunTaskId(agentRunUi) ?? agentRunUi.taskId,
               bridgeAction: agentRunUi.bridgeAction,
             });
           }}

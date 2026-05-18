@@ -2,6 +2,7 @@ use super::*;
 use crate::services::runtime_evidence_projection_service::collect_runtime_evidence_projection_summary_from_value;
 use std::io::Read;
 use std::path::PathBuf;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[tokio::test]
 async fn agent_app_connector_preview_reports_desktop_adapter_readiness() {
@@ -286,7 +287,21 @@ async fn agent_app_connector_cloud_overlay_observes_host_managed_secret_delivery
     assert!(payload.pointer("/secretDelivery/leaseRef").is_none());
     assert_eq!(
         payload.pointer("/next/required"),
-        Some(&serde_json::json!("cloud_overlay_worker_delivery"))
+        Some(&serde_json::json!("external_platform_delivery"))
+    );
+    assert_eq!(
+        payload.pointer("/delivery/status"),
+        Some(&serde_json::json!("accepted_by_local_cloud_overlay_worker"))
+    );
+    assert_eq!(
+        payload.pointer("/delivery/externalPlatformDelivered"),
+        Some(&serde_json::json!(false))
+    );
+    assert_eq!(
+        payload.pointer("/evidenceRefs/1/kind"),
+        Some(&serde_json::json!(
+            "connector_cloud_overlay_worker_delivery_receipt"
+        ))
     );
     let serialized = serde_json::to_string(&result).expect("result should serialize");
     assert!(!serialized.contains("raw-token-should-not-leak"));
@@ -302,6 +317,205 @@ async fn agent_app_connector_cloud_overlay_observes_host_managed_secret_delivery
         .expect("cloud overlay outbox should be readable");
     assert!(outbox.contains("secret-lease://connector/notion/createPage/test-lease"));
     assert!(outbox.contains("secretDeliveryInternal"));
+    let receipt_path = temp_dir
+        .path()
+        .join(".lime/agent-app-connectors/cloud-overlay/delivery-receipts.jsonl");
+    let mut receipt = String::new();
+    std::fs::File::open(receipt_path)
+        .expect("cloud overlay delivery receipt should exist")
+        .read_to_string(&mut receipt)
+        .expect("cloud overlay delivery receipt should be readable");
+    assert!(receipt.contains("accepted_by_local_cloud_overlay_worker"));
+    assert!(receipt.contains("secret-lease://connector/notion/createPage/test-lease"));
+    assert!(!receipt.contains("raw-token-should-not-leak"));
+}
+
+#[tokio::test]
+async fn agent_app_connector_cloud_overlay_can_deliver_to_host_managed_webhook() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("local webhook listener");
+    let target_url = format!("http://{}", listener.local_addr().expect("listener addr"));
+    let webhook = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.expect("webhook accept");
+        let mut buffer = Vec::new();
+        let mut chunk = [0_u8; 1024];
+        loop {
+            let read = socket.read(&mut chunk).await.expect("webhook read");
+            if read == 0 {
+                break;
+            }
+            buffer.extend_from_slice(&chunk[..read]);
+            let header_end = buffer
+                .windows(4)
+                .position(|window| window == b"\r\n\r\n")
+                .map(|index| index + 4);
+            let Some(header_end) = header_end else {
+                continue;
+            };
+            let headers = String::from_utf8_lossy(&buffer[..header_end]);
+            let content_length = headers
+                .lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("content-length").then_some(value)
+                })
+                .and_then(|value| value.trim().parse::<usize>().ok())
+                .unwrap_or(0);
+            if buffer.len() >= header_end + content_length {
+                break;
+            }
+        }
+        let request = String::from_utf8_lossy(&buffer).to_string();
+        socket
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK")
+            .await
+            .expect("webhook response");
+        request
+    });
+    let metadata = serde_json::json!({
+        "harness": {
+            "agent_app_tool_execution": {
+                "request": {
+                    "capability": "lime.connectors",
+                    "method": "invoke",
+                    "action": "createPage",
+                    "input": {
+                        "connectorId": "notion",
+                        "action": "createPage",
+                        "connectorRuntimeFacts": {
+                            "authorizationStatus": "authorized",
+                            "secretBinding": "host_managed",
+                            "tokenExposed": false,
+                            "secretDelivery": {
+                                "status": "ready",
+                                "binding": "host_managed",
+                                "source": "host_managed_secret_delivery_fact",
+                                "target": "cloud_overlay_worker",
+                                "leaseObserved": true,
+                                "leaseRefExposed": false,
+                                "leaseHandleStatus": "host_managed",
+                                "credentialMaterialExposed": false,
+                                "tokenExposed": false
+                            }
+                        }
+                    },
+                    "policy": {
+                        "secretBinding": "host_managed",
+                        "tokenExposed": false
+                    }
+                },
+                "internalRequest": {
+                    "capability": "lime.connectors",
+                    "method": "invoke",
+                    "action": "createPage",
+                    "input": {
+                        "connectorId": "notion",
+                        "action": "createPage",
+                        "connectorRuntimeFacts": {
+                            "authorizationStatus": "authorized",
+                            "secretBinding": "host_managed",
+                            "tokenExposed": false,
+                            "secretDelivery": {
+                                "status": "ready",
+                                "binding": "host_managed",
+                                "source": "host_managed_secret_delivery_fact",
+                                "target": "cloud_overlay_worker",
+                                "leaseRef": "secret-lease://connector/notion/createPage/webhook-lease",
+                                "credentialMaterialExposed": false,
+                                "tokenExposed": false,
+                                "externalDelivery": {
+                                    "status": "ready",
+                                    "binding": "host_managed",
+                                    "channel": "webhook",
+                                    "target": target_url,
+                                    "targetLabel": "local-test-webhook",
+                                    "targetExposed": false,
+                                    "credentialMaterialExposed": false,
+                                    "tokenExposed": false
+                                }
+                            }
+                        }
+                    },
+                    "policy": {
+                        "secretBinding": "host_managed",
+                        "tokenExposed": false
+                    }
+                }
+            }
+        }
+    });
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let mut registry = aster::tools::ToolRegistry::new();
+
+    let registered = register_agent_app_connector_preview_tools(&mut registry, Some(&metadata));
+
+    assert_eq!(registered, 1);
+    let result = registry
+        .execute(
+            "connector__notion__createPage",
+            serde_json::json!({
+                "connectorId": "notion",
+                "action": "createPage",
+                "idempotencyKey": "notion-external-delivery-ready-1",
+                "input": {
+                    "title": "内容计划",
+                    "accessToken": "raw-token-should-not-leak"
+                }
+            }),
+            &ToolContext::new(temp_dir.path().to_path_buf()),
+            None,
+        )
+        .await
+        .expect("cloud connector should deliver to host-managed webhook");
+    let payload = result.metadata.get("result").expect("result metadata");
+
+    assert!(result.success);
+    assert_eq!(
+        payload.pointer("/delivery/status"),
+        Some(&serde_json::json!("delivered_to_external_platform")),
+        "delivery payload: {payload}"
+    );
+    assert_eq!(
+        payload.pointer("/externalStatus"),
+        Some(&serde_json::json!("delivered"))
+    );
+    assert_eq!(
+        payload.pointer("/delivery/externalPlatformDelivered"),
+        Some(&serde_json::json!(true))
+    );
+    assert_eq!(
+        payload.pointer("/delivery/externalDelivery/channel"),
+        Some(&serde_json::json!("webhook"))
+    );
+    assert_eq!(
+        payload.pointer("/delivery/externalDelivery/targetExposed"),
+        Some(&serde_json::json!(false))
+    );
+    assert_eq!(
+        payload.pointer("/next/required"),
+        Some(&serde_json::json!("external_platform_delivery_complete"))
+    );
+    let request = webhook.await.expect("webhook join");
+    assert!(request.contains("POST / HTTP/1.1"));
+    assert!(request.contains("notion-external-delivery-ready-1"));
+    let serialized = serde_json::to_string(&result).expect("result should serialize");
+    assert!(!serialized.contains(&target_url));
+    assert!(!serialized.contains("raw-token-should-not-leak"));
+    assert!(!serialized.contains("secret-lease://connector/"));
+
+    let receipt_path = temp_dir
+        .path()
+        .join(".lime/agent-app-connectors/cloud-overlay/delivery-receipts.jsonl");
+    let mut receipt = String::new();
+    std::fs::File::open(receipt_path)
+        .expect("cloud overlay delivery receipt should exist")
+        .read_to_string(&mut receipt)
+        .expect("cloud overlay delivery receipt should be readable");
+    assert!(receipt.contains("delivered_to_external_platform"));
+    assert!(receipt.contains("externalPlatformDelivered\":true"));
+    assert!(!receipt.contains(&target_url));
+    assert!(!receipt.contains("raw-token-should-not-leak"));
 }
 
 #[tokio::test]

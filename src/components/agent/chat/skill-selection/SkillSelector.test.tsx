@@ -117,6 +117,66 @@ vi.mock("@/components/ui/command", () => {
   };
 });
 
+vi.mock("./characterMentionPanelLoader", () => ({
+  preloadCharacterMentionPanel: () => Promise.resolve(),
+  LazyCharacterMentionPanel: ({
+    installedSkills,
+    availableSkills,
+    mentionServiceSkills,
+    onSelectCapability,
+  }: {
+    installedSkills: Skill[];
+    availableSkills: Skill[];
+    mentionServiceSkills: ServiceSkillHomeItem[];
+    onSelectCapability: (item: InputCapabilitySelection) => void;
+  }) => (
+    <div data-testid="skill-selector-shared-panel">
+      {installedSkills.map((skill) => (
+        <button
+          key={`installed-${skill.key}`}
+          type="button"
+          onClick={() =>
+            onSelectCapability({
+              kind: "installed_skill",
+              skill,
+            })
+          }
+        >
+          {skill.name}
+        </button>
+      ))}
+      {availableSkills.map((skill) => (
+        <button
+          key={`available-${skill.key}`}
+          type="button"
+          onClick={() =>
+            onSelectCapability({
+              kind: "available_skill",
+              skill,
+            })
+          }
+        >
+          {skill.name}
+        </button>
+      ))}
+      {mentionServiceSkills.map((skill) => (
+        <button
+          key={`service-${skill.id}`}
+          type="button"
+          onClick={() =>
+            onSelectCapability({
+              kind: "service_skill",
+              skill,
+            })
+          }
+        >
+          {skill.title}
+        </button>
+      ))}
+    </div>
+  ),
+}));
+
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
 beforeEach(() => {
@@ -209,7 +269,7 @@ function renderSkillSelector(
 
 async function preloadSharedSkillPanel() {
   await act(async () => {
-    await import("./CharacterMentionPanel");
+    await import("./characterMentionPanelLoader");
   });
 }
 

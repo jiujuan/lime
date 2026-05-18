@@ -69,13 +69,15 @@ async fn select_credential_for_request(
     let db = match &state.db {
         Some(db) => db,
         None => {
-            eprintln!("[{log_prefix}] 数据库未初始化!");
+            tracing::debug!("[{log_prefix}] 数据库未初始化!");
             return Ok(None);
         }
     };
 
     if let Some(explicit_provider_id) = explicit_provider_id {
-        eprintln!("[{log_prefix}] 使用 X-Provider-Id 指定的 provider: {explicit_provider_id}");
+        tracing::debug!(
+            "[{log_prefix}] 使用 X-Provider-Id 指定的 provider: {explicit_provider_id}"
+        );
         let cred = state
             .api_key_service
             .select_credential_for_provider(
@@ -89,7 +91,7 @@ async fn select_credential_for_request(
             .flatten();
 
         if cred.is_none() {
-            eprintln!(
+            tracing::debug!(
                 "[{log_prefix}] X-Provider-Id '{explicit_provider_id}' 没有可用凭证，不切换 Provider"
             );
             state.logs.write().await.add(
@@ -115,7 +117,7 @@ async fn select_credential_for_request(
     }
 
     if !state.allow_provider_fallback {
-        eprintln!(
+        tracing::debug!(
             "[{log_prefix}] 已禁用 Provider 自动切换（retry.auto_switch_provider=false），仅从 API Key Provider 选择"
         );
         return match state
@@ -130,16 +132,16 @@ async fn select_credential_for_request(
         {
             Ok(cred) => {
                 if cred.is_some() {
-                    eprintln!("[{log_prefix}] 找到凭证: provider={selected_provider}");
+                    tracing::debug!("[{log_prefix}] 找到凭证: provider={selected_provider}");
                 } else {
-                    eprintln!(
+                    tracing::debug!(
                         "[{log_prefix}] 未找到凭证: provider={selected_provider}（Provider 自动切换已禁用）"
                     );
                 }
                 Ok(cred)
             }
             Err(e) => {
-                eprintln!("[{log_prefix}] 选择凭证失败: {e}");
+                tracing::debug!("[{log_prefix}] 选择凭证失败: {e}");
                 Ok(None)
             }
         };
@@ -158,14 +160,14 @@ async fn select_credential_for_request(
     {
         Ok(cred) => {
             if cred.is_some() {
-                eprintln!("[{log_prefix}] 找到凭证: provider={selected_provider}");
+                tracing::debug!("[{log_prefix}] 找到凭证: provider={selected_provider}");
             } else {
-                eprintln!("[{log_prefix}] 未找到凭证: provider={selected_provider}");
+                tracing::debug!("[{log_prefix}] 未找到凭证: provider={selected_provider}");
             }
             Ok(cred)
         }
         Err(e) => {
-            eprintln!("[{log_prefix}] 选择凭证失败: {e}");
+            tracing::debug!("[{log_prefix}] 选择凭证失败: {e}");
             Ok(None)
         }
     }
@@ -2065,14 +2067,14 @@ pub async fn chat_completions(
     Json(mut request): Json<ChatCompletionRequest>,
 ) -> Response {
     // ========== 详细日志：请求入口 ==========
-    eprintln!("\n========== [CHAT_COMPLETIONS] 收到请求 ==========");
-    eprintln!("[CHAT_COMPLETIONS] URL: /v1/chat/completions");
-    eprintln!("[CHAT_COMPLETIONS] 模型: {}", request.model);
-    eprintln!("[CHAT_COMPLETIONS] 流式: {}", request.stream);
-    eprintln!("[CHAT_COMPLETIONS] 消息数量: {}", request.messages.len());
+    tracing::debug!("\n========== [CHAT_COMPLETIONS] 收到请求 ==========");
+    tracing::debug!("[CHAT_COMPLETIONS] URL: /v1/chat/completions");
+    tracing::debug!("[CHAT_COMPLETIONS] 模型: {}", request.model);
+    tracing::debug!("[CHAT_COMPLETIONS] 流式: {}", request.stream);
+    tracing::debug!("[CHAT_COMPLETIONS] 消息数量: {}", request.messages.len());
 
     if let Err(e) = verify_model_generation_api_key(&headers, &state.api_key).await {
-        eprintln!("[CHAT_COMPLETIONS] 认证失败!");
+        tracing::debug!("[CHAT_COMPLETIONS] 认证失败!");
         state
             .logs
             .write()
@@ -2080,7 +2082,7 @@ pub async fn chat_completions(
             .add("warn", "Unauthorized request to /v1/chat/completions");
         return e.into_response();
     }
-    eprintln!("[CHAT_COMPLETIONS] 认证成功");
+    tracing::debug!("[CHAT_COMPLETIONS] 认证成功");
 
     // 速率限制检查
     if let Some(ref limiter) = state.rate_limiter {
@@ -2115,7 +2117,7 @@ pub async fn chat_completions(
     // 创建请求上下文
     let mut ctx = RequestContext::new(request.model.clone()).with_stream(request.stream);
     attach_request_correlation_metadata(&mut ctx, &headers);
-    eprintln!("[CHAT_COMPLETIONS] 请求ID: {}", ctx.request_id);
+    tracing::debug!("[CHAT_COMPLETIONS] 请求ID: {}", ctx.request_id);
 
     // 幂等性检查（仅非流式）
     let idempotency_key = headers
@@ -2166,12 +2168,13 @@ pub async fn chat_completions(
     );
 
     // 使用 RequestProcessor 解析模型别名
-    eprintln!("[CHAT_COMPLETIONS] 开始模型别名解析...");
+    tracing::debug!("[CHAT_COMPLETIONS] 开始模型别名解析...");
     let resolved_model = state.processor.resolve_model(&request.model).await;
     ctx.set_resolved_model(resolved_model.clone());
-    eprintln!(
+    tracing::debug!(
         "[CHAT_COMPLETIONS] 模型别名解析结果: {} -> {}",
-        request.model, resolved_model
+        request.model,
+        resolved_model
     );
 
     // 更新请求中的模型名为解析后的模型
@@ -2257,7 +2260,9 @@ pub async fn chat_completions(
     // 根据客户端类型选择 Provider
     // **Validates: Requirements 3.1, 3.3, 3.4**
     let (selected_provider, client_type) = select_provider_for_client(&headers, &state).await;
-    eprintln!("[CHAT_COMPLETIONS] 客户端类型: {client_type}, 选择的Provider: {selected_provider}");
+    tracing::debug!(
+        "[CHAT_COMPLETIONS] 客户端类型: {client_type}, 选择的Provider: {selected_provider}"
+    );
 
     // 记录客户端检测和 Provider 选择结果
     state.logs.write().await.add(
@@ -2277,7 +2282,7 @@ pub async fn chat_completions(
     // 尝试选择凭证（含能力感知 + 跨 Provider 回退）：
     // 1) X-Provider-Id 指定时仅走精确匹配（不切换 Provider）
     // 2) 否则先按 provider 链路做能力过滤，再选择可用凭证
-    eprintln!("[CHAT_COMPLETIONS] 开始选择凭证...");
+    tracing::debug!("[CHAT_COMPLETIONS] 开始选择凭证...");
     let (effective_provider, credential) = match resolve_openai_credential_with_capability_fallback(
         &state,
         &ctx.request_id,
@@ -2351,7 +2356,7 @@ pub async fn chat_completions(
 
     // 如果找到 API Key Provider 凭证，使用它
     if let Some(cred) = credential {
-        eprintln!(
+        tracing::debug!(
             "[CHAT_COMPLETIONS] 使用凭证: type={}, name={:?}, uuid={}",
             cred.provider_type,
             cred.name,
@@ -2381,7 +2386,7 @@ pub async fn chat_completions(
         // 检查是否需要拦截请求
         // **Validates: Requirements 2.1, 2.3, 2.5**
 
-        eprintln!("[CHAT_COMPLETIONS] 调用 Provider: {}", cred.provider_type);
+        tracing::debug!("[CHAT_COMPLETIONS] 调用 Provider: {}", cred.provider_type);
         let provider_label = cred.provider_type.to_string();
         let response = call_with_single_provider_resilience(
             &state,
@@ -2391,7 +2396,7 @@ pub async fn chat_completions(
             || async { call_provider_openai(&state, &cred, &request, None).await },
         )
         .await;
-        eprintln!(
+        tracing::debug!(
             "[CHAT_COMPLETIONS] Provider 响应状态: {}",
             response.status()
         );
