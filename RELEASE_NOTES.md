@@ -14,7 +14,7 @@
 - Agent App install mode / runtime profile / architecture guard 完成分层：补齐 install contract normalization、runtime capability matrix、installed runtime profile、import boundary regression 与 shell / package / runtime profile 对外导出。
 - Agent App Runtime 与 ToolRuntime 继续收敛到 current 命令主链，`agent_app_select_directory` 与 `agent_app_launch_shell` 已同步前端 API、Rust 命令、DevBridge mock priority 与治理目录册。
 - Connector Cloud overlay outbox 补齐 host-managed webhook 外部投递路径，并对 `localhost` / `127.0.0.1` 目标禁用代理，避免本地 release / CI 环境代理把 loopback webhook 错投为 `502`；投递回执继续隐藏 target URL、lease ref 与 credential material。
-- Agent App standalone evidence / smoke 脚本、connector outbox smoke 与 content factory flow 继续补齐，为 shell、打包、运行态和连接器 outbox 提供可重复发布证据入口。
+- Agent App standalone release gate、secret preflight、evidence check、installer verify 与 smoke 脚本继续补齐，为 shell、打包、运行态、连接器 outbox 与 macOS 发布门禁提供可重复证据入口。
 
 ### 用户可见更新
 
@@ -33,6 +33,7 @@
 - `src/lib/configEventManager.ts` 补齐订阅代际保护与依赖注入测试隔离，避免 `unsubscribe()` 后仍被进行中的 `safeListen` 回写为已订阅状态。
 - `src/components/agent/chat/skill-selection/SkillSelector.test.tsx` 固定 mock `characterMentionPanelLoader`，避免真实 lazy panel 在 Vitest 中引发 act 重叠和超时。
 - `scripts/lib/harness-eval-history-record.test.ts` 与 `scripts/lib/harness-eval-history-window.test.ts` 调整超时上限，降低重负载环境下 history 记录 / 窗口测试误报。
+- `.github/workflows/agent-app-standalone-release-gate.yml` 新增 standalone release gate，配套 `scripts/agent-app-standalone-release-secret-preflight.mjs`、`scripts/agent-app-standalone-release-evidence-check.mjs` 与 `scripts/agent-app-standalone-installer-verify.mjs`，把 macOS release 前置检查、证据校验和安装产物校验落成可复跑入口。
 - `RELEASE_NOTES.md` 删除旧版本正文堆叠，只保留 `v1.44.0` 当前发布说明。
 
 ### 当前校验状态
@@ -40,7 +41,7 @@
 - `npm run verify:app-version`：已通过，版本一致性为 `1.44.0`。
 - `cargo fmt --manifest-path "src-tauri/Cargo.toml" --all`：已执行；`cargo fmt --manifest-path "src-tauri/Cargo.toml" --all -- --check` 已通过。
 - `cargo clippy --manifest-path "src-tauri/Cargo.toml" --all-targets --all-features -- -D warnings`：已通过。
-- `cargo test --manifest-path "src-tauri/Cargo.toml"`：已通过；主库 `1401 passed / 1 ignored`，集成测试通过，真实联网测试按环境变量保持 ignored。
+- `cargo test --manifest-path "src-tauri/Cargo.toml"`：已通过；主库 `1410 passed / 1 ignored`，集成测试通过，真实联网测试按环境变量保持 ignored。
 - `npm run lint`：已通过。
 - `npm test`：已通过；`run-vitest-smart` 全部 `59/59` 批次通过。
 - `npm run test:contracts`：已通过，覆盖 agent runtime client 生成检查、命令契约、harness 契约、modality runtime contract 与 cleanup report contract。
