@@ -519,6 +519,130 @@ async fn agent_app_connector_cloud_overlay_can_deliver_to_host_managed_webhook()
 }
 
 #[tokio::test]
+async fn agent_app_connector_external_delivery_rejects_inline_secret_material() {
+    let metadata = serde_json::json!({
+        "harness": {
+            "agent_app_tool_execution": {
+                "request": {
+                    "capability": "lime.connectors",
+                    "method": "invoke",
+                    "action": "createPage",
+                    "input": {
+                        "connectorId": "notion",
+                        "action": "createPage",
+                        "connectorRuntimeFacts": {
+                            "authorizationStatus": "authorized",
+                            "secretBinding": "host_managed",
+                            "tokenExposed": false,
+                            "secretDelivery": {
+                                "status": "ready",
+                                "binding": "host_managed",
+                                "source": "host_managed_secret_delivery_fact",
+                                "target": "cloud_overlay_worker",
+                                "leaseObserved": true,
+                                "leaseRefExposed": false,
+                                "leaseHandleStatus": "host_managed",
+                                "credentialMaterialExposed": false,
+                                "tokenExposed": false
+                            }
+                        }
+                    },
+                    "policy": {
+                        "secretBinding": "host_managed",
+                        "tokenExposed": false
+                    }
+                },
+                "internalRequest": {
+                    "capability": "lime.connectors",
+                    "method": "invoke",
+                    "action": "createPage",
+                    "input": {
+                        "connectorId": "notion",
+                        "action": "createPage",
+                        "connectorRuntimeFacts": {
+                            "authorizationStatus": "authorized",
+                            "secretBinding": "host_managed",
+                            "tokenExposed": false,
+                            "secretDelivery": {
+                                "status": "ready",
+                                "binding": "host_managed",
+                                "source": "host_managed_secret_delivery_fact",
+                                "target": "cloud_overlay_worker",
+                                "leaseRef": "secret-lease://connector/notion/createPage/raw-header-lease",
+                                "credentialMaterialExposed": false,
+                                "tokenExposed": false,
+                                "externalDelivery": {
+                                    "status": "ready",
+                                    "binding": "host_managed",
+                                    "channel": "webhook",
+                                    "target": "https://example.com/connector-webhook",
+                                    "targetLabel": "raw-header-should-not-run",
+                                    "targetExposed": false,
+                                    "credentialMaterialExposed": false,
+                                    "tokenExposed": false,
+                                    "authorizationHeader": "Bearer raw-secret-should-not-leak"
+                                }
+                            }
+                        }
+                    },
+                    "policy": {
+                        "secretBinding": "host_managed",
+                        "tokenExposed": false
+                    }
+                }
+            }
+        }
+    });
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let mut registry = aster::tools::ToolRegistry::new();
+
+    let registered = register_agent_app_connector_preview_tools(&mut registry, Some(&metadata));
+
+    assert_eq!(registered, 1);
+    let result = registry
+        .execute(
+            "connector__notion__createPage",
+            serde_json::json!({
+                "connectorId": "notion",
+                "action": "createPage",
+                "idempotencyKey": "notion-inline-secret-rejected-1"
+            }),
+            &ToolContext::new(temp_dir.path().to_path_buf()),
+            None,
+        )
+        .await
+        .expect("cloud connector should keep local worker receipt only");
+    let payload = result.metadata.get("result").expect("result metadata");
+
+    assert!(result.success);
+    assert_eq!(
+        payload.get("adapterReadiness"),
+        Some(&serde_json::json!(
+            "host_managed_secret_delivery_adapter_ready"
+        ))
+    );
+    assert_eq!(
+        payload.pointer("/delivery/status"),
+        Some(&serde_json::json!("accepted_by_local_cloud_overlay_worker"))
+    );
+    assert_eq!(
+        payload.pointer("/delivery/externalDelivery/status"),
+        Some(&serde_json::json!("not_configured"))
+    );
+    assert_eq!(
+        payload.pointer("/delivery/externalPlatformDelivered"),
+        Some(&serde_json::json!(false))
+    );
+    assert_eq!(
+        payload.pointer("/next/required"),
+        Some(&serde_json::json!("external_platform_delivery"))
+    );
+    let serialized = serde_json::to_string(&result).expect("result should serialize");
+    assert!(!serialized.contains("raw-secret-should-not-leak"));
+    assert!(!serialized.contains("https://example.com/connector-webhook"));
+}
+
+#[tokio::test]
 async fn agent_app_connector_secret_delivery_requires_host_managed_lease_ref() {
     let metadata = serde_json::json!({
         "harness": {

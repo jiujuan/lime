@@ -108,8 +108,13 @@ export interface AgentAppUninstallRehearsalRequest {
   mode: "keep-data" | "delete-data";
 }
 
+export interface AgentAppUninstallRequest extends AgentAppUninstallRehearsalRequest {
+  confirmationPhrase?: string;
+}
+
 export interface AgentAppUninstallRehearsalResult {
   appId: string;
+  packageHash?: string;
   mode: "keep-data" | "delete-data";
   generatedAt: string;
   deletedTargetCount: number;
@@ -124,11 +129,44 @@ export interface AgentAppUninstallRehearsalResult {
   warnings: string[];
 }
 
+export interface AgentAppDeleteDataTargetEvidence {
+  kind: string;
+  value: string;
+  action: string;
+  reason: string;
+  status: "removed" | "missing" | "retained" | "blocked" | "failed" | string;
+  blockerCodes: string[];
+  error?: string | null;
+}
+
+export interface AgentAppDeleteDataExecutionEvidence {
+  status: "deleted" | "blocked" | "failed" | string;
+  generatedAt: string;
+  dataRoot: string;
+  removedTargets: AgentAppDeleteDataTargetEvidence[];
+  missingTargets: AgentAppDeleteDataTargetEvidence[];
+  retainedTargets: AgentAppDeleteDataTargetEvidence[];
+  blockedTargets: AgentAppDeleteDataTargetEvidence[];
+  failedTarget?: AgentAppDeleteDataTargetEvidence | null;
+  blockerCodes: string[];
+  postDeleteResidualAudit?: {
+    status: "clear" | "residual_present" | "not_run" | "failed" | string;
+    checkedAt: string;
+    checkedTargetCount: number;
+    remainingTargetCount: number;
+    remainingTargets: AgentAppDeleteDataTargetEvidence[];
+    failedTarget?: AgentAppDeleteDataTargetEvidence | null;
+  };
+}
+
 export interface AgentAppUninstallResult {
+  status?: "rehearsal_only" | "blocked" | "deleted" | "failed" | string;
   rehearsal: AgentAppUninstallRehearsalResult;
   list: InstalledAgentAppStateListResult;
   removedTargetCount: number;
   missingTargetCount: number;
+  blockerCodes?: string[];
+  deleteEvidence?: AgentAppDeleteDataExecutionEvidence | null;
 }
 
 export interface AgentAppUiRuntimeStartRequest {
@@ -682,9 +720,9 @@ export async function previewAgentAppUninstall(
 }
 
 export async function uninstallAgentApp(
-  request: AgentAppUninstallRehearsalRequest,
+  request: AgentAppUninstallRequest,
 ): Promise<AgentAppUninstallResult> {
-  // P17.3 仍是 rehearsal-only：命令返回演练结果，但不得真实删除本地数据。
+  // delete-data 只有在调用方传入精确 confirmationPhrase 时才会进入受控删除 adapter。
   return safeInvoke<AgentAppUninstallResult>("agent_app_uninstall", {
     request,
   });

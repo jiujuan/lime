@@ -218,6 +218,15 @@ async function flush(times = 8) {
   });
 }
 
+function setInputValue(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value",
+  )?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 async function openAppDetail(
   container: HTMLElement,
   appId = "content-factory-app",
@@ -398,6 +407,7 @@ function setupDefaultApiMocks() {
   );
   apiMocks.previewAgentAppUninstall.mockResolvedValue({
     appId: "content-factory-app",
+    packageHash: "package-fnv1a-test",
     mode: "delete-data",
     generatedAt: "2026-05-15T00:02:00.000Z",
     deletedTargetCount: 2,
@@ -421,10 +431,32 @@ function setupDefaultApiMocks() {
     warnings: ["DRY_RUN_ONLY"],
   });
   apiMocks.uninstallAgentApp.mockImplementation(
-    async (request: { appId: string; mode: "keep-data" | "delete-data" }) => {
+    async (request: {
+      appId: string;
+      mode: "keep-data" | "delete-data";
+      confirmationPhrase?: string;
+    }) => {
+      const state = installedStates.find(
+        (item) => item.appId === request.appId,
+      );
+      const expectedPhrase = state
+        ? `DELETE_AGENT_APP_DATA ${request.appId} ${state.identity.packageHash}`
+        : "";
+      const confirmed =
+        request.mode !== "delete-data" ||
+        request.confirmationPhrase === expectedPhrase;
+      if (confirmed) {
+        installedStates.splice(
+          0,
+          installedStates.length,
+          ...installedStates.filter((item) => item.appId !== request.appId),
+        );
+      }
       return {
+        status: confirmed ? "deleted" : "blocked",
         rehearsal: {
           appId: request.appId,
+          packageHash: state?.identity.packageHash ?? "package-fnv1a-test",
           mode: request.mode,
           generatedAt: "2026-05-15T00:03:00.000Z",
           deletedTargetCount: 2,
@@ -436,8 +468,10 @@ function setupDefaultApiMocks() {
           states: installedStates.map((state) => structuredClone(state)),
           issues: [],
         },
-        removedTargetCount: 0,
+        removedTargetCount: confirmed ? 2 : 0,
         missingTargetCount: 0,
+        blockerCodes: confirmed ? [] : ["CONFIRMATION_MISMATCH"],
+        deleteEvidence: null,
       };
     },
   );
@@ -490,7 +524,9 @@ describe("AgentAppsPage", () => {
     expect(
       container.querySelector('[data-testid="agent-apps-detail"]'),
     ).toBeNull();
-    expect(container.textContent).toContain("agentApp.apps.center.source.cloud");
+    expect(container.textContent).toContain(
+      "agentApp.apps.center.source.cloud",
+    );
     expect(container.textContent).toContain(
       "agentApp.apps.center.status.installable",
     );
@@ -558,8 +594,7 @@ describe("AgentAppsPage", () => {
     expect(
       container
         .querySelector('[data-testid="agent-apps-list"]')
-        ?.closest("section")
-        ?.className,
+        ?.closest("section")?.className,
     ).toContain("grid-rows-[auto_minmax(0,1fr)]");
   });
 
@@ -597,7 +632,9 @@ describe("AgentAppsPage", () => {
     await flush();
 
     expect(
-      container.querySelector('[data-testid="agent-apps-list-row-bulk-app-21"]'),
+      container.querySelector(
+        '[data-testid="agent-apps-list-row-bulk-app-21"]',
+      ),
     ).toBeNull();
 
     const nextPage = container.querySelector(
@@ -610,7 +647,9 @@ describe("AgentAppsPage", () => {
     await flush();
 
     expect(
-      container.querySelector('[data-testid="agent-apps-list-row-bulk-app-21"]'),
+      container.querySelector(
+        '[data-testid="agent-apps-list-row-bulk-app-21"]',
+      ),
     ).not.toBeNull();
 
     const search = container.querySelector(
@@ -626,10 +665,14 @@ describe("AgentAppsPage", () => {
     await flush();
 
     expect(
-      container.querySelector('[data-testid="agent-apps-list-row-bulk-app-25"]'),
+      container.querySelector(
+        '[data-testid="agent-apps-list-row-bulk-app-25"]',
+      ),
     ).not.toBeNull();
     expect(
-      container.querySelector('[data-testid="agent-apps-list-row-bulk-app-21"]'),
+      container.querySelector(
+        '[data-testid="agent-apps-list-row-bulk-app-21"]',
+      ),
     ).toBeNull();
 
     const localFilter = container.querySelector(
@@ -1023,8 +1066,33 @@ describe("AgentAppsPage", () => {
     const confirmButton = container.querySelector(
       '[data-testid="agent-apps-uninstall-confirm"]',
     ) as HTMLButtonElement | null;
+    const phrase = container.querySelector(
+      '[data-testid="agent-apps-delete-data-confirmation-phrase"]',
+    )?.textContent;
+    const confirmationInput = container.querySelector(
+      '[data-testid="agent-apps-delete-data-confirmation-input"]',
+    ) as HTMLInputElement | null;
+    expect(phrase).toContain("DELETE_AGENT_APP_DATA content-factory-app");
+    expect(confirmButton?.disabled).toBe(true);
+    expect(
+      container.querySelector(
+        '[data-testid="agent-apps-delete-data-confirmation-status"]',
+      )?.textContent,
+    ).toContain("agentApp.apps.uninstallPreview.deleteDataGate.mismatch");
     await act(async () => {
-      confirmButton?.click();
+      if (confirmationInput && phrase) {
+        setInputValue(confirmationInput, phrase);
+      }
+      await Promise.resolve();
+    });
+    await flush();
+    const readyConfirmButton = container.querySelector(
+      '[data-testid="agent-apps-uninstall-confirm"]',
+    ) as HTMLButtonElement | null;
+    expect(readyConfirmButton?.disabled).toBe(false);
+
+    await act(async () => {
+      readyConfirmButton?.click();
       await Promise.resolve();
     });
     await flush();
@@ -1032,12 +1100,17 @@ describe("AgentAppsPage", () => {
     expect(apiMocks.uninstallAgentApp).toHaveBeenCalledWith({
       appId: "content-factory-app",
       mode: "delete-data",
+      confirmationPhrase: phrase,
     });
+    const appRowAfterUninstall = container.querySelector(
+      '[data-testid="agent-apps-list-row-content-factory-app"]',
+    );
+    expect(appRowAfterUninstall?.textContent).toContain(
+      "agentApp.apps.center.status.installable",
+    );
     expect(
-      container.querySelector(
-        '[data-testid="agent-apps-list-row-content-factory-app"]',
-      ),
-    ).not.toBeNull();
+      container.querySelector('[data-testid="agent-apps-uninstall-preview"]'),
+    ).toBeNull();
     expect(
       container.querySelector('[data-testid="agent-apps-launch-summary"]')
         ?.textContent,

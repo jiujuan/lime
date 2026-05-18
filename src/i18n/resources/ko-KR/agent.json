@@ -548,5 +548,14 @@
   "agentApp.apps.center.sort.label": "정렬",
   "agentApp.apps.center.sort.recent": "최근 업데이트",
   "agentApp.apps.center.version.current": "현재 {{version}}",
-  "agentApp.apps.center.action.updateCloud": "클라우드 버전으로 업데이트"
+  "agentApp.apps.center.action.updateCloud": "클라우드 버전으로 업데이트",
+  "agentApp.apps.uninstallPreview.deleteDataGate.title": "데이터 삭제에는 정확한 확인이 필요합니다",
+  "agentApp.apps.uninstallPreview.deleteDataGate.description": "이 앱의 로컬 데이터, 캐시, 기록을 삭제합니다. 계속하기 전에 아래 문구를 그대로 입력하세요.",
+  "agentApp.apps.uninstallPreview.deleteDataGate.phraseLabel": "확인 문구",
+  "agentApp.apps.uninstallPreview.deleteDataGate.inputLabel": "데이터 삭제 확인 문구 입력",
+  "agentApp.apps.uninstallPreview.deleteDataGate.inputPlaceholder": "전체 확인 문구 입력",
+  "agentApp.apps.uninstallPreview.deleteDataGate.mismatch": "확인 문구가 일치하지 않아 삭제가 잠겼습니다.",
+  "agentApp.apps.uninstallPreview.deleteDataGate.ready": "확인 문구가 일치합니다. 삭제를 계속할 수 있습니다.",
+  "agentApp.apps.uninstall.blocked": "제거가 차단됨: {{codes}}.",
+  "agentApp.apps.toast.uninstallBlocked": "제거가 차단됨"
 }

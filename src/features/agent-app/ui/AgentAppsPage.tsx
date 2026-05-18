@@ -40,6 +40,7 @@ import { buildCleanupPlan } from "../install/cleanupPlan";
 import { buildLimeRuntimeProfileForInstalledState } from "../runtime-profile";
 import { resolveShellLaunchDescriptorForInstalledEntry } from "../shell";
 import {
+  buildAgentAppDeleteDataConfirmationPhrase,
   buildAgentAppLifecycleLaunchGate,
   buildAgentAppLifecycleToggleDescriptor,
   buildAgentAppLifecycleUninstallRehearsalDescriptor,
@@ -88,11 +89,7 @@ type AppCenterStatusKind =
   | "registration"
   | "disabled"
   | "partial";
-type AppCenterStatusFilter =
-  | "all"
-  | "installed"
-  | "installable"
-  | "attention";
+type AppCenterStatusFilter = "all" | "installed" | "installable" | "attention";
 type AppCenterSourceFilter = "all" | "cloud" | "local";
 type AppCenterActionLabelKey =
   | "agentApp.apps.center.action.open"
@@ -214,7 +211,9 @@ function getAppTitle(
 ): string {
   return (
     cloudApp?.displayName ??
-    (installedState ? resolveInstalledAgentAppDisplayName(installedState) : null) ??
+    (installedState
+      ? resolveInstalledAgentAppDisplayName(installedState)
+      : null) ??
     appId
   );
 }
@@ -301,7 +300,8 @@ function buildAppCenterItems(params: {
           })
         : undefined;
       const registrationBlocked = Boolean(
-        cloudApp?.registrationRequired && cloudApp.registrationState !== "active",
+        cloudApp?.registrationRequired &&
+        cloudApp.registrationState !== "active",
       );
       const statusKind = getStatusKind({
         installedState,
@@ -410,6 +410,8 @@ export function AgentAppsPage({
     useState<AgentAppUninstallRehearsalResult | null>(null);
   const [uninstallDescriptor, setUninstallDescriptor] =
     useState<AgentAppLifecycleUninstallRehearsalDescriptor | null>(null);
+  const [deleteDataConfirmationInput, setDeleteDataConfirmationInput] =
+    useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] =
     useState<AppCenterStatusFilter>("all");
@@ -429,6 +431,13 @@ export function AgentAppsPage({
     uninstallDescriptor.mode === uninstallPreview.mode
       ? uninstallDescriptor
       : null;
+  const deleteDataConfirmationPhrase =
+    activeUninstallDescriptor?.mode === "delete-data"
+      ? buildAgentAppDeleteDataConfirmationPhrase(activeUninstallDescriptor)
+      : "";
+  const deleteDataConfirmationMatches =
+    activeUninstallDescriptor?.mode !== "delete-data" ||
+    deleteDataConfirmationInput.trim() === deleteDataConfirmationPhrase;
 
   const appItems = useMemo(
     () =>
@@ -707,6 +716,7 @@ export function AgentAppsPage({
     if (descriptor.status === "blocked") {
       setUninstallDescriptor(descriptor);
       setUninstallPreview(null);
+      setDeleteDataConfirmationInput("");
       return;
     }
     const result = await runBusy(`uninstall:${descriptor.appId}:${mode}`, () =>
@@ -715,6 +725,7 @@ export function AgentAppsPage({
     if (result) {
       setUninstallDescriptor(descriptor);
       setUninstallPreview(result);
+      setDeleteDataConfirmationInput("");
     }
   }
 
@@ -730,11 +741,28 @@ export function AgentAppsPage({
     if (!descriptor || descriptor.status !== "ready") {
       return;
     }
+    const request =
+      descriptor.mode === "delete-data"
+        ? {
+            ...descriptor.request,
+            confirmationPhrase: deleteDataConfirmationInput.trim(),
+          }
+        : descriptor.request;
     const result = await runBusy(
       `confirm-uninstall:${uninstallPreview.appId}:${uninstallPreview.mode}`,
-      () => uninstallAgentApp(descriptor.request),
+      () => uninstallAgentApp(request),
     );
     if (!result) {
+      return;
+    }
+    if (result.status === "blocked") {
+      const codes = result.blockerCodes?.join(", ") || "blocked";
+      setLaunchSummary(
+        t("agentApp.apps.uninstall.blocked", {
+          codes,
+        }),
+      );
+      toast.error(t("agentApp.apps.toast.uninstallBlocked"));
       return;
     }
     setInstalled(result.list.states);
@@ -742,6 +770,7 @@ export function AgentAppsPage({
     setSelectedAppId(null);
     setUninstallPreview(null);
     setUninstallDescriptor(null);
+    setDeleteDataConfirmationInput("");
     setLaunchSummary(
       t("agentApp.apps.uninstall.completed", {
         removed: result.removedTargetCount,
@@ -933,8 +962,8 @@ export function AgentAppsPage({
   function hasCloudUpdate(item: AppCenterItem): boolean {
     return Boolean(
       item.installedVersion &&
-        item.cloudVersion &&
-        item.installedVersion !== item.cloudVersion,
+      item.cloudVersion &&
+      item.installedVersion !== item.cloudVersion,
     );
   }
 
@@ -959,7 +988,9 @@ export function AgentAppsPage({
     return "agentApp.apps.center.action.open";
   }
 
-  function getCloudActionLabelKey(item: AppCenterItem): AppCenterActionLabelKey {
+  function getCloudActionLabelKey(
+    item: AppCenterItem,
+  ): AppCenterActionLabelKey {
     if (item.registrationBlocked) {
       return "agentApp.apps.center.action.activate";
     }
@@ -969,7 +1000,9 @@ export function AgentAppsPage({
     return "agentApp.apps.center.action.install";
   }
 
-  function getDetailActionLabelKey(item: AppCenterItem): AppCenterActionLabelKey {
+  function getDetailActionLabelKey(
+    item: AppCenterItem,
+  ): AppCenterActionLabelKey {
     return getActionLabelKey(item);
   }
 
@@ -1118,9 +1151,7 @@ export function AgentAppsPage({
                   className="h-12 w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 shadow-sm shadow-slate-950/5 outline-none transition placeholder:text-slate-400 focus:border-blue-500"
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  onInput={(event) =>
-                    setSearchQuery(event.currentTarget.value)
-                  }
+                  onInput={(event) => setSearchQuery(event.currentTarget.value)}
                   placeholder={t("agentApp.apps.center.searchPlaceholder")}
                   data-testid="agent-apps-search"
                 />
@@ -1151,24 +1182,26 @@ export function AgentAppsPage({
           </header>
 
           <section className="flex flex-wrap items-center gap-7">
-                {(
-                  ["all", "installed", "installable", "attention"] as const
-                ).map((filter) => (
-                  <button
-                    key={filter}
-                    type="button"
-                    className={`min-w-[132px] rounded-lg border px-5 py-2.5 text-sm font-semibold transition ${
-                      statusFilter === filter
-                        ? "border-blue-950 bg-blue-50 text-blue-950 shadow-sm shadow-blue-950/5"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-blue-200"
-                    }`}
-                    onClick={() => setStatusFilter(filter)}
-                    data-testid={`agent-apps-status-filter-${filter}`}
-                  >
-                    {t(`agentApp.apps.center.filter.${filter}`)}
-                    <span className="ml-1 opacity-70">{filterCounts[filter]}</span>
-                  </button>
-                ))}
+            {(["all", "installed", "installable", "attention"] as const).map(
+              (filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  className={`min-w-[132px] rounded-lg border px-5 py-2.5 text-sm font-semibold transition ${
+                    statusFilter === filter
+                      ? "border-blue-950 bg-blue-50 text-blue-950 shadow-sm shadow-blue-950/5"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-blue-200"
+                  }`}
+                  onClick={() => setStatusFilter(filter)}
+                  data-testid={`agent-apps-status-filter-${filter}`}
+                >
+                  {t(`agentApp.apps.center.filter.${filter}`)}
+                  <span className="ml-1 opacity-70">
+                    {filterCounts[filter]}
+                  </span>
+                </button>
+              ),
+            )}
           </section>
 
           <section
@@ -1245,7 +1278,10 @@ export function AgentAppsPage({
                 </span>
               </div>
 
-              <div className="divide-y divide-slate-100" data-testid="agent-apps-list">
+              <div
+                className="divide-y divide-slate-100"
+                data-testid="agent-apps-list"
+              >
                 {pagedItems.map((item) => {
                   const selectedRow = selectedItem?.appId === item.appId;
                   const defaultEntry = getDefaultEntry(item);
@@ -1333,7 +1369,7 @@ export function AgentAppsPage({
                             ? t("agentApp.apps.center.version.current", {
                                 version: item.installedVersion,
                               })
-                            : item.cloudVersion ?? "-"}
+                            : (item.cloudVersion ?? "-")}
                         </span>
                         {item.installedVersion &&
                         item.cloudVersion &&
@@ -1371,7 +1407,9 @@ export function AgentAppsPage({
                           )}
                           {t(getActionLabelKey(item))}
                         </button>
-                        {item.installedState && item.cloudApp && hasCloudUpdate(item) ? (
+                        {item.installedState &&
+                        item.cloudApp &&
+                        hasCloudUpdate(item) ? (
                           <button
                             type="button"
                             className="inline-flex min-w-[80px] items-center justify-center rounded-lg border border-blue-800 bg-white px-4 py-2 text-sm font-semibold text-blue-950 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
@@ -1418,7 +1456,9 @@ export function AgentAppsPage({
                     type="button"
                     className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-blue-300 disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={currentPage <= 1}
-                    onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                    onClick={() =>
+                      setCurrentPage((page) => Math.max(1, page - 1))
+                    }
                     data-testid="agent-apps-pagination-prev"
                   >
                     <ChevronLeft size={14} />
@@ -1512,7 +1552,8 @@ export function AgentAppsPage({
                     ? renderRegistrationForm(selectedItem.cloudApp)
                     : null}
 
-                  {installReview && installReview.review.appId === selectedItem.appId ? (
+                  {installReview &&
+                  installReview.review.appId === selectedItem.appId ? (
                     <section
                       className="rounded-xl border border-blue-200 bg-blue-50 p-4"
                       data-testid="agent-apps-install-review"
@@ -1629,7 +1670,10 @@ export function AgentAppsPage({
                   ) : null}
 
                   {mountedUi && mountedUi.appId === selectedItem.appId ? (
-                    <section className="sr-only" data-testid="agent-apps-mounted-ui">
+                    <section
+                      className="sr-only"
+                      data-testid="agent-apps-mounted-ui"
+                    >
                       {t("agentApp.apps.surface.title", {
                         title: mountedUi.title,
                       })}
@@ -1638,7 +1682,10 @@ export function AgentAppsPage({
                   ) : null}
 
                   {launchSummary ? (
-                    <div className="sr-only" data-testid="agent-apps-launch-summary">
+                    <div
+                      className="sr-only"
+                      data-testid="agent-apps-launch-summary"
+                    >
                       {launchSummary}
                     </div>
                   ) : null}
@@ -1663,7 +1710,8 @@ export function AgentAppsPage({
                         data-testid="agent-apps-more-info-content"
                       >
                         <p className="break-all">
-                          {t("agentApp.apps.center.detail.appId")}: {selectedItem.appId}
+                          {t("agentApp.apps.center.detail.appId")}:{" "}
+                          {selectedItem.appId}
                         </p>
                         <div className="rounded-xl border border-slate-200 bg-white p-3">
                           <p className="text-sm font-semibold text-slate-900">
@@ -1672,7 +1720,9 @@ export function AgentAppsPage({
                           <div className="mt-3 grid gap-2 text-sm text-slate-600">
                             <div className="flex items-center justify-between gap-3">
                               <span>
-                                {t("agentApp.apps.center.detail.installedVersion")}
+                                {t(
+                                  "agentApp.apps.center.detail.installedVersion",
+                                )}
                               </span>
                               <span className="font-medium text-slate-900">
                                 {selectedItem.installedVersion ?? "-"}
@@ -1692,7 +1742,8 @@ export function AgentAppsPage({
                           <>
                             <p className="break-all">
                               {t("agentApp.apps.installReview.source", {
-                                kind: selectedItem.installedState.identity.sourceKind,
+                                kind: selectedItem.installedState.identity
+                                  .sourceKind,
                               })}
                             </p>
                             <p className="break-all">
@@ -1701,9 +1752,11 @@ export function AgentAppsPage({
                             <p className="break-all">
                               {t("agentApp.apps.installReview.hashes", {
                                 packageHash:
-                                  selectedItem.installedState.identity.packageHash,
+                                  selectedItem.installedState.identity
+                                    .packageHash,
                                 manifestHash:
-                                  selectedItem.installedState.identity.manifestHash,
+                                  selectedItem.installedState.identity
+                                    .manifestHash,
                               })}
                             </p>
                           </>
@@ -1716,8 +1769,12 @@ export function AgentAppsPage({
                             <button
                               type="button"
                               className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
-                              disabled={selected.disabled || Boolean(busyAction)}
-                              onClick={() => void handleSetDisabled(selected, true)}
+                              disabled={
+                                selected.disabled || Boolean(busyAction)
+                              }
+                              onClick={() =>
+                                void handleSetDisabled(selected, true)
+                              }
                               data-testid="agent-apps-disable"
                             >
                               <Ban size={16} />
@@ -1726,8 +1783,12 @@ export function AgentAppsPage({
                             <button
                               type="button"
                               className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-                              disabled={!selected.disabled || Boolean(busyAction)}
-                              onClick={() => void handleSetDisabled(selected, false)}
+                              disabled={
+                                !selected.disabled || Boolean(busyAction)
+                              }
+                              onClick={() =>
+                                void handleSetDisabled(selected, false)
+                              }
                               data-testid="agent-apps-enable"
                             >
                               <CheckCircle2 size={16} />
@@ -1738,7 +1799,10 @@ export function AgentAppsPage({
                               className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300"
                               disabled={Boolean(busyAction)}
                               onClick={() =>
-                                void handlePreviewUninstall(selected, "keep-data")
+                                void handlePreviewUninstall(
+                                  selected,
+                                  "keep-data",
+                                )
                               }
                               data-testid="agent-apps-uninstall-keep-data"
                             >
@@ -1752,7 +1816,10 @@ export function AgentAppsPage({
                               className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-left text-sm font-medium text-rose-800 transition hover:bg-rose-50"
                               disabled={Boolean(busyAction)}
                               onClick={() =>
-                                void handlePreviewUninstall(selected, "delete-data")
+                                void handlePreviewUninstall(
+                                  selected,
+                                  "delete-data",
+                                )
                               }
                               data-testid="agent-apps-uninstall-delete-data"
                             >
@@ -1811,18 +1878,86 @@ export function AgentAppsPage({
                                       "agentApp.lab.manager.evidence.residual.pendingDeletion",
                                       {
                                         count:
-                                          activeUninstallDescriptor.residualAudit
-                                            .pendingDeletionCount,
+                                          activeUninstallDescriptor
+                                            .residualAudit.pendingDeletionCount,
                                       },
                                     )}
                                   </span>
                                 </div>
                               </div>
                             ) : null}
+                            {activeUninstallDescriptor?.mode ===
+                            "delete-data" ? (
+                              <div
+                                className="mt-3 space-y-3 rounded-xl border border-rose-200 bg-rose-50 p-3"
+                                data-testid="agent-apps-delete-data-confirmation"
+                              >
+                                <div className="space-y-1">
+                                  <p className="text-sm font-semibold text-rose-900">
+                                    {t(
+                                      "agentApp.apps.uninstallPreview.deleteDataGate.title",
+                                    )}
+                                  </p>
+                                  <p className="text-sm text-rose-800">
+                                    {t(
+                                      "agentApp.apps.uninstallPreview.deleteDataGate.description",
+                                    )}
+                                  </p>
+                                </div>
+                                <div className="rounded-lg border border-rose-200 bg-white px-3 py-2">
+                                  <span className="text-xs font-medium text-rose-700">
+                                    {t(
+                                      "agentApp.apps.uninstallPreview.deleteDataGate.phraseLabel",
+                                    )}
+                                  </span>
+                                  <code
+                                    className="mt-1 block break-all rounded-md bg-slate-950 px-2 py-1.5 text-xs text-rose-50"
+                                    data-testid="agent-apps-delete-data-confirmation-phrase"
+                                  >
+                                    {deleteDataConfirmationPhrase}
+                                  </code>
+                                </div>
+                                <input
+                                  value={deleteDataConfirmationInput}
+                                  onChange={(event) =>
+                                    setDeleteDataConfirmationInput(
+                                      event.target.value,
+                                    )
+                                  }
+                                  className="w-full rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
+                                  placeholder={t(
+                                    "agentApp.apps.uninstallPreview.deleteDataGate.inputPlaceholder",
+                                  )}
+                                  aria-label={t(
+                                    "agentApp.apps.uninstallPreview.deleteDataGate.inputLabel",
+                                  )}
+                                  data-testid="agent-apps-delete-data-confirmation-input"
+                                />
+                                <p
+                                  className={`text-xs ${
+                                    deleteDataConfirmationMatches
+                                      ? "text-emerald-700"
+                                      : "text-rose-700"
+                                  }`}
+                                  data-testid="agent-apps-delete-data-confirmation-status"
+                                >
+                                  {deleteDataConfirmationMatches
+                                    ? t(
+                                        "agentApp.apps.uninstallPreview.deleteDataGate.ready",
+                                      )
+                                    : t(
+                                        "agentApp.apps.uninstallPreview.deleteDataGate.mismatch",
+                                      )}
+                                </p>
+                              </div>
+                            ) : null}
                             <button
                               type="button"
                               className="mt-3 inline-flex items-center gap-2 rounded-lg bg-rose-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-60"
-                              disabled={Boolean(busyAction)}
+                              disabled={
+                                Boolean(busyAction) ||
+                                !deleteDataConfirmationMatches
+                              }
                               onClick={() => void handleConfirmUninstall()}
                               data-testid="agent-apps-uninstall-confirm"
                             >

@@ -5,6 +5,7 @@ use super::common::{
 use super::events::{
     build_agent_app_runtime_task_events, build_agent_app_runtime_task_snapshot_event_payload,
     extract_content_factory_workspace_patch_from_artifact_document,
+    task_events_mark_business_completed,
 };
 use super::metadata::{build_agent_app_runtime_metadata, build_agent_app_runtime_task_message};
 use super::model_preference::model_preference_from_run_metadata;
@@ -884,6 +885,99 @@ fn test_agent_app_runtime_task_events_project_report_workspace_patch_fields() {
                 .and_then(|patch| patch.get("pptOutline"))
                 .is_some()
     }));
+}
+
+#[test]
+fn test_agent_app_runtime_task_events_complete_materialized_output_contract_after_tail_error() {
+    let mut thread_read = base_thread_read();
+    thread_read.status = "failed".to_string();
+    thread_read.profile_status = "failed".to_string();
+    thread_read.runtime_summary = Some(json!({
+        "surface": "agent_app",
+        "appId": "content-factory-app",
+        "taskId": "agent-app-task-review",
+        "taskKind": "content_factory.review.analyze"
+    }));
+    thread_read.tool_calls = vec![AgentRuntimeThreadToolCallView {
+        tool_call_id: "tool-reviewer".to_string(),
+        turn_id: "turn-1".to_string(),
+        tool_name: "Skill".to_string(),
+        status: "completed".to_string(),
+        started_at: Some("2026-05-16T00:00:01.000Z".to_string()),
+        finished_at: Some("2026-05-16T00:00:02.000Z".to_string()),
+        updated_at: Some("2026-05-16T00:00:02.000Z".to_string()),
+        arguments: Some(json!({ "skill": "content-reviewer" })),
+        output: Some("{\"status\":\"completed\"}".to_string()),
+        output_preview: Some("content-reviewer completed".to_string()),
+        success: Some(true),
+        error: None,
+        evidence_refs: Vec::new(),
+    }];
+    thread_read.artifacts = vec![AgentRuntimeThreadArtifactView {
+        item_id: "agent-app-output-contract:agent-app-task-review:turn-1".to_string(),
+        turn_id: "turn-1".to_string(),
+        path: ".lime/artifacts/agent-app/agent-app-task-review/turn-1/review_report.workspace-patch.json"
+            .to_string(),
+        source: "agent_runtime".to_string(),
+        status: "created".to_string(),
+        artifact_type: Some(CONTENT_FACTORY_WORKSPACE_PATCH_KIND.to_string()),
+        title: Some("复盘报告".to_string()),
+        created_at: Some("2026-05-16T00:00:03.000Z".to_string()),
+        completed_at: Some("2026-05-16T00:00:04.000Z".to_string()),
+        updated_at: Some("2026-05-16T00:00:04.000Z".to_string()),
+        metadata: Some(json!({
+            "agent_app_output_contract_materialized": true,
+            "artifactKind": "review_report",
+            "artifactType": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
+            "contentFactoryWorkspacePatch": {
+                "kind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
+                "artifactKind": "review_report",
+                "projectId": "sample_content_factory_spring",
+                "reviewReport": {
+                    "status": "requires_iteration",
+                    "summary": "继续观察并补充 A/B 测试"
+                }
+            }
+        })),
+    }];
+    thread_read.last_outcome = Some(AgentRuntimeOutcomeView {
+        thread_id: "thread-1".to_string(),
+        turn_id: Some("turn-1".to_string()),
+        outcome_type: "runtime_error".to_string(),
+        summary: Some(
+            "Invalid tool call: Could not interpret tool use parameters as a JSON object"
+                .to_string(),
+        ),
+        primary_cause: Some(
+            "Invalid tool call: Could not interpret tool use parameters as a JSON object"
+                .to_string(),
+        ),
+        retryable: true,
+        ended_at: Some("2026-05-16T00:00:05.000Z".to_string()),
+    });
+
+    let events = build_agent_app_runtime_task_events(&thread_read);
+    let completed_event = events
+        .iter()
+        .find(|event| event.id == "task:completed:output-contract:agent-app-task-review")
+        .expect("materialized output contract completion event");
+
+    assert_eq!(completed_event.status, "completed");
+    assert_eq!(
+        completed_event
+            .payload
+            .as_ref()
+            .and_then(|payload| payload.get("source")),
+        Some(&json!("agent_app_runtime_output_contract_materialized"))
+    );
+    assert_eq!(
+        completed_event.payload.as_ref().and_then(
+            |payload| payload.pointer("/contentFactoryWorkspacePatch/reviewReport/status")
+        ),
+        Some(&json!("requires_iteration"))
+    );
+    assert!(events.iter().any(|event| event.event_type == "task:error"));
+    assert!(task_events_mark_business_completed(&events));
 }
 
 #[test]

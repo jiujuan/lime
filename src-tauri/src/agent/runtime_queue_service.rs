@@ -13,6 +13,7 @@ use crate::LogState;
 use aster::session::QueuedTurnRuntime;
 use lime_agent::{
     clear_runtime_queue as clear_runtime_queue_impl,
+    finish_active_runtime_turn_if_matches as finish_active_runtime_turn_if_matches_impl,
     list_runtime_queue_snapshots as list_runtime_queue_snapshots_impl,
     promote_runtime_queued_turn as promote_runtime_queued_turn_impl,
     remove_runtime_queued_turn as remove_runtime_queued_turn_impl,
@@ -187,6 +188,13 @@ pub(crate) async fn promote_runtime_queued_turn(
     queued_turn_id: &str,
 ) -> Result<bool, String> {
     promote_runtime_queued_turn_impl(session_id, queued_turn_id).await
+}
+
+pub(crate) fn finish_active_runtime_turn_if_matches(
+    session_id: &str,
+    turn_id: &str,
+) -> Result<bool, String> {
+    finish_active_runtime_turn_if_matches_impl(session_id, turn_id)
 }
 
 pub(crate) async fn resume_persisted_runtime_queues_on_startup(

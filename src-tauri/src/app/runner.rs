@@ -201,7 +201,15 @@ pub fn run() {
 
     #[cfg(target_os = "macos")]
     {
-        builder = builder.menu(super::window_chrome::build_lime_app_menu);
+        if crate::services::agent_app_shell_window::resolve_agent_app_shell_standalone_runtime_env()
+            .is_some()
+        {
+            builder = builder.menu(
+                crate::services::agent_app_shell_window::build_agent_app_shell_macos_app_menu,
+            );
+        } else {
+            builder = builder.menu(super::window_chrome::build_lime_app_menu);
+        }
     }
 
     if should_enable_single_instance() {
@@ -366,22 +374,53 @@ pub fn run() {
                 crate::commands::windows_startup_cmd::maybe_show_windows_startup_notice(&app.handle());
             }
 
-            // 初始化托盘管理器
-            // Requirements 1.4: 应用启动时显示停止状态图标
-            match TrayManager::new(app.handle()) {
-                Ok(tray_manager) => {
-                    tracing::info!("[启动] 托盘管理器初始化成功");
-                    // 将托盘管理器存储到应用状态中
-                    let tray_state: TrayManagerState<tauri::Wry> =
-                        TrayManagerState(Arc::new(tokio::sync::RwLock::new(Some(tray_manager))));
-                    app.manage(tray_state);
+            // 初始化托盘管理器。AgentAPP standalone 使用单 App 原生托盘，避免继承 Lime Desktop 多 App 菜单。
+            if crate::services::agent_app_shell_window::resolve_agent_app_shell_standalone_runtime_env()
+                .is_some()
+            {
+                match crate::services::agent_app_shell_window::create_agent_app_shell_native_chrome_manager(app.handle()) {
+                    Ok(Some(native_chrome)) => {
+                        let tray_id = native_chrome.tray_id().to_string();
+                        let app_id = native_chrome.app_id().to_string();
+                        app.manage(native_chrome);
+                        tracing::info!(
+                            "[启动] Agent App Shell 原生 chrome 已初始化: app_id={} tray_id={}",
+                            app_id,
+                            tray_id
+                        );
+                    }
+                    Ok(None) => {
+                        tracing::warn!(
+                            "[启动] Agent App Shell standalone 环境缺失，跳过原生 chrome"
+                        );
+                    }
+                    Err(error) => {
+                        tracing::error!(
+                            "[启动] Agent App Shell 原生 chrome 初始化失败: {}",
+                            error
+                        );
+                    }
                 }
-                Err(e) => {
-                    tracing::error!("[启动] 托盘管理器初始化失败: {}", e);
-                    // 即使托盘初始化失败，应用仍然可以运行
-                    let tray_state: TrayManagerState<tauri::Wry> =
-                        TrayManagerState(Arc::new(tokio::sync::RwLock::new(None)));
-                    app.manage(tray_state);
+                let tray_state: TrayManagerState<tauri::Wry> =
+                    TrayManagerState(Arc::new(tokio::sync::RwLock::new(None)));
+                app.manage(tray_state);
+            } else {
+                // Requirements 1.4: Lime Desktop 启动时显示停止状态图标
+                match TrayManager::new(app.handle()) {
+                    Ok(tray_manager) => {
+                        tracing::info!("[启动] 托盘管理器初始化成功");
+                        // 将托盘管理器存储到应用状态中
+                        let tray_state: TrayManagerState<tauri::Wry> =
+                            TrayManagerState(Arc::new(tokio::sync::RwLock::new(Some(tray_manager))));
+                        app.manage(tray_state);
+                    }
+                    Err(e) => {
+                        tracing::error!("[启动] 托盘管理器初始化失败: {}", e);
+                        // 即使托盘初始化失败，应用仍然可以运行
+                        let tray_state: TrayManagerState<tauri::Wry> =
+                            TrayManagerState(Arc::new(tokio::sync::RwLock::new(None)));
+                        app.manage(tray_state);
+                    }
                 }
             }
 

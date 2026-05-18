@@ -548,5 +548,14 @@
   "agentApp.apps.center.sort.label": "排序",
   "agentApp.apps.center.sort.recent": "最近更新",
   "agentApp.apps.center.version.current": "当前 {{version}}",
-  "agentApp.apps.center.action.updateCloud": "更新到云端版"
+  "agentApp.apps.center.action.updateCloud": "更新到云端版",
+  "agentApp.apps.uninstallPreview.deleteDataGate.title": "删除数据需要精确确认",
+  "agentApp.apps.uninstallPreview.deleteDataGate.description": "这会移除该应用的本地数据、缓存和记录。请完整输入下方短语后再继续。",
+  "agentApp.apps.uninstallPreview.deleteDataGate.phraseLabel": "确认短语",
+  "agentApp.apps.uninstallPreview.deleteDataGate.inputLabel": "输入删除数据确认短语",
+  "agentApp.apps.uninstallPreview.deleteDataGate.inputPlaceholder": "输入完整确认短语",
+  "agentApp.apps.uninstallPreview.deleteDataGate.mismatch": "确认短语不匹配，删除按钮已锁定。",
+  "agentApp.apps.uninstallPreview.deleteDataGate.ready": "确认短语已匹配，可以继续删除。",
+  "agentApp.apps.uninstall.blocked": "卸载已阻断：{{codes}}。",
+  "agentApp.apps.toast.uninstallBlocked": "卸载已阻断"
 }

@@ -96,6 +96,15 @@ export interface AgentAppRunProjectionTaskSummary {
   queueCount: number;
 }
 
+export interface AgentAppRunProjectionMetrics {
+  providerName?: string;
+  modelName?: string;
+  modelLabel?: string;
+  tokenCount?: number;
+  tokenText?: string;
+  costText?: string;
+}
+
 export interface AgentAppRunProjectionViewModel {
   orderedParts: AgentAppRunProjectionPart[];
   actions: AgentAppRunProjectionAction[];
@@ -103,6 +112,7 @@ export interface AgentAppRunProjectionViewModel {
   evidence: AgentAppRunProjectionEvidence[];
   diagnostics: AgentAppRunProjectionDiagnostic[];
   task: AgentAppRunProjectionTaskSummary;
+  metrics: AgentAppRunProjectionMetrics;
   answerText: string;
   reasoningText: string;
 }
@@ -118,6 +128,7 @@ export function buildAgentAppRunProjectionViewModel(
   const diagnostics = buildDiagnosticIndex(orderedEvents);
   const latestRuntimeStatus = resolveLatestRuntimeStatus(orderedEvents);
   const terminal = isTerminalStatus(latestRuntimeStatus);
+  const metrics = buildMetricSummary(orderedEvents);
 
   return {
     orderedParts,
@@ -135,6 +146,7 @@ export function buildAgentAppRunProjectionViewModel(
       evidenceCount: evidence.length,
       queueCount: orderedEvents.filter((event) => event.type === "queue.changed").length,
     },
+    metrics,
     answerText: collectText(orderedEvents, "text.delta"),
     reasoningText: collectText(orderedEvents, "reasoning.delta"),
   };
@@ -461,6 +473,39 @@ function buildDiagnosticIndex(
   return [...diagnostics.values()];
 }
 
+function buildMetricSummary(
+  events: AgentUiProjectionEvent[],
+): AgentAppRunProjectionMetrics {
+  const metrics: AgentAppRunProjectionMetrics = {};
+  for (const event of events) {
+    if (!event.type.startsWith("metric.")) {
+      continue;
+    }
+    const payload = event.payload ?? {};
+    const providerName = readPayloadString(event, "providerName");
+    const modelName = readPayloadString(event, "modelName");
+    const usage = recordPayloadValue(payload, "usage");
+    const cost = recordPayloadValue(payload, "cost");
+    const tokenCount = readNumber(usage, "totalTokens") ?? readNumber(usage, "total_tokens");
+    const costText = formatCostText(cost);
+
+    if (providerName) metrics.providerName = providerName;
+    if (modelName) metrics.modelName = modelName;
+    if (typeof tokenCount === "number") {
+      metrics.tokenCount = tokenCount;
+      metrics.tokenText = `${formatInteger(tokenCount)} tokens`;
+    }
+    if (costText) metrics.costText = costText;
+  }
+
+  if (metrics.modelName || metrics.providerName) {
+    metrics.modelLabel = [metrics.providerName, metrics.modelName]
+      .filter((value): value is string => Boolean(value))
+      .join(" / ");
+  }
+  return metrics;
+}
+
 function collectText(
   events: AgentUiProjectionEvent[],
   type: AgentUiProjectionEvent["type"],
@@ -502,6 +547,53 @@ function readPayloadString(
 ): string | undefined {
   const value = event.payload?.[key];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function recordPayloadValue(
+  value: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> | undefined {
+  const item = value[key];
+  return item && typeof item === "object" && !Array.isArray(item)
+    ? item as Record<string, unknown>
+    : undefined;
+}
+
+function readNumber(
+  value: Record<string, unknown> | undefined,
+  key: string,
+): number | undefined {
+  const item = value?.[key];
+  return typeof item === "number" && Number.isFinite(item) ? item : undefined;
+}
+
+function formatInteger(value: number): string {
+  return Math.round(value).toLocaleString("en-US");
+}
+
+function formatCostText(value: Record<string, unknown> | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const total =
+    readNumber(value, "estimatedTotalCost") ??
+    readNumber(value, "estimated_total_cost") ??
+    readNumber(value, "totalCost") ??
+    readNumber(value, "total_cost") ??
+    readNumber(value, "total");
+  const currency = typeof value.currency === "string" && value.currency.trim()
+    ? value.currency.trim()
+    : "USD";
+  if (typeof total === "number") {
+    return `${currency} ${total.toFixed(total < 0.01 ? 4 : 2)}`;
+  }
+  const costClass =
+    typeof value.estimatedCostClass === "string" && value.estimatedCostClass.trim()
+      ? value.estimatedCostClass.trim()
+      : typeof value.estimated_cost_class === "string" && value.estimated_cost_class.trim()
+        ? value.estimated_cost_class.trim()
+        : undefined;
+  return costClass ? costClass : undefined;
 }
 
 function mergeStreamText(current: string, next: string): string {

@@ -1,6 +1,6 @@
 # Agent App P18.7 并行验证记录
 
-更新时间：2026-05-19 00:25
+更新时间：2026-05-19 06:06
 
 ## 主目标
 
@@ -331,7 +331,62 @@
 
 ## 2026-05-19 P18.7-E webhook external delivery first-cut
 
-- 本轮没有接管隔壁 v2 / standalone / content-factory flow，也没有抢 default `src-tauri/target`；代码写集只限 connector ToolRuntime seam。
+- 本轮没有接管隔壁 v2 / standalone / content-factory flow，也没有抢 default `src-tauri/target`；代码写集只限 connector ToolRuntime seam、focused smoke harness 和 P18.7-E 文档。
 - Rust seam 新增 Host-managed webhook external delivery：internal request 提供 `secretDelivery.externalDelivery` 时，Cloud Overlay adapter 可把脱敏 connector mutation payload POST 到 Host-managed webhook，并把 delivery receipt 从 `accepted_by_local_cloud_overlay_worker` 推进到 `delivered_to_external_platform`。
 - 公开 evidence 只允许 target hash / label / HTTP status / deliveredAt / delivered boolean；webhook URL、raw token、raw credential、concrete lease ref 不进入 ToolResult output、threadRead 或 Agent App task events。
+- local webhook 直连修复：本地 `http://127.0.0.1:` / `http://localhost:` 目标改为直接 TCP HTTP POST，绕过系统代理；远端 `https://...` 仍走 `reqwest`。该修复直接服务 P18.7-E focused live local-webhook evidence，避免本机 proxy 把 localhost POST 变成 502。
+- Rust 定向验证已完成：`rustfmt --edition 2021 --check ...connector_tools...` 与 `git diff --check -- ...P18.7-E 写集...` 通过；`CARGO_TARGET_DIR="$HOME/Library/Caches/lime-codex-target-p18e" cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_connector_cloud_overlay_can_deliver_to_host_managed_webhook --lib` 通过；`... agent_app_connector --lib` 12 tests passed；`... cargo check --manifest-path "src-tauri/Cargo.toml" -p lime --lib --message-format short` 通过；`node --check "scripts/agent-app-connector-outbox-smoke.mjs"` 通过。独立 target 复用现有 `sherpa-onnx` prebuilt，避免与隔壁 default target / Tauri dev 构建产物打架。
+- live evidence 当前是 diagnostic 而非 green：`.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-live-local-webhook-20260519-codex-summary.json` 与 `...-v2-summary.json` 均在旧 runtime binary 上失败，`externalDelivery.httpStatus=502`、local webhook `receivedRequestCount=0`；但两份 summary 仍显示 DevBridge healthy、connector tool call / outbox / delivery evidence projection 可读，且 target URL、raw token、concrete lease ref 未外露。下一刀应在确认可重启运行面后，用新 binary 复跑 live local-webhook smoke；不应继续在旧 binary 上重复 provider 调用。
 - completion 口径保持不变：local webhook first-cut 不是生产外部平台 delivery；P18.7-E 深水位仍缺真实 Connector OAuth、secret store raw material adapter、生产平台 delivery 和产品级 GUI evidence。
+
+## 2026-05-19 06:06 latest P18.7-E/F evidence
+
+- P18.7-E focused live local-webhook smoke 已在新 runtime binary 下通过：`.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-live-local-webhook-20260519-codex-v3-summary.json`。该 summary 显示 `externalStatus=delivered`、`nextRequired=external_platform_delivery_complete`、`deliveryStatus=delivered_to_external_platform`、`deliveryExternalPlatformDelivered=true`、`externalDeliveryHttpStatus=200`、local webhook `receivedRequestCount=1`；target URL、raw token、credential material 和 concrete lease ref 均未进入 public ToolResult / threadRead / Agent App task events。
+- P18.7-F focused run-review clean retry 已通过：`.lime/qc/gui-evidence/agent-apps/content-factory-review-yunwu-clean-retry-20260519-codex-summary.json`。`run-review` 的 direct runtime 为 `completed`，required Skills 命中，model / usage / cost / artifact / evidence / workspace patch / process visible / no Host fallback / no console errors gate 全部通过。
+- 五动作 full-flow 仍没有最新 green：`content-factory-full-flow-kimi-20260519-codex-failure.json` 失败在 `run-review` 的 terminal status，`content-factory-full-flow-round-materialize-fix-20260519-codex-failure.json` 失败在 `run-scenarios` runtime failed，`...retry...` 是 SIGTERM。当前可用的产品证据组合是 two-action green + run-review focused clean green + Agent Apps smoke green，而不是一份新的五动作 full-flow green。
+- completion 口径保持：整体目标仍不能标记 complete；下一刀优先真实 Connector OAuth / raw secret material adapter / production external platform delivery 与产品级 GUI 外部送达证明。
+
+## 2026-05-19 06:23 P18.7-E remote webhook secret-source validation
+
+| 验证项 | 状态 | 说明 |
+| --- | --- | --- |
+| `npm run bridge:health -- --timeout-ms 120000` | passed | 只读确认当前 DevBridge healthy，未启动新的 GUI/runtime/provider flow。 |
+| `node --check "scripts/agent-app-connector-outbox-smoke.mjs"` | passed | 隔壁 `agent-apps-content-factory-flow` 仍在跑，本轮只运行不碰 GUI/runtime/provider 的语法检查。 |
+| `git diff --check -- "scripts/agent-app-connector-outbox-smoke.mjs" "docs/roadmap/agentapp/p18-7-e-toolruntime-execution-gate-plan.md" "docs/roadmap/agentapp/p18-completion-audit.md" "docs/roadmap/agentapp/p18-7-parallel-validation.md"` | passed | 本轮窄写集无空白错误。 |
+
+本轮不重跑 live connector smoke：隔壁 full-flow 仍占用 GUI/runtime/provider；新增能力只是远端 webhook URL 的安全输入来源，为后续真实平台 delivery proof 做前置加固。
+
+## 2026-05-19 06:32 P18.7-F five-action full-flow result
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-final-20260519-codex-summary.json` | passed with caveat | 五动作 `run-scenarios / run-production / run-scripts / run-strategy / run-review` 全部 direct runtime completed，expected Skills 命中，model/usage/cost/workspace patch/fullRuntimeReady/process visible/no Host fallback/no console errors gate 全绿。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-final-20260519-codex.png` | captured | 对应 GUI 截图已保存。 |
+
+Caveat：`sameIframeContext=false`，summary 记录 18 个 `net::ERR_ABORTED` failedRequests；当前只把它作为 P18.7-F 五动作业务闭环证据，不把它升级为全运行面零噪声或 P18.7-E production connector delivery 完成证据。
+
+## 2026-05-19 06:34 P18.7-E replay after secret-source hardening
+
+| 验证项 | 状态 | 说明 |
+| --- | --- | --- |
+| `node "scripts/agent-app-connector-outbox-smoke.mjs" --mode replay --session-id "45062313-ce98-458a-bc17-b2931e3faed1" --task-id "agent-app-connector-outbox-runtime-1779141951965-66767" ...` | passed | 不调用模型 provider；复核 local-webhook delivered evidence projection、delivery receipt projection、secret delivery 不暴露 concrete lease/raw token/material。输出 `.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-replay-local-webhook-source-hardening-20260519-codex-summary.json`。 |
+
+## 2026-05-19 06:54 P18.7-F metrics full-flow result
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-metrics-20260519-codex-summary.json` | passed with caveat | 五动作 direct runtime completed；expected Skills、model/usage/cost、workspace patch、fullRuntimeReady、process visible、scene count preservation、no Host fallback、no console errors 均通过；failedRequests 降至 13。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-metrics-20260519-codex.png` | captured | 对应 GUI 截图已保存。 |
+
+Caveat：`sameIframeContext=false`，failedRequests 仍存在；该证据只加强 P18.7-F metrics/full-flow 产品闭环，不替代 P18.7-E 真实 OAuth / raw secret material adapter / production external delivery 证明。
+
+## 2026-05-19 07:03 P18.7-E inline raw secret guard validation
+
+| 验证项 | 状态 | 说明 |
+| --- | --- | --- |
+| `rustfmt --edition 2021 --check "src-tauri/src/commands/aster_agent_cmd/tool_runtime/connector_tools/readiness.rs" "src-tauri/src/commands/aster_agent_cmd/tool_runtime/connector_tools/tests.rs"` | passed | Connector readiness / tests 格式检查通过。 |
+| `CARGO_TARGET_DIR="$HOME/Library/Caches/lime-codex-target-p18e" cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_connector_external_delivery_rejects_inline_secret_material --lib` | passed | 新增 raw secret guard 定向测试 1 passed。 |
+| `CARGO_TARGET_DIR="$HOME/Library/Caches/lime-codex-target-p18e" cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_connector --lib` | passed | Connector 定向套件 13 tests passed，复核 local webhook、delivery receipt、authorization redaction 未回归。 |
+| `CARGO_TARGET_DIR="$HOME/Library/Caches/lime-codex-target-p18e" cargo check --manifest-path "src-tauri/Cargo.toml" -p lime --lib --message-format short` | passed | 独立 target 下 Rust lib check 通过，未抢 default `src-tauri/target`。 |
+
+该 guard 只封住 inline raw secret 假路径；它不等同于真实 raw secret material adapter 或 production external platform delivery 完成。

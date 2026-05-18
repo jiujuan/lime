@@ -334,8 +334,13 @@ pub async fn agent_runtime_interrupt_turn(
     } else {
         false
     };
+    let gate_released = if let Some(turn_id) = requested_turn_id.as_deref() {
+        finish_active_runtime_turn_if_matches_service(&session_id, turn_id)?
+    } else {
+        false
+    };
     let cleared = clear_runtime_queue_service(&app, &session_id).await?;
-    Ok(cancelled || aborted || !cleared.is_empty())
+    Ok(cancelled || aborted || gate_released || !cleared.is_empty())
 }
 
 /// 统一运行时：压缩当前会话上下文。

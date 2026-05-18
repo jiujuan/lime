@@ -79,13 +79,15 @@ describe("tauri-mock/core invoke", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
-  it("Agent App uninstall mock 只返回演练结果，不移除 installed state", async () => {
+  it("Agent App uninstall mock 没有精确确认短语时不移除 installed state", async () => {
     const before = await invokeMockOnly<{
       states: Array<{ appId: string }>;
     }>("agent_app_list_installed");
     const appId = before.states[0]?.appId ?? "content-factory-app";
 
     const result = await invokeMockOnly<{
+      status: string;
+      blockerCodes: string[];
       removedTargetCount: number;
       missingTargetCount: number;
       list: { states: Array<{ appId: string }> };
@@ -96,14 +98,47 @@ describe("tauri-mock/core invoke", () => {
       },
     });
 
+    expect(result.status).toBe("blocked");
+    expect(result.blockerCodes).toContain("CONFIRMATION_MISMATCH");
     expect(result.removedTargetCount).toBe(0);
     expect(result.missingTargetCount).toBe(0);
-    expect(result.list.states.some((state) => state.appId === appId)).toBe(true);
+    expect(result.list.states.some((state) => state.appId === appId)).toBe(
+      true,
+    );
 
     const after = await invokeMockOnly<{
       states: Array<{ appId: string }>;
     }>("agent_app_list_installed");
     expect(after.states.some((state) => state.appId === appId)).toBe(true);
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
+  it("Agent App uninstall mock 带精确确认短语时移除 installed state", async () => {
+    const before = await invokeMockOnly<{
+      states: Array<{ appId: string; identity: { packageHash: string } }>;
+    }>("agent_app_list_installed");
+    const state = before.states[0];
+    const appId = state?.appId ?? "content-factory-app";
+    const packageHash = state?.identity.packageHash ?? "package-fnv1a-mock";
+
+    const result = await invokeMockOnly<{
+      status: string;
+      removedTargetCount: number;
+      deleteEvidence: { status: string; removedTargets: unknown[] } | null;
+      list: { states: Array<{ appId: string }> };
+    }>("agent_app_uninstall", {
+      request: {
+        appId,
+        mode: "delete-data",
+        confirmationPhrase: `DELETE_AGENT_APP_DATA ${appId} ${packageHash}`,
+      },
+    });
+
+    expect(result.status).toBe("deleted");
+    expect(result.removedTargetCount).toBeGreaterThan(0);
+    expect(result.deleteEvidence?.status).toBe("deleted");
+    expect(result.deleteEvidence?.removedTargets.length).toBeGreaterThan(0);
+    expect(result.list.states.some((item) => item.appId === appId)).toBe(false);
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 

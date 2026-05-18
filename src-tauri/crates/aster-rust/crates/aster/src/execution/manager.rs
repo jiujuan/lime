@@ -250,7 +250,10 @@ fn spawn_turn_processor(runtime: AgentManagerRuntime, initial_turn: QueuedTurnRu
 
             match runtime
                 .runtime_queue
-                .finish_turn_and_take_next(&queued_turn.session_id)
+                .finish_matching_turn_and_take_next(
+                    &queued_turn.session_id,
+                    &queued_turn.queued_turn_id,
+                )
                 .await
             {
                 Ok(Some(next_turn)) => pending_turn = Some(next_turn),

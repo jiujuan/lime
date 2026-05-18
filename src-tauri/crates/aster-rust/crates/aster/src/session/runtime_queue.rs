@@ -46,6 +46,10 @@ impl SessionRuntimeQueueService {
         self.execution_gate.is_active(session_id)
     }
 
+    pub fn active_turn_id(&self, session_id: &str) -> Option<String> {
+        self.execution_gate.active_turn_id(session_id)
+    }
+
     pub async fn list_live_session_ids(&self) -> Result<HashSet<String>> {
         let mut session_ids = self.execution_gate.active_session_ids();
         session_ids.extend(self.store.list_queued_turn_session_ids().await?);
@@ -62,7 +66,11 @@ impl SessionRuntimeQueueService {
         }
 
         match self.store.take_next_queued_turn(session_id).await? {
-            Some(queued_turn) => Ok(Some(queued_turn)),
+            Some(queued_turn) => {
+                self.execution_gate
+                    .set_active_turn_id(session_id, &queued_turn.queued_turn_id);
+                Ok(Some(queued_turn))
+            }
             None => {
                 self.execution_gate.finish(session_id);
                 Ok(None)
@@ -85,6 +93,22 @@ impl SessionRuntimeQueueService {
         self.take_next_turn_with_gate(session_id, false).await
     }
 
+    pub async fn finish_matching_turn_and_take_next(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+    ) -> Result<Option<QueuedTurnRuntime>> {
+        if !self.execution_gate.active_turn_matches(session_id, turn_id) {
+            return Ok(None);
+        }
+
+        self.take_next_turn_with_gate(session_id, false).await
+    }
+
+    pub fn finish_active_turn_if_matches(&self, session_id: &str, turn_id: &str) -> bool {
+        self.execution_gate.finish_if_matches(session_id, turn_id)
+    }
+
     pub async fn submit_turn(
         &self,
         queued_turn: QueuedTurnRuntime,
@@ -92,7 +116,11 @@ impl SessionRuntimeQueueService {
     ) -> Result<RuntimeQueueSubmitResult> {
         let session_id = queued_turn.session_id.clone();
 
-        if !self.has_active_turn(&session_id) && self.execution_gate.try_start(&session_id) {
+        if !self.has_active_turn(&session_id)
+            && self
+                .execution_gate
+                .try_start_turn(&session_id, &queued_turn.queued_turn_id)
+        {
             return Ok(RuntimeQueueSubmitResult::StartNow);
         }
 
@@ -230,6 +258,10 @@ mod tests {
 
         assert_eq!(result, RuntimeQueueSubmitResult::StartNow);
         assert!(service.has_active_turn("session-1"));
+        assert_eq!(
+            service.active_turn_id("session-1").as_deref(),
+            Some("queued-1")
+        );
     }
 
     #[tokio::test]
@@ -260,6 +292,75 @@ mod tests {
             }
             other => panic!("unexpected submit result: {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn finish_matching_turn_ignores_stale_turn_completion() {
+        let store = Arc::new(InMemoryThreadRuntimeStore::default());
+        let service = SessionRuntimeQueueService::new(store.clone());
+        let _ = service
+            .submit_turn(queued_turn("session-1", "running", 1), true)
+            .await
+            .unwrap();
+        store
+            .enqueue_turn(queued_turn("session-1", "queued-1", 2))
+            .await
+            .unwrap();
+
+        let next = service
+            .finish_matching_turn_and_take_next("session-1", "stale-running")
+            .await
+            .unwrap();
+
+        assert!(next.is_none());
+        assert_eq!(
+            service.active_turn_id("session-1").as_deref(),
+            Some("running")
+        );
+        assert_eq!(store.list_queued_turns("session-1").await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn finish_matching_turn_starts_next_and_updates_active_turn_id() {
+        let store = Arc::new(InMemoryThreadRuntimeStore::default());
+        let service = SessionRuntimeQueueService::new(store.clone());
+        let _ = service
+            .submit_turn(queued_turn("session-1", "running", 1), true)
+            .await
+            .unwrap();
+        store
+            .enqueue_turn(queued_turn("session-1", "queued-1", 2))
+            .await
+            .unwrap();
+
+        let next = service
+            .finish_matching_turn_and_take_next("session-1", "running")
+            .await
+            .unwrap();
+
+        assert_eq!(
+            next.as_ref().map(|turn| turn.queued_turn_id.as_str()),
+            Some("queued-1")
+        );
+        assert_eq!(
+            service.active_turn_id("session-1").as_deref(),
+            Some("queued-1")
+        );
+    }
+
+    #[tokio::test]
+    async fn finish_active_turn_if_matches_releases_interrupted_turn_only() {
+        let store = Arc::new(InMemoryThreadRuntimeStore::default());
+        let service = SessionRuntimeQueueService::new(store);
+        let _ = service
+            .submit_turn(queued_turn("session-1", "running", 1), true)
+            .await
+            .unwrap();
+
+        assert!(!service.finish_active_turn_if_matches("session-1", "other"));
+        assert!(service.has_active_turn("session-1"));
+        assert!(service.finish_active_turn_if_matches("session-1", "running"));
+        assert!(!service.has_active_turn("session-1"));
     }
 
     #[tokio::test]

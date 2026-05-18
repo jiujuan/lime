@@ -112,6 +112,13 @@ test('root renderer can render directly from host task state', async () => {
   const html = root.renderLimeAgentRunProjectionStateHtml({
     taskId: 'task-state-renderer-regression',
     sessionId: 'session-state-renderer-regression',
+    runtimeFacts: {
+      modelRouting: {
+        routes: [{ model: { provider: 'deepseek', model: 'deepseek-v4-flash' } }],
+      },
+      tokenUsage: { totals: { totalTokens: 120 } },
+      costSummary: { cost: { currency: 'USD', estimatedTotalCost: 0.0042 } },
+    },
     runtimeProcess: {
       timeline: [
         { id: 'state-thinking', kind: 'thinking', message: 'Plan route' },
@@ -125,6 +132,9 @@ test('root renderer can render directly from host task state', async () => {
   assert.match(html, /data-kind="reasoning"/);
   assert.match(html, /Plan route/);
   assert.match(html, /article-writer/);
+  assert.match(html, /deepseek \/ deepseek-v4-flash/);
+  assert.match(html, /120 tokens/);
+  assert.match(html, /USD 0\.0042/);
   assert.match(html, /data-terminal="true"/);
 });
 

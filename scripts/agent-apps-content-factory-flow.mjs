@@ -83,6 +83,14 @@ const CONTENT_FACTORY_PAGE_ROUTE_PATHS = {
   delivery: "/deliver",
   review: "/review-dashboard",
 };
+const CONTENT_FACTORY_REVIEW_E2E_METRICS = {
+  "review.direction": "低气味家庭清洁内容",
+  "review.sampleSize": "240",
+  "review.reuseRatio": "6",
+  "review.completionRate": "32",
+  "review.searchShare": "28",
+  "review.conversionRate": "3.5",
+};
 
 const CONTENT_FACTORY_ACTIONS = {
   "build-store": {
@@ -780,16 +788,19 @@ function textShowsActionMaterializedResult(text, actionName) {
     actionName === "only-copy"
   ) {
     if (
-      /正在整理当前项目内容|运行中|还没有形成\s*(?:20\s*条内容批次|草稿)/.test(
+      /正在整理当前项目内容|运行中|还没有形成\s*(?:20\s*条内容批次|草稿)|整理草稿\s*0\s*\/\s*20|第\d+轮内容\s*0\s*\/\s*20|内容\s*0\s*默认\s*20|内容：\s*0\s*条/.test(
         normalized,
       )
     ) {
       return false;
     }
     const hasDraftBatch =
+      /第\d+轮内容\s*20\s*\/\s*20\s*条/.test(normalized) ||
+      /整理草稿\s*20\s*\/\s*20\s*条/.test(normalized) ||
       /内容\s*20\s*\/\s*20\s*条/.test(normalized) ||
       /草稿\s*20\s*\/\s*20\s*条/.test(normalized) ||
-      /(?:内容|文案|草稿)[^\d]{0,12}20\s*条/.test(normalized);
+      /内容批次\s*20\s*条内容已生成/.test(normalized) ||
+      /已(?:更新|写回)20\s*条(?:内容|文案|草稿)/.test(normalized);
     const productionReadySignal =
       textShowsMaterializedResult(normalized) ||
       /本轮内容可确认|确认本轮内容|去审核草稿/.test(normalized) ||
@@ -809,7 +820,10 @@ function textShowsActionMaterializedResult(text, actionName) {
     return /交付物清单|项目交付内容|汇报结构/.test(normalized);
   }
   if (actionName === "run-review") {
-    return /复盘发现|下一轮建议|生成判断/.test(normalized);
+    if (/待录入数据|样本量\s*0\s*条|复盘\s*待录入/.test(normalized)) return false;
+    const hasMetrics = /样本量\s*(?:2[0-9]{2}|[3-9][0-9]{2,})\s*条/.test(normalized);
+    const hasReviewDecision = /复盘判断待确认|确认复盘结论|确认进入下一轮|继续放量|修正方向|暂停投放|下一轮建议/.test(normalized);
+    return hasMetrics && hasReviewDecision;
   }
   return false;
 }
@@ -3274,6 +3288,9 @@ async function runFlowAction(frame, page, options, actionName) {
       await clickCampaignStep(frame, actionConfig.campaignStep, boundedTimeoutMs);
     }
   }
+  if (actionName === "run-review") {
+    await prepareReviewMetricsForAction(frame, boundedTimeoutMs);
+  }
 
   const actionButton = frame
     .locator(`button[data-action="${actionConfig.action}"]`)
@@ -3383,13 +3400,11 @@ async function runFlowAction(frame, page, options, actionName) {
             page,
           );
           pageMaterialization = materializationState.ready
-            ? materializationState
-            : {
+            ? {
                 ...materializationState,
-                ready: true,
-                source: "direct_workspace_patch_materialized",
                 directPatchMaterialized: true,
-              };
+              }
+            : materializationState;
         }
       }
     }
@@ -3570,6 +3585,19 @@ async function runFlowAction(frame, page, options, actionName) {
       .filter(Boolean),
     bodyPreview: sanitizeText(bodyText),
   };
+}
+
+async function prepareReviewMetricsForAction(frame, timeoutMs) {
+  logStage("action:run-review:prepare-metrics");
+  for (const [field, value] of Object.entries(CONTENT_FACTORY_REVIEW_E2E_METRICS)) {
+    const input = frame.locator(`input[data-field="${field}"]`).first();
+    await input.waitFor({ state: "visible", timeout: Math.min(timeoutMs, 20_000) });
+    await input.fill(value, { timeout: Math.min(timeoutMs, 20_000) });
+    await input.evaluate((element) => {
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  }
 }
 
 async function collectFailureDiagnostics(page, options, error, consoleErrors, failedRequests) {

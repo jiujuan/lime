@@ -1,6 +1,6 @@
 # P18 Completion Audit / 协作防打架记录
 
-更新时间：2026-05-19 00:25
+更新时间：2026-05-19 06:06
 
 状态：P18.1-P18.6 当前交付候选已具备证据；P18.7-A/B/C/D Host first-cut、P18.7-F 内容工厂真实闭环、20:49 run-scenarios 连续 GUI materialization、22:13 run-strategy cross-project fix、22:19 run-review 通过证据，以及 22:33 五动作 full-flow action gates 已落地；P18.7-E 已新增 Host-managed fixture connector mutation proof、Cloud Overlay outbox adapter first-cut、local worker delivery receipt first-cut、Host-managed webhook external delivery first-cut、metadata/output/trusted connector JSON 多路径 evidence projection、focused live runtime smoke harness，并接通 Host Bridge -> `lime.agent.startTask` handoff。当前剩余主线不是 P18.5 owner handoff，也不是重复跑内容工厂按钮 smoke，而是 P18.7-E 真实 Connector OAuth / raw secret material delivery adapter、生产外部平台真实 delivery 与产品级 GUI 送达证明；外部 package / Lime 工作区 dirty 仍需要 owner 提交边界收口。
 
@@ -284,7 +284,68 @@ P18.1-P18.6 和 P18.7-A/B 满足各自功能完成判定：外部 `content-facto
 
 ### 2026-05-19 P18.7-E Host-managed webhook external delivery first-cut
 
-- 本轮继续 P18.7-E，不再重复内容工厂按钮 smoke；认领写集限定在 `src-tauri/src/commands/aster_agent_cmd/tool_runtime/connector_tools/{readiness.rs,cloud_overlay_outbox.rs,tests.rs}` 与 P18.7-E 文档。
+- 本轮继续 P18.7-E，不再重复内容工厂按钮 smoke；认领写集限定在 `src-tauri/src/commands/aster_agent_cmd/tool_runtime/connector_tools/{readiness.rs,cloud_overlay_outbox.rs,tests.rs}`、`scripts/agent-app-connector-outbox-smoke.mjs` 与 P18.7-E 文档，避开隔壁 v2 / install / shell window 写集。
 - 已补 Host-managed webhook external delivery seam：`readiness.rs` 只从 internal request 读取 `secretDelivery.externalDelivery`，并要求 Host-managed binding、webhook channel、安全 false flags 与受限 target；`cloud_overlay_outbox.rs` 会把脱敏 payload POST 到 webhook，并在 ToolResult / delivery receipt 中只返回 target hash、label、HTTP status、deliveredAt 和 delivery boolean。
-- 安全边界：ToolResult / public evidence 不暴露 webhook target URL、raw credential/token 或 concrete `secret-lease://...`；失败路径也只返回安全错误码，避免 `reqwest::Error` 文本携带 URL。workspace-local internal receipt 仍可保留 Host-managed lease handle，供 Cloud Overlay worker 消费。
-- 审计结论：这把 P18.7-E 从 local worker intake receipt 推进到 external delivery adapter first-cut，但目前只证明 local webhook / HTTP endpoint；仍不能宣称真实 OAuth handshake、raw secret material delivery adapter、Notion/Slack 等生产外部平台送达或产品级 GUI 送达证明已完成。
+- 本地 `http://127.0.0.1:` / `http://localhost:` webhook 现在走直接 TCP HTTP POST，不经 `reqwest` proxy 选择；这是为了解决 focused live local-webhook smoke 中旧 runtime 通过系统代理拿到 `502`、本地 webhook `receivedRequestCount=0` 的问题。远端 `https://...` 仍走 `reqwest`，失败路径只返回安全错误码，不回显 URL。
+- 安全边界：ToolResult / public evidence 不暴露 webhook target URL、raw credential/token 或 concrete `secret-lease://...`；workspace-local internal receipt 仍可保留 Host-managed lease handle，供 Cloud Overlay worker 消费。
+- 定向验证：`agent_app_connector_cloud_overlay_can_deliver_to_host_managed_webhook --lib` 1 test passed；`agent_app_connector --lib` 12 tests passed；`cargo check --manifest-path "src-tauri/Cargo.toml" -p lime --lib --message-format short` 通过；`rustfmt --edition 2021 --check ...connector_tools...`、`node --check "scripts/agent-app-connector-outbox-smoke.mjs"`、`git diff --check -- ...P18.7-E 写集...` 通过。验证使用 `$HOME/Library/Caches/lime-codex-target-p18e` 独立 target 和现有 `sherpa-onnx` prebuilt，避免抢隔壁 default target / GUI flow。
+- live local-webhook evidence 尚未 green：`.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-live-local-webhook-20260519-codex-summary.json` 与 `...-v2-summary.json` 均显示旧 runtime binary 仍返回 `externalDelivery.httpStatus=502`，local webhook 未收到请求；两份 summary 仍证明 connector call、outbox/delivery evidence projection、target URL 不外露和 concrete lease ref 不外露。下一刀需在确认可重启 DevBridge / Tauri 后，用新 binary 复跑 `--external-delivery-local-webhook`。
+- 审计结论：这把 P18.7-E 从 local worker intake receipt 推进到 external delivery adapter first-cut，但目前只证明 Rust seam 与本地 HTTP endpoint 直连能力；仍不能宣称真实 OAuth handshake、raw secret material delivery adapter、Notion/Slack 等生产外部平台送达或产品级 GUI 送达证明已完成。
+
+### 2026-05-19 06:06 P18.7-E / F 最新证据补记
+
+- P18.7-E live local-webhook 已 green：`.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-live-local-webhook-20260519-codex-v3-summary.json` 使用 `custom-da3283c4-8405-45e9-81cd-12991ffdf41c / claude-sonnet-4-6`，所有 outbox / delivery / secret visibility / external delivery assertions 为 true；`externalStatus=delivered`、`nextRequired=external_platform_delivery_complete`、`deliveryStatus=delivered_to_external_platform`、`externalDeliveryHttpStatus=200`、local webhook `receivedRequestCount=1`。
+- P18.7-F run-review focused clean retry 已 green：`.lime/qc/gui-evidence/agent-apps/content-factory-review-yunwu-clean-retry-20260519-codex-summary.json`，`run-review` task `agent-app-task-024b3ecb-4ba5-41f6-b789-43d19ec03c24` / session `agent-app-runtime-743eaaf0-1155-4e53-a62d-6a3295fee820` 为 `taskStatus=completed / profileStatus=completed / toolCallCount=1 / artifactCount=3 / hasWorkspacePatch=true`，`allActionsFullRuntimeReady / processVisibleAfterEachAction / noHostFallback / noConsoleErrors` 均通过。
+- 前序失败口径保留：`content-factory-full-flow-kimi-20260519-codex-failure.json` 仍是五动作 full-flow 失败，断点为 `run-review` 缺 `terminalReady`，但模型 runStatus 为 success 且有 review_report workspace patch；`content-factory-review-xfyun-20260519-codex-failure.json` 为 Xfyun provider runStatus error。上述失败不能覆盖 clean retry green，但也说明五动作 full-flow 仍未有最新整体 green summary。
+- 完成口径不变：local webhook green 是 Host-managed HTTP endpoint first-cut，不是生产 Notion/Slack delivery；整体目标仍缺真实 Connector OAuth、raw secret material adapter、生产外部平台送达和产品级 GUI 外部送达证明，不能调用 goal complete。
+
+## 2026-05-19 06:23 P18.7-E remote webhook secret-source hardening
+
+- 在不抢隔壁 content-factory full-flow / GUI runtime 的前提下，focused `scripts/agent-app-connector-outbox-smoke.mjs` 增加远端 webhook URL 的安全来源：`--external-delivery-webhook-url-env` 与 `--external-delivery-webhook-url-file`。
+- 该变更解决的是“真实远端 delivery proof 不能把 webhook URL 暴露在命令行 / 进程列表 / summary 中”的前置门槛；summary 只保留来源类型、target hash/label 与 HTTP delivery 结果。
+- completion 口径不变：这不是 OAuth handshake、不是 raw secret material delivery adapter，也不是 Notion/Slack/Feishu 生产平台送达；整体目标仍不能标记完成。
+
+## 2026-05-19 06:32 P18.7-F five-action full-flow evidence
+
+- 隔壁 content-factory full-flow 已收口，summary：`.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-final-20260519-codex-summary.json`，screenshot：`.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-final-20260519-codex.png`。
+- 覆盖动作：`run-scenarios / run-production / run-scripts / run-strategy / run-review`，provider/model 为 `custom-da3283c4-8405-45e9-81cd-12991ffdf41c / claude-sonnet-4-6`。
+- 关键断言：`actionCount / allActionsCompleted / allActionsUsedExpectedSkills / allActionsHaveModelUsageCost / allActionsHaveWorkspacePatch / allActionsFullRuntimeReady / processVisibleAfterEachAction / sceneCountPreservedAfterFlow / noHostFallback / noConsoleErrors` 均为 true，`consoleErrorCount=0`；五个 direct runtime task 均 `completed`，对应页面 materialization 均 `ready=true`。
+- 注意事项：`sameIframeContext=false`，且仍有 18 个 `net::ERR_ABORTED` failedRequests（主要是 events / materialize 这类开发态请求中断）；因此该证据可声明 P18.7-F 五动作业务闭环与 runtime/Skill/usage/cost/workspace patch/no console errors gate 通过，但不声明“所有网络请求零噪声”。
+- completion 口径不变：该证据不覆盖 P18.7-E 的真实 Connector OAuth、raw secret material delivery adapter、生产外部平台 delivery 或产品级 GUI 外部送达证明；整体目标仍不能标记 complete。
+
+## 2026-05-19 06:34 P18.7-E focused replay after secret-source hardening
+
+- 变更 `agent-app-connector-outbox-smoke.mjs` 后，已用既有 live local-webhook session 做 replay：`.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-replay-local-webhook-source-hardening-20260519-codex-summary.json`。
+- Assertions 全绿，证明 replay harness 仍可读 `outbox://` / `delivery://` refs、delivery receipt、thread evidence summary 和 Agent App task events，并确认 concrete lease / raw token / credential material 未进入 public projection。
+- 这仍是 local-webhook replay，不是远端 production delivery proof；completion 缺口保持为真实 OAuth、raw secret material adapter、生产 external platform delivery 和产品级 GUI 外部送达证明。
+
+## 2026-05-19 06:54 P18.7-F metrics full-flow evidence
+
+- 新一轮 metrics full-flow 已收口，summary：`.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-metrics-20260519-codex-summary.json`，screenshot：`.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-metrics-20260519-codex.png`。
+- 覆盖动作仍为 `run-scenarios / run-production / run-scripts / run-strategy / run-review`，provider/model 为 `custom-da3283c4-8405-45e9-81cd-12991ffdf41c / claude-sonnet-4-6`。
+- 关键断言继续通过：`allActionsCompleted / allActionsUsedExpectedSkills / allActionsHaveModelUsageCost / allActionsHaveWorkspacePatch / allActionsFullRuntimeReady / processVisibleAfterEachAction / sceneCountPreservedAfterFlow / noHostFallback / noConsoleErrors` 均为 true，`consoleErrorCount=0`，`sceneCountRegressions=0`。
+- 本轮比上一份 full-flow failedRequests 更少（13 vs 18）；`run-review` 页面 materialization 来源为 `direct_workspace_patch_materialized`，说明复盘结果可从 direct workspace patch 回填页面。
+- Caveat 保持：`sameIframeContext=false`，仍有 13 个 `net::ERR_ABORTED` failedRequests，因此只作为更强的 P18.7-F 五动作/metrics 业务闭环证据，不代表全运行面零噪声，也不覆盖 P18.7-E production connector delivery。
+
+## 2026-05-19 06:58 objective completion audit checklist
+
+| 成功标准 / 明确交付物 | 当前证据 | 结论 |
+| --- | --- | --- |
+| Agent App 在 Host iframe 内通过统一 `lime.*` capability surface 消费 Host 能力 | P18.7 A/B/C/D/F 文档与前端/Rust/GUI 证据已覆盖；内容工厂 iframe 与 Host profile smoke 已有 green | first-cut covered |
+| P18.7-F 内容工厂业务五动作闭环 | `content-factory-full-flow-yunwu-final-20260519-codex-summary.json` 与 `content-factory-full-flow-yunwu-metrics-20260519-codex-summary.json` 均显示五动作 completed、Skills/usage/cost/workspace patch/fullRuntimeReady/no Host fallback/no console errors gate 通过 | covered with caveat：`sameIframeContext=false` 与 failedRequests 仍存在 |
+| P18.7-E ToolRuntime owner binding / connector evidence projection | Rust `agent_app_connector` / `runtime_evidence_projection_service` 定向测试、focused live local-webhook v3、source-hardening replay 均通过 | first-cut covered |
+| Host-managed local webhook external delivery | `p18-7-e-connector-outbox-runtime-smoke-live-local-webhook-20260519-codex-v3-summary.json` 显示 delivered、HTTP 200、local webhook received，且 target/lease/token/material 不外露 | local first-cut covered |
+| Remote webhook secret-safe test input | `agent-app-connector-outbox-smoke.mjs` 支持 `--external-delivery-webhook-url-env` / `--external-delivery-webhook-url-file`；`node --check`、replay、diff check 通过 | harness ready；尚未配置真实远端 secret |
+| 真实 Connector OAuth handshake | 当前只有 authorization request handoff / snapshot projection / redaction evidence；没有真实 OAuth provider handshake 成功证据 | missing |
+| raw secret material delivery adapter | 当前只有 Host-managed lease/ref 与不暴露证明；没有把 raw secret material 安全交给 Host/Cloud worker 的真实 adapter evidence | missing |
+| 生产外部平台真实 delivery（Notion/Slack/Feishu 等） | 当前只有 local webhook 与可安全读取远端 webhook URL 的 harness；无真实平台 receiver / domain object / production delivery receipt | missing |
+| 产品级 GUI evidence 证明外部平台送达 | 当前 GUI evidence 证明内容工厂业务闭环；未证明 connector mutation 到真实外部平台 | missing |
+| 并行大写集 owner 收口 | 工作树仍有 v2、standalone、runtime queue、UI/i18n 等大量隔壁写集和未跟踪文件 | pending |
+
+Audit verdict：整体目标不能标记 complete；下一刀仍优先 P18.7-E 的真实 OAuth / raw secret material adapter / production external delivery，而不是继续重复内容工厂 full-flow。
+
+## 2026-05-19 07:03 P18.7-E inline raw secret guard
+
+- `src-tauri/src/commands/aster_agent_cmd/tool_runtime/connector_tools/readiness.rs` 已拒绝 `externalDelivery` 中的 inline raw secret/header material；`src-tauri/src/commands/aster_agent_cmd/tool_runtime/connector_tools/tests.rs` 新增覆盖。
+- 验证通过：`rustfmt --edition 2021 --check ...readiness.rs ...tests.rs`、`cargo test ... agent_app_connector_external_delivery_rejects_inline_secret_material --lib`、`cargo test ... agent_app_connector --lib`、`cargo check --manifest-path "src-tauri/Cargo.toml" -p lime --lib --message-format short`。
+- Completion 口径：这是防止伪 production delivery 的 guardrail，不是 raw secret material adapter 完成；真实 adapter 仍需要 Host/Cloud 专用 secret fact/source 与生产平台 delivery evidence。

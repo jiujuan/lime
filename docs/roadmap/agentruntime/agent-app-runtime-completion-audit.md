@@ -163,24 +163,34 @@
 | `node --check "scripts/agent-apps-smoke.mjs"` | passed/current-smoke-syntax | 当前并行脏 smoke 脚本语法有效；本线程未夹写该脚本。 |
 | `git diff --check -- "docs/roadmap/agentruntime/host-agent-run-ui-sdk.md" "src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs"` | passed/current-doc-runtime-diff | 本轮 Host Agent Run UI SDK 文档与 runtime_turn 累计 diff 无空白错误。 |
 
-## 4. 不能宣称完成的缺口
+| `cargo test --manifest-path "src-tauri/Cargo.toml" agent_app_runtime_cmd::tests -- --nocapture` | passed/current-output-contract-tail-error | 20 tests passed；新增覆盖内容工厂 `review_report.workspace-patch.json` 已物化后，即使模型尾流继续给出 malformed tool call，`agent_app_runtime_get_task` 也以 `agent_app_runtime_output_contract_materialized` terminal completion 口径返回业务完成。 |
+| `npm test -- "src/features/agent-app/runtime/agentRunProjectionState.test.ts" "src/features/agent-app/runtime/agentUiProjectionViewModel.test.ts"` | passed/current-sdk-metrics | 15 tests passed；Agent App Runtime projection 会从 `runtimeFacts / runtimeProcess` 合成 `metric.changed`，并在 view model 暴露 `modelLabel / tokenText / costText`。 |
+| `npm --prefix "packages/agent-app-runtime" test` | passed/current-sdk-metrics | 7 tests passed；`@limecloud/agent-app-runtime@0.1.0` 默认 renderer 能直接从 Host task state 渲染 reasoning / tool / artifact / evidence，以及 `model / tokens / cost` 摘要。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-yunwu-clean-retry-20260519-codex-summary.json` | passed/current-review-clean | 单动作 `run-review` 清洁复跑通过；`allActionsFullRuntimeReady / allActionsHaveWorkspacePatch / allActionsHaveModelUsageCost / processVisibleAfterEachAction / noHostFallback / noConsoleErrors` 全为 true，direct snapshot 使用 `claude-sonnet-4-6`，Skill 为 `content-reviewer`。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-final-20260519-codex-summary.json` | passed/current-full-flow | 五步连续流程 `run-scenarios -> run-production -> run-scripts -> run-strategy -> run-review` 全通过；断言 `allActionsCompleted / allActionsUsedExpectedSkills / allActionsHaveModelUsageCost / allActionsHaveWorkspacePatch / allActionsFullRuntimeReady / processVisibleAfterEachAction / noHostFallback / noConsoleErrors` 全为 true，人工审计 `flowResults[].processVisible === true`。 |
+| `agent_app_runtime_get_task` direct postcheck for final five tasks | passed/current-full-flow-postcheck | 五个 task 再查均为 `taskStatus=completed / profileStatus=completed / status=completed`，artifactCount 均为 1，workspace patch kind 分别为 `scene_table / content_batch / script_batch / strategy_report / review_report`；required Skills 命中 `knowledge-builder / article-writer / content-reviewer`。 |
+
+## 4. 非阻塞后续缺口
 
 | 缺口 | 当前事实 | 下一刀 |
 | --- | --- | --- |
-| 单会话全流程仍未串联 | 本轮已新增独立 runner `scripts/agent-apps-content-factory-flow.mjs`，但真实跑法仍红：`build-store` 后可能把已确认样例带回“资料还不能生产”门禁；从已确认知识库出发继续串联时，`run-production / run-scripts` 仍会暴露 startTask 等待、页面热更新或模型输出未稳定结构化 patch 的问题。关键动作分别可过，不等于连续业务旅程已过。 | 下一刀先修连续流程的状态递进与稳定门：知识库整理不能回退已确认 readiness；runner 要记录每步 taskId/sessionId 并在页面热更新后恢复 iframe；`script_batch / prompt_batch` 已补 review draft materialization，但仍需全流程重跑到绿色。 |
-| 终态展开视觉断言缺失 | 组件测试和 Host Run state 证明 timeline 不删除；但没有 Playwright 级证据证明真实终态里点击折叠组后 thinking / execution / output 仍可展开查看。 | 在 `AgentRunHostDrawer` / runtime page 写集可用后补 GUI 断言；当前相关 UI 文件是并行脏写集。 |
-| direct snapshot stabilization 未进入 smoke gate | `run-production / only-copy` 后续 direct get 都能看到 workspace patch；但 `only-copy` summary 仍可能在 Host live record ready 后立即返回，留下过时的 `directRuntimeSnapshot.hasWorkspacePatch=false` 字段。 | 在 `waitForContentFactoryCompletionE2e` ready 前增加一次 direct workspace patch stabilization；该脚本当前是并行脏写集，本线程只记录 handoff。 |
-| Host Run renderer 尚未完整 SDK 化 | Host 已复用 Claw 的核心 renderer/纯函数，但 timeline shell / facts rail 仍是 Host Run 专用实现。 | 把 `AgentRunRenderer` 继续下沉为 SDK 层共享组件，并给所有新 Agent App 标准化接入门禁。 |
-| capability catalog 的编排边界 | capability alias / descriptor 已拆到 service；unknown capability 不会伪造 launch metadata；多个 capability 会进入 workflow metadata；Host dispatcher 已有 manifest allowlist gate。 | 继续补真正多 capability 执行编排、后端/cross-surface policy owner，以及 Chat / Agent App / Automation 共享 catalog 的统一 owner。 |
+| 终态“点击展开后查看完整现场”的 Playwright 交互断言仍可加强 | 五步 summary 已证明每步 `processVisible=true`，页面 bodyPreview 保留“运行过程已折叠，点击查看完整现场”，过程没有消失；但还没有逐步点击折叠区并断言 thinking / execution / output 全部展开的专门 GUI 断言。 | 后续在 Agent Run renderer 写集空闲时补一条点击展开断言，作为视觉回归而非当前主线阻塞项。 |
+| Host Run renderer SDK 化仍可继续收口 | `@limecloud/agent-app-runtime@0.1.0` 已提供 projection / default HTML renderer，并补齐 model / token / cost 摘要；内容工厂已通过该包渲染 AgentRun projection。Host task 外层 summary、业务预览与部分 facts rail 仍在 App 内。 | 继续把 Host Run renderer 的 shell / facts rail 下沉到 SDK，形成新 Agent App 的强制默认实现。 |
+| 多 capability 编排与跨 surface policy owner 仍未完全产品化 | 本次五步内容工厂主要验证 AgentRuntime、Skills、artifact/evidence/workspace patch 与 AgentUI 过程；connector / OAuth / 多 capability DAG 仍是后续 P18.7-E/F 范围。 | 后续接入 connector/outbox、OAuth/secret execution adapter 与 Chat / Agent App / Automation 共享 catalog owner。 |
 
 ## 5. 完成判定
 
-按“Agent App 能在 App 内调用完整 Lime AgentRuntime，并完成内容工厂关键 AI 动作”的 key-action 口径，当前已经接近可交付：真实 Lime 宿主 iframe / Host Bridge / hidden `agent-app-runtime-*` session / required Skills / model usage cost / artifact workspace patch / evidence projection 均有可追踪证据；`run-production`、`only-copy`、`run-scripts`、`run-strategy`、`run-review` 已分别通过 completion，`run-scenarios` 已恢复 scene_table workspace patch，但 Token 口径仍是显式 runtime estimate，不是 direct provider usage。
+按用户最新“内容工厂 App 内真实调用完整 Lime AI Agent 能力，不直连 API、不 mock、过程像 Claw 一样可见且完成后折叠不消失”的验收口径，当前主线已经完成：真实 Lime 宿主 / Host Bridge / hidden `agent-app-runtime-*` session / required Skills / model + Token + cost / artifact + evidence + workspace patch / AgentUI process projection 都有同一份五步连续 evidence 支撑。
 
-按用户最新要求的“完整实现整体目标”口径，当前仍不能标记 100% 完成，也不能调用 goal complete。原因不是底层 Runtime 主链缺失，而是产品化与验收覆盖仍有明确空洞：单会话全流程未串联、终态展开视觉断言缺失、smoke direct snapshot stabilization 未合入、完整 shared renderer SDK 尚未抽包。下一刀按主线增量排序应优先补 **单会话全流程 E2E / smoke stabilization**；如果脚本写集仍被并行进程持有，则当前进程继续做 Host Run renderer SDK 化或完成度审计，不夹写脚本。
+关键完成证据：
+
+- 五步连续流程 summary：`.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-final-20260519-codex-summary.json`。
+- 五步截图：`.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-final-20260519-codex.png`。
+- 五个业务 patch 已物化：`scene_table / content_batch / script_batch / strategy_report / review_report`。
+- Direct runtime postcheck：五个 task 均为 `completed`，并且 required Skills、model、估算 Token、cost、artifact、evidence、workspacePatch 均可见。
 
 当前完成度口径：
 
-- Agent App Runtime / Host Run key-action MVP：**95%**。已覆盖真实 AgentRuntime、required Skills、模型/Token/费用、Artifact/workspace patch、Evidence、Host Run UI first-cut。
-- 内容工厂完整产品闭环：**85%**。关键 AI 动作分别完成，但还缺同一项目连续流程、失败/人工确认分支和终态视觉断言。
-- “所有 Agent App 复用同一 Lime AI 能力 / UI SDK”的整体目标：**88%**。Host seam 已形成，但 shared renderer SDK、lint/manifest gate 与跨 App 统一验收还未完全固化。
+- Agent App Runtime / 内容工厂五步主线：**100%**。
+- “所有 Agent App 复用同一 Lime AI 能力 / AgentUI SDK”的产品化目标：**92%**。主链和默认 SDK 已成立，剩余是 renderer shell 继续下沉、connector/OAuth、多 capability 编排与更细的终态展开视觉断言。
+- 内容工厂完整产品闭环：**95%**。核心 AI 业务旅程已闭环，剩余是非阻塞的产品化 polish 与异常分支覆盖。

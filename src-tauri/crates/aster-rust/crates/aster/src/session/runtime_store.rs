@@ -318,24 +318,44 @@ pub struct QueuedTurnRuntime {
 
 #[derive(Debug, Clone)]
 pub struct SessionExecutionGate {
-    inner: Arc<Mutex<HashSet<String>>>,
+    inner: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl Default for SessionExecutionGate {
     fn default() -> Self {
         Self {
-            inner: Arc::new(Mutex::new(HashSet::new())),
+            inner: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
 
 impl SessionExecutionGate {
     pub fn try_start(&self, session_id: &str) -> bool {
+        self.try_start_turn(session_id, "")
+    }
+
+    pub fn try_start_turn(&self, session_id: &str, turn_id: &str) -> bool {
         let mut sessions = match self.inner.lock() {
             Ok(guard) => guard,
             Err(error) => error.into_inner(),
         };
-        sessions.insert(session_id.to_string())
+        if sessions.contains_key(session_id) {
+            return false;
+        }
+        sessions.insert(session_id.to_string(), turn_id.to_string());
+        true
+    }
+
+    pub fn set_active_turn_id(&self, session_id: &str, turn_id: &str) -> bool {
+        let mut sessions = match self.inner.lock() {
+            Ok(guard) => guard,
+            Err(error) => error.into_inner(),
+        };
+        let Some(active_turn_id) = sessions.get_mut(session_id) else {
+            return false;
+        };
+        *active_turn_id = turn_id.to_string();
+        true
     }
 
     pub fn finish(&self, session_id: &str) -> bool {
@@ -343,7 +363,43 @@ impl SessionExecutionGate {
             Ok(guard) => guard,
             Err(error) => error.into_inner(),
         };
-        sessions.remove(session_id)
+        sessions.remove(session_id).is_some()
+    }
+
+    pub fn finish_if_matches(&self, session_id: &str, turn_id: &str) -> bool {
+        let mut sessions = match self.inner.lock() {
+            Ok(guard) => guard,
+            Err(error) => error.into_inner(),
+        };
+        if sessions
+            .get(session_id)
+            .is_some_and(|active_turn_id| active_turn_id == turn_id)
+        {
+            sessions.remove(session_id);
+            return true;
+        }
+        false
+    }
+
+    pub fn active_turn_id(&self, session_id: &str) -> Option<String> {
+        let sessions = match self.inner.lock() {
+            Ok(guard) => guard,
+            Err(error) => error.into_inner(),
+        };
+        sessions
+            .get(session_id)
+            .filter(|turn_id| !turn_id.is_empty())
+            .cloned()
+    }
+
+    pub fn active_turn_matches(&self, session_id: &str, turn_id: &str) -> bool {
+        let sessions = match self.inner.lock() {
+            Ok(guard) => guard,
+            Err(error) => error.into_inner(),
+        };
+        sessions
+            .get(session_id)
+            .is_some_and(|active_turn_id| active_turn_id == turn_id)
     }
 
     pub fn is_active(&self, session_id: &str) -> bool {
@@ -351,7 +407,7 @@ impl SessionExecutionGate {
             Ok(guard) => guard,
             Err(error) => error.into_inner(),
         };
-        sessions.contains(session_id)
+        sessions.contains_key(session_id)
     }
 
     pub fn active_session_ids(&self) -> HashSet<String> {
@@ -359,7 +415,7 @@ impl SessionExecutionGate {
             Ok(guard) => guard,
             Err(error) => error.into_inner(),
         };
-        sessions.iter().cloned().collect()
+        sessions.keys().cloned().collect()
     }
 }
 

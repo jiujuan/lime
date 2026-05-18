@@ -2082,7 +2082,29 @@ async function main() {
       '[data-testid="agent-apps-cleanup-evidence-json"]',
     );
     const cleanupEvidence = JSON.parse(cleanupEvidenceText ?? "{}");
-    await page.click('[data-testid="agent-apps-uninstall-confirm"]');
+    const deleteDataConfirmationPhrase = (
+      await page.textContent('[data-testid="agent-apps-delete-data-confirmation-phrase"]')
+    )?.trim();
+    assert(
+      deleteDataConfirmationPhrase,
+      "delete-data confirmation phrase should be visible before destructive uninstall",
+    );
+    await page.fill(
+      '[data-testid="agent-apps-delete-data-confirmation-input"]',
+      deleteDataConfirmationPhrase,
+    );
+    const uninstallConfirm = page.locator(
+      '[data-testid="agent-apps-uninstall-confirm"]',
+    );
+    const confirmDeadline = Date.now() + options.timeoutMs;
+    while (Date.now() < confirmDeadline && !(await uninstallConfirm.isEnabled())) {
+      await sleep(100);
+    }
+    assert(
+      await uninstallConfirm.isEnabled(),
+      "delete-data uninstall confirmation should be enabled after exact phrase input",
+    );
+    await uninstallConfirm.click();
     await page.waitForSelector('[data-testid="agent-apps-launch-summary"]', {
       timeout: options.timeoutMs,
     });
@@ -2100,6 +2122,7 @@ async function main() {
       runtimeSurfaceVisible: Boolean(runtimeFrameSrc),
       runtimeFrameContentFactoryLoaded: runtimeFrameInspection.contentFactoryLoaded,
       runtimeFrameHostProfileVisible: runtimeFrameInspection.hostProfileVisible,
+      deleteDataConfirmationGateAccepted: Boolean(deleteDataConfirmationPhrase),
       ...(contentFactoryActionE2e
         ? {
             contentFactoryActionStarted: contentFactoryActionE2e.startTaskSeen,

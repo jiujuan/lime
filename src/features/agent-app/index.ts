@@ -37,11 +37,15 @@ export type {
 } from "./install/cleanupNamespaceClassifier";
 export {
   buildAgentAppLifecycleActionDescriptor,
+  buildAgentAppDeleteDataConfirmationPhrase,
+  buildAgentAppDeleteDataExecutionGate,
   buildAgentAppLifecycleLaunchGate,
   buildAgentAppLifecycleToggleDescriptor,
   buildAgentAppLifecycleUninstallRehearsalDescriptor,
 } from "./install/lifecycleAction";
 export type {
+  AgentAppDeleteDataExecutionGate,
+  AgentAppDeleteDataExecutionGateBlockerCode,
   AgentAppLifecycleActionDescriptor,
   AgentAppLifecycleActionKind,
   AgentAppLifecycleActionStatus,
@@ -49,6 +53,18 @@ export type {
   AgentAppLifecycleToggleDescriptor,
   AgentAppLifecycleUninstallRehearsalDescriptor,
 } from "./install/lifecycleAction";
+export { executeAgentAppDeleteData } from "./install/deleteDataExecutor";
+export type {
+  AgentAppDeleteDataExecutionBlocker,
+  AgentAppDeleteDataExecutionBlockerCode,
+  AgentAppDeleteDataExecutionFailure,
+  AgentAppDeleteDataExecutionInput,
+  AgentAppDeleteDataExecutionResult,
+  AgentAppDeleteDataFileSystemPort,
+  AgentAppDeleteDataRetainedReason,
+  AgentAppDeleteDataTargetEvidence,
+  AgentAppDeleteDataTargetStatus,
+} from "./install/deleteDataExecutor";
 export {
   buildAgentAppManifestHash,
   buildAgentAppPackageHash,

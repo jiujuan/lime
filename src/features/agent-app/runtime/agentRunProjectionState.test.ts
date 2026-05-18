@@ -182,6 +182,53 @@ describe("agentRunProjectionState", () => {
     expect(view.task.toolCallCount).toBe(2);
   });
 
+  it("从 runtimeFacts / runtimeProcess 补齐模型、Token 和费用摘要", () => {
+    const view = buildAgentRunProjectionViewModelFromState({
+      runtimeFacts: {
+        modelRouting: {
+          routes: [
+            {
+              model: {
+                provider: "deepseek",
+                model: "deepseek-v4-flash",
+              },
+            },
+          ],
+        },
+        tokenUsage: {
+          totals: {
+            inputTokens: 80,
+            outputTokens: 40,
+            totalTokens: 120,
+          },
+        },
+        costSummary: {
+          cost: {
+            currency: "USD",
+            estimatedTotalCost: 0.0042,
+          },
+        },
+      },
+      runtimeProcess: {
+        timeline: [{ kind: "thinking", message: "读取资料" }],
+      },
+    });
+
+    expect(view.metrics).toMatchObject({
+      providerName: "deepseek",
+      modelName: "deepseek-v4-flash",
+      modelLabel: "deepseek / deepseek-v4-flash",
+      tokenCount: 120,
+      tokenText: "120 tokens",
+      costText: "USD 0.0042",
+    });
+    expect(view.diagnostics).toEqual([
+      expect.objectContaining({
+        preview: "deepseek-v4-flash · 120 tokens · 0.0042",
+      }),
+    ]);
+  });
+
   it("从 agentUiEvents / projectionEvents 直接生成 projection view model", () => {
     const view = buildAgentRunProjectionViewModelFromState(
       {
@@ -230,5 +277,6 @@ describe("agentRunProjectionState", () => {
         preview: "120 tokens",
       }),
     ]);
+    expect(view.metrics.tokenText).toBeUndefined();
   });
 });

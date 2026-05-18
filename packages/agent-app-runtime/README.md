@@ -23,6 +23,7 @@ target directly:
 - assistant text stream deltas merge into one `text` part per run scope;
 - tool args / output deltas group by `toolCallId`;
 - terminal runs collapse by default, but the historical process remains in the view model;
+- runtime facts are projected into model, token, and cost summary metrics so Apps do not need to rebuild the common usage header;
 - artifacts, evidence, diagnostics, actions, model/cost metrics, and queue status stay as structured parts.
 - `includeStyles: true` injects the package default CSS with an optional escaped nonce.
 

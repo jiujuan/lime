@@ -3,7 +3,7 @@ use super::readiness::ConnectorAdapterReadiness;
 use super::sanitize::sanitized_connector_input;
 use super::*;
 use sha2::{Digest, Sha256};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 fn cloud_overlay_mutation_id(params: &serde_json::Value) -> String {
     [
@@ -57,16 +57,146 @@ fn external_delivery_error_code(error: &reqwest::Error) -> &'static str {
     }
 }
 
-fn external_delivery_client(target: &str) -> Result<reqwest::Client, reqwest::Error> {
-    let builder = reqwest::Client::builder();
+enum ExternalDeliveryAttempt {
+    HttpStatus(u16),
+    Error(&'static str),
+}
+
+struct LocalWebhookTarget {
+    host: String,
+    port: u16,
+    host_header: String,
+    path_and_query: String,
+}
+
+fn local_http_webhook_target(target: &str) -> Option<LocalWebhookTarget> {
     let trimmed = target.trim();
-    let builder =
-        if trimmed.starts_with("http://127.0.0.1:") || trimmed.starts_with("http://localhost:") {
-            builder.no_proxy()
-        } else {
-            builder
-        };
-    builder.build()
+    let url = url::Url::parse(trimmed).ok()?;
+    if url.scheme() != "http" {
+        return None;
+    }
+    let host = url.host_str()?.trim().to_ascii_lowercase();
+    if !matches!(host.as_str(), "127.0.0.1" | "localhost") {
+        return None;
+    }
+    let port = url.port()?;
+    let host_header = format!("{host}:{port}");
+    let mut path_and_query = url.path().to_string();
+    if path_and_query.is_empty() {
+        path_and_query = "/".to_string();
+    }
+    if let Some(query) = url.query() {
+        path_and_query.push('?');
+        path_and_query.push_str(query);
+    }
+
+    Some(LocalWebhookTarget {
+        host,
+        port,
+        host_header,
+        path_and_query,
+    })
+}
+
+async fn deliver_local_http_webhook(
+    target: &str,
+    delivery_ref: &str,
+    request_payload: &serde_json::Value,
+) -> ExternalDeliveryAttempt {
+    let Some(target) = local_http_webhook_target(target) else {
+        return ExternalDeliveryAttempt::Error("request_build_failed");
+    };
+    let body = match serde_json::to_vec(request_payload) {
+        Ok(body) => body,
+        Err(_) => return ExternalDeliveryAttempt::Error("request_build_failed"),
+    };
+    let connect = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        tokio::net::TcpStream::connect((target.host.as_str(), target.port)),
+    )
+    .await;
+    let mut socket = match connect {
+        Ok(Ok(socket)) => socket,
+        Err(_) => return ExternalDeliveryAttempt::Error("timeout"),
+        Ok(Err(_)) => return ExternalDeliveryAttempt::Error("connect_failed"),
+    };
+
+    let header = format!(
+        concat!(
+            "POST {} HTTP/1.1\r\n",
+            "Host: {}\r\n",
+            "Content-Type: application/json\r\n",
+            "Content-Length: {}\r\n",
+            "Connection: close\r\n",
+            "X-Lime-Connector-Delivery-Ref: {}\r\n",
+            "\r\n"
+        ),
+        target.path_and_query,
+        target.host_header,
+        body.len(),
+        delivery_ref
+    );
+    let write_result = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        socket.write_all(header.as_bytes()).await?;
+        socket.write_all(&body).await?;
+        socket.flush().await
+    })
+    .await;
+    match write_result {
+        Ok(Ok(())) => {}
+        Err(_) => return ExternalDeliveryAttempt::Error("timeout"),
+        Ok(Err(_)) => return ExternalDeliveryAttempt::Error("request_failed"),
+    }
+
+    let mut response = Vec::new();
+    let read_result = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        socket.read_to_end(&mut response),
+    )
+    .await;
+    match read_result {
+        Ok(Ok(_)) => {}
+        Err(_) => return ExternalDeliveryAttempt::Error("timeout"),
+        Ok(Err(_)) => return ExternalDeliveryAttempt::Error("request_failed"),
+    }
+    let first_line = response
+        .split(|byte| *byte == b'\n')
+        .next()
+        .and_then(|line| std::str::from_utf8(line).ok())
+        .map(str::trim);
+    let Some(status) = first_line
+        .and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|status| status.parse::<u16>().ok())
+    else {
+        return ExternalDeliveryAttempt::Error("request_failed");
+    };
+
+    ExternalDeliveryAttempt::HttpStatus(status)
+}
+
+async fn post_external_delivery(
+    target: &str,
+    delivery_ref: &str,
+    request_payload: &serde_json::Value,
+) -> ExternalDeliveryAttempt {
+    if local_http_webhook_target(target).is_some() {
+        return deliver_local_http_webhook(target, delivery_ref, request_payload).await;
+    }
+
+    match reqwest::Client::builder().build() {
+        Ok(client) => match client
+            .post(target)
+            .header("X-Lime-Connector-Delivery-Ref", delivery_ref)
+            .json(request_payload)
+            .timeout(std::time::Duration::from_secs(10))
+            .send()
+            .await
+        {
+            Ok(response) => ExternalDeliveryAttempt::HttpStatus(response.status().as_u16()),
+            Err(error) => ExternalDeliveryAttempt::Error(external_delivery_error_code(&error)),
+        },
+        Err(_) => ExternalDeliveryAttempt::Error("request_build_failed"),
+    }
 }
 
 async fn deliver_external_platform(
@@ -95,22 +225,9 @@ async fn deliver_external_platform(
         "inputPreview": input_preview,
         "source": "agent_app_connector_cloud_overlay_external_delivery_adapter"
     });
-    let response = match external_delivery_client(config.target.as_str()) {
-        Ok(client) => {
-            client
-                .post(config.target.as_str())
-                .header("X-Lime-Connector-Delivery-Ref", delivery_ref)
-                .json(&request_payload)
-                .timeout(std::time::Duration::from_secs(10))
-                .send()
-                .await
-        }
-        Err(error) => Err(error),
-    };
-    match response {
-        Ok(response) => {
-            let http_status = response.status().as_u16();
-            let delivered = response.status().is_success();
+    match post_external_delivery(config.target.as_str(), delivery_ref, &request_payload).await {
+        ExternalDeliveryAttempt::HttpStatus(http_status) => {
+            let delivered = (200..300).contains(&http_status);
             serde_json::json!({
                 "status": if delivered { "delivered_to_external_platform" } else { "external_platform_delivery_failed" },
                 "channel": config.channel.as_str(),
@@ -124,7 +241,7 @@ async fn deliver_external_platform(
                 "externalPlatformDelivered": delivered
             })
         }
-        Err(error) => serde_json::json!({
+        ExternalDeliveryAttempt::Error(error) => serde_json::json!({
             "status": "external_platform_delivery_failed",
             "channel": config.channel.as_str(),
             "targetHash": target_hash,
@@ -132,7 +249,7 @@ async fn deliver_external_platform(
             "targetExposed": false,
             "credentialMaterialExposed": false,
             "tokenExposed": false,
-            "error": external_delivery_error_code(&error),
+            "error": error,
             "deliveredAt": delivered_at,
             "externalPlatformDelivered": false
         }),

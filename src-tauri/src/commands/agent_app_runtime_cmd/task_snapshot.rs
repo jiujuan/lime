@@ -1,4 +1,7 @@
-use super::events::{build_agent_app_runtime_task_events, emit_agent_app_runtime_task_snapshot};
+use super::events::{
+    build_agent_app_runtime_task_events, emit_agent_app_runtime_task_snapshot,
+    task_events_mark_business_completed,
+};
 use super::types::{AgentAppRuntimeGetTaskRequest, AgentAppRuntimeTaskSnapshot};
 use crate::agent::AsterAgentState;
 use crate::app::LogState;
@@ -51,15 +54,7 @@ pub async fn agent_app_runtime_get_task(
     )
     .await?;
     let task_events = build_agent_app_runtime_task_events(&thread_read);
-    let task_status = if task_events.iter().any(|event| {
-        event.event_type == "task:completed"
-            && event
-                .payload
-                .as_ref()
-                .and_then(|payload| payload.get("source"))
-                .and_then(serde_json::Value::as_str)
-                == Some("agent_app_runtime_stalled_skill_materialization")
-    }) {
+    let task_status = if task_events_mark_business_completed(&task_events) {
         "completed".to_string()
     } else {
         thread_read.profile_status.clone()

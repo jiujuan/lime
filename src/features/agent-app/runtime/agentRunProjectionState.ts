@@ -26,12 +26,19 @@ export function buildAgentRunProjectionViewModelFromState(
 
 export function collectAgentRunProjectionSourceEvents(state: unknown): unknown[] {
   const root = isRecord(state) ? state : {};
+  const runtimeFacts = recordValue(root, "runtimeFacts");
+  const task = recordValue(root, "task");
+  const snapshot = recordValue(root, "snapshot");
   return [
     ...readEventArrays(root),
     ...readRuntimeProcessTimelineEvents(root, "root"),
+    ...readRuntimeMetricEvents(root, "root"),
     ...readNestedEventArrays(root, "runtimeFacts"),
+    ...(runtimeFacts ? readRuntimeMetricEvents(runtimeFacts, "runtimeFacts") : []),
     ...readNestedEventArrays(root, "task"),
+    ...(task ? readRuntimeMetricEvents(task, "task") : []),
     ...readNestedEventArrays(root, "snapshot"),
+    ...(snapshot ? readRuntimeMetricEvents(snapshot, "snapshot") : []),
   ];
 }
 
@@ -115,6 +122,100 @@ function readRuntimeProcessTimelineEvents(
       timelineRecordToProjectionSourceEvent(item, index, sourceKey),
     )
     .filter((item): item is Record<string, unknown> => Boolean(item));
+}
+
+function readRuntimeMetricEvents(
+  value: Record<string, unknown>,
+  sourceKey: string,
+): Record<string, unknown>[] {
+  const process = recordValue(value, "runtimeProcess") ?? recordValue(value, "process");
+  const model = readMetricModel(value) ?? readMetricModel(process);
+  const usage = readMetricUsage(value) ?? readMetricUsage(process);
+  const cost = readMetricCost(value) ?? readMetricCost(process);
+
+  if (!model && !usage && !cost) {
+    return [];
+  }
+
+  return [{
+    id: `${sourceKey}:runtime-metrics`,
+    eventType: "task:metricChanged",
+    status: "recorded",
+    payload: {
+      metricName: "runtime_usage_cost",
+      providerName: model?.providerName,
+      modelName: model?.modelName,
+      usage,
+      cost,
+    },
+  }];
+}
+
+function readMetricModel(
+  value: Record<string, unknown> | null,
+): { providerName?: string; modelName?: string } | null {
+  if (!value) {
+    return null;
+  }
+  const modelRouting = recordValue(value, "modelRouting");
+  const route = firstRecord(arrayValue(modelRouting ?? {}, "routes"));
+  const routeModel = route ? recordValue(route, "model") ?? route : null;
+  const models = recordValue(value, "models");
+  const listedModel = firstRecord(arrayValue(models ?? {}, "models"));
+  const directModel = recordValue(value, "model");
+  const model = routeModel ?? listedModel ?? directModel ?? value;
+  const providerName =
+    readString(model, "provider") ??
+    readString(model, "providerName") ??
+    readString(model, "selectedProvider");
+  const modelName =
+    readString(model, "model") ??
+    readString(model, "modelName") ??
+    readString(model, "selectedModel") ??
+    readString(model, "label");
+  return providerName || modelName
+    ? {
+        providerName: providerName ?? undefined,
+        modelName: modelName ?? undefined,
+      }
+    : null;
+}
+
+function readMetricUsage(
+  value: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!value) {
+    return null;
+  }
+  const tokenUsage = recordValue(value, "tokenUsage");
+  return recordValue(tokenUsage ?? {}, "totals")
+    ?? recordValue(firstRecord(arrayValue(tokenUsage ?? {}, "tasks")) ?? {}, "usage")
+    ?? recordValue(value, "usage");
+}
+
+function readMetricCost(
+  value: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!value) {
+    return null;
+  }
+  const costSummary = recordValue(value, "costSummary");
+  return recordValue(costSummary ?? {}, "cost")
+    ?? recordValue(firstRecord(arrayValue(costSummary ?? {}, "tasks")) ?? {}, "cost")
+    ?? recordValue(value, "cost");
+}
+
+function arrayValue(
+  value: Record<string, unknown>,
+  key: string,
+): unknown[] {
+  const item = value[key];
+  return Array.isArray(item) ? item : [];
+}
+
+function firstRecord(value: unknown[]): Record<string, unknown> | null {
+  const first = value.find(isRecord);
+  return first ?? null;
 }
 
 function timelineRecordToProjectionSourceEvent(

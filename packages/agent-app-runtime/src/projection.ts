@@ -373,6 +373,15 @@ export interface LimeAgentRunProjectionTaskSummary {
   queueCount: number;
 }
 
+export interface LimeAgentRunProjectionMetrics {
+  providerName?: string;
+  modelName?: string;
+  modelLabel?: string;
+  tokenCount?: number;
+  tokenText?: string;
+  costText?: string;
+}
+
 export interface LimeAgentRunProjectionViewModel {
   orderedParts: LimeAgentRunProjectionPart[];
   actions: LimeAgentRunProjectionAction[];
@@ -380,6 +389,7 @@ export interface LimeAgentRunProjectionViewModel {
   evidence: LimeAgentRunProjectionEvidence[];
   diagnostics: LimeAgentRunProjectionDiagnostic[];
   task: LimeAgentRunProjectionTaskSummary;
+  metrics: LimeAgentRunProjectionMetrics;
   answerText: string;
   reasoningText: string;
 }
@@ -417,6 +427,9 @@ export const collectAgentRunProjectionSourceEvents = collectLimeAgentRunProjecti
 
 export interface LimeAgentRunProjectionSummaryLabels {
   status: string;
+  model: string;
+  tokens: string;
+  cost: string;
   pendingActions: string;
   tools: string;
   artifacts: string;
@@ -539,6 +552,9 @@ const DEFAULT_RENDER_LABELS: ResolvedLimeAgentRunProjectionRenderLabels = {
   },
   summary: {
     status: "Status",
+    model: "Model",
+    tokens: "Tokens",
+    cost: "Cost",
     pendingActions: "Actions",
     tools: "Tools",
     artifacts: "Artifacts",
@@ -604,14 +620,18 @@ function renderProjectionSummary(
   view: LimeAgentRunProjectionViewModel,
   labels: ResolvedLimeAgentRunProjectionRenderLabels,
 ): string {
+  const metrics = view.metrics ?? {};
   const cards = [
     [labels.summary.status, view.task.latestRuntimeStatus],
+    metrics.modelLabel ? [labels.summary.model, metrics.modelLabel] : null,
+    metrics.tokenText ? [labels.summary.tokens, metrics.tokenText] : null,
+    metrics.costText ? [labels.summary.cost, metrics.costText] : null,
     [labels.summary.pendingActions, view.task.pendingActionCount],
     [labels.summary.tools, view.task.toolCallCount],
     [labels.summary.artifacts, view.task.artifactCount],
     [labels.summary.evidence, view.task.evidenceCount],
     [labels.summary.queue, view.task.queueCount],
-  ];
+  ].filter((card): card is [string, string | number] => Boolean(card));
   return `<div data-lime-agent-run-projection-summary>${cards
     .map(
       ([label, value]) =>

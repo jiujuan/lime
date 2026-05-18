@@ -548,5 +548,14 @@
   "agentApp.apps.center.sort.label": "並び順",
   "agentApp.apps.center.sort.recent": "最近更新",
   "agentApp.apps.center.version.current": "現在 {{version}}",
-  "agentApp.apps.center.action.updateCloud": "クラウド版へ更新"
+  "agentApp.apps.center.action.updateCloud": "クラウド版へ更新",
+  "agentApp.apps.uninstallPreview.deleteDataGate.title": "データ削除には正確な確認が必要です",
+  "agentApp.apps.uninstallPreview.deleteDataGate.description": "このアプリのローカルデータ、キャッシュ、記録を削除します。続行する前に下の語句を完全に入力してください。",
+  "agentApp.apps.uninstallPreview.deleteDataGate.phraseLabel": "確認フレーズ",
+  "agentApp.apps.uninstallPreview.deleteDataGate.inputLabel": "データ削除の確認フレーズを入力",
+  "agentApp.apps.uninstallPreview.deleteDataGate.inputPlaceholder": "確認フレーズを完全に入力",
+  "agentApp.apps.uninstallPreview.deleteDataGate.mismatch": "確認フレーズが一致しません。削除はロックされています。",
+  "agentApp.apps.uninstallPreview.deleteDataGate.ready": "確認フレーズが一致しました。削除を続行できます。",
+  "agentApp.apps.uninstall.blocked": "アンインストールはブロックされました: {{codes}}。",
+  "agentApp.apps.toast.uninstallBlocked": "アンインストールはブロックされました"
 }

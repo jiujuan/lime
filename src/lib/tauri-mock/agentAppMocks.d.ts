@@ -16,6 +16,7 @@ export declare const agentAppMocks: {
     agent_app_set_disabled: (args: any) => Promise<import("@/features/agent-app/install/installedAppState").InstalledAgentAppStateListResult>;
     agent_app_uninstall_rehearsal: (args: any) => Promise<{
         appId: string;
+        packageHash: string;
         mode: string;
         generatedAt: string;
         deletedTargetCount: number;
@@ -30,8 +31,10 @@ export declare const agentAppMocks: {
         warnings: string[];
     }>;
     agent_app_uninstall: (args: any) => Promise<{
+        status: string;
         rehearsal: {
             appId: string;
+            packageHash: string;
             mode: string;
             generatedAt: string;
             deletedTargetCount: number;
@@ -48,6 +51,26 @@ export declare const agentAppMocks: {
         list: import("@/features/agent-app/install/installedAppState").InstalledAgentAppStateListResult;
         removedTargetCount: number;
         missingTargetCount: number;
+        blockerCodes: string[];
+        deleteEvidence: {
+            status: string;
+            generatedAt: string;
+            dataRoot: string;
+            removedTargets: Array<Record<string, unknown>>;
+            missingTargets: Array<Record<string, unknown>>;
+            retainedTargets: Array<Record<string, unknown>>;
+            blockedTargets: Array<Record<string, unknown>>;
+            failedTarget: Record<string, unknown> | null;
+            blockerCodes: string[];
+            postDeleteResidualAudit?: {
+                status: string;
+                checkedAt: string;
+                checkedTargetCount: number;
+                remainingTargetCount: number;
+                remainingTargets: Array<Record<string, unknown>>;
+                failedTarget: Record<string, unknown> | null;
+            };
+        } | null;
     }>;
     agent_app_start_ui_runtime: (args: any) => Promise<{
         appId: string;

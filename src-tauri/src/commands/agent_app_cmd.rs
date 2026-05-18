@@ -153,6 +153,7 @@ pub struct AgentAppUninstallRehearsalRequest {
 pub struct AgentAppUninstallRequest {
     pub app_id: String,
     pub mode: String,
+    pub confirmation_phrase: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -322,6 +323,7 @@ struct InstalledAgentAppStateEnvelope {
 #[serde(rename_all = "camelCase")]
 pub struct AgentAppUninstallRehearsalResult {
     pub app_id: String,
+    pub package_hash: String,
     pub mode: String,
     pub generated_at: String,
     pub deleted_target_count: usize,
@@ -333,10 +335,13 @@ pub struct AgentAppUninstallRehearsalResult {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentAppUninstallResult {
+    pub status: String,
     pub rehearsal: AgentAppUninstallRehearsalResult,
     pub list: InstalledAgentAppStateListResult,
     pub removed_target_count: usize,
     pub missing_target_count: usize,
+    pub blocker_codes: Vec<String>,
+    pub delete_evidence: Option<AgentAppDeleteDataExecutionEvidence>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -347,6 +352,44 @@ pub struct AgentAppUninstallRehearsalTarget {
     pub safe_to_delete: bool,
     pub action: String,
     pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppDeleteDataExecutionEvidence {
+    pub status: String,
+    pub generated_at: String,
+    pub data_root: String,
+    pub removed_targets: Vec<AgentAppDeleteDataTargetEvidence>,
+    pub missing_targets: Vec<AgentAppDeleteDataTargetEvidence>,
+    pub retained_targets: Vec<AgentAppDeleteDataTargetEvidence>,
+    pub blocked_targets: Vec<AgentAppDeleteDataTargetEvidence>,
+    pub failed_target: Option<AgentAppDeleteDataTargetEvidence>,
+    pub blocker_codes: Vec<String>,
+    pub post_delete_residual_audit: AgentAppDeleteDataPostDeleteResidualAudit,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppDeleteDataTargetEvidence {
+    pub kind: String,
+    pub value: String,
+    pub action: String,
+    pub reason: String,
+    pub status: String,
+    pub blocker_codes: Vec<String>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppDeleteDataPostDeleteResidualAudit {
+    pub status: String,
+    pub checked_at: String,
+    pub checked_target_count: usize,
+    pub remaining_target_count: usize,
+    pub remaining_targets: Vec<AgentAppDeleteDataTargetEvidence>,
+    pub failed_target: Option<AgentAppDeleteDataTargetEvidence>,
 }
 
 #[tauri::command]
@@ -563,14 +606,41 @@ pub async fn agent_app_uninstall_rehearsal(
 pub async fn agent_app_uninstall(
     request: AgentAppUninstallRequest,
 ) -> Result<AgentAppUninstallResult, String> {
-    let rehearsal = build_agent_app_uninstall_rehearsal(request.app_id, request.mode)?;
+    let rehearsal =
+        build_agent_app_uninstall_rehearsal(request.app_id.clone(), request.mode.clone())?;
+    let mut status = "rehearsal_only".to_string();
+    let mut removed_target_count = 0;
+    let mut missing_target_count = 0;
+    let mut blocker_codes = Vec::new();
+    let mut delete_evidence = None;
 
-    // P17.3 只允许卸载演练；真实 delete-data 需要后续路线图单独打开。
+    if request.mode == "delete-data" {
+        let expected_confirmation = build_agent_app_delete_data_confirmation_phrase(
+            &rehearsal.app_id,
+            &rehearsal.package_hash,
+        );
+        if request.confirmation_phrase.as_deref() != Some(expected_confirmation.as_str()) {
+            status = "blocked".to_string();
+            blocker_codes.push("CONFIRMATION_MISMATCH".to_string());
+        } else {
+            let evidence =
+                execute_agent_app_delete_data_rehearsal(&rehearsal, &agent_app_data_dir()?)?;
+            status = evidence.status.clone();
+            removed_target_count = evidence.removed_targets.len();
+            missing_target_count = evidence.missing_targets.len();
+            blocker_codes = evidence.blocker_codes.clone();
+            delete_evidence = Some(evidence);
+        }
+    }
+
     Ok(AgentAppUninstallResult {
         rehearsal,
         list: agent_app_list_installed().await?,
-        removed_target_count: 0,
-        missing_target_count: 0,
+        removed_target_count,
+        missing_target_count,
+        status,
+        blocker_codes,
+        delete_evidence,
     })
 }
 
@@ -1063,6 +1133,7 @@ fn build_agent_app_uninstall_rehearsal(
 
     let package_hash = read_string(&state, &["identity", "packageHash"])
         .unwrap_or_else(|| "unknown-package".to_string());
+    let package_hash_path_segment = safe_hash_path_segment(&package_hash);
     let storage_namespace = read_string(&state, &["projection", "storage", "namespace"])
         .unwrap_or_else(|| app_id.clone());
     let base = agent_app_data_dir()?.to_string_lossy().to_string();
@@ -1084,7 +1155,7 @@ fn build_agent_app_uninstall_rehearsal(
         ),
         target(
             "path",
-            format!("{base}/packages/{package_hash}"),
+            format!("{base}/packages/{package_hash_path_segment}"),
             true,
             "delete",
             "Cached runtime package for this Agent App.",
@@ -1149,12 +1220,235 @@ fn build_agent_app_uninstall_rehearsal(
 
     Ok(AgentAppUninstallRehearsalResult {
         app_id,
+        package_hash,
         mode,
         generated_at: now_iso(),
         deleted_target_count,
         retained_target_count,
         targets,
         warnings: vec!["DRY_RUN_ONLY".to_string()],
+    })
+}
+
+fn build_agent_app_delete_data_confirmation_phrase(app_id: &str, package_hash: &str) -> String {
+    format!("DELETE_AGENT_APP_DATA {app_id} {package_hash}")
+}
+
+fn target_evidence(
+    target: &AgentAppUninstallRehearsalTarget,
+    status: &str,
+    blocker_codes: Vec<String>,
+    error: Option<String>,
+) -> AgentAppDeleteDataTargetEvidence {
+    AgentAppDeleteDataTargetEvidence {
+        kind: target.kind.clone(),
+        value: target.value.clone(),
+        action: target.action.clone(),
+        reason: target.reason.clone(),
+        status: status.to_string(),
+        blocker_codes,
+        error,
+    }
+}
+
+fn post_delete_residual_audit_not_run() -> AgentAppDeleteDataPostDeleteResidualAudit {
+    AgentAppDeleteDataPostDeleteResidualAudit {
+        status: "not_run".to_string(),
+        checked_at: now_iso(),
+        checked_target_count: 0,
+        remaining_target_count: 0,
+        remaining_targets: Vec::new(),
+        failed_target: None,
+    }
+}
+
+fn build_post_delete_residual_audit(
+    checked_targets: Vec<&AgentAppUninstallRehearsalTarget>,
+) -> AgentAppDeleteDataPostDeleteResidualAudit {
+    let mut remaining_targets = Vec::new();
+
+    for target in &checked_targets {
+        let path = PathBuf::from(target.value.trim());
+        if path.exists() {
+            remaining_targets.push(target_evidence(
+                target,
+                "residual_present",
+                vec!["POST_DELETE_RESIDUAL_PRESENT".to_string()],
+                None,
+            ));
+        }
+    }
+
+    AgentAppDeleteDataPostDeleteResidualAudit {
+        status: if remaining_targets.is_empty() {
+            "clear".to_string()
+        } else {
+            "residual_present".to_string()
+        },
+        checked_at: now_iso(),
+        checked_target_count: checked_targets.len(),
+        remaining_target_count: remaining_targets.len(),
+        failed_target: remaining_targets.first().cloned(),
+        remaining_targets,
+    }
+}
+
+fn path_has_parent_traversal(path: &Path) -> bool {
+    path.components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+}
+
+fn validate_agent_app_delete_target(
+    target: &AgentAppUninstallRehearsalTarget,
+    rehearsal: &AgentAppUninstallRehearsalResult,
+    data_root: &Path,
+) -> Vec<String> {
+    let mut blockers = Vec::new();
+    let value = target.value.trim();
+    if value.is_empty() {
+        blockers.push("TARGET_PATH_EMPTY".to_string());
+        return blockers;
+    }
+
+    let path = PathBuf::from(value);
+    if path_has_parent_traversal(&path) {
+        blockers.push("TARGET_PATH_TRAVERSAL".to_string());
+    }
+    if !path.starts_with(data_root) {
+        blockers.push("TARGET_OUTSIDE_AGENT_APP_DATA_ROOT".to_string());
+    }
+    if !value.contains(&rehearsal.app_id)
+        && !value.contains(&rehearsal.package_hash)
+        && !value.contains(&safe_hash_path_segment(&rehearsal.package_hash))
+    {
+        blockers.push("TARGET_OUTSIDE_APP_NAMESPACE".to_string());
+    }
+    if !target.safe_to_delete {
+        blockers.push("UNSAFE_TARGET".to_string());
+    }
+    if target.kind != "path" && target.kind != "namespace" {
+        blockers.push("TARGET_KIND_NOT_DELETABLE".to_string());
+    }
+
+    blockers
+}
+
+fn remove_agent_app_delete_target(path: &Path) -> Result<bool, String> {
+    if !path.exists() {
+        return Ok(false);
+    }
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| format!("读取 Agent App 删除目标元数据失败: {error}"))?;
+    if metadata.is_dir() {
+        fs::remove_dir_all(path)
+            .map_err(|error| format!("删除 Agent App 目录目标 {} 失败: {error}", path.display()))?;
+    } else {
+        fs::remove_file(path)
+            .map_err(|error| format!("删除 Agent App 文件目标 {} 失败: {error}", path.display()))?;
+    }
+    Ok(true)
+}
+
+fn execute_agent_app_delete_data_rehearsal(
+    rehearsal: &AgentAppUninstallRehearsalResult,
+    data_root: &Path,
+) -> Result<AgentAppDeleteDataExecutionEvidence, String> {
+    let mut removed_targets = Vec::new();
+    let mut missing_targets = Vec::new();
+    let mut retained_targets = Vec::new();
+    let mut blocked_targets = Vec::new();
+    let mut blocker_codes = Vec::new();
+
+    for target in &rehearsal.targets {
+        if target.action != "delete" {
+            retained_targets.push(target_evidence(target, "retained", Vec::new(), None));
+            continue;
+        }
+
+        let target_blockers = validate_agent_app_delete_target(target, rehearsal, data_root);
+        if !target_blockers.is_empty() {
+            blocker_codes.extend(target_blockers.clone());
+            blocked_targets.push(target_evidence(target, "blocked", target_blockers, None));
+        }
+    }
+
+    blocker_codes.sort();
+    blocker_codes.dedup();
+
+    if !blocked_targets.is_empty() {
+        return Ok(AgentAppDeleteDataExecutionEvidence {
+            status: "blocked".to_string(),
+            generated_at: now_iso(),
+            data_root: data_root.to_string_lossy().to_string(),
+            removed_targets,
+            missing_targets,
+            retained_targets,
+            blocked_targets,
+            failed_target: None,
+            blocker_codes,
+            post_delete_residual_audit: post_delete_residual_audit_not_run(),
+        });
+    }
+
+    for target in &rehearsal.targets {
+        if target.action != "delete" {
+            continue;
+        }
+        let path = PathBuf::from(target.value.trim());
+        match remove_agent_app_delete_target(&path) {
+            Ok(true) => removed_targets.push(target_evidence(target, "removed", Vec::new(), None)),
+            Ok(false) => missing_targets.push(target_evidence(target, "missing", Vec::new(), None)),
+            Err(error) => {
+                let failed_target =
+                    target_evidence(target, "failed", Vec::new(), Some(error.clone()));
+                return Ok(AgentAppDeleteDataExecutionEvidence {
+                    status: "failed".to_string(),
+                    generated_at: now_iso(),
+                    data_root: data_root.to_string_lossy().to_string(),
+                    removed_targets,
+                    missing_targets,
+                    retained_targets,
+                    blocked_targets,
+                    failed_target: Some(failed_target),
+                    blocker_codes: vec!["TARGET_DELETE_FAILED".to_string()],
+                    post_delete_residual_audit: post_delete_residual_audit_not_run(),
+                });
+            }
+        }
+    }
+
+    let checked_targets: Vec<&AgentAppUninstallRehearsalTarget> = rehearsal
+        .targets
+        .iter()
+        .filter(|target| target.action == "delete")
+        .collect();
+    let post_delete_residual_audit = build_post_delete_residual_audit(checked_targets);
+    if !post_delete_residual_audit.remaining_targets.is_empty() {
+        return Ok(AgentAppDeleteDataExecutionEvidence {
+            status: "failed".to_string(),
+            generated_at: now_iso(),
+            data_root: data_root.to_string_lossy().to_string(),
+            removed_targets,
+            missing_targets,
+            retained_targets,
+            blocked_targets,
+            failed_target: post_delete_residual_audit.failed_target.clone(),
+            blocker_codes: vec!["POST_DELETE_RESIDUAL_PRESENT".to_string()],
+            post_delete_residual_audit,
+        });
+    }
+
+    Ok(AgentAppDeleteDataExecutionEvidence {
+        status: "deleted".to_string(),
+        generated_at: now_iso(),
+        data_root: data_root.to_string_lossy().to_string(),
+        removed_targets,
+        missing_targets,
+        retained_targets,
+        blocked_targets,
+        failed_target: None,
+        blocker_codes,
+        post_delete_residual_audit,
     })
 }
 
@@ -2707,5 +3001,165 @@ mod tests {
 
         assert_eq!(first_hash, ignored_local_hash);
         assert_ne!(first_hash, changed_package_hash);
+    }
+
+    fn delete_data_rehearsal_for_root(root: &Path) -> AgentAppUninstallRehearsalResult {
+        let app_id = "content-factory-app".to_string();
+        let package_hash = "package-fnv1a-delete-test".to_string();
+        AgentAppUninstallRehearsalResult {
+            app_id: app_id.clone(),
+            package_hash: package_hash.clone(),
+            mode: "delete-data".to_string(),
+            generated_at: "2026-05-15T00:00:00.000Z".to_string(),
+            deleted_target_count: 3,
+            retained_target_count: 1,
+            targets: vec![
+                target(
+                    "path",
+                    root.join("installed")
+                        .join(format!("{app_id}.json"))
+                        .to_string_lossy(),
+                    true,
+                    "delete",
+                    "Installed Agent App state snapshot.",
+                ),
+                target(
+                    "path",
+                    root.join("packages").join(&package_hash).to_string_lossy(),
+                    true,
+                    "delete",
+                    "Cached runtime package.",
+                ),
+                target(
+                    "namespace",
+                    root.join("storage").join(&app_id).to_string_lossy(),
+                    true,
+                    "delete",
+                    "App storage namespace.",
+                ),
+                target(
+                    "ref",
+                    format!("artifact-ref:{app_id}:draft"),
+                    true,
+                    "retain",
+                    "Artifact reference only.",
+                ),
+            ],
+            warnings: vec!["DRY_RUN_ONLY".to_string()],
+        }
+    }
+
+    #[test]
+    fn delete_data_execution_removes_only_scoped_paths_and_namespaces() {
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+        let rehearsal = delete_data_rehearsal_for_root(root);
+        let installed_path = root.join("installed/content-factory-app.json");
+        let package_dir = root.join("packages/package-fnv1a-delete-test");
+        let storage_dir = root.join("storage/content-factory-app");
+        fs::create_dir_all(installed_path.parent().unwrap()).unwrap();
+        fs::create_dir_all(&package_dir).unwrap();
+        fs::create_dir_all(&storage_dir).unwrap();
+        fs::write(&installed_path, "{}").unwrap();
+        fs::write(package_dir.join("package.json"), "{}").unwrap();
+        fs::write(storage_dir.join("state.json"), "{}").unwrap();
+
+        let evidence = execute_agent_app_delete_data_rehearsal(&rehearsal, root).unwrap();
+
+        assert_eq!(evidence.status, "deleted");
+        assert_eq!(evidence.removed_targets.len(), 3);
+        assert_eq!(evidence.retained_targets.len(), 1);
+        assert!(!installed_path.exists());
+        assert!(!package_dir.exists());
+        assert!(!storage_dir.exists());
+        assert!(evidence.blocker_codes.is_empty());
+        assert_eq!(evidence.post_delete_residual_audit.status, "clear");
+        assert_eq!(evidence.post_delete_residual_audit.checked_target_count, 3);
+        assert_eq!(
+            evidence.post_delete_residual_audit.remaining_target_count,
+            0
+        );
+        assert!(evidence
+            .post_delete_residual_audit
+            .remaining_targets
+            .is_empty());
+    }
+
+    #[test]
+    fn delete_data_execution_blocks_traversal_and_out_of_root_targets() {
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+        let mut rehearsal = delete_data_rehearsal_for_root(root);
+        rehearsal.targets = vec![
+            target(
+                "path",
+                root.join("storage/content-factory-app/../other-app")
+                    .to_string_lossy(),
+                true,
+                "delete",
+                "Traversal target must be blocked.",
+            ),
+            target(
+                "path",
+                tempdir()
+                    .unwrap()
+                    .path()
+                    .join("content-factory-app.json")
+                    .to_string_lossy(),
+                true,
+                "delete",
+                "Out-of-root target must be blocked.",
+            ),
+        ];
+
+        let evidence = execute_agent_app_delete_data_rehearsal(&rehearsal, root).unwrap();
+
+        assert_eq!(evidence.status, "blocked");
+        assert!(evidence
+            .blocker_codes
+            .contains(&"TARGET_PATH_TRAVERSAL".to_string()));
+        assert!(evidence
+            .blocker_codes
+            .contains(&"TARGET_OUTSIDE_AGENT_APP_DATA_ROOT".to_string()));
+        assert!(evidence.removed_targets.is_empty());
+        assert_eq!(evidence.blocked_targets.len(), 2);
+        assert_eq!(evidence.post_delete_residual_audit.status, "not_run");
+        assert_eq!(evidence.post_delete_residual_audit.checked_target_count, 0);
+    }
+
+    #[test]
+    fn post_delete_residual_audit_reports_remaining_targets() {
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+        let target_path = root.join("storage/content-factory-app");
+        fs::create_dir_all(&target_path).unwrap();
+        let residual_target = target(
+            "namespace",
+            target_path.to_string_lossy(),
+            true,
+            "delete",
+            "Remaining storage namespace.",
+        );
+
+        let audit = build_post_delete_residual_audit(vec![&residual_target]);
+
+        assert_eq!(audit.status, "residual_present");
+        assert_eq!(audit.checked_target_count, 1);
+        assert_eq!(audit.remaining_target_count, 1);
+        assert_eq!(audit.remaining_targets[0].status, "residual_present");
+        assert!(audit.remaining_targets[0]
+            .blocker_codes
+            .contains(&"POST_DELETE_RESIDUAL_PRESENT".to_string()));
+    }
+
+    #[test]
+    fn delete_data_confirmation_phrase_includes_app_id_and_package_hash() {
+        assert_eq!(
+            build_agent_app_delete_data_confirmation_phrase(
+                "content-factory-app",
+                "package-fnv1a-delete-test"
+            ),
+            "DELETE_AGENT_APP_DATA content-factory-app package-fnv1a-delete-test"
+        );
     }
 }

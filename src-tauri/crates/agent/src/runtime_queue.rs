@@ -43,6 +43,7 @@ fn runtime_turn_panic_message(error: Box<dyn std::any::Any + Send>) -> String {
 fn spawn_runtime_turn_task<C>(
     session_id: String,
     event_name: String,
+    queued_turn_id: String,
     context: C,
     executor: RuntimeQueueExecutor<C>,
     emitter: RuntimeQueueEventEmitter,
@@ -104,6 +105,7 @@ fn spawn_runtime_turn_task<C>(
                 }
                 if let Err(error) = continue_runtime_queue_after_turn(
                     session_id,
+                    queued_turn_id,
                     context.clone(),
                     executor.clone(),
                     emitter_for_thread.clone(),
@@ -124,6 +126,7 @@ fn spawn_runtime_turn_task<C>(
 
 async fn continue_runtime_queue_after_turn<C>(
     session_id: String,
+    completed_turn_id: String,
     context: C,
     executor: RuntimeQueueExecutor<C>,
     emitter: RuntimeQueueEventEmitter,
@@ -131,12 +134,21 @@ async fn continue_runtime_queue_after_turn<C>(
 where
     C: Clone + Send + Sync + 'static,
 {
-    start_next_runtime_queue_turn(session_id, false, context, executor, emitter).await
+    start_next_runtime_queue_turn(
+        session_id,
+        false,
+        Some(completed_turn_id),
+        context,
+        executor,
+        emitter,
+    )
+    .await
 }
 
 async fn start_next_runtime_queue_turn<C>(
     session_id: String,
     acquire_gate: bool,
+    completed_turn_id: Option<String>,
     context: C,
     executor: RuntimeQueueExecutor<C>,
     emitter: RuntimeQueueEventEmitter,
@@ -148,6 +160,10 @@ where
         .map_err(|error| format!("读取 runtime queue service 失败: {error}"))?;
     let next_queued_turn = match if acquire_gate {
         runtime_queue_service.resume_if_idle(&session_id).await
+    } else if let Some(turn_id) = completed_turn_id.as_deref() {
+        runtime_queue_service
+            .finish_matching_turn_and_take_next(&session_id, turn_id)
+            .await
     } else {
         runtime_queue_service
             .finish_turn_and_take_next(&session_id)
@@ -175,6 +191,7 @@ where
     spawn_runtime_turn_task(
         session_id,
         event_name,
+        next_queued_turn.queued_turn_id,
         context,
         executor,
         emitter,
@@ -199,7 +216,7 @@ where
         return Ok(false);
     }
 
-    start_next_runtime_queue_turn(session_id, true, context, executor, emitter).await
+    start_next_runtime_queue_turn(session_id, true, None, context, executor, emitter).await
 }
 
 pub async fn submit_runtime_turn<C>(
@@ -242,6 +259,7 @@ where
             spawn_runtime_turn_task(
                 session_id.clone(),
                 queued_task.event_name,
+                queued_task.queued_turn_id.clone(),
                 context,
                 executor,
                 emitter,
@@ -405,6 +423,15 @@ pub async fn promote_runtime_queued_turn(
     Ok(true)
 }
 
+pub fn finish_active_runtime_turn_if_matches(
+    session_id: &str,
+    turn_id: &str,
+) -> Result<bool, String> {
+    let runtime_queue_service = require_shared_session_runtime_queue_service()
+        .map_err(|error| format!("读取 runtime queue service 失败: {error}"))?;
+    Ok(runtime_queue_service.finish_active_turn_if_matches(session_id, turn_id))
+}
+
 pub async fn resume_persisted_runtime_queues_on_startup<C>(
     context: C,
     executor: RuntimeQueueExecutor<C>,
@@ -437,4 +464,89 @@ where
     }
 
     Ok(resumed)
+}
+
+#[cfg(test)]
+mod tests {
+    use aster::session::{
+        InMemoryThreadRuntimeStore, QueuedTurnRuntime, RuntimeQueueSubmitResult,
+        SessionRuntimeQueueService, ThreadRuntimeStore,
+    };
+    use serde_json::json;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    fn queued_turn(session_id: &str, queued_turn_id: &str, created_at: i64) -> QueuedTurnRuntime {
+        QueuedTurnRuntime {
+            queued_turn_id: queued_turn_id.to_string(),
+            session_id: session_id.to_string(),
+            message_preview: format!("preview-{queued_turn_id}"),
+            message_text: format!("message-{queued_turn_id}"),
+            created_at,
+            image_count: 0,
+            payload: json!({ "queuedTurnId": queued_turn_id }),
+            metadata: HashMap::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn interrupted_active_turn_release_allows_follow_turn_to_start_now() {
+        let store = Arc::new(InMemoryThreadRuntimeStore::default());
+        let service = SessionRuntimeQueueService::new(store);
+        let first = service
+            .submit_turn(queued_turn("session-release", "running", 1), true)
+            .await
+            .expect("submit first turn");
+
+        assert_eq!(first, RuntimeQueueSubmitResult::StartNow);
+        assert!(service.finish_active_turn_if_matches("session-release", "running"));
+        let follow = service
+            .submit_turn(queued_turn("session-release", "follow", 2), true)
+            .await
+            .expect("submit follow turn");
+
+        assert_eq!(follow, RuntimeQueueSubmitResult::StartNow);
+        assert_eq!(
+            service.active_turn_id("session-release").as_deref(),
+            Some("follow")
+        );
+    }
+
+    #[tokio::test]
+    async fn stale_turn_completion_does_not_release_new_active_turn() {
+        let store = Arc::new(InMemoryThreadRuntimeStore::default());
+        let service = SessionRuntimeQueueService::new(store.clone());
+        let _ = service
+            .submit_turn(queued_turn("session-stale", "running", 1), true)
+            .await
+            .expect("submit first turn");
+        assert!(service.finish_active_turn_if_matches("session-stale", "running"));
+        let _ = service
+            .submit_turn(queued_turn("session-stale", "follow", 2), true)
+            .await
+            .expect("submit follow turn");
+        store
+            .enqueue_turn(queued_turn("session-stale", "queued-after-follow", 3))
+            .await
+            .expect("enqueue follow-up queued turn");
+
+        let next = service
+            .finish_matching_turn_and_take_next("session-stale", "running")
+            .await
+            .expect("stale completion should be ignored");
+
+        assert!(next.is_none());
+        assert_eq!(
+            service.active_turn_id("session-stale").as_deref(),
+            Some("follow")
+        );
+        assert_eq!(
+            store
+                .list_queued_turns("session-stale")
+                .await
+                .expect("list queued turns")
+                .len(),
+            1
+        );
+    }
 }

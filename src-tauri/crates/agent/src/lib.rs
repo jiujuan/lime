@@ -97,10 +97,10 @@ pub use request_tool_policy::{
 };
 pub use runtime_projection_snapshot::RuntimeProjectionSnapshot;
 pub use runtime_queue::{
-    clear_runtime_queue, list_runtime_queue_snapshots, promote_runtime_queued_turn,
-    remove_runtime_queued_turn, resume_persisted_runtime_queues_on_startup,
-    resume_runtime_queue_if_needed, submit_runtime_turn, RuntimeQueueEventEmitter,
-    RuntimeQueueExecutor,
+    clear_runtime_queue, finish_active_runtime_turn_if_matches, list_runtime_queue_snapshots,
+    promote_runtime_queued_turn, remove_runtime_queued_turn,
+    resume_persisted_runtime_queues_on_startup, resume_runtime_queue_if_needed,
+    submit_runtime_turn, RuntimeQueueEventEmitter, RuntimeQueueExecutor,
 };
 pub use session_execution_runtime::{
     apply_usage_to_cost_state, build_session_execution_runtime, detect_runtime_limit_event,

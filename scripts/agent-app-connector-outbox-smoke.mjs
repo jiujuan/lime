@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from "node:fs";
+import http from "node:http";
 import path from "node:path";
 import process from "node:process";
 
@@ -34,6 +35,12 @@ const DEFAULTS = {
   expectSecretDeliveryTokenExposed: "",
   expectDeliveryStatus: "",
   expectDeliveryExternalPlatformDelivered: "",
+  externalDeliveryWebhookUrl: "",
+  externalDeliveryWebhookUrlEnv: "",
+  externalDeliveryWebhookUrlFile: "",
+  externalDeliveryWebhookSource: "",
+  externalDeliveryWebhookLabel: "connector-outbox-smoke-webhook",
+  externalDeliveryLocalWebhook: false,
 };
 
 const TOOL_METADATA_BEGIN = "[Lime \u5de5\u5177\u5143\u6570\u636e\u5f00\u59cb]";
@@ -55,6 +62,10 @@ function parseArgs(argv) {
       printHelp();
       process.exit(0);
     }
+    if (arg === "--external-delivery-local-webhook") {
+      options.externalDeliveryLocalWebhook = true;
+      continue;
+    }
     if (arg.startsWith("--") && next !== undefined && !next.startsWith("--")) {
       const key = arg.slice(2).replace(/-([a-z])/g, (_, value) =>
         value.toUpperCase(),
@@ -71,11 +82,45 @@ function parseArgs(argv) {
   if (!["replay", "live"].includes(options.mode)) {
     throw new Error("--mode must be replay or live");
   }
+  if (
+    options.mode !== "live" &&
+    (options.externalDeliveryLocalWebhook ||
+      options.externalDeliveryWebhookUrl ||
+      options.externalDeliveryWebhookUrlEnv ||
+      options.externalDeliveryWebhookUrlFile)
+  ) {
+    throw new Error("external delivery webhook options require --mode live");
+  }
+  resolveExternalDeliveryWebhookUrl(options);
+  if (
+    options.externalDeliveryLocalWebhook &&
+    (options.externalDeliveryWebhookUrl ||
+      options.externalDeliveryWebhookUrlEnv ||
+      options.externalDeliveryWebhookUrlFile)
+  ) {
+    throw new Error(
+      "--external-delivery-local-webhook cannot be combined with remote webhook URL options",
+    );
+  }
+  if (
+    options.externalDeliveryWebhookUrl &&
+    !isSupportedExternalDeliveryWebhookUrl(options.externalDeliveryWebhookUrl)
+  ) {
+    throw new Error(
+      "external delivery webhook URL must be https://, http://127.0.0.1:<port>, or http://localhost:<port>",
+    );
+  }
   if (options.mode === "live") {
+    const expectsExternalDelivery =
+      options.externalDeliveryLocalWebhook || options.externalDeliveryWebhookUrl;
     options.expectAdapterReadiness ||=
       "host_managed_secret_delivery_adapter_ready";
-    options.expectExternalStatus ||= "not_delivered";
-    options.expectNextRequired ||= "external_platform_delivery";
+    options.expectExternalStatus ||= expectsExternalDelivery
+      ? "delivered"
+      : "not_delivered";
+    options.expectNextRequired ||= expectsExternalDelivery
+      ? "external_platform_delivery_complete"
+      : "external_platform_delivery";
     options.expectSecretDeliveryStatus ||= "ready";
     options.expectSecretDeliverySource ||= "host_managed_secret_delivery_fact";
     options.expectSecretDeliveryTarget ||= "cloud_overlay_worker";
@@ -84,8 +129,12 @@ function parseArgs(argv) {
     options.expectSecretDeliveryLeaseHandleStatus ||= "host_managed";
     options.expectSecretDeliveryCredentialMaterialExposed ||= "false";
     options.expectSecretDeliveryTokenExposed ||= "false";
-    options.expectDeliveryStatus ||= "accepted_by_local_cloud_overlay_worker";
-    options.expectDeliveryExternalPlatformDelivered ||= "false";
+    options.expectDeliveryStatus ||= expectsExternalDelivery
+      ? "delivered_to_external_platform"
+      : "accepted_by_local_cloud_overlay_worker";
+    options.expectDeliveryExternalPlatformDelivered ||= expectsExternalDelivery
+      ? "true"
+      : "false";
   }
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0) {
     throw new Error("--timeout-ms must be a positive number");
@@ -126,8 +175,8 @@ Options:
   --action <action>                Default createPage.
   --title <title>                  Live connector input title.
   --expect-adapter-readiness <v>   Optional replay assertion; live defaults to host_managed_secret_delivery_adapter_ready.
-  --expect-external-status <v>     Optional replay assertion; live defaults to not_delivered.
-  --expect-next-required <v>       Optional replay assertion; live defaults to external_platform_delivery.
+  --expect-external-status <v>     Optional replay assertion; live defaults to not_delivered, or delivered with external webhook.
+  --expect-next-required <v>       Optional replay assertion; live defaults to external_platform_delivery, or external_platform_delivery_complete with external webhook.
   --expect-secret-delivery-status <v>
                                    Optional replay assertion; live defaults to ready.
   --expect-secret-delivery-source <v>
@@ -144,9 +193,19 @@ Options:
                                    Optional replay assertion; live defaults to false.
   --expect-secret-delivery-token-exposed <true|false>
                                    Optional replay assertion; live defaults to false.
-  --expect-delivery-status <v>     Optional replay assertion; live defaults to accepted_by_local_cloud_overlay_worker.
+  --expect-delivery-status <v>     Optional replay assertion; live defaults to accepted_by_local_cloud_overlay_worker, or delivered_to_external_platform with external webhook.
   --expect-delivery-external-platform-delivered <true|false>
-                                   Optional replay assertion; live defaults to false.
+                                   Optional replay assertion; live defaults to false, or true with external webhook.
+  --external-delivery-local-webhook
+                                   Live mode only. Starts a local webhook, injects it through internalRequest, and expects delivered_to_external_platform.
+  --external-delivery-webhook-url <url>
+                                   Live mode only. Injects a Host-managed webhook URL through internalRequest. Prefer env/file for remote secret URLs.
+  --external-delivery-webhook-url-env <env>
+                                   Live mode only. Reads the Host-managed webhook URL from an environment variable; avoids leaking the URL through process args.
+  --external-delivery-webhook-url-file <path>
+                                   Live mode only. Reads the Host-managed webhook URL from a local secret file; the summary records only the source kind.
+  --external-delivery-webhook-label <label>
+                                   Optional App-safe label for the Host-managed webhook target.
   --output <path>                  Evidence JSON path.
 `);
 }
@@ -161,6 +220,46 @@ function assert(condition, message) {
   }
 }
 
+function resolveExternalDeliveryWebhookUrl(options) {
+  if (options.externalDeliveryWebhookUrl) {
+    options.externalDeliveryWebhookUrl = options.externalDeliveryWebhookUrl.trim();
+    options.externalDeliveryWebhookSource = "cli";
+    return;
+  }
+  if (options.externalDeliveryWebhookUrlEnv) {
+    const envName = options.externalDeliveryWebhookUrlEnv.trim();
+    const value = process.env[envName]?.trim() || "";
+    if (!value) {
+      throw new Error(
+        `environment variable ${envName} is required for external delivery webhook`,
+      );
+    }
+    options.externalDeliveryWebhookUrl = value;
+    options.externalDeliveryWebhookSource = "env";
+    return;
+  }
+  if (options.externalDeliveryWebhookUrlFile) {
+    const filePath = path.resolve(options.externalDeliveryWebhookUrlFile);
+    const value = fs.readFileSync(filePath, "utf8").trim();
+    if (!value) {
+      throw new Error("external delivery webhook URL file is empty");
+    }
+    options.externalDeliveryWebhookUrl = value;
+    options.externalDeliveryWebhookSource = "file";
+  }
+}
+
+function isSupportedExternalDeliveryWebhookUrl(value) {
+  const url = value.trim();
+  if (url.startsWith("https://")) {
+    return true;
+  }
+  return (
+    url.startsWith("http://127.0.0.1:") ||
+    url.startsWith("http://localhost:")
+  );
+}
+
 async function readJson(url, init, timeoutMs) {
   const response = await fetch(url, {
     ...init,
@@ -169,6 +268,43 @@ async function readJson(url, init, timeoutMs) {
   const text = await response.text();
   const body = text ? JSON.parse(text) : null;
   return { ok: response.ok, status: response.status, body, text };
+}
+
+function startLocalWebhookServer() {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("end", () => {
+      requests.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body: Buffer.concat(chunks).toString("utf8"),
+      });
+      response.writeHead(200, { "content-type": "text/plain" });
+      response.end("OK");
+    });
+  });
+
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        reject(new Error("local webhook server did not expose a TCP address"));
+        return;
+      }
+      resolve({
+        url: `http://127.0.0.1:${address.port}`,
+        requests,
+        close: () =>
+          new Promise((closeResolve) => {
+            server.close(() => closeResolve());
+          }),
+      });
+    });
+  });
 }
 
 async function waitForHealth(options) {
@@ -527,6 +663,19 @@ function buildLiveMetadata(options, taskId, idempotencyKey) {
     },
     idempotencyKey,
   };
+  const externalDelivery = options.externalDeliveryWebhookUrl
+    ? {
+        status: "ready",
+        binding: "host_managed",
+        channel: "webhook",
+        target: options.externalDeliveryWebhookUrl,
+        targetLabel: options.externalDeliveryWebhookLabel,
+        targetExposed: false,
+        credentialMaterialExposed: false,
+        tokenExposed: false,
+      }
+    : null;
+
   return {
     harness: {
       task_mode_enabled: true,
@@ -543,6 +692,7 @@ function buildLiveMetadata(options, taskId, idempotencyKey) {
                 ...publicSecretDelivery,
                 leaseRef,
                 expiresAt: leaseExpiresAt,
+                ...(externalDelivery ? { externalDelivery } : {}),
               },
             },
           },
@@ -636,7 +786,7 @@ async function runReplay(options) {
   };
 }
 
-function buildSummary(options, health, result) {
+function buildSummary(options, health, result, localWebhook = null) {
   const { threadRead, task } = result.projection;
   const toolCalls = getToolCalls(threadRead);
   const events = getTaskEvents(task);
@@ -677,6 +827,7 @@ function buildSummary(options, health, result) {
   const outputPayload = parseToolOutputPayload(output);
   const secretDelivery = outputPayload?.secretDelivery || {};
   const delivery = outputPayload?.delivery || {};
+  const externalDelivery = delivery?.externalDelivery || {};
   const deliveryReceiptRef =
     typeof delivery?.receiptRef === "string" ? delivery.receiptRef : "";
   const outputContainsBoundedMetadata =
@@ -811,6 +962,15 @@ function buildSummary(options, health, result) {
       ? taskEvidenceRefs.includes(deliveryReceiptRef)
       : false;
   }
+  if (options.externalDeliveryWebhookUrl) {
+    assertions.externalDeliveryTargetNotExposed =
+      !output.includes(options.externalDeliveryWebhookUrl) &&
+      !outputPayloadText.includes(options.externalDeliveryWebhookUrl);
+  }
+  if (options.externalDeliveryLocalWebhook) {
+    assertions.externalDeliveryLocalWebhookReceived =
+      (localWebhook?.requests?.length || 0) > 0;
+  }
   const deliveryEvidenceRefs = collectDeliveryRefs(
     toolEvidenceRefs,
     threadEvidenceRefs,
@@ -858,7 +1018,21 @@ function buildSummary(options, health, result) {
       deliveryEvidenceRefs,
       deliveryExternalPlatformDelivered:
         delivery?.externalPlatformDelivered ?? null,
+      externalDeliveryChannel: externalDelivery?.channel || null,
+      externalDeliveryTargetHash: externalDelivery?.targetHash || null,
+      externalDeliveryTargetLabel: externalDelivery?.targetLabel || null,
+      externalDeliveryTargetExposed:
+        externalDelivery?.targetExposed ?? null,
+      externalDeliveryHttpStatus: externalDelivery?.httpStatus ?? null,
     },
+    externalDeliveryWebhook: options.externalDeliveryWebhookUrl
+      ? {
+          configured: true,
+          targetSource: options.externalDeliveryWebhookSource || null,
+          localServer: Boolean(options.externalDeliveryLocalWebhook),
+          receivedRequestCount: localWebhook?.requests?.length || 0,
+        }
+      : null,
     agentAppTask: {
       status: task?.status || null,
       profileStatus: task?.profileStatus || task?.profile_status || null,
@@ -872,8 +1046,13 @@ function buildSummary(options, health, result) {
       result.mode === "replay"
         ? "Replay mode reads an existing runtime session and does not call the model provider."
         : "Live mode submits a new AgentRuntime turn and may call the configured model provider.",
-      "This proves runtime outbox/evidence projection, host-managed secret-delivery facts, and local cloud-overlay worker intake receipts; it does not prove external OAuth handshake, raw secret material exposure to the App/model, or external platform delivery.",
-    ],
+      options.externalDeliveryWebhookUrl
+        ? "This proves runtime outbox/evidence projection, Host-managed secret-delivery facts, and Host-managed HTTP webhook delivery; it does not prove external OAuth handshake or raw secret material exposure to the App/model."
+        : "This proves runtime outbox/evidence projection, Host-managed secret-delivery facts, and local cloud-overlay worker intake receipts; it does not prove external OAuth handshake, raw secret material exposure to the App/model, or external platform delivery.",
+      options.externalDeliveryWebhookUrl
+        ? "When a webhook is configured, this proves only Host-managed HTTP webhook delivery; it is not proof of Notion/Slack production delivery."
+        : null,
+    ].filter(Boolean),
   };
 }
 
@@ -884,11 +1063,25 @@ function writeSummary(output, summary) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  const health = await waitForHealth(options);
-  const result =
-    options.mode === "live" ? await runLive(options) : await runReplay(options);
-  const summary = buildSummary(options, health, result);
-  writeSummary(options.output, summary);
+  const localWebhook =
+    options.mode === "live" && options.externalDeliveryLocalWebhook
+      ? await startLocalWebhookServer()
+      : null;
+  if (localWebhook) {
+    options.externalDeliveryWebhookUrl = localWebhook.url;
+    options.externalDeliveryWebhookSource = "local";
+    options.externalDeliveryWebhookLabel ||= "local-connector-outbox-smoke-webhook";
+  }
+  let summary;
+  try {
+    const health = await waitForHealth(options);
+    const result =
+      options.mode === "live" ? await runLive(options) : await runReplay(options);
+    summary = buildSummary(options, health, result, localWebhook);
+    writeSummary(options.output, summary);
+  } finally {
+    await localWebhook?.close();
+  }
 
   console.log(
     JSON.stringify(

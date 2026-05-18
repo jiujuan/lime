@@ -7,6 +7,7 @@
 use crate::agent::aster_state::{ProviderConfig, SessionConfigBuilder};
 use crate::agent::runtime_queue_service::{
     clear_runtime_queue as clear_runtime_queue_service,
+    finish_active_runtime_turn_if_matches as finish_active_runtime_turn_if_matches_service,
     list_runtime_queue_snapshots as list_runtime_queue_snapshots_service,
     promote_runtime_queued_turn as promote_runtime_queued_turn_service,
     remove_runtime_queued_turn as remove_runtime_queued_turn_service,

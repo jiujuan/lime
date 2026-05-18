@@ -604,6 +604,9 @@ fn connector_external_delivery_config(
     {
         return None;
     }
+    if connector_external_delivery_raw_secret_observed(config) {
+        return None;
+    }
     let channel = connector_first_string_at_paths(config, &[&["channel"][..]])?;
     if !channel.eq_ignore_ascii_case("webhook") {
         return None;
@@ -620,6 +623,73 @@ fn connector_external_delivery_config(
             &[&["targetLabel"][..], &["target_label"][..]],
         ),
     })
+}
+
+fn connector_external_delivery_raw_secret_observed(config: &serde_json::Value) -> bool {
+    [
+        &["credentialMaterial"][..],
+        &["credential_material"][..],
+        &["rawSecret"][..],
+        &["raw_secret"][..],
+        &["secret"][..],
+        &["token"][..],
+        &["accessToken"][..],
+        &["access_token"][..],
+        &["refreshToken"][..],
+        &["refresh_token"][..],
+        &["authorizationHeader"][..],
+        &["authorization_header"][..],
+    ]
+    .iter()
+    .filter_map(|path| connector_value_at_path(Some(config), path))
+    .any(connector_external_delivery_material_value_present)
+        || connector_external_delivery_secret_header_observed(config)
+}
+
+fn connector_external_delivery_material_value_present(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Null => false,
+        serde_json::Value::String(text) => !text.trim().is_empty(),
+        serde_json::Value::Array(values) => !values.is_empty(),
+        serde_json::Value::Object(values) => !values.is_empty(),
+        serde_json::Value::Bool(value) => *value,
+        serde_json::Value::Number(_) => true,
+    }
+}
+
+fn connector_external_delivery_secret_header_observed(config: &serde_json::Value) -> bool {
+    let Some(headers) = connector_value_at_path(Some(config), &["headers"])
+        .or_else(|| connector_value_at_path(Some(config), &["secretHeaders"]))
+        .or_else(|| connector_value_at_path(Some(config), &["secret_headers"]))
+        .and_then(serde_json::Value::as_object)
+    else {
+        return false;
+    };
+
+    headers.iter().any(|(name, value)| {
+        connector_external_delivery_secret_header_name(name)
+            && connector_external_delivery_material_value_present(value)
+    })
+}
+
+fn connector_external_delivery_secret_header_name(name: &str) -> bool {
+    let normalized = name
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_lowercase();
+    matches!(
+        normalized.as_str(),
+        "authorization"
+            | "proxyauthorization"
+            | "apikey"
+            | "xapikey"
+            | "token"
+            | "xtoken"
+            | "xlimetoken"
+            | "slacksignature"
+            | "xslacksignature"
+    )
 }
 
 fn connector_external_delivery_false_flag(

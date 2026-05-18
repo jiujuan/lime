@@ -380,5 +380,10 @@ describe("buildAgentAppRunProjectionViewModel", () => {
         status: "completed",
       }),
     ]);
+    expect(view.metrics).toMatchObject({
+      modelName: "deepseek-v4-flash",
+      tokenCount: 120,
+      tokenText: "120 tokens",
+    });
   });
 });

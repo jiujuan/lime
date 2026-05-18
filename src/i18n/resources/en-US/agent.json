@@ -548,5 +548,14 @@
   "agentApp.apps.center.sort.label": "Sort",
   "agentApp.apps.center.sort.recent": "Recently Updated",
   "agentApp.apps.center.version.current": "Current {{version}}",
-  "agentApp.apps.center.action.updateCloud": "Update to Cloud Version"
+  "agentApp.apps.center.action.updateCloud": "Update to Cloud Version",
+  "agentApp.apps.uninstallPreview.deleteDataGate.title": "Exact confirmation required to delete data",
+  "agentApp.apps.uninstallPreview.deleteDataGate.description": "This removes local data, cache, and records for this app. Type the full phrase below before continuing.",
+  "agentApp.apps.uninstallPreview.deleteDataGate.phraseLabel": "Confirmation phrase",
+  "agentApp.apps.uninstallPreview.deleteDataGate.inputLabel": "Enter the delete-data confirmation phrase",
+  "agentApp.apps.uninstallPreview.deleteDataGate.inputPlaceholder": "Type the full confirmation phrase",
+  "agentApp.apps.uninstallPreview.deleteDataGate.mismatch": "The phrase does not match. Delete is locked.",
+  "agentApp.apps.uninstallPreview.deleteDataGate.ready": "The phrase matches. You can continue deleting.",
+  "agentApp.apps.uninstall.blocked": "Uninstall blocked: {{codes}}.",
+  "agentApp.apps.toast.uninstallBlocked": "Uninstall blocked"
 }

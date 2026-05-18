@@ -157,9 +157,13 @@ export const agentAppMocks = {
     return repository.list();
   },
   agent_app_uninstall_rehearsal: async (args: any) => {
+    await ensureSeeded();
     const request = args?.request ?? {};
     const appId = String(request.appId ?? "content-factory-app");
     const mode = request.mode === "delete-data" ? "delete-data" : "keep-data";
+    const list = await repository.list();
+    const state = list.states.find((item) => item.appId === appId) ?? list.states[0];
+    const packageHash = state?.identity.packageHash ?? "package-fnv1a-mock";
     const dataAction = mode === "delete-data" ? "delete" : "retain";
     const targets = [
       {
@@ -179,6 +183,7 @@ export const agentAppMocks = {
     ];
     return {
       appId,
+      packageHash,
       mode,
       generatedAt: now(),
       deletedTargetCount: targets.filter((target) => target.action === "delete")
@@ -190,13 +195,69 @@ export const agentAppMocks = {
     };
   },
   agent_app_uninstall: async (args: any) => {
+    const request = args?.request ?? {};
     const rehearsal = await agentAppMocks.agent_app_uninstall_rehearsal(args);
-    // P17.3 mock mirrors native behavior: return rehearsal without deleting state.
+    const expectedConfirmation = `DELETE_AGENT_APP_DATA ${rehearsal.appId} ${rehearsal.packageHash}`;
+    if (
+      rehearsal.mode === "delete-data" &&
+      request.confirmationPhrase === expectedConfirmation
+    ) {
+      const removed = await repository.remove(rehearsal.appId);
+      const removedTargetCount = removed ? rehearsal.deletedTargetCount : 0;
+      const missingTargetCount = removed ? 0 : rehearsal.deletedTargetCount;
+      const removedTargets = rehearsal.targets
+        .filter((target) => target.action === "delete")
+        .map((target) => ({
+          ...target,
+          status: removed ? "removed" : "missing",
+          blockerCodes: [],
+          error: null,
+        }));
+      return {
+        status: "deleted",
+        rehearsal,
+        list: await repository.list(),
+        removedTargetCount,
+        missingTargetCount,
+        blockerCodes: [],
+        deleteEvidence: {
+          status: "deleted",
+          generatedAt: now(),
+          dataRoot: "<LimeAppData>/agent-apps",
+          removedTargets: removed ? removedTargets : [],
+          missingTargets: removed ? [] : removedTargets,
+          retainedTargets: rehearsal.targets
+            .filter((target) => target.action !== "delete")
+            .map((target) => ({
+              ...target,
+              status: "retained",
+              blockerCodes: [],
+              error: null,
+            })),
+          blockedTargets: [],
+          failedTarget: null,
+          blockerCodes: [],
+          postDeleteResidualAudit: {
+            status: "clear",
+            checkedAt: now(),
+            checkedTargetCount: removedTargets.length,
+            remainingTargetCount: 0,
+            remainingTargets: [],
+            failedTarget: null,
+          },
+        },
+      };
+    }
+
     return {
+      status: rehearsal.mode === "delete-data" ? "blocked" : "rehearsal_only",
       rehearsal,
       list: await repository.list(),
       removedTargetCount: 0,
       missingTargetCount: 0,
+      blockerCodes:
+        rehearsal.mode === "delete-data" ? ["CONFIRMATION_MISMATCH"] : [],
+      deleteEvidence: null,
     };
   },
   agent_app_start_ui_runtime: async (args: any) => resolveMockRuntimeStatus(args),

@@ -266,7 +266,7 @@ fn content_factory_skill_name(tool_call: &AgentRuntimeThreadToolCallView) -> Opt
 }
 
 fn content_factory_skill_name_from_text(value: &str) -> Option<String> {
-    ["knowledge-builder", "content-reviewer"]
+    ["knowledge-builder", "article-writer", "content-reviewer"]
         .iter()
         .find(|skill| value.contains(**skill))
         .map(|skill| (*skill).to_string())
@@ -301,6 +301,133 @@ fn content_factory_thread_has_workspace_patch(thread_read: &AgentRuntimeThreadRe
                 artifact.metadata.as_ref(),
             )
             .is_some()
+    })
+}
+
+fn content_factory_task_kind(thread_read: &AgentRuntimeThreadReadModel) -> Option<String> {
+    content_factory_runtime_summary_text(thread_read, "taskKind")
+        .or_else(|| content_factory_runtime_summary_text(thread_read, "task_kind"))
+        .or_else(|| thread_read.task_kind.clone())
+}
+
+fn is_content_factory_agent_app_thread(thread_read: &AgentRuntimeThreadReadModel) -> bool {
+    let surface = content_factory_runtime_summary_text(thread_read, "surface");
+    let app_id = content_factory_runtime_summary_text(thread_read, "appId")
+        .or_else(|| content_factory_runtime_summary_text(thread_read, "app_id"));
+    surface.as_deref() == Some("agent_app")
+        && app_id.as_deref() == Some("content-factory-app")
+        && content_factory_task_kind(thread_read).is_some()
+}
+
+fn required_content_factory_skills_for_task_kind(task_kind: &str) -> &'static [&'static str] {
+    if task_kind.contains("scenario") {
+        &["knowledge-builder", "content-reviewer"]
+    } else if task_kind.contains("copy")
+        || task_kind.contains("script")
+        || task_kind.contains("delivery")
+    {
+        &["article-writer", "content-reviewer"]
+    } else if task_kind.contains("review") {
+        &["content-reviewer"]
+    } else {
+        &[]
+    }
+}
+
+fn content_factory_completed_required_skills(thread_read: &AgentRuntimeThreadReadModel) -> bool {
+    let Some(task_kind) = content_factory_task_kind(thread_read) else {
+        return false;
+    };
+    let required_skills = required_content_factory_skills_for_task_kind(&task_kind);
+    if required_skills.is_empty() {
+        return false;
+    }
+
+    let completed_skills = completed_content_factory_skills(thread_read);
+    required_skills.iter().all(|required_skill| {
+        completed_skills
+            .iter()
+            .any(|(completed_skill, _)| completed_skill == required_skill)
+    })
+}
+
+fn output_contract_materialized_artifact(
+    artifact: &AgentRuntimeThreadArtifactView,
+) -> Option<(Value, String)> {
+    let metadata = artifact.metadata.as_ref()?;
+    let materialized = bool_at_path(Some(metadata), &["agent_app_output_contract_materialized"])
+        .unwrap_or(false)
+        || artifact.item_id.starts_with("agent-app-output-contract:")
+        || artifact.path.ends_with(".workspace-patch.json");
+    if !materialized {
+        return None;
+    }
+
+    let payload = build_artifact_event_payload(artifact)?;
+    let workspace_patch = payload
+        .get("contentFactoryWorkspacePatch")
+        .or_else(|| payload.get("workspacePatch"))?
+        .clone();
+    Some((workspace_patch, artifact.path.clone()))
+}
+
+fn build_output_contract_materialized_completion_event(
+    thread_read: &AgentRuntimeThreadReadModel,
+) -> Option<AgentAppRuntimeTaskEvent> {
+    if !is_content_factory_agent_app_thread(thread_read)
+        || !matches!(thread_read.profile_status.as_str(), "failed" | "cancelled")
+        || !content_factory_completed_required_skills(thread_read)
+    {
+        return None;
+    }
+
+    let (workspace_patch, artifact_ref) = thread_read
+        .artifacts
+        .iter()
+        .find_map(output_contract_materialized_artifact)?;
+    let task_id = content_factory_runtime_summary_text(thread_read, "taskId")
+        .or_else(|| content_factory_runtime_summary_text(thread_read, "task_id"))
+        .unwrap_or_else(|| thread_read.thread_id.clone());
+    let evidence_ref = format!("evidence:{artifact_ref}");
+    let occurred_at = thread_read
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.path == artifact_ref)
+        .and_then(|artifact| {
+            artifact
+                .completed_at
+                .clone()
+                .or_else(|| artifact.updated_at.clone())
+                .or_else(|| artifact.created_at.clone())
+        })
+        .or_else(|| thread_read.updated_at.clone());
+
+    Some(AgentAppRuntimeTaskEvent {
+        id: format!("task:completed:output-contract:{task_id}"),
+        event_type: "task:completed".to_string(),
+        status: "completed".to_string(),
+        message: "内容工厂 workspace patch 已物化，尾流异常不阻断业务产物".to_string(),
+        severity: None,
+        turn_id: thread_read.active_turn_id.clone(),
+        request_id: Some(task_id),
+        tool_name: None,
+        evidence_ref: Some(evidence_ref),
+        artifact_ref: Some(artifact_ref),
+        occurred_at,
+        payload: Some(json!({
+            "workspacePatch": workspace_patch.clone(),
+            "contentFactoryWorkspacePatch": workspace_patch,
+            "source": "agent_app_runtime_output_contract_materialized",
+            "terminal": true,
+            "recovery": {
+                "status": thread_read.status.clone(),
+                "profileStatus": thread_read.profile_status.clone(),
+                "lastOutcomeType": thread_read
+                    .last_outcome
+                    .as_ref()
+                    .map(|outcome| outcome.outcome_type.clone()),
+            },
+        })),
     })
 }
 
@@ -746,6 +873,10 @@ pub(super) fn build_agent_app_runtime_task_events(
         }
     }
 
+    if let Some(event) = build_output_contract_materialized_completion_event(thread_read) {
+        events.push(event);
+    }
+
     if let Some((workspace_patch, task_id)) =
         build_stalled_content_factory_materialization_event(thread_read)
     {
@@ -893,6 +1024,29 @@ pub(super) fn build_agent_app_runtime_task_events(
     }
 
     events
+}
+
+pub(super) fn task_events_mark_business_completed(events: &[AgentAppRuntimeTaskEvent]) -> bool {
+    events.iter().any(|event| {
+        event.event_type == "task:completed"
+            && event.status == "completed"
+            && event.payload.as_ref().is_some_and(|payload| {
+                payload
+                    .get("source")
+                    .and_then(Value::as_str)
+                    .is_some_and(|source| {
+                        matches!(
+                            source,
+                            "agent_app_runtime_stalled_skill_materialization"
+                                | "agent_app_runtime_output_contract_materialized"
+                        )
+                    })
+                    && payload
+                        .get("terminal")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false)
+            })
+    })
 }
 
 pub(super) fn build_agent_app_runtime_task_snapshot_event_payload(

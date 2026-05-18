@@ -7,6 +7,7 @@ import type { Skill } from "@/lib/api/skills";
 import type { ServiceSkillHomeItem } from "@/components/agent/chat/service-skills/types";
 import { SKILL_SELECTION_DISPLAY_COPY } from "./skillSelectionDisplay";
 import type { InputCapabilitySelection } from "./inputCapabilitySelection";
+import type { InputCapabilityDescriptor } from "./inputCapabilitySections";
 
 const mockToastInfo = vi.fn();
 const mockPopoverState = vi.hoisted(() => ({
@@ -128,7 +129,7 @@ vi.mock("./characterMentionPanelLoader", () => ({
     installedSkills: Skill[];
     availableSkills: Skill[];
     mentionServiceSkills: ServiceSkillHomeItem[];
-    onSelectCapability: (item: InputCapabilitySelection) => void;
+    onSelectCapability: (item: InputCapabilityDescriptor) => void;
   }) => (
     <div data-testid="skill-selector-shared-panel">
       {installedSkills.map((skill) => (
@@ -137,6 +138,11 @@ vi.mock("./characterMentionPanelLoader", () => ({
           type="button"
           onClick={() =>
             onSelectCapability({
+              key: `installed-${skill.key}`,
+              title: skill.name,
+              description: skill.description,
+              icon: "sparkles",
+              iconClassName: "",
               kind: "installed_skill",
               skill,
             })
@@ -151,6 +157,11 @@ vi.mock("./characterMentionPanelLoader", () => ({
           type="button"
           onClick={() =>
             onSelectCapability({
+              key: `available-${skill.key}`,
+              title: skill.name,
+              description: skill.description,
+              icon: "sparkles",
+              iconClassName: "",
               kind: "available_skill",
               skill,
             })
@@ -165,6 +176,11 @@ vi.mock("./characterMentionPanelLoader", () => ({
           type="button"
           onClick={() =>
             onSelectCapability({
+              key: `service-${skill.id}`,
+              title: skill.title,
+              description: skill.summary,
+              icon: "zap",
+              iconClassName: "",
               kind: "service_skill",
               skill,
             })
