@@ -149,7 +149,7 @@ export function createSessionClient({
           limit,
           workspaceId: workspaceId ?? null,
         },
-        { level: "error" },
+        { level: "warn" },
       );
       throw error;
     } finally {

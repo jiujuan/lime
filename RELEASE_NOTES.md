@@ -1,13 +1,13 @@
-## Lime v1.44.0
+## Lime v1.45.0
 
-发布日期：`2026-05-19`
-递交范围：当前完整 worktree，包含 tracked 与新增文件；本次补齐版本事实源、Agent App v2 / standalone shell / packaging 主线、connector Cloud overlay 外部投递稳定性、release note 当前事实源与发布前校验结论。
+发布日期：`2026-05-20`
+递交范围：当前完整 worktree，包含 tracked 与新增文件；本次继续补齐版本事实源、Agent App v2 / standalone shell / packaging 主线、connector Cloud overlay 外部投递稳定性、release note 当前事实源与发布前校验结论。
 
-> 发布说明：上一版 release note 事实源为 `v1.42.0`。本版升级到 `v1.44.0`，并继续按 current release note 口径清理旧历史堆叠内容：`RELEASE_NOTES.md` 只保留当前版本说明，旧 v1.42.0 及更早发布说明不再作为当前 release note 事实源保留。
+> 发布说明：上一版 release note 事实源为 `v1.44.0`。本版升级到 `v1.45.0`，并继续按 current release note 口径清理旧历史堆叠内容：`RELEASE_NOTES.md` 只保留当前版本说明，旧 v1.44.0 及更早发布说明不再作为当前 release note 事实源保留。
 
 ### 发布概览
 
-- 应用版本从 `1.42.0` 升级到 `1.44.0`，同步 `package.json`、`package-lock.json`、`packages/lime-cli-npm/package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json` 与 `src-tauri/tauri.conf.headless.json`。
+- 应用版本从 `1.44.0` 升级到 `1.45.0`，同步 `package.json`、`package-lock.json`、`packages/lime-cli-npm/package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json` 与 `src-tauri/tauri.conf.headless.json`。
 - Agent App v2 路线图与执行文档落盘到 `docs/roadmap/agentapp/v2/`，补齐 PRD、架构、接口契约、实现计划、代码计划与完成度审计，发布说明继续只保留当前版本事实源。
 - Agent App standalone shell 进入 current 主链：新增 shell descriptor、runtime-backed / standalone launch descriptor、隔离策略、内存 launch port、Tauri shell capability 与原生 shell window 服务，避免只停留在 Lab 或浏览器 mock 入口。
 - Agent App packaging 主链补齐 package descriptor、artifact builder、release plan、updater manifest、Tauri config materializer / writer、macOS identity 与 native shell registration，支撑 standalone 包装和后续发布证据收集。
@@ -34,20 +34,20 @@
 - `src/components/agent/chat/skill-selection/SkillSelector.test.tsx` 固定 mock `characterMentionPanelLoader`，避免真实 lazy panel 在 Vitest 中引发 act 重叠和超时。
 - `scripts/lib/harness-eval-history-record.test.ts` 与 `scripts/lib/harness-eval-history-window.test.ts` 调整超时上限，降低重负载环境下 history 记录 / 窗口测试误报。
 - `.github/workflows/agent-app-standalone-release-gate.yml` 新增 standalone release gate，配套 `scripts/agent-app-standalone-release-secret-preflight.mjs`、`scripts/agent-app-standalone-release-evidence-check.mjs` 与 `scripts/agent-app-standalone-installer-verify.mjs`，把 macOS release 前置检查、证据校验和安装产物校验落成可复跑入口。
-- `RELEASE_NOTES.md` 删除旧版本正文堆叠，只保留 `v1.44.0` 当前发布说明。
+- `RELEASE_NOTES.md` 删除旧版本正文堆叠，只保留 `v1.45.0` 当前发布说明。
 
 ### 当前校验状态
 
-- `npm run verify:app-version`：已通过，版本一致性为 `1.44.0`。
+- `npm run verify:app-version`：已通过，版本一致性为 `1.45.0`。
 - `cargo fmt --manifest-path "src-tauri/Cargo.toml" --all`：已执行；`cargo fmt --manifest-path "src-tauri/Cargo.toml" --all -- --check` 已通过。
 - `cargo clippy --manifest-path "src-tauri/Cargo.toml" --all-targets --all-features -- -D warnings`：已通过。
-- `cargo test --manifest-path "src-tauri/Cargo.toml"`：已通过；主库 `1410 passed / 1 ignored`，集成测试通过，真实联网测试按环境变量保持 ignored。
+- `cargo test --manifest-path "src-tauri/Cargo.toml"`：已通过；主库 `1411 passed / 1 ignored`，集成测试通过，真实联网测试按环境变量保持 ignored。
 - `npm run lint`：已通过。
-- `npm test`：已通过；`run-vitest-smart` 全部 `59/59` 批次通过。
+- `npm test`：已通过；`run-vitest-smart` 全部通过。
 - `npm run test:contracts`：已通过，覆盖 agent runtime client 生成检查、命令契约、harness 契约、modality runtime contract 与 cleanup report contract。
 - `npm run verify:gui-smoke`：已通过；本轮复用已有 headless Tauri / DevBridge，并在 live Claw streaming smoke 中显式使用可用 `LIME_E2E_PROVIDER` / `LIME_E2E_MODEL`。
 - `git diff --check`：已通过。
 
 ---
 
-**完整变更**: `v1.42.0` -> `v1.44.0`
+**完整变更**: `v1.44.0` -> `v1.45.0`

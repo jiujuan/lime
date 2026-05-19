@@ -3264,7 +3264,7 @@ export function AppSidebar({
       setSidebarSessions(sortedSessions);
       setSidebarSessionsHasMore(hasMore);
     } catch (error) {
-      console.error("加载导航任务列表失败:", error);
+      console.warn("加载导航任务列表失败:", error);
       logAgentDebug(
         "AppSidebar",
         "recentConversations.load.error",
@@ -3274,7 +3274,7 @@ export function AppSidebar({
           limit: recentSessionRequestLimit,
           workspaceId: currentProjectId ?? "",
         },
-        { level: "error" },
+        { level: "warn" },
       );
       setSidebarSessions([]);
       setSidebarSessionsHasMore(false);

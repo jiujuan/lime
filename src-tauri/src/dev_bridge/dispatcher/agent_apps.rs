@@ -120,7 +120,7 @@ pub async fn try_handle(
             let automation_state =
                 app_handle.state::<crate::services::automation_service::AutomationServiceState>();
             serde_json::to_value(
-                crate::commands::agent_app_runtime_cmd::agent_app_runtime_start_task(
+                crate::commands::agent_app_runtime_cmd::start_task::agent_app_runtime_start_task(
                     app_handle.clone(),
                     aster_state,
                     db,
@@ -139,7 +139,7 @@ pub async fn try_handle(
             let app_handle = require_app_handle(state)?;
             let aster_state = app_handle.state::<crate::agent::AsterAgentState>();
             serde_json::to_value(
-                crate::commands::agent_app_runtime_cmd::agent_app_runtime_cancel_task(
+                crate::commands::agent_app_runtime_cmd::cancel_task::agent_app_runtime_cancel_task(
                     app_handle.clone(),
                     aster_state,
                     request,
@@ -161,7 +161,7 @@ pub async fn try_handle(
             let automation_state =
                 app_handle.state::<crate::services::automation_service::AutomationServiceState>();
             serde_json::to_value(
-                crate::commands::agent_app_runtime_cmd::agent_app_runtime_get_task(
+                crate::commands::agent_app_runtime_cmd::task_snapshot::agent_app_runtime_get_task(
                     app_handle.clone(),
                     aster_state,
                     db,
@@ -181,7 +181,7 @@ pub async fn try_handle(
             let aster_state = app_handle.state::<crate::agent::AsterAgentState>();
             let db = app_handle.state::<crate::database::DbConnection>();
             serde_json::to_value(
-                crate::commands::agent_app_runtime_cmd::agent_app_runtime_submit_host_response(
+                crate::commands::agent_app_runtime_cmd::host_response::agent_app_runtime_submit_host_response(
                     app_handle.clone(),
                     aster_state,
                     db,

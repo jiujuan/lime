@@ -95,6 +95,7 @@ type AppCenterActionLabelKey =
   | "agentApp.apps.center.action.open"
   | "agentApp.apps.center.action.install"
   | "agentApp.apps.center.action.update"
+  | "agentApp.apps.center.action.updateOneClick"
   | "agentApp.apps.center.action.activate"
   | "agentApp.apps.center.action.enable";
 
@@ -243,6 +244,9 @@ function getStatusKind(params: {
   if (installedState?.disabled) {
     return "disabled";
   }
+  if (registrationBlocked) {
+    return "registration";
+  }
   if (
     installedState &&
     cloudApp &&
@@ -258,9 +262,6 @@ function getStatusKind(params: {
   }
   if (installedState) {
     return "installed";
-  }
-  if (registrationBlocked) {
-    return "registration";
   }
   if (sourceState && !sourceState.canReview) {
     return "partial";
@@ -967,11 +968,26 @@ export function AgentAppsPage({
     );
   }
 
+  function canOneClickUpdate(item: AppCenterItem): boolean {
+    return Boolean(
+      item.installedState &&
+      item.cloudApp &&
+      hasCloudUpdate(item),
+    );
+  }
+
   function getActionLabelKey(item: AppCenterItem): AppCenterActionLabelKey {
-    if (item.installedState) {
-      return item.statusKind === "disabled"
-        ? "agentApp.apps.center.action.enable"
-        : "agentApp.apps.center.action.open";
+  if (item.installedState) {
+    if (item.statusKind === "disabled") {
+      return "agentApp.apps.center.action.enable";
+    }
+    if (item.registrationBlocked) {
+      return "agentApp.apps.center.action.activate";
+    }
+    if (canOneClickUpdate(item)) {
+      return "agentApp.apps.center.action.updateOneClick";
+    }
+      return "agentApp.apps.center.action.open";
     }
     if (item.statusKind === "registration") {
       return "agentApp.apps.center.action.activate";
@@ -1011,9 +1027,15 @@ export function AgentAppsPage({
       return true;
     }
     if (item.installedState) {
-      if (item.statusKind === "disabled") {
-        return false;
-      }
+    if (item.statusKind === "disabled") {
+      return false;
+    }
+    if (item.registrationBlocked) {
+      return false;
+    }
+    if (canOneClickUpdate(item)) {
+      return !item.canReviewCloud;
+    }
       return !getDefaultEntry(item);
     }
     if (item.statusKind === "registration") {
@@ -1044,6 +1066,15 @@ export function AgentAppsPage({
   async function handlePrimaryAction(item: AppCenterItem) {
     if (item.statusKind === "disabled" && item.installedState) {
       await handleSetDisabled(item.installedState, false);
+      return;
+    }
+    if (item.registrationBlocked && item.cloudApp) {
+      openDetail(item.appId);
+      await handleSubmitRegistration(item.cloudApp);
+      return;
+    }
+    if (canOneClickUpdate(item) && item.cloudApp) {
+      await handleInstallCloud(item.cloudApp);
       return;
     }
     const entry = getDefaultEntry(item);
@@ -1397,10 +1428,14 @@ export function AgentAppsPage({
                           data-testid={
                             !item.installedState && item.cloudApp
                               ? `agent-apps-install-cloud-${item.appId}`
-                              : undefined
+                              : canOneClickUpdate(item)
+                                ? `agent-apps-update-cloud-${item.appId}`
+                                : undefined
                           }
                         >
-                          {defaultEntry && item.installedState ? (
+                          {canOneClickUpdate(item) ? (
+                            <RefreshCw size={14} />
+                          ) : defaultEntry && item.installedState ? (
                             <PlayCircle size={14} />
                           ) : (
                             <ShieldCheck size={14} />
@@ -1413,14 +1448,36 @@ export function AgentAppsPage({
                           <button
                             type="button"
                             className="inline-flex min-w-[80px] items-center justify-center rounded-lg border border-blue-800 bg-white px-4 py-2 text-sm font-semibold text-blue-950 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={isCloudActionDisabled(item)}
+                            disabled={
+                              canOneClickUpdate(item)
+                                ? isPrimaryActionDisabled(item) ||
+                                  !defaultEntry
+                                : isCloudActionDisabled(item)
+                            }
                             onClick={(event) => {
                               event.stopPropagation();
+                              if (
+                                canOneClickUpdate(item) &&
+                                item.installedState &&
+                                defaultEntry
+                              ) {
+                                void handleLaunchEntry(
+                                  item.installedState,
+                                  defaultEntry,
+                                );
+                                return;
+                              }
                               void handleCloudAction(item);
                             }}
-                            data-testid={`agent-apps-install-cloud-${item.appId}`}
+                            data-testid={
+                              canOneClickUpdate(item)
+                                ? `agent-apps-launch-installed-${item.appId}`
+                                : `agent-apps-install-cloud-${item.appId}`
+                            }
                           >
-                            {t(getCloudActionLabelKey(item))}
+                            {canOneClickUpdate(item)
+                              ? t("agentApp.apps.center.action.open")
+                              : t(getCloudActionLabelKey(item))}
                           </button>
                         ) : null}
                       </div>
@@ -1530,7 +1587,11 @@ export function AgentAppsPage({
                       disabled={isPrimaryActionDisabled(selectedItem)}
                       onClick={() => void handlePrimaryAction(selectedItem)}
                     >
-                      <PlayCircle size={16} />
+                      {canOneClickUpdate(selectedItem) ? (
+                        <RefreshCw size={16} />
+                      ) : (
+                        <PlayCircle size={16} />
+                      )}
                       {t(getDetailActionLabelKey(selectedItem))}
                     </button>
                     {selectedItem.installedState &&
@@ -1539,11 +1600,34 @@ export function AgentAppsPage({
                       <button
                         type="button"
                         className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-blue-800 bg-white px-3 text-base font-semibold text-blue-950 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={isCloudActionDisabled(selectedItem)}
-                        onClick={() => void handleCloudAction(selectedItem)}
-                        data-testid={`agent-apps-install-cloud-${selectedItem.appId}`}
+                        disabled={
+                          canOneClickUpdate(selectedItem)
+                            ? isPrimaryActionDisabled(selectedItem) ||
+                              !getDefaultEntry(selectedItem)
+                            : isCloudActionDisabled(selectedItem)
+                        }
+                        onClick={() => {
+                          if (canOneClickUpdate(selectedItem)) {
+                            const entry = getDefaultEntry(selectedItem);
+                            if (selectedItem.installedState && entry) {
+                              void handleLaunchEntry(
+                                selectedItem.installedState,
+                                entry,
+                              );
+                              return;
+                            }
+                          }
+                          void handleCloudAction(selectedItem);
+                        }}
+                        data-testid={
+                          canOneClickUpdate(selectedItem)
+                            ? `agent-apps-launch-installed-${selectedItem.appId}`
+                            : `agent-apps-install-cloud-${selectedItem.appId}`
+                        }
                       >
-                        {t("agentApp.apps.center.action.update")}
+                        {canOneClickUpdate(selectedItem)
+                          ? t("agentApp.apps.center.action.open")
+                          : t("agentApp.apps.center.action.update")}
                       </button>
                     ) : null}
                   </div>

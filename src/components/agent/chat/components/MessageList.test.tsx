@@ -1680,7 +1680,7 @@ describe("MessageList", () => {
     );
   });
 
-  it("复杂任务完成后应把运行状态、耗时与 token 结算收口到最后一条 assistant 消息尾部", () => {
+  it("复杂任务完成后应把运行状态、耗时与 token 结算收口到最后一条 assistant 消息尾部", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -1724,7 +1724,7 @@ describe("MessageList", () => {
           : null,
     );
 
-    const container = render(messages, {
+    const container = await renderZh(messages, {
       providerType: "custom-provider-id",
       turns: [
         {

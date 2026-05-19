@@ -10,6 +10,7 @@ pub(super) struct ConnectorAdapterReadiness {
     pub(super) secret_delivery_lease_ref: Option<String>,
     pub(super) secret_delivery_expires_at: Option<String>,
     pub(super) external_delivery: Option<ConnectorExternalDelivery>,
+    pub(super) production_delivery: Option<ConnectorProductionDelivery>,
     pub(super) executable: bool,
 }
 
@@ -18,6 +19,14 @@ pub(super) struct ConnectorExternalDelivery {
     pub(super) channel: String,
     pub(super) target: String,
     pub(super) target_label: Option<String>,
+}
+
+#[derive(Clone)]
+pub(super) struct ConnectorProductionDelivery {
+    pub(super) delivered_at: Option<String>,
+    pub(super) platform: Option<String>,
+    pub(super) proof_level: String,
+    pub(super) receipt_ref: Option<String>,
 }
 
 struct ConnectorSecretDeliveryFact {
@@ -38,6 +47,7 @@ impl ConnectorAdapterReadiness {
             secret_delivery_lease_ref: None,
             secret_delivery_expires_at: None,
             external_delivery: None,
+            production_delivery: None,
             executable: false,
         }
     }
@@ -54,6 +64,7 @@ impl ConnectorAdapterReadiness {
             secret_delivery_lease_ref: None,
             secret_delivery_expires_at: None,
             external_delivery: None,
+            production_delivery: None,
             executable: false,
         }
     }
@@ -61,6 +72,7 @@ impl ConnectorAdapterReadiness {
     fn cloud_overlay_authorized(
         secret_delivery_fact: Option<ConnectorSecretDeliveryFact>,
         external_delivery: Option<ConnectorExternalDelivery>,
+        production_delivery: Option<ConnectorProductionDelivery>,
     ) -> Self {
         if let Some(secret_delivery_fact) = secret_delivery_fact {
             return Self {
@@ -74,6 +86,7 @@ impl ConnectorAdapterReadiness {
                 secret_delivery_lease_ref: Some(secret_delivery_fact.lease_ref),
                 secret_delivery_expires_at: secret_delivery_fact.expires_at,
                 external_delivery,
+                production_delivery,
                 executable: true,
             };
         }
@@ -89,6 +102,7 @@ impl ConnectorAdapterReadiness {
             secret_delivery_lease_ref: None,
             secret_delivery_expires_at: None,
             external_delivery: None,
+            production_delivery: None,
             executable: true,
         }
     }
@@ -105,6 +119,7 @@ impl ConnectorAdapterReadiness {
             secret_delivery_lease_ref: None,
             secret_delivery_expires_at: None,
             external_delivery: None,
+            production_delivery: None,
             executable: true,
         }
     }
@@ -131,7 +146,16 @@ impl ConnectorAdapterReadiness {
             } else {
                 None
             };
-            return Self::cloud_overlay_authorized(secret_delivery_fact, external_delivery);
+            let production_delivery = if secret_delivery_fact.is_some() {
+                connector_production_delivery_config(request_metadata)
+            } else {
+                None
+            };
+            return Self::cloud_overlay_authorized(
+                secret_delivery_fact,
+                external_delivery,
+                production_delivery,
+            );
         }
 
         Self::default_unconfigured()
@@ -625,6 +649,99 @@ fn connector_external_delivery_config(
     })
 }
 
+fn connector_production_delivery_config(
+    request_metadata: Option<&serde_json::Value>,
+) -> Option<ConnectorProductionDelivery> {
+    let request = connector_internal_request_value(request_metadata)?;
+    let config = [
+        &[
+            "connectorRuntimeFacts",
+            "secretDelivery",
+            "productionDelivery",
+        ][..],
+        &[
+            "connectorRuntimeFacts",
+            "secret_delivery",
+            "production_delivery",
+        ][..],
+        &["connectorRuntimeFacts", "productionDelivery"][..],
+        &["connectorRuntimeFacts", "production_delivery"][..],
+        &[
+            "input",
+            "connectorRuntimeFacts",
+            "secretDelivery",
+            "productionDelivery",
+        ][..],
+        &[
+            "input",
+            "connectorRuntimeFacts",
+            "secret_delivery",
+            "production_delivery",
+        ][..],
+        &["input", "connectorRuntimeFacts", "productionDelivery"][..],
+        &["input", "connectorRuntimeFacts", "production_delivery"][..],
+        &["input", "productionDelivery"][..],
+        &["productionDelivery"][..],
+    ]
+    .iter()
+    .find_map(|path| connector_value_at_path(Some(request), path))
+    .filter(|value| value.is_object())?;
+    if !connector_any_string_at_paths(config, &[&["binding"][..]], "host_managed") {
+        return None;
+    }
+    if !connector_external_delivery_false_flag(config, "targetExposed", "target_exposed")
+        || !connector_external_delivery_false_flag(
+            config,
+            "credentialMaterialExposed",
+            "credential_material_exposed",
+        )
+        || !connector_external_delivery_false_flag(config, "tokenExposed", "token_exposed")
+    {
+        return None;
+    }
+    if connector_external_delivery_raw_secret_observed(config) {
+        return None;
+    }
+    if connector_first_string_at_paths(config, &[&["target"][..], &["targetUrl"][..]]).is_some() {
+        return None;
+    }
+    let delivered = connector_value_at_path(Some(config), &["productionPlatformDelivered"])
+        .or_else(|| connector_value_at_path(Some(config), &["production_platform_delivered"]))
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    if !delivered {
+        return None;
+    }
+    let proof_level =
+        connector_first_string_at_paths(config, &[&["proofLevel"][..], &["proof_level"][..]])?;
+    if !matches!(
+        proof_level.as_str(),
+        "production_connector_delivery_adapter"
+            | "production_platform_delivery_receipt"
+            | "external_platform_delivery_receipt"
+    ) {
+        return None;
+    }
+
+    Some(ConnectorProductionDelivery {
+        delivered_at: connector_first_string_at_paths(
+            config,
+            &[&["deliveredAt"][..], &["delivered_at"][..]],
+        ),
+        platform: connector_first_string_at_paths(config, &[&["platform"][..]]),
+        proof_level,
+        receipt_ref: connector_first_string_at_paths(
+            config,
+            &[
+                &["receiptRef"][..],
+                &["receipt_ref"][..],
+                &["platformReceiptRef"][..],
+                &["platform_receipt_ref"][..],
+            ],
+        ),
+    })
+}
+
 fn connector_external_delivery_raw_secret_observed(config: &serde_json::Value) -> bool {
     [
         &["credentialMaterial"][..],
@@ -644,6 +761,7 @@ fn connector_external_delivery_raw_secret_observed(config: &serde_json::Value) -
     .filter_map(|path| connector_value_at_path(Some(config), path))
     .any(connector_external_delivery_material_value_present)
         || connector_external_delivery_secret_header_observed(config)
+        || connector_external_delivery_nested_secret_observed(config)
 }
 
 fn connector_external_delivery_material_value_present(value: &serde_json::Value) -> bool {
@@ -673,11 +791,7 @@ fn connector_external_delivery_secret_header_observed(config: &serde_json::Value
 }
 
 fn connector_external_delivery_secret_header_name(name: &str) -> bool {
-    let normalized = name
-        .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric())
-        .collect::<String>()
-        .to_ascii_lowercase();
+    let normalized = connector_external_delivery_normalized_key(name);
     matches!(
         normalized.as_str(),
         "authorization"
@@ -690,6 +804,60 @@ fn connector_external_delivery_secret_header_name(name: &str) -> bool {
             | "slacksignature"
             | "xslacksignature"
     )
+}
+
+fn connector_external_delivery_nested_secret_observed(value: &serde_json::Value) -> bool {
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+
+    object.iter().any(|(key, value)| {
+        if connector_external_delivery_public_value_key(key) {
+            return false;
+        }
+        if connector_external_delivery_secret_value_key(key)
+            && connector_external_delivery_material_value_present(value)
+        {
+            return true;
+        }
+        connector_external_delivery_nested_secret_observed(value)
+    })
+}
+
+fn connector_external_delivery_public_value_key(name: &str) -> bool {
+    matches!(
+        connector_external_delivery_normalized_key(name).as_str(),
+        "target" | "targeturl" | "targetlabel"
+    )
+}
+
+fn connector_external_delivery_secret_value_key(name: &str) -> bool {
+    let normalized = connector_external_delivery_normalized_key(name);
+    matches!(
+        normalized.as_str(),
+        "authorization"
+            | "authorizationheader"
+            | "credentialmaterial"
+            | "rawsecret"
+            | "secret"
+            | "token"
+            | "accesstoken"
+            | "refreshtoken"
+            | "bearertoken"
+            | "apikey"
+            | "xapikey"
+            | "clientsecret"
+            | "password"
+    )
+}
+
+fn connector_external_delivery_normalized_key(name: &str) -> String {
+    let normalized = name
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_lowercase();
+    normalized
 }
 
 fn connector_external_delivery_false_flag(

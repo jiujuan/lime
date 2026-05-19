@@ -518,9 +518,15 @@ describe("http-client", () => {
     expect(resolveBridgeRequestTimeoutMs("agent_app_start_ui_runtime")).toBe(
       150000,
     );
+    expect(resolveBridgeRequestTimeoutMs("agent_app_runtime_get_task")).toBe(
+      60000,
+    );
+    expect(resolveBridgeRequestTimeoutMs("agent_app_runtime_start_task")).toBe(
+      60000,
+    );
     expect(
       resolveBridgeRequestTimeoutMs("agent_app_inspect_local_package"),
-    ).toBe(30000);
+    ).toBe(60000);
     expect(
       resolveBridgeRequestTimeoutMs("agent_app_get_ui_runtime_status"),
     ).toBe(5000);

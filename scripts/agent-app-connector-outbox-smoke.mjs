@@ -35,6 +35,7 @@ const DEFAULTS = {
   expectSecretDeliveryTokenExposed: "",
   expectDeliveryStatus: "",
   expectDeliveryExternalPlatformDelivered: "",
+  expectProductionPlatformDelivered: "",
   externalDeliveryWebhookUrl: "",
   externalDeliveryWebhookUrlEnv: "",
   externalDeliveryWebhookUrlFile: "",
@@ -110,6 +111,14 @@ function parseArgs(argv) {
       "external delivery webhook URL must be https://, http://127.0.0.1:<port>, or http://localhost:<port>",
     );
   }
+  if (
+    options.externalDeliveryWebhookSource === "cli" &&
+    !isLocalExternalDeliveryWebhookUrl(options.externalDeliveryWebhookUrl)
+  ) {
+    throw new Error(
+      "remote external delivery webhook URL must be provided through --external-delivery-webhook-url-env or --external-delivery-webhook-url-file",
+    );
+  }
   if (options.mode === "live") {
     const expectsExternalDelivery =
       options.externalDeliveryLocalWebhook || options.externalDeliveryWebhookUrl;
@@ -135,6 +144,7 @@ function parseArgs(argv) {
     options.expectDeliveryExternalPlatformDelivered ||= expectsExternalDelivery
       ? "true"
       : "false";
+    options.expectProductionPlatformDelivered ||= "false";
   }
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0) {
     throw new Error("--timeout-ms must be a positive number");
@@ -196,10 +206,12 @@ Options:
   --expect-delivery-status <v>     Optional replay assertion; live defaults to accepted_by_local_cloud_overlay_worker, or delivered_to_external_platform with external webhook.
   --expect-delivery-external-platform-delivered <true|false>
                                    Optional replay assertion; live defaults to false, or true with external webhook.
+  --expect-production-platform-delivered <true|false>
+                                   Optional replay assertion; live defaults to false because webhook receipt is not production platform delivery.
   --external-delivery-local-webhook
                                    Live mode only. Starts a local webhook, injects it through internalRequest, and expects delivered_to_external_platform.
   --external-delivery-webhook-url <url>
-                                   Live mode only. Injects a Host-managed webhook URL through internalRequest. Prefer env/file for remote secret URLs.
+                                   Live mode only. Local/non-sensitive target only; remote secret URLs must use env/file.
   --external-delivery-webhook-url-env <env>
                                    Live mode only. Reads the Host-managed webhook URL from an environment variable; avoids leaking the URL through process args.
   --external-delivery-webhook-url-file <path>
@@ -254,6 +266,11 @@ function isSupportedExternalDeliveryWebhookUrl(value) {
   if (url.startsWith("https://")) {
     return true;
   }
+  return isLocalExternalDeliveryWebhookUrl(url);
+}
+
+function isLocalExternalDeliveryWebhookUrl(value) {
+  const url = value.trim();
   return (
     url.startsWith("http://127.0.0.1:") ||
     url.startsWith("http://localhost:")
@@ -827,6 +844,7 @@ function buildSummary(options, health, result, localWebhook = null) {
   const outputPayload = parseToolOutputPayload(output);
   const secretDelivery = outputPayload?.secretDelivery || {};
   const delivery = outputPayload?.delivery || {};
+  const productionDelivery = outputPayload?.productionDelivery || {};
   const externalDelivery = delivery?.externalDelivery || {};
   const deliveryReceiptRef =
     typeof delivery?.receiptRef === "string" ? delivery.receiptRef : "";
@@ -835,6 +853,10 @@ function buildSummary(options, health, result, localWebhook = null) {
   const outputContainsTrustedConnectorJson =
     isTrustedConnectorOutputPayload(outputPayload);
   const outputPayloadText = JSON.stringify(outputPayload ?? {});
+  const publicProjectionText = JSON.stringify({
+    threadRead,
+    task,
+  });
   const assertions = {
     devBridgeHealthy: health?.status === "ok" || Boolean(health),
     threadReadCompleted: threadRead?.status === "completed",
@@ -855,7 +877,8 @@ function buildSummary(options, health, result, localWebhook = null) {
       : false,
     secretDeliveryConcreteLeaseRefNotExposed:
       !output.includes("secret-lease://connector/") &&
-      !outputPayloadText.includes("secret-lease://connector/"),
+      !outputPayloadText.includes("secret-lease://connector/") &&
+      !publicProjectionText.includes("secret-lease://connector/"),
   };
   const expectations = {};
   addExpectedAssertion(
@@ -949,6 +972,13 @@ function buildSummary(options, health, result, localWebhook = null) {
     delivery?.externalPlatformDelivered,
     options.expectDeliveryExternalPlatformDelivered,
   );
+  addExpectedAssertion(
+    assertions,
+    expectations,
+    "productionPlatformDeliveredExpected",
+    productionDelivery?.productionPlatformDelivered,
+    options.expectProductionPlatformDelivered,
+  );
   if (options.expectDeliveryStatus || options.expectDeliveryExternalPlatformDelivered) {
     assertions.deliveryReceiptRefObserved =
       deliveryReceiptRef.startsWith("delivery://");
@@ -965,7 +995,8 @@ function buildSummary(options, health, result, localWebhook = null) {
   if (options.externalDeliveryWebhookUrl) {
     assertions.externalDeliveryTargetNotExposed =
       !output.includes(options.externalDeliveryWebhookUrl) &&
-      !outputPayloadText.includes(options.externalDeliveryWebhookUrl);
+      !outputPayloadText.includes(options.externalDeliveryWebhookUrl) &&
+      !publicProjectionText.includes(options.externalDeliveryWebhookUrl);
   }
   if (options.externalDeliveryLocalWebhook) {
     assertions.externalDeliveryLocalWebhookReceived =
@@ -1018,11 +1049,20 @@ function buildSummary(options, health, result, localWebhook = null) {
       deliveryEvidenceRefs,
       deliveryExternalPlatformDelivered:
         delivery?.externalPlatformDelivered ?? null,
+      productionDeliveryStatus: productionDelivery?.status || null,
+      productionDeliveryProofLevel: productionDelivery?.proofLevel || null,
+      productionDeliveryNextRequired:
+        productionDelivery?.nextRequired || null,
+      productionPlatformDelivered:
+        productionDelivery?.productionPlatformDelivered ?? null,
       externalDeliveryChannel: externalDelivery?.channel || null,
       externalDeliveryTargetHash: externalDelivery?.targetHash || null,
       externalDeliveryTargetLabel: externalDelivery?.targetLabel || null,
       externalDeliveryTargetExposed:
         externalDelivery?.targetExposed ?? null,
+      externalDeliveryProofLevel: externalDelivery?.proofLevel || null,
+      externalDeliveryProductionPlatformDelivered:
+        externalDelivery?.productionPlatformDelivered ?? null,
       externalDeliveryHttpStatus: externalDelivery?.httpStatus ?? null,
     },
     externalDeliveryWebhook: options.externalDeliveryWebhookUrl

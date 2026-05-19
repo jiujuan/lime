@@ -10,6 +10,8 @@ import {
   type LimeCapabilityDefinitionRecord,
   type LimeCapabilityName,
 } from "../sdk/capabilityCatalog";
+import { resolveOemCloudRuntimeContext } from "@/lib/api/oemCloudRuntime";
+import { startOemCloudLogin } from "@/lib/oemCloudLoginLauncher";
 import type {
   AgentAppProjection,
   AgentAppRuntimeProcessCost,
@@ -1136,6 +1138,56 @@ function buildAgentAppStandardProfile(params: {
     },
     requirementBoundary: readCapabilityHandoffContract(params),
   };
+}
+
+function buildCloudSessionSnapshot() {
+  const runtime = resolveOemCloudRuntimeContext();
+  if (!runtime) {
+    return {
+      hasSession: false,
+    };
+  }
+  return {
+    controlPlaneBaseUrl: runtime.controlPlaneBaseUrl,
+    tenantId: runtime.tenantId,
+    hasSession: Boolean(runtime.sessionToken),
+  };
+}
+
+async function dispatchCloudSession(
+  request: AgentAppHostBridgeCapabilityRequest,
+): Promise<unknown> {
+  if (request.method === "getSnapshot") {
+    return buildCloudSessionSnapshot();
+  }
+  if (request.method === "getAccessToken") {
+    const runtime = resolveOemCloudRuntimeContext();
+    if (!runtime?.sessionToken || !runtime.tenantId) {
+      throw new AgentAppCapabilityDispatcherError(
+        "SESSION_REQUIRED",
+        "Host cloud session is not available.",
+      );
+    }
+    return {
+      accessToken: runtime.sessionToken,
+      tenantId: runtime.tenantId,
+      controlPlaneBaseUrl: runtime.controlPlaneBaseUrl,
+    };
+  }
+  if (request.method === "requestLogin") {
+    const runtime = resolveOemCloudRuntimeContext();
+    if (!runtime) {
+      throw new AgentAppCapabilityDispatcherError(
+        "LOGIN_UNAVAILABLE",
+        "Host cloud login is not configured.",
+      );
+    }
+    if (!runtime.sessionToken) {
+      await startOemCloudLogin(runtime, { waitForCompletion: true });
+    }
+    return buildCloudSessionSnapshot();
+  }
+  throwUnsupportedMethod(request);
 }
 
 function dispatchCapabilities(
@@ -4176,6 +4228,9 @@ export function createAgentAppCapabilityDispatcher({
 
     if (request.capability === "lime.models") {
       return dispatchModels(host, request);
+    }
+    if (request.capability === "lime.cloudSession") {
+      return dispatchCloudSession(request);
     }
     if (request.capability === "lime.usage") {
       return dispatchUsage(host, request);

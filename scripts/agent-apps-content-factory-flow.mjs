@@ -2122,6 +2122,16 @@ async function prepareContentFactoryNextRound(frame, timeoutMs) {
     timeout: boundedTimeoutMs,
   });
 
+  const confirmedDelivery = await clickVisibleButtonIfPresent(
+    frame.locator('button[data-confirm-step="delivery_pack"]'),
+    boundedTimeoutMs,
+  );
+  if (confirmedDelivery) {
+    await frame.getByText(/交付已确认|确认复盘结论|创建下一轮目标/).first().waitFor({
+      timeout: boundedTimeoutMs,
+    });
+  }
+
   const confirmedReview = await clickVisibleButtonIfPresent(
     frame.locator('button[data-confirm-step="review_report"]'),
     boundedTimeoutMs,
@@ -2623,10 +2633,13 @@ function hasOutputWorkspacePatch({ artifacts = [], taskEvents = [] }) {
   });
 }
 
-async function materializeDirectWorkspacePatch(frame, directRecord, actionConfig, timeoutMs) {
+async function materializeDirectWorkspacePatch(frame, directRecord, actionConfig, timeoutMs, preparedReviewInput = null) {
   const patch = directRecord?.workspacePatch;
   if (!isObjectRecord(patch)) return false;
   const projectId = patch.projectId || patch.project_id || CONTENT_FACTORY_SAMPLE_PROJECT_ID;
+  const reviewInput = actionConfig?.action === "run-review"
+    ? preparedReviewInput || await readContentFactoryReviewInput(frame, Math.min(timeoutMs, 5_000)).catch(() => null)
+    : null;
   const frameUrl = typeof frame.url === "function" ? frame.url() : "";
   let origin = "";
   try {
@@ -2641,13 +2654,14 @@ async function materializeDirectWorkspacePatch(frame, directRecord, actionConfig
   let browserMaterializeError = null;
   let materialized = await evaluateWithTimeout(
     frame,
-    async ({ patch: runtimePatch, projectId: targetProjectId, activeProjectStorageKey }) => {
+    async ({ patch: runtimePatch, projectId: targetProjectId, activeProjectStorageKey, reviewInput: reviewInputFromPage }) => {
       const response = await fetch("/api/runtime/materialize-workspace-patch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           project_id: runtimePatch.projectId || runtimePatch.project_id || targetProjectId,
           patch: runtimePatch,
+          review_input: reviewInputFromPage,
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -2667,6 +2681,7 @@ async function materializeDirectWorkspacePatch(frame, directRecord, actionConfig
     {
       patch,
       projectId,
+      reviewInput,
       activeProjectStorageKey: CONTENT_FACTORY_ACTIVE_PROJECT_STORAGE_KEY,
     },
     timeoutMs,
@@ -2683,6 +2698,7 @@ async function materializeDirectWorkspacePatch(frame, directRecord, actionConfig
         body: JSON.stringify({
           project_id: projectId,
           patch,
+          review_input: reviewInput,
         }),
       },
       timeoutMs,
@@ -2731,6 +2747,25 @@ async function materializeDirectWorkspacePatch(frame, directRecord, actionConfig
     await clickCampaignStep(frame, actionConfig.campaignStep, timeoutMs);
   }
   return materialized;
+}
+
+async function readContentFactoryReviewInput(frame, timeoutMs = 5_000) {
+  return evaluateWithTimeout(
+    frame,
+    () => {
+      const readField = (field) => document.querySelector(`input[data-field="${field}"]`)?.value ?? "";
+      return {
+        direction: readField("review.direction"),
+        sampleSize: readField("review.sampleSize"),
+        reuseRatio: readField("review.reuseRatio"),
+        completionRate: readField("review.completionRate"),
+        searchShare: readField("review.searchShare"),
+        conversionRate: readField("review.conversionRate"),
+      };
+    },
+    null,
+    timeoutMs,
+  );
 }
 
 function isSuccessfulStatus(value) {
@@ -3258,42 +3293,46 @@ async function runFlowAction(frame, page, options, actionName) {
     Math.min(options.timeoutMs, 45_000),
   );
   const actionConfig = CONTENT_FACTORY_ACTIONS[actionName];
+  let preparedReviewInput = null;
   const boundedTimeoutMs = Math.min(options.timeoutMs, 60_000);
   await ensureContentFactorySampleProjectActive(frame, boundedTimeoutMs);
 
   logStage(`action:${actionName}:navigate`);
   await clickContentFactoryPage(frame, actionConfig.page, boundedTimeoutMs);
   await waitForActionPageReady(frame, actionConfig, boundedTimeoutMs);
+  let executionConfig = actionConfig;
   if (actionConfig.prepareNextRound) {
     await prepareContentFactoryNextRound(frame, boundedTimeoutMs);
-    await waitForActionPageReady(frame, CONTENT_FACTORY_ACTIONS["run-production"], boundedTimeoutMs);
+    executionConfig = CONTENT_FACTORY_ACTIONS["run-production"];
+    await waitForActionPageReady(frame, executionConfig, boundedTimeoutMs);
   }
-  if (actionConfig.campaignStep) {
-    await clickCampaignStep(frame, actionConfig.campaignStep, boundedTimeoutMs);
+  if (executionConfig.campaignStep) {
+    await clickCampaignStep(frame, executionConfig.campaignStep, boundedTimeoutMs);
   }
   const preparedNextRound = await prepareNextRoundForCompletedDefaultProduction(
     frame,
-    actionConfig,
+    executionConfig,
     actionName,
     boundedTimeoutMs,
   );
-  if (preparedNextRound && actionConfig.campaignStep) {
-    await clickCampaignStep(frame, actionConfig.campaignStep, boundedTimeoutMs);
+  if (preparedNextRound && executionConfig.campaignStep) {
+    await clickCampaignStep(frame, executionConfig.campaignStep, boundedTimeoutMs);
   }
-  if (!(await isContentFactoryPageRoute(frame, actionConfig.page))) {
+  if (!(await isContentFactoryPageRoute(frame, executionConfig.page))) {
     frame = await resolveContentFactoryReadFrame(page, frame, boundedTimeoutMs);
-    await clickContentFactoryPage(frame, actionConfig.page, boundedTimeoutMs);
-    await waitForActionPageReady(frame, actionConfig, boundedTimeoutMs);
-    if (actionConfig.campaignStep) {
-      await clickCampaignStep(frame, actionConfig.campaignStep, boundedTimeoutMs);
+    await clickContentFactoryPage(frame, executionConfig.page, boundedTimeoutMs);
+    await waitForActionPageReady(frame, executionConfig, boundedTimeoutMs);
+    if (executionConfig.campaignStep) {
+      await clickCampaignStep(frame, executionConfig.campaignStep, boundedTimeoutMs);
     }
   }
   if (actionName === "run-review") {
     await prepareReviewMetricsForAction(frame, boundedTimeoutMs);
+    preparedReviewInput = await readContentFactoryReviewInput(frame, Math.min(boundedTimeoutMs, 5_000)).catch(() => null);
   }
 
   const actionButton = frame
-    .locator(`button[data-action="${actionConfig.action}"]`)
+    .locator(`button[data-action="${executionConfig.action}"]`)
     .first();
   await actionButton.waitFor({ state: "visible", timeout: boundedTimeoutMs });
   assert(
@@ -3304,7 +3343,7 @@ async function runFlowAction(frame, page, options, actionName) {
   const baselineCallLogLength = await readSdkCallLogLength(frame);
   logStage(`action:${actionName}:start`);
   await actionButton.click({ timeout: boundedTimeoutMs });
-  await waitForRuntimeProcessVisible(frame, page, actionConfig, boundedTimeoutMs);
+  await waitForRuntimeProcessVisible(frame, page, executionConfig, boundedTimeoutMs);
   const startTaskTimeoutMs = Math.min(
     options.completionTimeoutMs,
     Math.max(boundedTimeoutMs, 180_000),
@@ -3358,7 +3397,7 @@ async function runFlowAction(frame, page, options, actionName) {
     latestCompletion = summarizeCompletion({
       directRecord: latestDirectRecord,
       hostRecord: latestHostRecord,
-      expectedSkills: actionConfig.expectedSkills,
+      expectedSkills: executionConfig.expectedSkills,
     });
     if (latestCompletion.businessReady) {
       const readFrame = await resolveOrRecoverContentFactoryReadFrame(
@@ -3383,8 +3422,9 @@ async function runFlowAction(frame, page, options, actionName) {
         directPatchMaterialized = await materializeDirectWorkspacePatch(
           readFrame,
           latestDirectRecord,
-          actionConfig,
+          executionConfig,
           boundedTimeoutMs,
+          preparedReviewInput,
         ).catch(() => false);
         if (directPatchMaterialized) {
           const materializedFrame = await resolveOrRecoverContentFactoryReadFrame(
@@ -3436,7 +3476,7 @@ async function runFlowAction(frame, page, options, actionName) {
         latestCompletion = summarizeCompletion({
           directRecord: latestDirectRecord,
           hostRecord: latestHostRecord,
-          expectedSkills: actionConfig.expectedSkills,
+          expectedSkills: executionConfig.expectedSkills,
         });
       }
     }
@@ -3464,8 +3504,9 @@ async function runFlowAction(frame, page, options, actionName) {
     directPatchMaterialized = await materializeDirectWorkspacePatch(
       readFrame,
       latestDirectRecord,
-      actionConfig,
+      executionConfig,
       boundedTimeoutMs,
+      preparedReviewInput,
     ).catch(() => false);
     if (directPatchMaterialized) {
       const materializedFrame = await resolveOrRecoverContentFactoryReadFrame(
@@ -3520,7 +3561,7 @@ async function runFlowAction(frame, page, options, actionName) {
     await readBodyText(finalFrame, Math.min(boundedTimeoutMs, 20_000)),
     await readBodyText(page, Math.min(boundedTimeoutMs, 20_000)),
   ].join("\n");
-  let processVisible = textShowsRuntimeProcess(bodyText, actionConfig);
+  let processVisible = textShowsRuntimeProcess(bodyText, executionConfig);
   const hostFallbackVisible = bodyText.includes("Lime AI 同事连接失败");
   if (!processVisible && options.launchMode !== "standalone-shell") {
     const surfaceState = await readRuntimeSurfaceState(page);
@@ -3530,7 +3571,7 @@ async function runFlowAction(frame, page, options, actionName) {
         await readBodyText(finalFrame, Math.min(boundedTimeoutMs, 20_000)),
         await readBodyText(page, Math.min(boundedTimeoutMs, 20_000)),
       ].join("\n");
-      processVisible = textShowsRuntimeProcess(bodyText, actionConfig);
+      processVisible = textShowsRuntimeProcess(bodyText, executionConfig);
       const recoveredSurfaceState = await readRuntimeSurfaceState(page);
       assert(
         recoveredSurfaceState.runtimeSurfaceVisible && recoveredSurfaceState.runtimeFrameVisible,
@@ -3571,7 +3612,7 @@ async function runFlowAction(frame, page, options, actionName) {
       taskStart.sessionId ||
       findSessionId(latestDirectRecord) ||
       findSessionId(latestHostRecord),
-    expectedSkills: actionConfig.expectedSkills,
+    expectedSkills: executionConfig.expectedSkills,
     invokedSkillNames: latestCompletion.invokedSkillNames,
     completion: latestCompletion,
     directRuntimeSnapshot: sanitizeJson(latestDirectRecord),

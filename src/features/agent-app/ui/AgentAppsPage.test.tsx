@@ -867,6 +867,76 @@ describe("AgentAppsPage", () => {
     ).toContain("agentApp.apps.installReview.title");
   });
 
+  it("已安装旧版 Cloud App 需要重新激活时，主按钮应提示输入激活码而不是假装一键更新", async () => {
+    installedStates.push(
+      buildReadyState({
+        manifest: {
+          ...(contentFactoryFixture as AppManifest),
+          version: "0.2.0",
+        },
+      }),
+    );
+    apiMocks.getAgentAppCloudCatalog.mockResolvedValue({
+      source: "remote",
+      payload: {
+        schemaVersion: "agent-app-cloud-bootstrap/v1",
+        tenantId: "tenant-0001",
+        generatedAt: "2026-05-15T00:00:00.000Z",
+        apps: [
+          {
+            appId: "content-factory-app",
+            displayName: "内容工厂",
+            version: "0.3.0",
+            registrationRequired: true,
+            registrationState: "required",
+            registrationHint: "请输入企业注册码",
+            enabled: false,
+            disabledReason: "registration required",
+            packageUrl: "",
+            packageHash: "",
+            manifestHash: "",
+            capabilityRequirements: {},
+            defaultEntries: ["dashboard"],
+            policyDefaults: {},
+            toolAvailability: [],
+          },
+        ],
+      },
+    });
+
+    const container = await renderPage();
+    await flush();
+
+    expect(container.textContent).toContain(
+      "agentApp.apps.center.status.registration",
+    );
+    expect(container.textContent).toContain(
+      "agentApp.apps.center.action.activate",
+    );
+    expect(container.textContent).not.toContain(
+      "agentApp.apps.center.action.updateOneClick",
+    );
+
+    const activateButton = container.querySelector(
+      '[data-testid="agent-apps-update-cloud-content-factory-app"]',
+    ) as HTMLButtonElement | null;
+    expect(activateButton?.disabled).toBe(false);
+    await act(async () => {
+      activateButton?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(
+      container.querySelector('[data-testid="agent-apps-detail"]'),
+    ).not.toBeNull();
+    expect(toast.error).toHaveBeenCalledWith(
+      "agentApp.apps.registration.codeRequired",
+    );
+    expect(apiMocks.reviewCloudAgentAppRelease).not.toHaveBeenCalled();
+    expect(apiMocks.saveInstalledAgentAppState).not.toHaveBeenCalled();
+  });
+
   it("Cloud App 已满足注册条件时应先生成安装审查再写入 installed state", async () => {
     const container = await renderPage();
     await flush();

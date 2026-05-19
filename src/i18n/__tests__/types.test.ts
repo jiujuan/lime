@@ -60,6 +60,20 @@ function assertI18nKeyTypes() {
   });
   i18n.t("common.oemLimeHubProviderSync.managedKeyAlias", { ns: "common" });
   i18n.t("common.oemLimeHubProviderSync.cloudTokenName", { ns: "common" });
+  i18n.t("common.modelSelector.header.title", { ns: "common" });
+  i18n.t("common.modelSelector.header.themeFilter", {
+    ns: "common",
+    theme: "General chat",
+  });
+  i18n.t("common.modelSelector.provider.section.cloud", { ns: "common" });
+  i18n.t("common.modelSelector.model.incompatibleHidden", {
+    ns: "common",
+    count: 2,
+  });
+  i18n.t("common.modelSelector.noProvider.dismissAria", { ns: "common" });
+  i18n.t("common.modelSelector.state.loginRequired", { ns: "common" });
+  i18n.t("common.modelCapabilities.reasoning.active", { ns: "common" });
+  i18n.t("common.modelCapabilities.vision.inactive", { ns: "common" });
   i18n.t("skills.contentDialog.loading", { ns: "agent" });
   i18n.t("skills.contentDialog.section.metadata", { ns: "agent" });
   i18n.t("skills.contentDialog.emptyInspection", { ns: "agent" });

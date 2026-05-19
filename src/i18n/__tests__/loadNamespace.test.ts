@@ -318,6 +318,30 @@ describe("i18n namespace loader", () => {
       expect(resources[locale].common).toHaveProperty(
         "common.oemLimeHubProviderSync.cloudTokenName",
       );
+      expect(resources[locale].common).toHaveProperty(
+        "common.modelSelector.header.title",
+      );
+      expect(resources[locale].common).toHaveProperty(
+        "common.modelSelector.header.themeFilter",
+      );
+      expect(resources[locale].common).toHaveProperty(
+        "common.modelSelector.provider.section.cloud",
+      );
+      expect(resources[locale].common).toHaveProperty(
+        "common.modelSelector.model.incompatibleHidden",
+      );
+      expect(resources[locale].common).toHaveProperty(
+        "common.modelSelector.noProvider.dismissAria",
+      );
+      expect(resources[locale].common).toHaveProperty(
+        "common.modelSelector.state.loginRequired",
+      );
+      expect(resources[locale].common).toHaveProperty(
+        "common.modelCapabilities.reasoning.active",
+      );
+      expect(resources[locale].common).toHaveProperty(
+        "common.modelCapabilities.vision.inactive",
+      );
       expect(resources[locale].agent).toHaveProperty(
         "skills.repoManager.title",
       );

@@ -177,7 +177,37 @@ export interface EvidenceRecorderPort {
 - 安装、启动、capability 调用、升级、回滚、卸载都必须可追踪。
 - Evidence event 只能引用 secret ref、artifact ref、trace id，不能写入 secret value。
 
-### 3.6 macOS App Identity Contract
+### 3.6 Cloud Session Capability Contract
+
+```ts
+export interface CloudSessionSnapshot {
+  controlPlaneBaseUrl?: string
+  tenantId?: string
+  hasSession: boolean
+}
+
+export interface CloudSessionAccessToken {
+  accessToken: string
+  tenantId: string
+  controlPlaneBaseUrl?: string
+  expiresAt?: string
+}
+
+export interface CloudSessionCapability {
+  getSnapshot(): Promise<CloudSessionSnapshot>
+  getAccessToken(): Promise<CloudSessionAccessToken>
+  requestLogin(): Promise<CloudSessionSnapshot>
+}
+```
+
+规则：
+
+- `getSnapshot` 只返回租户、控制面地址和会话存在性，不暴露 token。
+- `getAccessToken` 只能作为 just-in-time 认证入口使用，返回的 token 仅用于当前控制面调用。
+- `requestLogin` 可以唤起宿主的通用登录授权流程，但宿主不得代理垂直业务发布。
+- token 不得写入 app config、storage、log、artifact 或 evidence。
+
+### 3.7 macOS App Identity Contract
 
 ```ts
 export type MacOsStandaloneIdentity = {
@@ -198,6 +228,7 @@ export type MacOsStandaloneIdentity = {
 - `bundleId` 必须对每个 standalone App 唯一；`appId` 是 Team ID 与 Bundle ID 组合后的系统身份。
 - 多个 Lime 官方 standalone App 可以复用同一 Team 的 Developer ID Application 证书签名，但必须有各自的 Bundle ID / App ID / entitlements。
 - `.pkg` 安装器需要单独的 installer signing identity；这不改变 App 的 Bundle ID。
+- Tauri updater signing key 独立于 Apple 证书；生产发布默认按 standalone App / channel 隔离，不把 Lime Desktop updater key 直接复用给业务 App。
 - App Group / Keychain Access Group 是共享能力 allow list，不是默认打开；只有 Runtime broker 需要本地共享时才配置。
 - `unsigned` / `ad_hoc` 只能用于 dev shell 或测试 descriptor，不能标记为 production-ready。
 

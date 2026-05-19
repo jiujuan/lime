@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const {
   mockUseConfiguredProviders,
@@ -116,12 +117,14 @@ function renderModelSelector(
   return { container, props: mergedProps };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+
+  await changeLimeLocale("zh-CN");
 
   vi.clearAllMocks();
   window.localStorage.clear();
@@ -179,7 +182,7 @@ beforeEach(() => {
   }));
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) break;
@@ -189,6 +192,7 @@ afterEach(() => {
     mounted.container.remove();
   }
   window.localStorage.clear();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("ModelSelector", () => {
@@ -486,6 +490,65 @@ describe("ModelSelector", () => {
     expect(pageText).toContain("支持思考");
     expect(pageText).toContain("支持多模态");
     expect(pageText).toContain("无多模态");
+  });
+
+  it("en-US locale 应展示 common namespace 里的模型选择 chrome", async () => {
+    await changeLimeLocale("en-US");
+    mockUseProviderModels.mockReturnValue({
+      modelIds: ["gpt-5.3-codex", "text-only-chat"],
+      models: [
+        {
+          id: "gpt-5.3-codex",
+          capabilities: {
+            vision: true,
+            tools: true,
+            streaming: true,
+            json_mode: true,
+            function_calling: true,
+            reasoning: true,
+          },
+        },
+        {
+          id: "text-only-chat",
+          capabilities: {
+            vision: false,
+            tools: true,
+            streaming: true,
+            json_mode: true,
+            function_calling: true,
+            reasoning: false,
+          },
+        },
+      ],
+      loading: false,
+      error: null,
+    });
+
+    const { container } = renderModelSelector({
+      onManageProviders: vi.fn(),
+    });
+
+    const trigger = container.querySelector(
+      'button[role="combobox"]',
+    ) as HTMLButtonElement | null;
+    if (!trigger) {
+      throw new Error("未找到模型选择触发器");
+    }
+
+    act(() => {
+      trigger.click();
+    });
+
+    const pageText = document.body.textContent || "";
+    expect(pageText).toContain("Model selection");
+    expect(pageText).toContain("Currently organized by General chat");
+    expect(pageText).toContain("Providers");
+    expect(pageText).toContain("Model list");
+    expect(pageText).toContain("Supports reasoning");
+    expect(pageText).toContain("No multimodal");
+    expect(pageText).toContain("Manage providers");
+    expect(pageText).not.toContain("模型选择");
+    expect(pageText).not.toContain("支持思考");
   });
 
   it("展开后应把 Lime 云端模型与本地供应商分组显示", () => {

@@ -8,11 +8,14 @@
 import React from "react";
 import styled from "styled-components";
 import { Coins } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { AgentI18nKey } from "@/i18n/agentResources";
 import type { AgentTokenUsage as TokenUsage } from "@/lib/api/agentProtocol";
 import {
-  formatCompactTokenCount,
+  buildTokenUsageSummaryCopy,
   resolvePromptCacheActivity,
   resolvePromptCacheMetaText,
+  resolveTokenUsageTotalText,
 } from "../utils/tokenUsageSummary";
 
 const UsageContainer = styled.div`
@@ -69,9 +72,19 @@ export const TokenUsageDisplay: React.FC<TokenUsageDisplayProps> = ({
   promptCacheNotice,
   inline = false,
 }) => {
-  const total = usage.input_tokens + usage.output_tokens;
+  const { t } = useTranslation("agent");
+  const tokenUsageCopy = React.useMemo(
+    () =>
+      buildTokenUsageSummaryCopy((key, values) =>
+        t(key as AgentI18nKey, values ?? {}),
+      ),
+    [t],
+  );
   const totalPromptCacheTokens = resolvePromptCacheActivity(usage);
-  const promptCacheMetaText = resolvePromptCacheMetaText(usage);
+  const promptCacheMetaText = resolvePromptCacheMetaText(
+    usage,
+    tokenUsageCopy,
+  );
   const missingPromptCacheNotice =
     totalPromptCacheTokens > 0 ? null : (promptCacheNotice ?? null);
 
@@ -82,7 +95,9 @@ export const TokenUsageDisplay: React.FC<TokenUsageDisplayProps> = ({
       title={missingPromptCacheNotice?.detail}
     >
       <UsageIcon />
-      <UsageText>{formatCompactTokenCount(total)} tokens</UsageText>
+      <UsageText>
+        {resolveTokenUsageTotalText(usage, tokenUsageCopy)}
+      </UsageText>
       {promptCacheMetaText ? (
         <UsageMeta>{`· ${promptCacheMetaText}`}</UsageMeta>
       ) : null}

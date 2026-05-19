@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-05-19",
+  "source": {
+    "repoPath": "/Users/coso/Documents/dev/ai/limecloud/agentapp",
+    "remote": "git@github.com:limecloud/agentapp.git",
+    "packageName": "agentapp-ref",
+    "version": "0.8.0"
+  },
+  "git": {
+    "branch": "main",
+    "originMain": "af69c87cd65d3a508959958f9b4db29b2780ca68",
+    "head": "af69c87cd65d3a508959958f9b4db29b2780ca68",
+    "tag": "v0.8.0",
+    "tagObject": "16e6b06a3d52e441bcd249f1a4089b40290b887d",
+    "tagDereferencedCommit": "af69c87cd65d3a508959958f9b4db29b2780ca68",
+    "cleanWorkingTree": true
+  },
+  "githubRelease": {
+    "tagName": "v0.8.0",
+    "name": "AgentAPP v0.8.0",
+    "url": "https://github.com/limecloud/agentapp/releases/tag/v0.8.0",
+    "targetCommitish": "af69c87cd65d3a508959958f9b4db29b2780ca68",
+    "isDraft": false,
+    "isPrerelease": false,
+    "publishedAt": "2026-05-19T01:02:51Z"
+  },
+  "npm": {
+    "name": "agentapp-ref",
+    "version": "0.8.0",
+    "distTagLatest": "0.8.0",
+    "publishedAt": "2026-05-19T01:04:26.080Z",
+    "cliCheck": {
+      "command": "npm exec --yes agentapp-ref@0.8.0 -- --version",
+      "stdout": "0.8.0"
+    },
+    "dist": {
+      "integrity": "sha512-hXFtQvnDsswAH+M7aXb10cQePxa+rXjpGTIgDFPChM1G8GplWogRktQh/f+vuRo2B8dHmnorvkVgqKcmK2VOzg==",
+      "shasum": "9de448e9dfade038a94fa49f21918cabd9e95e4b",
+      "tarball": "https://registry.npmjs.org/agentapp-ref/-/agentapp-ref-0.8.0.tgz",
+      "fileCount": 180,
+      "unpackedSize": 3452939
+    }
+  },
+  "interpretation": {
+    "agentappStandardReleaseComplete": true,
+    "notes": "This evidence only covers the AgentAPP standard repository release. It does not prove Lime standalone Content Factory build/sign/notarize/upload readiness."
+  }
+}

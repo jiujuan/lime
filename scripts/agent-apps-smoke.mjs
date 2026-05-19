@@ -21,6 +21,13 @@ const DEFAULTS = {
   includeContentFactoryCompletionE2e: false,
   completionTimeoutMs: 90_000,
   contentFactoryAction: "build-store",
+  contentFactoryAppDir: path.resolve(
+    process.cwd(),
+    "..",
+    "..",
+    "limecloud",
+    "content-factory-app",
+  ),
 };
 
 const ACCOUNT_MENU_BUTTON_SELECTOR = '[data-testid="app-sidebar-account-button"]';
@@ -145,6 +152,10 @@ function parseArgs(argv) {
     }
     if (arg === "--content-factory-action" && argv[index + 1]) {
       options.contentFactoryAction = String(argv[index + 1]).trim();
+      index += 1;
+    }
+    if (arg === "--content-factory-app-dir" && argv[index + 1]) {
+      options.contentFactoryAppDir = path.resolve(String(argv[index + 1]).trim());
       index += 1;
     }
   }
@@ -1826,6 +1837,54 @@ async function runFlagOffRegression(options) {
   }
 }
 
+async function ensureContentFactoryInstalled(page, options, reason) {
+  const installedSelector = '[data-testid="agent-apps-installed-content-factory-app"]';
+  if ((await page.locator(installedSelector).count()) > 0) {
+    return { status: "already_installed", reason };
+  }
+
+  const appMarkdownPath = path.join(options.contentFactoryAppDir, "APP.md");
+  if (!fs.existsSync(appMarkdownPath)) {
+    throw new Error(
+      `Content Factory local package is required to seed Agent Apps smoke after delete-data uninstall: ${options.contentFactoryAppDir}`,
+    );
+  }
+
+  await page.evaluate(async () => {
+    const api = await import("/src/lib/api/agentApps.ts");
+    const fixtureResponse = await fetch(
+      "/src/features/agent-app/fixtures/content-factory-app.json",
+    );
+    if (!fixtureResponse.ok) {
+      throw new Error(
+        `Failed to load Content Factory fixture: HTTP ${fixtureResponse.status}`,
+      );
+    }
+    const packageManifest = await fixtureResponse.json();
+    const payload = window.__LIME_AGENT_APPS_SMOKE_BOOTSTRAP__;
+    const app = payload?.apps?.find?.(
+      (item) => item?.appId === "content-factory-app",
+    );
+    if (!app) {
+      throw new Error("Content Factory cloud bootstrap fixture is missing.");
+    }
+    await api.installCloudAgentAppRelease({
+      app,
+      packageManifest,
+    });
+  }, { appDir: options.contentFactoryAppDir });
+
+  await page.click('[data-testid="agent-apps-refresh"]');
+  await page.waitForSelector(installedSelector, {
+    timeout: options.timeoutMs,
+  });
+  return {
+    status: "seeded_from_local_package",
+    reason,
+    appDir: options.contentFactoryAppDir,
+  };
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   fs.mkdirSync(options.evidenceDir, { recursive: true });
@@ -1888,6 +1947,11 @@ async function main() {
     await page.waitForSelector('[data-testid="agent-apps-page"]', {
       timeout: options.timeoutMs,
     });
+    const initialInstallSeed = await ensureContentFactoryInstalled(
+      page,
+      options,
+      "initial_smoke_state",
+    );
     await page.waitForSelector('[data-testid="agent-apps-installed-content-factory-app"]', {
       timeout: options.timeoutMs,
     });
@@ -1896,9 +1960,12 @@ async function main() {
     await page.waitForSelector('[data-testid="agent-apps-registration-content-factory-app"]', {
       timeout: options.timeoutMs,
     });
-    const registrationInstallBlocked = await page.isDisabled(
+    const registrationInstallButton = page.locator(
       '[data-testid="agent-apps-install-cloud-content-factory-app"]',
     );
+    const registrationInstallBlocked =
+      (await registrationInstallButton.count()) === 0 ||
+      (await registrationInstallButton.isDisabled());
 
     logStage("activate-bootstrap-catalog");
     await page.evaluate((payload) => {
@@ -1911,37 +1978,51 @@ async function main() {
       window.__LIME_BOOTSTRAP__ = { data: { agentAppCatalog: payload } };
     }, bootstrap);
     await page.click('[data-testid="agent-apps-refresh"]');
-    await page.waitForFunction(
-      () => {
-        const button = document.querySelector(
-          '[data-testid="agent-apps-install-cloud-content-factory-app"]',
-        );
-        return button instanceof HTMLButtonElement && !button.disabled;
-      },
-      undefined,
-      { timeout: options.timeoutMs },
-    );
+    if (
+      (await page.locator('[data-testid="agent-apps-installed-content-factory-app"]').count()) ===
+      0
+    ) {
+      await page.waitForFunction(
+        () => {
+          const button = document.querySelector(
+            '[data-testid="agent-apps-install-cloud-content-factory-app"]',
+          );
+          return button instanceof HTMLButtonElement && !button.disabled;
+        },
+        undefined,
+        { timeout: options.timeoutMs },
+      );
+    }
 
     logStage("install-cloud-review");
     let cloudInstallReviewVisible = false;
     let cloudInstallAlreadySatisfied = false;
-    await page.click('[data-testid="agent-apps-install-cloud-content-factory-app"]', {
-      timeout: options.timeoutMs,
-    });
-    const reviewVisible = await page
-      .waitForSelector('[data-testid="agent-apps-install-review"]', {
-        timeout: Math.min(options.timeoutMs, 5_000),
-      })
-      .then(() => true)
-      .catch(() => false);
-    if (reviewVisible) {
-      cloudInstallReviewVisible = true;
-      await page.click('[data-testid="agent-apps-install-review-confirm"]');
-    } else {
+    const installedBeforeCloudAction =
+      (await page.locator('[data-testid="agent-apps-installed-content-factory-app"]').count()) > 0;
+    if (installedBeforeCloudAction) {
       cloudInstallAlreadySatisfied = true;
       console.log(
         "[smoke:agent-apps] install review skipped because content factory is already installed",
       );
+    } else {
+      await page.click('[data-testid="agent-apps-install-cloud-content-factory-app"]', {
+        timeout: options.timeoutMs,
+      });
+      const reviewVisible = await page
+        .waitForSelector('[data-testid="agent-apps-install-review"]', {
+          timeout: Math.min(options.timeoutMs, 5_000),
+        })
+        .then(() => true)
+        .catch(() => false);
+      if (reviewVisible) {
+        cloudInstallReviewVisible = true;
+        await page.click('[data-testid="agent-apps-install-review-confirm"]');
+      } else {
+        cloudInstallAlreadySatisfied = true;
+        console.log(
+          "[smoke:agent-apps] install review skipped because content factory is already installed",
+        );
+      }
     }
     await page.waitForSelector('[data-testid="agent-apps-installed-content-factory-app"]', {
       timeout: options.timeoutMs,
@@ -2108,13 +2189,21 @@ async function main() {
     await page.waitForSelector('[data-testid="agent-apps-launch-summary"]', {
       timeout: options.timeoutMs,
     });
-    const stillInstalledAfterRehearsal =
+    const stillInstalledAfterDeleteData =
       (await page.locator('[data-testid="agent-apps-installed-content-factory-app"]').count()) > 0;
+    const postDeleteInstallSeed = await ensureContentFactoryInstalled(
+      page,
+      options,
+      "post_delete_data_restore",
+    );
 
     const flagOff = await runFlagOffRegression(options);
     const assertions = {
       formalPageVisible: Boolean(await page.$('[data-testid="agent-apps-page"]')),
-      installedVisible: stillInstalledAfterRehearsal,
+      deleteDataRemovedInstalledState: !stillInstalledAfterDeleteData,
+      postDeleteInstalledStateRestored:
+        (await page.locator('[data-testid="agent-apps-installed-content-factory-app"]').count()) >
+        0,
       registrationRequiredBlocked: registrationInstallBlocked,
       cloudInstallReviewVisible:
         cloudInstallReviewVisible || cloudInstallAlreadySatisfied,
@@ -2176,6 +2265,8 @@ async function main() {
           runtimeFrameInspection,
           contentFactoryActionE2e,
           cleanupEvidence,
+          initialInstallSeed,
+          postDeleteInstallSeed,
           flagOff,
           consoleErrors,
           failedRequests,

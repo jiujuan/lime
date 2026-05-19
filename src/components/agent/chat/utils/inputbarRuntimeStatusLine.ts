@@ -324,7 +324,7 @@ function resolveFallbackDetail(params: {
   }
 
   if (status === "aborted") {
-    return latestAssistant?.runtimeStatus?.detail || "本轮已中断";
+    return latestAssistant?.runtimeStatus?.detail || null;
   }
 
   return null;

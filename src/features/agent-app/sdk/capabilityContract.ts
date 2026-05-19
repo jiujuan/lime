@@ -202,6 +202,26 @@ export interface LimeCapabilityContractMap {
     getRef: { args: { key: string }; value: { ref: string } };
     requestBinding: { args: { key: string; reason?: string }; value: unknown };
   };
+  "lime.cloudSession": {
+    getSnapshot: { args: undefined; value: unknown };
+    getAccessToken: {
+      args: undefined;
+      value: {
+        accessToken: string;
+        tenantId: string;
+        controlPlaneBaseUrl?: string;
+        expiresAt?: string;
+      };
+    };
+    requestLogin: {
+      args: undefined;
+      value: {
+        controlPlaneBaseUrl?: string;
+        hasSession: boolean;
+        tenantId?: string;
+      };
+    };
+  };
   "lime.evidence": {
     record: {
       args: { kind: string; message: string; refs?: string[] };

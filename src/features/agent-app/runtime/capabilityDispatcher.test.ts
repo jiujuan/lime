@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AdapterCapabilityHost } from "../adapters/AdapterCapabilityHost";
 import { InMemoryAgentAppCapabilityStore } from "../adapters/InMemoryAgentAppCapabilityStore";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
@@ -24,6 +24,14 @@ import {
 } from "./capabilityDispatcher";
 import { AgentRuntimeCapabilityHost } from "./agentRuntimeCapabilityHost";
 import type { AgentAppHostBridgeCapabilityRequest } from "./hostBridge";
+
+const loginLauncherMocks = vi.hoisted(() => ({
+  startOemCloudLogin: vi.fn(),
+}));
+
+vi.mock("@/lib/oemCloudLoginLauncher", () => ({
+  startOemCloudLogin: loginLauncherMocks.startOemCloudLogin,
+}));
 
 const FIXED_NOW = "2026-05-15T00:00:00.000Z";
 
@@ -87,6 +95,52 @@ function buildDispatcher(
       hostProfile: profile,
     }),
     ...standardProfile,
+  });
+  return (request: CapabilityRequestFixture) =>
+    dispatch(buildCapabilityRequest(request));
+}
+
+function buildDispatcherWithCloudSessionCapability() {
+  const profile = buildWorkflowRuntimeCapabilityProfile({
+    realAdapterEnabled: true,
+    uiRuntimeEnabled: true,
+    workerRuntimeEnabled: true,
+  });
+  const preview = buildInstalledAppPreview({
+    profile,
+    loadedAt: FIXED_NOW,
+    checkedAt: FIXED_NOW,
+    generatedAt: FIXED_NOW,
+  });
+  const host = new AdapterCapabilityHost({
+    preview,
+    store: new InMemoryAgentAppCapabilityStore(),
+    now: () => FIXED_NOW,
+  });
+  const projection = {
+    ...preview.projection,
+    requiredCapabilities: [
+      ...preview.projection.requiredCapabilities,
+      {
+        capability: "lime.cloudSession",
+        requestedRange: "^0.1.0",
+        required: true,
+        declaredBy: ["requires" as const],
+        entryKey: "dashboard",
+      },
+    ],
+  };
+
+  const dispatch = createAgentAppCapabilityDispatcher({
+    host,
+    projection,
+    entryKey: "dashboard",
+    runId: "bridge-run-1",
+    profile,
+    runtimeProfile: buildLimeRuntimeProfileForPreview({
+      preview,
+      hostProfile: profile,
+    }),
   });
   return (request: CapabilityRequestFixture) =>
     dispatch(buildCapabilityRequest(request));
@@ -732,6 +786,18 @@ function buildToolExecutionHandoffDispatcher() {
 }
 
 describe("createAgentAppCapabilityDispatcher", () => {
+  beforeEach(() => {
+    loginLauncherMocks.startOemCloudLogin.mockReset();
+    delete (window as unknown as Record<string, unknown>).__LIME_OEM_CLOUD__;
+    delete (window as unknown as Record<string, unknown>).__LIME_SESSION_TOKEN__;
+  });
+
+  afterEach(() => {
+    loginLauncherMocks.startOemCloudLogin.mockReset();
+    delete (window as unknown as Record<string, unknown>).__LIME_OEM_CLOUD__;
+    delete (window as unknown as Record<string, unknown>).__LIME_SESSION_TOKEN__;
+  });
+
   it("应通过 lime.capabilities 暴露 Host discovery profile，且不泄露内部路径", async () => {
     const dispatch = buildDispatcher();
 
@@ -994,6 +1060,88 @@ describe("createAgentAppCapabilityDispatcher", () => {
         }),
       }),
     });
+  });
+
+  it("lime.cloudSession 只通过显式能力返回当前会话令牌，且 requestLogin 会唤起宿主登录", async () => {
+    const dispatch = buildDispatcherWithCloudSessionCapability();
+    window.__LIME_OEM_CLOUD__ = {
+      enabled: true,
+      baseUrl: "https://user.limeai.run",
+      tenantId: "tenant-0001",
+      sessionToken: "host-session-token",
+    };
+
+    await expect(
+      dispatch({
+        appId: "content-factory-app",
+        entryKey: "dashboard",
+        capability: "lime.cloudSession",
+        method: "getSnapshot",
+        rawPayload: {
+          capability: "lime.cloudSession",
+          method: "getSnapshot",
+        },
+      }),
+    ).resolves.toMatchObject({
+      controlPlaneBaseUrl: "https://user.limeai.run/api",
+      tenantId: "tenant-0001",
+      hasSession: true,
+    });
+
+    await expect(
+      dispatch({
+        appId: "content-factory-app",
+        entryKey: "dashboard",
+        capability: "lime.cloudSession",
+        method: "getAccessToken",
+        rawPayload: {
+          capability: "lime.cloudSession",
+          method: "getAccessToken",
+        },
+      }),
+    ).resolves.toMatchObject({
+      accessToken: "host-session-token",
+      tenantId: "tenant-0001",
+      controlPlaneBaseUrl: "https://user.limeai.run/api",
+    });
+
+    window.__LIME_OEM_CLOUD__ = {
+      enabled: true,
+      baseUrl: "https://user.limeai.run",
+      tenantId: "tenant-0001",
+    };
+    delete window.__LIME_SESSION_TOKEN__;
+    loginLauncherMocks.startOemCloudLogin.mockImplementation(async () => {
+      window.__LIME_SESSION_TOKEN__ = "fresh-host-session-token";
+      window.__LIME_OEM_CLOUD__ = {
+        enabled: true,
+        baseUrl: "https://user.limeai.run",
+        tenantId: "tenant-0001",
+        sessionToken: "fresh-host-session-token",
+      };
+      return {
+        mode: "desktop_auth",
+        openedUrl: "lime://oauth/callback",
+      };
+    });
+
+    await expect(
+      dispatch({
+        appId: "content-factory-app",
+        entryKey: "dashboard",
+        capability: "lime.cloudSession",
+        method: "requestLogin",
+        rawPayload: {
+          capability: "lime.cloudSession",
+          method: "requestLogin",
+        },
+      }),
+    ).resolves.toMatchObject({
+      tenantId: "tenant-0001",
+      hasSession: true,
+      controlPlaneBaseUrl: "https://user.limeai.run/api",
+    });
+    expect(loginLauncherMocks.startOemCloudLogin).toHaveBeenCalledTimes(1);
   });
 
   it("应通过 lime.models / lime.usage 投影 AgentRuntime 模型与用量事实", async () => {

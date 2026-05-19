@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   AlertCircle,
   ArrowRight,
@@ -49,10 +50,6 @@ const BACKGROUND_PRELOAD_IDLE_TIMEOUT_MS = 1_500;
 const BACKGROUND_PRELOAD_FALLBACK_DELAY_MS = 180;
 const NO_PROVIDER_GUIDE_DISMISSED_STORAGE_KEY =
   "lime_model_selector_no_provider_guide_dismissed_v1";
-
-const THEME_LABEL_MAP: Record<string, string> = {
-  general: "通用对话",
-};
 
 function resolveProviderSelectionValue(provider: ConfiguredProvider): string {
   return provider.providerId ?? provider.key;
@@ -106,16 +103,17 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   backgroundPreload = "immediate",
   allowAutoProvider = false,
   allowAutoModel = false,
-  autoProviderLabel = "自动选择",
-  autoModelLabel = "自动选择",
-  placeholderLabel = "选择模型",
+  autoProviderLabel,
+  autoModelLabel,
+  placeholderLabel,
   suppressAutoSelection = false,
   providerFilter,
   modelFilter,
   getFallbackModels,
-  emptyStateTitle = "工具模型未配置",
-  emptyStateDescription = "配置工具模型以获得更好的对话标题和记忆管理。",
+  emptyStateTitle,
+  emptyStateDescription,
 }) => {
+  const { t } = useTranslation("common");
   const [open, setOpen] = useState(false);
   const [noProviderGuideDismissed, setNoProviderGuideDismissed] = useState(
     () => {
@@ -412,28 +410,43 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   const isAutoSelection = !providerType.trim() && !model.trim();
   const showPlaceholderSelection =
     isAutoSelection && (allowAutoProvider || suppressAutoSelection);
+  const resolvedAutoProviderLabel =
+    autoProviderLabel ?? t("common.modelSelector.autoSelect");
+  const resolvedAutoModelLabel =
+    autoModelLabel ?? t("common.modelSelector.autoSelect");
+  const resolvedPlaceholderLabel =
+    placeholderLabel ?? t("common.modelSelector.placeholder");
+  const resolvedEmptyStateTitle =
+    emptyStateTitle ?? t("common.modelSelector.noProvider.title");
+  const resolvedEmptyStateDescription =
+    emptyStateDescription ?? t("common.modelSelector.noProvider.description");
   const selectedProviderLabel = showPlaceholderSelection
-    ? placeholderLabel
+    ? resolvedPlaceholderLabel
     : selectedProvider?.label ||
       (allowAutoProvider && !providerType.trim()
-        ? autoProviderLabel
+        ? resolvedAutoProviderLabel
         : fallbackProviderLabel);
   const compactProviderLabel = showPlaceholderSelection
-    ? placeholderLabel
+    ? resolvedPlaceholderLabel
     : selectedProvider?.label ||
       (allowAutoProvider && !providerType.trim()
-        ? autoProviderLabel
+        ? resolvedAutoProviderLabel
         : fallbackProviderLabel);
   const selectedModelLabel =
     !showPlaceholderSelection && selectedProviderLoginRequired
-      ? "需要登录"
+      ? t("common.modelSelector.state.loginRequired")
       : showPlaceholderSelection
-        ? placeholderLabel
-        : model || (allowAutoModel ? autoModelLabel : "选择模型");
+        ? resolvedPlaceholderLabel
+        : model ||
+          (allowAutoModel
+            ? resolvedAutoModelLabel
+            : t("common.modelSelector.placeholder"));
   const compactModelLabel = selectedModelLabel;
   const normalizedTheme = (activeTheme || "").toLowerCase();
   const activeThemeLabel =
-    THEME_LABEL_MAP[normalizedTheme] || activeTheme || "当前主题";
+    normalizedTheme === "general"
+      ? t("common.modelSelector.theme.general")
+      : activeTheme || t("common.modelSelector.theme.current");
   const showThemeFilterHint =
     normalizedTheme !== "" &&
     normalizedTheme !== "general" &&
@@ -476,10 +489,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
             <div className="min-w-0">
               <div className="text-sm font-medium text-amber-900">
-                {emptyStateTitle}
+                {resolvedEmptyStateTitle}
               </div>
               <div className="text-xs text-amber-700 leading-5">
-                {emptyStateDescription}
+                {resolvedEmptyStateDescription}
               </div>
             </div>
           </div>
@@ -492,7 +505,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 className="h-8 shrink-0 border-amber-300 bg-white text-amber-800 hover:bg-amber-100 hover:text-amber-900"
                 onClick={onManageProviders}
               >
-                配置
+                {t("common.modelSelector.action.configure")}
               </Button>
             )}
             <Button
@@ -500,7 +513,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               variant="ghost"
               size="icon"
               className="h-8 w-8 shrink-0 rounded-full text-amber-700 hover:bg-amber-100 hover:text-amber-900"
-              aria-label="关闭工具模型未配置提示"
+              aria-label={t("common.modelSelector.noProvider.dismissAria")}
               onClick={handleDismissNoProviderGuide}
             >
               <X className="h-4 w-4" />
@@ -536,7 +549,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               )}
               title={
                 showPlaceholderSelection
-                  ? placeholderLabel
+                  ? resolvedPlaceholderLabel
                   : `${selectedProviderLabel} / ${selectedModelLabel}`
               }
             >
@@ -561,7 +574,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               <Bot size={16} className="text-slate-500" />
               {showPlaceholderSelection ? (
                 <span className="min-w-0 flex-1 font-medium text-left text-slate-700">
-                  {placeholderLabel}
+                  {resolvedPlaceholderLabel}
                 </span>
               ) : (
                 <span className="min-w-0 flex-1 flex items-center gap-1.5">
@@ -590,11 +603,11 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         >
           <div className="border-b border-slate-200/80 bg-[linear-gradient(180deg,rgb(255,255,255)_0%,rgb(248,250,252)_100%)] px-4 py-3">
             <div className="text-[11px] font-semibold tracking-[0.08em] text-slate-500">
-              模型选择
+              {t("common.modelSelector.header.title")}
             </div>
             {showPlaceholderSelection ? (
               <div className="mt-1 text-sm font-medium text-slate-700">
-                {placeholderLabel}
+                {resolvedPlaceholderLabel}
               </div>
             ) : (
               <div className="mt-1 flex items-center gap-2 text-sm text-slate-700">
@@ -607,13 +620,14 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             )}
             {activeTheme ? (
               <div className="mt-1 text-xs text-slate-500">
-                当前按 {activeThemeLabel} 组织候选模型
+                {t("common.modelSelector.header.themeFilter", {
+                  theme: activeThemeLabel,
+                })}
               </div>
             ) : null}
             {selectedPromptCacheNotice ? (
               <div className="mt-1 text-xs text-amber-700">
-                当前 Provider 未声明自动 Prompt Cache，请使用显式 cache_control
-                标记
+                {t("common.modelSelector.notice.promptCacheExplicit")}
               </div>
             ) : null}
           </div>
@@ -621,12 +635,12 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           <div className="flex h-[336px]">
             <div className="flex w-[156px] flex-col gap-1 overflow-y-auto border-r border-slate-200/80 bg-slate-50 p-2">
               <div className="mb-1 px-2 py-1 text-[11px] font-semibold tracking-[0.08em] text-slate-500">
-                供应商
+                {t("common.modelSelector.provider.title")}
               </div>
 
               {visibleProviders.length === 0 ? (
                 <div className="px-2 py-3 text-xs leading-5 text-slate-500">
-                  暂无已配置供应商
+                  {t("common.modelSelector.provider.empty")}
                 </div>
               ) : (
                 <>
@@ -644,7 +658,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                           : "text-slate-500 hover:border-slate-200 hover:bg-white hover:text-slate-900",
                       )}
                     >
-                      <span className="truncate">{autoProviderLabel}</span>
+                      <span className="truncate">
+                        {resolvedAutoProviderLabel}
+                      </span>
                       {!providerType.trim() ? (
                         <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                       ) : null}
@@ -652,16 +668,24 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   ) : null}
                   {selectedProvider && !selectedProviderVisible ? (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] leading-5 text-amber-700">
-                      当前已选供应商暂不可用
+                      {t("common.modelSelector.provider.selectedUnavailable")}
                     </div>
                   ) : null}
                   {[
-                    { title: "云端模型", providers: cloudProviders },
-                    { title: "本地与自定义", providers: localProviders },
+                    {
+                      key: "cloud",
+                      title: t("common.modelSelector.provider.section.cloud"),
+                      providers: cloudProviders,
+                    },
+                    {
+                      key: "local",
+                      title: t("common.modelSelector.provider.section.local"),
+                      providers: localProviders,
+                    },
                   ]
                     .filter((section) => section.providers.length > 0)
                     .map((section) => (
-                      <div key={section.title} className="space-y-1">
+                      <div key={section.key} className="space-y-1">
                         <div className="px-2 pt-2 text-[10px] font-semibold tracking-[0.08em] text-slate-400">
                           {section.title}
                         </div>
@@ -707,12 +731,16 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                                   </span>
                                   {provider.authStatus === "login_required" ? (
                                     <span className="text-[10px] leading-4 text-amber-700">
-                                      需要登录
+                                      {t(
+                                        "common.modelSelector.provider.badge.loginRequired",
+                                      )}
                                     </span>
                                   ) : providerPromptCacheMode ===
                                     "explicit_only" ? (
                                     <span className="text-[10px] leading-4 text-amber-700">
-                                      显式缓存
+                                      {t(
+                                        "common.modelSelector.provider.badge.explicitCache",
+                                      )}
                                     </span>
                                   ) : null}
                                 </span>
@@ -731,7 +759,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
             <div className="flex flex-1 flex-col overflow-hidden p-2.5">
               <div className="mb-1 px-2 py-1 text-[11px] font-semibold tracking-[0.08em] text-slate-500">
-                模型列表
+                {t("common.modelSelector.model.title")}
               </div>
               {showThemeFilterHint ||
               (normalizedTheme !== "general" && filteredResult.usedFallback) ||
@@ -739,18 +767,24 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 <div className="mb-2 space-y-1 rounded-2xl border border-slate-200/80 bg-slate-50 px-3 py-2">
                   {showThemeFilterHint ? (
                     <div className="text-[11px] leading-5 text-slate-500">
-                      已按 {activeThemeLabel} 主题筛选模型
+                      {t("common.modelSelector.model.themeFiltered", {
+                        theme: activeThemeLabel,
+                      })}
                     </div>
                   ) : null}
                   {normalizedTheme !== "general" &&
                   filteredResult.usedFallback ? (
                     <div className="text-[11px] leading-5 text-amber-700">
-                      {activeThemeLabel} 未命中特定主题模型，已回退到完整列表
+                      {t("common.modelSelector.model.themeFallback", {
+                        theme: activeThemeLabel,
+                      })}
                     </div>
                   ) : null}
                   {incompatibleModelCount > 0 ? (
                     <div className="text-[11px] leading-5 text-amber-700">
-                      已隐藏 {incompatibleModelCount} 个当前登录态不兼容的模型
+                      {t("common.modelSelector.model.incompatibleHidden", {
+                        count: incompatibleModelCount,
+                      })}
                     </div>
                   ) : null}
                 </div>
@@ -761,7 +795,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   {!selectedProvider &&
                   (allowAutoProvider || suppressAutoSelection) ? (
                     <div className="rounded-2xl border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-slate-500">
-                      先选择供应商，再查看模型列表
+                      {t("common.modelSelector.model.selectProviderFirst")}
                     </div>
                   ) : selectedProviderLoginRequired ? (
                     <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-4 text-xs leading-5 text-amber-800">
@@ -769,11 +803,17 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                         <div className="min-w-0">
                           <div className="font-medium text-amber-900">
-                            需要登录 {selectedProvider?.label ?? "Lime Hub"}
+                            {t(
+                              "common.modelSelector.model.loginRequiredTitle",
+                              {
+                                provider: selectedProvider?.label ?? "Lime Hub",
+                              },
+                            )}
                           </div>
                           <div className="mt-1 text-amber-700">
-                            登录后会自动同步 Lime Hub
-                            的可用模型，下拉框不会再显示本地兜底模型。
+                            {t(
+                              "common.modelSelector.model.loginRequiredDescription",
+                            )}
                           </div>
                           {onManageProviders ? (
                             <Button
@@ -786,7 +826,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                                 onManageProviders();
                               }}
                             >
-                              去登录
+                              {t("common.modelSelector.action.signIn")}
                             </Button>
                           ) : null}
                         </div>
@@ -794,7 +834,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                     </div>
                   ) : modelOptions.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-slate-500">
-                      暂无可用模型
+                      {t("common.modelSelector.model.empty")}
                     </div>
                   ) : (
                     <>
@@ -811,7 +851,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                               : "text-slate-500 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900",
                           )}
                         >
-                          <span className="truncate">{autoModelLabel}</span>
+                          <span className="truncate">
+                            {resolvedAutoModelLabel}
+                          </span>
                           {!model.trim() ? (
                             <Check size={14} className="text-slate-900" />
                           ) : null}
@@ -821,7 +863,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                       model.trim() &&
                       !currentModels.includes(model) ? (
                         <div className="rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] leading-5 text-amber-700">
-                          当前已选模型暂不可用
+                          {t("common.modelSelector.model.selectedUnavailable")}
                         </div>
                       ) : null}
                       {modelOptions.map((currentModelItem) => (
@@ -898,7 +940,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             >
               <span className="inline-flex items-center gap-2">
                 <Settings2 size={14} className="text-slate-400" />
-                管理供应商
+                {t("common.modelSelector.action.manageProviders")}
               </span>
               <ArrowRight size={14} className="text-slate-400" />
             </button>

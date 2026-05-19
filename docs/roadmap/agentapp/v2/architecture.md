@@ -62,6 +62,7 @@ flowchart LR
 
 - Desktop、Shell、Runtime-backed shell 是 **Host Shell** 的不同 adapter，不是三套 Runtime。
 - Agent App 永远只看到 `@lime/app-sdk` 和 `lime.*` capability。
+- `lime.cloudSession` 只提供通用登录、会话和 just-in-time token 入口，不允许 Host 代业务 App 代理发布或把 token 写入 snapshot。
 - Model / Tools / Secrets / Evidence / Policy 不进入 App package。
 
 ## 4. 分层架构
@@ -651,6 +652,7 @@ flowchart TD
 | 独立 Bundle ID | 每个 standalone `.app` 必须有自己的 `CFBundleIdentifier`，例如 `ai.lime.agentapp.content-factory`。 |
 | 独立 explicit App ID | 需要 App Group、keychain sharing、push、iCloud 等能力时，为该 Bundle ID 注册 explicit App ID。 |
 | 证书按 Team 复用 | Lime 官方发布的多个 App 可以使用同一 Team 下的 Developer ID Application 证书签名；证书不是每个 App 一张。 |
+| Updater key 按产品隔离 | Tauri updater signing key 不是 Apple 证书；每个 standalone App / channel 默认使用独立 updater key。 |
 | 能力按 App 授权 | App Groups、Keychain Access Groups、App Sandbox entitlements 按 App ID / provisioning profile 显式授权。 |
 | 默认隔离，按需共享 | Runtime 与 standalone shell 默认不同容器；只有 Runtime broker 必需的 handshake / secret ref 才进入共享组。 |
 | 跨 Team 不共享组 | 第三方签名 App 不能加入 Lime Team 的 App Group / Keychain group；必须通过 Runtime broker / account auth / cloud trust。 |

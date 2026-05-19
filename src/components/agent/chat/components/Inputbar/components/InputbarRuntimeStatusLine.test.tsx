@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { InputbarRuntimeStatusLine } from "./InputbarRuntimeStatusLine";
 import type { InputbarRuntimeStatusLineModel } from "../../../utils/inputbarRuntimeStatusLine";
 
@@ -44,12 +45,13 @@ vi.mock("@/hooks/useConfiguredProviders", () => ({
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
 
   mockUseConfiguredProviders.mockReturnValue({
     providers: [],
@@ -57,7 +59,7 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) {
@@ -69,6 +71,7 @@ afterEach(() => {
     mounted.container.remove();
   }
   vi.clearAllMocks();
+  await changeLimeLocale("en-US");
 });
 
 function renderStatusLine(

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { resolveOemCloudRuntimeContext } from "@/lib/api/oemCloudRuntime";
 import {
   listInstalledAgentApps,
   startAgentAppUiRuntime,
@@ -11,6 +12,7 @@ import type { AgentAppPageParams } from "@/types/page";
 import { AdapterCapabilityHost } from "../adapters/AdapterCapabilityHost";
 import { InMemoryAgentAppCapabilityStore } from "../adapters/InMemoryAgentAppCapabilityStore";
 import { buildCleanupPlan } from "../install/cleanupPlan";
+import { checkReadiness } from "../readiness/checkReadiness";
 import { buildLimeRuntimeProfileForInstalledState } from "../runtime-profile";
 import { createAgentAppCapabilityDispatcher } from "../runtime/capabilityDispatcher";
 import { evaluateAgentAppEntryRuntimeGuard } from "../runtime/entryRuntimeGuard";
@@ -60,6 +62,7 @@ const HOST_BRIDGE_DISPATCH_CAPABILITIES = new Set([
   "lime.mcp",
   "lime.terminal",
   "lime.connectors",
+  "lime.cloudSession",
 ]);
 const HOST_BRIDGE_KNOWN_CAPABILITIES = new Set([
   ...HOST_BRIDGE_DISPATCH_CAPABILITIES,
@@ -108,7 +111,7 @@ function buildPreviewFromInstalledState(state: InstalledAgentAppState) {
     identity: state.identity,
     manifest: state.manifest,
     projection: state.projection,
-    readiness: state.readiness,
+    readiness: buildRuntimeReadinessFromInstalledState(state),
     cleanupPlan: buildCleanupPlan({
       projection: state.projection,
       generatedAt: state.updatedAt,
@@ -116,10 +119,23 @@ function buildPreviewFromInstalledState(state: InstalledAgentAppState) {
   };
 }
 
+function buildRuntimeReadinessFromInstalledState(
+  state: InstalledAgentAppState,
+) {
+  return checkReadiness({
+    manifest: state.manifest,
+    projection: state.projection,
+    profile: RUNTIME_PAGE_PROFILE,
+    setup: state.setup,
+    checkedAt: state.readiness.checkedAt,
+  });
+}
+
 function resolveHostBridgeCapabilities(
   state: InstalledAgentAppState,
 ): AgentAppHostBridgeCapabilities {
-  const available = state.readiness.supportedCapabilities
+  const readiness = buildRuntimeReadinessFromInstalledState(state);
+  const available = readiness.supportedCapabilities
     .filter(
       (item) =>
         item.enabled && HOST_BRIDGE_DISPATCH_CAPABILITIES.has(item.capability),
@@ -131,7 +147,7 @@ function resolveHostBridgeCapabilities(
   );
   const blocked = [
     ...HOST_BRIDGE_KNOWN_CAPABILITIES,
-    ...state.readiness.missingCapabilities.map((item) => item.capability),
+    ...readiness.missingCapabilities.map((item) => item.capability),
     ...declared,
   ].filter((capability) => !available.includes(capability));
 
@@ -157,6 +173,12 @@ function readAgentRunTaskId(value: unknown): string | null {
     readString(value.taskId) ??
     (isRecord(value.task) ? readString(value.task.taskId) : null) ??
     (isRecord(value.snapshot) ? readString(value.snapshot.taskId) : null)
+  );
+}
+
+function shouldExposeCloudSession(state: InstalledAgentAppState): boolean {
+  return state.projection.requiredCapabilities.some(
+    (item) => item.capability === "lime.cloudSession",
   );
 }
 
@@ -510,6 +532,19 @@ export function AgentAppRuntimePage({
     () => (selected ? resolveHostBridgeCapabilities(selected) : undefined),
     [selected],
   );
+  const hostBridgeCloud = useCallback(() => {
+    if (!selected || !shouldExposeCloudSession(selected)) {
+      return undefined;
+    }
+    const cloudRuntime = resolveOemCloudRuntimeContext();
+    return cloudRuntime
+      ? {
+          controlPlaneBaseUrl: cloudRuntime.controlPlaneBaseUrl,
+          tenantId: cloudRuntime.tenantId,
+          hasSession: Boolean(cloudRuntime.sessionToken),
+        }
+      : undefined;
+  }, [selected]);
   const runtimeProfile = useMemo(
     () =>
       selected
@@ -820,6 +855,7 @@ export function AgentAppRuntimePage({
         openAgentRunUi,
         updateAgentRunUi,
         closeAgentRunUi,
+        cloud: hostBridgeCloud,
         capabilities: hostBridgeCapabilities,
         dispatchCapability,
       });
@@ -840,6 +876,7 @@ export function AgentAppRuntimePage({
     closeAgentRunUi,
     dispatchCapability,
     displayName,
+    hostBridgeCloud,
     hostBridgeCapabilities,
     notifyFromApp,
     openAgentRunUi,

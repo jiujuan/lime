@@ -2,7 +2,7 @@
   "name": "lime",
   "private": true,
   "workspaces": ["packages/*"],
-  "version": "1.44.0",
+  "version": "1.45.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -136,6 +136,9 @@
     "agent-qc:secret-scan": "node scripts/agent-qc-secret-scan.mjs",
     "agent-qc:objective-checklist": "node scripts/agent-qc-objective-checklist.mjs",
     "smoke:agent-apps": "node scripts/agent-apps-smoke.mjs",
+    "agent-app:connector-production-preflight": "node scripts/agent-app-connector-production-preflight.mjs",
+    "agent-app:connector-production-delivery-gate": "node scripts/agent-app-connector-production-delivery-gate.mjs",
+    "agent-app:connector-production-webhook-delivery": "node scripts/agent-app-connector-production-webhook-delivery.mjs",
     "smoke:agent-app-lab": "node scripts/agent-app-lab-smoke.mjs"
   },
   "dependencies": {

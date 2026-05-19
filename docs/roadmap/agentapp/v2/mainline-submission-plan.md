@@ -1,15 +1,15 @@
-# Agent App v2 主干提交预案
+# Agent App v2 主干状态与发布预案
 
 更新时间：2026-05-19
-状态：Blocked by explicit commit / push confirmation
+状态：Workflow landed; release blocked by missing secrets / evidence
 
 ## 目的
 
-本预案用于在用户明确确认 `git commit` / `git push` 后，把 Agent App v2 standalone 发布门禁进入 `main`，同时避免把当前脏工作树中的并行改动误带入主干。
+本预案用于复核 Agent App v2 standalone 发布门禁进入 `main` 后的当前状态，并继续记录后续补丁 / 发布执行需要遵守的 selective staging 边界，避免把当前脏工作树中的并行改动误带入主干。
 
 本文件不授权提交；它只记录可审计的 staging 边界。执行任何 `git commit` / `git push` 前仍必须获得用户明确确认。
 
-## 提交前硬阻断
+## 当前硬阻断
 
 1. repo-level 仍缺 5 个 standalone release 必需名称：
    - `LIME_AGENT_APP_PREVIOUS_RELEASE_REF`
@@ -19,22 +19,27 @@
    - `WINDOWS_SIGNING_CERTIFICATE_PASSWORD`
 2. org-level Actions secrets / variables 当前不可只读复核：`gh secret list --org "limecloud" --app actions` 与 `gh variable list --org "limecloud"` 均返回 `HTTP 403`。
 3. GitHub Environments 当前仅有 `github-pages`，没有 standalone release 专用 environment。
-4. `origin/main` 尚未包含 `.github/workflows/agent-app-standalone-release-gate.yml`。
+4. `origin/main` 已包含 `.github/workflows/agent-app-standalone-release-gate.yml`，`Agent App Standalone Release Gate` 已在 GitHub Actions 中 active；远程 run `26069161772` 已在 `main` / `c982fb643e8053e5b655c11c544fcf23933a6592` 上执行并因缺失 5 个发布配置失败，run URL 为 `https://github.com/limecloud/lime/actions/runs/26069161772`。该结果证明门禁真实阻断缺失项，但 workflow active / preflight failure 都不能替代真实 release evidence。
 5. `gh api "repos/limecloud/lime/branches/main/protection"` 返回 `Branch not protected`，`gh api "repos/limecloud/lime/rulesets"` 返回空数组；远程当前没有 branch protection / ruleset 替你兜底，因此更不能跳过人工确认和 selective staging。
-6. 当前工作树存在未确认并行写集；提交前必须只 stage 明确属于 Agent App v2 主线的文件。
+6. 当前工作树存在未确认并行写集；后续提交前必须只 stage 明确属于 Agent App v2 主线的文件。
 
-## 可纳入 Agent App v2 主线的候选写集
+## 后续补丁可纳入 Agent App v2 主线的候选写集
 
-以下写集与当前目标直接相关，提交前仍需逐文件复核 diff：
+以下写集与当前目标直接相关；如果后续还需要提交补丁，提交前仍需逐文件复核 diff：
 
 | 分组 | 文件 |
 | --- | --- |
 | v2 文档 | `docs/roadmap/agentapp/v2/README.md` |
+| v2 文档 | `docs/roadmap/agentapp/v2/prd.md` |
+| v2 文档 | `docs/roadmap/agentapp/v2/architecture.md` |
+| v2 文档 | `docs/roadmap/agentapp/v2/interface-contracts.md` |
 | v2 文档 | `docs/roadmap/agentapp/v2/code-plan.md` |
 | v2 文档 | `docs/roadmap/agentapp/v2/completion-audit.md` |
 | v2 文档 | `docs/roadmap/agentapp/v2/implementation-plan.md` |
 | v2 文档 | `docs/roadmap/agentapp/v2/release-operator-runbook.md` |
 | v2 文档 | `docs/roadmap/agentapp/v2/mainline-submission-plan.md` |
+| v2 evidence | `docs/roadmap/agentapp/v2/evidence/agentapp-v0.8-release.json` |
+| v2 evidence | `docs/roadmap/agentapp/v2/evidence/release-gate-run-26069161772.json` |
 | release gate workflow | `.github/workflows/agent-app-standalone-release-gate.yml` |
 | release CLI | `scripts/agent-app-standalone-release-secret-preflight.mjs` |
 | release CLI | `scripts/agent-app-standalone-installer-verify.mjs` |
@@ -64,17 +69,22 @@
 
 ## Selective staging 模板
 
-以下命令只是模板；只有在用户明确确认提交 / 推送后才能执行。执行前先逐文件复核 diff，执行后必须用 `git diff --cached --name-only` 确认 staged 列表没有出现未确认写集。
+以下命令只是模板；只有在用户明确确认提交 / 推送后才能执行。执行前先逐文件复核 diff，执行后必须用 `git diff --cached --name-only` 确认 staged 列表没有出现未确认写集。已进入 `main` 的文件不需要重复提交。
 
 ```bash
 git add -- \
   ".github/workflows/agent-app-standalone-release-gate.yml" \
   "docs/roadmap/agentapp/v2/README.md" \
+  "docs/roadmap/agentapp/v2/prd.md" \
+  "docs/roadmap/agentapp/v2/architecture.md" \
+  "docs/roadmap/agentapp/v2/interface-contracts.md" \
   "docs/roadmap/agentapp/v2/code-plan.md" \
   "docs/roadmap/agentapp/v2/completion-audit.md" \
   "docs/roadmap/agentapp/v2/implementation-plan.md" \
   "docs/roadmap/agentapp/v2/release-operator-runbook.md" \
   "docs/roadmap/agentapp/v2/mainline-submission-plan.md" \
+  "docs/roadmap/agentapp/v2/evidence/agentapp-v0.8-release.json" \
+  "docs/roadmap/agentapp/v2/evidence/release-gate-run-26069161772.json" \
   "scripts/agent-app-standalone-release-secret-preflight.mjs" \
   "scripts/agent-app-standalone-installer-verify.mjs" \
   "scripts/agent-app-standalone-release-evidence-check.mjs" \
@@ -164,7 +174,7 @@ git diff --cached --name-only | rg \
 
 质量任务口径：用 `detectTasks([".github/workflows/agent-app-standalone-release-gate.yml", ...])` 复核，正式 workflow 变更会触发 `workflow=true`、`integrity=true`、`frontend=true`、`rust=true`、`bridge=true`、`guiSmoke=true`，`bridgeReasons=["workflow_full_suite"]`。因此不能只跑 release CLI 单测。
 
-当前状态：2026-05-19 已在当前脏工作树运行 `npm run verify:local`；它通过 `verify:app-version` 和 `lint`，但在 `typecheck` 阶段失败于既有 `src/components/agent/chat/skill-selection/SkillSelector.test.tsx:154` / `:155`，错误为 `"available_skill"` 不符合当前 union，且 `Skill` 缺少 `ServiceSkillHomeItem` 字段。该文件不属于本预案候选 staging 写集；在解决或隔离该既有类型问题前，不能把 `verify:local` 视为绿色提交门禁。
+当前状态：2026-05-19 对当前工作树重新运行 `npm run verify:local`，最新复跑已通过；同轮输出显示版本一致性检查通过，Rust workspace 测试通过到 `1410 passed / 0 failed / 1 ignored`，全量 GUI smoke 通过到 `design-canvas` 收尾。此前同日有一次 `smoke:claw-chat-ready-streaming` timeout，但后续复跑已恢复 green。`node --check "scripts/agent-apps-smoke.mjs"`、`git diff --check` 与 `npm run harness:doc-freshness` 已通过。由于工作树仍存在未确认并行写集，后续任何提交都必须按实际 staged 文件重跑对应门禁，不能复用旧绿灯替代新 diff 验证。
 
 在获得提交确认并完成 selective staging 前，至少执行：
 
@@ -180,9 +190,9 @@ cargo test --manifest-path "src-tauri/Cargo.toml" delete_data -- --nocapture
 git diff --check
 ```
 
-## 提交后仍不代表发布完成
+## 主干 release gate 已落地，但仍不代表发布完成
 
-即使上述写集进入 `main`，也只能说明 release gate 和工程实现进入主干。完整目标仍要求：
+当前 release gate 已进入 `main`，这只能说明工程门禁入口在主干可触发。完整目标仍要求：
 
 1. 补齐 release secrets / refs。
 2. 触发远程 `Agent App Standalone Release Gate` 并取得 ready evidence。
@@ -192,3 +202,15 @@ git diff --check
 6. 执行 installer verify `--execute`。
 7. 完成 updater remote upload 与 rollback evidence。
 8. 通过 `scripts/agent-app-standalone-release-evidence-check.mjs --check`，且 `readyToRelease=true`。
+
+当前已触发的远程 gate 证据：
+
+| 字段 | 值 |
+| --- | --- |
+| Run | `26069161772` |
+| URL | `https://github.com/limecloud/lime/actions/runs/26069161772` |
+| 结论 | `failure`，符合预期的 release hard stop |
+| Versioned evidence | `docs/roadmap/agentapp/v2/evidence/release-gate-run-26069161772.json` |
+| 缺失项 | `LIME_AGENT_APP_PREVIOUS_RELEASE_REF`、`LIME_AGENT_APP_RELEASE_UPLOAD_TOKEN`、`APPLE_INSTALLER_SIGNING_IDENTITY`、`WINDOWS_SIGNING_CERTIFICATE`、`WINDOWS_SIGNING_CERTIFICATE_PASSWORD` |
+
+因此下一次远程 gate 必须在管理员补齐上述 5 项之后触发；在它返回 ready 且后续真实 build / signing / notarization / installer verify / updater upload evidence 齐全前，不得宣布 standalone 发布完成。

@@ -12,6 +12,8 @@
 - 后续 Lime 官方 AgentAPP standalone `.app / .pkg / .dmg / Windows installer` 发布。
 - 不适用于第三方 Team 自行签名分发；第三方发布必须使用第三方 Apple Developer Team / Windows signing identity，并重新审查 App Group / Keychain group。
 
+补充：如果发布入口是嵌入式 Studio 这类开发者工具，认证应通过 `lime.cloudSession` just-in-time 获取宿主当前会话 token，再由工具自己直连 registry / control plane；宿主只提供通用登录与会话能力，不代业务发布。
+
 ## 当前阻断
 
 当前本机 release preflight 已验证为 `blocked`：
@@ -70,13 +72,88 @@ node scripts/agent-app-standalone-release-secret-preflight.mjs \
 
 同日使用 `gh api "repos/limecloud/lime/environments"` 复核 GitHub Environments，当前仅存在 `github-pages`，未发现 standalone release 专用 environment；本 workflow 也未声明 `environment`，因此不会自动读取 environment-level secrets。
 
-当前 `origin/main` 尚未包含 `.github/workflows/agent-app-standalone-release-gate.yml`，因此即使补齐 secret，也需要先把该 workflow 进入主干后才能在 GitHub Actions 手动触发 `Agent App Standalone Release Gate`。在用户明确确认前，本地不执行 `git commit` / `git push`。
+当前 `origin/main` 已包含 `.github/workflows/agent-app-standalone-release-gate.yml`，`gh workflow list --all` 显示 `Agent App Standalone Release Gate` 为 `active`，workflow id 为 `279158660`。因此主干入口已具备；补齐缺失 secret / ref 后可以手动触发该门禁，但在缺失项补齐且取得远程 workflow evidence 前，不能把本地 dry-run 或 repo secret 名称清单视为发布 ready。
+
+已触发一次远程门禁验证，用于证明 workflow 在 `main` 上真实可运行且会阻断缺失配置：
+
+| 字段 | 值 |
+| --- | --- |
+| Run | `26069161772` |
+| URL | `https://github.com/limecloud/lime/actions/runs/26069161772` |
+| Head | `main` / `c982fb643e8053e5b655c11c544fcf23933a6592` |
+| Job | `Release secret preflight` |
+| Result | `failure`，符合预期的发布阻断 |
+| Artifact | `agent-app-standalone-release-secret-preflight` |
+| Versioned evidence | `docs/roadmap/agentapp/v2/evidence/release-gate-run-26069161772.json` |
+
+该 run 的 `Run Agent App standalone release secret preflight` 步骤输出 `status=blocked checked=13 missing=5`，缺失项为 `LIME_AGENT_APP_PREVIOUS_RELEASE_REF`、`LIME_AGENT_APP_RELEASE_UPLOAD_TOKEN`、`APPLE_INSTALLER_SIGNING_IDENTITY`、`WINDOWS_SIGNING_CERTIFICATE`、`WINDOWS_SIGNING_CERTIFICATE_PASSWORD`。`Run final release evidence check` 被跳过，因为 secret preflight 未 ready。该失败是 release hard stop，不是工程回归；在补齐缺失项前不要重跑真实 build / signing / notarization。
 
 说明：
 
 - 独立 AgentAPP 必须使用独立 Bundle ID / App ID。
 - Lime 官方发布可以复用同一 Team 的 `Developer ID Application` 证书签多个独立 App。
 - `.pkg` 需要 `Developer ID Installer`；这不是每个 App 一张，而是 Team 级 installer identity。
+
+## Release Admin Handoff
+
+本节是给 GitHub / Apple / Windows signing 管理员的一次性补齐清单。不要把 secret value 写入文档、issue、PR 描述或终端历史；优先从安全密码库复制到环境变量，再通过 `stdin` 写入 GitHub。
+
+### 1. 补齐缺失 repo 配置
+
+`LIME_AGENT_APP_PREVIOUS_RELEASE_REF` 可以作为 repo variable 或 secret。当前 workflow 同时读取 `secrets.LIME_AGENT_APP_PREVIOUS_RELEASE_REF` 与 `vars.LIME_AGENT_APP_PREVIOUS_RELEASE_REF`；如果它不包含敏感信息，优先用 variable，便于审计和轮换：
+
+```bash
+gh variable set "LIME_AGENT_APP_PREVIOUS_RELEASE_REF" \
+  --repo "limecloud/lime" \
+  --body "$LIME_AGENT_APP_PREVIOUS_RELEASE_REF"
+```
+
+远端上传 token、Installer identity 和 Windows signing certificate 仍按 secret 注入：
+
+```bash
+printf '%s' "$LIME_AGENT_APP_RELEASE_UPLOAD_TOKEN" | \
+  gh secret set "LIME_AGENT_APP_RELEASE_UPLOAD_TOKEN" --repo "limecloud/lime"
+
+printf '%s' "$APPLE_INSTALLER_SIGNING_IDENTITY" | \
+  gh secret set "APPLE_INSTALLER_SIGNING_IDENTITY" --repo "limecloud/lime"
+
+printf '%s' "$WINDOWS_SIGNING_CERTIFICATE" | \
+  gh secret set "WINDOWS_SIGNING_CERTIFICATE" --repo "limecloud/lime"
+
+printf '%s' "$WINDOWS_SIGNING_CERTIFICATE_PASSWORD" | \
+  gh secret set "WINDOWS_SIGNING_CERTIFICATE_PASSWORD" --repo "limecloud/lime"
+```
+
+如果 installer identity 已按别名管理，也可以写入 `APPLE_SIGNING_IDENTITY_INSTALLER`；但同一个 release 环境必须只保留一个事实源，避免 workflow 与本机 runbook 指向不同 identity。
+
+### 2. 远程门禁首跑
+
+补齐后先触发 secret / final-evidence 空跑，只验证远程注入是否满足发布前置条件，不执行真实 build / signing：
+
+```bash
+gh workflow run "Agent App Standalone Release Gate" \
+  --repo "limecloud/lime" \
+  --ref "main" \
+  -f "platform=all" \
+  -f "package_format=pkg" \
+  -f "channel=stable" \
+  -f "remote_upload=true" \
+  -f "updater_enabled=true"
+```
+
+通过后保存 GitHub Actions run URL / artifact 名称 / preflight JSON 摘要到 release evidence；失败时只记录缺失的 secret name，不导出 secret value。
+
+### 3. 真实发布前的 hard stop
+
+即使远程门禁通过，也只能说明 CI 能读取必要配置。只有完成下列 evidence 后，才能继续到 final release checker：
+
+- `tauri build` 真实产物路径、hash 和构建日志。
+- `.app` Developer ID Application 签名 evidence。
+- `.pkg` Developer ID Installer 签名 evidence。
+- notarization / stapler 完成日志。
+- installer verify `--execute` 结果。
+- updater remote upload evidence 和 stable rollback ref。
+- `scripts/agent-app-standalone-release-evidence-check.mjs --check` 返回 `readyToRelease=true`。
 
 ## GitHub Actions 门禁
 

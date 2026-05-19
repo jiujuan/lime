@@ -16,6 +16,7 @@ import {
   buildAgentAppThemePayload,
   isTrustedAgentAppBridgeMessage,
 } from "./hostBridge";
+import { OEM_CLOUD_SESSION_CHANGED_EVENT } from "@/lib/oemCloudSession";
 
 const appId = "content-factory-app";
 const entryKey = "dashboard";
@@ -78,6 +79,11 @@ describe("AgentAppHostBridge", () => {
       entryUrl,
       runtimeOrigin,
       now: () => "2026-05-15T00:00:00.000Z",
+      cloud: {
+        controlPlaneBaseUrl: "https://user.limeai.run/api",
+        tenantId: "tenant-0001",
+        hasSession: true,
+      },
     });
 
     expect(theme.tokens).toMatchObject({
@@ -99,7 +105,13 @@ describe("AgentAppHostBridge", () => {
         locale: "zh-CN",
         sentAt: "2026-05-15T00:00:00.000Z",
       },
+      cloud: {
+        controlPlaneBaseUrl: "https://user.limeai.run/api",
+        tenantId: "tenant-0001",
+        hasSession: true,
+      },
     });
+    expect(JSON.stringify(snapshot)).not.toContain("session-token");
   });
 
   it("只信任当前 iframe、runtime origin 和匹配 appId 的标准消息", () => {
@@ -209,6 +221,71 @@ describe("AgentAppHostBridge", () => {
         type: "theme:update",
         appId,
         entryKey,
+      }),
+      runtimeOrigin,
+    );
+
+    cleanup();
+  });
+
+  it("宿主云用户态变化时应重新读取 session context 并补发 snapshot", () => {
+    const { frame, postMessage } = buildFrame();
+    const readCloud = vi
+      .fn()
+      .mockReturnValueOnce({
+        controlPlaneBaseUrl: "https://user.limeai.run/api",
+        tenantId: "tenant-0001",
+        hasSession: false,
+      })
+      .mockReturnValueOnce({
+        controlPlaneBaseUrl: "https://user.limeai.run/api",
+        tenantId: "tenant-0002",
+        hasSession: true,
+      });
+    const bridge = new AgentAppHostBridge({
+      frame,
+      appId,
+      entryKey,
+      displayName: "内容工厂",
+      entryRoute: "/dashboard",
+      entryUrl,
+      cloud: readCloud,
+    });
+    const cleanup = bridge.start();
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: buildAppMessage("app:ready"),
+        origin: runtimeOrigin,
+        source: frame.contentWindow,
+      }),
+    );
+    window.dispatchEvent(new CustomEvent(OEM_CLOUD_SESSION_CHANGED_EVENT));
+
+    expect(readCloud).toHaveBeenCalledTimes(2);
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:snapshot",
+        payload: expect.objectContaining({
+          cloud: {
+            controlPlaneBaseUrl: "https://user.limeai.run/api",
+            tenantId: "tenant-0001",
+            hasSession: false,
+          },
+        }),
+      }),
+      runtimeOrigin,
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:snapshot",
+        payload: expect.objectContaining({
+          cloud: {
+            controlPlaneBaseUrl: "https://user.limeai.run/api",
+            tenantId: "tenant-0002",
+            hasSession: true,
+          },
+        }),
       }),
       runtimeOrigin,
     );

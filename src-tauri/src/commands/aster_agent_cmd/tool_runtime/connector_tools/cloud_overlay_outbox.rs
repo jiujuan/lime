@@ -1,5 +1,6 @@
 use super::readiness::connector_value_at_path;
 use super::readiness::ConnectorAdapterReadiness;
+use super::readiness::ConnectorProductionDelivery;
 use super::sanitize::sanitized_connector_input;
 use super::*;
 use sha2::{Digest, Sha256};
@@ -55,6 +56,51 @@ fn external_delivery_error_code(error: &reqwest::Error) -> &'static str {
     } else {
         "request_failed"
     }
+}
+
+fn production_delivery_projection(
+    delivery_ref_observed: bool,
+    external_delivery: Option<&serde_json::Value>,
+    production_delivery: Option<&ConnectorProductionDelivery>,
+) -> serde_json::Value {
+    if let Some(production_delivery) = production_delivery {
+        return serde_json::json!({
+            "status": "production_platform_delivered",
+            "proofLevel": production_delivery.proof_level.as_str(),
+            "externalDeliveryObserved": external_delivery
+                .and_then(|value| value.get("externalPlatformDelivered"))
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+            "productionPlatformDelivered": true,
+            "oauthHandshakeRequired": false,
+            "rawSecretMaterialAdapterRequired": false,
+            "nextRequired": "production_connector_delivery_complete",
+            "receiptRef": production_delivery.receipt_ref.as_deref(),
+            "platform": production_delivery.platform.as_deref(),
+            "deliveredAt": production_delivery.delivered_at.as_deref()
+        });
+    }
+    let external_delivery_observed = external_delivery
+        .and_then(|value| value.get("externalPlatformDelivered"))
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let proof_level = if external_delivery_observed {
+        "host_managed_webhook_receipt"
+    } else if delivery_ref_observed {
+        "local_cloud_overlay_worker_receipt"
+    } else {
+        "not_configured"
+    };
+
+    serde_json::json!({
+        "status": "production_platform_delivery_not_verified",
+        "proofLevel": proof_level,
+        "externalDeliveryObserved": external_delivery_observed,
+        "productionPlatformDelivered": false,
+        "oauthHandshakeRequired": true,
+        "rawSecretMaterialAdapterRequired": true,
+        "nextRequired": "production_connector_delivery_adapter"
+    })
 }
 
 enum ExternalDeliveryAttempt {
@@ -236,6 +282,8 @@ async fn deliver_external_platform(
                 "targetExposed": false,
                 "credentialMaterialExposed": false,
                 "tokenExposed": false,
+                "proofLevel": "host_managed_webhook_receipt",
+                "productionPlatformDelivered": false,
                 "httpStatus": http_status,
                 "deliveredAt": delivered_at,
                 "externalPlatformDelivered": delivered
@@ -249,6 +297,8 @@ async fn deliver_external_platform(
             "targetExposed": false,
             "credentialMaterialExposed": false,
             "tokenExposed": false,
+            "proofLevel": "host_managed_webhook_receipt",
+            "productionPlatformDelivered": false,
             "error": error,
             "deliveredAt": delivered_at,
             "externalPlatformDelivered": false
@@ -299,6 +349,11 @@ pub(super) async fn enqueue_cloud_overlay_connector_mutation(
     } else {
         None
     };
+    let production_delivery = production_delivery_projection(
+        delivery_ref.is_some(),
+        external_delivery.as_ref(),
+        adapter.production_delivery.as_ref(),
+    );
     let secret_delivery = serde_json::json!({
         "status": adapter.secret_delivery_status,
         "binding": "host_managed",
@@ -327,11 +382,16 @@ pub(super) async fn enqueue_cloud_overlay_connector_mutation(
             .get("externalPlatformDelivered")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false);
-        let delivery_status = external_delivery
-            .get("status")
-            .and_then(serde_json::Value::as_str)
-            .filter(|status| *status != "not_configured")
-            .unwrap_or("accepted_by_local_cloud_overlay_worker");
+        let production_platform_delivered = adapter.production_delivery.is_some();
+        let delivery_status = if production_platform_delivered {
+            "delivered_to_production_platform"
+        } else {
+            external_delivery
+                .get("status")
+                .and_then(serde_json::Value::as_str)
+                .filter(|status| *status != "not_configured")
+                .unwrap_or("accepted_by_local_cloud_overlay_worker")
+        };
         evidence_refs.push(serde_json::json!({
             "kind": "connector_cloud_overlay_worker_delivery_receipt",
             "ref": delivery_ref,
@@ -346,23 +406,28 @@ pub(super) async fn enqueue_cloud_overlay_connector_mutation(
             "relativePath": ".lime/agent-app-connectors/cloud-overlay/delivery-receipts.jsonl",
             "externalPlatformDelivered": external_platform_delivered,
             "externalDelivery": external_delivery,
+            "productionPlatformDelivered": production_platform_delivered,
+            "productionDelivery": production_delivery.clone(),
             "credentialMaterialExposed": false,
             "tokenExposed": false
         })
     });
+    let production_platform_delivered = adapter.production_delivery.is_some();
     let external_platform_delivered = external_delivery
         .as_ref()
         .and_then(|value| value.get("externalPlatformDelivered"))
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(false);
-    let next_required = if external_platform_delivered {
+    let next_required = if production_platform_delivered {
+        "production_connector_delivery_complete"
+    } else if external_platform_delivered {
         "external_platform_delivery_complete"
     } else if delivery_ref.is_some() {
         "external_platform_delivery"
     } else {
         adapter.next_required
     };
-    let external_status = if external_platform_delivered {
+    let external_status = if production_platform_delivered || external_platform_delivered {
         "delivered"
     } else {
         "not_delivered"
@@ -380,6 +445,7 @@ pub(super) async fn enqueue_cloud_overlay_connector_mutation(
         "secretBinding": "host_managed",
         "tokenExposed": false,
         "secretDelivery": secret_delivery,
+        "productionDelivery": production_delivery,
         "source": "agent_app_connector_cloud_overlay_outbox_adapter",
         "inputPreview": input_preview,
         "evidenceRefs": evidence_refs,

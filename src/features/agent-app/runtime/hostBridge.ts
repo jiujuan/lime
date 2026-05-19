@@ -11,6 +11,10 @@ import {
   type LimeEffectiveThemeMode,
   type LimeThemeMode,
 } from "@/lib/appearance/themeMode";
+import {
+  OEM_CLOUD_BOOTSTRAP_CHANGED_EVENT,
+  OEM_CLOUD_SESSION_CHANGED_EVENT,
+} from "@/lib/oemCloudSession";
 import { safeListen } from "@/lib/dev-bridge";
 import {
   buildLimeCapabilityInvokeRequest,
@@ -60,6 +64,11 @@ export interface AgentAppHostSnapshotPayload {
     sentAt: string;
   };
   theme: AgentAppThemePayload;
+  cloud?: {
+    controlPlaneBaseUrl?: string;
+    tenantId?: string;
+    hasSession: boolean;
+  };
   capabilities: {
     available: string[];
     blocked: string[];
@@ -153,6 +162,9 @@ export interface CreateAgentAppHostBridgeOptions {
   closeAgentRunUi?: (
     request: Pick<AgentAppHostAgentRunUiRequest, "taskId" | "bridgeAction">,
   ) => AgentAppHostAgentRunUiCloseResult;
+  cloud?:
+    | AgentAppHostSnapshotPayload["cloud"]
+    | (() => AgentAppHostSnapshotPayload["cloud"]);
   capabilities?: AgentAppHostBridgeCapabilities;
   dispatchCapability?: (
     request: AgentAppHostBridgeCapabilityRequest,
@@ -718,6 +730,15 @@ export function buildAgentAppHostSnapshot(
     runtimeOrigin: string;
   },
 ): AgentAppHostSnapshotPayload {
+  const cloudSource =
+    typeof options.cloud === "function" ? options.cloud() : options.cloud;
+  const cloud = cloudSource
+    ? {
+        controlPlaneBaseUrl: cloudSource.controlPlaneBaseUrl,
+        tenantId: cloudSource.tenantId,
+        hasSession: Boolean(cloudSource.hasSession),
+      }
+    : undefined;
   return {
     app: {
       appId: options.appId,
@@ -741,6 +762,7 @@ export function buildAgentAppHostSnapshot(
       sentAt: (options.now ?? (() => new Date().toISOString()))(),
     },
     theme: buildAgentAppThemePayload(),
+    ...(cloud ? { cloud } : {}),
     capabilities: normalizeCapabilities(options.capabilities),
   };
 }
@@ -819,6 +841,7 @@ export class AgentAppHostBridge {
   private readonly closeAgentRunUi?: (
     request: Pick<AgentAppHostAgentRunUiRequest, "taskId" | "bridgeAction">,
   ) => AgentAppHostAgentRunUiCloseResult;
+  private readonly cloud?: CreateAgentAppHostBridgeOptions["cloud"];
   private readonly capabilities?: AgentAppHostBridgeCapabilities;
   private readonly dispatchCapability?: (
     request: AgentAppHostBridgeCapabilityRequest,
@@ -848,6 +871,7 @@ export class AgentAppHostBridge {
     this.openAgentRunUi = options.openAgentRunUi;
     this.updateAgentRunUi = options.updateAgentRunUi;
     this.closeAgentRunUi = options.closeAgentRunUi;
+    this.cloud = options.cloud;
     this.capabilities = options.capabilities;
     this.dispatchCapability = options.dispatchCapability;
     this.listenRuntimeEvent = options.listenRuntimeEvent ?? safeListen;
@@ -866,6 +890,14 @@ export class AgentAppHostBridge {
       LIME_COLOR_SCHEME_CHANGED_EVENT,
       this.handleThemeChanged,
     );
+    window.addEventListener(
+      OEM_CLOUD_SESSION_CHANGED_EVENT,
+      this.handleHostContextChanged,
+    );
+    window.addEventListener(
+      OEM_CLOUD_BOOTSTRAP_CHANGED_EVENT,
+      this.handleHostContextChanged,
+    );
     window.addEventListener("storage", this.handleThemeChanged);
     document.addEventListener("visibilitychange", this.handleVisibilityChanged);
 
@@ -882,6 +914,14 @@ export class AgentAppHostBridge {
     window.removeEventListener(
       LIME_COLOR_SCHEME_CHANGED_EVENT,
       this.handleThemeChanged,
+    );
+    window.removeEventListener(
+      OEM_CLOUD_SESSION_CHANGED_EVENT,
+      this.handleHostContextChanged,
+    );
+    window.removeEventListener(
+      OEM_CLOUD_BOOTSTRAP_CHANGED_EVENT,
+      this.handleHostContextChanged,
     );
     window.removeEventListener("storage", this.handleThemeChanged);
     document.removeEventListener(
@@ -905,6 +945,7 @@ export class AgentAppHostBridge {
         locale: this.locale,
         now: this.now,
         runtimeOrigin: this.runtimeOrigin,
+        cloud: this.cloud,
         capabilities: this.capabilities,
       }),
       requestId,
@@ -927,6 +968,10 @@ export class AgentAppHostBridge {
     }
 
     void this.handleAppMessage(trusted.message);
+  };
+
+  private readonly handleHostContextChanged = () => {
+    this.sendSnapshot();
   };
 
   private readonly handleThemeChanged = () => {
@@ -1143,6 +1188,7 @@ export class AgentAppHostBridge {
         locale: this.locale,
         now: this.now,
         runtimeOrigin: this.runtimeOrigin,
+        cloud: this.cloud,
         capabilities: this.capabilities,
       }) as unknown as Record<string, unknown>;
     }

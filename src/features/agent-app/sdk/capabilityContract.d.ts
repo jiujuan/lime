@@ -806,6 +806,29 @@ export interface LimeCapabilityContractMap {
             value: unknown;
         };
     };
+    "lime.cloudSession": {
+        getSnapshot: {
+            args: undefined;
+            value: unknown;
+        };
+        getAccessToken: {
+            args: undefined;
+            value: {
+                accessToken: string;
+                tenantId: string;
+                controlPlaneBaseUrl?: string;
+                expiresAt?: string;
+            };
+        };
+        requestLogin: {
+            args: undefined;
+            value: {
+                controlPlaneBaseUrl?: string;
+                hasSession: boolean;
+                tenantId?: string;
+            };
+        };
+    };
     "lime.automation": {
         startJob: {
             args: {

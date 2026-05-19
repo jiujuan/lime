@@ -399,6 +399,18 @@ export const LIME_CAPABILITY_DEFINITIONS = [
     profile: { adapter: "adapter" },
   },
   {
+    name: "lime.cloudSession",
+    version: "0.1.0",
+    group: "governance",
+    stage: "preview",
+    owner: "cloud_overlay",
+    methods: ["getSnapshot", "getAccessToken", "requestLogin"],
+    summary: "宿主 Lime 当前云端会话快照、登录触发与 just-in-time 访问令牌能力，快照不暴露 bearer token。",
+    appResponsibility: "声明需要宿主会话的业务目的，并按需获取当前令牌后自行调用开放平台 API。",
+    limeResponsibility: "只暴露最小会话快照、按需签发短时 token，并保留登录与审计边界。",
+    profile: { adapter: "adapter" },
+  },
+  {
     name: "lime.automation",
     version: "0.3.0",
     group: "agent_runtime",

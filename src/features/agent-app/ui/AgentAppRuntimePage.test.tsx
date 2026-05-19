@@ -360,6 +360,10 @@ describe("AgentAppRuntimePage", () => {
     }
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+    delete window.__LIME_BOOTSTRAP__;
+    delete window.__LIME_OEM_CLOUD__;
+    delete window.__LIME_SESSION_TOKEN__;
+    window.localStorage.clear();
     window.sessionStorage.clear();
     document.documentElement.removeAttribute("style");
   });
@@ -438,6 +442,127 @@ describe("AgentAppRuntimePage", () => {
               "lime.agent",
               "lime.storage",
             ]),
+          }),
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+  });
+
+  it("只有声明 lime.cloudSession 的 App 才能从 Host snapshot 读取用户态上下文", async () => {
+    window.__LIME_OEM_CLOUD__ = {
+      enabled: true,
+      baseUrl: "https://user.limeai.run",
+      tenantId: "tenant-0001",
+    };
+    window.__LIME_SESSION_TOKEN__ = "secret-session-token";
+    const state = buildReadyState({
+      manifestPatch: {
+        requires: {
+          ...(contentFactoryFixture as AppManifest).requires,
+          capabilities: {
+            ...((contentFactoryFixture as AppManifest).requires
+              ?.capabilities ?? {}),
+            "lime.cloudSession": "^0.1.0",
+          },
+        },
+      },
+    });
+    const container = await renderPage(state);
+    await flush();
+    const frame = getRuntimeFrame(container);
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+
+    await act(async () => {
+      frame.dispatchEvent(new Event("load"));
+      await Promise.resolve();
+    });
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:snapshot",
+        payload: expect.objectContaining({
+          cloud: {
+            controlPlaneBaseUrl: "https://user.limeai.run/api",
+            tenantId: "tenant-0001",
+            hasSession: true,
+          },
+          capabilities: expect.objectContaining({
+            available: expect.arrayContaining(["lime.cloudSession"]),
+          }),
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+    expect(
+      JSON.stringify(postMessage.mock.calls.map(([message]) => message)),
+    ).not.toContain("secret-session-token");
+  });
+
+  it("runtime page 会用当前 adapter profile 重算能力，避免沿用安装期旧 readiness 阻断 storage", async () => {
+    const staleState = buildReadyState();
+    staleState.readiness = {
+      ...staleState.readiness,
+      supportedCapabilities: staleState.readiness.supportedCapabilities.map(
+        (item) =>
+          item.capability === "lime.storage"
+            ? { ...item, enabled: false, implementation: "none" }
+            : item,
+      ),
+      missingCapabilities: [
+        ...staleState.readiness.missingCapabilities,
+        {
+          capability: "lime.storage",
+          requestedRange: "^0.3.0",
+          required: true,
+          declaredBy: ["requires"],
+        },
+      ],
+    };
+    const container = await renderPage(staleState);
+    await flush();
+    const frame = getRuntimeFrame(container);
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+
+    await act(async () => {
+      frame.dispatchEvent(new Event("load"));
+      await Promise.resolve();
+    });
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.storage",
+        method: "set",
+        input: {
+          key: "projects/project-1/confirmations/content_batch",
+          value: { status: "confirmed" },
+        },
+      },
+      "storage-runtime-profile",
+    );
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:snapshot",
+        payload: expect.objectContaining({
+          capabilities: expect.objectContaining({
+            available: expect.arrayContaining(["lime.storage"]),
+            blocked: expect.not.arrayContaining(["lime.storage"]),
+          }),
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:response",
+        requestId: "storage-runtime-profile",
+        payload: expect.objectContaining({
+          ok: true,
+          result: expect.objectContaining({
+            key: "projects/project-1/confirmations/content_batch",
+            value: { status: "confirmed" },
           }),
         }),
       }),
@@ -683,9 +808,10 @@ describe("AgentAppRuntimePage", () => {
       '[data-testid="agent-app-host-agent-run-dock"]',
     ) as HTMLButtonElement;
     expect(dock).not.toBeNull();
-    expect(dock.className).toContain("bottom-4");
-    expect(dock.className).not.toContain("top-4");
-    expect(dock.className).toContain("min(320px");
+    expect(dock.className).toContain("top-3");
+    expect(dock.className).not.toContain("bottom-4");
+    expect(dock.className).not.toContain("min(320px");
+    expect(dock.className).toContain("max-w-[180px]");
     expect(container.textContent).toContain("查看运行现场");
 
     await act(async () => {

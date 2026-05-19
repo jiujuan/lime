@@ -493,6 +493,48 @@ async fn agent_app_connector_cloud_overlay_can_deliver_to_host_managed_webhook()
         Some(&serde_json::json!(false))
     );
     assert_eq!(
+        payload.pointer("/delivery/externalDelivery/proofLevel"),
+        Some(&serde_json::json!("host_managed_webhook_receipt"))
+    );
+    assert_eq!(
+        payload.pointer("/delivery/externalDelivery/productionPlatformDelivered"),
+        Some(&serde_json::json!(false))
+    );
+    assert_eq!(
+        payload.pointer("/delivery/productionPlatformDelivered"),
+        Some(&serde_json::json!(false))
+    );
+    assert_eq!(
+        payload.pointer("/productionDelivery/status"),
+        Some(&serde_json::json!(
+            "production_platform_delivery_not_verified"
+        ))
+    );
+    assert_eq!(
+        payload.pointer("/productionDelivery/proofLevel"),
+        Some(&serde_json::json!("host_managed_webhook_receipt"))
+    );
+    assert_eq!(
+        payload.pointer("/productionDelivery/externalDeliveryObserved"),
+        Some(&serde_json::json!(true))
+    );
+    assert_eq!(
+        payload.pointer("/productionDelivery/productionPlatformDelivered"),
+        Some(&serde_json::json!(false))
+    );
+    assert_eq!(
+        payload.pointer("/productionDelivery/oauthHandshakeRequired"),
+        Some(&serde_json::json!(true))
+    );
+    assert_eq!(
+        payload.pointer("/productionDelivery/rawSecretMaterialAdapterRequired"),
+        Some(&serde_json::json!(true))
+    );
+    assert_eq!(
+        payload.pointer("/productionDelivery/nextRequired"),
+        Some(&serde_json::json!("production_connector_delivery_adapter"))
+    );
+    assert_eq!(
         payload.pointer("/next/required"),
         Some(&serde_json::json!("external_platform_delivery_complete"))
     );
@@ -515,6 +557,166 @@ async fn agent_app_connector_cloud_overlay_can_deliver_to_host_managed_webhook()
     assert!(receipt.contains("delivered_to_external_platform"));
     assert!(receipt.contains("externalPlatformDelivered\":true"));
     assert!(!receipt.contains(&target_url));
+    assert!(!receipt.contains("raw-token-should-not-leak"));
+}
+
+#[tokio::test]
+async fn agent_app_connector_accepts_host_managed_production_delivery_receipt() {
+    let metadata = serde_json::json!({
+        "harness": {
+            "agent_app_tool_execution": {
+                "request": {
+                    "capability": "lime.connectors",
+                    "method": "invoke",
+                    "action": "createPage",
+                    "input": {
+                        "connectorId": "notion",
+                        "action": "createPage",
+                        "connectorRuntimeFacts": {
+                            "authorizationStatus": "authorized",
+                            "secretBinding": "host_managed",
+                            "tokenExposed": false,
+                            "secretDelivery": {
+                                "status": "ready",
+                                "binding": "host_managed",
+                                "source": "host_managed_secret_delivery_fact",
+                                "target": "cloud_overlay_worker",
+                                "leaseObserved": true,
+                                "leaseRefExposed": false,
+                                "leaseHandleStatus": "host_managed",
+                                "credentialMaterialExposed": false,
+                                "tokenExposed": false
+                            }
+                        }
+                    },
+                    "policy": {
+                        "secretBinding": "host_managed",
+                        "tokenExposed": false
+                    }
+                },
+                "internalRequest": {
+                    "capability": "lime.connectors",
+                    "method": "invoke",
+                    "action": "createPage",
+                    "input": {
+                        "connectorId": "notion",
+                        "action": "createPage",
+                        "connectorRuntimeFacts": {
+                            "authorizationStatus": "authorized",
+                            "secretBinding": "host_managed",
+                            "tokenExposed": false,
+                            "secretDelivery": {
+                                "status": "ready",
+                                "binding": "host_managed",
+                                "source": "host_managed_secret_delivery_fact",
+                                "target": "cloud_overlay_worker",
+                                "leaseRef": "secret-lease://connector/notion/createPage/production-lease",
+                                "credentialMaterialExposed": false,
+                                "tokenExposed": false,
+                                "productionDelivery": {
+                                    "binding": "host_managed",
+                                    "status": "delivered",
+                                    "platform": "notion",
+                                    "proofLevel": "production_connector_delivery_adapter",
+                                    "productionPlatformDelivered": true,
+                                    "receiptRef": "production-receipt://connector/notion/createPage/page-123",
+                                    "deliveredAt": "2026-05-19T06:50:00Z",
+                                    "targetExposed": false,
+                                    "credentialMaterialExposed": false,
+                                    "tokenExposed": false
+                                }
+                            }
+                        }
+                    },
+                    "policy": {
+                        "secretBinding": "host_managed",
+                        "tokenExposed": false
+                    }
+                }
+            }
+        }
+    });
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let mut registry = aster::tools::ToolRegistry::new();
+
+    let registered = register_agent_app_connector_preview_tools(&mut registry, Some(&metadata));
+
+    assert_eq!(registered, 1);
+    let result = registry
+        .execute(
+            "connector__notion__createPage",
+            serde_json::json!({
+                "connectorId": "notion",
+                "action": "createPage",
+                "idempotencyKey": "notion-production-delivery-ready-1",
+                "input": {
+                    "title": "内容计划",
+                    "accessToken": "raw-token-should-not-leak"
+                }
+            }),
+            &ToolContext::new(temp_dir.path().to_path_buf()),
+            None,
+        )
+        .await
+        .expect("cloud connector should accept host-managed production delivery receipt");
+    let payload = result.metadata.get("result").expect("result metadata");
+
+    assert!(result.success);
+    assert_eq!(
+        payload.pointer("/delivery/status"),
+        Some(&serde_json::json!("delivered_to_production_platform")),
+        "delivery payload: {payload}"
+    );
+    assert_eq!(
+        payload.pointer("/externalStatus"),
+        Some(&serde_json::json!("delivered"))
+    );
+    assert_eq!(
+        payload.pointer("/delivery/productionPlatformDelivered"),
+        Some(&serde_json::json!(true))
+    );
+    assert_eq!(
+        payload.pointer("/productionDelivery/status"),
+        Some(&serde_json::json!("production_platform_delivered"))
+    );
+    assert_eq!(
+        payload.pointer("/productionDelivery/proofLevel"),
+        Some(&serde_json::json!("production_connector_delivery_adapter"))
+    );
+    assert_eq!(
+        payload.pointer("/productionDelivery/productionPlatformDelivered"),
+        Some(&serde_json::json!(true))
+    );
+    assert_eq!(
+        payload.pointer("/productionDelivery/oauthHandshakeRequired"),
+        Some(&serde_json::json!(false))
+    );
+    assert_eq!(
+        payload.pointer("/productionDelivery/rawSecretMaterialAdapterRequired"),
+        Some(&serde_json::json!(false))
+    );
+    assert_eq!(
+        payload.pointer("/productionDelivery/nextRequired"),
+        Some(&serde_json::json!("production_connector_delivery_complete"))
+    );
+    assert_eq!(
+        payload.pointer("/next/required"),
+        Some(&serde_json::json!("production_connector_delivery_complete"))
+    );
+    let serialized = serde_json::to_string(&result).expect("result should serialize");
+    assert!(!serialized.contains("raw-token-should-not-leak"));
+    assert!(!serialized.contains("secret-lease://connector/"));
+
+    let receipt_path = temp_dir
+        .path()
+        .join(".lime/agent-app-connectors/cloud-overlay/delivery-receipts.jsonl");
+    let mut receipt = String::new();
+    std::fs::File::open(receipt_path)
+        .expect("cloud overlay delivery receipt should exist")
+        .read_to_string(&mut receipt)
+        .expect("cloud overlay delivery receipt should be readable");
+    assert!(receipt.contains("delivered_to_production_platform"));
+    assert!(receipt.contains("productionPlatformDelivered\":true"));
     assert!(!receipt.contains("raw-token-should-not-leak"));
 }
 
@@ -580,6 +782,9 @@ async fn agent_app_connector_external_delivery_rejects_inline_secret_material() 
                                     "targetExposed": false,
                                     "credentialMaterialExposed": false,
                                     "tokenExposed": false,
+                                    "auth": {
+                                        "bearerToken": "nested-raw-secret-should-not-leak"
+                                    },
                                     "authorizationHeader": "Bearer raw-secret-should-not-leak"
                                 }
                             }
@@ -634,11 +839,28 @@ async fn agent_app_connector_external_delivery_rejects_inline_secret_material() 
         Some(&serde_json::json!(false))
     );
     assert_eq!(
+        payload.pointer("/delivery/productionPlatformDelivered"),
+        Some(&serde_json::json!(false))
+    );
+    assert_eq!(
+        payload.pointer("/productionDelivery/proofLevel"),
+        Some(&serde_json::json!("local_cloud_overlay_worker_receipt"))
+    );
+    assert_eq!(
+        payload.pointer("/productionDelivery/productionPlatformDelivered"),
+        Some(&serde_json::json!(false))
+    );
+    assert_eq!(
+        payload.pointer("/productionDelivery/nextRequired"),
+        Some(&serde_json::json!("production_connector_delivery_adapter"))
+    );
+    assert_eq!(
         payload.pointer("/next/required"),
         Some(&serde_json::json!("external_platform_delivery"))
     );
     let serialized = serde_json::to_string(&result).expect("result should serialize");
     assert!(!serialized.contains("raw-secret-should-not-leak"));
+    assert!(!serialized.contains("nested-raw-secret-should-not-leak"));
     assert!(!serialized.contains("https://example.com/connector-webhook"));
 }
 

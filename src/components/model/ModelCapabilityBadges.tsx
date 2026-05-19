@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Brain, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ModelCapabilities } from "@/lib/types/modelRegistry";
@@ -55,6 +56,7 @@ export const ModelCapabilityBadges: React.FC<ModelCapabilityBadgesProps> = ({
   compact = false,
   showNegative = true,
 }) => {
+  const { t } = useTranslation("common");
   const resolvedTaskFamilies = model ? getModelTaskFamilies(model) : [];
   const resolvedInputModalities = model ? getModelInputModalities(model) : [];
   const visionActive =
@@ -66,8 +68,8 @@ export const ModelCapabilityBadges: React.FC<ModelCapabilityBadgesProps> = ({
       key: "reasoning",
       active: capabilities.reasoning,
       icon: <Brain className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />,
-      activeLabel: "支持思考",
-      inactiveLabel: "无思考",
+      activeLabel: t("common.modelCapabilities.reasoning.active"),
+      inactiveLabel: t("common.modelCapabilities.reasoning.inactive"),
       activeClassName:
         "border-violet-200/90 bg-violet-50/90 text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-200",
     },
@@ -75,8 +77,8 @@ export const ModelCapabilityBadges: React.FC<ModelCapabilityBadgesProps> = ({
       key: "vision",
       active: Boolean(visionActive),
       icon: <Eye className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />,
-      activeLabel: "支持多模态",
-      inactiveLabel: "无多模态",
+      activeLabel: t("common.modelCapabilities.vision.active"),
+      inactiveLabel: t("common.modelCapabilities.vision.inactive"),
       activeClassName:
         "border-sky-200/90 bg-sky-50/90 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200",
     },

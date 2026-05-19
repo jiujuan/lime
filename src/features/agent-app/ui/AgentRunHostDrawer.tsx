@@ -900,25 +900,24 @@ export function AgentRunHostDrawer({
     return (
       <button
         type="button"
-        className="absolute bottom-4 right-4 z-20 flex w-[min(320px,calc(100%-2rem))] items-start gap-3 rounded-2xl border border-emerald-200 bg-white/95 px-3 py-2.5 text-left shadow-xl shadow-slate-950/10 backdrop-blur transition hover:border-emerald-300 hover:shadow-2xl hover:shadow-slate-950/15"
+        className="absolute right-3 top-3 z-20 inline-flex max-w-[180px] items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-2 text-left shadow-lg shadow-slate-950/10 transition hover:border-emerald-300 hover:shadow-xl hover:shadow-slate-950/15"
         data-testid="agent-app-host-agent-run-dock"
         onClick={onExpand}
         aria-label={t("agentApp.apps.runtime.agentRun.expand")}
+        title={`${t("agentApp.apps.runtime.agentRun.expand")} · ${title}`}
       >
-        <span className="mt-0.5 rounded-full bg-emerald-50 p-2 text-emerald-700">
+        <span className="rounded-full bg-emerald-50 p-1.5 text-emerald-700">
           <Bot size={15} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-xs font-semibold text-emerald-700">
-            {t("agentApp.apps.runtime.agentRun.badge", { app: displayName })}
-          </span>
-          <strong className="mt-1 block truncate text-sm font-semibold text-slate-950">
-            {title}
-          </strong>
-          <span className="mt-1 block truncate text-xs text-slate-500">
+          <span className="sr-only">
+            {t("agentApp.apps.runtime.agentRun.badge", { app: displayName })} · {title} ·{" "}
             {terminal
               ? t("agentApp.apps.runtime.agentRun.timeline.collapsed")
               : t("agentApp.apps.runtime.agentRun.expand")}
+          </span>
+          <span className="block truncate text-xs font-semibold text-emerald-700">
+            {t("agentApp.apps.runtime.agentRun.expand")}
           </span>
         </span>
       </button>
