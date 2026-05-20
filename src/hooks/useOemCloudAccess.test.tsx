@@ -31,6 +31,7 @@ const controlPlaneMocks = vi.hoisted(() => ({
 const shellOpenMock = vi.hoisted(() => vi.fn());
 const systemBrowserMocks = vi.hoisted(() => ({
   openExternalUrlWithSystemBrowser: vi.fn(),
+  startOemCloudOAuthCallbackBridge: vi.fn(),
 }));
 const tauriRuntimeMocks = vi.hoisted(() => ({
   hasTauriInvokeCapability: vi.fn(),
@@ -86,8 +87,11 @@ vi.mock("@tauri-apps/plugin-shell", () => ({
 }));
 
 vi.mock("@/lib/api/externalUrl", () => ({
+  OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT: "oem-cloud-oauth-callback",
   openExternalUrlWithSystemBrowser:
     systemBrowserMocks.openExternalUrlWithSystemBrowser,
+  startOemCloudOAuthCallbackBridge:
+    systemBrowserMocks.startOemCloudOAuthCallbackBridge,
 }));
 
 vi.mock("@/lib/tauri-runtime", () => ({
@@ -257,6 +261,10 @@ describe("useOemCloudAccess", () => {
     systemBrowserMocks.openExternalUrlWithSystemBrowser.mockResolvedValue(
       undefined,
     );
+    systemBrowserMocks.startOemCloudOAuthCallbackBridge.mockReset();
+    systemBrowserMocks.startOemCloudOAuthCallbackBridge.mockResolvedValue({
+      callbackUrl: "http://127.0.0.1:18081/oauth/callback",
+    });
     tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(true);
     tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(true);
   });
@@ -652,17 +660,27 @@ describe("useOemCloudAccess", () => {
     });
 
     expect(
+      systemBrowserMocks.startOemCloudOAuthCallbackBridge,
+    ).toHaveBeenCalledTimes(1);
+    expect(
       controlPlaneMocks.createClientDesktopAuthSession,
     ).toHaveBeenCalledWith("tenant-0001", {
       clientId: "desktop-client",
       provider: "google",
-      desktopRedirectUri: "lime://oauth/callback",
+      desktopRedirectUri: "http://127.0.0.1:18081/oauth/callback",
     });
     expect(
       systemBrowserMocks.openExternalUrlWithSystemBrowser,
     ).toHaveBeenCalledWith(
       "https://user.limeai.run/oauth/desktop/device-code-001/signin",
     );
+    expect(
+      controlPlaneMocks.createClientDesktopAuthSession,
+    ).toHaveBeenCalledWith("tenant-0001", {
+      clientId: "desktop-client",
+      provider: "google",
+      desktopRedirectUri: "http://127.0.0.1:18081/oauth/callback",
+    });
     expect(shellOpenMock).not.toHaveBeenCalled();
     expect(controlPlaneMocks.pollClientDesktopAuthSession).toHaveBeenCalledWith(
       "device-code-001",
@@ -759,7 +777,7 @@ describe("useOemCloudAccess", () => {
     expect(parsedUrl.searchParams.get("tenant")).toBe("tenant-0001");
     expect(parsedUrl.searchParams.get("tenantId")).toBe("tenant-0001");
     expect(parsedUrl.searchParams.get("redirectUrl")).toBe(
-      "lime://oauth/callback",
+      "http://127.0.0.1:18081/oauth/callback",
     );
     expect(parsedUrl.searchParams.get("redirect")).toBe("/welcome");
     expect(latestState?.errorMessage).toBeNull();
@@ -814,13 +832,16 @@ describe("useOemCloudAccess", () => {
     }
   });
 
-  it("Google 桌面登录不再接受 localhost 本地回调配置", async () => {
+  it("Tauri 桌面登录会用本机回调桥覆盖静态 localhost 回调配置", async () => {
     window.__LIME_OEM_CLOUD__ = {
       enabled: true,
       baseUrl: "https://user.limeai.run",
       tenantId: "tenant-0001",
       desktopOauthRedirectUrl: "http://localhost:17834/callback",
     };
+    controlPlaneMocks.createClientDesktopAuthSession.mockRejectedValue(
+      new Error("desktop client not found"),
+    );
 
     const container = document.createElement("div");
     document.body.appendChild(container);
@@ -837,8 +858,21 @@ describe("useOemCloudAccess", () => {
     });
 
     expect(
+      systemBrowserMocks.startOemCloudOAuthCallbackBridge,
+    ).toHaveBeenCalledTimes(1);
+    expect(
       controlPlaneMocks.createClientDesktopAuthSession,
-    ).not.toHaveBeenCalled();
-    expect(latestState?.errorMessage).toContain("localhost 本地回调");
+    ).toHaveBeenCalledWith("tenant-0001", {
+      clientId: "desktop-client",
+      provider: "google",
+      desktopRedirectUri: "http://127.0.0.1:18081/oauth/callback",
+    });
+    const openedUrl = systemBrowserMocks.openExternalUrlWithSystemBrowser.mock
+      .calls[0]?.[0] as string;
+    const parsedUrl = new URL(openedUrl);
+    expect(parsedUrl.searchParams.get("redirectUrl")).toBe(
+      "http://127.0.0.1:18081/oauth/callback",
+    );
+    expect(latestState?.errorMessage).toBeNull();
   });
 });

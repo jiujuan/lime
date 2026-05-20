@@ -59,6 +59,7 @@ const mockPriorityCommands = new Set<string>([
 const bridgeTruthCommands = new Set<string>([
   "aster_agent_init",
   "aster_agent_status",
+  "start_oem_cloud_oauth_callback_bridge",
   "agent_generate_title",
   "get_or_create_default_project",
   "workspace_list",

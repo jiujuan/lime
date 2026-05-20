@@ -1639,6 +1639,7 @@ pub fn run() {
             commands::external_tools_cmd::open_codex_cli_login,
             commands::external_tools_cmd::open_codex_cli_logout,
             commands::external_tools_cmd::open_external_url,
+            commands::external_tools_cmd::start_oem_cloud_oauth_callback_bridge,
             commands::external_tools_cmd::get_external_tools,
             // Voice Input commands
             crate::voice::commands::get_voice_input_config,

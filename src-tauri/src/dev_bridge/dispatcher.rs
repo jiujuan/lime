@@ -117,7 +117,7 @@ pub async fn handle_command(
         return Ok(result);
     }
 
-    if let Some(result) = external_tools::try_handle(cmd, args.as_ref()).await? {
+    if let Some(result) = external_tools::try_handle(state, cmd, args.as_ref()).await? {
         return Ok(result);
     }
 

@@ -255,6 +255,8 @@ await lime.agent.startTask({
 
 2026-05-16 10:08 补充：`contentFactorySdkRegression.test.ts` 已改为只从 `src/features/agent-app/sdk/index.ts` 导入 SDK 类型和 helper，证明 Lime-side 内容工厂回归消费的是 SDK-only public surface，而不是 `capabilityContract.ts` / `capabilityAdapters.ts` 等内部深文件。该调整仍不代表外部 `content-factory-app` package 已迁移。
 
+2026-05-21 补充：Agent App Studio 云端发布链路已收敛到宿主开放平台基础能力，不把发布业务代理进宿主。Studio 通过 `lime.cloudSession.getAccessToken` 显式获取宿主当前 session token，未登录或过期时通过 `lime.cloudSession.requestLogin` 拉起宿主登录。Lime GUI / DevBridge 模式下登录不再使用 `lime://oauth/callback` 作为浏览器回跳，而是在宿主侧启动 `127.0.0.1:<port>/oauth/callback` 一次性本机回调桥；Rust 命令 `start_oem_cloud_oauth_callback_bridge` 收到回调后 emit `oem-cloud-oauth-callback`，前端完成 session 写入并继续 Studio 上传。该命令必须作为 bridge truth 走真实 DevBridge / Rust，不允许在浏览器模式优先回退 mock，否则会出现“返回了 localhost 地址但没有真实监听服务”的假成功。2026-05-21 实测 `content-factory-app` 本地目录 `/Users/coso/Documents/dev/ai/limecloud/agentapp/docs/examples/content-factory-app` 可直接识别并一键上传，发布为开发构建 `0.8.0+studio.20260520182133563`，Release `agent-app-release-2368`。
+
 迁移规则：
 
 1. App package 业务文件不能直接构造 `lime.agentApp.bridge` message。

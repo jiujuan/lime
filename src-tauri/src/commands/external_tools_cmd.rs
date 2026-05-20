@@ -3,9 +3,20 @@
 //! 管理 Codex CLI 等外部工具的状态检查和配置
 //! 这些工具有自己的认证系统，不通过 Lime 凭证池管理
 
+use axum::extract::{Query, State};
+use axum::http::{StatusCode, Uri};
+use axum::response::{Html, IntoResponse};
+use axum::routing::get;
+use axum::Router;
 use serde::{Deserialize, Serialize};
+use std::net::{IpAddr, SocketAddr};
 use std::process::Stdio;
+use std::sync::Arc;
+use std::time::Duration;
+use tauri::{AppHandle, Emitter};
+use tokio::net::TcpListener;
 use tokio::process::Command;
+use tokio::sync::{oneshot, Mutex};
 
 /// Codex CLI 状态
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -22,6 +33,70 @@ pub struct CodexCliStatus {
     pub api_key_prefix: Option<String>,
     /// 错误信息
     pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OemCloudOAuthCallbackBridgeStartResponse {
+    pub callback_url: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OemCloudOAuthCallbackBridgePayload {
+    pub source_path: String,
+    pub tenant_id: Option<String>,
+    pub token: Option<String>,
+    pub next: Option<String>,
+    pub error: Option<String>,
+    pub device_code: Option<String>,
+    pub status: Option<String>,
+}
+
+const OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT: &str = "oem-cloud-oauth-callback";
+const OEM_CLOUD_OAUTH_CALLBACK_PATH: &str = "/oauth/callback";
+const OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_TTL: Duration = Duration::from_secs(10 * 60);
+const OEM_CLOUD_OAUTH_CALLBACK_HTML: &str = r#"<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lime 登录回调</title>
+    <script>
+      (function () {
+        if (window.location.hash && window.location.hash.length > 1) {
+          var params = new URLSearchParams(window.location.hash.slice(1));
+          var search = new URLSearchParams(window.location.search);
+          params.forEach(function (value, key) {
+            if (!search.has(key)) search.set(key, value);
+          });
+          window.location.replace(window.location.pathname + "?" + search.toString());
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <p>Lime 登录结果已返回，可以关闭此页面。</p>
+  </body>
+</html>"#;
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OemCloudOAuthCallbackBridgeQuery {
+    #[serde(alias = "tenant_id")]
+    tenant_id: Option<String>,
+    token: Option<String>,
+    next: Option<String>,
+    error: Option<String>,
+    #[serde(alias = "device_code")]
+    device_code: Option<String>,
+    status: Option<String>,
+}
+
+#[derive(Clone)]
+struct OemCloudOAuthCallbackBridgeState {
+    app: AppHandle,
+    shutdown_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 
 /// 检查 Lime CLI 状态
@@ -138,6 +213,114 @@ pub async fn open_external_url(url: String) -> Result<(), String> {
     let normalized_url = normalize_external_url(&url)?;
     open::that(&normalized_url).map_err(|error| format!("无法打开系统浏览器: {error}"))?;
     Ok(())
+}
+
+fn normalize_callback_bridge_base_url(addr: SocketAddr) -> Result<String, String> {
+    if !matches!(addr.ip(), IpAddr::V4(ip) if ip.is_loopback()) {
+        return Err("OAuth 本地回调桥必须绑定到 IPv4 loopback 地址".to_string());
+    }
+    Ok(format!(
+        "http://127.0.0.1:{}{}",
+        addr.port(),
+        OEM_CLOUD_OAUTH_CALLBACK_PATH
+    ))
+}
+
+fn normalize_callback_bridge_value(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let normalized = value.trim();
+        if normalized.is_empty() {
+            None
+        } else {
+            Some(normalized.to_string())
+        }
+    })
+}
+
+fn build_oem_cloud_oauth_callback_payload(
+    uri: &Uri,
+    query: OemCloudOAuthCallbackBridgeQuery,
+) -> OemCloudOAuthCallbackBridgePayload {
+    OemCloudOAuthCallbackBridgePayload {
+        source_path: uri.path().to_string(),
+        tenant_id: normalize_callback_bridge_value(query.tenant_id),
+        token: normalize_callback_bridge_value(query.token),
+        next: normalize_callback_bridge_value(query.next),
+        error: normalize_callback_bridge_value(query.error),
+        device_code: normalize_callback_bridge_value(query.device_code),
+        status: normalize_callback_bridge_value(query.status),
+    }
+}
+
+fn should_emit_oem_cloud_oauth_callback(payload: &OemCloudOAuthCallbackBridgePayload) -> bool {
+    payload.tenant_id.is_some()
+        || payload.token.is_some()
+        || payload.error.is_some()
+        || payload.device_code.is_some()
+        || payload.status.is_some()
+}
+
+async fn handle_oem_cloud_oauth_callback_bridge_request(
+    State(state): State<OemCloudOAuthCallbackBridgeState>,
+    Query(query): Query<OemCloudOAuthCallbackBridgeQuery>,
+    uri: Uri,
+) -> impl IntoResponse {
+    let payload = build_oem_cloud_oauth_callback_payload(&uri, query);
+    if should_emit_oem_cloud_oauth_callback(&payload) {
+        if let Err(error) = state
+            .app
+            .emit(OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT, payload)
+        {
+            tracing::warn!("[OAuthCallbackBridge] 发送 OAuth 回调事件失败: {}", error);
+        }
+
+        if let Some(shutdown_tx) = state.shutdown_tx.lock().await.take() {
+            let _ = shutdown_tx.send(());
+        }
+
+        return (StatusCode::OK, Html(OEM_CLOUD_OAUTH_CALLBACK_HTML)).into_response();
+    }
+
+    (StatusCode::OK, Html(OEM_CLOUD_OAUTH_CALLBACK_HTML)).into_response()
+}
+
+/// 启动一次性 OEM Cloud OAuth 本机回调桥。
+#[tauri::command]
+pub async fn start_oem_cloud_oauth_callback_bridge(
+    app: AppHandle,
+) -> Result<OemCloudOAuthCallbackBridgeStartResponse, String> {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(|error| format!("无法启动 OAuth 本地回调桥: {error}"))?;
+    let addr = listener
+        .local_addr()
+        .map_err(|error| format!("无法读取 OAuth 本地回调地址: {error}"))?;
+    let callback_url = normalize_callback_bridge_base_url(addr)?;
+    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+    let state = OemCloudOAuthCallbackBridgeState {
+        app,
+        shutdown_tx: Arc::new(Mutex::new(Some(shutdown_tx))),
+    };
+    let router = Router::new()
+        .route(
+            OEM_CLOUD_OAUTH_CALLBACK_PATH,
+            get(handle_oem_cloud_oauth_callback_bridge_request),
+        )
+        .with_state(state);
+
+    tauri::async_runtime::spawn(async move {
+        let server = axum::serve(listener, router).with_graceful_shutdown(async move {
+            tokio::select! {
+                _ = shutdown_rx => {}
+                _ = tokio::time::sleep(OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_TTL) => {}
+            }
+        });
+        if let Err(error) = server.await {
+            tracing::warn!("[OAuthCallbackBridge] OAuth 本地回调桥运行失败: {}", error);
+        }
+    });
+
+    Ok(OemCloudOAuthCallbackBridgeStartResponse { callback_url })
 }
 
 /// 外部工具列表

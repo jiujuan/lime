@@ -2,7 +2,7 @@
   "name": "lime",
   "private": true,
   "workspaces": ["packages/*"],
-  "version": "1.45.0",
+  "version": "1.45.1",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",

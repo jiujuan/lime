@@ -1144,6 +1144,125 @@ describe("createAgentAppCapabilityDispatcher", () => {
     expect(loginLauncherMocks.startOemCloudLogin).toHaveBeenCalledTimes(1);
   });
 
+  it("lime.cloudSession.requestLogin 支持强制刷新已有宿主会话", async () => {
+    const dispatch = buildDispatcherWithCloudSessionCapability();
+    window.__LIME_OEM_CLOUD__ = {
+      enabled: true,
+      baseUrl: "https://user.limeai.run",
+      tenantId: "tenant-0001",
+      sessionToken: "stale-host-session-token",
+    };
+    loginLauncherMocks.startOemCloudLogin.mockImplementation(async () => {
+      window.__LIME_SESSION_TOKEN__ = "fresh-host-session-token";
+      window.__LIME_OEM_CLOUD__ = {
+        enabled: true,
+        baseUrl: "https://user.limeai.run",
+        tenantId: "tenant-0001",
+        sessionToken: "fresh-host-session-token",
+      };
+      return {
+        mode: "desktop_auth",
+        openedUrl: "lime://oauth/callback",
+      };
+    });
+
+    await expect(
+      dispatch({
+        appId: "content-factory-app",
+        entryKey: "dashboard",
+        capability: "lime.cloudSession",
+        method: "requestLogin",
+        input: { force: true },
+        rawPayload: {
+          capability: "lime.cloudSession",
+          method: "requestLogin",
+          input: { force: true },
+        },
+      }),
+    ).resolves.toMatchObject({
+      tenantId: "tenant-0001",
+      hasSession: true,
+      controlPlaneBaseUrl: "https://user.limeai.run/api",
+    });
+    expect(loginLauncherMocks.startOemCloudLogin).toHaveBeenCalledTimes(1);
+  });
+
+  it("lime.cloudSession.getAccessToken 不返回已过期的宿主会话令牌", async () => {
+    const dispatch = buildDispatcherWithCloudSessionCapability();
+    const expiredToken = [
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+      "eyJzdWIiOiJ1c2VyLTAwMDEiLCJ0ZW5hbnRJZCI6InRlbmFudC0wMDAxIiwiZXhwIjoxfQ",
+      "signature",
+    ].join(".");
+    window.__LIME_OEM_CLOUD__ = {
+      enabled: true,
+      baseUrl: "https://user.limeai.run",
+      tenantId: "tenant-0001",
+      sessionToken: expiredToken,
+    };
+
+    await expect(
+      dispatch({
+        appId: "content-factory-app",
+        entryKey: "dashboard",
+        capability: "lime.cloudSession",
+        method: "getAccessToken",
+        rawPayload: {
+          capability: "lime.cloudSession",
+          method: "getAccessToken",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "SESSION_REQUIRED",
+    });
+  });
+
+  it("lime.cloudSession.requestLogin 遇到过期宿主会话令牌时会刷新", async () => {
+    const dispatch = buildDispatcherWithCloudSessionCapability();
+    const expiredToken = [
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+      "eyJzdWIiOiJ1c2VyLTAwMDEiLCJ0ZW5hbnRJZCI6InRlbmFudC0wMDAxIiwiZXhwIjoxfQ",
+      "signature",
+    ].join(".");
+    window.__LIME_OEM_CLOUD__ = {
+      enabled: true,
+      baseUrl: "https://user.limeai.run",
+      tenantId: "tenant-0001",
+      sessionToken: expiredToken,
+    };
+    loginLauncherMocks.startOemCloudLogin.mockImplementation(async () => {
+      window.__LIME_SESSION_TOKEN__ = "fresh-host-session-token";
+      window.__LIME_OEM_CLOUD__ = {
+        enabled: true,
+        baseUrl: "https://user.limeai.run",
+        tenantId: "tenant-0001",
+        sessionToken: "fresh-host-session-token",
+      };
+      return {
+        mode: "desktop_auth",
+        openedUrl: "lime://oauth/callback",
+      };
+    });
+
+    await expect(
+      dispatch({
+        appId: "content-factory-app",
+        entryKey: "dashboard",
+        capability: "lime.cloudSession",
+        method: "requestLogin",
+        rawPayload: {
+          capability: "lime.cloudSession",
+          method: "requestLogin",
+        },
+      }),
+    ).resolves.toMatchObject({
+      tenantId: "tenant-0001",
+      hasSession: true,
+      controlPlaneBaseUrl: "https://user.limeai.run/api",
+    });
+    expect(loginLauncherMocks.startOemCloudLogin).toHaveBeenCalledTimes(1);
+  });
+
   it("应通过 lime.models / lime.usage 投影 AgentRuntime 模型与用量事实", async () => {
     const dispatch = buildRuntimeProjectionDispatcher();
 

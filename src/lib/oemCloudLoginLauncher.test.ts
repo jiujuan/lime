@@ -14,10 +14,15 @@ const controlPlaneMocks = vi.hoisted(() => ({
 }));
 const systemBrowserMocks = vi.hoisted(() => ({
   openExternalUrlWithSystemBrowser: vi.fn(),
+  startOemCloudOAuthCallbackBridge: vi.fn(),
 }));
 const tauriRuntimeMocks = vi.hoisted(() => ({
   hasTauriInvokeCapability: vi.fn(),
   hasTauriRuntimeMarkers: vi.fn(),
+}));
+const devBridgeMocks = vi.hoisted(() => ({
+  isDevBridgeAvailable: vi.fn(),
+  safeListen: vi.fn(),
 }));
 
 vi.mock("@/lib/api/oemCloudControlPlane", async (importOriginal) => {
@@ -38,14 +43,26 @@ vi.mock("@tauri-apps/plugin-shell", () => ({
 }));
 
 vi.mock("@/lib/api/externalUrl", () => ({
+  OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT: "oem-cloud-oauth-callback",
   openExternalUrlWithSystemBrowser:
     systemBrowserMocks.openExternalUrlWithSystemBrowser,
+  startOemCloudOAuthCallbackBridge:
+    systemBrowserMocks.startOemCloudOAuthCallbackBridge,
 }));
 
 vi.mock("@/lib/tauri-runtime", () => ({
   hasTauriInvokeCapability: tauriRuntimeMocks.hasTauriInvokeCapability,
   hasTauriRuntimeMarkers: tauriRuntimeMocks.hasTauriRuntimeMarkers,
 }));
+
+vi.mock("@/lib/dev-bridge", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/dev-bridge")>();
+  return {
+    ...actual,
+    isDevBridgeAvailable: devBridgeMocks.isDevBridgeAvailable,
+    safeListen: devBridgeMocks.safeListen,
+  };
+});
 
 function createOpenedWindow() {
   return {
@@ -73,16 +90,28 @@ describe("oemCloudLoginLauncher", () => {
     systemBrowserMocks.openExternalUrlWithSystemBrowser.mockResolvedValue(
       undefined,
     );
+    systemBrowserMocks.startOemCloudOAuthCallbackBridge.mockReset();
+    systemBrowserMocks.startOemCloudOAuthCallbackBridge.mockResolvedValue({
+      callbackUrl: "http://127.0.0.1:18081/oauth/callback",
+    });
     controlPlaneMocks.createClientDesktopAuthSession.mockReset();
     controlPlaneMocks.pollClientDesktopAuthSession.mockReset();
     tauriRuntimeMocks.hasTauriInvokeCapability.mockReset();
     tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReset();
     tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(false);
     tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(false);
+    devBridgeMocks.isDevBridgeAvailable.mockReset();
+    devBridgeMocks.isDevBridgeAvailable.mockReturnValue(false);
+    devBridgeMocks.safeListen.mockReset();
+    devBridgeMocks.safeListen.mockResolvedValue(() => undefined);
   });
 
   afterEach(() => {
     localStorage.clear();
+    Object.defineProperty(window, "parent", {
+      configurable: true,
+      value: window,
+    });
     vi.restoreAllMocks();
   });
 
@@ -163,6 +192,109 @@ describe("oemCloudLoginLauncher", () => {
     ).not.toHaveBeenCalled();
     expect(shellOpenMock).not.toHaveBeenCalled();
     expect(windowOpenSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("Tauri 桌面登录应启动本机回调桥并把 callbackUrl 传给 desktop auth session", async () => {
+    tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(true);
+    tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(true);
+    controlPlaneMocks.createClientDesktopAuthSession.mockResolvedValue({
+      authSessionId: "auth-session-001",
+      deviceCode: "device-001",
+      tenantId: "tenant-0001",
+      clientId: "desktop-client",
+      clientName: "Lime Desktop",
+      provider: "google",
+      desktopRedirectUri: "http://127.0.0.1:18081/oauth/callback",
+      status: "pending_login",
+      expiresInSeconds: 600,
+      pollIntervalSeconds: 1,
+      authorizeUrl: "https://user.limeai.run/oauth/desktop/device-001/signin",
+    });
+    controlPlaneMocks.pollClientDesktopAuthSession.mockReturnValue(
+      new Promise(() => undefined),
+    );
+
+    await startOemCloudLogin(
+      {
+        baseUrl: "https://user.limeai.run",
+        controlPlaneBaseUrl: "https://user.limeai.run/api",
+        sceneBaseUrl: "https://user.limeai.run/scene-api",
+        gatewayBaseUrl: "https://llm.limeai.run",
+        tenantId: "tenant-0001",
+        sessionToken: null,
+        hubProviderName: null,
+        loginPath: "/login",
+        desktopClientId: "desktop-client",
+        desktopOauthRedirectUrl: "lime://oauth/callback",
+        desktopOauthNextPath: "/welcome",
+      },
+      { waitForCompletion: false },
+    );
+
+    expect(
+      systemBrowserMocks.startOemCloudOAuthCallbackBridge,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      controlPlaneMocks.createClientDesktopAuthSession,
+    ).toHaveBeenCalledWith("tenant-0001", {
+      clientId: "desktop-client",
+      provider: "google",
+      desktopRedirectUri: "http://127.0.0.1:18081/oauth/callback",
+    });
+  });
+
+  it("DevBridge 浏览器模式应使用宿主命令打开登录页并启用本机回调桥", async () => {
+    devBridgeMocks.isDevBridgeAvailable.mockReturnValue(true);
+    controlPlaneMocks.createClientDesktopAuthSession.mockResolvedValue({
+      authSessionId: "auth-session-001",
+      deviceCode: "device-001",
+      tenantId: "tenant-0001",
+      clientId: "desktop-client",
+      clientName: "Lime Desktop",
+      provider: "google",
+      desktopRedirectUri: "http://127.0.0.1:18081/oauth/callback",
+      status: "pending_login",
+      expiresInSeconds: 600,
+      pollIntervalSeconds: 1,
+      authorizeUrl: "https://user.limeai.run/oauth/desktop/device-001/signin",
+    });
+    controlPlaneMocks.pollClientDesktopAuthSession.mockReturnValue(
+      new Promise(() => undefined),
+    );
+
+    await startOemCloudLogin(
+      {
+        baseUrl: "https://user.limeai.run",
+        controlPlaneBaseUrl: "https://user.limeai.run/api",
+        sceneBaseUrl: "https://user.limeai.run/scene-api",
+        gatewayBaseUrl: "https://llm.limeai.run",
+        tenantId: "tenant-0001",
+        sessionToken: null,
+        hubProviderName: null,
+        loginPath: "/login",
+        desktopClientId: "desktop-client",
+        desktopOauthRedirectUrl: "lime://oauth/callback",
+        desktopOauthNextPath: "/welcome",
+      },
+      { waitForCompletion: false },
+    );
+
+    expect(
+      systemBrowserMocks.startOemCloudOAuthCallbackBridge,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      controlPlaneMocks.createClientDesktopAuthSession,
+    ).toHaveBeenCalledWith("tenant-0001", {
+      clientId: "desktop-client",
+      provider: "google",
+      desktopRedirectUri: "http://127.0.0.1:18081/oauth/callback",
+    });
+    expect(
+      systemBrowserMocks.openExternalUrlWithSystemBrowser,
+    ).toHaveBeenCalledWith(
+      "https://user.limeai.run/oauth/desktop/device-001/signin",
+    );
+    expect(shellOpenMock).not.toHaveBeenCalled();
   });
 
   it("浏览器弹窗被拦截时应抛出可感知错误", async () => {
@@ -325,5 +457,62 @@ describe("oemCloudLoginLauncher", () => {
       }),
     );
     await Promise.resolve();
+  });
+
+  it("requestLogin fallback 打开普通登录页后应等待本机回调完成", async () => {
+    tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(true);
+    tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(true);
+    controlPlaneMocks.createClientDesktopAuthSession.mockRejectedValue(
+      new Error("desktop client not found"),
+    );
+
+    const loginPromise = startOemCloudLogin(
+      {
+        baseUrl: "https://user.limeai.run",
+        controlPlaneBaseUrl: "https://user.limeai.run/api",
+        sceneBaseUrl: "https://user.limeai.run/scene-api",
+        gatewayBaseUrl: "https://llm.limeai.run",
+        tenantId: "tenant-0001",
+        sessionToken: null,
+        hubProviderName: null,
+        loginPath: "/login",
+        desktopClientId: "desktop-client",
+        desktopOauthRedirectUrl: "lime://oauth/callback",
+        desktopOauthNextPath: "/welcome",
+      },
+      { waitForCompletion: true },
+    );
+
+    await vi.waitFor(() => {
+      expect(
+        systemBrowserMocks.openExternalUrlWithSystemBrowser,
+      ).toHaveBeenCalledTimes(1);
+    });
+    const openedUrl = systemBrowserMocks.openExternalUrlWithSystemBrowser.mock
+      .calls[0]?.[0] as string;
+    expect(new URL(openedUrl).searchParams.get("redirectUrl")).toBe(
+      "http://127.0.0.1:18081/oauth/callback",
+    );
+
+    setStoredOemCloudSessionState({
+      token: "session-token",
+      tenant: { id: "tenant-0001", slug: "tenant-0001" },
+      user: { id: "user-001" },
+      session: { id: "session-001", provider: "google" },
+    });
+    window.dispatchEvent(
+      new CustomEvent("lime:oem-cloud-oauth-completed", {
+        detail: {
+          tenantId: "tenant-0001",
+          nextPath: "/welcome",
+          provider: "google",
+        },
+      }),
+    );
+
+    await expect(loginPromise).resolves.toEqual({
+      mode: "login_url",
+      openedUrl,
+    });
   });
 });

@@ -569,6 +569,14 @@ function readOptionalInputRecord(
   return {};
 }
 
+function readBooleanOption(
+  request: AgentAppHostBridgeCapabilityRequest,
+  key: string,
+): boolean {
+  const input = readOptionalInputRecord(request);
+  return input[key] === true;
+}
+
 function readStringParam(
   request: AgentAppHostBridgeCapabilityRequest,
   key: string,
@@ -1154,6 +1162,36 @@ function buildCloudSessionSnapshot() {
   };
 }
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const payload = token.split(".")[1];
+  if (!payload) {
+    return null;
+  }
+
+  try {
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(
+      base64.length + ((4 - (base64.length % 4)) % 4),
+      "=",
+    );
+    const decoded = atob(padded);
+    const parsed = JSON.parse(decoded);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function isExpiredJwt(token: string, nowMs = Date.now()): boolean {
+  const payload = decodeJwtPayload(token);
+  const exp = payload?.exp;
+  if (typeof exp !== "number") {
+    return false;
+  }
+
+  return exp * 1000 <= nowMs + 60_000;
+}
+
 async function dispatchCloudSession(
   request: AgentAppHostBridgeCapabilityRequest,
 ): Promise<unknown> {
@@ -1162,7 +1200,11 @@ async function dispatchCloudSession(
   }
   if (request.method === "getAccessToken") {
     const runtime = resolveOemCloudRuntimeContext();
-    if (!runtime?.sessionToken || !runtime.tenantId) {
+    if (
+      !runtime?.sessionToken ||
+      !runtime.tenantId ||
+      isExpiredJwt(runtime.sessionToken)
+    ) {
       throw new AgentAppCapabilityDispatcherError(
         "SESSION_REQUIRED",
         "Host cloud session is not available.",
@@ -1182,7 +1224,12 @@ async function dispatchCloudSession(
         "Host cloud login is not configured.",
       );
     }
-    if (!runtime.sessionToken) {
+    const force = readBooleanOption(request, "force");
+    if (
+      force ||
+      !runtime.sessionToken ||
+      isExpiredJwt(runtime.sessionToken)
+    ) {
       await startOemCloudLogin(runtime, { waitForCompletion: true });
     }
     return buildCloudSessionSnapshot();

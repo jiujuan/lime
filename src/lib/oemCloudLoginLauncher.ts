@@ -6,8 +6,14 @@ import {
   createClientDesktopAuthSession,
   pollClientDesktopAuthSession,
 } from "@/lib/api/oemCloudControlPlane";
-import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import {
+  OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT,
+  type OemCloudOAuthCallbackBridgePayload,
+  openExternalUrlWithSystemBrowser,
+  startOemCloudOAuthCallbackBridge,
+} from "@/lib/api/externalUrl";
+import {
+  DEFAULT_OEM_CLOUD_DESKTOP_OAUTH_NEXT_PATH,
   resolveOemCloudRuntimeContext,
   type OemCloudRuntimeContext,
 } from "@/lib/api/oemCloudRuntime";
@@ -21,6 +27,7 @@ import {
   hasTauriInvokeCapability,
   hasTauriRuntimeMarkers,
 } from "@/lib/tauri-runtime";
+import { isDevBridgeAvailable, safeListen } from "@/lib/dev-bridge";
 
 const DESKTOP_AUTH_LEGACY_CLIENT_IDS: Record<string, string[]> = {
   "limehub-desktop": ["lobehub-desktop"],
@@ -152,9 +159,7 @@ export async function openExternalUrl(
   url: string,
   options: OpenExternalUrlOptions = {},
 ): Promise<void> {
-  const shouldUseTauriShell =
-    hasTauriInvokeCapability() || hasTauriRuntimeMarkers();
-  if (shouldUseTauriShell) {
+  if (hasHostDesktopBridge()) {
     let nativeOpenError: unknown = null;
     try {
       await openExternalUrlWithSystemBrowser(url);
@@ -274,7 +279,7 @@ function isDesktopClientNotFound(error: unknown) {
   );
 }
 
-function isLoopbackDesktopOauthRedirectUrl(value: string) {
+export function isLoopbackDesktopOauthRedirectUrl(value: string) {
   try {
     const parsed = new URL(value);
     if (!["http:", "https:"].includes(parsed.protocol)) {
@@ -287,6 +292,42 @@ function isLoopbackDesktopOauthRedirectUrl(value: string) {
   }
 }
 
+function shouldUseOAuthCallbackBridge() {
+  return hasHostDesktopBridge();
+}
+
+function hasHostDesktopBridge() {
+  return (
+    hasTauriInvokeCapability() ||
+    hasTauriRuntimeMarkers() ||
+    isDevBridgeAvailable()
+  );
+}
+
+function withDesktopOauthRedirectUrl(
+  runtime: OemCloudRuntimeContext,
+  desktopOauthRedirectUrl: string,
+): OemCloudRuntimeContext {
+  return {
+    ...runtime,
+    desktopOauthRedirectUrl,
+  };
+}
+
+async function resolveLoginRuntime(runtime: OemCloudRuntimeContext) {
+  if (!shouldUseOAuthCallbackBridge()) {
+    return runtime;
+  }
+
+  const { callbackUrl } = await startOemCloudOAuthCallbackBridge();
+  const normalizedCallbackUrl = callbackUrl?.trim();
+  if (!normalizedCallbackUrl) {
+    return runtime;
+  }
+
+  return withDesktopOauthRedirectUrl(runtime, normalizedCallbackUrl);
+}
+
 function resolveDesktopClientIdCandidates(clientId: string) {
   const primaryClientId = clientId.trim();
   const fallbackClientIds =
@@ -297,12 +338,6 @@ function resolveDesktopClientIdCandidates(clientId: string) {
 async function createGoogleDesktopAuthSession(
   runtime: OemCloudRuntimeContext,
 ): Promise<OemCloudDesktopAuthSessionStartResponse> {
-  if (isLoopbackDesktopOauthRedirectUrl(runtime.desktopOauthRedirectUrl)) {
-    throw new Error(
-      "桌面登录回跳地址仍是 localhost 本地回调，请改为 lime://oauth/callback。",
-    );
-  }
-
   const payload: CreateClientDesktopAuthSessionPayload = {
     clientId: runtime.desktopClientId,
     provider: "google",
@@ -477,6 +512,121 @@ function isGoogleOauthCompletionForRuntime(
   );
 }
 
+function normalizeCallbackBridgeText(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized ? normalized : null;
+}
+
+function toDesktopOAuthPayloadFromBridgeEvent(
+  payload: OemCloudOAuthCallbackBridgePayload | null,
+) {
+  return {
+    tenantId: normalizeCallbackBridgeText(payload?.tenantId),
+    token: normalizeCallbackBridgeText(payload?.token),
+    nextPath:
+      normalizeCallbackBridgeText(payload?.next) ??
+      DEFAULT_OEM_CLOUD_DESKTOP_OAUTH_NEXT_PATH,
+    error: normalizeCallbackBridgeText(payload?.error),
+  };
+}
+
+function subscribeOauthCallbackBridge(
+  runtime: OemCloudRuntimeContext,
+  onComplete: () => void,
+  onError: (error: Error) => void,
+) {
+  if (typeof window === "undefined" || !shouldUseOAuthCallbackBridge()) {
+    return () => undefined;
+  }
+
+  let disposed = false;
+  let nativeUnlisten: (() => void) | null = null;
+
+  const handleCallback = (
+    payload: OemCloudOAuthCallbackBridgePayload | null,
+  ) => {
+    if (disposed) {
+      return;
+    }
+
+    const callbackPayload = toDesktopOAuthPayloadFromBridgeEvent(payload);
+    if (callbackPayload.error) {
+      onError(new Error(callbackPayload.error));
+      return;
+    }
+
+    if (!callbackPayload.tenantId || !callbackPayload.token) {
+      return;
+    }
+
+    void completeOemCloudDesktopOAuthLogin(callbackPayload)
+      .then(() => {
+        if (disposed) {
+          return;
+        }
+        if (
+          isGoogleOauthCompletionForRuntime(
+            {
+              tenantId: callbackPayload.tenantId!,
+              nextPath: callbackPayload.nextPath,
+              provider: "google",
+            },
+            runtime,
+          )
+        ) {
+          onComplete();
+        }
+      })
+      .catch((error) => {
+        onError(
+          error instanceof Error
+            ? error
+            : new Error("OAuth 本地回调同步失败"),
+        );
+      });
+  };
+
+  const handleWindowCallback = (event: Event) => {
+    const detail =
+      event instanceof CustomEvent
+        ? (event.detail as OemCloudOAuthCallbackBridgePayload)
+        : null;
+    handleCallback(detail);
+  };
+
+  window.addEventListener(
+    OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT,
+    handleWindowCallback,
+  );
+
+  void safeListen<OemCloudOAuthCallbackBridgePayload>(
+    OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT,
+    (event) => {
+      handleCallback(event.payload);
+    },
+  )
+    .then((unlisten) => {
+      if (disposed) {
+        unlisten();
+        return;
+      }
+      nativeUnlisten = unlisten;
+    })
+    .catch(() => undefined);
+
+  return () => {
+    disposed = true;
+    nativeUnlisten?.();
+    window.removeEventListener(
+      OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT,
+      handleWindowCallback,
+    );
+  };
+}
+
 function monitorGoogleDesktopAuthCompletion(
   runtime: OemCloudRuntimeContext,
   authSession: OemCloudDesktopAuthSessionStartResponse,
@@ -519,6 +669,17 @@ export async function openConfiguredOemCloudLoginUrl(
   };
 }
 
+function shouldWaitForLoginUrlCompletion(
+  runtime: OemCloudRuntimeContext,
+  options: OemCloudLoginLaunchOptions,
+) {
+  return (
+    options.waitForCompletion === true &&
+    shouldUseOAuthCallbackBridge() &&
+    isLoopbackDesktopOauthRedirectUrl(runtime.desktopOauthRedirectUrl)
+  );
+}
+
 export async function startOemCloudLogin(
   runtime = resolveOemCloudRuntimeContext(),
   options: OemCloudLoginLaunchOptions = {},
@@ -526,33 +687,56 @@ export async function startOemCloudLogin(
   if (!runtime) {
     throw new Error("当前版本未配置云端登录入口。");
   }
+  const loginRuntime = await resolveLoginRuntime(runtime);
 
   let oauthCompleted = false;
   let disposeOauthCompletedListener: () => void = () => undefined;
   const oauthCompletedPromise =
     typeof window === "undefined"
       ? new Promise<void>(() => undefined)
-      : new Promise<void>((resolve) => {
-          disposeOauthCompletedListener = subscribeOauthCompleted(
-            runtime,
+      : new Promise<void>((resolve, reject) => {
+          const complete = () => {
+            oauthCompleted = true;
+            disposeOauthCompletedListener();
+            resolve();
+          };
+          const fail = (error: Error) => {
+            oauthCompleted = true;
+            disposeOauthCompletedListener();
+            reject(error);
+          };
+          const disposeOauthCompleted = subscribeOauthCompleted(
+            loginRuntime,
             () => {
-              oauthCompleted = true;
-              disposeOauthCompletedListener();
-              resolve();
+              complete();
             },
           );
+          const disposeCallbackBridge = subscribeOauthCallbackBridge(
+            loginRuntime,
+            complete,
+            fail,
+          );
+          disposeOauthCompletedListener = () => {
+            disposeOauthCompleted();
+            disposeCallbackBridge();
+          };
         });
 
   let authSession: OemCloudDesktopAuthSessionStartResponse | null = null;
   try {
-    authSession = await createGoogleDesktopAuthSession(runtime);
+    authSession = await createGoogleDesktopAuthSession(loginRuntime);
   } catch (error) {
-    disposeOauthCompletedListener();
-    if (error instanceof Error && /localhost 本地回调/.test(error.message)) {
-      options.browserTarget?.close();
-      throw error;
+    const result = await openConfiguredOemCloudLoginUrl(loginRuntime, options);
+    if (shouldWaitForLoginUrlCompletion(loginRuntime, options)) {
+      try {
+        await oauthCompletedPromise;
+      } finally {
+        disposeOauthCompletedListener();
+      }
+    } else {
+      disposeOauthCompletedListener();
     }
-    return openConfiguredOemCloudLoginUrl(runtime, options);
+    return result;
   }
 
   await openExternalUrl(authSession.authorizeUrl, {
@@ -561,7 +745,7 @@ export async function startOemCloudLogin(
   });
 
   const completionPromise = monitorGoogleDesktopAuthCompletion(
-    runtime,
+    loginRuntime,
     authSession,
     oauthCompletedPromise,
     () => oauthCompleted,

@@ -126,7 +126,8 @@
     "memory_runtime_prefetch_for_turn"
   ],
   "systemUtilityCommands": [
-    "open_external_url"
+    "open_external_url",
+    "start_oem_cloud_oauth_callback_bridge"
   ],
   "fileBrowserCommands": [
     "list_dir",

@@ -32,6 +32,14 @@ describe("mockPriorityCommands", () => {
       false,
     );
     expect(shouldPreferMockInBrowser("agent_app_stop_ui_runtime")).toBe(false);
+    expect(
+      shouldPreferMockInBrowser("start_oem_cloud_oauth_callback_bridge"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser(
+        "start_oem_cloud_oauth_callback_bridge",
+      ),
+    ).toBe(true);
   });
 
   it("图层设计工程目录命令在浏览器模式必须走真实桥接", () => {
