@@ -1684,7 +1684,7 @@ const AccountMenuPopover = styled.div<{ $collapsed?: boolean }>`
   width: ${({ $collapsed }) => ($collapsed ? "284px" : "304px")};
   max-width: min(304px, calc(100vw - 24px));
   max-height: min(760px, calc(100vh - 24px));
-  overflow-y: auto;
+  overflow: visible;
   overscroll-behavior: contain;
   border-radius: 18px;
   border: 1px solid var(--lime-card-subtle-border, rgba(226, 240, 226, 0.92));

@@ -133,6 +133,13 @@ function findButton(container: HTMLElement, text: string): HTMLButtonElement {
   return matched as HTMLButtonElement;
 }
 
+async function openSectionTab(container: HTMLElement, text: string) {
+  await act(async () => {
+    findButton(container, text).click();
+  });
+  await flushEffects();
+}
+
 async function flushEffects() {
   await act(async () => {
     await Promise.resolve();
@@ -358,18 +365,39 @@ describe("MemorySettings", () => {
     await flushEffects();
     await flushEffects();
 
-    const text = container.textContent ?? "";
+    const tabs = container.querySelector(
+      '[data-testid="memory-settings-section-tabs"]',
+    );
+    expect(tabs).toBeInstanceOf(HTMLElement);
+
+    let text = container.textContent ?? "";
     expect(text).toContain("Memory");
     expect(text).toContain(
       "Manage your user profile, source-chain policy, and memory directory entry.",
     );
     expect(text).toContain("Memory Master Switch");
+    expect(text).toContain("Overview");
+    expect(text).toContain("Source policy");
+    expect(text).toContain("Memory directory");
+    expect(text).toContain("Hit details");
     expect(text).toContain("Preference Profile");
     expect(text).toContain("Memory Hit Layer Availability");
     expect(text).toContain("Source Chain Status Overview");
+    expect(text).not.toContain("Source Chain Policy");
+    expect(text).not.toContain("Memory Directory (memdir)");
+    expect(text).not.toContain("Source Chain Hit Details");
+
+    await openSectionTab(container, "Source policy");
+    text = container.textContent ?? "";
     expect(text).toContain("Source Chain Policy");
-    expect(text).toContain("Source Chain Hit Details");
+
+    await openSectionTab(container, "Memory directory");
+    text = container.textContent ?? "";
     expect(text).toContain("Memory Directory (memdir)");
+
+    await openSectionTab(container, "Hit details");
+    text = container.textContent ?? "";
+    expect(text).toContain("Source Chain Hit Details");
     expect(text).not.toContain("settings.memory");
   });
 
@@ -386,6 +414,7 @@ describe("MemorySettings", () => {
     const container = renderComponent();
     await flushEffects();
     await flushEffects();
+    await openSectionTab(container, "Memory directory");
 
     await act(async () => {
       findButton(container, "Disable now").click();
@@ -398,6 +427,7 @@ describe("MemorySettings", () => {
     const container = renderComponent();
     await flushEffects();
     await flushEffects();
+    await openSectionTab(container, "Memory directory");
 
     await act(async () => {
       findButton(container, "Write to memdir").click();
@@ -414,6 +444,7 @@ describe("MemorySettings", () => {
     const container = renderComponent();
     await flushEffects();
     await flushEffects();
+    await openSectionTab(container, "Memory directory");
 
     await act(async () => {
       findButton(container, "Initialize memdir").click();
@@ -426,6 +457,7 @@ describe("MemorySettings", () => {
     const container = renderComponent();
     await flushEffects();
     await flushEffects();
+    await openSectionTab(container, "Memory directory");
 
     await act(async () => {
       findButton(container, "Organize memdir").click();
@@ -440,6 +472,7 @@ describe("MemorySettings", () => {
     const container = renderComponent();
     await flushEffects();
     await flushEffects();
+    await openSectionTab(container, "Memory directory");
 
     const textarea = container.querySelector("textarea[placeholder*='Why:']");
     expect(textarea).toBeInstanceOf(HTMLTextAreaElement);
@@ -472,6 +505,7 @@ describe("MemorySettings", () => {
     const container = renderComponent();
     await flushEffects();
     await flushEffects();
+    await openSectionTab(container, "Memory directory");
 
     await act(async () => {
       findButton(container, "Feedback memory").click();
@@ -506,6 +540,7 @@ describe("MemorySettings", () => {
     const container = renderComponent();
     await flushEffects();
     await flushEffects();
+    await openSectionTab(container, "Memory directory");
 
     const textarea = container.querySelector("textarea[placeholder*='Why:']");
     expect(textarea).toBeInstanceOf(HTMLTextAreaElement);
@@ -537,6 +572,7 @@ describe("MemorySettings", () => {
     const container = renderComponent();
     await flushEffects();
     await flushEffects();
+    await openSectionTab(container, "Source policy");
 
     await act(async () => {
       findButton(container, "Generate Workspace template").click();
@@ -553,6 +589,7 @@ describe("MemorySettings", () => {
     const container = renderComponent();
     await flushEffects();
     await flushEffects();
+    await openSectionTab(container, "Source policy");
 
     await act(async () => {
       findButton(container, "Add local template to .gitignore").click();

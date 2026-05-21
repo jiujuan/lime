@@ -10,11 +10,13 @@ import {
   LIME_CAPABILITY_DEFINITIONS,
   LIME_CAPABILITY_NAMES,
   MockCapabilityHost,
+  applyLimeHostTheme,
   createLimeCoreCapabilityAdapters,
   createLimeHostBridgeCapabilityInvoker,
   createMockLimeCapabilityTransport,
   isLimeCapabilityErrorCode,
   normalizeLimeCapabilityErrorCode,
+  syncLimeHostTheme,
 } from "./index";
 import * as publicSdkSurface from "./index";
 
@@ -39,6 +41,8 @@ describe("agent app SDK public surface", () => {
     expect(normalizeLimeCapabilityErrorCode("missing")).toBe("upstream_failed");
     expect(typeof createLimeCoreCapabilityAdapters).toBe("function");
     expect(typeof createLimeHostBridgeCapabilityInvoker).toBe("function");
+    expect(typeof applyLimeHostTheme).toBe("function");
+    expect(typeof syncLimeHostTheme).toBe("function");
     expect(typeof createMockLimeCapabilityTransport).toBe("function");
     expect(typeof MockCapabilityHost).toBe("function");
   });

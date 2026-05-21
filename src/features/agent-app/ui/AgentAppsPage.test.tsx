@@ -102,6 +102,10 @@ vi.mock("@/lib/api/agentApps", () => ({
   uninstallAgentApp: apiMocks.uninstallAgentApp,
 }));
 
+vi.mock("@/lib/api/fileSystem", () => ({
+  convertLocalFileSrc: (path: string) => `asset://${path}`,
+}));
+
 interface MountedPage {
   container: HTMLDivElement;
   root: Root;
@@ -516,6 +520,13 @@ describe("AgentAppsPage", () => {
         '[data-testid="agent-apps-list-row-content-factory-app"]',
       ),
     ).not.toBeNull();
+    const fallbackIcon = container.querySelector(
+      '[data-testid="agent-apps-icon-content-factory-app"] img',
+    ) as HTMLImageElement | null;
+    expect(fallbackIcon?.getAttribute("src")).toContain("data:image/svg+xml");
+    expect(decodeURIComponent(fallbackIcon?.getAttribute("src") ?? "")).toContain(
+      "内容工厂",
+    );
     expect(
       container.querySelector(
         '[data-testid="agent-apps-open-detail-content-factory-app"]',
@@ -596,6 +607,98 @@ describe("AgentAppsPage", () => {
         .querySelector('[data-testid="agent-apps-list"]')
         ?.closest("section")?.className,
     ).toContain("grid-rows-[auto_minmax(0,1fr)]");
+    expect(
+      container
+        .querySelector('[data-testid="agent-apps-list"]')
+        ?.className,
+    ).toContain("2xl:grid-cols-4");
+  });
+
+  it("本地 App 卡片应优先展示 manifest 声明的图标", async () => {
+    installedStates.push(
+      buildReadyState({
+        manifest: {
+          ...(contentFactoryFixture as AppManifest),
+          install: {
+            branding: {
+              name: "内容工厂",
+              icon: "./assets/icon.svg",
+              windowTitle: "内容工厂",
+            },
+          },
+        },
+      }),
+    );
+    const container = await renderPage();
+    await flush();
+
+    const icon = container.querySelector(
+      '[data-testid="agent-apps-icon-content-factory-app"] img',
+    ) as HTMLImageElement | null;
+    expect(icon?.getAttribute("src")).toBe(
+      `asset://${LOCAL_APP_DIR}/assets/icon.svg`,
+    );
+
+    await openAppDetail(container);
+
+    const detailIcon = container.querySelector(
+      '[data-testid="agent-apps-detail-icon-content-factory-app"] img',
+    ) as HTMLImageElement | null;
+    expect(detailIcon?.getAttribute("src")).toBe(
+      `asset://${LOCAL_APP_DIR}/assets/icon.svg`,
+    );
+  });
+
+  it("详情弹窗应支持关闭并回到卡片列表", async () => {
+    const container = await renderPage();
+    await flush();
+
+    await openAppDetail(container);
+
+    expect(
+      container.querySelector('[data-testid="agent-apps-detail-overlay"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="agent-apps-detail"]'),
+    ).not.toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="agent-apps-detail"]')
+        ?.getAttribute("role"),
+    ).toBe("dialog");
+    expect(
+      container
+        .querySelector('[data-testid="agent-apps-list"]')
+        ?.className,
+    ).toContain("2xl:grid-cols-4");
+
+    const closeDetail = container.querySelector(
+      '[data-testid="agent-apps-close-detail"]',
+    ) as HTMLButtonElement | null;
+    expect(closeDetail?.getAttribute("aria-label")).toBe(
+      "agentApp.apps.center.detail.close",
+    );
+    expect(closeDetail?.textContent).toContain(
+      "agentApp.apps.center.detail.close",
+    );
+
+    await act(async () => {
+      closeDetail?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(
+      container.querySelector('[data-testid="agent-apps-detail"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="agent-apps-detail-overlay"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="agent-apps-list-row-content-factory-app"]',
+      ),
+    ).not.toBeNull();
   });
 
   it("应用中心应支持云端/本地来源筛选、搜索和分页", async () => {

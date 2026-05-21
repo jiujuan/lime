@@ -191,13 +191,14 @@ describe("ProviderSetting", () => {
     expect(container.textContent ?? "").toContain("密钥、模型优先级和测试连接");
   });
 
-  it("详情页应只保留密钥、模型优先级和测试连接", async () => {
+  it("详情页应保留密钥保存、模型优先级和测试连接", async () => {
     const container = renderSetting(createProvider());
     await flushEffects();
     const text = container.textContent ?? "";
 
     expect(text).toContain("DeepSeek");
     expect(text).toContain("API 密钥");
+    expect(text).toContain("保存密钥");
     expect(text).toContain("模型优先级");
     expect(text).toContain("从接口获取");
     expect(text).toContain("测试连接");
@@ -213,6 +214,9 @@ describe("ProviderSetting", () => {
       container.querySelector(
         '[data-testid="provider-test-connection-button"]',
       ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="provider-api-key-save-button"]'),
     ).not.toBeNull();
   });
 
@@ -786,6 +790,116 @@ describe("ProviderSetting", () => {
     expect(onDeleteProvider).toHaveBeenCalledWith("deepseek");
 
     confirmSpy.mockRestore();
+  });
+
+  it("编辑 API 密钥后可显式保存，不必先测试连接", async () => {
+    const onAddApiKey = vi.fn().mockResolvedValue(undefined);
+    const onTestConnection = vi.fn().mockResolvedValue({
+      success: true,
+    });
+    const container = renderSetting(createProvider(), {
+      onAddApiKey,
+      onTestConnection,
+    });
+    await flushEffects();
+
+    const input = container.querySelector<HTMLInputElement>(
+      '[data-testid="provider-api-key-input"]',
+    );
+    const saveButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="provider-api-key-save-button"]',
+    );
+
+    expect(saveButton).not.toBeNull();
+    expect(saveButton?.disabled).toBe(true);
+
+    await act(async () => {
+      changeInput(input!, "sk-updated-key");
+      await Promise.resolve();
+    });
+
+    expect(container.textContent ?? "").toContain("未保存");
+    expect(saveButton?.disabled).toBe(false);
+
+    await act(async () => {
+      saveButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onAddApiKey).toHaveBeenCalledWith("deepseek", "sk-updated-key");
+    expect(onTestConnection).not.toHaveBeenCalled();
+    expect(container.textContent ?? "").toContain("API 密钥已保存");
+    expect(
+      container.querySelector('[data-testid="api-key-status"]'),
+    ).not.toBeNull();
+  });
+
+  it("保存 API 密钥遇到重复 Key 时应视为已保存", async () => {
+    const onAddApiKey = vi.fn().mockRejectedValue("该 API Key 已存在");
+    const container = renderSetting(createProvider(), {
+      onAddApiKey,
+    });
+    await flushEffects();
+
+    const input = container.querySelector<HTMLInputElement>(
+      '[data-testid="provider-api-key-input"]',
+    );
+    const saveButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="provider-api-key-save-button"]',
+    );
+
+    await act(async () => {
+      changeInput(input!, "sk-duplicated-key");
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      saveButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const status = container.querySelector<HTMLElement>(
+      '[data-testid="api-key-status"]',
+    );
+    expect(status?.textContent ?? "").toContain(
+      "这个 API 密钥已在当前服务商中",
+    );
+    expect(status?.className ?? "").toContain("border-emerald-200");
+    expect(status?.textContent ?? "").not.toContain("保存 API 密钥失败");
+  });
+
+  it("保存 API 密钥失败时应展示后端返回的字符串原因", async () => {
+    const onAddApiKey = vi.fn().mockRejectedValue("Provider 不存在: missing");
+    const container = renderSetting(createProvider(), {
+      onAddApiKey,
+    });
+    await flushEffects();
+
+    const input = container.querySelector<HTMLInputElement>(
+      '[data-testid="provider-api-key-input"]',
+    );
+    const saveButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="provider-api-key-save-button"]',
+    );
+
+    await act(async () => {
+      changeInput(input!, "sk-missing-provider");
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      saveButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const status = container.querySelector<HTMLElement>(
+      '[data-testid="api-key-status"]',
+    );
+    expect(status?.textContent ?? "").toContain("Provider 不存在: missing");
+    expect(status?.textContent ?? "").not.toContain("保存 API 密钥失败");
   });
 
   it("测试连接应先保存新密钥，并只显示简洁状态", async () => {

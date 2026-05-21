@@ -82,12 +82,53 @@ export interface ImportedSkillResult {
   directory: string;
 }
 
+export interface LocalSkillPackageFileEntry {
+  path: string;
+  isDirectory: boolean;
+  size: number;
+}
+
+export interface LocalSkillPackageInspectionResult {
+  directory: string;
+  inspection: SkillInspection;
+  files: LocalSkillPackageFileEntry[];
+}
+
+export interface SkillPackageFileAssociationStatus {
+  platform: string;
+  extension: string;
+  extensions?: string[];
+  mimeType: string;
+  appIdentifier: string;
+  isDefault: boolean;
+  canSetDefault: boolean;
+  requiresUserConfirmation: boolean;
+  currentHandler?: string | null;
+  settingsUrl?: string | null;
+  detail?: string | null;
+}
+
+export interface SkillPackageFileAssociationApplyResult {
+  changed: boolean;
+  message: string;
+  status: SkillPackageFileAssociationStatus;
+}
+
+export interface SkillPackageExportResult {
+  directory: string;
+  outputPath: string;
+  fileCount: number;
+  bytesWritten: number;
+}
+
 export interface SkillDownloadInstallRequest extends Record<string, unknown> {
   skillName: string;
   downloadUrl: string;
 }
 
 export type AppType = "claude" | "codex" | "gemini" | "lime";
+
+export const SKILL_PACKAGE_OPEN_EVENT = "skill-package://open";
 
 function normalizeStandardCompliance(
   compliance?: Partial<SkillStandardCompliance> | null,
@@ -242,8 +283,77 @@ export const skillsApi = {
   ): Promise<ImportedSkillResult> {
     return safeInvoke<ImportedSkillResult>("import_local_skill_for_app", {
       app,
-      source_path: sourcePath,
+      sourcePath,
     });
+  },
+
+  async inspectLocalSkillPackage(
+    sourcePath: string,
+    app: AppType = "lime",
+  ): Promise<LocalSkillPackageInspectionResult> {
+    const result = await safeInvoke<LocalSkillPackageInspectionResult>(
+      "inspect_local_skill_package_for_app",
+      {
+        app,
+        sourcePath,
+      },
+    );
+    return {
+      ...result,
+      inspection: normalizeInspection(result.inspection),
+      files: Array.isArray(result.files) ? result.files : [],
+    };
+  },
+
+  async installLocalSkillPackage(
+    sourcePath: string,
+    app: AppType = "lime",
+  ): Promise<SkillMarketplaceInstallResult> {
+    const result = await safeInvoke<SkillMarketplaceInstallResult>(
+      "install_local_skill_package_for_app",
+      {
+        app,
+        sourcePath,
+      },
+    );
+    return {
+      ...result,
+      inspection: normalizeInspection(result.inspection),
+    };
+  },
+
+  async takePendingSkillPackageOpenRequests(): Promise<string[]> {
+    const paths = await safeInvoke<string[]>(
+      "take_pending_skill_package_open_requests",
+    );
+    return normalizeStringList(paths);
+  },
+
+  async getSkillPackageFileAssociationStatus(): Promise<SkillPackageFileAssociationStatus> {
+    return safeInvoke<SkillPackageFileAssociationStatus>(
+      "get_skill_package_file_association_status",
+    );
+  },
+
+  async setSkillPackageFileAssociationDefault(): Promise<SkillPackageFileAssociationApplyResult> {
+    return safeInvoke<SkillPackageFileAssociationApplyResult>(
+      "set_skill_package_file_association_default",
+    );
+  },
+
+  async exportLocalSkillPackage(
+    directory: string,
+    targetPath: string,
+    app: AppType = "lime",
+  ): Promise<SkillPackageExportResult> {
+    return safeInvoke<SkillPackageExportResult>(
+      "export_local_skill_package_for_app",
+      {
+        app,
+        directory,
+        targetPath,
+      },
+    );
   },
 
   async installMarketplaceBundle(

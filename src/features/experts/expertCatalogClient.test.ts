@@ -7,6 +7,8 @@ import {
 import { getSeededExpertCatalog } from "./seededExpertCatalog";
 import type { ExpertCatalog } from "./types";
 
+const EXPERT_CATALOG_CACHE_STORAGE_KEY = "lime:expert-catalog-cache:v1";
+
 function buildRemoteCatalog(): ExpertCatalog {
   const catalog = getSeededExpertCatalog();
   return {
@@ -17,6 +19,14 @@ function buildRemoteCatalog(): ExpertCatalog {
       ...item,
       source: "cloud_catalog",
     })),
+  };
+}
+
+function buildEmptyRemoteCatalog(): ExpertCatalog {
+  return {
+    ...buildRemoteCatalog(),
+    version: "remote-experts-empty",
+    items: [],
   };
 }
 
@@ -43,6 +53,19 @@ describe("expertCatalogClient", () => {
 
     expect(catalog.tenantId).toBe("tenant-demo");
     expect(catalog.version).toBe("remote-experts-2026-05-15");
+  });
+
+  it("本地缓存是空专家目录时应回退 seeded，避免专家广场空白", async () => {
+    window.localStorage.setItem(
+      EXPERT_CATALOG_CACHE_STORAGE_KEY,
+      JSON.stringify(buildEmptyRemoteCatalog()),
+    );
+
+    const catalog = await getExpertCatalog();
+
+    expect(catalog.tenantId).toBe("local-seeded");
+    expect(catalog.items.length).toBeGreaterThan(0);
+    expect(readCachedExpertCatalog()).toBeNull();
   });
 
   it("存在 OEM 会话时应从 LimeCore 刷新并缓存专家目录", async () => {
@@ -78,6 +101,59 @@ describe("expertCatalogClient", () => {
     expect(readCachedExpertCatalog()?.version).toBe(
       "remote-experts-2026-05-15",
     );
+  });
+
+  it("远端返回空专家目录时应保留可用缓存", async () => {
+    saveCachedExpertCatalog(buildRemoteCatalog());
+    window.__LIME_OEM_CLOUD__ = {
+      baseUrl: "https://oem.example.com",
+      tenantId: "tenant-demo",
+    };
+    window.__LIME_SESSION_TOKEN__ = "session-token-demo";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          code: 200,
+          message: "success",
+          data: buildEmptyRemoteCatalog(),
+        }),
+      })),
+    );
+
+    const catalog = await getExpertCatalog({ refreshRemote: true });
+
+    expect(catalog.tenantId).toBe("tenant-demo");
+    expect(catalog.version).toBe("remote-experts-2026-05-15");
+    expect(readCachedExpertCatalog()?.version).toBe(
+      "remote-experts-2026-05-15",
+    );
+  });
+
+  it("远端返回空专家目录且没有缓存时应回退 seeded", async () => {
+    window.__LIME_OEM_CLOUD__ = {
+      baseUrl: "https://oem.example.com",
+      tenantId: "tenant-demo",
+    };
+    window.__LIME_SESSION_TOKEN__ = "session-token-demo";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          code: 200,
+          message: "success",
+          data: buildEmptyRemoteCatalog(),
+        }),
+      })),
+    );
+
+    const catalog = await getExpertCatalog({ refreshRemote: true });
+
+    expect(catalog.tenantId).toBe("local-seeded");
+    expect(catalog.items.length).toBeGreaterThan(0);
+    expect(readCachedExpertCatalog()).toBeNull();
   });
 
   it("远端刷新失败时应回退到上次缓存而不是直接丢回 seeded", async () => {

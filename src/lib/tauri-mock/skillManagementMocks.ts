@@ -18,6 +18,10 @@ function buildMockSkillInspection(
   };
 }
 
+function stripSkillPackageExtension(value: string): string {
+  return value.replace(/\.(?:skill|skills)$/i, "");
+}
+
 export const skillManagementMocks: Record<string, (args?: any) => any> = {
   get_all_skills: () => [],
   get_skills_for_app: () => [],
@@ -33,6 +37,80 @@ export const skillManagementMocks: Record<string, (args?: any) => any> = {
   install_skill_for_app: () => ({ success: true }),
   uninstall_skill_for_app: () => ({ success: true }),
   import_local_skill_for_app: () => ({ directory: "mock-skill" }),
+  inspect_local_skill_package_for_app: (args: any) => ({
+    directory: args?.sourcePath
+      ? stripSkillPackageExtension(args.sourcePath.split(/[\\/]/).pop() ?? "")
+      : args?.source_path
+        ? stripSkillPackageExtension(
+            args.source_path.split(/[\\/]/).pop() ?? "",
+          )
+        : "mock-local-package-skill",
+    inspection: buildMockSkillInspection({
+      content: "# Mock Local Skill Package",
+      hasReferences: true,
+    }),
+    files: [
+      { path: "SKILL.md", isDirectory: false, size: 32 },
+      { path: "references", isDirectory: true, size: 0 },
+      { path: "references/guide.md", isDirectory: false, size: 16 },
+    ],
+  }),
+  install_local_skill_package_for_app: (args: any) => ({
+    directory:
+      args?.skillName ||
+      args?.skill_name ||
+      (args?.sourcePath
+        ? stripSkillPackageExtension(args.sourcePath.split(/[\\/]/).pop() ?? "")
+        : undefined) ||
+      (args?.source_path
+        ? stripSkillPackageExtension(
+            args.source_path.split(/[\\/]/).pop() ?? "",
+          )
+        : undefined) ||
+      "mock-local-package-skill",
+    inspection: buildMockSkillInspection({
+      content: "# Mock Installed Local Skill Package",
+      hasReferences: true,
+    }),
+  }),
+  export_local_skill_package_for_app: (args: any) => ({
+    directory: args?.directory || "mock-local-package-skill",
+    outputPath:
+      args?.targetPath || args?.target_path || "/mock/path/to/skill.skills",
+    fileCount: 2,
+    bytesWritten: 512,
+  }),
+  take_pending_skill_package_open_requests: () => [],
+  get_skill_package_file_association_status: () => ({
+    platform: "mock",
+    extension: "skill",
+    extensions: ["skill", "skills"],
+    mimeType: "application/vnd.lime.skill+zip",
+    appIdentifier: "com.limecloud.lime",
+    isDefault: false,
+    canSetDefault: true,
+    requiresUserConfirmation: false,
+    currentHandler: "mock.other",
+    settingsUrl: null,
+    detail: null,
+  }),
+  set_skill_package_file_association_default: () => ({
+    changed: true,
+    message: "Mock .skill association updated",
+    status: {
+      platform: "mock",
+      extension: "skill",
+      extensions: ["skill", "skills"],
+      mimeType: "application/vnd.lime.skill+zip",
+      appIdentifier: "com.limecloud.lime",
+      isDefault: true,
+      canSetDefault: true,
+      requiresUserConfirmation: false,
+      currentHandler: "com.limecloud.lime",
+      settingsUrl: null,
+      detail: null,
+    },
+  }),
   install_marketplace_skill_for_app: (args: any) => ({
     directory: args?.bundle?.name || "mock-marketplace-skill",
     inspection: buildMockSkillInspection({

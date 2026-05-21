@@ -34,6 +34,7 @@ import { useAppStartupEffects } from "./hooks/useAppStartupEffects";
 import { useCompanionProviderBridge } from "./hooks/useCompanionProviderBridge";
 import { useGlobalTrayModelSync } from "./hooks/useGlobalTrayModelSync";
 import { useOemLimeHubProviderSync } from "./hooks/useOemLimeHubProviderSync";
+import { useSkillPackageOpenRequests } from "./hooks/useSkillPackageOpenRequests";
 import { ComponentDebugProvider } from "./contexts/ComponentDebugContext";
 import { SoundProvider } from "./contexts/SoundProvider";
 import { ComponentDebugOverlay } from "./components/dev";
@@ -191,6 +192,9 @@ function AppContent() {
   useCompanionProviderBridge({
     onNavigate: handleNavigate,
   });
+  useSkillPackageOpenRequests({
+    onNavigate: handleNavigate,
+  });
   useEffect(
     () =>
       listenOpenVoiceModelSettingsRequest((detail) => {
@@ -280,10 +284,13 @@ function AppContent() {
   const handleOpenWebsiteDeepLink = useCallback(
     async (payload: OpenDeepLinkPayload) => {
       if (payload.kind === "skill" && payload.action === "install") {
-        const installNavigation = resolveWebsiteInstalledSkillNavigation(payload);
+        const installNavigation =
+          resolveWebsiteInstalledSkillNavigation(payload);
         if (!installNavigation) {
           toast.error(t("common.app.websiteDeepLink.unsupported.title"), {
-            description: t("common.app.websiteDeepLink.unsupported.description"),
+            description: t(
+              "common.app.websiteDeepLink.unsupported.description",
+            ),
           });
           return;
         }

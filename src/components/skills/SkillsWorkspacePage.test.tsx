@@ -25,8 +25,13 @@ const mocks = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
   openDialog: vi.fn(),
+  saveDialog: vi.fn(),
   createSkillScaffold: vi.fn(),
   importLocalSkill: vi.fn(),
+  inspectLocalSkill: vi.fn(),
+  exportLocalSkillPackage: vi.fn(),
+  inspectLocalSkillPackage: vi.fn(),
+  installLocalSkillPackage: vi.fn(),
   serviceSkills: [] as ServiceSkillHomeItem[],
   officialMarketplaceSkills: [] as SkillMarketplaceItem[],
   officialMarketplaceError: null as string | null,
@@ -37,6 +42,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: (...args: unknown[]) => mocks.openDialog(...args),
+  save: (...args: unknown[]) => mocks.saveDialog(...args),
 }));
 
 vi.mock("sonner", () => ({
@@ -101,6 +107,14 @@ vi.mock("@/lib/api/skills", async (importOriginal) => {
       createSkillScaffold: (...args: unknown[]) =>
         mocks.createSkillScaffold(...args),
       importLocalSkill: (...args: unknown[]) => mocks.importLocalSkill(...args),
+      inspectLocalSkill: (...args: unknown[]) =>
+        mocks.inspectLocalSkill(...args),
+      exportLocalSkillPackage: (...args: unknown[]) =>
+        mocks.exportLocalSkillPackage(...args),
+      inspectLocalSkillPackage: (...args: unknown[]) =>
+        mocks.inspectLocalSkillPackage(...args),
+      installLocalSkillPackage: (...args: unknown[]) =>
+        mocks.installLocalSkillPackage(...args),
     },
   };
 });
@@ -332,6 +346,14 @@ function findButtonIn(container: HTMLElement, label: string) {
   ) as HTMLButtonElement | undefined;
 }
 
+function findLocalSkillRow(container: HTMLElement, directory: string) {
+  return Array.from(
+    container.querySelectorAll('[data-testid="skills-local-skill-row"]'),
+  ).find((row) => row.getAttribute("data-skill-directory") === directory) as
+    | HTMLElement
+    | undefined;
+}
+
 function getLatestNavigationPayload(onNavigate: ReturnType<typeof vi.fn>) {
   return onNavigate.mock.calls.at(-1)?.[1] as
     | Record<string, unknown>
@@ -389,8 +411,77 @@ describe("SkillsWorkspacePage", () => {
     mocks.toastError.mockReset();
     mocks.openDialog.mockReset();
     mocks.openDialog.mockResolvedValue(null);
+    mocks.saveDialog.mockReset();
+    mocks.saveDialog.mockResolvedValue(null);
     mocks.createSkillScaffold.mockReset();
     mocks.importLocalSkill.mockReset();
+    mocks.inspectLocalSkill.mockReset();
+    mocks.inspectLocalSkill.mockImplementation((directory: string) =>
+      Promise.resolve({
+        content: `---\nname: ${directory}\n---\n\n# ${directory}\n\nDetail for ${directory}`,
+        metadata: {},
+        allowedTools: [],
+        resourceSummary: {
+          hasScripts: false,
+          hasReferences: false,
+          hasAssets: false,
+        },
+        standardCompliance: {
+          isStandard: true,
+          validationErrors: [],
+          deprecatedFields: [],
+        },
+      }),
+    );
+    mocks.exportLocalSkillPackage.mockReset();
+    mocks.exportLocalSkillPackage.mockResolvedValue({
+      directory: "writer",
+      outputPath: "/Users/demo/writer.skills",
+      fileCount: 2,
+      bytesWritten: 512,
+    });
+    mocks.inspectLocalSkillPackage.mockReset();
+    mocks.inspectLocalSkillPackage.mockResolvedValue({
+      directory: "article-typesetting-master",
+      inspection: {
+        content: "---\nname: Article Typesetting\n---\n\n# Article Typesetting",
+        metadata: {},
+        allowedTools: [],
+        resourceSummary: {
+          hasScripts: false,
+          hasReferences: true,
+          hasAssets: false,
+        },
+        standardCompliance: {
+          isStandard: true,
+          validationErrors: [],
+          deprecatedFields: [],
+        },
+      },
+      files: [
+        { path: "SKILL.md", isDirectory: false, size: 128 },
+        { path: "references", isDirectory: true, size: 0 },
+      ],
+    });
+    mocks.installLocalSkillPackage.mockReset();
+    mocks.installLocalSkillPackage.mockResolvedValue({
+      directory: "article-typesetting-master",
+      inspection: {
+        content: "# Article Typesetting",
+        metadata: {},
+        allowedTools: [],
+        resourceSummary: {
+          hasScripts: false,
+          hasReferences: true,
+          hasAssets: false,
+        },
+        standardCompliance: {
+          isStandard: true,
+          validationErrors: [],
+          deprecatedFields: [],
+        },
+      },
+    });
     window.localStorage.clear();
   });
 
@@ -520,6 +611,52 @@ describe("SkillsWorkspacePage", () => {
     );
   });
 
+  it("内置页点击详情应读取并展示对应 SKILL.md", async () => {
+    const { container } = renderPage();
+
+    act(() => {
+      findButton(container, "内置")?.click();
+    });
+
+    const row = findLocalSkillRow(container, "aspnet-core");
+    expect(row).toBeTruthy();
+
+    await act(async () => {
+      findButtonIn(row!, "详情")?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.inspectLocalSkill).toHaveBeenCalledWith("aspnet-core", "lime");
+    expect(
+      container.querySelector('[data-testid="skills-installed-detail"]'),
+    ).toBeTruthy();
+    expect(document.body.textContent).toContain("Detail for aspnet-core");
+  });
+
+  it("用户安装页点击详情应读取并展示对应 SKILL.md", async () => {
+    const { container } = renderPage();
+
+    act(() => {
+      findButton(container, "用户安装")?.click();
+    });
+
+    const row = findLocalSkillRow(container, "writer");
+    expect(row).toBeTruthy();
+
+    await act(async () => {
+      findButtonIn(row!, "详情")?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.inspectLocalSkill).toHaveBeenCalledWith("writer", "lime");
+    expect(
+      container.querySelector('[data-testid="skills-installed-detail"]'),
+    ).toBeTruthy();
+    expect(document.body.textContent).toContain("Detail for writer");
+  });
+
   it("用户安装页点击卸载只卸载技能，不跳转会话", async () => {
     const { container, onNavigate } = renderPage();
 
@@ -534,6 +671,37 @@ describe("SkillsWorkspacePage", () => {
 
     expect(mocks.uninstallLocalSkill).toHaveBeenCalledWith("writer");
     expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  it("用户安装页点击导出应打包为 .skills 安装包", async () => {
+    mocks.saveDialog.mockResolvedValue("/Users/demo/writer");
+    const { container } = renderPage();
+
+    act(() => {
+      findButton(container, "用户安装")?.click();
+    });
+    await act(async () => {
+      findButton(container, "导出")?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.saveDialog).toHaveBeenCalledWith({
+      title: "导出 Skill 安装包",
+      defaultPath: "writer.skills",
+      filters: [
+        {
+          name: "Skill 安装包",
+          extensions: ["skills", "skill"],
+        },
+      ],
+    });
+    expect(mocks.exportLocalSkillPackage).toHaveBeenCalledWith(
+      "writer",
+      "/Users/demo/writer.skills",
+      "lime",
+    );
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("已导出「写作助手」安装包");
   });
 
   it("技能广场点击未安装官方技能应安装标准包并刷新本地列表", async () => {
@@ -671,6 +839,49 @@ describe("SkillsWorkspacePage", () => {
           requestKey: expect.any(Number),
         }),
       }),
+    );
+  });
+
+  it("收到 .skill 安装包页面参数时应打开安装预览并在安装后刷新本地 Skills", async () => {
+    const { container } = renderPage({
+      initialView: "installed",
+      initialSkillPackagePath: "/Users/demo/article-typesetting-master.skill",
+      initialSkillPackageName: "article-typesetting-master.skill",
+      initialSkillPackageRequestKey: 42,
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.inspectLocalSkillPackage).toHaveBeenCalledWith(
+      "/Users/demo/article-typesetting-master.skill",
+      "lime",
+    );
+    expect(container.textContent).toContain(
+      "把「article-typesetting-master」添加到你的技能库？",
+    );
+    expect(container.textContent).toContain("安装包内容");
+    expect(container.textContent).toContain("SKILL.md");
+    expect(container.textContent).toContain("Article Typesetting");
+    expect(
+      container.querySelector('[data-testid="skills-installed-view"]'),
+    ).toBeTruthy();
+
+    await act(async () => {
+      findButton(container, "添加到技能库")?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.installLocalSkillPackage).toHaveBeenCalledWith(
+      "/Users/demo/article-typesetting-master.skill",
+      "lime",
+    );
+    expect(mocks.refreshLocalSkills).toHaveBeenCalled();
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "已安装 Skill：article-typesetting-master",
     );
   });
 });

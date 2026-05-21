@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { Info, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { resolveOemCloudRuntimeContext } from "@/lib/api/oemCloudRuntime";
 import {
+  getAgentAppCloudCatalog,
   listInstalledAgentApps,
   startAgentAppUiRuntime,
   type AgentAppUiRuntimeStatus,
@@ -32,6 +33,7 @@ import { buildUiRuntimeCapabilityProfile } from "../runtime/uiRuntimeCapabilityP
 import { buildLimeCapabilityInvokeRequest } from "../sdk/capabilityContract";
 import type {
   AgentAppTaskHostResponseActionType,
+  CloudBootstrapApp,
   InstalledAgentAppState,
   ProjectedEntry,
 } from "../types";
@@ -104,6 +106,56 @@ function resolveActiveEntry(
 
 function normalizeErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function parseAppVersion(value: string | undefined): [number, number, number] | null {
+  const match = value?.match(/^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?/i);
+  if (!match) {
+    return null;
+  }
+  return [
+    Number(match[1] ?? 0),
+    Number(match[2] ?? 0),
+    Number(match[3] ?? 0),
+  ];
+}
+
+function compareAppVersion(
+  left: string | undefined,
+  right: string | undefined,
+): number {
+  const leftParts = parseAppVersion(left);
+  const rightParts = parseAppVersion(right);
+  if (!leftParts || !rightParts) {
+    return 0;
+  }
+  for (let index = 0; index < leftParts.length; index += 1) {
+    const diff = leftParts[index] - rightParts[index];
+    if (diff !== 0) {
+      return diff;
+    }
+  }
+  return 0;
+}
+
+function hasNewerCloudVersion(
+  state: InstalledAgentAppState | null,
+  cloudApp: CloudBootstrapApp | undefined,
+): boolean {
+  if (!state || !cloudApp) {
+    return false;
+  }
+  return compareAppVersion(cloudApp.version, state.identity.appVersion) > 0;
+}
+
+function sourceLabelKey(
+  state: InstalledAgentAppState,
+):
+  | "agentApp.apps.runtime.appInfo.source.cloud"
+  | "agentApp.apps.runtime.appInfo.source.local" {
+  return state.identity.sourceKind === "cloud_release"
+    ? "agentApp.apps.runtime.appInfo.source.cloud"
+    : "agentApp.apps.runtime.appInfo.source.local";
 }
 
 function buildPreviewFromInstalledState(state: InstalledAgentAppState) {
@@ -490,6 +542,8 @@ export function AgentAppRuntimePage({
   const [retryKey, setRetryKey] = useState(0);
   const [agentRunUi, setAgentRunUi] = useState<AgentRunUiState | null>(null);
   const [agentRunExpanded, setAgentRunExpanded] = useState(false);
+  const [cloudApps, setCloudApps] = useState<CloudBootstrapApp[]>([]);
+  const [appInfoOpen, setAppInfoOpen] = useState(false);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const hostBridgeRef = useRef<AgentAppHostBridge | null>(null);
   const dismissedAgentRunRef = useRef<AgentRunDismissalKey | null>(null);
@@ -512,6 +566,11 @@ export function AgentAppRuntimePage({
   const displayName = selected
     ? resolveInstalledAgentAppDisplayName(selected)
     : t("agentApp.apps.runtime.unavailable");
+  const selectedCloudApp = useMemo(
+    () => cloudApps.find((app) => app.appId === selected?.appId),
+    [cloudApps, selected?.appId],
+  );
+  const upgradeAvailable = hasNewerCloudVersion(selected, selectedCloudApp);
   const capabilityHost = useMemo(() => {
     if (!selected) {
       return null;
@@ -591,6 +650,24 @@ export function AgentAppRuntimePage({
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    let disposed = false;
+    getAgentAppCloudCatalog()
+      .then((result) => {
+        if (!disposed) {
+          setCloudApps(result.payload.apps);
+        }
+      })
+      .catch(() => {
+        if (!disposed) {
+          setCloudApps([]);
+        }
+      });
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
   const openRuntime = useCallback(async () => {
     if (!selected || !activeEntry || !runtimeProfile) {
       setRuntime(null);
@@ -667,6 +744,7 @@ export function AgentAppRuntimePage({
     agentRunStorageKeyRef.current = agentRunStorageKey;
     setAgentRunUi(readStoredAgentRunUi(agentRunStorageKey));
     setAgentRunExpanded(false);
+    setAppInfoOpen(false);
   }, [agentRunStorageKey]);
 
   const openAgentRunUi = useCallback((request: AgentAppHostAgentRunUiRequest) => {
@@ -954,6 +1032,76 @@ export function AgentAppRuntimePage({
         onLoad={handleFrameLoad}
         sandbox="allow-scripts allow-forms allow-same-origin allow-downloads allow-modals"
       />
+      <div className="pointer-events-none absolute bottom-3 right-3 z-20 flex flex-col items-end gap-2">
+        {appInfoOpen ? (
+          <section
+            className="pointer-events-auto w-64 rounded-lg border border-border bg-background p-3 text-left shadow-md shadow-slate-950/10"
+            data-testid="agent-app-host-app-info-panel"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-foreground">
+                  {displayName}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t("agentApp.apps.runtime.appInfo.version", {
+                    version: selected.identity.appVersion,
+                  })}
+                </p>
+              </div>
+              {upgradeAvailable ? (
+                <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
+                  {t("agentApp.apps.runtime.appInfo.upgradeBadge")}
+                </span>
+              ) : null}
+            </div>
+            <dl className="mt-3 grid gap-2 text-xs">
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-muted-foreground">
+                  {t("agentApp.apps.runtime.appInfo.source")}
+                </dt>
+                <dd className="font-medium text-foreground">
+                  {t(sourceLabelKey(selected))}
+                </dd>
+              </div>
+              {selectedCloudApp?.version ? (
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">
+                    {t("agentApp.apps.runtime.appInfo.latestVersion")}
+                  </dt>
+                  <dd className={upgradeAvailable ? "font-semibold text-rose-700 dark:text-rose-300" : "font-medium text-foreground"}>
+                    v{selectedCloudApp.version}
+                  </dd>
+                </div>
+              ) : null}
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-muted-foreground">
+                  {t("agentApp.apps.runtime.appInfo.entry")}
+                </dt>
+                <dd className="max-w-32 truncate font-medium text-foreground">
+                  {activeEntry?.title ?? activeEntry?.key ?? "-"}
+                </dd>
+              </div>
+            </dl>
+          </section>
+        ) : null}
+        <button
+          type="button"
+          className="pointer-events-auto relative inline-flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm shadow-slate-950/10 transition hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
+          aria-label={t("agentApp.apps.runtime.appInfo.toggle")}
+          aria-expanded={appInfoOpen}
+          data-testid="agent-app-host-app-info-toggle"
+          onClick={() => setAppInfoOpen((value) => !value)}
+        >
+          <Info size={14} aria-hidden="true" />
+          {upgradeAvailable ? (
+            <span
+              className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-background bg-rose-500"
+              data-testid="agent-app-host-app-info-update-dot"
+            />
+          ) : null}
+        </button>
+      </div>
       {agentRunUi ? (
         <AgentRunHostDrawer
           run={agentRunUi}

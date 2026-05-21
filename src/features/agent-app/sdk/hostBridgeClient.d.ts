@@ -115,6 +115,26 @@ export interface LimeHostBridgeSelectDirectoryResult {
     message?: string;
 }
 export type LimeHostBridgeEventHandler = (payload: unknown) => void;
+export interface LimeHostThemeSnapshot {
+    themeMode?: string;
+    effectiveThemeMode?: string;
+    colorSchemeId?: string;
+    tokens?: Record<string, string>;
+}
+export interface LimeHostThemeDocumentLike {
+    documentElement: LimeHostThemeElementLike;
+}
+export interface LimeHostThemeElementLike {
+    dataset: Record<string, string | undefined>;
+    style: {
+        colorScheme?: string;
+        setProperty(name: string, value: string): void;
+    };
+}
+export interface SyncLimeHostThemeOptions {
+    documentRef?: LimeHostThemeDocumentLike;
+    allowedTokenPrefixes?: string[];
+}
 export interface LimeHostBridgeCapabilitySubscribeRequest {
     capability: LimeCapabilityName;
     topic: string;
@@ -148,5 +168,7 @@ export interface LimeHostBridgeCapabilityEvent {
     emittedAt?: string;
 }
 export type LimeHostBridgeCapabilityEventHandler = (event: LimeHostBridgeCapabilityEvent) => void;
+export declare function applyLimeHostTheme(payload: unknown, options?: SyncLimeHostThemeOptions): LimeHostThemeSnapshot | null;
+export declare function syncLimeHostTheme(invoker: Pick<LimeHostBridgeCapabilityInvoker, "onHostSnapshot" | "onThemeUpdate" | "getHostSnapshot">, options?: SyncLimeHostThemeOptions): () => void;
 export declare function createLimeHostBridgeCapabilityInvoker(options: CreateLimeHostBridgeCapabilityInvokerOptions): LimeHostBridgeCapabilityInvoker;
 export {};

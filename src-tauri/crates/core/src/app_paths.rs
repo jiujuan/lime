@@ -88,7 +88,7 @@ pub fn resolve_sessions_dir() -> Result<PathBuf, String> {
 }
 
 pub fn resolve_skills_dir() -> Result<PathBuf, String> {
-    resolve_runtime_subdir("skills")
+    resolve_home_skills_dir()
 }
 
 pub fn resolve_aster_dir() -> Result<PathBuf, String> {
@@ -260,6 +260,28 @@ fn resolve_runtime_subdir(subdir: &str) -> Result<PathBuf, String> {
     with_app_roots(|preferred_root, legacy_roots| {
         resolve_subdir_with_legacy_copy_from_source_roots(preferred_root, legacy_roots, subdir)
     })
+}
+
+fn resolve_home_skills_dir() -> Result<PathBuf, String> {
+    let preferred_root = compat_home_dir()?;
+    let mut legacy_roots = Vec::new();
+
+    #[cfg(target_os = "windows")]
+    push_unique_root(&mut legacy_roots, legacy_windows_roaming_app_data_dir()?);
+
+    push_unique_root(&mut legacy_roots, preferred_data_dir()?);
+    push_unique_root(&mut legacy_roots, legacy_app_data_dir()?);
+    push_unique_root(&mut legacy_roots, legacy_home_dir()?);
+
+    resolve_subdir_with_legacy_copy_from_source_roots(&preferred_root, &legacy_roots, "skills")
+}
+
+#[cfg(test)]
+fn resolve_home_skills_dir_from_roots(
+    preferred_root: &Path,
+    legacy_roots: &[PathBuf],
+) -> Result<PathBuf, String> {
+    resolve_subdir_with_legacy_copy_from_source_roots(preferred_root, legacy_roots, "skills")
 }
 
 fn fallback_runtime_subdir(subdir: &str) -> PathBuf {
@@ -928,6 +950,24 @@ mod tests {
         let resolved =
             resolve_subdir_with_legacy_copy_from_roots(&preferred_root, &legacy_root, "skills")
                 .unwrap();
+
+        assert_eq!(resolved, preferred_root.join("skills"));
+        assert_eq!(
+            fs::read_to_string(resolved.join("legacy-skill").join("SKILL.md")).unwrap(),
+            "legacy skill"
+        );
+    }
+
+    #[test]
+    fn resolve_home_skills_dir_prefers_lime_home_skills() {
+        let temp = tempdir().unwrap();
+        let preferred_root = temp.path().join("home").join(".lime");
+        let legacy_root = temp.path().join("appdata").join("lime");
+        let legacy_skill_dir = legacy_root.join("skills").join("legacy-skill");
+        fs::create_dir_all(&legacy_skill_dir).unwrap();
+        fs::write(legacy_skill_dir.join("SKILL.md"), "legacy skill").unwrap();
+
+        let resolved = resolve_home_skills_dir_from_roots(&preferred_root, &[legacy_root]).unwrap();
 
         assert_eq!(resolved, preferred_root.join("skills"));
         assert_eq!(

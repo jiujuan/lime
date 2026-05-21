@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { open } from "./plugin-dialog";
+import { open, save } from "./plugin-dialog";
 
 describe("tauri-mock/plugin-dialog", () => {
   it("浏览器预览不能伪造本机目录路径", async () => {
@@ -13,5 +13,13 @@ describe("tauri-mock/plugin-dialog", () => {
     await expect(open({ multiple: false })).resolves.toBe(
       "/mock/path/to/file.txt",
     );
+  });
+
+  it("Skill 安装包导出保存对话应返回 .skills 后缀", async () => {
+    await expect(
+      save({
+        filters: [{ name: "Skill package", extensions: ["skills", "skill"] }],
+      }),
+    ).resolves.toBe("/mock/path/to/saved/file.skills");
   });
 });

@@ -741,6 +741,17 @@ export function AgentChatWorkspace({
     },
     [],
   );
+  const handleInstallSkillPackageFromFileManager = useCallback(
+    (entry: { path: string; name: string }) => {
+      _onNavigate?.("skills", {
+        initialView: "installed",
+        initialSkillPackagePath: entry.path,
+        initialSkillPackageName: entry.name,
+        initialSkillPackageRequestKey: Date.now(),
+      });
+    },
+    [_onNavigate],
+  );
   const handleRemovePathReference = useCallback((id: string) => {
     setPathReferences((current) =>
       current.filter((reference) => reference.id !== id),
@@ -8161,6 +8172,9 @@ export function AgentChatWorkspace({
             absolutePath: entry.path,
           });
         }}
+        onInstallSkillPackage={
+          _onNavigate ? handleInstallSkillPackageFromFileManager : undefined
+        }
         initialDirectory={project?.rootPath || null}
       />
     ) : null;

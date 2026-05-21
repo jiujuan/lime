@@ -53,6 +53,7 @@ import { listTeamMemorySnapshots } from "@/lib/teamMemorySync";
 type SettingsTranslationKey =
   keyof typeof import("@/i18n/resources/zh-CN/settings.json");
 type MemorySettingsTranslate = TFunction<"settings", undefined>;
+type MemorySettingsTab = "overview" | "sourcePolicy" | "memdir" | "sourceHits";
 
 function memoryI18n(
   t: TFunction<"settings">,
@@ -963,6 +964,7 @@ export function MemorySettings() {
   const [scaffoldingMemdir, setScaffoldingMemdir] = useState(false);
   const [cleaningMemdir, setCleaningMemdir] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<MemorySettingsTab>("overview");
 
   const loadLayerMetrics = useCallback(async () => {
     setLoadingLayerMetrics(true);
@@ -1511,6 +1513,41 @@ export function MemorySettings() {
     ),
   };
   const selectedMemdirGuide = resolveMemdirWriteGuide(t, autoMemoryType);
+  const configuredSourcePolicyCount =
+    (sourcesConfig.project_memory_paths || []).length +
+    (sourcesConfig.project_rule_dirs || []).length +
+    (resolveConfig.additional_dirs || []).length;
+  const memorySettingsTabs: Array<{
+    id: MemorySettingsTab;
+    label: string;
+    icon: LucideIcon;
+    countLabel: string;
+  }> = [
+    {
+      id: "overview",
+      label: memoryI18n(t, "settings.memory.tabs.overview", "概览"),
+      icon: Sparkles,
+      countLabel: `${profileCompletionPercent}%`,
+    },
+    {
+      id: "sourcePolicy",
+      label: memoryI18n(t, "settings.memory.tabs.sourcePolicy", "来源策略"),
+      icon: FolderTree,
+      countLabel: String(configuredSourcePolicyCount),
+    },
+    {
+      id: "memdir",
+      label: memoryI18n(t, "settings.memory.tabs.memdir", "记忆目录"),
+      icon: Database,
+      countLabel: String(autoIndex?.items?.length ?? 0),
+    },
+    {
+      id: "sourceHits",
+      label: memoryI18n(t, "settings.memory.tabs.sourceHits", "命中详情"),
+      icon: Files,
+      countLabel: sourceHitLabel,
+    },
+  ];
   const messageIsError = Boolean(
     message &&
     /失败|失敗|失敗しました|실패|failed|cannot|can't|required|请先|必须|不能|必須|必要|絶対日付|절대 날짜|绝对日期/u.test(
@@ -1661,622 +1698,1000 @@ export function MemorySettings() {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.28fr)_minmax(340px,0.92fr)]">
-        <MemoryPanel
-          icon={Sparkles}
-          title={t("settings.memory.profile.title")}
-          description={t("settings.memory.profile.description")}
-          tipAriaLabel={t("settings.memory.profile.tipAria")}
-          aside={
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-              {profileDimensionCountText}
-            </span>
-          }
+      <div
+        className="rounded-[26px] border border-slate-200/80 bg-white p-1.5 shadow-sm shadow-slate-950/5"
+        data-testid="memory-settings-section-tabs"
+        role="tablist"
+        aria-label={memoryI18n(t, "settings.memory.tabs.aria", "记忆设置分区")}
+      >
+        <div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-4">
+          {memorySettingsTabs.map((tab) => {
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                aria-controls={`memory-settings-${tab.id}-panel`}
+                data-testid={`memory-settings-tab-${tab.id}`}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "flex items-center justify-between gap-3 rounded-[20px] px-4 py-3 text-left text-sm font-medium transition",
+                  active
+                    ? "bg-slate-950 text-white shadow-sm shadow-slate-950/15"
+                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-950",
+                )}
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <tab.icon className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{tab.label}</span>
+                </span>
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-xs",
+                    active
+                      ? "bg-white/15 text-white"
+                      : "bg-slate-100 text-slate-500",
+                  )}
+                >
+                  {tab.countLabel}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {activeTab === "overview" ? (
+        <section
+          id="memory-settings-overview-panel"
+          data-testid="memory-settings-panel-overview"
+          role="tabpanel"
+          className="grid gap-6 xl:grid-cols-[minmax(0,1.28fr)_minmax(340px,0.92fr)]"
         >
-          <div className="space-y-4">
-            <MultiSelectSection
-              title={t(
-                "settings.memory.profile.statusQuestion.title",
-                "以下哪个选项最能形容你现在的状态?",
-              )}
-              subtitle={t(
-                "settings.memory.profile.statusQuestion.subtitle",
-                "单选，用于帮助代理判断你的知识密度和上下文称呼。",
-              )}
-              tipAriaLabel={t(
-                "settings.memory.profile.statusQuestion.tipAria",
-                "当前状态说明",
-              )}
-              options={statusOptions}
-              value={profile.current_status ? [profile.current_status] : []}
-              onToggle={(option) => setStatus(option)}
-              multiple={false}
-              {...questionBadgeTexts}
-            />
-
-            <div className="grid gap-4 xl:grid-cols-2">
-              <MultiSelectSection
-                title={t(
-                  "settings.memory.profile.strengthQuestion.title",
-                  "你觉得自己有哪些方面比较擅长?",
-                )}
-                subtitle={t(
-                  "settings.memory.profile.strengthQuestion.subtitle",
-                  "可多选，用于强化优先理解的领域。",
-                )}
-                tipAriaLabel={t(
-                  "settings.memory.profile.strengthQuestion.tipAria",
-                  "擅长方向说明",
-                )}
-                options={strengthOptions}
-                value={profile.strengths || []}
-                onToggle={(option) => toggleMulti("strengths", option)}
-                {...questionBadgeTexts}
-              />
-
-              <MultiSelectSection
-                title={t(
-                  "settings.memory.profile.explanationQuestion.title",
-                  "我解释事情时通常更喜欢:",
-                )}
-                subtitle={t(
-                  "settings.memory.profile.explanationQuestion.subtitle",
-                  "可多选，用于调整表达风格与组织方式。",
-                )}
-                tipAriaLabel={t(
-                  "settings.memory.profile.explanationQuestion.tipAria",
-                  "解释偏好说明",
-                )}
-                options={explanationStyleOptions}
-                value={profile.explanation_style || []}
-                onToggle={(option) => toggleMulti("explanation_style", option)}
-                {...questionBadgeTexts}
-              />
-
-              <MultiSelectSection
-                title={t(
-                  "settings.memory.profile.challengeQuestion.title",
-                  "当你遇到难题/概念时，你更倾向于:",
-                )}
-                subtitle={t(
-                  "settings.memory.profile.challengeQuestion.subtitle",
-                  "可多选，用于决定先讲例子、难点还是拆解步骤。",
-                )}
-                tipAriaLabel={t(
-                  "settings.memory.profile.challengeQuestion.tipAria",
-                  "难题偏好说明",
-                )}
-                options={challengeOptions}
-                value={profile.challenge_preference || []}
-                onToggle={(option) =>
-                  toggleMulti("challenge_preference", option)
-                }
-                className="xl:col-span-2"
-                {...questionBadgeTexts}
-              />
-            </div>
-          </div>
-        </MemoryPanel>
-
-        <div className="space-y-6">
           <MemoryPanel
-            icon={Layers3}
+            icon={Sparkles}
+            title={t("settings.memory.profile.title")}
+            description={t("settings.memory.profile.description")}
+            tipAriaLabel={t("settings.memory.profile.tipAria")}
+            aside={
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
+                {profileDimensionCountText}
+              </span>
+            }
+          >
+            <div className="space-y-4">
+              <MultiSelectSection
+                title={t(
+                  "settings.memory.profile.statusQuestion.title",
+                  "以下哪个选项最能形容你现在的状态?",
+                )}
+                subtitle={t(
+                  "settings.memory.profile.statusQuestion.subtitle",
+                  "单选，用于帮助代理判断你的知识密度和上下文称呼。",
+                )}
+                tipAriaLabel={t(
+                  "settings.memory.profile.statusQuestion.tipAria",
+                  "当前状态说明",
+                )}
+                options={statusOptions}
+                value={profile.current_status ? [profile.current_status] : []}
+                onToggle={(option) => setStatus(option)}
+                multiple={false}
+                {...questionBadgeTexts}
+              />
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                <MultiSelectSection
+                  title={t(
+                    "settings.memory.profile.strengthQuestion.title",
+                    "你觉得自己有哪些方面比较擅长?",
+                  )}
+                  subtitle={t(
+                    "settings.memory.profile.strengthQuestion.subtitle",
+                    "可多选，用于强化优先理解的领域。",
+                  )}
+                  tipAriaLabel={t(
+                    "settings.memory.profile.strengthQuestion.tipAria",
+                    "擅长方向说明",
+                  )}
+                  options={strengthOptions}
+                  value={profile.strengths || []}
+                  onToggle={(option) => toggleMulti("strengths", option)}
+                  {...questionBadgeTexts}
+                />
+
+                <MultiSelectSection
+                  title={t(
+                    "settings.memory.profile.explanationQuestion.title",
+                    "我解释事情时通常更喜欢:",
+                  )}
+                  subtitle={t(
+                    "settings.memory.profile.explanationQuestion.subtitle",
+                    "可多选，用于调整表达风格与组织方式。",
+                  )}
+                  tipAriaLabel={t(
+                    "settings.memory.profile.explanationQuestion.tipAria",
+                    "解释偏好说明",
+                  )}
+                  options={explanationStyleOptions}
+                  value={profile.explanation_style || []}
+                  onToggle={(option) =>
+                    toggleMulti("explanation_style", option)
+                  }
+                  {...questionBadgeTexts}
+                />
+
+                <MultiSelectSection
+                  title={t(
+                    "settings.memory.profile.challengeQuestion.title",
+                    "当你遇到难题/概念时，你更倾向于:",
+                  )}
+                  subtitle={t(
+                    "settings.memory.profile.challengeQuestion.subtitle",
+                    "可多选，用于决定先讲例子、难点还是拆解步骤。",
+                  )}
+                  tipAriaLabel={t(
+                    "settings.memory.profile.challengeQuestion.tipAria",
+                    "难题偏好说明",
+                  )}
+                  options={challengeOptions}
+                  value={profile.challenge_preference || []}
+                  onToggle={(option) =>
+                    toggleMulti("challenge_preference", option)
+                  }
+                  className="xl:col-span-2"
+                  {...questionBadgeTexts}
+                />
+              </div>
+            </div>
+          </MemoryPanel>
+
+          <div className="space-y-6">
+            <MemoryPanel
+              icon={Layers3}
+              title={memoryI18n(
+                t,
+                "settings.memory.layers.title",
+                "记忆命中层可用性",
+              )}
+              description={memoryI18n(
+                t,
+                "settings.memory.layers.description",
+                "持续检查来源链、会话记忆、持久记忆、团队记忆与会话压缩的参与情况。",
+              )}
+              tipAriaLabel={memoryI18n(
+                t,
+                "settings.memory.layers.tipAria",
+                "记忆命中层可用性说明",
+              )}
+              aside={
+                <button
+                  type="button"
+                  onClick={() => loadLayerMetrics()}
+                  disabled={loadingLayerMetrics}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
+                >
+                  <RefreshCw
+                    className={cn(
+                      "h-3.5 w-3.5",
+                      loadingLayerMetrics && "animate-spin",
+                    )}
+                  />
+                  {memoryI18n(t, "settings.memory.action.refresh", "刷新")}
+                </button>
+              }
+            >
+              {layerMetrics ? (
+                <div className="space-y-3">
+                  <div className="rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-600">
+                    {memoryI18n(
+                      t,
+                      "settings.memory.layers.readyCount",
+                      "已可用 {{ready}}/{{total}} 层",
+                      {
+                        ready: layerMetrics.readyLayers,
+                        total: layerMetrics.totalLayers,
+                      },
+                    )}
+                  </div>
+                  {layerMetrics.cards.map((card) => (
+                    <div
+                      key={card.key}
+                      className="rounded-[20px] border border-slate-200/80 bg-slate-50/60 p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {card.title}
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-slate-500">
+                            {card.description}
+                          </p>
+                        </div>
+                        <span
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 text-[10px] font-medium",
+                            card.available
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-slate-200 bg-slate-100 text-slate-500",
+                          )}
+                        >
+                          {card.available
+                            ? memoryI18n(
+                                t,
+                                "settings.memory.layers.card.available",
+                                "已生效",
+                              )
+                            : memoryI18n(
+                                t,
+                                "settings.memory.layers.card.pending",
+                                "待完善",
+                              )}
+                        </span>
+                      </div>
+                      <div className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">
+                        {card.value}
+                        <span className="ml-1 text-sm font-medium text-slate-500">
+                          {card.unit}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  <p className="text-xs leading-5 text-slate-500">
+                    {memoryI18n(
+                      t,
+                      "settings.memory.layers.footer",
+                      "更完整的分层详情、压缩摘要与项目资料附属层都在「记忆」页面查看。",
+                    )}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  {memoryI18n(
+                    t,
+                    "settings.memory.layers.loading",
+                    "正在加载记忆命中层状态...",
+                  )}
+                </p>
+              )}
+            </MemoryPanel>
+
+            <MemoryPanel
+              icon={FolderTree}
+              title={memoryI18n(
+                t,
+                "settings.memory.source.overview.title",
+                "来源链状态总览",
+              )}
+              description={memoryI18n(
+                t,
+                "settings.memory.source.overview.description",
+                "快速查看当前来源链解析策略和命中状态。",
+              )}
+              tipAriaLabel={memoryI18n(
+                t,
+                "settings.memory.source.overview.tipAria",
+                "来源链状态总览说明",
+              )}
+              aside={
+                <button
+                  type="button"
+                  onClick={() => loadSourceState()}
+                  disabled={loadingSourceState}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
+                >
+                  <RefreshCw
+                    className={cn(
+                      "h-3.5 w-3.5",
+                      loadingSourceState && "animate-spin",
+                    )}
+                  />
+                  {memoryI18n(
+                    t,
+                    "settings.memory.source.overview.refresh",
+                    "刷新来源",
+                  )}
+                </button>
+              }
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
+                  <p className="text-xs font-medium text-slate-500">
+                    {memoryI18n(
+                      t,
+                      "settings.memory.source.overview.hitSources",
+                      "命中来源",
+                    )}
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+                    {sourceHitLabel}
+                  </p>
+                </div>
+                <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
+                  <p className="text-xs font-medium text-slate-500">
+                    {memoryI18n(
+                      t,
+                      "settings.memory.source.overview.importPolicy",
+                      "@import 策略",
+                    )}
+                  </p>
+                  <p className="mt-2 text-lg font-semibold tracking-tight text-slate-900">
+                    {resolveConfig.follow_imports
+                      ? memoryI18n(
+                          t,
+                          "settings.memory.source.overview.followImports",
+                          "跟随导入",
+                        )
+                      : memoryI18n(
+                          t,
+                          "settings.memory.source.overview.importsDisabled",
+                          "关闭导入",
+                        )}
+                  </p>
+                </div>
+                <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
+                  <p className="text-xs font-medium text-slate-500">
+                    {memoryI18n(
+                      t,
+                      "settings.memory.source.overview.maxImportDepth",
+                      "最大导入深度",
+                    )}
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+                    {resolveConfig.import_max_depth ?? 5}
+                  </p>
+                </div>
+                <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
+                  <p className="text-xs font-medium text-slate-500">
+                    {memoryI18n(
+                      t,
+                      "settings.memory.source.overview.additionalDirsMemory",
+                      "额外目录记忆",
+                    )}
+                  </p>
+                  <p className="mt-2 text-lg font-semibold tracking-tight text-slate-900">
+                    {resolveConfig.load_additional_dirs_memory
+                      ? memoryI18n(
+                          t,
+                          "settings.memory.source.overview.loaded",
+                          "已加载",
+                        )
+                      : memoryI18n(
+                          t,
+                          "settings.memory.source.overview.notLoaded",
+                          "未加载",
+                        )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
+                <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+                  <Files className="h-3.5 w-3.5 text-slate-400" />
+                  {memoryI18n(
+                    t,
+                    "settings.memory.source.overview.currentWorkspace",
+                    "当前工作目录",
+                  )}
+                </div>
+                <p className="mt-2 break-all text-sm leading-6 text-slate-700">
+                  {effectiveSources?.working_dir ||
+                    memoryI18n(
+                      t,
+                      "settings.memory.source.overview.workspaceMissing",
+                      "未返回工作目录",
+                    )}
+                </p>
+              </div>
+            </MemoryPanel>
+          </div>
+        </section>
+      ) : null}
+
+      {activeTab === "sourcePolicy" ? (
+        <section
+          id="memory-settings-sourcePolicy-panel"
+          data-testid="memory-settings-panel-sourcePolicy"
+          role="tabpanel"
+        >
+          <MemoryPanel
+            className="scroll-mt-4"
+            icon={Database}
             title={memoryI18n(
               t,
-              "settings.memory.layers.title",
-              "记忆命中层可用性",
+              "settings.memory.source.policy.title",
+              "来源链策略",
             )}
             description={memoryI18n(
               t,
-              "settings.memory.layers.description",
-              "持续检查来源链、会话记忆、持久记忆、团队记忆与会话压缩的参与情况。",
+              "settings.memory.source.policy.description",
+              "统一管理组织策略、项目规则目录和额外仓库记忆的加载规则。",
             )}
             tipAriaLabel={memoryI18n(
               t,
-              "settings.memory.layers.tipAria",
-              "记忆命中层可用性说明",
+              "settings.memory.source.policy.tipAria",
+              "来源链策略说明",
             )}
-            aside={
-              <button
-                type="button"
-                onClick={() => loadLayerMetrics()}
-                disabled={loadingLayerMetrics}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
-              >
-                <RefreshCw
-                  className={cn(
-                    "h-3.5 w-3.5",
-                    loadingLayerMetrics && "animate-spin",
-                  )}
-                />
-                {memoryI18n(t, "settings.memory.action.refresh", "刷新")}
-              </button>
-            }
           >
-            {layerMetrics ? (
-              <div className="space-y-3">
-                <div className="rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-600">
-                  {memoryI18n(
-                    t,
-                    "settings.memory.layers.readyCount",
-                    "已可用 {{ready}}/{{total}} 层",
-                    {
-                      ready: layerMetrics.readyLayers,
-                      total: layerMetrics.totalLayers,
-                    },
-                  )}
-                </div>
-                {layerMetrics.cards.map((card) => (
-                  <div
-                    key={card.key}
-                    className="rounded-[20px] border border-slate-200/80 bg-slate-50/60 p-4"
-                  >
-                    <div className="flex items-start justify-between gap-3">
+            <div className="space-y-4">
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
+                  <p className="text-sm font-semibold text-slate-900">
+                    {memoryI18n(
+                      t,
+                      "settings.memory.source.policy.basePathsTitle",
+                      "基础路径",
+                    )}
+                  </p>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <label className="space-y-2">
+                      <span className="text-xs font-medium text-slate-500">
+                        {memoryI18n(
+                          t,
+                          "settings.memory.source.policy.managedPolicyFile",
+                          "组织策略文件",
+                        )}
+                      </span>
+                      <input
+                        type="text"
+                        value={sourcesConfig.managed_policy_path || ""}
+                        onChange={(event) =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            sources: {
+                              ...normalizeSources(prev.sources),
+                              managed_policy_path:
+                                event.target.value || undefined,
+                            },
+                          }))
+                        }
+                        className={INPUT_CLASS_NAME}
+                        placeholder={memoryI18n(
+                          t,
+                          "settings.memory.source.policy.managedPolicyPlaceholder",
+                          "例如 ~/.lime/AGENTS.md",
+                        )}
+                      />
+                    </label>
+
+                    <label className="space-y-2">
+                      <span className="text-xs font-medium text-slate-500">
+                        {memoryI18n(
+                          t,
+                          "settings.memory.source.policy.userMemoryFile",
+                          "用户记忆文件",
+                        )}
+                      </span>
+                      <input
+                        type="text"
+                        value={sourcesConfig.user_memory_path || ""}
+                        onChange={(event) =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            sources: {
+                              ...normalizeSources(prev.sources),
+                              user_memory_path: event.target.value || undefined,
+                            },
+                          }))
+                        }
+                        className={INPUT_CLASS_NAME}
+                        placeholder={memoryI18n(
+                          t,
+                          "settings.memory.source.policy.userMemoryPlaceholder",
+                          "留空时使用应用默认 ~/.lime/AGENTS.md 路径",
+                        )}
+                      />
+                    </label>
+
+                    <label className="space-y-2 md:col-span-2">
+                      <span className="text-xs font-medium text-slate-500">
+                        {memoryI18n(
+                          t,
+                          "settings.memory.source.policy.projectLocalMemoryFile",
+                          "项目本地私有文件",
+                        )}
+                      </span>
+                      <input
+                        type="text"
+                        value={sourcesConfig.project_local_memory_path || ""}
+                        onChange={(event) =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            sources: {
+                              ...normalizeSources(prev.sources),
+                              project_local_memory_path:
+                                event.target.value || undefined,
+                            },
+                          }))
+                        }
+                        className={INPUT_CLASS_NAME}
+                        placeholder={memoryI18n(
+                          t,
+                          "settings.memory.source.policy.projectLocalMemoryPlaceholder",
+                          "例如 .lime/AGENTS.local.md",
+                        )}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="mt-4 rounded-[20px] border border-slate-200/80 bg-white/80 p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="text-sm font-semibold text-slate-900">
-                          {card.title}
+                          {memoryI18n(
+                            t,
+                            "settings.memory.source.policy.templateTitle",
+                            "显式生成模板",
+                          )}
                         </p>
                         <p className="mt-1 text-xs leading-5 text-slate-500">
-                          {card.description}
+                          {memoryI18n(
+                            t,
+                            "settings.memory.source.policy.templateDescription",
+                            "只在你点击时创建模板文件，不会静默生成，也不会默认覆盖已有内容。",
+                          )}
                         </p>
                       </div>
-                      <span
-                        className={cn(
-                          "rounded-full border px-2 py-0.5 text-[10px] font-medium",
-                          card.available
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                            : "border-slate-200 bg-slate-100 text-slate-500",
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-500">
+                        {memoryI18n(
+                          t,
+                          "settings.memory.source.policy.currentWorkspace",
+                          "当前 Workspace：{{path}}",
+                          {
+                            path:
+                              effectiveSources?.working_dir ||
+                              memoryI18n(
+                                t,
+                                "settings.memory.source.policy.workspaceUnresolved",
+                                "未解析",
+                              ),
+                          },
                         )}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void handleScaffoldRuntimeAgentsTemplate("global")
+                        }
+                        disabled={scaffoldingTarget !== null}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
                       >
-                        {card.available
+                        {scaffoldingTarget === "global"
                           ? memoryI18n(
                               t,
-                              "settings.memory.layers.card.available",
-                              "已生效",
+                              "settings.memory.source.policy.generating",
+                              "生成中...",
                             )
                           : memoryI18n(
                               t,
-                              "settings.memory.layers.card.pending",
-                              "待完善",
+                              "settings.memory.source.policy.generateGlobalTemplate",
+                              "生成全局模板",
                             )}
-                      </span>
-                    </div>
-                    <div className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">
-                      {card.value}
-                      <span className="ml-1 text-sm font-medium text-slate-500">
-                        {card.unit}
-                      </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void handleScaffoldRuntimeAgentsTemplate("workspace")
+                        }
+                        disabled={
+                          scaffoldingTarget !== null ||
+                          !effectiveSources?.working_dir
+                        }
+                        className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
+                      >
+                        {scaffoldingTarget === "workspace"
+                          ? memoryI18n(
+                              t,
+                              "settings.memory.source.policy.generating",
+                              "生成中...",
+                            )
+                          : memoryI18n(
+                              t,
+                              "settings.memory.source.policy.generateWorkspaceTemplate",
+                              "生成 Workspace 模板",
+                            )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void handleScaffoldRuntimeAgentsTemplate(
+                            "workspace_local",
+                          )
+                        }
+                        disabled={
+                          scaffoldingTarget !== null ||
+                          !effectiveSources?.working_dir
+                        }
+                        className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
+                      >
+                        {scaffoldingTarget === "workspace_local"
+                          ? memoryI18n(
+                              t,
+                              "settings.memory.source.policy.generating",
+                              "生成中...",
+                            )
+                          : memoryI18n(
+                              t,
+                              "settings.memory.source.policy.generateLocalTemplate",
+                              "生成本机模板",
+                            )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void handleEnsureWorkspaceLocalGitignore()
+                        }
+                        disabled={
+                          ensuringGitignore || !effectiveSources?.working_dir
+                        }
+                        className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
+                      >
+                        {ensuringGitignore
+                          ? memoryI18n(
+                              t,
+                              "settings.memory.source.policy.writing",
+                              "写入中...",
+                            )
+                          : memoryI18n(
+                              t,
+                              "settings.memory.source.policy.addLocalTemplateGitignore",
+                              "将本机模板加入 .gitignore",
+                            )}
+                      </button>
                     </div>
                   </div>
-                ))}
-                <p className="text-xs leading-5 text-slate-500">
+                </div>
+
+                <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
+                  <p className="text-sm font-semibold text-slate-900">
+                    {memoryI18n(
+                      t,
+                      "settings.memory.source.policy.resolveRulesTitle",
+                      "解析规则",
+                    )}
+                  </p>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <label className="space-y-2">
+                      <span className="text-xs font-medium text-slate-500">
+                        {memoryI18n(
+                          t,
+                          "settings.memory.source.policy.maxImportDepth",
+                          "最大导入深度",
+                        )}
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={20}
+                        value={resolveConfig.import_max_depth ?? 5}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          setDraft((prev) => ({
+                            ...prev,
+                            resolve: {
+                              ...normalizeResolve(prev.resolve),
+                              import_max_depth: Number.isFinite(value)
+                                ? Math.max(1, Math.min(20, value))
+                                : 5,
+                            },
+                          }));
+                        }}
+                        className={INPUT_CLASS_NAME}
+                      />
+                    </label>
+
+                    <label className="space-y-2">
+                      <span className="text-xs font-medium text-slate-500">
+                        {memoryI18n(
+                          t,
+                          "settings.memory.source.policy.additionalDirCount",
+                          "额外目录数量",
+                        )}
+                      </span>
+                      <div className="rounded-[16px] border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700">
+                        {(resolveConfig.additional_dirs || []).length}
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <label className={TOGGLE_ROW_CLASS_NAME}>
+                      <span>
+                        {memoryI18n(
+                          t,
+                          "settings.memory.source.policy.followImports",
+                          "跟随 @import",
+                        )}
+                      </span>
+                      <Switch
+                        aria-label={memoryI18n(
+                          t,
+                          "settings.memory.source.policy.followImportsAria",
+                          "跟随 @import",
+                        )}
+                        checked={resolveConfig.follow_imports ?? true}
+                        onCheckedChange={(checked) =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            resolve: {
+                              ...normalizeResolve(prev.resolve),
+                              follow_imports: checked,
+                            },
+                          }))
+                        }
+                      />
+                    </label>
+
+                    <label className={TOGGLE_ROW_CLASS_NAME}>
+                      <span>
+                        {memoryI18n(
+                          t,
+                          "settings.memory.source.policy.loadAdditionalDirs",
+                          "加载额外目录记忆",
+                        )}
+                      </span>
+                      <Switch
+                        aria-label={memoryI18n(
+                          t,
+                          "settings.memory.source.policy.loadAdditionalDirsAria",
+                          "加载额外目录记忆",
+                        )}
+                        checked={
+                          resolveConfig.load_additional_dirs_memory ?? false
+                        }
+                        onCheckedChange={(checked) =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            resolve: {
+                              ...normalizeResolve(prev.resolve),
+                              load_additional_dirs_memory: checked,
+                            },
+                          }))
+                        }
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
+                  <span className="text-sm font-semibold text-slate-900">
+                    {memoryI18n(
+                      t,
+                      "settings.memory.source.policy.projectMemoryFiles",
+                      "项目记忆文件",
+                    )}
+                  </span>
+                  <span className="text-xs leading-5 text-slate-500">
+                    {memoryI18n(
+                      t,
+                      "settings.memory.source.policy.projectMemoryFilesDescription",
+                      "每行一个相对路径，例如 `.lime/AGENTS.md`。",
+                    )}
+                  </span>
+                  <textarea
+                    value={(sourcesConfig.project_memory_paths || []).join(
+                      "\n",
+                    )}
+                    onChange={(event) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        sources: {
+                          ...normalizeSources(prev.sources),
+                          project_memory_paths: parseLines(event.target.value),
+                        },
+                      }))
+                    }
+                    className={TEXTAREA_CLASS_NAME}
+                  />
+                </label>
+
+                <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
+                  <span className="text-sm font-semibold text-slate-900">
+                    {memoryI18n(
+                      t,
+                      "settings.memory.source.policy.projectRuleDirs",
+                      "项目规则目录",
+                    )}
+                  </span>
+                  <span className="text-xs leading-5 text-slate-500">
+                    {memoryI18n(
+                      t,
+                      "settings.memory.source.policy.projectRuleDirsDescription",
+                      "每行一个相对路径，用于定义仓库级规则目录。",
+                    )}
+                  </span>
+                  <textarea
+                    value={(sourcesConfig.project_rule_dirs || []).join("\n")}
+                    onChange={(event) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        sources: {
+                          ...normalizeSources(prev.sources),
+                          project_rule_dirs: parseLines(event.target.value),
+                        },
+                      }))
+                    }
+                    className={TEXTAREA_CLASS_NAME}
+                  />
+                </label>
+              </div>
+
+              <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
+                <span className="text-sm font-semibold text-slate-900">
                   {memoryI18n(
                     t,
-                    "settings.memory.layers.footer",
-                    "更完整的分层详情、压缩摘要与项目资料附属层都在「记忆」页面查看。",
+                    "settings.memory.source.policy.additionalDirs",
+                    "额外目录",
                   )}
-                </p>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-500">
-                {memoryI18n(
-                  t,
-                  "settings.memory.layers.loading",
-                  "正在加载记忆命中层状态...",
-                )}
-              </p>
-            )}
+                </span>
+                <span className="text-xs leading-5 text-slate-500">
+                  {memoryI18n(
+                    t,
+                    "settings.memory.source.policy.additionalDirsDescription",
+                    "每行一个绝对路径，可添加当前仓库之外的参考目录参与记忆解析。",
+                  )}
+                </span>
+                <textarea
+                  value={(resolveConfig.additional_dirs || []).join("\n")}
+                  onChange={(event) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      resolve: {
+                        ...normalizeResolve(prev.resolve),
+                        additional_dirs: parseLines(event.target.value),
+                      },
+                    }))
+                  }
+                  className={TEXTAREA_CLASS_NAME}
+                  placeholder={memoryI18n(
+                    t,
+                    "settings.memory.source.policy.additionalDirsPlaceholder",
+                    "例如 /absolute/path/to/extra-repo",
+                  )}
+                />
+              </label>
+            </div>
           </MemoryPanel>
+        </section>
+      ) : null}
 
+      {activeTab === "memdir" ? (
+        <section
+          id="memory-settings-memdir-panel"
+          data-testid="memory-settings-panel-memdir"
+          role="tabpanel"
+        >
           <MemoryPanel
-            icon={FolderTree}
+            className="scroll-mt-4"
+            icon={Database}
             title={memoryI18n(
               t,
-              "settings.memory.source.overview.title",
-              "来源链状态总览",
+              "settings.memory.memdir.title",
+              "记忆目录（memdir）",
             )}
             description={memoryI18n(
               t,
-              "settings.memory.source.overview.description",
-              "快速查看当前来源链解析策略和命中状态。",
+              "settings.memory.memdir.description",
+              "管理 MEMORY.md 入口、四类记忆文件、类型化写入和当前索引预览。",
             )}
             tipAriaLabel={memoryI18n(
               t,
-              "settings.memory.source.overview.tipAria",
-              "来源链状态总览说明",
+              "settings.memory.memdir.tipAria",
+              "记忆目录说明",
             )}
             aside={
-              <button
-                type="button"
-                onClick={() => loadSourceState()}
-                disabled={loadingSourceState}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
-              >
-                <RefreshCw
-                  className={cn(
-                    "h-3.5 w-3.5",
-                    loadingSourceState && "animate-spin",
-                  )}
-                />
-                {memoryI18n(
-                  t,
-                  "settings.memory.source.overview.refresh",
-                  "刷新来源",
-                )}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handleScaffoldMemdir}
+                  disabled={scaffoldingMemdir}
+                  className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-800 disabled:opacity-60"
+                >
+                  {scaffoldingMemdir
+                    ? memoryI18n(
+                        t,
+                        "settings.memory.memdir.action.initializing",
+                        "初始化中...",
+                      )
+                    : memoryI18n(
+                        t,
+                        "settings.memory.memdir.action.initialize",
+                        "初始化 memdir",
+                      )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCleanupMemdir}
+                  disabled={cleaningMemdir}
+                  className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-white hover:text-slate-900 disabled:opacity-60"
+                >
+                  {cleaningMemdir
+                    ? memoryI18n(
+                        t,
+                        "settings.memory.memdir.action.cleaning",
+                        "整理中...",
+                      )
+                    : memoryI18n(
+                        t,
+                        "settings.memory.memdir.action.cleanup",
+                        "整理 memdir",
+                      )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleAutoImmediately}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                >
+                  {autoConfig.enabled
+                    ? memoryI18n(
+                        t,
+                        "settings.memory.memdir.action.disableNow",
+                        "立即关闭",
+                      )
+                    : memoryI18n(
+                        t,
+                        "settings.memory.memdir.action.enableNow",
+                        "立即开启",
+                      )}
+                </button>
+              </>
             }
           >
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
-                <p className="text-xs font-medium text-slate-500">
-                  {memoryI18n(
-                    t,
-                    "settings.memory.source.overview.hitSources",
-                    "命中来源",
-                  )}
-                </p>
-                <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
-                  {sourceHitLabel}
-                </p>
-              </div>
-              <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
-                <p className="text-xs font-medium text-slate-500">
-                  {memoryI18n(
-                    t,
-                    "settings.memory.source.overview.importPolicy",
-                    "@import 策略",
-                  )}
-                </p>
-                <p className="mt-2 text-lg font-semibold tracking-tight text-slate-900">
-                  {resolveConfig.follow_imports
-                    ? memoryI18n(
-                        t,
-                        "settings.memory.source.overview.followImports",
-                        "跟随导入",
-                      )
-                    : memoryI18n(
-                        t,
-                        "settings.memory.source.overview.importsDisabled",
-                        "关闭导入",
-                      )}
-                </p>
-              </div>
-              <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
-                <p className="text-xs font-medium text-slate-500">
-                  {memoryI18n(
-                    t,
-                    "settings.memory.source.overview.maxImportDepth",
-                    "最大导入深度",
-                  )}
-                </p>
-                <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
-                  {resolveConfig.import_max_depth ?? 5}
-                </p>
-              </div>
-              <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
-                <p className="text-xs font-medium text-slate-500">
-                  {memoryI18n(
-                    t,
-                    "settings.memory.source.overview.additionalDirsMemory",
-                    "额外目录记忆",
-                  )}
-                </p>
-                <p className="mt-2 text-lg font-semibold tracking-tight text-slate-900">
-                  {resolveConfig.load_additional_dirs_memory
-                    ? memoryI18n(
-                        t,
-                        "settings.memory.source.overview.loaded",
-                        "已加载",
-                      )
-                    : memoryI18n(
-                        t,
-                        "settings.memory.source.overview.notLoaded",
-                        "未加载",
-                      )}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
-              <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-                <Files className="h-3.5 w-3.5 text-slate-400" />
-                {memoryI18n(
-                  t,
-                  "settings.memory.source.overview.currentWorkspace",
-                  "当前工作目录",
-                )}
-              </div>
-              <p className="mt-2 break-all text-sm leading-6 text-slate-700">
-                {effectiveSources?.working_dir ||
-                  memoryI18n(
-                    t,
-                    "settings.memory.source.overview.workspaceMissing",
-                    "未返回工作目录",
-                  )}
-              </p>
-            </div>
-          </MemoryPanel>
-        </div>
-      </section>
-
-      <MemoryPanel
-        icon={Database}
-        title={memoryI18n(
-          t,
-          "settings.memory.source.policy.title",
-          "来源链策略",
-        )}
-        description={memoryI18n(
-          t,
-          "settings.memory.source.policy.description",
-          "统一管理组织策略、项目规则目录和额外仓库记忆的加载规则。",
-        )}
-        tipAriaLabel={memoryI18n(
-          t,
-          "settings.memory.source.policy.tipAria",
-          "来源链策略说明",
-        )}
-      >
-        <div className="space-y-4">
-          <div className="grid gap-4 xl:grid-cols-2">
-            <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-              <p className="text-sm font-semibold text-slate-900">
-                {memoryI18n(
-                  t,
-                  "settings.memory.source.policy.basePathsTitle",
-                  "基础路径",
-                )}
-              </p>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <label className="space-y-2">
-                  <span className="text-xs font-medium text-slate-500">
+            <div className="space-y-4">
+              <div className="grid gap-4 xl:grid-cols-3">
+                <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
+                  <span className="text-sm font-semibold text-slate-900">
                     {memoryI18n(
                       t,
-                      "settings.memory.source.policy.managedPolicyFile",
-                      "组织策略文件",
+                      "settings.memory.memdir.field.entrypoint",
+                      "入口文件",
                     )}
                   </span>
                   <input
                     type="text"
-                    value={sourcesConfig.managed_policy_path || ""}
+                    value={autoConfig.entrypoint || "MEMORY.md"}
                     onChange={(event) =>
                       setDraft((prev) => ({
                         ...prev,
-                        sources: {
-                          ...normalizeSources(prev.sources),
-                          managed_policy_path: event.target.value || undefined,
+                        auto: {
+                          ...normalizeAuto(prev.auto),
+                          entrypoint: event.target.value,
                         },
                       }))
                     }
                     className={INPUT_CLASS_NAME}
-                    placeholder={memoryI18n(
-                      t,
-                      "settings.memory.source.policy.managedPolicyPlaceholder",
-                      "例如 ~/.lime/AGENTS.md",
-                    )}
                   />
                 </label>
 
-                <label className="space-y-2">
-                  <span className="text-xs font-medium text-slate-500">
+                <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
+                  <span className="text-sm font-semibold text-slate-900">
                     {memoryI18n(
                       t,
-                      "settings.memory.source.policy.userMemoryFile",
-                      "用户记忆文件",
-                    )}
-                  </span>
-                  <input
-                    type="text"
-                    value={sourcesConfig.user_memory_path || ""}
-                    onChange={(event) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        sources: {
-                          ...normalizeSources(prev.sources),
-                          user_memory_path: event.target.value || undefined,
-                        },
-                      }))
-                    }
-                    className={INPUT_CLASS_NAME}
-                    placeholder={memoryI18n(
-                      t,
-                      "settings.memory.source.policy.userMemoryPlaceholder",
-                      "留空时使用应用默认 ~/.lime/AGENTS.md 路径",
-                    )}
-                  />
-                </label>
-
-                <label className="space-y-2 md:col-span-2">
-                  <span className="text-xs font-medium text-slate-500">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.source.policy.projectLocalMemoryFile",
-                      "项目本地私有文件",
-                    )}
-                  </span>
-                  <input
-                    type="text"
-                    value={sourcesConfig.project_local_memory_path || ""}
-                    onChange={(event) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        sources: {
-                          ...normalizeSources(prev.sources),
-                          project_local_memory_path:
-                            event.target.value || undefined,
-                        },
-                      }))
-                    }
-                    className={INPUT_CLASS_NAME}
-                    placeholder={memoryI18n(
-                      t,
-                      "settings.memory.source.policy.projectLocalMemoryPlaceholder",
-                      "例如 .lime/AGENTS.local.md",
-                    )}
-                  />
-                </label>
-              </div>
-
-              <div className="mt-4 rounded-[20px] border border-slate-200/80 bg-white/80 p-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {memoryI18n(
-                        t,
-                        "settings.memory.source.policy.templateTitle",
-                        "显式生成模板",
-                      )}
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">
-                      {memoryI18n(
-                        t,
-                        "settings.memory.source.policy.templateDescription",
-                        "只在你点击时创建模板文件，不会静默生成，也不会默认覆盖已有内容。",
-                      )}
-                    </p>
-                  </div>
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-500">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.source.policy.currentWorkspace",
-                      "当前 Workspace：{{path}}",
-                      {
-                        path:
-                          effectiveSources?.working_dir ||
-                          memoryI18n(
-                            t,
-                            "settings.memory.source.policy.workspaceUnresolved",
-                            "未解析",
-                          ),
-                      },
-                    )}
-                  </span>
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void handleScaffoldRuntimeAgentsTemplate("global")
-                    }
-                    disabled={scaffoldingTarget !== null}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
-                  >
-                    {scaffoldingTarget === "global"
-                      ? memoryI18n(
-                          t,
-                          "settings.memory.source.policy.generating",
-                          "生成中...",
-                        )
-                      : memoryI18n(
-                          t,
-                          "settings.memory.source.policy.generateGlobalTemplate",
-                          "生成全局模板",
-                        )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void handleScaffoldRuntimeAgentsTemplate("workspace")
-                    }
-                    disabled={
-                      scaffoldingTarget !== null ||
-                      !effectiveSources?.working_dir
-                    }
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
-                  >
-                    {scaffoldingTarget === "workspace"
-                      ? memoryI18n(
-                          t,
-                          "settings.memory.source.policy.generating",
-                          "生成中...",
-                        )
-                      : memoryI18n(
-                          t,
-                          "settings.memory.source.policy.generateWorkspaceTemplate",
-                          "生成 Workspace 模板",
-                        )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void handleScaffoldRuntimeAgentsTemplate(
-                        "workspace_local",
-                      )
-                    }
-                    disabled={
-                      scaffoldingTarget !== null ||
-                      !effectiveSources?.working_dir
-                    }
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
-                  >
-                    {scaffoldingTarget === "workspace_local"
-                      ? memoryI18n(
-                          t,
-                          "settings.memory.source.policy.generating",
-                          "生成中...",
-                        )
-                      : memoryI18n(
-                          t,
-                          "settings.memory.source.policy.generateLocalTemplate",
-                          "生成本机模板",
-                        )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleEnsureWorkspaceLocalGitignore()}
-                    disabled={
-                      ensuringGitignore || !effectiveSources?.working_dir
-                    }
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
-                  >
-                    {ensuringGitignore
-                      ? memoryI18n(
-                          t,
-                          "settings.memory.source.policy.writing",
-                          "写入中...",
-                        )
-                      : memoryI18n(
-                          t,
-                          "settings.memory.source.policy.addLocalTemplateGitignore",
-                          "将本机模板加入 .gitignore",
-                        )}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-              <p className="text-sm font-semibold text-slate-900">
-                {memoryI18n(
-                  t,
-                  "settings.memory.source.policy.resolveRulesTitle",
-                  "解析规则",
-                )}
-              </p>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <label className="space-y-2">
-                  <span className="text-xs font-medium text-slate-500">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.source.policy.maxImportDepth",
-                      "最大导入深度",
+                      "settings.memory.memdir.field.maxLoadedLines",
+                      "加载行数上限",
                     )}
                   </span>
                   <input
                     type="number"
-                    min={1}
-                    max={20}
-                    value={resolveConfig.import_max_depth ?? 5}
+                    min={20}
+                    max={1000}
+                    value={autoConfig.max_loaded_lines ?? 200}
                     onChange={(event) => {
                       const value = Number(event.target.value);
                       setDraft((prev) => ({
                         ...prev,
-                        resolve: {
-                          ...normalizeResolve(prev.resolve),
-                          import_max_depth: Number.isFinite(value)
-                            ? Math.max(1, Math.min(20, value))
-                            : 5,
+                        auto: {
+                          ...normalizeAuto(prev.auto),
+                          max_loaded_lines: Number.isFinite(value)
+                            ? Math.max(20, Math.min(1000, value))
+                            : 200,
                         },
                       }));
                     }}
@@ -2284,711 +2699,434 @@ export function MemorySettings() {
                   />
                 </label>
 
-                <label className="space-y-2">
-                  <span className="text-xs font-medium text-slate-500">
+                <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
+                  <span className="text-sm font-semibold text-slate-900">
                     {memoryI18n(
                       t,
-                      "settings.memory.source.policy.additionalDirCount",
-                      "额外目录数量",
+                      "settings.memory.memdir.field.rootDir",
+                      "memdir 根目录",
                     )}
                   </span>
-                  <div className="rounded-[16px] border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700">
-                    {(resolveConfig.additional_dirs || []).length}
-                  </div>
-                </label>
-              </div>
-
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <label className={TOGGLE_ROW_CLASS_NAME}>
-                  <span>
-                    {memoryI18n(
-                      t,
-                      "settings.memory.source.policy.followImports",
-                      "跟随 @import",
-                    )}
-                  </span>
-                  <Switch
-                    aria-label={memoryI18n(
-                      t,
-                      "settings.memory.source.policy.followImportsAria",
-                      "跟随 @import",
-                    )}
-                    checked={resolveConfig.follow_imports ?? true}
-                    onCheckedChange={(checked) =>
+                  <input
+                    type="text"
+                    value={autoConfig.root_dir || ""}
+                    onChange={(event) =>
                       setDraft((prev) => ({
                         ...prev,
-                        resolve: {
-                          ...normalizeResolve(prev.resolve),
-                          follow_imports: checked,
+                        auto: {
+                          ...normalizeAuto(prev.auto),
+                          root_dir: event.target.value || undefined,
                         },
                       }))
                     }
-                  />
-                </label>
-
-                <label className={TOGGLE_ROW_CLASS_NAME}>
-                  <span>
-                    {memoryI18n(
+                    className={INPUT_CLASS_NAME}
+                    placeholder={memoryI18n(
                       t,
-                      "settings.memory.source.policy.loadAdditionalDirs",
-                      "加载额外目录记忆",
+                      "settings.memory.memdir.field.rootDirPlaceholder",
+                      "默认自动推导，可留空",
                     )}
-                  </span>
-                  <Switch
-                    aria-label={memoryI18n(
-                      t,
-                      "settings.memory.source.policy.loadAdditionalDirsAria",
-                      "加载额外目录记忆",
-                    )}
-                    checked={resolveConfig.load_additional_dirs_memory ?? false}
-                    onCheckedChange={(checked) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        resolve: {
-                          ...normalizeResolve(prev.resolve),
-                          load_additional_dirs_memory: checked,
-                        },
-                      }))
-                    }
                   />
                 </label>
               </div>
-            </div>
-          </div>
 
-          <div className="grid gap-4 xl:grid-cols-2">
-            <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-              <span className="text-sm font-semibold text-slate-900">
-                {memoryI18n(
-                  t,
-                  "settings.memory.source.policy.projectMemoryFiles",
-                  "项目记忆文件",
-                )}
-              </span>
-              <span className="text-xs leading-5 text-slate-500">
-                {memoryI18n(
-                  t,
-                  "settings.memory.source.policy.projectMemoryFilesDescription",
-                  "每行一个相对路径，例如 `.lime/AGENTS.md`。",
-                )}
-              </span>
-              <textarea
-                value={(sourcesConfig.project_memory_paths || []).join("\n")}
-                onChange={(event) =>
-                  setDraft((prev) => ({
-                    ...prev,
-                    sources: {
-                      ...normalizeSources(prev.sources),
-                      project_memory_paths: parseLines(event.target.value),
-                    },
-                  }))
-                }
-                className={TEXTAREA_CLASS_NAME}
-              />
-            </label>
-
-            <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-              <span className="text-sm font-semibold text-slate-900">
-                {memoryI18n(
-                  t,
-                  "settings.memory.source.policy.projectRuleDirs",
-                  "项目规则目录",
-                )}
-              </span>
-              <span className="text-xs leading-5 text-slate-500">
-                {memoryI18n(
-                  t,
-                  "settings.memory.source.policy.projectRuleDirsDescription",
-                  "每行一个相对路径，用于定义仓库级规则目录。",
-                )}
-              </span>
-              <textarea
-                value={(sourcesConfig.project_rule_dirs || []).join("\n")}
-                onChange={(event) =>
-                  setDraft((prev) => ({
-                    ...prev,
-                    sources: {
-                      ...normalizeSources(prev.sources),
-                      project_rule_dirs: parseLines(event.target.value),
-                    },
-                  }))
-                }
-                className={TEXTAREA_CLASS_NAME}
-              />
-            </label>
-          </div>
-
-          <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-            <span className="text-sm font-semibold text-slate-900">
-              {memoryI18n(
-                t,
-                "settings.memory.source.policy.additionalDirs",
-                "额外目录",
-              )}
-            </span>
-            <span className="text-xs leading-5 text-slate-500">
-              {memoryI18n(
-                t,
-                "settings.memory.source.policy.additionalDirsDescription",
-                "每行一个绝对路径，可添加当前仓库之外的参考目录参与记忆解析。",
-              )}
-            </span>
-            <textarea
-              value={(resolveConfig.additional_dirs || []).join("\n")}
-              onChange={(event) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  resolve: {
-                    ...normalizeResolve(prev.resolve),
-                    additional_dirs: parseLines(event.target.value),
-                  },
-                }))
-              }
-              className={TEXTAREA_CLASS_NAME}
-              placeholder={memoryI18n(
-                t,
-                "settings.memory.source.policy.additionalDirsPlaceholder",
-                "例如 /absolute/path/to/extra-repo",
-              )}
-            />
-          </label>
-        </div>
-      </MemoryPanel>
-
-      <MemoryPanel
-        icon={Database}
-        title={memoryI18n(
-          t,
-          "settings.memory.memdir.title",
-          "记忆目录（memdir）",
-        )}
-        description={memoryI18n(
-          t,
-          "settings.memory.memdir.description",
-          "管理 MEMORY.md 入口、四类记忆文件、类型化写入和当前索引预览。",
-        )}
-        tipAriaLabel={memoryI18n(
-          t,
-          "settings.memory.memdir.tipAria",
-          "记忆目录说明",
-        )}
-        aside={
-          <>
-            <button
-              type="button"
-              onClick={handleScaffoldMemdir}
-              disabled={scaffoldingMemdir}
-              className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-800 disabled:opacity-60"
-            >
-              {scaffoldingMemdir
-                ? memoryI18n(
-                    t,
-                    "settings.memory.memdir.action.initializing",
-                    "初始化中...",
-                  )
-                : memoryI18n(
-                    t,
-                    "settings.memory.memdir.action.initialize",
-                    "初始化 memdir",
-                  )}
-            </button>
-            <button
-              type="button"
-              onClick={handleCleanupMemdir}
-              disabled={cleaningMemdir}
-              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-white hover:text-slate-900 disabled:opacity-60"
-            >
-              {cleaningMemdir
-                ? memoryI18n(
-                    t,
-                    "settings.memory.memdir.action.cleaning",
-                    "整理中...",
-                  )
-                : memoryI18n(
-                    t,
-                    "settings.memory.memdir.action.cleanup",
-                    "整理 memdir",
-                  )}
-            </button>
-            <button
-              type="button"
-              onClick={handleToggleAutoImmediately}
-              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-            >
-              {autoConfig.enabled
-                ? memoryI18n(
-                    t,
-                    "settings.memory.memdir.action.disableNow",
-                    "立即关闭",
-                  )
-                : memoryI18n(
-                    t,
-                    "settings.memory.memdir.action.enableNow",
-                    "立即开启",
-                  )}
-            </button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div className="grid gap-4 xl:grid-cols-3">
-            <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-              <span className="text-sm font-semibold text-slate-900">
-                {memoryI18n(
-                  t,
-                  "settings.memory.memdir.field.entrypoint",
-                  "入口文件",
-                )}
-              </span>
-              <input
-                type="text"
-                value={autoConfig.entrypoint || "MEMORY.md"}
-                onChange={(event) =>
-                  setDraft((prev) => ({
-                    ...prev,
-                    auto: {
-                      ...normalizeAuto(prev.auto),
-                      entrypoint: event.target.value,
-                    },
-                  }))
-                }
-                className={INPUT_CLASS_NAME}
-              />
-            </label>
-
-            <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-              <span className="text-sm font-semibold text-slate-900">
-                {memoryI18n(
-                  t,
-                  "settings.memory.memdir.field.maxLoadedLines",
-                  "加载行数上限",
-                )}
-              </span>
-              <input
-                type="number"
-                min={20}
-                max={1000}
-                value={autoConfig.max_loaded_lines ?? 200}
-                onChange={(event) => {
-                  const value = Number(event.target.value);
-                  setDraft((prev) => ({
-                    ...prev,
-                    auto: {
-                      ...normalizeAuto(prev.auto),
-                      max_loaded_lines: Number.isFinite(value)
-                        ? Math.max(20, Math.min(1000, value))
-                        : 200,
-                    },
-                  }));
-                }}
-                className={INPUT_CLASS_NAME}
-              />
-            </label>
-
-            <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-              <span className="text-sm font-semibold text-slate-900">
-                {memoryI18n(
-                  t,
-                  "settings.memory.memdir.field.rootDir",
-                  "memdir 根目录",
-                )}
-              </span>
-              <input
-                type="text"
-                value={autoConfig.root_dir || ""}
-                onChange={(event) =>
-                  setDraft((prev) => ({
-                    ...prev,
-                    auto: {
-                      ...normalizeAuto(prev.auto),
-                      root_dir: event.target.value || undefined,
-                    },
-                  }))
-                }
-                className={INPUT_CLASS_NAME}
-                placeholder={memoryI18n(
-                  t,
-                  "settings.memory.memdir.field.rootDirPlaceholder",
-                  "默认自动推导，可留空",
-                )}
-              />
-            </label>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.06fr)_minmax(360px,0.94fr)]">
-            <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                <Database className="h-4 w-4 text-emerald-600" />
-                {memoryI18n(
-                  t,
-                  "settings.memory.memdir.write.title",
-                  "写入 memdir",
-                )}
-              </div>
-              <div className="mt-4 space-y-3">
-                <div className="grid gap-2">
-                  <p className="text-xs leading-5 text-slate-500">
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.06fr)_minmax(360px,0.94fr)]">
+                <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <Database className="h-4 w-4 text-emerald-600" />
                     {memoryI18n(
                       t,
-                      "settings.memory.memdir.write.description",
-                      "先选择这条记忆应归入哪一类，再决定是否额外拆 topic 文件。",
+                      "settings.memory.memdir.write.title",
+                      "写入 memdir",
                     )}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {memdirTypeOptions.map((option) => {
-                      const active = autoMemoryType === option.value;
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => setAutoMemoryType(option.value)}
-                          className={cn(
-                            "rounded-full border px-3 py-1.5 text-xs font-medium transition",
-                            active
-                              ? ACTIVE_OPTION_BUTTON_CLASS
-                              : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
-                          )}
-                          title={option.description}
-                        >
-                          {option.label}
-                        </button>
-                      );
-                    })}
                   </div>
-                </div>
-                <div className="rounded-[18px] border border-white/90 bg-white/88 px-4 py-3 shadow-sm">
-                  <p className="text-sm font-medium text-slate-900">
-                    {resolveMemdirTypeLabel(t, autoMemoryType)}
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    {selectedMemdirGuide.description}
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {selectedMemdirGuide.requiredSections.length > 0 ? (
-                      selectedMemdirGuide.requiredSections.map((section) => (
-                        <span
-                          key={section}
-                          className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700"
-                        >
-                          {memoryI18n(
-                            t,
-                            "settings.memory.memdir.requiredSectionBadge",
-                            "必须包含 {{section}}",
-                            { section },
-                          )}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                  <div className="mt-4 space-y-3">
+                    <div className="grid gap-2">
+                      <p className="text-xs leading-5 text-slate-500">
                         {memoryI18n(
                           t,
-                          "settings.memory.memdir.noTemplateRequired",
-                          "可直接写自然语言，不强制模板",
+                          "settings.memory.memdir.write.description",
+                          "先选择这条记忆应归入哪一类，再决定是否额外拆 topic 文件。",
                         )}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-3 text-xs leading-5 text-slate-500">
-                    {selectedMemdirGuide.note}
-                  </p>
-                  <p className="mt-2 text-xs leading-5 text-slate-500">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.memdir.topicMergeHint",
-                      "同一 topic 会被视为同一条当前记忆并覆盖更新；如果要保留多条并行结论，请拆成不同 topic。",
-                    )}
-                  </p>
-                </div>
-                <input
-                  type="text"
-                  value={autoTopic}
-                  onChange={(event) => setAutoTopic(event.target.value)}
-                  className={INPUT_CLASS_NAME}
-                  placeholder={selectedMemdirGuide.topicPlaceholder}
-                />
-                <textarea
-                  value={autoNote}
-                  onChange={(event) => setAutoNote(event.target.value)}
-                  className={TEXTAREA_CLASS_NAME}
-                  placeholder={selectedMemdirGuide.placeholder}
-                />
-                <button
-                  type="button"
-                  onClick={handleUpdateAutoNote}
-                  disabled={savingAutoNote}
-                  className={PRIMARY_ACTION_BUTTON_CLASS}
-                >
-                  {savingAutoNote
-                    ? memoryI18n(
-                        t,
-                        "settings.memory.memdir.action.writing",
-                        "写入中...",
-                      )
-                    : memoryI18n(
-                        t,
-                        "settings.memory.memdir.action.write",
-                        "写入 memdir",
-                      )}
-                </button>
-                <p className="text-xs leading-5 text-slate-500">
-                  {memoryI18n(
-                    t,
-                    "settings.memory.memdir.cleanupHint",
-                    "“整理 memdir” 会去重入口链接、裁剪 README 历史段落，并把旧的 topic 日志收口成当前有效版本。",
-                  )}
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                <Files className="h-4 w-4 text-sky-600" />
-                {memoryI18n(
-                  t,
-                  "settings.memory.memdir.index.title",
-                  "当前索引",
-                )}
-              </div>
-              <div className="mt-4 rounded-[18px] border border-white/90 bg-white/88 px-4 py-3 shadow-sm">
-                <p className="text-xs leading-5 text-slate-500">
-                  {autoIndex?.entry_exists
-                    ? memoryI18n(
-                        t,
-                        "settings.memory.memdir.index.exists",
-                        "已存在",
-                      )
-                    : memoryI18n(
-                        t,
-                        "settings.memory.memdir.index.uninitialized",
-                        "未初始化",
-                      )}
-                  {autoIndex
-                    ? memoryI18n(
-                        t,
-                        "settings.memory.memdir.index.lineCount",
-                        " · {{count}} 行",
-                        { count: autoIndex.total_lines },
-                      )
-                    : ""}
-                </p>
-              </div>
-              {autoIndex?.preview_lines?.length ? (
-                <pre className="mt-4 max-h-52 overflow-auto rounded-[18px] border border-white/90 bg-white/88 p-3 text-[11px] leading-relaxed text-slate-600 whitespace-pre-wrap break-words shadow-sm">
-                  {autoIndex.preview_lines.join("\n")}
-                </pre>
-              ) : (
-                <p className="mt-4 text-sm leading-6 text-slate-500">
-                  {memoryI18n(
-                    t,
-                    "settings.memory.memdir.index.empty",
-                    "暂无 memdir 入口内容",
-                  )}
-                </p>
-              )}
-              {autoIndex?.items?.length ? (
-                <div className="mt-4 space-y-2">
-                  {autoIndex.items.slice(0, 6).map((item) => (
-                    <div
-                      key={item.relative_path}
-                      className="rounded-[16px] border border-slate-200/80 bg-slate-50/70 px-3 py-2"
-                    >
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {memdirTypeOptions.map((option) => {
+                          const active = autoMemoryType === option.value;
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setAutoMemoryType(option.value)}
+                              className={cn(
+                                "rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                                active
+                                  ? ACTIVE_OPTION_BUTTON_CLASS
+                                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
+                              )}
+                              title={option.description}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div className="rounded-[18px] border border-white/90 bg-white/88 px-4 py-3 shadow-sm">
                       <p className="text-sm font-medium text-slate-900">
-                        {item.title}
+                        {resolveMemdirTypeLabel(t, autoMemoryType)}
                       </p>
                       <p className="mt-1 text-xs leading-5 text-slate-500">
-                        {item.relative_path}
+                        {selectedMemdirGuide.description}
                       </p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {item.memory_type ? (
-                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
-                            {resolveMemdirTypeLabel(t, item.memory_type)}
-                          </span>
-                        ) : null}
-                        {item.provider ? (
-                          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {selectedMemdirGuide.requiredSections.length > 0 ? (
+                          selectedMemdirGuide.requiredSections.map(
+                            (section) => (
+                              <span
+                                key={section}
+                                className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700"
+                              >
+                                {memoryI18n(
+                                  t,
+                                  "settings.memory.memdir.requiredSectionBadge",
+                                  "必须包含 {{section}}",
+                                  { section },
+                                )}
+                              </span>
+                            ),
+                          )
+                        ) : (
+                          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500">
                             {memoryI18n(
                               t,
-                              "settings.memory.memdir.index.provider",
-                              "provider：{{provider}}",
-                              { provider: item.provider },
+                              "settings.memory.memdir.noTemplateRequired",
+                              "可直接写自然语言，不强制模板",
                             )}
                           </span>
+                        )}
+                      </div>
+                      <p className="mt-3 text-xs leading-5 text-slate-500">
+                        {selectedMemdirGuide.note}
+                      </p>
+                      <p className="mt-2 text-xs leading-5 text-slate-500">
+                        {memoryI18n(
+                          t,
+                          "settings.memory.memdir.topicMergeHint",
+                          "同一 topic 会被视为同一条当前记忆并覆盖更新；如果要保留多条并行结论，请拆成不同 topic。",
+                        )}
+                      </p>
+                    </div>
+                    <input
+                      type="text"
+                      value={autoTopic}
+                      onChange={(event) => setAutoTopic(event.target.value)}
+                      className={INPUT_CLASS_NAME}
+                      placeholder={selectedMemdirGuide.topicPlaceholder}
+                    />
+                    <textarea
+                      value={autoNote}
+                      onChange={(event) => setAutoNote(event.target.value)}
+                      className={TEXTAREA_CLASS_NAME}
+                      placeholder={selectedMemdirGuide.placeholder}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleUpdateAutoNote}
+                      disabled={savingAutoNote}
+                      className={PRIMARY_ACTION_BUTTON_CLASS}
+                    >
+                      {savingAutoNote
+                        ? memoryI18n(
+                            t,
+                            "settings.memory.memdir.action.writing",
+                            "写入中...",
+                          )
+                        : memoryI18n(
+                            t,
+                            "settings.memory.memdir.action.write",
+                            "写入 memdir",
+                          )}
+                    </button>
+                    <p className="text-xs leading-5 text-slate-500">
+                      {memoryI18n(
+                        t,
+                        "settings.memory.memdir.cleanupHint",
+                        "“整理 memdir” 会去重入口链接、裁剪 README 历史段落，并把旧的 topic 日志收口成当前有效版本。",
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <Files className="h-4 w-4 text-sky-600" />
+                    {memoryI18n(
+                      t,
+                      "settings.memory.memdir.index.title",
+                      "当前索引",
+                    )}
+                  </div>
+                  <div className="mt-4 rounded-[18px] border border-white/90 bg-white/88 px-4 py-3 shadow-sm">
+                    <p className="text-xs leading-5 text-slate-500">
+                      {autoIndex?.entry_exists
+                        ? memoryI18n(
+                            t,
+                            "settings.memory.memdir.index.exists",
+                            "已存在",
+                          )
+                        : memoryI18n(
+                            t,
+                            "settings.memory.memdir.index.uninitialized",
+                            "未初始化",
+                          )}
+                      {autoIndex
+                        ? memoryI18n(
+                            t,
+                            "settings.memory.memdir.index.lineCount",
+                            " · {{count}} 行",
+                            { count: autoIndex.total_lines },
+                          )
+                        : ""}
+                    </p>
+                  </div>
+                  {autoIndex?.preview_lines?.length ? (
+                    <pre className="mt-4 max-h-52 overflow-auto rounded-[18px] border border-white/90 bg-white/88 p-3 text-[11px] leading-relaxed text-slate-600 whitespace-pre-wrap break-words shadow-sm">
+                      {autoIndex.preview_lines.join("\n")}
+                    </pre>
+                  ) : (
+                    <p className="mt-4 text-sm leading-6 text-slate-500">
+                      {memoryI18n(
+                        t,
+                        "settings.memory.memdir.index.empty",
+                        "暂无 memdir 入口内容",
+                      )}
+                    </p>
+                  )}
+                  {autoIndex?.items?.length ? (
+                    <div className="mt-4 space-y-2">
+                      {autoIndex.items.slice(0, 6).map((item) => (
+                        <div
+                          key={item.relative_path}
+                          className="rounded-[16px] border border-slate-200/80 bg-slate-50/70 px-3 py-2"
+                        >
+                          <p className="text-sm font-medium text-slate-900">
+                            {item.title}
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-slate-500">
+                            {item.relative_path}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {item.memory_type ? (
+                              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
+                                {resolveMemdirTypeLabel(t, item.memory_type)}
+                              </span>
+                            ) : null}
+                            {item.provider ? (
+                              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                                {memoryI18n(
+                                  t,
+                                  "settings.memory.memdir.index.provider",
+                                  "provider：{{provider}}",
+                                  { provider: item.provider },
+                                )}
+                              </span>
+                            ) : null}
+                            {item.updated_at ? (
+                              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                                {memoryI18n(
+                                  t,
+                                  "settings.memory.memdir.index.updatedAt",
+                                  "更新于 {{time}}",
+                                  {
+                                    time: formatRelativeTimeLabel(
+                                      t,
+                                      item.updated_at,
+                                    ),
+                                  },
+                                )}
+                              </span>
+                            ) : null}
+                          </div>
+                          {item.summary ? (
+                            <p className="mt-1 text-sm leading-6 text-slate-600">
+                              {item.summary}
+                            </p>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </MemoryPanel>
+        </section>
+      ) : null}
+
+      {activeTab === "sourceHits" ? (
+        <section
+          id="memory-settings-sourceHits-panel"
+          data-testid="memory-settings-panel-sourceHits"
+          role="tabpanel"
+        >
+          <MemoryPanel
+            className="scroll-mt-4"
+            icon={Files}
+            title={memoryI18n(
+              t,
+              "settings.memory.source.detail.title",
+              "来源链命中详情",
+            )}
+            description={memoryI18n(
+              t,
+              "settings.memory.source.detail.description",
+              "逐项查看来源链是否命中、是否已加载，以及实际预览内容。",
+            )}
+            tipAriaLabel={memoryI18n(
+              t,
+              "settings.memory.source.detail.tipAria",
+              "来源链命中详情说明",
+            )}
+            aside={
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
+                {effectiveSources
+                  ? memoryI18n(
+                      t,
+                      "settings.memory.source.detail.hits",
+                      "命中 {{loaded}}/{{total}}",
+                      {
+                        loaded: effectiveSources.loaded_sources,
+                        total: effectiveSources.total_sources,
+                      },
+                    )
+                  : "--"}
+              </span>
+            }
+          >
+            {effectiveSources ? (
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
+                    {memoryI18n(
+                      t,
+                      "settings.memory.source.detail.workingDir",
+                      "工作目录：{{path}}",
+                      { path: effectiveSources.working_dir },
+                    )}
+                  </span>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
+                    {memoryI18n(
+                      t,
+                      "settings.memory.source.detail.followImports",
+                      "跟随 @import：{{value}}",
+                      {
+                        value: effectiveSources.follow_imports
+                          ? memoryI18n(
+                              t,
+                              "settings.memory.source.detail.yes",
+                              "是",
+                            )
+                          : memoryI18n(
+                              t,
+                              "settings.memory.source.detail.no",
+                              "否",
+                            ),
+                      },
+                    )}
+                  </span>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
+                    {memoryI18n(
+                      t,
+                      "settings.memory.source.detail.importDepth",
+                      "导入深度：{{depth}}",
+                      { depth: effectiveSources.import_max_depth },
+                    )}
+                  </span>
+                </div>
+
+                <div className="grid gap-3 xl:grid-cols-2">
+                  {effectiveSources.sources.map((source) => (
+                    <div
+                      key={`${source.kind}-${source.path}`}
+                      className="rounded-[20px] border border-slate-200/80 bg-slate-50/60 p-4"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm font-semibold text-slate-900">
+                          {source.kind}
+                        </span>
+                        <SourceStatusPill
+                          loaded={source.loaded}
+                          exists={source.exists}
+                        />
+                      </div>
+                      <p className="mt-2 break-all text-xs leading-5 text-slate-500">
+                        {source.path}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                          {memoryI18n(
+                            t,
+                            "settings.memory.source.detail.sourceBucket",
+                            "来源分类：{{bucket}}",
+                            {
+                              bucket: resolveSourceBucketLabel(
+                                t,
+                                source.source_bucket,
+                              ),
+                            },
+                          )}
+                        </span>
+                        {source.provider ? (
+                          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                            provider：{source.provider}
+                          </span>
                         ) : null}
-                        {item.updated_at ? (
+                        {source.memory_type ? (
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
+                            {resolveMemdirTypeLabel(t, source.memory_type)}
+                          </span>
+                        ) : null}
+                        {source.updated_at ? (
                           <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
                             {memoryI18n(
                               t,
-                              "settings.memory.memdir.index.updatedAt",
-                              "更新于 {{time}}",
+                              "settings.memory.source.detail.updatedAt",
+                              "最近更新：{{time}}",
                               {
                                 time: formatRelativeTimeLabel(
                                   t,
-                                  item.updated_at,
+                                  source.updated_at,
                                 ),
                               },
                             )}
                           </span>
                         ) : null}
                       </div>
-                      {item.summary ? (
-                        <p className="mt-1 text-sm leading-6 text-slate-600">
-                          {item.summary}
+                      {source.preview ? (
+                        <p className="mt-3 text-sm leading-6 text-slate-600 line-clamp-3">
+                          {source.preview}
+                        </p>
+                      ) : null}
+                      {source.warnings?.length > 0 ? (
+                        <p className="mt-3 text-xs leading-5 text-amber-600">
+                          {source.warnings.join("；")}
                         </p>
                       ) : null}
                     </div>
                   ))}
                 </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </MemoryPanel>
-
-      <MemoryPanel
-        icon={Files}
-        title={memoryI18n(
-          t,
-          "settings.memory.source.detail.title",
-          "来源链命中详情",
-        )}
-        description={memoryI18n(
-          t,
-          "settings.memory.source.detail.description",
-          "逐项查看来源链是否命中、是否已加载，以及实际预览内容。",
-        )}
-        tipAriaLabel={memoryI18n(
-          t,
-          "settings.memory.source.detail.tipAria",
-          "来源链命中详情说明",
-        )}
-        aside={
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-            {effectiveSources
-              ? memoryI18n(
-                  t,
-                  "settings.memory.source.detail.hits",
-                  "命中 {{loaded}}/{{total}}",
-                  {
-                    loaded: effectiveSources.loaded_sources,
-                    total: effectiveSources.total_sources,
-                  },
-                )
-              : "--"}
-          </span>
-        }
-      >
-        {effectiveSources ? (
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">
                 {memoryI18n(
                   t,
-                  "settings.memory.source.detail.workingDir",
-                  "工作目录：{{path}}",
-                  { path: effectiveSources.working_dir },
+                  "settings.memory.source.detail.loading",
+                  "正在加载来源命中结果...",
                 )}
-              </span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-                {memoryI18n(
-                  t,
-                  "settings.memory.source.detail.followImports",
-                  "跟随 @import：{{value}}",
-                  {
-                    value: effectiveSources.follow_imports
-                      ? memoryI18n(t, "settings.memory.source.detail.yes", "是")
-                      : memoryI18n(t, "settings.memory.source.detail.no", "否"),
-                  },
-                )}
-              </span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-                {memoryI18n(
-                  t,
-                  "settings.memory.source.detail.importDepth",
-                  "导入深度：{{depth}}",
-                  { depth: effectiveSources.import_max_depth },
-                )}
-              </span>
-            </div>
-
-            <div className="grid gap-3 xl:grid-cols-2">
-              {effectiveSources.sources.map((source) => (
-                <div
-                  key={`${source.kind}-${source.path}`}
-                  className="rounded-[20px] border border-slate-200/80 bg-slate-50/60 p-4"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-semibold text-slate-900">
-                      {source.kind}
-                    </span>
-                    <SourceStatusPill
-                      loaded={source.loaded}
-                      exists={source.exists}
-                    />
-                  </div>
-                  <p className="mt-2 break-all text-xs leading-5 text-slate-500">
-                    {source.path}
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                      {memoryI18n(
-                        t,
-                        "settings.memory.source.detail.sourceBucket",
-                        "来源分类：{{bucket}}",
-                        {
-                          bucket: resolveSourceBucketLabel(
-                            t,
-                            source.source_bucket,
-                          ),
-                        },
-                      )}
-                    </span>
-                    {source.provider ? (
-                      <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                        provider：{source.provider}
-                      </span>
-                    ) : null}
-                    {source.memory_type ? (
-                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
-                        {resolveMemdirTypeLabel(t, source.memory_type)}
-                      </span>
-                    ) : null}
-                    {source.updated_at ? (
-                      <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                        {memoryI18n(
-                          t,
-                          "settings.memory.source.detail.updatedAt",
-                          "最近更新：{{time}}",
-                          {
-                            time: formatRelativeTimeLabel(t, source.updated_at),
-                          },
-                        )}
-                      </span>
-                    ) : null}
-                  </div>
-                  {source.preview ? (
-                    <p className="mt-3 text-sm leading-6 text-slate-600 line-clamp-3">
-                      {source.preview}
-                    </p>
-                  ) : null}
-                  {source.warnings?.length > 0 ? (
-                    <p className="mt-3 text-xs leading-5 text-amber-600">
-                      {source.warnings.join("；")}
-                    </p>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-slate-500">
-            {memoryI18n(
-              t,
-              "settings.memory.source.detail.loading",
-              "正在加载来源命中结果...",
+              </p>
             )}
-          </p>
-        )}
-      </MemoryPanel>
+          </MemoryPanel>
+        </section>
+      ) : null}
     </div>
   );
 }

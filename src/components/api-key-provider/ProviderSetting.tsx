@@ -19,6 +19,7 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  Save,
   Sparkles,
   Star,
   Trash2,
@@ -224,6 +225,34 @@ function getStatusIcon(tone: InlineStatusTone) {
   return <Sparkles className="h-4 w-4" />;
 }
 
+function readActionErrorMessage(error: unknown): string | null {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error.trim()) {
+    return error;
+  }
+
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+  }
+
+  return null;
+}
+
+function formatActionError(error: unknown, fallback: string): string {
+  return readActionErrorMessage(error) ?? fallback;
+}
+
+function isDuplicateApiKeyError(error: unknown): boolean {
+  const message = readActionErrorMessage(error) ?? "";
+  return /api key.*(已存在|already exists)/i.test(message);
+}
+
 // ============================================================================
 // 组件实现
 // ============================================================================
@@ -358,6 +387,8 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
   const [deletingProvider, setDeletingProvider] = useState(false);
   const [apiKeyDraft, setApiKeyDraft] = useState("");
   const [apiKeyDirty, setApiKeyDirty] = useState(false);
+  const [savingApiKey, setSavingApiKey] = useState(false);
+  const [apiKeyStatus, setApiKeyStatus] = useState<InlineStatus | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<InlineStatus | null>(
@@ -381,6 +412,8 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     setConnectionStatus(null);
     setApiKeyDraft("");
     setApiKeyDirty(false);
+    setSavingApiKey(false);
+    setApiKeyStatus(null);
     setShowApiKey(false);
     setImageCommandDraft(null);
     setImageCommandStatus(null);
@@ -411,6 +444,7 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     modelFetchApiKeyRequired,
   );
   const canUseDraftApiKey = apiKeyDirty && apiKeyDraft.trim().length > 0;
+  const hasPendingApiKey = canUseDraftApiKey;
   const canReadModelsFromApi =
     modelAutoFetchCapability.supported &&
     (!modelFetchApiKeyRequired || hasApiKey || canUseDraftApiKey);
@@ -466,9 +500,16 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
       provider.prompt_cache_mode,
       provider.api_host,
     ) === "explicit_only";
+  const canSaveApiKey =
+    !loading &&
+    !savingApiKey &&
+    !testingConnection &&
+    !fetchingModels &&
+    hasPendingApiKey;
   const canTestConnection =
     !loading &&
     !testingConnection &&
+    !savingApiKey &&
     modelList.length > 0 &&
     (!providerApiKeyRequired || hasApiKey || canUseDraftApiKey);
   const modelFetchUnsupportedMessage = useMemo(() => {
@@ -530,6 +571,54 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     setApiKeyDraft("");
     setApiKeyDirty(false);
   }, [apiKeyDirty, apiKeyDraft, onAddApiKey, provider.id, t]);
+
+  const handleSaveApiKey = useCallback(async () => {
+    if (!apiKeyDirty) {
+      return;
+    }
+
+    if (!apiKeyDraft.trim()) {
+      setApiKeyStatus({
+        tone: "error",
+        message: t("settings.providers.setting.feedback.apiKey.required"),
+      });
+      return;
+    }
+
+    setSavingApiKey(true);
+    setApiKeyStatus(null);
+    setConnectionStatus(null);
+
+    try {
+      await persistDraftApiKey();
+      setApiKeyStatus({
+        tone: "success",
+        message: t("settings.providers.setting.feedback.apiKey.saved"),
+      });
+    } catch (error) {
+      if (isDuplicateApiKeyError(error)) {
+        setApiKeyDraft("");
+        setApiKeyDirty(false);
+        setApiKeyStatus({
+          tone: "success",
+          message: t(
+            "settings.providers.setting.feedback.apiKey.alreadySaved",
+          ),
+        });
+        return;
+      }
+
+      setApiKeyStatus({
+        tone: "error",
+        message: formatActionError(
+          error,
+          t("settings.providers.setting.feedback.apiKey.saveFailed"),
+        ),
+      });
+    } finally {
+      setSavingApiKey(false);
+    }
+  }, [apiKeyDirty, apiKeyDraft, persistDraftApiKey, t]);
 
   const applyModels = useCallback(
     async (nextModels: string[]) => {
@@ -731,10 +820,10 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     } catch (error) {
       setModelFetchStatus({
         tone: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : t("settings.providers.setting.feedback.modelFetch.errorDefault"),
+        message: formatActionError(
+          error,
+          t("settings.providers.setting.feedback.modelFetch.errorDefault"),
+        ),
       });
     } finally {
       setFetchingModels(false);
@@ -781,10 +870,10 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     } catch (error) {
       setProviderActionStatus({
         tone: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : t("settings.providers.setting.feedback.delete.errorDefault"),
+        message: formatActionError(
+          error,
+          t("settings.providers.setting.feedback.delete.errorDefault"),
+        ),
       });
     } finally {
       setDeletingProvider(false);
@@ -848,10 +937,10 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     } catch (error) {
       setConnectionStatus({
         tone: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : t("settings.providers.setting.feedback.connection.errorDefault"),
+        message: formatActionError(
+          error,
+          t("settings.providers.setting.feedback.connection.errorDefault"),
+        ),
       });
     } finally {
       setTestingConnection(false);
@@ -1002,7 +1091,14 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                         "API 密钥（可选）",
                       )}
                 </Label>
-                {hasApiKey ? (
+                {hasPendingApiKey ? (
+                  <span className="text-xs text-amber-600">
+                    {t(
+                      "settings.providers.setting.body.apiKey.pending",
+                      "未保存",
+                    )}
+                  </span>
+                ) : hasApiKey ? (
                   <span className="text-xs text-emerald-600">
                     {t(
                       "settings.providers.setting.body.apiKey.configured",
@@ -1011,52 +1107,98 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                   </span>
                 ) : null}
               </div>
-              <div className="relative">
-                <Input
-                  id="provider-api-key"
-                  type={showApiKey ? "text" : "password"}
-                  value={apiKeyInputValue}
-                  onFocus={() => {
-                    if (!apiKeyDirty && apiKeyMask) {
-                      setApiKeyDraft("");
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="relative min-w-0 flex-1">
+                  <Input
+                    id="provider-api-key"
+                    type={showApiKey ? "text" : "password"}
+                    value={apiKeyInputValue}
+                    onFocus={() => {
+                      if (!apiKeyDirty && apiKeyMask) {
+                        setApiKeyDraft("");
+                        setApiKeyDirty(true);
+                      }
+                    }}
+                    onChange={(event) => {
                       setApiKeyDirty(true);
+                      setApiKeyDraft(event.target.value);
+                      setApiKeyStatus(null);
+                      setConnectionStatus(null);
+                    }}
+                    placeholder={
+                      providerApiKeyRequired
+                        ? t(
+                            "settings.providers.setting.body.apiKey.placeholder",
+                            "输入 API 密钥",
+                          )
+                        : t(
+                            "settings.providers.setting.body.apiKey.optionalPlaceholder",
+                            "本地服务可留空",
+                          )
                     }
-                  }}
-                  onChange={(event) => {
-                    setApiKeyDirty(true);
-                    setApiKeyDraft(event.target.value);
-                  }}
-                  placeholder={
-                    providerApiKeyRequired
-                      ? t(
-                          "settings.providers.setting.body.apiKey.placeholder",
-                          "输入 API 密钥",
-                        )
-                      : t(
-                          "settings.providers.setting.body.apiKey.optionalPlaceholder",
-                          "本地服务可留空",
-                        )
-                  }
-                  className="h-12 rounded-[18px] border-slate-200 bg-white px-4 pr-11"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  disabled={loading || testingConnection || fetchingModels}
-                  data-testid="provider-api-key-input"
-                />
-                <button
+                    className="h-12 rounded-[18px] border-slate-200 bg-white px-4 pr-11"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    disabled={
+                      loading ||
+                      savingApiKey ||
+                      testingConnection ||
+                      fetchingModels
+                    }
+                    data-testid="provider-api-key-input"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey((previous) => !previous)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700"
+                    aria-label={t(
+                      "settings.providers.setting.body.apiKey.toggleVisibility",
+                      "显示或隐藏 API 密钥",
+                    )}
+                    data-testid="provider-api-key-eye-button"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
+                </div>
+                <Button
                   type="button"
-                  onClick={() => setShowApiKey((previous) => !previous)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700"
-                  aria-label={t(
-                    "settings.providers.setting.body.apiKey.toggleVisibility",
-                    "显示或隐藏 API 密钥",
-                  )}
-                  data-testid="provider-api-key-eye-button"
+                  variant="outline"
+                  className="h-12 rounded-[18px] border-slate-200 bg-white px-4 text-slate-700 hover:bg-slate-50"
+                  onClick={() => {
+                    void handleSaveApiKey();
+                  }}
+                  disabled={!canSaveApiKey}
+                  data-testid="provider-api-key-save-button"
                 >
-                  <Eye className="h-4 w-4" />
-                </button>
+                  {savingApiKey ? (
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-1.5 h-4 w-4" />
+                  )}
+                  {savingApiKey
+                    ? t(
+                        "settings.providers.setting.body.apiKey.action.saving",
+                        "保存中...",
+                      )
+                    : t(
+                        "settings.providers.setting.body.apiKey.action.save",
+                        "保存密钥",
+                      )}
+                </Button>
               </div>
+              {apiKeyStatus ? (
+                <div
+                  className={cn(
+                    "flex items-start gap-2 rounded-[16px] border px-3 py-2 text-sm",
+                    buildStatusClass(apiKeyStatus.tone),
+                  )}
+                  data-testid="api-key-status"
+                >
+                  {getStatusIcon(apiKeyStatus.tone)}
+                  <span className="leading-5">{apiKeyStatus.message}</span>
+                </div>
+              ) : null}
               {accessHelp.keylessHint ? (
                 <p className="text-xs leading-5 text-slate-500">
                   {accessHelp.keylessHint}

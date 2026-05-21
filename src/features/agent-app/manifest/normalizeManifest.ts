@@ -146,6 +146,7 @@ export function normalizeManifest(
       input: manifest.install,
       fallbackName: displayName,
     }),
+    presentation: manifest.presentation,
     agentRuntime: manifest.agentRuntime,
     requirements: manifest.requirements,
     boundary: manifest.boundary,

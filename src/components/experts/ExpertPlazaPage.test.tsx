@@ -16,6 +16,7 @@ interface MountedContent {
 }
 
 const mountedContents: MountedContent[] = [];
+const EXPERT_CATALOG_CACHE_STORAGE_KEY = "lime:expert-catalog-cache:v1";
 
 function renderPage(onNavigate = vi.fn()) {
   const container = document.createElement("div");
@@ -66,6 +67,19 @@ function cacheCloudExpertCatalog() {
   };
 }
 
+function cacheEmptyExpertCatalog() {
+  const catalog = getSeededExpertCatalog();
+  window.localStorage.setItem(
+    EXPERT_CATALOG_CACHE_STORAGE_KEY,
+    JSON.stringify({
+      ...catalog,
+      tenantId: "tenant-empty",
+      version: "tenant-empty:test",
+      items: [],
+    }),
+  );
+}
+
 describe("ExpertPlazaPage", () => {
   beforeEach(async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -103,6 +117,21 @@ describe("ExpertPlazaPage", () => {
     ).not.toBeNull();
     expect(container.textContent).toContain("营销策略专家");
     expect(container.textContent).toContain("热门精选");
+  });
+
+  it("空缓存目录不应覆盖 seeded 专家广场", async () => {
+    cacheEmptyExpertCatalog();
+
+    const { container } = renderPage();
+    await flushEffects();
+
+    expect(
+      container.querySelector(
+        '[data-testid="expert-card-marketing-strategist"]',
+      ),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("营销策略专家");
+    expect(container.textContent).not.toContain("没有找到匹配的专家");
   });
 
   it("点击开始对话应进入 Agent 并携带专家 request metadata", async () => {

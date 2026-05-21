@@ -3,7 +3,7 @@
 //! 包含 Tauri 应用的主入口函数和命令注册。
 
 use std::sync::Arc;
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, Runtime};
 
 #[cfg(desktop)]
 use tauri::Listener;
@@ -45,6 +45,27 @@ fn should_enable_single_instance() -> bool {
 fn should_forward_deep_link_argument(value: &str) -> bool {
     value.starts_with("lime://")
         || crate::services::agent_app_shell_window::is_agent_app_shell_deep_link_url(value)
+}
+
+fn collect_skill_package_open_arguments(args: &[String]) -> Vec<String> {
+    commands::skill_cmd::collect_skill_package_open_paths(args)
+}
+
+fn emit_skill_package_open_paths<R: Runtime>(app: &tauri::AppHandle<R>, paths: Vec<String>) {
+    if paths.is_empty() {
+        return;
+    }
+
+    commands::skill_cmd::record_skill_package_open_paths(paths.clone());
+    if should_reveal_main_window_on_startup() {
+        if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+            super::window_chrome::reveal_main_window(&window, "打开 Skill 安装包");
+        }
+    }
+
+    if let Err(error) = app.emit(commands::skill_cmd::SKILL_PACKAGE_OPEN_EVENT, &paths) {
+        tracing::error!("[Skill Package] 转发打开请求失败: {}", error);
+    }
 }
 
 fn compiled_updater_public_key() -> Option<&'static str> {
@@ -110,6 +131,10 @@ fn show_fatal_startup_dialog(_title: &str, _message: &str) {}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let _profiling_guard = crate::profiling::init();
+    let startup_args = std::env::args().collect::<Vec<_>>();
+    commands::skill_cmd::record_skill_package_open_paths(collect_skill_package_open_arguments(
+        &startup_args,
+    ));
 
     // 加载并验证配置
     let config = match bootstrap::load_and_validate_config() {
@@ -245,6 +270,8 @@ pub fn run() {
                         tracing::error!("[单实例] 转发 Deep Link URL 失败: {}", error);
                     }
                 }
+
+                emit_skill_package_open_paths(app, collect_skill_package_open_arguments(&args));
             }));
     } else {
         tracing::info!("[启动] 已禁用单实例插件（当前会话允许并行实例）");
@@ -1165,6 +1192,12 @@ pub fn run() {
             commands::skill_cmd::inspect_local_skill_for_app,
             commands::skill_cmd::create_skill_scaffold_for_app,
             commands::skill_cmd::import_local_skill_for_app,
+            commands::skill_cmd::inspect_local_skill_package_for_app,
+            commands::skill_cmd::install_local_skill_package_for_app,
+            commands::skill_cmd::export_local_skill_package_for_app,
+            commands::skill_cmd::take_pending_skill_package_open_requests,
+            commands::skill_cmd::get_skill_package_file_association_status,
+            commands::skill_cmd::set_skill_package_file_association_default,
             commands::skill_cmd::install_marketplace_skill_for_app,
             commands::skill_cmd::install_skill_from_download_url_for_app,
             commands::skill_cmd::inspect_remote_skill,
@@ -1699,7 +1732,17 @@ pub fn run() {
             commands::telegram_remote_cmd::stop_telegram_remote,
             commands::telegram_remote_cmd::get_telegram_remote_status,
         ])
-        .run(tauri::generate_context!());
+        .build(tauri::generate_context!())
+        .map(|app| {
+            app.run(|app_handle, event| {
+                #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+                if let tauri::RunEvent::Opened { urls } = event {
+                    let paths =
+                        commands::skill_cmd::collect_skill_package_open_paths_from_urls(&urls);
+                    emit_skill_package_open_paths(app_handle, paths);
+                }
+            });
+        });
 
     if let Err(error) = run_result {
         report_fatal_startup_error("启动 Tauri 应用", &error.to_string());

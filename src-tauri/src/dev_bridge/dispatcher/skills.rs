@@ -127,6 +127,71 @@ pub(super) async fn try_handle(
                 .map_err(|e| format!("导入本地 Skill 失败: {e}"))?;
             serde_json::to_value(result)?
         }
+        "inspect_local_skill_package_for_app" => {
+            let args = args_or_default(args);
+            let app = args
+                .get("app")
+                .and_then(|value| value.as_str())
+                .unwrap_or("lime")
+                .to_string();
+            let source_path = get_string_arg(&args, "source_path", "source_path")
+                .or_else(|_| get_string_arg(&args, "sourcePath", "sourcePath"))?;
+            let result =
+                crate::commands::skill_cmd::inspect_local_skill_package_for_app(app, source_path)
+                    .map_err(|e| format!("检查本地 Skill 安装包失败: {e}"))?;
+            serde_json::to_value(result)?
+        }
+        "install_local_skill_package_for_app" => {
+            let args = args_or_default(args);
+            let app = args
+                .get("app")
+                .and_then(|value| value.as_str())
+                .unwrap_or("lime")
+                .to_string();
+            let source_path = get_string_arg(&args, "source_path", "source_path")
+                .or_else(|_| get_string_arg(&args, "sourcePath", "sourcePath"))?;
+            let skill_name = get_optional_string_arg(&args, "skill_name", "skillName");
+            let result = crate::commands::skill_cmd::install_local_skill_package_for_app(
+                app,
+                source_path,
+                skill_name,
+            )
+            .map_err(|e| format!("安装本地 Skill 安装包失败: {e}"))?;
+            serde_json::to_value(result)?
+        }
+        "export_local_skill_package_for_app" => {
+            let args = args_or_default(args);
+            let app = args
+                .get("app")
+                .and_then(|value| value.as_str())
+                .unwrap_or("lime")
+                .to_string();
+            let directory = get_string_arg(&args, "directory", "directory")?;
+            let target_path = get_string_arg(&args, "target_path", "target_path")
+                .or_else(|_| get_string_arg(&args, "targetPath", "targetPath"))?;
+            let result = crate::commands::skill_cmd::export_local_skill_package_for_app(
+                app,
+                directory,
+                target_path,
+            )
+            .map_err(|e| format!("导出本地 Skill 安装包失败: {e}"))?;
+            serde_json::to_value(result)?
+        }
+        "take_pending_skill_package_open_requests" => {
+            let result = crate::commands::skill_cmd::take_pending_skill_package_open_requests()
+                .map_err(|e| format!("读取待处理 Skill 安装包打开请求失败: {e}"))?;
+            serde_json::to_value(result)?
+        }
+        "get_skill_package_file_association_status" => {
+            let result = crate::commands::skill_cmd::get_skill_package_file_association_status()
+                .map_err(|e| format!("读取 Skill 安装包文件关联状态失败: {e}"))?;
+            serde_json::to_value(result)?
+        }
+        "set_skill_package_file_association_default" => {
+            let result = crate::commands::skill_cmd::set_skill_package_file_association_default()
+                .map_err(|e| format!("设置 Skill 安装包默认打开方式失败: {e}"))?;
+            serde_json::to_value(result)?
+        }
         "install_marketplace_skill_for_app" => {
             let args = args_or_default(args);
             let app = args

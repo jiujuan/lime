@@ -725,7 +725,7 @@ export async function startOemCloudLogin(
   let authSession: OemCloudDesktopAuthSessionStartResponse | null = null;
   try {
     authSession = await createGoogleDesktopAuthSession(loginRuntime);
-  } catch (error) {
+  } catch (_error) {
     const result = await openConfiguredOemCloudLoginUrl(loginRuntime, options);
     if (shouldWaitForLoginUrlCompletion(loginRuntime, options)) {
       try {

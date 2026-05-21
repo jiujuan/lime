@@ -23,6 +23,11 @@ const toastMock = vi.hoisted(() => ({
   info: vi.fn(),
 }));
 
+const skillPackageInstallActionPattern =
+  /安装|skills\.localPackage\.fileManager\.action/;
+const skillPackageContextActionPattern =
+  /安装 Skill|skills\.localPackage\.fileManager\.contextAction/;
+
 vi.mock("sonner", () => ({
   toast: toastMock,
 }));
@@ -101,6 +106,22 @@ function createListing(path: string): DirectoryListing {
         modifiedAt: Date.now(),
         mimeType: "application/pdf",
       },
+      {
+        name: "article-typesetting-master.skill",
+        path: "/Users/demo/article-typesetting-master.skill",
+        isDir: false,
+        size: 4096,
+        modifiedAt: Date.now(),
+        mimeType: "application/zip",
+      },
+      {
+        name: "article-typesetting-addon.skills",
+        path: "/Users/demo/article-typesetting-addon.skills",
+        isDir: false,
+        size: 4096,
+        modifiedAt: Date.now(),
+        mimeType: "application/zip",
+      },
     ],
     error: null,
   };
@@ -117,6 +138,9 @@ async function renderFileManagerSidebar(props?: {
   onOpenFileInWorkspace?: React.ComponentProps<
     typeof FileManagerSidebar
   >["onOpenFileInWorkspace"];
+  onInstallSkillPackage?: React.ComponentProps<
+    typeof FileManagerSidebar
+  >["onInstallSkillPackage"];
   initialDirectory?: React.ComponentProps<
     typeof FileManagerSidebar
   >["initialDirectory"];
@@ -128,6 +152,7 @@ async function renderFileManagerSidebar(props?: {
   const onAddPathReferences = props?.onAddPathReferences ?? vi.fn();
   const onImportAsKnowledge = props?.onImportAsKnowledge;
   const onOpenFileInWorkspace = props?.onOpenFileInWorkspace;
+  const onInstallSkillPackage = props?.onInstallSkillPackage;
 
   await act(async () => {
     root.render(
@@ -136,6 +161,7 @@ async function renderFileManagerSidebar(props?: {
         onAddPathReferences={onAddPathReferences}
         onImportAsKnowledge={onImportAsKnowledge}
         onOpenFileInWorkspace={onOpenFileInWorkspace}
+        onInstallSkillPackage={onInstallSkillPackage}
         initialDirectory={props?.initialDirectory}
       />,
     );
@@ -411,6 +437,114 @@ describe("FileManagerSidebar", () => {
       }),
     ]);
     expect(openPathWithDefaultApp).not.toHaveBeenCalled();
+  });
+
+  it("普通点击 .skill 安装包应打开安装流程而不是加入对话", async () => {
+    const onAddPathReferences = vi.fn();
+    const onInstallSkillPackage = vi.fn();
+    const { container } = await renderFileManagerSidebar({
+      onAddPathReferences,
+      onInstallSkillPackage,
+    });
+
+    const skillEntry = Array.from(
+      container.querySelectorAll('[data-testid="file-manager-entry"]'),
+    ).find((entry) =>
+      entry.textContent?.includes("article-typesetting-master.skill"),
+    );
+    expect(skillEntry?.textContent).toMatch(skillPackageInstallActionPattern);
+
+    await act(async () => {
+      skillEntry?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(onInstallSkillPackage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: "/Users/demo/article-typesetting-master.skill",
+        name: "article-typesetting-master.skill",
+        isDir: false,
+      }),
+    );
+    expect(onAddPathReferences).not.toHaveBeenCalled();
+  });
+
+  it("右键 .skill 安装包应展示安装 Skill 入口", async () => {
+    const onInstallSkillPackage = vi.fn();
+    const { container } = await renderFileManagerSidebar({
+      onInstallSkillPackage,
+    });
+
+    const skillEntry = Array.from(
+      container.querySelectorAll('[data-testid="file-manager-entry"]'),
+    ).find((entry) =>
+      entry.textContent?.includes("article-typesetting-master.skill"),
+    );
+
+    await act(async () => {
+      skillEntry?.dispatchEvent(
+        new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 48,
+          clientY: 56,
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    const menu = document.querySelector(
+      '[data-testid="file-manager-context-menu"]',
+    );
+    expect(menu?.textContent).toMatch(skillPackageContextActionPattern);
+
+    const installAction = Array.from(
+      menu?.querySelectorAll("button") ?? [],
+    ).find((button) =>
+      skillPackageContextActionPattern.test(button.textContent ?? ""),
+    );
+    expect(installAction).toBeTruthy();
+
+    await act(async () => {
+      installAction?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(onInstallSkillPackage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: "/Users/demo/article-typesetting-master.skill",
+      }),
+    );
+  });
+
+  it("普通点击 .skills 安装包应打开安装流程而不是加入对话", async () => {
+    const onAddPathReferences = vi.fn();
+    const onInstallSkillPackage = vi.fn();
+    const { container } = await renderFileManagerSidebar({
+      onAddPathReferences,
+      onInstallSkillPackage,
+    });
+
+    const skillEntry = Array.from(
+      container.querySelectorAll('[data-testid="file-manager-entry"]'),
+    ).find((entry) =>
+      entry.textContent?.includes("article-typesetting-addon.skills"),
+    );
+    expect(skillEntry?.textContent).toMatch(skillPackageInstallActionPattern);
+
+    await act(async () => {
+      skillEntry?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(onInstallSkillPackage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: "/Users/demo/article-typesetting-addon.skills",
+        name: "article-typesetting-addon.skills",
+        isDir: false,
+      }),
+    );
+    expect(onAddPathReferences).not.toHaveBeenCalled();
   });
 
   it("文件预览按钮应打开工作台预览，不替代普通加入对话动作", async () => {

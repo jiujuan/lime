@@ -472,6 +472,61 @@ describe("AppSidebar", () => {
     expect(accountMenu?.textContent).not.toContain("内容工厂");
   });
 
+  it("Agent App Studio 动态导航应使用安装态展示名", async () => {
+    mockListInstalledAgentApps.mockResolvedValue({
+      states: [
+        {
+          appId: "lime-agent-app-studio",
+          disabled: false,
+          manifest: {
+            displayName: "发布应用",
+          },
+          projection: {
+            app: {
+              appId: "lime-agent-app-studio",
+              displayName: "发布应用",
+            },
+            entries: [
+              {
+                key: "dashboard",
+                kind: "page",
+                title: "发布入口",
+              },
+            ],
+          },
+        },
+      ],
+      issues: [],
+    });
+    const onNavigate = vi.fn();
+    const container = mountSidebarContainer({ onNavigate });
+    await flushEffects(2);
+
+    const mainNav = container.querySelector(
+      '[data-testid="app-sidebar-main-nav"]',
+    );
+    expect(mainNav?.textContent).toContain("发布应用");
+    expect(mainNav?.textContent).not.toContain("Lime Agent App Studio");
+
+    const appButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("发布应用"),
+    ) as HTMLButtonElement | undefined;
+    expect(appButton).toBeDefined();
+
+    act(() => {
+      appButton?.click();
+    });
+
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent-app",
+      expect.objectContaining({
+        appId: "lime-agent-app-studio",
+        entryKey: "dashboard",
+        launchRequestKey: expect.any(Number),
+      }),
+    );
+  });
+
   it("Agent App 动态导航加载失败时应降级为静态导航而不输出控制台错误", async () => {
     const navError = new Error("timeout after 5000ms");
     mockListInstalledAgentApps.mockRejectedValueOnce(navError);
@@ -1256,6 +1311,15 @@ describe("AppSidebar", () => {
       '[data-testid="app-sidebar-language-menu"]',
     );
     expect(languageMenu).not.toBeNull();
+    const accountMenu = container.querySelector(
+      '[data-testid="app-sidebar-account-menu"]',
+    );
+    expect(accountMenu).not.toBeNull();
+    expect(getComputedStyle(accountMenu as Element).overflow).toBe("visible");
+    expect(getComputedStyle(languageMenu as Element).position).toBe("absolute");
+    expect(getComputedStyle(languageMenu as Element).left).toBe(
+      "calc(100% + 8px)",
+    );
     expect(getComputedStyle(languageMenu as Element).bottom).toBe("0px");
     expect(getComputedStyle(languageMenu as Element).overflowY).toBe("auto");
     expect(languageMenu?.textContent).toContain("中文");

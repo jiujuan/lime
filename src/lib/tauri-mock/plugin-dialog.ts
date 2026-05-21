@@ -46,5 +46,14 @@ export async function save(
   options?: SaveDialogOptions,
 ): Promise<string | null> {
   console.log("[Mock] Dialog save:", options);
-  return "/mock/path/to/saved/file.txt";
+  const hasSkillPackageFilter = options?.filters?.some((filter) =>
+    filter.extensions.some(
+      (extension) =>
+        extension.toLowerCase() === "skill" ||
+        extension.toLowerCase() === "skills",
+    ),
+  );
+  return hasSkillPackageFilter
+    ? "/mock/path/to/saved/file.skills"
+    : "/mock/path/to/saved/file.txt";
 }

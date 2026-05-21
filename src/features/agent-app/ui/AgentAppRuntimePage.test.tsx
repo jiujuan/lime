@@ -23,6 +23,7 @@ import { AgentAppRuntimePage } from "./AgentAppRuntimePage";
 const LOCAL_APP_DIR = "/tmp/lime/content-factory-app";
 
 const apiMocks = vi.hoisted(() => ({
+  getAgentAppCloudCatalog: vi.fn(),
   listInstalledAgentApps: vi.fn(),
   startAgentAppUiRuntime: vi.fn(),
 }));
@@ -54,6 +55,14 @@ const i18nMocks = vi.hoisted(() => ({
       "agentApp.apps.runtime.openFailed": "App 打开失败",
       "agentApp.apps.runtime.retry": "重新打开",
       "agentApp.apps.runtime.unavailable": "该 Agent App 暂不可用。",
+      "agentApp.apps.runtime.appInfo.toggle": "查看 App 信息",
+      "agentApp.apps.runtime.appInfo.version": `当前版本 v${String(params?.version)}`,
+      "agentApp.apps.runtime.appInfo.upgradeBadge": "可升级",
+      "agentApp.apps.runtime.appInfo.source": "来源",
+      "agentApp.apps.runtime.appInfo.source.cloud": "云端",
+      "agentApp.apps.runtime.appInfo.source.local": "本地",
+      "agentApp.apps.runtime.appInfo.latestVersion": "最新版本",
+      "agentApp.apps.runtime.appInfo.entry": "入口",
       "agentApp.apps.runtime.agentRun.aria": "Host AI 运行面板",
       "agentApp.apps.runtime.agentRun.badge": `${String(params?.app)} 的 AI 同事`,
       "agentApp.apps.runtime.agentRun.titleFallback": "Lime AI 运行现场",
@@ -104,6 +113,7 @@ const i18nMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api/agentApps", () => ({
+  getAgentAppCloudCatalog: apiMocks.getAgentAppCloudCatalog,
   listInstalledAgentApps: apiMocks.listInstalledAgentApps,
   startAgentAppUiRuntime: apiMocks.startAgentAppUiRuntime,
 }));
@@ -287,6 +297,15 @@ describe("AgentAppRuntimePage", () => {
   beforeEach(() => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     let runtimeTaskCounter = 0;
+    apiMocks.getAgentAppCloudCatalog.mockResolvedValue({
+      source: "seeded",
+      payload: {
+        schemaVersion: "agent-app-cloud-bootstrap/v1",
+        tenantId: "seeded",
+        generatedAt: "2026-05-15T00:00:00.000Z",
+        apps: [],
+      },
+    });
     projectApiMocks.getOrCreateDefaultProject.mockResolvedValue({
       id: "workspace-1",
     });
@@ -387,6 +406,89 @@ describe("AgentAppRuntimePage", () => {
     expect(container.textContent).not.toContain("知识绑定");
     expect(container.textContent).not.toContain("UI Bundle");
     expect(container.textContent).not.toContain("已注入能力");
+  });
+
+  it("Host iframe chrome 默认只显示静默 App 信息图标，点击后展开版本信息", async () => {
+    const container = await renderPage();
+    await flush();
+
+    const toggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="agent-app-host-app-info-toggle"]',
+    );
+    expect(toggle).not.toBeNull();
+    expect(toggle?.getAttribute("aria-label")).toBe("查看 App 信息");
+    expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      container.querySelector('[data-testid="agent-app-host-app-info-panel"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="agent-app-host-app-info-update-dot"]'),
+    ).toBeNull();
+
+    await act(async () => {
+      toggle?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(
+      container.querySelector('[data-testid="agent-app-host-app-info-panel"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("内容工厂");
+    expect(container.textContent).toContain("当前版本 v0.3.0");
+    expect(container.textContent).toContain("本地");
+  });
+
+  it("云端存在更高版本时，静默信息图标只显示红点，点击后才展示升级状态", async () => {
+    apiMocks.getAgentAppCloudCatalog.mockResolvedValue({
+      source: "remote",
+      payload: {
+        schemaVersion: "agent-app-cloud-bootstrap/v1",
+        tenantId: "tenant-0001",
+        generatedAt: "2026-05-15T00:00:00.000Z",
+        apps: [
+          {
+            appId: "content-factory-app",
+            displayName: "内容工厂",
+            version: "0.4.0",
+            releaseId: "content-factory-app-0.4.0",
+            registrationRequired: false,
+            registrationState: "not_required",
+            enabled: true,
+            packageUrl: "https://lime.local/content-factory-app-0.4.0.zip",
+            packageHash:
+              "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            manifestHash:
+              "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            capabilityRequirements: {},
+            defaultEntries: ["dashboard"],
+            policyDefaults: {},
+            toolAvailability: [],
+          },
+        ],
+      },
+    });
+    const container = await renderPage();
+    await flush(12);
+
+    const toggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="agent-app-host-app-info-toggle"]',
+    );
+    expect(
+      container.querySelector('[data-testid="agent-app-host-app-info-update-dot"]'),
+    ).not.toBeNull();
+    expect(container.textContent).not.toContain("可升级");
+
+    await act(async () => {
+      toggle?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(container.textContent).toContain("可升级");
+    expect(container.textContent).toContain("最新版本");
+    expect(container.textContent).toContain("v0.4.0");
   });
 
   it("runtime surface 应先经过 P14 guard，needs-setup 时不启动 UI runtime", async () => {

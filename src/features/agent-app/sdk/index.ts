@@ -99,7 +99,9 @@ export type {
 export {
   LIME_AGENT_APP_BRIDGE_PROTOCOL,
   LIME_AGENT_APP_BRIDGE_VERSION,
+  applyLimeHostTheme,
   createLimeHostBridgeCapabilityInvoker,
+  syncLimeHostTheme,
 } from "./hostBridgeClient";
 export type {
   CreateLimeHostBridgeCapabilityInvokerOptions,
@@ -117,6 +119,10 @@ export type {
   LimeHostBridgeOpenExternalPayload,
   LimeHostBridgeSelectDirectoryPayload,
   LimeHostBridgeSelectDirectoryResult,
+  LimeHostThemeDocumentLike,
+  LimeHostThemeElementLike,
+  LimeHostThemeSnapshot,
+  SyncLimeHostThemeOptions,
 } from "./hostBridgeClient";
 export { MockCapabilityHost } from "./MockCapabilityHost";
 export type {

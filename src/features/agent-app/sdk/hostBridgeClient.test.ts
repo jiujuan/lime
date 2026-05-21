@@ -16,9 +16,11 @@ import {
   LimeCapabilityAdapterError,
 } from "./capabilityAdapters";
 import {
+  applyLimeHostTheme,
   createLimeHostBridgeCapabilityInvoker,
   LIME_AGENT_APP_BRIDGE_PROTOCOL,
   LIME_AGENT_APP_BRIDGE_VERSION,
+  syncLimeHostTheme,
   type LimeAgentAppBridgeClientMessage,
 } from "./hostBridgeClient";
 
@@ -174,6 +176,24 @@ function bridgeCallNames(fake: FakeBridgeWindow): string[] {
     const payload = post.message.payload as { capability?: string; method?: string };
     return `${payload.capability}.${payload.method}`;
   });
+}
+
+function createThemeDocument() {
+  const properties = new Map<string, string>();
+  return {
+    properties,
+    documentRef: {
+      documentElement: {
+        dataset: {} as Record<string, string | undefined>,
+        style: {
+          colorScheme: "",
+          setProperty: (name: string, value: string) => {
+            properties.set(name, value);
+          },
+        },
+      },
+    },
+  };
 }
 
 describe("P18.5 Host Bridge SDK client", () => {
@@ -465,6 +485,89 @@ describe("P18.5 Host Bridge SDK client", () => {
 
     expect(invoker.pendingRequestCount).toBe(0);
     invoker.dispose();
+  });
+
+  it("应提供统一主题同步 helper，App 不需要各自解析 host theme payload", async () => {
+    const fake = new FakeBridgeWindow();
+    const themeDocument = createThemeDocument();
+    const invoker = createLimeHostBridgeCapabilityInvoker({
+      appId: "content-factory-app",
+      entryKey: "dashboard",
+      windowRef: fake.windowRef,
+      trustedHostOrigin: "https://lime.host",
+      requestIdPrefix: "theme-sync",
+    });
+
+    const disposeThemeSync = syncLimeHostTheme(invoker, {
+      documentRef: themeDocument.documentRef,
+    });
+    const snapshotRequest = latestBridgeRequest(fake);
+    expect(snapshotRequest.type).toBe("host:getSnapshot");
+    fake.emit({
+      protocol: LIME_AGENT_APP_BRIDGE_PROTOCOL,
+      version: LIME_AGENT_APP_BRIDGE_VERSION,
+      type: "host:snapshot",
+      requestId: snapshotRequest.requestId,
+      appId: "content-factory-app",
+      entryKey: "dashboard",
+      payload: {
+        theme: {
+          themeMode: "system",
+          effectiveThemeMode: "dark",
+          colorSchemeId: "lime-forest",
+          tokens: {
+            "--lime-chrome-surface": "#101820",
+            "--app-primary": "#7dd3a5",
+            "--unsafe-token": "red",
+          },
+        },
+      },
+    });
+    await Promise.resolve();
+
+    expect(themeDocument.properties.get("--lime-chrome-surface")).toBe("#101820");
+    expect(themeDocument.properties.get("--app-primary")).toBe("#7dd3a5");
+    expect(themeDocument.properties.has("--unsafe-token")).toBe(false);
+    expect(themeDocument.documentRef.documentElement.dataset.limeTheme).toBe("system");
+    expect(themeDocument.documentRef.documentElement.dataset.limeThemeEffective).toBe("dark");
+    expect(themeDocument.documentRef.documentElement.dataset.limeColorScheme).toBe("lime-forest");
+    expect(themeDocument.documentRef.documentElement.style.colorScheme).toBe("dark");
+
+    fake.emit({
+      protocol: LIME_AGENT_APP_BRIDGE_PROTOCOL,
+      version: LIME_AGENT_APP_BRIDGE_VERSION,
+      type: "theme:update",
+      appId: "content-factory-app",
+      entryKey: "dashboard",
+      payload: {
+        effectiveThemeMode: "light",
+        tokens: { "--lime-chrome-text": "#123456" },
+      },
+    });
+    expect(themeDocument.properties.get("--lime-chrome-text")).toBe("#123456");
+    expect(themeDocument.documentRef.documentElement.dataset.limeThemeEffective).toBe("light");
+    expect(themeDocument.documentRef.documentElement.style.colorScheme).toBe("light");
+
+    disposeThemeSync();
+    invoker.dispose();
+  });
+
+  it("主题 helper 也支持直接应用单次 payload", () => {
+    const themeDocument = createThemeDocument();
+    const applied = applyLimeHostTheme(
+      {
+        effectiveThemeMode: "dark",
+        tokens: {
+          "--lime-sidebar-active-text": "#7dd3a5",
+          "--external-token": "#fff",
+        },
+      },
+      { documentRef: themeDocument.documentRef },
+    );
+
+    expect(applied).toMatchObject({ effectiveThemeMode: "dark" });
+    expect(themeDocument.properties.get("--lime-sidebar-active-text")).toBe("#7dd3a5");
+    expect(themeDocument.properties.has("--external-token")).toBe(false);
   });
 
   it("应支持 capability subscription 事件分发与 unsubscribe 清理", async () => {

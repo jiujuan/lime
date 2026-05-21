@@ -2006,18 +2006,16 @@ fn spawn_agent_app_ui_process(
     port: u16,
     runtime_env: &AgentAppUiRuntimeEnv,
 ) -> Result<Child, String> {
-    let binaries: &[&str] = if cfg!(windows) {
-        &["npm.cmd", "npm"]
-    } else {
-        &["npm"]
-    };
     let mut last_error = None;
-    for binary in binaries {
-        let mut command = Command::new(binary);
+    for candidate in agent_app_npm_launch_candidates() {
+        let mut command = Command::new(&candidate.binary);
         command
             .args(["run", "dev", "--silent"])
             .current_dir(app_dir)
             .env("PORT", port.to_string());
+        if let Some(path_env) = candidate.path_env.as_deref() {
+            command.env("PATH", path_env);
+        }
         #[cfg(unix)]
         {
             command.process_group(0);
@@ -2033,13 +2031,135 @@ fn spawn_agent_app_ui_process(
             .spawn()
         {
             Ok(child) => return Ok(child),
-            Err(error) => last_error = Some(format!("{binary}: {error}")),
+            Err(error) => last_error = Some(format!("{}: {error}", candidate.binary)),
         }
     }
     Err(format!(
         "启动 Agent App UI runtime 失败，请确认已安装 Node.js/npm: {}",
         last_error.unwrap_or_else(|| "npm 不可用".to_string())
     ))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AgentAppNpmLaunchCandidate {
+    binary: String,
+    path_env: Option<String>,
+}
+
+fn agent_app_npm_launch_candidates() -> Vec<AgentAppNpmLaunchCandidate> {
+    let mut candidates = Vec::new();
+
+    #[cfg(not(windows))]
+    {
+        if let Some(candidate) = resolve_agent_app_npm_from_login_shell() {
+            push_agent_app_npm_candidate(&mut candidates, candidate);
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        for binary in ["npm.cmd", "npm"] {
+            push_agent_app_npm_candidate(
+                &mut candidates,
+                AgentAppNpmLaunchCandidate {
+                    binary: binary.to_string(),
+                    path_env: std::env::var("PATH").ok(),
+                },
+            );
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        push_agent_app_npm_candidate(
+            &mut candidates,
+            AgentAppNpmLaunchCandidate {
+                binary: "npm".to_string(),
+                path_env: std::env::var("PATH").ok(),
+            },
+        );
+    }
+
+    candidates
+}
+
+fn push_agent_app_npm_candidate(
+    candidates: &mut Vec<AgentAppNpmLaunchCandidate>,
+    candidate: AgentAppNpmLaunchCandidate,
+) {
+    if candidate.binary.trim().is_empty() {
+        return;
+    }
+    if candidates
+        .iter()
+        .any(|current| current.binary == candidate.binary && current.path_env == candidate.path_env)
+    {
+        return;
+    }
+    candidates.push(candidate);
+}
+
+#[cfg(not(windows))]
+fn resolve_agent_app_npm_from_login_shell() -> Option<AgentAppNpmLaunchCandidate> {
+    let shell = std::env::var("SHELL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "/bin/zsh".to_string());
+    let script = "npm_path=$(command -v npm 2>/dev/null) || exit 127; printf '__LIME_AGENT_APP_NPM__%s\\n__LIME_AGENT_APP_PATH__%s\\n' \"$npm_path\" \"$PATH\"";
+
+    for args in [vec!["-lic", script], vec!["-lc", script]] {
+        let output = Command::new(&shell).args(args).output();
+        let Ok(output) = output else {
+            continue;
+        };
+        if !output.status.success() {
+            continue;
+        }
+        if let Some(candidate) = parse_agent_app_npm_shell_output(&output.stdout) {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+#[cfg(not(windows))]
+fn parse_agent_app_npm_shell_output(raw: &[u8]) -> Option<AgentAppNpmLaunchCandidate> {
+    let text = String::from_utf8_lossy(raw);
+    let mut binary = None;
+    let mut path_env = None;
+    for line in text.lines() {
+        if let Some(value) = line.strip_prefix("__LIME_AGENT_APP_NPM__") {
+            binary = Some(value.trim());
+            continue;
+        }
+        if let Some(value) = line.strip_prefix("__LIME_AGENT_APP_PATH__") {
+            path_env = Some(value.trim());
+        }
+    }
+    let binary = binary?;
+    let binary = if !binary.is_empty() && Path::new(binary).is_absolute() {
+        binary.to_string()
+    } else {
+        find_agent_app_npm_in_path(path_env?)?
+    };
+    Some(AgentAppNpmLaunchCandidate {
+        binary,
+        path_env: path_env
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string),
+    })
+}
+
+#[cfg(not(windows))]
+fn find_agent_app_npm_in_path(path_env: &str) -> Option<String> {
+    std::env::split_paths(path_env).find_map(|dir| {
+        let candidate = dir.join("npm");
+        if candidate.is_file() {
+            Some(candidate.to_string_lossy().to_string())
+        } else {
+            None
+        }
+    })
 }
 
 fn terminate_agent_app_ui_process(child: &mut Child) {
@@ -2846,6 +2966,72 @@ mod tests {
         let claims = verify_agent_app_runtime_token(&config.server.api_key, &token).unwrap();
         assert_eq!(claims.app_id, "content-factory-app");
         assert_eq!(claims.scope, AGENT_APP_RUNTIME_SCOPE_MODEL_GENERATION);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn parses_login_shell_npm_path_and_runtime_path() {
+        let candidate = parse_agent_app_npm_shell_output(
+            b"shell noise\n__LIME_AGENT_APP_NPM__/opt/homebrew/bin/npm\n__LIME_AGENT_APP_PATH__/opt/homebrew/bin:/usr/bin\n",
+        )
+        .unwrap();
+
+        assert_eq!(candidate.binary, "/opt/homebrew/bin/npm");
+        assert_eq!(
+            candidate.path_env.as_deref(),
+            Some("/opt/homebrew/bin:/usr/bin")
+        );
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn rejects_relative_login_shell_npm_path() {
+        assert!(parse_agent_app_npm_shell_output(
+            b"__LIME_AGENT_APP_NPM__npm\n__LIME_AGENT_APP_PATH__\n"
+        )
+        .is_none());
+        assert!(parse_agent_app_npm_shell_output(b"__LIME_AGENT_APP_PATH__/usr/bin\n").is_none());
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn resolves_lazy_shell_function_npm_from_path() {
+        let temp = tempdir().unwrap();
+        let npm_path = temp.path().join("npm");
+        fs::write(&npm_path, "#!/bin/sh\n").unwrap();
+        let output = format!(
+            "__LIME_AGENT_APP_NPM__npm\n__LIME_AGENT_APP_PATH__{}\n",
+            temp.path().display()
+        );
+
+        let candidate = parse_agent_app_npm_shell_output(output.as_bytes()).unwrap();
+
+        assert_eq!(candidate.binary, npm_path.to_string_lossy());
+        assert_eq!(
+            candidate.path_env.as_deref(),
+            Some(temp.path().to_string_lossy().as_ref())
+        );
+    }
+
+    #[test]
+    fn npm_launch_candidate_dedupes_binary_and_path() {
+        let mut candidates = Vec::new();
+        let candidate = AgentAppNpmLaunchCandidate {
+            binary: "npm".to_string(),
+            path_env: Some("/usr/bin".to_string()),
+        };
+
+        push_agent_app_npm_candidate(&mut candidates, candidate.clone());
+        push_agent_app_npm_candidate(&mut candidates, candidate);
+        push_agent_app_npm_candidate(
+            &mut candidates,
+            AgentAppNpmLaunchCandidate {
+                binary: "npm".to_string(),
+                path_env: Some("/opt/homebrew/bin:/usr/bin".to_string()),
+            },
+        );
+
+        assert_eq!(candidates.len(), 2);
     }
 
     #[test]

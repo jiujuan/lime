@@ -445,6 +445,12 @@ function normalizeCloudBootstrapApp(
     appId,
     displayName: normalizeOptionalString(record.displayName),
     version,
+    icon: normalizeOptionalString(record.icon),
+    iconUrl: normalizeOptionalString(record.iconUrl),
+    logoUrl: normalizeOptionalString(record.logoUrl),
+    presentation: isRecord(record.presentation)
+      ? record.presentation
+      : undefined,
     releaseId: normalizeOptionalString(record.releaseId),
     tenantId: normalizeOptionalString(record.tenantId),
     tenantEnablementRef: normalizeOptionalString(record.tenantEnablementRef),

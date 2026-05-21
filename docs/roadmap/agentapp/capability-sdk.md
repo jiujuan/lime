@@ -194,6 +194,7 @@ interface LimeAgentAppBridgeMessage {
 2. `capability:invoke` 仍必须经过 manifest 声明、entry readiness、permission、policy 和 provenance。
 3. 未开放能力返回 blocked error，不返回 mock 成功、不写假数据。
 4. 主题同步只传当前已生效 token；App 只应用到自己的 DOM，不读取外层 DOM。
+5. App 不应各自解析 `theme.tokens` 或手写 `root.style.setProperty` 循环。主题 payload 到 DOM 的同步事实源是 SDK helper `applyLimeHostTheme` / `syncLimeHostTheme`；业务 App 只调用 helper，并在 CSS 中消费 `--lime-*` / `--app-*` token。
 
 ## Host Bridge SDK Client
 

@@ -3,14 +3,30 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
 
-const { mockCheckForUpdates, mockDownloadUpdate } = vi.hoisted(() => ({
+const {
+  mockCheckForUpdates,
+  mockDownloadUpdate,
+  mockGetSkillPackageFileAssociationStatus,
+  mockSetSkillPackageFileAssociationDefault,
+} = vi.hoisted(() => ({
   mockCheckForUpdates: vi.fn(),
   mockDownloadUpdate: vi.fn(),
+  mockGetSkillPackageFileAssociationStatus: vi.fn(),
+  mockSetSkillPackageFileAssociationDefault: vi.fn(),
 }));
 
 vi.mock("@/lib/api/appUpdate", () => ({
   checkForUpdates: mockCheckForUpdates,
   downloadUpdate: mockDownloadUpdate,
+}));
+
+vi.mock("@/lib/api/skills", () => ({
+  skillsApi: {
+    getSkillPackageFileAssociationStatus:
+      mockGetSkillPackageFileAssociationStatus,
+    setSkillPackageFileAssociationDefault:
+      mockSetSkillPackageFileAssociationDefault,
+  },
 }));
 
 import { AboutSection } from ".";
@@ -91,6 +107,36 @@ beforeEach(async () => {
     message: "安装更新失败: signature mismatch。请前往发布页手动下载最新版",
     filePath: undefined,
   });
+  mockGetSkillPackageFileAssociationStatus.mockResolvedValue({
+    platform: "macos",
+    extension: "skill",
+    extensions: ["skill", "skills"],
+    mimeType: "application/vnd.lime.skill+zip",
+    appIdentifier: "com.limecloud.lime",
+    isDefault: false,
+    canSetDefault: true,
+    requiresUserConfirmation: false,
+    currentHandler: "com.anthropic.claude",
+    settingsUrl: null,
+    detail: null,
+  });
+  mockSetSkillPackageFileAssociationDefault.mockResolvedValue({
+    changed: true,
+    message: "updated",
+    status: {
+      platform: "macos",
+      extension: "skill",
+      extensions: ["skill", "skills"],
+      mimeType: "application/vnd.lime.skill+zip",
+      appIdentifier: "com.limecloud.lime",
+      isDefault: true,
+      canSetDefault: true,
+      requiresUserConfirmation: false,
+      currentHandler: "com.limecloud.lime",
+      settingsUrl: null,
+      detail: null,
+    },
+  });
 });
 
 afterEach(async () => {
@@ -132,6 +178,8 @@ describe("AboutSection", () => {
     expect(text).toContain("Update available: 1.10.1");
     expect(text).toContain("Check for Updates");
     expect(text).toContain("Download Update");
+    expect(text).toContain("Skill package opening");
+    expect(text).toContain("Currently opened by com.anthropic.claude");
     expect(text).not.toContain("可更新到 1.10.1");
     expect(text).not.toContain("settings.about");
   });
@@ -181,6 +229,20 @@ describe("AboutSection", () => {
     );
     expect(container.textContent).not.toContain("在线安装包");
     expect(container.textContent).not.toContain("offline 安装包");
+  });
+
+  it("应允许从关于页将 .skill 默认打开方式切回 Lime", async () => {
+    const container = renderComponent();
+    await waitForLoad();
+
+    await act(async () => {
+      findButton(container, "Set Lime as Default").click();
+      await waitForLoad();
+    });
+
+    expect(mockSetSkillPackageFileAssociationDefault).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain(".skill / .skills files now open with Lime.");
+    expect(container.textContent).toContain("Lime is the default");
   });
 
   it("更新检查失败时应隐藏技术错误", async () => {

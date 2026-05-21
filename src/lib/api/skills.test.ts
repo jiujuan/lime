@@ -55,4 +55,181 @@ describe("skillsApi", () => {
     await expect(skillsApi.getRepos()).resolves.toEqual([]);
     await expect(skillsApi.getInstalledLimeSkills()).resolves.toEqual([]);
   });
+
+  it("本地 Skill 安装包命令应统一走 skills API 网关", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        directory: "article-typesetting-master",
+        inspection: {
+          content: "# Article Typesetting",
+          metadata: {},
+          allowedTools: [],
+          resourceSummary: {
+            hasScripts: false,
+            hasReferences: true,
+            hasAssets: false,
+          },
+          standardCompliance: {
+            isStandard: true,
+          },
+        },
+        files: [{ path: "SKILL.md", isDirectory: false, size: 128 }],
+      })
+      .mockResolvedValueOnce({
+        directory: "article-typesetting-master",
+        inspection: {
+          content: "# Article Typesetting",
+          metadata: {},
+          allowedTools: [],
+          resourceSummary: {
+            hasScripts: false,
+            hasReferences: true,
+            hasAssets: false,
+          },
+          standardCompliance: {
+            isStandard: true,
+          },
+        },
+      })
+      .mockResolvedValueOnce(["/Users/demo/article-typesetting-master.skill"])
+      .mockResolvedValueOnce({
+        platform: "macos",
+        extension: "skill",
+        mimeType: "application/vnd.lime.skill+zip",
+        appIdentifier: "com.limecloud.lime",
+        isDefault: false,
+        canSetDefault: true,
+        requiresUserConfirmation: false,
+        currentHandler: "com.anthropic.claude",
+        settingsUrl: null,
+        detail: null,
+      })
+      .mockResolvedValueOnce({
+        changed: true,
+        message: "updated",
+        status: {
+          platform: "macos",
+          extension: "skill",
+          mimeType: "application/vnd.lime.skill+zip",
+          appIdentifier: "com.limecloud.lime",
+          isDefault: true,
+          canSetDefault: true,
+          requiresUserConfirmation: false,
+          currentHandler: "com.limecloud.lime",
+          settingsUrl: null,
+          detail: null,
+        },
+      })
+      .mockResolvedValueOnce({
+        directory: "article-typesetting-master",
+        outputPath: "/Users/demo/article-typesetting-master.skills",
+        fileCount: 2,
+        bytesWritten: 512,
+      });
+
+    await expect(
+      skillsApi.inspectLocalSkillPackage(
+        "/Users/demo/article-typesetting-master.skill",
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        directory: "article-typesetting-master",
+        files: [{ path: "SKILL.md", isDirectory: false, size: 128 }],
+        inspection: expect.objectContaining({
+          standardCompliance: {
+            isStandard: true,
+            validationErrors: [],
+            deprecatedFields: [],
+          },
+        }),
+      }),
+    );
+    await expect(
+      skillsApi.installLocalSkillPackage(
+        "/Users/demo/article-typesetting-master.skill",
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        directory: "article-typesetting-master",
+        inspection: expect.objectContaining({
+          standardCompliance: {
+            isStandard: true,
+            validationErrors: [],
+            deprecatedFields: [],
+          },
+        }),
+      }),
+    );
+    await expect(
+      skillsApi.takePendingSkillPackageOpenRequests(),
+    ).resolves.toEqual(["/Users/demo/article-typesetting-master.skill"]);
+    await expect(
+      skillsApi.getSkillPackageFileAssociationStatus(),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        isDefault: false,
+        currentHandler: "com.anthropic.claude",
+      }),
+    );
+    await expect(
+      skillsApi.setSkillPackageFileAssociationDefault(),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        changed: true,
+        status: expect.objectContaining({
+          isDefault: true,
+        }),
+      }),
+    );
+    await expect(
+      skillsApi.exportLocalSkillPackage(
+        "article-typesetting-master",
+        "/Users/demo/article-typesetting-master.skills",
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        directory: "article-typesetting-master",
+        outputPath: "/Users/demo/article-typesetting-master.skills",
+        fileCount: 2,
+      }),
+    );
+
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      1,
+      "inspect_local_skill_package_for_app",
+      {
+        app: "lime",
+        sourcePath: "/Users/demo/article-typesetting-master.skill",
+      },
+    );
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      2,
+      "install_local_skill_package_for_app",
+      {
+        app: "lime",
+        sourcePath: "/Users/demo/article-typesetting-master.skill",
+      },
+    );
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      3,
+      "take_pending_skill_package_open_requests",
+    );
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      4,
+      "get_skill_package_file_association_status",
+    );
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      5,
+      "set_skill_package_file_association_default",
+    );
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      6,
+      "export_local_skill_package_for_app",
+      {
+        app: "lime",
+        directory: "article-typesetting-master",
+        targetPath: "/Users/demo/article-typesetting-master.skills",
+      },
+    );
+  });
 });

@@ -25,6 +25,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   getFileIconDataUrl,
@@ -50,6 +51,7 @@ import {
 
 const PINNED_LOCATIONS_STORAGE_KEY = "lime.file-manager.pinned-locations";
 const APPLICATION_ENTRY_PATTERN = /\.(app|appref-ms|exe|lnk)$/i;
+const SKILL_PACKAGE_ENTRY_PATTERN = /\.(?:skill|skills)$/i;
 const MAX_ICON_PREFETCH_ENTRIES = 72;
 const ICON_PREFETCH_CONCURRENCY = 2;
 
@@ -60,6 +62,7 @@ interface FileManagerSidebarProps {
   onAddPathReferences: (references: MessagePathReference[]) => void;
   onImportAsKnowledge?: (reference: MessagePathReference) => void;
   onOpenFileInWorkspace?: (entry: FileEntry) => void;
+  onInstallSkillPackage?: (entry: FileEntry) => void;
   initialDirectory?: string | null;
 }
 
@@ -157,6 +160,10 @@ function isApplicationEntry(
     return true;
   }
   return activeLocationKind === "applications" && !entry.isDir;
+}
+
+function isSkillPackageEntry(entry: FileEntry): boolean {
+  return !entry.isDir && SKILL_PACKAGE_ENTRY_PATTERN.test(entry.name);
 }
 
 function EntryIcon({
@@ -264,14 +271,26 @@ function buildContextMenuActions(
   entry: FileEntry,
   knowledgeImportEnabled: boolean,
   workspacePreviewEnabled: boolean,
+  skillPackageInstallEnabled: boolean,
+  skillPackageInstallLabel: string,
 ): ContextMenuAction[] {
+  const isSkillPackage = isSkillPackageEntry(entry);
   const actions: ContextMenuAction[] = [
     { action: "open", label: "打开", icon: ExternalLink },
     { action: "reveal", label: "在系统文件管理器中显示", icon: Folder },
-    { action: "add", label: "添加到对话", icon: PlusCircle },
   ];
 
-  if (workspacePreviewEnabled && !entry.isDir) {
+  if (skillPackageInstallEnabled && isSkillPackage) {
+    actions.push({
+      action: "install-skill-package",
+      label: skillPackageInstallLabel,
+      icon: Package,
+    });
+  } else {
+    actions.push({ action: "add", label: "添加到对话", icon: PlusCircle });
+  }
+
+  if (workspacePreviewEnabled && !entry.isDir && !isSkillPackage) {
     actions.push({
       action: "preview-workspace",
       label: "在工作台预览",
@@ -279,7 +298,7 @@ function buildContextMenuActions(
     });
   }
 
-  if (knowledgeImportEnabled && !entry.isDir) {
+  if (knowledgeImportEnabled && !entry.isDir && !isSkillPackage) {
     const unsupportedMessage = getKnowledgeUnsupportedSourceMessage(entry);
     actions.push({
       action: "import-knowledge",
@@ -305,8 +324,10 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
   onAddPathReferences,
   onImportAsKnowledge,
   onOpenFileInWorkspace,
+  onInstallSkillPackage,
   initialDirectory,
 }) => {
+  const { t } = useTranslation("agent");
   const normalizedInitialDirectory = initialDirectory?.trim() ?? "";
   const [locations, setLocations] = useState<FileManagerLocation[]>([]);
   const [pinnedLocations, setPinnedLocations] = useState<FileManagerLocation[]>(
@@ -575,9 +596,19 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
         return;
       }
 
+      if (isSkillPackageEntry(entry) && onInstallSkillPackage) {
+        onInstallSkillPackage(entry);
+        return;
+      }
+
       handleAddEntry(entry);
     },
-    [activeLocationKind, handleAddEntry, handleOpenEntry],
+    [
+      activeLocationKind,
+      handleAddEntry,
+      handleOpenEntry,
+      onInstallSkillPackage,
+    ],
   );
 
   const handleImportEntryAsKnowledge = useCallback(
@@ -657,6 +688,9 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
         case "preview-workspace":
           handleOpenEntryInWorkspace(entry);
           break;
+        case "install-skill-package":
+          onInstallSkillPackage?.(entry);
+          break;
         case "import-knowledge":
           handleImportEntryAsKnowledge(entry);
           break;
@@ -675,6 +709,7 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
       handleOpenEntryInWorkspace,
       handlePinEntry,
       loadActiveDirectory,
+      onInstallSkillPackage,
     ],
   );
 
@@ -702,22 +737,39 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
 
   const renderEntry = (entry: FileEntry) => {
     const isApplication = isApplicationEntry(entry, activeLocationKind);
-    const Icon = isApplication ? Package : entry.isDir ? Folder : FileText;
+    const isSkillPackage = isSkillPackageEntry(entry);
+    const Icon =
+      isApplication || isSkillPackage
+        ? Package
+        : entry.isDir
+          ? Folder
+          : FileText;
     const iconKind = isApplication
       ? "application"
-      : entry.isDir
-        ? "folder"
-        : "file";
+      : isSkillPackage
+        ? "skill-package"
+        : entry.isDir
+          ? "folder"
+          : "file";
     const hasNativeIcon = Boolean(entry.iconDataUrl);
     const knowledgeUnsupportedMessage =
       !entry.isDir && onImportAsKnowledge
         ? getKnowledgeUnsupportedSourceMessage(entry)
         : "";
     const canPreviewInWorkspace = Boolean(
-      onOpenFileInWorkspace && !entry.isDir && !isApplication,
+      onOpenFileInWorkspace &&
+      !entry.isDir &&
+      !isApplication &&
+      !isSkillPackage,
+    );
+    const canInstallSkillPackage = Boolean(
+      onInstallSkillPackage && isSkillPackage,
     );
     const canImportAsKnowledge = Boolean(
-      onImportAsKnowledge && !entry.isDir && !knowledgeUnsupportedMessage,
+      onImportAsKnowledge &&
+      !entry.isDir &&
+      !isSkillPackage &&
+      !knowledgeUnsupportedMessage,
     );
     const handleEntryKeyDown = (event: React.KeyboardEvent) => {
       if (event.key !== "Enter" && event.key !== " ") {
@@ -758,7 +810,9 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
             ? "打开文件夹"
             : isApplication
               ? "打开应用"
-              : "单击加入对话，可右键查看更多操作"
+              : isSkillPackage && canInstallSkillPackage
+                ? t("skills.localPackage.fileManager.title")
+                : "单击加入对话，可右键查看更多操作"
         }
       >
         <span
@@ -808,16 +862,29 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
         </span>
         {!entry.isDir && !isApplication && viewMode === "list" ? (
           <span className="flex shrink-0 items-center gap-1 opacity-100 transition group-hover:opacity-100">
-            <button
-              type="button"
-              className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-800"
-              onClick={(event) => {
-                event.stopPropagation();
-                handleAddEntry(entry);
-              }}
-            >
-              加入对话
-            </button>
+            {canInstallSkillPackage ? (
+              <button
+                type="button"
+                className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800 transition hover:border-amber-300 hover:bg-amber-100"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onInstallSkillPackage?.(entry);
+                }}
+              >
+                {t("skills.localPackage.fileManager.action")}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-800"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleAddEntry(entry);
+                }}
+              >
+                加入对话
+              </button>
+            )}
             {canPreviewInWorkspace ? (
               <button
                 type="button"
@@ -992,6 +1059,8 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
             contextMenu.entry,
             Boolean(onImportAsKnowledge),
             Boolean(onOpenFileInWorkspace),
+            Boolean(onInstallSkillPackage),
+            t("skills.localPackage.fileManager.contextAction"),
           ).map(({ action, label, icon: MenuIcon, disabled, title }) => {
             return (
               <button

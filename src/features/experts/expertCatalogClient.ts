@@ -18,6 +18,12 @@ export interface GetExpertCatalogOptions {
   refreshRemote?: boolean;
 }
 
+function isDisplayableExpertCatalog(
+  catalog: ExpertCatalog | null,
+): catalog is ExpertCatalog {
+  return Boolean(catalog && catalog.items.length > 0);
+}
+
 export function readCachedExpertCatalog(): ExpertCatalog | null {
   if (typeof window === "undefined") {
     return null;
@@ -28,7 +34,8 @@ export function readCachedExpertCatalog(): ExpertCatalog | null {
     if (!raw) {
       return null;
     }
-    return parseExpertCatalog(JSON.parse(raw) as unknown);
+    const catalog = parseExpertCatalog(JSON.parse(raw) as unknown);
+    return isDisplayableExpertCatalog(catalog) ? catalog : null;
   } catch {
     return null;
   }
@@ -36,8 +43,8 @@ export function readCachedExpertCatalog(): ExpertCatalog | null {
 
 export function saveCachedExpertCatalog(catalog: ExpertCatalog): ExpertCatalog {
   const parsed = parseExpertCatalog(catalog);
-  if (!parsed) {
-    return catalog;
+  if (!isDisplayableExpertCatalog(parsed)) {
+    return getSeededExpertCatalog();
   }
   if (typeof window !== "undefined") {
     window.localStorage.setItem(
@@ -97,7 +104,11 @@ export async function getExpertCatalog(
   }
 
   try {
-    return saveCachedExpertCatalog(await requestRemoteExpertCatalog());
+    const remoteCatalog = await requestRemoteExpertCatalog();
+    if (!isDisplayableExpertCatalog(remoteCatalog)) {
+      return readCachedExpertCatalog() ?? getSeededExpertCatalog();
+    }
+    return saveCachedExpertCatalog(remoteCatalog);
   } catch {
     return readCachedExpertCatalog() ?? getSeededExpertCatalog();
   }

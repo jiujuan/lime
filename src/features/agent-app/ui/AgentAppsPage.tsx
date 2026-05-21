@@ -1,9 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   Archive,
   Ban,
-  Boxes,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -13,8 +19,10 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { convertLocalFileSrc } from "@/lib/api/fileSystem";
 import {
   AGENT_APPS_CHANGED_EVENT,
   launchAgentAppShell,
@@ -64,6 +72,7 @@ import type {
   HostCapabilityProfile,
   InstalledAppPreview,
   InstalledAgentAppState,
+  PackageSourceKind,
   ProjectedEntry,
 } from "../types";
 
@@ -105,6 +114,7 @@ interface AppCenterItem {
   appId: string;
   title: string;
   description: string;
+  iconSrc: string;
   installedState?: InstalledAgentAppState;
   cloudApp?: CloudBootstrapApp;
   sourceKind: AppCenterSourceKind;
@@ -115,6 +125,142 @@ interface AppCenterItem {
   sourceState?: CloudSourceState;
   registrationBlocked: boolean;
   canReviewCloud: boolean;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeOptionalText(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim();
+  return normalized || undefined;
+}
+
+function escapeSvgText(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function svgToDataUri(svg: string): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function buildAppNameIcon(title: string): string {
+  const safeTitle = escapeSvgText(title || "Lime App");
+  const initial = escapeSvgText([...safeTitle][0] || "L");
+  return svgToDataUri(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="${safeTitle}"><defs><linearGradient id="g" x1="16" y1="12" x2="82" y2="86" gradientUnits="userSpaceOnUse"><stop stop-color="#ecfdf5"/><stop offset="0.55" stop-color="#eff6ff"/><stop offset="1" stop-color="#f8fafc"/></linearGradient></defs><rect width="96" height="96" rx="22" fill="url(#g)"/><rect x="1" y="1" width="94" height="94" rx="21" fill="none" stroke="#cbd5e1"/><circle cx="70" cy="25" r="9" fill="#10b981" fill-opacity="0.18"/><path d="M24 36h48M24 50h36M24 64h26" stroke="#64748b" stroke-width="5" stroke-linecap="round"/><text x="70" y="74" text-anchor="middle" font-family="ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="24" font-weight="800" fill="#0f172a">${initial}</text></svg>`,
+  );
+}
+
+function isDirectAssetSrc(value: string): boolean {
+  return /^(?:https?:|data:|blob:|asset:|tauri:)/i.test(value);
+}
+
+function isRelativeIconPath(value: string): boolean {
+  return value.startsWith("./") || value.startsWith("../");
+}
+
+function joinLocalPath(basePath: string, relativePath: string): string {
+  const normalizedBase = basePath.replace(/\/+$/, "");
+  const normalizedRelative = relativePath.replace(/^\.?\//, "");
+  return `${normalizedBase}/${normalizedRelative}`;
+}
+
+function getPresentationString(
+  presentation: unknown,
+  keys: string[],
+): string | undefined {
+  if (!isRecord(presentation)) {
+    return undefined;
+  }
+  for (const key of keys) {
+    const value = normalizeOptionalText(presentation[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function getCloudAppIconCandidate(
+  cloudApp: CloudBootstrapApp | undefined,
+): string | undefined {
+  if (!cloudApp) {
+    return undefined;
+  }
+  return (
+    normalizeOptionalText(cloudApp.iconUrl) ??
+    normalizeOptionalText(cloudApp.logoUrl) ??
+    getPresentationString(cloudApp.presentation, ["iconUrl", "logoUrl"]) ??
+    normalizeOptionalText(cloudApp.icon) ??
+    getPresentationString(cloudApp.presentation, ["icon"])
+  );
+}
+
+function getInstalledAppIconCandidate(
+  state: InstalledAgentAppState | undefined,
+): string | undefined {
+  if (!state) {
+    return undefined;
+  }
+  return (
+    normalizeOptionalText(state.projection.install.branding.icon) ??
+    getPresentationString(state.projection.app.presentation, [
+      "iconUrl",
+      "logoUrl",
+      "icon",
+    ]) ??
+    getPresentationString(state.manifest.presentation, [
+      "iconUrl",
+      "logoUrl",
+      "icon",
+    ])
+  );
+}
+
+function getLocalSourceRoot(
+  state: InstalledAgentAppState | undefined,
+): string | undefined {
+  if (
+    !state ||
+    !["local_folder", "explicit_manifest"].includes(
+      state.identity.sourceKind as PackageSourceKind,
+    )
+  ) {
+    return undefined;
+  }
+  return normalizeOptionalText(state.identity.sourceUri);
+}
+
+function resolveAppIconSrc(params: {
+  title: string;
+  installedState?: InstalledAgentAppState;
+  cloudApp?: CloudBootstrapApp;
+}): string {
+  const candidate =
+    getInstalledAppIconCandidate(params.installedState) ??
+    getCloudAppIconCandidate(params.cloudApp);
+  if (!candidate) {
+    return buildAppNameIcon(params.title);
+  }
+  if (candidate.trim().startsWith("<svg")) {
+    return svgToDataUri(candidate.trim());
+  }
+  if (isDirectAssetSrc(candidate)) {
+    return candidate;
+  }
+  const sourceRoot = getLocalSourceRoot(params.installedState);
+  if (sourceRoot && isRelativeIconPath(candidate)) {
+    return convertLocalFileSrc(joinLocalPath(sourceRoot, candidate));
+  }
+  return buildAppNameIcon(params.title);
 }
 
 function buildProfile(): HostCapabilityProfile {
@@ -310,11 +456,13 @@ function buildAppCenterItems(params: {
         sourceState,
         registrationBlocked,
       });
+      const title = getAppTitle(installedState, cloudApp, appId);
 
       return {
         appId,
-        title: getAppTitle(installedState, cloudApp, appId),
+        title,
         description: getAppDescription(installedState, cloudApp),
+        iconSrc: resolveAppIconSrc({ title, installedState, cloudApp }),
         installedState,
         cloudApp,
         sourceKind: getSourceKind(installedState, cloudApp),
@@ -960,6 +1108,11 @@ export function AgentAppsPage({
     setMoreInfoOpen(false);
   }
 
+  function closeDetail() {
+    setSelectedAppId(null);
+    setMoreInfoOpen(false);
+  }
+
   function hasCloudUpdate(item: AppCenterItem): boolean {
     return Boolean(
       item.installedVersion &&
@@ -977,16 +1130,16 @@ export function AgentAppsPage({
   }
 
   function getActionLabelKey(item: AppCenterItem): AppCenterActionLabelKey {
-  if (item.installedState) {
-    if (item.statusKind === "disabled") {
-      return "agentApp.apps.center.action.enable";
-    }
-    if (item.registrationBlocked) {
-      return "agentApp.apps.center.action.activate";
-    }
-    if (canOneClickUpdate(item)) {
-      return "agentApp.apps.center.action.updateOneClick";
-    }
+    if (item.installedState) {
+      if (item.statusKind === "disabled") {
+        return "agentApp.apps.center.action.enable";
+      }
+      if (item.registrationBlocked) {
+        return "agentApp.apps.center.action.activate";
+      }
+      if (canOneClickUpdate(item)) {
+        return "agentApp.apps.center.action.updateOneClick";
+      }
       return "agentApp.apps.center.action.open";
     }
     if (item.statusKind === "registration") {
@@ -1027,15 +1180,15 @@ export function AgentAppsPage({
       return true;
     }
     if (item.installedState) {
-    if (item.statusKind === "disabled") {
-      return false;
-    }
-    if (item.registrationBlocked) {
-      return false;
-    }
-    if (canOneClickUpdate(item)) {
-      return !item.canReviewCloud;
-    }
+      if (item.statusKind === "disabled") {
+        return false;
+      }
+      if (item.registrationBlocked) {
+        return false;
+      }
+      if (canOneClickUpdate(item)) {
+        return !item.canReviewCloud;
+      }
       return !getDefaultEntry(item);
     }
     if (item.statusKind === "registration") {
@@ -1148,6 +1301,26 @@ export function AgentAppsPage({
     );
   }
 
+  function renderAppIcon(
+    item: AppCenterItem,
+    className = "size-16",
+    testId = `agent-apps-icon-${item.appId}`,
+  ): ReactElement {
+    return (
+      <div
+        className={`overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm shadow-slate-950/5 ${className}`}
+        data-testid={testId}
+      >
+        <img
+          className="h-full w-full object-cover"
+          src={item.iconSrc}
+          alt={item.title}
+          loading="lazy"
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       className="lime-workbench-theme-scope flex h-full min-h-0 flex-col bg-slate-50 text-slate-950"
@@ -1236,15 +1409,9 @@ export function AgentAppsPage({
           </section>
 
           <section
-            className={`mt-2 grid min-h-[640px] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm shadow-slate-950/5 ${
-              selectedItem ? "xl:grid-cols-[minmax(0,1fr)_460px]" : ""
-            }`}
+            className="mt-2 grid min-h-[640px] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm shadow-slate-950/5"
           >
-            <div
-              className={`flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 text-sm text-slate-600 ${
-                selectedItem ? "xl:col-span-2" : ""
-              }`}
-            >
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 text-sm text-slate-600">
               <div className="flex flex-wrap items-center gap-3">
                 <span>{t("agentApp.apps.center.source.label")}：</span>
                 {(["all", "cloud", "local"] as const).map((filter) => (
@@ -1298,19 +1465,9 @@ export function AgentAppsPage({
                 </span>
               </div>
             </div>
-            <main className="min-w-0">
-              <div className="grid grid-cols-[minmax(260px,1fr)_104px_128px_136px_112px] gap-3 border-b border-slate-200 bg-slate-50/60 px-4 py-3 text-sm font-medium text-slate-500 max-lg:hidden">
-                <span>{t("agentApp.apps.center.table.app")}</span>
-                <span>{t("agentApp.apps.center.table.source")}</span>
-                <span>{t("agentApp.apps.center.table.status")}</span>
-                <span>{t("agentApp.apps.center.table.version")}</span>
-                <span className="text-right">
-                  {t("agentApp.apps.center.table.action")}
-                </span>
-              </div>
-
+            <main className="min-w-0 bg-slate-50/60">
               <div
-                className="divide-y divide-slate-100"
+                className="grid grid-cols-1 gap-4 p-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
                 data-testid="agent-apps-list"
               >
                 {pagedItems.map((item) => {
@@ -1319,107 +1476,92 @@ export function AgentAppsPage({
                   return (
                     <div
                       key={item.appId}
-                      className={`grid gap-3 border-l-4 px-4 py-4 transition hover:bg-slate-50/80 lg:grid-cols-[minmax(260px,1fr)_104px_128px_136px_112px] lg:items-center ${
+                      className={`flex min-h-[292px] flex-col rounded-2xl border bg-white p-4 shadow-sm shadow-slate-950/5 transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md hover:shadow-slate-950/10 ${
                         selectedRow
-                          ? "border-emerald-600 bg-emerald-50/60"
-                          : "border-transparent bg-white"
+                          ? "border-emerald-300 ring-1 ring-emerald-200"
+                          : "border-slate-200"
                       }`}
                       data-testid={`agent-apps-list-row-${item.appId}`}
                     >
-                      <div className="flex min-w-0 items-center gap-4">
-                        <div
-                          className={`grid size-12 shrink-0 place-items-center rounded-xl shadow-sm ${
-                            selectedRow
-                              ? "bg-emerald-600 text-white shadow-emerald-900/10"
-                              : "bg-blue-50 text-blue-700 shadow-blue-900/5"
-                          }`}
-                        >
-                          <Boxes size={22} />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="truncate text-base font-semibold text-slate-950">
+                      <div className="flex min-w-0 items-start gap-3">
+                        {renderAppIcon(item)}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 items-start justify-between gap-3">
+                            <h2 className="min-w-0 truncate text-base font-semibold text-slate-950">
                               {item.title}
-                            </span>
-                            <button
-                              type="button"
-                              className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold text-slate-600 transition hover:border-blue-300 hover:text-blue-950"
-                              onClick={() => openDetail(item.appId)}
-                              data-testid={`agent-apps-open-detail-${item.appId}`}
+                            </h2>
+                            <span
+                              className={`shrink-0 rounded-md border px-2 py-0.5 text-xs font-semibold ${appCenterStatusClass(
+                                item.statusKind,
+                              )}`}
                             >
-                              {t("agentApp.apps.center.action.details")}
-                            </button>
+                              {t(`agentApp.apps.center.status.${item.statusKind}`)}
+                            </span>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <span
+                              className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${appCenterSourceClass(
+                                item.sourceKind,
+                              )}`}
+                            >
+                              {t(`agentApp.apps.center.source.${item.sourceKind}`)}
+                            </span>
                             {item.sourceState ? (
-                              <span
-                                className="sr-only"
-                                data-testid={`agent-apps-source-state-${item.appId}`}
-                              >
-                                {t(item.sourceState.labelKey)}
-                              </span>
+                              <>
+                                <span
+                                  className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600"
+                                  data-testid={`agent-apps-source-state-${item.appId}`}
+                                >
+                                  {t(item.sourceState.labelKey)}
+                                </span>
+                              </>
                             ) : null}
                           </div>
-                          <p className="mt-1 line-clamp-2 text-sm leading-5 text-slate-600">
-                            {item.description ||
-                              t("agentApp.apps.center.descriptionFallback")}
-                          </p>
-                          {item.installedState ? (
-                            <span
-                              className="sr-only"
-                              data-testid={`agent-apps-installed-${item.appId}`}
-                            />
-                          ) : null}
-                          {item.registrationBlocked ? (
-                            <span
-                              className="sr-only"
-                              data-testid={`agent-apps-registration-${item.appId}`}
-                            />
+                        </div>
+                      </div>
+
+                      <p className="mt-4 line-clamp-3 min-h-[60px] text-sm leading-5 text-slate-600">
+                        {item.description ||
+                          t("agentApp.apps.center.descriptionFallback")}
+                      </p>
+                      {item.installedState ? (
+                        <span
+                          className="sr-only"
+                          data-testid={`agent-apps-installed-${item.appId}`}
+                        />
+                      ) : null}
+                      {item.registrationBlocked ? (
+                        <span
+                          className="sr-only"
+                          data-testid={`agent-apps-registration-${item.appId}`}
+                        />
+                      ) : null}
+
+                      <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                        <div className="text-sm text-slate-600">
+                          <span className="font-medium text-slate-800">
+                            {item.installedVersion
+                              ? t("agentApp.apps.center.version.current", {
+                                  version: item.installedVersion,
+                                })
+                              : (item.cloudVersion ?? "-")}
+                          </span>
+                          {item.installedVersion &&
+                          item.cloudVersion &&
+                          item.installedVersion !== item.cloudVersion ? (
+                            <span className="mt-1 block text-amber-700">
+                              {t("agentApp.apps.center.version.cloud", {
+                                version: item.cloudVersion,
+                              })}
+                            </span>
                           ) : null}
                         </div>
                       </div>
-                      <div>
-                        <span
-                          className={`inline-flex rounded-md border px-2.5 py-1 text-sm font-medium ${appCenterSourceClass(
-                            item.sourceKind,
-                          )}`}
-                        >
-                          {t(`agentApp.apps.center.source.${item.sourceKind}`)}
-                        </span>
-                      </div>
-                      <div>
-                        <span
-                          className={`inline-flex rounded-md border px-2.5 py-1 text-sm font-medium ${appCenterStatusClass(
-                            item.statusKind,
-                          )}`}
-                        >
-                          {t(`agentApp.apps.center.status.${item.statusKind}`)}
-                        </span>
-                      </div>
-                      <div className="text-sm text-slate-600">
-                        <span className="font-medium text-slate-800">
-                          {item.installedVersion
-                            ? t("agentApp.apps.center.version.current", {
-                                version: item.installedVersion,
-                              })
-                            : (item.cloudVersion ?? "-")}
-                        </span>
-                        {item.installedVersion &&
-                        item.cloudVersion &&
-                        item.installedVersion !== item.cloudVersion ? (
-                          <span className="mt-1 block text-amber-700">
-                            {t("agentApp.apps.center.version.cloud", {
-                              version: item.cloudVersion,
-                            })}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="flex flex-col items-stretch gap-2 lg:items-end">
+
+                      <div className="mt-auto flex items-center gap-2 pt-4">
                         <button
                           type="button"
-                          className={`inline-flex min-w-[80px] items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                            item.installedState
-                              ? "bg-blue-950 text-white hover:bg-blue-900"
-                              : "bg-blue-950 text-white hover:bg-blue-900"
-                          }`}
+                          className="inline-flex h-10 flex-1 min-w-0 items-center justify-center gap-2 rounded-lg bg-blue-950 px-3 text-sm font-semibold text-white transition hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-60"
                           disabled={isPrimaryActionDisabled(item)}
                           onClick={(event) => {
                             event.stopPropagation();
@@ -1442,50 +1584,58 @@ export function AgentAppsPage({
                           )}
                           {t(getActionLabelKey(item))}
                         </button>
-                        {item.installedState &&
-                        item.cloudApp &&
-                        hasCloudUpdate(item) ? (
-                          <button
-                            type="button"
-                            className="inline-flex min-w-[80px] items-center justify-center rounded-lg border border-blue-800 bg-white px-4 py-2 text-sm font-semibold text-blue-950 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={
-                              canOneClickUpdate(item)
-                                ? isPrimaryActionDisabled(item) ||
-                                  !defaultEntry
-                                : isCloudActionDisabled(item)
-                            }
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              if (
-                                canOneClickUpdate(item) &&
-                                item.installedState &&
-                                defaultEntry
-                              ) {
-                                void handleLaunchEntry(
-                                  item.installedState,
-                                  defaultEntry,
-                                );
-                                return;
-                              }
-                              void handleCloudAction(item);
-                            }}
-                            data-testid={
-                              canOneClickUpdate(item)
-                                ? `agent-apps-launch-installed-${item.appId}`
-                                : `agent-apps-install-cloud-${item.appId}`
-                            }
-                          >
-                            {canOneClickUpdate(item)
-                              ? t("agentApp.apps.center.action.open")
-                              : t(getCloudActionLabelKey(item))}
-                          </button>
-                        ) : null}
+                        <button
+                          type="button"
+                          className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-950"
+                          onClick={() => openDetail(item.appId)}
+                          data-testid={`agent-apps-open-detail-${item.appId}`}
+                        >
+                          {t("agentApp.apps.center.action.details")}
+                        </button>
                       </div>
+
+                      {item.installedState &&
+                      item.cloudApp &&
+                      hasCloudUpdate(item) ? (
+                        <button
+                          type="button"
+                          className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-lg border border-blue-800 bg-white px-3 text-sm font-semibold text-blue-950 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={
+                            canOneClickUpdate(item)
+                              ? isPrimaryActionDisabled(item) || !defaultEntry
+                              : isCloudActionDisabled(item)
+                          }
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (
+                              canOneClickUpdate(item) &&
+                              item.installedState &&
+                              defaultEntry
+                            ) {
+                              void handleLaunchEntry(
+                                item.installedState,
+                                defaultEntry,
+                              );
+                              return;
+                            }
+                            void handleCloudAction(item);
+                          }}
+                          data-testid={
+                            canOneClickUpdate(item)
+                              ? `agent-apps-launch-installed-${item.appId}`
+                              : `agent-apps-install-cloud-${item.appId}`
+                          }
+                        >
+                          {canOneClickUpdate(item)
+                            ? t("agentApp.apps.center.action.open")
+                            : t(getCloudActionLabelKey(item))}
+                        </button>
+                      ) : null}
                     </div>
                   );
                 })}
                 {pagedItems.length === 0 ? (
-                  <div className="flex min-h-[360px] items-center justify-center p-8 text-center">
+                  <div className="col-span-full flex min-h-[360px] items-center justify-center p-8 text-center">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">
                         {appItems.length === 0
@@ -1500,7 +1650,7 @@ export function AgentAppsPage({
                 ) : null}
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3">
                 <p className="text-xs text-slate-500">
                   {t("agentApp.apps.center.pagination.summary", {
                     page: currentPage,
@@ -1537,17 +1687,29 @@ export function AgentAppsPage({
               </div>
             </main>
 
-            {selectedItem ? (
-              <aside
-                className="min-w-0 border-t border-slate-200 bg-white p-6 xl:border-l xl:border-t-0"
+          </section>
+
+          {selectedItem ? (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/25 p-4 backdrop-blur-sm"
+              data-testid="agent-apps-detail-overlay"
+              onClick={closeDetail}
+            >
+              <section
+                role="dialog"
+                aria-modal="true"
+                className="flex max-h-[calc(100vh-3rem)] min-h-[420px] w-full max-w-[820px] flex-col overflow-hidden rounded-[18px] border border-slate-200 bg-white text-slate-950 shadow-2xl shadow-slate-950/20"
                 data-testid="agent-apps-detail"
+                onClick={(event) => event.stopPropagation()}
               >
-                <div className="space-y-5">
+                <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
                   <div className="space-y-4">
                     <div className="flex items-start gap-4">
-                      <div className="grid size-20 shrink-0 place-items-center rounded-2xl bg-emerald-50 text-emerald-700 shadow-sm shadow-emerald-950/10">
-                        <Boxes size={34} />
-                      </div>
+                      {renderAppIcon(
+                        selectedItem,
+                        "size-20 shrink-0",
+                        `agent-apps-detail-icon-${selectedItem.appId}`,
+                      )}
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-semibold text-slate-500">
                           {t("agentApp.apps.center.detail.title")}
@@ -1576,6 +1738,17 @@ export function AgentAppsPage({
                           </span>
                         </div>
                       </div>
+                      <button
+                        type="button"
+                        className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-600 shadow-sm shadow-slate-950/5 transition hover:border-slate-300 hover:bg-white hover:text-slate-900"
+                        aria-label={t("agentApp.apps.center.detail.close")}
+                        title={t("agentApp.apps.center.detail.close")}
+                        onClick={closeDetail}
+                        data-testid="agent-apps-close-detail"
+                      >
+                        <span>{t("agentApp.apps.center.detail.close")}</span>
+                        <X className="ml-1.5" size={14} />
+                      </button>
                     </div>
                     <p className="text-base leading-7 text-slate-700">
                       {selectedItem.description ||
@@ -2054,9 +2227,9 @@ export function AgentAppsPage({
                     ) : null}
                   </section>
                 </div>
-              </aside>
-            ) : null}
-          </section>
+              </section>
+            </div>
+          ) : null}
 
           {installReview &&
           installReview.review.appId !== selectedItem?.appId ? (

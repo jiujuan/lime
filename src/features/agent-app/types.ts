@@ -335,6 +335,16 @@ export interface LifecycleDeclaration {
   uninstall?: unknown;
 }
 
+export interface AgentAppPresentation {
+  icon?: string;
+  iconUrl?: string;
+  logoUrl?: string;
+  category?: string;
+  title?: string;
+  summary?: string;
+  [key: string]: unknown;
+}
+
 export interface AppManifest {
   manifestVersion: string;
   name: string;
@@ -366,6 +376,7 @@ export interface AppManifest {
   ui?: UiDeclaration;
   lifecycle?: LifecycleDeclaration;
   install?: unknown;
+  presentation?: AgentAppPresentation;
   agentRuntime?: unknown;
   requirements?: unknown;
   boundary?: unknown;
@@ -443,6 +454,7 @@ export interface NormalizedAppManifest {
   ui?: UiDeclaration;
   lifecycle: LifecycleDeclaration;
   install: NormalizedAgentAppInstallContract;
+  presentation?: AgentAppPresentation;
   agentRuntime?: unknown;
   requirements?: unknown;
   boundary?: unknown;
@@ -512,6 +524,10 @@ export interface CloudBootstrapApp {
   appId: string;
   displayName?: string;
   version: string;
+  icon?: string;
+  iconUrl?: string;
+  logoUrl?: string;
+  presentation?: AgentAppPresentation;
   releaseId?: string;
   tenantId?: string;
   tenantEnablementRef?: string;
@@ -652,6 +668,7 @@ export interface AppSummary {
   status: AppStatus;
   appType: AppType;
   description: string;
+  presentation?: AgentAppPresentation;
 }
 
 export type ProjectedEntryReadiness =

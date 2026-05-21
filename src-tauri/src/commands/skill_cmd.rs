@@ -10,14 +10,19 @@ use lime_core::app_paths;
 use lime_services::skill_service::SkillService;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::{Cursor, Read};
 use std::path::{Component, Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use tauri::State;
 use url::Url;
-use zip::ZipArchive;
+use zip::write::FileOptions;
+use zip::{CompressionMethod, ZipArchive, ZipWriter};
+
+pub const SKILL_PACKAGE_OPEN_EVENT: &str = "skill-package://open";
+static PENDING_SKILL_PACKAGE_OPEN_PATHS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
 
 /// 从指定目录扫描已安装的 Skills
 ///
@@ -575,6 +580,67 @@ pub struct MarketplaceSkillInstallResult {
     pub inspection: SkillPackageInspection,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalSkillPackageFileEntry {
+    pub path: String,
+    pub is_directory: bool,
+    pub size: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LocalSkillPackageInspectionResult {
+    pub directory: String,
+    pub inspection: SkillPackageInspection,
+    pub files: Vec<LocalSkillPackageFileEntry>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillPackageFileAssociationStatus {
+    pub platform: String,
+    pub extension: String,
+    pub extensions: Vec<String>,
+    pub mime_type: String,
+    pub app_identifier: String,
+    pub is_default: bool,
+    pub can_set_default: bool,
+    pub requires_user_confirmation: bool,
+    pub current_handler: Option<String>,
+    pub settings_url: Option<String>,
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillPackageFileAssociationApplyResult {
+    pub changed: bool,
+    pub message: String,
+    pub status: SkillPackageFileAssociationStatus,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillPackageExportResult {
+    pub directory: String,
+    pub output_path: String,
+    pub file_count: usize,
+    pub bytes_written: u64,
+}
+
+#[derive(Debug, Clone)]
+struct SkillZipPackageFile {
+    path: PathBuf,
+    content: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+struct SkillZipPackage {
+    files: Vec<SkillZipPackageFile>,
+    shared_zip_root: Option<String>,
+    should_strip_directory: bool,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillDownloadInstallRequest {
@@ -583,6 +649,19 @@ pub struct SkillDownloadInstallRequest {
 }
 
 const MAX_SKILL_DOWNLOAD_BYTES: usize = 20 * 1024 * 1024;
+const LIME_APP_BUNDLE_ID: &str = "com.limecloud.lime";
+const LIME_SKILL_PACKAGE_EXTENSION: &str = "skill";
+const LIME_SKILL_PACKAGE_EXPORT_EXTENSION: &str = "skills";
+const LIME_SKILL_PACKAGE_EXTENSIONS: &[&str] = &[
+    LIME_SKILL_PACKAGE_EXTENSION,
+    LIME_SKILL_PACKAGE_EXPORT_EXTENSION,
+];
+const LIME_SKILL_PACKAGE_MIME_TYPE: &str = "application/vnd.lime.skill+zip";
+const LIME_SKILL_PACKAGE_UTI: &str = "com.limecloud.lime.skill";
+#[cfg(target_os = "windows")]
+const LIME_SKILL_PACKAGE_PROG_ID: &str = "Lime.skill";
+#[cfg(target_os = "linux")]
+const LIME_LINUX_DESKTOP_FILE_ID: &str = "com.limecloud.lime.desktop";
 
 fn normalize_bundle_sha256(value: &str) -> String {
     value
@@ -639,6 +718,697 @@ fn verify_marketplace_file_checksum(file: &MarketplaceSkillBundleFile) -> Result
     }
 
     Ok(())
+}
+
+fn pending_skill_package_open_paths() -> &'static Mutex<Vec<String>> {
+    PENDING_SKILL_PACKAGE_OPEN_PATHS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn skill_package_extensions() -> Vec<String> {
+    LIME_SKILL_PACKAGE_EXTENSIONS
+        .iter()
+        .map(|extension| (*extension).to_string())
+        .collect()
+}
+
+fn is_lime_skill_package_extension(extension: &str) -> bool {
+    LIME_SKILL_PACKAGE_EXTENSIONS
+        .iter()
+        .any(|supported| extension.eq_ignore_ascii_case(supported))
+}
+
+fn normalize_skill_package_open_argument(value: &str) -> Option<String> {
+    let trimmed = value.trim().trim_matches('"').trim_matches('\'');
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let path = if let Ok(url) = Url::parse(trimmed) {
+        if url.scheme() != "file" {
+            return None;
+        }
+        url.to_file_path().ok()?
+    } else {
+        PathBuf::from(trimmed)
+    };
+
+    if !path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(is_lime_skill_package_extension)
+        .unwrap_or(false)
+    {
+        return None;
+    }
+
+    Some(path.to_string_lossy().to_string())
+}
+
+pub fn collect_skill_package_open_paths<I, S>(values: I) -> Vec<String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut paths = Vec::new();
+    for value in values {
+        let Some(path) = normalize_skill_package_open_argument(value.as_ref()) else {
+            continue;
+        };
+        if !paths.contains(&path) {
+            paths.push(path);
+        }
+    }
+    paths
+}
+
+pub fn collect_skill_package_open_paths_from_urls(urls: &[Url]) -> Vec<String> {
+    collect_skill_package_open_paths(urls.iter().map(Url::as_str))
+}
+
+pub fn record_skill_package_open_paths(paths: Vec<String>) {
+    if paths.is_empty() {
+        return;
+    }
+    let Ok(mut pending) = pending_skill_package_open_paths().lock() else {
+        return;
+    };
+    for path in paths {
+        if !pending.contains(&path) {
+            pending.push(path);
+        }
+    }
+}
+
+fn take_pending_skill_package_open_paths() -> Vec<String> {
+    let Ok(mut pending) = pending_skill_package_open_paths().lock() else {
+        return Vec::new();
+    };
+    std::mem::take(&mut *pending)
+}
+
+fn current_skill_package_file_association_status() -> SkillPackageFileAssociationStatus {
+    platform_skill_package_file_association_status()
+}
+
+#[cfg(target_os = "macos")]
+fn platform_skill_package_file_association_status() -> SkillPackageFileAssociationStatus {
+    let handlers = macos_skill_package_default_handlers();
+    let current_handler = handlers
+        .iter()
+        .find(|(_, handler)| handler.as_deref() != Some(LIME_APP_BUNDLE_ID))
+        .and_then(|(_, handler)| handler.clone())
+        .or_else(|| handlers.iter().find_map(|(_, handler)| handler.clone()));
+    let has_types = !handlers.is_empty();
+    let is_default = has_types
+        && handlers
+            .iter()
+            .all(|(_, handler)| handler.as_deref() == Some(LIME_APP_BUNDLE_ID));
+
+    SkillPackageFileAssociationStatus {
+        platform: "macos".to_string(),
+        extension: LIME_SKILL_PACKAGE_EXTENSION.to_string(),
+        extensions: skill_package_extensions(),
+        mime_type: LIME_SKILL_PACKAGE_MIME_TYPE.to_string(),
+        app_identifier: LIME_APP_BUNDLE_ID.to_string(),
+        is_default,
+        can_set_default: true,
+        requires_user_confirmation: false,
+        current_handler,
+        settings_url: None,
+        detail: None,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn platform_skill_package_file_association_status() -> SkillPackageFileAssociationStatus {
+    let current_handler = windows_skill_package_current_handler();
+    let is_default = current_handler
+        .as_deref()
+        .map(|value| value.eq_ignore_ascii_case(LIME_SKILL_PACKAGE_PROG_ID))
+        .unwrap_or(false);
+
+    SkillPackageFileAssociationStatus {
+        platform: "windows".to_string(),
+        extension: LIME_SKILL_PACKAGE_EXTENSION.to_string(),
+        extensions: skill_package_extensions(),
+        mime_type: LIME_SKILL_PACKAGE_MIME_TYPE.to_string(),
+        app_identifier: LIME_SKILL_PACKAGE_PROG_ID.to_string(),
+        is_default,
+        can_set_default: true,
+        requires_user_confirmation: true,
+        current_handler,
+        settings_url: Some("ms-settings:defaultapps".to_string()),
+        detail: Some("Windows 需要用户在系统默认应用设置中确认文件关联。".to_string()),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn platform_skill_package_file_association_status() -> SkillPackageFileAssociationStatus {
+    let current_handler = linux_skill_package_current_handler();
+    let is_default = current_handler
+        .as_deref()
+        .map(|value| value == LIME_LINUX_DESKTOP_FILE_ID)
+        .unwrap_or(false);
+
+    SkillPackageFileAssociationStatus {
+        platform: "linux".to_string(),
+        extension: LIME_SKILL_PACKAGE_EXTENSION.to_string(),
+        extensions: skill_package_extensions(),
+        mime_type: LIME_SKILL_PACKAGE_MIME_TYPE.to_string(),
+        app_identifier: LIME_LINUX_DESKTOP_FILE_ID.to_string(),
+        is_default,
+        can_set_default: true,
+        requires_user_confirmation: false,
+        current_handler,
+        settings_url: None,
+        detail: None,
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+fn platform_skill_package_file_association_status() -> SkillPackageFileAssociationStatus {
+    SkillPackageFileAssociationStatus {
+        platform: std::env::consts::OS.to_string(),
+        extension: LIME_SKILL_PACKAGE_EXTENSION.to_string(),
+        extensions: skill_package_extensions(),
+        mime_type: LIME_SKILL_PACKAGE_MIME_TYPE.to_string(),
+        app_identifier: LIME_APP_BUNDLE_ID.to_string(),
+        is_default: false,
+        can_set_default: false,
+        requires_user_confirmation: true,
+        current_handler: None,
+        settings_url: None,
+        detail: Some("当前平台暂不支持从 Lime 内设置 .skill / .skills 默认打开方式。".to_string()),
+    }
+}
+
+fn set_skill_package_file_association_default_impl(
+) -> Result<SkillPackageFileAssociationApplyResult, String> {
+    platform_set_skill_package_file_association_default()
+}
+
+#[cfg(target_os = "macos")]
+fn platform_set_skill_package_file_association_default(
+) -> Result<SkillPackageFileAssociationApplyResult, String> {
+    macos_register_current_app_bundle();
+    let content_types = macos_skill_package_content_types();
+    if content_types.is_empty() {
+        return Err("无法解析 .skill / .skills 文件类型".to_string());
+    }
+
+    for content_type in content_types {
+        macos_set_default_handler_for_content_type(&content_type, LIME_APP_BUNDLE_ID)?;
+    }
+
+    Ok(SkillPackageFileAssociationApplyResult {
+        changed: true,
+        message: "已将 .skill / .skills 默认打开方式设置为 Lime。".to_string(),
+        status: current_skill_package_file_association_status(),
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn platform_set_skill_package_file_association_default(
+) -> Result<SkillPackageFileAssociationApplyResult, String> {
+    windows_register_skill_package_prog_id()?;
+    if let Err(error) = open::that("ms-settings:defaultapps") {
+        tracing::warn!("[Skill Package] 打开 Windows 默认应用设置失败: {}", error);
+    }
+
+    Ok(SkillPackageFileAssociationApplyResult {
+        changed: false,
+        message: "已注册 Lime 的 .skill / .skills 打开方式，请在 Windows 默认应用设置中选择 Lime。"
+            .to_string(),
+        status: current_skill_package_file_association_status(),
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn platform_set_skill_package_file_association_default(
+) -> Result<SkillPackageFileAssociationApplyResult, String> {
+    linux_register_skill_package_mime_type()?;
+    linux_set_default_skill_package_handler()?;
+
+    Ok(SkillPackageFileAssociationApplyResult {
+        changed: true,
+        message: "已将 .skill / .skills 默认打开方式设置为 Lime。".to_string(),
+        status: current_skill_package_file_association_status(),
+    })
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+fn platform_set_skill_package_file_association_default(
+) -> Result<SkillPackageFileAssociationApplyResult, String> {
+    let status = current_skill_package_file_association_status();
+    Err(status
+        .detail
+        .clone()
+        .unwrap_or_else(|| "当前平台暂不支持设置 .skill / .skills 默认打开方式。".to_string()))
+}
+
+#[cfg(target_os = "macos")]
+mod macos_file_association {
+    use super::{
+        LIME_SKILL_PACKAGE_EXTENSIONS, LIME_SKILL_PACKAGE_MIME_TYPE, LIME_SKILL_PACKAGE_UTI,
+    };
+    use std::ffi::{CStr, CString};
+    use std::os::raw::{c_char, c_void};
+    use std::path::{Path, PathBuf};
+    use std::ptr;
+
+    type CFIndex = isize;
+    type CFStringRef = *const c_void;
+    type CFURLRef = *const c_void;
+    type OSStatus = i32;
+
+    const K_CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
+    const K_LS_ROLES_ALL: u32 = 0xffff_ffff;
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFStringCreateWithCString(
+            alloc: *const c_void,
+            c_str: *const c_char,
+            encoding: u32,
+        ) -> CFStringRef;
+        fn CFStringGetCString(
+            the_string: CFStringRef,
+            buffer: *mut c_char,
+            buffer_size: CFIndex,
+            encoding: u32,
+        ) -> u8;
+        fn CFStringGetLength(the_string: CFStringRef) -> CFIndex;
+        fn CFStringGetMaximumSizeForEncoding(length: CFIndex, encoding: u32) -> CFIndex;
+        fn CFURLCreateFromFileSystemRepresentation(
+            allocator: *const c_void,
+            buffer: *const u8,
+            buf_len: CFIndex,
+            is_directory: u8,
+        ) -> CFURLRef;
+        fn CFRelease(cf: *const c_void);
+    }
+
+    #[link(name = "CoreServices", kind = "framework")]
+    extern "C" {
+        fn LSRegisterURL(url: CFURLRef, update: u8) -> OSStatus;
+        fn LSSetDefaultRoleHandlerForContentType(
+            content_type: CFStringRef,
+            role: u32,
+            handler_bundle_id: CFStringRef,
+        ) -> OSStatus;
+        fn LSCopyDefaultRoleHandlerForContentType(
+            content_type: CFStringRef,
+            role: u32,
+        ) -> CFStringRef;
+        fn UTTypeCreatePreferredIdentifierForTag(
+            tag_class: CFStringRef,
+            tag: CFStringRef,
+            conforming_to_uti: CFStringRef,
+        ) -> CFStringRef;
+    }
+
+    pub fn content_types() -> Vec<String> {
+        let mut types = vec![LIME_SKILL_PACKAGE_UTI.to_string()];
+        for extension in LIME_SKILL_PACKAGE_EXTENSIONS {
+            if let Some(extension_uti) =
+                preferred_identifier_for_tag("public.filename-extension", extension, None)
+            {
+                push_unique(&mut types, extension_uti);
+            }
+        }
+        if let Some(mime_uti) = preferred_identifier_for_tag(
+            "public.mime-type",
+            LIME_SKILL_PACKAGE_MIME_TYPE,
+            Some(LIME_SKILL_PACKAGE_UTI),
+        ) {
+            push_unique(&mut types, mime_uti);
+        }
+        types
+    }
+
+    pub fn default_handler(content_type: &str) -> Option<String> {
+        let content_type = create_cf_string(content_type).ok()?;
+        let handler = unsafe {
+            LSCopyDefaultRoleHandlerForContentType(content_type.as_ptr(), K_LS_ROLES_ALL)
+        };
+        let result = cf_string_to_string(handler);
+        if !handler.is_null() {
+            unsafe { CFRelease(handler) };
+        }
+        result
+    }
+
+    pub fn set_default_handler(content_type: &str, bundle_id: &str) -> Result<(), String> {
+        let content_type = create_cf_string(content_type)?;
+        let bundle_id = create_cf_string(bundle_id)?;
+        let status = unsafe {
+            LSSetDefaultRoleHandlerForContentType(
+                content_type.as_ptr(),
+                K_LS_ROLES_ALL,
+                bundle_id.as_ptr(),
+            )
+        };
+        if status == 0 {
+            Ok(())
+        } else {
+            Err(format!(
+                "设置 .skill / .skills 默认打开方式失败（LaunchServices {status}）"
+            ))
+        }
+    }
+
+    pub fn register_current_app_bundle() {
+        let Some(bundle_path) = current_app_bundle_path() else {
+            return;
+        };
+        if let Err(error) = register_app_bundle(&bundle_path) {
+            tracing::warn!(
+                "[Skill Package] 注册 macOS app bundle 失败 {}: {}",
+                bundle_path.display(),
+                error
+            );
+        }
+    }
+
+    fn push_unique(values: &mut Vec<String>, value: String) {
+        if !values.contains(&value) {
+            values.push(value);
+        }
+    }
+
+    fn preferred_identifier_for_tag(
+        tag_class: &str,
+        tag: &str,
+        conforming_to_uti: Option<&str>,
+    ) -> Option<String> {
+        let tag_class = create_cf_string(tag_class).ok()?;
+        let tag = create_cf_string(tag).ok()?;
+        let conforming_to_uti = conforming_to_uti.and_then(|value| create_cf_string(value).ok());
+        let result = unsafe {
+            UTTypeCreatePreferredIdentifierForTag(
+                tag_class.as_ptr(),
+                tag.as_ptr(),
+                conforming_to_uti
+                    .as_ref()
+                    .map(|value| value.as_ptr())
+                    .unwrap_or(ptr::null()),
+            )
+        };
+        let text = cf_string_to_string(result);
+        if !result.is_null() {
+            unsafe { CFRelease(result) };
+        }
+        text
+    }
+
+    fn create_cf_string(value: &str) -> Result<ScopedCfString, String> {
+        let c_string =
+            CString::new(value).map_err(|_| format!("无效的 macOS 文件关联字符串: {value}"))?;
+        let ptr = unsafe {
+            CFStringCreateWithCString(ptr::null(), c_string.as_ptr(), K_CF_STRING_ENCODING_UTF8)
+        };
+        if ptr.is_null() {
+            Err(format!("无法创建 macOS 文件关联字符串: {value}"))
+        } else {
+            Ok(ScopedCfString(ptr))
+        }
+    }
+
+    fn cf_string_to_string(value: CFStringRef) -> Option<String> {
+        if value.is_null() {
+            return None;
+        }
+        let length = unsafe { CFStringGetLength(value) };
+        let max_size =
+            unsafe { CFStringGetMaximumSizeForEncoding(length, K_CF_STRING_ENCODING_UTF8) } + 1;
+        if max_size <= 1 {
+            return Some(String::new());
+        }
+        let mut buffer = vec![0 as c_char; max_size as usize];
+        let ok = unsafe {
+            CFStringGetCString(
+                value,
+                buffer.as_mut_ptr(),
+                max_size,
+                K_CF_STRING_ENCODING_UTF8,
+            )
+        };
+        if ok == 0 {
+            return None;
+        }
+        Some(
+            unsafe { CStr::from_ptr(buffer.as_ptr()) }
+                .to_string_lossy()
+                .to_string(),
+        )
+    }
+
+    fn current_app_bundle_path() -> Option<PathBuf> {
+        let executable = std::env::current_exe().ok()?;
+        executable
+            .ancestors()
+            .find(|path| {
+                path.extension()
+                    .and_then(|value| value.to_str())
+                    .is_some_and(|value| value.eq_ignore_ascii_case("app"))
+            })
+            .map(Path::to_path_buf)
+    }
+
+    fn register_app_bundle(bundle_path: &Path) -> Result<(), String> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStrExt;
+            let bytes = bundle_path.as_os_str().as_bytes();
+            let url = unsafe {
+                CFURLCreateFromFileSystemRepresentation(
+                    ptr::null(),
+                    bytes.as_ptr(),
+                    bytes.len() as CFIndex,
+                    1,
+                )
+            };
+            if url.is_null() {
+                return Err("无法创建 app bundle URL".to_string());
+            }
+            let status = unsafe { LSRegisterURL(url, 1) };
+            unsafe { CFRelease(url) };
+            if status == 0 {
+                Ok(())
+            } else {
+                Err(format!("LaunchServices 注册返回 {status}"))
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = bundle_path;
+            Ok(())
+        }
+    }
+
+    struct ScopedCfString(CFStringRef);
+
+    impl ScopedCfString {
+        fn as_ptr(&self) -> CFStringRef {
+            self.0
+        }
+    }
+
+    impl Drop for ScopedCfString {
+        fn drop(&mut self) {
+            if !self.0.is_null() {
+                unsafe { CFRelease(self.0) };
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_skill_package_content_types() -> Vec<String> {
+    macos_file_association::content_types()
+}
+
+#[cfg(target_os = "macos")]
+fn macos_skill_package_default_handlers() -> Vec<(String, Option<String>)> {
+    macos_skill_package_content_types()
+        .into_iter()
+        .map(|content_type| {
+            let handler = macos_file_association::default_handler(&content_type);
+            (content_type, handler)
+        })
+        .collect()
+}
+
+#[cfg(target_os = "macos")]
+fn macos_set_default_handler_for_content_type(
+    content_type: &str,
+    bundle_id: &str,
+) -> Result<(), String> {
+    macos_file_association::set_default_handler(content_type, bundle_id)
+}
+
+#[cfg(target_os = "macos")]
+fn macos_register_current_app_bundle() {
+    macos_file_association::register_current_app_bundle();
+}
+
+#[cfg(target_os = "windows")]
+fn windows_skill_package_current_handler_for_extension(extension: &str) -> Option<String> {
+    use winreg::{enums::*, RegKey};
+
+    let extension = format!(".{extension}");
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    if let Ok(user_choice) = hkcu.open_subkey(format!(
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\{extension}\\UserChoice",
+    )) {
+        if let Ok(value) = user_choice.get_value::<String, _>("ProgId") {
+            return Some(value);
+        }
+    }
+    if let Ok(extension_key) = hkcu.open_subkey(format!("Software\\Classes\\{extension}")) {
+        if let Ok(value) = extension_key.get_value::<String, _>("") {
+            return Some(value);
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn windows_skill_package_current_handler() -> Option<String> {
+    let handlers: Vec<String> = LIME_SKILL_PACKAGE_EXTENSIONS
+        .iter()
+        .filter_map(|extension| windows_skill_package_current_handler_for_extension(extension))
+        .collect();
+
+    handlers
+        .iter()
+        .find(|handler| !handler.eq_ignore_ascii_case(LIME_SKILL_PACKAGE_PROG_ID))
+        .cloned()
+        .or_else(|| handlers.into_iter().next())
+}
+
+#[cfg(target_os = "windows")]
+fn windows_register_skill_package_prog_id() -> Result<(), String> {
+    use winreg::{enums::*, RegKey};
+
+    let exe = std::env::current_exe()
+        .map_err(|error| format!("无法获取 Lime 可执行文件路径: {error}"))?;
+    let command = format!("\"{}\" \"%1\"", exe.display());
+    let icon = format!("{},0", exe.display());
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    for extension in LIME_SKILL_PACKAGE_EXTENSIONS {
+        let (extension_key, _) = hkcu
+            .create_subkey(format!("Software\\Classes\\.{extension}"))
+            .map_err(|error| format!("无法注册 .{extension} 扩展名: {error}"))?;
+        extension_key
+            .set_value("", &LIME_SKILL_PACKAGE_PROG_ID)
+            .map_err(|error| format!("无法写入 .{extension} 默认 ProgID: {error}"))?;
+        extension_key
+            .set_value("Content Type", &LIME_SKILL_PACKAGE_MIME_TYPE)
+            .map_err(|error| format!("无法写入 .{extension} MIME 类型: {error}"))?;
+    }
+
+    let (prog_id_key, _) = hkcu
+        .create_subkey(format!("Software\\Classes\\{LIME_SKILL_PACKAGE_PROG_ID}"))
+        .map_err(|error| format!("无法注册 Lime Skill ProgID: {error}"))?;
+    prog_id_key
+        .set_value("", &"Lime Skill Package")
+        .map_err(|error| format!("无法写入 Lime Skill ProgID 名称: {error}"))?;
+
+    let (icon_key, _) = hkcu
+        .create_subkey(format!(
+            "Software\\Classes\\{LIME_SKILL_PACKAGE_PROG_ID}\\DefaultIcon"
+        ))
+        .map_err(|error| format!("无法注册 .skill / .skills 图标: {error}"))?;
+    icon_key
+        .set_value("", &icon)
+        .map_err(|error| format!("无法写入 .skill / .skills 图标: {error}"))?;
+
+    let (command_key, _) = hkcu
+        .create_subkey(format!(
+            "Software\\Classes\\{LIME_SKILL_PACKAGE_PROG_ID}\\shell\\open\\command"
+        ))
+        .map_err(|error| format!("无法注册 .skill / .skills 打开命令: {error}"))?;
+    command_key
+        .set_value("", &command)
+        .map_err(|error| format!("无法写入 .skill / .skills 打开命令: {error}"))?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn linux_skill_package_current_handler() -> Option<String> {
+    std::process::Command::new("xdg-mime")
+        .arg("query")
+        .arg("default")
+        .arg(LIME_SKILL_PACKAGE_MIME_TYPE)
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+#[cfg(target_os = "linux")]
+fn linux_register_skill_package_mime_type() -> Result<(), String> {
+    let Some(data_dir) = dirs::data_dir() else {
+        return Err("无法获取 Linux 用户数据目录".to_string());
+    };
+    let package_dir = data_dir.join("mime").join("packages");
+    fs::create_dir_all(&package_dir).map_err(|error| {
+        format!(
+            "无法创建 Linux MIME package 目录 {}: {error}",
+            package_dir.display()
+        )
+    })?;
+    let xml_path = package_dir.join("com.limecloud.lime.skill.xml");
+    fs::write(
+        &xml_path,
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="{mime}">
+    <comment>Lime Skill Package</comment>
+    <glob pattern="*.skill"/>
+    <glob pattern="*.skills"/>
+  </mime-type>
+</mime-info>
+"#,
+            mime = LIME_SKILL_PACKAGE_MIME_TYPE
+        ),
+    )
+    .map_err(|error| {
+        format!(
+            "无法写入 Linux MIME package {}: {error}",
+            xml_path.display()
+        )
+    })?;
+
+    let mime_root = data_dir.join("mime");
+    let status = std::process::Command::new("update-mime-database")
+        .arg(&mime_root)
+        .status()
+        .map_err(|error| format!("无法运行 update-mime-database: {error}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("update-mime-database 退出状态: {status}"))
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn linux_set_default_skill_package_handler() -> Result<(), String> {
+    let status = std::process::Command::new("xdg-mime")
+        .arg("default")
+        .arg(LIME_LINUX_DESKTOP_FILE_ID)
+        .arg(LIME_SKILL_PACKAGE_MIME_TYPE)
+        .status()
+        .map_err(|error| format!("无法运行 xdg-mime: {error}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("xdg-mime 退出状态: {status}"))
+    }
 }
 
 fn validate_skill_download_url(value: &str) -> Result<String, String> {
@@ -739,13 +1509,7 @@ fn strip_first_zip_component(path: &Path) -> Result<PathBuf, String> {
     Ok(stripped)
 }
 
-fn install_skill_zip_bytes_into_root(
-    skills_root: &Path,
-    skill_name: &str,
-    bytes: &[u8],
-) -> Result<MarketplaceSkillInstallResult, String> {
-    let directory = skill_name.trim();
-    validate_skill_directory(directory)?;
+fn read_skill_zip_package(bytes: &[u8]) -> Result<SkillZipPackage, String> {
     if bytes.is_empty() {
         return Err("Skill package is empty".to_string());
     }
@@ -753,7 +1517,7 @@ fn install_skill_zip_bytes_into_root(
     let cursor = Cursor::new(bytes);
     let mut archive =
         ZipArchive::new(cursor).map_err(|error| format!("Invalid skill zip package: {error}"))?;
-    let mut files: Vec<(PathBuf, Vec<u8>)> = Vec::new();
+    let mut files: Vec<SkillZipPackageFile> = Vec::new();
     for index in 0..archive.len() {
         let mut file = archive
             .by_index(index)
@@ -780,7 +1544,10 @@ fn install_skill_zip_bytes_into_root(
         if content.len() > MAX_SKILL_DOWNLOAD_BYTES {
             return Err("Skill package file is too large".to_string());
         }
-        files.push((normalized, content));
+        files.push(SkillZipPackageFile {
+            path: normalized,
+            content,
+        });
     }
 
     if files.is_empty() {
@@ -788,21 +1555,245 @@ fn install_skill_zip_bytes_into_root(
     }
 
     let root_skill_md = Path::new("SKILL.md");
-    let has_root_skill_md = files.iter().any(|(path, _)| path == root_skill_md);
+    let has_root_skill_md = files.iter().any(|file| file.path == root_skill_md);
     let shared_zip_root = files
         .first()
-        .and_then(|(path, _)| first_zip_component(path));
+        .and_then(|file| first_zip_component(&file.path));
     let should_strip_directory = shared_zip_root
         .as_deref()
         .map(|root| {
             let nested_skill_md = Path::new(root).join("SKILL.md");
             !has_root_skill_md
-                && files.iter().any(|(path, _)| path == &nested_skill_md)
+                && files.iter().any(|file| file.path == nested_skill_md)
                 && files
                     .iter()
-                    .all(|(path, _)| first_zip_component(path).as_deref() == Some(root))
+                    .all(|file| first_zip_component(&file.path).as_deref() == Some(root))
         })
         .unwrap_or(false);
+
+    Ok(SkillZipPackage {
+        files,
+        shared_zip_root,
+        should_strip_directory,
+    })
+}
+
+fn normalize_skill_zip_relative_path(
+    path: &Path,
+    should_strip_directory: bool,
+) -> Result<PathBuf, String> {
+    let relative_path = if should_strip_directory {
+        strip_first_zip_component(path)?
+    } else {
+        path.to_path_buf()
+    };
+    let relative_path_text = relative_path
+        .to_str()
+        .ok_or_else(|| "Skill zip entry path must be valid UTF-8".to_string())?;
+    validate_marketplace_file_path(relative_path_text)
+}
+
+fn skill_zip_path_to_display_path(path: &Path) -> Result<String, String> {
+    let mut parts = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(value) => {
+                let text = value
+                    .to_str()
+                    .ok_or_else(|| "Skill zip entry path must be valid UTF-8".to_string())?;
+                parts.push(text.to_string());
+            }
+            _ => return Err(format!("Invalid skill zip entry path: {}", path.display())),
+        }
+    }
+    if parts.is_empty() {
+        return Err("Skill zip entry path is required".to_string());
+    }
+    Ok(parts.join("/"))
+}
+
+fn build_local_skill_package_file_entries(
+    package: &SkillZipPackage,
+) -> Result<Vec<LocalSkillPackageFileEntry>, String> {
+    let mut directories = BTreeSet::new();
+    let mut files = Vec::new();
+
+    for file in &package.files {
+        let relative_path =
+            normalize_skill_zip_relative_path(&file.path, package.should_strip_directory)?;
+        let display_path = skill_zip_path_to_display_path(&relative_path)?;
+
+        let mut current = PathBuf::new();
+        let mut components = relative_path.components().peekable();
+        while let Some(component) = components.next() {
+            if components.peek().is_none() {
+                break;
+            }
+            match component {
+                Component::Normal(value) => {
+                    current.push(value);
+                    directories.insert(skill_zip_path_to_display_path(&current)?);
+                }
+                _ => {
+                    return Err(format!(
+                        "Invalid skill zip entry path: {}",
+                        relative_path.display()
+                    ))
+                }
+            }
+        }
+
+        files.push(LocalSkillPackageFileEntry {
+            path: display_path,
+            is_directory: false,
+            size: file.content.len() as u64,
+        });
+    }
+
+    let mut entries: Vec<LocalSkillPackageFileEntry> = directories
+        .into_iter()
+        .map(|path| LocalSkillPackageFileEntry {
+            path,
+            is_directory: true,
+            size: 0,
+        })
+        .collect();
+    files.sort_by(|a, b| a.path.cmp(&b.path));
+    entries.extend(files);
+    Ok(entries)
+}
+
+fn write_skill_zip_package_files(
+    target_dir: &Path,
+    package: &SkillZipPackage,
+) -> Result<(), String> {
+    let root_skill_md = Path::new("SKILL.md");
+    let mut has_skill_md = false;
+
+    for file in &package.files {
+        let relative_path =
+            normalize_skill_zip_relative_path(&file.path, package.should_strip_directory)?;
+        if relative_path == root_skill_md {
+            has_skill_md = true;
+        }
+        let destination = target_dir.join(relative_path);
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent).map_err(|error| {
+                format!(
+                    "Failed to create skill file parent {}: {error}",
+                    parent.display()
+                )
+            })?;
+        }
+        fs::write(&destination, &file.content).map_err(|error| {
+            format!(
+                "Failed to write skill package file {}: {error}",
+                destination.display()
+            )
+        })?;
+    }
+
+    if !has_skill_md {
+        return Err("Skill package missing SKILL.md".to_string());
+    }
+
+    Ok(())
+}
+
+fn resolve_skill_package_directory_name(
+    package: &SkillZipPackage,
+    fallback_name: &str,
+) -> Result<String, String> {
+    let directory = if package.should_strip_directory {
+        package.shared_zip_root.as_deref().unwrap_or(fallback_name)
+    } else {
+        fallback_name
+    }
+    .trim();
+
+    validate_skill_directory(directory)?;
+    Ok(directory.to_string())
+}
+
+fn resolve_local_skill_package_fallback_name(source_path: &Path) -> Result<String, String> {
+    let fallback = source_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "Failed to resolve skill package file name".to_string())?
+        .trim();
+    validate_skill_directory(fallback)?;
+    Ok(fallback.to_string())
+}
+
+fn read_local_skill_package_file(source_path: &Path) -> Result<(PathBuf, Vec<u8>), String> {
+    let canonical_source = source_path.canonicalize().map_err(|e| {
+        format!(
+            "Failed to resolve skill package source {}: {e}",
+            source_path.display()
+        )
+    })?;
+
+    if !canonical_source.is_file() {
+        return Err("Skill package source path must be a file".to_string());
+    }
+
+    let metadata = fs::metadata(&canonical_source).map_err(|e| {
+        format!(
+            "Failed to read skill package metadata {}: {e}",
+            canonical_source.display()
+        )
+    })?;
+    if metadata.len() > MAX_SKILL_DOWNLOAD_BYTES as u64 {
+        return Err("Skill package is too large".to_string());
+    }
+
+    let bytes = fs::read(&canonical_source).map_err(|e| {
+        format!(
+            "Failed to read skill package {}: {e}",
+            canonical_source.display()
+        )
+    })?;
+    if bytes.len() > MAX_SKILL_DOWNLOAD_BYTES {
+        return Err("Skill package is too large".to_string());
+    }
+
+    Ok((canonical_source, bytes))
+}
+
+fn inspect_skill_zip_package(
+    fallback_name: &str,
+    bytes: &[u8],
+) -> Result<LocalSkillPackageInspectionResult, String> {
+    let package = read_skill_zip_package(bytes)?;
+    let directory = resolve_skill_package_directory_name(&package, fallback_name)?;
+    let files = build_local_skill_package_file_entries(&package)?;
+    let temp_dir = tempfile::TempDir::new()
+        .map_err(|error| format!("Failed to create skill package preview: {error}"))?;
+    let target_dir = temp_dir.path().join(&directory);
+    fs::create_dir_all(&target_dir).map_err(|error| {
+        format!(
+            "Failed to create skill package preview directory {}: {error}",
+            target_dir.display()
+        )
+    })?;
+    write_skill_zip_package_files(&target_dir, &package)?;
+    let inspection = SkillService::inspect_skill_dir(&target_dir)
+        .map_err(|error| format!("Skill package failed inspection: {error}"))?;
+
+    Ok(LocalSkillPackageInspectionResult {
+        directory,
+        inspection,
+        files,
+    })
+}
+
+fn install_skill_zip_package_into_root(
+    skills_root: &Path,
+    skill_name: &str,
+    package: SkillZipPackage,
+) -> Result<MarketplaceSkillInstallResult, String> {
+    let directory = skill_name.trim();
+    validate_skill_directory(directory)?;
 
     fs::create_dir_all(skills_root).map_err(|e| {
         format!(
@@ -821,58 +1812,9 @@ fn install_skill_zip_bytes_into_root(
         )
     })?;
 
-    let mut has_skill_md = false;
-    for (path, content) in files {
-        let relative_path = if should_strip_directory {
-            match strip_first_zip_component(&path) {
-                Ok(value) => value,
-                Err(error) => {
-                    let _ = fs::remove_dir_all(&target_dir);
-                    return Err(error);
-                }
-            }
-        } else {
-            path
-        };
-        let relative_path_text = match relative_path.to_str() {
-            Some(value) => value,
-            None => {
-                let _ = fs::remove_dir_all(&target_dir);
-                return Err("Skill zip entry path must be valid UTF-8".to_string());
-            }
-        };
-        let relative_path = match validate_marketplace_file_path(relative_path_text) {
-            Ok(value) => value,
-            Err(error) => {
-                let _ = fs::remove_dir_all(&target_dir);
-                return Err(error);
-            }
-        };
-        if relative_path == root_skill_md {
-            has_skill_md = true;
-        }
-        let destination = target_dir.join(relative_path);
-        if let Some(parent) = destination.parent() {
-            if let Err(error) = fs::create_dir_all(parent) {
-                let _ = fs::remove_dir_all(&target_dir);
-                return Err(format!(
-                    "Failed to create skill file parent {}: {error}",
-                    parent.display()
-                ));
-            }
-        }
-        if let Err(error) = fs::write(&destination, content) {
-            let _ = fs::remove_dir_all(&target_dir);
-            return Err(format!(
-                "Failed to write skill package file {}: {error}",
-                destination.display()
-            ));
-        }
-    }
-
-    if !has_skill_md {
+    if let Err(error) = write_skill_zip_package_files(&target_dir, &package) {
         let _ = fs::remove_dir_all(&target_dir);
-        return Err("Skill package missing SKILL.md".to_string());
+        return Err(error);
     }
 
     match SkillService::inspect_skill_dir(&target_dir) {
@@ -894,6 +1836,15 @@ fn install_skill_zip_bytes_into_root(
             Err(format!("Downloaded skill failed inspection: {error}"))
         }
     }
+}
+
+fn install_skill_zip_bytes_into_root(
+    skills_root: &Path,
+    skill_name: &str,
+    bytes: &[u8],
+) -> Result<MarketplaceSkillInstallResult, String> {
+    let package = read_skill_zip_package(bytes)?;
+    install_skill_zip_package_into_root(skills_root, skill_name, package)
 }
 
 fn install_marketplace_skill_bundle_into_root(
@@ -1015,6 +1966,236 @@ fn install_marketplace_skill_bundle_into_root(
     }
 }
 
+#[derive(Debug, Clone)]
+struct SkillPackageExportFile {
+    source_path: PathBuf,
+    archive_path: String,
+}
+
+fn normalize_skill_package_output_path(target_path: &str) -> Result<PathBuf, String> {
+    let target_path = target_path.trim();
+    if target_path.is_empty() {
+        return Err("Skill package export path is required".to_string());
+    }
+
+    let path = PathBuf::from(target_path);
+    let Some(extension) = path.extension().and_then(|value| value.to_str()) else {
+        return Err("Skill package export path must end with .skill or .skills".to_string());
+    };
+    if !is_lime_skill_package_extension(extension) {
+        return Err("Skill package export path must end with .skill or .skills".to_string());
+    }
+
+    Ok(path)
+}
+
+fn path_to_skill_package_zip_path(path: &Path) -> Result<String, String> {
+    let mut parts = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(value) => {
+                let text = value
+                    .to_str()
+                    .ok_or_else(|| "Skill package path must be valid UTF-8".to_string())?;
+                parts.push(text.to_string());
+            }
+            _ => return Err(format!("Invalid skill package path: {}", path.display())),
+        }
+    }
+    if parts.is_empty() {
+        return Err("Skill package path is required".to_string());
+    }
+    Ok(parts.join("/"))
+}
+
+fn is_ignorable_skill_package_export_entry(path: &Path) -> bool {
+    path.file_name()
+        .map(|value| value.to_string_lossy() == ".DS_Store")
+        .unwrap_or(false)
+}
+
+fn collect_skill_package_export_files(
+    root_dir: &Path,
+    current_dir: &Path,
+    directory: &str,
+    files: &mut Vec<SkillPackageExportFile>,
+    total_size: &mut u64,
+) -> Result<(), String> {
+    let mut entries = fs::read_dir(current_dir)
+        .map_err(|error| {
+            format!(
+                "Failed to read skill directory {}: {error}",
+                current_dir.display()
+            )
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Failed to read skill directory entry: {error}"))?;
+    entries.sort_by_key(|entry| entry.file_name());
+
+    for entry in entries {
+        let path = entry.path();
+        if is_ignorable_skill_package_export_entry(&path) {
+            continue;
+        }
+
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|error| format!("Failed to read skill file {}: {error}", path.display()))?;
+        if metadata.file_type().is_symlink() {
+            return Err(format!(
+                "Skill package export does not support symlinks: {}",
+                path.display()
+            ));
+        }
+        if metadata.is_dir() {
+            collect_skill_package_export_files(root_dir, &path, directory, files, total_size)?;
+            continue;
+        }
+        if !metadata.is_file() {
+            return Err(format!(
+                "Unsupported skill package export entry: {}",
+                path.display()
+            ));
+        }
+
+        let next_total = total_size
+            .checked_add(metadata.len())
+            .ok_or_else(|| "Skill package is too large".to_string())?;
+        if next_total > MAX_SKILL_DOWNLOAD_BYTES as u64 {
+            return Err("Skill package is too large".to_string());
+        }
+        *total_size = next_total;
+
+        let relative_path = path.strip_prefix(root_dir).map_err(|error| {
+            format!(
+                "Failed to resolve skill package relative path {}: {error}",
+                path.display()
+            )
+        })?;
+        let archive_path =
+            path_to_skill_package_zip_path(&Path::new(directory).join(relative_path))?;
+        files.push(SkillPackageExportFile {
+            source_path: path,
+            archive_path,
+        });
+    }
+
+    Ok(())
+}
+
+fn ensure_skill_package_export_target_allowed(
+    skill_dir: &Path,
+    target_path: &Path,
+) -> Result<(), String> {
+    let Some(parent) = target_path.parent() else {
+        return Ok(());
+    };
+    if parent.as_os_str().is_empty() {
+        return Ok(());
+    }
+
+    fs::create_dir_all(parent).map_err(|error| {
+        format!(
+            "Failed to create skill package export directory {}: {error}",
+            parent.display()
+        )
+    })?;
+
+    let canonical_parent = parent.canonicalize().map_err(|error| {
+        format!(
+            "Failed to resolve skill package export directory {}: {error}",
+            parent.display()
+        )
+    })?;
+    if canonical_parent.starts_with(skill_dir) {
+        return Err("Skill package export path cannot be inside the Skill directory".to_string());
+    }
+    Ok(())
+}
+
+fn export_local_skill_package_to_path(
+    skill_roots: &[PathBuf],
+    directory: &str,
+    target_path: &Path,
+) -> Result<SkillPackageExportResult, String> {
+    validate_skill_directory(directory)?;
+    let skill_dir = resolve_local_skill_dir(skill_roots, directory)?;
+    let inspection = SkillService::inspect_skill_dir(&skill_dir)
+        .map_err(|error| format!("Skill failed inspection before export: {error}"))?;
+    if !inspection.standard_compliance.validation_errors.is_empty() {
+        return Err(format!(
+            "Skill is not Agent Skills compliant: {}",
+            inspection.standard_compliance.validation_errors.join("; ")
+        ));
+    }
+
+    ensure_skill_package_export_target_allowed(&skill_dir, target_path)?;
+
+    let mut files = Vec::new();
+    let mut total_size = 0;
+    collect_skill_package_export_files(
+        &skill_dir,
+        &skill_dir,
+        directory,
+        &mut files,
+        &mut total_size,
+    )?;
+    if files.is_empty() {
+        return Err("Skill package export contains no files".to_string());
+    }
+
+    let export_file = fs::File::create(target_path).map_err(|error| {
+        format!(
+            "Failed to create skill package export {}: {error}",
+            target_path.display()
+        )
+    })?;
+    let mut writer = ZipWriter::new(export_file);
+    let file_options = FileOptions::default()
+        .compression_method(CompressionMethod::Deflated)
+        .unix_permissions(0o644);
+
+    for file in &files {
+        writer
+            .start_file(&file.archive_path, file_options)
+            .map_err(|error| {
+                format!(
+                    "Failed to write skill package entry {}: {error}",
+                    file.archive_path
+                )
+            })?;
+        let mut source_file = fs::File::open(&file.source_path).map_err(|error| {
+            format!(
+                "Failed to open skill package file {}: {error}",
+                file.source_path.display()
+            )
+        })?;
+        std::io::copy(&mut source_file, &mut writer).map_err(|error| {
+            format!(
+                "Failed to compress skill package file {}: {error}",
+                file.source_path.display()
+            )
+        })?;
+    }
+
+    writer.finish().map_err(|error| {
+        let _ = fs::remove_file(target_path);
+        format!(
+            "Failed to finish skill package export {}: {error}",
+            target_path.display()
+        )
+    })?;
+    let bytes_written = fs::metadata(target_path)
+        .map(|metadata| metadata.len())
+        .unwrap_or(total_size);
+
+    Ok(SkillPackageExportResult {
+        directory: directory.to_string(),
+        output_path: target_path.to_string_lossy().to_string(),
+        file_count: files.len(),
+        bytes_written,
+    })
+}
+
 /// 获取已安装的 Lime Skills 目录列表
 ///
 /// 扫描 Lime 可发现的 provider Skills 根目录，返回包含 SKILL.md 的子目录名列表。
@@ -1089,6 +2270,90 @@ pub fn import_local_skill_for_app(
     }
 
     Ok(ImportedSkillResult { directory })
+}
+
+/// 预检本地 `.skill` 安装包。
+///
+/// 安装包按 ZIP 读取，允许包内有单个根目录；预检会返回安装目录名、
+/// `SKILL.md` 标准检查结果和包内文件清单，供 GUI 在安装前展示。
+#[tauri::command]
+pub fn inspect_local_skill_package_for_app(
+    app: String,
+    source_path: String,
+) -> Result<LocalSkillPackageInspectionResult, String> {
+    let _app_type: AppType = app.parse().map_err(|e: String| e)?;
+    let (canonical_source, bytes) = read_local_skill_package_file(Path::new(&source_path))?;
+    let fallback_name = resolve_local_skill_package_fallback_name(&canonical_source)?;
+    inspect_skill_zip_package(&fallback_name, &bytes)
+}
+
+/// 从本地 `.skill` 安装包安装 Skill。
+///
+/// 如果未显式提供 `skill_name`，优先使用 ZIP 单根目录名；否则使用文件名。
+#[tauri::command]
+pub fn install_local_skill_package_for_app(
+    app: String,
+    source_path: String,
+    skill_name: Option<String>,
+) -> Result<MarketplaceSkillInstallResult, String> {
+    let app_type: AppType = app.parse().map_err(|e: String| e)?;
+    let (canonical_source, bytes) = read_local_skill_package_file(Path::new(&source_path))?;
+    let fallback_name = resolve_local_skill_package_fallback_name(&canonical_source)?;
+    let package = read_skill_zip_package(&bytes)?;
+    let directory = match skill_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        Some(value) => {
+            validate_skill_directory(value)?;
+            value.to_string()
+        }
+        None => resolve_skill_package_directory_name(&package, &fallback_name)?,
+    };
+    let skills_root = get_skills_dir(&app_type)?;
+    let result = install_skill_zip_package_into_root(&skills_root, &directory, package)?;
+
+    if matches!(app_type, AppType::Lime) {
+        AsterAgentState::reload_lime_skills();
+    }
+
+    Ok(result)
+}
+
+/// 将已安装 Skill 导出为可双击安装的 `.skills`/`.skill` ZIP 包。
+#[tauri::command]
+pub fn export_local_skill_package_for_app(
+    app: String,
+    directory: String,
+    target_path: String,
+) -> Result<SkillPackageExportResult, String> {
+    let app_type: AppType = app.parse().map_err(|e: String| e)?;
+    let skill_roots = get_skill_lookup_roots(&app_type)?;
+    let target_path = normalize_skill_package_output_path(&target_path)?;
+    export_local_skill_package_to_path(&skill_roots, &directory, &target_path)
+}
+
+/// 取出系统文件关联或单实例转发过来的 `.skill` 打开请求。
+///
+/// 前端启动后调用一次，用于避免早于事件监听注册的打开请求丢失。
+#[tauri::command]
+pub fn take_pending_skill_package_open_requests() -> Result<Vec<String>, String> {
+    Ok(take_pending_skill_package_open_paths())
+}
+
+/// 查询 `.skill` 当前默认打开方式。
+#[tauri::command]
+pub fn get_skill_package_file_association_status(
+) -> Result<SkillPackageFileAssociationStatus, String> {
+    Ok(current_skill_package_file_association_status())
+}
+
+/// 尝试将 `.skill` 默认打开方式设置为 Lime。
+#[tauri::command]
+pub fn set_skill_package_file_association_default(
+) -> Result<SkillPackageFileAssociationApplyResult, String> {
+    set_skill_package_file_association_default_impl()
 }
 
 /// 从官方技能市场 bundle 结构化安装 Skill。
@@ -1423,6 +2688,37 @@ mod tests {
         let original = std::env::var_os(key);
         std::env::set_var(key, value);
         EnvVarGuard { key, original }
+    }
+
+    #[test]
+    fn test_collect_skill_package_open_paths_accepts_file_urls_and_paths() {
+        let temp_dir = TempDir::new().unwrap();
+        let skill_path = temp_dir.path().join("article-typesetting-master.skill");
+        let skills_path = temp_dir.path().join("article-typesetting-addon.skills");
+        let skill_path_string = skill_path.to_string_lossy().to_string();
+        let skills_path_string = skills_path.to_string_lossy().to_string();
+        let skill_file_url = Url::from_file_path(&skill_path)
+            .expect("temp skill path should convert to file URL")
+            .to_string();
+        let skills_file_url = Url::from_file_path(&skills_path)
+            .expect("temp skills path should convert to file URL")
+            .to_string();
+        let readme_path_string = temp_dir
+            .path()
+            .join("readme.md")
+            .to_string_lossy()
+            .to_string();
+        let paths = collect_skill_package_open_paths([
+            "lime",
+            skill_path_string.as_str(),
+            skills_path_string.as_str(),
+            skill_file_url.as_str(),
+            skills_file_url.as_str(),
+            readme_path_string.as_str(),
+            "https://example.com/example.skill",
+        ]);
+
+        assert_eq!(paths, vec![skill_path_string, skills_path_string]);
     }
 
     /// 生成有效的 Skill 目录名（字母数字和连字符）
@@ -1900,6 +3196,46 @@ content"#,
         assert!(!target_root.join("market-skill").exists());
     }
 
+    #[test]
+    fn test_export_local_skill_package_to_path_writes_skill_zip() {
+        let temp_dir = TempDir::new().unwrap();
+        let skill_root = temp_dir.path().join("skills");
+        let source_dir = skill_root.join("writer");
+        std::fs::create_dir_all(source_dir.join("references")).unwrap();
+        std::fs::write(
+            source_dir.join("SKILL.md"),
+            "---\nname: Writer\ndescription: export me\n---\n\n# Writer\n",
+        )
+        .unwrap();
+        std::fs::write(source_dir.join("references").join("guide.md"), "# Guide").unwrap();
+
+        let export_path = temp_dir.path().join("exports").join("writer.skills");
+        let result =
+            export_local_skill_package_to_path(&[skill_root], "writer", &export_path).unwrap();
+
+        assert_eq!(result.directory, "writer");
+        assert_eq!(result.output_path, export_path.to_string_lossy());
+        assert_eq!(result.file_count, 2);
+        assert!(result.bytes_written > 0);
+        assert!(export_path.is_file());
+
+        let export_file = fs::File::open(&export_path).unwrap();
+        let mut archive = ZipArchive::new(export_file).unwrap();
+        let mut names = Vec::new();
+        for index in 0..archive.len() {
+            names.push(archive.by_index(index).unwrap().name().to_string());
+        }
+        assert_eq!(names, vec!["writer/SKILL.md", "writer/references/guide.md"]);
+
+        let mut skill_md = String::new();
+        archive
+            .by_name("writer/SKILL.md")
+            .unwrap()
+            .read_to_string(&mut skill_md)
+            .unwrap();
+        assert!(skill_md.contains("name: Writer"));
+    }
+
     fn build_skill_zip(entries: &[(&str, &str)]) -> Vec<u8> {
         let cursor = Cursor::new(Vec::new());
         let mut writer = zip::ZipWriter::new(cursor);
@@ -1921,6 +3257,7 @@ content"#,
         let temp_dir = TempDir::new().unwrap();
         // Isolate app paths so the command path never writes to the developer's real Lime data dir.
         let _home = set_test_env_var("HOME", &temp_dir.path().join("home"));
+        let _userprofile = set_test_env_var("USERPROFILE", &temp_dir.path().join("home"));
         let _xdg_data = set_test_env_var("XDG_DATA_HOME", &temp_dir.path().join("xdg-data"));
         let _appdata = set_test_env_var("APPDATA", &temp_dir.path().join("appdata"));
         let _local_appdata =
@@ -1982,6 +3319,91 @@ content"#,
             .join("guide.md")
             .is_file());
         assert!(result.inspection.standard_compliance.is_standard);
+    }
+
+    #[test]
+    fn test_inspect_skill_zip_package_returns_stripped_file_tree() {
+        let package = build_skill_zip(&[
+            (
+                "article-typesetting-master/SKILL.md",
+                "---\nname: Article Typesetting\ndescription: typeset article\n---\n\n# Article Typesetting",
+            ),
+            (
+                "article-typesetting-master/references/guide.md",
+                "# Guide",
+            ),
+            (
+                "article-typesetting-master/templates/default.md",
+                "# Template",
+            ),
+        ]);
+
+        let result = inspect_skill_zip_package("article-typesetting-master", &package).unwrap();
+
+        assert_eq!(result.directory, "article-typesetting-master");
+        assert!(result.inspection.content.contains("# Article Typesetting"));
+        assert!(result.inspection.standard_compliance.is_standard);
+        assert_eq!(
+            result
+                .files
+                .iter()
+                .map(|entry| (entry.path.as_str(), entry.is_directory))
+                .collect::<Vec<_>>(),
+            vec![
+                ("references", true),
+                ("templates", true),
+                ("SKILL.md", false),
+                ("references/guide.md", false),
+                ("templates/default.md", false),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_install_local_skill_package_for_app_installs_skill_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let _home = set_test_env_var("HOME", &temp_dir.path().join("home"));
+        let _userprofile = set_test_env_var("USERPROFILE", &temp_dir.path().join("home"));
+        let _xdg_data = set_test_env_var("XDG_DATA_HOME", &temp_dir.path().join("xdg-data"));
+        let _appdata = set_test_env_var("APPDATA", &temp_dir.path().join("appdata"));
+        let _local_appdata =
+            set_test_env_var("LOCALAPPDATA", &temp_dir.path().join("local-appdata"));
+        let package = build_skill_zip(&[
+            (
+                "article-typesetting-master/SKILL.md",
+                "---\nname: Article Typesetting\ndescription: typeset article\n---\n",
+            ),
+            ("article-typesetting-master/references/guide.md", "# Guide"),
+        ]);
+        let source_path = temp_dir
+            .path()
+            .join("packages")
+            .join("article-typesetting-master.skill");
+        std::fs::create_dir_all(source_path.parent().unwrap()).unwrap();
+        std::fs::write(&source_path, package).unwrap();
+
+        let result = install_local_skill_package_for_app(
+            "lime".to_string(),
+            source_path.to_string_lossy().to_string(),
+            None,
+        )
+        .expect("local .skill package should install");
+
+        let target_root = app_paths::resolve_skills_dir().expect("temp skills dir should resolve");
+        assert_eq!(
+            target_root,
+            temp_dir.path().join("home").join(".lime").join("skills")
+        );
+        assert_eq!(result.directory, "article-typesetting-master");
+        assert!(target_root
+            .join("article-typesetting-master")
+            .join("SKILL.md")
+            .is_file());
+        assert!(target_root
+            .join("article-typesetting-master")
+            .join("references")
+            .join("guide.md")
+            .is_file());
     }
 
     #[test]

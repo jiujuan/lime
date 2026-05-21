@@ -1,5 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, ExternalLink, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  CheckCircle2,
+  ExternalLink,
+  PackageCheck,
+  RefreshCw,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   checkForUpdates,
@@ -7,6 +12,10 @@ import {
   type DownloadUpdateResult,
   type VersionInfo,
 } from "@/lib/api/appUpdate";
+import {
+  skillsApi,
+  type SkillPackageFileAssociationStatus,
+} from "@/lib/api/skills";
 import { LIME_BRAND_LOGO_SRC, LIME_BRAND_NAME } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +38,14 @@ export function AboutSection() {
   const [downloading, setDownloading] = useState(false);
   const [downloadResult, setDownloadResult] =
     useState<DownloadUpdateResult | null>(null);
+  const [skillAssociationStatus, setSkillAssociationStatus] =
+    useState<SkillPackageFileAssociationStatus | null>(null);
+  const [skillAssociationLoading, setSkillAssociationLoading] = useState(false);
+  const [skillAssociationApplying, setSkillAssociationApplying] =
+    useState(false);
+  const [skillAssociationMessage, setSkillAssociationMessage] = useState<
+    string | null
+  >(null);
   const manualDownloadUrl =
     versionInfo.releaseNotesUrl || FALLBACK_RELEASES_URL;
   const isWindows =
@@ -59,6 +76,27 @@ export function AboutSection() {
 
     void loadCurrentVersion();
   }, []);
+
+  const refreshSkillAssociationStatus = useCallback(async () => {
+    setSkillAssociationLoading(true);
+    try {
+      const status = await skillsApi.getSkillPackageFileAssociationStatus();
+      setSkillAssociationStatus(status);
+      setSkillAssociationMessage(null);
+    } catch (error) {
+      setSkillAssociationMessage(
+        t("settings.about.skillAssociation.message.checkFailed", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    } finally {
+      setSkillAssociationLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    void refreshSkillAssociationStatus();
+  }, [refreshSkillAssociationStatus]);
 
   const handleCheckUpdate = async () => {
     setChecking(true);
@@ -117,6 +155,33 @@ export function AboutSection() {
     }
   };
 
+  const handleSetSkillAssociationDefault = async () => {
+    setSkillAssociationApplying(true);
+    try {
+      const result = await skillsApi.setSkillPackageFileAssociationDefault();
+      setSkillAssociationStatus(result.status);
+      if (result.status.isDefault) {
+        setSkillAssociationMessage(
+          t("settings.about.skillAssociation.message.updated"),
+        );
+      } else if (result.status.requiresUserConfirmation) {
+        setSkillAssociationMessage(
+          t("settings.about.skillAssociation.message.needsConfirmation"),
+        );
+      } else {
+        setSkillAssociationMessage(result.message);
+      }
+    } catch (error) {
+      setSkillAssociationMessage(
+        t("settings.about.skillAssociation.message.updateFailed", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    } finally {
+      setSkillAssociationApplying(false);
+    }
+  };
+
   const versionLabel = t("settings.about.version.label", {
     version: versionInfo.current || t("settings.about.version.loading"),
     build: versionInfo.current || t("settings.about.version.loading"),
@@ -151,6 +216,39 @@ export function AboutSection() {
       className: "border-sky-200 bg-sky-50 text-sky-700",
     };
   }, [t, versionInfo.error, versionInfo.hasUpdate, versionInfo.latest]);
+
+  const skillAssociationStatusMeta = useMemo(() => {
+    if (skillAssociationLoading && !skillAssociationStatus) {
+      return {
+        label: t("settings.about.skillAssociation.status.checking"),
+        className: "border-sky-200 bg-sky-50 text-sky-700",
+      };
+    }
+    if (skillAssociationStatus?.isDefault) {
+      return {
+        label: t("settings.about.skillAssociation.status.default"),
+        className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      };
+    }
+    if (skillAssociationStatus?.currentHandler) {
+      return {
+        label: t("settings.about.skillAssociation.status.other", {
+          handler: skillAssociationStatus.currentHandler,
+        }),
+        className: "border-amber-200 bg-amber-50 text-amber-700",
+      };
+    }
+    return {
+      label: t("settings.about.skillAssociation.status.unknown"),
+      className: "border-slate-200 bg-slate-100 text-slate-600",
+    };
+  }, [skillAssociationLoading, skillAssociationStatus, t]);
+
+  const skillAssociationActionLabel = skillAssociationStatus?.isDefault
+    ? t("settings.about.skillAssociation.action.recheck")
+    : skillAssociationStatus?.requiresUserConfirmation
+      ? t("settings.about.skillAssociation.action.openSystemSettings")
+      : t("settings.about.skillAssociation.action.setDefault");
 
   return (
     <div className="pb-8">
@@ -257,6 +355,86 @@ export function AboutSection() {
             </div>
           </div>
         ) : null}
+      </section>
+
+      <section className="mx-auto mt-4 max-w-[560px] rounded-[24px] border border-slate-200/80 bg-white p-5 text-left shadow-sm shadow-slate-950/5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+              <PackageCheck className="h-4 w-4 text-amber-600" />
+              {t("settings.about.skillAssociation.title")}
+            </div>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {t("settings.about.skillAssociation.description")}
+            </p>
+          </div>
+          <span
+            className={cn(
+              "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium",
+              skillAssociationStatusMeta.className,
+            )}
+          >
+            {skillAssociationStatusMeta.label}
+          </span>
+        </div>
+
+        <div className="mt-4 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
+          {skillAssociationStatus?.requiresUserConfirmation
+            ? t("settings.about.skillAssociation.notice.requiresConfirmation")
+            : t("settings.about.skillAssociation.notice.default")}
+        </div>
+
+        {skillAssociationMessage ? (
+          <p
+            className={cn(
+              "mt-3 rounded-[16px] border px-3 py-2 text-xs leading-5",
+              skillAssociationStatus?.isDefault
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border-amber-200 bg-amber-50 text-amber-800",
+            )}
+          >
+            {skillAssociationMessage}
+          </p>
+        ) : null}
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() =>
+              skillAssociationStatus?.isDefault
+                ? void refreshSkillAssociationStatus()
+                : void handleSetSkillAssociationDefault()
+            }
+            disabled={skillAssociationLoading || skillAssociationApplying}
+            className={
+              skillAssociationStatus?.isDefault
+                ? SECONDARY_ACTION_BUTTON_CLASS
+                : PRIMARY_ACTION_BUTTON_CLASS
+            }
+          >
+            <RefreshCw
+              className={cn(
+                "h-4 w-4",
+                (skillAssociationLoading || skillAssociationApplying) &&
+                  "animate-spin",
+              )}
+            />
+            {skillAssociationApplying
+              ? t("settings.about.skillAssociation.action.setting")
+              : skillAssociationActionLabel}
+          </button>
+
+          {!skillAssociationStatus?.isDefault ? (
+            <button
+              type="button"
+              onClick={() => void refreshSkillAssociationStatus()}
+              disabled={skillAssociationLoading || skillAssociationApplying}
+              className={SECONDARY_ACTION_BUTTON_CLASS}
+            >
+              {t("settings.about.skillAssociation.action.recheck")}
+            </button>
+          ) : null}
+        </div>
       </section>
     </div>
   );

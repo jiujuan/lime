@@ -153,6 +153,7 @@ export function projectApp(params: {
       status: manifest.status,
       appType: manifest.appType,
       description: manifest.description,
+      presentation: manifest.presentation,
     },
     package: identity,
     entries,

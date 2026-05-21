@@ -176,6 +176,9 @@ export interface SkillScaffoldDraft extends Record<string, unknown> {
 export interface SkillsPageParams {
   initialScaffoldDraft?: SkillScaffoldDraft;
   initialScaffoldRequestKey?: number;
+  initialSkillPackagePath?: string;
+  initialSkillPackageName?: string;
+  initialSkillPackageRequestKey?: number;
   creationProjectId?: string;
   highlightCapabilityDraftId?: string;
   initialView?: "store" | "builtin" | "installed" | "discover" | "manage";
