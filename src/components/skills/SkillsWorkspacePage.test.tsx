@@ -364,6 +364,12 @@ function findMenuItem(container: HTMLElement, label: string) {
   ) as HTMLElement | undefined;
 }
 
+function clickMenuItem(container: HTMLElement, label: string) {
+  const item = findMenuItem(container, label);
+  expect(item).toBeTruthy();
+  item?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+}
+
 function findLocalSkillRow(container: HTMLElement, directory: string) {
   return Array.from(
     container.querySelectorAll('[data-testid="skills-local-skill-row"]'),
@@ -685,9 +691,9 @@ describe("SkillsWorkspacePage", () => {
     act(() => {
       findButton(container, "用户安装")?.click();
     });
+    openLocalSkillMenu(container);
     act(() => {
-      openLocalSkillMenu(container);
-      findButton(container, "在聊天中试用")?.click();
+      clickMenuItem(container, "在聊天中试用");
     });
 
     expect(onNavigate).toHaveBeenCalledWith(
@@ -855,9 +861,9 @@ describe("SkillsWorkspacePage", () => {
     act(() => {
       findButton(container, "用户安装")?.click();
     });
+    openLocalSkillMenu(container);
     await act(async () => {
-      openLocalSkillMenu(container);
-      findButton(container, "卸载")?.click();
+      clickMenuItem(container, "卸载");
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -873,9 +879,9 @@ describe("SkillsWorkspacePage", () => {
     act(() => {
       findButton(container, "用户安装")?.click();
     });
+    openLocalSkillMenu(container);
     await act(async () => {
-      openLocalSkillMenu(container);
-      findButton(container, "导出")?.click();
+      clickMenuItem(container, "导出");
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -909,9 +915,9 @@ describe("SkillsWorkspacePage", () => {
       findButton(container, "用户安装")?.click();
     });
 
+    openLocalSkillMenu(container);
     await act(async () => {
-      openLocalSkillMenu(container);
-      findButton(container, "重命名")?.click();
+      clickMenuItem(container, "重命名");
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -927,9 +933,9 @@ describe("SkillsWorkspacePage", () => {
     );
     expect(mocks.refreshLocalSkills).toHaveBeenCalled();
 
+    openLocalSkillMenu(container);
     await act(async () => {
-      openLocalSkillMenu(container);
-      findButton(container, "替换")?.click();
+      clickMenuItem(container, "替换");
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -951,9 +957,9 @@ describe("SkillsWorkspacePage", () => {
       "lime",
     );
 
+    openLocalSkillMenu(container);
     await act(async () => {
-      openLocalSkillMenu(container);
-      findButton(container, "在文件夹中显示")?.click();
+      clickMenuItem(container, "在文件夹中显示");
       await Promise.resolve();
     });
 
@@ -1016,7 +1022,7 @@ describe("SkillsWorkspacePage", () => {
     expect(container.textContent).toContain("上传技能");
 
     act(() => {
-      findButton(container, "浏览技能")?.click();
+      clickMenuItem(container, "浏览技能");
     });
     expect(
       container.querySelector('[data-testid="skills-store-view"]'),
@@ -1026,7 +1032,7 @@ describe("SkillsWorkspacePage", () => {
       findButton(container, "管理")?.click();
     });
     await act(async () => {
-      findButton(container, "上传技能")?.click();
+      clickMenuItem(container, "上传技能");
       await Promise.resolve();
       await Promise.resolve();
     });
