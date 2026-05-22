@@ -2368,14 +2368,14 @@ fn replace_user_local_skill_package(
     validate_skill_directory(directory)?;
     let skills_root = get_skills_dir(app_type)?;
     let existing_dir = resolve_local_skill_dir(&[skills_root.clone()], directory)?;
-    let (canonical_source, bytes) = read_local_skill_package_file(Path::new(source_path))?;
-    let _fallback_name = resolve_local_skill_package_fallback_name(&canonical_source)?;
+    let (_canonical_source, bytes) = read_local_skill_package_file(Path::new(source_path))?;
     let package = read_skill_zip_package(&bytes)?;
 
     let staging_parent = tempfile::TempDir::new_in(&skills_root)
         .map_err(|error| format!("Failed to create replacement staging directory: {error}"))?;
     let staged_dir = staging_parent.path().join(directory);
-    let staged_result = install_skill_zip_package_into_existing_dir(&staged_dir, directory, package)?;
+    let staged_result =
+        install_skill_zip_package_into_existing_dir(&staged_dir, directory, package)?;
 
     let backup_dir = skills_root.join(format!(
         ".{directory}.replace-backup-{}",
@@ -3704,6 +3704,86 @@ content"#,
             .join("references")
             .join("guide.md")
             .is_file());
+    }
+
+    #[test]
+    fn test_rename_user_local_skill_dir_moves_skill_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let _home = set_test_env_var("HOME", &temp_dir.path().join("home"));
+        let _userprofile = set_test_env_var("USERPROFILE", &temp_dir.path().join("home"));
+        let _xdg_data = set_test_env_var("XDG_DATA_HOME", &temp_dir.path().join("xdg-data"));
+        let _appdata = set_test_env_var("APPDATA", &temp_dir.path().join("appdata"));
+        let _local_appdata =
+            set_test_env_var("LOCALAPPDATA", &temp_dir.path().join("local-appdata"));
+        let target_root = app_paths::resolve_skills_dir().expect("temp skills dir should resolve");
+        let source_dir = target_root.join("writer");
+        std::fs::create_dir_all(&source_dir).unwrap();
+        std::fs::write(
+            source_dir.join("SKILL.md"),
+            "---\nname: Writer\ndescription: rename me\n---\n",
+        )
+        .unwrap();
+
+        let result =
+            rename_user_local_skill_dir(&AppType::Lime, "writer", "writer-renamed").unwrap();
+
+        assert_eq!(result, "writer-renamed");
+        assert!(!target_root.join("writer").exists());
+        assert!(target_root
+            .join("writer-renamed")
+            .join("SKILL.md")
+            .is_file());
+    }
+
+    #[test]
+    fn test_replace_user_local_skill_package_replaces_existing_tree() {
+        let temp_dir = TempDir::new().unwrap();
+        let _home = set_test_env_var("HOME", &temp_dir.path().join("home"));
+        let _userprofile = set_test_env_var("USERPROFILE", &temp_dir.path().join("home"));
+        let _xdg_data = set_test_env_var("XDG_DATA_HOME", &temp_dir.path().join("xdg-data"));
+        let _appdata = set_test_env_var("APPDATA", &temp_dir.path().join("appdata"));
+        let _local_appdata =
+            set_test_env_var("LOCALAPPDATA", &temp_dir.path().join("local-appdata"));
+        let target_root = app_paths::resolve_skills_dir().expect("temp skills dir should resolve");
+        let existing_dir = target_root.join("writer");
+        std::fs::create_dir_all(existing_dir.join("references")).unwrap();
+        std::fs::write(
+            existing_dir.join("SKILL.md"),
+            "---\nname: Writer\ndescription: old\n---\n",
+        )
+        .unwrap();
+        std::fs::write(existing_dir.join("references").join("old.md"), "old").unwrap();
+
+        let package = build_skill_zip(&[
+            (
+                "writer/SKILL.md",
+                "---\nname: Writer\ndescription: replaced\n---\n\n# Replaced",
+            ),
+            ("writer/assets/new.txt", "new"),
+        ]);
+        let source_path = temp_dir.path().join("writer.skills");
+        std::fs::write(&source_path, package).unwrap();
+
+        let result = replace_user_local_skill_package(
+            &AppType::Lime,
+            "writer",
+            &source_path.to_string_lossy(),
+        )
+        .unwrap();
+
+        assert_eq!(result.directory, "writer");
+        assert!(target_root.join("writer").join("SKILL.md").is_file());
+        assert!(target_root
+            .join("writer")
+            .join("assets")
+            .join("new.txt")
+            .is_file());
+        assert!(!target_root
+            .join("writer")
+            .join("references")
+            .join("old.md")
+            .exists());
+        assert!(result.inspection.content.contains("# Replaced"));
     }
 
     #[test]
