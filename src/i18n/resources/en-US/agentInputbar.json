@@ -195,6 +195,7 @@
   "agentChat.inputbar.knowledge.meta.companion": "Enters context with the main knowledge to add operational facts and execution boundaries",
   "agentChat.inputbar.knowledge.implicitCompanions": "Persona knowledge added automatically: {{labels}}.",
   "agentChat.inputbar.knowledge.pendingNotice": "{{count}} knowledge item(s) still need review. They will appear in the available list after confirmation.",
+  "agentChat.inputbar.knowledge.dismiss.aria": "Close knowledge panel",
   "agentChat.inputbar.knowledge.action.close": "Close knowledge",
   "agentChat.inputbar.knowledge.action.check": "Check knowledge",
   "agentChat.inputbar.knowledge.action.organizeSecondary": "Add new knowledge",

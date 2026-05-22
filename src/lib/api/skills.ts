@@ -86,6 +86,7 @@ export interface LocalSkillPackageFileEntry {
   path: string;
   isDirectory: boolean;
   size: number;
+  content?: string;
 }
 
 export interface LocalSkillPackageInspectionResult {
@@ -93,6 +94,9 @@ export interface LocalSkillPackageInspectionResult {
   inspection: SkillInspection;
   files: LocalSkillPackageFileEntry[];
 }
+
+export type LocalSkillDetailInspectionResult =
+  LocalSkillPackageInspectionResult;
 
 export interface SkillPackageFileAssociationStatus {
   platform: string;
@@ -261,6 +265,62 @@ export const skillsApi = {
       { app, directory },
     );
     return normalizeInspection(inspection);
+  },
+
+  async inspectLocalSkillDetail(
+    directory: string,
+    app: AppType = "lime",
+  ): Promise<LocalSkillDetailInspectionResult> {
+    const result = await safeInvoke<LocalSkillDetailInspectionResult>(
+      "inspect_local_skill_detail_for_app",
+      { app, directory },
+    );
+    return {
+      ...result,
+      inspection: normalizeInspection(result.inspection),
+      files: Array.isArray(result.files) ? result.files : [],
+    };
+  },
+
+  async revealLocalSkill(
+    directory: string,
+    app: AppType = "lime",
+  ): Promise<boolean> {
+    return safeInvoke<boolean>("reveal_local_skill_for_app", {
+      app,
+      directory,
+    });
+  },
+
+  async renameLocalSkill(
+    directory: string,
+    newDirectory: string,
+    app: AppType = "lime",
+  ): Promise<ImportedSkillResult> {
+    return safeInvoke<ImportedSkillResult>("rename_local_skill_for_app", {
+      app,
+      directory,
+      newDirectory,
+    });
+  },
+
+  async replaceLocalSkillPackage(
+    directory: string,
+    sourcePath: string,
+    app: AppType = "lime",
+  ): Promise<SkillMarketplaceInstallResult> {
+    const result = await safeInvoke<SkillMarketplaceInstallResult>(
+      "replace_local_skill_package_for_app",
+      {
+        app,
+        directory,
+        sourcePath,
+      },
+    );
+    return {
+      ...result,
+      inspection: normalizeInspection(result.inspection),
+    };
   },
 
   async createSkillScaffold(

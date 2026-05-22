@@ -195,6 +195,7 @@
   "agentChat.inputbar.knowledge.meta.companion": "和主资料一起进入上下文，用于补充运营事实和执行边界",
   "agentChat.inputbar.knowledge.implicitCompanions": "已自动搭配人设资料：{{labels}}。",
   "agentChat.inputbar.knowledge.pendingNotice": "还有 {{count}} 份资料待确认，确认后才会出现在可用列表里。",
+  "agentChat.inputbar.knowledge.dismiss.aria": "关闭资料浮层",
   "agentChat.inputbar.knowledge.action.close": "关闭资料",
   "agentChat.inputbar.knowledge.action.check": "检查资料",
   "agentChat.inputbar.knowledge.action.organizeSecondary": "添加新资料",

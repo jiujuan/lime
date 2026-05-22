@@ -85,6 +85,15 @@ Lime 的命令体系固定按以下关系理解：
 - 轻卡是用户第一反馈层
 - viewer 是详情查看层
 
+### Agent 执行环境与路径规则
+
+Agent turn 必须把当前 OS、工作目录、shell 运行时和本机路径格式注入系统提示，作为执行环境事实源。
+
+- Windows 原生运行时默认使用 PowerShell 语义和 Windows 路径，不能把系统盘 / C 盘猜成 `/mnt/c`
+- `/mnt/<drive>` 只适用于明确处于 WSL / Linux shell 的会话；没有证据时，先查询 `$env:SystemDrive`、`$env:SystemRoot` 或 `Get-PSDrive -PSProvider FileSystem`
+- macOS / 非 Windows 运行时不能臆造 `C:\`、`D:\` 等盘符；用户要求 Windows 专属路径时，应说明当前环境不可直接访问或请求确认映射
+- 本规则是执行主链的一部分，不应下沉为某个 skill 的私有提示；skill 可提供平台路由示例，但不能覆盖运行时事实源
+
 对图片任务再补一条固定约束：
 
 `@配图/@修图/@重绘` 原始文本必须先进入 Agent turn，再由 `harness.image_skill_launch` 辅助首刀 `Skill(image_generate)`；文稿 inline 配图、封面位、图片工作台编辑/变体这类显式图片动作也一样，必须先组装 `image_task` 上下文后再复用统一发送主线。不要把这些通用图片命令重新改回前端预翻 slash skill、前端直建任务或“按钮直调 task API”。统一目录显式声明的图片模型标签，例如用户在“设置 -> AI 服务商”里从已配置 Provider 模型创建的 `@Nano Banana 2` / `@GPT Images 2`，或 Lime Cloud 下发的同构 command entry，也只表示“用户已经指定图片执行模型”；发送边界仍必须把 `entry_source / provider_id / model / executor_mode / modality_contract_key / runtime_contract / routing_slot` 等上下文并入 `harness.image_skill_launch.image_task`，由同一条 Agent / Skill 回合调用 `lime_create_image_generation_task` 创建标准 task artifact。未在 catalog 中声明的任意 `@模型名` 不得自动变成图片 API 入口。图片 launch 还必须显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类通用偏航工具，并在必要时直接从当前 session tool surface 移除这些 detour tools，避免模型在“搜技能目录”里空转或把权限错误暴露给用户。当前通用 `image_generate` 的唯一 current 执行面是 `Skill(image_generate) -> lime_create_image_generation_task -> 标准 image task artifact + worker`；旧的 `Bash -> lime media image generate --json` / `lime task create image --json` 和前端直接 `create_image_generation_task_artifact` 只允许停留在 compat、显式工具动作或手工 CLI 场景，不能再作为聊天 @图片命令首发路径。即使经过 compat 入口，最终也必须委托同一条 task artifact + worker 执行链，并禁止把任务改写到 `outputPath` / markdown 文稿。

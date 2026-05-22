@@ -180,11 +180,19 @@ const DropdownMenuItem: React.FC<DropdownMenuItemProps> = ({
 
   return (
     <div
+      role="menuitem"
+      tabIndex={0}
       className={cn(
         "relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-3 py-2 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
         className,
       )}
       onClick={handleClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleClick(e as unknown as React.MouseEvent);
+        }
+      }}
     >
       {children}
     </div>

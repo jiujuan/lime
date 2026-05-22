@@ -3190,9 +3190,55 @@ describe("Inputbar", () => {
     );
     expect(hub?.textContent).toContain("Companion knowledge (multi-select)");
     expect(hub?.textContent).toContain("Available");
+    expect(
+      container
+        .querySelector('[data-testid="inputbar-knowledge-hub-dismiss"]')
+        ?.getAttribute("aria-label"),
+    ).toBe("Close knowledge panel");
     expect(hub?.textContent).toContain("Close knowledge");
     expect(hub?.textContent).toContain("Add to knowledge");
     expect(hub?.textContent).toContain("Check knowledge");
+  });
+
+  it("资料中枢应提供只收起浮层的关闭按钮", async () => {
+    const onToggleKnowledgePack = vi.fn();
+    const { container } = renderInputbar({
+      knowledgePackSelection: {
+        enabled: false,
+        packName: "brand-product-demo",
+        workingDir: "/tmp/lime-project",
+        label: "品牌产品资料",
+        status: "ready",
+      },
+      onToggleKnowledgePack,
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const toggle = container.querySelector(
+      '[data-testid="inputbar-knowledge-pack-toggle"]',
+    ) as HTMLButtonElement | null;
+
+    act(() => {
+      toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const dismissButton = container.querySelector(
+      '[data-testid="inputbar-knowledge-hub-dismiss"]',
+    ) as HTMLButtonElement | null;
+    expect(dismissButton).toBeTruthy();
+    expect(dismissButton?.getAttribute("aria-label")).toBe("关闭资料浮层");
+
+    act(() => {
+      dismissButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-knowledge-hub"]'),
+    ).toBeNull();
+    expect(onToggleKnowledgePack).not.toHaveBeenCalled();
   });
 
   it("待确认资料即使残留启用状态也不应显示为正在使用", async () => {

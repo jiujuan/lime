@@ -7420,6 +7420,7 @@ mod tests {
             &[
                 "merge_system_prompt_with_runtime_plugin_agents(",
                 "TurnPromptAugmentationStageKind::RuntimeAgents",
+                "TurnPromptAugmentationStageKind::RuntimeEnvironment",
                 "TurnPromptAugmentationStageKind::ExplicitLocalPathFocus",
                 "build_full_runtime_system_prompt(",
                 "build_fast_chat_system_prompt(",
@@ -7573,6 +7574,24 @@ mod tests {
         .expect("应能读取 runtime_turn.rs")
     }
 
+    fn aster_tool_source(relative_path: &str) -> String {
+        fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("crates/aster-rust/crates/aster/src/tools")
+                .join(relative_path),
+        )
+        .unwrap_or_else(|error| panic!("应能读取 aster 工具源码 {relative_path}: {error}"))
+    }
+
+    fn aster_source(relative_path: &str) -> String {
+        fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("crates/aster-rust/crates/aster/src")
+                .join(relative_path),
+        )
+        .unwrap_or_else(|error| panic!("应能读取 aster 源码 {relative_path}: {error}"))
+    }
+
     fn source_slice<'a>(source: &'a str, start_marker: &str, end_marker: &str) -> &'a str {
         let start = source
             .find(start_marker)
@@ -7592,6 +7611,42 @@ mod tests {
                 .unwrap_or_else(|| panic!("未按顺序找到标记: {marker}"));
             cursor += offset + marker.len();
         }
+    }
+
+    #[test]
+    fn test_aster_tool_sources_block_windows_wsl_drive_mount_screenshot_probe() {
+        for relative_path in ["bash.rs", "powershell_tool.rs"] {
+            let source = aster_tool_source(relative_path);
+
+            assert_markers_in_order(
+                &source,
+                &[
+                    "fn command_references_wsl_drive_mount(",
+                    "fn preflight_windows_wsl_drive_mount_for(",
+                    "windows_wsl_drive_mount",
+                    "preflight_windows_wsl_drive_mount(",
+                ],
+            );
+            assert!(source.contains("ls /mnt/c/Users/ 2>/dev/null || ls /mnt 2>/dev/null"));
+            assert!(source.contains("Windows 原生"));
+            assert!(source.contains("Get-PSDrive -PSProvider FileSystem"));
+        }
+    }
+
+    #[test]
+    fn test_aster_tool_sources_keep_windows_powershell_default_enabled_contract() {
+        let tools_source = aster_source("tools/mod.rs");
+        let agent_test_source = aster_source("agents/agent.rs");
+
+        assert!(tools_source.contains("powershell: is_windows && !env_defined_falsy(powershell_env)"));
+        assert_markers_in_order(
+            &agent_test_source,
+            &[
+                "let external_env = HashMap::new();",
+                "current_surface_tool_gates_from_env_map(&external_env, true)",
+                "assert!(external_gates.powershell);",
+            ],
+        );
     }
 
     #[test]

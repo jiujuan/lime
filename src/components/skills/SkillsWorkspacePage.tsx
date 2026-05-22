@@ -3,13 +3,27 @@ import {
   open as openDialog,
   save as saveDialog,
 } from "@tauri-apps/plugin-dialog";
-import { Download, RefreshCw, Search } from "lucide-react";
+import {
+  BookOpen,
+  ChevronRight,
+  Download,
+  FolderOpen,
+  MessageCircle,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { useSkills } from "@/hooks/useSkills";
 import {
   skillsApi,
   type CreateSkillScaffoldRequest,
+  type LocalSkillPackageFileEntry,
   type Skill,
 } from "@/lib/api/skills";
 import type {
@@ -25,6 +39,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
@@ -54,6 +75,14 @@ import {
   renderSkillMarkdown,
   stripSkillFrontmatter,
 } from "./skillMarkdownPreview";
+import {
+  SkillFileContentPreview,
+  SkillFileTree,
+} from "./skillFilePreview";
+import {
+  getDefaultSkillFilePath,
+  getSkillFilePreviewContent,
+} from "./skillFilePreviewModel";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
 import { buildSkillScaffoldCreationReplayRequestMetadata } from "@/components/agent/chat/utils/creationReplayMetadata";
 import {
@@ -123,6 +152,7 @@ type InstalledSkillDetailContentState =
       directory: string;
       status: "ready";
       content: string;
+      files: LocalSkillPackageFileEntry[];
     }
   | {
       directory: string;
@@ -473,6 +503,10 @@ function ensureSkillPackageExtension(filePath: string): string {
   return `${normalizedBase}.skills`;
 }
 
+function basenameFromPath(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).at(-1) || path;
+}
+
 function isSkillAutoLoadEnabled(
   skill: Pick<Skill, "directory" | "key">,
   preferences: SkillAutoLoadPreferences,
@@ -692,10 +726,21 @@ export function SkillsWorkspacePage({
     useState<string | null>(null);
   const [installedDetailContentState, setInstalledDetailContentState] =
     useState<InstalledSkillDetailContentState | null>(null);
+  const [installedDetailSelectedFilePath, setInstalledDetailSelectedFilePath] =
+    useState<string>("SKILL.md");
   const [uninstallingSkillDirectory, setUninstallingSkillDirectory] = useState<
     string | null
   >(null);
   const [exportingSkillDirectory, setExportingSkillDirectory] = useState<
+    string | null
+  >(null);
+  const [renamingSkillDirectory, setRenamingSkillDirectory] = useState<
+    string | null
+  >(null);
+  const [replacingSkillDirectory, setReplacingSkillDirectory] = useState<
+    string | null
+  >(null);
+  const [revealingSkillDirectory, setRevealingSkillDirectory] = useState<
     string | null
   >(null);
   const [skillAutoLoadPreferences, setSkillAutoLoadPreferences] =
@@ -711,7 +756,8 @@ export function SkillsWorkspacePage({
   const [localPackageSourceName, setLocalPackageSourceName] = useState<
     string | null
   >(null);
-  const [importingLocalSkill, setImportingLocalSkill] = useState(false);
+  const [selectingLocalSkillPackage, setSelectingLocalSkillPackage] =
+    useState(false);
   const [
     highlightedInstalledSkillDirectory,
     setHighlightedInstalledSkillDirectory,
@@ -958,6 +1004,11 @@ export function SkillsWorkspacePage({
     [creationProjectId, onNavigate],
   );
 
+  const handleOpenScaffoldDialog = useCallback(() => {
+    setScaffoldDialogDraft(null);
+    setScaffoldDialogOpen(true);
+  }, []);
+
   const handleUninstallLocalSkill = useCallback(
     async (skill: Skill) => {
       if (skill.sourceKind === "builtin" || skill.catalogSource === "project") {
@@ -1057,6 +1108,160 @@ export function SkillsWorkspacePage({
         );
       } finally {
         setExportingSkillDirectory(null);
+      }
+    },
+    [t],
+  );
+
+  const handleRenameLocalSkill = useCallback(
+    async (skill: Skill) => {
+      if (
+        !skill.directory ||
+        skill.sourceKind === "builtin" ||
+        skill.catalogSource === "project"
+      ) {
+        return;
+      }
+
+      const nextDirectory = window
+        .prompt(
+          t("skills.workspace.installedSkill.rename.prompt", {
+            name: skill.name,
+          }),
+          skill.directory,
+        )
+        ?.trim();
+
+      if (!nextDirectory || nextDirectory === skill.directory) {
+        return;
+      }
+
+      setRenamingSkillDirectory(skill.directory);
+      try {
+        const result = await skillsApi.renameLocalSkill(
+          skill.directory,
+          nextDirectory,
+          "lime",
+        );
+        await refreshLocalSkills();
+        setHighlightedInstalledSkillDirectory(result.directory);
+        if (detailInstalledSkillDirectory === skill.directory) {
+          setDetailInstalledSkillDirectory(result.directory);
+        }
+        const oldPreferenceKey = getSkillAutoLoadPreferenceKey(skill);
+        setSkillAutoLoadPreferences((previous) => {
+          if (!(oldPreferenceKey in previous)) {
+            return previous;
+          }
+          const next = { ...previous };
+          next[result.directory] = previous[oldPreferenceKey];
+          delete next[oldPreferenceKey];
+          writeSkillAutoLoadPreferences(next);
+          return next;
+        });
+        toast.success(
+          t("skills.workspace.installedSkill.rename.success", {
+            name: skill.name,
+            directory: result.directory,
+          }),
+        );
+      } catch (error) {
+        toast.error(
+          t("skills.workspace.installedSkill.rename.failed", {
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        );
+      } finally {
+        setRenamingSkillDirectory(null);
+      }
+    },
+    [detailInstalledSkillDirectory, refreshLocalSkills, t],
+  );
+
+  const handleReplaceLocalSkillPackage = useCallback(
+    async (skill: Skill) => {
+      if (
+        !skill.directory ||
+        skill.sourceKind === "builtin" ||
+        skill.catalogSource === "project"
+      ) {
+        return;
+      }
+
+      let selected: string | string[] | null;
+      setReplacingSkillDirectory(skill.directory);
+      try {
+        selected = await openDialog({
+          directory: false,
+          multiple: false,
+          title: t("skills.workspace.installedSkill.replace.dialogTitle", {
+            name: skill.name,
+          }),
+          filters: [
+            {
+              name: t("skills.workspace.export.filterName"),
+              extensions: ["skills", "skill"],
+            },
+          ],
+        });
+      } catch (error) {
+        toast.error(
+          t("skills.workspace.installedSkill.replace.failed", {
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        );
+        setReplacingSkillDirectory(null);
+        return;
+      }
+
+      if (!selected || Array.isArray(selected)) {
+        setReplacingSkillDirectory(null);
+        return;
+      }
+
+      try {
+        const result = await skillsApi.replaceLocalSkillPackage(
+          skill.directory,
+          selected,
+          "lime",
+        );
+        await refreshLocalSkills();
+        setHighlightedInstalledSkillDirectory(result.directory);
+        toast.success(
+          t("skills.workspace.installedSkill.replace.success", {
+            name: skill.name,
+          }),
+        );
+      } catch (error) {
+        toast.error(
+          t("skills.workspace.installedSkill.replace.failed", {
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        );
+      } finally {
+        setReplacingSkillDirectory(null);
+      }
+    },
+    [refreshLocalSkills, t],
+  );
+
+  const handleRevealLocalSkill = useCallback(
+    async (skill: Skill) => {
+      if (!skill.directory) {
+        return;
+      }
+
+      setRevealingSkillDirectory(skill.directory);
+      try {
+        await skillsApi.revealLocalSkill(skill.directory, "lime");
+      } catch (error) {
+        toast.error(
+          t("skills.workspace.installedSkill.showInFolder.failed", {
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        );
+      } finally {
+        setRevealingSkillDirectory(null);
       }
     },
     [t],
@@ -1304,35 +1509,42 @@ export function SkillsWorkspacePage({
     [refreshLocalSkills, t],
   );
 
-  const handleImportLocalSkill = useCallback(async () => {
-    const selected = await openDialog({
-      directory: true,
-      multiple: false,
-      title: t("skills.workspace.import.dialogTitle"),
-    });
-
-    if (!selected || Array.isArray(selected)) {
-      return;
-    }
-
-    setImportingLocalSkill(true);
+  const handleSelectLocalSkillPackage = useCallback(async () => {
+    let selected: string | string[] | null;
+    setSelectingLocalSkillPackage(true);
     try {
-      const result = await skillsApi.importLocalSkill(selected, "lime");
-      await refreshLocalSkills();
-      setActiveView("installed");
-      setSearchQuery("");
-      setHighlightedInstalledSkillDirectory(result.directory);
-      toast.success(t("skills.workspace.import.success"));
+      selected = await openDialog({
+        directory: false,
+        multiple: false,
+        title: t("skills.localPackage.open.dialogTitle"),
+        filters: [
+          {
+            name: t("skills.workspace.export.filterName"),
+            extensions: ["skills", "skill"],
+          },
+        ],
+      });
     } catch (error) {
       toast.error(
         t("skills.workspace.import.failed", {
           message: error instanceof Error ? error.message : String(error),
         }),
       );
+      return;
     } finally {
-      setImportingLocalSkill(false);
+      setSelectingLocalSkillPackage(false);
     }
-  }, [refreshLocalSkills, t]);
+
+    if (!selected || Array.isArray(selected)) {
+      return;
+    }
+
+    setLocalPackageSourcePath(selected);
+    setLocalPackageSourceName(basenameFromPath(selected));
+    setLocalPackageDialogOpen(true);
+    setActiveView("installed");
+    setSearchQuery("");
+  }, [t]);
 
   const activeScaffoldDraft =
     pageParams?.initialScaffoldRequestKey === consumedScaffoldRequestKey
@@ -1463,22 +1675,28 @@ export function SkillsWorkspacePage({
   useEffect(() => {
     if (!detailInstalledSkill) {
       setInstalledDetailContentState(null);
+      setInstalledDetailSelectedFilePath("SKILL.md");
       return;
     }
 
     let cancelled = false;
     const { directory } = detailInstalledSkill;
     setInstalledDetailContentState({ directory, status: "loading" });
+    setInstalledDetailSelectedFilePath("SKILL.md");
 
     void skillsApi
-      .inspectLocalSkill(directory, "lime")
-      .then((inspection) => {
+      .inspectLocalSkillDetail(directory, "lime")
+      .then((result) => {
         if (cancelled) return;
         setInstalledDetailContentState({
           directory,
           status: "ready",
-          content: inspection.content,
+          content: result.inspection.content,
+          files: result.files,
         });
+        setInstalledDetailSelectedFilePath(
+          getDefaultSkillFilePath(result.files),
+        );
       })
       .catch((error) => {
         if (cancelled) return;
@@ -1560,6 +1778,115 @@ export function SkillsWorkspacePage({
           })}
         />
       </div>
+    );
+  };
+
+  const renderInstalledSkillActionMenu = (skill: Skill) => {
+    const isProtected =
+      skill.sourceKind === "builtin" || skill.catalogSource === "project";
+    const isRenaming = renamingSkillDirectory === skill.directory;
+    const isReplacing = replacingSkillDirectory === skill.directory;
+    const isRevealing = revealingSkillDirectory === skill.directory;
+    const isExporting = exportingSkillDirectory === skill.directory;
+    const isUninstalling = uninstallingSkillDirectory === skill.directory;
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+            aria-label={t("skills.workspace.installedSkill.action.more", {
+              name: skill.name,
+            })}
+            title={t("skills.workspace.installedSkill.action.more", {
+              name: skill.name,
+            })}
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          className="z-[80] min-w-[210px] rounded-xl border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-1 text-[color:var(--lime-text)] shadow-lg"
+        >
+          <DropdownMenuItem
+            className="rounded-lg px-3 py-2 text-[13px] font-medium hover:bg-[color:var(--lime-surface-hover)]"
+            onClick={() => handleInstalledSkillSelect(skill)}
+          >
+            <MessageCircle className="h-4 w-4 text-slate-500" />
+            {t("skills.workspace.installedSkill.action.tryInChat")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="rounded-lg px-3 py-2 text-[13px] font-medium hover:bg-[color:var(--lime-surface-hover)]"
+            onClick={() => setDetailInstalledSkillDirectory(skill.directory)}
+          >
+            <BookOpen className="h-4 w-4 text-slate-500" />
+            {t("skills.workspace.marketplace.action.detail")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className={cn(
+              "rounded-lg px-3 py-2 text-[13px] font-medium hover:bg-[color:var(--lime-surface-hover)]",
+              isProtected && "pointer-events-none opacity-50",
+            )}
+            onClick={() => void handleRenameLocalSkill(skill)}
+          >
+            <Pencil className="h-4 w-4 text-slate-500" />
+            {isRenaming
+              ? t("skills.workspace.installedSkill.action.renaming")
+              : t("skills.workspace.installedSkill.action.rename")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className={cn(
+              "rounded-lg px-3 py-2 text-[13px] font-medium hover:bg-[color:var(--lime-surface-hover)]",
+              isProtected && "pointer-events-none opacity-50",
+            )}
+            onClick={() => void handleReplaceLocalSkillPackage(skill)}
+          >
+            <Upload className="h-4 w-4 text-slate-500" />
+            {isReplacing
+              ? t("skills.workspace.installedSkill.action.replacing")
+              : t("skills.workspace.installedSkill.action.replace")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="rounded-lg px-3 py-2 text-[13px] font-medium hover:bg-[color:var(--lime-surface-hover)]"
+            onClick={() => void handleRevealLocalSkill(skill)}
+          >
+            <FolderOpen className="h-4 w-4 text-slate-500" />
+            {isRevealing
+              ? t("skills.workspace.installedSkill.action.showingInFolder")
+              : t("skills.workspace.installedSkill.action.showInFolder")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className={cn(
+              "rounded-lg px-3 py-2 text-[13px] font-medium hover:bg-[color:var(--lime-surface-hover)]",
+              isProtected && "pointer-events-none opacity-50",
+            )}
+            onClick={() => void handleExportLocalSkillPackage(skill)}
+          >
+            <Download className="h-4 w-4 text-slate-500" />
+            {isExporting
+              ? t("skills.workspace.installedSkill.action.exporting")
+              : t("skills.workspace.installedSkill.action.export")}
+          </DropdownMenuItem>
+          {!isProtected ? (
+            <>
+              <DropdownMenuSeparator className="bg-[color:var(--lime-surface-border)]" />
+              <DropdownMenuItem
+                className="rounded-lg px-3 py-2 text-[13px] font-semibold text-rose-700 hover:bg-rose-50"
+                onClick={() => void handleUninstallLocalSkill(skill)}
+              >
+                <Trash2 className="h-4 w-4" />
+                {isUninstalling
+                  ? t("skills.workspace.installedSkill.action.uninstalling")
+                  : t("skills.workspace.installedSkill.action.uninstall")}
+              </DropdownMenuItem>
+            </>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
     );
   };
 
@@ -1725,26 +2052,72 @@ export function SkillsWorkspacePage({
               className="h-9 rounded-full border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] pl-10 pr-4 text-sm font-semibold text-[color:var(--lime-text-strong)] shadow-none placeholder:text-[color:var(--lime-text-muted)]"
             />
           </label>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9 rounded-full border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-4 text-sm font-semibold text-[color:var(--lime-text-strong)] shadow-none hover:bg-[color:var(--lime-surface-hover)]"
-            onClick={() => {
-              setScaffoldDialogDraft(null);
-              setScaffoldDialogOpen(true);
-            }}
-          >
-            {t("skills.workspace.header.createWithLime")}
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 rounded-full border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-sm font-semibold text-[color:var(--lime-text-strong)] shadow-none hover:bg-[color:var(--lime-surface-hover)]"
+                aria-label={t("skills.workspace.manageMenu.trigger")}
+              >
+                <Plus className="mr-1.5 h-4 w-4" />
+                {t("skills.workspace.manageMenu.trigger")}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="z-[80] min-w-[240px] rounded-xl border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-1 text-[color:var(--lime-text)] shadow-lg"
+            >
+              <DropdownMenuItem
+                className="rounded-lg px-3 py-2 text-[13px] font-medium hover:bg-[color:var(--lime-surface-hover)]"
+                onClick={() => setActiveView("store")}
+              >
+                <BookOpen className="h-4 w-4 text-slate-500" />
+                {t("skills.workspace.manageMenu.browse")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-[color:var(--lime-surface-border)]" />
+              <div className="px-3 pb-1 pt-2 text-[11px] font-semibold text-[color:var(--lime-text-muted)]">
+                {t("skills.workspace.manageMenu.create")}
+              </div>
+              <DropdownMenuItem
+                className="rounded-lg px-3 py-2 text-[13px] font-medium hover:bg-[color:var(--lime-surface-hover)]"
+                onClick={handleOpenScaffoldDialog}
+              >
+                <Plus className="h-4 w-4 text-slate-500" />
+                <span className="min-w-0 flex-1">
+                  {t("skills.workspace.manageMenu.createWithLime")}
+                </span>
+                <ChevronRight className="h-4 w-4 text-slate-400" />
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="rounded-lg px-3 py-2 text-[13px] font-medium hover:bg-[color:var(--lime-surface-hover)]"
+                onClick={handleOpenScaffoldDialog}
+              >
+                <Pencil className="h-4 w-4 text-slate-500" />
+                <span className="min-w-0 flex-1">
+                  {t("skills.workspace.manageMenu.writeInstructions")}
+                </span>
+                <ChevronRight className="h-4 w-4 text-slate-400" />
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-[color:var(--lime-surface-border)]" />
+              <DropdownMenuItem
+                className="rounded-lg px-3 py-2 text-[13px] font-medium hover:bg-[color:var(--lime-surface-hover)]"
+                onClick={() => void handleSelectLocalSkillPackage()}
+              >
+                <Upload className="h-4 w-4 text-slate-500" />
+                {t("skills.workspace.manageMenu.upload")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             type="button"
             size="sm"
             className="h-9 rounded-full bg-[color:var(--lime-text-strong)] px-5 text-sm font-semibold text-[color:var(--lime-surface)] shadow-none hover:opacity-90"
-            disabled={importingLocalSkill}
-            onClick={() => void handleImportLocalSkill()}
+            disabled={selectingLocalSkillPackage}
+            onClick={() => void handleSelectLocalSkillPackage()}
           >
-            {importingLocalSkill
+            {selectingLocalSkillPackage
               ? t("skills.workspace.header.installingSkill")
               : t("skills.workspace.header.installSkill")}
           </Button>
@@ -1940,7 +2313,7 @@ export function SkillsWorkspacePage({
                   </p>
                 </div>
                 {visibleBuiltinLocalSkills.length > 0 ? (
-                  <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                  <div className="rounded-lg border border-slate-200 bg-white">
                     {visibleBuiltinLocalSkills.map((skill) => (
                       <div
                         key={skill.key}
@@ -2037,7 +2410,7 @@ export function SkillsWorkspacePage({
                               {t("skills.workspace.autoLoad.description")}
                             </p>
                           </div>
-                          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                          <div className="flex shrink-0 items-center justify-end gap-2">
                             {renderAutoLoadControl(skill)}
                             <Button
                               type="button"
@@ -2052,65 +2425,7 @@ export function SkillsWorkspacePage({
                             >
                               {t("skills.workspace.marketplace.action.detail")}
                             </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-8 rounded-full border-slate-200 bg-white px-3 text-xs text-slate-700 shadow-none hover:bg-slate-50"
-                              onClick={() => handleInstalledSkillSelect(skill)}
-                            >
-                              {t("skills.workspace.installedSkill.action.use")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-8 rounded-full border-slate-200 bg-white px-3 text-xs text-slate-700 shadow-none hover:bg-slate-50"
-                              disabled={
-                                exportingSkillDirectory === skill.directory
-                              }
-                              onClick={() =>
-                                void handleExportLocalSkillPackage(skill)
-                              }
-                              title={t(
-                                "skills.workspace.installedSkill.action.exportTitle",
-                                {
-                                  name: skill.name,
-                                },
-                              )}
-                            >
-                              <Download className="mr-1 h-3.5 w-3.5" />
-                              {exportingSkillDirectory === skill.directory
-                                ? t(
-                                    "skills.workspace.installedSkill.action.exporting",
-                                  )
-                                : t(
-                                    "skills.workspace.installedSkill.action.export",
-                                  )}
-                            </Button>
-                            {skill.sourceKind !== "builtin" &&
-                            skill.catalogSource !== "project" ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-8 rounded-full border-rose-200 bg-white px-3 text-xs text-rose-700 shadow-none hover:bg-rose-50"
-                                disabled={
-                                  uninstallingSkillDirectory === skill.directory
-                                }
-                                onClick={() =>
-                                  void handleUninstallLocalSkill(skill)
-                                }
-                              >
-                                {uninstallingSkillDirectory === skill.directory
-                                  ? t(
-                                      "skills.workspace.installedSkill.action.uninstalling",
-                                    )
-                                  : t(
-                                      "skills.workspace.installedSkill.action.uninstall",
-                                    )}
-                              </Button>
-                            ) : null}
+                            {renderInstalledSkillActionMenu(skill)}
                           </div>
                         </div>
                       );
@@ -2190,55 +2505,110 @@ export function SkillsWorkspacePage({
                 </DialogHeader>
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-                <div className="mb-5 rounded-lg border border-[color:var(--lime-info-border)] bg-[color:var(--lime-info-soft)] px-4 py-3 text-[13px] leading-5 text-[color:var(--lime-info)]">
-                  {t("skills.workspace.marketplace.detail.sourceNotice")}
-                </div>
-                <article className="mx-auto max-w-[760px] pb-8 text-left">
-                  {(() => {
-                    const contentState =
-                      installedDetailContentState?.directory ===
-                      detailInstalledSkill.directory
-                        ? installedDetailContentState
-                        : null;
+              {(() => {
+                const contentState =
+                  installedDetailContentState?.directory ===
+                  detailInstalledSkill.directory
+                    ? installedDetailContentState
+                    : null;
+                const fallback = buildInstalledSkillFallbackMarkdown(
+                  detailInstalledSkill,
+                  installedSkillPresentationCopy,
+                );
 
-                    const fallback = buildInstalledSkillFallbackMarkdown(
-                      detailInstalledSkill,
-                      installedSkillPresentationCopy,
-                    );
+                if (!contentState || contentState.status === "loading") {
+                  return (
+                    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                      <div className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] px-4 py-8 text-center text-sm text-[color:var(--lime-text-muted)]">
+                        {t(
+                          "skills.workspace.marketplace.detail.loadingSkillContent",
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
 
-                    if (!contentState || contentState.status === "loading") {
-                      return (
-                        <div className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] px-4 py-8 text-center text-sm text-[color:var(--lime-text-muted)]">
-                          {t(
-                            "skills.workspace.marketplace.detail.loadingSkillContent",
-                          )}
+                if (contentState.status === "error") {
+                  return (
+                    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                      <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-700">
+                        {t(
+                          "skills.workspace.marketplace.detail.loadSkillContentFailed",
+                          {
+                            message: contentState.message,
+                          },
+                        )}
+                      </div>
+                      <article className="mx-auto max-w-[760px] pb-8 text-left">
+                        {renderSkillMarkdown(fallback)}
+                      </article>
+                    </div>
+                  );
+                }
+
+                const selectedFile = contentState.files.find(
+                  (entry) => entry.path === installedDetailSelectedFilePath,
+                );
+                const selectedFilePreview = getSkillFilePreviewContent(
+                  selectedFile,
+                  selectedFile?.path === "SKILL.md"
+                    ? contentState.content || fallback
+                    : null,
+                );
+
+                return (
+                  <div className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)] overflow-hidden">
+                    <aside className="min-h-0 border-r border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)]">
+                      <div className="border-b border-[color:var(--lime-surface-border)] px-4 py-3">
+                        <div className="text-[12px] font-semibold text-[color:var(--lime-text-strong)]">
+                          {t("skills.localPackage.files.title")}
                         </div>
-                      );
-                    }
+                        <div className="mt-1 truncate text-[11px] text-[color:var(--lime-text-muted)]">
+                          {detailInstalledSkill.directory}
+                        </div>
+                      </div>
+                      <div className="max-h-full min-h-0 overflow-y-auto p-2">
+                        <SkillFileTree
+                          files={contentState.files}
+                          selectedPath={installedDetailSelectedFilePath}
+                          onSelect={setInstalledDetailSelectedFilePath}
+                          emptyLabel={t("skills.localPackage.files.empty")}
+                        />
+                      </div>
+                    </aside>
 
-                    if (contentState.status === "error") {
-                      return (
-                        <>
-                          <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-700">
-                            {t(
-                              "skills.workspace.marketplace.detail.loadSkillContentFailed",
-                              {
-                                message: contentState.message,
-                              },
+                    <main className="flex min-h-0 flex-col overflow-hidden bg-[color:var(--lime-surface)]">
+                      <article className="flex min-h-0 flex-1 flex-col text-left">
+                        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--lime-surface-border)] px-6 py-3">
+                          <h3 className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                            {t("skills.localPackage.preview.title")}
+                          </h3>
+                          {selectedFile?.path ? (
+                            <span className="rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] px-2.5 py-1 text-[11px] font-medium text-[color:var(--lime-text-muted)]">
+                              {selectedFile.path}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                          <div className="mx-auto max-w-[760px] pb-8">
+                            {selectedFile ? (
+                              <SkillFileContentPreview
+                                content={selectedFilePreview}
+                                selectedFile={selectedFile}
+                                emptyLabel={t(
+                                  "skills.localPackage.preview.empty",
+                                )}
+                              />
+                            ) : (
+                              renderSkillMarkdown(contentState.content || fallback)
                             )}
                           </div>
-                          {renderSkillMarkdown(fallback)}
-                        </>
-                      );
-                    }
-
-                    return renderSkillMarkdown(
-                      contentState.content || fallback,
-                    );
-                  })()}
-                </article>
-              </div>
+                        </div>
+                      </article>
+                    </main>
+                  </div>
+                );
+              })()}
 
               <div className="flex shrink-0 justify-end border-t border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] px-6 py-4">
                 <Button

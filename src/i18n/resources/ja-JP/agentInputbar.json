@@ -195,6 +195,7 @@
   "agentChat.inputbar.knowledge.meta.companion": "メインナレッジと一緒にコンテキストへ入り、運用上の事実と実行境界を補足します",
   "agentChat.inputbar.knowledge.implicitCompanions": "ペルソナナレッジを自動追加しました: {{labels}}。",
   "agentChat.inputbar.knowledge.pendingNotice": "確認待ちのナレッジが {{count}} 件あります。確認後に利用可能リストへ表示されます。",
+  "agentChat.inputbar.knowledge.dismiss.aria": "資料パネルを閉じる",
   "agentChat.inputbar.knowledge.action.close": "ナレッジを閉じる",
   "agentChat.inputbar.knowledge.action.check": "ナレッジを確認",
   "agentChat.inputbar.knowledge.action.organizeSecondary": "新しいナレッジを追加",

@@ -1,13 +1,13 @@
-## Lime v1.46.0
+## Lime v1.47.0
 
-发布日期：`2026-05-21`
+发布日期：`2026-05-23`
 递交范围：当前完整 worktree，包含 tracked 与新增文件；本次继续补齐技能包本地安装链路、Agent App Host Bridge / runtime surface、i18n 文案对齐、release note 事实源与版本同步。
 
-> 发布说明：上一版 release note 事实源为 `v1.45.1`。本版升级到 `v1.46.0`，并继续按 current release note 口径清理旧历史堆叠内容：`RELEASE_NOTES.md` 只保留当前版本说明，旧 `v1.45.1` 及更早发布说明不再作为当前 release note 事实源保留。
+> 发布说明：上一版 release note 事实源为 `v1.46.0`。本版升级到 `v1.47.0`，并继续按 current release note 口径清理旧历史堆叠内容：`RELEASE_NOTES.md` 只保留当前版本说明，旧 `v1.46.0` 及更早发布说明不再作为当前 release note 事实源保留。
 
 ### 发布概览
 
-- 应用版本从 `1.45.1` 升级到 `1.46.0`，同步 `package.json`、`package-lock.json`、`packages/lime-cli-npm/package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json` 与 `src-tauri/tauri.conf.headless.json`。
+- 应用版本从 `1.46.0` 升级到 `1.47.0`，同步 `package.json`、`package-lock.json`、`packages/lime-cli-npm/package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json` 与 `src-tauri/tauri.conf.headless.json`。
 - Skills 主链补齐本地 skill package 检查、安装、打开请求清理与可视化预览，新增 `SkillPackageInstallDialog`、`useSkillPackageOpenRequests`、`skillsApi` 的 package 入口、mock 映射与文件关联状态。
 - Agent App / Host Bridge 继续收敛到 current 命令与 typed bridge surface，补齐 runtime page、apps page、bridge client、cloud bootstrap 与 command catalog 的一致性。
 - 多语言文案继续对齐 current 五语言，覆盖 skills、settings、agent / runtime 页面新增 presentation copy。
@@ -38,4 +38,4 @@
 
 ---
 
-**完整变更**: `v1.45.1` -> `v1.46.0`
+**完整变更**: `v1.46.0` -> `v1.47.0`

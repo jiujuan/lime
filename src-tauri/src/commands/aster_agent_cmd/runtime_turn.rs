@@ -54,6 +54,7 @@ const RUNTIME_MODEL_PERMISSION_FALLBACK_FAILED_WARNING_CODE: &str =
 const STOP_HOOK_CONTINUATION_UNSUPPORTED_WARNING_CODE: &str = "stop_hook_continuation_unsupported";
 const TURN_KNOWLEDGE_PACK_PROMPT_MARKER: &str = "【运行时知识包】";
 const TURN_MEMORY_PREFETCH_PROMPT_MARKER: &str = "【运行时记忆召回】";
+const TURN_RUNTIME_ENVIRONMENT_PROMPT_MARKER: &str = "【运行时执行环境】";
 const TURN_LOCAL_PATH_FOCUS_PROMPT_MARKER: &str = "【本回合本地路径焦点】";
 const LIME_RUNTIME_METADATA_KEY: &str = "lime_runtime";
 const AGENT_APP_RUNTIME_EVENT_PREFIX: &str = "agent_app_runtime:";
@@ -1307,6 +1308,78 @@ fn push_unique_focus_path(paths: &mut Vec<String>, candidate: &str) {
     }
 
     paths.push(normalized);
+}
+
+fn build_runtime_environment_system_prompt_for(
+    workspace_root: &str,
+    os: &str,
+    family: &str,
+    is_windows: bool,
+) -> String {
+    let shell = if is_windows {
+        "PowerShell / Windows PowerShell"
+    } else {
+        "POSIX sh"
+    };
+    let path_style = if is_windows {
+        r#"Windows 原生路径，例如 `C:\Users\name\file.txt` 或 `$env:SystemDrive\file.txt`"#
+    } else {
+        "POSIX 路径，例如 `/Users/name/file.txt`"
+    };
+
+    let mut lines = vec![
+        TURN_RUNTIME_ENVIRONMENT_PROMPT_MARKER.to_string(),
+        format!("- 当前运行系统: {os} ({family})"),
+        format!("- 当前工作目录: {}", workspace_root.trim()),
+        format!("- Shell 命令运行时: {shell}"),
+        format!("- 本机路径格式: {path_style}"),
+        "- 处理用户提到的“系统盘”“C 盘”“根目录”时，必须先按当前运行系统解释，不要跨平台猜路径。"
+            .to_string(),
+    ];
+
+    if is_windows {
+        lines.extend([
+            "- Windows 原生运行时不要把 C 盘改写成 `/mnt/c`；`/mnt/c` 只适用于明确处于 WSL/Linux shell 的会话。".to_string(),
+            "- 需要确认系统盘时，优先使用 PowerShell 查询 `$env:SystemDrive`、`$env:SystemRoot` 或 `Get-PSDrive -PSProvider FileSystem`。".to_string(),
+            "- 在 Windows 写文件时优先使用 `Write` 工具或 PowerShell 的 `Set-Content -Encoding utf8`，路径用双引号包裹。".to_string(),
+        ]);
+    } else {
+        lines.extend([
+            "- 非 Windows 运行时不要臆造 `C:\\`、`D:\\` 等盘符；如果用户要求 Windows 专属路径，先说明当前环境无法直接访问 Windows 系统盘或请求确认映射。".to_string(),
+            "- 只有在命令结果或环境变量明确表明当前处于 WSL 时，才考虑 `/mnt/<drive>` 路径。".to_string(),
+        ]);
+    }
+
+    lines.join("\n")
+}
+
+fn build_runtime_environment_system_prompt(workspace_root: &str) -> String {
+    build_runtime_environment_system_prompt_for(
+        workspace_root,
+        std::env::consts::OS,
+        std::env::consts::FAMILY,
+        cfg!(target_os = "windows"),
+    )
+}
+
+fn merge_system_prompt_with_runtime_environment(
+    base_prompt: Option<String>,
+    workspace_root: &str,
+) -> Option<String> {
+    let environment_prompt = build_runtime_environment_system_prompt(workspace_root);
+
+    match base_prompt {
+        Some(base) => {
+            if base.contains(TURN_RUNTIME_ENVIRONMENT_PROMPT_MARKER) {
+                Some(base)
+            } else if base.trim().is_empty() {
+                Some(environment_prompt)
+            } else {
+                Some(format!("{base}\n\n{environment_prompt}"))
+            }
+        }
+        None => Some(environment_prompt),
+    }
 }
 
 fn extract_explicit_local_focus_paths_from_message(message: &str) -> Vec<String> {
@@ -3704,10 +3777,16 @@ fn prepare_runtime_turn_prompt_strategy(
         TurnPromptAugmentationStageKind::RuntimeAgents,
         prompt_with_runtime_agents.clone(),
     );
+    let prompt_with_runtime_environment = apply_turn_prompt_stage(
+        turn_input_builder,
+        TurnPromptAugmentationStageKind::RuntimeEnvironment,
+        prompt_with_runtime_agents,
+        |prompt| merge_system_prompt_with_runtime_environment(prompt, workspace_root),
+    );
     let prompt_with_local_path_focus = apply_turn_prompt_stage(
         turn_input_builder,
         TurnPromptAugmentationStageKind::ExplicitLocalPathFocus,
-        prompt_with_runtime_agents,
+        prompt_with_runtime_environment,
         |prompt| {
             merge_system_prompt_with_explicit_local_path_focus(
                 prompt,
@@ -11279,6 +11358,37 @@ mod tests {
         assert!(merged.contains(TURN_LOCAL_PATH_FOCUS_PROMPT_MARKER));
         assert!(merged.contains(&repo_dir.to_string_lossy().to_string()));
         assert!(merged.contains("不要先扫描当前默认工作目录 /tmp/lime/workspaces/default"));
+    }
+
+    #[test]
+    fn runtime_environment_prompt_should_cover_windows_system_drive_screenshot_case() {
+        let prompt = build_runtime_environment_system_prompt_for(
+            r"C:\Users\demo\workspace",
+            "windows",
+            "windows",
+            true,
+        );
+
+        assert!(prompt.contains(TURN_RUNTIME_ENVIRONMENT_PROMPT_MARKER));
+        assert!(prompt.contains("系统盘"));
+        assert!(prompt.contains("C 盘"));
+        assert!(prompt.contains("不要把 C 盘改写成 `/mnt/c`"));
+        assert!(prompt.contains("$env:SystemDrive"));
+        assert!(prompt.contains("Get-PSDrive"));
+    }
+
+    #[test]
+    fn runtime_environment_prompt_should_not_invent_windows_drive_on_posix() {
+        let prompt = build_runtime_environment_system_prompt_for(
+            "/Users/demo/workspace",
+            "macos",
+            "unix",
+            false,
+        );
+
+        assert!(prompt.contains(TURN_RUNTIME_ENVIRONMENT_PROMPT_MARKER));
+        assert!(prompt.contains("不要臆造 `C:\\`"));
+        assert!(prompt.contains("WSL"));
     }
 
     fn write_runtime_test_knowledge_pack(

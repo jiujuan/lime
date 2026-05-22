@@ -6176,7 +6176,7 @@ mod tests {
         assert!(!external_gates.config);
         assert!(!external_gates.sleep);
         assert!(!external_gates.workflow);
-        assert!(!external_gates.powershell);
+        assert!(external_gates.powershell);
 
         let ant_env = HashMap::from([("USER_TYPE".to_string(), "ant".to_string())]);
         let ant_gates = crate::tools::current_surface_tool_gates_from_env_map(&ant_env, true);

@@ -286,6 +286,26 @@ function buildReviewResult(state: InstalledAgentAppState) {
   };
 }
 
+function expectInstallReviewDialog(container: HTMLElement) {
+  const overlay = container.querySelector(
+    '[data-testid="agent-apps-install-review-overlay"]',
+  );
+  const dialog = container.querySelector(
+    '[data-testid="agent-apps-install-review"]',
+  );
+
+  expect(overlay).not.toBeNull();
+  expect(dialog).not.toBeNull();
+  expect(dialog?.getAttribute("role")).toBe("dialog");
+  expect(dialog?.getAttribute("aria-modal")).toBe("true");
+  expect(dialog?.textContent).toContain("agentApp.apps.installReview.title");
+  expect(
+    container
+      .querySelector('[data-testid="agent-apps-page"]')
+      ?.lastElementChild?.getAttribute("data-testid"),
+  ).not.toBe("agent-apps-install-review");
+}
+
 function setupDefaultApiMocks() {
   apiMocks.getAgentAppCloudCatalog.mockResolvedValue({
     source: "seeded",
@@ -561,10 +581,7 @@ describe("AgentAppsPage", () => {
       }),
     );
     expect(apiMocks.saveInstalledAgentAppState).not.toHaveBeenCalled();
-    expect(
-      container.querySelector('[data-testid="agent-apps-install-review"]')
-        ?.textContent,
-    ).toContain("agentApp.apps.installReview.title");
+    expectInstallReviewDialog(container);
 
     const confirmInstall = container.querySelector(
       '[data-testid="agent-apps-install-review-confirm"]',
@@ -599,19 +616,26 @@ describe("AgentAppsPage", () => {
     ) as HTMLButtonElement | null;
 
     expect(page?.className).toContain("lime-workbench-theme-scope");
-    expect(page?.className).toContain("bg-slate-50");
-    expect(installLocal?.className).toContain("bg-blue-950");
-    expect(installLocal?.className).toContain("text-white");
+    expect(page?.className).toContain("bg-[color:var(--lime-app-bg)]");
+    expect(installLocal?.className).toContain(
+      "bg-[color:var(--lime-text-strong)]",
+    );
+    expect(installLocal?.className).toContain("rounded-full");
     expect(
       container
         .querySelector('[data-testid="agent-apps-list"]')
         ?.closest("section")?.className,
-    ).toContain("grid-rows-[auto_minmax(0,1fr)]");
+    ).toContain("space-y-4");
     expect(
       container
         .querySelector('[data-testid="agent-apps-list"]')
         ?.className,
-    ).toContain("2xl:grid-cols-4");
+    ).toContain("lg:grid-cols-3");
+    expect(
+      container
+        .querySelector('[data-testid="agent-apps-list-row-content-factory-app"]')
+        ?.className,
+    ).toContain("min-h-[188px]");
   });
 
   it("本地 App 卡片应优先展示 manifest 声明的图标", async () => {
@@ -670,7 +694,7 @@ describe("AgentAppsPage", () => {
       container
         .querySelector('[data-testid="agent-apps-list"]')
         ?.className,
-    ).toContain("2xl:grid-cols-4");
+    ).toContain("lg:grid-cols-3");
 
     const closeDetail = container.querySelector(
       '[data-testid="agent-apps-close-detail"]',
@@ -964,10 +988,7 @@ describe("AgentAppsPage", () => {
         }),
       }),
     );
-    expect(
-      container.querySelector('[data-testid="agent-apps-install-review"]')
-        ?.textContent,
-    ).toContain("agentApp.apps.installReview.title");
+    expectInstallReviewDialog(container);
   });
 
   it("已安装旧版 Cloud App 需要重新激活时，主按钮应提示输入激活码而不是假装一键更新", async () => {
@@ -1040,6 +1061,46 @@ describe("AgentAppsPage", () => {
     expect(apiMocks.saveInstalledAgentAppState).not.toHaveBeenCalled();
   });
 
+  it("已安装旧版 Cloud App 可更新时应打开居中安装审查弹窗", async () => {
+    installedStates.push(
+      buildReadyState({
+        manifest: {
+          ...(contentFactoryFixture as AppManifest),
+          version: "0.2.0",
+        },
+      }),
+    );
+
+    const container = await renderPage();
+    await flush();
+
+    expect(container.textContent).toContain(
+      "agentApp.apps.center.status.update",
+    );
+    const updateButton = container.querySelector(
+      '[data-testid="agent-apps-update-cloud-content-factory-app"]',
+    ) as HTMLButtonElement | null;
+    expect(updateButton?.disabled).toBe(false);
+
+    await act(async () => {
+      updateButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(apiMocks.reviewCloudAgentAppRelease).toHaveBeenCalledWith(
+      expect.objectContaining({
+        app: expect.objectContaining({
+          appId: "content-factory-app",
+          version: "0.3.0",
+        }),
+      }),
+    );
+    expect(apiMocks.saveInstalledAgentAppState).not.toHaveBeenCalled();
+    expectInstallReviewDialog(container);
+  });
+
   it("Cloud App 已满足注册条件时应先生成安装审查再写入 installed state", async () => {
     const container = await renderPage();
     await flush();
@@ -1069,10 +1130,7 @@ describe("AgentAppsPage", () => {
       }),
     );
     expect(apiMocks.saveInstalledAgentAppState).not.toHaveBeenCalled();
-    expect(
-      container.querySelector('[data-testid="agent-apps-install-review"]')
-        ?.textContent,
-    ).toContain("agentApp.apps.installReview.title");
+    expectInstallReviewDialog(container);
 
     const confirmInstall = container.querySelector(
       '[data-testid="agent-apps-install-review-confirm"]',

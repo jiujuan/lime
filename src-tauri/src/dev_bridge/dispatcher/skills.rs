@@ -99,6 +99,67 @@ pub(super) async fn try_handle(
                     .map_err(|e| format!("检查本地 Skill 失败: {e}"))?;
             serde_json::to_value(inspection)?
         }
+        "inspect_local_skill_detail_for_app" => {
+            let args = args_or_default(args);
+            let app = args
+                .get("app")
+                .and_then(|value| value.as_str())
+                .unwrap_or("lime")
+                .to_string();
+            let directory = get_string_arg(&args, "directory", "directory")?;
+            let inspection =
+                crate::commands::skill_cmd::inspect_local_skill_detail_for_app(app, directory)
+                    .map_err(|e| format!("检查本地 Skill 详情失败: {e}"))?;
+            serde_json::to_value(inspection)?
+        }
+        "reveal_local_skill_for_app" => {
+            let args = args_or_default(args);
+            let app = args
+                .get("app")
+                .and_then(|value| value.as_str())
+                .unwrap_or("lime")
+                .to_string();
+            let directory = get_string_arg(&args, "directory", "directory")?;
+            let result = crate::commands::skill_cmd::reveal_local_skill_for_app(app, directory)
+                .map_err(|e| format!("显示本地 Skill 目录失败: {e}"))?;
+            serde_json::to_value(result)?
+        }
+        "rename_local_skill_for_app" => {
+            let args = args_or_default(args);
+            let app = args
+                .get("app")
+                .and_then(|value| value.as_str())
+                .unwrap_or("lime")
+                .to_string();
+            let directory = get_string_arg(&args, "directory", "directory")?;
+            let new_directory = get_string_arg(&args, "new_directory", "new_directory")
+                .or_else(|_| get_string_arg(&args, "newDirectory", "newDirectory"))?;
+            let result = crate::commands::skill_cmd::rename_local_skill_for_app(
+                app,
+                directory,
+                new_directory,
+            )
+            .map_err(|e| format!("重命名本地 Skill 失败: {e}"))?;
+            serde_json::to_value(result)?
+        }
+        "replace_local_skill_package_for_app" => {
+            let args = args_or_default(args);
+            let app = args
+                .get("app")
+                .and_then(|value| value.as_str())
+                .unwrap_or("lime")
+                .to_string();
+            let directory = get_string_arg(&args, "directory", "directory")?;
+            let source_path = get_string_arg(&args, "source_path", "source_path")
+                .or_else(|_| get_string_arg(&args, "sourcePath", "sourcePath"))?;
+            let result = crate::commands::skill_cmd::replace_local_skill_package_for_app(
+                app,
+                directory,
+                source_path,
+            )
+            .map_err(|e| format!("替换本地 Skill 安装包失败: {e}"))?;
+            serde_json::to_value(result)?
+        }
         "create_skill_scaffold_for_app" => {
             let args = args_or_default(args);
             let app = args

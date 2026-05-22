@@ -32,6 +32,43 @@ export const skillManagementMocks: Record<string, (args?: any) => any> = {
   get_installed_lime_skills: () => [],
   refresh_skill_cache: () => true,
   inspect_local_skill_for_app: () => buildMockSkillInspection(),
+  inspect_local_skill_detail_for_app: (args: any) => {
+    const directory = args?.directory || "mock-skill";
+    const content = `# Mock Skill\n\nDetail for ${directory}`;
+    return {
+      directory,
+      inspection: buildMockSkillInspection({
+        content,
+        hasReferences: true,
+      }),
+      files: [
+        {
+          path: "SKILL.md",
+          isDirectory: false,
+          size: content.length,
+          content,
+        },
+        { path: "references", isDirectory: true, size: 0 },
+        {
+          path: "references/guide.md",
+          isDirectory: false,
+          size: 21,
+          content: "# Mock Reference Guide",
+        },
+      ],
+    };
+  },
+  reveal_local_skill_for_app: () => true,
+  rename_local_skill_for_app: (args: any) => ({
+    directory: args?.newDirectory || args?.new_directory || "renamed-skill",
+  }),
+  replace_local_skill_package_for_app: (args: any) => ({
+    directory: args?.directory || "mock-local-package-skill",
+    inspection: buildMockSkillInspection({
+      content: "# Mock Replaced Local Skill Package",
+      hasReferences: true,
+    }),
+  }),
   create_skill_scaffold_for_app: () => buildMockSkillInspection(),
   inspect_remote_skill: () => buildMockSkillInspection({ hasReferences: true }),
   install_skill_for_app: () => ({ success: true }),
@@ -50,9 +87,19 @@ export const skillManagementMocks: Record<string, (args?: any) => any> = {
       hasReferences: true,
     }),
     files: [
-      { path: "SKILL.md", isDirectory: false, size: 32 },
+      {
+        path: "SKILL.md",
+        isDirectory: false,
+        size: 32,
+        content: "# Mock Local Skill Package",
+      },
       { path: "references", isDirectory: true, size: 0 },
-      { path: "references/guide.md", isDirectory: false, size: 16 },
+      {
+        path: "references/guide.md",
+        isDirectory: false,
+        size: 16,
+        content: "# Guide",
+      },
     ],
   }),
   install_local_skill_package_for_app: (args: any) => ({

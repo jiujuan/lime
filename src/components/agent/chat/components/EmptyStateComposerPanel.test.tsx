@@ -515,6 +515,11 @@ describe("EmptyStateComposerPanel", () => {
     expect(
       container.querySelector('[data-testid="inputbar-knowledge-hub"]'),
     ).toBeTruthy();
+    expect(
+      container
+        .querySelector('[data-testid="inputbar-knowledge-hub-dismiss"]')
+        ?.getAttribute("aria-label"),
+    ).toBe("关闭资料浮层");
     expect(container.textContent).toContain("选择项目资料");
   });
 

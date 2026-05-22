@@ -195,6 +195,7 @@
   "agentChat.inputbar.knowledge.meta.companion": "會和主資料一起進入上下文，用於補充營運事實和執行邊界",
   "agentChat.inputbar.knowledge.implicitCompanions": "已自動搭配人設資料：{{labels}}。",
   "agentChat.inputbar.knowledge.pendingNotice": "還有 {{count}} 份資料待確認，確認後才會出現在可用清單裡。",
+  "agentChat.inputbar.knowledge.dismiss.aria": "關閉資料浮層",
   "agentChat.inputbar.knowledge.action.close": "關閉資料",
   "agentChat.inputbar.knowledge.action.check": "檢查資料",
   "agentChat.inputbar.knowledge.action.organizeSecondary": "新增資料",

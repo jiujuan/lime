@@ -66,8 +66,10 @@ function createInspectionResult() {
     directory: "article-typesetting-master",
     inspection: {
       content:
-        "---\nname: Article Typesetting\n---\n\n# Article Typesetting\n\n- Format article drafts",
-      metadata: {},
+        "---\nname: Article Typesetting\nversion: 2026.05\n---\n\n# Article Typesetting\n\nUse **strict layout rules** and keep `SKILL.md` readable.\n\n> Review before installing.\n\n1. Read the draft\n2. Format article drafts\n\n| Area | Output |\n| --- | --- |\n| Draft | Clean article |\n\n```ts\nconst enabled = true;\n```",
+      metadata: {
+        version: "2026.05",
+      },
       allowedTools: [],
       resourceSummary: {
         hasScripts: false,
@@ -84,7 +86,12 @@ function createInspectionResult() {
       { path: "references", isDirectory: true, size: 0 },
       { path: "templates", isDirectory: true, size: 0 },
       { path: "SKILL.md", isDirectory: false, size: 128 },
-      { path: "references/guide.md", isDirectory: false, size: 64 },
+      {
+        path: "references/guide.md",
+        isDirectory: false,
+        size: 64,
+        content: "# Guide\n\n- Follow the reference",
+      },
     ],
   };
 }
@@ -163,7 +170,7 @@ describe("SkillPackageInstallDialog", () => {
   });
 
   it("打开后应检查本地 .skill 包并展示文件树与 SKILL.md 预览", async () => {
-    await renderDialog();
+    const { container } = await renderDialog();
 
     expect(mocks.inspectLocalSkillPackage).toHaveBeenCalledWith(
       "/Users/demo/article-typesetting-master.skill",
@@ -178,6 +185,41 @@ describe("SkillPackageInstallDialog", () => {
     expect(document.body.textContent).toContain("templates");
     expect(document.body.textContent).toContain("Article Typesetting");
     expect(document.body.textContent).toContain("Add to library");
+    expect(document.body.textContent).toContain("Close");
+    expect(container.querySelector('[data-testid="skills-markdown-preview"]'))
+      .toBeTruthy();
+    expect(container.querySelector("strong")?.textContent).toBe(
+      "strict layout rules",
+    );
+    expect(container.querySelector("code")?.textContent).toContain("SKILL.md");
+    expect(container.querySelector("blockquote")?.textContent).toContain(
+      "Review before installing.",
+    );
+    expect(container.querySelector("ol")?.textContent).toContain(
+      "Read the draft",
+    );
+    expect(container.querySelector("table")?.textContent).toContain(
+      "Clean article",
+    );
+    expect(container.querySelector("pre")?.textContent).toContain(
+      "const enabled = true;",
+    );
+    expect(document.body.textContent).not.toContain("version: 2026.05");
+  });
+
+  it("点击文件树中的其他 Markdown 文件时应切换预览内容", async () => {
+    const { container } = await renderDialog();
+
+    await act(async () => {
+      findButton("guide.md")?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="skills-markdown-preview"]'))
+      .toBeTruthy();
+    expect(document.body.textContent).toContain("Guide");
+    expect(document.body.textContent).not.toContain("Article Typesetting");
   });
 
   it("确认安装后应调用安装命令并回调刷新 Skills", async () => {
@@ -200,6 +242,19 @@ describe("SkillPackageInstallDialog", () => {
     expect(mocks.toastSuccess).toHaveBeenCalledWith(
       "Installed Skill: article-typesetting-master",
     );
+  });
+
+  it("关闭按钮应直接关闭安装弹窗", async () => {
+    const onOpenChange = vi.fn();
+    await renderDialog({ onOpenChange });
+
+    await act(async () => {
+      findButton("Close")?.click();
+      await Promise.resolve();
+    });
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(mocks.installLocalSkillPackage).not.toHaveBeenCalled();
   });
 
   it("也应兼容 .skills 安装包名称并去掉后缀", async () => {

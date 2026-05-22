@@ -195,6 +195,7 @@
   "agentChat.inputbar.knowledge.meta.companion": "주 지식과 함께 컨텍스트에 들어가 운영 사실과 실행 경계를 보완합니다",
   "agentChat.inputbar.knowledge.implicitCompanions": "페르소나 지식을 자동으로 함께 사용합니다: {{labels}}.",
   "agentChat.inputbar.knowledge.pendingNotice": "확인 대기 중인 지식이 {{count}}개 있습니다. 확인 후 사용 가능 목록에 표시됩니다.",
+  "agentChat.inputbar.knowledge.dismiss.aria": "자료 패널 닫기",
   "agentChat.inputbar.knowledge.action.close": "지식 닫기",
   "agentChat.inputbar.knowledge.action.check": "지식 확인",
   "agentChat.inputbar.knowledge.action.organizeSecondary": "새 지식 추가",

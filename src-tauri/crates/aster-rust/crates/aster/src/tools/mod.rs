@@ -199,12 +199,7 @@ pub(crate) fn current_surface_tool_gates_from_env_map(
         cron: env_truthy(env.get("AGENT_TRIGGERS")),
         remote_trigger: env_truthy(env.get(REMOTE_TRIGGER_GATE_ENV)),
         workflow: env_truthy(env.get("WORKFLOW_SCRIPTS")),
-        powershell: is_windows
-            && if is_internal_user {
-                !env_defined_falsy(powershell_env)
-            } else {
-                env_truthy(powershell_env)
-            },
+        powershell: is_windows && !env_defined_falsy(powershell_env),
     }
 }
 

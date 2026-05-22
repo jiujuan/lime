@@ -202,6 +202,86 @@ fn inspect_local_skill(
     SkillService::inspect_skill_dir(&skill_dir).map_err(|e| e.to_string())
 }
 
+fn collect_local_skill_file_entries(
+    root: &Path,
+    current: &Path,
+    directories: &mut BTreeSet<String>,
+    files: &mut Vec<LocalSkillPackageFileEntry>,
+) -> Result<(), String> {
+    let entries = fs::read_dir(current).map_err(|error| {
+        format!(
+            "Failed to read skill directory {}: {error}",
+            current.display()
+        )
+    })?;
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let file_type = entry
+            .file_type()
+            .map_err(|error| format!("Failed to inspect skill file {}: {error}", path.display()))?;
+        let relative_path = path.strip_prefix(root).map_err(|error| {
+            format!(
+                "Failed to resolve skill file path {}: {error}",
+                path.display()
+            )
+        })?;
+        let display_path = relative_path
+            .to_string_lossy()
+            .replace(std::path::MAIN_SEPARATOR, "/");
+
+        if file_type.is_dir() {
+            directories.insert(display_path);
+            collect_local_skill_file_entries(root, &path, directories, files)?;
+            continue;
+        }
+
+        if !file_type.is_file() {
+            continue;
+        }
+
+        let content = fs::read(&path)
+            .map_err(|error| format!("Failed to read skill file {}: {error}", path.display()))?;
+        files.push(LocalSkillPackageFileEntry {
+            path: display_path,
+            is_directory: false,
+            size: content.len() as u64,
+            content: String::from_utf8(content).ok(),
+        });
+    }
+
+    Ok(())
+}
+
+fn inspect_local_skill_detail(
+    skill_roots: &[PathBuf],
+    directory: &str,
+) -> Result<LocalSkillPackageInspectionResult, String> {
+    let skill_dir = resolve_local_skill_dir(skill_roots, directory)?;
+    let inspection = SkillService::inspect_skill_dir(&skill_dir).map_err(|e| e.to_string())?;
+    let mut directories = BTreeSet::new();
+    let mut files = Vec::new();
+    collect_local_skill_file_entries(&skill_dir, &skill_dir, &mut directories, &mut files)?;
+
+    let mut entries: Vec<LocalSkillPackageFileEntry> = directories
+        .into_iter()
+        .map(|path| LocalSkillPackageFileEntry {
+            path,
+            is_directory: true,
+            size: 0,
+            content: None,
+        })
+        .collect();
+    files.sort_by(|a, b| a.path.cmp(&b.path));
+    entries.extend(files);
+
+    Ok(LocalSkillPackageInspectionResult {
+        directory: directory.to_string(),
+        inspection,
+        files: entries,
+    })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SkillScaffoldTarget {
     Project,
@@ -586,6 +666,8 @@ pub struct LocalSkillPackageFileEntry {
     pub path: String,
     pub is_directory: bool,
     pub size: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1647,6 +1729,7 @@ fn build_local_skill_package_file_entries(
             path: display_path,
             is_directory: false,
             size: file.content.len() as u64,
+            content: String::from_utf8(file.content.clone()).ok(),
         });
     }
 
@@ -1656,6 +1739,7 @@ fn build_local_skill_package_file_entries(
             path,
             is_directory: true,
             size: 0,
+            content: None,
         })
         .collect();
     files.sort_by(|a, b| a.path.cmp(&b.path));
@@ -1834,6 +1918,46 @@ fn install_skill_zip_package_into_root(
         Err(error) => {
             let _ = fs::remove_dir_all(&target_dir);
             Err(format!("Downloaded skill failed inspection: {error}"))
+        }
+    }
+}
+
+fn install_skill_zip_package_into_existing_dir(
+    target_dir: &Path,
+    directory: &str,
+    package: SkillZipPackage,
+) -> Result<MarketplaceSkillInstallResult, String> {
+    validate_skill_directory(directory)?;
+
+    fs::create_dir_all(target_dir).map_err(|error| {
+        format!(
+            "Failed to create replacement skill directory {}: {error}",
+            target_dir.display()
+        )
+    })?;
+
+    if let Err(error) = write_skill_zip_package_files(target_dir, &package) {
+        let _ = fs::remove_dir_all(target_dir);
+        return Err(error);
+    }
+
+    match SkillService::inspect_skill_dir(target_dir) {
+        Ok(inspection) if inspection.standard_compliance.validation_errors.is_empty() => {
+            Ok(MarketplaceSkillInstallResult {
+                directory: directory.to_string(),
+                inspection,
+            })
+        }
+        Ok(inspection) => {
+            let _ = fs::remove_dir_all(target_dir);
+            Err(format!(
+                "Replacement skill is not Agent Skills compliant: {}",
+                inspection.standard_compliance.validation_errors.join("; ")
+            ))
+        }
+        Err(error) => {
+            let _ = fs::remove_dir_all(target_dir);
+            Err(format!("Replacement skill failed inspection: {error}"))
         }
     }
 }
@@ -2196,6 +2320,94 @@ fn export_local_skill_package_to_path(
     })
 }
 
+fn resolve_user_local_skill_dir(app_type: &AppType, directory: &str) -> Result<PathBuf, String> {
+    validate_skill_directory(directory)?;
+    let skills_root = get_skills_dir(app_type)?;
+    resolve_local_skill_dir(&[skills_root], directory)
+}
+
+fn validate_skill_rename_directory(old_directory: &str, new_directory: &str) -> Result<(), String> {
+    validate_skill_directory(old_directory)?;
+    validate_skill_directory(new_directory)?;
+    if old_directory == new_directory {
+        return Err("New skill directory must be different".to_string());
+    }
+    Ok(())
+}
+
+fn rename_user_local_skill_dir(
+    app_type: &AppType,
+    directory: &str,
+    new_directory: &str,
+) -> Result<String, String> {
+    validate_skill_rename_directory(directory, new_directory)?;
+    let skills_root = get_skills_dir(app_type)?;
+    let source_dir = resolve_local_skill_dir(&[skills_root.clone()], directory)?;
+    let target_dir = skills_root.join(new_directory);
+
+    if target_dir.exists() {
+        return Err(format!("Skill directory already exists: {new_directory}"));
+    }
+
+    fs::rename(&source_dir, &target_dir).map_err(|error| {
+        format!(
+            "Failed to rename skill directory {} -> {}: {error}",
+            source_dir.display(),
+            target_dir.display()
+        )
+    })?;
+
+    Ok(new_directory.to_string())
+}
+
+fn replace_user_local_skill_package(
+    app_type: &AppType,
+    directory: &str,
+    source_path: &str,
+) -> Result<MarketplaceSkillInstallResult, String> {
+    validate_skill_directory(directory)?;
+    let skills_root = get_skills_dir(app_type)?;
+    let existing_dir = resolve_local_skill_dir(&[skills_root.clone()], directory)?;
+    let (canonical_source, bytes) = read_local_skill_package_file(Path::new(source_path))?;
+    let _fallback_name = resolve_local_skill_package_fallback_name(&canonical_source)?;
+    let package = read_skill_zip_package(&bytes)?;
+
+    let staging_parent = tempfile::TempDir::new_in(&skills_root)
+        .map_err(|error| format!("Failed to create replacement staging directory: {error}"))?;
+    let staged_dir = staging_parent.path().join(directory);
+    let staged_result = install_skill_zip_package_into_existing_dir(&staged_dir, directory, package)?;
+
+    let backup_dir = skills_root.join(format!(
+        ".{directory}.replace-backup-{}",
+        Utc::now().timestamp_millis()
+    ));
+    fs::rename(&existing_dir, &backup_dir).map_err(|error| {
+        format!(
+            "Failed to backup existing skill directory {}: {error}",
+            existing_dir.display()
+        )
+    })?;
+
+    if let Err(error) = fs::rename(&staged_dir, &existing_dir) {
+        let _ = fs::remove_dir_all(&existing_dir);
+        let _ = fs::rename(&backup_dir, &existing_dir);
+        return Err(format!(
+            "Failed to replace skill directory {}: {error}",
+            existing_dir.display()
+        ));
+    }
+
+    if let Err(error) = fs::remove_dir_all(&backup_dir) {
+        tracing::warn!(
+            "[Skill Package] 清理替换备份目录失败 {}: {}",
+            backup_dir.display(),
+            error
+        );
+    }
+
+    Ok(staged_result)
+}
+
 /// 获取已安装的 Lime Skills 目录列表
 ///
 /// 扫描 Lime 可发现的 provider Skills 根目录，返回包含 SKILL.md 的子目录名列表。
@@ -2230,6 +2442,66 @@ pub fn inspect_local_skill_for_app(
     let app_type: AppType = app.parse().map_err(|e: String| e)?;
     let skill_roots = get_skill_lookup_roots(&app_type)?;
     inspect_local_skill(&skill_roots, &directory)
+}
+
+#[tauri::command]
+pub fn inspect_local_skill_detail_for_app(
+    app: String,
+    directory: String,
+) -> Result<LocalSkillPackageInspectionResult, String> {
+    let app_type: AppType = app.parse().map_err(|e: String| e)?;
+    let skill_roots = get_skill_lookup_roots(&app_type)?;
+    inspect_local_skill_detail(&skill_roots, &directory)
+}
+
+/// 在系统文件管理器中显示用户级本地 Skill 目录。
+#[tauri::command]
+pub fn reveal_local_skill_for_app(app: String, directory: String) -> Result<bool, String> {
+    let app_type: AppType = app.parse().map_err(|e: String| e)?;
+    let skill_dir = resolve_user_local_skill_dir(&app_type, &directory)?;
+    open::that(&skill_dir).map_err(|error| {
+        format!(
+            "Failed to reveal skill directory {}: {error}",
+            skill_dir.display()
+        )
+    })?;
+    Ok(true)
+}
+
+/// 重命名用户级本地 Skill 目录。
+#[tauri::command]
+pub fn rename_local_skill_for_app(
+    app: String,
+    directory: String,
+    new_directory: String,
+) -> Result<ImportedSkillResult, String> {
+    let app_type: AppType = app.parse().map_err(|e: String| e)?;
+    let renamed_directory = rename_user_local_skill_dir(&app_type, &directory, &new_directory)?;
+
+    if matches!(app_type, AppType::Lime) {
+        AsterAgentState::reload_lime_skills();
+    }
+
+    Ok(ImportedSkillResult {
+        directory: renamed_directory,
+    })
+}
+
+/// 用本地 `.skill`/`.skills` 包替换用户级本地 Skill。
+#[tauri::command]
+pub fn replace_local_skill_package_for_app(
+    app: String,
+    directory: String,
+    source_path: String,
+) -> Result<MarketplaceSkillInstallResult, String> {
+    let app_type: AppType = app.parse().map_err(|e: String| e)?;
+    let result = replace_user_local_skill_package(&app_type, &directory, &source_path)?;
+
+    if matches!(app_type, AppType::Lime) {
+        AsterAgentState::reload_lime_skills();
+    }
+
+    Ok(result)
 }
 
 /// 创建标准 Skill 脚手架
@@ -2893,6 +3165,34 @@ content"#,
         assert!(inspection.content.contains("# Demo Skill"));
         assert!(inspection.resource_summary.has_references);
         assert!(inspection.standard_compliance.validation_errors.is_empty());
+    }
+
+    #[test]
+    fn test_inspect_local_skill_detail_returns_file_entries() {
+        let temp_dir = TempDir::new().unwrap();
+        let skills_dir = temp_dir.path().join("skills");
+        let skill_dir = skills_dir.join("demo-skill");
+        let references_dir = skill_dir.join("references");
+        std::fs::create_dir_all(&references_dir).unwrap();
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: Demo Skill\n---\n# Demo Skill",
+        )
+        .unwrap();
+        std::fs::write(references_dir.join("guide.md"), "# Guide").unwrap();
+
+        let detail = inspect_local_skill_detail(&[skills_dir.clone()], "demo-skill").unwrap();
+
+        assert_eq!(detail.directory, "demo-skill");
+        assert!(detail.inspection.content.contains("# Demo Skill"));
+        assert!(detail.files.iter().any(|entry| {
+            entry.path == "references" && entry.is_directory && entry.content.is_none()
+        }));
+        assert!(detail.files.iter().any(|entry| {
+            entry.path == "references/guide.md"
+                && !entry.is_directory
+                && entry.content.as_deref() == Some("# Guide")
+        }));
     }
 
     #[test]

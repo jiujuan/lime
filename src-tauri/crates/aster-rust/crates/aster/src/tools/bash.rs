@@ -836,6 +836,35 @@ fn build_missing_read_target_result(paths: &[std::path::PathBuf]) -> ToolResult 
         .with_metadata("missing_paths", serde_json::json!(path_values))
 }
 
+fn command_references_wsl_drive_mount(command: &str) -> bool {
+    static WSL_DRIVE_MOUNT_RE: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r#"(?i)(^|[\s'"(=:/])/(?:mnt|run/desktop/mnt/host)/[a-z](?:/|$)"#)
+            .expect("valid WSL drive mount regex")
+    });
+    WSL_DRIVE_MOUNT_RE.is_match(command)
+}
+
+fn build_windows_wsl_drive_mount_result(command: &str) -> ToolResult {
+    ToolResult::error(
+        "当前是 Windows 原生 shell 运行时，不应使用 `/mnt/c`、`/mnt/d` 这类 WSL/Linux 挂载路径。请改用 Windows 原生路径，或先用 PowerShell 查询 `$env:SystemDrive` / `Get-PSDrive -PSProvider FileSystem` 后再继续。",
+    )
+    .with_metadata("preflight_check", serde_json::json!("windows_wsl_drive_mount"))
+    .with_metadata("shell", serde_json::json!("powershell"))
+    .with_metadata("command", serde_json::json!(command))
+}
+
+fn preflight_windows_wsl_drive_mount_for(
+    command: &str,
+    is_windows_native_runtime: bool,
+) -> Option<ToolResult> {
+    (is_windows_native_runtime && command_references_wsl_drive_mount(command))
+        .then(|| build_windows_wsl_drive_mount_result(command))
+}
+
+fn preflight_windows_wsl_drive_mount(command: &str) -> Option<ToolResult> {
+    preflight_windows_wsl_drive_mount_for(command, cfg!(target_os = "windows"))
+}
+
 pub fn preflight_bash_read_targets(command: &str, cwd: &Path) -> Option<ToolResult> {
     let mut missing_paths = Vec::new();
 
@@ -1279,6 +1308,10 @@ impl Tool for BashTool {
             .get("background")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
+
+        if let Some(preflight_result) = preflight_windows_wsl_drive_mount(command) {
+            return Ok(preflight_result);
+        }
 
         if !background {
             if let Some(preflight_result) =
@@ -1790,6 +1823,35 @@ mod tests {
     fn test_is_bash_command_concurrency_safe_rejects_mutation() {
         assert!(!is_bash_command_concurrency_safe("mkdir tmp-output"));
         assert!(!is_bash_command_concurrency_safe("git checkout main"));
+    }
+
+    #[test]
+    fn test_command_references_wsl_drive_mount_detects_screenshot_windows_probe() {
+        assert!(command_references_wsl_drive_mount(
+            "ls /mnt/c/Users/ 2>/dev/null || ls /mnt 2>/dev/null"
+        ));
+        assert!(command_references_wsl_drive_mount(
+            "cat '/run/desktop/mnt/host/c/Users/demo/file.txt'"
+        ));
+        assert!(!command_references_wsl_drive_mount(
+            r#"Get-ChildItem "C:\Users\demo""#
+        ));
+    }
+
+    #[test]
+    fn test_preflight_windows_wsl_drive_mount_blocks_screenshot_probe_on_windows_runtime() {
+        let result = preflight_windows_wsl_drive_mount_for(
+            "ls /mnt/c/Users/ 2>/dev/null || ls /mnt 2>/dev/null",
+            true,
+        )
+        .expect("应阻断 Windows 原生运行时中的 WSL 盘符探测");
+
+        assert!(result.is_error());
+        assert!(result.content().contains("Windows 原生 shell"));
+        assert_eq!(
+            result.metadata.get("preflight_check"),
+            Some(&serde_json::json!("windows_wsl_drive_mount"))
+        );
     }
 
     // Builder Tests

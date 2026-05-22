@@ -1261,13 +1261,13 @@ export function AgentAppsPage({
   function renderRegistrationForm(app: CloudBootstrapApp) {
     return (
       <div
-        className="rounded-2xl border border-amber-200 bg-amber-50 p-3"
+        className="rounded-lg border border-[color:var(--lime-info-border)] bg-[color:var(--lime-info-soft)] px-4 py-3"
         data-testid={`agent-apps-registration-${app.appId}`}
       >
-        <p className="text-xs font-semibold text-amber-900">
+        <p className="text-xs font-semibold text-[color:var(--lime-text-strong)]">
           {t("agentApp.apps.center.detail.registrationHint")}
         </p>
-        <p className="mt-1 text-xs leading-5 text-amber-800">
+        <p className="mt-1 text-xs leading-5 text-[color:var(--lime-text-muted)]">
           {app.registrationHint ??
             t("agentApp.apps.registration.hintFallback", {
               state: app.registrationState ?? "required",
@@ -1275,7 +1275,7 @@ export function AgentAppsPage({
         </p>
         <div className="mt-3 flex gap-2">
           <input
-            className="min-w-0 flex-1 rounded-full border border-amber-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none transition focus:border-amber-400"
+            className="min-w-0 flex-1 rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2 text-xs text-[color:var(--lime-text-strong)] outline-none transition focus:border-[color:var(--lime-surface-border-strong)]"
             value={registrationCodes[app.appId] ?? ""}
             onChange={(event) =>
               updateRegistrationCode(app.appId, event.target.value)
@@ -1289,7 +1289,7 @@ export function AgentAppsPage({
           />
           <button
             type="button"
-            className="shrink-0 rounded-full bg-amber-700 px-3 py-2 text-xs font-medium text-white transition hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="shrink-0 rounded-full bg-[color:var(--lime-text-strong)] px-3 py-2 text-xs font-medium text-[color:var(--lime-surface)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={Boolean(busyAction)}
             onClick={() => void handleSubmitRegistration(app)}
             data-testid={`agent-apps-submit-registration-${app.appId}`}
@@ -1303,12 +1303,12 @@ export function AgentAppsPage({
 
   function renderAppIcon(
     item: AppCenterItem,
-    className = "size-16",
+    className = "size-12",
     testId = `agent-apps-icon-${item.appId}`,
   ): ReactElement {
     return (
       <div
-        className={`overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm shadow-slate-950/5 ${className}`}
+        className={`overflow-hidden rounded-xl border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] ${className}`}
         data-testid={testId}
       >
         <img
@@ -1321,19 +1321,116 @@ export function AgentAppsPage({
     );
   }
 
+  function renderInstallReviewDialog() {
+    if (!installReview) {
+      return null;
+    }
+
+    return (
+      <div
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/35 p-4"
+        data-testid="agent-apps-install-review-overlay"
+        onClick={() => setInstallReview(null)}
+      >
+        <section
+          role="dialog"
+          aria-modal="true"
+          className="lime-workbench-surface-scope flex max-h-[calc(100vh-3rem)] w-full max-w-[560px] flex-col overflow-hidden rounded-[18px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] text-[color:var(--lime-text)] shadow-2xl shadow-slate-950/20"
+          data-testid="agent-apps-install-review"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                  {t("agentApp.apps.installReview.title")}
+                </p>
+                <p className="mt-1 text-sm leading-6 text-[color:var(--lime-text-muted)]">
+                  {t("agentApp.apps.installReview.description")}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="inline-flex h-9 shrink-0 items-center justify-center rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-sm font-medium text-[color:var(--lime-text-muted)] shadow-none transition hover:bg-[color:var(--lime-surface-hover)] hover:text-[color:var(--lime-text-strong)]"
+                aria-label={t("agentApp.apps.center.detail.close")}
+                title={t("agentApp.apps.center.detail.close")}
+                onClick={() => setInstallReview(null)}
+                data-testid="agent-apps-install-review-close"
+              >
+                <span>{t("agentApp.apps.center.detail.close")}</span>
+                <X className="ml-1.5" size={14} />
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-[color:var(--lime-info-border)] bg-[color:var(--lime-info-soft)] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-base font-semibold text-[color:var(--lime-text-strong)]">
+                    {installReview.review.displayName}
+                  </p>
+                  <p className="mt-1 text-sm text-[color:var(--lime-text-muted)]">
+                    {t("agentApp.apps.center.detail.versionLine", {
+                      version: installReview.review.version,
+                    })}
+                  </p>
+                </div>
+                <span
+                  className={`shrink-0 rounded-full border px-2 py-1 text-xs font-medium ${sourceStateClass(
+                    installReview.review.sourceState.tone,
+                  )}`}
+                >
+                  {t(installReview.review.sourceState.labelKey)}
+                </span>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-[color:var(--lime-text)]">
+                {t("agentApp.apps.installReview.summary", {
+                  entries: installReview.review.entryCount,
+                  capabilities: installReview.review.capabilityCount,
+                  cleanupTargets: installReview.review.cleanupTargetCount,
+                })}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 border-t border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-5 py-4">
+            <button
+              type="button"
+              className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-full bg-[color:var(--lime-text-strong)] px-4 text-sm font-semibold text-[color:var(--lime-surface)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={Boolean(busyAction)}
+              onClick={() => void handleConfirmInstallReview()}
+              data-testid="agent-apps-install-review-confirm"
+            >
+              <ShieldCheck size={16} />
+              {t("agentApp.apps.installReview.confirm")}
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-10 items-center justify-center rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-4 text-sm font-semibold text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={Boolean(busyAction)}
+              onClick={() => setInstallReview(null)}
+              data-testid="agent-apps-install-review-cancel"
+            >
+              {t("agentApp.apps.installReview.cancel")}
+            </button>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div
-      className="lime-workbench-theme-scope flex h-full min-h-0 flex-col bg-slate-50 text-slate-950"
+      className="lime-workbench-theme-scope flex h-full min-h-0 flex-col overflow-hidden bg-[color:var(--lime-app-bg)] text-[color:var(--lime-text)]"
       data-testid="agent-apps-page"
     >
-      <div className="flex-1 overflow-auto px-8 py-8">
-        <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-3">
+      <div className="min-h-0 flex-1 overflow-auto bg-[color:var(--lime-surface)] px-5 pb-10 pt-10">
+        <div className="mx-auto flex w-full max-w-[1040px] flex-col gap-8">
           <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
-              <h1 className="text-3xl font-semibold tracking-tight text-slate-950">
+              <h1 className="text-[28px] font-semibold text-[color:var(--lime-text-strong)]">
                 {t("agentApp.apps.center.title")}
               </h1>
-              <p className="mt-2 max-w-xl text-base leading-6 text-slate-600">
+              <p className="mt-2 max-w-xl text-sm leading-6 text-[color:var(--lime-text-muted)]">
                 {t("agentApp.apps.center.description")}
               </p>
               {issueCount > 0 ? (
@@ -1348,11 +1445,11 @@ export function AgentAppsPage({
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <label className="relative w-full sm:w-[360px]">
                 <Search
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
+                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[color:var(--lime-text-muted)]"
                   size={18}
                 />
                 <input
-                  className="h-12 w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 shadow-sm shadow-slate-950/5 outline-none transition placeholder:text-slate-400 focus:border-blue-500"
+                  className="h-9 w-full rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] pl-10 pr-4 text-sm font-semibold text-[color:var(--lime-text-strong)] shadow-none outline-none transition placeholder:text-[color:var(--lime-text-muted)] focus:border-[color:var(--lime-surface-border-strong)]"
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   onInput={(event) => setSearchQuery(event.currentTarget.value)}
@@ -1363,7 +1460,7 @@ export function AgentAppsPage({
               <div className="flex gap-3">
                 <button
                   type="button"
-                  className="inline-flex h-12 items-center gap-2 rounded-lg bg-blue-950 px-5 text-sm font-semibold text-white shadow-sm shadow-blue-950/10 transition hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-9 items-center gap-2 rounded-full bg-[color:var(--lime-text-strong)] px-5 text-sm font-semibold text-[color:var(--lime-surface)] shadow-none transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={Boolean(busyAction)}
                   onClick={() => void handleInstallLocal()}
                   data-testid="agent-apps-install-local"
@@ -1373,7 +1470,7 @@ export function AgentAppsPage({
                 </button>
                 <button
                   type="button"
-                  className="inline-flex h-12 items-center gap-2 rounded-lg border border-slate-300 bg-white px-5 text-sm font-semibold text-blue-950 shadow-sm shadow-slate-950/5 transition hover:border-blue-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-9 items-center gap-2 rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-4 text-sm font-semibold text-[color:var(--lime-text-strong)] shadow-none transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={() => void refresh()}
                   disabled={loading}
                   data-testid="agent-apps-refresh"
@@ -1385,22 +1482,22 @@ export function AgentAppsPage({
             </div>
           </header>
 
-          <section className="flex flex-wrap items-center gap-7">
+          <section className="flex flex-wrap items-center gap-5">
             {(["all", "installed", "installable", "attention"] as const).map(
               (filter) => (
                 <button
                   key={filter}
                   type="button"
-                  className={`min-w-[132px] rounded-lg border px-5 py-2.5 text-sm font-semibold transition ${
+                  className={`inline-flex h-8 items-center gap-2 rounded-full text-base font-semibold transition ${
                     statusFilter === filter
-                      ? "border-blue-950 bg-blue-50 text-blue-950 shadow-sm shadow-blue-950/5"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-blue-200"
+                      ? "text-[color:var(--lime-text-strong)]"
+                      : "text-[color:var(--lime-text-muted)] hover:text-[color:var(--lime-text-strong)]"
                   }`}
                   onClick={() => setStatusFilter(filter)}
                   data-testid={`agent-apps-status-filter-${filter}`}
                 >
                   {t(`agentApp.apps.center.filter.${filter}`)}
-                  <span className="ml-1 opacity-70">
+                  <span className="text-xs text-[color:var(--lime-text-muted)]">
                     {filterCounts[filter]}
                   </span>
                 </button>
@@ -1409,19 +1506,19 @@ export function AgentAppsPage({
           </section>
 
           <section
-            className="mt-2 grid min-h-[640px] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm shadow-slate-950/5"
+            className="space-y-4"
           >
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 text-sm text-slate-600">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[color:var(--lime-text-muted)]">
               <div className="flex flex-wrap items-center gap-3">
                 <span>{t("agentApp.apps.center.source.label")}：</span>
                 {(["all", "cloud", "local"] as const).map((filter) => (
                   <button
                     key={filter}
                     type="button"
-                    className={`font-semibold transition ${
+                    className={`h-8 rounded-lg border px-3 text-xs font-semibold transition ${
                       sourceFilter === filter
-                        ? "text-blue-950"
-                        : "text-slate-500 hover:text-slate-900"
+                        ? "border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-surface-hover)] text-[color:var(--lime-text-strong)]"
+                        : "border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] text-[color:var(--lime-text)] hover:bg-[color:var(--lime-surface-hover)]"
                     }`}
                     onClick={() => setSourceFilter(filter)}
                     data-testid={`agent-apps-source-filter-${filter}`}
@@ -1435,7 +1532,9 @@ export function AgentAppsPage({
                 <button
                   type="button"
                   className={`font-semibold ${
-                    statusFilter === "all" ? "text-blue-950" : "text-slate-500"
+                    statusFilter === "all"
+                      ? "text-[color:var(--lime-text-strong)]"
+                      : "text-[color:var(--lime-text-muted)]"
                   }`}
                   onClick={() => setStatusFilter("all")}
                 >
@@ -1444,7 +1543,7 @@ export function AgentAppsPage({
                 <span className="text-slate-300">/</span>
                 <button
                   type="button"
-                  className="font-medium text-slate-500 hover:text-slate-900"
+                  className="font-medium text-[color:var(--lime-text-muted)] hover:text-[color:var(--lime-text-strong)]"
                   onClick={() => setStatusFilter("attention")}
                 >
                   {t("agentApp.apps.center.status.updateShort")}
@@ -1452,22 +1551,22 @@ export function AgentAppsPage({
                 <span className="text-slate-300">/</span>
                 <button
                   type="button"
-                  className="font-medium text-slate-500 hover:text-slate-900"
+                  className="font-medium text-[color:var(--lime-text-muted)] hover:text-[color:var(--lime-text-strong)]"
                   onClick={() => setStatusFilter("attention")}
                 >
                   {t("agentApp.apps.center.status.authorizationShort")}
                 </button>
               </div>
-              <div className="text-slate-500">
+              <div className="text-[color:var(--lime-text-muted)]">
                 {t("agentApp.apps.center.sort.label")}：
-                <span className="ml-2 font-medium text-slate-700">
+                <span className="ml-2 font-medium text-[color:var(--lime-text)]">
                   {t("agentApp.apps.center.sort.recent")}
                 </span>
               </div>
             </div>
-            <main className="min-w-0 bg-slate-50/60">
+            <main className="min-w-0">
               <div
-                className="grid grid-cols-1 gap-4 p-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
                 data-testid="agent-apps-list"
               >
                 {pagedItems.map((item) => {
@@ -1476,10 +1575,10 @@ export function AgentAppsPage({
                   return (
                     <div
                       key={item.appId}
-                      className={`flex min-h-[292px] flex-col rounded-2xl border bg-white p-4 shadow-sm shadow-slate-950/5 transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md hover:shadow-slate-950/10 ${
+                      className={`group flex min-h-[188px] flex-col rounded-[10px] border bg-[color:var(--lime-surface)] p-4 text-left shadow-sm shadow-[color:var(--lime-shadow-color)] transition hover:border-[color:var(--lime-surface-border-strong)] hover:bg-[color:var(--lime-surface-hover)] hover:shadow-md ${
                         selectedRow
                           ? "border-emerald-300 ring-1 ring-emerald-200"
-                          : "border-slate-200"
+                          : "border-[color:var(--lime-surface-border)]"
                       }`}
                       data-testid={`agent-apps-list-row-${item.appId}`}
                     >
@@ -1487,7 +1586,7 @@ export function AgentAppsPage({
                         {renderAppIcon(item)}
                         <div className="min-w-0 flex-1">
                           <div className="flex min-w-0 items-start justify-between gap-3">
-                            <h2 className="min-w-0 truncate text-base font-semibold text-slate-950">
+                            <h2 className="min-w-0 truncate text-sm font-semibold text-[color:var(--lime-text-strong)]">
                               {item.title}
                             </h2>
                             <span
@@ -1520,7 +1619,7 @@ export function AgentAppsPage({
                         </div>
                       </div>
 
-                      <p className="mt-4 line-clamp-3 min-h-[60px] text-sm leading-5 text-slate-600">
+                      <p className="mt-3 line-clamp-2 min-h-[40px] text-sm leading-5 text-[color:var(--lime-text-muted)]">
                         {item.description ||
                           t("agentApp.apps.center.descriptionFallback")}
                       </p>
@@ -1537,9 +1636,9 @@ export function AgentAppsPage({
                         />
                       ) : null}
 
-                      <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                        <div className="text-sm text-slate-600">
-                          <span className="font-medium text-slate-800">
+                      <div className="mt-3 border-t border-[color:var(--lime-surface-border)] pt-3">
+                        <div className="text-xs text-[color:var(--lime-text-muted)]">
+                          <span className="font-medium text-[color:var(--lime-text)]">
                             {item.installedVersion
                               ? t("agentApp.apps.center.version.current", {
                                   version: item.installedVersion,
@@ -1558,10 +1657,10 @@ export function AgentAppsPage({
                         </div>
                       </div>
 
-                      <div className="mt-auto flex items-center gap-2 pt-4">
+                      <div className="mt-auto flex items-center gap-2 pt-3">
                         <button
                           type="button"
-                          className="inline-flex h-10 flex-1 min-w-0 items-center justify-center gap-2 rounded-lg bg-blue-950 px-3 text-sm font-semibold text-white transition hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="inline-flex h-8 flex-1 min-w-0 items-center justify-center gap-2 rounded-full bg-[color:var(--lime-text-strong)] px-3 text-xs font-semibold text-[color:var(--lime-surface)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                           disabled={isPrimaryActionDisabled(item)}
                           onClick={(event) => {
                             event.stopPropagation();
@@ -1586,7 +1685,7 @@ export function AgentAppsPage({
                         </button>
                         <button
                           type="button"
-                          className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-950"
+                          className="inline-flex h-8 shrink-0 items-center justify-center rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-xs font-semibold text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)]"
                           onClick={() => openDetail(item.appId)}
                           data-testid={`agent-apps-open-detail-${item.appId}`}
                         >
@@ -1599,7 +1698,7 @@ export function AgentAppsPage({
                       hasCloudUpdate(item) ? (
                         <button
                           type="button"
-                          className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-lg border border-blue-800 bg-white px-3 text-sm font-semibold text-blue-950 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="mt-2 inline-flex h-8 w-full items-center justify-center rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-xs font-semibold text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
                           disabled={
                             canOneClickUpdate(item)
                               ? isPrimaryActionDisabled(item) || !defaultEntry
@@ -1635,14 +1734,14 @@ export function AgentAppsPage({
                   );
                 })}
                 {pagedItems.length === 0 ? (
-                  <div className="col-span-full flex min-h-[360px] items-center justify-center p-8 text-center">
+                  <div className="col-span-full flex min-h-[260px] items-center justify-center rounded-lg border border-dashed border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] px-4 py-8 text-center">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">
+                      <p className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
                         {appItems.length === 0
                           ? t("agentApp.apps.center.empty.noApps")
                           : t("agentApp.apps.center.empty.noMatches")}
                       </p>
-                      <p className="mt-2 text-sm text-slate-500">
+                      <p className="mt-2 text-sm text-[color:var(--lime-text-muted)]">
                         {t("agentApp.apps.center.empty.helper")}
                       </p>
                     </div>
@@ -1650,8 +1749,8 @@ export function AgentAppsPage({
                 ) : null}
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3">
-                <p className="text-xs text-slate-500">
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--lime-surface-border)] pt-4">
+                <p className="text-xs text-[color:var(--lime-text-muted)]">
                   {t("agentApp.apps.center.pagination.summary", {
                     page: currentPage,
                     total: totalPages,
@@ -1661,7 +1760,7 @@ export function AgentAppsPage({
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-blue-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-8 items-center gap-1 rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-4 text-sm font-medium text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={currentPage <= 1}
                     onClick={() =>
                       setCurrentPage((page) => Math.max(1, page - 1))
@@ -1673,7 +1772,7 @@ export function AgentAppsPage({
                   </button>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1 rounded-lg border border-blue-800 bg-white px-4 py-2 text-sm font-medium text-blue-950 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-8 items-center gap-1 rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-4 text-sm font-medium text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={currentPage >= totalPages}
                     onClick={() =>
                       setCurrentPage((page) => Math.min(totalPages, page + 1))
@@ -1691,14 +1790,14 @@ export function AgentAppsPage({
 
           {selectedItem ? (
             <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/25 p-4 backdrop-blur-sm"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4"
               data-testid="agent-apps-detail-overlay"
               onClick={closeDetail}
             >
               <section
                 role="dialog"
                 aria-modal="true"
-                className="flex max-h-[calc(100vh-3rem)] min-h-[420px] w-full max-w-[820px] flex-col overflow-hidden rounded-[18px] border border-slate-200 bg-white text-slate-950 shadow-2xl shadow-slate-950/20"
+                className="lime-workbench-surface-scope flex max-h-[calc(100vh-3rem)] min-h-[420px] w-full max-w-[920px] flex-col overflow-hidden rounded-[18px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] text-[color:var(--lime-text)] shadow-2xl shadow-slate-950/20"
                 data-testid="agent-apps-detail"
                 onClick={(event) => event.stopPropagation()}
               >
@@ -1711,10 +1810,10 @@ export function AgentAppsPage({
                         `agent-apps-detail-icon-${selectedItem.appId}`,
                       )}
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-slate-500">
+                        <p className="text-xs font-semibold text-[color:var(--lime-text-muted)]">
                           {t("agentApp.apps.center.detail.title")}
                         </p>
-                        <h2 className="mt-2 text-2xl font-semibold text-slate-950">
+                        <h2 className="mt-2 text-[22px] font-semibold text-[color:var(--lime-text-strong)]">
                           {selectedItem.title}
                         </h2>
                         <div className="mt-3 flex flex-wrap gap-2">
@@ -1740,7 +1839,7 @@ export function AgentAppsPage({
                       </div>
                       <button
                         type="button"
-                        className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-600 shadow-sm shadow-slate-950/5 transition hover:border-slate-300 hover:bg-white hover:text-slate-900"
+                        className="inline-flex h-9 shrink-0 items-center justify-center rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-sm font-medium text-[color:var(--lime-text-muted)] shadow-none transition hover:bg-[color:var(--lime-surface-hover)] hover:text-[color:var(--lime-text-strong)]"
                         aria-label={t("agentApp.apps.center.detail.close")}
                         title={t("agentApp.apps.center.detail.close")}
                         onClick={closeDetail}
@@ -1750,13 +1849,13 @@ export function AgentAppsPage({
                         <X className="ml-1.5" size={14} />
                       </button>
                     </div>
-                    <p className="text-base leading-7 text-slate-700">
+                    <p className="text-sm leading-6 text-[color:var(--lime-text-muted)]">
                       {selectedItem.description ||
                         t("agentApp.apps.center.descriptionFallback")}
                     </p>
                     <button
                       type="button"
-                      className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-blue-950 px-3 text-base font-semibold text-white transition hover:bg-blue-900 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:opacity-80"
+                      className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-full bg-[color:var(--lime-text-strong)] px-3 text-sm font-semibold text-[color:var(--lime-surface)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-80"
                       disabled={isPrimaryActionDisabled(selectedItem)}
                       onClick={() => void handlePrimaryAction(selectedItem)}
                     >
@@ -1772,7 +1871,7 @@ export function AgentAppsPage({
                     hasCloudUpdate(selectedItem) ? (
                       <button
                         type="button"
-                        className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-blue-800 bg-white px-3 text-base font-semibold text-blue-950 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="inline-flex h-10 w-full items-center justify-center rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-sm font-semibold text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
                         disabled={
                           canOneClickUpdate(selectedItem)
                             ? isPrimaryActionDisabled(selectedItem) ||
@@ -1809,74 +1908,9 @@ export function AgentAppsPage({
                     ? renderRegistrationForm(selectedItem.cloudApp)
                     : null}
 
-                  {installReview &&
-                  installReview.review.appId === selectedItem.appId ? (
-                    <section
-                      className="rounded-xl border border-blue-200 bg-blue-50 p-4"
-                      data-testid="agent-apps-install-review"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-950">
-                            {t("agentApp.apps.installReview.title")}
-                          </p>
-                          <p className="mt-1 text-xs leading-5 text-slate-600">
-                            {t("agentApp.apps.installReview.description")}
-                          </p>
-                        </div>
-                        <span
-                          className={`shrink-0 rounded-full border px-2 py-1 text-xs font-medium ${sourceStateClass(
-                            installReview.review.sourceState.tone,
-                          )}`}
-                        >
-                          {t(installReview.review.sourceState.labelKey)}
-                        </span>
-                      </div>
-                      <div className="mt-3 rounded-2xl border border-sky-100 bg-white p-3">
-                        <p className="text-sm font-semibold text-slate-900">
-                          {installReview.review.displayName}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-600">
-                          {t("agentApp.apps.center.detail.versionLine", {
-                            version: installReview.review.version,
-                          })}
-                        </p>
-                        <p className="mt-2 text-xs leading-5 text-slate-600">
-                          {t("agentApp.apps.installReview.summary", {
-                            entries: installReview.review.entryCount,
-                            capabilities: installReview.review.capabilityCount,
-                            cleanupTargets:
-                              installReview.review.cleanupTargetCount,
-                          })}
-                        </p>
-                      </div>
-                      <div className="mt-3 flex gap-2">
-                        <button
-                          type="button"
-                          className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-[color:var(--lime-text-strong)] px-3 py-2 text-sm font-medium text-[color:var(--lime-surface)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={Boolean(busyAction)}
-                          onClick={() => void handleConfirmInstallReview()}
-                          data-testid="agent-apps-install-review-confirm"
-                        >
-                          <ShieldCheck size={16} />
-                          {t("agentApp.apps.installReview.confirm")}
-                        </button>
-                        <button
-                          type="button"
-                          className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={Boolean(busyAction)}
-                          onClick={() => setInstallReview(null)}
-                          data-testid="agent-apps-install-review-cancel"
-                        >
-                          {t("agentApp.apps.installReview.cancel")}
-                        </button>
-                      </div>
-                    </section>
-                  ) : null}
-
                   {selectedItem.installedState ? (
                     <section className="space-y-3">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--lime-text-strong)]">
                         <Layers3 size={16} />
                         {t("agentApp.apps.center.detail.commonEntries")}
                       </div>
@@ -1886,7 +1920,7 @@ export function AgentAppsPage({
                             <button
                               key={entry.key}
                               type="button"
-                              className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-3 text-left transition hover:border-blue-300 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="flex items-center justify-between gap-3 rounded-[10px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-3 text-left transition hover:border-[color:var(--lime-surface-border-strong)] hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
                               disabled={
                                 selectedItem.installedState?.disabled ||
                                 Boolean(busyAction)
@@ -1900,12 +1934,12 @@ export function AgentAppsPage({
                                   : undefined
                               }
                               data-testid={`agent-apps-launch-entry-${entry.key}`}
-                            >
+                              >
                               <span className="min-w-0">
-                                <span className="block truncate text-sm font-medium text-slate-900">
+                                <span className="block truncate text-sm font-medium text-[color:var(--lime-text-strong)]">
                                   {entry.title}
                                 </span>
-                                <span className="mt-1 block truncate text-xs text-slate-500">
+                                <span className="mt-1 block truncate text-xs text-[color:var(--lime-text-muted)]">
                                   {t(
                                     `agentApp.apps.runtime.entryKind.${entry.kind}`,
                                   )}
@@ -1919,7 +1953,7 @@ export function AgentAppsPage({
                           ))}
                         </div>
                       ) : (
-                        <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                        <p className="rounded-lg border border-dashed border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] p-4 text-sm text-[color:var(--lime-text-muted)]">
                           {t("agentApp.apps.center.detail.noEntries")}
                         </p>
                       )}
@@ -1950,12 +1984,12 @@ export function AgentAppsPage({
                   <section>
                     <button
                       type="button"
-                      className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left text-sm font-semibold text-slate-900 transition hover:border-slate-300"
+                      className="flex w-full items-center justify-between gap-3 rounded-[10px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-3 text-left text-sm font-semibold text-[color:var(--lime-text-strong)] transition hover:bg-[color:var(--lime-surface-hover)]"
                       onClick={() => setMoreInfoOpen((open) => !open)}
                       data-testid="agent-apps-more-info"
                     >
                       {t("agentApp.apps.center.detail.moreInfo")}
-                      <span className="text-xs font-medium text-slate-500">
+                      <span className="text-xs font-medium text-[color:var(--lime-text-muted)]">
                         {moreInfoOpen
                           ? t("agentApp.apps.center.detail.collapse")
                           : t("agentApp.apps.center.detail.expand")}
@@ -1963,25 +1997,25 @@ export function AgentAppsPage({
                     </button>
                     {moreInfoOpen ? (
                       <div
-                        className="mt-2 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600"
+                        className="mt-2 space-y-3 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] p-3 text-xs text-[color:var(--lime-text-muted)]"
                         data-testid="agent-apps-more-info-content"
                       >
                         <p className="break-all">
                           {t("agentApp.apps.center.detail.appId")}:{" "}
                           {selectedItem.appId}
                         </p>
-                        <div className="rounded-xl border border-slate-200 bg-white p-3">
-                          <p className="text-sm font-semibold text-slate-900">
+                        <div className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-3">
+                          <p className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
                             {t("agentApp.apps.center.detail.sourceVersion")}
                           </p>
-                          <div className="mt-3 grid gap-2 text-sm text-slate-600">
+                          <div className="mt-3 grid gap-2 text-sm text-[color:var(--lime-text-muted)]">
                             <div className="flex items-center justify-between gap-3">
                               <span>
                                 {t(
                                   "agentApp.apps.center.detail.installedVersion",
                                 )}
                               </span>
-                              <span className="font-medium text-slate-900">
+                              <span className="font-medium text-[color:var(--lime-text-strong)]">
                                 {selectedItem.installedVersion ?? "-"}
                               </span>
                             </div>
@@ -1989,7 +2023,7 @@ export function AgentAppsPage({
                               <span>
                                 {t("agentApp.apps.center.detail.cloudVersion")}
                               </span>
-                              <span className="font-medium text-slate-900">
+                              <span className="font-medium text-[color:var(--lime-text-strong)]">
                                 {selectedItem.cloudVersion ?? "-"}
                               </span>
                             </div>
@@ -2022,10 +2056,10 @@ export function AgentAppsPage({
                           <p>{selectedItem.sourceState.reason}</p>
                         ) : null}
                         {selected ? (
-                          <div className="grid gap-2 border-t border-slate-200 pt-3 sm:grid-cols-2">
+                          <div className="grid gap-2 border-t border-[color:var(--lime-surface-border)] pt-3 sm:grid-cols-2">
                             <button
                               type="button"
-                              className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-200 bg-[color:var(--lime-surface)] px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
                               disabled={
                                 selected.disabled || Boolean(busyAction)
                               }
@@ -2039,7 +2073,7 @@ export function AgentAppsPage({
                             </button>
                             <button
                               type="button"
-                              className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="inline-flex items-center justify-center gap-2 rounded-full border border-emerald-200 bg-[color:var(--lime-surface)] px-3 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
                               disabled={
                                 !selected.disabled || Boolean(busyAction)
                               }
@@ -2053,7 +2087,7 @@ export function AgentAppsPage({
                             </button>
                             <button
                               type="button"
-                              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300"
+                              className="rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2 text-left text-xs font-medium text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)]"
                               disabled={Boolean(busyAction)}
                               onClick={() =>
                                 void handlePreviewUninstall(
@@ -2070,7 +2104,7 @@ export function AgentAppsPage({
                             </button>
                             <button
                               type="button"
-                              className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-left text-sm font-medium text-rose-800 transition hover:bg-rose-50"
+                              className="rounded-full border border-rose-200 bg-[color:var(--lime-surface)] px-3 py-2 text-left text-xs font-medium text-rose-800 transition hover:bg-rose-50"
                               disabled={Boolean(busyAction)}
                               onClick={() =>
                                 void handlePreviewUninstall(
@@ -2089,13 +2123,13 @@ export function AgentAppsPage({
                         ) : null}
                         {uninstallPreview ? (
                           <div
-                            className="rounded-xl border border-slate-200 bg-white p-3"
+                            className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-3"
                             data-testid="agent-apps-uninstall-preview"
                           >
-                            <p className="text-sm font-semibold text-slate-900">
+                            <p className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
                               {t("agentApp.apps.uninstallPreview.title")}
                             </p>
-                            <p className="mt-2 text-sm text-slate-600">
+                            <p className="mt-2 text-sm text-[color:var(--lime-text-muted)]">
                               {t("agentApp.apps.uninstallPreview.summary", {
                                 deleted: uninstallPreview.deletedTargetCount,
                                 retained: uninstallPreview.retainedTargetCount,
@@ -2103,7 +2137,7 @@ export function AgentAppsPage({
                             </p>
                             {activeUninstallDescriptor ? (
                               <div
-                                className="mt-3 space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3"
+                                className="mt-3 space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3"
                                 data-testid="agent-apps-cleanup-evidence"
                               >
                                 <p className="text-sm text-emerald-800">
@@ -2146,7 +2180,7 @@ export function AgentAppsPage({
                             {activeUninstallDescriptor?.mode ===
                             "delete-data" ? (
                               <div
-                                className="mt-3 space-y-3 rounded-xl border border-rose-200 bg-rose-50 p-3"
+                                className="mt-3 space-y-3 rounded-lg border border-rose-200 bg-rose-50 p-3"
                                 data-testid="agent-apps-delete-data-confirmation"
                               >
                                 <div className="space-y-1">
@@ -2161,7 +2195,7 @@ export function AgentAppsPage({
                                     )}
                                   </p>
                                 </div>
-                                <div className="rounded-lg border border-rose-200 bg-white px-3 py-2">
+                                <div className="rounded-lg border border-rose-200 bg-[color:var(--lime-surface)] px-3 py-2">
                                   <span className="text-xs font-medium text-rose-700">
                                     {t(
                                       "agentApp.apps.uninstallPreview.deleteDataGate.phraseLabel",
@@ -2181,7 +2215,7 @@ export function AgentAppsPage({
                                       event.target.value,
                                     )
                                   }
-                                  className="w-full rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
+                                  className="w-full rounded-full border border-rose-200 bg-[color:var(--lime-surface)] px-3 py-2 text-sm text-[color:var(--lime-text-strong)] outline-none transition placeholder:text-[color:var(--lime-text-muted)] focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
                                   placeholder={t(
                                     "agentApp.apps.uninstallPreview.deleteDataGate.inputPlaceholder",
                                   )}
@@ -2210,7 +2244,7 @@ export function AgentAppsPage({
                             ) : null}
                             <button
                               type="button"
-                              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-rose-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="mt-3 inline-flex items-center gap-2 rounded-full bg-rose-700 px-3 py-2 text-xs font-medium text-white transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-60"
                               disabled={
                                 Boolean(busyAction) ||
                                 !deleteDataConfirmationMatches
@@ -2231,38 +2265,7 @@ export function AgentAppsPage({
             </div>
           ) : null}
 
-          {installReview &&
-          installReview.review.appId !== selectedItem?.appId ? (
-            <section
-              className="rounded-2xl border border-sky-200 bg-sky-50 p-4 shadow-sm shadow-slate-950/5"
-              data-testid="agent-apps-install-review"
-            >
-              <p className="text-sm font-semibold text-slate-950">
-                {t("agentApp.apps.installReview.title")}
-              </p>
-              <div className="mt-3 flex gap-2">
-                <button
-                  type="button"
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-[color:var(--lime-text-strong)] px-3 py-2 text-sm font-medium text-[color:var(--lime-surface)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={Boolean(busyAction)}
-                  onClick={() => void handleConfirmInstallReview()}
-                  data-testid="agent-apps-install-review-confirm"
-                >
-                  <ShieldCheck size={16} />
-                  {t("agentApp.apps.installReview.confirm")}
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={Boolean(busyAction)}
-                  onClick={() => setInstallReview(null)}
-                  data-testid="agent-apps-install-review-cancel"
-                >
-                  {t("agentApp.apps.installReview.cancel")}
-                </button>
-              </div>
-            </section>
-          ) : null}
+          {renderInstallReviewDialog()}
 
           {!selectedItem && mountedUi ? (
             <section className="sr-only" data-testid="agent-apps-mounted-ui">

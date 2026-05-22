@@ -70,6 +70,7 @@ pub enum TurnExecutionProfile {
 #[serde(rename_all = "snake_case")]
 pub enum TurnPromptAugmentationStageKind {
     RuntimeAgents,
+    RuntimeEnvironment,
     ExplicitLocalPathFocus,
     Memory,
     KnowledgePack,
