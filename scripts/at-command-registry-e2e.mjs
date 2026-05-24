@@ -92,6 +92,12 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function readConsoleText(consoleMessages) {
+  return consoleMessages
+    .map((item) => String(item?.text || ""))
+    .join("\n");
+}
+
 function timeoutAfter(ms) {
   return new Promise((resolve) => {
     const timer = setTimeout(resolve, ms);
@@ -486,12 +492,14 @@ async function main() {
 
     const page = await context.newPage();
     const invokes = [];
+    const consoleMessages = [];
 
     page.on("console", (message) => {
       const entry = {
         type: message.type(),
         text: message.text(),
       };
+      consoleMessages.push(entry);
       if (message.type() === "error") {
         summary.consoleErrors.push(entry);
       } else if (message.type() === "warning") {
@@ -541,6 +549,33 @@ async function main() {
       null,
       { timeout: options.timeoutMs },
     );
+
+    logStage(options, "wait-workspace-ready");
+    const workspaceReadySignal = await waitForCondition(
+      "等待默认工作区完成加载",
+      () => {
+        const consoleText = readConsoleText(consoleMessages);
+        if (consoleText.includes("AgentChatPage.loadData.projectOnlyComplete")) {
+          return "AgentChatPage.loadData.projectOnlyComplete";
+        }
+        if (consoleText.includes("AgentChatPage.loadData.projectLoaded")) {
+          return "AgentChatPage.loadData.projectLoaded";
+        }
+        if (consoleText.includes("AgentChatPage.workspaceCheck.success")) {
+          return "AgentChatPage.workspaceCheck.success";
+        }
+        if (invokes.some((item) => item.cmd === "workspace_ensure_ready")) {
+          return "invoke:workspace_ensure_ready";
+        }
+        if (invokes.some((item) => item.cmd === "aster_agent_init")) {
+          return "invoke:aster_agent_init";
+        }
+        return null;
+      },
+      options.timeoutMs,
+      options.intervalMs,
+    );
+    summary.workspaceReadySignal = workspaceReadySignal;
 
     logStage(options, "open-at-panel");
     await textarea.click();
