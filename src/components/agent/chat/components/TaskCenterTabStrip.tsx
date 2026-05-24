@@ -4,10 +4,12 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Pin,
+  Pencil,
   Plus,
   X,
 } from "lucide-react";
 import type { CSSProperties } from "react";
+import { useTranslation } from "react-i18next";
 import type { TaskStatus } from "../hooks/agentChatShared";
 import { cn } from "@/lib/utils";
 import {
@@ -49,12 +51,14 @@ export interface TaskCenterTabItem {
   isActive: boolean;
   hasUnread: boolean;
   isPinned: boolean;
+  renamable?: boolean;
   closable?: boolean;
 }
 
 interface TaskCenterTabStripProps {
   items: TaskCenterTabItem[];
   onSelectTask: (taskId: string) => void | Promise<void>;
+  onRenameTask?: (taskId: string) => void | Promise<void>;
   onCloseTask: (taskId: string) => void | Promise<void>;
   onCreateTask: () => void;
   showHistoryToggle?: boolean;
@@ -103,6 +107,7 @@ const taskCenterTabStripStyle = {
 export function TaskCenterTabStrip({
   items,
   onSelectTask,
+  onRenameTask,
   onCloseTask,
   onCreateTask,
   showHistoryToggle = false,
@@ -111,7 +116,19 @@ export function TaskCenterTabStrip({
   workbenchVisible = false,
   onWorkbenchToggle,
 }: TaskCenterTabStripProps) {
+  const { t } = useTranslation("navigation");
   const showToolbarActions = showHistoryToggle || showWorkbenchToggle;
+  const renameActionLabel = t("navigation.sidebar.conversations.menu.rename");
+  const createConversationLabel = t(
+    "navigation.sidebar.conversations.newConversation",
+  );
+  const historyToggleLabel = t(
+    "navigation.sidebar.conversations.toggleHistory",
+  );
+  const workbenchLabel = t("navigation.sidebar.conversations.workbench.label");
+  const workbenchToggleLabel = workbenchVisible
+    ? t("navigation.sidebar.conversations.workbench.collapse")
+    : t("navigation.sidebar.conversations.workbench.expand");
 
   return (
     <section
@@ -172,6 +189,26 @@ export function TaskCenterTabStrip({
                       />
                     ) : null}
                   </button>
+                  {item.renamable !== false && onRenameTask ? (
+                    <button
+                      type="button"
+                      className={cn(
+                        "rounded-full p-1 text-[color:var(--lime-text-muted)] transition hover:bg-[color:var(--lime-chrome-tab-hover)] hover:text-[color:var(--lime-text)] focus-visible:text-[color:var(--lime-text)] dark:hover:bg-white/10 dark:hover:text-slate-200",
+                        item.isActive
+                          ? "opacity-100"
+                          : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+                      )}
+                      aria-label={renameActionLabel}
+                      title={renameActionLabel}
+                      data-testid={`task-center-tab-rename-${item.id}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void onRenameTask(item.id);
+                      }}
+                    >
+                      <Pencil className="h-2.5 w-2.5" />
+                    </button>
+                  ) : null}
                   {item.closable === false ? null : (
                     <button
                       type="button"
@@ -199,8 +236,8 @@ export function TaskCenterTabStrip({
               type="button"
               className={cn(tabUtilityButtonClassName, "ml-0.5")}
               data-testid="task-center-tab-create-button"
-              aria-label="新建对话"
-              title="新建对话"
+              aria-label={createConversationLabel}
+              title={createConversationLabel}
               onClick={onCreateTask}
             >
               <Plus className="h-3.5 w-3.5" />
@@ -218,8 +255,8 @@ export function TaskCenterTabStrip({
                 type="button"
                 className={tabUtilityButtonClassName}
                 data-testid="task-center-tab-history"
-                aria-label="切换历史"
-                title="切换历史"
+                aria-label={historyToggleLabel}
+                title={historyToggleLabel}
                 onClick={onToggleHistory}
               >
                 <Box className="h-3.5 w-3.5" />
@@ -234,8 +271,8 @@ export function TaskCenterTabStrip({
                     "border-[color:var(--lime-chrome-border)] bg-[color:var(--lime-chrome-tab-active-surface)] text-[color:var(--lime-text)] shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] dark:bg-slate-700 dark:text-slate-100",
                 )}
                 data-testid="task-center-tab-workbench"
-                aria-label={workbenchVisible ? "收起工作台" : "展开工作台"}
-                title={workbenchVisible ? "收起工作台" : "展开工作台"}
+                aria-label={workbenchToggleLabel}
+                title={workbenchToggleLabel}
                 onClick={onWorkbenchToggle}
               >
                 {workbenchVisible ? (
@@ -243,7 +280,7 @@ export function TaskCenterTabStrip({
                 ) : (
                   <PanelRightOpen className="h-3.5 w-3.5" />
                 )}
-                <span>工作台</span>
+                <span>{workbenchLabel}</span>
               </button>
             ) : null}
           </div>

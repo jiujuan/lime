@@ -1302,7 +1302,7 @@ describe("AppSidebar", () => {
 
     await act(async () => {
       container
-        .querySelector<HTMLButtonElement>('button[aria-label="语言"]')
+        .querySelector<HTMLButtonElement>('button[aria-label="界面语言"]')
         ?.click();
       await Promise.resolve();
     });
@@ -1328,7 +1328,7 @@ describe("AppSidebar", () => {
     await act(async () => {
       container
         .querySelector<HTMLButtonElement>(
-          'button[aria-label="切换语言为English"]',
+          'button[aria-label="切换界面语言为English"]',
         )
         ?.click();
       await Promise.resolve();

@@ -25,6 +25,7 @@ use uuid::Uuid;
 
 use super::context::ToolContext;
 use super::error::ToolError;
+use super::shell_runtime::build_platform_shell_command;
 
 #[derive(Debug, Clone)]
 pub enum TaskShell {
@@ -425,17 +426,7 @@ impl TaskManager {
     /// Build a platform-specific command
     fn build_command(&self, command: &str, context: &ToolContext, shell: &TaskShell) -> Command {
         let mut cmd = match shell {
-            TaskShell::PlatformDefault => {
-                if cfg!(target_os = "windows") {
-                    let mut cmd = Command::new("powershell");
-                    cmd.args(["-NoProfile", "-NonInteractive", "-Command", command]);
-                    cmd
-                } else {
-                    let mut cmd = Command::new("sh");
-                    cmd.args(["-c", command]);
-                    cmd
-                }
-            }
+            TaskShell::PlatformDefault => build_platform_shell_command(command),
             TaskShell::PowerShell { executable_path } => {
                 let mut cmd = Command::new(executable_path);
                 cmd.args(["-NoProfile", "-NonInteractive", "-Command", command]);

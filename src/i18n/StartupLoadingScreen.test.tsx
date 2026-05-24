@@ -2,7 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { LIME_BRAND_NAME } from "@/lib/branding";
-import { changeLimeLocale } from "./createI18n";
+import { changeLimeLocale, limeI18nResources } from "./createI18n";
 import { StartupLoadingScreen } from "./StartupLoadingScreen";
 
 interface MountedScreen {
@@ -50,11 +50,13 @@ describe("StartupLoadingScreen", () => {
 
   it("启动加载屏文案应走 common namespace 英文资源", () => {
     const container = renderStartupLoadingScreen();
+    const expectedDescription =
+      limeI18nResources["en-US"].common[
+        "common.startupLoading.description"
+      ];
 
     expect(container.textContent).toContain(`Starting ${LIME_BRAND_NAME}`);
-    expect(container.textContent).toContain(
-      "Preparing language settings and workspace entry. Please wait.",
-    );
+    expect(container.textContent).toContain(expectedDescription);
     expect(container.querySelector("img")?.getAttribute("alt")).toBe(
       LIME_BRAND_NAME,
     );

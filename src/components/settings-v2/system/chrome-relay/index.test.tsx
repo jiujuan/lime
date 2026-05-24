@@ -469,6 +469,20 @@ describe("ChromeRelaySettings", () => {
 
     await openAdvancedTab(container);
 
+    expect(container.textContent).toContain(
+      "Open a dedicated settings window for Google or Xiaohongshu first, then confirm account, browser language, and content preferences.",
+    );
+
+    const profileButton = findButton(container, "View Profile Details");
+    await act(async () => {
+      profileButton.click();
+      await flushEffects();
+    });
+
+    expect(container.textContent).toContain(
+      "A dedicated Profile for search preferences, browser language, and region settings.",
+    );
+
     const tabButton = findTabButton(container, "Debug");
     await act(async () => {
       tabButton.click();

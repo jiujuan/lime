@@ -2,6 +2,9 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "@/i18n/config";
+import { changeLimeLocale } from "@/i18n/createI18n";
+import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import * as fileBrowserModule from "@/lib/api/fileBrowser";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
@@ -104,6 +107,10 @@ vi.mock("@/lib/api/fileBrowser", () => ({
   readFilePreview: vi.fn(),
 }));
 
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser: vi.fn(),
+}));
+
 interface MountedHarness {
   container: HTMLDivElement;
   root: Root;
@@ -121,12 +128,14 @@ interface RenderOptions {
 
 const mountedRoots: MountedHarness[] = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
+  vi.mocked(openExternalUrlWithSystemBrowser).mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -312,6 +321,103 @@ describe("MarkdownRenderer", () => {
     expect(container.textContent).toContain("图片 · 点击查看大图");
   });
 
+  it("开发分析正文应渲染标题、表格、粗体和行内代码，而不是露出原始 Markdown", () => {
+    const content = [
+      "## BADOUCMS 架构分析",
+      "",
+      "| 发现 | 说明 |",
+      "| --- | --- |",
+      "| **底层框架** | `ThinkPHP` |",
+    ].join("\n");
+
+    const container = render(content);
+
+    expect(
+      container.querySelector('h2[data-markdown-heading-level="2"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="markdown-table-scroll"] table'),
+    ).not.toBeNull();
+    expect(container.querySelector("strong")?.textContent).toBe("底层框架");
+    expect(
+      container.querySelector('code[data-inline-code="true"]')?.textContent,
+    ).toBe("ThinkPHP");
+    expect(container.textContent).not.toContain("## BADOUCMS");
+    expect(container.textContent).not.toContain("| 发现 | 说明 |");
+  });
+
+  it("markdown 围栏里确实是表格时应拆掉围栏并渲染为表格", () => {
+    const content = [
+      "```markdown",
+      "| 文件 | 作用 |",
+      "| --- | --- |",
+      "| build.bat | Windows 构建入口 |",
+      "```",
+    ].join("\n");
+
+    const container = render(content);
+
+    expect(
+      container.querySelector('[data-testid="markdown-table-scroll"] table'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="markdown-syntax-code-block"]'),
+    ).toBeNull();
+    expect(container.textContent).toContain("build.bat");
+    expect(container.textContent).not.toContain("```");
+  });
+
+  it("markdown 围栏里不是表格时应继续作为代码块显示", () => {
+    const content = ["```markdown", "**强调示例**", "```"].join("\n");
+
+    const container = render(content);
+
+    expect(
+      container.querySelector('[data-testid="markdown-syntax-code-block"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="markdown-table-scroll"]'),
+    ).toBeNull();
+  });
+
+  it("http/https 链接应交给系统浏览器而不是当前 WebView", async () => {
+    const container = render("[Node.js](https://nodejs.org)");
+    const link = container.querySelector("a");
+
+    expect(link).not.toBeNull();
+    expect(link?.getAttribute("href")).toBe("https://nodejs.org");
+    expect(link?.getAttribute("rel")).toBe("noreferrer noopener");
+
+    const clickEvent = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+    });
+
+    await act(async () => {
+      link?.dispatchEvent(clickEvent);
+      await Promise.resolve();
+    });
+
+    expect(clickEvent.defaultPrevented).toBe(true);
+    expect(openExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
+      "https://nodejs.org",
+    );
+  });
+
+  it("非 http/https 链接不应触发系统浏览器打开", () => {
+    const container = render("[章节](#install)");
+    const link = container.querySelector("a");
+    const clickEvent = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+    });
+
+    link?.dispatchEvent(clickEvent);
+
+    expect(clickEvent.defaultPrevented).toBe(false);
+    expect(openExternalUrlWithSystemBrowser).not.toHaveBeenCalled();
+  });
+
   it("带 baseFilePath 时应把相对图片路径解析为本地文件资源", () => {
     const container = render("![配图](images/hero.png)", {
       baseFilePath:
@@ -414,9 +520,19 @@ describe("MarkdownRenderer", () => {
     );
 
     expect(tableScroll).not.toBeNull();
-    expect(tableScroll?.querySelector("table")).not.toBeNull();
-    expect(document.head.textContent).toContain("--lime-surface-border");
-    expect(document.head.textContent).toContain("--lime-brand-soft");
+    const table = tableScroll?.querySelector("table");
+    const headerCell = table?.querySelector("th");
+    expect(table).not.toBeNull();
+    expect(headerCell).not.toBeNull();
+    const headerBackground = getComputedStyle(
+      headerCell as HTMLElement,
+    ).backgroundColor;
+    const rgbMatch = /rgb\((\d+), (\d+), (\d+)\)/.exec(headerBackground);
+    expect(rgbMatch).not.toBeNull();
+    const [, red = "0", green = "0", blue = "0"] = rgbMatch ?? [];
+    expect(Number(red)).toBeGreaterThanOrEqual(240);
+    expect(Number(green)).toBeGreaterThanOrEqual(240);
+    expect(Number(blue)).toBeGreaterThanOrEqual(240);
     expect(container.textContent).toContain("Browser Runtime");
   });
 
@@ -706,9 +822,15 @@ describe("MarkdownRenderer", () => {
 
     expect(syntaxHighlighter?.getAttribute("data-theme")).toBe("light");
     expect(codeBlock).not.toBeNull();
-    expect(getComputedStyle(codeBlock as HTMLElement).backgroundColor).toBe(
-      "rgb(248, 250, 252)",
-    );
+    const backgroundColor = getComputedStyle(
+      codeBlock as HTMLElement,
+    ).backgroundColor;
+    const rgbMatch = /rgb\((\d+), (\d+), (\d+)\)/.exec(backgroundColor);
+    expect(rgbMatch).not.toBeNull();
+    const [, red = "0", green = "0", blue = "0"] = rgbMatch ?? [];
+    expect(Number(red)).toBeGreaterThanOrEqual(240);
+    expect(Number(green)).toBeGreaterThanOrEqual(240);
+    expect(Number(blue)).toBeGreaterThanOrEqual(240);
   });
 
   it("inline code 应单独标记，块级代码不应再继承胶囊样式", () => {

@@ -1,0 +1,27 @@
+{
+  "localeProposals": [],
+  "resourcesDir": "/Users/coso/Documents/dev/ai/aiclientproxy/lime/src/i18n/resources",
+  "schemaVersion": "lime.i18n.translationPrPack.v1",
+  "sourceLocale": "zh-CN",
+  "sourceLocaleExport": {
+    "namespaceCount": 13,
+    "sourceKeyCount": 7200,
+    "totalRawBytes": 627489
+  },
+  "translationCoverage": {
+    "coverageRatio": 1,
+    "extraKeyCount": 0,
+    "fullCoverageLocaleCount": 4,
+    "localeCount": 4,
+    "missingKeyCount": 0,
+    "sourceKeyCount": 7200,
+    "translatedKeyCount": 28800
+  },
+  "summary": {
+    "localeCount": 5,
+    "localesWithGaps": 0,
+    "namespaceCount": 13,
+    "proposedEntryCount": 0,
+    "sourceKeyCount": 7200
+  }
+}

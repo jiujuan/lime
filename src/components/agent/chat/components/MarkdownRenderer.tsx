@@ -1,4 +1,5 @@
 import React, { memo } from "react";
+import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -13,6 +14,10 @@ import type { A2UIFormData } from "@/lib/workspace/a2ui";
 import { CHAT_A2UI_TASK_CARD_PRESET } from "@/lib/workspace/a2ui";
 import { useDebouncedValue } from "@/lib/artifact/hooks/useDebouncedValue";
 import { readFilePreview } from "@/lib/api/fileBrowser";
+import {
+  interceptHttpExternalLinkClick,
+  resolveHttpExternalHref,
+} from "@/lib/markdown/externalLinks";
 import { resolveMarkdownImageSrc } from "@/lib/markdown/resolveMarkdownImageSrc";
 import {
   parseMarkdownBundleImageOverrides,
@@ -25,17 +30,19 @@ const STREAMING_LIGHT_RENDER_THRESHOLD = 2_000;
 const STREAMING_LIGHT_RENDER_DEBOUNCE_MS = 48;
 const STREAMING_STANDARD_RENDER_DEBOUNCE_MS = 24;
 const MARKDOWN_BUNDLE_META_MAX_SIZE = 64 * 1024;
-const CODE_BLOCK_SURFACE = "#f8fafc";
+const CODE_BLOCK_SURFACE = "#f7f8fa";
 const CODE_BLOCK_SURFACE_ACCENT =
-  "linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(248, 250, 252, 0.98) 100%)";
+  "linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(247, 248, 250, 0.98) 100%)";
 const CODE_BLOCK_HEADER_SURFACE =
-  "linear-gradient(180deg, rgba(248, 250, 252, 0.98) 0%, rgba(241, 245, 249, 0.98) 100%)";
-const CODE_BLOCK_BORDER = "rgba(203, 213, 225, 0.88)";
+  "linear-gradient(180deg, rgba(250, 251, 252, 0.98) 0%, rgba(243, 245, 247, 0.98) 100%)";
+const CODE_BLOCK_BORDER = "rgba(188, 199, 214, 0.78)";
 const CODE_BLOCK_HEADER_BORDER = "rgba(148, 163, 184, 0.22)";
 const CODE_BLOCK_TEXT = "#0f172a";
 const CODE_BLOCK_MUTED_TEXT = "#64748b";
 const CODE_BLOCK_BUTTON_SURFACE = "rgba(255, 255, 255, 0.88)";
 const CODE_BLOCK_BUTTON_HOVER_SURFACE = "rgba(248, 250, 252, 0.98)";
+const CODE_FONT_FAMILY =
+  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
 
 // 收紧正文与代码块表面，让消息正文更接近单列执行流的阅读节奏。
 const MarkdownContainer = styled.div`
@@ -152,22 +159,22 @@ const MarkdownContainer = styled.div`
     font-family:
       ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
       "Courier New", monospace;
-    font-size: 0.84em;
-    line-height: 1.4;
-    padding: 0.08rem 0.42rem;
-    border-radius: 999px;
-    border: 1px solid hsl(var(--border));
-    background-color: hsl(var(--muted));
-    color: hsl(var(--foreground));
+    font-size: 0.86em;
+    line-height: 1.45;
+    padding: 0.08rem 0.34rem;
+    border-radius: 5px;
+    border: 1px solid rgba(203, 213, 225, 0.86);
+    background-color: rgba(248, 250, 252, 0.95);
+    color: #0f172a;
   }
 
   pre {
     margin: 14px 0;
     padding: 10px 12px 12px;
-    border-radius: 10px;
+    border-radius: 8px;
     overflow: auto;
     border: 1px solid hsl(var(--border));
-    background: hsl(var(--secondary));
+    background: ${CODE_BLOCK_SURFACE};
 
     code {
       padding: 0;
@@ -199,12 +206,8 @@ const MarkdownContainer = styled.div`
 
   th {
     font-weight: 600;
-    background: linear-gradient(
-      180deg,
-      var(--lime-brand-soft, hsl(var(--muted))) 0%,
-      var(--lime-surface-soft, hsl(var(--secondary))) 100%
-    );
-    color: var(--lime-brand-strong, hsl(var(--foreground)));
+    background: #f8fafc;
+    color: #334155;
     white-space: nowrap;
   }
 
@@ -256,8 +259,7 @@ const MarkdownDivider = styled.hr`
 const MarkdownQuoteCard = styled.blockquote`
   margin: 0 0 0.95em;
   padding: 0;
-  border: 1px solid
-    var(--lime-surface-border-strong, hsl(var(--border)));
+  border: 1px solid var(--lime-surface-border-strong, hsl(var(--border)));
   border-radius: 20px;
   background: linear-gradient(
     180deg,
@@ -334,14 +336,15 @@ const GeneratedImage = styled.img`
 const CodeBlockContainer = styled.div`
   position: relative;
   margin: 10px 0;
-  border-radius: 10px;
+  max-width: 100%;
+  border-radius: 8px;
   overflow: hidden;
   border: 1px solid ${CODE_BLOCK_BORDER};
   background-color: ${CODE_BLOCK_SURFACE};
   background-image: ${CODE_BLOCK_SURFACE_ACCENT};
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    0 18px 34px -30px rgba(15, 23, 42, 0.28);
+    0 14px 28px -28px rgba(15, 23, 42, 0.32);
 `;
 
 const CodeHeader = styled.div`
@@ -349,27 +352,37 @@ const CodeHeader = styled.div`
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  padding: 4px 8px;
+  min-height: 32px;
+  padding: 5px 8px 5px 10px;
   background: ${CODE_BLOCK_HEADER_SURFACE};
   color: ${CODE_BLOCK_MUTED_TEXT};
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: ${CODE_FONT_FAMILY};
+  font-size: 11.5px;
+  letter-spacing: 0;
+  text-transform: none;
   border-bottom: 1px solid ${CODE_BLOCK_HEADER_BORDER};
+
+  > span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 `;
 
 const CopyButton = styled.button`
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
+  padding: 2px 7px;
+  border-radius: 6px;
   border: 1px solid ${CODE_BLOCK_HEADER_BORDER};
   background: ${CODE_BLOCK_BUTTON_SURFACE};
   color: ${CODE_BLOCK_TEXT};
-  font-size: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
   cursor: pointer;
   transition:
     background-color 0.18s ease,
@@ -448,15 +461,12 @@ const MarkdownBlockActionButton = styled.button`
 const MarkdownTableScroll = styled.div`
   margin: 0 0 0.82em;
   overflow-x: auto;
-  border: 1px solid
-    var(--lime-surface-border-strong, hsl(var(--border)));
-  border-radius: 14px;
+  border: 1px solid var(--lime-surface-border-strong, hsl(var(--border)));
+  border-radius: 8px;
   background: var(--lime-surface, hsl(var(--background)));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 `;
 
-const CODE_FONT_FAMILY =
-  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
 const PLAIN_TEXT_LANGUAGES = new Set(["text", "plaintext", "plain", "txt"]);
 const FLOW_ARROW_ONLY_PATTERN = /^(↓|⬇|⇣|↧|->|=>|→|↘|v)$/u;
 const CODE_SIGNAL_PATTERN =
@@ -485,6 +495,7 @@ const CODE_LANGUAGE_ALIASES: Record<string, string> = {
 };
 const COMPACT_PIPE_TABLE_SEPARATOR_PATTERN = /\|\|[ \t:|-]{3,}\|\|/;
 const MARKDOWN_FENCE_LINE_PATTERN = /^\s*(`{3,}|~{3,})/;
+const MARKDOWN_FENCE_OPEN_PATTERN = /^(\s*)(`{3,}|~{3,})\s*([^\s`]*)?.*$/;
 
 interface MarkdownRendererProps {
   content: string;
@@ -660,6 +671,108 @@ function normalizeCompactPipeTables(markdown: string): string {
     .join("\n");
 }
 
+function isMarkdownFenceInfo(info: string | undefined): boolean {
+  const normalized = (info || "").trim().toLowerCase();
+  return (
+    normalized === "md" || normalized === "markdown" || normalized === "gfm"
+  );
+}
+
+function isMarkdownTableDelimiterCell(cell: string): boolean {
+  return /^:?-{3,}:?$/.test(cell.trim());
+}
+
+function stripBlockquotePrefix(line: string): string {
+  return line.replace(/^\s*>\s?/, "");
+}
+
+function containsMarkdownTable(markdown: string): boolean {
+  const lines = markdown.split("\n").map(stripBlockquotePrefix);
+
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    const headerCells = parsePipeTableCells(lines[index] || "");
+    const delimiterCells = parsePipeTableCells(lines[index + 1] || "");
+    if (
+      headerCells.filter(Boolean).length >= 2 &&
+      delimiterCells.length >= headerCells.length &&
+      delimiterCells.every(isMarkdownTableDelimiterCell)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function normalizeMarkdownTableFences(markdown: string): string {
+  if (!markdown.includes("```") && !markdown.includes("~~~")) {
+    return markdown;
+  }
+
+  const lines = markdown.split("\n");
+  const outputLines: string[] = [];
+  let activeFence: {
+    marker: "`" | "~";
+    markerLength: number;
+    openLine: string;
+    isMarkdown: boolean;
+    contentLines: string[];
+  } | null = null;
+
+  for (const line of lines) {
+    const fenceMatch = MARKDOWN_FENCE_OPEN_PATTERN.exec(line);
+    if (!activeFence) {
+      if (fenceMatch) {
+        const markerRun = fenceMatch[2] || "";
+        const marker = markerRun.startsWith("~") ? "~" : "`";
+        activeFence = {
+          marker,
+          markerLength: markerRun.length,
+          openLine: line,
+          isMarkdown: isMarkdownFenceInfo(fenceMatch[3]),
+          contentLines: [],
+        };
+        continue;
+      }
+
+      outputLines.push(line);
+      continue;
+    }
+
+    if (fenceMatch) {
+      const markerRun = fenceMatch[2] || "";
+      const marker = markerRun.startsWith("~") ? "~" : "`";
+      const isClosingFence =
+        marker === activeFence.marker &&
+        markerRun.length >= activeFence.markerLength &&
+        line.trim() === markerRun;
+
+      if (isClosingFence) {
+        const content = activeFence.contentLines.join("\n");
+        if (activeFence.isMarkdown && containsMarkdownTable(content)) {
+          outputLines.push(...activeFence.contentLines);
+        } else {
+          outputLines.push(
+            activeFence.openLine,
+            ...activeFence.contentLines,
+            line,
+          );
+        }
+        activeFence = null;
+        continue;
+      }
+    }
+
+    activeFence.contentLines.push(line);
+  }
+
+  if (activeFence) {
+    outputLines.push(activeFence.openLine, ...activeFence.contentLines);
+  }
+
+  return outputLines.join("\n");
+}
+
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
   ({
     content,
@@ -675,6 +788,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
     onQuoteContent,
     renderMode = "standard",
   }) => {
+    const { t } = useTranslation("agent");
     const [copied, setCopied] = React.useState<string | null>(null);
     const [bundleImageOverrides, setBundleImageOverrides] = React.useState<
       Record<string, string>
@@ -846,6 +960,13 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
     const normalizedContent = React.useMemo(() => content.trim(), [content]);
     const canShowBlockActions = showBlockActions && Boolean(normalizedContent);
     const isContentCopied = copied?.startsWith("content:") ?? false;
+    const copiedLabel = t("agentChat.markdown.code.copied");
+    const copyLabel = t("agentChat.markdown.code.copy");
+    const copyCodeBlockLabel = t("agentChat.markdown.code.copyBlock");
+    const imageOpenTitle = t("agentChat.markdown.image.openTitle");
+    const imageCaption = t("agentChat.markdown.image.caption");
+    const quoteContentBlockLabel = t("agentChat.markdown.block.quote");
+    const copyContentBlockLabel = t("agentChat.markdown.block.copy");
     const handleQuoteContent = React.useCallback(() => {
       if (!onQuoteContent) {
         return;
@@ -893,7 +1014,10 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
         index++;
       }
 
-      return { text: normalizeCompactPipeTables(result), images };
+      return {
+        text: normalizeCompactPipeTables(normalizeMarkdownTableFences(result)),
+        images,
+      };
     }, [renderContent]);
 
     // 渲染 base64 图片
@@ -939,13 +1063,13 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
               src={img.src}
               alt={img.alt}
               onClick={handleImageClick}
-              title="点击查看大图"
+              title={imageOpenTitle}
               onError={(e) => {
                 console.error("[MarkdownRenderer] 图片加载失败:", img.alt);
                 (e.target as HTMLImageElement).style.display = "none";
               }}
             />
-            <ImageCaption>图片 · 点击查看大图</ImageCaption>
+            <ImageCaption>{imageCaption}</ImageCaption>
           </ImageContainer>
         );
       });
@@ -969,11 +1093,11 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
               <CopyButton
                 type="button"
                 onClick={() => void handleCopy(copyKey, codeContent)}
-                aria-label="复制代码块"
-                title={isCopied ? "已复制" : "复制"}
+                aria-label={copyCodeBlockLabel}
+                title={isCopied ? copiedLabel : copyLabel}
               >
                 {isCopied ? <Check size={14} /> : <Copy size={14} />}
-                {isCopied ? "已复制" : "复制"}
+                {isCopied ? copiedLabel : copyLabel}
               </CopyButton>
             </CodeHeader>
             <div className="overflow-auto px-3 py-3">
@@ -998,7 +1122,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
           </CodeBlockContainer>
         );
       },
-      [copied, handleCopy],
+      [copied, copiedLabel, copyCodeBlockLabel, copyLabel, handleCopy],
     );
 
     const renderFlowCodeBlock = React.useCallback(
@@ -1017,11 +1141,11 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
               <CopyButton
                 type="button"
                 onClick={() => void handleCopy(copyKey, codeContent)}
-                aria-label="复制代码块"
-                title={isCopied ? "已复制" : "复制"}
+                aria-label={copyCodeBlockLabel}
+                title={isCopied ? copiedLabel : copyLabel}
               >
                 {isCopied ? <Check size={14} /> : <Copy size={14} />}
-                {isCopied ? "已复制" : "复制"}
+                {isCopied ? copiedLabel : copyLabel}
               </CopyButton>
             </CodeHeader>
             <div className="space-y-1.5 px-3 py-3">
@@ -1056,7 +1180,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
           </CodeBlockContainer>
         );
       },
-      [copied, handleCopy],
+      [copied, copiedLabel, copyCodeBlockLabel, copyLabel, handleCopy],
     );
 
     return (
@@ -1073,8 +1197,8 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
                   selectionSnapshotRef.current = getSelectedMarkdownText();
                 }}
                 onClick={handleQuoteContent}
-                aria-label="引用内容区块"
-                title="引用内容区块"
+                aria-label={quoteContentBlockLabel}
+                title={quoteContentBlockLabel}
               >
                 <Quote size={14} />
               </MarkdownBlockActionButton>
@@ -1088,18 +1212,16 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
                 selectionSnapshotRef.current = getSelectedMarkdownText();
               }}
               onClick={() => void handleCopyContent()}
-              aria-label="复制内容区块"
-              title={isContentCopied ? "已复制" : "复制内容区块"}
+              aria-label={copyContentBlockLabel}
+              title={isContentCopied ? copiedLabel : copyContentBlockLabel}
             >
               {isContentCopied ? <Check size={14} /> : <Copy size={14} />}
             </MarkdownBlockActionButton>
           </MarkdownBlockActions>
         ) : null}
         <MarkdownContainer>
-          {/* 先渲染 base64 图片 */}
           {renderBase64Images()}
 
-          {/* 如果还有其他内容，渲染 markdown */}
           {!hasOnlyPlaceholders && processedContent.text.trim() && (
             <ReactMarkdown
               remarkPlugins={remarkPlugins}
@@ -1156,7 +1278,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
                       return (
                         <A2UITaskLoadingCard
                           preset={CHAT_A2UI_TASK_CARD_PRESET}
-                          subtitle="正在解析结构化问题，请稍等。"
+                          subtitle={t("agentChat.markdown.a2ui.parsing")}
                           compact={true}
                           className="max-w-[432px]"
                         />
@@ -1215,11 +1337,11 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
                         <CopyButton
                           type="button"
                           onClick={() => void handleCopy(copyKey, codeContent)}
-                          aria-label="复制代码块"
-                          title={isCopied ? "已复制" : "复制"}
+                          aria-label={copyCodeBlockLabel}
+                          title={isCopied ? copiedLabel : copyLabel}
                         >
                           {isCopied ? <Check size={14} /> : <Copy size={14} />}
-                          {isCopied ? "已复制" : "复制"}
+                          {isCopied ? copiedLabel : copyLabel}
                         </CopyButton>
                       </CodeHeader>
                       <SyntaxHighlighter
@@ -1241,11 +1363,13 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
                         }}
                         customStyle={{
                           margin: 0,
-                          padding: "10px 12px 12px",
+                          padding: "12px 14px 14px",
                           background: "transparent",
-                          fontSize: "12px",
-                          lineHeight: "1.5",
+                          fontSize: "12.5px",
+                          lineHeight: "1.55",
                           fontFamily: CODE_FONT_FAMILY,
+                          overflowX: "auto",
+                          maxWidth: "100%",
                           textShadow: "none",
                           fontVariantLigatures: "none",
                         }}
@@ -1285,6 +1409,41 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
                     </code>
                   );
                 },
+                a({ href, children, ...props }: any) {
+                  const { onAuxClick, onClick, rel, ...anchorProps } = props;
+                  const externalHref = typeof href === "string" ? href : "";
+                  const linkRel = resolveHttpExternalHref(externalHref)
+                    ? "noreferrer noopener"
+                    : rel;
+                  const handleClick = (
+                    event: React.MouseEvent<HTMLAnchorElement>,
+                  ) => {
+                    onClick?.(event);
+                    if (!event.defaultPrevented) {
+                      interceptHttpExternalLinkClick(event, externalHref);
+                    }
+                  };
+                  const handleAuxClick = (
+                    event: React.MouseEvent<HTMLAnchorElement>,
+                  ) => {
+                    onAuxClick?.(event);
+                    if (!event.defaultPrevented) {
+                      interceptHttpExternalLinkClick(event, externalHref);
+                    }
+                  };
+
+                  return (
+                    <a
+                      {...anchorProps}
+                      href={href}
+                      rel={linkRel}
+                      onClick={handleClick}
+                      onAuxClick={handleAuxClick}
+                    >
+                      {children}
+                    </a>
+                  );
+                },
                 // 普通图片渲染（非 base64）
                 img({ src, alt, ...props }: any) {
                   // base64 图片已经在上面单独处理了，这里只处理普通 URL 图片
@@ -1304,7 +1463,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
                       src={resolvedSrc}
                       alt={alt || "Image"}
                       onClick={handleImageClick}
-                      title="点击查看大图"
+                      title={imageOpenTitle}
                       {...props}
                     />
                   );

@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import process from "node:process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { planQualityTasks } from "./quality-task-planner.mjs";
 
@@ -65,6 +67,9 @@ function printGithubFormat(result) {
   const lines = [
     `changed_count=${changedFiles.length}`,
     `integrity=${tasks.integrity}`,
+    `i18n=${tasks.i18n}`,
+    `i18n_hardcoded=${tasks.i18nHardcoded}`,
+    `i18n_unused=${tasks.i18nUnused}`,
     `frontend=${tasks.frontend}`,
     `rust=${tasks.rust}`,
     `bridge=${tasks.bridge}`,
@@ -97,4 +102,12 @@ function main() {
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 
-main();
+const isMainModule =
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMainModule) {
+  main();
+}
+
+export { parseArgs, printGithubFormat };

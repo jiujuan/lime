@@ -506,13 +506,8 @@ function assertI18nKeyTypes() {
     ns: "agent",
     count: 2,
   });
-  i18n.t("sceneAppExecutionSummary.runtimePack.title", { ns: "agent" });
   i18n.t("sceneAppExecutionSummary.followup.action.saveInspiration", {
     ns: "agent",
-  });
-  i18n.t("sceneAppExecutionSummary.orchestration.blockedReason", {
-    ns: "agent",
-    reason: "Missing cover",
   });
   i18n.t("generalWorkbench.workflow.current.title", { ns: "agent" });
   i18n.t("generalWorkbench.workflow.queue.hiddenCount", {
@@ -573,6 +568,12 @@ function assertI18nKeyTypes() {
     ns: "agent",
     query: "brand 2026",
   });
+  i18n.t("generalWorkbench.context.detail.notFound", { ns: "agent" });
+  i18n.t("generalWorkbench.context.detail.sourceTokens", {
+    ns: "agent",
+    source: "Web search",
+    tokens: 1200,
+  });
   i18n.t("generalWorkbench.context.list.summary", {
     ns: "agent",
     active: 1,
@@ -596,22 +597,9 @@ function assertI18nKeyTypes() {
     moreSuffix: "",
     titles: "Example",
   });
-  i18n.t("skills.workspace.runtimeEnable.prompt.intro", {
-    ns: "agent",
-    name: "Writer",
-    directory: "writer",
-  });
-  i18n.t("skills.workspace.installedSkill.entryBannerWithReplay", {
-    ns: "agent",
-    name: "Writer",
-  });
   i18n.t("skills.workspace.managedJob.created", {
     ns: "agent",
     name: "Daily Review",
-  });
-  i18n.t("skills.workspace.reviewBanner.action", {
-    ns: "agent",
-    title: "Review This Account / Project",
   });
   i18n.t("curatedTask.templates.recommendation.recentReviewReasonLabel", {
     ns: "agent",
@@ -1398,8 +1386,6 @@ function assertI18nKeyTypes() {
   });
   i18n.t("settings.automation.focus.label", { ns: "settings" });
   i18n.t("settings.automation.focus.title", { ns: "settings" });
-  i18n.t("settings.automation.focus.action.openDetail", { ns: "settings" });
-  i18n.t("settings.automation.focus.strip.recentResult", { ns: "settings" });
   i18n.t("settings.automation.health.title", { ns: "settings" });
   i18n.t("settings.automation.health.status.waitingForHuman", {
     ns: "settings",

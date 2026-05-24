@@ -13,6 +13,7 @@ import {
 import {
   Check,
   Languages,
+  MessageCircle,
   Monitor,
   Moon,
   Palette,
@@ -73,6 +74,12 @@ interface ThemeOption {
 }
 
 interface LanguageOption {
+  id: LocalePreference;
+  label: string;
+  hint: string;
+}
+
+interface ResponseLanguageOption {
   id: LocalePreference;
   label: string;
   hint: string;
@@ -179,6 +186,17 @@ function LoadingSkeleton() {
   );
 }
 
+function resolveResponseLanguageOptionLabel(
+  preference: LocalePreference,
+  t: ReturnType<typeof useTranslation<"settings">>["t"],
+): string {
+  if (preference === "auto") {
+    return t("settings.appearance.responseLanguage.options.auto.label", "自动判断");
+  }
+
+  return resolveLocaleOptionLabel(preference);
+}
+
 export function AppearanceSettings() {
   const { t } = useTranslation("settings");
   const [loading, setLoading] = useState(true);
@@ -186,6 +204,8 @@ export function AppearanceSettings() {
   const [colorSchemeId, setColorSchemeId] =
     useState<LimeColorSchemeId>("lime-classic");
   const [language, setLanguageState] = useState<LocalePreference>("zh-CN");
+  const [agentResponseLanguage, setAgentResponseLanguage] =
+    useState<LocalePreference>("auto");
   const [
     appendSelectedTextToRecommendation,
     setAppendSelectedTextToRecommendation,
@@ -205,6 +225,11 @@ export function AppearanceSettings() {
       const loadedConfig = await getConfig();
       setConfig(loadedConfig);
       setLanguageState(normalizeLocalePreference(loadedConfig.language));
+      setAgentResponseLanguage(
+        normalizeLocalePreference(
+          loadedConfig.workspace_preferences?.agent_response_language,
+        ),
+      );
       setAppendSelectedTextToRecommendation(
         loadedConfig.chat_appearance?.append_selected_text_to_recommendation ??
           true,
@@ -331,11 +356,22 @@ export function AppearanceSettings() {
       themeLabel: currentThemeLabel,
       colorSchemeLabel: currentColorSchemeLabel,
       languageLabel: resolveLocaleOptionLabel(language),
+      responseLanguageLabel: resolveResponseLanguageOptionLabel(
+        agentResponseLanguage,
+        t,
+      ),
       soundsLabel: soundEnabled
         ? t("settings.appearance.status.enabled", "已开启")
         : t("settings.appearance.status.disabled", "已关闭"),
     }),
-    [currentColorSchemeLabel, currentThemeLabel, language, soundEnabled, t],
+    [
+      agentResponseLanguage,
+      currentColorSchemeLabel,
+      currentThemeLabel,
+      language,
+      soundEnabled,
+      t,
+    ],
   );
 
   const enabledNavigationItems = useMemo(
@@ -351,6 +387,26 @@ export function AppearanceSettings() {
         id: option.id,
         label: option.label,
         hint: t(option.hintKey, option.fallbackHint),
+      })),
+    [t],
+  );
+  const responseLanguageOptions = useMemo<ResponseLanguageOption[]>(
+    () =>
+      UI_LOCALE_OPTIONS.map((option) => ({
+        id: option.id,
+        label:
+          option.id === "auto"
+            ? t(
+                "settings.appearance.responseLanguage.options.auto.label",
+                "自动判断",
+              )
+            : option.label,
+        hint: t(
+          `settings.appearance.responseLanguage.options.${option.id}.hint`,
+          option.id === "auto"
+            ? "根据最近输入和当前上下文选择回复语言。"
+            : option.fallbackHint,
+        ),
       })),
     [t],
   );
@@ -414,6 +470,43 @@ export function AppearanceSettings() {
       }
     },
     [config, language, setI18nLanguage, t],
+  );
+
+  const handleAgentResponseLanguageChange = useCallback(
+    async (nextLanguage: LocalePreference) => {
+      if (!config) {
+        return;
+      }
+
+      const previousConfig = config;
+      const previousLanguage = agentResponseLanguage;
+      const nextConfig: Config = {
+        ...config,
+        workspace_preferences: {
+          ...(config.workspace_preferences || {}),
+          agent_response_language: nextLanguage,
+        },
+      };
+
+      setError(null);
+      setConfig(nextConfig);
+      setAgentResponseLanguage(nextLanguage);
+
+      try {
+        await saveConfig(nextConfig);
+      } catch (err) {
+        console.error("保存回复语言设置失败:", err);
+        setConfig(previousConfig);
+        setAgentResponseLanguage(previousLanguage);
+        setError(
+          t(
+            "settings.appearance.error.saveResponseLanguage",
+            "保存回复语言设置失败，请重试。",
+          ),
+        );
+      }
+    },
+    [agentResponseLanguage, config, t],
   );
 
   const handleSoundToggle = useCallback(
@@ -569,6 +662,12 @@ export function AppearanceSettings() {
               {t("settings.appearance.summary.language", {
                 language: workspaceSummary.languageLabel,
                 defaultValue: "语言：{{language}}",
+              })}
+            </span>
+            <span className={HEADER_INFO_PILL_CLASS}>
+              {t("settings.appearance.summary.responseLanguage", {
+                language: workspaceSummary.responseLanguageLabel,
+                defaultValue: "回复：{{language}}",
               })}
             </span>
             <span
@@ -808,6 +907,82 @@ export function AppearanceSettings() {
                       type="button"
                       disabled={!config}
                       onClick={() => void handleLanguageChange(option.id)}
+                      className={cn(
+                        "rounded-[20px] border px-4 py-4 text-left transition shadow-sm",
+                        active
+                          ? ACTIVE_OPTION_CARD_CLASS
+                          : INACTIVE_OPTION_CARD_CLASS,
+                        !config && "cursor-not-allowed opacity-60",
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-sm font-semibold">{option.label}</p>
+                        {active ? <Check className="h-4 w-4" /> : null}
+                      </div>
+                      <p
+                        className={cn(
+                          "mt-2 text-xs leading-5",
+                          active ? "text-slate-600" : "text-slate-500",
+                        )}
+                      >
+                        {option.hint}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700">
+                    <MessageCircle className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold text-slate-900">
+                        {t(
+                          "settings.appearance.responseLanguage.title",
+                          "回复语言",
+                        )}
+                      </h3>
+                      <WorkbenchInfoTip
+                        ariaLabel={t(
+                          "settings.appearance.responseLanguage.tipAria",
+                          "回复语言说明",
+                        )}
+                        content={t(
+                          "settings.appearance.responseLanguage.tip",
+                          "控制对话默认回复语言；不影响界面语言、浏览器站点语言或内容产物目标语言。",
+                        )}
+                        tone="slate"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <span className={CURRENT_INFO_PILL_CLASS}>
+                  {t("settings.appearance.responseLanguage.current", {
+                    language: resolveResponseLanguageOptionLabel(
+                      agentResponseLanguage,
+                      t,
+                    ),
+                    defaultValue: "当前：{{language}}",
+                  })}
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                {responseLanguageOptions.map((option) => {
+                  const active = agentResponseLanguage === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      disabled={!config}
+                      onClick={() =>
+                        void handleAgentResponseLanguageChange(option.id)
+                      }
                       className={cn(
                         "rounded-[20px] border px-4 py-4 text-left transition shadow-sm",
                         active

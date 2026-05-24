@@ -638,12 +638,37 @@ function hasWorkspacePatchPayload(value: unknown): boolean {
   return false;
 }
 
+function hasArtifactPayload(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (readArtifactsFromValue(value).length > 0) {
+    return true;
+  }
+  if (Array.isArray(value.events) && value.events.some(hasArtifactPayload)) {
+    return true;
+  }
+  if (Array.isArray(value.taskEvents) && value.taskEvents.some(hasArtifactPayload)) {
+    return true;
+  }
+  return false;
+}
+
+function shouldWaitForContentFactoryPatch(subscription: AgentAppTaskSubscription): boolean {
+  return subscription.bridgeAction === "contentFactoryProduction";
+}
+
+function shouldWaitForImageArtifact(subscription: AgentAppTaskSubscription): boolean {
+  return subscription.bridgeAction === "studioLogoGenerate";
+}
+
 interface AgentAppTaskSubscription {
   subscriptionId: string;
   taskId: string;
   sessionId?: string;
   pollIntervalMs: number;
   bridgeAction?: string;
+  expectedOutput?: unknown;
   runtimeEventName?: string;
   runtimeEventUnlisten?: () => void;
   timerId?: number;
@@ -1348,6 +1373,11 @@ export class AgentAppHostBridge {
       (isRecord(message.payload.input)
         ? readString(message.payload.input, "bridgeAction")
         : undefined);
+    const expectedOutput = hasOwn(message.payload, "expectedOutput")
+      ? message.payload.expectedOutput
+      : isRecord(message.payload.input) && hasOwn(message.payload.input, "expectedOutput")
+        ? message.payload.input.expectedOutput
+        : undefined;
     const runtimeEventName = readRuntimeEventNameFromPayload(
       this.appId,
       taskId,
@@ -1361,6 +1391,7 @@ export class AgentAppHostBridge {
       sessionId,
       pollIntervalMs,
       bridgeAction,
+      expectedOutput,
       runtimeEventName,
       inFlight: false,
       terminalArtifactReplayPolls: 0,
@@ -1560,7 +1591,10 @@ export class AgentAppHostBridge {
         emittedAt: (this.now ?? (() => new Date().toISOString()))(),
       });
       const shouldPollForTerminalArtifact =
-        isSuccessfulTerminalTaskValue(result) && !hasWorkspacePatchPayload(result);
+        isSuccessfulTerminalTaskValue(result) &&
+        ((shouldWaitForContentFactoryPatch(subscription) &&
+          !hasWorkspacePatchPayload(result)) ||
+          (shouldWaitForImageArtifact(subscription) && !hasArtifactPayload(result)));
       if (shouldPollForTerminalArtifact) {
         subscription.terminalArtifactReplayPolls += 1;
       }
@@ -1611,9 +1645,12 @@ export class AgentAppHostBridge {
   private buildTaskSubscriptionPollRequest(
     subscription: AgentAppTaskSubscription,
   ): AgentAppHostBridgeCapabilityRequest {
-    const input: Record<string, string> = { taskId: subscription.taskId };
+    const input: Record<string, unknown> = { taskId: subscription.taskId };
     if (subscription.sessionId) {
       input.sessionId = subscription.sessionId;
+    }
+    if (subscription.expectedOutput !== undefined) {
+      input.expectedOutput = subscription.expectedOutput;
     }
     const invokeRequest = buildLimeCapabilityInvokeRequest({
       capability: "lime.agent",

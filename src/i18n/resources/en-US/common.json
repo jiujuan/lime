@@ -1,6 +1,5 @@
 {
   "common.loading": "Loading...",
-  "common.reload": "Reload",
   "common.save": "Save",
   "common.cancel": "Cancel",
   "common.confirm": "Confirm",
@@ -10,7 +9,7 @@
   "common.splashScreen.slogan": "Tap Lime, inspiration arrives",
   "common.splashScreen.subtitle": "From one thought to polished copy, images, videos, and finished work",
   "common.startupLoading.title": "Starting {{brand}}",
-  "common.startupLoading.description": "Preparing language settings and workspace entry. Please wait.",
+  "common.startupLoading.description": "Preparing interface language settings and workspace entry. Please wait.",
   "common.app.resourceNavigation.unsupported.title": "Cannot return to this resource yet",
   "common.app.resourceNavigation.unsupported.description": "The source was recorded, but the main window does not have a matching destination yet.",
   "common.app.project.created": "Project created",

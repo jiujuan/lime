@@ -184,6 +184,29 @@ jobs:
       - name: Run headless GUI smoke
         run: npm run verify:gui-smoke -- --timeout-ms 480000
 
+  windows_shell_runtime:
+    name: Windows Shell Runtime
+    runs-on: windows-2022
+    timeout-minutes: 20
+    needs: changed
+    if: ${{ needs.changed.outputs.rust == 'true' || needs.changed.outputs.fallback == 'true' || needs.changed.outputs.workflow == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: quality-windows-shell-runtime
+          cache-on-failure: true
+
+      - name: Test Windows shell runtime fallback
+        run: cargo test --manifest-path src-tauri/Cargo.toml -p lime-agent --test windows_shell_runtime -- --test-threads=1
+
   results:
     name: Quality results
     runs-on: ubuntu-latest
@@ -193,6 +216,7 @@ jobs:
       - frontend
       - bridge_contracts
       - gui_smoke
+      - windows_shell_runtime
     if: always()
     steps:
       - name: Summarize
@@ -205,12 +229,14 @@ jobs:
           FRONTEND_RESULT='${{ needs.frontend.result }}'
           BRIDGE_RESULT='${{ needs.bridge_contracts.result }}'
           GUI_SMOKE_RESULT='${{ needs.gui_smoke.result }}'
+          WINDOWS_SHELL_RESULT='${{ needs.windows_shell_runtime.result }}'
           FALLBACK='${{ needs.changed.outputs.fallback }}'
           WORKFLOW='${{ needs.changed.outputs.workflow }}'
           INTEGRITY_REQUIRED='${{ needs.changed.outputs.integrity }}'
           FRONTEND_REQUIRED='${{ needs.changed.outputs.frontend }}'
           BRIDGE_REQUIRED='${{ needs.changed.outputs.bridge }}'
           GUI_SMOKE_REQUIRED='${{ needs.changed.outputs.gui_smoke }}'
+          RUST_REQUIRED='${{ needs.changed.outputs.rust }}'
 
           BRIDGE_REASONS_DISPLAY="${BRIDGE_REASONS//,/、}"
           if [[ -z "${BRIDGE_REASONS_DISPLAY}" ]]; then
@@ -224,6 +250,7 @@ jobs:
           echo "frontend    : ${FRONTEND_RESULT}"
           echo "bridge      : ${BRIDGE_RESULT}"
           echo "gui_smoke   : ${GUI_SMOKE_RESULT}"
+          echo "windows_shell_runtime: ${WINDOWS_SHELL_RESULT}"
 
           FINAL_STATUS="success"
           FAILURE_REASON=""
@@ -263,6 +290,13 @@ jobs:
               fi
             fi
 
+            if [[ -z "${FAILURE_REASON}" && ("${RUST_REQUIRED}" == 'true' || "${FALLBACK}" == 'true' || "${WORKFLOW}" == 'true') ]]; then
+              if [[ "${WINDOWS_SHELL_RESULT}" != 'success' ]]; then
+                FINAL_STATUS="failed"
+                FAILURE_REASON="windows shell runtime failed"
+              fi
+            fi
+
             if [[ -n "${FAILURE_REASON}" ]]; then
               if [[ "${FAILURE_REASON}" == "integrity failed" ]]; then
                 NEXT_ACTION='Run `npm run verify:app-version` and sync package / Cargo / Tauri version files.'
@@ -278,6 +312,8 @@ jobs:
                 fi
               elif [[ "${FAILURE_REASON}" == "gui smoke failed" ]]; then
                 NEXT_ACTION='Run `npm run verify:gui-smoke -- --timeout-ms 480000` and inspect DevBridge / headless Tauri readiness.'
+              elif [[ "${FAILURE_REASON}" == "windows shell runtime failed" ]]; then
+                NEXT_ACTION='Run `cargo test --manifest-path src-tauri/Cargo.toml -p lime-agent --test windows_shell_runtime -- --test-threads=1` on Windows and inspect PowerShell PATH fallback.'
               fi
             fi
           fi
@@ -301,6 +337,7 @@ jobs:
             echo "| frontend | ${FRONTEND_REQUIRED} | ${FRONTEND_RESULT} |"
             echo "| bridge_contracts | ${BRIDGE_REQUIRED} | ${BRIDGE_RESULT} |"
             echo "| gui_smoke | ${GUI_SMOKE_REQUIRED} | ${GUI_SMOKE_RESULT} |"
+            echo "| windows_shell_runtime | ${RUST_REQUIRED} | ${WINDOWS_SHELL_RESULT} |"
             echo
             echo "### Notes"
             echo

@@ -187,6 +187,13 @@ pub fn validate_or_repair_artifact_document_value(
         repaired = true;
     }
 
+    let language = normalize_text(find_string(record, &["language"]).as_deref())
+        .unwrap_or_else(|| "zh-CN".to_string());
+    if find_string(record, &["language"]).as_deref() != Some(language.as_str()) {
+        repaired = true;
+        issues.push("language 缺失或为空，已使用默认文档语言。".to_string());
+    }
+
     let mut metadata = record
         .get("metadata")
         .and_then(Value::as_object)
@@ -227,7 +234,7 @@ pub fn validate_or_repair_artifact_document_value(
         ("kind".to_string(), Value::String(kind.clone())),
         ("title".to_string(), Value::String(title.clone())),
         ("status".to_string(), Value::String(status.clone())),
-        ("language".to_string(), Value::String("zh-CN".to_string())),
+        ("language".to_string(), Value::String(language)),
         (
             "summary".to_string(),
             optional_string_value(
@@ -1915,8 +1922,38 @@ mod tests {
         );
         assert_eq!(
             outcome.document.get("language").and_then(Value::as_str),
+            Some("en-US")
+        );
+    }
+
+    #[test]
+    fn validate_or_fallback_should_default_missing_document_language() {
+        let raw = serde_json::json!({
+            "schemaVersion": ARTIFACT_DOCUMENT_SCHEMA_VERSION,
+            "artifactId": "ignored",
+            "kind": "report",
+            "title": "缺省语言报告",
+            "status": "ready",
+            "blocks": [
+                { "id": "body-1", "type": "rich_text", "content": "正文" }
+            ],
+            "sources": [
+                { "id": "source-1", "title": "Source", "url": "https://example.com" }
+            ],
+            "metadata": {}
+        })
+        .to_string();
+
+        let outcome = validate_or_fallback_artifact_document(&raw, &base_context());
+
+        assert_eq!(
+            outcome.document.get("language").and_then(Value::as_str),
             Some("zh-CN")
         );
+        assert!(outcome
+            .issues
+            .iter()
+            .any(|issue| issue.contains("language 缺失或为空")));
     }
 
     #[test]

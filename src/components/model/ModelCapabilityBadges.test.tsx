@@ -2,17 +2,19 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { ModelCapabilityBadges } from "./ModelCapabilityBadges";
 import type { EnhancedModelMetadata } from "@/lib/types/modelRegistry";
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
 });
 
 afterEach(() => {

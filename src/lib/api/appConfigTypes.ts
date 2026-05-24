@@ -96,6 +96,7 @@ export interface CompanionDefaultsConfig {
 
 export interface WorkspacePreferencesConfig {
   schema_version?: number;
+  agent_response_language?: string;
   media_defaults?: MediaGenerationDefaultsConfig;
   companion_defaults?: CompanionDefaultsConfig;
   service_models?: ServiceModelsConfig;

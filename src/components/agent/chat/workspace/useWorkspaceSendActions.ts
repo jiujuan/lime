@@ -2604,6 +2604,7 @@ interface UseWorkspaceSendActionsParams {
   browserAssistAutoLaunch?: boolean | null;
   workspaceRequestMetadataBase?: Record<string, unknown>;
   serviceModels?: ServiceModelsConfig;
+  agentResponseLanguage?: string | null;
   messages: Message[];
   setChatMessages: Dispatch<SetStateAction<Message[]>>;
   bootstrapDispatchPreview?: InitialDispatchPreviewSnapshot | null;
@@ -2756,6 +2757,7 @@ export function useWorkspaceSendActions({
   browserAssistAutoLaunch,
   workspaceRequestMetadataBase,
   serviceModels,
+  agentResponseLanguage,
   messages,
   setChatMessages,
   bootstrapDispatchPreview,
@@ -5238,6 +5240,7 @@ export function useWorkspaceSendActions({
           selectedTeamLabel,
           selectedTeamSummary,
           teamMemoryShadowSnapshot,
+          agentResponseLanguage,
         });
         const serviceModelSendOverrides = resolveServiceModelSendOverrides({
           requestMetadata: nextRequestMetadata,
@@ -5375,6 +5378,7 @@ export function useWorkspaceSendActions({
     },
     [
       _prepareRuntimeTeamBeforeSend,
+      agentResponseLanguage,
       browserAssistAutoLaunch,
       browserAssistPreferredBackend,
       browserAssistProfileKey,

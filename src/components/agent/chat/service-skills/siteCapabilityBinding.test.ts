@@ -52,6 +52,49 @@ function createBrowserSkill(
   };
 }
 
+function createArticleExportSkill(
+  overrides: Partial<ServiceSkillItem> = {},
+): ServiceSkillItem {
+  return createBrowserSkill({
+    id: "x-article-export",
+    title: "X 文章转存",
+    summary: "导出 X 长文并按目标语言翻译正文。",
+    slotSchema: [
+      {
+        key: "article_url",
+        label: "X 文章链接",
+        type: "url",
+        required: true,
+        placeholder: "https://x.com/<账号>/article/<文章ID>",
+      },
+      {
+        key: "target_language",
+        label: "目标语言",
+        type: "text",
+        required: false,
+        defaultValue: "中文",
+        placeholder: "例如 中文、英文、日文",
+      },
+    ],
+    siteCapabilityBinding: {
+      autoRun: true,
+      requireAttachedSession: true,
+      saveMode: "project_resource",
+      siteLabel: "X",
+      adapterMatch: {
+        urlArgName: "url",
+        requiredCapabilities: ["article_export", "markdown_bundle"],
+        hostAliases: ["twitter.com", "www.twitter.com"],
+      },
+      slotArgMap: {
+        article_url: "url",
+        target_language: "target_language",
+      },
+    },
+    ...overrides,
+  });
+}
+
 describe("site capability binding natural launch message", () => {
   beforeEach(() => {
     mockSiteListAdapters.mockReset();
@@ -98,43 +141,7 @@ describe("site capability binding natural launch message", () => {
 
   it("X 文章转存在指定目标语言时应明确要求翻译正文并保留代码块与图片结构", () => {
     const message = buildServiceSkillNaturalLaunchMessage({
-      skill: createBrowserSkill({
-        id: "x-article-export",
-        title: "X 文章转存",
-        summary: "导出 X 长文并按目标语言翻译正文。",
-        slotSchema: [
-          {
-            key: "article_url",
-            label: "X 文章链接",
-            type: "url",
-            required: true,
-            placeholder: "https://x.com/<账号>/article/<文章ID>",
-          },
-          {
-            key: "target_language",
-            label: "目标语言",
-            type: "text",
-            required: false,
-            defaultValue: "中文",
-            placeholder: "例如 中文、英文、日文",
-          },
-        ],
-        siteCapabilityBinding: {
-          autoRun: true,
-          requireAttachedSession: true,
-          saveMode: "project_resource",
-          siteLabel: "X",
-          adapterMatch: {
-            urlArgName: "url",
-            requiredCapabilities: ["article_export", "markdown_bundle"],
-            hostAliases: ["twitter.com", "www.twitter.com"],
-          },
-          slotArgMap: {
-            article_url: "url",
-            target_language: "target_language",
-          },
-        },
-      }),
+      skill: createArticleExportSkill(),
       slotValues: {
         article_url:
           "https://x.com/GoogleCloudTech/article/2033953579824758855",
@@ -148,43 +155,7 @@ describe("site capability binding natural launch message", () => {
   });
 
   it("导出型站点技能带目标语言时应同时注入 translation_skill_launch metadata", () => {
-    const skill = createBrowserSkill({
-      id: "x-article-export",
-      title: "X 文章转存",
-      summary: "导出 X 长文并按目标语言翻译正文。",
-      slotSchema: [
-        {
-          key: "article_url",
-          label: "X 文章链接",
-          type: "url",
-          required: true,
-          placeholder: "https://x.com/<账号>/article/<文章ID>",
-        },
-        {
-          key: "target_language",
-          label: "目标语言",
-          type: "text",
-          required: false,
-          defaultValue: "中文",
-          placeholder: "例如 中文、英文、日文",
-        },
-      ],
-      siteCapabilityBinding: {
-        autoRun: true,
-        requireAttachedSession: true,
-        saveMode: "project_resource",
-        siteLabel: "X",
-        adapterMatch: {
-          urlArgName: "url",
-          requiredCapabilities: ["article_export", "markdown_bundle"],
-          hostAliases: ["twitter.com", "www.twitter.com"],
-        },
-        slotArgMap: {
-          article_url: "url",
-          target_language: "target_language",
-        },
-      },
-    });
+    const skill = createArticleExportSkill();
     const context = buildServiceSkillClawLaunchContext(
       skill,
       {
@@ -217,6 +188,67 @@ describe("site capability binding natural launch message", () => {
         },
       },
     });
+  });
+
+  it("导出型站点技能不应从 locale-like 参数推导 content target language", () => {
+    const skill = createArticleExportSkill({
+      slotSchema: [
+        {
+          key: "article_url",
+          label: "X 文章链接",
+          type: "url",
+          required: true,
+          placeholder: "https://x.com/<账号>/article/<文章ID>",
+        },
+      ],
+      siteCapabilityBinding: {
+        autoRun: true,
+        fixedArgs: {
+          locale: "en-US",
+        },
+        requireAttachedSession: true,
+        saveMode: "project_resource",
+        siteLabel: "X",
+        adapterMatch: {
+          urlArgName: "url",
+          requiredCapabilities: ["article_export", "markdown_bundle"],
+          hostAliases: ["twitter.com", "www.twitter.com"],
+        },
+        slotArgMap: {
+          article_url: "url",
+        },
+      },
+    });
+    const context = buildServiceSkillClawLaunchContext(
+      skill,
+      {
+        article_url:
+          "https://x.com/GoogleCloudTech/article/2033953579824758855",
+      },
+      {
+        adapterName: "x/article-export",
+        projectId: "project-1",
+        contentId: "content-1",
+      },
+    );
+    const metadata = buildServiceSkillClawLaunchRequestMetadata(context);
+    const harness = (metadata as { harness: Record<string, unknown> }).harness;
+
+    expect(context.args).toMatchObject({
+      locale: "en-US",
+      url: "https://x.com/GoogleCloudTech/article/2033953579824758855",
+    });
+    expect(metadata).toMatchObject({
+      harness: {
+        service_skill_launch: {
+          args: {
+            locale: "en-US",
+          },
+        },
+      },
+    });
+    expect(harness).not.toHaveProperty("allow_model_skills");
+    expect(harness).not.toHaveProperty("translation_skill_launch");
   });
 
   it("应按 URL 域名、能力标签和 host alias 解析动态站点适配器", async () => {

@@ -99,8 +99,27 @@ vi.mock("@/hooks/useConfiguredProviders", () => ({
 }));
 
 vi.mock("./MarkdownRenderer", () => ({
-  MarkdownRenderer: ({ content }: { content: string }) => (
-    <div data-testid="markdown-renderer">{content || "<empty>"}</div>
+  MarkdownRenderer: ({
+    content,
+    readOnlyA2UI,
+    renderA2UIInline,
+    renderMode,
+  }: {
+    content: string;
+    readOnlyA2UI?: boolean;
+    renderA2UIInline?: boolean;
+    renderMode?: string;
+  }) => (
+    <div
+      data-testid="markdown-renderer"
+      data-read-only-a2ui={readOnlyA2UI ? "yes" : "no"}
+      data-render-a2ui-inline={
+        renderA2UIInline === undefined ? "default" : String(renderA2UIInline)
+      }
+      data-render-mode={renderMode || "standard"}
+    >
+      {content || "<empty>"}
+    </div>
   ),
 }));
 
@@ -954,6 +973,15 @@ describe("MessageList", () => {
     const markdownPreview = container.querySelector(
       '[data-testid="message-list-historical-markdown-preview"]',
     );
+    const previewMarkdownRenderer = markdownPreview?.querySelector(
+      '[data-testid="markdown-renderer"]',
+    );
+    expect(previewMarkdownRenderer?.getAttribute("data-render-mode")).toBe(
+      "light",
+    );
+    expect(
+      previewMarkdownRenderer?.getAttribute("data-render-a2ui-inline"),
+    ).toBe("false");
     expect(markdownPreview?.textContent).toContain("历史 content parts 正文");
     const commit = getAgentUiPerformanceMetrics().find(
       (entry) => entry.phase === "messageList.commit",
@@ -1256,8 +1284,16 @@ describe("MessageList", () => {
     );
   });
 
-  it("旧会话里的长助手回复应先展示纯文本预览，避免首帧挂载 Markdown", () => {
-    const oldAssistantContent = `旧回复开头 ${"历史分析 ".repeat(360)} 旧回复末尾完整内容`;
+  it("旧会话里的长助手回复应先用轻量 Markdown 预览，避免首帧挂载完整渲染器", () => {
+    const oldAssistantContent = [
+      "## BADOUCMS 架构分析",
+      "",
+      "| 发现 | 说明 |",
+      "| --- | --- |",
+      "| **底层框架** | `ThinkPHP` |",
+      "",
+      `旧回复开头 ${"历史分析 ".repeat(360)} 旧回复末尾完整内容`,
+    ].join("\n");
     const latestAssistantContent = "最新回复保持完整";
     const container = render(
       [
@@ -1301,6 +1337,15 @@ describe("MessageList", () => {
     );
 
     expect(preview).not.toBeNull();
+    const previewMarkdown = preview?.querySelector(
+      '[data-testid="markdown-renderer"]',
+    );
+    expect(previewMarkdown?.getAttribute("data-render-mode")).toBe("light");
+    expect(previewMarkdown?.getAttribute("data-render-a2ui-inline")).toBe(
+      "false",
+    );
+    expect(previewMarkdown?.getAttribute("data-read-only-a2ui")).toBe("yes");
+    expect(previewMarkdown?.textContent).toContain("## BADOUCMS 架构分析");
     expect(preview?.textContent).toContain("This assistant reply is long");
     expect(preview?.textContent).not.toContain("旧回复末尾完整内容");
     expect(container.textContent).toContain(latestAssistantContent);
@@ -6405,6 +6450,11 @@ describe("MessageList", () => {
 
     mountedRoots.push({ container, root });
 
+    const artifactShell = container.querySelector(
+      '[data-testid="message-artifact-card"]',
+    );
+    expect(artifactShell?.className).toContain("border-slate-200");
+    expect(artifactShell?.className).not.toContain("bg-sky-50");
     const artifactCard = container.querySelector("button");
     expect(artifactCard?.textContent).toContain("demo.md");
     expect(artifactCard?.textContent).toContain("docs/demo.md");

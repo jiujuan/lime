@@ -1453,6 +1453,74 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     });
   });
 
+  it("重复点击当前顶部会话标签不应清空已渲染消息", async () => {
+    const state: Record<string, unknown> = createMockAgentChatUnifiedState({
+      sessionId: "topic-current",
+      messages: [
+        {
+          id: "msg-current",
+          role: "assistant",
+          content: "当前会话已经有回复",
+          timestamp: new Date(FIXED_TOPIC_UPDATED_AT),
+        },
+      ],
+      topics: [
+        {
+          id: "topic-current",
+          title: "当前会话",
+          updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+          workspaceId: "workspace-test",
+        },
+      ],
+    });
+    const setMessages = vi.fn((next: unknown) => {
+      state.messages =
+        typeof next === "function"
+          ? (next as (current: unknown) => unknown)(state.messages)
+          : next;
+    });
+    const switchTopic = vi.fn(async () => undefined);
+    state.setMessages = setMessages;
+    state.switchTopic = switchTopic;
+    installMockAgentChatUnifiedState(state);
+
+    const mounted = mountPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-current",
+      projectId: "workspace-test",
+    });
+    await flushEffects();
+    setMessages.mockClear();
+    switchTopic.mockClear();
+
+    expect(
+      mounted.container.querySelector('[data-testid="message-list"]'),
+    ).not.toBeNull();
+
+    const currentTabButton = mounted.container.querySelector(
+      '[data-testid="task-center-tab-topic-current"] button',
+    ) as HTMLButtonElement | null;
+    expect(currentTabButton).not.toBeNull();
+
+    act(() => {
+      currentTabButton?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+    await flushEffects();
+    mounted.rerender();
+    await flushEffects();
+
+    expect(setMessages).not.toHaveBeenCalled();
+    expect(switchTopic).not.toHaveBeenCalled();
+    expect(
+      mounted.container.querySelector('[data-testid="message-list"]'),
+    ).not.toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="empty-state"]'),
+    ).toBeNull();
+  });
+
   it("点击顶部加号应在任务中心新标签内嵌首页起手页", async () => {
     const onNavigate = vi.fn();
     vi.mocked(buildHomeAgentParams).mockClear();

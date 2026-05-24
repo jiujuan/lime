@@ -22,6 +22,20 @@ export interface UiLocaleOption {
 }
 
 const SUPPORTED_LOCALE_SET = new Set<string>(SUPPORTED_LOCALES);
+const RTL_LOCALE_BASES = new Set([
+  "ar",
+  "ckb",
+  "dv",
+  "fa",
+  "he",
+  "ku",
+  "ps",
+  "syr",
+  "ug",
+  "ur",
+  "yi",
+]);
+const RTL_SCRIPT_PATTERN = /(^|-)(arab|hebr)(-|$)/i;
 
 export const UI_LOCALE_OPTIONS: UiLocaleOption[] = [
   {
@@ -139,10 +153,24 @@ export function toLegacyPatchLanguage(
   return normalizeLocale(preference).startsWith("en") ? "en" : "zh";
 }
 
+export function isRtlLocale(locale?: string | null): boolean {
+  const raw = normalizeLocaleCode(locale || "");
+  if (!raw) {
+    return false;
+  }
+
+  const [base] = raw.toLowerCase().split("-");
+  if (RTL_LOCALE_BASES.has(base)) {
+    return true;
+  }
+
+  return RTL_SCRIPT_PATTERN.test(raw);
+}
+
 export function resolveDocumentDirection(
-  _locale: SupportedLocale,
+  locale?: string | null,
 ): DocumentDirection {
-  return "ltr";
+  return isRtlLocale(locale) ? "rtl" : "ltr";
 }
 
 export function resolveLocaleOptionLabel(preference?: string | null): string {

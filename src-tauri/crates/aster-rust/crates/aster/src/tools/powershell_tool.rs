@@ -11,6 +11,7 @@ use super::path_guard::{
     evaluate_path_mutations, resolve_static_path_candidate, summarize_paths, summarize_raw_paths,
     PathGuardFinding, PathMutationCandidate, PathMutationKind,
 };
+use super::shell_runtime::detect_powershell_executable;
 use super::task::{TaskManager, TaskShell};
 use async_trait::async_trait;
 use once_cell::sync::Lazy;
@@ -145,7 +146,7 @@ impl PowerShellTool {
     fn executable_path(&self) -> Result<&Path, ToolError> {
         self.executable_path.as_deref().ok_or_else(|| {
             ToolError::execution_failed(
-                "PowerShell runtime unavailable: neither `pwsh` nor `powershell` was found in PATH.",
+                "PowerShell runtime unavailable: neither `pwsh` nor Windows PowerShell was found.",
             )
         })
     }
@@ -384,12 +385,6 @@ impl Default for PowerShellTool {
     fn default() -> Self {
         Self::new()
     }
-}
-
-fn detect_powershell_executable() -> Option<PathBuf> {
-    which::which("pwsh")
-        .ok()
-        .or_else(|| which::which("powershell").ok())
 }
 
 fn default_dangerous_patterns() -> Vec<Regex> {

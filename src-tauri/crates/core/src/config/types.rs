@@ -686,6 +686,9 @@ pub struct WorkspacePreferencesConfig {
     /// 工作区偏好配置版本
     #[serde(default)]
     pub schema_version: u8,
+    /// Agent 默认回复语言偏好；不等同于 UI locale 或内容产物语言
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_response_language: Option<String>,
     /// 全局媒体生成默认设置
     #[serde(default)]
     pub media_defaults: MediaGenerationDefaultsConfig,
@@ -698,13 +701,14 @@ pub struct WorkspacePreferencesConfig {
 }
 
 fn current_workspace_preferences_schema_version() -> u8 {
-    2
+    3
 }
 
 impl Default for WorkspacePreferencesConfig {
     fn default() -> Self {
         Self {
             schema_version: current_workspace_preferences_schema_version(),
+            agent_response_language: None,
             media_defaults: MediaGenerationDefaultsConfig::default(),
             companion_defaults: CompanionDefaultsConfig::default(),
             service_models: ServiceModelsConfig::default(),
@@ -2951,6 +2955,25 @@ mod unit_tests {
                 .preferred_provider_id
                 .as_deref(),
             Some("openai-tts")
+        );
+    }
+
+    #[test]
+    fn test_workspace_preferences_supports_agent_response_language_roundtrip() {
+        let mut config = Config::default();
+        config.workspace_preferences.agent_response_language = Some("en-US".to_string());
+
+        let value =
+            serde_json::to_value(&config).expect("config should serialize response language");
+        let parsed: Config =
+            serde_json::from_value(value).expect("config should deserialize response language");
+
+        assert_eq!(
+            parsed
+                .workspace_preferences
+                .agent_response_language
+                .as_deref(),
+            Some("en-US")
         );
     }
 

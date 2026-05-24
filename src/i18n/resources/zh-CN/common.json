@@ -1,6 +1,5 @@
 {
   "common.loading": "加载中...",
-  "common.reload": "重新加载",
   "common.save": "保存",
   "common.cancel": "取消",
   "common.confirm": "确认",
@@ -10,7 +9,7 @@
   "common.splashScreen.slogan": "青柠一下，灵感即来",
   "common.splashScreen.subtitle": "从一句想法，到成稿、成图、成片、成事",
   "common.startupLoading.title": "正在启动 {{brand}}",
-  "common.startupLoading.description": "正在准备语言配置与工作台入口，请稍候。",
+  "common.startupLoading.description": "正在准备界面语言配置与工作台入口，请稍候。",
   "common.app.resourceNavigation.unsupported.title": "当前资源暂时不能自动回跳",
   "common.app.resourceNavigation.unsupported.description": "已记录来源信息，但主窗口还没有对应的业务入口。",
   "common.app.project.created": "项目创建成功",

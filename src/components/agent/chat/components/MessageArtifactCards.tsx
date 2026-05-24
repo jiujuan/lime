@@ -65,14 +65,15 @@ export function MessageArtifactCards({
         return (
           <div
             key={artifact.id}
-            className="flex w-full flex-col items-stretch gap-2 rounded-xl border border-sky-200/80 bg-sky-50 p-2 text-left shadow-sm shadow-sky-950/5 sm:flex-row"
+            data-testid="message-artifact-card"
+            className="flex w-full flex-col items-stretch gap-2 rounded-lg border border-slate-200 bg-white p-2 text-left shadow-sm shadow-slate-950/5 sm:flex-row"
           >
             <button
               type="button"
               onClick={() => onArtifactClick?.(artifact)}
-              className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-0.5 text-left transition-colors hover:bg-white"
+              className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-slate-50"
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-700">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-600">
                 {artifact.status === "streaming" ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
@@ -81,27 +82,27 @@ export function MessageArtifactCards({
               </div>
               <div className="min-w-0 flex-1">
                 <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                  <span className="inline-flex rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-sky-700">
+                  <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">
                     {t("agentChat.messageList.artifact.documentBadge")}
                   </span>
                   {knowledgeSource ? (
-                    <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                    <span className="inline-flex rounded-md border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">
                       {t("agentChat.messageList.artifact.saveableBadge")}
                     </span>
                   ) : null}
                 </div>
-                <div className="truncate text-sm font-semibold text-slate-900">
+                <div className="truncate text-[13px] font-semibold leading-5 text-slate-900">
                   {displayTitle}
                 </div>
-                <div className="truncate text-xs text-slate-500">
+                <div className="truncate font-mono text-[11px] leading-4 text-slate-500">
                   {filePath}
                 </div>
-                <div className="mt-1 flex items-center gap-2">
-                  <span className="inline-flex rounded-full bg-white px-2 py-0.5 text-[11px] text-slate-500">
+                <div className="mt-1 flex min-w-0 items-center gap-2">
+                  <span className="inline-flex shrink-0 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] text-slate-500">
                     {statusLabel}
                   </span>
                   {previewText ? (
-                    <span className="line-clamp-1 text-xs text-slate-600">
+                    <span className="min-w-0 truncate text-xs text-slate-600">
                       {previewText}
                     </span>
                   ) : artifact.status === "streaming" ? (
@@ -124,7 +125,7 @@ export function MessageArtifactCards({
                     description: knowledgeSource?.description,
                   })
                 }
-                className="flex shrink-0 items-center justify-center rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-700 transition-colors hover:border-sky-300 hover:bg-sky-100 sm:py-0"
+                className="flex shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-white sm:py-0"
               >
                 {t("agentChat.messageList.artifact.saveDocument")}
               </button>

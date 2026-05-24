@@ -70,6 +70,7 @@ export interface BuildHarnessRequestMetadataOptions {
   teamMemoryShadow?: TeamMemoryShadowRequestMetadata | null;
   workspaceSkillBindings?: AgentRuntimeWorkspaceSkillBinding[] | null;
   workspaceSkillRuntimeEnable?: WorkspaceSkillRuntimeEnableInput | null;
+  agentResponseLanguage?: string | null;
   oemRouting?: HarnessOemRoutingRequestMetadata | null;
   tenantFeatureFlags?: HarnessTenantFeatureFlagsRequestMetadata | null;
 }
@@ -162,6 +163,7 @@ export function buildHarnessRequestMetadata(
     teamMemoryShadow,
     workspaceSkillBindings,
     workspaceSkillRuntimeEnable,
+    agentResponseLanguage,
     oemRouting,
     tenantFeatureFlags,
   } = options;
@@ -210,6 +212,12 @@ export function buildHarnessRequestMetadata(
     buildWorkspaceSkillRuntimeEnableHarnessMetadata(
       workspaceSkillRuntimeEnable,
     );
+  const resolvedAgentResponseLanguage =
+    readTrimmedString(agentResponseLanguage) ??
+    readTrimmedString(base?.agent_response_language) ??
+    readTrimmedString(base?.agentResponseLanguage) ??
+    readTrimmedString(base?.response_language) ??
+    readTrimmedString(base?.responseLanguage);
 
   const metadata: Record<string, unknown> = {
     ...(base || {}),
@@ -244,6 +252,7 @@ export function buildHarnessRequestMetadata(
       workspaceSkillRuntimeEnableMetadata?.workspace_skill_runtime_enable ??
       base?.workspace_skill_runtime_enable ??
       base?.workspaceSkillRuntimeEnable,
+    agent_response_language: resolvedAgentResponseLanguage,
     oem_routing: oemRouting || undefined,
     tenant_feature_flags: tenantFeatureFlags || undefined,
     browser_requirement: browserRequirement || undefined,

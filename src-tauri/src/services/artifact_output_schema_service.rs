@@ -85,6 +85,7 @@ struct ArtifactOutputSchemaContext {
     stage: Option<String>,
     source_policy: Option<String>,
     target_block_id: Option<String>,
+    language: Option<String>,
 }
 
 fn normalize_text(value: Option<&str>) -> Option<String> {
@@ -127,6 +128,17 @@ fn build_artifact_output_schema_context(
         target_block_id: extract_artifact_string(
             request_metadata,
             &["artifact_target_block_id", "artifactTargetBlockId"],
+        ),
+        language: extract_artifact_string(
+            request_metadata,
+            &[
+                "content_target_language",
+                "contentTargetLanguage",
+                "artifact_language",
+                "artifactLanguage",
+                "target_language",
+                "targetLanguage",
+            ],
         ),
     };
 
@@ -319,7 +331,7 @@ fn build_stage2_document_schema(context: &ArtifactOutputSchemaContext) -> Value 
             },
             "language": {
                 "type": "string",
-                "enum": ["zh-CN"]
+                "enum": [context.language.as_deref().unwrap_or("zh-CN")]
             },
             "summary": {
                 "type": "string"
@@ -1074,6 +1086,47 @@ mod tests {
                         })
                     })
             })));
+    }
+
+    #[test]
+    fn stage2_should_narrow_document_language_to_content_target_language() {
+        let metadata = json!({
+            "artifact": {
+                "artifact_mode": "draft",
+                "artifact_stage": "stage2",
+                "artifact_kind": "report",
+                "target_language": "en-US"
+            }
+        });
+
+        let schema = build_artifact_output_schema(Some(&metadata)).expect("schema");
+
+        assert_eq!(
+            schema
+                .get("oneOf")
+                .and_then(Value::as_array)
+                .and_then(|items| items.first())
+                .and_then(|item| item.get("properties"))
+                .and_then(Value::as_object)
+                .and_then(|properties| properties.get("document"))
+                .and_then(|document| document.get("properties"))
+                .and_then(Value::as_object)
+                .and_then(|properties| properties.get("language"))
+                .and_then(|language| language.get("enum"))
+                .and_then(Value::as_array)
+                .and_then(|items| items.first())
+                .and_then(Value::as_str),
+            Some("en-US")
+        );
+    }
+
+    #[test]
+    fn target_language_alone_should_not_trigger_artifact_output_schema() {
+        let metadata = json!({
+            "target_language": "en-US"
+        });
+
+        assert!(build_artifact_output_schema(Some(&metadata)).is_none());
     }
 
     #[test]

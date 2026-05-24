@@ -2,6 +2,8 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 import {
   normalizeLocale,
   normalizeLocalePreference,
+  isRtlLocale,
+  resolveDocumentDirection,
   resolveLocaleOptionLabel,
   toLegacyPatchLanguage,
 } from "../locales";
@@ -39,5 +41,13 @@ describe("i18n locale registry", () => {
     expect(resolveLocaleOptionLabel("auto")).toBe("跟随系统");
     expect(resolveLocaleOptionLabel("en")).toBe("English");
     expect(resolveLocaleOptionLabel("unknown")).toBe("简体中文");
+  });
+
+  it("应识别 RTL 语言并同步文档方向", () => {
+    expect(isRtlLocale("ar")).toBe(true);
+    expect(isRtlLocale("fa-IR")).toBe(true);
+    expect(isRtlLocale("en-US")).toBe(false);
+    expect(resolveDocumentDirection("ar")).toBe("rtl");
+    expect(resolveDocumentDirection("zh-CN")).toBe("ltr");
   });
 });

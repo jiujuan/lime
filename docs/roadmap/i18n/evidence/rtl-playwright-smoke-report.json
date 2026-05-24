@@ -1,0 +1,22 @@
+{
+  "appUrl": "http://127.0.0.1:1420/",
+  "consoleErrorCount": 0,
+  "consoleErrors": [],
+  "dir": {
+    "body": "rtl",
+    "document": "rtl"
+  },
+  "evidenceDir": "/Users/coso/Documents/dev/ai/aiclientproxy/lime/docs/roadmap/i18n/evidence",
+  "pageErrors": [],
+  "schemaVersion": "lime.i18n.rtlPlaywrightSmokeReport.v1",
+  "screenshots": {
+    "home": "/Users/coso/Documents/dev/ai/aiclientproxy/lime/docs/roadmap/i18n/evidence/rtl-home-automated.png",
+    "settings": "/Users/coso/Documents/dev/ai/aiclientproxy/lime/docs/roadmap/i18n/evidence/rtl-settings-automated.png",
+    "userMenu": "/Users/coso/Documents/dev/ai/aiclientproxy/lime/docs/roadmap/i18n/evidence/rtl-user-menu-automated.png"
+  },
+  "summary": {
+    "homeSidebarOnRight": true,
+    "settingsNavVisible": true,
+    "userMenuDialogVisible": true
+  }
+}

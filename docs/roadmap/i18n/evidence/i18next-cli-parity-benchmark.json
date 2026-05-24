@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "lime.i18n.i18nextCliParityBenchmark.v1",
+  "cliVersion": "1.58.0",
+  "environment": {
+    "node": "v23.4.0",
+    "platform": "darwin"
+  },
+  "fixture": {
+    "description": "Temp fixture with zh-CN/en-US resources, flat dotted keys, useTranslation namespace, getFixedT, keyPrefix, and one hardcoded JSX literal.",
+    "resourcesRoot": "/var/folders/87/s6cpr7hd1_v43cs833x4s_900000gn/T/lime-i18next-cli-parity-tcLaTc/src/i18n/resources"
+  },
+  "summary": {
+    "cliStatus": {
+      "exitCode": 1,
+      "keysFound": 1,
+      "namespacesFound": 1,
+      "incompleteTranslations": true
+    },
+    "cliLint": {
+      "exitCode": 1,
+      "hardcodedIssueCount": 1
+    },
+    "cliExtractDryRun": {
+      "exitCode": 1,
+      "updatedFileCount": 4
+    },
+    "cliTypes": {
+      "exitCode": 0,
+      "generatedResourcesFile": true,
+      "generatedI18nextTypes": true
+    },
+    "limeDetectTranslations": {
+      "exitCode": 0,
+      "hasIssues": false,
+      "issueCount": 0,
+      "sourceKeyCount": 4
+    },
+    "limeUnused": {
+      "exitCode": 0,
+      "protectedKeyCount": 1,
+      "unusedKeyCount": 1,
+      "dynamicKeyPatternCount": 0,
+      "topNamespace": "common"
+    }
+  },
+  "commands": {
+    "detectTranslations": {
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "{\n  \"schemaVersion\": \"lime.i18n.translationCheckReport.v1\",\n  \"absoluteResourcesDir\": \"/var/folders/87/s6cpr7hd1_v43cs833x4s_900000gn/T/lime-i18next-cli-parity-tcLaTc/src/i18n/resources\",\n  \"resourcesDir\": \"../../../../../../../var/folders/87/s6cpr7hd1_v43cs833x4s_900000gn/T/lime-i18next-cli-parity-tcLaTc/src/i18n/resources\",\n  \"sourceLocale\": \"zh-CN\",\n  \"locales\": [\n    \"en-US\",\n    \"zh-CN\"\n  ],\n  \"namespaces\": [\n    \"agentSkills\",\n    \"common\"\n  ],\n  \"summary\": {\n    \"hasIssues\": false,\n    \"issueCount\": 0,\n    \"localeCount\": 2,\n    \"namespaceCount\": 2,\n    \"sourceKeyCount\": 4\n  },\n  \"coverage\": {\n    \"localeSummaries\": [\n      {\n        \"coverageRatio\": 1,\n        \"extraKeyCount\": 0,\n        \"locale\": \"en-US\",\n        \"missingKeyCount\": 0,\n        \"namespaceCoverage\": [\n          {\n            \"extraKeyCount\": 0,\n            \"coverageRatio\": 1,\n            \"missingKeyCount\": 0,\n            \"namespace\": \"agentSkills\",\n            \"sourceKeyCount\": 2,\n            \"translatedKeyCount\": 2\n          },\n          {\n            \"extraKeyCount\": 0,\n            \"coverageRatio\": 1,\n            \"missingKeyCount\": 0,\n            \"namespace\": \"common\",\n            \"sourceKeyCount\": 2,\n            \"translatedKeyCount\": 2\n          }\n        ],\n        \"sourceKeyCount\": 4,\n        \"translatedKeyCount\": 4\n      }\n    ],\n    \"summary\": {\n      \"coverageRatio\": 1,\n      \"extraKeyCount\": 0,\n      \"fullCoverageLocaleCount\": 1,\n      \"localeCount\": 1,\n      \"missingKeyCount\": 0,\n      \"sourceKeyCount\": 4,\n      \"translatedKeyCount\": 4\n    }\n  },\n  \"issues\": []\n}\n\n"
+    },
+    "limeUnused": {
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "{\n  \"schemaVersion\": \"lime.i18n.unusedKeyReport.v1\",\n  \"resourcesDir\": \"/var/folders/87/s6cpr7hd1_v43cs833x4s_900000gn/T/lime-i18next-cli-parity-tcLaTc/src/i18n/resources\",\n  \"sourceLocale\": \"zh-CN\",\n  \"sourceDirs\": [\n    \"/var/folders/87/s6cpr7hd1_v43cs833x4s_900000gn/T/lime-i18next-cli-parity-tcLaTc/src\"\n  ],\n  \"summary\": {\n    \"protectedKeyCount\": 1,\n    \"dynamicKeyPatternCount\": 0,\n    \"referencedKeyCount\": 2,\n    \"resourceKeyCount\": 4,\n    \"scannedFileCount\": 1,\n    \"unusedKeyCount\": 1\n  },\n  \"dynamicKeyPatterns\": [],\n  \"namespaceSummaries\": [\n    {\n      \"namespace\": \"common\",\n      \"protectedKeyCount\": 0,\n      \"referencedKeyCount\": 1,\n      \"resourceKeyCount\": 2,\n      \"unusedKeyCount\": 1,\n      \"unusedRatio\": 0.5\n    },\n    {\n      \"namespace\": \"agentSkills\",\n      \"protectedKeyCount\": 1,\n      \"referencedKeyCount\": 1,\n      \"resourceKeyCount\": 2,\n      \"unusedKeyCount\": 0,\n      \"unusedRatio\": 0\n    }\n  ],\n  \"unusedKeyFamiliesByNamespace\": {\n    \"common\": [\n      {\n        \"prefix\": \"button.cancel\",\n        \"count\": 1\n      }\n    ]\n  },\n  \"unusedKeysByNamespace\": {\n    \"common\": [\n      \"button.cancel\"\n    ]\n  },\n  \"protectedKeysByNamespace\": {\n    \"agentSkills\": [\n      \"skills.workspace.sidebar.local.title\"\n    ]\n  }\n}\n"
+    },
+    "i18nextCli": {
+      "extractDryRun": {
+        "exitCode": 1,
+        "stderr": "- Running i18next key extractor...\n\n✔ Extraction complete!\n❌ Some files were updated. This should not happen in CI mode.\n\n  /private/var/folders/87/s6cpr7hd1_v43cs833x4s_900000gn/T/lime-i18next-cli-parity-tcLaTc/src/i18n/resources/zh-CN/common.json [zh-CN/common]\n    - button.cancel: undefined\n    ~ button.save: undefined → \"button.save\"\n\n  /private/var/folders/87/s6cpr7hd1_v43cs833x4s_900000gn/T/lime-i18next-cli-parity-tcLaTc/src/i18n/resources/zh-CN/agentSkills.json [zh-CN/agentSkills]\n    - skills.workspace.sidebar.local.empty: undefined\n    - skills.workspace.sidebar.local.title: undefined\n\n  /private/var/folders/87/s6cpr7hd1_v43cs833x4s_900000gn/T/lime-i18next-cli-parity-tcLaTc/src/i18n/resources/en-US/common.json [en-US/common]\n    - button.cancel: undefined\n    ~ button.save: undefined → \"\"\n\n  /private/var/folders/87/s6cpr7hd1_v43cs833x4s_900000gn/T/lime-i18next-cli-parity-tcLaTc/src/i18n/resources/en-US/agentSkills.json [en-US/agentSkills]\n    - skills.workspace.sidebar.local.empty: undefined\n    - skills.workspace.sidebar.local.title: undefined\n",
+        "stdout": ""
+      },
+      "lint": {
+        "exitCode": 1,
+        "stderr": "✖ \u001b[31m\u001b[1mLinter found 1 potential issues.\u001b[22m\u001b[39m\n",
+        "stdout": "\nsrc/App.tsx\n  15: Error: Found hardcoded string: \"Hardcoded UI text\"\n"
+      },
+      "status": {
+        "exitCode": 1,
+        "stderr": "- Analyzing project localization status...\n\n✔ Analysis complete.\n✖ Error: Incomplete translations detected.\n",
+        "stdout": "\u001b[36m\u001b[1m\ni18next Project Status\u001b[22m\u001b[39m\n------------------------\n🔑 Keys Found:         1\n📚 Namespaces Found:   1\n🌍 Locales:            zh-CN, en-US\n✅ Primary Language:   zh-CN\n\nTranslation Progress:\n- en-US: [□□□□□□□□□□□□□□□□□□□□] 0% (0/1 keys)  — 1 absent\n"
+      },
+      "types": {
+        "exitCode": 0,
+        "stderr": "",
+        "stdout": "  ✓ Resources interface written to src/types/resources.d.ts\n  ✓ TypeScript definitions written to src/types/i18next.d.ts\n"
+      }
+    }
+  },
+  "decision": {
+    "current": "保留 Lime 自研 i18n 治理脚本为 current。",
+    "next": "只有在官方 CLI 对动态 key 保护、unused family 分桶和 Patch retirement gate 具备等价覆盖后，再评估替换最薄的 i18n:check 层。"
+  }
+}

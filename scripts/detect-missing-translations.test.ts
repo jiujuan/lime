@@ -1,13 +1,14 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   analyzeTranslations,
   applyTranslationFixes,
   formatTranslationReport,
   hasTranslationIssues,
+  runCli,
 } from "./detect-missing-translations";
 
 const tempDirs: string[] = [];
@@ -45,6 +46,66 @@ describe("detect-missing-translations", () => {
 
     expect(hasTranslationIssues(result)).toBe(false);
     expect(formatTranslationReport(result)).toContain("通过");
+  });
+
+  it("应支持 JSON 模式输出结构化报告", () => {
+    const resourcesDir = createTempResourcesDir();
+    writeResource(resourcesDir, "zh-CN", "common", {
+      "common.cancel": "取消",
+      "common.save": "保存",
+    });
+    writeResource(resourcesDir, "en-US", "common", {
+      "common.save": "Save",
+    });
+
+    const result = analyzeTranslations({ resourcesDir });
+    const report = JSON.parse(
+      formatTranslationReport(result, { format: "json" }),
+    ) as {
+      coverage: {
+        summary: {
+          coverageRatio: number;
+          localeCount: number;
+          missingKeyCount: number;
+          sourceKeyCount: number;
+          translatedKeyCount: number;
+        };
+        localeSummaries: Array<{
+          locale: string;
+          coverageRatio: number;
+          sourceKeyCount: number;
+          translatedKeyCount: number;
+        }>;
+      };
+      summary: { hasIssues: boolean; issueCount: number; sourceKeyCount: number };
+      issues: Array<{ locale: string }>;
+    };
+
+    expect(report.summary).toEqual(
+      expect.objectContaining({
+        hasIssues: true,
+        issueCount: 1,
+        sourceKeyCount: 2,
+      }),
+    );
+    expect(report.coverage.summary).toEqual(
+      expect.objectContaining({
+        coverageRatio: 0.5,
+        localeCount: 1,
+        missingKeyCount: 1,
+        sourceKeyCount: 2,
+        translatedKeyCount: 1,
+      }),
+    );
+    expect(report.coverage.localeSummaries).toEqual([
+      expect.objectContaining({
+        locale: "en-US",
+        coverageRatio: 0.5,
+        sourceKeyCount: 2,
+        translatedKeyCount: 1,
+      }),
+    ]);
+    expect(report.issues).toEqual([expect.objectContaining({ locale: "en-US" })]);
   });
 
   it("应发现缺失 namespace、缺失 key 与多余 key", () => {
@@ -105,5 +166,125 @@ describe("detect-missing-translations", () => {
     expect(
       fs.existsSync(path.join(resourcesDir, "en-US", "settings.json")),
     ).toBe(true);
+  });
+
+  it("应在 coverage 报告中区分 namespace 覆盖率与 locale 总覆盖率", () => {
+    const resourcesDir = createTempResourcesDir();
+    writeResource(resourcesDir, "zh-CN", "common", {
+      "common.cancel": "取消",
+      "common.save": "保存",
+    });
+    writeResource(resourcesDir, "zh-CN", "settings", {
+      "settings.title": "设置",
+    });
+    writeResource(resourcesDir, "en-US", "common", {
+      "common.cancel": "Cancel",
+      "common.save": "Save",
+      "common.extra": "Extra",
+    });
+
+    const result = analyzeTranslations({ resourcesDir });
+    const report = JSON.parse(
+      formatTranslationReport(result, { format: "json" }),
+    ) as {
+      coverage: {
+        localeSummaries: Array<{
+          locale: string;
+          coverageRatio: number;
+          extraKeyCount: number;
+          missingKeyCount: number;
+          namespaceCoverage: Array<{
+            coverageRatio: number;
+            extraKeyCount: number;
+            missingKeyCount: number;
+            namespace: string;
+            sourceKeyCount: number;
+            translatedKeyCount: number;
+          }>;
+          sourceKeyCount: number;
+          translatedKeyCount: number;
+        }>;
+        summary: {
+          coverageRatio: number;
+          extraKeyCount: number;
+          fullCoverageLocaleCount: number;
+          localeCount: number;
+          missingKeyCount: number;
+          sourceKeyCount: number;
+          translatedKeyCount: number;
+        };
+      };
+    };
+
+    expect(report.coverage.summary).toEqual(
+      expect.objectContaining({
+        coverageRatio: 2 / 3,
+        extraKeyCount: 1,
+        fullCoverageLocaleCount: 0,
+        localeCount: 1,
+        missingKeyCount: 1,
+        sourceKeyCount: 3,
+        translatedKeyCount: 2,
+      }),
+    );
+    expect(report.coverage.localeSummaries).toEqual([
+      expect.objectContaining({
+        locale: "en-US",
+        coverageRatio: 2 / 3,
+        extraKeyCount: 1,
+        missingKeyCount: 1,
+        sourceKeyCount: 3,
+        translatedKeyCount: 2,
+        namespaceCoverage: [
+          expect.objectContaining({
+            namespace: "common",
+            coverageRatio: 1,
+            extraKeyCount: 1,
+            missingKeyCount: 0,
+            sourceKeyCount: 2,
+            translatedKeyCount: 2,
+          }),
+          expect.objectContaining({
+            namespace: "settings",
+            coverageRatio: 0,
+            extraKeyCount: 0,
+            missingKeyCount: 1,
+            sourceKeyCount: 1,
+            translatedKeyCount: 0,
+          }),
+        ],
+      }),
+    ]);
+    expect(formatTranslationReport(result, { verbose: true })).toContain(
+      "coverage locale=en-US ratio=66.7%",
+    );
+  });
+
+  it("CLI 应支持 --format json 并返回结构化结果", () => {
+    const resourcesDir = createTempResourcesDir();
+    writeResource(resourcesDir, "zh-CN", "common", {
+      "common.cancel": "取消",
+      "common.save": "保存",
+    });
+    writeResource(resourcesDir, "en-US", "common", {
+      "common.save": "Save",
+    });
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const exitCode = runCli(["--format", "json", "--resources-dir", resourcesDir]);
+
+    expect(exitCode).toBe(1);
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(logSpy.mock.calls[0]?.[0] ?? ""))).toEqual(
+      expect.objectContaining({
+        summary: expect.objectContaining({
+          hasIssues: true,
+          issueCount: 1,
+        }),
+        issues: [expect.objectContaining({ locale: "en-US" })],
+      }),
+    );
+
+    logSpy.mockRestore();
   });
 });

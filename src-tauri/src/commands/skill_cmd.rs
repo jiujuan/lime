@@ -2939,8 +2939,11 @@ mod tests {
     use std::collections::HashSet;
     use std::ffi::OsString;
     use std::io::Write;
+    use std::sync::{Mutex, MutexGuard, OnceLock};
     use tempfile::TempDir;
     use zip::write::FileOptions;
+
+    static TEST_ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
     struct EnvVarGuard {
         key: &'static str,
@@ -2960,6 +2963,13 @@ mod tests {
         let original = std::env::var_os(key);
         std::env::set_var(key, value);
         EnvVarGuard { key, original }
+    }
+
+    fn lock_test_env() -> MutexGuard<'static, ()> {
+        TEST_ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     #[test]
@@ -3554,6 +3564,7 @@ content"#,
         const DOWNLOAD_URL: &str =
             "https://limeai.run/skill-packages/viral-content-breakdown/latest/viral-content-breakdown.zip";
 
+        let _env_lock = lock_test_env();
         let temp_dir = TempDir::new().unwrap();
         // Isolate app paths so the command path never writes to the developer's real Lime data dir.
         let _home = set_test_env_var("HOME", &temp_dir.path().join("home"));
@@ -3661,6 +3672,7 @@ content"#,
 
     #[test]
     fn test_install_local_skill_package_for_app_installs_skill_file() {
+        let _env_lock = lock_test_env();
         let temp_dir = TempDir::new().unwrap();
         let _home = set_test_env_var("HOME", &temp_dir.path().join("home"));
         let _userprofile = set_test_env_var("USERPROFILE", &temp_dir.path().join("home"));
@@ -3708,6 +3720,7 @@ content"#,
 
     #[test]
     fn test_rename_user_local_skill_dir_moves_skill_directory() {
+        let _env_lock = lock_test_env();
         let temp_dir = TempDir::new().unwrap();
         let _home = set_test_env_var("HOME", &temp_dir.path().join("home"));
         let _userprofile = set_test_env_var("USERPROFILE", &temp_dir.path().join("home"));
@@ -3737,6 +3750,7 @@ content"#,
 
     #[test]
     fn test_replace_user_local_skill_package_replaces_existing_tree() {
+        let _env_lock = lock_test_env();
         let temp_dir = TempDir::new().unwrap();
         let _home = set_test_env_var("HOME", &temp_dir.path().join("home"));
         let _userprofile = set_test_env_var("USERPROFILE", &temp_dir.path().join("home"));

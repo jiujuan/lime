@@ -97,6 +97,11 @@ describe("BrowserEnvironmentPresetManager", () => {
     const container = await renderManager({ onPresetsChanged });
 
     expect(container.textContent).toContain("环境预设");
+    expect(container.textContent).toContain("浏览器 Locale");
+    expect(container.textContent).toContain("Accept-Language 请求头");
+    expect(container.textContent).toContain(
+      "这些值只影响网站看到的环境，不控制 Lime 界面语言或 Agent 回复语言。",
+    );
     expect(container.textContent).toContain("美区桌面");
     expect(container.textContent).toContain("America/Los_Angeles");
     expect(onPresetsChanged).toHaveBeenCalledWith([
@@ -113,6 +118,11 @@ describe("BrowserEnvironmentPresetManager", () => {
     const container = await renderManager({ onMessage });
 
     expect(container.textContent).toContain("Environment Presets");
+    expect(container.textContent).toContain("Browser locale");
+    expect(container.textContent).toContain("Accept-Language header");
+    expect(container.textContent).toContain(
+      "These values shape what websites see; they do not control Lime UI language or Agent response language.",
+    );
     expect(container.textContent).toContain("Profile launch environment");
     expect(container.textContent).toContain("No preset");
     expect(container.textContent).toContain("Refresh presets");

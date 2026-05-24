@@ -1,0 +1,37 @@
+{
+  "docsSite": {
+    "buildScripts": [
+      "build",
+      "dev",
+      "generate"
+    ],
+    "contentFileCount": 13,
+    "hasI18nConfig": false,
+    "hasLocaleRouting": false,
+    "packageJsonExists": true,
+    "topLevelContentDirs": [
+      "02.user-guide",
+      "03.providers",
+      "04.api-reference",
+      "07.legal",
+      "08.open-platform"
+    ]
+  },
+  "releaseNotes": {
+    "englishCompanionExists": false,
+    "sourceExists": true
+  },
+  "repoRoot": "/Users/coso/Documents/dev/ai/aiclientproxy/lime",
+  "rootReadme": {
+    "englishCompanionExists": true,
+    "sourceExists": true
+  },
+  "schemaVersion": "lime.i18n.releaseDocsWorkflowReport.v1",
+  "summary": {
+    "contentFileCount": 13,
+    "docsTranslationWorkflowPresent": false,
+    "hasBilingualRootReadme": true,
+    "hasDocsLocaleWorkflow": false,
+    "hasReleaseNotesCompanion": false
+  }
+}

@@ -76,6 +76,7 @@ pub enum TurnPromptAugmentationStageKind {
     KnowledgePack,
     WebSearch,
     RequestToolPolicy,
+    ResponseLanguage,
     Artifact,
     ImageSkillLaunch,
     CoverSkillLaunch,

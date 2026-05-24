@@ -6992,6 +6992,33 @@ Extract it into the Agent Skills directory.`,
     }
   });
 
+  it("应把 workspace response language 偏好写入 request metadata", async () => {
+    const harness = mountHook({
+      agentResponseLanguage: "en-US",
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness.getValue().handleSend();
+        expect(started).toBe(true);
+      });
+
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      const args = mockSendMessage.mock.calls[0] as Parameters<
+        HookProps["sendMessage"]
+      >;
+      expect(args?.[8]).toMatchObject({
+        requestMetadata: {
+          harness: expect.objectContaining({
+            agent_response_language: "en-US",
+          }),
+        },
+      });
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("当前 selectedTeam 还未 hydrate 时应保留 base request metadata 里的 Team 字段", async () => {
     const harness = mountHook({
       workspaceRequestMetadataBase: {

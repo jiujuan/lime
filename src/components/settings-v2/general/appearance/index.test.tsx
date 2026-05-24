@@ -43,6 +43,7 @@ function createMockConfig() {
   return {
     language: "zh",
     workspace_preferences: {
+      agent_response_language: "auto",
       media_defaults: {
         voice: {
           preferredProviderId: "openai",
@@ -171,10 +172,13 @@ describe("AppearanceSettings", () => {
     );
 
     expect(text).toContain("外观");
-    expect(text).toContain("管理主题、语言、提示音效、推荐行为和底部入口。");
+    expect(text).toContain(
+      "管理主题、界面语言、回复语言、提示音效、推荐行为和底部入口。",
+    );
     expect(text).toContain("主题：跟随系统");
     expect(text).toContain("配色：墨绿");
-    expect(text).toContain("语言：简体中文");
+    expect(text).toContain("界面：简体中文");
+    expect(text).toContain("回复：自动判断");
     expect(text).toContain("提示音效：已开启");
     expect(text).toContain("基础外观");
     expect(text).toContain("主题模式");
@@ -192,6 +196,7 @@ describe("AppearanceSettings", () => {
     expect(text).toContain("文艺");
     expect(text).toContain("奢华");
     expect(text).toContain("界面语言");
+    expect(text).toContain("回复语言");
     expect(text).toContain("可选系统入口");
     expect(text).not.toContain("持续流程");
     expect(text).not.toContain("消息渠道");
@@ -217,11 +222,13 @@ describe("AppearanceSettings", () => {
     expect(text).toContain("Appearance");
     expect(text).toContain("Theme: System");
     expect(text).toContain("Palette: Graphite Green");
-    expect(text).toContain("Language: English");
+    expect(text).toContain("UI: English");
+    expect(text).toContain("Reply: Auto");
     expect(text).toContain("Sound cues: On");
     expect(text).toContain("Base Appearance");
     expect(text).toContain("Theme Mode");
     expect(text).toContain("Color Palette");
+    expect(text).toContain("Reply Language");
     expect(text).toContain("Random");
     expect(text).not.toContain("Setup & Recovery");
     expect(text).toContain("Optional System Entries");
@@ -248,6 +255,35 @@ describe("AppearanceSettings", () => {
       expect.objectContaining({ language: "en-US" }),
     );
     expect(document.documentElement.lang).toBe("en-US");
+  });
+
+  it("切换回复语言时应写入 workspace_preferences 且不改 UI language", async () => {
+    const { container } = await renderPage();
+    const englishButtons = Array.from(
+      container.querySelectorAll("button"),
+    ).filter((button) => button.textContent?.includes("English"));
+    const responseLanguageButton = englishButtons.at(-1);
+
+    expect(responseLanguageButton).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      responseLanguageButton?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+
+    const savedConfig = mockSaveConfig.mock.calls.at(-1)?.[0] as any;
+
+    expect(savedConfig.language).toBe("zh");
+    expect(savedConfig.workspace_preferences.agent_response_language).toBe(
+      "en-US",
+    );
+    expect(
+      savedConfig.workspace_preferences.media_defaults.voice
+        .preferredProviderId,
+    ).toBe("openai");
+    expect(mockSetLanguage).not.toHaveBeenCalled();
   });
 
   it("切换推荐行为时应保留 workspace_preferences 的其他配置", async () => {
@@ -373,23 +409,35 @@ describe("AppearanceSettings", () => {
     await renderPage();
 
     expect(getBodyText()).not.toContain(
-      "管理主题、语言、提示音效、推荐问题的上下文带入方式，以及底部系统入口的显示状态。",
+      "管理主题、界面语言、回复语言、提示音效、推荐问题的上下文带入方式，以及底部系统入口的显示状态。",
     );
     expect(getBodyText()).not.toContain(
-      "先确定全局主题、语言和声音反馈，再统一工作区里的视觉节奏。",
+      "先确定全局主题、界面语言和声音反馈，再统一工作区里的视觉节奏。",
     );
 
     const heroTip = await hoverTip("外观设置总览说明");
     expect(getBodyText()).toContain(
-      "管理主题、语言、提示音效、推荐问题的上下文带入方式，以及底部系统入口的显示状态。",
+      "管理主题、界面语言、回复语言、提示音效、推荐问题的上下文带入方式，以及底部系统入口的显示状态。",
     );
     await leaveTip(heroTip);
 
     const sectionTip = await hoverTip("基础外观说明");
     expect(getBodyText()).toContain(
-      "先确定全局主题、语言和声音反馈，再统一工作区里的视觉节奏。",
+      "先确定全局主题、界面语言和声音反馈，再统一工作区里的视觉节奏。",
     );
     await leaveTip(sectionTip);
+
+    const languageTip = await hoverTip("界面语言说明");
+    expect(getBodyText()).toContain(
+      "只切换界面显示语言；不影响回复语言、浏览器站点语言或内容产物目标语言。",
+    );
+    await leaveTip(languageTip);
+
+    const responseLanguageTip = await hoverTip("回复语言说明");
+    expect(getBodyText()).toContain(
+      "控制对话默认回复语言；不影响界面语言、浏览器站点语言或内容产物目标语言。",
+    );
+    await leaveTip(responseLanguageTip);
   });
 
   it("切换可选系统入口时应写回 navigation.enabled_items 并保留其他配置", async () => {

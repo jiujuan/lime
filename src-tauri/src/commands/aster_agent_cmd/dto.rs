@@ -3790,6 +3790,7 @@ mod tests {
             recent_gate_key: None,
             recent_run_title: None,
             recent_content_id: None,
+            recent_response_language: None,
             task_profile: Some(lime_agent::SessionExecutionRuntimeTaskProfile {
                 kind: "translation".to_string(),
                 source: "translation_skill_launch".to_string(),
@@ -4486,6 +4487,7 @@ mod tests {
             recent_gate_key: None,
             recent_run_title: None,
             recent_content_id: None,
+            recent_response_language: None,
             task_profile: None,
             routing_decision: None,
             limit_state: None,
@@ -4661,6 +4663,7 @@ mod tests {
             recent_gate_key: None,
             recent_run_title: None,
             recent_content_id: None,
+            recent_response_language: None,
             task_profile: None,
             routing_decision: None,
             limit_state: None,
@@ -4732,6 +4735,7 @@ mod tests {
             recent_gate_key: None,
             recent_run_title: None,
             recent_content_id: None,
+            recent_response_language: None,
             task_profile: None,
             routing_decision: Some(lime_agent::SessionExecutionRuntimeRoutingDecision {
                 routing_mode: "single_candidate".to_string(),

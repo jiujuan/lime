@@ -10,5 +10,9 @@ export async function openPathWithDefaultApp(path: string): Promise<void> {
 }
 
 export function convertLocalFileSrc(path: string): string {
-  return convertFileSrc(path);
+  try {
+    return typeof convertFileSrc === "function" ? convertFileSrc(path) : path;
+  } catch {
+    return path;
+  }
 }

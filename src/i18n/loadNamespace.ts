@@ -4,41 +4,18 @@ import {
   normalizeLocale,
   type SupportedLocale,
 } from "./locales";
+import {
+  CORE_NAMESPACES,
+  getBundledNamespaceResourceParts as getNamespaceResourceParts,
+  type LimeNamespace,
+} from "./bundledNamespaceParts";
+export { CORE_NAMESPACES } from "./bundledNamespaceParts";
 
-export const CORE_NAMESPACES = [
-  "common",
-  "navigation",
-  "settings",
-  "workspace",
-  "agent",
-  "errors",
-] as const;
-
-export type LimeNamespace = (typeof CORE_NAMESPACES)[number];
 export type I18nNamespaceResource = Record<string, string>;
 export type BundledI18nResources = Record<
   SupportedLocale,
   Record<LimeNamespace, I18nNamespaceResource>
 >;
-
-const NAMESPACE_RESOURCE_PARTS = {
-  agent: [
-    "agent",
-    "agentHome",
-    "agentInputbar",
-    "agentMessageList",
-    "agentRuntime",
-    "agentSkills",
-    "agentExperts",
-    "agentTeamWorkspace",
-  ],
-} as const satisfies Partial<Record<LimeNamespace, readonly string[]>>;
-
-function hasResourceParts(
-  namespace: LimeNamespace,
-): namespace is keyof typeof NAMESPACE_RESOURCE_PARTS {
-  return namespace in NAMESPACE_RESOURCE_PARTS;
-}
 
 const bundledResourceModules = import.meta.glob<I18nNamespaceResource>(
   "./resources/*/*.json",
@@ -52,12 +29,10 @@ function resourceModuleKey(locale: SupportedLocale, namespace: string) {
   return `./resources/${locale}/${namespace}.json`;
 }
 
-function resourcePartsForNamespace(
+export function getBundledNamespaceResourceParts(
   namespace: LimeNamespace,
 ): readonly string[] {
-  return hasResourceParts(namespace)
-    ? NAMESPACE_RESOURCE_PARTS[namespace]
-    : [namespace];
+  return getNamespaceResourceParts(namespace);
 }
 
 export function hasBundledNamespace(
@@ -65,7 +40,7 @@ export function hasBundledNamespace(
   namespace: LimeNamespace,
 ): boolean {
   const normalizedLocale = normalizeLocale(locale);
-  return resourcePartsForNamespace(namespace).some(
+  return getNamespaceResourceParts(namespace).some(
     (part) =>
       resourceModuleKey(normalizedLocale, part) in bundledResourceModules,
   );
@@ -78,7 +53,7 @@ export function loadNamespaceResource(
   const normalizedLocale = normalizeLocale(locale);
   return Object.assign(
     {},
-    ...resourcePartsForNamespace(namespace).map((part) => {
+    ...getNamespaceResourceParts(namespace).map((part) => {
       const resource =
         bundledResourceModules[resourceModuleKey(normalizedLocale, part)];
       if (resource) {

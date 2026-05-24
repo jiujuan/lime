@@ -46,4 +46,14 @@ describe("fileSystem API", () => {
     expect(convertLocalFileSrc("/tmp/demo.txt")).toBe("asset://demo.txt");
     expect(convertFileSrc).toHaveBeenCalledWith("/tmp/demo.txt");
   });
+
+  it("convertFileSrc 在浏览器环境不可用时应回退原始路径", () => {
+    vi.mocked(convertFileSrc).mockImplementationOnce(() => {
+      throw new TypeError(
+        "Cannot read properties of undefined (reading 'convertFileSrc')",
+      );
+    });
+
+    expect(convertLocalFileSrc("/tmp/demo.txt")).toBe("/tmp/demo.txt");
+  });
 });

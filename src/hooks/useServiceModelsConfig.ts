@@ -4,11 +4,15 @@ import type { ServiceModelsConfig } from "@/lib/api/appConfigTypes";
 
 interface UseServiceModelsConfigResult {
   serviceModels: ServiceModelsConfig;
+  agentResponseLanguage?: string;
   loading: boolean;
 }
 
 export function useServiceModelsConfig(): UseServiceModelsConfigResult {
   const [serviceModels, setServiceModels] = useState<ServiceModelsConfig>({});
+  const [agentResponseLanguage, setAgentResponseLanguage] = useState<
+    string | undefined
+  >();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -24,10 +28,14 @@ export function useServiceModelsConfig(): UseServiceModelsConfigResult {
           return;
         }
         setServiceModels(config.workspace_preferences?.service_models ?? {});
+        setAgentResponseLanguage(
+          config.workspace_preferences?.agent_response_language,
+        );
       } catch (error) {
         console.error("加载服务模型运行时配置失败:", error);
         if (active) {
           setServiceModels({});
+          setAgentResponseLanguage(undefined);
         }
       } finally {
         if (active) {
@@ -50,6 +58,7 @@ export function useServiceModelsConfig(): UseServiceModelsConfigResult {
 
   return {
     serviceModels,
+    agentResponseLanguage,
     loading,
   };
 }

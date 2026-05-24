@@ -279,7 +279,7 @@ describe("SettingsHomePage", () => {
     await leaveTip(heroTip);
 
     const cardTip = await hoverTip("Appearance help");
-    expect(getBodyText()).toContain("Theme, language, and sound cues");
+    expect(getBodyText()).toContain("Theme, interface language, and sound cues");
     await leaveTip(cardTip);
   });
 });

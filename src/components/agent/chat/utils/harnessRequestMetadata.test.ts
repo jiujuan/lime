@@ -267,6 +267,45 @@ describe("harnessRequestMetadata", () => {
     });
   });
 
+  it("应以独立字段透传 Agent response language 且不复用 UI locale", () => {
+    const metadata = buildHarnessRequestMetadata({
+      base: {
+        response_language: "ja-JP",
+        agentResponseLanguage: "ko-KR",
+      },
+      theme: "general",
+      preferences: {
+        webSearch: false,
+        thinking: true,
+        task: false,
+        subagent: false,
+      },
+      sessionMode: "default",
+      agentResponseLanguage: "en-US",
+    });
+
+    expect(metadata.agent_response_language).toBe("en-US");
+    expect(metadata.language).toBeUndefined();
+  });
+
+  it("应兼容读取已有 response language alias 但 current 写入 snake_case", () => {
+    const metadata = buildHarnessRequestMetadata({
+      base: {
+        response_language: " ja-JP ",
+      },
+      theme: "general",
+      preferences: {
+        webSearch: false,
+        thinking: true,
+        task: false,
+        subagent: false,
+      },
+      sessionMode: "default",
+    });
+
+    expect(metadata.agent_response_language).toBe("ja-JP");
+  });
+
   it("应按 P3D contract 透传 workspace skill binding 候选且不打开模型技能", () => {
     const metadata = buildHarnessRequestMetadata({
       theme: "general",

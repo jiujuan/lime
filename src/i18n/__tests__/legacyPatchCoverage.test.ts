@@ -1,14 +1,14 @@
 /**
- * Translation Coverage Test
+ * Legacy Patch Coverage Test
  *
- * Verifies that translation patch files are valid and contain expected entries
+ * Verifies that legacy patch files are valid and contain expected entries.
  */
 
 import { describe, it, expect } from "vitest";
 import enPatch from "../legacy-patch/patches/en.json";
 import zhPatch from "../legacy-patch/patches/zh.json";
 
-describe("Translation Coverage", () => {
+describe("Legacy Patch Coverage", () => {
   describe("Patch File Validity", () => {
     it("should load en.json without errors", () => {
       expect(enPatch).toBeDefined();
@@ -24,19 +24,17 @@ describe("Translation Coverage", () => {
       const enKeys = Object.keys(enPatch).filter((k) => !k.startsWith("//"));
       const zhKeys = Object.keys(zhPatch).filter((k) => !k.startsWith("//"));
 
-      // Both should have similar number of keys (allowing some variance)
       expect(Math.abs(enKeys.length - zhKeys.length)).toBeLessThan(50);
     });
   });
 
-  describe("Translation Quality", () => {
+  describe("Legacy Patch Quality", () => {
     it("should not have [TODO: Translate] markers in production", () => {
       const enValues = Object.values(enPatch);
       const todoCount = enValues.filter(
         (v) => typeof v === "string" && v.includes("[TODO: Translate]"),
       ).length;
 
-      // Allow some TODOs in development, but warn if too many
       if (todoCount > 0) {
         console.warn(`Found ${todoCount} [TODO: Translate] markers in en.json`);
       }
@@ -46,7 +44,6 @@ describe("Translation Coverage", () => {
       const zhKeys = Object.keys(zhPatch).filter((k) => !k.startsWith("//"));
       const chineseKeys = zhKeys.filter((k) => /[\u4e00-\u9fff]/.test(k));
 
-      // Most keys should contain Chinese characters
       expect(chineseKeys.length).toBeGreaterThan(zhKeys.length * 0.8);
     });
 
@@ -55,13 +52,12 @@ describe("Translation Coverage", () => {
         ([k]) => !k.startsWith("//"),
       );
 
-      // Check that most Chinese keys map to themselves
       const identityMappings = entries.filter(([k, v]) => k === v).length;
       expect(identityMappings).toBeGreaterThan(entries.length * 0.8);
     });
   });
 
-  describe("Common Translations", () => {
+  describe("Legacy Patch Common Entries", () => {
     it("should have translations for common UI elements", () => {
       const commonElements = ["设置", "保存", "取消", "确认", "删除"];
 
@@ -98,7 +94,7 @@ describe("Translation Coverage", () => {
     });
   });
 
-  describe("Translation Consistency", () => {
+  describe("Legacy Patch Consistency", () => {
     it("should not have empty translations", () => {
       const enEntries = Object.entries(enPatch).filter(
         ([k]) => !k.startsWith("//"),
@@ -115,7 +111,6 @@ describe("Translation Coverage", () => {
 
       entries.forEach(([key, value]) => {
         if (typeof value === "string" && value.length > 0) {
-          // English translation shouldn't be 10x longer than Chinese
           expect(value.length).toBeLessThan(key.length * 10);
         }
       });

@@ -435,6 +435,7 @@ mod tests {
                         responses.push(response);
                     }
                     Ok(AgentEvent::McpNotification(_)) => {}
+                    Ok(AgentEvent::ToolInputDelta { .. }) => {}
                     Ok(AgentEvent::ModelChange { .. }) => {}
                     Ok(AgentEvent::HistoryReplaced(_updated_conversation)) => {
                         // We should update the conversation here, but we're not reading it

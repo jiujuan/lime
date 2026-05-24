@@ -23,7 +23,40 @@ export interface LocaleIssue {
   namespaces: NamespaceIssue[];
 }
 
+export interface NamespaceCoverage {
+  extraKeyCount: number;
+  coverageRatio: number;
+  missingKeyCount: number;
+  namespace: string;
+  sourceKeyCount: number;
+  translatedKeyCount: number;
+}
+
+export interface LocaleCoverage {
+  coverageRatio: number;
+  extraKeyCount: number;
+  locale: string;
+  missingKeyCount: number;
+  namespaceCoverage: NamespaceCoverage[];
+  sourceKeyCount: number;
+  translatedKeyCount: number;
+}
+
+export interface TranslationCoverageReport {
+  localeSummaries: LocaleCoverage[];
+  summary: {
+    coverageRatio: number;
+    extraKeyCount: number;
+    fullCoverageLocaleCount: number;
+    localeCount: number;
+    missingKeyCount: number;
+    sourceKeyCount: number;
+    translatedKeyCount: number;
+  };
+}
+
 export interface TranslationCheckResult {
+  coverage: TranslationCoverageReport;
   resourcesDir: string;
   sourceLocale: string;
   locales: string[];
@@ -32,8 +65,11 @@ export interface TranslationCheckResult {
   issues: LocaleIssue[];
 }
 
+export type TranslationReportFormat = "text" | "json";
+
 interface CliOptions extends TranslationCheckOptions {
   fix: boolean;
+  format: TranslationReportFormat;
   verbose: boolean;
 }
 
@@ -120,6 +156,124 @@ function countSourceKeys(sourceLocaleDir: string, namespaces: string[]): number 
   );
 }
 
+function countSharedKeys(sourceKeys: Set<string>, targetKeys: Set<string>): number {
+  let count = 0;
+  for (const key of sourceKeys) {
+    if (targetKeys.has(key)) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function buildNamespaceCoverage(
+  namespace: string,
+  sourceKeys: Set<string>,
+  targetKeys: Set<string>,
+): NamespaceCoverage {
+  const sourceKeyCount = sourceKeys.size;
+  const translatedKeyCount = countSharedKeys(sourceKeys, targetKeys);
+  const missingKeyCount = sourceKeyCount - translatedKeyCount;
+  const extraKeyCount = targetKeys.size - translatedKeyCount;
+
+  return {
+    extraKeyCount,
+    coverageRatio: sourceKeyCount > 0 ? translatedKeyCount / sourceKeyCount : 1,
+    missingKeyCount,
+    namespace,
+    sourceKeyCount,
+    translatedKeyCount,
+  };
+}
+
+function buildCoverageReport(
+  sourceLocaleDir: string,
+  locales: string[],
+  namespaces: string[],
+): TranslationCoverageReport {
+  const sourceNamespaceKeys = new Map<string, Set<string>>();
+  for (const namespace of namespaces) {
+    sourceNamespaceKeys.set(namespace, readNamespaceKeys(sourceLocaleDir, namespace));
+  }
+
+  const localeSummaries = locales
+    .filter((locale) => locale !== path.basename(sourceLocaleDir))
+    .map((locale) => {
+      const localeDir = path.join(path.dirname(sourceLocaleDir), locale);
+      const namespaceCoverage = namespaces.map((namespace) =>
+        buildNamespaceCoverage(
+          namespace,
+          sourceNamespaceKeys.get(namespace) ?? new Set(),
+          readNamespaceKeys(localeDir, namespace),
+        ),
+      );
+
+      const sourceKeyCount = namespaceCoverage.reduce(
+        (total, item) => total + item.sourceKeyCount,
+        0,
+      );
+      const translatedKeyCount = namespaceCoverage.reduce(
+        (total, item) => total + item.translatedKeyCount,
+        0,
+      );
+      const missingKeyCount = namespaceCoverage.reduce(
+        (total, item) => total + item.missingKeyCount,
+        0,
+      );
+      const extraKeyCount = namespaceCoverage.reduce(
+        (total, item) => total + item.extraKeyCount,
+        0,
+      );
+
+      return {
+        coverageRatio: sourceKeyCount > 0 ? translatedKeyCount / sourceKeyCount : 1,
+        extraKeyCount,
+        locale,
+        missingKeyCount,
+        namespaceCoverage,
+        sourceKeyCount,
+        translatedKeyCount,
+      } satisfies LocaleCoverage;
+    });
+
+  const sourceKeyCount = namespaces.reduce(
+    (total, namespace) => total + (sourceNamespaceKeys.get(namespace)?.size ?? 0),
+    0,
+  );
+  const translatedKeyCount = localeSummaries.reduce(
+    (total, item) => total + item.translatedKeyCount,
+    0,
+  );
+  const missingKeyCount = localeSummaries.reduce(
+    (total, item) => total + item.missingKeyCount,
+    0,
+  );
+  const extraKeyCount = localeSummaries.reduce(
+    (total, item) => total + item.extraKeyCount,
+    0,
+  );
+  const fullCoverageLocaleCount = localeSummaries.filter(
+    (item) => item.coverageRatio >= 1,
+  ).length;
+
+  return {
+    localeSummaries,
+    summary: {
+      coverageRatio:
+        localeSummaries.length > 0
+          ? localeSummaries.reduce((total, item) => total + item.coverageRatio, 0) /
+            localeSummaries.length
+          : 1,
+      extraKeyCount,
+      fullCoverageLocaleCount,
+      localeCount: localeSummaries.length,
+      missingKeyCount,
+      sourceKeyCount,
+      translatedKeyCount,
+    },
+  };
+}
+
 export function hasTranslationIssues(result: TranslationCheckResult): boolean {
   return result.issues.some(
     (issue) =>
@@ -190,6 +344,7 @@ export function analyzeTranslations(
   }
 
   return {
+    coverage: buildCoverageReport(sourceLocaleDir, locales, namespaces),
     resourcesDir,
     sourceLocale,
     locales,
@@ -247,14 +402,45 @@ function formatList(items: string[]): string {
   return items.length === 0 ? "-" : items.join(", ");
 }
 
+function createTranslationCheckReport(
+  result: TranslationCheckResult,
+): Record<string, unknown> {
+  return {
+    schemaVersion: "lime.i18n.translationCheckReport.v1",
+    absoluteResourcesDir: result.resourcesDir,
+    resourcesDir:
+      path.relative(REPO_ROOT, result.resourcesDir) || result.resourcesDir,
+    sourceLocale: result.sourceLocale,
+    locales: result.locales,
+    namespaces: result.namespaces,
+    summary: {
+      hasIssues: hasTranslationIssues(result),
+      issueCount: result.issues.length,
+      localeCount: result.locales.length,
+      namespaceCount: result.namespaces.length,
+      sourceKeyCount: result.sourceKeyCount,
+    },
+    coverage: result.coverage,
+    issues: result.issues,
+  };
+}
+
 export function formatTranslationReport(
   result: TranslationCheckResult,
-  options: { verbose?: boolean } = {},
+  options: { format?: TranslationReportFormat; verbose?: boolean } = {},
 ): string {
+  if (options.format === "json") {
+    return `${JSON.stringify(createTranslationCheckReport(result), null, 2)}${os.EOL}`;
+  }
+
   const lines: string[] = [];
   const issueCount = result.issues.length;
+  const coverage = result.coverage.summary;
   lines.push(
     `[i18n:check] resources=${path.relative(REPO_ROOT, result.resourcesDir) || result.resourcesDir} source=${result.sourceLocale} locales=${result.locales.length} namespaces=${result.namespaces.length} sourceKeys=${result.sourceKeyCount}`,
+  );
+  lines.push(
+    `[i18n:check] coverage=${(coverage.coverageRatio * 100).toFixed(1)}% translated=${coverage.translatedKeyCount}/${coverage.sourceKeyCount} missing=${coverage.missingKeyCount} extra=${coverage.extraKeyCount} fullCoverageLocales=${coverage.fullCoverageLocaleCount}/${coverage.localeCount}`,
   );
 
   if (!hasTranslationIssues(result)) {
@@ -262,11 +448,28 @@ export function formatTranslationReport(
     if (options.verbose) {
       lines.push(`[i18n:check] locale 列表: ${result.locales.join(", ")}`);
       lines.push(`[i18n:check] namespace 列表: ${result.namespaces.join(", ")}`);
+      for (const localeCoverage of result.coverage.localeSummaries) {
+        lines.push(
+          `[i18n:check] coverage locale=${localeCoverage.locale} ratio=${(localeCoverage.coverageRatio * 100).toFixed(1)}% translated=${localeCoverage.translatedKeyCount}/${localeCoverage.sourceKeyCount} missing=${localeCoverage.missingKeyCount} extra=${localeCoverage.extraKeyCount}`,
+        );
+      }
     }
     return lines.join(os.EOL);
   }
 
   lines.push(`[i18n:check] 发现 ${issueCount} 个 locale 存在翻译结构差异。`);
+  if (options.verbose) {
+    for (const localeCoverage of result.coverage.localeSummaries) {
+      lines.push(
+        `[i18n:check] coverage locale=${localeCoverage.locale} ratio=${(localeCoverage.coverageRatio * 100).toFixed(1)}% translated=${localeCoverage.translatedKeyCount}/${localeCoverage.sourceKeyCount} missing=${localeCoverage.missingKeyCount} extra=${localeCoverage.extraKeyCount}`,
+      );
+      for (const namespaceCoverage of localeCoverage.namespaceCoverage) {
+        lines.push(
+          `  namespace=${namespaceCoverage.namespace} ratio=${(namespaceCoverage.coverageRatio * 100).toFixed(1)}% translated=${namespaceCoverage.translatedKeyCount}/${namespaceCoverage.sourceKeyCount} missing=${namespaceCoverage.missingKeyCount} extra=${namespaceCoverage.extraKeyCount}`,
+        );
+      }
+    }
+  }
   for (const localeIssue of result.issues) {
     lines.push(`[i18n:check] locale=${localeIssue.locale}`);
     if (localeIssue.missingNamespaces.length > 0) {
@@ -294,6 +497,7 @@ export function formatTranslationReport(
 function parseCliArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     fix: false,
+    format: "text",
     resourcesDir: DEFAULT_RESOURCES_DIR,
     sourceLocale: DEFAULT_SOURCE_LOCALE,
     verbose: false,
@@ -306,6 +510,17 @@ function parseCliArgs(argv: string[]): CliOptions {
     if (arg === "--fix") {
       options.fix = true;
       continue;
+    }
+    if (arg === "--format") {
+      if (next === "json" || next === "text") {
+        options.format = next;
+        index += 1;
+        continue;
+      }
+
+      throw new Error(
+        `Unknown or missing format value: ${next ?? "(missing)"}`,
+      );
     }
     if (arg === "--verbose") {
       options.verbose = true;
@@ -322,7 +537,7 @@ function parseCliArgs(argv: string[]): CliOptions {
       continue;
     }
     if (arg === "-h" || arg === "--help") {
-      console.log(`Usage: npm run detect-translations -- [--fix] [--verbose] [--resources-dir <dir>] [--source-locale <locale>]`);
+      console.log(`Usage: npm run detect-translations -- [--fix] [--format text|json] [--verbose] [--resources-dir <dir>] [--source-locale <locale>]`);
       process.exit(0);
     }
 
@@ -340,7 +555,12 @@ export function runCli(argv = process.argv.slice(2)): number {
   }
 
   const result = analyzeTranslations(options);
-  console.log(formatTranslationReport(result, { verbose: options.verbose }));
+  console.log(
+    formatTranslationReport(result, {
+      format: options.format,
+      verbose: options.verbose,
+    }),
+  );
   return hasTranslationIssues(result) ? 1 : 0;
 }
 

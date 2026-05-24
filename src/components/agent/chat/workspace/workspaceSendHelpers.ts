@@ -629,6 +629,7 @@ interface BuildWorkspaceRequestMetadataOptions {
   selectedTeamLabel?: string;
   selectedTeamSummary?: string;
   teamMemoryShadowSnapshot?: TeamMemorySnapshot | null;
+  agentResponseLanguage?: string | null;
 }
 
 function applyActiveContextPrompt(
@@ -874,6 +875,7 @@ export function buildWorkspaceRequestMetadata(
     selectedTeamLabel,
     selectedTeamSummary,
     teamMemoryShadowSnapshot,
+    agentResponseLanguage,
   } = options;
 
   const existingHarnessMetadata = omitLegacyAccessModeFromHarnessMetadata(
@@ -956,6 +958,7 @@ export function buildWorkspaceRequestMetadata(
       selectedTeamSummary: resolvedSelectedTeamSummary,
       selectedTeamRoles: resolvedSelectedTeamRoles,
       teamMemoryShadow: resolvedTeamMemoryShadow,
+      agentResponseLanguage,
       oemRouting: resolvedOemRouting,
       tenantFeatureFlags: resolvedTenantFeatureFlags,
     }),

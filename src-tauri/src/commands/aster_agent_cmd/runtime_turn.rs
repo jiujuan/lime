@@ -56,6 +56,7 @@ const TURN_KNOWLEDGE_PACK_PROMPT_MARKER: &str = "【运行时知识包】";
 const TURN_MEMORY_PREFETCH_PROMPT_MARKER: &str = "【运行时记忆召回】";
 const TURN_RUNTIME_ENVIRONMENT_PROMPT_MARKER: &str = "【运行时执行环境】";
 const TURN_LOCAL_PATH_FOCUS_PROMPT_MARKER: &str = "【本回合本地路径焦点】";
+const TURN_RESPONSE_LANGUAGE_PROMPT_MARKER: &str = "【AI 回复语言】";
 const LIME_RUNTIME_METADATA_KEY: &str = "lime_runtime";
 const AGENT_APP_RUNTIME_EVENT_PREFIX: &str = "agent_app_runtime:";
 const AGENTUI_CONTEXT_METADATA_KEY: &str = "agentui_context";
@@ -5176,6 +5177,13 @@ fn build_full_runtime_system_prompt(
     );
     prompt = apply_turn_metadata_prompt_stage(
         turn_input_builder,
+        TurnPromptAugmentationStageKind::ResponseLanguage,
+        prompt,
+        request_metadata,
+        merge_system_prompt_with_response_language,
+    );
+    prompt = apply_turn_metadata_prompt_stage(
+        turn_input_builder,
         TurnPromptAugmentationStageKind::Artifact,
         prompt,
         request_metadata,
@@ -7053,6 +7061,53 @@ fn metadata_string_at_paths(
             .and_then(serde_json::Value::as_str)
             .and_then(|value| non_empty_projection_text(Some(value)))
     })
+}
+
+fn merge_system_prompt_with_response_language(
+    prompt: Option<String>,
+    request_metadata: Option<&serde_json::Value>,
+) -> Option<String> {
+    let Some(response_language) = extract_harness_string(
+        request_metadata,
+        &[
+            "agent_response_language",
+            "agentResponseLanguage",
+            "response_language",
+            "responseLanguage",
+        ],
+    ) else {
+        return prompt;
+    };
+
+    let response_language = response_language.trim();
+    if response_language.is_empty()
+        || prompt
+            .as_ref()
+            .is_some_and(|base| base.contains(TURN_RESPONSE_LANGUAGE_PROMPT_MARKER))
+    {
+        return prompt;
+    }
+
+    let guidance = if response_language.eq_ignore_ascii_case("auto") {
+        format!(
+            "{TURN_RESPONSE_LANGUAGE_PROMPT_MARKER}\n\
+- 默认根据用户最近输入语言与当前上下文自然回复。\n\
+- 如果用户显式要求其他语言，优先遵循当前消息。\n\
+- 不要把 UI locale 当成唯一回复语言事实源。"
+        )
+    } else {
+        format!(
+            "{TURN_RESPONSE_LANGUAGE_PROMPT_MARKER}\n\
+- 默认使用 {response_language} 回复。\n\
+- 如果当前消息显式要求其他语言，优先遵循当前消息。\n\
+- 不要把 UI locale、浏览器环境语言或内容产物语言当成同一个字段。"
+        )
+    };
+
+    match prompt {
+        Some(base) => Some(format!("{base}\n\n{guidance}")),
+        None => Some(guidance),
+    }
 }
 
 fn resolve_agent_app_output_contract_value(
@@ -11485,6 +11540,42 @@ mod tests {
             .is_some_and(|files| files
                 .iter()
                 .any(|value| value.as_str() == Some("compiled/brief.md"))));
+    }
+
+    #[test]
+    fn merge_system_prompt_with_response_language_should_append_explicit_locale_guidance() {
+        let metadata = json!({
+            "harness": {
+                "agent_response_language": "en-US"
+            }
+        });
+
+        let prompt = merge_system_prompt_with_response_language(
+            Some("基础系统提示".to_string()),
+            Some(&metadata),
+        )
+        .expect("response language prompt");
+
+        assert!(prompt.contains("基础系统提示"));
+        assert!(prompt.contains(TURN_RESPONSE_LANGUAGE_PROMPT_MARKER));
+        assert!(prompt.contains("默认使用 en-US 回复"));
+        assert!(prompt.contains("不要把 UI locale、浏览器环境语言或内容产物语言当成同一个字段"));
+    }
+
+    #[test]
+    fn merge_system_prompt_with_response_language_should_keep_auto_decision_weak() {
+        let metadata = json!({
+            "harness": {
+                "response_language": "auto"
+            }
+        });
+
+        let prompt = merge_system_prompt_with_response_language(None, Some(&metadata))
+            .expect("response language prompt");
+
+        assert!(prompt.contains(TURN_RESPONSE_LANGUAGE_PROMPT_MARKER));
+        assert!(prompt.contains("默认根据用户最近输入语言与当前上下文自然回复"));
+        assert!(prompt.contains("不要把 UI locale 当成唯一回复语言事实源"));
     }
 
     #[test]

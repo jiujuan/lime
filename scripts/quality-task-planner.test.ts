@@ -65,6 +65,9 @@ describe("quality-task-planner", () => {
 
     expect(tasks.workflow).toBe(false);
     expect(tasks.integrity).toBe(false);
+    expect(tasks.i18n).toBe(false);
+    expect(tasks.i18nHardcoded).toBe(false);
+    expect(tasks.i18nUnused).toBe(false);
     expect(tasks.frontend).toBe(false);
     expect(tasks.bridge).toBe(false);
     expect(tasks.guiSmoke).toBe(false);
@@ -88,10 +91,58 @@ describe("quality-task-planner", () => {
 
     expect(tasks.workflow).toBe(true);
     expect(tasks.integrity).toBe(true);
+    expect(tasks.i18n).toBe(true);
+    expect(tasks.i18nHardcoded).toBe(true);
+    expect(tasks.i18nUnused).toBe(true);
     expect(tasks.frontend).toBe(true);
     expect(tasks.bridge).toBe(true);
     expect(tasks.guiSmoke).toBe(true);
     expect(tasks.bridgeReasons).toContain("workflow_full_suite");
+  });
+
+  it("i18n resource 改动应触发翻译资源结构校验", () => {
+    const tasks = detectTasks(["src/i18n/resources/en-US/agent.json"]);
+
+    expect(tasks.i18n).toBe(true);
+    expect(tasks.i18nHardcoded).toBe(false);
+    expect(tasks.i18nUnused).toBe(true);
+    expect(tasks.frontend).toBe(true);
+    expect(tasks.docsOnly).toBe(false);
+    expect(tasks.recommendedCommands).toEqual([
+      "npm run i18n:translation-pr-pack:json -- --output docs/roadmap/i18n/evidence/translation-pr-pack.json",
+    ]);
+  });
+
+  it("i18n workflow 脚本改动应触发翻译结构校验并推荐 PR pack", () => {
+    const tasks = detectTasks(["scripts/i18n-translation-pr-pack.ts"]);
+
+    expect(tasks.i18n).toBe(true);
+    expect(tasks.i18nHardcoded).toBe(false);
+    expect(tasks.i18nUnused).toBe(true);
+    expect(tasks.frontend).toBe(false);
+    expect(tasks.docsOnly).toBe(false);
+    expect(tasks.recommendedCommands).toEqual([
+      "npm run i18n:translation-pr-pack:json -- --output docs/roadmap/i18n/evidence/translation-pr-pack.json",
+    ]);
+  });
+
+  it("patch retirement 相关脚本改动应触发 GUI smoke 并推荐 gate", () => {
+    const tasks = detectTasks(["scripts/i18n-patch-retirement-gate.mjs"]);
+
+    expect(tasks.guiSmoke).toBe(true);
+    expect(tasks.frontend).toBe(false);
+    expect(tasks.recommendedCommands).toEqual([
+      "npm run i18n:patch-retirement-gate -- --check",
+    ]);
+  });
+
+  it("前端源码改动应触发硬编码文案扫描", () => {
+    const tasks = detectTasks(["src/components/settings/LanguagePicker.tsx"]);
+
+    expect(tasks.i18nHardcoded).toBe(true);
+    expect(tasks.i18n).toBe(false);
+    expect(tasks.i18nUnused).toBe(true);
+    expect(tasks.frontend).toBe(true);
   });
 
   it("正式工作流搭配项目资料主路径改动时仍应推荐产品 E2E", () => {

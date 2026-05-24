@@ -1,0 +1,40 @@
+{
+  "appPackageJson": {
+    "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
+    "name": "lime",
+    "version": "1.47.0"
+  },
+  "headlessTauriConfig": {
+    "identifier": "com.limecloud.lime.headless",
+    "productName": "Lime",
+    "title": "Lime"
+  },
+  "repoRoot": "/Users/coso/Documents/dev/ai/aiclientproxy/lime",
+  "shellCapability": {
+    "description": "Agent App 独立 Shell 只允许使用 Tauri IPC 调用 Lime 宿主封装能力。",
+    "identifier": "agent-app-shell"
+  },
+  "srcTauriCargoToml": {
+    "description": null,
+    "homepage": null,
+    "packageVersion": null,
+    "workspaceVersion": null
+  },
+  "tauriConfig": {
+    "bundleTargets": "all",
+    "deepLinkSchemes": [
+      "lime"
+    ],
+    "identifier": "com.limecloud.lime",
+    "productName": "Lime",
+    "title": "Lime",
+    "updaterPubkeyPlaceholder": true
+  },
+  "schemaVersion": "lime.i18n.appMetadataWorkflowReport.v1",
+  "summary": {
+    "hasInstallerLocalizationWorkflow": false,
+    "hasLocalizedAppMetadataArtifacts": true,
+    "hasLocalizedMetadataFields": true,
+    "hasLocaleAwareMetadataSources": true
+  }
+}

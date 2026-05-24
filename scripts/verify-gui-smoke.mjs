@@ -56,6 +56,12 @@ const DEFAULT_I18N_PATCH_REPORT_OUTPUT = path.join(
   "i18n",
   "patch-metrics-report.json",
 );
+const DEFAULT_LEGACY_SURFACE_REPORT_OUTPUT = path.join(
+  rootDir,
+  ".lime",
+  "governance",
+  "legacy-surface-report.json",
+);
 const tauriCommand =
   process.platform === "win32"
     ? path.join(rootDir, "node_modules", ".bin", "tauri.cmd")
@@ -191,6 +197,7 @@ const DEFAULTS = {
   includeKnowledgeProductE2e: false,
   i18nPatchMetricsOutput: DEFAULT_I18N_PATCH_METRICS_OUTPUT,
   i18nPatchReportOutput: DEFAULT_I18N_PATCH_REPORT_OUTPUT,
+  legacySurfaceReportOutput: DEFAULT_LEGACY_SURFACE_REPORT_OUTPUT,
   skipI18nPatchMetrics: false,
   sampleProjectName: "Lime Smoke Workspace",
 };
@@ -236,6 +243,8 @@ Lime GUI 冒烟入口
                              导出 GUI 页面上的 window.__I18N_METRICS__，默认 .lime/i18n/patch-metrics.json
   --i18n-patch-report-output <path>
                              写入 Patch metrics JSON 报告，默认 .lime/i18n/patch-metrics-report.json
+  --legacy-surface-report-output <path>
+                             写入 legacy surface JSON 报告，默认 .lime/governance/legacy-surface-report.json
   --skip-i18n-patch-metrics  跳过 Patch metrics 导出与报告
   -h, --help                  显示帮助
 `);
@@ -318,6 +327,14 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (arg === "--legacy-surface-report-output" && argv[index + 1]) {
+      options.legacySurfaceReportOutput = path.resolve(
+        String(argv[index + 1]).trim(),
+      );
+      index += 1;
+      continue;
+    }
+
     if (arg === "--skip-i18n-patch-metrics") {
       options.skipI18nPatchMetrics = true;
       continue;
@@ -366,6 +383,9 @@ function parseArgs(argv) {
     }
     if (!options.i18nPatchReportOutput) {
       throw new Error("--i18n-patch-report-output 不能为空");
+    }
+    if (!options.legacySurfaceReportOutput) {
+      throw new Error("--legacy-surface-report-output 不能为空");
     }
   }
 
@@ -911,14 +931,14 @@ async function cleanupStaleGuiSmokeChromeProfiles(
 
 function writeI18nPatchMetricsReport(options) {
   if (options.skipI18nPatchMetrics) {
-    return;
+    return false;
   }
 
   if (!fs.existsSync(options.i18nPatchMetricsOutput)) {
     console.warn(
       `[verify:gui-smoke] 未发现 i18n Patch metrics: ${options.i18nPatchMetricsOutput}`,
     );
-    return;
+    return false;
   }
 
   const metrics = JSON.parse(
@@ -945,6 +965,45 @@ function writeI18nPatchMetricsReport(options) {
   );
   console.log(
     `[verify:gui-smoke] i18n Patch metrics report: ${options.i18nPatchReportOutput}`,
+  );
+  return true;
+}
+
+async function runI18nPatchRetirementGate(options) {
+  if (options.skipI18nPatchMetrics) {
+    return;
+  }
+
+  await runCommand(
+    npmCommand,
+    [
+      "run",
+      "governance:legacy-report",
+      "--",
+      "--json",
+      "--output",
+      options.legacySurfaceReportOutput,
+    ],
+    "governance:legacy-report",
+    options.timeoutMs + 30_000,
+  );
+
+  await runCommand(
+    npmCommand,
+    [
+      "run",
+      "i18n:patch-retirement-gate",
+      "--",
+      "--check",
+      "--format",
+      "json",
+      "--patch-report",
+      options.i18nPatchReportOutput,
+      "--legacy-report",
+      options.legacySurfaceReportOutput,
+    ],
+    "i18n:patch-retirement-gate",
+    options.timeoutMs + 30_000,
   );
 }
 
@@ -1658,7 +1717,10 @@ async function main() {
       options.timeoutMs + 30_000,
     );
 
-    writeI18nPatchMetricsReport(options);
+    const patchMetricsWritten = writeI18nPatchMetricsReport(options);
+    if (patchMetricsWritten) {
+      await runI18nPatchRetirementGate(options);
+    }
 
     if (options.includeKnowledgeProductE2e) {
       await runCommand(

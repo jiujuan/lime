@@ -459,6 +459,7 @@ mod tests {
                 "kind": "generation_topic",
                 "source": "auxiliary_generation_topic"
             },
+            "recent_response_language": "en-US",
             "routing_decision": {
                 "routingMode": "single_candidate",
                 "decisionSource": "service_model_setting",

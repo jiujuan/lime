@@ -430,15 +430,6 @@ describe("i18n namespace loader", () => {
         "sceneAppExecutionSummary.overview.referenceCount",
       );
       expect(resources[locale].agent).toHaveProperty(
-        "sceneAppExecutionSummary.runtimePack.title",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "sceneAppExecutionSummary.followup.action.saveInspiration",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "sceneAppExecutionSummary.orchestration.blockedReason",
-      );
-      expect(resources[locale].agent).toHaveProperty(
         "generalWorkbench.workflow.current.title",
       );
       expect(resources[locale].agent).toHaveProperty(
@@ -493,6 +484,12 @@ describe("i18n namespace loader", () => {
         "generalWorkbench.context.detail.query",
       );
       expect(resources[locale].agent).toHaveProperty(
+        "generalWorkbench.context.detail.notFound",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "generalWorkbench.context.detail.sourceTokens",
+      );
+      expect(resources[locale].agent).toHaveProperty(
         "generalWorkbench.context.list.summary",
       );
       expect(resources[locale].agent).toHaveProperty(
@@ -514,16 +511,10 @@ describe("i18n namespace loader", () => {
         "skills.workspace.curatedTask.home.referenceSummary.focused",
       );
       expect(resources[locale].agent).toHaveProperty(
-        "skills.workspace.runtimeEnable.prompt.intro",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "skills.workspace.installedSkill.entryBannerWithReplay",
+        "sceneAppExecutionSummary.followup.action.saveInspiration",
       );
       expect(resources[locale].agent).toHaveProperty(
         "skills.workspace.managedJob.created",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "skills.workspace.reviewBanner.action",
       );
       expect(resources[locale].agent).toHaveProperty(
         "curatedTask.templates.recommendation.recentReviewReasonLabel",
@@ -1409,12 +1400,6 @@ describe("i18n namespace loader", () => {
         "settings.automation.focus.title",
       );
       expect(resources[locale].settings).toHaveProperty(
-        "settings.automation.focus.action.openDetail",
-      );
-      expect(resources[locale].settings).toHaveProperty(
-        "settings.automation.focus.strip.recentResult",
-      );
-      expect(resources[locale].settings).toHaveProperty(
         "settings.automation.health.title",
       );
       expect(resources[locale].settings).toHaveProperty(
@@ -1580,6 +1565,17 @@ describe("i18n namespace loader", () => {
         "errors.crashRecovery.moduleImportFailure.prefix",
       );
     }
+  });
+
+  it("common 启动文案应明确是界面语言准备", () => {
+    const resources = loadBundledI18nResources();
+
+    expect(
+      resources["en-US"].common["common.startupLoading.description"],
+    ).toBe("Preparing interface language settings and workspace entry. Please wait.");
+    expect(
+      resources["zh-CN"].common["common.startupLoading.description"],
+    ).toBe("正在准备界面语言配置与工作台入口，请稍候。");
   });
 
   it("应能检测已打包 namespace，并把旧 locale 归一后查询", () => {

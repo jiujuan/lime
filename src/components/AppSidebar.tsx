@@ -4369,15 +4369,15 @@ export function AppSidebar({
     "navigation.sidebar.search.moreRecent",
     "查看更多对话",
   );
-  const languageMenuLabel = t("navigation.sidebar.account.language", "语言");
   const interfaceLanguageLabel = t(
     "navigation.sidebar.account.interfaceLanguage",
     "界面语言",
   );
   const selectLanguageLabel = t(
     "navigation.sidebar.account.selectLanguage",
-    "选择语言",
+    "选择界面语言",
   );
+  const languageMenuLabel = interfaceLanguageLabel;
   const accountOpenUserMenuLabel = t(
     "navigation.sidebar.account.openMenu",
     "打开用户菜单",
@@ -5266,7 +5266,7 @@ export function AppSidebar({
                                 "navigation.sidebar.account.switchLanguage",
                                 {
                                   language: option.label,
-                                  defaultValue: "切换语言为{{language}}",
+                                  defaultValue: "切换界面语言为{{language}}",
                                 },
                               )}
                               onClick={() =>

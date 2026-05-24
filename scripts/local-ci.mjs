@@ -19,6 +19,14 @@ const BRIDGE_REASON_LABELS = {
   workflow_full_suite: "workflow 全量",
 };
 
+const I18N_HARDCODED_SCAN_PREFIXES = [
+  "src/components/",
+  "src/features/",
+  "src/pages/",
+];
+const I18N_HARDCODED_SCAN_FILES = new Set(["src/App.tsx", "src/main.tsx"]);
+const I18N_HARDCODED_SCAN_FILE_PATTERNS = [/\.(test|spec)\.[^.]+$/];
+
 function parseArgs(argv) {
   const result = {
     full: false,
@@ -111,6 +119,15 @@ function printSummary(changedFiles, tasks) {
   if (tasks.integrity) {
     console.log("[local-ci] - 一致性校验");
   }
+  if (tasks.i18n) {
+    console.log("[local-ci] - i18n 资源结构校验");
+  }
+  if (tasks.i18nHardcoded) {
+    console.log("[local-ci] - i18n 用户可见硬编码扫描");
+  }
+  if (tasks.i18nUnused) {
+    console.log("[local-ci] - i18n 未引用 key 检查");
+  }
   if (tasks.frontend) {
     console.log("[local-ci] - 前端校验");
   }
@@ -146,7 +163,7 @@ function printSummary(changedFiles, tasks) {
   }
 }
 
-function runSelectedTasks(tasks) {
+function runSelectedTasks(changedFiles, tasks) {
   if (tasks.docsOnly) {
     return;
   }
@@ -155,8 +172,27 @@ function runSelectedTasks(tasks) {
     runCommand(npmCommand, ["run", "verify:app-version"]);
   }
 
+  if (tasks.i18n) {
+    runCommand(npmCommand, ["run", "i18n:check"]);
+  }
+  if (tasks.i18nUnused) {
+    runCommand(npmCommand, ["run", "i18n:unused", "--", "--check"]);
+  }
+
   if (tasks.frontend) {
     runCommand(npmCommand, ["run", "lint"]);
+    if (tasks.i18nHardcoded) {
+      const scanFiles = collectI18nHardcodedScanFiles(changedFiles);
+      if (scanFiles.length > 0) {
+        runCommand(npmCommand, [
+          "run",
+          "i18n:scan",
+          "--",
+          "--files",
+          ...scanFiles,
+        ]);
+      }
+    }
     runCommand(npmCommand, ["run", "typecheck"]);
     runCommand(npmCommand, ["test"]);
   }
@@ -201,8 +237,28 @@ function main() {
     staged: options.staged,
   });
   printSummary(changedFiles, tasks);
-  runSelectedTasks(tasks);
+  runSelectedTasks(changedFiles, tasks);
   console.log("\n[local-ci] 本地校验完成。");
+}
+
+function collectI18nHardcodedScanFiles(changedFiles) {
+  return Array.from(new Set(changedFiles))
+    .map((file) => String(file).trim())
+    .filter(Boolean)
+    .filter((file) => {
+      if (!/\.(ts|tsx|js|jsx)$/.test(file)) {
+        return false;
+      }
+      if (I18N_HARDCODED_SCAN_FILES.has(file)) {
+        return true;
+      }
+      if (I18N_HARDCODED_SCAN_FILE_PATTERNS.some((pattern) => pattern.test(file))) {
+        return false;
+      }
+      return I18N_HARDCODED_SCAN_PREFIXES.some((prefix) =>
+        file.startsWith(prefix),
+      );
+    });
 }
 
 main();

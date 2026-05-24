@@ -504,7 +504,7 @@ mod tests {
     use super::{
         build_anthropic_api_client, resolve_anthropic_auth,
         should_use_bearer_auth_for_anthropic_host, supports_automatic_prompt_cache_for_host,
-        AnthropicProvider,
+        AnthropicProvider, LIME_TENANT_HEADER,
     };
     use crate::conversation::message::Message;
     use crate::model::ModelConfig;

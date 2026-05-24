@@ -30,6 +30,7 @@ use super::path_guard::{
     evaluate_path_mutations, resolve_static_path_candidate, summarize_paths, summarize_raw_paths,
     PathGuardFinding, PathMutationCandidate, PathMutationKind,
 };
+use super::shell_runtime::build_platform_shell_command;
 use super::task::TaskManager;
 
 /// Maximum output length before truncation (128KB)
@@ -1112,17 +1113,7 @@ impl BashTool {
 
     /// Build a platform-specific command
     fn build_platform_command(&self, command: &str, context: &ToolContext) -> Command {
-        let mut cmd = if cfg!(target_os = "windows") {
-            // Try PowerShell first, fall back to CMD
-            let mut cmd = Command::new("powershell");
-            cmd.args(["-NoProfile", "-NonInteractive", "-Command", command]);
-            cmd
-        } else {
-            // Unix-like systems (macOS, Linux)
-            let mut cmd = Command::new("sh");
-            cmd.args(["-c", command]);
-            cmd
-        };
+        let mut cmd = build_platform_shell_command(command);
 
         // Set working directory
         cmd.current_dir(&context.working_directory);

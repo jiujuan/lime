@@ -106,6 +106,7 @@ import type { AgentAccessMode } from "./agentChatStorage";
 import { hasRecoverableSilentTurnActivity } from "./agentSilentTurnRecovery";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
 import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import { useTranslation } from "react-i18next";
 import {
   buildSessionDetailHydrationOptions,
   buildSessionDetailPrefetchKey,
@@ -382,6 +383,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     setExecutionStrategyState,
     setAccessModeState,
   } = options;
+  const { t: tNavigation } = useTranslation("navigation");
   const scopedKeys = useMemo(
     () => getAgentSessionScopedKeys(workspaceId),
     [workspaceId],
@@ -3047,13 +3049,18 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           saveTransient(scopedKeys.currentTurnKey, null);
         }
 
-        toast.success("任务已删除");
+        toast.success(
+          tNavigation("navigation.sidebar.conversations.delete.success"),
+        );
       } catch (error) {
         console.error("[AsterChat] 删除任务失败:", error);
-        toast.error("删除任务失败");
+        toast.error(
+          tNavigation("navigation.sidebar.conversations.delete.error"),
+        );
       }
     },
     [
+      applySessionSnapshot,
       loadTopics,
       persistSessionRestoreCandidate,
       resetPendingActions,
@@ -3061,7 +3068,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       runtime,
       scopedKeys,
       sessionIdRef,
-      applySessionSnapshot,
+      tNavigation,
     ],
   );
 
@@ -3075,13 +3082,17 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       try {
         await runtime.renameSession(topicId, normalizedTitle);
         await loadTopics();
-        toast.success("任务已重命名");
+        toast.success(
+          tNavigation("navigation.sidebar.conversations.rename.success"),
+        );
       } catch (error) {
         console.error("[AsterChat] 重命名任务失败:", error);
-        toast.error("重命名失败");
+        toast.error(
+          tNavigation("navigation.sidebar.conversations.rename.error"),
+        );
       }
     },
-    [loadTopics, runtime],
+    [loadTopics, runtime, tNavigation],
   );
 
   const updateTopicExecutionStrategy = useCallback(

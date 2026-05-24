@@ -1326,6 +1326,138 @@ describe("AgentAppHostBridge", () => {
     }
   });
 
+  it("Logo 图片任务终态应等待图片 artifact 回放后再推给 App", async () => {
+    vi.useFakeTimers();
+    const { frame, postMessage } = buildFrame();
+    const dispatchCapability = vi
+      .fn()
+      .mockResolvedValueOnce({
+        taskId: "task-logo-1",
+        sessionId: "session-logo-1",
+        taskStatus: "completed",
+        events: [{ eventType: "task:completed", message: "Logo 生成完成" }],
+      })
+      .mockResolvedValueOnce({
+        taskId: "task-logo-1",
+        sessionId: "session-logo-1",
+        taskStatus: "completed",
+        events: [{ eventType: "task:completed", message: "Logo 生成完成" }],
+        result: {
+          artifacts: [
+            {
+              path: ".lime/tasks/image_generate/task-logo-1.json",
+              title: "应用 Logo",
+              metadata: {
+                image: {
+                  absolute_artifact_path:
+                    "/workspace/app/.lime/tasks/image_generate/task-logo-1.json",
+                },
+              },
+            },
+          ],
+        },
+      });
+    const bridge = new AgentAppHostBridge({
+      frame,
+      appId,
+      entryKey,
+      displayName: "内容工厂",
+      entryRoute: "/dashboard",
+      entryUrl,
+      dispatchCapability,
+      listenRuntimeEvent: async () => () => undefined,
+      now: () => "2026-05-16T00:00:00.000Z",
+    });
+    const cleanup = bridge.start();
+
+    try {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: buildAppMessage("capability:subscribe", {
+            capability: "lime.agent",
+            topic: "task",
+            input: {
+              taskId: "task-logo-1",
+              sessionId: "session-logo-1",
+              bridgeAction: "studioLogoGenerate",
+              expectedOutput: {
+                kind: "image_asset",
+                installTarget: "./assets/app-icon.png",
+              },
+            },
+            pollIntervalMs: 250,
+          }),
+          origin: runtimeOrigin,
+          source: frame.contentWindow,
+        }),
+      );
+      await flushBridgeTasks();
+
+      expect(dispatchCapability).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(250);
+      await flushBridgeTasks();
+
+      expect(dispatchCapability).toHaveBeenCalledTimes(2);
+      expect(dispatchCapability).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          input: expect.objectContaining({
+            expectedOutput: {
+              kind: "image_asset",
+              installTarget: "./assets/app-icon.png",
+            },
+          }),
+        }),
+      );
+      expect(dispatchCapability).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          input: expect.objectContaining({
+            expectedOutput: {
+              kind: "image_asset",
+              installTarget: "./assets/app-icon.png",
+            },
+          }),
+        }),
+      );
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "capability:event",
+          payload: expect.objectContaining({
+            eventType: "task:update",
+            taskId: "task-logo-1",
+            sessionId: "session-logo-1",
+            bridgeAction: "studioLogoGenerate",
+            task: expect.objectContaining({
+              result: expect.objectContaining({
+                artifacts: expect.arrayContaining([
+                  expect.objectContaining({
+                    path: ".lime/tasks/image_generate/task-logo-1.json",
+                  }),
+                ]),
+              }),
+            }),
+            events: expect.arrayContaining([
+              expect.objectContaining({
+                eventType: "artifact:created",
+                payload: expect.objectContaining({
+                  artifact: expect.objectContaining({
+                    path: ".lime/tasks/image_generate/task-logo-1.json",
+                  }),
+                }),
+              }),
+            ]),
+          }),
+        }),
+        runtimeOrigin,
+      );
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+    }
+  });
+
   it("capability dispatcher 的结构化错误码应透传给 App", async () => {
     const { frame, postMessage } = buildFrame();
     const error = Object.assign(new Error("不支持该能力方法。"), {

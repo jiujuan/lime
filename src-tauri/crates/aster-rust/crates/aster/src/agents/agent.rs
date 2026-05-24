@@ -5235,11 +5235,18 @@ mod tests {
             .agent_only();
         let session_config = SessionConfig {
             id: "session-skill-visible".to_string(),
+            thread_id: Some("thread-skill-visible".to_string()),
+            turn_id: Some("turn-skill-visible".to_string()),
+            schedule_id: None,
+            max_turns: None,
+            retry_config: None,
+            system_prompt: None,
+            system_prompt_override: None,
+            include_context_trace: None,
             turn_context: Some(TurnContextOverride {
                 user_visible_input_text: Some("@analysis 帮我分析一下今天的国际形势".to_string()),
                 ..TurnContextOverride::default()
             }),
-            ..SessionConfig::default()
         };
 
         let visible_message =

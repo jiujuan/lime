@@ -21,6 +21,7 @@ pub mod context;
 pub mod error;
 pub mod hooks;
 pub mod registry;
+mod shell_runtime;
 pub mod task;
 
 // Tool implementations

@@ -16,6 +16,7 @@ import {
 } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { useAgentChatUnified } from "./hooks";
 import {
   resolveRecentTopicActionLabel,
@@ -708,6 +709,15 @@ export function AgentChatWorkspace({
   openBrowserAssistOnMount = false,
   initialSiteSkillLaunch,
 }: AgentChatWorkspaceProps) {
+  const { t } = useTranslation("agent");
+  const { t: tNavigation } = useTranslation("navigation");
+  const untitledTaskLabel = t(
+    "generalWorkbench.workflow.outputs.summary.untitledTask",
+  );
+  const taskCenterRenamePromptLabel = tNavigation(
+    "navigation.sidebar.conversations.rename.prompt",
+  );
+
   // 性能埋点：记录组件渲染开始时间
   const workspaceRenderT0 = useRef<number>(performance.now());
   useEffect(() => {
@@ -1482,7 +1492,7 @@ export function AgentChatWorkspace({
   const { workspaceHarnessEnabled } = useDeveloperFeatureFlags();
   const { mediaDefaults, loading: mediaDefaultsLoading } =
     useGlobalMediaGenerationDefaults();
-  const { serviceModels } = useServiceModelsConfig();
+  const { serviceModels, agentResponseLanguage } = useServiceModelsConfig();
   const inputCompletionEnabled =
     serviceModels.input_completion?.enabled !== false;
   const effectiveImageWorkbenchPreference = useMemo(
@@ -3428,16 +3438,18 @@ export function AgentChatWorkspace({
     (contextId: string) => {
       const detail = contextWorkspace.getContextDetail(contextId);
       if (!detail) {
-        toast.error("无法找到上下文详情");
+        toast.error(t("generalWorkbench.context.detail.notFound"));
         return;
       }
 
-      const sourceLabel =
-        detail.source === "material"
-          ? "素材库"
-          : detail.source === "content"
-            ? "历史内容"
-            : "搜索结果";
+      let sourceLabel = t("generalWorkbench.context.source.web");
+      if (detail.source === "material") {
+        sourceLabel = t("generalWorkbench.context.source.material");
+      } else if (detail.source === "content") {
+        sourceLabel = t("generalWorkbench.context.source.content");
+      } else if (detail.searchMode === "social") {
+        sourceLabel = t("generalWorkbench.context.source.social");
+      }
 
       toast.info(
         <div style={{ maxWidth: "500px" }}>
@@ -3451,7 +3463,10 @@ export function AgentChatWorkspace({
               marginBottom: "8px",
             }}
           >
-            来源: {sourceLabel} · 约 {detail.estimatedTokens} tokens
+            {t("generalWorkbench.context.detail.sourceTokens", {
+              source: sourceLabel,
+              tokens: detail.estimatedTokens,
+            })}
           </div>
           <div
             style={{
@@ -3467,7 +3482,7 @@ export function AgentChatWorkspace({
         { duration: 10000 },
       );
     },
-    [contextWorkspace],
+    [contextWorkspace, t],
   );
 
   const harnessRequestMetadata = useMemo(
@@ -3497,6 +3512,7 @@ export function AgentChatWorkspace({
         teamMemoryShadow: buildTeamMemoryShadowRequestMetadata(
           resolvedTeamMemoryShadowSnapshot,
         ),
+        agentResponseLanguage,
       }),
     [
       effectiveChatToolPreferences.subagent,
@@ -3518,6 +3534,7 @@ export function AgentChatWorkspace({
       selectedTeamLabel,
       selectedTeamSummary,
       resolvedTeamMemoryShadowSnapshot,
+      agentResponseLanguage,
       themeWorkbenchActiveQueueItem?.title,
     ],
   );
@@ -4369,6 +4386,7 @@ export function AgentChatWorkspace({
     workspaceRequestMetadataBase:
       workspaceRequestMetadataWithExpertSkills ?? undefined,
     serviceModels,
+    agentResponseLanguage,
     messages,
     setChatMessages,
     bootstrapDispatchPreview,
@@ -5121,6 +5139,16 @@ export function AgentChatWorkspace({
         taskCenterOpenTabIdsRef.current.includes(topicId);
       const shouldMaintainTaskCenterTab =
         agentEntry === "claw" || agentEntry === "new-task";
+      const shouldSkipActiveTopicReopen =
+        topicId === activeSessionIdRef.current &&
+        messages.length > 0 &&
+        activeTaskCenterDraftTabIdRef.current === null &&
+        taskCenterDraftSurfaceActiveRef.current === false &&
+        taskCenterDetachedTopicId === null &&
+        shouldResume === false &&
+        options?.forceRefresh !== true &&
+        options?.preferResume !== true &&
+        options?.replaceOpenTabs !== true;
       const rollbackPendingOpen = () => {
         if (!wasOpenInTaskCenter && options?.replaceOpenTabs !== true) {
           setTaskCenterOpenTabMap((currentMap) =>
@@ -5139,6 +5167,10 @@ export function AgentChatWorkspace({
           current === topicId ? null : current,
         );
       };
+
+      if (shouldSkipActiveTopicReopen) {
+        return;
+      }
 
       taskCenterDraftSurfaceActiveRef.current = false;
       resetLocalImageWorkbenchSessionScope();
@@ -5196,12 +5228,14 @@ export function AgentChatWorkspace({
       agentEntry,
       clearEntryPendingA2UI,
       markTaskCenterLocalSessionOverride,
+      messages.length,
       replaceTaskCenterOpenTabs,
       resetLocalImageWorkbenchSessionScope,
       setActiveTaskCenterDraftTabId,
       setChatMessages,
       switchTopic,
       taskCenterWorkspaceId,
+      taskCenterDetachedTopicId,
       setTaskCenterDetachedTopicId,
       setTaskCenterTransitionTopicId,
       topicById,
@@ -5581,6 +5615,7 @@ export function AgentChatWorkspace({
       isActive: draft.id === activeTaskCenterDraftTabId,
       hasUnread: false,
       isPinned: false,
+      renamable: false,
     }));
     const topicItems = taskCenterVisibleTabIds
       .map((topicId) => topicById.get(topicId))
@@ -5598,6 +5633,7 @@ export function AgentChatWorkspace({
           topic.id === (taskCenterPreviewTopicId ?? sessionId),
         hasUnread: Boolean(topic.hasUnread),
         isPinned: Boolean(topic.isPinned),
+        renamable: true,
       }));
 
     return [...draftItems, ...topicItems].slice(0, MAX_TASK_CENTER_OPEN_TABS);

@@ -40,6 +40,47 @@ const FRONTEND_TOOLING_FILES = new Set([
   "scripts/quality-task-selector.mjs",
 ]);
 
+const I18N_CHECK_FILES = new Set([
+  "package.json",
+  "scripts/detect-missing-translations.ts",
+  "scripts/detect-missing-translations.test.ts",
+  "scripts/local-ci.mjs",
+  "scripts/quality-task-planner.mjs",
+  "scripts/quality-task-selector.mjs",
+  "src/i18n/loadNamespace.ts",
+  "src/i18n/locales.ts",
+  "src/i18n/types.d.ts",
+]);
+
+const I18N_CHECK_PREFIXES = [
+  "scripts/i18n-",
+  "src/i18n/resources/",
+  "src/i18n/__tests__/",
+];
+
+const I18N_TRANSLATION_REVIEW_PACK_RECOMMENDED_COMMANDS = [
+  "npm run i18n:translation-pr-pack:json -- --output docs/roadmap/i18n/evidence/translation-pr-pack.json",
+];
+
+const I18N_PATCH_RETIREMENT_RECOMMENDED_COMMANDS = [
+  "npm run i18n:patch-retirement-gate -- --check",
+];
+
+const I18N_PATCH_RETIREMENT_FILES = new Set([
+  "scripts/i18n-patch-metrics-report.mjs",
+  "scripts/i18n-patch-retirement-gate.mjs",
+  "scripts/lib/i18n-patch-metrics-report-core.mjs",
+  "scripts/lib/legacy-surface-report-core.mjs",
+  "scripts/report-legacy-surfaces.mjs",
+  "scripts/verify-gui-smoke.mjs",
+]);
+
+const I18N_HARDCODED_SCAN_PREFIXES = [
+  "src/components/",
+  "src/features/",
+  "src/pages/",
+];
+
 const BRIDGE_FILES = new Set([
   "vite.config.ts",
   "scripts/check-command-contracts.mjs",
@@ -278,6 +319,34 @@ function isFrontendChange(file) {
   );
 }
 
+function isI18nCheckChange(file) {
+  return (
+    I18N_CHECK_FILES.has(file) ||
+    I18N_CHECK_PREFIXES.some((prefix) => file.startsWith(prefix))
+  );
+}
+
+function isI18nTranslationReviewPackChange(file) {
+  return (
+    file.startsWith("src/i18n/resources/") ||
+    file === "scripts/detect-missing-translations.ts" ||
+    file === "scripts/i18n-source-locale-export.ts" ||
+    file === "scripts/i18n-translation-pr-pack.ts"
+  );
+}
+
+function isI18nPatchRetirementChange(file) {
+  return I18N_PATCH_RETIREMENT_FILES.has(file);
+}
+
+function isI18nHardcodedScanChange(file) {
+  return (
+    file === "src/App.tsx" ||
+    file === "src/main.tsx" ||
+    I18N_HARDCODED_SCAN_PREFIXES.some((prefix) => file.startsWith(prefix))
+  );
+}
+
 function isRustChange(file) {
   return file.startsWith("src-tauri/");
 }
@@ -334,7 +403,8 @@ function collectBridgeReasons(
 function isGuiSmokeChange(file) {
   return (
     GUI_SMOKE_FILES.has(file) ||
-    GUI_SMOKE_PREFIXES.some((prefix) => file.startsWith(prefix))
+    GUI_SMOKE_PREFIXES.some((prefix) => file.startsWith(prefix)) ||
+    isI18nPatchRetirementChange(file)
   );
 }
 
@@ -350,11 +420,20 @@ function collectRecommendedCommands(changedFiles, { docsOnly = false } = {}) {
     return [];
   }
 
-  if (changedFiles.some(isKnowledgeProductE2eChange)) {
-    return [...KNOWLEDGE_PRODUCT_E2E_RECOMMENDED_COMMANDS];
+  const commands = [];
+  if (changedFiles.some(isI18nPatchRetirementChange)) {
+    commands.push(...I18N_PATCH_RETIREMENT_RECOMMENDED_COMMANDS);
   }
 
-  return [];
+  if (changedFiles.some(isKnowledgeProductE2eChange)) {
+    commands.push(...KNOWLEDGE_PRODUCT_E2E_RECOMMENDED_COMMANDS);
+  }
+
+  if (changedFiles.some(isI18nTranslationReviewPackChange)) {
+    commands.push(...I18N_TRANSLATION_REVIEW_PACK_RECOMMENDED_COMMANDS);
+  }
+
+  return commands;
 }
 
 function isIntegrityChange(file) {
@@ -372,11 +451,14 @@ function detectTasks(changedFiles, { full = false } = {}) {
   });
 
   if (full) {
-    return {
-      integrity: true,
-      frontend: true,
-      rust: true,
-      bridge: true,
+      return {
+        integrity: true,
+        i18n: true,
+        i18nHardcoded: true,
+        i18nUnused: true,
+        frontend: true,
+        rust: true,
+        bridge: true,
       bridgeReasons: collectBridgeReasons([], { full: true }),
       guiSmoke: true,
       docs: true,
@@ -390,6 +472,9 @@ function detectTasks(changedFiles, { full = false } = {}) {
   if (changedFiles.length === 0) {
     return {
       integrity: true,
+      i18n: true,
+      i18nHardcoded: true,
+      i18nUnused: true,
       frontend: true,
       rust: true,
       bridge: true,
@@ -407,6 +492,9 @@ function detectTasks(changedFiles, { full = false } = {}) {
   if (workflow) {
     return {
       integrity: true,
+      i18n: true,
+      i18nHardcoded: true,
+      i18nUnused: true,
       frontend: true,
       rust: true,
       bridge: true,
@@ -423,6 +511,9 @@ function detectTasks(changedFiles, { full = false } = {}) {
   if (isDocsOnlyChange(changedFiles)) {
     return {
       integrity: false,
+      i18n: false,
+      i18nHardcoded: false,
+      i18nUnused: false,
       frontend: false,
       rust: false,
       bridge: false,
@@ -441,6 +532,11 @@ function detectTasks(changedFiles, { full = false } = {}) {
 
   return {
     integrity: changedFiles.some(isIntegrityChange),
+    i18n: changedFiles.some(isI18nCheckChange),
+    i18nHardcoded: changedFiles.some(isI18nHardcodedScanChange),
+    i18nUnused:
+      changedFiles.some(isI18nCheckChange) ||
+      changedFiles.some(isFrontendChange),
     frontend: changedFiles.some(isFrontendChange),
     rust: changedFiles.some(isRustChange),
     bridge,

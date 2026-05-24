@@ -163,6 +163,8 @@ describe("BrowserProfileManager", () => {
     expect(container.textContent).toContain(
       "Attached mode is not ready on this device.",
     );
+    expect(container.textContent).toContain("browser locale");
+    expect(container.textContent).toContain("Accept-Language");
 
     const newButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent?.includes("New profile"),
@@ -200,6 +202,8 @@ describe("BrowserProfileManager", () => {
     expect(container.textContent).toContain(
       "请先在当前 Chrome 安装并连接 Lime Browser Bridge",
     );
+    expect(container.textContent).toContain("浏览器 Locale");
+    expect(container.textContent).toContain("Accept-Language");
   });
 
   it("启动资料后应回调工作台并提示成功", async () => {
@@ -585,7 +589,7 @@ describe("BrowserProfileManager", () => {
 
     expect(container.textContent).toContain('已选择启动环境 "美区桌面"');
     expect(container.textContent).toContain(
-      "附着当前 Chrome 模式暂不应用代理、时区、语言、UA 或视口等启动级配置",
+      "附着当前 Chrome 模式暂不应用代理、时区、浏览器 Locale、Accept-Language、UA 或视口等启动级配置",
     );
   });
 

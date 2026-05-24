@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { AgentThreadItem } from "../types";
+import { MarkdownRenderer } from "./MarkdownRenderer";
 import {
   formatHistoricalContentLength,
   summarizeHistoricalTimelineItems,
@@ -35,8 +36,13 @@ export function HistoricalAssistantMessagePreview({
       data-preview-variant={variant}
       className="space-y-3"
     >
-      <div className="whitespace-pre-wrap break-words text-[15px] leading-7 text-slate-800">
-        {content}
+      <div className="break-words text-[15px] leading-7 text-slate-800">
+        <MarkdownRenderer
+          content={content}
+          renderMode="light"
+          renderA2UIInline={false}
+          readOnlyA2UI={true}
+        />
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-sm text-slate-600">
         <span>
@@ -61,9 +67,14 @@ export const HistoricalMarkdownHydrationPreview: React.FC<{
 }> = ({ content }) => (
   <div
     data-testid="message-list-historical-markdown-preview"
-    className="whitespace-pre-wrap break-words text-[15px] leading-7 text-slate-800"
+    className="break-words text-[15px] leading-7 text-slate-800"
   >
-    {content}
+    <MarkdownRenderer
+      content={content}
+      renderMode="light"
+      renderA2UIInline={false}
+      readOnlyA2UI={true}
+    />
   </div>
 );
 
@@ -90,16 +101,12 @@ export const HistoricalTimelinePreview: React.FC<{
       : null,
     summary.thinkingStepsCount > 0
       ? t("agentChat.messageList.historicalTimeline.thinkingSteps", {
-          countLabel: formatHistoricalContentLength(
-            summary.thinkingStepsCount,
-          ),
+          countLabel: formatHistoricalContentLength(summary.thinkingStepsCount),
         })
       : null,
     summary.artifactStepsCount > 0
       ? t("agentChat.messageList.historicalTimeline.artifactSteps", {
-          countLabel: formatHistoricalContentLength(
-            summary.artifactStepsCount,
-          ),
+          countLabel: formatHistoricalContentLength(summary.artifactStepsCount),
         })
       : null,
   ].filter((part): part is string => Boolean(part));

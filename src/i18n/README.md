@@ -6,7 +6,7 @@ Lime is migrating from DOM Patch translation to key-based i18next resources.
 
 Current fact sources:
 
-- `locales.ts`: supported locale registry, BCP 47 normalization, and legacy patch mapping
+- `locales.ts`: supported locale registry, BCP 47 normalization, RTL direction helpers, and legacy patch mapping
 - `loadNamespace.ts`: Vite `import.meta.glob` based loader for bundled core namespace resources
 - `createI18n.ts`: i18next initialization, bundled core resources, and document `lang` / `dir` sync
 - `format.ts`: locale-aware wrappers for dates, numbers, relative time, lists, and sorting
@@ -155,16 +155,69 @@ signal; it does not replace current-path dependency audits.
 
 `npm run verify:gui-smoke` passes `--i18n-patch-metrics-output` to
 `smoke:knowledge-gui` by default, writes `.lime/i18n/patch-metrics.json`, and
-then writes `.lime/i18n/patch-metrics-report.json`. Use
+then writes `.lime/i18n/patch-metrics-report.json`, `.lime/governance/legacy-surface-report.json`,
+and runs `npm run i18n:patch-retirement-gate -- --check`. Use
 `--skip-i18n-patch-metrics` only when debugging unrelated GUI smoke failures.
+
+To combine Patch no-hit evidence with legacy surface dependency audit:
+
+```bash
+npm run i18n:patch-retirement-gate -- --patch-report .lime/i18n/patch-metrics-report.json --legacy-report .lime/governance/legacy-surface-report.json
+npm run i18n:patch-retirement-gate -- --check --format json --patch-report .lime/i18n/patch-metrics-report.json --legacy-report .lime/governance/legacy-surface-report.json
+```
+
+The gate passes only when the Patch report is `no-hit` and the legacy surface
+report has no violations. It is a retirement gate, not a blanket approval for
+deleting Patch files by hand.
+
+`npm run i18n:unused:json` now also emits namespace hotspot summaries so you can
+review candidate keys bucket by bucket before tightening protected prefixes or
+splitting namespaces.
+
+For source locale export used by translation PR review or external tooling:
+
+```bash
+npm run i18n:source-export
+npm run i18n:source-export:json
+```
+
+For translation PR review packs that combine source export and locale gaps:
+
+```bash
+npm run i18n:translation-pr-pack
+npm run i18n:translation-pr-pack:json
+```
+
+For UI locale / response language / browser environment / content language
+boundary inventory:
+
+```bash
+npm run i18n:language-boundary-report
+npm run i18n:language-boundary-report:json
+npm run i18n:language-boundary-report:json -- --category contentTargetLanguage --output "docs/roadmap/i18n/evidence/content-target-language-boundary-report.json"
+```
+
+For bundle footprint and chunk strategy review:
+
+```bash
+npm run i18n:bundle-report
+npm run i18n:bundle-report:json
+```
 
 ## Validation
 
 - `npm run detect-translations`: checks that every locale under `resources/` matches the `zh-CN` namespace/key structure.
 - `npm run detect-translations:fix`: fills missing target locale files and keys from the `zh-CN` source value. Review the result manually before keeping it.
 - `npm run detect-translations -- --verbose`: prints locale and namespace coverage details.
+- `npm run detect-translations:json`: emits the machine-readable translation check report, including locale coverage summaries and namespace coverage ratios.
+- `npm run i18n:unused -- --check`: validates current source locale keys against referenced source usage and protected dynamic families; `verify:local` runs it when frontend or i18n files change.
+- `npm run i18n:source-export`: exports the `zh-CN` source locale namespaces and flattened keys for translation workflow review.
+- `npm run i18n:translation-pr-pack`: packages source locale export and missing locale entries into a PR review artifact without writing back to resources.
+- `npm run i18n:language-boundary-report`: inventories language-like fields before changing UI locale, response language, browser environment, content language, or ASR language behavior; use `--category contentTargetLanguage` when reviewing Artifact, document, article, translation, or media task output-language changes.
 - `npm run i18n:patch-report`: renders exported legacy Patch runtime metrics as text.
 - `npm run i18n:patch-report:json`: renders exported legacy Patch runtime metrics as JSON for CI or release evidence.
+- `npm run i18n:patch-retirement-gate`: combines Patch no-hit evidence with legacy surface dependency audit.
+- `npm run i18n:bundle-report`: summarizes current bundle footprint and inline vs lazy chunk strategy.
 - `npm run typecheck`: validates migrated namespace keys through `src/i18n/types.d.ts`.
 
 ## Troubleshooting

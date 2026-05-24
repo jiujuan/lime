@@ -553,6 +553,8 @@ pub struct SessionExecutionRuntime {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recent_content_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub recent_response_language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub task_profile: Option<SessionExecutionRuntimeTaskProfile>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub routing_decision: Option<SessionExecutionRuntimeRoutingDecision>,
@@ -715,6 +717,7 @@ struct RecentHarnessContext {
     gate_key: Option<String>,
     run_title: Option<String>,
     content_id: Option<String>,
+    response_language: Option<String>,
 }
 
 fn resolve_session_model_name(session: &Session) -> Option<String> {
@@ -937,6 +940,12 @@ fn extract_recent_harness_context_from_metadata(
         gate_key: resolve_text(&["gate_key", "gateKey"]),
         run_title: resolve_text(&["run_title", "runTitle", "title"]),
         content_id: resolve_text(&["content_id", "contentId"]),
+        response_language: resolve_text(&[
+            "agent_response_language",
+            "agentResponseLanguage",
+            "response_language",
+            "responseLanguage",
+        ]),
     }
 }
 
@@ -1154,6 +1163,7 @@ fn extract_recent_harness_context_from_runtime_snapshot(
         && from_turn.gate_key.is_some()
         && from_turn.run_title.is_some()
         && from_turn.content_id.is_some()
+        && from_turn.response_language.is_some()
     {
         return from_turn;
     }
@@ -1165,7 +1175,10 @@ fn extract_recent_harness_context_from_runtime_snapshot(
             let context = extract_recent_harness_context_from_metadata(&thread.thread.metadata);
             if context.theme.is_none()
                 && context.session_mode.is_none()
+                && context.gate_key.is_none()
+                && context.run_title.is_none()
                 && context.content_id.is_none()
+                && context.response_language.is_none()
             {
                 return None;
             }
@@ -1181,6 +1194,9 @@ fn extract_recent_harness_context_from_runtime_snapshot(
         gate_key: from_turn.gate_key.or(from_thread.gate_key),
         run_title: from_turn.run_title.or(from_thread.run_title),
         content_id: from_turn.content_id.or(from_thread.content_id),
+        response_language: from_turn
+            .response_language
+            .or(from_thread.response_language),
     }
 }
 
@@ -1296,6 +1312,7 @@ pub fn build_session_execution_runtime(
         recent_gate_key: None,
         recent_run_title: None,
         recent_content_id: None,
+        recent_response_language: None,
         task_profile: None,
         routing_decision: None,
         limit_state: None,
@@ -1313,6 +1330,7 @@ pub fn build_session_execution_runtime(
         runtime.recent_gate_key = recent_harness_context.gate_key;
         runtime.recent_run_title = recent_harness_context.run_title;
         runtime.recent_content_id = recent_harness_context.content_id;
+        runtime.recent_response_language = recent_harness_context.response_language;
         runtime.recent_access_mode = extract_recent_access_mode_from_runtime_snapshot(snapshot);
 
         if let Some(latest_turn) = resolve_latest_turn(snapshot) {
@@ -1418,6 +1436,7 @@ pub fn build_session_execution_runtime(
         && runtime.recent_gate_key.is_none()
         && runtime.recent_run_title.is_none()
         && runtime.recent_content_id.is_none()
+        && runtime.recent_response_language.is_none()
         && runtime.context_summary.is_none()
         && runtime.task_profile.is_none()
         && runtime.routing_decision.is_none()
@@ -1960,7 +1979,8 @@ mod tests {
                 metadata: std::collections::HashMap::from([(
                     "harness".to_string(),
                     json!({
-                        "content_id": "content-current"
+                        "content_id": "content-current",
+                        "agent_response_language": "en-US"
                     }),
                 )]),
                 ..TurnContextOverride::default()
@@ -1996,6 +2016,7 @@ mod tests {
             runtime.recent_content_id.as_deref(),
             Some("content-current")
         );
+        assert_eq!(runtime.recent_response_language.as_deref(), Some("en-US"));
     }
 
     #[test]
@@ -2016,7 +2037,8 @@ mod tests {
                         "session_mode": "general_workbench",
                         "gate_key": "write_mode",
                         "run_title": "社媒初稿",
-                        "content_id": "content-current"
+                        "content_id": "content-current",
+                        "response_language": "auto"
                     }),
                 )]),
                 ..TurnContextOverride::default()
@@ -2055,6 +2077,7 @@ mod tests {
             runtime.recent_content_id.as_deref(),
             Some("content-current")
         );
+        assert_eq!(runtime.recent_response_language.as_deref(), Some("auto"));
     }
 
     #[test]
@@ -2082,6 +2105,9 @@ mod tests {
         thread
             .metadata
             .insert("content_id".to_string(), json!("content-from-thread"));
+        thread
+            .metadata
+            .insert("agent_response_language".to_string(), json!("ja-JP"));
         thread.updated_at = now;
         let snapshot = SessionRuntimeSnapshot {
             session_id: "session-thread-content".to_string(),
@@ -2105,6 +2131,7 @@ mod tests {
             runtime.recent_content_id.as_deref(),
             Some("content-from-thread")
         );
+        assert_eq!(runtime.recent_response_language.as_deref(), Some("ja-JP"));
     }
 
     #[test]
@@ -2174,6 +2201,53 @@ mod tests {
             runtime.recent_content_id.as_deref(),
             Some("content-from-thread")
         );
+    }
+
+    #[test]
+    fn falls_back_to_thread_metadata_recent_response_language() {
+        let now = Utc::now();
+        let latest_turn = TurnRuntime {
+            id: "turn-without-response-language".to_string(),
+            session_id: "session-thread-response-language".to_string(),
+            thread_id: "thread-1".to_string(),
+            status: TurnStatus::Completed,
+            input_text: Some("hello".to_string()),
+            error_message: None,
+            context_override: Some(TurnContextOverride::default()),
+            output_schema_runtime: None,
+            created_at: now - Duration::seconds(10),
+            started_at: Some(now - Duration::seconds(10)),
+            completed_at: Some(now - Duration::seconds(1)),
+            updated_at: now,
+        };
+        let mut thread = ThreadRuntime::new(
+            "thread-1",
+            "session-thread-response-language",
+            PathBuf::from("/tmp/workspace"),
+        );
+        thread
+            .metadata
+            .insert("response_language".to_string(), json!("ko-KR"));
+        thread.updated_at = now;
+        let snapshot = SessionRuntimeSnapshot {
+            session_id: "session-thread-response-language".to_string(),
+            threads: vec![ThreadRuntimeSnapshot {
+                thread,
+                turns: vec![latest_turn],
+                items: Vec::new(),
+            }],
+        };
+
+        let runtime = build_session_execution_runtime(
+            "session-thread-response-language",
+            None,
+            None,
+            Some(&snapshot),
+            None,
+        )
+        .expect("runtime");
+
+        assert_eq!(runtime.recent_response_language.as_deref(), Some("ko-KR"));
     }
 
     #[test]
@@ -2628,6 +2702,7 @@ mod tests {
             recent_gate_key: None,
             recent_run_title: None,
             recent_content_id: None,
+            recent_response_language: None,
             task_profile: None,
             routing_decision: Some(SessionExecutionRuntimeRoutingDecision {
                 routing_mode: "multi_candidate".to_string(),
