@@ -95,9 +95,7 @@ describe("useWorkspaceInitialSessionNavigation", () => {
 
     await flushEffects();
 
-    expect(switchTopic).toHaveBeenCalledWith("session-42", {
-      forceRefresh: true,
-    });
+    expect(switchTopic).toHaveBeenCalledWith("session-42", undefined);
   });
 
   it("当前已经在目标会话时不应重复切换", async () => {
@@ -130,12 +128,8 @@ describe("useWorkspaceInitialSessionNavigation", () => {
     });
     await flushEffects();
 
-    expect(switchTopic).toHaveBeenNthCalledWith(1, "session-42", {
-      forceRefresh: true,
-    });
-    expect(switchTopic).toHaveBeenNthCalledWith(2, "session-99", {
-      forceRefresh: true,
-    });
+    expect(switchTopic).toHaveBeenNthCalledWith(1, "session-42", undefined);
+    expect(switchTopic).toHaveBeenNthCalledWith(2, "session-99", undefined);
   });
 
   it("应透传解析后的初始会话切换选项", async () => {
@@ -210,8 +204,6 @@ describe("useWorkspaceInitialSessionNavigation", () => {
     await flushEffects();
 
     expect(switchTopic).toHaveBeenCalledTimes(1);
-    expect(switchTopic).toHaveBeenCalledWith("session-dedupe", {
-      forceRefresh: true,
-    });
+    expect(switchTopic).toHaveBeenCalledWith("session-dedupe", undefined);
   });
 });

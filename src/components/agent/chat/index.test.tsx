@@ -1410,7 +1410,7 @@ afterEach(() => {
 });
 
 describe("AgentChatPage 任务中心初始会话标签", () => {
-  it("路由初始会话恢复应强制刷新，避免旧缓存串到目标会话", async () => {
+  it("路由普通历史会话恢复不应强制刷新，应复用本地缓存主链", async () => {
     const state: Record<string, unknown> = createMockAgentChatUnifiedState({
       sessionId: null,
       topics: [
@@ -1442,7 +1442,45 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
 
     expect(switchTopic).toHaveBeenCalledWith("topic-target", {
       allowDetachedSession: true,
+    });
+  });
+
+  it("路由恢复工作区错误会话时仍应强制刷新并恢复启动钩子", async () => {
+    const state: Record<string, unknown> = createMockAgentChatUnifiedState({
+      sessionId: null,
+      topics: [
+        {
+          id: "topic-workspace-error",
+          title: "工作区错误会话",
+          updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+          workspaceId: "workspace-test",
+          status: "failed",
+          statusReason: "workspace_error",
+        },
+      ],
+    });
+    const switchTopic = vi.fn(async (topicId: string) => {
+      state.sessionId = topicId;
+    });
+    state.switchTopic = switchTopic;
+    installMockAgentChatUnifiedState(state);
+
+    const { container } = mountPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-workspace-error",
+      projectId: "workspace-test",
+    });
+    await waitForElement(
+      container,
+      '[data-testid="workspace-shell-scene"]',
+      80,
+    );
+    await flushEffects();
+
+    expect(switchTopic).toHaveBeenCalledWith("topic-workspace-error", {
+      allowDetachedSession: true,
       forceRefresh: true,
+      resumeSessionStartHooks: true,
     });
   });
 

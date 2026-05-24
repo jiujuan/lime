@@ -123,6 +123,7 @@ export function useWorkspaceInitialSessionNavigation({
     );
     logAgentDebug("AgentChatPage", "initialSessionNavigation.start", {
       currentSessionId: normalizedCurrentSessionId,
+      forceRefresh: resolvedSwitchOptions?.forceRefresh === true,
       initialSessionId: normalizedInitialSessionId,
       resumeSessionStartHooks:
         resolvedSwitchOptions?.resumeSessionStartHooks === true,
@@ -131,7 +132,9 @@ export function useWorkspaceInitialSessionNavigation({
     });
 
     const switchOptions: InitialSessionSwitchOptions = {
-      forceRefresh: resolvedSwitchOptions?.forceRefresh ?? true,
+      ...(resolvedSwitchOptions?.forceRefresh === true
+        ? { forceRefresh: true }
+        : {}),
       ...(resolvedSwitchOptions?.resumeSessionStartHooks === true
         ? { resumeSessionStartHooks: true }
         : {}),
@@ -139,8 +142,12 @@ export function useWorkspaceInitialSessionNavigation({
         ? { allowDetachedSession: true }
         : {}),
     };
+    const hasSwitchOptions = Object.keys(switchOptions).length > 0;
 
-    void switchTopic(normalizedInitialSessionId, switchOptions).catch(
+    void switchTopic(
+      normalizedInitialSessionId,
+      hasSwitchOptions ? switchOptions : undefined,
+    ).catch(
       (error) => {
         appliedInitialSessionIdRef.current = null;
         recentInitialSessionNavigationStarts.delete(normalizedInitialSessionId);

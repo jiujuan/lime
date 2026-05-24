@@ -3991,12 +3991,12 @@ export function AgentChatWorkspace({
   const resolveInitialSessionSwitch = useCallback(
     (topicId: string) => {
       const topic = topicById.get(topicId);
+      const shouldResume = shouldResumeTaskSession(topic);
+      const shouldForceRefresh = topic?.statusReason === "workspace_error";
       return {
         allowDetachedSession: true,
-        forceRefresh: true,
-        ...(shouldResumeTaskSession(topic)
-          ? { resumeSessionStartHooks: true }
-          : {}),
+        ...(shouldForceRefresh ? { forceRefresh: true } : {}),
+        ...(shouldResume ? { resumeSessionStartHooks: true } : {}),
       };
     },
     [topicById],
