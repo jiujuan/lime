@@ -67,13 +67,13 @@ pub(super) async fn execute_host_fixture_connector_mutation(
     let mut line = serde_json::to_string(&result_payload)
         .map_err(|error| ToolError::execution_failed(error.to_string()))?;
     line.push('\n');
-    tokio::fs::OpenOptions::new()
+    let mut log_file = tokio::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(&log_path)
-        .await?
-        .write_all(line.as_bytes())
         .await?;
+    log_file.write_all(line.as_bytes()).await?;
+    log_file.flush().await?;
 
     let output = serde_json::to_string_pretty(&result_payload)
         .unwrap_or_else(|_| result_payload.to_string());

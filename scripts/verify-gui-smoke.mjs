@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { acquireGuiSmokeRunLock } from "./lib/gui-smoke-run-lock.mjs";
 import {
   createI18nPatchMetricsReport,
   renderI18nPatchMetricsTextReport,
@@ -36,6 +37,12 @@ const GUI_SMOKE_COMPILE_GRACE_MS = 900_000;
 const GUI_SMOKE_MAX_COMPILE_GRACE_EXTENSIONS = 2;
 const GUI_SMOKE_BOOT_GRACE_MS = 60_000;
 const GUI_SMOKE_CHILD_EXIT_GRACE_MS = 30_000;
+const GUI_SMOKE_RUN_LOCK_DIR = path.join(
+  rootDir,
+  ".lime",
+  "locks",
+  "gui-smoke.lock",
+);
 const INVOKE_TIMEOUT_CEILING_MS = 180_000;
 const INVOKE_RETRY_COUNT = 10;
 const INVOKE_RETRY_DELAY_MS = 1_000;
@@ -71,6 +78,7 @@ const state = {
   activeCommandPid: null,
   child: null,
   cleanedUp: false,
+  runLock: null,
   tempConfigPath: null,
 };
 
@@ -1140,6 +1148,16 @@ async function stopHeadlessTauri() {
   state.tempConfigPath = null;
 }
 
+function releaseGuiSmokeRunLock() {
+  try {
+    state.runLock?.release?.();
+  } catch {
+    // ignore
+  } finally {
+    state.runLock = null;
+  }
+}
+
 async function waitForAppShell(options) {
   const startedAt = Date.now();
   let lastError = null;
@@ -1495,8 +1513,18 @@ async function main() {
 
   const parsedOptions = parseArgs(process.argv.slice(2));
   const options = normalizeCargoTargetDir(parsedOptions);
-  const startupMode = await resolveStartupMode(options);
-  const startedByScript = startupMode.shouldStart;
+  state.runLock = await acquireGuiSmokeRunLock({
+    lockDir: GUI_SMOKE_RUN_LOCK_DIR,
+    waitTimeoutMs: options.timeoutMs,
+    pollMs: Math.max(500, Math.min(options.intervalMs, 5_000)),
+    owner: {
+      command: process.argv.join(" "),
+    },
+    log: (message) => console.log(message),
+  });
+
+  let startupMode = null;
+  let startedByScript = false;
 
   if (options.cargoTargetDirFallbackReason) {
     const corruptedDirList = options.corruptedSqliteBindingOutputs
@@ -1518,6 +1546,7 @@ async function main() {
       }
       await stopHeadlessTauri();
     } finally {
+      releaseGuiSmokeRunLock();
       process.kill(process.pid, signal);
     }
   };
@@ -1530,6 +1559,9 @@ async function main() {
   });
 
   try {
+    startupMode = await resolveStartupMode(options);
+    startedByScript = startupMode.shouldStart;
+
     if (startedByScript) {
       await startHeadlessTauri(options, startupMode);
       await sleep(1_500);
@@ -1779,6 +1811,7 @@ async function main() {
     if (startedByScript) {
       await stopHeadlessTauri();
     }
+    releaseGuiSmokeRunLock();
   }
 }
 

@@ -1740,10 +1740,16 @@ pub fn run() {
         .map(|app| {
             app.run(|app_handle, event| {
                 #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
-                if let tauri::RunEvent::Opened { urls } = event {
-                    let paths =
-                        commands::skill_cmd::collect_skill_package_open_paths_from_urls(&urls);
-                    emit_skill_package_open_paths(app_handle, paths);
+                {
+                    if let tauri::RunEvent::Opened { urls } = event {
+                        let paths =
+                            commands::skill_cmd::collect_skill_package_open_paths_from_urls(&urls);
+                        emit_skill_package_open_paths(app_handle, paths);
+                    }
+                }
+                #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
+                {
+                    let _ = (app_handle, event);
                 }
             });
         });

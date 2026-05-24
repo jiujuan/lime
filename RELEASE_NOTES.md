@@ -1,76 +1,50 @@
-## Lime v1.48.0
+## Lime v1.49.0
 
 发布日期：`2026-05-24`
-递交范围：当前完整 worktree，包含 `v1.47.0` 后 2 个已提交 commit，以及本轮发布前 tracked / untracked / deletion 改动；本次重点收口 i18n 工具链、回复语言边界、Markdown 渲染安全、Agent App Host Bridge artifact 回放、质量工作流与旧证据清理。
-
-> 发布说明：上一版 release note 事实源为 `v1.47.0`。本版升级到 `v1.48.0`，并继续按 current release note 口径清理旧历史堆叠内容：`RELEASE_NOTES.md` 只保留当前版本说明，旧 `v1.47.0` 及更早发布说明不再作为当前 release note 事实源保留。
+递交范围：`v1.48.0` 后的发布收口修复。本版只保留当前 release note 事实源，旧 `v1.48.0` 发布说明不再作为当前发布说明保留。
 
 ### 发布概览
 
-- 应用版本从 `1.47.0` 升级到 `1.48.0`，同步 `package.json`、`package-lock.json`、`packages/lime-cli-npm/package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json` 与 `src-tauri/tauri.conf.headless.json`。
-- i18n 工具链补齐 translation coverage JSON、source locale export、translation PR pack、hardcoded scan、unused key check、language boundary、bundle、release docs、app metadata、RTL readiness 与 patch retirement gate 等脚本和证据文件。
-- 质量工作流把 i18n 结构校验、用户可见硬编码扫描、unused key 检查与 patch retirement gate 纳入本地任务选择、`local-ci` 和 GUI smoke 主链。
-- 回复语言从配置、设置页、前端 request metadata、Rust runtime snapshot 到 system prompt 注入形成独立事实源，避免把 UI locale、浏览器环境语言和内容产物语言混用。
-- Markdown 渲染继续收敛为 current 安全路径：统一外链拦截、复制 / 图片 / 引用文案本地化、代码块视觉与 markdown table fence 处理，并补齐 Preview 回归。
-- Agent App Host Bridge 对 `studioLogoGenerate` 这类图片 artifact 任务等待 artifact 回放后再推送终态，避免 App 先收到无结果完成态。
-- 删除旧 Agent App prototype 图、旧 v2 release evidence，以及 legacy translation coverage 单测，避免旧证据继续伪装成当前发布事实源。
+- 应用版本从 `1.48.0` 升级到 `1.49.0`，同步 `package.json`、`package-lock.json`、`packages/lime-cli-npm/package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json` 与 `src-tauri/tauri.conf.headless.json`。
+- Mimo / xiaomimimo Anthropic-compatible Provider 完成 SGP host 识别、模型别名归一、模型列表兜底与 Prompt Cache catalog 对齐，避免 `/models` 404 或旧别名导致模型不可选。
+- API Key Provider 保存逻辑支持替换当前 Provider 的旧密钥，设置页保存时不再追加重复 key，避免界面已改但运行时仍调用旧密钥。
+- 任务中心删除旧 hover / search 预取链路，打开历史会话时不再被旧预取请求抢占；新建任务首页和历史会话切换保留 current 任务中心主路径。
+- GUI smoke 发布门禁加固：增加单 runner 锁、延长 CI 超时、拆分并验证 Skill Forge Rust 定向测试实际运行，避免 release 前冒烟被并发或长编译误判。
+- `@` 命令注册表 smoke 改为在提交前显式过滤并确认 `@配图` badge，确保发布门禁真实覆盖 `@配图 -> image_generate` 主链。
+- Knowledge GUI smoke 的种子阶段关闭 Builder Runtime 外部模型依赖，使发布冒烟不再受租户白名单影响。
 
 ### 用户可见更新
 
-- 设置页新增独立的“回复语言”偏好，可选择自动判断或固定为 current 五语言之一；该偏好只影响对话回复，不改变界面语言、浏览器站点语言或内容产物目标语言。
-- Agent 对话 Markdown 代码块、图片说明、引用 / 复制操作文案进入五语言资源，交互文案不再硬编码中文。
-- Markdown 中的 HTTP 外链点击在聊天与预览中走统一拦截逻辑，桌面环境下打开外部链接更一致。
-- Markdown 表格如果被包在 `markdown` fence 中，会按正文表格渲染，减少模型输出表格被误当代码块的问题。
-- 任务中心顶部会话标签支持直接重命名当前任务，新建任务首页标签保持不可重命名 / 不可关闭，避免误操作。
-- 任务中心打开历史会话时不再先清空当前消息，减少会话切换过程中的空白闪烁和缓存误清理。
-- Mimo / xiaomimimo Anthropic 兼容入口会把旧 `mimo-v2-flash` 模型别名归一到当前可用的 `mimo-v2.5-pro`，减少旧配置触发 provider 400。
-- AI 服务商详情页支持直接编辑并保存 `API Host`，从接口获取模型和测试连接前会先保存未提交的 Host，Mimo 可以切换到 SGP / CN 等不同 xiaomimimo Host。
-- AI 服务商详情页的 API 密钥保存改为替换当前 Provider 的旧密钥，而不是追加一条新密钥；重复历史密钥也会被整理成唯一启用密钥，避免界面仍显示 / 调用旧密钥。
-- AI 服务商左侧“启用的模型”列表改为独立滚动区域，长列表滚动不再拖动整个设置页。
-- RTL 语言 readiness、source locale export 与翻译 PR pack 有独立报告和 evidence，便于后续翻译交付复核。
+- Mimo SGP / CN 等 xiaomimimo Host 可以重新保存和切换，模型下拉可在上游不提供标准模型枚举时显示当前可用模型。
+- Provider 详情页保存 API Key 后会替换旧 key，避免保存后结尾仍显示旧 key 或运行时继续使用旧凭证。
+- AI 服务商左侧“启用的模型”区域保持独立滚动，长模型列表不再拖动整个设置页。
+- 任务中心从侧边栏或搜索结果打开历史会话时更稳定，不再先清空消息或被 hover 预取打断。
 
 ### 开发者与治理更新
 
-- `scripts/detect-missing-translations.ts` 增加 coverage 统计与 JSON report，`package.json` 暴露 i18n 检查、扫描、导出和报告命令。
-- `scripts/quality-task-planner.mjs`、`scripts/quality-task-selector.mjs`、`scripts/local-ci.mjs` 与 `.github/workflows/quality.yml` 同步 i18n 任务选择和 CI 输出字段。
-- `scripts/verify-gui-smoke.mjs` 在写出 Patch metrics 后联动 `governance:legacy-report` 与 `i18n:patch-retirement-gate`。
-- `at-command-registry` 与 `claw-chat-ready-streaming` GUI smoke 补齐 Playwright context 关闭超时、临时 profile 清理和工作区 ready 信号等待，降低 release smoke 收尾阶段挂起概率。
-- `src/i18n/loadNamespace.ts` 将 bundled namespace parts 独立到 `bundledNamespaceParts.ts`，并在 `locales.ts` 增加 RTL direction helper。
-- Rust runtime 增加 `recent_response_language` 投影与 `【AI 回复语言】` prompt stage，测试覆盖 turn / thread metadata fallback。
-- `src-tauri/crates/aster-rust/crates/aster/src/tools/shell_runtime.rs` 与相关 bash / PowerShell / task 工具继续收敛跨平台 shell runtime 行为，并补 Windows shell runtime 回归。
-- 修复 Windows 发布构建中 `shell_runtime.rs` 的 unreachable expression warning，以及 `std::env::var_os` 直接作为泛型 `Fn(&str)` 参数传入时的 lifetime 泛化错误。
-- 文件管理器 `create_directory` 补齐平台原生路径与嵌套目录创建回归，并在 Windows quality workflow 中增加定向测试。
-- `request_model_resolution` 与前端模型配置解析同步 Mimo 模型别名归一化，避免前端列表与 Rust runtime 解析口径不一致。
-- `add_api_key` 命令请求新增 `replace_existing` 语义，设置页单密钥编辑走后端事务替换旧密钥；常规添加模型流程仍保留追加 Key 能力。
-- `i18n-hardcoded-check` 允许可选 literal expression 解包，Companion 设置卡片标题也迁入五语言资源，避免用户可见文案回流硬编码。
-- `src-tauri/src/commands/skill_cmd.rs` 的本地 skill 包管理测试补齐进程环境变量隔离，避免 Rust 并行测试互相覆盖 `HOME/XDG/APPDATA`。
-- `docs/roadmap/i18n/` 新增 app metadata、Chrome extension、language boundary、release docs、response language、RTL、toolchain 评估和 evidence 记录。
+- `.github/workflows/quality.yml` 的 GUI Smoke 超时调整为 90 分钟，并同步本地建议命令为 `npm run verify:gui-smoke -- --timeout-ms 900000`。
+- `scripts/verify-gui-smoke.mjs` 新增 `.lime/locks/gui-smoke.lock` 运行锁，避免多个 GUI smoke 同时争用 headless Tauri、Chrome profile 和 DevBridge。
+- `scripts/agent-service-skill-entry-smoke.mjs` 改为按 Rust test filter 分组运行，并检查目标测试名实际通过，防止过滤器空跑。
+- `scripts/at-command-registry-e2e.mjs` 在选择 `@配图` 后断言输入栏命令 badge 和提示词已就绪，再等待 `execute_skill image_generate` 请求，避免普通文本误提交流程被当成发布冒烟。
+- `scripts/knowledge-gui-smoke.mjs` seed pack 时显式设置 `builderRuntime.enabled=false`，避免 smoke 依赖外部模型白名单。
+- Windows / Rust warning 收口：`runner.rs` 未使用变量、`skill_cmd.rs` 平台限定常量与 URL helper、`voice_asr_service.rs` 测试 import 都已按平台 cfg 收紧。
+- `fixture_adapter.rs` 写 fixture log 后显式 flush，减少 connector fixture 日志丢失风险。
 
 ### 当前校验状态
 
 - 已通过 `npm run verify:app-version`
-- 已通过 `cargo fmt --manifest-path "src-tauri/Cargo.toml" --all`
-- 已通过 `cargo clippy --manifest-path "src-tauri/Cargo.toml" --all-targets --all-features -- -D warnings`
-- 已通过 `cargo check --manifest-path "src-tauri/Cargo.toml" --no-default-features --features local-sensevoice`
-- 已通过 `cargo test --manifest-path "src-tauri/Cargo.toml"`
+- 已通过 `npm test`
 - 已通过 `npm run lint`
 - 已通过 `npm run typecheck`
-- 已通过 `npm test`
-- 已通过 `npm run test:contracts`
-- 已通过 `npm run i18n:check`
-- 已通过 `npm run i18n:unused -- --check`
-- 已通过 `npm run i18n:scan -- --files src/components/AppPageContent.tsx src/components/agent/chat/AgentChatWorkspace.tsx src/components/agent/chat/index.tsx src/components/api-key-provider/ApiKeyProviderSection.tsx src/components/api-key-provider/ModelProviderList.tsx src/components/api-key-provider/ProviderSetting.tsx src/components/settings-v2/agent/providers/index.tsx src/main.tsx`
-- 已通过 `npm test -- src/components/api-key-provider/ProviderSetting.ui.test.tsx src/lib/api/apiKeyProvider.test.ts`
-- 已通过 `npm test -- src/components/api-key-provider/ApiKeyProviderSection.ui.test.tsx src/components/settings-v2/agent/providers/index.test.tsx`
-- 已通过 `npm test -- src/components/settings-v2/agent/providers/index.test.tsx src/components/api-key-provider/ProviderSetting.ui.test.tsx src/components/api-key-provider/ApiKeyProviderSection.ui.test.tsx src/lib/api/apiKeyProvider.test.ts`
-- 已通过 `cargo test --manifest-path "src-tauri/Cargo.toml" -p lime-services add_api_key_replace_existing -- --nocapture`
-- 已通过 Mimo SGP live `/anthropic/v1/messages` smoke：`mimo-v2.5-pro` 返回 HTTP 200，密钥未写入仓库或 release note。
-- 已通过 `npm run verify:gui-smoke`
 - 已通过 `cargo fmt --manifest-path "src-tauri/Cargo.toml" --all -- --check`
-- 已通过 `cargo test --manifest-path "src-tauri/crates/aster-rust/Cargo.toml" -p aster-core tools::shell_runtime`
-- 已通过 `cargo check --manifest-path "src-tauri/crates/aster-rust/Cargo.toml" -p aster-core --no-default-features`
-- 已尝试 `cargo check --manifest-path "src-tauri/crates/aster-rust/Cargo.toml" -p aster-core --target x86_64-pc-windows-msvc`；本机 macOS 交叉环境缺少 Windows/MSVC C 标准头，停在 `ring` build script 的 `assert.h`，未复现用户报告的 `shell_runtime.rs` Rust 编译错误。
+- 已通过 `cargo test --manifest-path "src-tauri/Cargo.toml"`
+- 已通过 `npm run test:contracts`
+- 已通过 `npm run lint:rust`
+- 已通过 `git diff --check`
+- 已通过敏感信息扫描，真实 API Key 未写入仓库或 release note。
+- 已通过 Mimo SGP live `/anthropic/v1/messages` smoke：`mimo-v2.5-pro` 返回 HTTP 200。
+- 已通过 `npm run verify:gui-smoke -- --timeout-ms 900000`
 
 ---
 
-**完整变更**: `v1.47.0` -> `v1.48.0`
+**完整变更**: `v1.48.0` -> `v1.49.0`

@@ -511,11 +511,9 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
   const detailBadges = [
     isPreload ? "系统预执行" : null,
     skillTitle && skillTitle !== subject ? `技能：${skillTitle}` : null,
-    toolCall.status === "running"
-      ? "执行中"
-      : toolCall.status === "failed"
-        ? "执行失败"
-        : null,
+    toolCall.status === "running" || toolCall.status === "failed"
+      ? toolDisplay.action
+      : null,
   ].filter((value): value is string => Boolean(value));
 
   return (
@@ -612,8 +610,10 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
                 <button
                   type="button"
                   className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                  title="在画布中打开"
-                  aria-label={`在画布中打开-${filePath}`}
+                  title={t("agentChat.toolCall.openInCanvas")}
+                  aria-label={t("agentChat.toolCall.openInCanvasWithTarget", {
+                    target: filePath,
+                  })}
                   onClick={() => {
                     if (filePath && onFileClick) {
                       onFileClick(filePath, fileContent);
@@ -785,7 +785,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
                     <img
                       key={`${image.src.slice(0, 48)}-${index}`}
                       src={image.src}
-                      alt="工具结果图片"
+                      alt={t("agentChat.toolCall.resultImage.alt")}
                       className="h-20 w-20 rounded-lg border border-slate-200 object-cover"
                       loading="lazy"
                     />

@@ -1,6 +1,7 @@
 interface ResolveChatLayoutVisibilityParams {
   agentEntry: string;
   preferEmptyStateForFreshTaskCenterTab?: boolean;
+  hasSession?: boolean;
   hasDisplayMessages: boolean;
   hasPendingA2UIForm: boolean;
   hasCanvasContent?: boolean;
@@ -8,13 +9,13 @@ interface ResolveChatLayoutVisibilityParams {
   hasUnconsumedInitialDispatch: boolean;
   isPreparingSend: boolean;
   isSending: boolean;
-  isSessionHydrating?: boolean;
   queuedTurnCount: number;
 }
 
 export function shouldShowChatLayout({
   agentEntry,
   preferEmptyStateForFreshTaskCenterTab = false,
+  hasSession = false,
   hasDisplayMessages,
   hasPendingA2UIForm,
   hasCanvasContent = false,
@@ -22,11 +23,11 @@ export function shouldShowChatLayout({
   hasUnconsumedInitialDispatch,
   isPreparingSend,
   isSending,
-  isSessionHydrating = false,
   queuedTurnCount,
 }: ResolveChatLayoutVisibilityParams): boolean {
   return (
     (agentEntry === "claw" && !preferEmptyStateForFreshTaskCenterTab) ||
+    hasSession ||
     hasDisplayMessages ||
     hasPendingA2UIForm ||
     hasCanvasContent ||
@@ -34,7 +35,6 @@ export function shouldShowChatLayout({
     hasUnconsumedInitialDispatch ||
     isPreparingSend ||
     isSending ||
-    isSessionHydrating ||
     queuedTurnCount > 0
   );
 }

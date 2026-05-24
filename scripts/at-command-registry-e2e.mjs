@@ -15,6 +15,8 @@ const DEFAULT_PREFIX = "at-command-registry-e2e";
 const MENTION_USAGE_STORAGE_KEY = "lime:mention-entry-usage:v1";
 const ONBOARDING_VERSION = "1.1.0";
 const RECENT_REPLAY_TEXT = "E2E 最近搜索输入";
+const IMAGE_COMMAND_PREFIX = "@配图";
+const IMAGE_COMMAND_LABEL = "配图";
 const IMAGE_PROMPT = "E2E 图片命令路由测试，请生成一张青柠插画";
 const CHAT_PROVIDER_PREFERENCE = "deepseek";
 const CHAT_MODEL_PREFERENCE = "deepseek-v4-flash";
@@ -244,6 +246,21 @@ function logStage(options, stage) {
 
 function commandItemByText(page, text) {
   return page.locator("[cmdk-item]").filter({ hasText: text });
+}
+
+async function waitForTextareaValue(page, expectedValue, timeoutMs) {
+  await page.waitForFunction(
+    ({ selector, value }) => {
+      const inputs = Array.from(document.querySelectorAll(selector));
+      const input = inputs.at(-1);
+      return input?.value === value;
+    },
+    {
+      selector: 'textarea[name="agent-chat-message"]',
+      value: expectedValue,
+    },
+    { timeout: timeoutMs },
+  );
 }
 
 function readNestedObject(value, keys) {
@@ -616,9 +633,26 @@ async function main() {
     });
 
     logStage(options, "select-image-command");
-    await imageCommandItem.scrollIntoViewIfNeeded();
-    await imageCommandItem.click();
+    await textarea.fill(IMAGE_COMMAND_PREFIX);
+    const filteredImageCommandItem = commandItemByText(
+      page,
+      IMAGE_COMMAND_PREFIX,
+    ).first();
+    await filteredImageCommandItem.waitFor({
+      state: "visible",
+      timeout: options.timeoutMs,
+    });
+    await filteredImageCommandItem.scrollIntoViewIfNeeded();
+    await filteredImageCommandItem.click();
+    await page
+      .getByTestId("inputbar-builtin-command-badge")
+      .filter({ hasText: IMAGE_COMMAND_LABEL })
+      .first()
+      .waitFor({ state: "visible", timeout: options.timeoutMs });
     await textarea.fill(IMAGE_PROMPT);
+    await waitForTextareaValue(page, IMAGE_PROMPT, options.timeoutMs);
+    summary.assertions.imageCommandSelected = true;
+    summary.assertions.imagePromptFilled = true;
 
     logStage(options, "submit-image-command");
     const submitStart = invokes.length;

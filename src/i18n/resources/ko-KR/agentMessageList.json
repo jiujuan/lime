@@ -77,5 +77,8 @@
   "agentChat.messageList.taskCenterEmpty.chip.pending": "이어서 진행할 채팅을 왼쪽에 우선 표시",
   "agentChat.messageList.taskCenterEmpty.chip.organized": "최근 채팅과 아카이브를 시간순으로 자동 정리",
   "agentChat.messageList.taskCenterEmpty.chip.restore": "복원 중인 세션은 자동으로 여기로 돌아옵니다",
-  "agentChat.messageList.empty.defaultTitle": "새 대화를 시작해 보세요"
+  "agentChat.messageList.empty.defaultTitle": "새 대화를 시작해 보세요",
+  "agentChat.toolCall.openInCanvas": "캔버스에서 열기",
+  "agentChat.toolCall.openInCanvasWithTarget": "캔버스에서 열기: {{target}}",
+  "agentChat.toolCall.resultImage.alt": "도구 결과 이미지"
 }

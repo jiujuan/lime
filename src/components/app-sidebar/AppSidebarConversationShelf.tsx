@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type MouseEvent,
-} from "react";
+import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import styled from "styled-components";
 import { useTranslation } from "react-i18next";
@@ -39,7 +33,6 @@ interface AppSidebarConversationShelfProps {
   actionSessionId: string | null;
   onCreateConversation: () => void;
   onNavigateToConversation: (session: AsterSessionInfo) => void;
-  onPrefetchConversation?: (session: AsterSessionInfo) => void;
   onRenameConversation?: (session: AsterSessionInfo) => void;
   onDeleteConversation?: (session: AsterSessionInfo) => void;
   onToggleArchive: (session: AsterSessionInfo, archived: boolean) => void;
@@ -48,7 +41,6 @@ interface AppSidebarConversationShelfProps {
   onToggleArchivedCollapsed: () => void;
 }
 
-const CONVERSATION_HOVER_PREFETCH_DELAY_MS = 900;
 const FAVORITE_SESSION_IDS_STORAGE_KEY =
   "lime.app-sidebar.favorite-session-ids";
 const CONVERSATION_MENU_WIDTH = 188;
@@ -496,7 +488,6 @@ export function AppSidebarConversationShelf({
   actionSessionId,
   onCreateConversation,
   onNavigateToConversation,
-  onPrefetchConversation,
   onRenameConversation,
   onDeleteConversation,
   onToggleArchive,
@@ -538,59 +529,6 @@ export function AppSidebarConversationShelf({
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(
     () => new Set(),
   );
-  const hoverPrefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-  const hoverPrefetchSessionRef = useRef<AsterSessionInfo | null>(null);
-  const clearHoverPrefetch = useCallback(() => {
-    if (hoverPrefetchTimerRef.current !== null) {
-      const session = hoverPrefetchSessionRef.current;
-      clearTimeout(hoverPrefetchTimerRef.current);
-      hoverPrefetchTimerRef.current = null;
-      hoverPrefetchSessionRef.current = null;
-      if (session) {
-        recordAgentUiPerformanceMetric(
-          "sidebar.conversation.prefetchCancelled",
-          {
-            sessionId: session.id,
-            source: "conversation_shelf",
-            workspaceId: session.workspace_id ?? null,
-          },
-        );
-      }
-    }
-  }, []);
-  const scheduleHoverPrefetch = useCallback(
-    (session: AsterSessionInfo) => {
-      if (
-        hoverPrefetchTimerRef.current !== null &&
-        hoverPrefetchSessionRef.current?.id === session.id
-      ) {
-        return;
-      }
-
-      clearHoverPrefetch();
-      recordAgentUiPerformanceMetric("sidebar.conversation.prefetchScheduled", {
-        sessionId: session.id,
-        source: "conversation_shelf",
-        workspaceId: session.workspace_id ?? null,
-      });
-      hoverPrefetchSessionRef.current = session;
-      hoverPrefetchTimerRef.current = setTimeout(() => {
-        hoverPrefetchTimerRef.current = null;
-        hoverPrefetchSessionRef.current = null;
-        recordAgentUiPerformanceMetric("sidebar.conversation.prefetchFired", {
-          sessionId: session.id,
-          source: "conversation_shelf",
-          workspaceId: session.workspace_id ?? null,
-        });
-        onPrefetchConversation?.(session);
-      }, CONVERSATION_HOVER_PREFETCH_DELAY_MS);
-    },
-    [clearHoverPrefetch, onPrefetchConversation],
-  );
-
-  useEffect(() => clearHoverPrefetch, [clearHoverPrefetch]);
 
   useEffect(() => {
     if (!menuState) {
@@ -616,7 +554,6 @@ export function AppSidebarConversationShelf({
       archived: boolean,
     ) => {
       event.stopPropagation();
-      clearHoverPrefetch();
       const rect = event.currentTarget.getBoundingClientRect();
       setMenuState({
         session,
@@ -641,7 +578,7 @@ export function AppSidebarConversationShelf({
         ),
       });
     },
-    [clearHoverPrefetch],
+    [],
   );
 
   const toggleFavoriteSession = useCallback((session: AsterSessionInfo) => {
@@ -905,7 +842,6 @@ export function AppSidebarConversationShelf({
                           isCurrentConversation ? "page" : undefined
                         }
                         onClick={() => {
-                          clearHoverPrefetch();
                           recordAgentUiPerformanceMetric(
                             "sidebar.conversation.click",
                             {
@@ -920,10 +856,6 @@ export function AppSidebarConversationShelf({
                           }
                           onNavigateToConversation(session);
                         }}
-                        onBlur={clearHoverPrefetch}
-                        onFocus={() => scheduleHoverPrefetch(session)}
-                        onPointerEnter={() => scheduleHoverPrefetch(session)}
-                        onPointerLeave={clearHoverPrefetch}
                         title={title}
                       >
                         {multiSelectMode ? (
@@ -1016,7 +948,6 @@ export function AppSidebarConversationShelf({
                             isCurrentConversation ? "page" : undefined
                           }
                           onClick={() => {
-                            clearHoverPrefetch();
                             recordAgentUiPerformanceMetric(
                               "sidebar.conversation.click",
                               {
@@ -1025,16 +956,12 @@ export function AppSidebarConversationShelf({
                                 workspaceId: session.workspace_id ?? null,
                               },
                             );
-                            if (multiSelectMode) {
-                              toggleSelectedSession(session);
-                              return;
-                            }
-                            onNavigateToConversation(session);
-                          }}
-                          onBlur={clearHoverPrefetch}
-                          onFocus={() => scheduleHoverPrefetch(session)}
-                          onPointerEnter={() => scheduleHoverPrefetch(session)}
-                          onPointerLeave={clearHoverPrefetch}
+                          if (multiSelectMode) {
+                            toggleSelectedSession(session);
+                            return;
+                          }
+                          onNavigateToConversation(session);
+                        }}
                           title={title}
                         >
                           {multiSelectMode ? (

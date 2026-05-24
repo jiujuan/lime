@@ -112,6 +112,27 @@ function normalizeUrlCandidate(rawUrl: string): {
   };
 }
 
+function normalizeStructuredUrlCandidate(rawUrl: string): string | null {
+  const normalized = normalizeUrlCandidate(rawUrl.trim()).url.trim();
+  if (!normalized) {
+    return null;
+  }
+  if (!/^https?:\/\//i.test(normalized)) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
+  return normalized;
+}
+
 function findFirstUrl(
   ...values: Array<string | undefined>
 ): string | undefined {
@@ -153,14 +174,22 @@ function extractSearchResultFromRecord(
       ? (record.locator as Record<string, unknown>)
       : null;
   const url =
-    (typeof record.url === "string" && record.url.trim()) ||
-    (typeof record.link === "string" && record.link.trim()) ||
-    (typeof record.href === "string" && record.href.trim()) ||
-    (typeof record.sourceUrl === "string" && record.sourceUrl.trim()) ||
-    (typeof record.source_url === "string" && record.source_url.trim()) ||
-    (typeof record.targetUrl === "string" && record.targetUrl.trim()) ||
-    (typeof record.target_url === "string" && record.target_url.trim()) ||
-    (typeof locator?.url === "string" && locator.url.trim()) ||
+    (typeof record.url === "string" &&
+      normalizeStructuredUrlCandidate(record.url)) ||
+    (typeof record.link === "string" &&
+      normalizeStructuredUrlCandidate(record.link)) ||
+    (typeof record.href === "string" &&
+      normalizeStructuredUrlCandidate(record.href)) ||
+    (typeof record.sourceUrl === "string" &&
+      normalizeStructuredUrlCandidate(record.sourceUrl)) ||
+    (typeof record.source_url === "string" &&
+      normalizeStructuredUrlCandidate(record.source_url)) ||
+    (typeof record.targetUrl === "string" &&
+      normalizeStructuredUrlCandidate(record.targetUrl)) ||
+    (typeof record.target_url === "string" &&
+      normalizeStructuredUrlCandidate(record.target_url)) ||
+    (typeof locator?.url === "string" &&
+      normalizeStructuredUrlCandidate(locator.url)) ||
     "";
   if (!url) {
     return null;

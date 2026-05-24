@@ -34,30 +34,51 @@ function runVitest(label, args) {
   }
 
   if (typeof result.status === "number" && result.status !== 0) {
-    const error = new Error(
-      `[smoke:agent-service-skill-entry] ${label} 失败`,
-    );
+    const error = new Error(`[smoke:agent-service-skill-entry] ${label} 失败`);
     error.exitCode = result.status;
     throw error;
   }
 }
 
-function runCargoTest(label, { packageName, testName }) {
-  console.log(`\n[smoke:agent-service-skill-entry] > ${label}`);
-  const result = spawnSync("cargo", [
-    "test",
-    "--manifest-path",
-    "Cargo.toml",
-    "-p",
-    packageName,
-    testName,
-    "--",
-    "--exact",
-  ], {
-    cwd: path.join(rootDir, "src-tauri"),
-    encoding: "utf8",
-    env: process.env,
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function assertCargoOutputContainsTests(label, output, expectedTests) {
+  const missingTests = expectedTests.filter((testName) => {
+    const pattern = new RegExp(`test ${escapeRegExp(testName)} \\.\\.\\. ok`);
+    return !pattern.test(output);
   });
+
+  if (missingTests.length > 0) {
+    const error = new Error(
+      `[smoke:agent-service-skill-entry] ${label} 未实际运行目标 Rust 测试: ${missingTests.join(", ")}`,
+    );
+    error.exitCode = 1;
+    throw error;
+  }
+}
+
+function runCargoTestGroup(label, { packageName, testFilter, expectedTests }) {
+  console.log(`\n[smoke:agent-service-skill-entry] > ${label}`);
+  const result = spawnSync(
+    "cargo",
+    [
+      "test",
+      "--manifest-path",
+      "Cargo.toml",
+      "-p",
+      packageName,
+      testFilter,
+      "--",
+      "--test-threads=1",
+    ],
+    {
+      cwd: path.join(rootDir, "src-tauri"),
+      encoding: "utf8",
+      env: process.env,
+    },
+  );
 
   if (result.stdout) {
     process.stdout.write(result.stdout);
@@ -71,30 +92,19 @@ function runCargoTest(label, { packageName, testName }) {
   }
 
   if (typeof result.status === "number" && result.status !== 0) {
-    const error = new Error(
-      `[smoke:agent-service-skill-entry] ${label} 失败`,
-    );
+    const error = new Error(`[smoke:agent-service-skill-entry] ${label} 失败`);
     error.exitCode = result.status;
     throw error;
   }
 
   const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
-  const passedCount = Array.from(
-    output.matchAll(/test result: ok\. ([0-9]+) passed/g),
-  ).reduce((total, match) => total + Number(match[1] || 0), 0);
-  if (passedCount <= 0) {
-    const error = new Error(
-      `[smoke:agent-service-skill-entry] ${label} 未实际运行目标 Rust 测试`,
-    );
-    error.exitCode = 1;
-    throw error;
-  }
+  assertCargoOutputContainsTests(label, output, expectedTests);
 
-  return {
+  return expectedTests.map((testName) => ({
     packageName,
     testName,
-    passedCount,
-  };
+    passedCount: 1,
+  }));
 }
 
 function runtimePhaseForTest(testName) {
@@ -195,11 +205,17 @@ function skillToolGateEvidenceForPhase(phase) {
 function assertRuntimeTranscriptHasSkillToolGateEvidence(transcript) {
   const events = transcript?.runtimeTranscript?.events;
   if (!Array.isArray(events)) {
-    throw new Error("[smoke:agent-service-skill-entry] runtime transcript 缺少 events");
+    throw new Error(
+      "[smoke:agent-service-skill-entry] runtime transcript 缺少 events",
+    );
   }
 
-  const allowEvent = events.find((event) => event.phase === "skill_tool_gate_allow");
-  const denyEvent = events.find((event) => event.phase === "skill_tool_gate_deny");
+  const allowEvent = events.find(
+    (event) => event.phase === "skill_tool_gate_allow",
+  );
+  const denyEvent = events.find(
+    (event) => event.phase === "skill_tool_gate_deny",
+  );
   const hasGateEvidence = (event) =>
     event?.request?.toolName === "SkillTool" &&
     typeof event?.request?.skill === "string" &&
@@ -230,14 +246,22 @@ function assertRuntimeTranscriptHasSkillToolGateEvidence(transcript) {
 
 function buildSkillToolGateProof(transcript) {
   const events = transcript.runtimeTranscript.events;
-  const allowEvent = events.find((event) => event.phase === "skill_tool_gate_allow");
-  const denyEvent = events.find((event) => event.phase === "skill_tool_gate_deny");
+  const allowEvent = events.find(
+    (event) => event.phase === "skill_tool_gate_allow",
+  );
+  const denyEvent = events.find(
+    (event) => event.phase === "skill_tool_gate_deny",
+  );
 
   return {
     allow: {
       phase: allowEvent.phase,
-      hasRequest: Boolean(allowEvent.request?.toolName && allowEvent.request?.skill),
-      hasDecision: Boolean(allowEvent.decision?.action && allowEvent.decision?.gate),
+      hasRequest: Boolean(
+        allowEvent.request?.toolName && allowEvent.request?.skill,
+      ),
+      hasDecision: Boolean(
+        allowEvent.decision?.action && allowEvent.decision?.gate,
+      ),
       hasResult: Boolean(allowEvent.result?.status),
       hasSourceMetadata: Boolean(allowEvent.sourceMetadata?.sourceDraftId),
       request: allowEvent.request,
@@ -246,8 +270,12 @@ function buildSkillToolGateProof(transcript) {
     },
     deny: {
       phase: denyEvent.phase,
-      hasRequest: Boolean(denyEvent.request?.toolName && denyEvent.request?.skill),
-      hasDecision: Boolean(denyEvent.decision?.action && denyEvent.decision?.gate),
+      hasRequest: Boolean(
+        denyEvent.request?.toolName && denyEvent.request?.skill,
+      ),
+      hasDecision: Boolean(
+        denyEvent.decision?.action && denyEvent.decision?.gate,
+      ),
       hasResult: Boolean(denyEvent.result?.status),
       hasSourceMetadata: Boolean(denyEvent.sourceMetadata),
       request: denyEvent.request,
@@ -307,7 +335,10 @@ function writeRuntimeTranscript(cargoResults) {
   assertRuntimeTranscriptHasSkillToolGateEvidence(transcript);
   const gateProof = buildSkillToolGateProof(transcript);
   transcript.skillToolGateProof = gateProof;
-  fs.writeFileSync(runtimeTranscriptPath, `${JSON.stringify(transcript, null, 2)}\n`);
+  fs.writeFileSync(
+    runtimeTranscriptPath,
+    `${JSON.stringify(transcript, null, 2)}\n`,
+  );
   console.log(
     `[smoke:agent-service-skill-entry] Skill Forge runtime transcript: ${runtimeTranscriptPath}`,
   );
@@ -331,46 +362,50 @@ function main() {
   const cargoResults = [
     {
       packageName: "lime",
-      testName:
+      testFilter:
         "services::capability_draft_service::tests::register_capability_draft_persists_readonly_http_preflight_provenance",
+      expectedTests: [
+        "services::capability_draft_service::tests::register_capability_draft_persists_readonly_http_preflight_provenance",
+      ],
     },
     {
       packageName: "lime",
-      testName:
+      testFilter: "services::runtime_skill_binding_service::tests::",
+      expectedTests: [
         "services::runtime_skill_binding_service::tests::registered_skill_becomes_ready_for_manual_enable_binding_candidate",
-    },
-    {
-      packageName: "lime",
-      testName:
         "services::runtime_skill_binding_service::tests::explicit_runtime_enable_projects_ready_binding_allowlist",
-    },
-    {
-      packageName: "lime",
-      testName:
         "services::runtime_skill_binding_service::tests::registered_skill_without_verification_provenance_is_blocked",
+      ],
     },
     {
       packageName: "lime",
-      testName:
+      testFilter:
         "services::capability_draft_service::tests::execute_capability_draft_controlled_get_returns_evidence_without_persisting_inputs",
+      expectedTests: [
+        "services::capability_draft_service::tests::execute_capability_draft_controlled_get_returns_evidence_without_persisting_inputs",
+      ],
     },
     {
       packageName: "lime",
-      testName:
+      testFilter:
         "commands::aster_agent_cmd::workspace_skill_binding_prompt::tests::should_project_workspace_skill_runtime_enable_as_callable_scope",
+      expectedTests: [
+        "commands::aster_agent_cmd::workspace_skill_binding_prompt::tests::should_project_workspace_skill_runtime_enable_as_callable_scope",
+      ],
     },
     {
       packageName: "lime-agent",
-      testName:
+      testFilter: "tools::skill_tool_gate::tests::",
+      expectedTests: [
         "tools::skill_tool_gate::tests::allowlisted_session_should_preserve_workspace_skill_source_metadata",
-    },
-    {
-      packageName: "lime-agent",
-      testName:
         "tools::skill_tool_gate::tests::disabled_session_should_fail_execute",
+      ],
     },
-  ].map((testSpec) =>
-    runCargoTest(`Skill Forge Rust 定向测试: ${testSpec.testName}`, testSpec),
+  ].flatMap((testSpec) =>
+    runCargoTestGroup(
+      `Skill Forge Rust 定向测试: ${testSpec.testFilter}`,
+      testSpec,
+    ),
   );
   writeRuntimeTranscript(cargoResults);
 

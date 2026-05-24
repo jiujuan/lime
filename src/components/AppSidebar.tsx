@@ -56,10 +56,8 @@ import {
   buildHomeAgentParams,
 } from "@/lib/workspace/navigation";
 import {
-  notifyTaskCenterTaskPrefetch,
   notifyTaskCenterTaskOpen,
   requestTaskCenterDraftTask,
-  type TaskCenterPrefetchTaskDetail,
 } from "@/components/agent/chat/taskCenterDraftTaskEvents";
 import {
   deleteAgentRuntimeSession,
@@ -188,7 +186,6 @@ const SIDEBAR_SESSION_LOAD_RESTART_DEFER_MS = 160;
 const SIDEBAR_NEW_TASK_HOME_SESSION_LOAD_DEFER_MS = 0;
 const SIDEBAR_CONVERSATION_NAVIGATION_DEFER_MS =
   SIDEBAR_SESSION_ENTRY_REFRESH_DEFER_MS;
-const SIDEBAR_SEARCH_HOVER_PREFETCH_DELAY_MS = 900;
 const SIDEBAR_NAV_LABEL_KEYS: Record<string, string> = {
   "agent-apps": "navigation.sidebar.items.agentApps",
   "agent-app-lab": "navigation.sidebar.items.agentAppLab",
@@ -2546,10 +2543,6 @@ export function AppSidebar({
   const archivedSidebarLoadInFlightRef = useRef(false);
   const archivedSidebarReloadPendingRef = useRef(false);
   const archivedSidebarReloadCancelRef = useRef<(() => void) | null>(null);
-  const sidebarSearchPrefetchTimerRef = useRef<ReturnType<
-    typeof setTimeout
-  > | null>(null);
-  const sidebarSearchPrefetchSessionRef = useRef<AsterSessionInfo | null>(null);
   const loadRecentSidebarSessionsRef = useRef<() => Promise<void>>(
     async () => undefined,
   );
@@ -2567,11 +2560,6 @@ export function AppSidebar({
       recentSidebarReloadCancelRef.current = null;
       archivedSidebarReloadCancelRef.current?.();
       archivedSidebarReloadCancelRef.current = null;
-      if (sidebarSearchPrefetchTimerRef.current !== null) {
-        clearTimeout(sidebarSearchPrefetchTimerRef.current);
-        sidebarSearchPrefetchTimerRef.current = null;
-        sidebarSearchPrefetchSessionRef.current = null;
-      }
     };
   }, []);
 
@@ -2593,11 +2581,6 @@ export function AppSidebar({
   }, []);
 
   const closeSidebarSearchDialog = useCallback(() => {
-    if (sidebarSearchPrefetchTimerRef.current !== null) {
-      clearTimeout(sidebarSearchPrefetchTimerRef.current);
-      sidebarSearchPrefetchTimerRef.current = null;
-      sidebarSearchPrefetchSessionRef.current = null;
-    }
     setSidebarSearchOpen(false);
     setSidebarSearchQuery("");
   }, []);
@@ -3798,106 +3781,6 @@ export function AppSidebar({
     [currentProjectId, isClawTaskCenter, onNavigate],
   );
 
-  const handlePrefetchConversation = useCallback(
-    (
-      session: AsterSessionInfo,
-      source: TaskCenterPrefetchTaskDetail["source"] = "conversation_shelf",
-    ) => {
-      if (!isAgentWorkspace) {
-        return;
-      }
-
-      notifyTaskCenterTaskPrefetch({
-        sessionId: session.id,
-        workspaceId: session.workspace_id ?? currentProjectId ?? null,
-        source,
-      });
-    },
-    [currentProjectId, isAgentWorkspace],
-  );
-
-  const clearSidebarSearchPrefetch = useCallback(() => {
-    if (sidebarSearchPrefetchTimerRef.current === null) {
-      return;
-    }
-
-    const session = sidebarSearchPrefetchSessionRef.current;
-    clearTimeout(sidebarSearchPrefetchTimerRef.current);
-    sidebarSearchPrefetchTimerRef.current = null;
-    sidebarSearchPrefetchSessionRef.current = null;
-    if (session) {
-      recordAgentUiPerformanceMetric("sidebar.conversation.prefetchCancelled", {
-        sessionId: session.id,
-        source: "sidebar_search",
-        workspaceId: session.workspace_id ?? currentProjectId ?? null,
-      });
-    }
-  }, [currentProjectId]);
-
-  const scheduleSidebarSearchPrefetch = useCallback(
-    (session: AsterSessionInfo) => {
-      if (
-        !isAgentWorkspace ||
-        sidebarSessionsLoading ||
-        currentSessionId === session.id ||
-        conversationNavigationDeferUntilRef.current > Date.now()
-      ) {
-        return;
-      }
-
-      if (
-        sidebarSearchPrefetchTimerRef.current !== null &&
-        sidebarSearchPrefetchSessionRef.current?.id === session.id
-      ) {
-        return;
-      }
-
-      clearSidebarSearchPrefetch();
-      sidebarSearchPrefetchSessionRef.current = session;
-      recordAgentUiPerformanceMetric("sidebar.conversation.prefetchScheduled", {
-        sessionId: session.id,
-        source: "sidebar_search",
-        workspaceId: session.workspace_id ?? currentProjectId ?? null,
-      });
-      sidebarSearchPrefetchTimerRef.current = setTimeout(() => {
-        sidebarSearchPrefetchTimerRef.current = null;
-        sidebarSearchPrefetchSessionRef.current = null;
-        recordAgentUiPerformanceMetric("sidebar.conversation.prefetchFired", {
-          sessionId: session.id,
-          source: "sidebar_search",
-          workspaceId: session.workspace_id ?? currentProjectId ?? null,
-        });
-        handlePrefetchConversation(session, "sidebar_search");
-      }, SIDEBAR_SEARCH_HOVER_PREFETCH_DELAY_MS);
-    },
-    [
-      clearSidebarSearchPrefetch,
-      currentProjectId,
-      currentSessionId,
-      handlePrefetchConversation,
-      isAgentWorkspace,
-      sidebarSessionsLoading,
-    ],
-  );
-
-  const handleSidebarSearchResultInteractionEnd = useCallback(() => {
-    clearSidebarSearchPrefetch();
-  }, [clearSidebarSearchPrefetch]);
-
-  const handleSidebarSearchResultFocus = useCallback(
-    (session: AsterSessionInfo) => {
-      scheduleSidebarSearchPrefetch(session);
-    },
-    [scheduleSidebarSearchPrefetch],
-  );
-
-  const handleSidebarSearchResultPointerEnter = useCallback(
-    (session: AsterSessionInfo) => {
-      scheduleSidebarSearchPrefetch(session);
-    },
-    [scheduleSidebarSearchPrefetch],
-  );
-
   const handleNavigateToNewTask = useCallback(() => {
     if (tryOpenTaskCenterDraftFromSidebar()) {
       return;
@@ -3946,10 +3829,9 @@ export function AppSidebar({
 
   const handleSidebarSearchResultClick = useCallback(
     (session: AsterSessionInfo) => {
-      clearSidebarSearchPrefetch();
       handleSidebarSearchNavigateToConversation(session);
     },
-    [clearSidebarSearchPrefetch, handleSidebarSearchNavigateToConversation],
+    [handleSidebarSearchNavigateToConversation],
   );
 
   const handleRenameConversation = useCallback(
@@ -4862,7 +4744,6 @@ export function AppSidebar({
               actionSessionId={sidebarSessionActionId}
               onCreateConversation={handleNavigateToNewTask}
               onNavigateToConversation={handleNavigateToConversation}
-              onPrefetchConversation={handlePrefetchConversation}
               onRenameConversation={handleRenameConversation}
               onDeleteConversation={handleDeleteConversation}
               onToggleArchive={(session, archived) => {
@@ -5436,16 +5317,10 @@ export function AppSidebar({
                       key={session.id}
                       type="button"
                       $active={isCurrentConversation}
-                      disabled={sidebarSessionsLoading}
+                      disabled={shouldShowSessionLoadingState}
                       aria-current={isCurrentConversation ? "page" : undefined}
                       title={title}
                       data-testid="app-sidebar-search-result"
-                      onBlur={handleSidebarSearchResultInteractionEnd}
-                      onFocus={() => handleSidebarSearchResultFocus(session)}
-                      onPointerEnter={() =>
-                        handleSidebarSearchResultPointerEnter(session)
-                      }
-                      onPointerLeave={handleSidebarSearchResultInteractionEnd}
                       onClick={() => handleSidebarSearchResultClick(session)}
                     >
                       <MessageSquare />

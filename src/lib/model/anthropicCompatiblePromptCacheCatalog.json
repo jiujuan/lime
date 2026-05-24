@@ -43,6 +43,10 @@
     {
       "provider": "xiaomi",
       "contains": "token-plan-cn.xiaomimimo.com/anthropic"
+    },
+    {
+      "provider": "xiaomi",
+      "contains": "token-plan-sgp.xiaomimimo.com/anthropic"
     }
   ]
 }

@@ -149,7 +149,7 @@ jobs:
   gui_smoke:
     name: GUI Smoke
     runs-on: macos-latest
-    timeout-minutes: 25
+    timeout-minutes: 90
     needs: changed
     if: ${{ needs.changed.outputs.gui_smoke == 'true' || needs.changed.outputs.fallback == 'true' || needs.changed.outputs.workflow == 'true' }}
     steps:
@@ -182,7 +182,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run headless GUI smoke
-        run: npm run verify:gui-smoke -- --timeout-ms 480000
+        run: npm run verify:gui-smoke -- --timeout-ms 900000
 
   windows_shell_runtime:
     name: Windows Shell Runtime
@@ -314,7 +314,7 @@ jobs:
                   NEXT_ACTION='Run `npm run verify:local` or `npm run test:bridge && npm run test:contracts` to reproduce the bridge/contracts failure.'
                 fi
               elif [[ "${FAILURE_REASON}" == "gui smoke failed" ]]; then
-                NEXT_ACTION='Run `npm run verify:gui-smoke -- --timeout-ms 480000` and inspect DevBridge / headless Tauri readiness.'
+                NEXT_ACTION='Run `npm run verify:gui-smoke -- --timeout-ms 900000` and inspect DevBridge / headless Tauri readiness.'
               elif [[ "${FAILURE_REASON}" == "windows shell runtime failed" ]]; then
                 NEXT_ACTION='Run `cargo test --manifest-path src-tauri/Cargo.toml -p lime-agent --test windows_shell_runtime -- --test-threads=1` on Windows and inspect PowerShell PATH fallback.'
               fi

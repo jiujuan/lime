@@ -307,6 +307,14 @@ function buildWebSearchPostSummary(output: string): string | null {
   return `已找到 ${items.length} 个可参考来源`;
 }
 
+function buildFetchSearchFailureSummary(
+  family: "fetch" | "search",
+): string {
+  return family === "fetch"
+    ? "来源暂时无法读取"
+    : "搜索结果暂时无法读取";
+}
+
 function buildSitePostSummary(metadata: unknown): string | null {
   const summary = normalizeSiteToolResultSummary(metadata);
   if (!summary) {
@@ -959,6 +967,10 @@ function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
     metadata: input.metadata,
   });
   const normalizedName = normalizeToolNameKey(input.toolName);
+  const display = getToolDisplayInfo(
+    input.toolName,
+    input.status === "in_progress" ? "running" : input.status,
+  );
   const resultOutput = input.output || "";
   const plainError = resolveToolErrorSummaryText(
     input.toolName,
@@ -990,14 +1002,19 @@ function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
     if (imageGenerationFailureSummary) {
       postSummary = imageGenerationFailureSummary;
       postSource = "error";
+    } else if (display.family === "fetch" || display.family === "search") {
+      postSummary = buildFetchSearchFailureSummary(display.family);
+      postSource = "error";
     } else {
       postSummary =
         plainError ||
         (failedOutputSummary ? `执行失败：${failedOutputSummary}` : null);
     }
     if (postSummary && !imageGenerationFailureSummary) {
-      if (!postSummary.startsWith("执行失败：")) {
-        postSummary = `执行失败：${postSummary}`;
+      if (display.family !== "fetch" && display.family !== "search") {
+        if (!postSummary.startsWith("执行失败：")) {
+          postSummary = `执行失败：${postSummary}`;
+        }
       }
       postSource = "error";
     }

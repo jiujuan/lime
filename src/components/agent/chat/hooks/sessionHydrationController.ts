@@ -5,11 +5,6 @@ export interface SessionDetailHydrationOptions {
   resumeSessionStartHooks?: true;
 }
 
-export interface SessionDetailPrefetchTopicLike {
-  updatedAt?: Date | null;
-  messagesCount?: number | null;
-}
-
 export function normalizeSessionDetailHistoryLimit(
   value: number | null | undefined,
 ): number {
@@ -30,24 +25,6 @@ export function buildSessionDetailHydrationOptions(params?: {
     options.resumeSessionStartHooks = true;
   }
   return options;
-}
-
-export function buildSessionDetailPrefetchKey(
-  workspaceId: string,
-  topicId: string,
-): string {
-  return `${workspaceId.trim() || "global"}:${topicId.trim()}`;
-}
-
-export function buildSessionDetailPrefetchSignature(
-  topicId: string,
-  topic?: SessionDetailPrefetchTopicLike | null,
-): string {
-  return [
-    topicId.trim(),
-    topic?.updatedAt?.getTime() ?? "unknown-updated",
-    topic?.messagesCount ?? "unknown-count",
-  ].join(":");
 }
 
 export function isCurrentSessionHydrationRequest(params: {

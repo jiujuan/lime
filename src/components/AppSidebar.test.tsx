@@ -9,7 +9,6 @@ import { changeLimeLocale } from "@/i18n/createI18n";
 import {
   TASK_CENTER_CREATE_DRAFT_TASK_EVENT,
   TASK_CENTER_OPEN_TASK_EVENT,
-  TASK_CENTER_PREFETCH_TASK_EVENT,
 } from "@/components/agent/chat/taskCenterDraftTaskEvents";
 import { LIME_COLOR_SCHEME_STORAGE_KEY } from "@/lib/appearance/colorSchemes";
 import { LIME_THEME_STORAGE_KEY } from "@/lib/appearance/themeMode";
@@ -1690,15 +1689,8 @@ describe("AppSidebar", () => {
     );
   });
 
-  it("任务中心内悬停已有会话应延迟通知本地预取旧会话", async () => {
+  it("任务中心内悬停已有会话不应再触发旧会话预取", async () => {
     vi.useFakeTimers();
-    const receivedDetails: unknown[] = [];
-    const listener = (event: Event) => {
-      receivedDetails.push(
-        event instanceof CustomEvent ? event.detail : undefined,
-      );
-    };
-    window.addEventListener(TASK_CENTER_PREFETCH_TASK_EVENT, listener);
     mockListAgentRuntimeSessions.mockResolvedValue([
       {
         id: "session-prefetch",
@@ -1729,34 +1721,21 @@ describe("AppSidebar", () => {
         await Promise.resolve();
       });
 
-      expect(receivedDetails).toEqual([]);
-
       act(() => {
         vi.advanceTimersByTime(920);
       });
 
-      expect(receivedDetails).toEqual([
-        {
-          sessionId: "session-prefetch",
-          workspaceId: "project-1",
-          source: "conversation_shelf",
-        },
-      ]);
+      expect(mockRecordAgentUiPerformanceMetric).not.toHaveBeenCalledWith(
+        "sidebar.conversation.prefetchFired",
+        expect.anything(),
+      );
     } finally {
       vi.useRealTimers();
-      window.removeEventListener(TASK_CENTER_PREFETCH_TASK_EVENT, listener);
     }
   });
 
-  it("点击已有会话时不应先触发旧会话预取抢占切换链路", async () => {
+  it("点击已有会话时不应再触发旧会话预取抢占切换链路", async () => {
     vi.useFakeTimers();
-    const receivedPrefetchDetails: unknown[] = [];
-    const listener = (event: Event) => {
-      receivedPrefetchDetails.push(
-        event instanceof CustomEvent ? event.detail : undefined,
-      );
-    };
-    window.addEventListener(TASK_CENTER_PREFETCH_TASK_EVENT, listener);
     mockListAgentRuntimeSessions.mockResolvedValue([
       {
         id: "session-click",
@@ -1796,11 +1775,13 @@ describe("AppSidebar", () => {
         vi.advanceTimersByTime(200);
       });
 
-      expect(receivedPrefetchDetails).toEqual([]);
+      expect(mockRecordAgentUiPerformanceMetric).not.toHaveBeenCalledWith(
+        "sidebar.conversation.prefetchFired",
+        expect.anything(),
+      );
       expect(onNavigate).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
-      window.removeEventListener(TASK_CENTER_PREFETCH_TASK_EVENT, listener);
     }
   });
 
@@ -1999,15 +1980,8 @@ describe("AppSidebar", () => {
     ).toBeNull();
   });
 
-  it("搜索结果悬停应延迟触发旧会话预取，避免抢占点击切换", async () => {
+  it("搜索结果悬停不应再触发旧会话预取，避免抢占点击切换", async () => {
     vi.useFakeTimers();
-    const receivedDetails: unknown[] = [];
-    const listener = (event: Event) => {
-      receivedDetails.push(
-        event instanceof CustomEvent ? event.detail : undefined,
-      );
-    };
-    window.addEventListener(TASK_CENTER_PREFETCH_TASK_EVENT, listener);
     mockListAgentRuntimeSessions.mockResolvedValue([
       {
         id: "session-prefetch-search",
@@ -2055,48 +2029,26 @@ describe("AppSidebar", () => {
         await Promise.resolve();
       });
 
-      expect(receivedDetails).toEqual([]);
-
       act(() => {
         vi.advanceTimersByTime(899);
       });
-      expect(receivedDetails).toEqual([]);
 
       act(() => {
         vi.advanceTimersByTime(1);
       });
 
-      expect(receivedDetails).toEqual([
-        {
-          sessionId: "session-prefetch-search",
-          workspaceId: "project-1",
-          source: "sidebar_search",
-        },
-      ]);
-      expect(mockRecordAgentUiPerformanceMetric).toHaveBeenCalledWith(
+      expect(mockRecordAgentUiPerformanceMetric).not.toHaveBeenCalledWith(
         "sidebar.conversation.prefetchFired",
-        expect.objectContaining({
-          sessionId: "session-prefetch-search",
-          source: "sidebar_search",
-          workspaceId: "project-1",
-        }),
+        expect.anything(),
       );
     } finally {
       vi.useRealTimers();
-      window.removeEventListener(TASK_CENTER_PREFETCH_TASK_EVENT, listener);
     }
   });
 
-  it("搜索结果快速点击应取消预取计时器并直接导航", async () => {
+  it("搜索结果快速点击不应再触发预取计时器并应直接导航", async () => {
     vi.useFakeTimers();
     const onNavigate = vi.fn();
-    const receivedPrefetchDetails: unknown[] = [];
-    const listener = (event: Event) => {
-      receivedPrefetchDetails.push(
-        event instanceof CustomEvent ? event.detail : undefined,
-      );
-    };
-    window.addEventListener(TASK_CENTER_PREFETCH_TASK_EVENT, listener);
     mockListAgentRuntimeSessions.mockResolvedValue([
       {
         id: "session-click-search",
@@ -2146,7 +2098,10 @@ describe("AppSidebar", () => {
         vi.advanceTimersByTime(900);
       });
 
-      expect(receivedPrefetchDetails).toEqual([]);
+      expect(mockRecordAgentUiPerformanceMetric).not.toHaveBeenCalledWith(
+        "sidebar.conversation.prefetchFired",
+        expect.anything(),
+      );
       expect(onNavigate).toHaveBeenCalledWith(
         "agent",
         expect.objectContaining({
@@ -2157,7 +2112,6 @@ describe("AppSidebar", () => {
       );
     } finally {
       vi.useRealTimers();
-      window.removeEventListener(TASK_CENTER_PREFETCH_TASK_EVENT, listener);
     }
   });
 

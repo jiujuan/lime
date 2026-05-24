@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   SESSION_DETAIL_HISTORY_LIMIT,
   buildSessionDetailHydrationOptions,
-  buildSessionDetailPrefetchKey,
-  buildSessionDetailPrefetchSignature,
   isCurrentSessionHydrationRequest,
   normalizeSessionDetailHistoryLimit,
 } from "./sessionHydrationController";
@@ -40,20 +38,6 @@ describe("sessionHydrationController", () => {
     ).toEqual({
       historyLimit: 8,
     });
-  });
-
-  it("应稳定生成 prefetch key 与签名", () => {
-    const updatedAt = new Date("2026-05-05T00:00:00.000Z");
-
-    expect(buildSessionDetailPrefetchKey(" workspace-a ", " session-a ")).toBe(
-      "workspace-a:session-a",
-    );
-    expect(
-      buildSessionDetailPrefetchSignature(" session-a ", {
-        updatedAt,
-        messagesCount: 12,
-      }),
-    ).toBe(`session-a:${updatedAt.getTime()}:12`);
   });
 
   it("应按 requestVersion 和 targetSessionId 丢弃过期 hydration 结果", () => {

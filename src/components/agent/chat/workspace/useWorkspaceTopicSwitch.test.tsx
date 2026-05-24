@@ -131,6 +131,7 @@ describe("useWorkspaceTopicSwitch", () => {
       isArchived: false,
     });
     const props = createBaseProps({
+      projectId: undefined,
       originalSwitchTopic,
       onBeforeTopicSwitch,
       loadTopicBoundProjectId: vi.fn(() => null),
@@ -142,12 +143,40 @@ describe("useWorkspaceTopicSwitch", () => {
       result = await mounted.getValue().switchTopic("session-2");
     });
 
-    expect(result).toBe("success");
+    expect(result).toBe("deferred");
     expect(onBeforeTopicSwitch).toHaveBeenCalledTimes(1);
     expect(onBeforeTopicSwitch.mock.invocationCallOrder[0]).toBeLessThan(
       projectApiMock.getDefaultProject.mock.invocationCallOrder[0],
     );
-    expect(originalSwitchTopic).toHaveBeenCalledWith("session-2");
+    expect(props.deferTopicSwitch).toHaveBeenCalledWith(
+      "session-2",
+      "workspace-1",
+      undefined,
+    );
+    expect(originalSwitchTopic).not.toHaveBeenCalled();
+  });
+
+  it("当前项目已知但话题未绑定时应直接切换，不再等待项目解析", async () => {
+    const originalSwitchTopic = vi.fn(async () => undefined);
+    const onBeforeTopicSwitch = vi.fn();
+    const props = createBaseProps({
+      originalSwitchTopic,
+      onBeforeTopicSwitch,
+      loadTopicBoundProjectId: vi.fn(() => null),
+    });
+    const mounted = renderHook(props);
+
+    let result: Awaited<ReturnType<HookValue["switchTopic"]>> | undefined;
+    await act(async () => {
+      result = await mounted.getValue().switchTopic("session-fast-path");
+    });
+
+    expect(result).toBe("success");
+    expect(projectApiMock.getProject).not.toHaveBeenCalled();
+    expect(projectApiMock.getDefaultProject).not.toHaveBeenCalled();
+    expect(projectApiMock.getOrCreateDefaultProject).not.toHaveBeenCalled();
+    expect(onBeforeTopicSwitch).toHaveBeenCalledWith("session-fast-path");
+    expect(originalSwitchTopic).toHaveBeenCalledWith("session-fast-path");
   });
 
   it("直接 runTopicSwitch 时也应发出导航信号", async () => {

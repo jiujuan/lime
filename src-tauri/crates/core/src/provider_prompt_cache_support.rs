@@ -62,6 +62,7 @@ mod tests {
             "https://coding.dashscope.aliyuncs.com/apps/anthropic",
             "https://coding-intl.dashscope.aliyuncs.com/apps/anthropic",
             "https://token-plan-cn.xiaomimimo.com/anthropic",
+            "https://token-plan-sgp.xiaomimimo.com/anthropic",
         ];
 
         for host in hosts {

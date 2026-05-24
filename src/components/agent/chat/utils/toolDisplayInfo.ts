@@ -1202,6 +1202,11 @@ const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
       icon: FilePlus,
       groupTitle: "任务",
       actionKey: "task",
+      actions: {
+        failed: "生成失败",
+        completed: "已生成",
+        running: "生成中",
+      },
     },
   ],
   [

@@ -77,5 +77,8 @@
   "agentChat.messageList.taskCenterEmpty.chip.pending": "続きから再開するチャットを左側に優先表示",
   "agentChat.messageList.taskCenterEmpty.chip.organized": "最近のチャットとアーカイブを時間順に整理",
   "agentChat.messageList.taskCenterEmpty.chip.restore": "復元中のセッションは自動的にここへ戻ります",
-  "agentChat.messageList.empty.defaultTitle": "新しい会話を始めましょう"
+  "agentChat.messageList.empty.defaultTitle": "新しい会話を始めましょう",
+  "agentChat.toolCall.openInCanvas": "キャンバスで開く",
+  "agentChat.toolCall.openInCanvasWithTarget": "キャンバスで開く: {{target}}",
+  "agentChat.toolCall.resultImage.alt": "ツール結果画像"
 }

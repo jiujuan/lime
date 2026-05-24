@@ -828,6 +828,129 @@ describe("agentChatHistory", () => {
     ).toBe(true);
   });
 
+  it("水合历史时应在保留本地可见文本的同时收敛同一工具调用的终态", () => {
+    const localMessages = [
+      {
+        id: "local-user-tool-state",
+        role: "user" as const,
+        content: "请继续整理结果",
+        timestamp: new Date("2026-05-12T10:00:00.000Z"),
+      },
+      {
+        id: "local-assistant-tool-state",
+        role: "assistant" as const,
+        content: "本地仍在整理结果",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "本地仍在整理结果",
+          },
+          {
+            type: "tool_use" as const,
+            toolCall: {
+              id: "tool-state-1",
+              name: "WebFetch",
+              arguments: JSON.stringify({
+                url: "https://example.com/article",
+              }),
+              status: "running" as const,
+              startTime: new Date("2026-05-12T10:00:01.000Z"),
+            },
+          },
+        ],
+        toolCalls: [
+          {
+            id: "tool-state-1",
+            name: "WebFetch",
+            arguments: JSON.stringify({
+              url: "https://example.com/article",
+            }),
+            status: "running" as const,
+            startTime: new Date("2026-05-12T10:00:01.000Z"),
+          },
+        ],
+        timestamp: new Date("2026-05-12T10:00:02.000Z"),
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "history-user-tool-state",
+        role: "user" as const,
+        content: "请继续整理结果",
+        timestamp: new Date("2026-05-12T10:00:01.000Z"),
+      },
+      {
+        id: "local-assistant-tool-state",
+        role: "assistant" as const,
+        content:
+          "历史消息内容过大，首屏已省略完整内容；需要时可加载完整历史查看。",
+        contentParts: [
+          {
+            type: "tool_use" as const,
+            toolCall: {
+              id: "tool-state-1",
+              name: "WebFetch",
+              arguments: JSON.stringify({
+                url: "https://example.com/article",
+              }),
+              status: "completed" as const,
+              startTime: new Date("2026-05-12T10:00:01.000Z"),
+              endTime: new Date("2026-05-12T10:00:03.000Z"),
+              result: {
+                success: true,
+                output: "已整理完毕",
+              },
+            },
+          },
+        ],
+        toolCalls: [
+          {
+            id: "tool-state-1",
+            name: "WebFetch",
+            arguments: JSON.stringify({
+              url: "https://example.com/article",
+            }),
+            status: "completed" as const,
+            startTime: new Date("2026-05-12T10:00:01.000Z"),
+            endTime: new Date("2026-05-12T10:00:03.000Z"),
+            result: {
+              success: true,
+              output: "已整理完毕",
+            },
+          },
+        ],
+        timestamp: new Date("2026-05-12T10:00:03.000Z"),
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+    );
+
+    expect(mergedMessages).toHaveLength(2);
+    expect(mergedMessages[1]?.content).toBe("本地仍在整理结果");
+    expect(mergedMessages[1]?.toolCalls?.[0]).toMatchObject({
+      id: "tool-state-1",
+      status: "completed",
+    });
+    expect(mergedMessages[1]?.contentParts?.[0]).toEqual({
+      type: "text",
+      text: "本地仍在整理结果",
+    });
+    expect(
+      mergedMessages[1]?.contentParts?.find(
+        (part) => part.type === "tool_use" && part.toolCall.id === "tool-state-1",
+      ),
+    ).toMatchObject({
+      type: "tool_use",
+      toolCall: {
+        id: "tool-state-1",
+        status: "completed",
+      },
+    });
+  });
+
   it("分页历史消息应使用历史窗口绝对位置生成稳定 ID", () => {
     const detail: AsterSessionDetail = {
       id: "session-page",

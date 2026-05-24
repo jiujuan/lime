@@ -496,8 +496,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     vi.useRealTimers();
   });
 
-  it("历史窗口 hydrate 完成后仍应先透传消息，并延迟运行轨迹投影", () => {
-    vi.useFakeTimers();
+  it("历史窗口 hydrate 完成后应直接透传消息和运行轨迹投影", () => {
     const { messages, turns, threadItems } =
       buildHeavySessionRuntimeFixture("history-window");
     const params = createBaseParams({
@@ -515,24 +514,14 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     });
 
     const harness = renderHook(params);
-    let sceneProps = (harness.getValue().mainAreaNode as any).props;
+    const sceneProps = (harness.getValue().mainAreaNode as any).props;
 
     expect(sceneProps.messageListProps.messages).toBe(messages);
-    expect(sceneProps.messageListProps.turns).toEqual([]);
-    expect(sceneProps.messageListProps.threadItems).toEqual([]);
-    expect(sceneProps.messageListProps.currentTurnId).toBeNull();
-
-    act(() => {
-      vi.advanceTimersByTime(700);
-    });
-
-    sceneProps = (harness.getValue().mainAreaNode as any).props;
     expect(sceneProps.messageListProps.turns).toBe(turns);
     expect(sceneProps.messageListProps.threadItems).toBe(threadItems);
     expect(sceneProps.messageListProps.currentTurnId).toBe(
       "history-window-turn-5",
     );
-    vi.useRealTimers();
   });
 
   it("发送中会话不应延迟运行轨迹投影", () => {

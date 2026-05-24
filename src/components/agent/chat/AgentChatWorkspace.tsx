@@ -237,7 +237,6 @@ import {
 } from "./components/TaskCenterTabStrip";
 import {
   subscribeTaskCenterDraftTaskRequests,
-  subscribeTaskCenterTaskPrefetchRequests,
   subscribeTaskCenterTaskOpenRequests,
 } from "./taskCenterDraftTaskEvents";
 import type { GeneralWorkbenchFollowUpActionPayload } from "./components/generalWorkbenchSidebarContract";
@@ -2364,7 +2363,6 @@ export function AgentChatWorkspace({
     createFreshSession,
     ensureSession = async () => null,
     switchTopic: originalSwitchTopic,
-    prefetchTopic = async () => false,
     loadFullSessionHistory = async () => false,
     deleteTopic,
     renameTopic,
@@ -5457,23 +5455,6 @@ export function AgentChatWorkspace({
     });
   }, [agentEntry, handleOpenTaskCenterNewTaskPage]);
   useEffect(() => {
-    return subscribeTaskCenterTaskPrefetchRequests(
-      ({ sessionId: requestedSessionId, workspaceId }) => {
-        const requestedWorkspaceId = normalizeProjectId(workspaceId);
-        if (
-          requestedWorkspaceId &&
-          taskCenterWorkspaceId &&
-          requestedWorkspaceId !== normalizeProjectId(taskCenterWorkspaceId)
-        ) {
-          return;
-        }
-
-        void prefetchTopic(requestedSessionId);
-      },
-    );
-  }, [prefetchTopic, taskCenterWorkspaceId]);
-
-  useEffect(() => {
     if (agentEntry !== "claw" && agentEntry !== "new-task") {
       return;
     }
@@ -7035,10 +7016,20 @@ export function AgentChatWorkspace({
   const shellChromeRuntime = useMemo(() => {
     const hasUnconsumedInitialDispatch =
       !shouldUseCompactGeneralWorkbench && isBootstrapDispatchPending;
+    const hasConversationSessionForLayout =
+      Boolean(sessionId) &&
+      !shouldRenderTaskCenterEmbeddedHome &&
+      !(
+        agentEntry === "new-task" &&
+        shouldUseBrowserWorkspaceHomeChrome &&
+        !hasHomeConversationActivity &&
+        !normalizedInitialSessionId
+      );
 
     const showChatLayout = shouldShowChatLayout({
       agentEntry,
       preferEmptyStateForFreshTaskCenterTab: shouldRenderTaskCenterEmbeddedHome,
+      hasSession: hasConversationSessionForLayout,
       hasDisplayMessages,
       hasPendingA2UIForm,
       hasCanvasContent: hasCanvasWorkbenchContent,
@@ -7046,7 +7037,6 @@ export function AgentChatWorkspace({
       hasUnconsumedInitialDispatch,
       isPreparingSend: isPreparingSend || Boolean(taskCenterDraftSendRequest),
       isSending,
-      isSessionHydrating,
       queuedTurnCount: queuedTurns.length,
     });
 
@@ -7097,15 +7087,17 @@ export function AgentChatWorkspace({
     contextWorkspace.generalWorkbenchEnabled,
     currentGate.status,
     hasDisplayMessages,
+    hasHomeConversationActivity,
     hasCanvasWorkbenchContent,
     hasPendingA2UIForm,
     hideTopBar,
     isBootstrapDispatchPending,
     isPreparingSend,
     isSending,
-    isSessionHydrating,
     isThemeWorkbench,
     layoutMode,
+    normalizedInitialSessionId,
+    sessionId,
     taskCenterDraftSendRequest,
     queuedTurns.length,
     shouldRenderTaskCenterEmbeddedHome,

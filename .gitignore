@@ -146,3 +146,4 @@ playwright*
 benchmarks/*
 !benchmarks/lime-agent-runtime/
 !benchmarks/lime-agent-runtime/**
+.tmp-smoke/

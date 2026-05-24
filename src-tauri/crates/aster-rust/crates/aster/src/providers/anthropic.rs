@@ -61,6 +61,7 @@ fn should_use_bearer_auth_for_anthropic_host(host: &str) -> bool {
         "coding.dashscope.aliyuncs.com/apps/anthropic",
         "coding-intl.dashscope.aliyuncs.com/apps/anthropic",
         "token-plan-cn.xiaomimimo.com/anthropic",
+        "token-plan-sgp.xiaomimimo.com/anthropic",
     ]
     .iter()
     .any(|needle| normalized_host.contains(needle))
@@ -562,7 +563,7 @@ mod tests {
     #[test]
     fn test_known_compatible_host_adds_dual_auth_headers_to_api_client() {
         let api_client = build_anthropic_api_client(
-            "https://token-plan-cn.xiaomimimo.com/anthropic",
+            "https://token-plan-sgp.xiaomimimo.com/anthropic",
             "k1".to_string(),
         )
         .expect("api client should build");

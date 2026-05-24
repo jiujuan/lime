@@ -77,5 +77,8 @@
   "agentChat.messageList.taskCenterEmpty.chip.pending": "左侧会优先显示待继续的对话",
   "agentChat.messageList.taskCenterEmpty.chip.organized": "最近对话和归档会按时间自动整理",
   "agentChat.messageList.taskCenterEmpty.chip.restore": "恢复中的会话会自动回到这里继续",
-  "agentChat.messageList.empty.defaultTitle": "开始一段新的对话吧"
+  "agentChat.messageList.empty.defaultTitle": "开始一段新的对话吧",
+  "agentChat.toolCall.openInCanvas": "在画布中打开",
+  "agentChat.toolCall.openInCanvasWithTarget": "在画布中打开：{{target}}",
+  "agentChat.toolCall.resultImage.alt": "工具结果图片"
 }

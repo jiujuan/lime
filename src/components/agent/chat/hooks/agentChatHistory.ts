@@ -256,6 +256,94 @@ function contentPartContainsProcess(part: ContentPart): boolean {
   return part.type !== "text";
 }
 
+type HistoryToolCall = NonNullable<Message["toolCalls"]>[number];
+type HistoryToolUseContentPart = Extract<ContentPart, { type: "tool_use" }>;
+
+function mergeToolCallStates(
+  previous: HistoryToolCall,
+  next: HistoryToolCall,
+): HistoryToolCall {
+  if (previous.status === "running" && next.status !== "running") {
+    return next;
+  }
+  if (previous.status !== "running" && next.status === "running") {
+    return previous;
+  }
+  return next;
+}
+
+function mergeToolUseContentPart(
+  previous: HistoryToolUseContentPart,
+  next: HistoryToolUseContentPart,
+): HistoryToolUseContentPart {
+  const mergedToolCall = mergeToolCallStates(previous.toolCall, next.toolCall);
+  return mergedToolCall === previous.toolCall
+    ? previous
+    : {
+        ...previous,
+        ...next,
+        toolCall: mergedToolCall,
+      };
+}
+
+function mergeHydratedToolStateContentParts(
+  baseParts?: ContentPart[],
+  overlayParts?: ContentPart[],
+): ContentPart[] | undefined {
+  const base = Array.isArray(baseParts) ? [...baseParts] : [];
+  const overlay = Array.isArray(overlayParts) ? overlayParts : [];
+
+  if (base.length === 0) {
+    return overlay.length > 0 ? overlay : undefined;
+  }
+  if (overlay.length === 0) {
+    return base;
+  }
+
+  const toolUseIndexById = new Map<string, number>();
+  const actionRequiredIndexById = new Map<string, number>();
+
+  base.forEach((part, index) => {
+    if (part.type === "tool_use") {
+      toolUseIndexById.set(part.toolCall.id, index);
+      return;
+    }
+    if (part.type === "action_required") {
+      actionRequiredIndexById.set(part.actionRequired.requestId, index);
+    }
+  });
+
+  for (const part of overlay) {
+    if (part.type === "tool_use") {
+      const existingIndex = toolUseIndexById.get(part.toolCall.id);
+      if (existingIndex !== undefined) {
+        const current = base[existingIndex];
+        if (current?.type === "tool_use") {
+          base[existingIndex] = mergeToolUseContentPart(current, part);
+        }
+        continue;
+      }
+      toolUseIndexById.set(part.toolCall.id, base.length);
+      base.push(part);
+      continue;
+    }
+
+    if (part.type === "action_required") {
+      const existingIndex = actionRequiredIndexById.get(
+        part.actionRequired.requestId,
+      );
+      if (existingIndex !== undefined) {
+        base[existingIndex] = part;
+        continue;
+      }
+      actionRequiredIndexById.set(part.actionRequired.requestId, base.length);
+      base.push(part);
+    }
+  }
+
+  return base;
+}
+
 function mergeByKey<T>(
   localItems: T[] | undefined,
   remoteItems: T[] | undefined,
@@ -1049,7 +1137,15 @@ export const mergeAdjacentAssistantMessages = (
               item.type === "tool_use" && item.toolCall.id === part.toolCall.id,
           );
           if (existingIndex >= 0) {
-            nextParts[existingIndex] = part;
+            const existingPart = nextParts[existingIndex];
+            if (existingPart?.type === "tool_use") {
+              nextParts[existingIndex] = mergeToolUseContentPart(
+                existingPart,
+                part,
+              );
+            } else {
+              nextParts[existingIndex] = part;
+            }
             continue;
           }
           nextParts.push(part);
@@ -1074,17 +1170,35 @@ export const mergeAdjacentAssistantMessages = (
       }
       return nextParts;
     })();
-    const toolCallMap = new Map<
-      string,
-      NonNullable<Message["toolCalls"]>[number]
-    >();
-    for (const toolCall of [
-      ...(previous.toolCalls || []),
-      ...(current.toolCalls || []),
-    ]) {
-      toolCallMap.set(toolCall.id, toolCall);
-    }
-    const toolCalls = Array.from(toolCallMap.values());
+    const toolCalls = (() => {
+      const previousToolCalls = previous.toolCalls || [];
+      const currentToolCalls = current.toolCalls || [];
+      if (previousToolCalls.length === 0) {
+        return currentToolCalls.length > 0 ? currentToolCalls : undefined;
+      }
+      if (currentToolCalls.length === 0) {
+        return previousToolCalls;
+      }
+
+      const toolCallById = new Map<string, HistoryToolCall>();
+      for (const toolCall of previousToolCalls) {
+        toolCallById.set(toolCall.id, toolCall);
+      }
+      for (const toolCall of currentToolCalls) {
+        const existing = toolCallById.get(toolCall.id);
+        if (existing) {
+          toolCallById.set(toolCall.id, mergeToolCallStates(existing, toolCall));
+          continue;
+        }
+        toolCallById.set(toolCall.id, toolCall);
+      }
+
+      if (toolCallById.size === 0) {
+        return undefined;
+      }
+
+      return Array.from(toolCallById.values());
+    })();
     const contextTrace = (() => {
       const seen = new Set<string>();
       const mergedSteps: ContextTraceStep[] = [];
@@ -1117,7 +1231,7 @@ export const mergeAdjacentAssistantMessages = (
       ...previous,
       content,
       contentParts: contentParts.length > 0 ? contentParts : undefined,
-      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      toolCalls: (toolCalls?.length || 0) > 0 ? toolCalls : undefined,
       contextTrace: contextTrace.length > 0 ? contextTrace : undefined,
       artifacts: artifacts.length > 0 ? artifacts : undefined,
       usage: current.usage ?? previous.usage,
@@ -1764,11 +1878,41 @@ export const mergeHydratedMessagesWithLocalState = (
             message.contentParts,
           )
         : message.contentParts;
-      const toolCalls = mergeByKey(
-        localAssistantMessage?.toolCalls,
-        message.toolCalls,
-        (toolCall) => toolCall.id,
-      );
+      const toolCalls = (() => {
+        const localToolCalls = localAssistantMessage?.toolCalls || [];
+        const remoteToolCalls = message.toolCalls || [];
+        if (localToolCalls.length === 0) {
+          return remoteToolCalls.length > 0 ? remoteToolCalls : undefined;
+        }
+        if (remoteToolCalls.length === 0) {
+          return localToolCalls;
+        }
+
+        const mergedToolCalls: HistoryToolCall[] = [...localToolCalls];
+        const toolCallIndexById = new Map<string, number>();
+        mergedToolCalls.forEach((toolCall, index) => {
+          toolCallIndexById.set(toolCall.id, index);
+        });
+
+        for (const toolCall of remoteToolCalls) {
+          const existingIndex = toolCallIndexById.get(toolCall.id);
+          if (existingIndex === undefined) {
+            toolCallIndexById.set(toolCall.id, mergedToolCalls.length);
+            mergedToolCalls.push(toolCall);
+            continue;
+          }
+
+          const existingToolCall = mergedToolCalls[existingIndex];
+          if (existingToolCall) {
+            mergedToolCalls[existingIndex] = mergeToolCallStates(
+              existingToolCall,
+              toolCall,
+            );
+          }
+        }
+
+        return mergedToolCalls;
+      })();
       const actionRequests = mergeByKey(
         localAssistantMessage?.actionRequests,
         message.actionRequests,
@@ -1805,7 +1949,10 @@ export const mergeHydratedMessagesWithLocalState = (
           message,
         );
       const resolvedContentParts = shouldPreserveLocalVisibleOutput
-        ? (localAssistantMessage?.contentParts ?? contentParts)
+        ? mergeHydratedToolStateContentParts(
+            localAssistantMessage?.contentParts,
+            contentParts,
+          ) ?? localAssistantMessage?.contentParts ?? contentParts
         : contentParts;
       const resolvedThinkingContent = shouldPreserveLocalVisibleOutput
         ? (localAssistantMessage?.thinkingContent ??

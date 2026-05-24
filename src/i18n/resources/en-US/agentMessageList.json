@@ -77,5 +77,8 @@
   "agentChat.messageList.taskCenterEmpty.chip.pending": "Chats to continue appear on the left first",
   "agentChat.messageList.taskCenterEmpty.chip.organized": "Recent chats and archives are organized by time",
   "agentChat.messageList.taskCenterEmpty.chip.restore": "Restoring sessions return here automatically",
-  "agentChat.messageList.empty.defaultTitle": "Start a new conversation"
+  "agentChat.messageList.empty.defaultTitle": "Start a new conversation",
+  "agentChat.toolCall.openInCanvas": "Open in canvas",
+  "agentChat.toolCall.openInCanvasWithTarget": "Open in canvas: {{target}}",
+  "agentChat.toolCall.resultImage.alt": "Tool result image"
 }

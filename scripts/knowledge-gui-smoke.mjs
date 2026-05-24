@@ -460,7 +460,9 @@ async function clickPageControl(page, { text, ariaLabel, index = 0 }) {
 }
 
 async function waitForInputbarKnowledgePackToggle(page, label, timeoutMs) {
-  const locator = page.locator('[data-testid="inputbar-knowledge-pack-toggle"]');
+  const locator = page.locator(
+    '[data-testid="inputbar-knowledge-pack-toggle"]',
+  );
 
   try {
     await locator.first().waitFor({ state: "visible", timeout: timeoutMs });
@@ -481,9 +483,11 @@ async function waitForInputbarKnowledgePackToggle(page, label, timeoutMs) {
       )
       .catch(() => []);
     throw new Error(
-      `[smoke:knowledge-gui] ${label} 等待默认项目资料控件失败 ${JSON.stringify({
-        knowledgeControls,
-      })}，页面文本预览: ${pageText.slice(0, 2_000)}`,
+      `[smoke:knowledge-gui] ${label} 等待默认项目资料控件失败 ${JSON.stringify(
+        {
+          knowledgeControls,
+        },
+      )}，页面文本预览: ${pageText.slice(0, 2_000)}`,
       { cause: error },
     );
   }
@@ -712,13 +716,19 @@ async function confirmKnowledgeComposer(
   await waitForPageText(
     page,
     "项目资料选择弹层打开",
-    ["选择这次创作用哪些资料", "写作口吻（只能选 1 个）", "要参考的资料（可多选）"],
+    [
+      "选择这次创作用哪些资料",
+      "写作口吻（只能选 1 个）",
+      "要参考的资料（可多选）",
+    ],
     options.timeoutMs,
   );
 
   if (selectPersona) {
     await page
-      .locator(`[data-testid="knowledge-composer-persona-${PERSONA_PACK.name}"]`)
+      .locator(
+        `[data-testid="knowledge-composer-persona-${PERSONA_PACK.name}"]`,
+      )
       .click({ timeout: DEFAULT_ACTION_TIMEOUT_MS });
   }
 
@@ -885,7 +895,7 @@ async function openKnowledgePageFromMainNav(page, options) {
 
   throw new Error(
     `[smoke:knowledge-gui] 项目资料导航失败: ${
-    lastError instanceof Error ? lastError.message : String(lastError)
+      lastError instanceof Error ? lastError.message : String(lastError)
     }`,
   );
 }
@@ -1152,7 +1162,14 @@ async function runPlaywrightGuiFlow(options) {
     await waitForPageText(
       page,
       "项目资料状态说明页加载",
-      ["项目资料状态说明", "没有资料", "已可用", "待确认", "需要补充", "整理失败"],
+      [
+        "项目资料状态说明",
+        "没有资料",
+        "已可用",
+        "待确认",
+        "需要补充",
+        "整理失败",
+      ],
       options.timeoutMs,
     );
     await assertNoUserFacingInternalText(page, "项目资料状态说明页");
@@ -1292,6 +1309,9 @@ async function seedPack(options, pack) {
     request: {
       workingDir: options.workingDir,
       name: pack.name,
+      builderRuntime: {
+        enabled: false,
+      },
     },
   });
   await invoke(options, "knowledge_update_pack_status", {

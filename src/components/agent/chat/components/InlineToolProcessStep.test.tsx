@@ -411,8 +411,10 @@ describe("InlineToolProcessStep", () => {
     });
 
     expect(container.textContent).toContain(
-      "当前联网搜索链路未接通，请检查 Runtime 是否接通 WebSearch，或关闭联网搜索后重试。",
+      "搜索结果暂时无法读取",
     );
+    expect(container.textContent).toContain("搜索失败");
+    expect(container.textContent).not.toContain("执行失败");
 
     act(() => {
       const toggle = container.querySelector(
@@ -424,6 +426,28 @@ describe("InlineToolProcessStep", () => {
     expect(container.textContent).toContain(
       "原始错误：-32603: -32002: WebSearch",
     );
+  });
+
+  it("WebFetch 获取失败应使用弱提示而不是执行失败", () => {
+    const { container } = renderTool({
+      id: "tool-fetch-failed-1",
+      name: "WebFetch",
+      arguments: JSON.stringify({
+        url: "https://example.com/unavailable",
+      }),
+      status: "failed",
+      result: {
+        success: false,
+        error: "404 Not Found",
+        output: "",
+      },
+      startTime: new Date("2026-04-13T10:23:00.000Z"),
+      endTime: new Date("2026-04-13T10:23:01.000Z"),
+    });
+
+    expect(container.textContent).toContain("来源暂时无法读取");
+    expect(container.textContent).toContain("获取失败");
+    expect(container.textContent).not.toContain("执行失败");
   });
 
   it("图片生成任务失败时不应展示内部错误码、工具名或长提示词", () => {

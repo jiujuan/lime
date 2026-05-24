@@ -640,7 +640,6 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     createFreshSession: session.createFreshSession,
     ensureSession: session.ensureSession,
     switchTopic: session.switchTopic,
-    prefetchTopic: session.prefetchTopic,
     loadFullSessionHistory: session.loadFullSessionHistory,
     deleteTopic: session.deleteTopic,
     renameTopic: session.renameTopic,

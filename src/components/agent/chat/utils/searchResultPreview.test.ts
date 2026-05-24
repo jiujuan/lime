@@ -92,4 +92,33 @@ REMINDER: You MUST include the sources above in your response.
       },
     ]);
   });
+
+  it("应忽略空 URL 与无效来源，避免渲染脏结果", () => {
+    const items = resolveSearchResultPreviewItemsFromText(
+      JSON.stringify({
+        results: [
+          {
+            title: "空链接结果",
+            url: "",
+            snippet: "不应出现",
+          },
+          {
+            title: "有效结果",
+            url: "https://example.com/docs",
+            snippet: "应保留",
+          },
+        ],
+      }),
+    );
+
+    expect(items).toEqual([
+      {
+        id: "search-record-0-https://example.com/docs",
+        title: "有效结果",
+        url: "https://example.com/docs",
+        hostname: "example.com",
+        snippet: "应保留",
+      },
+    ]);
+  });
 });

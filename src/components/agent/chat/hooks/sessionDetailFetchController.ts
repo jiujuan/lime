@@ -1,6 +1,5 @@
 import {
   buildSessionDetailHydrationOptions,
-  buildSessionDetailPrefetchKey,
   type SessionDetailHydrationOptions,
 } from "./sessionHydrationController";
 
@@ -13,18 +12,6 @@ export interface SessionDetailFetchDetailLike {
   queued_turns?: readonly unknown[] | null;
 }
 
-export interface SessionDetailPrefetchEntry<TDetail> {
-  signature: string;
-  promise: Promise<TDetail>;
-}
-
-export interface SessionDetailPrefetchRegistry<TDetail> {
-  get: (key: string) => SessionDetailPrefetchEntry<TDetail> | undefined;
-  set: (key: string, entry: SessionDetailPrefetchEntry<TDetail>) => void;
-  deleteIfCurrent: (key: string, promise: Promise<TDetail>) => void;
-  clear: () => void;
-}
-
 export interface SessionDetailFetchEvent {
   logEvent: string;
   logContext: Record<string, unknown>;
@@ -32,26 +19,6 @@ export interface SessionDetailFetchEvent {
   metricContext?: Record<string, unknown>;
   logLevel?: "warn" | "error";
   throttleMs?: number;
-}
-
-export function createSessionDetailPrefetchRegistry<
-  TDetail,
->(): SessionDetailPrefetchRegistry<TDetail> {
-  const entries = new Map<string, SessionDetailPrefetchEntry<TDetail>>();
-
-  return {
-    get: (key) => entries.get(key),
-    set: (key, entry) => {
-      entries.set(key, entry);
-    },
-    deleteIfCurrent: (key, promise) => {
-      const current = entries.get(key);
-      if (current?.promise === promise) {
-        entries.delete(key);
-      }
-    },
-    clear: () => entries.clear(),
-  };
 }
 
 function buildSessionDetailFetchMetricContext<
@@ -93,8 +60,6 @@ export async function loadSessionDetailWithPrefetch<
   mode: SessionDetailFetchMode;
   now?: () => number;
   onEvent?: (event: SessionDetailFetchEvent) => void;
-  prefetchRegistry: SessionDetailPrefetchRegistry<TDetail>;
-  prefetchWorkspaceId?: string | null;
   resumeSessionStartHooks?: boolean;
   startedAt: number;
   topicId: string;
@@ -119,48 +84,6 @@ export async function loadSessionDetailWithPrefetch<
   });
 
   try {
-    const prefetchKey = buildSessionDetailPrefetchKey(
-      params.prefetchWorkspaceId ?? params.workspaceId ?? "",
-      params.topicId,
-    );
-    const prefetchedDetail = !resumeSessionStartHooks
-      ? params.prefetchRegistry.get(prefetchKey)
-      : undefined;
-
-    if (prefetchedDetail) {
-      try {
-        const detail = await prefetchedDetail.promise;
-        const context = buildSessionDetailFetchMetricContext({
-          detail,
-          mode: params.mode,
-          requestDurationMs: now() - requestStartedAt,
-          startedAt: params.startedAt,
-          topicId: params.topicId,
-          workspaceId: params.workspaceId,
-          now,
-        });
-        params.onEvent?.({
-          logEvent: "switchTopic.fetchDetail.prefetch",
-          logContext: context,
-          metricName: "session.switch.fetchDetail.prefetch",
-          metricContext: context,
-        });
-        return detail;
-      } catch (error) {
-        params.onEvent?.({
-          logEvent: "switchTopic.fetchDetail.prefetchFallback",
-          logContext: {
-            error,
-            mode: params.mode,
-            topicId: params.topicId,
-            workspaceId: params.workspaceId,
-          },
-          logLevel: "warn",
-          throttleMs: 1000,
-        });
-      }
-    }
-
     const detail = await params.getSession(
       params.topicId,
       buildSessionDetailHydrationOptions({ resumeSessionStartHooks }),

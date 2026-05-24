@@ -731,6 +731,7 @@ pub struct SkillDownloadInstallRequest {
 }
 
 const MAX_SKILL_DOWNLOAD_BYTES: usize = 20 * 1024 * 1024;
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
 const LIME_APP_BUNDLE_ID: &str = "com.limecloud.lime";
 const LIME_SKILL_PACKAGE_EXTENSION: &str = "skill";
 const LIME_SKILL_PACKAGE_EXPORT_EXTENSION: &str = "skills";
@@ -739,6 +740,7 @@ const LIME_SKILL_PACKAGE_EXTENSIONS: &[&str] = &[
     LIME_SKILL_PACKAGE_EXPORT_EXTENSION,
 ];
 const LIME_SKILL_PACKAGE_MIME_TYPE: &str = "application/vnd.lime.skill+zip";
+#[cfg(target_os = "macos")]
 const LIME_SKILL_PACKAGE_UTI: &str = "com.limecloud.lime.skill";
 #[cfg(target_os = "windows")]
 const LIME_SKILL_PACKAGE_PROG_ID: &str = "Lime.skill";
@@ -863,6 +865,7 @@ where
     paths
 }
 
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
 pub fn collect_skill_package_open_paths_from_urls(urls: &[Url]) -> Vec<String> {
     collect_skill_package_open_paths(urls.iter().map(Url::as_str))
 }

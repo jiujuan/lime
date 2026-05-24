@@ -35,10 +35,8 @@ import {
   savePersistedSessionWorkspaceId,
 } from "./agentProjectStorage";
 import {
-  hydrateSessionDetailMessages,
   mergeHydratedMessagesWithLocalState,
   normalizeHistoryMessages,
-  shouldCompactCompletedSessionHistory,
 } from "./agentChatHistory";
 import {
   getAgentSessionScopedKeys,
@@ -109,8 +107,6 @@ import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
 import { useTranslation } from "react-i18next";
 import {
   buildSessionDetailHydrationOptions,
-  buildSessionDetailPrefetchKey,
-  buildSessionDetailPrefetchSignature,
   isCurrentSessionHydrationRequest,
 } from "./sessionHydrationController";
 import {
@@ -121,7 +117,6 @@ import {
 } from "./sessionHistoryPaginationController";
 import { buildSessionHistoryMergePlan } from "./sessionHistoryMergeController";
 import {
-  createSessionDetailPrefetchRegistry,
   loadSessionDetailWithPrefetch,
   type SessionDetailFetchEvent,
 } from "./sessionDetailFetchController";
@@ -139,19 +134,9 @@ const ACTIVE_SESSION_TRANSIENT_SAVE_IDLE_TIMEOUT_MS = 1_800;
 const SESSION_METADATA_SYNC_DELAY_MS = 8_000;
 const SESSION_METADATA_SYNC_IDLE_TIMEOUT_MS = 15_000;
 const FRESH_SESSION_POST_CREATE_PERSISTENCE_IDLE_TIMEOUT_MS = 1_000;
-const SESSION_DETAIL_PREFETCH_RECENT_LIMIT = 1;
-const SESSION_DETAIL_PREFETCH_DELAY_MS = 5_000;
-const SESSION_DETAIL_PREFETCH_IDLE_TIMEOUT_MS = 8_000;
 const SESSION_DETAIL_DEFERRED_HYDRATION_DELAY_MS = 1_200;
 const SESSION_DETAIL_DEFERRED_HYDRATION_RETRY_DELAY_MS = 15_000;
 const SESSION_DETAIL_DEFERRED_HYDRATION_MAX_RETRY = 1;
-
-type AgentSessionRuntimeDetail = Awaited<
-  ReturnType<AgentRuntimeAdapter["getSession"]>
->;
-
-const sessionDetailPrefetchRegistry =
-  createSessionDetailPrefetchRegistry<AgentSessionRuntimeDetail>();
 
 function mapSessionDetailToTopic(
   sessionId: string,
@@ -927,7 +912,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       null,
     );
     const cachedScopedSnapshot = scopedSessionCandidate
-      ? loadAgentSessionCachedSnapshot(workspaceId.trim(), scopedSessionCandidate)
+      ? loadAgentSessionCachedSnapshot(
+          workspaceId.trim(),
+          scopedSessionCandidate,
+        )
       : null;
     const shouldUseCachedSnapshot =
       scopedMessages.length === 0 && Boolean(cachedScopedSnapshot);
@@ -976,7 +964,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           cachedTotalMessages > restoreMessages.length)
         ? {
             loadedMessages: restoreMessages.length,
-            totalMessages: Math.max(cachedTotalMessages, restoreMessages.length),
+            totalMessages: Math.max(
+              cachedTotalMessages,
+              restoreMessages.length,
+            ),
             isLoadingFull: false,
             error: null,
           }
@@ -1480,218 +1471,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     ],
   );
 
-  const prefetchTopic = useCallback(
-    async (topicId: string): Promise<boolean> => {
-      const resolvedTopicId = topicId.trim();
-      const resolvedWorkspaceId = normalizeProjectId(workspaceId);
-      if (
-        !resolvedTopicId ||
-        !resolvedWorkspaceId ||
-        isAuxiliaryAgentSessionId(resolvedTopicId) ||
-        sessionIdRef.current === resolvedTopicId
-      ) {
-        return false;
-      }
-
-      const selectedTopic = topics.find(
-        (topic) => topic.id === resolvedTopicId,
-      );
-      const signature = buildSessionDetailPrefetchSignature(
-        resolvedTopicId,
-        selectedTopic,
-      );
-      const prefetchKey = buildSessionDetailPrefetchKey(
-        resolvedWorkspaceId,
-        resolvedTopicId,
-      );
-      const existingPrefetch = sessionDetailPrefetchRegistry.get(prefetchKey);
-      if (existingPrefetch?.signature === signature) {
-        return existingPrefetch.promise.then(
-          () => true,
-          () => false,
-        );
-      }
-
-      const cachedSnapshot = loadAgentSessionCachedSnapshot(
-        resolvedWorkspaceId,
-        resolvedTopicId,
-        {
-          topicUpdatedAt: selectedTopic?.updatedAt ?? null,
-          messagesCount: selectedTopic?.messagesCount ?? null,
-        },
-      );
-      if (cachedSnapshot?.cacheMetadata?.freshness === "fresh") {
-        return false;
-      }
-
-      const prefetchStartedAt = Date.now();
-      const prefetchMetricContext = {
-        cacheFreshness: cachedSnapshot?.cacheMetadata?.freshness ?? null,
-        sessionId: resolvedTopicId,
-        workspaceId: resolvedWorkspaceId,
-      };
-      recordAgentUiPerformanceMetric(
-        "session.prefetch.start",
-        prefetchMetricContext,
-      );
-      logAgentDebug(
-        "useAgentSession",
-        "sessionPrefetch.start",
-        prefetchMetricContext,
-      );
-
-      const promise = runtime
-        .getSession(resolvedTopicId, buildSessionDetailHydrationOptions())
-        .then((detail) => {
-          const detailWorkspaceId = normalizeProjectId(detail.workspace_id);
-          if (
-            detailWorkspaceId &&
-            resolvedWorkspaceId &&
-            detailWorkspaceId !== resolvedWorkspaceId
-          ) {
-            logAgentDebug("useAgentSession", "sessionPrefetch.skipped", {
-              detailWorkspaceId,
-              reason: "workspace_mismatch",
-              sessionId: resolvedTopicId,
-              workspaceId: resolvedWorkspaceId,
-            });
-            return detail;
-          }
-
-          const messages = hydrateSessionDetailMessages(
-            detail,
-            resolvedTopicId,
-            {
-              compactCompletedHistory:
-                shouldCompactCompletedSessionHistory(detail),
-            },
-          );
-          const threadTurns = detail.turns || [];
-          const threadItems = filterConversationThreadItems(
-            normalizeLegacyThreadItems(detail.items || []),
-          );
-          saveAgentSessionCachedSnapshot(
-            resolvedWorkspaceId,
-            resolvedTopicId,
-            {
-              messages,
-              threadTurns,
-              threadItems,
-              currentTurnId: null,
-            },
-            {
-              sessionUpdatedAt: detail.updated_at * 1000,
-              messagesCount: detail.messages_count ?? messages.length,
-              historyTruncated:
-                detail.history_truncated === true ||
-                (typeof detail.messages_count === "number" &&
-                  detail.messages_count > messages.length),
-            },
-          );
-          if (detailWorkspaceId) {
-            savePersistedSessionWorkspaceId(resolvedTopicId, detailWorkspaceId);
-          }
-          const prefetchSuccessMetricContext = {
-            durationMs: Date.now() - prefetchStartedAt,
-            itemsCount: threadItems.length,
-            messagesCount: messages.length,
-            sessionId: resolvedTopicId,
-            turnsCount: threadTurns.length,
-            workspaceId: resolvedWorkspaceId,
-          };
-          recordAgentUiPerformanceMetric(
-            "session.prefetch.success",
-            prefetchSuccessMetricContext,
-          );
-          logAgentDebug(
-            "useAgentSession",
-            "sessionPrefetch.success",
-            prefetchSuccessMetricContext,
-          );
-          return detail;
-        })
-        .catch((error) => {
-          recordAgentUiPerformanceMetric("session.prefetch.error", {
-            durationMs: Date.now() - prefetchStartedAt,
-            sessionId: resolvedTopicId,
-            workspaceId: resolvedWorkspaceId,
-          });
-          logAgentDebug(
-            "useAgentSession",
-            "sessionPrefetch.error",
-            {
-              error,
-              sessionId: resolvedTopicId,
-              workspaceId: resolvedWorkspaceId,
-            },
-            { level: "warn", throttleMs: 1000 },
-          );
-          throw error;
-        })
-        .finally(() => {
-          sessionDetailPrefetchRegistry.deleteIfCurrent(prefetchKey, promise);
-        });
-
-      sessionDetailPrefetchRegistry.set(prefetchKey, {
-        signature,
-        promise,
-      });
-
-      return promise.then(
-        () => true,
-        () => false,
-      );
-    },
-    [runtime, sessionIdRef, topics, workspaceId],
-  );
-
-  useEffect(() => {
-    if (
-      import.meta.env?.MODE === "test" ||
-      import.meta.env?.VITEST ||
-      !topicsReady ||
-      disableSessionRestore ||
-      !workspaceId?.trim()
-    ) {
-      return;
-    }
-
-    const candidates = topics
-      .filter(
-        (topic) =>
-          topic.id !== sessionIdRef.current &&
-          !isAuxiliaryAgentSessionId(topic.id),
-      )
-      .slice(0, SESSION_DETAIL_PREFETCH_RECENT_LIMIT);
-    if (candidates.length === 0) {
-      return;
-    }
-
-    return scheduleMinimumDelayIdleTask(
-      () => {
-        void (async () => {
-          for (const topic of candidates) {
-            if (sessionIdRef.current === topic.id) {
-              continue;
-            }
-            await prefetchTopic(topic.id);
-          }
-        })();
-      },
-      {
-        minimumDelayMs: SESSION_DETAIL_PREFETCH_DELAY_MS,
-        idleTimeoutMs: SESSION_DETAIL_PREFETCH_IDLE_TIMEOUT_MS,
-      },
-    );
-  }, [
-    disableSessionRestore,
-    prefetchTopic,
-    sessionIdRef,
-    topics,
-    topicsReady,
-    workspaceId,
-  ]);
-
   const emitSessionDetailFetchEvent = useCallback(
     (event: SessionDetailFetchEvent) => {
       if (event.metricName) {
@@ -1729,8 +1508,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         getSession: (topicId, options) => runtime.getSession(topicId, options),
         mode: params.mode,
         onEvent: emitSessionDetailFetchEvent,
-        prefetchRegistry: sessionDetailPrefetchRegistry,
-        prefetchWorkspaceId: normalizeProjectId(workspaceId) || "",
         resumeSessionStartHooks: params.resumeSessionStartHooks,
         startedAt: params.startedAt,
         topicId: params.topicId,
@@ -3192,7 +2969,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     createFreshSession,
     ensureSession,
     switchTopic,
-    prefetchTopic,
     loadFullSessionHistory,
     deleteTopic,
     renameTopic,

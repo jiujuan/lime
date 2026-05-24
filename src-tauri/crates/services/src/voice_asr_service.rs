@@ -492,9 +492,12 @@ impl AsrService {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    #[cfg(feature = "local-sensevoice")]
+    use super::{AsrService, SENSEVOICE_MODEL_FILE, SENSEVOICE_TOKENS_FILE, SENSEVOICE_VAD_FILE};
     #[cfg(feature = "local-sensevoice")]
     use lime_core::config::SenseVoiceLocalConfig;
+    #[cfg(feature = "local-sensevoice")]
+    use std::path::PathBuf;
 
     #[cfg(feature = "local-sensevoice")]
     #[test]

@@ -170,13 +170,17 @@ export function useWorkspaceTopicSwitch({
           topicId,
         });
 
-        if (currentProjectId && topicBoundProjectId === currentProjectId) {
+        if (
+          currentProjectId &&
+          (!topicBoundProjectId || topicBoundProjectId === currentProjectId)
+        ) {
           rememberProjectId(currentProjectId);
           logAgentDebug("AgentChatPage", "switchTopic.fastPathCurrentProject", {
             allowDetachedSession: options?.allowDetachedSession === true,
             currentProjectId,
             externalProjectId: externalProjectId ?? null,
             forceRefresh: options?.forceRefresh === true,
+            topicBoundProjectId: topicBoundProjectId ?? null,
             topicId,
           });
           finishResolutionIfNeeded();

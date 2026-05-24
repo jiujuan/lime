@@ -381,6 +381,17 @@ mod tests {
         assert_eq!(spec.auth_header, "Authorization");
         assert_eq!(spec.auth_prefix, Some("Bearer"));
         assert_eq!(spec.extra_headers[0], ("anthropic-version", "2023-06-01"));
+
+        let xiaomi_sgp_spec = infer_managed_runtime_spec(
+            ApiProviderType::Openai,
+            "https://token-plan-sgp.xiaomimimo.com/anthropic",
+        );
+        assert_eq!(
+            xiaomi_sgp_spec.protocol_family,
+            ProviderProtocolFamily::Anthropic
+        );
+        assert_eq!(xiaomi_sgp_spec.auth_header, "Authorization");
+        assert_eq!(xiaomi_sgp_spec.auth_prefix, Some("Bearer"));
     }
 
     #[test]

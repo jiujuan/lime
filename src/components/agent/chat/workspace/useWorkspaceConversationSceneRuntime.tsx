@@ -276,18 +276,6 @@ function resolveNextSessionRuntimeProjectionState(
     : next;
 }
 
-function hasPersistedHiddenSessionHistory(
-  sessionHistoryWindow:
-    | ConversationScenePresentationParams["messageList"]["sessionHistoryWindow"]
-    | null
-    | undefined,
-): boolean {
-  return Boolean(
-    sessionHistoryWindow &&
-    sessionHistoryWindow.totalMessages > sessionHistoryWindow.loadedMessages,
-  );
-}
-
 interface UseWorkspaceConversationSceneRuntimeParams {
   messageListEmptyStateVariant?: "default" | "task-center";
   navbarContextVariant?: "default" | "task-center";
@@ -616,9 +604,7 @@ export function useWorkspaceConversationSceneRuntime({
     sessionRuntimeProjectionLastTurnId,
     sessionRuntimeProjectionLastItemId,
   ].join("|");
-  const shouldTreatAsRestoredHistoryWindow =
-    isAutoRestoringSession ||
-    hasPersistedHiddenSessionHistory(sessionHistoryWindow);
+  const shouldTreatAsRestoredHistoryWindow = isAutoRestoringSession;
   const hasHeavySessionRuntimeProjection =
     displayMessages.length >=
       SESSION_RUNTIME_PROJECTION_DEFER_MESSAGE_THRESHOLD ||

@@ -52,6 +52,7 @@ describe("providerPromptCacheSupport", () => {
     "https://coding.dashscope.aliyuncs.com/apps/anthropic",
     "https://coding-intl.dashscope.aliyuncs.com/apps/anthropic",
     "https://token-plan-cn.xiaomimimo.com/anthropic",
+    "https://token-plan-sgp.xiaomimimo.com/anthropic",
   ])("已知官方 Anthropic 兼容 Host %s 不应误报显式缓存提示", (apiHost) => {
     expect(isKnownAutomaticAnthropicCompatibleHost(apiHost)).toBe(true);
     expect(
@@ -122,6 +123,12 @@ describe("providerPromptCacheSupport", () => {
       ),
     ).toBe("xiaomi");
     expect(
+      getRegistryIdFromType(
+        "anthropic-compatible",
+        "https://token-plan-sgp.xiaomimimo.com/anthropic",
+      ),
+    ).toBe("xiaomi");
+    expect(
       resolveKnownAnthropicCompatibleProvider(
         "https://open.bigmodel.cn/api/anthropic",
       ),
@@ -150,6 +157,11 @@ describe("providerPromptCacheSupport", () => {
     expect(
       resolveKnownAnthropicCompatibleProvider(
         "https://token-plan-cn.xiaomimimo.com/anthropic",
+      ),
+    ).toBe("xiaomi");
+    expect(
+      resolveKnownAnthropicCompatibleProvider(
+        "https://token-plan-sgp.xiaomimimo.com/anthropic",
       ),
     ).toBe("xiaomi");
     expect(getProviderPromptCacheMode("anthropic-compatible")).toBe(
