@@ -1,33 +1,6 @@
-import { Suspense, lazy, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { AgentChatWorkspaceProps } from "./agentChatWorkspaceContract";
-import {
-  loadAgentChatWorkspaceModule,
-  preloadAgentChatWorkspaceModule,
-} from "./agentChatWorkspaceLoader";
-import { startupTracker } from "@/lib/diagnostics/startupPerformance";
-
-const WORKSPACE_LOADING_FALLBACK = (
-  <div className="flex h-full min-h-[320px] items-center justify-center text-sm text-slate-500">
-    正在准备生成工作区...
-  </div>
-);
-
-const LazyAgentChatWorkspace = lazy(async () => {
-  const t0 = performance.now();
-  startupTracker.mark("AgentChatWorkspace: module load start");
-  const module = await loadAgentChatWorkspaceModule();
-  const duration = performance.now() - t0;
-  startupTracker.mark(
-    `AgentChatWorkspace: module loaded (${duration.toFixed(0)}ms)`,
-  );
-  console.info(
-    `[PERF] AgentChatWorkspace module loaded: ${duration.toFixed(0)}ms`,
-  );
-  return { default: module.AgentChatWorkspace };
-});
-
-// 在模块加载时立即预热，避免首次进入聊天页时才触发动态 import
-preloadAgentChatWorkspaceModule();
+import { AgentChatWorkspace } from "./AgentChatWorkspace";
 
 export type {
   AgentChatWorkspaceProps,
@@ -98,13 +71,11 @@ export function AgentChatPage(props: AgentChatWorkspaceProps) {
   ]);
 
   return (
-    <Suspense fallback={WORKSPACE_LOADING_FALLBACK}>
-      <LazyAgentChatWorkspace
-        {...props}
-        key={forcedMountKey.current ?? undefined}
-        agentEntry={effectiveAgentEntry}
-        showChatPanel={effectiveShowChatPanel}
-      />
-    </Suspense>
+    <AgentChatWorkspace
+      {...props}
+      key={forcedMountKey.current ?? undefined}
+      agentEntry={effectiveAgentEntry}
+      showChatPanel={effectiveShowChatPanel}
+    />
   );
 }

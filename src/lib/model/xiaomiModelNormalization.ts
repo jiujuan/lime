@@ -8,6 +8,7 @@ const XIAOMI_MODEL_ID_ALIASES: Record<string, string> = {
   "mimo-v2-pro": "mimo-v2.5-pro",
   "mimo-v2.5": "mimo-v2.5-pro",
   "mimo-v2.5-pro": "mimo-v2.5-pro",
+  "mimo-v2-flash": "mimo-v2.5-pro",
 };
 
 export function isXiaomiLikeProvider(options: {

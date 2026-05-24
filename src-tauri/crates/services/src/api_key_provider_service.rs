@@ -746,6 +746,95 @@ data: [DONE]\n";
         assert_ne!(persisted.api_key_encrypted, legacy_ciphertext);
     }
 
+    #[test]
+    fn test_add_api_key_replace_existing_keeps_only_new_key() {
+        let db = init_test_database();
+        let service = ApiKeyProviderService::new();
+
+        let provider = service
+            .add_custom_provider(
+                &db,
+                "Replace Key Provider".to_string(),
+                ApiProviderType::Openai,
+                "https://api.example.com/v1".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("创建 Provider 失败");
+
+        let old_key = service
+            .add_api_key(&db, &provider.id, "sk-old-key", None, false)
+            .expect("添加旧 Key 失败");
+        let new_key = service
+            .add_api_key(&db, &provider.id, "sk-new-key", None, true)
+            .expect("替换新 Key 失败");
+
+        assert_ne!(old_key.id, new_key.id);
+
+        let persisted = service
+            .get_provider(&db, &provider.id)
+            .expect("读取 Provider 失败")
+            .expect("Provider 应存在");
+        assert_eq!(persisted.api_keys.len(), 1);
+        assert_eq!(persisted.api_keys[0].id, new_key.id);
+        assert!(persisted.api_keys[0].enabled);
+
+        let active_key = service
+            .get_next_api_key(&db, &provider.id)
+            .expect("读取当前 Key 失败")
+            .expect("应返回当前 Key");
+        assert_eq!(active_key, "sk-new-key");
+    }
+
+    #[test]
+    fn test_add_api_key_replace_existing_reuses_matching_history_key() {
+        let db = init_test_database();
+        let service = ApiKeyProviderService::new();
+
+        let provider = service
+            .add_custom_provider(
+                &db,
+                "Reuse Key Provider".to_string(),
+                ApiProviderType::Openai,
+                "https://api.example.com/v1".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("创建 Provider 失败");
+
+        let first_key = service
+            .add_api_key(&db, &provider.id, "sk-first-key", None, false)
+            .expect("添加第一个 Key 失败");
+        service
+            .add_api_key(&db, &provider.id, "sk-second-key", None, false)
+            .expect("添加第二个 Key 失败");
+
+        let reused_key = service
+            .add_api_key(&db, &provider.id, "sk-first-key", None, true)
+            .expect("复用历史 Key 失败");
+        assert_eq!(reused_key.id, first_key.id);
+
+        let persisted = service
+            .get_provider(&db, &provider.id)
+            .expect("读取 Provider 失败")
+            .expect("Provider 应存在");
+        assert_eq!(persisted.api_keys.len(), 1);
+        assert_eq!(persisted.api_keys[0].id, first_key.id);
+        assert!(persisted.api_keys[0].enabled);
+
+        let active_key = service
+            .get_next_api_key(&db, &provider.id)
+            .expect("读取当前 Key 失败")
+            .expect("应返回当前 Key");
+        assert_eq!(active_key, "sk-first-key");
+    }
+
     async fn spawn_single_response_server(
         response_body: serde_json::Value,
     ) -> (String, tokio::task::JoinHandle<(String, String)>) {
@@ -846,7 +935,13 @@ data: [DONE]\n";
             )
             .expect("创建 Provider 失败");
         service
-            .add_api_key(&db, &provider.id, "sk-test-key", Some("test".to_string()))
+            .add_api_key(
+                &db,
+                &provider.id,
+                "sk-test-key",
+                Some("test".to_string()),
+                false,
+            )
             .expect("添加 API Key 失败");
 
         let result = service
@@ -900,7 +995,13 @@ data: [DONE]\n";
             )
             .expect("创建 Provider 失败");
         service
-            .add_api_key(&db, &provider.id, "sk-test-key", Some("test".to_string()))
+            .add_api_key(
+                &db,
+                &provider.id,
+                "sk-test-key",
+                Some("test".to_string()),
+                false,
+            )
             .expect("添加 API Key 失败");
 
         let result = service
@@ -2302,10 +2403,12 @@ impl ApiKeyProviderService {
         provider_id: &str,
         api_key: &str,
         alias: Option<String>,
+        replace_existing: bool,
     ) -> Result<ApiKeyEntry, String> {
         tracing::info!(
-            "[ApiKeyProviderService] 开始添加 API Key: provider_id={}",
-            provider_id
+            "[ApiKeyProviderService] 开始添加 API Key: provider_id={}, replace_existing={}",
+            provider_id,
+            replace_existing
         );
 
         let mut conn = lime_core::database::lock_db(db)?;
@@ -2337,13 +2440,56 @@ impl ApiKeyProviderService {
 
         // 检查是否有相同的 API Key（比较加密后的值）
         let encrypted_input = self.encryption.encrypt(api_key);
-        for existing_key in &existing_keys {
-            if existing_key.api_key_encrypted == encrypted_input {
+        if let Some(existing_key) = existing_keys
+            .iter()
+            .find(|existing_key| existing_key.api_key_encrypted == encrypted_input)
+        {
+            if !replace_existing {
                 return Err("该 API Key 已存在".to_string());
+            }
+
+            let now = Utc::now();
+            let mut replacement_key = existing_key.clone();
+            replacement_key.enabled = true;
+            if alias.is_some() {
+                replacement_key.alias = alias.clone();
+            }
+            ApiKeyProviderDao::update_api_key(&tx, &replacement_key).map_err(|e| e.to_string())?;
+
+            for stale_key in existing_keys
+                .iter()
+                .filter(|key| key.id != replacement_key.id)
+            {
+                ApiKeyProviderDao::delete_api_key(&tx, &stale_key.id).map_err(|e| e.to_string())?;
+            }
+
+            if !provider.enabled {
+                let mut updated_provider = provider.clone();
+                updated_provider.enabled = true;
+                updated_provider.updated_at = now;
+                ApiKeyProviderDao::update_provider(&tx, &updated_provider)
+                    .map_err(|e| e.to_string())?;
+            }
+
+            tx.commit().map_err(|e| format!("提交事务失败: {e}"))?;
+            tracing::info!(
+                "[ApiKeyProviderService] 已将已有 API Key 设为唯一启用 Key: provider={}, key_id={}",
+                provider_id,
+                replacement_key.id
+            );
+
+            return Ok(replacement_key);
+        }
+
+        if replace_existing {
+            for existing_key in &existing_keys {
+                ApiKeyProviderDao::delete_api_key(&tx, &existing_key.id)
+                    .map_err(|e| e.to_string())?;
             }
         }
 
-        let should_enable_provider = existing_keys.is_empty() && !provider.enabled;
+        let should_enable_provider =
+            (replace_existing || existing_keys.is_empty()) && !provider.enabled;
 
         let now = Utc::now();
         let key = ApiKeyEntry {

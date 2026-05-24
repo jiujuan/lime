@@ -41,12 +41,12 @@ export const ModelProviderList: React.FC<ModelProviderListProps> = ({
   return (
     <aside
       className={cn(
-        "flex h-full w-[320px] flex-col border-r border-slate-200/80 bg-[#fbfaf7]",
+        "flex h-full min-h-0 w-[320px] flex-col overflow-hidden border-r border-slate-200/80 bg-[#fbfaf7]",
         className,
       )}
       data-testid="enabled-model-list"
     >
-      <div className="px-5 pb-3 pt-5">
+      <div className="flex-shrink-0 px-5 pb-3 pt-5">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-slate-900">
@@ -76,7 +76,10 @@ export const ModelProviderList: React.FC<ModelProviderListProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-2">
+      <div
+        className="min-h-0 flex-1 overscroll-contain overflow-y-auto px-4 py-2"
+        data-testid="enabled-model-scroll-region"
+      >
         {items.length > 0 ? (
           <div className="space-y-2" data-testid="enabled-model-items">
             {items.map((item) => {
@@ -159,7 +162,7 @@ export const ModelProviderList: React.FC<ModelProviderListProps> = ({
         )}
       </div>
 
-      <div className="space-y-2 border-t border-slate-200/80 px-4 py-4">
+      <div className="flex-shrink-0 space-y-2 border-t border-slate-200/80 px-4 py-4">
         {onAddModel ? (
           <button
             type="button"

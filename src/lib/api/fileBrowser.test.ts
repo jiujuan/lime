@@ -78,6 +78,17 @@ describe("fileBrowser API", () => {
     await expect(deletePath("/tmp/demo2.txt", false)).resolves.toBeUndefined();
   });
 
+  it("创建目录时应原样传递 Windows 原生路径", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce(undefined);
+    const windowsPath = String.raw`C:\Users\demo\workspace\new-folder`;
+
+    await expect(createDirectoryAtPath(windowsPath)).resolves.toBeUndefined();
+
+    expect(safeInvoke).toHaveBeenCalledWith("create_directory", {
+      path: windowsPath,
+    });
+  });
+
   it("应代理文件管理器快捷入口命令", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce([
       {

@@ -88,6 +88,7 @@ interface UseApiKeyProviderReturn {
     providerId: string,
     apiKey: string,
     alias?: string,
+    options?: { replaceExisting?: boolean },
   ) => Promise<ApiKeyDisplay>;
   /** 删除 API Key */
   deleteApiKey: (keyId: string) => Promise<boolean>;
@@ -454,11 +455,13 @@ export function useApiKeyProvider(
       providerId: string,
       apiKey: string,
       alias?: string,
+      options: { replaceExisting?: boolean } = {},
     ): Promise<ApiKeyDisplay> => {
       const request: AddApiKeyRequest = {
         provider_id: providerId,
         api_key: apiKey,
         alias,
+        replace_existing: options.replaceExisting,
       };
 
       providerDebugLog("[useApiKeyProvider] 开始添加 API Key:", {

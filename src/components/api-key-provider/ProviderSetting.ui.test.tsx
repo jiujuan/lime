@@ -197,6 +197,7 @@ describe("ProviderSetting", () => {
     const text = container.textContent ?? "";
 
     expect(text).toContain("DeepSeek");
+    expect(text).toContain("API Host");
     expect(text).toContain("API 密钥");
     expect(text).toContain("保存密钥");
     expect(text).toContain("模型优先级");
@@ -211,6 +212,9 @@ describe("ProviderSetting", () => {
       container.querySelector('[data-testid="provider-simple-card"]'),
     ).not.toBeNull();
     expect(
+      container.querySelector('[data-testid="provider-api-host-input"]'),
+    ).not.toBeNull();
+    expect(
       container.querySelector(
         '[data-testid="provider-test-connection-button"]',
       ),
@@ -218,6 +222,108 @@ describe("ProviderSetting", () => {
     expect(
       container.querySelector('[data-testid="provider-api-key-save-button"]'),
     ).not.toBeNull();
+  });
+
+  it("应支持修改并保存 Provider API Host", async () => {
+    const onUpdate = vi.fn().mockResolvedValue(undefined);
+    const container = renderSetting(
+      createProvider({
+        id: "xiaomi",
+        name: "Mimo",
+        type: "anthropic-compatible",
+        api_host: "https://token-plan-cn.xiaomimimo.com/anthropic",
+        custom_models: ["mimo-v2.5-pro"],
+      }),
+      {
+        onUpdate,
+      },
+    );
+    await flushEffects();
+
+    const input = container.querySelector<HTMLInputElement>(
+      '[data-testid="provider-api-host-input"]',
+    );
+    const saveButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="provider-api-host-save-button"]',
+    );
+
+    expect(input?.value).toBe(
+      "https://token-plan-cn.xiaomimimo.com/anthropic",
+    );
+    expect(saveButton).not.toBeNull();
+    expect(saveButton?.disabled).toBe(true);
+
+    await act(async () => {
+      changeInput(input!, "https://token-plan-sgp.xiaomimimo.com/anthropic");
+      await Promise.resolve();
+    });
+
+    expect(container.textContent ?? "").toContain("未保存");
+    expect(saveButton?.disabled).toBe(false);
+
+    await act(async () => {
+      saveButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onUpdate).toHaveBeenCalledWith("xiaomi", {
+      api_host: "https://token-plan-sgp.xiaomimimo.com/anthropic",
+    });
+    expect(container.textContent ?? "").toContain("API Host 已保存");
+  });
+
+  it("测试连接前应先保存未保存的 API Host", async () => {
+    const callOrder: string[] = [];
+    const onUpdate = vi.fn().mockImplementation(async () => {
+      callOrder.push("update");
+    });
+    const onTestConnection = vi.fn().mockImplementation(async () => {
+      callOrder.push("test");
+      return {
+        success: true,
+        latencyMs: 96,
+      };
+    });
+    const container = renderSetting(
+      createProvider({
+        id: "xiaomi",
+        name: "Mimo",
+        type: "anthropic-compatible",
+        api_host: "https://token-plan-cn.xiaomimimo.com/anthropic",
+        custom_models: ["mimo-v2.5-pro"],
+      }),
+      {
+        onUpdate,
+        onTestConnection,
+      },
+    );
+    await flushEffects();
+
+    const hostInput = container.querySelector<HTMLInputElement>(
+      '[data-testid="provider-api-host-input"]',
+    );
+    const testButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="provider-test-connection-button"]',
+    );
+
+    await act(async () => {
+      changeInput(hostInput!, "https://token-plan-sgp.xiaomimimo.com/anthropic");
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      testButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onUpdate).toHaveBeenCalledWith("xiaomi", {
+      api_host: "https://token-plan-sgp.xiaomimimo.com/anthropic",
+    });
+    expect(onTestConnection).toHaveBeenCalledWith("xiaomi");
+    expect(callOrder).toEqual(["update", "test"]);
+    expect(container.textContent ?? "").toContain("连接成功 · 96ms");
   });
 
   it("Lime Hub 未登录时应展示登录提示，不展示模型配置表单", async () => {
@@ -827,7 +933,12 @@ describe("ProviderSetting", () => {
       await Promise.resolve();
     });
 
-    expect(onAddApiKey).toHaveBeenCalledWith("deepseek", "sk-updated-key");
+    expect(onAddApiKey).toHaveBeenCalledWith(
+      "deepseek",
+      "sk-updated-key",
+      undefined,
+      { replaceExisting: true },
+    );
     expect(onTestConnection).not.toHaveBeenCalled();
     expect(container.textContent ?? "").toContain("API 密钥已保存");
     expect(
@@ -835,7 +946,7 @@ describe("ProviderSetting", () => {
     ).not.toBeNull();
   });
 
-  it("保存 API 密钥遇到重复 Key 时应视为已保存", async () => {
+  it("保存 API 密钥遇到重复 Key 时不应假装替换成功", async () => {
     const onAddApiKey = vi.fn().mockRejectedValue("该 API Key 已存在");
     const container = renderSetting(createProvider(), {
       onAddApiKey,
@@ -863,11 +974,17 @@ describe("ProviderSetting", () => {
     const status = container.querySelector<HTMLElement>(
       '[data-testid="api-key-status"]',
     );
-    expect(status?.textContent ?? "").toContain(
+    expect(onAddApiKey).toHaveBeenCalledWith(
+      "deepseek",
+      "sk-duplicated-key",
+      undefined,
+      { replaceExisting: true },
+    );
+    expect(status?.textContent ?? "").toContain("该 API Key 已存在");
+    expect(status?.className ?? "").toContain("border-rose-200");
+    expect(status?.textContent ?? "").not.toContain(
       "这个 API 密钥已在当前服务商中",
     );
-    expect(status?.className ?? "").toContain("border-emerald-200");
-    expect(status?.textContent ?? "").not.toContain("保存 API 密钥失败");
   });
 
   it("保存 API 密钥失败时应展示后端返回的字符串原因", async () => {
@@ -897,6 +1014,12 @@ describe("ProviderSetting", () => {
 
     const status = container.querySelector<HTMLElement>(
       '[data-testid="api-key-status"]',
+    );
+    expect(onAddApiKey).toHaveBeenCalledWith(
+      "deepseek",
+      "sk-missing-provider",
+      undefined,
+      { replaceExisting: true },
     );
     expect(status?.textContent ?? "").toContain("Provider 不存在: missing");
     expect(status?.textContent ?? "").not.toContain("保存 API 密钥失败");
@@ -937,7 +1060,12 @@ describe("ProviderSetting", () => {
       await Promise.resolve();
     });
 
-    expect(onAddApiKey).toHaveBeenCalledWith("deepseek", "sk-new-key");
+    expect(onAddApiKey).toHaveBeenCalledWith(
+      "deepseek",
+      "sk-new-key",
+      undefined,
+      { replaceExisting: true },
+    );
     expect(onTestConnection).toHaveBeenCalledWith("deepseek");
     expect(container.textContent ?? "").toContain("连接成功 · 128ms");
     expect(container.textContent ?? "").not.toContain("错误详情");

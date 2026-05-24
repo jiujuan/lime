@@ -21,6 +21,12 @@
 - Agent 对话 Markdown 代码块、图片说明、引用 / 复制操作文案进入五语言资源，交互文案不再硬编码中文。
 - Markdown 中的 HTTP 外链点击在聊天与预览中走统一拦截逻辑，桌面环境下打开外部链接更一致。
 - Markdown 表格如果被包在 `markdown` fence 中，会按正文表格渲染，减少模型输出表格被误当代码块的问题。
+- 任务中心顶部会话标签支持直接重命名当前任务，新建任务首页标签保持不可重命名 / 不可关闭，避免误操作。
+- 任务中心打开历史会话时不再先清空当前消息，减少会话切换过程中的空白闪烁和缓存误清理。
+- Mimo / xiaomimimo Anthropic 兼容入口会把旧 `mimo-v2-flash` 模型别名归一到当前可用的 `mimo-v2.5-pro`，减少旧配置触发 provider 400。
+- AI 服务商详情页支持直接编辑并保存 `API Host`，从接口获取模型和测试连接前会先保存未提交的 Host，Mimo 可以切换到 SGP / CN 等不同 xiaomimimo Host。
+- AI 服务商详情页的 API 密钥保存改为替换当前 Provider 的旧密钥，而不是追加一条新密钥；重复历史密钥也会被整理成唯一启用密钥，避免界面仍显示 / 调用旧密钥。
+- AI 服务商左侧“启用的模型”列表改为独立滚动区域，长列表滚动不再拖动整个设置页。
 - RTL 语言 readiness、source locale export 与翻译 PR pack 有独立报告和 evidence，便于后续翻译交付复核。
 
 ### 开发者与治理更新
@@ -28,9 +34,15 @@
 - `scripts/detect-missing-translations.ts` 增加 coverage 统计与 JSON report，`package.json` 暴露 i18n 检查、扫描、导出和报告命令。
 - `scripts/quality-task-planner.mjs`、`scripts/quality-task-selector.mjs`、`scripts/local-ci.mjs` 与 `.github/workflows/quality.yml` 同步 i18n 任务选择和 CI 输出字段。
 - `scripts/verify-gui-smoke.mjs` 在写出 Patch metrics 后联动 `governance:legacy-report` 与 `i18n:patch-retirement-gate`。
+- `at-command-registry` 与 `claw-chat-ready-streaming` GUI smoke 补齐 Playwright context 关闭超时、临时 profile 清理和工作区 ready 信号等待，降低 release smoke 收尾阶段挂起概率。
 - `src/i18n/loadNamespace.ts` 将 bundled namespace parts 独立到 `bundledNamespaceParts.ts`，并在 `locales.ts` 增加 RTL direction helper。
 - Rust runtime 增加 `recent_response_language` 投影与 `【AI 回复语言】` prompt stage，测试覆盖 turn / thread metadata fallback。
 - `src-tauri/crates/aster-rust/crates/aster/src/tools/shell_runtime.rs` 与相关 bash / PowerShell / task 工具继续收敛跨平台 shell runtime 行为，并补 Windows shell runtime 回归。
+- 修复 Windows 发布构建中 `shell_runtime.rs` 的 unreachable expression warning，以及 `std::env::var_os` 直接作为泛型 `Fn(&str)` 参数传入时的 lifetime 泛化错误。
+- 文件管理器 `create_directory` 补齐平台原生路径与嵌套目录创建回归，并在 Windows quality workflow 中增加定向测试。
+- `request_model_resolution` 与前端模型配置解析同步 Mimo 模型别名归一化，避免前端列表与 Rust runtime 解析口径不一致。
+- `add_api_key` 命令请求新增 `replace_existing` 语义，设置页单密钥编辑走后端事务替换旧密钥；常规添加模型流程仍保留追加 Key 能力。
+- `i18n-hardcoded-check` 允许可选 literal expression 解包，Companion 设置卡片标题也迁入五语言资源，避免用户可见文案回流硬编码。
 - `src-tauri/src/commands/skill_cmd.rs` 的本地 skill 包管理测试补齐进程环境变量隔离，避免 Rust 并行测试互相覆盖 `HOME/XDG/APPDATA`。
 - `docs/roadmap/i18n/` 新增 app metadata、Chrome extension、language boundary、release docs、response language、RTL、toolchain 评估和 evidence 记录。
 
@@ -42,9 +54,22 @@
 - 已通过 `cargo check --manifest-path "src-tauri/Cargo.toml" --no-default-features --features local-sensevoice`
 - 已通过 `cargo test --manifest-path "src-tauri/Cargo.toml"`
 - 已通过 `npm run lint`
+- 已通过 `npm run typecheck`
 - 已通过 `npm test`
 - 已通过 `npm run test:contracts`
+- 已通过 `npm run i18n:check`
+- 已通过 `npm run i18n:unused -- --check`
+- 已通过 `npm run i18n:scan -- --files src/components/AppPageContent.tsx src/components/agent/chat/AgentChatWorkspace.tsx src/components/agent/chat/index.tsx src/components/api-key-provider/ApiKeyProviderSection.tsx src/components/api-key-provider/ModelProviderList.tsx src/components/api-key-provider/ProviderSetting.tsx src/components/settings-v2/agent/providers/index.tsx src/main.tsx`
+- 已通过 `npm test -- src/components/api-key-provider/ProviderSetting.ui.test.tsx src/lib/api/apiKeyProvider.test.ts`
+- 已通过 `npm test -- src/components/api-key-provider/ApiKeyProviderSection.ui.test.tsx src/components/settings-v2/agent/providers/index.test.tsx`
+- 已通过 `npm test -- src/components/settings-v2/agent/providers/index.test.tsx src/components/api-key-provider/ProviderSetting.ui.test.tsx src/components/api-key-provider/ApiKeyProviderSection.ui.test.tsx src/lib/api/apiKeyProvider.test.ts`
+- 已通过 `cargo test --manifest-path "src-tauri/Cargo.toml" -p lime-services add_api_key_replace_existing -- --nocapture`
+- 已通过 Mimo SGP live `/anthropic/v1/messages` smoke：`mimo-v2.5-pro` 返回 HTTP 200，密钥未写入仓库或 release note。
 - 已通过 `npm run verify:gui-smoke`
+- 已通过 `cargo fmt --manifest-path "src-tauri/Cargo.toml" --all -- --check`
+- 已通过 `cargo test --manifest-path "src-tauri/crates/aster-rust/Cargo.toml" -p aster-core tools::shell_runtime`
+- 已通过 `cargo check --manifest-path "src-tauri/crates/aster-rust/Cargo.toml" -p aster-core --no-default-features`
+- 已尝试 `cargo check --manifest-path "src-tauri/crates/aster-rust/Cargo.toml" -p aster-core --target x86_64-pc-windows-msvc`；本机 macOS 交叉环境缺少 Windows/MSVC C 标准头，停在 `ring` build script 的 `assert.h`，未复现用户报告的 `shell_runtime.rs` Rust 编译错误。
 
 ---
 

@@ -18,6 +18,7 @@ const RECENT_REPLAY_TEXT = "E2E 最近搜索输入";
 const IMAGE_PROMPT = "E2E 图片命令路由测试，请生成一张青柠插画";
 const CHAT_PROVIDER_PREFERENCE = "deepseek";
 const CHAT_MODEL_PREFERENCE = "deepseek-v4-flash";
+const CONTEXT_CLOSE_TIMEOUT_MS = 5_000;
 
 function parseArgs(argv) {
   const options = {
@@ -89,6 +90,13 @@ function assert(condition, message) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function timeoutAfter(ms) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    timer.unref?.();
+  });
 }
 
 async function waitForCondition(label, probe, timeoutMs, intervalMs) {
@@ -185,6 +193,42 @@ async function launchContext(options) {
       launchOptions,
     );
     return { context, userDataDir };
+  }
+}
+
+async function closeContextWithTimeout(context, options) {
+  const closeResult = await Promise.race([
+    context.close().then(
+      () => ({ status: "closed" }),
+      (error) => ({ status: "failed", error }),
+    ),
+    timeoutAfter(CONTEXT_CLOSE_TIMEOUT_MS).then(() => ({ status: "timeout" })),
+  ]);
+
+  if (closeResult.status === "failed") {
+    console.warn(
+      `[${options.prefix}] Playwright context 关闭失败: ${
+        closeResult.error instanceof Error
+          ? closeResult.error.message
+          : String(closeResult.error)
+      }`,
+    );
+  } else if (closeResult.status === "timeout") {
+    console.warn(
+      `[${options.prefix}] Playwright context 关闭超过 ${CONTEXT_CLOSE_TIMEOUT_MS}ms，继续退出以避免 smoke 清理阶段挂起`,
+    );
+  }
+}
+
+function removeUserDataDir(userDataDir, options) {
+  try {
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  } catch (error) {
+    console.warn(
+      `[${options.prefix}] 删除临时浏览器 profile 失败: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
   }
 }
 
@@ -689,8 +733,8 @@ async function main() {
     console.log(`[${options.prefix}] summary=${summaryPath}`);
     console.log(`[${options.prefix}] 通过`);
   } finally {
-    await context.close().catch(() => undefined);
-    fs.rmSync(userDataDir, { recursive: true, force: true });
+    await closeContextWithTimeout(context, options);
+    removeUserDataDir(userDataDir, options);
   }
 }
 

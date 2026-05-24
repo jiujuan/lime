@@ -16,9 +16,6 @@ import { initializeLimeThemeMode } from "@/lib/appearance/themeMode";
 import { startupTracker } from "@/lib/diagnostics/startupPerformance";
 import "@/lib/diagnostics/layoutShiftDetector";
 
-// 预加载 AgentChatWorkspace 模块,避免首次点击"新建任务"时才加载
-import { preloadAgentChatWorkspaceModule } from "@/components/agent/chat/agentChatWorkspaceLoader";
-
 startupTracker.mark("main.tsx: start");
 
 // 只引入轻量渲染器注册入口,避免启动期拖入整条 Artifact 重型依赖链
@@ -37,12 +34,4 @@ void initCrashReporting();
 startupTracker.mark("before React render");
 ReactDOM.createRoot(document.getElementById("root")!).render(<RootRouter />);
 startupTracker.mark("React render called");
-
-// 在 React 渲染后立即开始预加载 AgentChatWorkspace
-// 这样用户在浏览首页时,模块就在后台加载了
-setTimeout(() => {
-  startupTracker.mark("preloading AgentChatWorkspace");
-  preloadAgentChatWorkspaceModule();
-}, 100);
-
 scheduleStyledRuntimeDiagnostics();

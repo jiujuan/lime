@@ -677,7 +677,7 @@ function CompanionProviderBridgeCard() {
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-base font-semibold text-slate-900">
-                  Lime Pet Companion
+                  {t("settings.providers.workspaceView.companion.label")}
                 </h3>
                 <InfoPill
                   label={
@@ -1323,7 +1323,7 @@ export function CloudProviderSettings(props: CloudProviderSettingsProps) {
 
   const localProviderContent = (
     <ApiKeyProviderSection
-      className="min-h-[640px]"
+      className="h-[calc(100vh-220px)] min-h-[560px] max-h-[820px]"
       exposeOemLoginPrompt={isOemRuntime && !session}
       onOemLogin={() => {
         void handleOpenCloudUserCenter("/welcome");

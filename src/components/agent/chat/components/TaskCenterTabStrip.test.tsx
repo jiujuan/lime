@@ -154,8 +154,27 @@ describe("TaskCenterTabStrip", () => {
     expect(onSelectTask).not.toHaveBeenCalled();
   });
 
+  it("重命名标签时不应触发切换", () => {
+    const onSelectTask = vi.fn();
+    const onRenameTask = vi.fn();
+    const { container } = renderTabStrip({ onSelectTask, onRenameTask });
+
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="task-center-tab-rename-topic-b"]',
+        ) as HTMLButtonElement | null
+      )?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onRenameTask).toHaveBeenCalledWith("topic-b");
+    expect(onSelectTask).not.toHaveBeenCalled();
+  });
+
   it("不可关闭标签不应渲染关闭按钮", () => {
+    const onRenameTask = vi.fn();
     const { container } = renderTabStrip({
+      onRenameTask,
       items: [
         {
           id: "new-task-home",
@@ -165,6 +184,7 @@ describe("TaskCenterTabStrip", () => {
           isActive: true,
           hasUnread: false,
           isPinned: false,
+          renamable: false,
           closable: false,
         },
       ],
@@ -176,6 +196,11 @@ describe("TaskCenterTabStrip", () => {
     expect(
       container.querySelector(
         '[data-testid="task-center-tab-close-new-task-home"]',
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="task-center-tab-rename-new-task-home"]',
       ),
     ).toBeNull();
   });

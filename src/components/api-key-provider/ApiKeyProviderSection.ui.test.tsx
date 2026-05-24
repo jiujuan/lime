@@ -311,6 +311,26 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     expect(
       container.querySelector('[data-testid="enabled-model-list"]'),
     ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="api-key-provider-section"]')
+        ?.className,
+    ).toContain("min-h-0");
+    expect(
+      container.querySelector('[data-testid="api-key-provider-detail"]')
+        ?.className,
+    ).toContain("min-h-0");
+    expect(
+      container.querySelector('[data-testid="enabled-model-list"]')
+        ?.className,
+    ).toContain("overflow-hidden");
+    expect(
+      container.querySelector('[data-testid="enabled-model-scroll-region"]')
+        ?.className,
+    ).toContain("overflow-y-auto");
+    expect(
+      container.querySelector('[data-testid="enabled-model-scroll-region"]')
+        ?.className,
+    ).toContain("overscroll-contain");
     expect(container.textContent ?? "").toContain("启用的模型");
     expect(container.textContent ?? "").toContain("添加模型");
     expect(container.textContent ?? "").toContain("导入 / 导出配置");

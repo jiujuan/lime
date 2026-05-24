@@ -28,11 +28,19 @@ describe("apiKeyProvider API", () => {
       apiKeyProviderApi.addApiKey({
         provider_id: "openai",
         api_key: "sk-test",
+        replace_existing: true,
       }),
     ).resolves.toEqual(expect.objectContaining({ id: "key-1" }));
     await expect(
       apiKeyProviderApi.testConnection("openai", "gpt-4.1"),
     ).resolves.toEqual(expect.objectContaining({ success: true }));
+    expect(vi.mocked(safeInvoke)).toHaveBeenNthCalledWith(2, "add_api_key", {
+      request: {
+        provider_id: "openai",
+        api_key: "sk-test",
+        replace_existing: true,
+      },
+    });
   });
 
   it("不应继续暴露旧 API Key 迁移 API", () => {

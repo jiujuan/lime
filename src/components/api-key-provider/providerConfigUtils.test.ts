@@ -287,7 +287,7 @@ describe("模型辅助函数", () => {
           apiHost: "https://token-plan-cn.xiaomimimo.com/anthropic",
         },
       ),
-    ).toEqual(["mimo-v2.5-pro", "mimo-v2-flash"]);
+    ).toEqual(["mimo-v2.5-pro"]);
   });
 
   test("serializeCustomModels 应输出规范化后的 MiMo 模型 ID", () => {

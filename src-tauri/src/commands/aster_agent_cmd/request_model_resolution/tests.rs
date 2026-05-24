@@ -481,7 +481,7 @@ fn xiaomi_compatibility_canonicalizes_display_name_and_legacy_alias() {
                 "mimo-v2-flash".to_string(),
             ],
         ),
-        vec!["mimo-v2.5-pro".to_string(), "mimo-v2-flash".to_string()]
+        vec!["mimo-v2.5-pro".to_string()]
     );
 }
 

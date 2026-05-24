@@ -114,6 +114,8 @@ export interface AddApiKeyRequest {
   provider_id: string;
   api_key: string;
   alias?: string;
+  /** 单 Key 设置入口使用：替换当前 Provider 的旧 Key，而不是追加轮询 Key。 */
+  replace_existing?: boolean;
 }
 
 // ============================================================================

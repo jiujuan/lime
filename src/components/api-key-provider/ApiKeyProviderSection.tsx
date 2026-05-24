@@ -161,7 +161,13 @@ export const ApiKeyProviderSection = forwardRef<
       providerId: string,
       apiKey: string,
       alias?: string,
+      options?: { replaceExisting?: boolean },
     ): Promise<void> => {
+      if (options) {
+        await addApiKey(providerId, apiKey, alias, options);
+        return;
+      }
+
       await addApiKey(providerId, apiKey, alias);
     },
     [addApiKey],
@@ -250,7 +256,7 @@ export const ApiKeyProviderSection = forwardRef<
   return (
     <div
       className={cn(
-        "relative flex h-full overflow-hidden rounded-[24px] border border-slate-200/80 bg-white shadow-sm shadow-slate-950/5",
+        "relative flex h-full min-h-0 min-w-0 overflow-hidden rounded-[24px] border border-slate-200/80 bg-white shadow-sm shadow-slate-950/5",
         className,
       )}
       data-testid="api-key-provider-section"
@@ -267,7 +273,10 @@ export const ApiKeyProviderSection = forwardRef<
       />
 
       {/* 右侧：Provider 设置面板 / 添加模型流程 */}
-      <div className="relative flex-1 min-w-0 overflow-hidden bg-white">
+      <div
+        className="relative min-h-0 flex-1 overflow-hidden bg-white"
+        data-testid="api-key-provider-detail"
+      >
         {showAddModelFlow ? (
           <ModelAddPanel
             providers={providers}

@@ -1262,6 +1262,31 @@ mod tests {
         assert!(!is_hidden_file("readme.md"));
     }
 
+    #[tokio::test]
+    async fn create_directory_creates_nested_directory_from_platform_path() {
+        let temp_dir = tempfile::tempdir().expect("应创建临时目录");
+        let target = temp_dir.path().join("workspace").join("new-folder");
+
+        create_directory(target.to_string_lossy().to_string())
+            .await
+            .expect("应创建嵌套目录");
+
+        assert!(target.is_dir());
+    }
+
+    #[tokio::test]
+    async fn create_directory_rejects_existing_directory() {
+        let temp_dir = tempfile::tempdir().expect("应创建临时目录");
+        let target = temp_dir.path().join("existing-folder");
+        fs::create_dir_all(&target).expect("应准备已存在目录");
+
+        let error = create_directory(target.to_string_lossy().to_string())
+            .await
+            .expect_err("已存在目录应返回错误");
+
+        assert_eq!(error, "目录已存在");
+    }
+
     #[test]
     fn test_normalize_bundle_icon_file_name() {
         assert_eq!(

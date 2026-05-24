@@ -27,7 +27,6 @@ import {
   settleLiveArtifactAfterStreamStops,
   useArtifactDisplayState,
 } from "./hooks/useArtifactDisplayState";
-import { clearAgentSessionCachedSnapshot } from "./hooks/agentSessionScopedStorage";
 import type { TopicBranchStatus } from "./hooks/useTopicBranchBoard";
 import { useSessionFiles } from "./hooks/useSessionFiles";
 import { useContentSync } from "./hooks/useContentSync";
@@ -240,7 +239,6 @@ import {
   subscribeTaskCenterDraftTaskRequests,
   subscribeTaskCenterTaskPrefetchRequests,
   subscribeTaskCenterTaskOpenRequests,
-  type TaskCenterTaskEventSource,
 } from "./taskCenterDraftTaskEvents";
 import type { GeneralWorkbenchFollowUpActionPayload } from "./components/generalWorkbenchSidebarContract";
 import { RuntimeReviewDecisionDialog } from "./components/RuntimeReviewDecisionDialog";
@@ -422,16 +420,6 @@ const TASK_CENTER_DRAFT_TAB_PREFIX = "task-draft";
 const TASK_CENTER_DRAFT_SESSION_WARMUP_DELAY_MS = 120;
 const NOOP_SET_CHAT_MESSAGES: Dispatch<SetStateAction<Message[]>> = () =>
   undefined;
-
-function shouldForceRefreshTaskOpenSource(
-  source?: TaskCenterTaskEventSource,
-): boolean {
-  return (
-    source === "sidebar" ||
-    source === "sidebar_search" ||
-    source === "conversation_shelf"
-  );
-}
 
 function loadFileManagerSidebarOpen(): boolean {
   return false;
@@ -5178,12 +5166,6 @@ export function AgentChatWorkspace({
       setTaskCenterDetachedTopicId(null);
       setActiveTaskCenterDraftTabId(null);
       clearEntryPendingA2UI();
-      setChatMessages([]);
-      const targetSnapshotWorkspaceId =
-        topicWorkspaceId ?? taskCenterWorkspaceId;
-      if (targetSnapshotWorkspaceId) {
-        clearAgentSessionCachedSnapshot(targetSnapshotWorkspaceId, topicId);
-      }
       if (options?.replaceOpenTabs === true) {
         replaceTaskCenterOpenTabs(topicId, topicWorkspaceId);
       } else if (shouldMaintainTaskCenterTab) {
@@ -5232,7 +5214,6 @@ export function AgentChatWorkspace({
       replaceTaskCenterOpenTabs,
       resetLocalImageWorkbenchSessionScope,
       setActiveTaskCenterDraftTabId,
-      setChatMessages,
       switchTopic,
       taskCenterWorkspaceId,
       taskCenterDetachedTopicId,
@@ -5251,10 +5232,6 @@ export function AgentChatWorkspace({
       setTaskCenterDetachedTopicId(topicId);
       setTaskCenterTransitionTopicId(topicId);
       clearEntryPendingA2UI();
-      setChatMessages([]);
-      if (taskCenterWorkspaceId) {
-        clearAgentSessionCachedSnapshot(taskCenterWorkspaceId, topicId);
-      }
       markTaskCenterLocalSessionOverride(topicId);
       rememberInitialSessionNavigationStart(topicId);
       const switchResult = await switchTopic(topicId, {
@@ -5278,9 +5255,7 @@ export function AgentChatWorkspace({
       clearEntryPendingA2UI,
       markTaskCenterLocalSessionOverride,
       resetLocalImageWorkbenchSessionScope,
-      setChatMessages,
       switchTopic,
-      taskCenterWorkspaceId,
     ],
   );
 
@@ -5330,9 +5305,34 @@ export function AgentChatWorkspace({
     [handleOpenTaskTopic, handleSelectTaskCenterDraftTab],
   );
 
+  const handleRenameTaskTopic = useCallback(
+    async (topicId: string) => {
+      if (isTaskCenterDraftTabId(topicId) || typeof window === "undefined") {
+        return;
+      }
+
+      const topic = topicById.get(topicId);
+      if (!topic) {
+        return;
+      }
+
+      const currentTitle =
+        resolveInternalImageTaskDisplayName(topic.title) || untitledTaskLabel;
+      const nextTitle = window
+        .prompt(taskCenterRenamePromptLabel, currentTitle)
+        ?.trim();
+      if (!nextTitle || nextTitle === currentTitle) {
+        return;
+      }
+
+      await renameTopic(topicId, nextTitle);
+    },
+    [renameTopic, taskCenterRenamePromptLabel, topicById, untitledTaskLabel],
+  );
+
   const handleOpenSidebarTaskTopic = useCallback(
     async (topicId: string) => {
-      await handleOpenTaskTopic(topicId, { forceRefresh: true });
+      await handleOpenTaskTopic(topicId);
     },
     [handleOpenTaskTopic],
   );
@@ -5479,9 +5479,8 @@ export function AgentChatWorkspace({
     }
 
     return subscribeTaskCenterTaskOpenRequests(
-      ({ sessionId: requestedSessionId, source, workspaceId }) => {
+      ({ sessionId: requestedSessionId, workspaceId }) => {
         const requestedWorkspaceId = normalizeProjectId(workspaceId);
-        const shouldForceRefresh = shouldForceRefreshTaskOpenSource(source);
         if (
           requestedWorkspaceId &&
           requestedWorkspaceId !== normalizeProjectId(taskCenterWorkspaceId)
@@ -5491,18 +5490,11 @@ export function AgentChatWorkspace({
           setActiveTaskCenterDraftTabId(null);
           markTaskCenterLocalSessionOverride(requestedSessionId);
           upsertTaskCenterOpenTab(requestedSessionId, requestedWorkspaceId);
-          deferTopicSwitch(
-            requestedSessionId,
-            requestedWorkspaceId,
-            shouldForceRefresh ? { forceRefresh: true } : undefined,
-          );
+          deferTopicSwitch(requestedSessionId, requestedWorkspaceId);
           return;
         }
 
-        void handleOpenTaskTopic(
-          requestedSessionId,
-          shouldForceRefresh ? { forceRefresh: true } : undefined,
-        );
+        void handleOpenTaskTopic(requestedSessionId);
       },
     );
   }, [
@@ -5622,7 +5614,8 @@ export function AgentChatWorkspace({
       .filter((topic): topic is NonNullable<typeof topic> => Boolean(topic))
       .map((topic) => ({
         id: topic.id,
-        title: resolveInternalImageTaskDisplayName(topic.title) || "未命名任务",
+        title:
+          resolveInternalImageTaskDisplayName(topic.title) || untitledTaskLabel,
         status: topic.status ?? "done",
         updatedAt:
           topic.updatedAt instanceof Date
@@ -5645,6 +5638,7 @@ export function AgentChatWorkspace({
     taskCenterPreviewTopicId,
     taskCenterVisibleTabIds,
     topicById,
+    untitledTaskLabel,
   ]);
   const shouldRenderTaskCenterTabStrip =
     agentEntry === "claw" ||
@@ -5766,6 +5760,9 @@ export function AgentChatWorkspace({
         onSelectTask={(topicId) => {
           void handleSwitchTaskTopic(topicId);
         }}
+        onRenameTask={(topicId) => {
+          void handleRenameTaskTopic(topicId);
+        }}
         onCloseTask={(topicId) => {
           void handleCloseTaskCenterTab(topicId);
         }}
@@ -5780,6 +5777,7 @@ export function AgentChatWorkspace({
   }, [
     handleCloseTaskCenterTab,
     handleOpenTaskCenterNewTaskPage,
+    handleRenameTaskTopic,
     handleToggleCanvas,
     handleSwitchTaskTopic,
     isThemeWorkbench,
@@ -5800,6 +5798,7 @@ export function AgentChatWorkspace({
       isActive: true,
       hasUnread: false,
       isPinned: false,
+      renamable: false,
       closable: false,
     };
 

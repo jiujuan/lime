@@ -34,8 +34,10 @@ const {
 });
 
 vi.mock("@/components/api-key-provider", () => ({
-  ApiKeyProviderSection: () => (
-    <div data-testid="api-key-provider-stub">API Key Provider 设置占位</div>
+  ApiKeyProviderSection: ({ className }: { className?: string }) => (
+    <div data-testid="api-key-provider-stub" className={className}>
+      API Key Provider 设置占位
+    </div>
   ),
 }));
 
@@ -105,6 +107,8 @@ vi.mock("@/hooks/useOemCloudAccess", () => ({
 import { CloudProviderSettings } from ".";
 
 const settingsDictionary = settingsZhCN as Record<string, string>;
+const companionWorkspaceLabel =
+  settingsDictionary["settings.providers.workspaceView.companion.label"];
 
 function interpolateTemplate(
   template: string,
@@ -458,11 +462,15 @@ describe("CloudProviderSettings", () => {
       container.querySelector('[data-testid="provider-workspace-switcher"]'),
     ).not.toBeNull();
     expect(
+      container.querySelector('[data-testid="api-key-provider-stub"]')
+        ?.className,
+    ).toContain("h-[calc(100vh-220px)]");
+    expect(
       container.querySelectorAll('[data-testid="provider-workspace-switcher"]')
         .length,
     ).toBe(1);
     expect(text).toContain("API Key Provider 设置占位");
-    expect(text).not.toContain("Lime Pet Companion");
+    expect(container.querySelector('[data-testid="companion-provider-card"]')).toBeNull();
     expect(text).not.toContain("把本地 Provider 配置和 OEM 云端服务拆开管理");
     expect(text).not.toContain("把本地 Provider 配置和品牌云端服务拆开管理");
     expect(text).not.toContain("默认先进入“服务商设置”处理 Provider");
@@ -962,7 +970,7 @@ describe("CloudProviderSettings", () => {
     expect(
       container.querySelector('[data-testid="companion-provider-card"]'),
     ).not.toBeNull();
-    expect(text).toContain("Lime Pet Companion");
+    expect(text).toContain(companionWorkspaceLabel);
 
     const introTip = await hoverTip("桌宠 Companion 说明");
     expect(getBodyText()).toContain(
@@ -997,7 +1005,7 @@ describe("CloudProviderSettings", () => {
     expect(
       container.querySelector('[data-testid="companion-provider-card"]'),
     ).not.toBeNull();
-    expect(container.textContent ?? "").toContain("Lime Pet Companion");
+    expect(container.textContent ?? "").toContain(companionWorkspaceLabel);
   });
 
   it("点击开启桌宠后应调用 launch 接口并展示启动反馈", async () => {

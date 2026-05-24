@@ -301,7 +301,7 @@ pub async fn save_relay_api_key(
     let key_alias = name.or_else(|| Some(format!("[Connect] {}", relay_info.name)));
     let api_key_entry = api_key_service
         .0
-        .add_api_key(&db, &final_provider_id, &api_key, key_alias.clone())
+        .add_api_key(&db, &final_provider_id, &api_key, key_alias.clone(), false)
         .map_err(|e| ConnectError {
             code: "ADD_API_KEY_FAILED".to_string(),
             message: format!("添加 API Key 失败: {e}"),

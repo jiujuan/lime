@@ -893,7 +893,9 @@ fn canonicalize_xiaomi_model_id(model_id: &str) -> String {
     }
 
     match normalize_identifier(trimmed).as_str() {
-        "mimo-v2-pro" | "mimo-v2.5" | "mimo-v2.5-pro" => "mimo-v2.5-pro".to_string(),
+        "mimo-v2-pro" | "mimo-v2.5" | "mimo-v2.5-pro" | "mimo-v2-flash" => {
+            "mimo-v2.5-pro".to_string()
+        }
         _ => trimmed.to_string(),
     }
 }

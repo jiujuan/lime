@@ -75,6 +75,7 @@ export interface ProviderSettingProps {
     providerId: string,
     apiKey: string,
     alias?: string,
+    options?: { replaceExisting?: boolean },
   ) => Promise<void>;
   /** 测试连接回调 */
   onTestConnection?: (providerId: string) => Promise<ConnectionTestResult>;
@@ -248,11 +249,6 @@ function formatActionError(error: unknown, fallback: string): string {
   return readActionErrorMessage(error) ?? fallback;
 }
 
-function isDuplicateApiKeyError(error: unknown): boolean {
-  const message = readActionErrorMessage(error) ?? "";
-  return /api key.*(已存在|already exists)/i.test(message);
-}
-
 // ============================================================================
 // 组件实现
 // ============================================================================
@@ -299,7 +295,7 @@ export const ProviderSetting: React.FC<ProviderSettingProps> = (props) => {
         data-testid="provider-login-required"
         data-provider-id={props.provider.id}
       >
-        <div className="flex-1 overflow-y-auto px-4 py-5 lg:px-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 lg:px-6">
           <section className="mx-auto w-full max-w-[820px] rounded-[30px] border border-amber-200 bg-amber-50 p-5 shadow-sm shadow-slate-950/5 lg:p-6">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex min-w-0 items-start gap-3">
@@ -389,6 +385,12 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
   const [apiKeyDirty, setApiKeyDirty] = useState(false);
   const [savingApiKey, setSavingApiKey] = useState(false);
   const [apiKeyStatus, setApiKeyStatus] = useState<InlineStatus | null>(null);
+  const [apiHostDraft, setApiHostDraft] = useState(provider.api_host);
+  const [apiHostDirty, setApiHostDirty] = useState(false);
+  const [savingApiHost, setSavingApiHost] = useState(false);
+  const [apiHostStatus, setApiHostStatus] = useState<InlineStatus | null>(
+    null,
+  );
   const [showApiKey, setShowApiKey] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<InlineStatus | null>(
@@ -414,10 +416,14 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     setApiKeyDirty(false);
     setSavingApiKey(false);
     setApiKeyStatus(null);
+    setApiHostDraft(provider.api_host);
+    setApiHostDirty(false);
+    setSavingApiHost(false);
+    setApiHostStatus(null);
     setShowApiKey(false);
     setImageCommandDraft(null);
     setImageCommandStatus(null);
-  }, [provider?.id, provider?.custom_models]);
+  }, [provider.id, provider.api_host, provider.custom_models]);
 
   useEffect(() => {
     return subscribeSkillCatalogChanged(() => {
@@ -428,15 +434,19 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
   const providerHostLabel = formatProviderHost(provider.api_host);
   const apiKeyMask = getFirstVisibleApiKey(provider);
   const hasApiKey = hasConfiguredApiKey(provider);
+  const effectiveApiHost = apiHostDirty ? apiHostDraft : provider.api_host;
+  const trimmedApiHostDraft = apiHostDraft.trim();
+  const hasPendingApiHost =
+    apiHostDirty && trimmedApiHostDraft !== provider.api_host.trim();
   const accessHelp = getProviderAccessHelp({
     providerId: provider.id,
     providerName: provider.name,
-    apiHost: provider.api_host,
+    apiHost: effectiveApiHost,
   });
   const modelAutoFetchCapability = getProviderModelAutoFetchCapability({
     providerId: provider.id,
     providerType: provider.type,
-    apiHost: provider.api_host,
+    apiHost: effectiveApiHost,
   });
   const modelFetchApiKeyRequired = modelAutoFetchCapability.requiresApiKey;
   const providerApiKeyRequired = isProviderApiKeyRequired(
@@ -502,13 +512,23 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     ) === "explicit_only";
   const canSaveApiKey =
     !loading &&
+    !savingApiHost &&
     !savingApiKey &&
     !testingConnection &&
     !fetchingModels &&
     hasPendingApiKey;
+  const canSaveApiHost =
+    !loading &&
+    !savingApiHost &&
+    !savingApiKey &&
+    !testingConnection &&
+    !fetchingModels &&
+    hasPendingApiHost &&
+    Boolean(trimmedApiHostDraft);
   const canTestConnection =
     !loading &&
     !testingConnection &&
+    !savingApiHost &&
     !savingApiKey &&
     modelList.length > 0 &&
     (!providerApiKeyRequired || hasApiKey || canUseDraftApiKey);
@@ -555,6 +575,66 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     [t],
   );
 
+  const persistDraftApiHost = useCallback(async () => {
+    const nextApiHost = apiHostDraft.trim();
+    if (!apiHostDirty || nextApiHost === provider.api_host.trim()) {
+      return;
+    }
+
+    if (!nextApiHost) {
+      throw new Error(
+        t("settings.providers.setting.feedback.apiHost.required"),
+      );
+    }
+
+    if (!onUpdate) {
+      throw new Error(
+        t("settings.providers.setting.feedback.apiHost.updateMissingCapability"),
+      );
+    }
+
+    await onUpdate(provider.id, { api_host: nextApiHost });
+    setApiHostDraft(nextApiHost);
+    setApiHostDirty(false);
+  }, [apiHostDirty, apiHostDraft, onUpdate, provider.api_host, provider.id, t]);
+
+  const handleSaveApiHost = useCallback(async () => {
+    if (!apiHostDirty) {
+      return;
+    }
+
+    if (!apiHostDraft.trim()) {
+      setApiHostStatus({
+        tone: "error",
+        message: t("settings.providers.setting.feedback.apiHost.required"),
+      });
+      return;
+    }
+
+    setSavingApiHost(true);
+    setApiHostStatus(null);
+    setConnectionStatus(null);
+    setModelFetchStatus(null);
+
+    try {
+      await persistDraftApiHost();
+      setApiHostStatus({
+        tone: "success",
+        message: t("settings.providers.setting.feedback.apiHost.saved"),
+      });
+    } catch (error) {
+      setApiHostStatus({
+        tone: "error",
+        message: formatActionError(
+          error,
+          t("settings.providers.setting.feedback.apiHost.saveFailed"),
+        ),
+      });
+    } finally {
+      setSavingApiHost(false);
+    }
+  }, [apiHostDirty, apiHostDraft, persistDraftApiHost, t]);
+
   const persistDraftApiKey = useCallback(async () => {
     const nextApiKey = apiKeyDraft.trim();
     if (!apiKeyDirty || !nextApiKey) {
@@ -567,7 +647,9 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
       );
     }
 
-    await onAddApiKey(provider.id, nextApiKey);
+    await onAddApiKey(provider.id, nextApiKey, undefined, {
+      replaceExisting: true,
+    });
     setApiKeyDraft("");
     setApiKeyDirty(false);
   }, [apiKeyDirty, apiKeyDraft, onAddApiKey, provider.id, t]);
@@ -596,18 +678,6 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
         message: t("settings.providers.setting.feedback.apiKey.saved"),
       });
     } catch (error) {
-      if (isDuplicateApiKeyError(error)) {
-        setApiKeyDraft("");
-        setApiKeyDirty(false);
-        setApiKeyStatus({
-          tone: "success",
-          message: t(
-            "settings.providers.setting.feedback.apiKey.alreadySaved",
-          ),
-        });
-        return;
-      }
-
       setApiKeyStatus({
         tone: "error",
         message: formatActionError(
@@ -740,6 +810,7 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     setModelFetchStatus(null);
 
     try {
+      await persistDraftApiHost();
       await persistDraftApiKey();
       const result = await fetchProviderModelsAuto(provider.id);
       const source = normalizeFetchProviderModelsSource(result);
@@ -835,6 +906,7 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     modelList,
     modelAutoFetchCapability.supported,
     normalizedModelSet,
+    persistDraftApiHost,
     persistDraftApiKey,
     provider,
     t,
@@ -901,6 +973,7 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     setConnectionStatus(null);
 
     try {
+      await persistDraftApiHost();
       await persistDraftApiKey();
       const result = onTestConnection
         ? await onTestConnection(provider.id)
@@ -950,6 +1023,7 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     hasApiKey,
     modelList.length,
     onTestConnection,
+    persistDraftApiHost,
     persistDraftApiKey,
     primaryModel,
     providerApiKeyRequired,
@@ -959,11 +1033,11 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
 
   return (
     <div
-      className={cn("flex h-full flex-col bg-slate-50", className)}
+      className={cn("flex h-full min-h-0 flex-col bg-slate-50", className)}
       data-testid="provider-setting"
       data-provider-id={provider.id}
     >
-      <div className="flex-1 overflow-y-auto px-4 py-5 lg:px-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 lg:px-6">
         <section
           className="mx-auto w-full max-w-[820px] rounded-[30px] border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-950/5 lg:p-6"
           data-testid="provider-simple-card"
@@ -1074,6 +1148,95 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                 </span>
               </div>
             ) : null}
+
+            <div className="space-y-2" data-testid="api-host-section">
+              <div className="flex items-center justify-between gap-3">
+                <Label
+                  htmlFor="provider-api-host"
+                  className="text-sm text-slate-600"
+                >
+                  {t(
+                    "settings.providers.setting.body.apiHost.label",
+                    "API Host",
+                  )}
+                </Label>
+                {hasPendingApiHost ? (
+                  <span className="text-xs text-amber-600">
+                    {t(
+                      "settings.providers.setting.body.apiHost.pending",
+                      "未保存",
+                    )}
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  id="provider-api-host"
+                  type="url"
+                  value={apiHostDraft}
+                  onChange={(event) => {
+                    setApiHostDirty(true);
+                    setApiHostDraft(event.target.value);
+                    setApiHostStatus(null);
+                    setConnectionStatus(null);
+                    setModelFetchStatus(null);
+                  }}
+                  placeholder={t(
+                    "settings.providers.setting.body.apiHost.placeholder",
+                    "输入 API Host",
+                  )}
+                  className="h-12 min-w-0 flex-1 rounded-[18px] border-slate-200 bg-white px-4"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  disabled={
+                    loading ||
+                    savingApiHost ||
+                    savingApiKey ||
+                    testingConnection ||
+                    fetchingModels
+                  }
+                  data-testid="provider-api-host-input"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 rounded-[18px] border-slate-200 bg-white px-4 text-slate-700 hover:bg-slate-50"
+                  onClick={() => {
+                    void handleSaveApiHost();
+                  }}
+                  disabled={!canSaveApiHost}
+                  data-testid="provider-api-host-save-button"
+                >
+                  {savingApiHost ? (
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-1.5 h-4 w-4" />
+                  )}
+                  {savingApiHost
+                    ? t(
+                        "settings.providers.setting.body.apiHost.action.saving",
+                        "保存中...",
+                      )
+                    : t(
+                        "settings.providers.setting.body.apiHost.action.save",
+                        "保存 Host",
+                      )}
+                </Button>
+              </div>
+              {apiHostStatus ? (
+                <div
+                  className={cn(
+                    "flex items-start gap-2 rounded-[16px] border px-3 py-2 text-sm",
+                    buildStatusClass(apiHostStatus.tone),
+                  )}
+                  data-testid="api-host-status"
+                >
+                  {getStatusIcon(apiHostStatus.tone)}
+                  <span className="leading-5">{apiHostStatus.message}</span>
+                </div>
+              ) : null}
+            </div>
 
             <div className="space-y-2" data-testid="api-key-section">
               <div className="flex items-center justify-between gap-3">

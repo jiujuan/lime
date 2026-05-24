@@ -163,8 +163,12 @@ function createFinding(
 }
 
 function unwrapLiteralExpression(
-  expression: ts.Expression,
+  expression: ts.Expression | undefined,
 ): ts.Expression | undefined {
+  if (!expression) {
+    return undefined;
+  }
+
   let current: ts.Expression = expression;
 
   while (ts.isParenthesizedExpression(current)) {

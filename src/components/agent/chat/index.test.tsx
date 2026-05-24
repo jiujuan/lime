@@ -2,7 +2,6 @@ import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
   afterEach,
-  beforeAll,
   beforeEach,
   describe,
   expect,
@@ -757,8 +756,6 @@ import * as configuredProvidersModule from "@/hooks/useConfiguredProviders";
 import * as providerModelsModule from "@/hooks/useProviderModels";
 import { AgentChatPage } from "./index";
 
-const preloadAgentChatWorkspaceModule = import("./AgentChatWorkspace");
-
 interface MountedHarness {
   container: HTMLDivElement;
   root: Root;
@@ -1130,10 +1127,6 @@ function mockBrowserAssistCompletedSession() {
 
   installMockAgentChatUnifiedState(state);
 }
-
-beforeAll(async () => {
-  await preloadAgentChatWorkspaceModule;
-}, 180_000);
 
 beforeEach(() => {
   (
@@ -1519,6 +1512,46 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     expect(
       mounted.container.querySelector('[data-testid="empty-state"]'),
     ).toBeNull();
+  });
+
+  it("顶部会话标签应支持重命名当前任务", async () => {
+    const renameTopic = vi.fn(async () => undefined);
+    const state: Record<string, unknown> = createMockAgentChatUnifiedState({
+      sessionId: "topic-current",
+      topics: [
+        {
+          id: "topic-current",
+          title: "当前会话",
+          updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+          workspaceId: "workspace-test",
+        },
+      ],
+      renameTopic,
+    });
+    installMockAgentChatUnifiedState(state);
+    const promptSpy = vi
+      .spyOn(window, "prompt")
+      .mockReturnValue("重命名后的会话");
+
+    const mounted = mountPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-current",
+      projectId: "workspace-test",
+    });
+    await flushEffects();
+
+    const renameButton = mounted.container.querySelector(
+      '[data-testid="task-center-tab-rename-topic-current"]',
+    ) as HTMLButtonElement | null;
+    expect(renameButton).not.toBeNull();
+
+    act(() => {
+      renameButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    expect(promptSpy).toHaveBeenCalledWith(expect.any(String), "当前会话");
+    expect(renameTopic).toHaveBeenCalledWith("topic-current", "重命名后的会话");
   });
 
   it("点击顶部加号应在任务中心新标签内嵌首页起手页", async () => {
@@ -2401,9 +2434,7 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     mounted.rerender();
     await flushEffects();
 
-    expect(switchTopic).toHaveBeenCalledWith("topic-a", {
-      forceRefresh: true,
-    });
+    expect(switchTopic).toHaveBeenCalledWith("topic-a");
     expect(
       mounted.container
         .querySelector('[data-testid="task-center-tab-topic-a"]')
@@ -2462,9 +2493,7 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     });
     await flushEffects();
 
-    expect(switchTopic).toHaveBeenCalledWith("topic-a", {
-      forceRefresh: true,
-    });
+    expect(switchTopic).toHaveBeenCalledWith("topic-a");
     expect(
       mounted.container
         .querySelector('[data-testid="task-center-tab-topic-a"]')
@@ -2521,9 +2550,7 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
       }),
     ).toBe(true);
     await flushEffects();
-    expect(switchTopic).toHaveBeenCalledWith("topic-next", {
-      forceRefresh: true,
-    });
+    expect(switchTopic).toHaveBeenCalledWith("topic-next");
 
     mounted.rerender({
       initialSessionId: "topic-next",
@@ -2548,6 +2575,56 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
         localStorage.getItem(TASK_CENTER_OPEN_TAB_IDS_STORAGE_KEY) ?? "{}",
       )["workspace-test"],
     ).toEqual(["topic-next", "topic-current"]);
+  });
+
+  it("打开历史会话时不应先清空当前消息再切换", async () => {
+    const setMessages = vi.fn();
+    const state: Record<string, unknown> = createMockAgentChatUnifiedState({
+      sessionId: "topic-current",
+      messages: [
+        {
+          id: "msg-current",
+          role: "assistant",
+          content: "当前会话已有内容",
+          timestamp: new Date(FIXED_TOPIC_UPDATED_AT),
+        },
+      ],
+      topics: [
+        {
+          id: "topic-current",
+          title: "当前会话",
+          updatedAt: new Date(FIXED_TOPIC_UPDATED_AT - 1_000),
+          workspaceId: "workspace-test",
+        },
+        {
+          id: "topic-a",
+          title: "历史会话",
+          updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+          workspaceId: "workspace-test",
+        },
+      ],
+      setMessages,
+    });
+    const switchTopic = vi.fn(async (topicId: string) => {
+      state.sessionId = topicId;
+    });
+    state.switchTopic = switchTopic;
+    installMockAgentChatUnifiedState(state);
+
+    const mounted = mountPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-current",
+      projectId: "workspace-test",
+    });
+    await flushEffects();
+
+    clickButton(mounted.container, "toggle-history");
+    await flushEffects();
+    clickButton(mounted.container, "switch-topic");
+    await flushEffects();
+
+    expect(switchTopic).toHaveBeenNthCalledWith(1, "topic-a");
+    expect(setMessages).not.toHaveBeenCalledWith([]);
   });
 
   it("new-task 首页收到外层侧栏打开历史会话时应立即切换会话", async () => {
@@ -2585,9 +2662,7 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     mounted.rerender();
     await flushEffects();
 
-    expect(switchTopic).toHaveBeenCalledWith("topic-next", {
-      forceRefresh: true,
-    });
+    expect(switchTopic).toHaveBeenCalledWith("topic-next");
     expect(
       mounted.container
         .querySelector('[data-testid="task-center-tab-topic-next"]')
@@ -2745,9 +2820,7 @@ describe("AgentChatPage 话题切换项目恢复", () => {
 
     const switchTopicMock = mockUseAgentChatUnified.mock.results[0]?.value
       ?.switchTopic as ReturnType<typeof vi.fn>;
-    expect(switchTopicMock).toHaveBeenCalledWith("topic-a", {
-      forceRefresh: true,
-    });
+    expect(switchTopicMock).toHaveBeenCalledWith("topic-a");
 
     const workspaceHookOrder = getHookCallOrderForWorkspace("project-topic");
     const switchTopicOrder = switchTopicMock.mock.invocationCallOrder[0];
@@ -2800,9 +2873,7 @@ describe("AgentChatPage 话题切换项目恢复", () => {
     expect(mockToast.info).toHaveBeenCalledWith(
       "未找到可用项目，已自动创建默认项目",
     );
-    expect(switchTopicMock).toHaveBeenCalledWith("topic-a", {
-      forceRefresh: true,
-    });
+    expect(switchTopicMock).toHaveBeenCalledWith("topic-a");
 
     const workspaceHookOrder = getHookCallOrderForWorkspace("default-new");
     const switchTopicOrder = switchTopicMock.mock.invocationCallOrder[0];

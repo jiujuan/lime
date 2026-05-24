@@ -35,15 +35,18 @@ pub(crate) fn detect_powershell_executable() -> Option<PathBuf> {
 
     #[cfg(target_os = "windows")]
     {
-        return detect_known_windows_powershell_executable();
+        detect_known_windows_powershell_executable()
     }
 
-    None
+    #[cfg(not(target_os = "windows"))]
+    {
+        None
+    }
 }
 
 #[cfg(target_os = "windows")]
 fn detect_known_windows_powershell_executable() -> Option<PathBuf> {
-    windows_powershell_candidates_from_env(std::env::var_os)
+    windows_powershell_candidates_from_env(|key| std::env::var_os(key))
         .into_iter()
         .find(|path| path.exists())
 }

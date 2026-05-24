@@ -63,6 +63,8 @@ pub struct AddApiKeyRequest {
     pub provider_id: String,
     pub api_key: String,
     pub alias: Option<String>,
+    #[serde(default)]
+    pub replace_existing: bool,
 }
 
 /// Provider 显示数据（用于前端）
@@ -383,9 +385,13 @@ pub fn add_api_key(
     service: State<'_, ApiKeyProviderServiceState>,
     request: AddApiKeyRequest,
 ) -> Result<ApiKeyDisplay, String> {
-    let key = service
-        .0
-        .add_api_key(&db, &request.provider_id, &request.api_key, request.alias)?;
+    let key = service.0.add_api_key(
+        &db,
+        &request.provider_id,
+        &request.api_key,
+        request.alias,
+        request.replace_existing,
+    )?;
 
     Ok(api_key_to_display(&key, &service.0))
 }

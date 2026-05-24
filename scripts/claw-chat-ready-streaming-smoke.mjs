@@ -164,6 +164,12 @@ function logStage(label) {
   console.log(`[smoke:claw-chat-ready-streaming] stage=${label}`);
 }
 
+function readConsoleText(consoleMessages) {
+  return consoleMessages
+    .map((item) => String(item?.text || ""))
+    .join("\n");
+}
+
 async function waitForHealth(options) {
   const startedAt = Date.now();
   let lastError = null;
@@ -1203,6 +1209,26 @@ async function main() {
     assert(readySnapshot, "读取 ready 页面快照失败");
     summary.readySnapshot = readySnapshot;
     summary.steps.push("ready");
+    const workspaceReadySignal = await waitForCondition(
+      "等待默认工作区完成加载",
+      () => {
+        const consoleText = readConsoleText(consoleMessages);
+        if (consoleText.includes("AgentChatPage.loadData.projectOnlyComplete")) {
+          return "AgentChatPage.loadData.projectOnlyComplete";
+        }
+        if (consoleText.includes("AgentChatPage.loadData.projectLoaded")) {
+          return "AgentChatPage.loadData.projectLoaded";
+        }
+        if (consoleText.includes("AgentChatPage.workspaceCheck.success")) {
+          return "AgentChatPage.workspaceCheck.success";
+        }
+        return null;
+      },
+      90_000,
+      250,
+    );
+    summary.workspaceReadySignal = workspaceReadySignal;
+    summary.steps.push("workspace-ready");
     await page.screenshot({
       path: path.join(evidenceDir, `${prefix}-01-ready.png`),
       fullPage: true,

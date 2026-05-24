@@ -279,6 +279,7 @@ pub(super) async fn try_handle(
                 &request.provider_id,
                 &request.api_key,
                 request.alias,
+                request.replace_existing,
             )?;
 
             serde_json::to_value(api_key_to_display(
