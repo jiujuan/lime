@@ -3,6 +3,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import {
+  assertLiveProviderSmokeAllowed,
+  liveProviderSmokeAllowed,
+} from "./lib/live-provider-smoke-gate.mjs";
 
 const DEFAULT_HEALTH_URL = "http://127.0.0.1:3030/health";
 const DEFAULT_INVOKE_URL = "http://127.0.0.1:3030/invoke";
@@ -42,6 +46,8 @@ Lime AgentUI TTFT Live Sample
   --samples N          本次采样条数，默认 1，单次最多 ${MAX_SAMPLES_PER_RUN}
   --message TEXT       提交给模型的最短测试消息；不会写入脚本输出，默认 ${DEFAULT_MESSAGE}
   --output PATH        写入脱敏 JSON；默认 stdout
+  --allow-live-provider
+                       确认允许调用真实模型 Provider；默认禁止以避免消耗额度
   --health-url URL     DevBridge health 地址，默认 ${DEFAULT_HEALTH_URL}
   --invoke-url URL     DevBridge invoke 地址，默认 ${DEFAULT_INVOKE_URL}
   --timeout-ms MS      单条样本等待超时，默认 ${DEFAULT_TIMEOUT_MS}
@@ -62,6 +68,7 @@ function parseArgs(argv) {
     providerPreference: "",
     samples: 1,
     timeoutMs: DEFAULT_TIMEOUT_MS,
+    allowLiveProvider: liveProviderSmokeAllowed(),
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -108,6 +115,10 @@ function parseArgs(argv) {
     if (arg === "--output" && argv[index + 1]) {
       options.outputPath = path.resolve(String(argv[index + 1]).trim());
       index += 1;
+      continue;
+    }
+    if (arg === "--allow-live-provider") {
+      options.allowLiveProvider = true;
       continue;
     }
     if (arg === "--provider-preference" && argv[index + 1]) {
@@ -499,6 +510,10 @@ function writeOutput(options, payload) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  assertLiveProviderSmokeAllowed({
+    allowed: options.allowLiveProvider,
+    scriptName: "scripts/agentui-ttft-live-sample.mjs",
+  });
   const health = await waitForHealth(options);
   const workspace = await invoke(options, "get_or_create_default_project", {});
   const workspaceId = workspace?.id;

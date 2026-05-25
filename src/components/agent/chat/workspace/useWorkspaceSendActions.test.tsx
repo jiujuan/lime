@@ -5491,7 +5491,6 @@ Extract it into the Agent Skills directory.`,
               subagent: true,
             },
             code_command: {
-              kind: "bug_fix",
               prompt: "修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
               content: "修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
               entry_source: "at_code_command",
@@ -5503,10 +5502,61 @@ Extract it into the Agent Skills directory.`,
         expect.objectContaining({
           kind: "builtin_command",
           entryId: "code_runtime",
-          replayText:
-            "类型:修复 要求:修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
+          replayText: "修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
         }),
       ]);
+      const harnessMetadata = (
+        mockSendMessage.mock.calls[0]?.[8]?.requestMetadata as
+          | { harness?: { code_command?: Record<string, unknown> } }
+          | undefined
+      )?.harness;
+      expect(harnessMetadata?.code_command?.kind).toBeUndefined();
+      expect(listServiceSkillUsage()).toEqual([]);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("普通输入在 code_orchestrated 下应走底层编程底座而不是 @代码 parser", async () => {
+    const harness = mountHook({
+      input: "继续修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
+      executionStrategy: "code_orchestrated",
+      chatToolPreferences: {
+        webSearch: false,
+        thinking: false,
+        task: false,
+        subagent: false,
+      },
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness.getValue().handleSend();
+        expect(started).toBe(true);
+      });
+
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
+        "继续修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
+      );
+      expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
+        requestMetadata: {
+          harness: {
+            preferred_team_preset_id: "code-triage-team",
+            preferences: {
+              task: true,
+              subagent: true,
+            },
+          },
+        },
+      });
+      const harnessMetadata = (
+        mockSendMessage.mock.calls[0]?.[8]?.requestMetadata as
+          | { harness?: Record<string, unknown> }
+          | undefined
+      )?.harness;
+      expect(harnessMetadata?.code_command).toBeUndefined();
+      expect(listMentionEntryUsage()).toEqual([]);
       expect(listServiceSkillUsage()).toEqual([]);
     } finally {
       harness.unmount();

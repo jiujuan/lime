@@ -12,6 +12,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cargoWorkspaceVersion = readWorkspaceAppVersion(__dirname);
 const appVersion =
   process.env.VITE_APP_VERSION?.trim() || cargoWorkspaceVersion || "unknown";
+const liveProviderSmokeAllowed =
+  isTruthyEnv(process.env.LIME_ALLOW_LIVE_PROVIDER_SMOKE) ||
+  isTruthyEnv(process.env.LIME_REAL_API_TEST);
 
 if (!process.env.VITE_APP_VERSION && cargoWorkspaceVersion) {
   process.env.VITE_APP_VERSION = cargoWorkspaceVersion;
@@ -21,6 +24,10 @@ if (!process.env.VITE_APP_VERSION && cargoWorkspaceVersion) {
 const tauriMockDir = path.resolve(__dirname, "./src/lib/tauri-mock");
 const sharedTauriOptimizeDepsExclude = ["@tauri-apps/plugin-deep-link"];
 
+function isTruthyEnv(value: string | undefined): boolean {
+  return /^(1|true|yes|on)$/i.test(String(value || "").trim());
+}
+
 export default defineConfig(({ mode }) => {
   const browserBridgeFlag =
     process.env.LIME_BROWSER_BRIDGE ?? process.env.PROXYCAST_BROWSER_BRIDGE;
@@ -28,8 +35,7 @@ export default defineConfig(({ mode }) => {
     process.env.LIME_VITE_FORCE_OPTIMIZE_DEPS?.trim() === "1";
   // 检查是否在 Tauri 环境中运行（通过环境变量判断）
   const isTauri =
-    process.env.TAURI_ENV_PLATFORM !== undefined &&
-    browserBridgeFlag !== "1";
+    process.env.TAURI_ENV_PLATFORM !== undefined && browserBridgeFlag !== "1";
   // 避免 Tauri/非 Tauri 共享同一份 optimize deps 缓存导致 chunk 丢失
   const cacheDir = isTauri
     ? "node_modules/.vite-tauri"
@@ -143,10 +149,13 @@ export default defineConfig(({ mode }) => {
     test: {
       globals: true,
       environment: "jsdom",
+      setupFiles: ["./scripts/setup-vitest-network-guard.ts"],
       exclude: [
         "**/node_modules/**",
+        "**/tmp/lime-pnpm-frozen-node_modules/**",
         "**/dist/**",
         "**/src-tauri/target/**",
+        ...(liveProviderSmokeAllowed ? [] : ["**/*.live.test.*"]),
       ],
     },
   };

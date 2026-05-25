@@ -4,6 +4,10 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
+import {
+  isLiveProviderTestPath,
+  liveProviderSmokeAllowed,
+} from "./lib/live-provider-smoke-gate.mjs";
 
 const vitestEntrypoint = fileURLToPath(
   new URL("../node_modules/vitest/vitest.mjs", import.meta.url),
@@ -33,6 +37,7 @@ const ignoredTestPathSegments = [
   "/node_modules/",
   "/tmp/lime-pnpm-frozen-node_modules/",
 ];
+const includeLiveProviderTests = liveProviderSmokeAllowed();
 
 function normalizeTestPath(file) {
   return path.resolve(file).replaceAll("\\", "/");
@@ -40,12 +45,22 @@ function normalizeTestPath(file) {
 
 function shouldIgnoreCollectedTestFile(file) {
   const normalized = normalizeTestPath(file);
-  return ignoredTestPathSegments.some((segment) =>
-    normalized.includes(segment),
-  );
+  if (ignoredTestPathSegments.some((segment) => normalized.includes(segment))) {
+    return true;
+  }
+  return !includeLiveProviderTests && isLiveProviderTestPath(normalized);
 }
 
 function runVitest(args, label) {
+  if (!includeLiveProviderTests) {
+    const liveTestArgs = args.filter((arg) => isLiveProviderTestPath(arg));
+    if (liveTestArgs.length > 0) {
+      throw new Error(
+        `[vitest-smart] ${liveTestArgs.join(", ")} 会调用真实模型或多模态 Provider。为避免消耗额度，默认禁止执行；如确需运行，请设置 LIME_ALLOW_LIVE_PROVIDER_SMOKE=1 或 LIME_REAL_API_TEST=1。`,
+      );
+    }
+  }
+
   if (label) {
     console.log(`[vitest-smart] ${label}`);
   }
@@ -97,14 +112,18 @@ function collectTestFiles() {
   }
 
   const parsed = JSON.parse(result.stdout || "[]");
-  return parsed
+  let skippedLiveTestCount = 0;
+  const files = parsed
     .map((entry) => (typeof entry === "string" ? entry : entry?.file))
-    .filter(
-      (entry) =>
-        typeof entry === "string" &&
-        entry.length > 0 &&
-        !shouldIgnoreCollectedTestFile(entry),
-    );
+    .filter((entry) => typeof entry === "string" && entry.length > 0)
+    .filter((entry) => {
+      if (!includeLiveProviderTests && isLiveProviderTestPath(entry)) {
+        skippedLiveTestCount += 1;
+      }
+      return !shouldIgnoreCollectedTestFile(entry);
+    });
+
+  return { files, skippedLiveTestCount };
 }
 
 function chunkFiles(files, size) {
@@ -150,7 +169,12 @@ function main() {
     return;
   }
 
-  const files = collectTestFiles();
+  const { files, skippedLiveTestCount } = collectTestFiles();
+  if (!includeLiveProviderTests && skippedLiveTestCount > 0) {
+    console.log(
+      `[vitest-smart] 默认跳过 ${skippedLiveTestCount} 个 live Provider 测试；如确需运行，请设置 LIME_ALLOW_LIVE_PROVIDER_SMOKE=1 或 LIME_REAL_API_TEST=1。`,
+    );
+  }
   const batches = buildBatches(files);
 
   for (let index = 0; index < batches.length; index += 1) {

@@ -10,6 +10,7 @@ import type {
   AgentThreadTurn,
 } from "../types";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import type { ArtifactTimelineOpenTarget } from "../utils/artifactTimelineNavigation";
 
 const parseAIResponseMock = vi.fn();
@@ -160,12 +161,13 @@ interface MountedHarness {
 
 const mountedRoots: MountedHarness[] = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
   HTMLElement.prototype.scrollIntoView = vi.fn();
   parseAIResponseMock.mockImplementation((content: string) => ({
     parts: content.trim() ? [{ type: "text", content: content.trim() }] : [],

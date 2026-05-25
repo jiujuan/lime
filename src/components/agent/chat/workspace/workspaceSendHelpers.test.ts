@@ -7,10 +7,84 @@ import {
   buildRuntimeTeamDispatchPreviewMessages,
   buildSubmissionPreviewMessages,
   createSubmissionPreviewSnapshot,
+  resolveCodeOrchestratedRuntimeDefaults,
   resolveRuntimeTeamDispatchPreviewState,
 } from "./workspaceSendHelpers";
 
 describe("workspaceSendHelpers runtime team preview", () => {
+  it("code_orchestrated 普通发送应补齐编程底座工具偏好与默认代码团队", () => {
+    const result = resolveCodeOrchestratedRuntimeDefaults({
+      executionStrategy: "code_orchestrated",
+      effectiveToolPreferences: {
+        webSearch: false,
+        thinking: false,
+        task: false,
+        subagent: false,
+      },
+      mappedTheme: "general",
+    });
+
+    expect(result).toEqual({
+      effectiveToolPreferences: {
+        webSearch: false,
+        thinking: false,
+        task: true,
+        subagent: true,
+      },
+      preferredTeamPresetId: "code-triage-team",
+    });
+  });
+
+  it("code_orchestrated 不应覆盖显式工具入口或既有 Team 选择", () => {
+    const explicitLaunch = resolveCodeOrchestratedRuntimeDefaults({
+      executionStrategy: "code_orchestrated",
+      effectiveToolPreferences: {
+        webSearch: false,
+        thinking: false,
+        task: false,
+        subagent: false,
+      },
+      mappedTheme: "general",
+      hasExplicitCommandOrSkillLaunch: true,
+    });
+
+    expect(explicitLaunch).toEqual({
+      effectiveToolPreferences: {
+        webSearch: false,
+        thinking: false,
+        task: false,
+        subagent: false,
+      },
+      preferredTeamPresetId: undefined,
+    });
+
+    const explicitTeam = resolveCodeOrchestratedRuntimeDefaults({
+      executionStrategy: "code_orchestrated",
+      effectiveToolPreferences: {
+        webSearch: false,
+        thinking: false,
+        task: false,
+        subagent: false,
+      },
+      mappedTheme: "general",
+      workspaceRequestMetadataBase: {
+        harness: {
+          preferred_team_preset_id: "research-team",
+        },
+      },
+    });
+
+    expect(explicitTeam).toEqual({
+      effectiveToolPreferences: {
+        webSearch: false,
+        thinking: false,
+        task: true,
+        subagent: true,
+      },
+      preferredTeamPresetId: undefined,
+    });
+  });
+
   it("initialDispatchKey 应稳定编码首轮 prompt 与图片签名", () => {
     expect(
       buildInitialDispatchKey("写一篇文章", [

@@ -203,9 +203,19 @@ pub async fn get_embeddings_batch(
 mod tests {
     use super::*;
 
+    fn real_api_test_enabled() -> bool {
+        std::env::var("LIME_REAL_API_TEST").as_deref() == Ok("1")
+            || std::env::var("PROXYCAST_REAL_API_TEST").as_deref() == Ok("1")
+    }
+
     #[tokio::test]
+    #[ignore = "真实联网测试：设置 LIME_REAL_API_TEST=1 后执行"]
     async fn test_get_embedding_mock() {
-        // 这个测试需要真实的 API key，在 CI 中跳过
+        if !real_api_test_enabled() {
+            println!("跳过测试：未设置 LIME_REAL_API_TEST=1");
+            return;
+        }
+
         let api_key = std::env::var("OPENAI_API_KEY");
         if api_key.is_err() {
             println!("跳过测试：未设置 OPENAI_API_KEY");

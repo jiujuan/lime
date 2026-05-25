@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { chromium } from "playwright";
+import { liveProviderSmokeAllowed } from "./lib/live-provider-smoke-gate.mjs";
 
 const DEFAULT_APP_URL = "http://127.0.0.1:1420/";
 const DEFAULT_HEALTH_URL = "http://127.0.0.1:3030/health";
@@ -32,6 +33,7 @@ function parseArgs(argv) {
     prefix: DEFAULT_PREFIX,
     evidenceDir: path.join(process.cwd(), ".lime", "e2e", DEFAULT_PREFIX),
     headless: true,
+    allowLiveProvider: liveProviderSmokeAllowed(),
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -68,6 +70,9 @@ function parseArgs(argv) {
         break;
       case "--headless":
         options.headless = true;
+        break;
+      case "--allow-live-provider":
+        options.allowLiveProvider = true;
         break;
       default:
         throw new Error(`未知参数: ${arg}`);
@@ -653,6 +658,37 @@ async function main() {
     await waitForTextareaValue(page, IMAGE_PROMPT, options.timeoutMs);
     summary.assertions.imageCommandSelected = true;
     summary.assertions.imagePromptFilled = true;
+
+    if (!options.allowLiveProvider) {
+      summary.assertions.imageCommandSelectionVerified = true;
+      summary.submitRequest = {
+        routeMode: "not_submitted",
+        reason: "live-provider-smoke-disabled",
+      };
+      summary.cleanup = {
+        attempted: false,
+        reason: "not-submitted",
+      };
+      await page.screenshot({
+        path: path.join(
+          options.evidenceDir,
+          `${options.prefix}-02-selected-no-submit.png`,
+        ),
+        fullPage: true,
+      });
+
+      const summaryPath = path.join(
+        options.evidenceDir,
+        `${options.prefix}-summary.json`,
+      );
+      fs.writeFileSync(summaryPath, JSON.stringify(summary, null, 2));
+      console.log(JSON.stringify(summary, null, 2));
+      console.log(`[${options.prefix}] summary=${summaryPath}`);
+      console.log(
+        `[${options.prefix}] 通过；默认未提交 @配图 请求，避免触发真实模型或图片生成 Provider。需要提交验证时请显式传入 --allow-live-provider。`,
+      );
+      return;
+    }
 
     logStage(options, "submit-image-command");
     const submitStart = invokes.length;

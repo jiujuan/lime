@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 """
 OpenAI 兼容图像生成 API 测试脚本
 
@@ -8,15 +10,16 @@ OpenAI 兼容图像生成 API 测试脚本
     # 安装依赖
     pip install openai
 
-    # 运行测试（需要先启动 API Server）
+    # 默认 dry run，不调用真实图片 Provider
     python scripts/test_image_api.py
 
-    # 指定自定义 API 地址和密钥
-    python scripts/test_image_api.py --base-url http://localhost:8999 --api-key your-key
+    # 显式允许真实 API 测试
+    python scripts/test_image_api.py --allow-live-provider --base-url http://localhost:8999 --api-key your-key
 
 环境变量:
     LIME_BASE_URL: API 服务器地址（默认: http://localhost:8999）
-    LIME_API_KEY: API 密钥（默认: pc_LXZbIv3o78WpHuQwqgmwC0U4G0cY5UtQ）
+    LIME_API_KEY: API 密钥
+    LIME_ALLOW_LIVE_PROVIDER_SMOKE / LIME_REAL_API_TEST: 设为 1/true/yes/on 时允许真实 API 测试
 """
 
 import argparse
@@ -28,9 +31,22 @@ from datetime import datetime
 try:
     from openai import OpenAI
 except ImportError:
-    print("错误: 请先安装 openai 库")
-    print("运行: pip install openai")
-    sys.exit(1)
+    OpenAI = None
+
+
+LIVE_PROVIDER_SMOKE_ENV = "LIME_ALLOW_LIVE_PROVIDER_SMOKE"
+REAL_API_TEST_ENV = "LIME_REAL_API_TEST"
+DEFAULT_API_KEY = "test-key"
+
+
+def is_truthy_env(value: str | None) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def live_provider_allowed() -> bool:
+    return is_truthy_env(os.environ.get(LIVE_PROVIDER_SMOKE_ENV)) or is_truthy_env(
+        os.environ.get(REAL_API_TEST_ENV)
+    )
 
 
 def test_image_generation_url(client: OpenAI, prompt: str) -> bool:
@@ -299,7 +315,7 @@ def main():
     parser.add_argument(
         "--api-key",
         default=os.environ.get("LIME_API_KEY")
-        or os.environ.get("PROXYCAST_API_KEY", "pc_LXZbIv3o78WpHuQwqgmwC0U4G0cY5UtQ"),
+        or os.environ.get("PROXYCAST_API_KEY", DEFAULT_API_KEY),
         help="API 密钥"
     )
     parser.add_argument(
@@ -310,10 +326,16 @@ def main():
     parser.add_argument(
         "--skip-generation",
         action="store_true",
-        help="跳过实际图像生成测试（仅测试错误处理）"
+        help="跳过实际图像生成测试；需要 live 授权时才会执行错误处理请求"
+    )
+    parser.add_argument(
+        "--allow-live-provider",
+        action="store_true",
+        help="确认允许调用真实图片 Provider；默认不发送任何 API 请求"
     )
     
     args = parser.parse_args()
+    allow_live_provider = args.allow_live_provider or live_provider_allowed()
     
     print("=" * 60)
     print("OpenAI 兼容图像生成 API 测试")
@@ -321,6 +343,20 @@ def main():
     print(f"API 地址: {args.base_url}")
     print(f"API 密钥: {args.api_key[:8]}...")
     print(f"测试提示词: {args.prompt[:50]}...")
+
+    if not allow_live_provider:
+        print(
+            "\n默认 dry run：未发送任何 API 请求，避免消耗真实图片 Provider 额度。"
+        )
+        print(
+            f"如需真实测试，请传入 --allow-live-provider，或设置 {LIVE_PROVIDER_SMOKE_ENV}=1 / {REAL_API_TEST_ENV}=1。"
+        )
+        sys.exit(0)
+
+    if OpenAI is None:
+        print("错误: 请先安装 openai 库")
+        print("运行: pip install openai")
+        sys.exit(1)
     
     # 创建 OpenAI 客户端
     client = OpenAI(

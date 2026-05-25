@@ -18,14 +18,19 @@ export function alignChatToolPreferencesWithExecutionStrategy(
   preferences: ChatToolPreferences,
   executionStrategy?: AsterExecutionStrategy | null,
 ): ChatToolPreferences {
-  const nextTask = isPlanExecutionStrategy(executionStrategy);
-  if (preferences.task === nextTask) {
+  const isCodeOrchestrated = isPlanExecutionStrategy(executionStrategy);
+  const nextSubagent = isCodeOrchestrated ? true : preferences.subagent;
+  if (
+    preferences.task === isCodeOrchestrated &&
+    preferences.subagent === nextSubagent
+  ) {
     return preferences;
   }
 
   return {
     ...preferences,
-    task: nextTask,
+    task: isCodeOrchestrated,
+    subagent: nextSubagent,
   };
 }
 

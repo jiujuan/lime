@@ -70,3 +70,6 @@ pub mod update_window;
 pub mod web_search_prompt_service;
 pub mod web_search_runtime_service;
 pub mod workspace_health_service;
+
+#[cfg(test)]
+mod runtime_skill_binding_service_tests;

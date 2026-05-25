@@ -3994,7 +3994,7 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
       expect(mockCreateAgentRuntimeSession).toHaveBeenCalledWith(
         workspaceId,
         "重构输入命令",
-        "react",
+        "code_orchestrated",
         { runStartHooks: true },
       );
       expect(mockSubmitAgentRuntimeTurn).not.toHaveBeenCalled();
@@ -4072,7 +4072,7 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
       expect(mockCreateAgentRuntimeSession).toHaveBeenCalledWith(
         workspaceId,
         undefined,
-        "react",
+        "code_orchestrated",
         { runStartHooks: true },
       );
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
@@ -6757,7 +6757,7 @@ describe("useAsterAgentChat 偏好持久化", () => {
       expect(mockCreateAgentRuntimeSession).toHaveBeenCalledWith(
         workspaceId,
         undefined,
-        "react",
+        "code_orchestrated",
         { runStartHooks: true },
       );
     } finally {

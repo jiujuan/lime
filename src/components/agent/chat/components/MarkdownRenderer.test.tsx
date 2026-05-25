@@ -262,6 +262,9 @@ describe("MarkdownRenderer", () => {
 
     expect(button).not.toBeNull();
     expect(button?.textContent).toContain("复制");
+    expect(container.textContent).toContain("bash");
+    expect(container.textContent).toContain("1 行");
+    expect(button?.hasAttribute("data-markdown-code-action")).toBe(true);
 
     await act(async () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -868,6 +871,7 @@ describe("MarkdownRenderer", () => {
 
     expect(syntaxHighlighter?.getAttribute("data-language")).toBe("bash");
     expect(container.textContent).toContain("bash");
+    expect(container.textContent).toContain("1 行");
   });
 
   it("文本流程代码块应渲染为流程视图而不是语法高亮", () => {
@@ -889,6 +893,7 @@ describe("MarkdownRenderer", () => {
     expect(
       container.querySelector('[data-testid="syntax-highlighter"]'),
     ).toBeNull();
+    expect(container.textContent).toContain("5 行");
   });
 
   it("伪代码目录块即使标注为 typescript 也应降级为纯文本视图", () => {
@@ -917,6 +922,7 @@ describe("MarkdownRenderer", () => {
       container.querySelector('[data-testid="syntax-highlighter"]'),
     ).toBeNull();
     expect(container.textContent).toContain("AppLayout");
+    expect(container.textContent).toContain("6 行");
   });
 
   it("逐块判定返回 true 时才应渲染 artifact 占位卡", () => {

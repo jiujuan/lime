@@ -226,6 +226,16 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 
 这类问题 **单靠** `lint`、`typecheck`、`vitest` 无法覆盖。
 
+默认 `npm run verify:local`、`npm test`、`cargo test --manifest-path "src-tauri/Cargo.toml"` 与 `npm run verify:gui-smoke` 不允许消耗真实模型 / 图片 Provider 额度。会调用 `agent_runtime_submit_turn`、`test_api_key_provider_chat`、图片生成、embedding、ASR 或 live AgentRuntime transcript 的测试 / smoke，必须显式 opt-in：
+
+```bash
+npm run verify:gui-smoke -- --include-live-provider-smokes
+LIME_ALLOW_LIVE_PROVIDER_SMOKE=1 npm run verify:gui-smoke
+LIME_REAL_API_TEST=1 npm run smoke:agent-runtime-approval-sandbox
+```
+
+单项脚本统一使用 `--allow-live-provider`；Vitest 的 `*.live.test.*` 默认从 `npm test` / `npx vitest` 收集中排除，直接点名运行也必须设置 `LIME_ALLOW_LIVE_PROVIDER_SMOKE=1` 或 `LIME_REAL_API_TEST=1`；普通 Vitest 默认还会安装外部网络守卫，覆盖 `fetch`、`XMLHttpRequest` 与 Node `http` / `https` 请求，只允许 localhost / data / blob / file 等离线路径，避免未按 `.live.test` 命名的测试或 SDK 误打 Deepseek、OpenAI 或图片 Provider；Rust 真实联网测试必须同时使用 `#[ignore]` 和 `LIME_REAL_API_TEST=1` 二次门禁。设计画布只有 `--image-task live-single-layer` 需要该授权，connector outbox 只有 `--mode live` 需要该授权，Agent Apps 内容工厂的 action / completion E2E 与 `scripts/agent-apps-content-factory-flow.mjs` 需要该授权，replay / fixture / registry-only 路径不应调用真实 Provider。
+
 ### Layer 3：契约与桥接边界
 
 入口：

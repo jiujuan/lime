@@ -79,8 +79,8 @@ npm run agent-qc:release-summary -- \
 | Scenario | 最低入口 | 关键证据 | 阻断条件 |
 | --- | --- | --- | --- |
 | `command-bridge-contract` | `npm run test:contracts` | 命令合同日志、四侧同步摘要 | 前端/Rust/mock/catalog 任一侧缺失 |
-| `claw-chat-ready-streaming` | `npm run verify:gui-smoke` + Playwright MCP | GUI trace、DevBridge、runtime transcript、console/network | workspace 未 ready、流式卡死、中断不可恢复 |
-| `tool-approval-sandbox-boundary` | `npm run smoke:agent-runtime-tool-surface` + `npm run smoke:agent-runtime-approval-sandbox` | tool timeline、approval decision、sandbox policy | 工具绕过授权、超时无恢复、危险工具暴露 |
+| `claw-chat-ready-streaming` | `npm run verify:gui-smoke -- --include-live-provider-smokes` + Playwright MCP | GUI trace、DevBridge、runtime transcript、console/network | workspace 未 ready、流式卡死、中断不可恢复；未显式允许 live Provider 时不得把默认 GUI smoke 当作 runtime transcript 证据 |
+| `tool-approval-sandbox-boundary` | `npm run smoke:agent-runtime-tool-surface` + `npm run smoke:agent-runtime-approval-sandbox -- --allow-live-provider` | tool timeline、approval decision、sandbox policy | 工具绕过授权、超时无恢复、危险工具暴露；默认确定性 smoke 不能替代 live runtime transcript |
 | `skill-forge-register-bind-enable` | `npm run test:contracts` + `npm run smoke:agent-service-skill-entry` | draft、verify/register、runtime binding、`.lime/qc/skill-forge-runtime-transcript-current.json` 中的 SkillTool request/decision/result/source metadata | 把 registered 误判为 executable、metadata 自动启用 skill |
 | `browser-runtime-site-adapter` | `npm run smoke:browser-runtime` + `npm run smoke:site-adapters` | browser session、adapter catalog、console/network、cleanup | session 泄漏、adapter 漂移、cleanup 缺失 |
 | `workspace-ready-session-restore` | `npm run smoke:workspace-ready` + `npm run verify:gui-smoke` | workspace smoke、GUI smoke、DevBridge、design canvas 工程保存 / 打开结果 | ready 假阳性、会话恢复脏状态、设计画布导出无保存状态 |

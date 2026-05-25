@@ -16,6 +16,8 @@ pub(crate) mod json_value_fields;
 pub(crate) mod objective_api;
 #[path = "command_api/objective_audit.rs"]
 pub(crate) mod objective_audit;
+#[path = "command_api/objective_continuation.rs"]
+pub(crate) mod objective_continuation;
 #[path = "command_api/objective_support.rs"]
 pub(crate) mod objective_support;
 #[path = "command_api/provider_api.rs"]

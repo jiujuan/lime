@@ -6,6 +6,10 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { chromium } from "playwright";
+import {
+  assertLiveProviderSmokeAllowed,
+  liveProviderSmokeAllowed,
+} from "./lib/live-provider-smoke-gate.mjs";
 
 function resolveDefaultContentFactoryDir() {
   if (process.env.CONTENT_FACTORY_APP_DIR) {
@@ -29,6 +33,7 @@ const DEFAULTS = {
   modelProvider: process.env.CONTENT_FACTORY_E2E_MODEL_PROVIDER || "",
   modelName: process.env.CONTENT_FACTORY_E2E_MODEL || "",
   modelLabel: process.env.CONTENT_FACTORY_E2E_MODEL_LABEL || "",
+  allowLiveProvider: liveProviderSmokeAllowed(),
   actions: [
     "run-scenarios",
     "run-production",
@@ -246,6 +251,10 @@ function parseArgs(argv) {
       index += 1;
       continue;
     }
+    if (arg === "--allow-live-provider") {
+      options.allowLiveProvider = true;
+      continue;
+    }
     if (arg === "--actions" && index + 1 < argv.length) {
       const rawActions = String(argv[index + 1]).trim();
       options.actions = rawActions && rawActions !== "none"
@@ -298,6 +307,7 @@ Options:
   --model-provider <id>            Optional provider preference written to Content Factory settings
   --model <name>                   Optional model preference written to Content Factory settings
   --model-label <label>            Optional display label for the model preference
+  --allow-live-provider            Confirm this flow may submit real AgentRuntime turns and consume model Provider quota
   --actions <csv>                 Flow actions, default run-scenarios,run-production,run-scripts,run-strategy,run-review
                                   Extra: run-production-next-round creates and confirms a new round before production
 `);
@@ -3726,6 +3736,12 @@ async function collectFailureDiagnostics(page, options, error, consoleErrors, fa
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  if (options.actions.length > 0) {
+    assertLiveProviderSmokeAllowed({
+      allowed: options.allowLiveProvider,
+      scriptName: "scripts/agent-apps-content-factory-flow.mjs",
+    });
+  }
   fs.mkdirSync(options.evidenceDir, { recursive: true });
   await waitForHealth(options);
 

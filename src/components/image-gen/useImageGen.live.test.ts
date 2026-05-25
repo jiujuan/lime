@@ -12,11 +12,18 @@ const { requestImageFromNewApiResponsesStream } = __imageGenFalTestUtils;
 const env = (globalThis as typeof globalThis & {
   process?: { env?: Record<string, string | undefined> };
 }).process?.env;
-const LIVE_ENABLED = env?.LIME_IMAGE_GEN_LIVE === "1";
+const LIVE_ENABLED =
+  env?.LIME_IMAGE_GEN_LIVE === "1" &&
+  (isTruthyEnv(env?.LIME_ALLOW_LIVE_PROVIDER_SMOKE) ||
+    isTruthyEnv(env?.LIME_REAL_API_TEST));
 const LIVE_API_HOST = env?.LIME_IMAGE_GEN_LIVE_API_HOST ?? "";
 const LIVE_API_KEY = env?.LIME_IMAGE_GEN_LIVE_API_KEY ?? "";
 const LIVE_MODEL = env?.LIME_IMAGE_GEN_LIVE_MODEL ?? "gpt-images-2";
 const LIVE_TIMEOUT_MS = 180_000;
+
+function isTruthyEnv(value: string | undefined): boolean {
+  return /^(1|true|yes|on)$/i.test(String(value || "").trim());
+}
 
 function requireLiveConfig(): { apiHost: string; apiKey: string; model: string } {
   if (!LIVE_API_HOST.trim()) {

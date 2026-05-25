@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  getExecutionStrategyStorageKey,
   loadPersisted,
   loadTransient,
+  resolvePersistedExecutionStrategy,
   resolveWorkspaceAgentPreferences,
 } from "./agentChatStorage";
 
 afterEach(() => {
+  localStorage.clear();
   sessionStorage.clear();
 });
 
@@ -42,5 +45,25 @@ describe("agentChatStorage", () => {
       providerType: "",
       model: "",
     });
+  });
+
+  it("有 workspace 但没有持久化执行策略时应默认进入编程执行底层", () => {
+    expect(resolvePersistedExecutionStrategy("workspace-code-default")).toBe(
+      "code_orchestrated",
+    );
+  });
+
+  it("没有 workspace 时执行策略应降级为普通对话", () => {
+    expect(resolvePersistedExecutionStrategy(null)).toBe("react");
+  });
+
+  it("已有 workspace 执行策略偏好时应尊重用户选择", () => {
+    const storageKey = getExecutionStrategyStorageKey("workspace-user-pref");
+    expect(storageKey).toBeTruthy();
+    localStorage.setItem(storageKey!, JSON.stringify("react"));
+
+    expect(resolvePersistedExecutionStrategy("workspace-user-pref")).toBe(
+      "react",
+    );
   });
 });

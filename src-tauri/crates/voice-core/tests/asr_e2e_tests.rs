@@ -20,7 +20,7 @@
 //! export OPENAI_API_KEY=xxx
 //!
 //! # 运行测试
-//! cargo test --package voice-core --test asr_e2e_tests -- --nocapture
+//! LIME_REAL_API_TEST=1 cargo test --package voice-core --test asr_e2e_tests -- --ignored --nocapture
 //! ```
 
 use voice_core::asr_client::{AsrClient, XunfeiClient};
@@ -50,10 +50,18 @@ fn generate_sine_wave_audio(duration_secs: f32, frequency: f32) -> AudioData {
     AudioData::new(samples, sample_rate, 1)
 }
 
+fn real_api_test_enabled() -> bool {
+    std::env::var("LIME_REAL_API_TEST").as_deref() == Ok("1")
+        || std::env::var("PROXYCAST_REAL_API_TEST").as_deref() == Ok("1")
+}
+
 mod xunfei {
     use super::*;
 
     fn get_xunfei_credentials() -> Option<(String, String, String)> {
+        if !real_api_test_enabled() {
+            return None;
+        }
         let app_id = std::env::var("XUNFEI_APP_ID").ok()?;
         let api_key = std::env::var("XUNFEI_API_KEY").ok()?;
         let api_secret = std::env::var("XUNFEI_API_SECRET").ok()?;
@@ -61,6 +69,7 @@ mod xunfei {
     }
 
     #[tokio::test]
+    #[ignore = "真实联网测试：设置 LIME_REAL_API_TEST=1 后执行"]
     async fn test_xunfei_connection() {
         let Some((app_id, api_key, api_secret)) = get_xunfei_credentials() else {
             eprintln!("跳过测试: 未设置讯飞凭证环境变量");
@@ -85,6 +94,7 @@ mod xunfei {
     }
 
     #[tokio::test]
+    #[ignore = "真实联网测试：设置 LIME_REAL_API_TEST=1 后执行"]
     async fn test_xunfei_transcribe_audio() {
         let Some((app_id, api_key, api_secret)) = get_xunfei_credentials() else {
             eprintln!("跳过测试: 未设置讯飞凭证环境变量");
@@ -110,7 +120,13 @@ mod xunfei {
     }
 
     #[tokio::test]
+    #[ignore = "真实联网测试：设置 LIME_REAL_API_TEST=1 后执行"]
     async fn test_xunfei_invalid_credentials() {
+        if !real_api_test_enabled() {
+            eprintln!("跳过测试: 未设置 LIME_REAL_API_TEST=1");
+            return;
+        }
+
         let client = XunfeiClient::new(
             "invalid_app_id".to_string(),
             "invalid_api_key".to_string(),
@@ -126,6 +142,7 @@ mod xunfei {
     }
 
     #[tokio::test]
+    #[ignore = "真实联网测试：设置 LIME_REAL_API_TEST=1 后执行"]
     async fn test_xunfei_short_audio() {
         let Some((app_id, api_key, api_secret)) = get_xunfei_credentials() else {
             eprintln!("跳过测试: 未设置讯飞凭证环境变量");
@@ -144,6 +161,7 @@ mod xunfei {
     }
 
     #[tokio::test]
+    #[ignore = "真实联网测试：设置 LIME_REAL_API_TEST=1 后执行"]
     async fn test_xunfei_long_audio() {
         let Some((app_id, api_key, api_secret)) = get_xunfei_credentials() else {
             eprintln!("跳过测试: 未设置讯飞凭证环境变量");
@@ -173,12 +191,16 @@ mod baidu {
     use voice_core::asr_client::BaiduClient;
 
     fn get_baidu_credentials() -> Option<(String, String)> {
+        if !real_api_test_enabled() {
+            return None;
+        }
         let api_key = std::env::var("BAIDU_API_KEY").ok()?;
         let secret_key = std::env::var("BAIDU_SECRET_KEY").ok()?;
         Some((api_key, secret_key))
     }
 
     #[tokio::test]
+    #[ignore = "真实联网测试：设置 LIME_REAL_API_TEST=1 后执行"]
     async fn test_baidu_connection() {
         let Some((api_key, secret_key)) = get_baidu_credentials() else {
             eprintln!("跳过测试: 未设置百度凭证环境变量");
@@ -207,6 +229,9 @@ mod openai {
     use voice_core::asr_client::OpenAIWhisperClient;
 
     fn get_openai_credentials() -> Option<String> {
+        if !real_api_test_enabled() {
+            return None;
+        }
         let key = std::env::var("OPENAI_API_KEY").ok()?;
         if key.is_empty() {
             None
@@ -216,6 +241,7 @@ mod openai {
     }
 
     #[tokio::test]
+    #[ignore = "真实联网测试：设置 LIME_REAL_API_TEST=1 后执行"]
     async fn test_openai_connection() {
         let Some(api_key) = get_openai_credentials() else {
             eprintln!("跳过测试: 未设置 OpenAI 凭证环境变量");
@@ -241,7 +267,13 @@ mod openai {
 
 /// 综合测试：测试所有已配置的 ASR 服务
 #[tokio::test]
+#[ignore = "真实联网测试：设置 LIME_REAL_API_TEST=1 后执行"]
 async fn test_all_configured_asr_services() {
+    if !real_api_test_enabled() {
+        eprintln!("跳过测试: 未设置 LIME_REAL_API_TEST=1");
+        return;
+    }
+
     println!("\n========== ASR 服务综合测试 ==========\n");
 
     let mut tested = 0;

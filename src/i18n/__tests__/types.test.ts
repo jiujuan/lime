@@ -104,7 +104,105 @@ function assertI18nKeyTypes() {
     ns: "agent",
     count: 1024,
   });
+  i18n.t("agentChat.toolCall.logs.title", { ns: "agent" });
+  i18n.t("agentChat.toolCall.commandSummary.title", { ns: "agent" });
+  i18n.t("agentChat.toolCall.commandSummary.command", { ns: "agent" });
+  i18n.t("agentChat.toolCall.commandSummary.cwd", { ns: "agent" });
+  i18n.t("agentChat.toolCall.commandSummary.exitCode", {
+    ns: "agent",
+    value: 0,
+  });
+  i18n.t("agentChat.toolCall.commandSummary.stdout", {
+    ns: "agent",
+    value: 128,
+  });
+  i18n.t("agentChat.toolCall.commandSummary.stderr", {
+    ns: "agent",
+    value: 0,
+  });
+  i18n.t("agentChat.toolCall.commandSummary.sandboxEnabled", { ns: "agent" });
+  i18n.t("agentChat.toolCall.commandSummary.sandboxEnabledWithType", {
+    ns: "agent",
+    type: "workspace-write",
+  });
+  i18n.t("agentChat.toolCall.commandSummary.sandboxDisabled", { ns: "agent" });
+  i18n.t("agentChat.toolCall.commandSummary.truncated", { ns: "agent" });
   i18n.t("agentChat.messageList.artifact.saveDocument", { ns: "agent" });
+  i18n.t("agentChat.messageList.artifact.checkpointBadge", { ns: "agent" });
+  i18n.t("agentChat.messageList.artifact.diffBadge", {
+    ns: "agent",
+    count: 1,
+  });
+  i18n.t("agentChat.messageList.artifact.validationBadge", {
+    ns: "agent",
+    count: 2,
+  });
+  i18n.t("agentChat.messageList.artifact.agentUiProjectionTitle", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.messageList.artifact.agentUiBadgePrefix", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.messageList.artifact.blockCount", {
+    ns: "agent",
+    count: 2,
+  });
+  i18n.t("agentChat.messageList.artifact.sourceCount", {
+    ns: "agent",
+    count: 1,
+  });
+  i18n.t("agentChat.messageList.artifact.locateBlock", {
+    ns: "agent",
+    label: "摘要",
+  });
+  i18n.t("agentChat.messageList.artifact.documentSyncedPreview", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.decisionPanel.queuedTitle", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.permissionHandledTitle", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.submittedTitle", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.submittedAnswerLabel", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.queuedDescription", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.submittedDescription", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.infoRequiredTitle", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.defaultInfoPrompt", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.answerLabel", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.answerPlaceholder", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.supplementLabel", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.supplementPlaceholder", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.assistantQuestionTitle", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.otherLabel", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.otherPlaceholder", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.multiSelectHint", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.fallbackQueuedDescription", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.decisionPanel.permissionRequestTitle", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.assistantWantsUse", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.unknownTool", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.action.submitting", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.action.submit", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.action.cancelling", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.action.cancel", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.action.recording", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.action.recordAnswer", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.action.submitAnswer", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.action.processing", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.action.allow", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.action.deny", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.runtimePermission.title", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.runtimePermission.description", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.decisionPanel.runtimePermission.submittedTitle", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.decisionPanel.runtimePermission.submittedDescription", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.decisionPanel.runtimePermission.deniedDescription", {
+    ns: "agent",
+  });
   i18n.t("agentChat.messageList.history.windowSummaryRestored", {
     ns: "agent",
     loaded: "40",

@@ -15,6 +15,10 @@ export const DEFAULT_AGENT_PROVIDER = "";
 export const DEFAULT_AGENT_MODEL = "";
 export type AgentAccessMode = "read-only" | "current" | "full-access";
 export const DEFAULT_AGENT_ACCESS_MODE: AgentAccessMode = "full-access";
+export const DEFAULT_WORKSPACE_AGENT_EXECUTION_STRATEGY: AsterExecutionStrategy =
+  "code_orchestrated";
+export const DEFAULT_GLOBAL_AGENT_EXECUTION_STRATEGY: AsterExecutionStrategy =
+  "react";
 export const GLOBAL_PROVIDER_PREF_KEY = "agent_pref_provider_global";
 export const GLOBAL_MODEL_PREF_KEY = "agent_pref_model_global";
 export const GLOBAL_MIGRATED_PREF_KEY = "agent_pref_migrated_global";
@@ -296,11 +300,14 @@ export const resolvePersistedExecutionStrategy = (
 ): AsterExecutionStrategy => {
   const storageKey = getExecutionStrategyStorageKey(workspaceId);
   if (!storageKey) {
-    return "react";
+    return DEFAULT_GLOBAL_AGENT_EXECUTION_STRATEGY;
   }
 
   return normalizeExecutionStrategy(
-    loadPersisted<string | null>(storageKey, "react"),
+    loadPersisted<string | null>(
+      storageKey,
+      DEFAULT_WORKSPACE_AGENT_EXECUTION_STRATEGY,
+    ),
   );
 };
 

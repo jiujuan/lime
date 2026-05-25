@@ -1150,10 +1150,8 @@ describe("Inputbar", () => {
     expect(container.textContent).toContain("Model");
     expect(container.textContent).toContain("Advanced settings");
 
-    const modelBadge = Array.from(
-      container.querySelectorAll("[title]"),
-    ).find((element) =>
-      element.getAttribute("title")?.startsWith("Current model:"),
+    const modelBadge = Array.from(container.querySelectorAll("[title]")).find(
+      (element) => element.getAttribute("title")?.startsWith("Current model:"),
     );
     expect(modelBadge?.getAttribute("title")).toBe(
       "Current model: OpenAI / gpt-4.1",
@@ -2649,7 +2647,7 @@ describe("Inputbar", () => {
     expect(container.textContent).not.toContain("Native schema");
   });
 
-  it("应在高级设置中渲染计划执行开关与权限模式，并透传对应回调", async () => {
+  it("应在高级设置中渲染编程执行开关与权限模式，并透传对应回调", async () => {
     const setExecutionStrategy = vi.fn();
     const setAccessMode = vi.fn();
     const { container } = renderInputbar({
@@ -2679,9 +2677,9 @@ describe("Inputbar", () => {
 
     expect(planToggle).toBeTruthy();
     expect(accessSelect).toBeTruthy();
-    expect(planToggle?.textContent).toContain("计划执行");
-    expect(planToggle?.getAttribute("aria-label")).toBe("开启计划执行");
-    expect(planToggle?.getAttribute("title")).toBe("开启计划执行");
+    expect(planToggle?.textContent).toContain("编程执行");
+    expect(planToggle?.getAttribute("aria-label")).toBe("开启编程执行");
+    expect(planToggle?.getAttribute("title")).toBe("开启编程执行");
     expect(container.querySelector('select[aria-label="执行模式"]')).toBeNull();
 
     act(() => {
@@ -2694,7 +2692,7 @@ describe("Inputbar", () => {
     expect(setAccessMode).toHaveBeenCalledWith("full-access");
   });
 
-  it("高级设置计划执行开关文案应跟随 en-US 资源", async () => {
+  it("高级设置编程执行开关文案应跟随 en-US 资源", async () => {
     await changeLimeLocale("en-US");
     const setExecutionStrategy = vi.fn();
     const { container } = renderInputbar({
@@ -2715,14 +2713,12 @@ describe("Inputbar", () => {
     ) as HTMLButtonElement | null;
 
     expect(planToggle).toBeTruthy();
-    expect(planToggle?.textContent).toContain("Plan");
-    expect(planToggle?.textContent).not.toContain("计划执行");
+    expect(planToggle?.textContent).toContain("Code");
+    expect(planToggle?.textContent).not.toContain("编程执行");
     expect(planToggle?.getAttribute("aria-label")).toBe(
-      "Turn on planned execution",
+      "Turn on coding execution",
     );
-    expect(planToggle?.getAttribute("title")).toBe(
-      "Turn on planned execution",
-    );
+    expect(planToggle?.getAttribute("title")).toBe("Turn on coding execution");
   });
 
   it("受控模式下点击联网搜索应透传状态变更", async () => {
@@ -4025,9 +4021,7 @@ describe("Inputbar", () => {
     expect(container.textContent).toContain("Current progress");
     expect(container.textContent).toContain("Task queue");
     expect(container.textContent).toContain("In progress · 0/2");
-    expect(container.textContent).toContain(
-      "Moving forward; 1 item(s) remain",
-    );
+    expect(container.textContent).toContain("Moving forward; 1 item(s) remain");
     expect(container.textContent).not.toContain("当前进展");
     expect(container.textContent).not.toContain("任务队列");
 

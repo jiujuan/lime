@@ -4,6 +4,10 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import process from "node:process";
+import {
+  assertLiveProviderSmokeAllowed,
+  liveProviderSmokeAllowed,
+} from "./lib/live-provider-smoke-gate.mjs";
 
 const DEFAULTS = {
   mode: "replay",
@@ -42,6 +46,7 @@ const DEFAULTS = {
   externalDeliveryWebhookSource: "",
   externalDeliveryWebhookLabel: "connector-outbox-smoke-webhook",
   externalDeliveryLocalWebhook: false,
+  allowLiveProvider: liveProviderSmokeAllowed(),
 };
 
 const TOOL_METADATA_BEGIN = "[Lime \u5de5\u5177\u5143\u6570\u636e\u5f00\u59cb]";
@@ -65,6 +70,10 @@ function parseArgs(argv) {
     }
     if (arg === "--external-delivery-local-webhook") {
       options.externalDeliveryLocalWebhook = true;
+      continue;
+    }
+    if (arg === "--allow-live-provider") {
+      options.allowLiveProvider = true;
       continue;
     }
     if (arg.startsWith("--") && next !== undefined && !next.startsWith("--")) {
@@ -181,6 +190,7 @@ Options:
   --expected-ref <ref>             Expected outbox evidence ref. If omitted, any outbox:// ref passes.
   --provider-preference <id>       Optional for live mode; auto-picks an enabled provider when omitted.
   --model-preference <model>       Optional for live mode; auto-picks a fast configured model when omitted.
+  --allow-live-provider            Required for live mode unless LIME_ALLOW_LIVE_PROVIDER_SMOKE=1 / LIME_REAL_API_TEST=1 is set.
   --connector-id <id>              Default notion.
   --action <action>                Default createPage.
   --title <title>                  Live connector input title.
@@ -1103,6 +1113,12 @@ function writeSummary(output, summary) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  if (options.mode === "live") {
+    assertLiveProviderSmokeAllowed({
+      allowed: options.allowLiveProvider,
+      scriptName: "scripts/agent-app-connector-outbox-smoke.mjs --mode live",
+    });
+  }
   const localWebhook =
     options.mode === "live" && options.externalDeliveryLocalWebhook
       ? await startLocalWebhookServer()

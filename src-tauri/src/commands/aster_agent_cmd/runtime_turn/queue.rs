@@ -380,6 +380,30 @@ async fn execute_queued_request_with_team_runtime_governor(
             emit_subagent_status_changed_events(&context.app, &request_session_id).await;
         }
     }
+    if result.is_ok() {
+        match crate::commands::aster_agent_cmd::command_api::objective_continuation::maybe_submit_managed_objective_auto_continuation(
+            context,
+            &request_session_id,
+        )
+        .await
+        {
+            Ok(Some(queued_turn_id)) => {
+                tracing::info!(
+                    "[AsterAgent][Objective] 已提交目标自动续跑: session_id={}, queued_turn_id={}",
+                    request_session_id,
+                    queued_turn_id
+                );
+            }
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(
+                    "[AsterAgent][Objective] 目标自动续跑 guard 失败，已跳过: session_id={}, error={}",
+                    request_session_id,
+                    error
+                );
+            }
+        }
+    }
     result
 }
 

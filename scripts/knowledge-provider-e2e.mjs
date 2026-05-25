@@ -4,6 +4,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import {
+  assertLiveProviderSmokeAllowed,
+  liveProviderSmokeAllowed,
+} from "./lib/live-provider-smoke-gate.mjs";
 
 const DEFAULTS = {
   invokeUrl: "http://127.0.0.1:3030/invoke",
@@ -29,7 +33,7 @@ function printHelp() {
   console.log(`Usage: node scripts/knowledge-provider-e2e.mjs [options]
 
 真实 Provider E2E，验证 knowledge_compile_pack -> Builder Skill -> documents/ -> compiled/splits -> persona context。
-默认不会调用外部模型；必须显式传 --allow-external-provider。
+默认不会调用外部模型；必须显式传 --allow-live-provider 或 --allow-external-provider。
 
 Options:
   --invoke-url <url>             DevBridge invoke URL，默认 ${DEFAULTS.invokeUrl}
@@ -40,13 +44,19 @@ Options:
   --source-file <path>           自定义 Markdown 来源；默认使用内置非敏感示例
   --output <path>                写出 sanitized evidence JSON
   --list-providers               只列出 provider 摘要，不调用模型
+  --allow-live-provider          明确允许外部模型调用、资料外发与费用消耗
   --allow-external-provider      明确允许外部模型调用、资料外发与费用消耗
   --help, -h                     显示帮助
 `);
 }
 
 function parseArgs(argv) {
-  const options = { ...DEFAULTS, allowExternalProvider: false, listProviders: false };
+  const options = {
+    ...DEFAULTS,
+    allowExternalProvider: false,
+    allowLiveProvider: liveProviderSmokeAllowed(),
+    listProviders: false,
+  };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -56,6 +66,11 @@ function parseArgs(argv) {
     }
     if (arg === "--allow-external-provider") {
       options.allowExternalProvider = true;
+      options.allowLiveProvider = true;
+      continue;
+    }
+    if (arg === "--allow-live-provider") {
+      options.allowLiveProvider = true;
       continue;
     }
     if (arg === "--list-providers") {
@@ -121,9 +136,11 @@ function ensureProviderOptions(options) {
   if (!options.provider || !options.model) {
     throw new Error("真实 Provider E2E 需要同时传 --provider 和 --model；可先用 --list-providers 查看摘要");
   }
-  if (!options.allowExternalProvider) {
-    throw new Error("拒绝执行外部模型调用：请显式传 --allow-external-provider，表示已确认资料外发和费用消耗风险");
-  }
+  assertLiveProviderSmokeAllowed({
+    allowed: options.allowLiveProvider,
+    scriptName: "scripts/knowledge-provider-e2e.mjs",
+    flag: "--allow-live-provider",
+  });
 }
 
 function evidenceOutputPath(options, workingDir) {

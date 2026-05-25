@@ -300,3 +300,7 @@ pub(crate) fn resolve_runtime_export_workspace_root(
 #[cfg(test)]
 #[path = "runtime_evidence_pack_service_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "runtime_evidence_pack_owner_session_tests.rs"]
+mod owner_session_tests;

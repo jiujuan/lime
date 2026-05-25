@@ -2,11 +2,13 @@
 //!
 //! 负责自动化任务的结构化存储、后台轮询与执行。
 
+mod agent_turn_runtime_request;
 pub mod browser_runtime_sync;
 pub mod delivery;
 pub mod executor;
 pub mod health;
 mod managed_objective_binding;
+mod managed_objective_completion_policy;
 pub mod schedule;
 
 use self::delivery::{
@@ -763,8 +765,9 @@ impl AutomationService {
                 _ => AgentRunStatus::Error,
             };
             let run_succeeded = run_status == AgentRunStatus::Success;
-            tracker.finish_with_status(
+            tracker.finish_with_status_and_session(
                 handle,
+                session_id.as_deref(),
                 run_status,
                 if run_succeeded {
                     None
@@ -864,7 +867,7 @@ fn validate_payload(payload: &AutomationPayload) -> Result<(), String> {
             managed_objective_binding::validate_agent_turn_payload_metadata(
                 request_metadata.as_ref(),
             )?;
-            executor::resolve_agent_turn_access_mode_from_payload(
+            agent_turn_runtime_request::resolve_agent_turn_access_mode_from_payload(
                 approval_policy.as_deref(),
                 sandbox_policy.as_deref(),
                 request_metadata.as_ref(),

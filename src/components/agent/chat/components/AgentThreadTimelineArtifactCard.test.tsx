@@ -207,6 +207,41 @@ describe("AgentThreadTimelineArtifactCard", () => {
     expect(container.textContent).not.toContain("schemaVersion");
   });
 
+  it("应在时间线摘要中显示文件快照、diff 和校验事实", () => {
+    const container = renderCard(
+      createFileArtifactItem({
+        content: undefined,
+        metadata: {
+          artifact_id: "artifact-document:demo",
+          artifactTitle: "季度复盘",
+          artifactKind: "analysis",
+          artifactStatus: "ready",
+          artifactVersionNo: 8,
+          artifactVersionId: "artifact-document:demo:v8",
+          snapshotPath: ".lime/checkpoints/thread-1/artifact-demo-v8.json",
+          artifactVersionDiff: {
+            changedBlocks: [
+              {
+                blockId: "body-1",
+                changeType: "updated",
+                summary: "补充执行证据",
+              },
+            ],
+          },
+          validationIssueCount: 2,
+          previewText: "本轮重点是补齐来源线索与交付节奏。",
+        },
+      }),
+    );
+
+    expect(container.textContent).toContain("V8");
+    expect(container.textContent).toContain("已记录快照");
+    expect(container.textContent).toContain("Diff 1 处");
+    expect(container.textContent).toContain("校验问题 2");
+    expect(container.textContent).not.toContain("artifactVersionDiff");
+    expect(container.textContent).not.toContain("snapshotPath");
+  });
+
   it("应从 AgentUI projection store 显示 artifact 标准投影状态", () => {
     conversationProjectionStore.recordAgentUiProjectionEvents([
       {

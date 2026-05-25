@@ -458,7 +458,7 @@ const SEEDED_COMMAND_PROJECTION_SPECS: SeededCommandProjectionSpec[] = [
       "重构",
     ],
     trigger: "@代码",
-    triggerHints: ["@Code Agent"],
+    triggerHints: ["@code", "@coding", "@开发", "@Code Agent"],
     category: "代码执行",
     outputHint: "代码执行 timeline",
     commandBinding: {

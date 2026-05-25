@@ -2,10 +2,7 @@ import type { ParsedAnalysisWorkbenchCommand } from "./analysisWorkbenchCommand"
 import type { ParsedBroadcastWorkbenchCommand } from "./broadcastWorkbenchCommand";
 import type { ParsedBrowserWorkbenchCommand } from "./browserWorkbenchCommand";
 import type { ParsedChannelPreviewWorkbenchCommand } from "./channelPreviewWorkbenchCommand";
-import type {
-  CodeWorkbenchTaskType,
-  ParsedCodeWorkbenchCommand,
-} from "./codeWorkbenchCommand";
+import type { ParsedCodeWorkbenchCommand } from "./codeWorkbenchCommand";
 import type { ParsedComplianceWorkbenchCommand } from "./complianceWorkbenchCommand";
 import type { ParsedCompetitorWorkbenchCommand } from "./competitorWorkbenchCommand";
 import type { ParsedCoverWorkbenchCommand } from "./coverWorkbenchCommand";
@@ -142,14 +139,6 @@ const WEBPAGE_TYPE_LABELS: Record<WebpageType, string> = {
   resume_page: "简历页",
 };
 
-const CODE_TASK_TYPE_LABELS: Record<CodeWorkbenchTaskType, string> = {
-  code_review: "代码评审",
-  bug_fix: "修复",
-  implementation: "实现",
-  refactor: "重构",
-  explain: "解释",
-};
-
 const RESOURCE_TYPE_LABELS: Record<ResourceSearchType, string> = {
   image: "图片",
   bgm: "BGM",
@@ -186,13 +175,6 @@ const WEBPAGE_TYPE_VALUES = [
   "docs_page",
   "portfolio",
   "resume_page",
-] as const;
-const CODE_TASK_TYPE_VALUES = [
-  "code_review",
-  "bug_fix",
-  "implementation",
-  "refactor",
-  "explain",
 ] as const;
 const RESOURCE_TYPE_VALUES = ["image", "bgm", "sfx", "video"] as const;
 const DEFAULT_PDF_READ_PROMPT = "请阅读这份 PDF 并提炼关键信息";
@@ -657,19 +639,9 @@ function buildUrlParseReplayText(
 function buildCodeReplayText(
   parsedCommand: ParsedCodeWorkbenchCommand,
 ): string | undefined {
-  const taskType = parsedCommand.taskType
-    ? CODE_TASK_TYPE_LABELS[parsedCommand.taskType]
-    : undefined;
   const prompt = normalizeText(parsedCommand.prompt);
 
-  if (!taskType && !prompt) {
-    return normalizeText(parsedCommand.body);
-  }
-
-  return joinReplayFields([
-    taskType ? `类型:${taskType}` : undefined,
-    prompt ? `要求:${prompt}` : undefined,
-  ]);
+  return prompt || normalizeText(parsedCommand.body);
 }
 
 function buildImageReplayText(
@@ -1510,7 +1482,6 @@ function buildMentionCommandReplayTextFromSlotValues(params: {
   if (commandKey === "code_runtime") {
     return buildCodeReplayText({
       body: "",
-      taskType: normalizeEnumValue(slotValues.intent, CODE_TASK_TYPE_VALUES),
       prompt: resolvePromptWithContentFallback({
         prompt: slotValues.prompt,
         content: slotValues.content,

@@ -5,6 +5,10 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { chromium } from "playwright";
+import {
+  assertLiveProviderSmokeAllowed,
+  liveProviderSmokeAllowed,
+} from "./lib/live-provider-smoke-gate.mjs";
 
 const DEFAULTS = {
   appUrl: "http://127.0.0.1:1420/",
@@ -22,6 +26,7 @@ const DEFAULTS = {
     process.env.LIME_E2E_MODEL ||
     process.env.LIME_DEFAULT_MODEL ||
     "",
+  allowLiveProvider: liveProviderSmokeAllowed(),
   evidenceDir: path.join(
     process.cwd(),
     ".lime",
@@ -69,6 +74,7 @@ Lime Claw Chat Ready Streaming Smoke
   --interval-ms <ms>            轮询间隔，默认 1000
   --provider-preference <id>    可选，显式指定 provider
   --model-preference <model>    可选，显式指定 model
+  --allow-live-provider         确认允许调用真实模型 Provider；默认禁止以避免消耗额度
   --evidence-dir <path>         证据目录，默认 .lime/qc/gui-evidence/claw-chat-ready-streaming
   --prefix <name>               证据文件前缀，默认 claw-chat-ready-streaming
   -h, --help                    显示帮助
@@ -113,6 +119,10 @@ function parseArgs(argv) {
     if (arg === "--model-preference" && argv[index + 1]) {
       options.modelPreference = String(argv[index + 1]).trim();
       index += 1;
+      continue;
+    }
+    if (arg === "--allow-live-provider") {
+      options.allowLiveProvider = true;
       continue;
     }
     if (arg === "--evidence-dir" && argv[index + 1]) {
@@ -999,6 +1009,10 @@ async function main() {
   const prefix = options.prefix;
   const evidenceDir = options.evidenceDir;
   fs.mkdirSync(evidenceDir, { recursive: true });
+  assertLiveProviderSmokeAllowed({
+    allowed: options.allowLiveProvider,
+    scriptName: "smoke:claw-chat-ready-streaming",
+  });
   const hasExplicitProviderPreference = Boolean(
     options.providerPreference && options.modelPreference,
   );

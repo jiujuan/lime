@@ -2851,9 +2851,9 @@ describe("EmptyState", () => {
       '[data-testid="inputbar-plan-toggle"]',
     ) as HTMLButtonElement | null;
     expect(planButton).toBeTruthy();
-    expect(planButton?.textContent).toContain("计划执行");
+    expect(planButton?.textContent).toContain("编程执行");
     expect(planButton?.textContent).not.toContain("Plan");
-    expect(planButton?.getAttribute("aria-label")).toBe("开启计划执行");
+    expect(planButton?.getAttribute("aria-label")).toBe("开启编程执行");
     const subagentButton = container.querySelector(
       'button[title="任务拆分偏好已关闭"]',
     ) as HTMLButtonElement | null;

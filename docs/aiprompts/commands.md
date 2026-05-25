@@ -364,7 +364,7 @@ Skill 执行链路同样遵循单一命令边界。当前前端入口为 `src/li
 
 `Claw` 的纯文本代码命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的代码命令：`@代码` / `@code` / `@coding` / `@开发` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `code_command` 写入 `request_metadata.harness.code_command`，并把本次发送的 `execution_strategy` 强制切到 `code_orchestrated`，同时把 `request_metadata.harness.preferred_team_preset_id` 设为 `code-triage-team`，且把 `harness.preferences.task/subagent` 打开。当前主链不新增 prompt skill，也不新增 HTML / artifact 协议，而是直接复用现有 `code_orchestrated -> code_execution / tools / team runtime`。这意味着 `@代码` 首刀应优先进入真实代码工具与协作编排，而不是退回普通聊天、先做 `ToolSearch` 目录探索，或把代码任务伪装成一段口头建议；若当前上下文只够做解释或评审，允许 Agent 在同一主链中按 `code_command.kind` 调整策略，但不能绕回另一套命令体系。
+- Agent 驱动的代码命令：`@代码` / `@code` / `@coding` / `@开发` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `code_command` 写入 `request_metadata.harness.code_command`，并把本次发送的 `execution_strategy` 强制切到 `code_orchestrated`，同时把 `request_metadata.harness.preferred_team_preset_id` 设为 `code-triage-team`，且把 `harness.preferences.task/subagent` 打开。当前主链不新增 prompt skill，也不新增 HTML / artifact 协议，而是直接复用现有 `code_orchestrated -> code_execution / tools / team runtime`。这意味着 `@代码` 只作为进入编程底座的快捷入口，首刀应优先进入真实代码工具与协作编排，而不是退回普通聊天、先做 `ToolSearch` 目录探索，或把代码任务伪装成一段口头建议；具体是解释、评审、修复还是实现，应由同一条 `code_orchestrated` 运行时基于用户原文和上下文判断，前端 parser 不维护任务类型词表，也不在 `code_command` 内写任务类型字段。`@代码` 相关触发词的唯一事实源是 command catalog 的 `code_runtime` mention triggers；`codeWorkbenchCommand.ts` 只消费运行时 `mentionCommandPrefixKeyMap`，不得再维护私有触发词名单。
 
 `Claw` 的纯文本发布命令当前应收敛到现有发布工作流，而不是新开一条平行 runtime：
 

@@ -1048,7 +1048,7 @@ describe("EmptyStateComposerPanel", () => {
     ).toBeTruthy();
   });
 
-  it("应通过高级设置中的计划执行开关透传执行策略切换，不再渲染执行模式下拉", () => {
+  it("应通过高级设置中的编程执行开关透传执行策略切换，不再渲染执行模式下拉", () => {
     const setExecutionStrategy = vi.fn();
     const container = renderPanel({
       executionStrategy: "react",
@@ -1066,9 +1066,9 @@ describe("EmptyStateComposerPanel", () => {
     ) as HTMLButtonElement | null;
 
     expect(planToggle).toBeTruthy();
-    expect(planToggle?.textContent).toContain("计划执行");
+    expect(planToggle?.textContent).toContain("编程执行");
     expect(planToggle?.textContent).not.toContain("Plan");
-    expect(planToggle?.getAttribute("aria-label")).toBe("开启计划执行");
+    expect(planToggle?.getAttribute("aria-label")).toBe("开启编程执行");
     expect(container.textContent).not.toContain("ReAct");
     expect(container.textContent).not.toContain("Auto");
 

@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,6 +27,7 @@ import {
   Loader2,
 } from "lucide-react";
 import type { ActionRequired, ConfirmResponse, QuestionOption } from "../types";
+import { isRuntimeActionConfirmationRequestId } from "../utils/runtimeActionConfirmation";
 
 interface DecisionPanelProps {
   request: ActionRequired;
@@ -339,7 +341,25 @@ function resolveSubmittedAnswerText(
   return undefined;
 }
 
+function isDeniedSubmittedAnswer(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return (
+    normalized.includes("拒绝") ||
+    normalized.includes("deny") ||
+    normalized.includes("denied") ||
+    normalized.includes("reject") ||
+    normalized.includes("rejected") ||
+    normalized.includes("decline") ||
+    normalized.includes("declined")
+  );
+}
+
 export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
+  const { t } = useTranslation("agent");
   const requestAnchorProps = {
     "data-request-id": request.requestId,
     id: `agent-request-${request.requestId}`,
@@ -376,6 +396,9 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
   const isQueued = request.status === "queued";
   const isSubmitting = submissionState !== null;
   const submittedAnswer = resolveSubmittedAnswerText(request);
+  const isRuntimeActionConfirmation = isRuntimeActionConfirmationRequestId(
+    request.requestId,
+  );
   const isFallbackAskPending =
     request.actionType === "ask_user" && request.isFallback;
   const usesQuestionnaireUi =
@@ -554,10 +577,12 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
 
   if (isSubmitted || isQueued) {
     const submittedTitle = isQueued
-      ? "已记录你的回答"
-      : request.actionType === "tool_confirmation"
-        ? "已处理权限请求"
-        : "已提交你的回答";
+      ? t("agentChat.decisionPanel.queuedTitle")
+      : isRuntimeActionConfirmation
+        ? t("agentChat.decisionPanel.runtimePermission.submittedTitle")
+        : request.actionType === "tool_confirmation"
+        ? t("agentChat.decisionPanel.permissionHandledTitle")
+        : t("agentChat.decisionPanel.submittedTitle");
     const submittedClassName = isQueued
       ? "border-sky-200 bg-sky-50/50 dark:border-sky-800 dark:bg-sky-950/20"
       : request.actionType === "tool_confirmation"
@@ -593,7 +618,9 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
 
           {submittedAnswer && (
             <div className="rounded-md border bg-background/80 px-3 py-2 text-sm">
-              <span className="text-muted-foreground">你的回答：</span>
+              <span className="text-muted-foreground">
+                {t("agentChat.decisionPanel.submittedAnswerLabel")}
+              </span>
               <span className="ml-2 font-medium text-foreground">
                 {submittedAnswer}
               </span>
@@ -602,8 +629,16 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
 
           <p className="text-xs text-muted-foreground">
             {isQueued
-              ? "答案已记录，等待系统请求 ID 就绪后会自动提交。"
-              : "已提交，等待助手继续执行..."}
+              ? t("agentChat.decisionPanel.queuedDescription")
+              : isRuntimeActionConfirmation
+                ? isDeniedSubmittedAnswer(submittedAnswer)
+                  ? t(
+                      "agentChat.decisionPanel.runtimePermission.deniedDescription",
+                    )
+                  : t(
+                      "agentChat.decisionPanel.runtimePermission.submittedDescription",
+                    )
+                : t("agentChat.decisionPanel.submittedDescription")}
           </p>
         </CardContent>
       </Card>
@@ -620,12 +655,12 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300">
             <HelpCircle className="h-4 w-4" />
-            需要你提供信息
+            {t("agentChat.decisionPanel.infoRequiredTitle")}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-foreground">
-            {request.prompt || "请提供继续执行所需的信息"}
+            {request.prompt || t("agentChat.decisionPanel.defaultInfoPrompt")}
           </p>
 
           {elicitationDescription && (
@@ -661,10 +696,10 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
 
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">
-              回答
+              {t("agentChat.decisionPanel.answerLabel")}
             </label>
             <Input
-              placeholder="请输入回答..."
+              placeholder={t("agentChat.decisionPanel.answerPlaceholder")}
               value={elicitationAnswer}
               disabled={isSubmitting}
               onChange={(e) => setElicitationAnswer(e.target.value)}
@@ -673,10 +708,10 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
 
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">
-              补充说明（可选）
+              {t("agentChat.decisionPanel.supplementLabel")}
             </label>
             <Input
-              placeholder="可选补充内容..."
+              placeholder={t("agentChat.decisionPanel.supplementPlaceholder")}
               value={elicitationOther}
               disabled={isSubmitting}
               onChange={(e) => setElicitationOther(e.target.value)}
@@ -695,7 +730,9 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
               ) : (
                 <CheckCircle className="mr-1 h-4 w-4" />
               )}
-              {submissionState?.key === "allow" ? "提交中..." : "提交"}
+              {submissionState?.key === "allow"
+                ? t("agentChat.decisionPanel.action.submitting")
+                : t("agentChat.decisionPanel.action.submit")}
             </Button>
             <Button
               size="sm"
@@ -708,7 +745,9 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
               ) : (
                 <XCircle className="mr-1 h-4 w-4" />
               )}
-              {submissionState?.key === "deny" ? "取消中..." : "取消"}
+              {submissionState?.key === "deny"
+                ? t("agentChat.decisionPanel.action.cancelling")
+                : t("agentChat.decisionPanel.action.cancel")}
             </Button>
           </div>
         </CardContent>
@@ -724,6 +763,11 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
   ) {
     const questions = request.questions;
     const isQuestionElicitation = request.actionType === "elicitation";
+    const title = isRuntimeActionConfirmation
+      ? t("agentChat.decisionPanel.runtimePermission.title")
+      : isQuestionElicitation
+        ? t("agentChat.decisionPanel.infoRequiredTitle")
+        : t("agentChat.decisionPanel.assistantQuestionTitle");
     const cardClassName = isQuestionElicitation
       ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20"
       : "border-emerald-200 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20";
@@ -749,10 +793,15 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
             )}
           >
             <HelpCircle className="h-4 w-4" />
-            {isQuestionElicitation ? "需要你提供信息" : "助手的问题"}
+            {title}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {isRuntimeActionConfirmation ? (
+            <p className="text-xs leading-5 text-muted-foreground">
+              {t("agentChat.decisionPanel.runtimePermission.description")}
+            </p>
+          ) : null}
           {isQuestionElicitation && request.prompt && (
             <p className="text-sm text-foreground">{request.prompt}</p>
           )}
@@ -808,10 +857,10 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
               {/* 其他输入 */}
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">
-                  其他
+                  {t("agentChat.decisionPanel.otherLabel")}
                 </label>
                 <Input
-                  placeholder="输入你的答案..."
+                  placeholder={t("agentChat.decisionPanel.otherPlaceholder")}
                   value={otherInputs[qIndex] ?? ""}
                   disabled={isSubmitting}
                   onChange={(e) =>
@@ -825,7 +874,7 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
 
               {q.multiSelect && (
                 <p className="text-xs text-muted-foreground">
-                  可以选择多个选项
+                  {t("agentChat.decisionPanel.multiSelectHint")}
                 </p>
               )}
             </div>
@@ -833,8 +882,7 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
 
           {isFallbackAskPending && (
             <p className="text-xs text-muted-foreground">
-              如果系统请求 ID
-              还没就绪，你现在提交的答案会先被记录，并在就绪后自动提交。
+              {t("agentChat.decisionPanel.fallbackQueuedDescription")}
             </p>
           )}
 
@@ -853,11 +901,11 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
               )}
               {submissionState?.key === "allow"
                 ? isFallbackAskPending
-                  ? "记录中..."
-                  : "提交中..."
+                  ? t("agentChat.decisionPanel.action.recording")
+                  : t("agentChat.decisionPanel.action.submitting")
                 : isFallbackAskPending
-                  ? "记录答案"
-                  : "提交答案"}
+                  ? t("agentChat.decisionPanel.action.recordAnswer")
+                  : t("agentChat.decisionPanel.action.submitAnswer")}
             </Button>
             <Button
               size="sm"
@@ -870,7 +918,9 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
               ) : (
                 <XCircle className="mr-1 h-4 w-4" />
               )}
-              {submissionState?.key === "deny" ? "取消中..." : "取消"}
+              {submissionState?.key === "deny"
+                ? t("agentChat.decisionPanel.action.cancelling")
+                : t("agentChat.decisionPanel.action.cancel")}
             </Button>
           </div>
         </CardContent>
@@ -887,7 +937,7 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-300">
           <AlertTriangle className="h-4 w-4" />
-          权限请求
+          {t("agentChat.decisionPanel.permissionRequestTitle")}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -895,9 +945,9 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
         <div className="flex items-center gap-2">
           {getToolIcon(request.toolName)}
           <span className="text-sm">
-            助手想要使用：
+            {t("agentChat.decisionPanel.assistantWantsUse")}
             <span className="ml-1 font-medium">
-              {request.toolName || "未知工具"}
+              {request.toolName || t("agentChat.decisionPanel.unknownTool")}
             </span>
           </span>
         </div>
@@ -924,7 +974,9 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
             ) : (
               <CheckCircle className="mr-1 h-4 w-4" />
             )}
-            {submissionState?.key === "allow" ? "处理中..." : "允许"}
+            {submissionState?.key === "allow"
+              ? t("agentChat.decisionPanel.action.processing")
+              : t("agentChat.decisionPanel.action.allow")}
           </Button>
           <Button
             size="sm"
@@ -937,7 +989,9 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
             ) : (
               <XCircle className="mr-1 h-4 w-4" />
             )}
-            {submissionState?.key === "deny" ? "处理中..." : "拒绝"}
+            {submissionState?.key === "deny"
+              ? t("agentChat.decisionPanel.action.processing")
+              : t("agentChat.decisionPanel.action.deny")}
           </Button>
         </div>
       </CardContent>

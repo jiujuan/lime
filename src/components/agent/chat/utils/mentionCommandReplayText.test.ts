@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   clearSkillCatalogCache,
+  getSeededSkillCatalog,
   upsertLocalModelBoundImageCommandBinding,
 } from "@/lib/api/skillCatalog";
+import { buildRuntimeMentionCommandCatalog } from "../skill-selection/runtimeInputCapabilityCatalog";
 import { parseAnalysisWorkbenchCommand } from "./analysisWorkbenchCommand";
 import { parseBroadcastWorkbenchCommand } from "./broadcastWorkbenchCommand";
 import { parseBrowserWorkbenchCommand } from "./browserWorkbenchCommand";
@@ -38,6 +40,17 @@ import { parseUrlParseWorkbenchCommand } from "./urlParseWorkbenchCommand";
 import { parseVideoWorkbenchCommand } from "./videoWorkbenchCommand";
 import { parseVoiceWorkbenchCommand } from "./voiceWorkbenchCommand";
 import { parseWebpageWorkbenchCommand } from "./webpageWorkbenchCommand";
+
+function parseSeededCodeCommand(text: string) {
+  const { mentionCommandPrefixKeyMap } = buildRuntimeMentionCommandCatalog(
+    getSeededSkillCatalog(),
+  );
+
+  return parseCodeWorkbenchCommand(text, {
+    commandKey: "code_runtime",
+    mentionCommandPrefixKeyMap,
+  });
+}
 
 describe("buildMentionCommandReplayText", () => {
   beforeEach(() => {
@@ -537,8 +550,8 @@ describe("buildMentionCommandReplayText", () => {
     ).toBe("链接:https://example.com/post 提取:摘要 要求:整理成三条结论");
   });
 
-  it("应把 @代码 回放整理成任务字段骨架", () => {
-    const parsedCommand = parseCodeWorkbenchCommand(
+  it("应把 @代码 回放保留为用户要求正文", () => {
+    const parsedCommand = parseSeededCodeCommand(
       "@代码 类型:重构 重构聊天区时间线组件，合并重复状态分支并补测试",
     );
 
@@ -547,7 +560,7 @@ describe("buildMentionCommandReplayText", () => {
         commandKey: "code_runtime",
         parsedCommand: parsedCommand!,
       }),
-    ).toBe("类型:重构 要求:重构聊天区时间线组件，合并重复状态分支并补测试");
+    ).toBe("类型:重构 重构聊天区时间线组件，合并重复状态分支并补测试");
   });
 
   it("应把 @渠道预览 回放整理成平台字段骨架", () => {

@@ -9,6 +9,10 @@ import {
   buildApprovalSandboxSmokeEvidence,
   renderApprovalSandboxTranscriptLines,
 } from "./lib/agent-runtime-approval-sandbox-smoke-core.mjs";
+import {
+  assertLiveProviderSmokeAllowed,
+  liveProviderSmokeAllowed,
+} from "./lib/live-provider-smoke-gate.mjs";
 import { runVitestSmoke } from "./lib/vitest-smoke-runner.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -54,6 +58,8 @@ Lime Agent Runtime Approval / Sandbox Smoke
   --interval-ms <ms> live runtime 轮询间隔，默认 ${DEFAULT_INTERVAL_MS}
   --provider-preference <id> live runtime 使用的 provider 偏好；默认读取 LIME_AGENT_QC_PROVIDER / LIME_E2E_PROVIDER，未设置时自动选本地启用 provider
   --model-preference <name>  live runtime 使用的 model 偏好；默认读取 LIME_AGENT_QC_MODEL / LIME_E2E_MODEL，未设置时自动选 provider 的首个自定义模型
+  --allow-live-provider / --live-runtime
+                      确认允许调用真实模型 Provider 并采集 live runtime transcript；默认仅生成确定性投影摘要
   --skip-live-runtime 跳过 DevBridge live runtime transcript，仅生成确定性投影摘要
   --no-write        只运行校验并打印摘要，不写 evidence JSON
   -h, --help        显示帮助
@@ -69,7 +75,8 @@ function parseArgs(argv) {
     intervalMs: DEFAULT_INTERVAL_MS,
     providerPreference: DEFAULT_PROVIDER_PREFERENCE,
     modelPreference: DEFAULT_MODEL_PREFERENCE,
-    liveRuntime: true,
+    liveRuntime: liveProviderSmokeAllowed(),
+    liveProviderExplicitlyAllowed: false,
     write: true,
   };
 
@@ -116,6 +123,11 @@ function parseArgs(argv) {
     }
     if (arg === "--skip-live-runtime" || arg === "--no-live-runtime") {
       options.liveRuntime = false;
+      continue;
+    }
+    if (arg === "--allow-live-provider" || arg === "--live-runtime") {
+      options.liveRuntime = true;
+      options.liveProviderExplicitlyAllowed = true;
       continue;
     }
     if (arg === "--help" || arg === "-h") {
@@ -615,6 +627,19 @@ async function main() {
       "存在工具库存时应展示工具与权限区块及来源统计|待审批区块应通过 artifact protocol",
     ]),
   );
+
+  if (options.liveRuntime) {
+    assertLiveProviderSmokeAllowed({
+      allowed:
+        liveProviderSmokeAllowed() || options.liveProviderExplicitlyAllowed,
+      scriptName: "smoke:agent-runtime-approval-sandbox",
+      flag: "--allow-live-provider",
+    });
+  } else {
+    console.log(
+      "[smoke:agent-runtime-approval-sandbox] 默认跳过 live runtime transcript，避免调用真实模型 Provider；需要时请显式传入 --allow-live-provider。",
+    );
+  }
 
   const liveRuntimeTranscript = options.liveRuntime
     ? await collectLiveRuntimeTranscript(options)

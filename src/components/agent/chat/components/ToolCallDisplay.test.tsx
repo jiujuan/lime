@@ -286,8 +286,11 @@ describe("ToolCallDisplay", () => {
         output: "/tmp\nfile-a\nfile-b\nfile-c\n",
         metadata: {
           exit_code: 0,
+          cwd: "/workspace",
           stdout_length: 24,
           stderr_length: 0,
+          sandboxed: true,
+          sandbox_type: "workspace-write",
         },
       },
       startTime: new Date("2026-03-20T12:10:00.000Z"),
@@ -303,11 +306,20 @@ describe("ToolCallDisplay", () => {
 
     expect(container.textContent).toContain("已运行 ls -la");
     expect(container.textContent).not.toContain("已运行已运行");
-    expect(container.textContent).not.toContain("退出码 0");
-    expect(container.textContent).not.toContain("stdout 24");
-    expect(container.textContent).not.toContain("stderr 0");
+    expect(container.textContent).toContain("命令摘要");
+    expect(container.textContent).toContain("命令");
+    expect(container.textContent).toContain("ls -la");
+    expect(container.textContent).toContain("目录");
+    expect(container.textContent).toContain("/workspace");
+    expect(container.textContent).toContain("退出码：0");
+    expect(container.textContent).toContain("stdout：24");
+    expect(container.textContent).toContain("stderr：0");
+    expect(container.textContent).toContain("沙箱：workspace-write");
     expect(
       container.querySelector('[data-testid="tool-call-rendered-result"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="tool-call-command-summary"]'),
     ).toBeTruthy();
     expect(container.textContent).toContain("text");
     expect(container.textContent).toContain("复制");
@@ -342,11 +354,12 @@ describe("ToolCallDisplay", () => {
 
     expect(container.textContent).toContain("内容较长，已省略部分文本");
     expect(container.textContent).toContain("命令返回错误");
+    expect(container.textContent).toContain("命令摘要");
+    expect(container.textContent).toContain("退出码：2");
+    expect(container.textContent).toContain("输出已截断");
     expect(container.textContent).toContain("结果文件: final-result.md");
     expect(container.textContent).not.toContain("完整输出已转存");
-    expect(container.textContent).not.toContain("输出已截断");
     expect(container.textContent).not.toContain("输出文件:");
-    expect(container.textContent).not.toContain("退出码 2");
     expect(container.textContent).not.toContain(
       "exports/reports/final-result.md",
     );
@@ -692,8 +705,8 @@ describe("ToolCallDisplay", () => {
     });
 
     const overlayButton = Array.from(
-      document.body.querySelectorAll("button"),
-    ).find((button) => button.querySelector('img[alt="工具结果图片大图"]')) as
+      document.body.querySelectorAll("button.fixed"),
+    ).find((button) => button.querySelector('img[alt="工具结果图片"]')) as
       | HTMLButtonElement
       | undefined;
 
@@ -702,8 +715,8 @@ describe("ToolCallDisplay", () => {
     expect(overlayButton?.className).not.toContain("bg-black/70");
     expect(
       document.body
-        .querySelector('img[alt="工具结果图片大图"]')
-      ?.getAttribute("src"),
+        .querySelector('img[alt="工具结果图片"]')
+        ?.getAttribute("src"),
     ).toBe("https://example.com/poster.png");
   });
 

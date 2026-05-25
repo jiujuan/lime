@@ -13,6 +13,20 @@ use serial_test::serial;
 mod tetrate_streaming_tests {
     use super::*;
 
+    fn real_api_test_enabled() -> bool {
+        std::env::var("LIME_REAL_API_TEST").as_deref() == Ok("1")
+            || std::env::var("PROXYCAST_REAL_API_TEST").as_deref() == Ok("1")
+    }
+
+    fn skip_real_api_test(test_name: &str) -> bool {
+        if real_api_test_enabled() {
+            return false;
+        }
+
+        println!("Skipping {test_name} - set LIME_REAL_API_TEST=1 to run real Tetrate smoke");
+        true
+    }
+
     async fn create_test_provider() -> Result<TetrateProvider> {
         // Create a test provider with the default model
         let model_config = ModelConfig::new("claude-3-5-sonnet-latest")?;
@@ -23,6 +37,10 @@ mod tetrate_streaming_tests {
     #[serial]
     #[ignore] // Ignore by default, run with --ignored flag when API key is available
     async fn test_tetrate_streaming_basic() -> Result<()> {
+        if skip_real_api_test("test_tetrate_streaming_basic") {
+            return Ok(());
+        }
+
         let provider = create_test_provider().await?;
 
         let messages = vec![Message::user().with_text("Count from 1 to 5, one number at a time.")];
@@ -78,6 +96,10 @@ mod tetrate_streaming_tests {
     #[serial]
     #[ignore]
     async fn test_tetrate_streaming_with_tools() -> Result<()> {
+        if skip_real_api_test("test_tetrate_streaming_with_tools") {
+            return Ok(());
+        }
+
         let provider = create_test_provider().await?;
 
         // Define a simple tool
@@ -140,6 +162,10 @@ mod tetrate_streaming_tests {
     #[serial]
     #[ignore]
     async fn test_tetrate_streaming_empty_response() -> Result<()> {
+        if skip_real_api_test("test_tetrate_streaming_empty_response") {
+            return Ok(());
+        }
+
         let provider = create_test_provider().await?;
 
         // This might result in a very short or empty response
@@ -169,6 +195,10 @@ mod tetrate_streaming_tests {
     #[serial]
     #[ignore]
     async fn test_tetrate_streaming_long_response() -> Result<()> {
+        if skip_real_api_test("test_tetrate_streaming_long_response") {
+            return Ok(());
+        }
+
         let provider = create_test_provider().await?;
 
         let messages = vec![Message::user().with_text(
@@ -225,7 +255,12 @@ mod tetrate_streaming_tests {
 
     #[tokio::test]
     #[serial]
+    #[ignore = "requires LIME_REAL_API_TEST=1; sends a request to the Tetrate service"]
     async fn test_tetrate_streaming_error_handling() -> Result<()> {
+        if skip_real_api_test("test_tetrate_streaming_error_handling") {
+            return Ok(());
+        }
+
         // Test with invalid API key to ensure error handling works
         std::env::set_var("TETRATE_API_KEY", "invalid-key-for-testing");
 
@@ -251,6 +286,10 @@ mod tetrate_streaming_tests {
     #[serial]
     #[ignore]
     async fn test_tetrate_streaming_concurrent_streams() -> Result<()> {
+        if skip_real_api_test("test_tetrate_streaming_concurrent_streams") {
+            return Ok(());
+        }
+
         let provider = create_test_provider().await?;
 
         // Create multiple concurrent streams

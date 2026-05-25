@@ -230,7 +230,13 @@ async function seedPack(options, workingDir, pack) {
     },
   });
   await invoke(options, "knowledge_compile_pack", {
-    request: { workingDir, name: pack.name },
+    request: {
+      workingDir,
+      name: pack.name,
+      builderRuntime: {
+        enabled: false,
+      },
+    },
   });
   await invoke(options, "knowledge_update_pack_status", {
     request: { workingDir, name: pack.name, status: pack.status },

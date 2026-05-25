@@ -3,10 +3,12 @@ import { ArrowUpRight, FileStack, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   resolveArtifactDocumentCurrentVersion,
+  resolveArtifactDocumentCurrentVersionDiff,
   type ArtifactDocumentBlock,
   type ArtifactDocumentKind,
   type ArtifactDocumentStatus,
   type ArtifactDocumentV1,
+  type ArtifactDocumentVersionDiff,
 } from "@/lib/artifact-document";
 import {
   resolveArtifactProtocolDocumentPayload,
@@ -79,6 +81,48 @@ function readMetadataNumber(
     }
   }
   return undefined;
+}
+
+function readMetadataRecord(
+  metadata: Record<string, unknown> | undefined,
+  keys: string[],
+): Record<string, unknown> | undefined {
+  for (const key of keys) {
+    const direct = asRecord(metadata?.[key]);
+    if (direct) {
+      return direct;
+    }
+  }
+  return undefined;
+}
+
+function readMetadataArray(
+  metadata: Record<string, unknown> | undefined,
+  keys: string[],
+): unknown[] | undefined {
+  for (const key of keys) {
+    const direct = metadata?.[key];
+    if (Array.isArray(direct)) {
+      return direct;
+    }
+  }
+  return undefined;
+}
+
+function resolveVersionDiffChangedBlockCount(
+  diff: ArtifactDocumentVersionDiff | Record<string, unknown> | null | undefined,
+): number {
+  const record = asRecord(diff);
+  if (!record) {
+    return 0;
+  }
+
+  const changedBlocks = Array.isArray(record.changedBlocks)
+    ? record.changedBlocks
+    : Array.isArray(record.changed_blocks)
+      ? record.changed_blocks
+      : [];
+  return changedBlocks.length;
 }
 
 function resolveFileName(path: string): string {
@@ -264,6 +308,7 @@ function resolveKnowledgeDocumentSource({
 function resolveDocumentPreview(
   document: ArtifactDocumentV1 | null,
   displayTitle: string,
+  syncedPreviewText: string,
 ): string | null {
   if (!document) {
     return null;
@@ -271,7 +316,7 @@ function resolveDocumentPreview(
 
   const preview = normalizeText(resolveArtifactProtocolPreviewText(document));
   if (!preview || preview === displayTitle) {
-    return "已同步到工作区，可继续在画布里阅读、编辑和定位到对应区块。";
+    return syncedPreviewText;
   }
 
   return truncateInlineText(preview);
@@ -301,6 +346,7 @@ export function AgentThreadTimelineArtifactCard({
   const currentVersion = document
     ? resolveArtifactDocumentCurrentVersion(document)
     : null;
+  const documentMetadata = asRecord(document?.metadata);
   const metadataTitle = readMetadataText(metadata, [
     "artifactTitle",
     "artifact_title",
@@ -331,7 +377,58 @@ export function AgentThreadTimelineArtifactCard({
     readMetadataNumber(metadata, [
       "artifactVersionNo",
       "artifact_version_no",
+      "versionNo",
+      "version_no",
     ]) || readMetadataNumber(metadataVersion, ["versionNo", "version_no"]);
+  const metadataVersionId =
+    readMetadataText(metadata, [
+      "artifactVersionId",
+      "artifact_version_id",
+      "versionId",
+      "version_id",
+    ]) ||
+    readMetadataText(metadataVersion, ["id", "versionId", "version_id"]) ||
+    normalizeText(currentVersion?.id) ||
+    readMetadataText(documentMetadata, [
+      "currentVersionId",
+      "current_version_id",
+    ]);
+  const snapshotPath =
+    readMetadataText(metadata, ["snapshotPath", "snapshot_path"]) ||
+    readMetadataText(metadataVersion, ["snapshotPath", "snapshot_path"]) ||
+    normalizeText(currentVersion?.snapshotPath);
+  const metadataVersionDiff =
+    readMetadataRecord(metadata, [
+      "currentVersionDiff",
+      "current_version_diff",
+      "artifactVersionDiff",
+      "artifact_version_diff",
+    ]) ||
+    readMetadataRecord(metadataVersion, [
+      "currentVersionDiff",
+      "current_version_diff",
+      "artifactVersionDiff",
+      "artifact_version_diff",
+    ]);
+  const versionDiff =
+    (document ? resolveArtifactDocumentCurrentVersionDiff(document) : null) ||
+    metadataVersionDiff;
+  const diffChangedBlockCount =
+    resolveVersionDiffChangedBlockCount(versionDiff);
+  const validationIssueCount =
+    readMetadataNumber(metadata, [
+      "validationIssueCount",
+      "validation_issue_count",
+    ]) ||
+    readMetadataNumber(metadataVersion, [
+      "validationIssueCount",
+      "validation_issue_count",
+    ]) ||
+    readMetadataArray(metadata, [
+      "validationIssues",
+      "validation_issues",
+    ])?.length ||
+    0;
   const metadataPreview = readMetadataText(metadata, [
     "previewText",
     "preview_text",
@@ -345,7 +442,11 @@ export function AgentThreadTimelineArtifactCard({
     resolveFileName(item.path);
   const displayPath = truncateMiddle(item.path, 84);
   const previewText =
-    resolveDocumentPreview(document, displayTitle) ||
+    resolveDocumentPreview(
+      document,
+      displayTitle,
+      t("agentChat.messageList.artifact.documentSyncedPreview"),
+    ) ||
     (metadataPreview ? truncateInlineText(metadataPreview) : null) ||
     resolveFallbackPreview(item.content) ||
     "点击在画布中打开完整内容。";
@@ -357,6 +458,7 @@ export function AgentThreadTimelineArtifactCard({
     currentVersion?.status || document?.status || metadataStatus,
   );
   const versionNo = currentVersion?.versionNo || metadataVersionNo;
+  const hasCheckpointFact = Boolean(snapshotPath || versionNo || metadataVersionId);
   const blockCount = document?.blocks.length || 0;
   const sourceCount = document?.sources.length || 0;
   const knowledgeDocumentSource = resolveKnowledgeDocumentSource({
@@ -413,13 +515,13 @@ export function AgentThreadTimelineArtifactCard({
                   variant="outline"
                   className="border-sky-200 bg-white text-sky-700"
                 >
-                  Document 产物
+                  {t("agentChat.messageList.artifact.documentBadge")}
                 </Badge>
                 <Badge
                   variant="outline"
                   className="border-emerald-200 bg-emerald-50 text-emerald-700"
                 >
-                  可保存到项目资料
+                  {t("agentChat.messageList.artifact.saveableBadge")}
                 </Badge>
               </div>
             ) : null}
@@ -457,7 +559,7 @@ export function AgentThreadTimelineArtifactCard({
                   className="border-sky-200 bg-white text-sky-700"
                   data-testid="timeline-file-artifact-agentui"
                   title={[
-                    "Agent UI 标准投影",
+                    t("agentChat.messageList.artifact.agentUiProjectionTitle"),
                     formatAgentUiProjectionSourceType(
                       latestArtifactProjection.sourceType,
                       translateProjection,
@@ -468,7 +570,7 @@ export function AgentThreadTimelineArtifactCard({
                     ),
                   ].join(" · ")}
                 >
-                  AgentUI{" "}
+                  {t("agentChat.messageList.artifact.agentUiBadgePrefix")}{" "}
                   {formatAgentUiProjectionEventType(
                     latestArtifactProjection.type,
                     translateProjection,
@@ -499,18 +601,44 @@ export function AgentThreadTimelineArtifactCard({
                   V{versionNo}
                 </span>
               ) : null}
+              {hasCheckpointFact ? (
+                <span
+                  title={snapshotPath || metadataVersionId || undefined}
+                  className="inline-flex rounded-full bg-emerald-50 px-2 py-1 text-[11px] text-emerald-700"
+                >
+                  {t("agentChat.messageList.artifact.checkpointBadge")}
+                </span>
+              ) : null}
+              {diffChangedBlockCount > 0 ? (
+                <span className="inline-flex rounded-full bg-sky-50 px-2 py-1 text-[11px] text-sky-700">
+                  {t("agentChat.messageList.artifact.diffBadge", {
+                    count: diffChangedBlockCount,
+                  })}
+                </span>
+              ) : null}
+              {validationIssueCount > 0 ? (
+                <span className="inline-flex rounded-full bg-amber-50 px-2 py-1 text-[11px] text-amber-700">
+                  {t("agentChat.messageList.artifact.validationBadge", {
+                    count: validationIssueCount,
+                  })}
+                </span>
+              ) : null}
               {blockCount > 0 ? (
                 <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-[11px] text-slate-500">
-                  {blockCount} 个区块
+                  {t("agentChat.messageList.artifact.blockCount", {
+                    count: blockCount,
+                  })}
                 </span>
               ) : null}
               {sourceCount > 0 ? (
                 <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-[11px] text-slate-500">
-                  {sourceCount} 条来源
+                  {t("agentChat.messageList.artifact.sourceCount", {
+                    count: sourceCount,
+                  })}
                 </span>
               ) : null}
               <span className="inline-flex items-center gap-1 text-xs text-slate-400 transition group-hover:text-sky-700">
-                <span>在画布中打开</span>
+                <span>{t("agentChat.toolCall.openInCanvas")}</span>
                 <ArrowUpRight className="h-3.5 w-3.5" />
               </span>
             </div>
@@ -530,7 +658,7 @@ export function AgentThreadTimelineArtifactCard({
               })
             }
           >
-            保存这份文档
+            {t("agentChat.messageList.artifact.saveDocument")}
           </button>
         ) : null}
       </div>
@@ -544,7 +672,9 @@ export function AgentThreadTimelineArtifactCard({
               className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
               onClick={() => onOpenArtifactFromTimeline(target)}
             >
-              定位到 {resolveBlockLabel(document, target.blockId || "")}
+              {t("agentChat.messageList.artifact.locateBlock", {
+                label: resolveBlockLabel(document, target.blockId || ""),
+              })}
             </button>
           ))}
         </div>

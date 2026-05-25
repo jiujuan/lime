@@ -242,6 +242,48 @@ describe("ManagedObjectivePanel", () => {
     expect(container.textContent).toContain("当前会话正在执行或排队");
   });
 
+  it("应只展示后端 projection 状态，不从审计摘要推断完成", () => {
+    const objective = {
+      ...createObjective("active"),
+      last_audit_summary:
+        "decision=completed; evidence_pack=/tmp/evidence; artifacts=1; blockers=none",
+      last_evidence_pack_ref: "/tmp/evidence",
+      last_artifact_refs: ["/tmp/evidence/artifacts/result.md"],
+    };
+    const container = renderPanel({ objective });
+
+    expect(container.textContent).toContain("进行中");
+    expect(container.textContent).not.toContain("已完成");
+    expect(container.textContent).toContain("验证结果");
+    expect(container.textContent).toContain(
+      "decision=completed; evidence_pack=/tmp/evidence",
+    );
+    expect(
+      container.querySelector<HTMLButtonElement>(
+        '[data-testid="managed-objective-continue"]',
+      )?.disabled,
+    ).toBe(false);
+  });
+
+  it.each([
+    ["needs_input", "需要补充", "等待用户补充信息"],
+    ["blocked", "已阻塞", "外部依赖失败"],
+    ["budget_limited", "预算受限", "自动续跑已达到最大轮数"],
+  ] as const)("应展示高风险状态 %s 的后端阻塞原因", (status, label, blocker) => {
+    const container = renderPanel({
+      objective: {
+        ...createObjective(status),
+        blocker_reason: blocker,
+      },
+    });
+
+    expect(container.textContent).toContain(label);
+    expect(container.textContent).toContain(`阻塞原因：${blocker}`);
+    expect(
+      container.querySelector('[data-testid="managed-objective-continue"]'),
+    ).toBeNull();
+  });
+
   it("应支持从 paused 恢复目标", async () => {
     const objective = createObjective("paused");
     updateAgentRuntimeObjectiveStatusMock.mockResolvedValue(

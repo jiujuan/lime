@@ -11,6 +11,10 @@ import {
   createI18nPatchMetricsReport,
   renderI18nPatchMetricsTextReport,
 } from "./lib/i18n-patch-metrics-report-core.mjs";
+import {
+  liveProviderSmokeAllowed,
+  liveProviderSmokeEnv,
+} from "./lib/live-provider-smoke-gate.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -203,6 +207,7 @@ const DEFAULTS = {
   intervalMs: 1_000,
   reuseRunning: false,
   includeKnowledgeProductE2e: false,
+  includeLiveProviderSmokes: liveProviderSmokeAllowed(),
   i18nPatchMetricsOutput: DEFAULT_I18N_PATCH_METRICS_OUTPUT,
   i18nPatchReportOutput: DEFAULT_I18N_PATCH_REPORT_OUTPUT,
   legacySurfaceReportOutput: DEFAULT_LEGACY_SURFACE_REPORT_OUTPUT,
@@ -247,6 +252,8 @@ Lime GUI 冒烟入口
   --reuse-running             复用已启动的 headless Tauri，不主动拉起
   --include-knowledge-product-e2e
                              额外执行项目资料产品 E2E 闭环验收
+  --include-live-provider-smokes
+                             额外执行会调用真实模型 Provider 的 live smoke；默认跳过以避免消耗额度
   --i18n-patch-metrics-output <path>
                              导出 GUI 页面上的 window.__I18N_METRICS__，默认 .lime/i18n/patch-metrics.json
   --i18n-patch-report-output <path>
@@ -316,6 +323,11 @@ function parseArgs(argv) {
 
     if (arg === "--include-knowledge-product-e2e") {
       options.includeKnowledgeProductE2e = true;
+      continue;
+    }
+
+    if (arg === "--include-live-provider-smokes") {
+      options.includeLiveProviderSmokes = true;
       continue;
     }
 
@@ -1198,12 +1210,18 @@ async function waitForAppShell(
   );
 }
 
-async function runPageSmokeCommand(options, args, label, timeoutMs) {
+async function runPageSmokeCommand(
+  options,
+  args,
+  label,
+  timeoutMs,
+  envOverrides = {},
+) {
   await waitForAppShell(options, {
     timeoutMs: Math.min(options.timeoutMs, 30_000),
     label: `${label} 前置前端壳`,
   });
-  await runCommand(npmCommand, args, label, timeoutMs);
+  await runCommand(npmCommand, args, label, timeoutMs, envOverrides);
 }
 
 async function isUrlReady(url, timeoutMs) {
@@ -1702,9 +1720,11 @@ async function main() {
         String(options.timeoutMs),
         "--interval-ms",
         String(options.intervalMs),
+        ...(options.includeLiveProviderSmokes ? ["--allow-live-provider"] : []),
       ],
       "smoke:at-command-registry",
       options.timeoutMs + 30_000,
+      options.includeLiveProviderSmokes ? liveProviderSmokeEnv() : {},
     );
 
     await runPageSmokeCommand(
@@ -1726,26 +1746,34 @@ async function main() {
       options.timeoutMs + 30_000,
     );
 
-    await runPageSmokeCommand(
-      options,
-      [
-        "run",
+    if (options.includeLiveProviderSmokes) {
+      await runPageSmokeCommand(
+        options,
+        [
+          "run",
+          "smoke:claw-chat-ready-streaming",
+          "--",
+          "--app-url",
+          options.appUrl,
+          "--health-url",
+          options.healthUrl,
+          "--invoke-url",
+          options.invokeUrl,
+          "--timeout-ms",
+          String(options.timeoutMs),
+          "--interval-ms",
+          String(options.intervalMs),
+          "--allow-live-provider",
+        ],
         "smoke:claw-chat-ready-streaming",
-        "--",
-        "--app-url",
-        options.appUrl,
-        "--health-url",
-        options.healthUrl,
-        "--invoke-url",
-        options.invokeUrl,
-        "--timeout-ms",
-        String(options.timeoutMs),
-        "--interval-ms",
-        String(options.intervalMs),
-      ],
-      "smoke:claw-chat-ready-streaming",
-      options.timeoutMs + 30_000,
-    );
+        options.timeoutMs + 30_000,
+        liveProviderSmokeEnv(),
+      );
+    } else {
+      console.log(
+        "[verify:gui-smoke] 跳过 smoke:claw-chat-ready-streaming；该 smoke 会调用真实模型 Provider。需要时请显式传入 --include-live-provider-smokes。",
+      );
+    }
 
     await runPageSmokeCommand(
       options,

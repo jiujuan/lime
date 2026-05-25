@@ -41,7 +41,6 @@ import {
 } from "../hooks/agentChatToolResult";
 import {
   normalizeSiteToolResultSummary,
-  resolveSiteProjectTargetLabel,
   resolveSiteSavedContentTargetFromMetadata,
 } from "../utils/siteToolResultSummary";
 import { normalizeToolSearchResultSummary } from "../utils/toolSearchResultSummary";
@@ -152,10 +151,11 @@ const buildRenderedToolResultContent = (params: {
   content: string;
   filePath?: string | null;
   resultPath?: string | null;
+  emptyOutputLabel: string;
 }): string => {
-  const { toolCall, content, filePath, resultPath } = params;
-  if (!content.trim() || content === "(无输出)") {
-    return "```text\n(无输出)\n```";
+  const { toolCall, content, filePath, resultPath, emptyOutputLabel } = params;
+  if (!content.trim() || content === emptyOutputLabel) {
+    return `\`\`\`text\n${emptyOutputLabel}\n\`\`\``;
   }
   if (content.includes("```")) {
     return content;
@@ -205,7 +205,10 @@ const resolveToolGroupKey = (toolCall: ToolCallState): string => {
   return `${info.groupTitle}:${toolCall.status}`;
 };
 
-const buildToolGroupPreview = (toolCalls: ToolCallState[]): string => {
+const buildToolGroupPreview = (
+  toolCalls: ToolCallState[],
+  formatHiddenCount: (count: number) => string,
+): string => {
   const previews = toolCalls
     .slice(0, 2)
     .map((toolCall) => {
@@ -220,7 +223,7 @@ const buildToolGroupPreview = (toolCalls: ToolCallState[]): string => {
 
   const hiddenCount = Math.max(toolCalls.length - previews.length, 0);
   return hiddenCount > 0
-    ? `${previews.join(" · ")} 等 ${hiddenCount} 项`
+    ? `${previews.join(" · ")} ${formatHiddenCount(hiddenCount)}`
     : previews.join(" · ");
 };
 
@@ -275,6 +278,17 @@ interface SkillInvocationContentInfo {
   isSnapshotStandard: boolean | null;
 }
 
+interface CommandToolSummary {
+  command: string | null;
+  cwd: string | null;
+  exitCode: number | null;
+  stdoutLength: number | null;
+  stderrLength: number | null;
+  sandboxed: boolean | null;
+  sandboxType: string | null;
+  outputTruncated: boolean | null;
+}
+
 const readRecordString = (
   record: Record<string, unknown> | undefined,
   keys: string[],
@@ -315,6 +329,88 @@ const readRecordBoolean = (
     }
   }
   return null;
+};
+
+const resolveCommandToolSummary = (params: {
+  toolName: string;
+  args: Record<string, ToolCallArgumentValue>;
+  metadata?: Record<string, unknown>;
+}): CommandToolSummary | null => {
+  const { toolName, args, metadata } = params;
+  const normalizedName = normalizeToolNameKeyFromInfo(toolName);
+  const command = readRecordString(args, [
+    "command",
+    "cmd",
+    "script",
+    "input",
+    "code",
+  ]);
+  const cwd =
+    readRecordString(metadata, [
+      "cwd",
+      "working_directory",
+      "workingDirectory",
+    ]) ||
+    readRecordString(args, ["cwd", "working_directory", "workingDirectory"]);
+  const exitCode = readRecordNumber(metadata, ["exit_code", "exitCode"]);
+  const stdoutLength = readRecordNumber(metadata, [
+    "stdout_length",
+    "stdoutLength",
+    "stdout_bytes",
+    "stdoutBytes",
+  ]);
+  const stderrLength = readRecordNumber(metadata, [
+    "stderr_length",
+    "stderrLength",
+    "stderr_bytes",
+    "stderrBytes",
+  ]);
+  const sandboxed = readRecordBoolean(metadata, ["sandboxed"]);
+  const sandboxType = readRecordString(metadata, [
+    "sandbox_type",
+    "sandboxType",
+  ]);
+  const outputTruncated = readRecordBoolean(metadata, [
+    "output_truncated",
+    "outputTruncated",
+  ]);
+  const hasCommandFact =
+    command !== null ||
+    cwd !== null ||
+    exitCode !== null ||
+    stdoutLength !== null ||
+    stderrLength !== null ||
+    sandboxed !== null ||
+    sandboxType !== null ||
+    outputTruncated !== null;
+
+  if (!hasCommandFact) {
+    return null;
+  }
+
+  const isCommandLike =
+    normalizedName.includes("bash") ||
+    normalizedName.includes("shell") ||
+    normalizedName.includes("exec") ||
+    normalizedName.includes("powershell") ||
+    normalizedName.includes("terminal") ||
+    normalizedName.includes("command") ||
+    exitCode !== null;
+
+  if (!isCommandLike) {
+    return null;
+  }
+
+  return {
+    command,
+    cwd,
+    exitCode,
+    stdoutLength,
+    stderrLength,
+    sandboxed,
+    sandboxType,
+    outputTruncated,
+  };
 };
 
 const resolveSkillInvocationContentInfo = (params: {
@@ -523,6 +619,7 @@ const ToolLogsView: React.FC<ToolLogsViewProps> = ({
   working,
   isStartExpanded = false,
 }) => {
+  const { t } = useTranslation("agent");
   const boxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -535,7 +632,7 @@ const ToolLogsView: React.FC<ToolLogsViewProps> = ({
     <ExpandablePanel
       label={
         <span className="pl-2 py-1 text-sm flex items-center gap-2">
-          <span>日志</span>
+          <span>{t("agentChat.toolCall.logs.title")}</span>
           {working && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
         </span>
       }
@@ -572,13 +669,16 @@ const ToolResultView: React.FC<ToolResultViewProps> = ({
   isError = false,
   isStartExpanded = false,
 }) => {
+  const { t } = useTranslation("agent");
   return (
     <ExpandablePanel
       label={
         <span
           className={cn("pl-2 py-1 text-sm", isError && "text-destructive")}
         >
-          {isError ? "错误" : "输出"}
+          {isError
+            ? t("agentChat.toolCall.result.error")
+            : t("agentChat.toolCall.result.output")}
         </span>
       }
       isStartExpanded={isStartExpanded}
@@ -590,7 +690,7 @@ const ToolResultView: React.FC<ToolResultViewProps> = ({
             isError ? "text-destructive" : "text-foreground/80",
           )}
         >
-          {result || "(无输出)"}
+          {result || t("agentChat.toolCall.result.empty")}
         </pre>
       </div>
     </ExpandablePanel>
@@ -636,6 +736,7 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     useState(false);
   const [previewImageSrc, setPreviewImageSrc] = useState<string | null>(null);
   const hasUserToggledExpandedRef = useRef(false);
+  const emptyOutputLabel = t("agentChat.toolCall.result.empty");
 
   // 解析参数
   const parsedArgs = useMemo(
@@ -715,11 +816,11 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
       return (
         resolveToolErrorDetailText(toolCall.name, normalized) ||
         normalized ||
-        "(无输出)"
+        emptyOutputLabel
       );
     }
-    return normalized || "(无输出)";
-  }, [isFailed, rawResultText, toolCall.name]);
+    return normalized || emptyOutputLabel;
+  }, [emptyOutputLabel, isFailed, rawResultText, toolCall.name]);
   const isResultFailure = useMemo(() => {
     if (!toolCall.result) return isFailed;
     return !isToolResultSuccessful({
@@ -727,6 +828,24 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
       metadata: resultMetadata,
     });
   }, [isFailed, resultMetadata, toolCall.result]);
+  const resolveSiteProjectTargetDisplay = useCallback(
+    (params: { source?: string; projectId?: string }): string => {
+      if (params.source === "context_project") {
+        return t("agentChat.toolCall.siteResult.target.currentProject");
+      }
+      if (params.source === "explicit_project") {
+        return t("agentChat.toolCall.siteResult.target.selectedProject");
+      }
+      const projectId = params.projectId?.trim();
+      if (projectId) {
+        return t("agentChat.toolCall.siteResult.target.project", {
+          projectId,
+        });
+      }
+      return t("agentChat.toolCall.siteResult.target.currentProject");
+    },
+    [t],
+  );
   const resultMetaItems = useMemo(() => {
     if (!resultMetadata) return [];
 
@@ -735,14 +854,23 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
       resultMetadata.lime_offloaded === true ||
       resultMetadata.output_truncated === true
     ) {
-      items.push("内容较长，已省略部分文本");
+      items.push(t("agentChat.toolCall.resultNotice.truncatedPreview"));
     }
     if (typeof resultMetadata.exit_code === "number" && isResultFailure) {
-      items.push("命令返回错误");
+      items.push(t("agentChat.toolCall.resultNotice.commandFailed"));
     }
 
     return items;
-  }, [isResultFailure, resultMetadata]);
+  }, [isResultFailure, resultMetadata, t]);
+  const commandSummary = useMemo(
+    () =>
+      resolveCommandToolSummary({
+        toolName: toolCall.name,
+        args: parsedArgs,
+        metadata: resultMetadata,
+      }),
+    [parsedArgs, resultMetadata, toolCall.name],
+  );
   const siteResultNotices = useMemo(() => {
     if (!siteResultSummary) return [] as ToolResultNotice[];
 
@@ -750,13 +878,16 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     const savedProjectId =
       siteResultSummary.savedProjectId ||
       siteResultSummary.savedContent?.projectId;
-    const savedProjectTarget = resolveSiteProjectTargetLabel({
+    const savedProjectTarget = resolveSiteProjectTargetDisplay({
       source: siteResultSummary.savedBy,
       projectId: savedProjectId,
     });
 
     if (siteResultSummary.savedContent?.title) {
-      const text = `结果已自动保存到${savedProjectTarget}：${siteResultSummary.savedContent.title}`;
+      const text = t("agentChat.toolCall.siteResult.saved", {
+        target: savedProjectTarget,
+        title: siteResultSummary.savedContent.title,
+      });
       notices.push({
         key: "site-save-success",
         text,
@@ -767,7 +898,7 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     if (siteResultSummary.savedContent?.markdownRelativePath) {
       notices.push({
         key: "site-save-markdown-path",
-        text: "已导出 Markdown 文稿",
+        text: t("agentChat.toolCall.siteResult.markdownExported"),
         tone: "neutral",
       });
     }
@@ -775,20 +906,26 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     if (typeof siteResultSummary.savedContent?.imageCount === "number") {
       notices.push({
         key: "site-save-images",
-        text: `附带图片 ${siteResultSummary.savedContent.imageCount} 张`,
+        text: t("agentChat.toolCall.siteResult.images", {
+          count: siteResultSummary.savedContent.imageCount,
+        }),
         tone: "neutral",
       });
     }
 
     if (siteResultSummary.saveSkippedProjectId) {
-      const skippedProjectTarget = resolveSiteProjectTargetLabel({
+      const skippedProjectTarget = resolveSiteProjectTargetDisplay({
         source: siteResultSummary.saveSkippedBy,
         projectId: siteResultSummary.saveSkippedProjectId,
       });
       const text =
         toolCall.status === "failed"
-          ? `执行失败，未保存到${skippedProjectTarget}`
-          : `本次结果未保存到${skippedProjectTarget}`;
+          ? t("agentChat.toolCall.siteResult.saveSkippedAfterFailure", {
+              target: skippedProjectTarget,
+            })
+          : t("agentChat.toolCall.siteResult.saveSkipped", {
+              target: skippedProjectTarget,
+            });
       notices.push({
         key: "site-save-skipped",
         text,
@@ -799,12 +936,14 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     if (siteResultSummary.saveErrorMessage) {
       notices.push({
         key: "site-save-error",
-        text: `自动保存失败：${siteResultSummary.saveErrorMessage}`,
+        text: t("agentChat.toolCall.siteResult.saveError", {
+          message: siteResultSummary.saveErrorMessage,
+        }),
         tone: "error",
       });
     }
     return notices;
-  }, [siteResultSummary, toolCall.status]);
+  }, [resolveSiteProjectTargetDisplay, siteResultSummary, t, toolCall.status]);
   const resultPath = useMemo(() => {
     if (!resultMetadata) return undefined;
     if (
@@ -813,7 +952,7 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     ) {
       const fullPath = resultMetadata.offload_file.trim();
       return {
-        label: "结果文件",
+        label: t("agentChat.toolCall.resultFile"),
         value: fullPath,
         displayValue: resolveUserFacingPathName(fullPath) || fullPath,
       };
@@ -824,7 +963,7 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     ) {
       const fullPath = resultMetadata.output_file.trim();
       return {
-        label: "结果文件",
+        label: t("agentChat.toolCall.resultFile"),
         value: fullPath,
         displayValue: resolveUserFacingPathName(fullPath) || fullPath,
       };
@@ -832,13 +971,13 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     if (typeof resultMetadata.path === "string" && resultMetadata.path.trim()) {
       const fullPath = resultMetadata.path.trim();
       return {
-        label: "结果文件",
+        label: t("agentChat.toolCall.resultFile"),
         value: fullPath,
         displayValue: resolveUserFacingPathName(fullPath) || fullPath,
       };
     }
     return undefined;
-  }, [resultMetadata]);
+  }, [resultMetadata, t]);
   const openableFilePath = useMemo(
     () => resultPath?.value || filePath,
     [filePath, resultPath?.value],
@@ -850,8 +989,9 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
         content: resultText,
         filePath,
         resultPath: resultPath?.value,
+        emptyOutputLabel,
       }),
-    [filePath, resultPath?.value, resultText, toolCall],
+    [emptyOutputLabel, filePath, resultPath?.value, resultText, toolCall],
   );
   const toolHeadline = useMemo(
     () =>
@@ -887,7 +1027,7 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
   );
   const hasToolSearchSummary = Boolean(toolSearchSummary);
   const shouldShowRawSearchResultToggle =
-    hasSearchResults && resultText !== "(无输出)";
+    hasSearchResults && resultText !== emptyOutputLabel;
   const shouldRenderResultPanel =
     isExpanded &&
     hasResult &&
@@ -908,6 +1048,17 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
   const skillContentTitle = skillInvocationContentInfo.snapshotContent
     ? t("agentChat.toolCall.skillContent.title.snapshot")
     : t("agentChat.toolCall.skillContent.title.current");
+  const openInCanvasTitle = t("agentChat.toolCall.openInCanvas");
+  const openInCanvasAriaLabel = openableFilePath
+    ? t("agentChat.toolCall.openInCanvasWithTarget", {
+        target: openableFilePath,
+      })
+    : openInCanvasTitle;
+  const resultImageAlt = t("agentChat.toolCall.resultImage.alt");
+  const resultImageOpenTitle = t("agentChat.markdown.image.openTitle");
+  const openExternalUnsupportedMessage = t(
+    "agentChat.toolCall.error.openExternalUnsupported",
+  );
 
   const handleOpenExternalUrl = useCallback(async (url: string) => {
     try {
@@ -917,9 +1068,9 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
         window.open(url, "_blank");
         return;
       }
-      throw new Error("当前环境不支持打开外部链接");
+      throw new Error(openExternalUnsupportedMessage);
     }
-  }, []);
+  }, [openExternalUnsupportedMessage]);
 
   useEffect(() => {
     setIsSkillContentExpanded(false);
@@ -972,8 +1123,17 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
   }, [onOpenSavedSiteContent, savedSiteContentTarget]);
   const openSavedSiteContentLabel =
     savedSiteContentTarget?.preferredTarget === "project_file"
-      ? "在下方预览导出 Markdown"
-      : "打开已保存内容";
+      ? t("agentChat.toolCall.siteResult.openMarkdownPreview")
+      : t("agentChat.toolCall.siteResult.openSavedContent");
+  const resultToggleTitle = isExpanded
+    ? t("agentChat.toolCall.result.collapse")
+    : t("agentChat.toolCall.result.expand");
+  const searchRawToggleLabel = showRawSearchResultOutput
+    ? t("agentChat.toolCall.searchRaw.collapse")
+    : t("agentChat.toolCall.searchRaw.expand");
+  const searchRawToggleAriaLabel = showRawSearchResultOutput
+    ? t("agentChat.toolCall.searchRaw.collapseAria")
+    : t("agentChat.toolCall.searchRaw.expandAria");
 
   const handleToggleExpanded = useCallback(() => {
     hasUserToggledExpandedRef.current = true;
@@ -1074,8 +1234,8 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
               <button
                 onClick={handleOpenFile}
                 className="rounded-md p-1 transition-colors hover:bg-slate-100"
-                title="在画布中打开"
-                aria-label={`在画布中打开-${openableFilePath}`}
+                title={openInCanvasTitle}
+                aria-label={openInCanvasAriaLabel}
               >
                 <ExternalLink className="h-3.5 w-3.5 text-slate-500 hover:text-slate-900" />
               </button>
@@ -1084,7 +1244,7 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
               <button
                 onClick={handleToggleExpanded}
                 className="rounded-md p-1 transition-colors hover:bg-slate-100"
-                title={isExpanded ? "收起结果" : "查看结果"}
+                title={resultToggleTitle}
               >
                 <ChevronRight
                   className={cn(
@@ -1126,8 +1286,8 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
               <button
                 onClick={handleOpenFile}
                 className="rounded-md p-1 transition-colors hover:bg-slate-100"
-                title="在画布中打开"
-                aria-label={`在画布中打开-${openableFilePath}`}
+                title={openInCanvasTitle}
+                aria-label={openInCanvasAriaLabel}
               >
                 <ExternalLink className="h-3.5 w-3.5 text-slate-500 hover:text-slate-900" />
               </button>
@@ -1137,7 +1297,7 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
               <button
                 onClick={handleToggleExpanded}
                 className="rounded-md p-1 transition-colors hover:bg-slate-100"
-                title={isExpanded ? "收起结果" : "查看结果"}
+                title={resultToggleTitle}
               >
                 <ChevronRight
                   className={cn(
@@ -1158,11 +1318,11 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
               key={`${image.src.slice(0, 48)}-${index}`}
               className="overflow-hidden rounded-lg border border-slate-200 bg-white"
               onClick={() => setPreviewImageSrc(image.src)}
-              title="点击查看大图"
+              title={resultImageOpenTitle}
             >
               <img
                 src={image.src}
-                alt="工具结果图片预览"
+                alt={resultImageAlt}
                 className="h-20 w-20 object-cover"
                 loading="lazy"
               />
@@ -1184,16 +1344,12 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
               <button
                 type="button"
                 className="rounded-md px-2 py-1 text-[11px] text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                aria-label={
-                  showRawSearchResultOutput
-                    ? "收起搜索文本详情"
-                    : "查看搜索文本详情"
-                }
+                aria-label={searchRawToggleAriaLabel}
                 onClick={() =>
                   setShowRawSearchResultOutput((current) => !current)
                 }
               >
-                {showRawSearchResultOutput ? "收起文本详情" : "查看文本详情"}
+                {searchRawToggleLabel}
               </button>
             </div>
           ) : null}
@@ -1290,6 +1446,81 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
           className="mb-2 ml-6 mt-1.5 space-y-2"
           data-testid="tool-call-result-panel"
         >
+          {commandSummary ? (
+            <div
+              className="rounded-[12px] border border-slate-200 bg-slate-50 px-3 py-2"
+              data-testid="tool-call-command-summary"
+            >
+              <div className="text-[11px] font-semibold text-slate-700">
+                {t("agentChat.toolCall.commandSummary.title")}
+              </div>
+              <div className="mt-1 space-y-1 text-[11px] text-slate-600">
+                {commandSummary.command ? (
+                  <div className="flex min-w-0 gap-1.5">
+                    <span className="shrink-0 text-slate-500">
+                      {t("agentChat.toolCall.commandSummary.command")}
+                    </span>
+                    <code className="min-w-0 break-all rounded bg-white px-1 py-0.5 font-mono text-[11px] text-slate-800">
+                      {commandSummary.command}
+                    </code>
+                  </div>
+                ) : null}
+                {commandSummary.cwd ? (
+                  <div className="flex min-w-0 gap-1.5">
+                    <span className="shrink-0 text-slate-500">
+                      {t("agentChat.toolCall.commandSummary.cwd")}
+                    </span>
+                    <span className="min-w-0 break-all text-slate-700">
+                      {commandSummary.cwd}
+                    </span>
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap gap-x-3 gap-y-1">
+                  {commandSummary.exitCode !== null ? (
+                    <span>
+                      {t("agentChat.toolCall.commandSummary.exitCode", {
+                        value: commandSummary.exitCode,
+                      })}
+                    </span>
+                  ) : null}
+                  {commandSummary.stdoutLength !== null ? (
+                    <span>
+                      {t("agentChat.toolCall.commandSummary.stdout", {
+                        value: commandSummary.stdoutLength,
+                      })}
+                    </span>
+                  ) : null}
+                  {commandSummary.stderrLength !== null ? (
+                    <span>
+                      {t("agentChat.toolCall.commandSummary.stderr", {
+                        value: commandSummary.stderrLength,
+                      })}
+                    </span>
+                  ) : null}
+                  {commandSummary.sandboxed === true ? (
+                    <span>
+                      {commandSummary.sandboxType
+                        ? t(
+                            "agentChat.toolCall.commandSummary.sandboxEnabledWithType",
+                            { type: commandSummary.sandboxType },
+                          )
+                        : t("agentChat.toolCall.commandSummary.sandboxEnabled")}
+                    </span>
+                  ) : null}
+                  {commandSummary.sandboxed === false ? (
+                    <span>
+                      {t("agentChat.toolCall.commandSummary.sandboxDisabled")}
+                    </span>
+                  ) : null}
+                  {commandSummary.outputTruncated === true ? (
+                    <span>
+                      {t("agentChat.toolCall.commandSummary.truncated")}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
           {resultMetaItems.length > 0 ? (
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
               {resultMetaItems.map((item) => (
@@ -1353,7 +1584,7 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
         >
           <img
             src={previewImageSrc}
-            alt="工具结果图片大图"
+            alt={resultImageAlt}
             className="mx-auto max-h-full max-w-full rounded-lg object-contain"
           />
         </button>
@@ -1506,11 +1737,14 @@ function WorkToolCallGroup({
   onFileClick?: (fileName: string, content: string) => void;
   onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
 }) {
+  const { t } = useTranslation("agent");
   const hasRunning = toolCalls.some((item) => item.status === "running");
   const hasFailed = toolCalls.some((item) => item.status === "failed");
   const [expanded, setExpanded] = useState(hasRunning || hasFailed);
   const headline = buildToolGroupHeadlineFromInfo(toolCalls);
-  const preview = buildToolGroupPreview(toolCalls);
+  const preview = buildToolGroupPreview(toolCalls, (count) =>
+    t("agentChat.toolCall.group.hiddenItems", { count }),
+  );
 
   useEffect(() => {
     if (hasRunning || hasFailed) {
@@ -1524,7 +1758,11 @@ function WorkToolCallGroup({
         type="button"
         className="flex w-full items-start gap-2.5 py-1.5 text-left transition-colors hover:bg-slate-50"
         onClick={() => setExpanded((prev) => !prev)}
-        aria-label={expanded ? "收起工具批次" : "展开工具批次"}
+        aria-label={
+          expanded
+            ? t("agentChat.toolCall.group.collapseWork")
+            : t("agentChat.toolCall.group.expandWork")
+        }
       >
         <span className="pt-0.5 text-sm text-slate-400">•</span>
         <span className="min-w-0 flex-1">
@@ -1574,6 +1812,7 @@ function SearchToolCallGroup({
   onFileClick?: (fileName: string, content: string) => void;
   onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
 }) {
+  const { t } = useTranslation("agent");
   const [expanded, setExpanded] = useState(true);
   const headline = buildToolGroupHeadlineFromInfo(toolCalls);
   const queryPreview = toolCalls
@@ -1588,7 +1827,11 @@ function SearchToolCallGroup({
         type="button"
         className="flex w-full items-start gap-2.5 py-1.5 text-left transition-colors hover:bg-slate-50"
         onClick={() => setExpanded((prev) => !prev)}
-        aria-label={expanded ? "收起搜索批次" : "展开搜索批次"}
+        aria-label={
+          expanded
+            ? t("agentChat.toolCall.group.collapseSearch")
+            : t("agentChat.toolCall.group.expandSearch")
+        }
       >
         <span className="pt-0.5 text-sm text-slate-400">•</span>
         <span className="min-w-0 flex-1">
@@ -1598,7 +1841,11 @@ function SearchToolCallGroup({
           {!expanded ? (
             <span className="mt-0.5 block truncate text-xs text-slate-500">
               {queryPreview}
-              {hiddenCount > 0 ? ` 等 ${hiddenCount} 组` : ""}
+              {hiddenCount > 0
+                ? t("agentChat.toolCall.group.hiddenSearchGroups", {
+                    count: hiddenCount,
+                  })
+                : ""}
             </span>
           ) : null}
         </span>

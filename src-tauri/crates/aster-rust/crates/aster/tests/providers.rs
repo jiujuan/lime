@@ -366,12 +366,26 @@ fn load_env() {
     }
 }
 
+fn real_api_test_enabled() -> bool {
+    std::env::var("LIME_REAL_API_TEST").as_deref() == Ok("1")
+        || std::env::var("PROXYCAST_REAL_API_TEST").as_deref() == Ok("1")
+}
+
 async fn test_provider(
     name: &str,
     model_name: &str,
     required_vars: &[&str],
     env_modifications: Option<HashMap<&str, Option<String>>>,
 ) -> Result<()> {
+    if !real_api_test_enabled() {
+        println!(
+            "Skipping {} tests - set LIME_REAL_API_TEST=1 to run real provider smoke",
+            name
+        );
+        TEST_REPORT.record_skip(name);
+        return Ok(());
+    }
+
     TEST_REPORT.record_fail(name);
 
     let original_env = {

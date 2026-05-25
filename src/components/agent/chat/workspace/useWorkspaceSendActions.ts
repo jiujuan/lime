@@ -54,6 +54,7 @@ import {
   resolveMentionCommandMergedPrefillReplayText,
   resolveMentionCommandPrefillReplayText,
 } from "../utils/mentionCommandReplayText";
+import { resolveMentionCommandPrefixMatch } from "../utils/mentionCommandPrefixMatch";
 import { parseTranscriptionWorkbenchCommand } from "../utils/transcriptionWorkbenchCommand";
 import { parseTypesettingWorkbenchCommand } from "../utils/typesettingWorkbenchCommand";
 import { parseUploadWorkbenchCommand } from "../utils/uploadWorkbenchCommand";
@@ -113,6 +114,7 @@ import {
   hasModelSkillLaunchRequestMetadata,
   hasServiceSkillLaunchRequestMetadata,
   primeBrowserAssistBeforeSend,
+  resolveCodeOrchestratedRuntimeDefaults,
   type ContextWorkspaceSummary,
   type EnsureBrowserAssistCanvasOptions,
 } from "./workspaceSendHelpers";
@@ -904,46 +906,6 @@ function resolveBareMentionCommandPrefillSourceText(
   }
 
   return `${matched.commandPrefix} ${replayText}`;
-}
-
-function resolveMentionCommandPrefixMatch(
-  rawText: string,
-  mentionCommandPrefixKeyMap: Map<string, string>,
-): { commandPrefix: string; commandKey: string; hasBody: boolean } | null {
-  const trimmedStart = rawText.trimStart();
-  if (!trimmedStart.startsWith("@")) {
-    return null;
-  }
-
-  const normalized = trimmedStart.toLowerCase();
-  let matchedPrefix: string | null = null;
-  let matchedCommandKey: string | null = null;
-
-  for (const [prefix, commandKey] of mentionCommandPrefixKeyMap.entries()) {
-    if (
-      normalized === prefix ||
-      normalized.startsWith(`${prefix} `) ||
-      normalized.startsWith(`${prefix}\n`)
-    ) {
-      if (!matchedPrefix || prefix.length > matchedPrefix.length) {
-        matchedPrefix = prefix;
-        matchedCommandKey = commandKey;
-      }
-    }
-  }
-
-  if (!matchedPrefix || !matchedCommandKey) {
-    return null;
-  }
-
-  const commandPrefix = trimmedStart.slice(0, matchedPrefix.length);
-  const hasBody = trimmedStart.slice(matchedPrefix.length).trim().length > 0;
-
-  return {
-    commandPrefix,
-    commandKey: matchedCommandKey,
-    hasBody,
-  };
 }
 
 function resolvePreferredRecentCommandText(
@@ -4443,7 +4405,10 @@ export function useWorkspaceSendActions({
         !parsedPresentationWorkbenchCommand &&
         !parsedFormWorkbenchCommand &&
         !parsedWebpageWorkbenchCommand
-          ? parseCodeWorkbenchCommand(sourceText)
+          ? parseCodeWorkbenchCommand(sourceText, {
+              commandKey: "code_runtime",
+              mentionCommandPrefixKeyMap,
+            })
           : null;
       if (parsedCodeWorkbenchCommand) {
         const existingHarnessMetadata =
@@ -4464,7 +4429,6 @@ export function useWorkspaceSendActions({
               ...existingHarnessMetadata,
               preferred_team_preset_id: "code-triage-team",
               code_command: {
-                kind: parsedCodeWorkbenchCommand.taskType || "implementation",
                 prompt:
                   parsedCodeWorkbenchCommand.prompt ||
                   parsedCodeWorkbenchCommand.body,
@@ -5172,7 +5136,6 @@ export function useWorkspaceSendActions({
         text,
         images,
         sendBoundary,
-        effectiveToolPreferences,
         effectiveWebSearch,
         effectiveSearchMode,
         effectiveThinking,
@@ -5190,6 +5153,30 @@ export function useWorkspaceSendActions({
         messagesCount,
         sourceTextLength: sourceText.trim().length,
       });
+      const runtimeDefaultsSourceMetadata = {
+        ...(workspaceRequestMetadataBase || {}),
+        ...(sendOptions?.requestMetadata || {}),
+      };
+      const hasExplicitCommandOrSkillLaunch =
+        sourceText.trim().startsWith("@") ||
+        sourceText.trim().startsWith("/") ||
+        Boolean(sendBoundary.browserRequirementMatch) ||
+        hasServiceSkillLaunchRequestMetadata(runtimeDefaultsSourceMetadata) ||
+        hasModelSkillLaunchRequestMetadata(runtimeDefaultsSourceMetadata);
+      const runtimeDefaults = resolveCodeOrchestratedRuntimeDefaults({
+        executionStrategy: sendExecutionStrategy ?? executionStrategy,
+        workspaceRequestMetadataBase,
+        sendOptions,
+        effectiveToolPreferences: plan.effectiveToolPreferences,
+        mappedTheme,
+        preferredTeamPresetId,
+        selectedTeam,
+        hasExplicitCommandOrSkillLaunch,
+      });
+      const effectiveToolPreferences =
+        runtimeDefaults.effectiveToolPreferences;
+      const effectivePreferredTeamPresetId =
+        runtimeDefaults.preferredTeamPresetId;
       setRuntimeTeamDispatchPreview(null);
       setInput("");
       setMentionedCharacters([]);
@@ -5235,7 +5222,7 @@ export function useWorkspaceSendActions({
           browserAssistProfileKey,
           browserAssistPreferredBackend,
           browserAssistAutoLaunch,
-          preferredTeamPresetId,
+          preferredTeamPresetId: effectivePreferredTeamPresetId,
           selectedTeam,
           selectedTeamLabel,
           selectedTeamSummary,
@@ -5386,6 +5373,7 @@ export function useWorkspaceSendActions({
       contextWorkspace.activeContextPrompt,
       contextWorkspace.enabled,
       currentGateKey,
+      executionStrategy,
       finalizeAfterSendSuccess,
       isThemeWorkbench,
       mappedTheme,

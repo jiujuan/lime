@@ -7572,11 +7572,14 @@ mod tests {
         [
             "runtime_turn.rs",
             "runtime_turn/flow.rs",
+            "runtime_turn/flow/build.rs",
+            "runtime_turn/flow/prompt.rs",
             "runtime_turn/prompt_composition.rs",
             "runtime_turn/request_metadata.rs",
             "runtime_turn/request_resolution.rs",
             "runtime_turn/skill_launch.rs",
             "runtime_turn/stream.rs",
+            "runtime_turn/stream/finalize.rs",
         ]
         .into_iter()
         .map(|relative_path| {

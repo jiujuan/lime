@@ -7,6 +7,10 @@ import path from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
 import { chromium } from "playwright";
+import {
+  assertLiveProviderSmokeAllowed,
+  liveProviderSmokeAllowed,
+} from "./lib/live-provider-smoke-gate.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -21,6 +25,7 @@ const DEFAULTS = {
   includeContentFactoryCompletionE2e: false,
   completionTimeoutMs: 90_000,
   contentFactoryAction: "build-store",
+  allowLiveProvider: liveProviderSmokeAllowed(),
 };
 
 const ACCOUNT_MENU_BUTTON_SELECTOR = '[data-testid="app-sidebar-account-button"]';
@@ -137,6 +142,10 @@ function parseArgs(argv) {
     if (arg === "--include-content-factory-completion-e2e") {
       options.includeContentFactoryActionE2e = true;
       options.includeContentFactoryCompletionE2e = true;
+    }
+    if (arg === "--allow-live-provider") {
+      options.allowLiveProvider = true;
+      continue;
     }
     if (arg === "--completion-timeout-ms" && argv[index + 1]) {
       options.completionTimeoutMs = Number(argv[index + 1]);
@@ -1868,6 +1877,14 @@ async function ensureContentFactoryInstalled(page, options, reason) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  if (options.includeContentFactoryActionE2e) {
+    assertLiveProviderSmokeAllowed({
+      allowed: options.allowLiveProvider,
+      scriptName: options.includeContentFactoryCompletionE2e
+        ? "smoke:agent-apps --include-content-factory-completion-e2e"
+        : "smoke:agent-apps --include-content-factory-action-e2e",
+    });
+  }
   fs.mkdirSync(options.evidenceDir, { recursive: true });
   await waitForHealth(options);
 

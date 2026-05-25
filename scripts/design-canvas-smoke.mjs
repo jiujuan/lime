@@ -9,6 +9,10 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import zlib from "node:zlib";
 import { chromium } from "playwright";
+import {
+  assertLiveProviderSmokeAllowed,
+  liveProviderSmokeAllowed,
+} from "./lib/live-provider-smoke-gate.mjs";
 
 const execFileAsync = promisify(execFile);
 const HTTP_JSON_EXECUTOR_VERIFIER_PATH = fileURLToPath(
@@ -32,6 +36,7 @@ const DEFAULTS = {
   imageProvider: "",
   imageModel: "",
   projectRoundtrip: true,
+  allowLiveProvider: liveProviderSmokeAllowed(),
 };
 
 const ACTION_TIMEOUT_MS = 45_000;
@@ -299,6 +304,7 @@ Lime Design Canvas Smoke
   --image-task <mode>      图片任务模式：none / auto-refresh-fixture / live-single-layer，默认 none
   --image-provider <id>    live-single-layer 使用的真实图片 Provider ID
   --image-model <id>       live-single-layer 使用的真实图片模型 ID
+  --allow-live-provider    确认允许 live-single-layer 调用真实图片 Provider；默认禁止以避免消耗额度
   --project-roundtrip      上传拆层前验证 prompt seed 工程保存与重新打开（默认开启）
   --skip-project-roundtrip 跳过工程保存/重新打开，仅用于定位非持久化链路问题
   -h, --help               显示帮助
@@ -365,6 +371,11 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (arg === "--allow-live-provider") {
+      options.allowLiveProvider = true;
+      continue;
+    }
+
     if (arg === "--help" || arg === "-h") {
       printHelp();
       process.exit(0);
@@ -402,6 +413,12 @@ function parseArgs(argv) {
   }
   if (options.imageTask === "live-single-layer" && !options.imageModel) {
     throw new Error("--image-task live-single-layer 必须提供 --image-model");
+  }
+  if (options.imageTask === "live-single-layer") {
+    assertLiveProviderSmokeAllowed({
+      allowed: options.allowLiveProvider,
+      scriptName: "scripts/design-canvas-smoke.mjs --image-task live-single-layer",
+    });
   }
 
   return options;

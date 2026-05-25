@@ -37,6 +37,7 @@ import type {
   TeamDefinitionSource,
   TeamRoleDefinition,
 } from "../utils/teamDefinitions";
+import { resolveDefaultTeamPresetId } from "../utils/teamPresets";
 import type { UseRuntimeTeamFormationResult } from "../hooks/useRuntimeTeamFormation";
 import type { TeamWorkspaceRuntimeFormationState } from "../teamWorkspaceRuntime";
 import {
@@ -630,6 +631,84 @@ interface BuildWorkspaceRequestMetadataOptions {
   selectedTeamSummary?: string;
   teamMemoryShadowSnapshot?: TeamMemorySnapshot | null;
   agentResponseLanguage?: string | null;
+}
+
+export interface ResolveCodeOrchestratedRuntimeDefaultsOptions {
+  executionStrategy?: AsterExecutionStrategy | null;
+  workspaceRequestMetadataBase?: Record<string, unknown>;
+  sendOptions?: HandleSendOptions;
+  effectiveToolPreferences: ChatToolPreferences;
+  mappedTheme: ThemeType;
+  preferredTeamPresetId?: string | null;
+  selectedTeam?: TeamDefinition | null;
+  hasExplicitCommandOrSkillLaunch?: boolean;
+}
+
+export interface ResolvedCodeOrchestratedRuntimeDefaults {
+  effectiveToolPreferences: ChatToolPreferences;
+  preferredTeamPresetId?: string | null;
+}
+
+function hasRequestTeamPreference(
+  metadata: Record<string, unknown> | undefined,
+): boolean {
+  return Boolean(
+    readMetadataText(metadata, "preferred_team_preset_id") ||
+      readMetadataText(metadata, "selected_team_id") ||
+      readMetadataText(metadata, "selected_team_source") ||
+      readMetadataText(metadata, "selected_team_label") ||
+      readMetadataText(metadata, "selected_team_summary") ||
+      readExistingTeamRoles(metadata),
+  );
+}
+
+export function resolveCodeOrchestratedRuntimeDefaults(
+  options: ResolveCodeOrchestratedRuntimeDefaultsOptions,
+): ResolvedCodeOrchestratedRuntimeDefaults {
+  const {
+    executionStrategy,
+    workspaceRequestMetadataBase,
+    sendOptions,
+    effectiveToolPreferences,
+    mappedTheme,
+    preferredTeamPresetId,
+    selectedTeam,
+    hasExplicitCommandOrSkillLaunch,
+  } = options;
+
+  if (
+    executionStrategy !== "code_orchestrated" ||
+    sendOptions?.purpose ||
+    sendOptions?.capabilityRoute ||
+    sendOptions?.skillRequest ||
+    hasExplicitCommandOrSkillLaunch
+  ) {
+    return {
+      effectiveToolPreferences,
+      preferredTeamPresetId,
+    };
+  }
+
+  const existingHarnessMetadata = extractExistingHarnessMetadata({
+    ...(workspaceRequestMetadataBase || {}),
+    ...(sendOptions?.requestMetadata || {}),
+  });
+  const hasExplicitTeamPreference = Boolean(
+    selectedTeam ||
+      preferredTeamPresetId ||
+      hasRequestTeamPreference(existingHarnessMetadata),
+  );
+
+  return {
+    effectiveToolPreferences: {
+      ...effectiveToolPreferences,
+      task: true,
+      subagent: true,
+    },
+    preferredTeamPresetId: hasExplicitTeamPreference
+      ? preferredTeamPresetId
+      : resolveDefaultTeamPresetId(mappedTheme),
+  };
 }
 
 function applyActiveContextPrompt(

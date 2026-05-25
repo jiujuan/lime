@@ -2061,12 +2061,16 @@ export function AgentChatWorkspace({
   }, [activeTheme, runtimeChatToolPreferences, syncChatToolPreferencesSource]);
 
   useEffect(() => {
-    if (chatToolPreferences.task === effectiveChatToolPreferences.task) {
+    if (
+      chatToolPreferences.task === effectiveChatToolPreferences.task &&
+      chatToolPreferences.subagent === effectiveChatToolPreferences.subagent
+    ) {
       return;
     }
 
     setChatToolPreferences(effectiveChatToolPreferences);
   }, [
+    chatToolPreferences.subagent,
     chatToolPreferences.task,
     effectiveChatToolPreferences,
     setChatToolPreferences,

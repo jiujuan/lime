@@ -38,7 +38,62 @@ describe("i18n namespace loader", () => {
         "agentChat.toolCall.skillContent.action.expandBody",
         "agentChat.toolCall.skillContent.action.collapseBody",
         "agentChat.toolCall.skillContent.meta.bytes",
+        "agentChat.toolCall.logs.title",
+        "agentChat.toolCall.commandSummary.title",
+        "agentChat.toolCall.commandSummary.command",
+        "agentChat.toolCall.commandSummary.cwd",
+        "agentChat.toolCall.commandSummary.exitCode",
+        "agentChat.toolCall.commandSummary.stdout",
+        "agentChat.toolCall.commandSummary.stderr",
+        "agentChat.toolCall.commandSummary.sandboxEnabled",
+        "agentChat.toolCall.commandSummary.sandboxEnabledWithType",
+        "agentChat.toolCall.commandSummary.sandboxDisabled",
+        "agentChat.toolCall.commandSummary.truncated",
         "agentChat.messageList.artifact.saveDocument",
+        "agentChat.messageList.artifact.checkpointBadge",
+        "agentChat.messageList.artifact.diffBadge",
+        "agentChat.messageList.artifact.validationBadge",
+        "agentChat.messageList.artifact.agentUiProjectionTitle",
+        "agentChat.messageList.artifact.agentUiBadgePrefix",
+        "agentChat.messageList.artifact.blockCount",
+        "agentChat.messageList.artifact.sourceCount",
+        "agentChat.messageList.artifact.locateBlock",
+        "agentChat.messageList.artifact.documentSyncedPreview",
+        "agentChat.decisionPanel.queuedTitle",
+        "agentChat.decisionPanel.permissionHandledTitle",
+        "agentChat.decisionPanel.submittedTitle",
+        "agentChat.decisionPanel.submittedAnswerLabel",
+        "agentChat.decisionPanel.queuedDescription",
+        "agentChat.decisionPanel.submittedDescription",
+        "agentChat.decisionPanel.infoRequiredTitle",
+        "agentChat.decisionPanel.defaultInfoPrompt",
+        "agentChat.decisionPanel.answerLabel",
+        "agentChat.decisionPanel.answerPlaceholder",
+        "agentChat.decisionPanel.supplementLabel",
+        "agentChat.decisionPanel.supplementPlaceholder",
+        "agentChat.decisionPanel.assistantQuestionTitle",
+        "agentChat.decisionPanel.otherLabel",
+        "agentChat.decisionPanel.otherPlaceholder",
+        "agentChat.decisionPanel.multiSelectHint",
+        "agentChat.decisionPanel.fallbackQueuedDescription",
+        "agentChat.decisionPanel.permissionRequestTitle",
+        "agentChat.decisionPanel.assistantWantsUse",
+        "agentChat.decisionPanel.unknownTool",
+        "agentChat.decisionPanel.action.submitting",
+        "agentChat.decisionPanel.action.submit",
+        "agentChat.decisionPanel.action.cancelling",
+        "agentChat.decisionPanel.action.cancel",
+        "agentChat.decisionPanel.action.recording",
+        "agentChat.decisionPanel.action.recordAnswer",
+        "agentChat.decisionPanel.action.submitAnswer",
+        "agentChat.decisionPanel.action.processing",
+        "agentChat.decisionPanel.action.allow",
+        "agentChat.decisionPanel.action.deny",
+        "agentChat.decisionPanel.runtimePermission.title",
+        "agentChat.decisionPanel.runtimePermission.description",
+        "agentChat.decisionPanel.runtimePermission.submittedTitle",
+        "agentChat.decisionPanel.runtimePermission.submittedDescription",
+        "agentChat.decisionPanel.runtimePermission.deniedDescription",
         "agentChat.messageList.history.windowSummaryRestored",
         "agentChat.messageList.taskCenterEmpty.title",
         "agentChat.messageList.empty.defaultTitle",
@@ -1570,12 +1625,12 @@ describe("i18n namespace loader", () => {
   it("common 启动文案应明确是界面语言准备", () => {
     const resources = loadBundledI18nResources();
 
-    expect(
-      resources["en-US"].common["common.startupLoading.description"],
-    ).toBe("Preparing interface language settings and workspace entry. Please wait.");
-    expect(
-      resources["zh-CN"].common["common.startupLoading.description"],
-    ).toBe("正在准备界面语言配置与工作台入口，请稍候。");
+    expect(resources["en-US"].common["common.startupLoading.description"]).toBe(
+      "Preparing interface language settings and workspace entry. Please wait.",
+    );
+    expect(resources["zh-CN"].common["common.startupLoading.description"]).toBe(
+      "正在准备界面语言配置与工作台入口，请稍候。",
+    );
   });
 
   it("应能检测已打包 namespace，并把旧 locale 归一后查询", () => {

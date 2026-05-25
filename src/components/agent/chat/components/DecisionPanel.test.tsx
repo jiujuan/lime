@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DecisionPanel } from "./DecisionPanel";
 import type { ActionRequired, ConfirmResponse } from "../types";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 interface RenderResult {
   container: HTMLDivElement;
@@ -14,12 +15,13 @@ interface RenderResult {
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
 });
 
 function renderDecisionPanel(request: ActionRequired): RenderResult {
@@ -111,6 +113,31 @@ function createRichElicitationRequest(requestId: string): ActionRequired {
         mode: {
           type: "string",
           enum: ["自动执行", "确认后执行"],
+        },
+      },
+    },
+  };
+}
+
+function createRuntimePermissionConfirmationRequest(): ActionRequired {
+  return {
+    requestId: "runtime_permission_confirmation:turn-1",
+    actionType: "elicitation",
+    prompt:
+      "当前执行需要确认运行时权限：web_search, write_artifacts。确认后才允许继续模型执行；拒绝会保持阻断。",
+    questions: [
+      {
+        question: "是否允许本次执行使用这些运行时权限？",
+        header: "运行时权限确认",
+        options: [{ label: "允许本次执行" }, { label: "拒绝" }],
+      },
+    ],
+    requestedSchema: {
+      type: "object",
+      properties: {
+        answer: {
+          type: "string",
+          enum: ["允许本次执行", "拒绝"],
         },
       },
     },
@@ -250,6 +277,32 @@ describe("DecisionPanel elicitation", () => {
       response: JSON.stringify({ answer: "确认后执行" }),
       actionType: "elicitation",
       userData: { answer: "确认后执行" },
+    });
+  });
+
+  it("运行时权限确认应使用专属提示并提交结构化选择", () => {
+    const request = createRuntimePermissionConfirmationRequest();
+    const { container, onSubmit } = renderDecisionPanel(request);
+
+    expect(container.textContent).toContain("确认运行时权限");
+    expect(container.textContent).toContain(
+      "本轮执行需要这些权限，确认后才会继续",
+    );
+    expect(container.textContent).toContain("允许本次执行");
+    expect(container.textContent).toContain("拒绝");
+    expect(container.textContent).not.toContain("confirmationStatus");
+    expect(container.textContent).not.toContain("askProfileKeys");
+
+    clickButton(findButtonByText(container, "允许本次执行"));
+    clickButton(findButtonByText(container, "提交答案"));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit).toHaveBeenCalledWith({
+      requestId: "runtime_permission_confirmation:turn-1",
+      confirmed: true,
+      response: JSON.stringify({ answer: "允许本次执行" }),
+      actionType: "elicitation",
+      userData: { answer: "允许本次执行" },
     });
   });
 });

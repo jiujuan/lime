@@ -370,6 +370,27 @@ const CodeHeader = styled.div`
   }
 `;
 
+const CodeHeaderInfo = styled.span`
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+`;
+
+const CodeLanguageLabel = styled.span`
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: ${CODE_BLOCK_TEXT};
+  font-weight: 600;
+`;
+
+const CodeLineCount = styled.span`
+  flex-shrink: 0;
+  color: ${CODE_BLOCK_MUTED_TEXT};
+`;
+
 const CopyButton = styled.button`
   display: flex;
   align-items: center;
@@ -942,7 +963,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
         const element = node instanceof Element ? node : node.parentElement;
         return Boolean(
           element?.closest(
-            '[data-markdown-block-actions], [aria-label="复制代码块"]',
+            "[data-markdown-block-actions], [data-markdown-code-action]",
           ),
         );
       };
@@ -963,6 +984,22 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
     const copiedLabel = t("agentChat.markdown.code.copied");
     const copyLabel = t("agentChat.markdown.code.copy");
     const copyCodeBlockLabel = t("agentChat.markdown.code.copyBlock");
+    const getCodeLineCountLabel = React.useCallback(
+      (codeContent: string) =>
+        t("agentChat.markdown.code.lineCount", {
+          count: codeContent.length > 0 ? codeContent.split("\n").length : 0,
+        }),
+      [t],
+    );
+    const renderCodeHeaderInfo = React.useCallback(
+      (language: string, codeContent: string) => (
+        <CodeHeaderInfo>
+          <CodeLanguageLabel>{language}</CodeLanguageLabel>
+          <CodeLineCount>{getCodeLineCountLabel(codeContent)}</CodeLineCount>
+        </CodeHeaderInfo>
+      ),
+      [getCodeLineCountLabel],
+    );
     const imageOpenTitle = t("agentChat.markdown.image.openTitle");
     const imageCaption = t("agentChat.markdown.image.caption");
     const quoteContentBlockLabel = t("agentChat.markdown.block.quote");
@@ -1089,9 +1126,10 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
         return (
           <CodeBlockContainer data-testid="markdown-plain-code-block">
             <CodeHeader>
-              <span>{language}</span>
+              {renderCodeHeaderInfo(language, codeContent)}
               <CopyButton
                 type="button"
+                data-markdown-code-action
                 onClick={() => void handleCopy(copyKey, codeContent)}
                 aria-label={copyCodeBlockLabel}
                 title={isCopied ? copiedLabel : copyLabel}
@@ -1122,7 +1160,14 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
           </CodeBlockContainer>
         );
       },
-      [copied, copiedLabel, copyCodeBlockLabel, copyLabel, handleCopy],
+      [
+        copied,
+        copiedLabel,
+        copyCodeBlockLabel,
+        copyLabel,
+        handleCopy,
+        renderCodeHeaderInfo,
+      ],
     );
 
     const renderFlowCodeBlock = React.useCallback(
@@ -1137,9 +1182,10 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
         return (
           <CodeBlockContainer data-testid="markdown-flow-code-block">
             <CodeHeader>
-              <span>{language}</span>
+              {renderCodeHeaderInfo(language, codeContent)}
               <CopyButton
                 type="button"
+                data-markdown-code-action
                 onClick={() => void handleCopy(copyKey, codeContent)}
                 aria-label={copyCodeBlockLabel}
                 title={isCopied ? copiedLabel : copyLabel}
@@ -1180,7 +1226,14 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
           </CodeBlockContainer>
         );
       },
-      [copied, copiedLabel, copyCodeBlockLabel, copyLabel, handleCopy],
+      [
+        copied,
+        copiedLabel,
+        copyCodeBlockLabel,
+        copyLabel,
+        handleCopy,
+        renderCodeHeaderInfo,
+      ],
     );
 
     return (
@@ -1333,9 +1386,10 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
                   return (
                     <CodeBlockContainer data-testid="markdown-syntax-code-block">
                       <CodeHeader>
-                        <span>{language}</span>
+                        {renderCodeHeaderInfo(language, codeContent)}
                         <CopyButton
                           type="button"
+                          data-markdown-code-action
                           onClick={() => void handleCopy(copyKey, codeContent)}
                           aria-label={copyCodeBlockLabel}
                           title={isCopied ? copiedLabel : copyLabel}

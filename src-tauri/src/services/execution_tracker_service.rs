@@ -118,7 +118,7 @@ impl ExecutionTracker {
     }
 
     pub fn finish_success(&self, handle: &RunHandle, metadata: Option<Value>) {
-        self.finish(handle, AgentRunStatus::Success, None, None, metadata);
+        self.finish(handle, None, AgentRunStatus::Success, None, None, metadata);
     }
 
     pub fn finish_error(
@@ -130,6 +130,7 @@ impl ExecutionTracker {
     ) {
         self.finish(
             handle,
+            None,
             AgentRunStatus::Error,
             error_code,
             error_message,
@@ -145,7 +146,26 @@ impl ExecutionTracker {
         error_message: Option<&str>,
         metadata: Option<Value>,
     ) {
-        self.finish(handle, status, error_code, error_message, metadata);
+        self.finish(handle, None, status, error_code, error_message, metadata);
+    }
+
+    pub fn finish_with_status_and_session(
+        &self,
+        handle: &RunHandle,
+        session_id: Option<&str>,
+        status: AgentRunStatus,
+        error_code: Option<&str>,
+        error_message: Option<&str>,
+        metadata: Option<Value>,
+    ) {
+        self.finish(
+            handle,
+            session_id,
+            status,
+            error_code,
+            error_message,
+            metadata,
+        );
     }
 
     pub fn refresh_running_metadata(
@@ -182,6 +202,7 @@ impl ExecutionTracker {
     fn finish(
         &self,
         handle: &RunHandle,
+        session_id: Option<&str>,
         status: AgentRunStatus,
         error_code: Option<&str>,
         error_message: Option<&str>,
@@ -206,6 +227,18 @@ impl ExecutionTracker {
                 return;
             }
         };
+
+        if let Some(session_id) = session_id.map(str::trim).filter(|value| !value.is_empty()) {
+            if let Err(e) = AgentRunDao::refresh_running_run(
+                &conn,
+                &handle.id,
+                &finished_at_str,
+                Some(session_id),
+                None,
+            ) {
+                tracing::warn!("[ExecutionTracker] 刷新 run session 失败: {}", e);
+            }
+        }
 
         if let Err(e) = AgentRunDao::finish_run(
             &conn,
@@ -318,6 +351,7 @@ impl ExecutionTracker {
             let decision = finalize(&result);
             self.finish(
                 handle,
+                None,
                 decision.status,
                 decision.error_code.as_deref(),
                 decision.error_message.as_deref(),
@@ -472,5 +506,43 @@ mod tests {
             run.metadata.as_deref(),
             Some("{\"browser_lifecycle_state\":\"human_controlling\"}")
         );
+    }
+
+    #[test]
+    fn finish_with_status_and_session_should_make_run_queryable_by_session() {
+        let tracker = ExecutionTracker::new(setup_db());
+        let handle = tracker
+            .start(RunSource::Automation, Some("job-1".to_string()), None, None)
+            .expect("应创建运行句柄");
+
+        tracker.finish_with_status_and_session(
+            &handle,
+            Some("session-runtime-1"),
+            AgentRunStatus::Success,
+            None,
+            None,
+            Some(serde_json::json!({
+                "status": "success",
+                "harness": {
+                    "managed_objective": {
+                        "owner_id": "job-1",
+                        "completion_audit": "artifact_or_evidence_required"
+                    }
+                }
+            })),
+        );
+
+        let run = tracker
+            .get_run(&handle.id)
+            .expect("查询 run 失败")
+            .expect("run 不存在");
+        assert_eq!(run.status, AgentRunStatus::Success);
+        assert_eq!(run.session_id.as_deref(), Some("session-runtime-1"));
+
+        let session_runs = tracker
+            .list_runs_by_session("session-runtime-1", 10)
+            .expect("按 session 查询 run 失败");
+        assert_eq!(session_runs.len(), 1);
+        assert_eq!(session_runs[0].id, handle.id);
     }
 }

@@ -5,8 +5,11 @@ use lime_core::database::managed_objective_repository::{
     update_objective_status_by_owner, upsert_objective, ManagedObjectiveRecord,
     ManagedObjectiveStatus, ManagedObjectiveUpsert, MANAGED_OBJECTIVE_OWNER_AGENT_SESSION,
 };
-use serde_json::{json, Value};
+use serde_json::Value;
 
+use super::objective_continuation::{
+    build_objective_continuation_request, ManagedObjectiveContinuationSource,
+};
 use super::objective_support::{load_active_objective, normalize_session_id};
 
 #[derive(Debug, Deserialize)]
@@ -161,7 +164,10 @@ pub async fn agent_runtime_continue_objective(
     assert_objective_can_continue(&objective)?;
     assert_runtime_can_continue(&runtime, &session_id).await?;
 
-    let request = build_objective_continuation_request(&objective);
+    let request = build_objective_continuation_request(
+        &objective,
+        ManagedObjectiveContinuationSource::ManualGui,
+    );
     let queued_task = build_queued_turn_task(request)?;
     let queued_turn_id = queued_task.queued_turn_id.clone();
     runtime
@@ -221,67 +227,6 @@ async fn assert_runtime_can_continue(
     Ok(())
 }
 
-fn build_objective_continuation_request(objective: &ManagedObjectiveRecord) -> AsterChatRequest {
-    let criteria = if objective.success_criteria.is_empty() {
-        "未设置单独成功标准，请按目标本身判断下一步。".to_string()
-    } else {
-        objective
-            .success_criteria
-            .iter()
-            .map(|item| format!("- {item}"))
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
-    let message = format!(
-        "继续推进当前目标。\n\n目标：{}\n\n成功标准：\n{}\n\n请先检查当前会话事实、产物和待处理请求；只推进下一步，不要创建新的目标。",
-        objective.objective_text, criteria
-    );
-    let metadata = json!({
-        "harness": {
-            "managed_objective": {
-                "objective_id": objective.objective_id,
-                "owner_type": objective.owner_kind,
-                "owner_id": objective.owner_id,
-                "objective_text": objective.objective_text,
-                "success_criteria": objective.success_criteria,
-                "continuation_source": "manual_gui",
-                "completion_audit": {
-                    "required": false,
-                    "source": "manual_gui_mvp"
-                }
-            }
-        }
-    });
-
-    AsterChatRequest {
-        message,
-        session_id: objective.owner_id.clone(),
-        event_name: format!(
-            "managed_objective:{}:{}",
-            objective.objective_id,
-            chrono::Utc::now().timestamp()
-        ),
-        images: None,
-        provider_config: None,
-        provider_preference: None,
-        model_preference: None,
-        thinking_enabled: None,
-        approval_policy: None,
-        sandbox_policy: None,
-        project_id: None,
-        workspace_id: objective.workspace_id.clone().unwrap_or_default(),
-        web_search: None,
-        search_mode: None,
-        execution_strategy: None,
-        auto_continue: None,
-        system_prompt: None,
-        metadata: Some(metadata),
-        turn_id: None,
-        queue_if_busy: Some(false),
-        queued_turn_id: None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -318,7 +263,10 @@ mod tests {
     #[test]
     fn continuation_request_carries_managed_objective_metadata() {
         let objective = objective_with_status(ManagedObjectiveStatus::Active);
-        let request = build_objective_continuation_request(&objective);
+        let request = build_objective_continuation_request(
+            &objective,
+            ManagedObjectiveContinuationSource::ManualGui,
+        );
 
         assert_eq!(request.session_id, "session-1");
         assert!(request.message.contains("修到本地验证通过"));

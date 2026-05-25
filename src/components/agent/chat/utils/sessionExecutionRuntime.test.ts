@@ -162,6 +162,25 @@ describe("sessionExecutionRuntime", () => {
     });
   });
 
+  it("code_orchestrated 会话恢复时应把任务与子代理偏好对齐到编程底座", () => {
+    expect(
+      createChatToolPreferencesFromExecutionRuntime({
+        execution_strategy: "code_orchestrated",
+        recent_preferences: {
+          webSearch: false,
+          thinking: false,
+          task: false,
+          subagent: false,
+        },
+      }),
+    ).toEqual({
+      webSearch: false,
+      thinking: false,
+      task: true,
+      subagent: true,
+    });
+  });
+
   it("应把工具偏好转换成 session recent_preferences 请求载荷", () => {
     expect(
       createSessionRecentPreferencesFromChatToolPreferences({

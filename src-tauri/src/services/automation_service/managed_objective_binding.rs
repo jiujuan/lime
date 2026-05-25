@@ -4,6 +4,8 @@
 //! 与运行 guard；调度仍属于 automation service，完成事实仍属于 evidence pack。
 
 use super::{AutomationJobRecord, AutomationPayload};
+use crate::services::automation_service::managed_objective_completion_policy::AutomationObjectiveCompletionPolicy;
+use lime_core::database::dao::agent_run::{AgentRunDao, AgentRunStatus};
 use lime_core::database::dao::automation_job::AutomationJobDao;
 use lime_core::database::managed_objective_repository::{
     get_objective_by_owner, update_objective_audit_by_owner, update_objective_status_by_owner,
@@ -205,6 +207,52 @@ pub(super) fn apply_terminal_managed_objective_state(
     }
 
     if status == "success" {
+        let policy = AutomationObjectiveCompletionPolicy::from_job_payload(&job.payload);
+        let completed_successes =
+            consecutive_successful_automation_run_count(conn, &job.id)?.saturating_add(1);
+        if let Some(required_successes) = policy.required_successes() {
+            if completed_successes >= required_successes && policy.has_completion_evidence_refs() {
+                update_objective_audit_by_owner(
+                    conn,
+                    MANAGED_OBJECTIVE_OWNER_AUTOMATION_JOB,
+                    &job.id,
+                    ManagedObjectiveAuditUpdate {
+                        status: ManagedObjectiveStatus::Completed,
+                        last_audit_summary: Some(format!(
+                            "automation job {} 已达到连续成功目标：成功 {}/{}；completion audit 已引用 evidence pack / artifact。",
+                            job.id, completed_successes, required_successes
+                        )),
+                        last_evidence_pack_ref: policy.evidence_pack_ref().map(ToString::to_string),
+                        last_artifact_refs: policy.artifact_refs(),
+                        blocker_reason: None,
+                    },
+                )?;
+                job.enabled = false;
+                job.next_run_at = None;
+                job.auto_disabled_until = None;
+                refresh_managed_objective_projection(conn, job)?;
+                return Ok(());
+            }
+
+            update_objective_audit_by_owner(
+                conn,
+                MANAGED_OBJECTIVE_OWNER_AUTOMATION_JOB,
+                &job.id,
+                ManagedObjectiveAuditUpdate {
+                    status: ManagedObjectiveStatus::Active,
+                    last_audit_summary: Some(format!(
+                        "automation job {} 执行成功；成功 {}/{}，completed 仍需满足连续成功目标并具备 artifact / evidence pack 审计引用。",
+                        job.id, completed_successes, required_successes
+                    )),
+                    last_evidence_pack_ref: policy.evidence_pack_ref().map(ToString::to_string),
+                    last_artifact_refs: policy.artifact_refs(),
+                    blocker_reason: None,
+                },
+            )?;
+            refresh_managed_objective_projection(conn, job)?;
+            return Ok(());
+        }
+
         update_objective_audit_by_owner(
             conn,
             MANAGED_OBJECTIVE_OWNER_AUTOMATION_JOB,
@@ -220,13 +268,24 @@ pub(super) fn apply_terminal_managed_objective_state(
                 blocker_reason: None,
             },
         )?;
+        refresh_managed_objective_projection(conn, job)?;
         return Ok(());
     }
 
-    if job.consecutive_failures >= AUTOMATION_FAILURE_BLOCK_CUTOFF {
+    let policy = AutomationObjectiveCompletionPolicy::from_job_payload(&job.payload);
+    let failure_block_cutoff = policy
+        .failure_block_after()
+        .unwrap_or(AUTOMATION_FAILURE_BLOCK_CUTOFF);
+
+    if job.consecutive_failures >= failure_block_cutoff {
+        let blocked_prompt = policy
+            .blocked_user_prompt()
+            .unwrap_or("请检查自动化配置后重试");
         let blocker_reason = format!(
-            "automation job 连续失败 {} 次，最近错误：{}",
+            "automation job 连续失败 {} 次，已达到失败阈值 {}；{}。最近错误：{}",
             job.consecutive_failures,
+            failure_block_cutoff,
+            blocked_prompt,
             output.trim()
         );
         job.enabled = false;
@@ -239,14 +298,15 @@ pub(super) fn apply_terminal_managed_objective_state(
             ManagedObjectiveAuditUpdate {
                 status: ManagedObjectiveStatus::Blocked,
                 last_audit_summary: Some(format!(
-                    "automation job {} 已达到连续失败阈值，目标进入 blocked。",
-                    job.id
+                    "automation job {} 已达到连续失败阈值 {}，目标进入 blocked；{}。",
+                    job.id, failure_block_cutoff, blocked_prompt
                 )),
                 last_evidence_pack_ref: None,
                 last_artifact_refs: Vec::new(),
                 blocker_reason: Some(blocker_reason),
             },
         )?;
+        refresh_managed_objective_projection(conn, job)?;
         return Ok(());
     }
 
@@ -265,7 +325,22 @@ pub(super) fn apply_terminal_managed_objective_state(
             blocker_reason: None,
         },
     )?;
+    refresh_managed_objective_projection(conn, job)?;
     Ok(())
+}
+
+fn consecutive_successful_automation_run_count(
+    conn: &Connection,
+    job_id: &str,
+) -> Result<u32, String> {
+    let runs = AgentRunDao::list_runs_by_source_ref(conn, "automation", job_id, 10_000)
+        .map_err(|error| format!("读取 automation run 历史失败: {error}"))?;
+    Ok(runs
+        .iter()
+        .filter(|run| run.status.is_terminal())
+        .take_while(|run| run.status == AgentRunStatus::Success)
+        .count()
+        .min(u32::MAX as usize) as u32)
 }
 
 fn read_binding_from_job(

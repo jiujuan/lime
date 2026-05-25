@@ -157,6 +157,25 @@ describe("seededCommandPackage", () => {
           ]),
         }),
         expect.objectContaining({
+          id: "command:code_runtime",
+          commandKey: "code_runtime",
+          binding: {
+            skillId: undefined,
+            executionKind: "agent_turn",
+          },
+          renderContract: expect.objectContaining({
+            resultKind: "tool_timeline",
+            detailKind: "json",
+          }),
+          triggers: expect.arrayContaining([
+            { mode: "mention", prefix: "@代码" },
+            { mode: "mention", prefix: "@code" },
+            { mode: "mention", prefix: "@coding" },
+            { mode: "mention", prefix: "@开发" },
+            { mode: "mention", prefix: "@Code Agent" },
+          ]),
+        }),
+        expect.objectContaining({
           id: "command:browser_runtime",
           commandKey: "browser_runtime",
           triggers: expect.arrayContaining([
