@@ -743,6 +743,9 @@ pub struct AgentRuntimeThreadReadModel {
     pub permission_state: Option<lime_agent::SessionExecutionRuntimePermissionState>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit_event: Option<lime_agent::SessionExecutionRuntimeLimitEvent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub managed_objective:
+        Option<lime_core::database::managed_objective_repository::ManagedObjectiveRecord>,
 }
 
 fn extract_oem_policy_summary(
@@ -2211,6 +2214,7 @@ impl AgentRuntimeThreadReadModel {
             cost_state,
             permission_state,
             limit_event,
+            managed_objective: None,
         }
     }
 }

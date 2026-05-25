@@ -346,6 +346,70 @@ export interface AgentRuntimeThreadReadModel {
   cost_state?: AsterSessionExecutionRuntimeCostState | null;
   permission_state?: AsterSessionExecutionRuntimePermissionState | null;
   limit_event?: AsterSessionExecutionRuntimeLimitEvent | null;
+  managed_objective?: ManagedObjective | null;
+}
+
+export type ManagedObjectiveStatus =
+  | "active"
+  | "verifying"
+  | "needs_input"
+  | "blocked"
+  | "budget_limited"
+  | "paused"
+  | "completed"
+  | "failed";
+
+export interface ManagedObjective {
+  objective_id: string;
+  workspace_id?: string | null;
+  owner_kind: string;
+  owner_id: string;
+  objective_text: string;
+  success_criteria: string[];
+  status: ManagedObjectiveStatus;
+  budget_policy?: Record<string, unknown> | null;
+  risk_policy?: Record<string, unknown> | null;
+  approval_policy?: Record<string, unknown> | null;
+  continuation_policy?: Record<string, unknown> | null;
+  last_audit_summary?: string | null;
+  last_evidence_pack_ref?: string | null;
+  last_artifact_refs: string[];
+  blocker_reason?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentRuntimeSetObjectiveRequest {
+  sessionId: string;
+  workspaceId?: string | null;
+  objectiveText: string;
+  successCriteria?: string[];
+  budgetPolicy?: Record<string, unknown> | null;
+  riskPolicy?: Record<string, unknown> | null;
+  approvalPolicy?: Record<string, unknown> | null;
+  continuationPolicy?: Record<string, unknown> | null;
+}
+
+export interface AgentRuntimeUpdateObjectiveStatusRequest {
+  sessionId: string;
+  status: ManagedObjectiveStatus;
+  blockerReason?: string | null;
+}
+
+export interface AgentRuntimeObjectiveSessionRequest {
+  sessionId: string;
+  ownerKind?: "agent_session" | "automation_job" | string | null;
+  ownerId?: string | null;
+}
+
+export interface AgentRuntimeClearObjectiveResult {
+  cleared: boolean;
+}
+
+export interface AgentRuntimeContinueObjectiveResult {
+  submitted: boolean;
+  queued_turn_id: string;
+  objective: ManagedObjective;
 }
 
 export type AgentRuntimeProfileStatus =
@@ -373,7 +437,13 @@ export interface AgentRuntimeThreadToolCallView {
   started_at?: string | null;
   finished_at?: string | null;
   updated_at?: string | null;
-  arguments?: Record<string, unknown> | unknown[] | string | number | boolean | null;
+  arguments?:
+    | Record<string, unknown>
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   output?: string | null;
   output_preview?: string | null;
   success?: boolean | null;

@@ -1,4 +1,7 @@
 {
+  "agentChat.sidebar.history.loadingBadge": "同期中",
+  "agentChat.sidebar.history.loadingDescription": "最新のセッションを取得中です。最近のチャットは自動的に表示されます。",
+  "agentChat.sidebar.history.loadingTitle": "履歴を整理しています",
   "agentChat.messageList.firstTokenStatus.cancelled.detail": "このリクエストは停止しました。",
   "agentChat.messageList.firstTokenStatus.cancelled.title": "キャンセル済み",
   "agentChat.messageList.firstTokenStatus.context.detail": "必要なコンテキストをこのターンに接続しています。",

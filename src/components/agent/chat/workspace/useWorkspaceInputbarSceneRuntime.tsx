@@ -577,6 +577,7 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
     assistantMessageId: string,
   ) => boolean | Promise<boolean>;
   promoteQueuedTurn?: (queuedTurnId: string) => boolean | Promise<boolean>;
+  onObjectiveChanged?: GeneralWorkbenchDialogParams["onObjectiveChanged"];
   removeQueuedTurn: InputbarParams["onRemoveQueuedTurn"];
   latestAssistantMessageId: string | null;
   sessionIdForDiagnostics: string | null;
@@ -693,6 +694,7 @@ export function useWorkspaceInputbarSceneRuntime({
   resumeThread,
   replayPendingAction,
   promoteQueuedTurn,
+  onObjectiveChanged,
   removeQueuedTurn,
   latestAssistantMessageId,
   sessionIdForDiagnostics,
@@ -910,6 +912,7 @@ export function useWorkspaceInputbarSceneRuntime({
                 replayPendingAction(requestId, latestAssistantMessageId)
             : undefined,
         onPromoteQueuedTurn: promoteQueuedTurn,
+        onObjectiveChanged,
         onOpenMemoryWorkbench:
           sessionIdForDiagnostics && projectRootPath
             ? () =>

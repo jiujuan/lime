@@ -610,6 +610,23 @@ describe("legacySurfaceCatalog", () => {
     expect(rustEventMonitor?.allowedPaths).toEqual([]);
   });
 
+  it("应限制 subagent metadata 直读只留在 query 与 session_store 投影边界", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-agent-subagent-metadata-direct-read",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("deprecated");
+    expect(monitor?.patterns).toEqual(["resolve_subagent_session_metadata("]);
+    expect(monitor?.allowedPaths).toEqual([
+      "src-tauri/crates/agent/src/session_query.rs",
+      "src-tauri/crates/agent/src/session_store.rs",
+      "src-tauri/crates/agent/src/session_store_subagent_context.rs",
+      "src-tauri/crates/aster-rust/crates/aster/src/session/query.rs",
+      "src-tauri/crates/aster-rust/crates/aster/src/session/subagent.rs",
+    ]);
+  });
+
   it("应将 channels_cmd 旧 CRUD stub 命令标记为 dead-candidate", () => {
     const monitor = legacySurfaceCatalogJson.commands.find(
       (entry) => entry.id === "channels-crud-stub-commands",

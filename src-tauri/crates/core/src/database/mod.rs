@@ -1,6 +1,7 @@
 pub mod agent_runtime_queue_repository;
 pub mod agent_session_repository;
 pub mod dao;
+pub mod managed_objective_repository;
 pub mod migration;
 mod migration_support;
 pub mod migration_v2;

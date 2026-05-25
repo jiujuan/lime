@@ -361,6 +361,7 @@ mod request_model_resolution;
 mod research_skill_launch;
 mod resource_search_skill_launch;
 mod run_metadata;
+mod runtime_auto_compaction;
 mod runtime_plugin_agents;
 mod runtime_project_hooks;
 mod runtime_task_profile;
@@ -429,18 +430,23 @@ pub(crate) use browser_assist::{
 };
 #[allow(unused_imports)]
 pub(crate) use command_api::{
-    agent_runtime_close_subagent, agent_runtime_compact_session, agent_runtime_create_session,
+    agent_runtime_audit_objective, agent_runtime_clear_objective, agent_runtime_close_subagent,
+    agent_runtime_compact_session, agent_runtime_continue_objective, agent_runtime_create_session,
     agent_runtime_diff_file_checkpoint, agent_runtime_export_analysis_handoff,
     agent_runtime_export_evidence_pack, agent_runtime_export_handoff_bundle,
-    agent_runtime_export_replay_case, agent_runtime_get_file_checkpoint, agent_runtime_get_session,
-    agent_runtime_get_thread_read, agent_runtime_get_tool_inventory, agent_runtime_interrupt_turn,
+    agent_runtime_export_replay_case, agent_runtime_get_file_checkpoint,
+    agent_runtime_get_objective, agent_runtime_get_session, agent_runtime_get_thread_read,
+    agent_runtime_get_tool_inventory, agent_runtime_interrupt_turn,
     agent_runtime_list_file_checkpoints, agent_runtime_list_sessions,
     agent_runtime_list_workspace_skill_bindings, agent_runtime_promote_queued_turn,
     agent_runtime_remove_queued_turn, agent_runtime_replay_request, agent_runtime_resume_subagent,
     agent_runtime_resume_thread, agent_runtime_save_review_decision,
-    agent_runtime_send_subagent_input, agent_runtime_spawn_subagent, agent_runtime_submit_turn,
-    agent_runtime_update_session, agent_runtime_wait_subagents, aster_agent_configure_provider,
-    aster_agent_init, aster_agent_reset, aster_agent_status,
+    agent_runtime_send_subagent_input, agent_runtime_set_objective, agent_runtime_spawn_subagent,
+    agent_runtime_submit_turn, agent_runtime_update_objective_status, agent_runtime_update_session,
+    agent_runtime_wait_subagents, aster_agent_configure_provider, aster_agent_init,
+    aster_agent_reset, aster_agent_status, AgentRuntimeClearObjectiveResult,
+    AgentRuntimeContinueObjectiveResult, AgentRuntimeObjectiveStatusRequest,
+    AgentRuntimeSessionObjectiveRequest, AgentRuntimeSetObjectiveRequest,
 };
 pub(crate) use cover_skill_launch::{
     append_cover_skill_launch_session_permissions, merge_system_prompt_with_cover_skill_launch,
@@ -514,10 +520,9 @@ pub(crate) use provider_runtime_strategy::{
     enrich_provider_config_with_runtime_tool_strategy, RuntimeToolCallStrategy,
 };
 use reply_runtime::{
-    build_runtime_user_message, build_turn_runtime_statuses, complete_runtime_status_projection,
+    build_turn_runtime_statuses, complete_runtime_status_projection,
     emit_runtime_status_with_projection, ensure_code_execution_extension_enabled,
     should_fallback_to_react_from_code_orchestrated, should_project_runtime_status_to_timeline,
-    stream_reply_once,
 };
 pub(crate) use report_skill_launch::{
     append_report_skill_launch_session_permissions, merge_system_prompt_with_report_skill_launch,

@@ -6,6 +6,7 @@ pub mod browser_runtime_sync;
 pub mod delivery;
 pub mod executor;
 pub mod health;
+mod managed_objective_binding;
 pub mod schedule;
 
 use self::delivery::{
@@ -268,7 +269,12 @@ impl AutomationService {
             .as_ref()
             .ok_or_else(|| "数据库未初始化".to_string())?;
         let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-        AutomationJobDao::list(&conn).map_err(|e| format!("查询自动化任务失败: {e}"))
+        let mut jobs =
+            AutomationJobDao::list(&conn).map_err(|e| format!("查询自动化任务失败: {e}"))?;
+        for job in &mut jobs {
+            let _ = managed_objective_binding::refresh_managed_objective_projection(&conn, job)?;
+        }
+        Ok(jobs)
     }
 
     pub fn get_job(&self, id: &str) -> Result<Option<AutomationJobRecord>, String> {
@@ -277,7 +283,12 @@ impl AutomationService {
             .as_ref()
             .ok_or_else(|| "数据库未初始化".to_string())?;
         let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-        AutomationJobDao::get(&conn, id).map_err(|e| format!("查询自动化任务失败: {e}"))
+        let mut job =
+            AutomationJobDao::get(&conn, id).map_err(|e| format!("查询自动化任务失败: {e}"))?;
+        if let Some(job) = job.as_mut() {
+            let _ = managed_objective_binding::refresh_managed_objective_projection(&conn, job)?;
+        }
+        Ok(job)
     }
 
     pub fn create_job(&self, draft: AutomationJobDraft) -> Result<AutomationJobRecord, String> {
@@ -295,7 +306,7 @@ impl AutomationService {
         } else {
             None
         };
-        let job = AutomationJob {
+        let mut job = AutomationJob {
             id: Uuid::new_v4().to_string(),
             name: draft.name.trim().to_string(),
             description: normalize_optional_string(draft.description),
@@ -322,6 +333,7 @@ impl AutomationService {
             updated_at: now,
         };
 
+        managed_objective_binding::replace_managed_objective_binding(&conn, &mut job)?;
         AutomationJobDao::create(&conn, &job).map_err(|e| format!("创建自动化任务失败: {e}"))?;
         Ok(job)
     }
@@ -340,6 +352,9 @@ impl AutomationService {
             .map_err(|e| format!("读取自动化任务失败: {e}"))?
             .ok_or_else(|| format!("自动化任务不存在: {id}"))?;
 
+        let mut payload_changed = false;
+        let mut workspace_changed = false;
+
         if let Some(value) = update.name {
             job.name = value.trim().to_string();
         }
@@ -350,6 +365,7 @@ impl AutomationService {
             job.enabled = value;
         }
         if let Some(value) = update.workspace_id {
+            workspace_changed = job.workspace_id != value.trim();
             job.workspace_id = value.trim().to_string();
         }
         if let Some(value) = update.execution_mode {
@@ -360,6 +376,7 @@ impl AutomationService {
             job.schedule = value;
         }
         if let Some(value) = update.payload {
+            payload_changed = true;
             validate_payload(&value)?;
             job.payload =
                 serde_json::to_value(value).map_err(|e| format!("序列化自动化负载失败: {e}"))?;
@@ -382,6 +399,12 @@ impl AutomationService {
         job.updated_at = Utc::now().to_rfc3339();
 
         validate_job(&conn, &job)?;
+        if payload_changed || workspace_changed {
+            managed_objective_binding::replace_managed_objective_binding(&conn, &mut job)?;
+        } else {
+            managed_objective_binding::ensure_managed_objective_binding(&conn, &mut job)?;
+        }
+        managed_objective_binding::sync_job_enabled_to_objective(&conn, &job)?;
         AutomationJobDao::update(&conn, &job).map_err(|e| format!("更新自动化任务失败: {e}"))?;
         Ok(job)
     }
@@ -472,7 +495,11 @@ impl AutomationService {
             let mut status = service.status.write();
             status.last_polled_at = Some(Utc::now().to_rfc3339());
             status.last_job_count = jobs.len();
-            service.update_next_poll();
+            status.next_poll_at = Some(
+                (Utc::now()
+                    + chrono::Duration::seconds(service.config.poll_interval_secs.max(5) as i64))
+                .to_rfc3339(),
+            );
         }
 
         for job in jobs {
@@ -519,6 +546,17 @@ impl AutomationService {
                 BROWSER_AUTOMATION_RETIRED_LAST_ERROR,
             )?;
             return Ok("error".to_string());
+        }
+
+        {
+            let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
+            if managed_objective_binding::prepare_job_for_managed_objective_run(
+                &conn,
+                &mut working_job,
+                &started_at_str,
+            )? {
+                return Ok("error".to_string());
+            }
         }
 
         set_active_job_state(
@@ -708,6 +746,12 @@ impl AutomationService {
 
         {
             let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
+            managed_objective_binding::apply_terminal_managed_objective_state(
+                &conn,
+                &mut working_job,
+                &status,
+                &output,
+            )?;
             AutomationJobDao::update(&conn, &working_job)
                 .map_err(|e| format!("保存自动化任务结果失败: {e}"))?;
         }
@@ -817,6 +861,9 @@ fn validate_payload(payload: &AutomationPayload) -> Result<(), String> {
                     return Err("自动化任务 request_metadata 必须为对象".to_string());
                 }
             }
+            managed_objective_binding::validate_agent_turn_payload_metadata(
+                request_metadata.as_ref(),
+            )?;
             executor::resolve_agent_turn_access_mode_from_payload(
                 approval_policy.as_deref(),
                 sandbox_policy.as_deref(),

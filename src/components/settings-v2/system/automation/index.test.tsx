@@ -13,6 +13,9 @@ const {
   mockGetAutomationHealth,
   mockGetAutomationRunHistory,
   mockListProjects,
+  mockAuditAgentRuntimeObjective,
+  mockOpenPathWithDefaultApp,
+  mockRevealPathInFinder,
   mockAutomationJobDialog,
 } = vi.hoisted(() => ({
   mockGetAutomationSchedulerConfig: vi.fn(),
@@ -21,6 +24,9 @@ const {
   mockGetAutomationHealth: vi.fn(),
   mockGetAutomationRunHistory: vi.fn(),
   mockListProjects: vi.fn(),
+  mockAuditAgentRuntimeObjective: vi.fn(),
+  mockOpenPathWithDefaultApp: vi.fn(),
+  mockRevealPathInFinder: vi.fn(),
   mockAutomationJobDialog: vi.fn(),
 }));
 
@@ -39,6 +45,15 @@ vi.mock("@/lib/api/automation", () => ({
 
 vi.mock("@/lib/api/project", () => ({
   listProjects: mockListProjects,
+}));
+
+vi.mock("@/lib/api/agentRuntime", () => ({
+  auditAgentRuntimeObjective: mockAuditAgentRuntimeObjective,
+}));
+
+vi.mock("@/lib/api/fileSystem", () => ({
+  openPathWithDefaultApp: mockOpenPathWithDefaultApp,
+  revealPathInFinder: mockRevealPathInFinder,
 }));
 
 vi.mock("./AutomationHealthPanel", () => ({
@@ -230,8 +245,12 @@ beforeEach(async () => {
     {
       id: "workspace-default",
       name: "默认工作区",
+      rootPath: "/workspace/default",
     },
   ]);
+  mockAuditAgentRuntimeObjective.mockResolvedValue({});
+  mockOpenPathWithDefaultApp.mockResolvedValue(undefined);
+  mockRevealPathInFinder.mockResolvedValue(undefined);
 });
 
 afterEach(async () => {
@@ -407,6 +426,83 @@ function setupSceneAppAutomationMocks() {
 
   return {
     sceneAppJob,
+  };
+}
+
+function setupManagedObjectiveAutomationMocks() {
+  const managedObjectiveJob = {
+    id: "job-managed-objective-1",
+    name: "目标日报",
+    description: "持续推进可审计目标。",
+    enabled: true,
+    workspace_id: "workspace-default",
+    execution_mode: "skill",
+    schedule: { kind: "cron", expr: "0 9 * * *", tz: "Asia/Shanghai" },
+    payload: {
+      kind: "agent_turn",
+      prompt: "请继续推进目标。",
+      system_prompt: null,
+      web_search: false,
+      request_metadata: {
+        harness: {
+          managed_objective: {
+            objective_id: "objective-1",
+            owner_type: "automation_job",
+            owner_id: "job-managed-objective-1",
+            objective_text: "产出可审计日报",
+            success_criteria: ["生成 Markdown", "附带证据包"],
+            state: "active",
+            last_evidence_pack_ref:
+              ".lime/harness/job-managed-objective-1/evidence",
+            last_artifact_refs: ["reports/daily.md"],
+          },
+        },
+      },
+    },
+    delivery: {
+      mode: "none",
+      channel: null,
+      target: null,
+      best_effort: true,
+      output_schema: "text",
+      output_format: "text",
+    },
+    timeout_secs: 120,
+    max_retries: 1,
+    next_run_at: "2026-03-16T09:00:00Z",
+    last_status: "success",
+    last_error: null,
+    last_run_at: "2026-03-16T08:59:00Z",
+    last_finished_at: "2026-03-16T09:00:10Z",
+    running_started_at: null,
+    consecutive_failures: 0,
+    last_retry_count: 0,
+    auto_disabled_until: null,
+    last_delivery: null,
+    created_at: "2026-03-16T00:00:00Z",
+    updated_at: "2026-03-16T00:00:00Z",
+  };
+  const managedObjectiveRun = {
+    id: "run-managed-objective-1",
+    source: "automation",
+    source_ref: "job-managed-objective-1",
+    session_id: "session-managed-objective-1",
+    status: "success",
+    started_at: "2026-03-16T08:59:00Z",
+    finished_at: "2026-03-16T09:00:10Z",
+    duration_ms: 70_000,
+    error_code: null,
+    error_message: null,
+    metadata: "{}",
+    created_at: "2026-03-16T08:59:00Z",
+    updated_at: "2026-03-16T09:00:10Z",
+  };
+
+  mockGetAutomationJobs.mockResolvedValue([managedObjectiveJob]);
+  mockGetAutomationRunHistory.mockResolvedValue([managedObjectiveRun]);
+
+  return {
+    managedObjectiveJob,
   };
 }
 
@@ -611,6 +707,56 @@ describe("AutomationSettings", () => {
     await openJobDetails(container, "job-browser-1");
 
     expect(toast.error).toHaveBeenCalledWith("加载运行历史失败: network down");
+  });
+
+  it("绑定目标详情应从最新运行会话触发 automation owner 审计", async () => {
+    setupManagedObjectiveAutomationMocks();
+    const container = await renderSettings({
+      mode: "workspace",
+    });
+
+    await openJobDetails(container, "job-managed-objective-1");
+
+    const auditButton = document.body.querySelector<HTMLButtonElement>(
+      "[data-testid='automation-managed-objective-audit-job-managed-objective-1']",
+    );
+    expect(auditButton).not.toBeNull();
+
+    await act(async () => {
+      auditButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockAuditAgentRuntimeObjective).toHaveBeenCalledWith({
+      sessionId: "session-managed-objective-1",
+      ownerKind: "automation_job",
+      ownerId: "job-managed-objective-1",
+    });
+    expect(toast.success).toHaveBeenCalledWith("目标审计已更新");
+  });
+
+  it("绑定目标详情应打开工作区内的证据引用", async () => {
+    setupManagedObjectiveAutomationMocks();
+    const container = await renderSettings({
+      mode: "workspace",
+    });
+
+    await openJobDetails(container, "job-managed-objective-1");
+
+    const openEvidenceButton = document.body.querySelector<HTMLButtonElement>(
+      "[data-testid='automation-managed-objective-open-evidence-job-managed-objective-1-0']",
+    );
+    expect(openEvidenceButton).not.toBeNull();
+
+    await act(async () => {
+      openEvidenceButton?.click();
+      await Promise.resolve();
+    });
+
+    expect(mockOpenPathWithDefaultApp).toHaveBeenCalledWith(
+      "/workspace/default/.lime/harness/job-managed-objective-1/evidence",
+    );
   });
 
   it("workspace 模式切换到概览 tab 后才显示统计与健康面板", async () => {
@@ -956,6 +1102,78 @@ describe("AutomationSettings", () => {
     expect(dialogText).toContain("重点关注新增热点与异常波动。");
     expect(dialogText).toContain("失败原因");
     expect(dialogText).toContain("模型返回空结果");
+  });
+
+  it("自动化任务列表应展示绑定目标摘要", async () => {
+    mockGetAutomationJobs.mockResolvedValueOnce([
+      {
+        id: "job-managed-objective-1",
+        name: "每日目标摘要｜定时执行",
+        description: "围绕目标持续生成可审计摘要。",
+        enabled: true,
+        workspace_id: "workspace-default",
+        execution_mode: "skill",
+        schedule: { kind: "cron", expr: "0 9 * * *", tz: "Asia/Shanghai" },
+        payload: {
+          kind: "agent_turn",
+          prompt: "继续推进每日目标摘要。",
+          system_prompt: null,
+          web_search: false,
+          request_metadata: {
+            harness: {
+              managed_objective: {
+                objective_id: "objective-managed-1",
+                owner_type: "automation_job",
+                owner_id: "job-managed-objective-1",
+                objective_text: "每天生成可审计的 Markdown 趋势摘要",
+                success_criteria: [
+                  "生成 Markdown artifact",
+                  "写入 evidence pack",
+                ],
+                state: "blocked",
+                completion_audit: "artifact_or_evidence_required",
+              },
+            },
+          },
+        },
+        delivery: {
+          mode: "none",
+          channel: null,
+          target: null,
+          best_effort: true,
+          output_schema: "text",
+          output_format: "text",
+        },
+        timeout_secs: 120,
+        max_retries: 2,
+        next_run_at: "2026-03-16T09:00:00Z",
+        last_status: "error",
+        last_error: "等待补充输入",
+        last_run_at: "2026-03-16T08:59:00Z",
+        last_finished_at: "2026-03-16T09:00:10Z",
+        running_started_at: null,
+        consecutive_failures: 3,
+        last_retry_count: 0,
+        auto_disabled_until: null,
+        last_delivery: null,
+        created_at: "2026-03-16T00:00:00Z",
+        updated_at: "2026-03-16T00:00:00Z",
+      },
+    ]);
+
+    const container = await renderSettings({ mode: "workspace" });
+    const objectiveSummary = container.querySelector(
+      "[data-testid='automation-job-managed-objective-summary-job-managed-objective-1']",
+    );
+
+    expect(objectiveSummary).not.toBeNull();
+    expect(objectiveSummary?.textContent).toContain("目标");
+    expect(objectiveSummary?.textContent).toContain("已阻塞");
+    expect(objectiveSummary?.textContent).toContain(
+      "每天生成可审计的 Markdown 趋势摘要",
+    );
+    expect(objectiveSummary?.textContent).toContain("2 条成功标准");
+    expect(objectiveSummary?.textContent).toContain("需产物或证据审计");
   });
 
   it("旧目录 cloud_required 任务应显示兼容标记而不是云执行", async () => {

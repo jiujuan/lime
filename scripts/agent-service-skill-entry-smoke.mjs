@@ -2,6 +2,7 @@
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -15,6 +16,10 @@ const runtimeTranscriptPath = path.join(
   ".lime",
   "qc",
   "skill-forge-runtime-transcript-current.json",
+);
+const cargoTargetDir = path.resolve(
+  process.env.LIME_AGENT_SERVICE_SKILL_ENTRY_TARGET_DIR ||
+    path.join(os.tmpdir(), "lime-agent-service-skill-entry-target"),
 );
 
 function runVitest(label, args) {
@@ -67,6 +72,8 @@ function runCargoTestGroup(label, { packageName, testFilter, expectedTests }) {
       "test",
       "--manifest-path",
       "Cargo.toml",
+      "--target-dir",
+      cargoTargetDir,
       "-p",
       packageName,
       testFilter,
@@ -351,6 +358,10 @@ function writeRuntimeTranscript(cargoResults) {
 }
 
 function main() {
+  console.log(
+    `[smoke:agent-service-skill-entry] Cargo target: ${cargoTargetDir}`,
+  );
+
   runVitest("Skill Forge 前端 metadata 与工作台显式启用链路", [
     "src/lib/api/capabilityDrafts.test.ts",
     "src/lib/api/agentRuntime/inventoryClient.test.ts",

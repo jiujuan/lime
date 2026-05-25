@@ -496,7 +496,7 @@ function hasProcessTreeMembers(pid) {
   );
 }
 
-async function runCommand(command, args, label, timeoutMs) {
+async function runCommand(command, args, label, timeoutMs, envOverrides = {}) {
   console.log(`\n[verify:gui-smoke] > ${formatCommand(command, args)}`);
 
   await new Promise((resolve, reject) => {
@@ -504,7 +504,7 @@ async function runCommand(command, args, label, timeoutMs) {
       cwd: rootDir,
       detached: process.platform !== "win32",
       stdio: "inherit",
-      env: process.env,
+      env: { ...process.env, ...envOverrides },
     });
     let settled = false;
     let timedOut = false;
@@ -1158,11 +1158,14 @@ function releaseGuiSmokeRunLock() {
   }
 }
 
-async function waitForAppShell(options) {
+async function waitForAppShell(
+  options,
+  { timeoutMs = options.timeoutMs, label = "前端壳" } = {},
+) {
   const startedAt = Date.now();
   let lastError = null;
 
-  while (Date.now() - startedAt < options.timeoutMs) {
+  while (Date.now() - startedAt < timeoutMs) {
     try {
       const response = await fetch(options.appUrl, { method: "GET" });
       const html = await response.text();
@@ -1177,7 +1180,7 @@ async function waitForAppShell(options) {
       );
 
       console.log(
-        `[verify:gui-smoke] 前端壳已就绪: ${options.appUrl} (${Date.now() - startedAt}ms)`,
+        `[verify:gui-smoke] ${label}已就绪: ${options.appUrl} (${Date.now() - startedAt}ms)`,
       );
       return;
     } catch (error) {
@@ -1191,8 +1194,16 @@ async function waitForAppShell(options) {
       ? lastError.message
       : String(lastError || "unknown error");
   throw new Error(
-    `[verify:gui-smoke] 前端壳未就绪: ${options.appUrl}。最后错误: ${detail}`,
+    `[verify:gui-smoke] ${label}未就绪: ${options.appUrl}。最后错误: ${detail}`,
   );
+}
+
+async function runPageSmokeCommand(options, args, label, timeoutMs) {
+  await waitForAppShell(options, {
+    timeoutMs: Math.min(options.timeoutMs, 30_000),
+    label: `${label} 前置前端壳`,
+  });
+  await runCommand(npmCommand, args, label, timeoutMs);
 }
 
 async function isUrlReady(url, timeoutMs) {
@@ -1418,6 +1429,13 @@ async function resolveStartupMode(options) {
 
   const guiSmokeProcesses = inspectGuiSmokeTauriProcesses();
   const existingAppShell = await probeAppShell(options.appUrl, 1_500);
+  const existingListeners = listListeningCommandsForPort(
+    resolveUrlPort(options.appUrl),
+  );
+  const hasLimeFrontendListener = existingListeners.some(
+    isLikelyLimeFrontendListener,
+  );
+
   if (existingAppShell.reachable && !existingAppShell.isLimeDevShell) {
     const statusLabel =
       `${existingAppShell.status || "unknown"} ${existingAppShell.statusText || ""}`.trim();
@@ -1426,13 +1444,35 @@ async function resolveStartupMode(options) {
     );
   }
 
+  const existingBridge = await isUrlReady(options.healthUrl, 1_500);
+  if (existingBridge) {
+    if (existingAppShell.isLimeDevShell) {
+      console.log(
+        "[verify:gui-smoke] 检测到已有 headless 环境，自动复用现有前端与 DevBridge。",
+      );
+    } else if (hasLimeFrontendListener) {
+      console.log(
+        `[verify:gui-smoke] 检测到已有 DevBridge，且 ${options.appUrl} 已由当前仓库的前端启动链监听；本次将复用现有环境并等待前端壳就绪。`,
+      );
+    } else {
+      console.log(
+        `[verify:gui-smoke] 检测到已有 DevBridge 正在监听 ${options.healthUrl}；本次将复用现有环境并等待前端壳就绪。`,
+      );
+    }
+
+    return {
+      shouldStart: false,
+      reusedExisting: true,
+      reuseExistingAppShell: true,
+    };
+  }
+
   if (!existingAppShell.isLimeDevShell) {
-    const existingListeners = listListeningCommandsForPort(
-      resolveUrlPort(options.appUrl),
-    );
-    const hasLimeFrontendListener = existingListeners.some(
-      isLikelyLimeFrontendListener,
-    );
+    if (existingListeners.length > 0 && !hasLimeFrontendListener) {
+      throw new Error(
+        `[verify:gui-smoke] ${options.appUrl} 已被其他进程占用，且当前无法确认为 Lime 前端壳。请先关闭占用进程后重试。`,
+      );
+    }
 
     if (guiSmokeProcesses.active.length > 0) {
       const pidList = guiSmokeProcesses.active
@@ -1459,28 +1499,10 @@ async function resolveStartupMode(options) {
       };
     }
 
-    if (existingListeners.length > 0) {
-      throw new Error(
-        `[verify:gui-smoke] ${options.appUrl} 已被其他进程占用，且当前无法确认为 Lime 前端壳。请先关闭占用进程后重试。`,
-      );
-    }
-
     return {
       shouldStart: true,
       reusedExisting: false,
       reuseExistingAppShell: false,
-    };
-  }
-
-  const existingBridge = await isUrlReady(options.healthUrl, 1_500);
-  if (existingBridge) {
-    console.log(
-      "[verify:gui-smoke] 检测到已有 headless 环境，自动复用现有前端与 DevBridge。",
-    );
-    return {
-      shouldStart: false,
-      reusedExisting: true,
-      reuseExistingAppShell: true,
     };
   }
 
@@ -1631,6 +1653,9 @@ async function main() {
       ["run", "smoke:agent-service-skill-entry"],
       "smoke:agent-service-skill-entry",
       options.timeoutMs + 30_000,
+      {
+        LIME_AGENT_SERVICE_SKILL_ENTRY_TARGET_DIR: options.cargoTargetDir,
+      },
     );
 
     await runCommand(
@@ -1640,8 +1665,8 @@ async function main() {
       options.timeoutMs + 30_000,
     );
 
-    await runCommand(
-      npmCommand,
+    await runPageSmokeCommand(
+      options,
       [
         "run",
         "smoke:agent-runtime-tool-surface-page",
@@ -1661,8 +1686,8 @@ async function main() {
       options.timeoutMs + 30_000,
     );
 
-    await runCommand(
-      npmCommand,
+    await runPageSmokeCommand(
+      options,
       [
         "run",
         "smoke:at-command-registry",
@@ -1682,8 +1707,8 @@ async function main() {
       options.timeoutMs + 30_000,
     );
 
-    await runCommand(
-      npmCommand,
+    await runPageSmokeCommand(
+      options,
       [
         "run",
         "smoke:agent-apps",
@@ -1701,8 +1726,8 @@ async function main() {
       options.timeoutMs + 30_000,
     );
 
-    await runCommand(
-      npmCommand,
+    await runPageSmokeCommand(
+      options,
       [
         "run",
         "smoke:claw-chat-ready-streaming",
@@ -1722,8 +1747,8 @@ async function main() {
       options.timeoutMs + 30_000,
     );
 
-    await runCommand(
-      npmCommand,
+    await runPageSmokeCommand(
+      options,
       [
         "run",
         "smoke:knowledge-gui",
@@ -1755,8 +1780,8 @@ async function main() {
     }
 
     if (options.includeKnowledgeProductE2e) {
-      await runCommand(
-        npmCommand,
+      await runPageSmokeCommand(
+        options,
         [
           "run",
           "knowledge:product-e2e",
@@ -1775,8 +1800,8 @@ async function main() {
       );
     }
 
-    await runCommand(
-      npmCommand,
+    await runPageSmokeCommand(
+      options,
       [
         "run",
         "smoke:design-canvas",

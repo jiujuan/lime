@@ -380,7 +380,7 @@ const ConversationItemActionButton = styled.button`
   }
 
   &:disabled {
-    cursor: wait;
+    cursor: default;
     opacity: 0.6;
   }
 

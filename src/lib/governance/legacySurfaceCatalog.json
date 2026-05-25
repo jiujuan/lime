@@ -5103,6 +5103,7 @@
       "allowedPaths": [
         "src-tauri/crates/agent/src/session_query.rs",
         "src-tauri/crates/agent/src/session_store.rs",
+        "src-tauri/crates/agent/src/session_store_subagent_context.rs",
         "src-tauri/crates/aster-rust/crates/aster/src/session/query.rs",
         "src-tauri/crates/aster-rust/crates/aster/src/session/subagent.rs"
       ]

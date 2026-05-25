@@ -12,6 +12,7 @@ import { browserMocks } from "./browserMocks";
 import { configSystemMocks } from "./configSystemMocks";
 import { clearCompanionMocks, companionMocks } from "./companionMocks";
 import { agentRuntimeMocks } from "./agentRuntimeMocks";
+import { resetAgentRuntimeObjectiveMocks } from "./agentRuntimeObjectiveMocks";
 import { agentAppMocks } from "./agentAppMocks";
 import { fileSystemMocks } from "./fileSystemMocks";
 import { clearKnowledgeMocks, knowledgeMocks } from "./knowledgeMocks";
@@ -161,6 +162,7 @@ export function clearMocks() {
   mockCommands.clear();
   clearCompanionMocks();
   clearKnowledgeMocks();
+  resetAgentRuntimeObjectiveMocks();
   clearSkillForgeMocks();
   clearLayeredDesignMocks();
 }

@@ -697,6 +697,8 @@ pub fn create_tables(conn: &Connection) -> Result<(), rusqlite::Error> {
         [],
     )?;
 
+    crate::database::managed_objective_repository::create_managed_objectives_table(conn)?;
+
     // Agent turn 表
     // 存储每一轮用户输入驱动的执行周期
     conn.execute(

@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { ChatSidebar } from "./ChatSidebar";
 import type { Topic } from "../hooks/agentChatShared";
 import type { Message } from "../types";
@@ -44,12 +45,13 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
 });
 
 afterEach(() => {
@@ -129,6 +131,22 @@ describe("ChatSidebar", () => {
     const container = renderSidebar();
     expect(container.textContent).toContain("新建任务");
     expect(container.textContent).toContain("任务一");
+  });
+
+  it("历史记录初次同步时应展示加载提示而不是空态", () => {
+    const container = renderSidebar({
+      topics: [],
+      topicsReady: false,
+      currentTopicId: null,
+    });
+
+    expect(
+      container.querySelector('[data-testid="chat-sidebar-history-loading"]'),
+    ).not.toBeNull();
+    expect(container.querySelector("[aria-busy='true']")).not.toBeNull();
+    expect(container.textContent).toContain("正在整理历史记录");
+    expect(container.textContent).toContain("最近对话会自动出现");
+    expect(container.textContent).not.toContain("还没有任务");
   });
 
   it("任务中心侧栏空态应展示最近对话文案和新建入口", () => {

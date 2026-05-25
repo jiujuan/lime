@@ -39,6 +39,15 @@ import {
   automationAccessModeLabelWithCopy,
   resolveAgentTurnAutomationAccessMode,
 } from "./automationAccessMode";
+import {
+  AutomationManagedObjectiveDetails,
+  type AutomationManagedObjectiveDetailsCopy,
+} from "./AutomationManagedObjectiveDetails";
+import {
+  resolveAutomationObjectiveReferencePath,
+  resolveLatestAutomationObjectiveAuditSessionId,
+} from "./managedObjectiveAutomationEvidence";
+import { resolveManagedObjectiveAutomationProjection } from "./managedObjectiveAutomationProjection";
 
 type SettingsTranslate = TFunction<"settings">;
 
@@ -478,7 +487,12 @@ interface AutomationJobDetailsDialogProps {
   jobRuns: AgentRun[];
   historyLoading: boolean;
   retiredSceneAppMessage?: string | null;
+  workspaceRoot?: string | null;
+  managedObjectiveAuditing?: boolean;
   onRefreshHistory: (jobId: string) => Promise<void> | void;
+  onAuditManagedObjective?: (job: AutomationJobRecord) => Promise<void> | void;
+  onOpenManagedObjectiveReference?: (path: string) => Promise<void> | void;
+  onRevealManagedObjectiveReference?: (path: string) => Promise<void> | void;
 }
 
 export function AutomationJobDetailsDialog({
@@ -490,7 +504,12 @@ export function AutomationJobDetailsDialog({
   jobRuns,
   historyLoading,
   retiredSceneAppMessage = null,
+  workspaceRoot = null,
+  managedObjectiveAuditing = false,
   onRefreshHistory,
+  onAuditManagedObjective,
+  onOpenManagedObjectiveReference,
+  onRevealManagedObjectiveReference,
 }: AutomationJobDetailsDialogProps) {
   const { i18n, t } = useTranslation("settings");
   const presentationCopy = buildDetailsPresentationCopy(t);
@@ -502,6 +521,115 @@ export function AutomationJobDetailsDialog({
     t,
     "settings.automation.details.serviceSkill.executionCompatNote",
   );
+  const managedObjectiveDetailsCopy: AutomationManagedObjectiveDetailsCopy = {
+    actionAudit: detailsText(
+      t,
+      "settings.automation.details.managedObjective.action.audit",
+    ),
+    actionAuditing: detailsText(
+      t,
+      "settings.automation.details.managedObjective.action.auditing",
+    ),
+    actionOpenRef: detailsText(
+      t,
+      "settings.automation.details.managedObjective.action.openRef",
+    ),
+    actionRevealRef: detailsText(
+      t,
+      "settings.automation.details.managedObjective.action.revealRef",
+    ),
+    auditArtifactOrEvidenceRequired: detailsText(
+      t,
+      "settings.automation.details.managedObjective.auditArtifactOrEvidenceRequired",
+    ),
+    auditDefault: detailsText(
+      t,
+      "settings.automation.details.managedObjective.auditDefault",
+    ),
+    auditTitle: detailsText(
+      t,
+      "settings.automation.details.managedObjective.auditTitle",
+    ),
+    auditUnavailable: detailsText(
+      t,
+      "settings.automation.details.managedObjective.auditUnavailable",
+    ),
+    artifactsMore: (count) =>
+      detailsText(
+        t,
+        "settings.automation.details.managedObjective.artifactsMore",
+        {
+          count,
+        },
+      ),
+    artifactsTitle: (count) =>
+      detailsText(
+        t,
+        "settings.automation.details.managedObjective.artifactsTitle",
+        {
+          count,
+        },
+      ),
+    blockerReason: (reason) =>
+      detailsText(
+        t,
+        "settings.automation.details.managedObjective.blockerReason",
+        {
+          reason,
+        },
+      ),
+    criteriaEmpty: detailsText(
+      t,
+      "settings.automation.details.managedObjective.criteriaEmpty",
+    ),
+    criteriaTitle: detailsText(
+      t,
+      "settings.automation.details.managedObjective.criteriaTitle",
+    ),
+    description: detailsText(
+      t,
+      "settings.automation.details.managedObjective.description",
+    ),
+    evidencePackTitle: detailsText(
+      t,
+      "settings.automation.details.managedObjective.evidencePackTitle",
+    ),
+    evidenceTitle: detailsText(
+      t,
+      "settings.automation.details.managedObjective.evidenceTitle",
+    ),
+    statusLabel: (status) =>
+      String(
+        i18n.t(`agentChat.managedObjective.status.${status}`, {
+          ns: "agent",
+        }),
+      ),
+    title: detailsText(t, "settings.automation.details.managedObjective.title"),
+  };
+  const managedObjectiveProjection = job
+    ? resolveManagedObjectiveAutomationProjection(job)
+    : null;
+  const managedObjectiveLatestSessionId = job
+    ? resolveLatestAutomationObjectiveAuditSessionId(job.id, jobRuns)
+    : null;
+  const handleOpenManagedObjectiveReference = (reference: string) => {
+    const resolvedPath = resolveAutomationObjectiveReferencePath(
+      workspaceRoot,
+      reference,
+    );
+    if (resolvedPath) {
+      void onOpenManagedObjectiveReference?.(resolvedPath);
+    }
+  };
+  const handleRevealManagedObjectiveReference = (reference: string) => {
+    const resolvedPath = resolveAutomationObjectiveReferencePath(
+      workspaceRoot,
+      reference,
+    );
+    if (resolvedPath) {
+      void onRevealManagedObjectiveReference?.(resolvedPath);
+    }
+  };
 
   return (
     <Dialog open={open && Boolean(job)} onOpenChange={onOpenChange}>
@@ -685,6 +813,31 @@ export function AutomationJobDetailsDialog({
                     </div>
                   ) : null}
                 </div>
+
+                {managedObjectiveProjection ? (
+                  <AutomationManagedObjectiveDetails
+                    jobId={job.id}
+                    projection={managedObjectiveProjection}
+                    copy={managedObjectiveDetailsCopy}
+                    latestSessionId={managedObjectiveLatestSessionId}
+                    auditing={managedObjectiveAuditing}
+                    onAuditEvidence={
+                      onAuditManagedObjective
+                        ? () => void onAuditManagedObjective(job)
+                        : undefined
+                    }
+                    onOpenReference={
+                      onOpenManagedObjectiveReference
+                        ? handleOpenManagedObjectiveReference
+                        : undefined
+                    }
+                    onRevealReference={
+                      onRevealManagedObjectiveReference
+                        ? handleRevealManagedObjectiveReference
+                        : undefined
+                    }
+                  />
+                ) : null}
 
                 {serviceSkillContext ? (
                   <div className="rounded-[22px] border border-sky-200/80 bg-sky-50 px-4 py-4">

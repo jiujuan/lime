@@ -61,14 +61,14 @@ pub(super) async fn try_handle(
         "get_automation_status" => serde_json::to_value(
             crate::commands::automation_cmd::get_automation_status(automation_state).await?,
         )?,
-        "get_automation_jobs" => {
-            serde_json::to_value(crate::commands::automation_cmd::get_automation_jobs(db).await?)?
-        }
+        "get_automation_jobs" => serde_json::to_value(
+            crate::commands::automation_cmd::get_automation_jobs(automation_state).await?,
+        )?,
         "get_automation_job" => {
             let args = args_or_default(args);
             let id = get_string_arg(&args, "id", "id")?;
             serde_json::to_value(
-                crate::commands::automation_cmd::get_automation_job(db, id).await?,
+                crate::commands::automation_cmd::get_automation_job(automation_state, id).await?,
             )?
         }
         "create_automation_job" => {

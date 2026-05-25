@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockSafeInvoke } = vi.hoisted(() => ({
+const { mockLogAgentDebug, mockSafeInvoke } = vi.hoisted(() => ({
+  mockLogAgentDebug: vi.fn(),
   mockSafeInvoke: vi.fn(),
+}));
+
+vi.mock("@/lib/agentDebug", () => ({
+  logAgentDebug: mockLogAgentDebug,
 }));
 
 vi.mock("@/lib/dev-bridge", () => ({
@@ -859,6 +864,28 @@ describe("Agent API 治理护栏", () => {
       sessionId: "session-runtime-tail",
       historyLimit: 120,
     });
+  });
+
+  it("getAgentRuntimeSession 遇到 transient DevBridge 读失败时只输出 warn 调试日志", async () => {
+    mockSafeInvoke.mockRejectedValueOnce(
+      new Error(
+        '[DevBridge] 浏览器模式无法连接后端桥接，命令 "agent_runtime_get_session" 执行失败。原始错误: Failed to fetch (timeout after 8000ms)',
+      ),
+    );
+
+    await expect(
+      getAgentRuntimeSession("session-runtime-transient", {
+        historyLimit: 40,
+      }),
+    ).rejects.toThrow("timeout after 8000ms");
+
+    const errorDebugCall = mockLogAgentDebug.mock.calls.find(
+      ([component, phase]) =>
+        component === "AgentApi" && phase === "runtimeGetSession.error",
+    );
+
+    expect(errorDebugCall).toBeTruthy();
+    expect(errorDebugCall?.[3]).toMatchObject({ level: "warn" });
   });
 
   it("exportAgentRuntimeHandoffBundle 应走统一 runtime handoff 导出命令", async () => {

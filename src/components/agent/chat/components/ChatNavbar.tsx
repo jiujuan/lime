@@ -27,6 +27,7 @@ interface ChatNavbarProps {
   entryContextLabel?: string;
   entryContextHint?: string;
   onToggleHistory: () => void;
+  onPrefetchHistory?: () => void;
   showHistoryToggle?: boolean;
   onToggleFullscreen: () => void;
   onBackToProjectManagement?: () => void;
@@ -92,6 +93,7 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
   entryContextLabel,
   entryContextHint,
   onToggleHistory,
+  onPrefetchHistory,
   showHistoryToggle = true,
   onToggleFullscreen: _onToggleFullscreen,
   onBackToProjectManagement,
@@ -403,6 +405,8 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
                 size="icon"
                 className={ghostIconButtonClassName}
                 onClick={onToggleHistory}
+                onFocus={onPrefetchHistory}
+                onMouseEnter={onPrefetchHistory}
                 aria-label="切换历史"
                 title="切换历史"
               >

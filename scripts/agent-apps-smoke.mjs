@@ -21,13 +21,6 @@ const DEFAULTS = {
   includeContentFactoryCompletionE2e: false,
   completionTimeoutMs: 90_000,
   contentFactoryAction: "build-store",
-  contentFactoryAppDir: path.resolve(
-    process.cwd(),
-    "..",
-    "..",
-    "limecloud",
-    "content-factory-app",
-  ),
 };
 
 const ACCOUNT_MENU_BUTTON_SELECTOR = '[data-testid="app-sidebar-account-button"]';
@@ -152,10 +145,6 @@ function parseArgs(argv) {
     }
     if (arg === "--content-factory-action" && argv[index + 1]) {
       options.contentFactoryAction = String(argv[index + 1]).trim();
-      index += 1;
-    }
-    if (arg === "--content-factory-app-dir" && argv[index + 1]) {
-      options.contentFactoryAppDir = path.resolve(String(argv[index + 1]).trim());
       index += 1;
     }
   }
@@ -1843,13 +1832,6 @@ async function ensureContentFactoryInstalled(page, options, reason) {
     return { status: "already_installed", reason };
   }
 
-  const appMarkdownPath = path.join(options.contentFactoryAppDir, "APP.md");
-  if (!fs.existsSync(appMarkdownPath)) {
-    throw new Error(
-      `Content Factory local package is required to seed Agent Apps smoke after delete-data uninstall: ${options.contentFactoryAppDir}`,
-    );
-  }
-
   await page.evaluate(async () => {
     const api = await import("/src/lib/api/agentApps.ts");
     const fixtureResponse = await fetch(
@@ -1872,16 +1854,15 @@ async function ensureContentFactoryInstalled(page, options, reason) {
       app,
       packageManifest,
     });
-  }, { appDir: options.contentFactoryAppDir });
+  });
 
   await page.click('[data-testid="agent-apps-refresh"]');
   await page.waitForSelector(installedSelector, {
     timeout: options.timeoutMs,
   });
   return {
-    status: "seeded_from_local_package",
+    status: "seeded_from_fixture",
     reason,
-    appDir: options.contentFactoryAppDir,
   };
 }
 

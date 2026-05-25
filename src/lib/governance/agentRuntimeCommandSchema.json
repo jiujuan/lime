@@ -56,6 +56,60 @@
       "docsSection": "agent-runtime.thread"
     },
     {
+      "command": "agent_runtime_get_objective",
+      "domain": "thread",
+      "requestType": "{ sessionId: string }",
+      "responseType": "ManagedObjective | null",
+      "lifecycle": "current",
+      "mockStrategy": "bridge-only",
+      "docsSection": "agent-runtime.thread"
+    },
+    {
+      "command": "agent_runtime_set_objective",
+      "domain": "thread",
+      "requestType": "AgentRuntimeSetObjectiveRequest",
+      "responseType": "ManagedObjective",
+      "lifecycle": "current",
+      "mockStrategy": "bridge-only",
+      "docsSection": "agent-runtime.thread"
+    },
+    {
+      "command": "agent_runtime_update_objective_status",
+      "domain": "thread",
+      "requestType": "AgentRuntimeUpdateObjectiveStatusRequest",
+      "responseType": "ManagedObjective | null",
+      "lifecycle": "current",
+      "mockStrategy": "bridge-only",
+      "docsSection": "agent-runtime.thread"
+    },
+    {
+      "command": "agent_runtime_clear_objective",
+      "domain": "thread",
+      "requestType": "AgentRuntimeObjectiveSessionRequest",
+      "responseType": "AgentRuntimeClearObjectiveResult",
+      "lifecycle": "current",
+      "mockStrategy": "bridge-only",
+      "docsSection": "agent-runtime.thread"
+    },
+    {
+      "command": "agent_runtime_continue_objective",
+      "domain": "thread",
+      "requestType": "AgentRuntimeObjectiveSessionRequest",
+      "responseType": "AgentRuntimeContinueObjectiveResult",
+      "lifecycle": "current",
+      "mockStrategy": "bridge-only",
+      "docsSection": "agent-runtime.thread"
+    },
+    {
+      "command": "agent_runtime_audit_objective",
+      "domain": "thread",
+      "requestType": "AgentRuntimeObjectiveSessionRequest",
+      "responseType": "ManagedObjective",
+      "lifecycle": "current",
+      "mockStrategy": "bridge-only",
+      "docsSection": "agent-runtime.thread"
+    },
+    {
       "command": "agent_runtime_list_file_checkpoints",
       "domain": "thread",
       "requestType": "AgentRuntimeListFileCheckpointsRequest",

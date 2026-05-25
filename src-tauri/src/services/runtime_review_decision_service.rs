@@ -1773,6 +1773,7 @@ mod tests {
             cost_state: None,
             permission_state: None,
             limit_event: None,
+            managed_objective: None,
         }
     }
 

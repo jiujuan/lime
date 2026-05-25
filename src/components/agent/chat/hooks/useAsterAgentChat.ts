@@ -633,6 +633,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     triggerAIGuide: context.triggerAIGuide,
 
     topics: session.topics,
+    topicsReady: session.topicsReady,
     sessionHistoryWindow: session.sessionHistoryWindow,
     isAutoRestoringSession: session.isAutoRestoringSession,
     isSessionHydrating: session.isSessionHydrating,
@@ -641,6 +642,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     ensureSession: session.ensureSession,
     switchTopic: session.switchTopic,
     loadFullSessionHistory: session.loadFullSessionHistory,
+    refreshSessionReadModel: session.refreshSessionReadModel,
     deleteTopic: session.deleteTopic,
     renameTopic: session.renameTopic,
     loadTopics: session.loadTopics,

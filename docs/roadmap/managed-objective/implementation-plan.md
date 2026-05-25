@@ -1,7 +1,7 @@
 # Managed Objective 实施计划
 
-> 状态：proposal  
-> 更新时间：2026-05-05  
+> 状态：in-progress
+> 更新时间：2026-05-25
 > 目标：把 Managed Objective 拆成可验证阶段，先做受控目标续跑闭环，再扩展到长期业务任务。
 
 依赖文档：
@@ -29,6 +29,17 @@
 
 5. **先低风险任务**
    - 首期只做只读 skill / 本地 artifact 产出，不做外部写操作自动化。
+
+## 1.1 进度日志
+
+- 2026-05-25：P1/P2 已接入 GUI current 主链，支持 session-scoped objective 保存、暂停、恢复、清除和手动继续；P3 第一刀已落地 `agent_runtime_audit_objective`，复用 `agent_runtime_export_evidence_pack` 事实源回写 `last_audit_summary / last_evidence_pack_ref / last_artifact_refs`，并在目标面板展示审计结果。
+- 2026-05-25：P3 审计 guard 已补实：`completed` 决策必须同时具备 artifact / timeline / tool call / controlled evidence 之一；带 `success_criteria` 的目标必须有 `checkedCriteria / criteriaChecks` 等 satisfied 证据；存在 pending user request 时强制进入 `needs_input`。GUI 面板按 controller / current view / empty form / shared model 拆分，避免继续扩大单文件职责。验证已覆盖 Rust 定向审计测试、Managed Objective 前端回归与 `npm run test:contracts`。
+- 2026-05-25：P4 第一刀已接入 automation owner binding：`agent_turn` automation payload 中的 `harness.managed_objective` 会持久化为 `owner_kind=automation_job` 的 objective，并回填 `objective_id / owner_id / completion_audit` 等 metadata；非 `active` objective 会阻断 due run，job pause / resume 会同步 objective pause / active，连续失败达到阈值后 objective 进入 `blocked` 并停用 job。验证已覆盖 Rust 定向绑定测试；due job 集成、app 重启恢复和 GUI job card projection 仍留在后续刀。
+- 2026-05-25：P4 第二刀补齐 due job scheduler 回归：active objective 绑定的 due job 会由 automation scheduler 推进并写入 automation run metadata，`needs_input` objective 会在 scheduler 层停用 job 且不创建 run；同时修复 `execute_due_jobs` 内部 status 写锁重入导致的轮询卡死问题。验证已覆盖 `managed_objective_binding` 定向测试 9 条；真实 `agent_runtime_submit_turn` 队列与 GUI job card projection 仍留在后续刀。
+- 2026-05-25：P5 第一刀已接入 automation job 列表投影：自动化设置页从现有 `agent_turn.request_metadata.harness.managed_objective` 解析 automation-owned objective，展示目标、状态、成功标准数量和 artifact / evidence 审计要求；解析与展示拆到 `managedObjectiveAutomationProjection.ts` 与 `AutomationManagedObjectiveSummary.tsx`，避免继续扩大自动化主文件。仍未完成详情弹窗里的 audit evidence backlink、artifact 回跳和 GUI smoke。
+- 2026-05-25：P5 第二刀已接入持续流程详情投影：详情弹窗复用 automation objective projection，展示绑定目标、状态、成功标准和 evidence-based audit 要求；状态色抽到 `managedObjectiveAutomationStatus.ts`，详情展示拆到 `AutomationManagedObjectiveDetails.tsx`。当前仍只展示后端 payload projection，不在前端猜测 evidence pack / artifact 回链；下一刀应补真实证据入口与 GUI smoke。
+- 2026-05-25：P5 第三刀修正 automation objective projection 的事实源：`get_automation_jobs / get_automation_job` 改为走 `AutomationService`，读取时刷新 `harness.managed_objective`，并从 Managed Objective 仓库回填真实 `state / last_audit_summary / last_evidence_pack_ref / last_artifact_refs / blocker_reason`；详情弹窗开始展示最近审计证据、证据包引用和产物引用。仍未新增 artifact 打开动作或导出 evidence pack 的 GUI action，最终验收仍需 GUI smoke。
+- 2026-05-25：P5 第四刀补齐 automation objective 的 GUI 审计动作：持续流程详情可用最新 automation run 的 `session_id` 触发现有 `agent_runtime_audit_objective`，但写回目标 owner 为 `automation_job / job.id`；证据包与产物引用支持按 workspace root 打开或定位。命令仍复用 `agent_runtime_*` current 主链，前端复杂解析拆到 `managedObjectiveAutomationEvidence.ts`，避免继续扩大自动化设置页和详情弹窗文件。仍需 GUI smoke 验证真实桌面链路。
 
 ## 2. P0：文档与边界落盘
 

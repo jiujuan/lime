@@ -7,6 +7,7 @@ mod tests {
     use crate::commands::aster_agent_cmd::dto::{
         AgentRuntimeActionScope, AgentRuntimeListSessionsRequest,
     };
+    use crate::commands::aster_agent_cmd::reply_runtime::build_runtime_user_message;
     use crate::commands::aster_agent_cmd::service_skill_launch::build_service_skill_preload_tool_projection;
     use crate::commands::aster_agent_cmd::tool_runtime::{
         append_agent_app_tool_execution_session_permissions,
@@ -7567,11 +7568,25 @@ mod tests {
     }
 
     fn runtime_turn_source() -> String {
-        fs::read_to_string(
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("src/commands/aster_agent_cmd/runtime_turn.rs"),
-        )
-        .expect("应能读取 runtime_turn.rs")
+        let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/commands/aster_agent_cmd");
+        [
+            "runtime_turn.rs",
+            "runtime_turn/flow.rs",
+            "runtime_turn/prompt_composition.rs",
+            "runtime_turn/request_metadata.rs",
+            "runtime_turn/request_resolution.rs",
+            "runtime_turn/skill_launch.rs",
+            "runtime_turn/stream.rs",
+        ]
+        .into_iter()
+        .map(|relative_path| {
+            let source = fs::read_to_string(base.join(relative_path)).unwrap_or_else(|error| {
+                panic!("应能读取 runtime turn 源码 {relative_path}: {error}")
+            });
+            format!("\n// file: {relative_path}\n{source}")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
     }
 
     fn aster_tool_source(relative_path: &str) -> String {

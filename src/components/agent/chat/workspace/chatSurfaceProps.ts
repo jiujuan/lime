@@ -384,6 +384,7 @@ interface BuildWorkspaceNavbarPropsParams {
   onToggleHistory: NonNullable<
     ComponentProps<typeof ChatNavbar>["onToggleHistory"]
   >;
+  onPrefetchHistory?: ComponentProps<typeof ChatNavbar>["onPrefetchHistory"];
   showHistoryToggle: boolean;
   onBackToProjectManagement?: ComponentProps<
     typeof ChatNavbar
@@ -436,6 +437,7 @@ export function buildWorkspaceNavbarProps({
   navbarContextVariant = "default",
   collapseEntryContext = false,
   onToggleHistory,
+  onPrefetchHistory,
   showHistoryToggle,
   onBackToProjectManagement,
   onBackToResources,
@@ -474,6 +476,7 @@ export function buildWorkspaceNavbarProps({
         ? "task-center"
         : "default",
     onToggleHistory,
+    onPrefetchHistory,
     showHistoryToggle,
     onToggleFullscreen: () => undefined,
     onBackToProjectManagement,

@@ -1,4 +1,7 @@
 {
+  "agentChat.sidebar.history.loadingBadge": "동기화 중",
+  "agentChat.sidebar.history.loadingDescription": "최신 세션을 가져오는 동안 최근 채팅이 자동으로 표시됩니다.",
+  "agentChat.sidebar.history.loadingTitle": "기록 정리 중",
   "agentChat.messageList.firstTokenStatus.cancelled.detail": "이 요청은 중지되었습니다.",
   "agentChat.messageList.firstTokenStatus.cancelled.title": "취소됨",
   "agentChat.messageList.firstTokenStatus.context.detail": "필요한 컨텍스트를 이번 턴에 연결하는 중입니다.",

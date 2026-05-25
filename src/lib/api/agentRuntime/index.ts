@@ -31,6 +31,15 @@ export {
   listWorkspaceSkillBindings,
 } from "./inventoryClient";
 export {
+  auditAgentRuntimeObjective,
+  clearAgentRuntimeObjective,
+  continueAgentRuntimeObjective,
+  createObjectiveClient,
+  getAgentRuntimeObjective,
+  setAgentRuntimeObjective,
+  updateAgentRuntimeObjectiveStatus,
+} from "./objectiveClient";
+export {
   cancelMediaTaskArtifact,
   completeAudioGenerationTaskArtifact,
   createAudioGenerationTaskArtifact,

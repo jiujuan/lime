@@ -15,7 +15,6 @@ use crate::services::automation_service::{
 };
 use lime_core::config::{AutomationExecutionMode, DeliveryConfig, TaskSchedule};
 use lime_core::database::dao::agent_run::AgentRun;
-use lime_core::database::dao::automation_job::AutomationJobDao;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 
@@ -117,19 +116,19 @@ pub async fn get_automation_status(
 
 #[tauri::command]
 pub async fn get_automation_jobs(
-    db: State<'_, DbConnection>,
+    automation_state: State<'_, AutomationServiceState>,
 ) -> Result<Vec<AutomationJobRecord>, String> {
-    let conn = lock_db(db.inner())?;
-    AutomationJobDao::list(&conn).map_err(|e| format!("查询自动化任务失败: {e}"))
+    let service = automation_state.0.read().await;
+    service.list_jobs()
 }
 
 #[tauri::command]
 pub async fn get_automation_job(
-    db: State<'_, DbConnection>,
+    automation_state: State<'_, AutomationServiceState>,
     id: String,
 ) -> Result<Option<AutomationJobRecord>, String> {
-    let conn = lock_db(db.inner())?;
-    AutomationJobDao::get(&conn, id.trim()).map_err(|e| format!("查询自动化任务失败: {e}"))
+    let service = automation_state.0.read().await;
+    service.get_job(id.trim())
 }
 
 #[tauri::command]

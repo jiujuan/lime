@@ -7229,7 +7229,7 @@ describe("useAsterAgentChat 偏好持久化", () => {
     }
   });
 
-  it("切换到命中过往快照的话题时应先立即回放本地 tail，再等待远端详情补全", async () => {
+  it("切换到命中过往快照的话题时应先立即回放本地 tail，并立即后台拉取远端详情", async () => {
     const workspaceId = "ws-topic-history-warm-restore";
     const createdAt = Math.floor(Date.now() / 1000);
     const deferredTopicDetail = createDeferred<{
@@ -7295,6 +7295,7 @@ describe("useAsterAgentChat 偏好持久化", () => {
     try {
       await flushEffects();
       await flushEffects();
+      mockScheduleMinimumDelayIdleTask.mockClear();
 
       let switchPromise: Promise<unknown> | null = null;
       await act(async () => {
@@ -7309,12 +7310,7 @@ describe("useAsterAgentChat 偏好持久化", () => {
       );
       await expect(switchPromise).resolves.toBeUndefined();
 
-      await act(async () => {
-        await new Promise((resolve) => {
-          window.setTimeout(resolve, 0);
-        });
-      });
-
+      expect(mockScheduleMinimumDelayIdleTask).not.toHaveBeenCalled();
       expect(mockGetAgentRuntimeSession).toHaveBeenCalledTimes(1);
 
       await act(async () => {
@@ -7428,9 +7424,6 @@ describe("useAsterAgentChat 偏好持久化", () => {
       await flushEffects();
       mockGetAgentRuntimeSession.mockClear();
       mockScheduleMinimumDelayIdleTask.mockClear();
-      mockScheduleMinimumDelayIdleTask.mockImplementation(() => {
-        throw new Error("stale 快照不应等待 idle hydration");
-      });
 
       await act(async () => {
         void harness.getValue().switchTopic("topic-stale");

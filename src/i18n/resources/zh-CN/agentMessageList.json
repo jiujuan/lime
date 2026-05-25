@@ -1,4 +1,7 @@
 {
+  "agentChat.sidebar.history.loadingBadge": "正在同步",
+  "agentChat.sidebar.history.loadingDescription": "最近对话会自动出现，当前正在为你拉取最新会话。",
+  "agentChat.sidebar.history.loadingTitle": "正在整理历史记录",
   "agentChat.messageList.firstTokenStatus.cancelled.detail": "当前请求已停止。",
   "agentChat.messageList.firstTokenStatus.cancelled.title": "已取消",
   "agentChat.messageList.firstTokenStatus.context.detail": "正在把必要上下文接入本轮响应。",

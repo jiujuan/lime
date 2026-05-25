@@ -3105,6 +3105,7 @@ mod tests {
                 message: "因能力缺口触发回退链".to_string(),
                 retryable: true,
             }),
+            managed_objective: None,
         }
     }
 

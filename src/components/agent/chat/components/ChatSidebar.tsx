@@ -5,6 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ArrowUpLeft,
   BrainCircuit,
@@ -56,6 +57,7 @@ const TEAM_SECTION_INITIAL_CHILD_COUNT = 3;
 const TEAM_SECTION_INITIAL_SIBLING_COUNT = 2;
 const TEAM_SECTION_LABEL = "子任务";
 const PINNED_TASK_IDS_STORAGE_KEY = "lime_task_sidebar_pinned_ids";
+const HISTORY_LOADING_SKELETON_ROWS = 4;
 
 const CHAT_SIDEBAR_PRIMARY_ACTION_BUTTON_CLASSNAME =
   "inline-flex h-11 w-full items-center justify-center gap-2 rounded-[18px] border border-emerald-200 bg-[linear-gradient(135deg,#0ea5e9_0%,#14b8a6_52%,#10b981_100%)] px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-950/15 transition hover:opacity-95 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100";
@@ -137,6 +139,7 @@ interface ChatSidebarProps {
   onOpenKnowledgePage?: () => void;
   onOpenMemoryPage?: () => void;
   topics: Topic[];
+  topicsReady?: boolean;
   currentTopicId: string | null;
   onSwitchTopic: (topicId: string) => void | Promise<void>;
   onOpenArchivedTopic?: (topicId: string) => void | Promise<void>;
@@ -528,6 +531,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   onOpenKnowledgePage,
   onOpenMemoryPage,
   topics,
+  topicsReady = true,
   currentTopicId,
   onSwitchTopic,
   onOpenArchivedTopic,
@@ -545,6 +549,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   onOpenSubagentSession,
   onReturnToParentSession,
 }) => {
+  const { t } = useTranslation("agent");
   const [editingTopicId, setEditingTopicId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [searchKeyword, setSearchKeyword] = useState("");
@@ -833,6 +838,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   const isTaskCenter = contextVariant === "task-center";
   const hasAnyTasks = topics.length > 0;
   const hasFilteredResults = filteredTaskItems.length > 0;
+  const isInitialHistoryLoading = !topicsReady && topics.length === 0;
   const taskHeadingLabel = isTaskCenter ? "最近对话" : "任务";
   const taskHeadingHint = isTaskCenter
     ? "继续最近对话，待处理会话会优先显示在前面。"
@@ -854,12 +860,23 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   const olderSectionMoreLabel = isTaskCenter
     ? "查看更多归档对话"
     : "查看更多历史任务";
+  const historyLoadingTitle = t(
+    "agentChat.sidebar.history.loadingTitle",
+  );
+  const historyLoadingDescription = t(
+    "agentChat.sidebar.history.loadingDescription",
+  );
+  const historyLoadingBadge = t(
+    "agentChat.sidebar.history.loadingBadge",
+  );
   const handleCreateConversation = isTaskCenter
     ? (onOpenTaskCenterHome ?? onNewChat)
     : onNewChat;
-  const taskCountLabel = searchKeyword.trim()
-    ? `${filteredTaskItems.length} 个结果`
-    : `${topics.length} 个${isTaskCenter ? "对话" : "任务"}`;
+  const taskCountLabel = isInitialHistoryLoading
+    ? historyLoadingBadge
+    : searchKeyword.trim()
+      ? `${filteredTaskItems.length} 个结果`
+      : `${topics.length} 个${isTaskCenter ? "对话" : "任务"}`;
   const sidebarShellClassName = isTaskCenter
     ? "w-[308px] shrink-0 overflow-hidden rounded-[30px] border border-slate-200 bg-[linear-gradient(180deg,#fbfcfd_0%,#f3f6f8_100%)] shadow-sm shadow-slate-950/5 dark:border-white/10 dark:bg-[#111318]"
     : "w-[308px] shrink-0 overflow-hidden rounded-[30px] border border-emerald-200/40 bg-[linear-gradient(180deg,rgba(252,254,252,0.98)_0%,rgba(247,251,248,0.92)_100%)] shadow-sm shadow-slate-950/5 backdrop-blur dark:border-white/10 dark:bg-[#111318]";
@@ -1117,7 +1134,11 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   };
 
   return (
-    <aside className={sidebarShellClassName} data-testid="chat-sidebar">
+    <aside
+      className={sidebarShellClassName}
+      data-testid="chat-sidebar"
+      aria-busy={isInitialHistoryLoading}
+    >
       <div className="flex h-full min-h-0 flex-col gap-4 p-4">
         <div className="space-y-3">
           <div className="relative">
@@ -1510,7 +1531,49 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
               )}
             </div>
 
-            {!hasAnyTasks ? (
+            {isInitialHistoryLoading ? (
+              <div
+                className="rounded-[26px] border border-slate-200/90 bg-white/86 px-4 py-5 shadow-sm shadow-slate-950/5 dark:border-white/10 dark:bg-white/5"
+                data-testid="chat-sidebar-history-loading"
+                role="status"
+                aria-live="polite"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                      {historyLoadingTitle}
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                      {historyLoadingDescription}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 space-y-2.5">
+                  {Array.from(
+                    { length: HISTORY_LOADING_SKELETON_ROWS },
+                    (_, index) => (
+                      <div
+                        key={index}
+                        className="rounded-[20px] border border-slate-200/70 bg-white px-3.5 py-3 shadow-sm shadow-slate-950/5 dark:border-white/10 dark:bg-white/5"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="mt-1 h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-slate-200 dark:bg-white/20" />
+                          <div className="min-w-0 flex-1 space-y-2.5">
+                            <div className="h-3.5 w-3/5 animate-pulse rounded-full bg-slate-200 dark:bg-white/20" />
+                            <div className="h-3 w-full animate-pulse rounded-full bg-slate-100 dark:bg-white/10" />
+                            <div className="h-3 w-2/3 animate-pulse rounded-full bg-slate-100 dark:bg-white/10" />
+                          </div>
+                        </div>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </div>
+            ) : !hasAnyTasks ? (
               <div className="rounded-[26px] border border-dashed border-slate-200/90 bg-white/82 px-4 py-8 text-center shadow-sm shadow-slate-950/5 dark:border-white/10 dark:bg-white/5">
                 <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300">
                   <Clock3 className="h-5 w-5" />

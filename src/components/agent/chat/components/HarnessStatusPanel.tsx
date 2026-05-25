@@ -144,6 +144,7 @@ import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 import { AgentThreadReliabilityPanel } from "./AgentThreadReliabilityPanel";
 import { HarnessVerificationSummarySection } from "./HarnessVerificationSummarySection";
 import { HarnessTaskIndexSection } from "./HarnessTaskIndexSection";
+import { ManagedObjectivePanel } from "./ManagedObjectivePanel";
 import { RuntimeReviewDecisionDialog } from "./RuntimeReviewDecisionDialog";
 
 interface HarnessEnvironmentSummary {
@@ -197,6 +198,7 @@ interface HarnessStatusPanelProps {
   onResumeThread?: () => boolean | Promise<boolean>;
   onReplayPendingRequest?: (requestId: string) => boolean | Promise<boolean>;
   onPromoteQueuedTurn?: (queuedTurnId: string) => boolean | Promise<boolean>;
+  onObjectiveChanged?: () => void | Promise<void>;
   onOpenMemoryWorkbench?: () => void;
   messages?: Message[];
   teamMemorySnapshot?: TeamMemorySnapshot | null;
@@ -235,6 +237,7 @@ type ToolInventoryFilterValue = "all" | "runtime" | "persisted" | "default";
 type HarnessSectionKey =
   | "team_config"
   | "runtime"
+  | "objective"
   | "agentui"
   | "handoff"
   | "reliability"
@@ -2310,6 +2313,7 @@ export function HarnessStatusPanel({
   onResumeThread,
   onReplayPendingRequest,
   onPromoteQueuedTurn,
+  onObjectiveChanged,
   onOpenMemoryWorkbench,
   messages = [],
   teamMemorySnapshot = null,
@@ -5754,6 +5758,35 @@ export function HarnessStatusPanel({
                       )}
                     </div>
                   </div>
+                </Section>
+              ) : null}
+
+              {diagnosticRuntimeContext?.sessionId ? (
+                <Section
+                  sectionKey="objective"
+                  title={String(t("agentChat.managedObjective.sectionTitle"))}
+                  badge={
+                    threadRead?.managed_objective
+                      ? String(
+                          t(
+                            `agentChat.managedObjective.status.${threadRead.managed_objective.status}` as never,
+                          ),
+                        )
+                      : String(t("agentChat.managedObjective.badge.empty"))
+                  }
+                  registerRef={registerSectionRef}
+                >
+                  <ManagedObjectivePanel
+                    sessionId={diagnosticRuntimeContext.sessionId}
+                    workspaceId={diagnosticRuntimeContext.workspaceId}
+                    objective={threadRead?.managed_objective ?? null}
+                    runtimeBusy={
+                      threadRead?.status === "running" ||
+                      threadRead?.status === "queued" ||
+                      canInterrupt
+                    }
+                    onObjectiveChanged={onObjectiveChanged}
+                  />
                 </Section>
               ) : null}
 

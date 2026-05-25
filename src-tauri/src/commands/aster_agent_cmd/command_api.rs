@@ -10,6 +10,14 @@ use crate::commands::aster_agent_cmd::subagent_runtime::{
 };
 use crate::commands::aster_agent_cmd::tool_runtime::ensure_runtime_support_tools_registered;
 
+#[path = "command_api/json_value_fields.rs"]
+pub(crate) mod json_value_fields;
+#[path = "command_api/objective_api.rs"]
+pub(crate) mod objective_api;
+#[path = "command_api/objective_audit.rs"]
+pub(crate) mod objective_audit;
+#[path = "command_api/objective_support.rs"]
+pub(crate) mod objective_support;
 #[path = "command_api/provider_api.rs"]
 pub(crate) mod provider_api;
 #[path = "command_api/runtime_api.rs"]
@@ -18,6 +26,8 @@ pub(crate) mod runtime_api;
 pub(crate) mod session_api;
 #[path = "command_api/subagent_api.rs"]
 pub(crate) mod subagent_api;
+#[path = "command_api/thread_read_projection.rs"]
+pub(crate) mod thread_read_projection;
 
 fn build_runtime_command_context(
     app: AppHandle,
@@ -63,6 +73,14 @@ fn build_subagent_control_runtime(
     )
 }
 
+pub(crate) use objective_api::{
+    agent_runtime_clear_objective, agent_runtime_continue_objective, agent_runtime_get_objective,
+    agent_runtime_set_objective, agent_runtime_update_objective_status,
+    AgentRuntimeClearObjectiveResult, AgentRuntimeContinueObjectiveResult,
+    AgentRuntimeObjectiveStatusRequest, AgentRuntimeSessionObjectiveRequest,
+    AgentRuntimeSetObjectiveRequest,
+};
+pub(crate) use objective_audit::agent_runtime_audit_objective;
 pub(crate) use provider_api::{
     aster_agent_configure_provider, aster_agent_init, aster_agent_reset, aster_agent_status,
 };

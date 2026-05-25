@@ -450,6 +450,44 @@ describe("InlineToolProcessStep", () => {
     expect(container.textContent).not.toContain("执行失败");
   });
 
+  it("WebFetch 成功返回结构化 JSON 时应渲染正文而不是原始 JSON", () => {
+    const { container } = renderTool({
+      id: "tool-fetch-json-1",
+      name: "WebFetch",
+      arguments: JSON.stringify({
+        url: "https://example.com/article",
+      }),
+      status: "completed",
+      result: {
+        success: true,
+        output: JSON.stringify({
+          url: "https://example.com/article",
+          title: "Example Article",
+          markdown: "# 页面标题\n\n正文 **重点**。",
+        }),
+      },
+      startTime: new Date("2026-04-13T10:24:00.000Z"),
+      endTime: new Date("2026-04-13T10:24:01.000Z"),
+    });
+
+    act(() => {
+      const toggle = container.querySelector(
+        'button[title="展开过程详情"]',
+      ) as HTMLButtonElement | null;
+      toggle?.click();
+    });
+
+    const markdownRenderer = container.querySelector(
+      '[data-testid="markdown-renderer"]',
+    );
+    expect(markdownRenderer?.textContent).toContain("# 页面标题");
+    expect(markdownRenderer?.textContent).toContain("正文 **重点**。");
+    expect(markdownRenderer?.textContent).not.toContain('"markdown"');
+    expect(markdownRenderer?.textContent).not.toContain(
+      "https://example.com/article",
+    );
+  });
+
   it("图片生成任务失败时不应展示内部错误码、工具名或长提示词", () => {
     const { container } = renderTool({
       id: "tool-image-generate-failed-1",

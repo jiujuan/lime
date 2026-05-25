@@ -2,6 +2,7 @@ import { createAgentClient } from "./agentClient";
 import { createExportClient } from "./exportClient";
 import { createInventoryClient } from "./inventoryClient";
 import { createMediaClient } from "./mediaClient";
+import { createObjectiveClient } from "./objectiveClient";
 import { createSessionClient } from "./sessionClient";
 import { createSiteClient } from "./siteClient";
 import { createSubagentClient } from "./subagentClient";
@@ -37,6 +38,7 @@ export function createAgentRuntimeClient({
     ...createExportClient({ invokeCommand: resolvedInvokeCommand }),
     ...createInventoryClient({ invokeCommand: resolvedInvokeCommand }),
     ...createMediaClient({ bridgeInvoke: resolvedBridgeInvoke }),
+    ...createObjectiveClient({ invokeCommand: resolvedInvokeCommand }),
     ...createSessionClient({ invokeCommand: resolvedInvokeCommand }),
     ...createSiteClient({ bridgeInvoke: resolvedBridgeInvoke }),
     ...createSubagentClient({ invokeCommand: resolvedInvokeCommand }),

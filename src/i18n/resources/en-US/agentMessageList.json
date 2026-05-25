@@ -1,4 +1,7 @@
 {
+  "agentChat.sidebar.history.loadingBadge": "Syncing",
+  "agentChat.sidebar.history.loadingDescription": "Recent chats will appear automatically while the latest sessions are fetched.",
+  "agentChat.sidebar.history.loadingTitle": "Organizing history",
   "agentChat.messageList.firstTokenStatus.cancelled.detail": "This request has stopped.",
   "agentChat.messageList.firstTokenStatus.cancelled.title": "Cancelled",
   "agentChat.messageList.firstTokenStatus.context.detail": "Required context is being attached to this turn.",

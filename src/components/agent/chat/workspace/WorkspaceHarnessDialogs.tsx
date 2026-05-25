@@ -25,6 +25,7 @@ type HarnessPanelBaseProps = Pick<
   | "onResumeThread"
   | "onReplayPendingRequest"
   | "onPromoteQueuedTurn"
+  | "onObjectiveChanged"
   | "onOpenMemoryWorkbench"
   | "messages"
   | "teamMemorySnapshot"

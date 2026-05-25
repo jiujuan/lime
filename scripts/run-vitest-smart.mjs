@@ -17,9 +17,9 @@ const batchSize =
   Number.isFinite(defaultBatchSize) && defaultBatchSize > 0
     ? defaultBatchSize
     : 16;
-const serialTestFiles = new Set([
-  "scripts/lib/harness-eval-history-record.test.ts",
+const serialTestFileOrder = [
   "scripts/lib/harness-eval-history-window.test.ts",
+  "scripts/lib/harness-eval-history-record.test.ts",
   "src/components/agent/chat/index.test.tsx",
   "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx",
   "src/components/workspace/WorkbenchPage.test.tsx",
@@ -27,7 +27,8 @@ const serialTestFiles = new Set([
   "src/components/agent/chat/components/ThemeWorkbenchSidebar.test.tsx",
   "src/components/agent/chat/components/TeamWorkspaceBoard.test.tsx",
   "src/components/settings-v2/system/automation/index.test.tsx",
-]);
+];
+const serialTestFiles = new Set(serialTestFileOrder);
 const ignoredTestPathSegments = [
   "/node_modules/",
   "/tmp/lime-pnpm-frozen-node_modules/",
@@ -118,11 +119,23 @@ function buildBatches(files) {
   const repoRoot = process.cwd();
   const serialBatches = [];
   const regularFiles = [];
+  const fileByRelativePath = new Map();
+
+  for (const file of files) {
+    const relativePath = path.relative(repoRoot, file).replaceAll("\\", "/");
+    fileByRelativePath.set(relativePath, file);
+  }
+
+  for (const relativePath of serialTestFileOrder) {
+    const file = fileByRelativePath.get(relativePath);
+    if (file) {
+      serialBatches.push([file]);
+    }
+  }
 
   for (const file of files) {
     const relativePath = path.relative(repoRoot, file).replaceAll("\\", "/");
     if (serialTestFiles.has(relativePath)) {
-      serialBatches.push([file]);
       continue;
     }
     regularFiles.push(file);

@@ -360,6 +360,7 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   fromResources: boolean;
   handleBackHome: ConversationScenePresentationParams["scene"]["onBackHome"];
   handleToggleSidebar: ConversationScenePresentationParams["scene"]["onToggleHistory"];
+  handlePrefetchHistory?: ConversationScenePresentationParams["scene"]["onPrefetchHistory"];
   showHarnessToggle: ConversationScenePresentationParams["scene"]["showHarnessToggle"];
   navbarHarnessPanelVisible: ConversationScenePresentationParams["scene"]["harnessPanelVisible"];
   handleToggleHarnessPanel: ConversationScenePresentationParams["scene"]["onToggleHarnessPanel"];
@@ -517,6 +518,7 @@ export function useWorkspaceConversationSceneRuntime({
   fromResources,
   handleBackHome,
   handleToggleSidebar,
+  handlePrefetchHistory,
   showHarnessToggle,
   navbarHarnessPanelVisible,
   handleToggleHarnessPanel,
@@ -1114,6 +1116,7 @@ export function useWorkspaceConversationSceneRuntime({
       navbarChrome: topBarChrome,
       navbarContextVariant,
       onToggleHistory: handleToggleSidebar,
+      onPrefetchHistory: handlePrefetchHistory,
       showHistoryToggle: !hideHistoryToggle && showChatPanel,
       onBackToProjectManagement,
       onBackToResources: fromResources

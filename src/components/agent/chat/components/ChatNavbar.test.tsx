@@ -145,6 +145,28 @@ describe("ChatNavbar", () => {
     ).toBeNull();
   });
 
+  it("历史按钮在悬停和聚焦时应预取历史列表", () => {
+    const onPrefetchHistory = vi.fn();
+    const container = renderChatNavbar({
+      showHistoryToggle: true,
+      onPrefetchHistory,
+    });
+    const button = container.querySelector(
+      '[aria-label="切换历史"]',
+    ) as HTMLButtonElement | null;
+
+    expect(button).not.toBeNull();
+
+    act(() => {
+      button?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    act(() => {
+      button?.focus();
+    });
+
+    expect(onPrefetchHistory).toHaveBeenCalledTimes(2);
+  });
+
   it("任务中心折叠顶栏应隐藏左侧重导航，但保留右侧项目与工具入口", () => {
     const container = renderChatNavbar({
       collapseChrome: true,

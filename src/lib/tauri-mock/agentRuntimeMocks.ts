@@ -1,4 +1,5 @@
 import agentCommandCatalog from "../governance/agentCommandCatalog.json";
+import { agentRuntimeObjectiveMocks } from "./agentRuntimeObjectiveMocks";
 
 const createDeprecatedCommandMock =
   (command: string, replacement: string) => () => {
@@ -103,6 +104,7 @@ function buildMockPermissionConfirmationSummary(
 
 export const agentRuntimeMocks: Record<string, (args?: any) => any> = {
   ...deprecatedAgentCommandMocks,
+  ...agentRuntimeObjectiveMocks,
   agent_get_process_status: () => ({ running: false }),
   agent_start_process: () => ({ success: true }),
   agent_stop_process: () => ({ success: true }),

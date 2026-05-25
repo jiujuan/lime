@@ -134,7 +134,6 @@ const ACTIVE_SESSION_TRANSIENT_SAVE_IDLE_TIMEOUT_MS = 1_800;
 const SESSION_METADATA_SYNC_DELAY_MS = 8_000;
 const SESSION_METADATA_SYNC_IDLE_TIMEOUT_MS = 15_000;
 const FRESH_SESSION_POST_CREATE_PERSISTENCE_IDLE_TIMEOUT_MS = 1_000;
-const SESSION_DETAIL_DEFERRED_HYDRATION_DELAY_MS = 1_200;
 const SESSION_DETAIL_DEFERRED_HYDRATION_RETRY_DELAY_MS = 15_000;
 const SESSION_DETAIL_DEFERRED_HYDRATION_MAX_RETRY = 1;
 
@@ -2085,18 +2084,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
             })();
           };
 
-          if (shouldRefreshCachedSnapshotImmediately) {
-            hydrateCachedTopic();
-          } else {
-            deferredSessionHydrationCancelRef.current =
-              scheduleMinimumDelayIdleTask(hydrateCachedTopic, {
-                minimumDelayMs:
-                  cachedSnapshotMetadata?.freshness === "fresh"
-                    ? SESSION_DETAIL_DEFERRED_HYDRATION_DELAY_MS
-                    : 0,
-                idleTimeoutMs: 1_500,
-              });
-          }
+          hydrateCachedTopic();
           return;
         }
 

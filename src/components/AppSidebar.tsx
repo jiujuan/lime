@@ -734,7 +734,7 @@ const SidebarSearchResultButton = styled.button<{ $active?: boolean }>`
   }
 
   &:disabled {
-    cursor: progress;
+    cursor: default;
     opacity: 0.58;
   }
 
@@ -1784,7 +1784,7 @@ const AccountPlanActionButton = styled.button<{ $primary?: boolean }>`
   }
 
   &:disabled {
-    cursor: progress;
+    cursor: default;
     opacity: 0.66;
     transform: none;
   }
@@ -1986,7 +1986,7 @@ const AccountMenuItem = styled.button<{ $danger?: boolean; $active?: boolean }>`
   }
 
   &:disabled {
-    cursor: progress;
+    cursor: default;
     opacity: 0.62;
   }
 

@@ -1,3 +1,11 @@
+use super::json_value_fields::json_string_field;
+use super::thread_read_projection::{
+    hydrate_thread_read_managed_objective, hydrate_thread_read_with_latest_model_delta_timing,
+};
+#[cfg(test)]
+use super::thread_read_projection::{
+    latest_model_delta_timing_from_run, merge_latest_model_delta_timing_into_thread_read,
+};
 use super::*;
 use crate::commands::aster_agent_cmd::dto::AgentRuntimeSessionHistoryCursor;
 use crate::database::lock_db;
@@ -25,7 +33,9 @@ use crate::services::runtime_review_decision_service::{
 use crate::services::thread_reliability_projection_service::sync_thread_reliability_projection;
 use aster::hooks::SessionSource;
 use lime_core::database::dao::agent::AgentDao;
-use lime_core::database::dao::agent_run::{AgentRun, AgentRunDao};
+#[cfg(test)]
+use lime_core::database::dao::agent_run::AgentRun;
+use lime_core::database::dao::agent_run::AgentRunDao;
 use lime_core::database::dao::agent_timeline::{AgentThreadItemStatus, AgentThreadTurnStatus};
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -94,139 +104,6 @@ fn should_list_runtime_queue_snapshots(
             .items
             .iter()
             .any(|item| matches!(item.status, AgentThreadItemStatus::InProgress))
-}
-
-fn json_nested_object<'a>(
-    value: &'a Value,
-    path: &[&str],
-) -> Option<&'a serde_json::Map<String, Value>> {
-    let mut current = value;
-    for key in path {
-        current = current.get(*key)?;
-    }
-    current.as_object()
-}
-
-fn json_string_field(value: &Value, keys: &[&str]) -> Option<String> {
-    keys.iter().find_map(|key| {
-        value
-            .get(*key)
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|text| !text.is_empty())
-            .map(str::to_string)
-    })
-}
-
-fn json_string_vec_field(value: &Value, keys: &[&str]) -> Option<Vec<String>> {
-    keys.iter().find_map(|key| {
-        let values = value.get(*key)?.as_array()?;
-        let values = values
-            .iter()
-            .filter_map(Value::as_str)
-            .map(str::trim)
-            .filter(|text| !text.is_empty())
-            .map(str::to_string)
-            .collect::<Vec<_>>();
-        (!values.is_empty()).then_some(values)
-    })
-}
-
-fn json_u64_field(value: &Value, keys: &[&str]) -> Option<u64> {
-    keys.iter().find_map(|key| {
-        let field = value.get(*key)?;
-        field
-            .as_u64()
-            .or_else(|| field.as_i64().and_then(|number| u64::try_from(number).ok()))
-    })
-}
-
-fn latest_model_delta_timing_from_run(run: &AgentRun) -> Option<Value> {
-    let metadata = run.metadata.as_deref()?;
-    let metadata: Value = serde_json::from_str(metadata).ok()?;
-    let first_visible_delta_ms = json_u64_field(
-        &metadata,
-        &["model_first_visible_delta_ms", "modelFirstVisibleDeltaMs"],
-    );
-    let first_thinking_delta_ms = json_u64_field(
-        &metadata,
-        &["model_first_thinking_delta_ms", "modelFirstThinkingDeltaMs"],
-    );
-    let first_text_delta_ms = json_u64_field(
-        &metadata,
-        &["model_first_text_delta_ms", "modelFirstTextDeltaMs"],
-    );
-
-    if first_visible_delta_ms.is_none()
-        && first_thinking_delta_ms.is_none()
-        && first_text_delta_ms.is_none()
-    {
-        return None;
-    }
-
-    let routing = json_nested_object(
-        &metadata,
-        &["request_metadata", "lime_runtime", "routing_decision"],
-    )
-    .or_else(|| json_nested_object(&metadata, &["requestMetadata", "limeRuntime", "routingDecision"]))
-    .map(|routing| {
-        let routing_value = Value::Object(routing.clone());
-        json!({
-            "decisionSource": json_string_field(&routing_value, &["decisionSource", "decision_source"]),
-            "decisionReason": json_string_field(&routing_value, &["decisionReason", "decision_reason"]),
-            "fallbackChain": json_string_vec_field(&routing_value, &["fallbackChain", "fallback_chain"]),
-            "settingsSource": json_string_field(&routing_value, &["settingsSource", "settings_source"]),
-            "serviceModelSlot": json_string_field(&routing_value, &["serviceModelSlot", "service_model_slot"]),
-            "selectedProvider": json_string_field(&routing_value, &["selectedProvider", "selected_provider"]),
-            "selectedModel": json_string_field(&routing_value, &["selectedModel", "selected_model"]),
-            "requestedProvider": json_string_field(&routing_value, &["requestedProvider", "requested_provider"]),
-            "requestedModel": json_string_field(&routing_value, &["requestedModel", "requested_model"]),
-        })
-    });
-
-    Some(json!({
-        "source": "agent_runs.metadata",
-        "runId": run.id,
-        "runSource": run.source,
-        "runStatus": run.status.as_str(),
-        "startedAt": run.started_at,
-        "finishedAt": run.finished_at,
-        "durationMs": run.duration_ms,
-        "firstVisibleDeltaMs": first_visible_delta_ms,
-        "firstThinkingDeltaMs": first_thinking_delta_ms,
-        "firstTextDeltaMs": first_text_delta_ms,
-        "routing": routing,
-    }))
-}
-
-fn merge_latest_model_delta_timing_into_thread_read(
-    thread_read: &mut AgentRuntimeThreadReadModel,
-    latest_timing: Value,
-) {
-    let mut model_routing = thread_read
-        .model_routing
-        .take()
-        .and_then(|value| value.as_object().cloned())
-        .unwrap_or_default();
-    model_routing.insert("latestModelDeltaTiming".to_string(), latest_timing);
-    thread_read.model_routing = Some(Value::Object(model_routing));
-}
-
-fn hydrate_thread_read_with_latest_model_delta_timing(
-    db: &DbConnection,
-    session_id: &str,
-    thread_read: &mut AgentRuntimeThreadReadModel,
-) -> Result<(), String> {
-    let conn = lock_db(db)?;
-    let runs = AgentRunDao::list_runs_by_session(&conn, session_id, 8)
-        .map_err(|error| format!("查询 agent_runs 首字证据失败: {error}"))?;
-    drop(conn);
-
-    if let Some(latest_timing) = runs.iter().find_map(latest_model_delta_timing_from_run) {
-        merge_latest_model_delta_timing_into_thread_read(thread_read, latest_timing);
-    }
-
-    Ok(())
 }
 
 async fn resume_runtime_queue_with_warning(
@@ -515,6 +392,15 @@ pub async fn agent_runtime_get_session(
                 error
             );
         }
+        if let Err(error) =
+            hydrate_thread_read_managed_objective(runtime.db(), &session_id, &mut thread_read)
+        {
+            tracing::warn!(
+                "[AsterAgent] 读取 Managed Objective 投影失败: session_id={}, error={}",
+                session_id,
+                error
+            );
+        }
         let projection_ms = projection_started_at.elapsed().as_millis();
 
         let dto_started_at = Instant::now();
@@ -677,6 +563,15 @@ pub async fn agent_runtime_get_thread_read(
     ) {
         tracing::warn!(
             "[AsterAgent] 读取 agent_runs 首字证据失败: session_id={}, error={}",
+            session_id,
+            error
+        );
+    }
+    if let Err(error) =
+        hydrate_thread_read_managed_objective(runtime.db(), &session_id, &mut thread_read)
+    {
+        tracing::warn!(
+            "[AsterAgent] 读取 Managed Objective 投影失败: session_id={}, error={}",
             session_id,
             error
         );
@@ -1770,6 +1665,7 @@ mod tests {
             cost_state: None,
             permission_state: None,
             limit_event: None,
+            managed_objective: None,
         }
     }
 
@@ -2121,6 +2017,7 @@ mod tests {
             cost_state: None,
             permission_state: None,
             limit_event: None,
+            managed_objective: None,
         };
 
         merge_latest_model_delta_timing_into_thread_read(

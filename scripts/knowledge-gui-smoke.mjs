@@ -87,7 +87,8 @@ const AGENT_RESULT_MESSAGE = {
   ].join("\n"),
 };
 
-const FILE_MANAGER_SOURCE_TITLE = "default-source";
+const FILE_MANAGER_SOURCE_ID = "default-source";
+const FILE_MANAGER_SOURCE_VISIBLE_TITLE = "default source";
 const USER_FACING_FORBIDDEN_TEXT = [
   ".lime/knowledge",
   "KNOWLEDGE.md",
@@ -1122,8 +1123,10 @@ async function runPlaywrightGuiFlow(options) {
       options,
       "文件管理器资料导入完成",
       (pack) =>
-        pack.description === FILE_MANAGER_SOURCE_TITLE ||
-        pack.name === FILE_MANAGER_SOURCE_TITLE,
+        pack.description === FILE_MANAGER_SOURCE_ID ||
+        pack.name === FILE_MANAGER_SOURCE_ID ||
+        pack.description === FILE_MANAGER_SOURCE_VISIBLE_TITLE ||
+        pack.name === FILE_MANAGER_SOURCE_VISIBLE_TITLE,
     );
 
     await closeFileManagerIfOpen(page);
@@ -1145,7 +1148,7 @@ async function runPlaywrightGuiFlow(options) {
         PERSONA_PACK.title,
         DEFAULT_PACK.title,
         SECONDARY_PACK.title,
-        FILE_MANAGER_SOURCE_TITLE,
+        FILE_MANAGER_SOURCE_VISIBLE_TITLE,
       ],
       options.timeoutMs,
     );

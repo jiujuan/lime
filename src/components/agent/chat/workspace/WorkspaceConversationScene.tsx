@@ -425,6 +425,7 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   onToggleHistory: NonNullable<
     ComponentProps<typeof ChatNavbar>["onToggleHistory"]
   >;
+  onPrefetchHistory?: ComponentProps<typeof ChatNavbar>["onPrefetchHistory"];
   showHistoryToggle: boolean;
   onBackToProjectManagement?: ComponentProps<
     typeof ChatNavbar
@@ -562,6 +563,7 @@ export function WorkspaceConversationScene({
   navbarChrome,
   navbarContextVariant = "default",
   onToggleHistory,
+  onPrefetchHistory,
   showHistoryToggle,
   onBackToProjectManagement,
   onBackToResources,
@@ -698,6 +700,7 @@ export function WorkspaceConversationScene({
     chrome: navbarChrome,
     navbarContextVariant,
     onToggleHistory,
+    onPrefetchHistory,
     showHistoryToggle,
     onBackToProjectManagement,
     onBackToResources,

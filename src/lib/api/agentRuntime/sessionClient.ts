@@ -34,6 +34,22 @@ const requireWorkspaceId = (
   return resolvedWorkspaceId;
 };
 
+function isTransientSessionReadError(error: unknown): boolean {
+  const message =
+    error instanceof Error ? error.message : String(error || "Unknown error");
+  const normalizedMessage = message.toLowerCase();
+
+  return (
+    message.includes("Failed to fetch") ||
+    message.includes("NetworkError") ||
+    message.includes("ERR_CONNECTION_REFUSED") ||
+    message.includes("Load failed") ||
+    message.includes("ECONNREFUSED") ||
+    normalizedMessage.includes("timeout") ||
+    normalizedMessage.includes("aborterror")
+  );
+}
+
 export interface AgentRuntimeSessionClientDeps {
   invokeCommand?: AgentRuntimeCommandInvoke;
 }
@@ -308,7 +324,7 @@ export function createSessionClient({
           resumeSessionStartHooks,
           sessionId,
         },
-        { level: "error" },
+        { level: isTransientSessionReadError(error) ? "warn" : "error" },
       );
       throw error;
     } finally {

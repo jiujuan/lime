@@ -22,6 +22,7 @@ interface WorkspaceShellSceneProps {
   sidebarContextVariant?: ComponentProps<typeof ChatSidebar>["contextVariant"];
   currentTopicId: ComponentProps<typeof ChatSidebar>["currentTopicId"];
   topics: ComponentProps<typeof ChatSidebar>["topics"];
+  topicsReady?: ComponentProps<typeof ChatSidebar>["topicsReady"];
   onNewChat: ComponentProps<typeof ChatSidebar>["onNewChat"];
   onOpenTaskCenterHome?: ComponentProps<
     typeof ChatSidebar
@@ -73,6 +74,7 @@ export function WorkspaceShellScene({
   sidebarContextVariant = "default",
   currentTopicId,
   topics,
+  topicsReady = true,
   onNewChat,
   onOpenTaskCenterHome,
   onOpenSkillsPage,
@@ -105,6 +107,7 @@ export function WorkspaceShellScene({
         onOpenKnowledgePage,
         onOpenMemoryPage,
         topics,
+        topicsReady,
         currentTopicId,
         onSwitchTopic,
         onOpenArchivedTopic,

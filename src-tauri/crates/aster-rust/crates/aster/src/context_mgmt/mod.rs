@@ -14,6 +14,7 @@ use tracing::{debug, info};
 pub const DEFAULT_COMPACTION_THRESHOLD: f64 = 0.8;
 const LIME_RUNTIME_METADATA_KEY: &str = "lime_runtime";
 const LIME_RUNTIME_AUTO_COMPACT_KEY: &str = "auto_compact";
+const COMPACTION_HEAD_TRIM_RETRY_LIMIT: usize = 3;
 
 const CONVERSATION_CONTINUATION_TEXT: &str =
     "The previous message contains a summary that was prepared because a context limit was reached.
@@ -302,6 +303,18 @@ fn filter_tool_responses<'a>(messages: &[&'a Message], remove_percent: u32) -> V
         .collect()
 }
 
+fn trim_oldest_messages_for_compaction<'a>(
+    messages: Vec<&'a Message>,
+    trim_count: usize,
+) -> Vec<&'a Message> {
+    if trim_count == 0 {
+        return messages;
+    }
+    let max_trim = messages.len().saturating_sub(2);
+    let trim_count = trim_count.min(max_trim);
+    messages.into_iter().skip(trim_count).collect()
+}
+
 async fn do_compact(
     provider: &dyn Provider,
     messages: &[Message],
@@ -313,9 +326,18 @@ async fn do_compact(
 
     // Try progressively removing more tool response messages from the middle to reduce context length
     let removal_percentages = [0, 10, 20, 50, 100];
+    let mut attempts: Vec<(u32, usize)> = removal_percentages
+        .iter()
+        .copied()
+        .map(|remove_percent| (remove_percent, 0))
+        .collect();
+    attempts.extend((1..=COMPACTION_HEAD_TRIM_RETRY_LIMIT).map(|trim_count| (100, trim_count)));
 
-    for (attempt, &remove_percent) in removal_percentages.iter().enumerate() {
-        let filtered_messages = filter_tool_responses(&agent_visible_messages, remove_percent);
+    for (attempt, (remove_percent, trim_count)) in attempts.iter().copied().enumerate() {
+        let filtered_messages = trim_oldest_messages_for_compaction(
+            filter_tool_responses(&agent_visible_messages, remove_percent),
+            trim_count,
+        );
 
         let messages_text = filtered_messages
             .iter()
@@ -349,11 +371,11 @@ async fn do_compact(
             }
             Err(e) => {
                 if matches!(e, ProviderError::ContextLengthExceeded(_)) {
-                    if attempt < removal_percentages.len() - 1 {
+                    if attempt < attempts.len() - 1 {
                         continue;
                     } else {
                         return Err(anyhow::anyhow!(
-                            "Failed to compact: context limit exceeded even after removing all tool responses"
+                            "Failed to compact: context limit exceeded even after removing all tool responses and trimming oldest messages"
                         ));
                     }
                 }
@@ -466,6 +488,7 @@ mod tests {
         message: Message,
         config: ModelConfig,
         max_tool_responses: Option<usize>,
+        reject_system_containing: Option<String>,
     }
 
     impl MockProvider {
@@ -482,11 +505,17 @@ mod tests {
                     fast_model: None,
                 },
                 max_tool_responses: None,
+                reject_system_containing: None,
             }
         }
 
         fn with_max_tool_responses(mut self, max: usize) -> Self {
             self.max_tool_responses = Some(max);
+            self
+        }
+
+        fn with_reject_system_containing(mut self, needle: &str) -> Self {
+            self.reject_system_containing = Some(needle.to_string());
             self
         }
     }
@@ -537,6 +566,14 @@ mod tests {
                     return Err(ProviderError::ContextLengthExceeded(format!(
                         "Too many tool responses: {} > {}",
                         tool_response_count, max
+                    )));
+                }
+            }
+
+            if let Some(needle) = self.reject_system_containing.as_deref() {
+                if _system.contains(needle) {
+                    return Err(ProviderError::ContextLengthExceeded(format!(
+                        "System prompt still contains oldest message marker: {needle}"
                     )));
                 }
             }
@@ -621,6 +658,26 @@ mod tests {
         assert!(
             result.is_ok(),
             "Should succeed with progressive removal: {:?}",
+            result.err()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_head_trim_retry_on_context_exceeded_after_tool_removal() {
+        let provider = MockProvider::new(Message::assistant().with_text("<mock summary>"), 1_000)
+            .with_reject_system_containing("oldest-message-0");
+        let conversation = Conversation::new_unvalidated(vec![
+            Message::user().with_text("oldest-message-0"),
+            Message::assistant().with_text("oldest assistant response"),
+            Message::user().with_text("newer user request"),
+            Message::assistant().with_text("newer assistant response"),
+        ]);
+
+        let result = compact_messages(&provider, &conversation, false).await;
+
+        assert!(
+            result.is_ok(),
+            "Should retry by trimming the oldest visible message: {:?}",
             result.err()
         );
     }

@@ -70,6 +70,12 @@ pub(super) async fn try_handle(
             | "agent_runtime_list_sessions"
             | "agent_runtime_get_session"
             | "agent_runtime_get_thread_read"
+            | "agent_runtime_get_objective"
+            | "agent_runtime_set_objective"
+            | "agent_runtime_update_objective_status"
+            | "agent_runtime_clear_objective"
+            | "agent_runtime_continue_objective"
+            | "agent_runtime_audit_objective"
             | "agent_runtime_list_file_checkpoints"
             | "agent_runtime_get_file_checkpoint"
             | "agent_runtime_diff_file_checkpoint"
@@ -479,6 +485,110 @@ pub(super) async fn try_handle(
                     mcp_manager,
                     automation_state,
                     session_id,
+                )
+                .await?,
+            )?
+        }
+        "agent_runtime_get_objective" => {
+            let args = args_or_default(args);
+            let session_id = get_string_arg(&args, "sessionId", "session_id")?;
+            let db = app_handle.state::<crate::database::DbConnection>();
+
+            serde_json::to_value(
+                crate::commands::aster_agent_cmd::agent_runtime_get_objective(db, session_id)
+                    .await?,
+            )?
+        }
+        "agent_runtime_set_objective" => {
+            let request = parse_request::<
+                crate::commands::aster_agent_cmd::AgentRuntimeSetObjectiveRequest,
+            >(args)?;
+            let db = app_handle.state::<crate::database::DbConnection>();
+
+            serde_json::to_value(
+                crate::commands::aster_agent_cmd::agent_runtime_set_objective(db, request).await?,
+            )?
+        }
+        "agent_runtime_update_objective_status" => {
+            let request = parse_request::<
+                crate::commands::aster_agent_cmd::AgentRuntimeObjectiveStatusRequest,
+            >(args)?;
+            let db = app_handle.state::<crate::database::DbConnection>();
+
+            serde_json::to_value(
+                crate::commands::aster_agent_cmd::agent_runtime_update_objective_status(
+                    db, request,
+                )
+                .await?,
+            )?
+        }
+        "agent_runtime_clear_objective" => {
+            let request = parse_request::<
+                crate::commands::aster_agent_cmd::AgentRuntimeSessionObjectiveRequest,
+            >(args)?;
+            let db = app_handle.state::<crate::database::DbConnection>();
+
+            serde_json::to_value(
+                crate::commands::aster_agent_cmd::agent_runtime_clear_objective(db, request)
+                    .await?,
+            )?
+        }
+        "agent_runtime_continue_objective" => {
+            let request = parse_request::<
+                crate::commands::aster_agent_cmd::AgentRuntimeSessionObjectiveRequest,
+            >(args)?;
+            let aster_state = app_handle.state::<crate::agent::AsterAgentState>();
+            let db = app_handle.state::<crate::database::DbConnection>();
+            let api_key_provider_service =
+                app_handle
+                    .state::<crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState>();
+            let logs = app_handle.state::<crate::app::LogState>();
+            let config_manager = app_handle.state::<crate::config::GlobalConfigManagerState>();
+            let mcp_manager = app_handle.state::<crate::mcp::McpManagerState>();
+            let automation_state =
+                app_handle.state::<crate::services::automation_service::AutomationServiceState>();
+
+            serde_json::to_value(
+                crate::commands::aster_agent_cmd::agent_runtime_continue_objective(
+                    app_handle.clone(),
+                    aster_state,
+                    db,
+                    api_key_provider_service,
+                    logs,
+                    config_manager,
+                    mcp_manager,
+                    automation_state,
+                    request,
+                )
+                .await?,
+            )?
+        }
+        "agent_runtime_audit_objective" => {
+            let request = parse_request::<
+                crate::commands::aster_agent_cmd::AgentRuntimeSessionObjectiveRequest,
+            >(args)?;
+            let aster_state = app_handle.state::<crate::agent::AsterAgentState>();
+            let db = app_handle.state::<crate::database::DbConnection>();
+            let api_key_provider_service =
+                app_handle
+                    .state::<crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState>();
+            let logs = app_handle.state::<crate::app::LogState>();
+            let config_manager = app_handle.state::<crate::config::GlobalConfigManagerState>();
+            let mcp_manager = app_handle.state::<crate::mcp::McpManagerState>();
+            let automation_state =
+                app_handle.state::<crate::services::automation_service::AutomationServiceState>();
+
+            serde_json::to_value(
+                crate::commands::aster_agent_cmd::agent_runtime_audit_objective(
+                    app_handle.clone(),
+                    aster_state,
+                    db,
+                    api_key_provider_service,
+                    logs,
+                    config_manager,
+                    mcp_manager,
+                    automation_state,
+                    request,
                 )
                 .await?,
             )?
