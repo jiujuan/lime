@@ -137,6 +137,15 @@
       "docsSection": "agent-runtime.thread"
     },
     {
+      "command": "agent_runtime_restore_file_checkpoint",
+      "domain": "thread",
+      "requestType": "AgentRuntimeRestoreFileCheckpointRequest",
+      "responseType": "AgentRuntimeFileCheckpointRestoreResult",
+      "lifecycle": "current",
+      "mockStrategy": "bridge-only",
+      "docsSection": "agent-runtime.thread"
+    },
+    {
       "command": "agent_runtime_promote_queued_turn",
       "domain": "thread",
       "requestType": "AgentRuntimePromoteQueuedTurnRequest",

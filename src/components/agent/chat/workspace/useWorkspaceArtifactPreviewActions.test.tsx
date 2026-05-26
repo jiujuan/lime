@@ -493,6 +493,52 @@ describe("useWorkspaceArtifactPreviewActions", () => {
     );
   });
 
+  it("通用模式打开真实 HTML 路径时应读取文件并保留 sourcePath 供 Tauri 预览", async () => {
+    const readFilePreviewSpy = vi
+      .spyOn(fileBrowserModule, "readFilePreview")
+      .mockResolvedValue({
+        path: "/tmp/project/prototype.html",
+        content: "<!doctype html><html><body>Lime</body></html>",
+        isBinary: false,
+        size: 44,
+        error: null,
+      });
+    const setGeneralCanvasState = vi.fn();
+    const setSelectedArtifactId = vi.fn();
+    const setLayoutMode = vi.fn();
+    const suppressBrowserAssistCanvasAutoOpen = vi.fn();
+    const { render, getValue } = renderHook({
+      setGeneralCanvasState,
+      setSelectedArtifactId,
+      setLayoutMode,
+      suppressBrowserAssistCanvasAutoOpen,
+    });
+
+    await render();
+
+    await act(async () => {
+      getValue().handleFileClick("/tmp/project/prototype.html", "");
+      await flushAsyncWork();
+    });
+
+    expect(readFilePreviewSpy).toHaveBeenCalledWith(
+      "/tmp/project/prototype.html",
+      64 * 1024,
+    );
+    expect(setSelectedArtifactId).toHaveBeenCalledWith(null);
+    expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
+    expect(setGeneralCanvasState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        isOpen: true,
+        filename: "/tmp/project/prototype.html",
+        sourcePath: "/tmp/project/prototype.html",
+        content: "<!doctype html><html><body>Lime</body></html>",
+        contentType: "html",
+        language: "html",
+      }),
+    );
+  });
+
   it("点击占位任务文件时应按需读取会话内容并更新主题工作台画布", async () => {
     const readSessionFile = vi.fn(async () => "# 主题工作台内容");
     const setTaskFiles = vi.fn();

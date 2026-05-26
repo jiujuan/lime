@@ -23,7 +23,6 @@ import { parseAnalysisWorkbenchCommand } from "../utils/analysisWorkbenchCommand
 import { parseBrowserWorkbenchCommand } from "../utils/browserWorkbenchCommand";
 import { parseBroadcastWorkbenchCommand } from "../utils/broadcastWorkbenchCommand";
 import { parseChannelPreviewWorkbenchCommand } from "../utils/channelPreviewWorkbenchCommand";
-import { parseCodeWorkbenchCommand } from "../utils/codeWorkbenchCommand";
 import { normalizeContentPostPlatform } from "../utils/contentPostPlatform";
 import {
   DEFAULT_COMPLIANCE_FOCUS,
@@ -54,7 +53,10 @@ import {
   resolveMentionCommandMergedPrefillReplayText,
   resolveMentionCommandPrefillReplayText,
 } from "../utils/mentionCommandReplayText";
-import { resolveMentionCommandPrefixMatch } from "../utils/mentionCommandPrefixMatch";
+import {
+  parseMentionCommand,
+  resolveMentionCommandPrefixMatch,
+} from "../utils/mentionCommandPrefixMatch";
 import { parseTranscriptionWorkbenchCommand } from "../utils/transcriptionWorkbenchCommand";
 import { parseTypesettingWorkbenchCommand } from "../utils/typesettingWorkbenchCommand";
 import { parseUploadWorkbenchCommand } from "../utils/uploadWorkbenchCommand";
@@ -162,7 +164,10 @@ import {
   getMentionEntryUsageRecordKey,
   recordMentionEntryUsage,
 } from "../skill-selection/mentionEntryUsage";
-import { useRuntimeMentionCommandCatalog } from "../skill-selection/runtimeInputCapabilityCatalog";
+import {
+  parseCatalogExecutionStrategy,
+  useRuntimeMentionCommandCatalog,
+} from "../skill-selection/runtimeInputCapabilityCatalog";
 import { recordServiceSkillUsage } from "../service-skills/storage";
 import { composeServiceSkillPrompt } from "../service-skills/promptComposer";
 import { recordSlashEntryUsage } from "../skill-selection/slashEntryUsage";
@@ -2620,6 +2625,7 @@ interface WorkspaceSendPlan extends WorkspaceResolvedSendState {
   text: string;
   images: MessageImage[];
   sendExecutionStrategy?: ExecutionStrategy;
+  catalogRuntimeDefaultsRouteMatched?: boolean;
   autoContinuePayload?: AutoContinueRequestPayload;
   sendOptions?: HandleSendOptions;
   completedMentionCommandUsage: CompletedMentionCommandUsage | null;
@@ -2753,8 +2759,11 @@ export function useWorkspaceSendActions({
     },
     [t],
   );
-  const { mentionCommandSkillIdMap, mentionCommandPrefixKeyMap } =
-    useRuntimeMentionCommandCatalog();
+  const {
+    mentionAgentTurnRouteMap,
+    mentionCommandSkillIdMap,
+    mentionCommandPrefixKeyMap,
+  } = useRuntimeMentionCommandCatalog();
   const clearRuntimeTeamDispatchPreview = useCallback(() => {
     setRuntimeTeamDispatchPreview(null);
   }, []);
@@ -2982,6 +2991,7 @@ export function useWorkspaceSendActions({
         null;
       let completedSlashUsage: WorkspaceSendPlan["completedSlashUsage"] =
         inputCapabilityDispatch.completedSlashUsage;
+      let catalogRuntimeDefaultsRouteMatched = false;
       sendOptions = inputCapabilityDispatch.capabilityRoute
         ? {
             ...(sendOptions || {}),
@@ -4384,7 +4394,7 @@ export function useWorkspaceSendActions({
         hasBoundSkillLaunch = true;
       }
 
-      const parsedCodeWorkbenchCommand =
+      const parsedAgentTurnMentionShortcut =
         !sendOptions?.purpose &&
         sourceText.trim() &&
         !parsedImageWorkbenchCommand &&
@@ -4405,44 +4415,23 @@ export function useWorkspaceSendActions({
         !parsedPresentationWorkbenchCommand &&
         !parsedFormWorkbenchCommand &&
         !parsedWebpageWorkbenchCommand
-          ? parseCodeWorkbenchCommand(sourceText, {
-              commandKey: "code_runtime",
-              mentionCommandPrefixKeyMap,
-            })
+          ? parseMentionCommand(sourceText, mentionCommandPrefixKeyMap)
           : null;
-      if (parsedCodeWorkbenchCommand) {
-        const existingHarnessMetadata =
-          asRecord(sendOptions?.requestMetadata?.harness) || {};
-        effectiveToolPreferences = {
-          ...effectiveToolPreferences,
-          task: true,
-          subagent: true,
-        };
-        sendExecutionStrategy = "code_orchestrated";
+      const agentTurnMentionRoute = parsedAgentTurnMentionShortcut
+        ? mentionAgentTurnRouteMap.get(
+            parsedAgentTurnMentionShortcut.commandKey,
+          )
+        : undefined;
+      if (parsedAgentTurnMentionShortcut && agentTurnMentionRoute) {
+        catalogRuntimeDefaultsRouteMatched = true;
+        sendExecutionStrategy =
+          agentTurnMentionRoute.executionStrategy ?? sendExecutionStrategy;
         ensureSubmissionPreview();
-        sendOptions = {
-          ...(sendOptions || {}),
-          toolPreferencesOverride: effectiveToolPreferences,
-          requestMetadata: {
-            ...(sendOptions?.requestMetadata || {}),
-            harness: {
-              ...existingHarnessMetadata,
-              preferred_team_preset_id: "code-triage-team",
-              code_command: {
-                prompt:
-                  parsedCodeWorkbenchCommand.prompt ||
-                  parsedCodeWorkbenchCommand.body,
-                content: parsedCodeWorkbenchCommand.body,
-                entry_source: "at_code_command",
-              },
-            },
-          },
-        };
         markCompletedMentionCommand(
-          "code_runtime",
+          parsedAgentTurnMentionShortcut.commandKey,
           resolveMentionCommandReplayText(
-            parsedCodeWorkbenchCommand,
-            "code_runtime",
+            parsedAgentTurnMentionShortcut,
+            parsedAgentTurnMentionShortcut.commandKey,
           ),
         );
       }
@@ -4468,7 +4457,7 @@ export function useWorkspaceSendActions({
         !parsedPresentationWorkbenchCommand &&
         !parsedFormWorkbenchCommand &&
         !parsedWebpageWorkbenchCommand &&
-        !parsedCodeWorkbenchCommand
+        !agentTurnMentionRoute
           ? parseWritingWorkbenchCommand(sourceText)
           : null;
       if (parsedWritingWorkbenchCommand) {
@@ -4536,7 +4525,7 @@ export function useWorkspaceSendActions({
         !parsedPresentationWorkbenchCommand &&
         !parsedFormWorkbenchCommand &&
         !parsedWebpageWorkbenchCommand &&
-        !parsedCodeWorkbenchCommand &&
+        !agentTurnMentionRoute &&
         !parsedWritingWorkbenchCommand
           ? parseChannelPreviewWorkbenchCommand(sourceText)
           : null;
@@ -4614,7 +4603,7 @@ export function useWorkspaceSendActions({
         !parsedPresentationWorkbenchCommand &&
         !parsedFormWorkbenchCommand &&
         !parsedWebpageWorkbenchCommand &&
-        !parsedCodeWorkbenchCommand &&
+        !agentTurnMentionRoute &&
         !parsedWritingWorkbenchCommand &&
         !parsedChannelPreviewWorkbenchCommand
           ? parseUploadWorkbenchCommand(sourceText)
@@ -4697,7 +4686,7 @@ export function useWorkspaceSendActions({
         !parsedPresentationWorkbenchCommand &&
         !parsedFormWorkbenchCommand &&
         !parsedWebpageWorkbenchCommand &&
-        !parsedCodeWorkbenchCommand &&
+        !agentTurnMentionRoute &&
         !parsedWritingWorkbenchCommand &&
         !parsedChannelPreviewWorkbenchCommand &&
         !parsedUploadWorkbenchCommand
@@ -4886,6 +4875,16 @@ export function useWorkspaceSendActions({
           throw error;
         }
         if (sceneLaunchRequest) {
+          const sceneRequestDefaults =
+            sceneLaunchRequest.sceneEntry.requestDefaults ?? {};
+          const sceneExecutionStrategy = parseCatalogExecutionStrategy(
+            sceneRequestDefaults.executionStrategy ??
+              sceneRequestDefaults.execution_strategy,
+          );
+          if (sceneExecutionStrategy) {
+            catalogRuntimeDefaultsRouteMatched = true;
+            sendExecutionStrategy = sceneExecutionStrategy;
+          }
           if (sceneLaunchRequest.dispatchText) {
             dispatchText = sceneLaunchRequest.dispatchText;
           }
@@ -5052,6 +5051,7 @@ export function useWorkspaceSendActions({
           effectiveThinking,
           submissionPreviewKey,
           sendExecutionStrategy,
+          catalogRuntimeDefaultsRouteMatched,
           autoContinuePayload,
           sendOptions,
           completedMentionCommandUsage,
@@ -5080,6 +5080,7 @@ export function useWorkspaceSendActions({
       resourcePromptRewritePreference,
       serviceSkills,
       translateAgentWorkspace,
+      mentionAgentTurnRouteMap,
       mentionCommandPrefixKeyMap,
       mentionCommandSkillIdMap,
       workspaceRequestMetadataBase,
@@ -5141,6 +5142,7 @@ export function useWorkspaceSendActions({
         effectiveThinking,
         submissionPreviewKey,
         sendExecutionStrategy,
+        catalogRuntimeDefaultsRouteMatched,
         autoContinuePayload,
         sendOptions,
         completedMentionCommandUsage,
@@ -5158,11 +5160,12 @@ export function useWorkspaceSendActions({
         ...(sendOptions?.requestMetadata || {}),
       };
       const hasExplicitCommandOrSkillLaunch =
-        sourceText.trim().startsWith("@") ||
-        sourceText.trim().startsWith("/") ||
-        Boolean(sendBoundary.browserRequirementMatch) ||
-        hasServiceSkillLaunchRequestMetadata(runtimeDefaultsSourceMetadata) ||
-        hasModelSkillLaunchRequestMetadata(runtimeDefaultsSourceMetadata);
+        !catalogRuntimeDefaultsRouteMatched &&
+        (sourceText.trim().startsWith("@") ||
+          sourceText.trim().startsWith("/") ||
+          Boolean(sendBoundary.browserRequirementMatch) ||
+          hasServiceSkillLaunchRequestMetadata(runtimeDefaultsSourceMetadata) ||
+          hasModelSkillLaunchRequestMetadata(runtimeDefaultsSourceMetadata));
       const runtimeDefaults = resolveCodeOrchestratedRuntimeDefaults({
         executionStrategy: sendExecutionStrategy ?? executionStrategy,
         workspaceRequestMetadataBase,
@@ -5172,6 +5175,7 @@ export function useWorkspaceSendActions({
         preferredTeamPresetId,
         selectedTeam,
         hasExplicitCommandOrSkillLaunch,
+        allowCatalogRoutedRuntimeDefaults: catalogRuntimeDefaultsRouteMatched,
       });
       const effectiveToolPreferences =
         runtimeDefaults.effectiveToolPreferences;

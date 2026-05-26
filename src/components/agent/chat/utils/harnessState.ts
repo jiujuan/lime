@@ -651,7 +651,7 @@ function extractSearchQuery(
   return undefined;
 }
 
-function resolveFileKind(
+export function resolveFileKind(
   path: string,
   preferred?: HarnessFileKind,
 ): HarnessFileKind {

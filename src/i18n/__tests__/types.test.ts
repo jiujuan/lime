@@ -689,12 +689,8 @@ function assertI18nKeyTypes() {
   i18n.t("skills.workspace.curatedTask.suggestion.action.start", {
     ns: "agent",
   });
-  i18n.t("skills.workspace.curatedTask.home.title", { ns: "agent" });
-  i18n.t("skills.workspace.curatedTask.home.referenceSummary.focused", {
-    ns: "agent",
-    moreSuffix: "",
-    titles: "Example",
-  });
+  i18n.t("memoryLibrary.title", { ns: "agent" });
+  i18n.t("memoryLibrary.points.title", { ns: "agent" });
   i18n.t("skills.workspace.managedJob.created", {
     ns: "agent",
     name: "Daily Review",
@@ -1047,6 +1043,14 @@ function assertI18nKeyTypes() {
   i18n.t("workspace.browserAssistRenderer.launching.title", {
     ns: "workspace",
   });
+  i18n.t("workspace.browserAssistRenderer.launching.detail", {
+    ns: "workspace",
+  });
+  i18n.t("workspace.browserAssistRenderer.failed.attachedOnlyWithDetail", {
+    ns: "workspace",
+    target: "浏览器协助",
+    detail: "Chrome Bridge 未连接",
+  });
   i18n.t("workspace.browserAssistRenderer.replay.title", {
     ns: "workspace",
   });
@@ -1213,14 +1217,15 @@ function assertI18nKeyTypes() {
   i18n.t("settings.hotkeys.summary.globalReady", { ns: "settings" });
   i18n.t("settings.hotkeys.catalog.scene.global.title", { ns: "settings" });
   i18n.t("settings.memory.title", { ns: "settings" });
-  i18n.t("settings.memory.hero.profileCompletion", {
+  i18n.t("settings.memory.embedding.provider.ollama.label", {
     ns: "settings",
-    percent: 75,
   });
-  i18n.t("settings.memory.memdir.message.emptyNote", { ns: "settings" });
-  i18n.t("settings.memory.source.detail.followImports", {
+  i18n.t("settings.memory.embedding.status.indexedValue", {
     ns: "settings",
-    value: "Yes",
+    count: 12,
+  });
+  i18n.t("settings.memory.embedding.providerSelect.description", {
+    ns: "settings",
   });
   i18n.t("settings.webSearch.providers.googleEngine.label", {
     ns: "settings",

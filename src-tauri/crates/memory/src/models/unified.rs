@@ -90,7 +90,7 @@ pub struct MemoryMetadata {
 
     /// 向量嵌入（可选，用于语义搜索）
     ///
-    /// 768 维向量（OpenAI text-embedding-3-small）
+    /// 向量维度由当前嵌入模型决定
     /// 当 embedding 为 None 时，仅使用关键词搜索
     pub embedding: Option<Vec<f32>>,
 }

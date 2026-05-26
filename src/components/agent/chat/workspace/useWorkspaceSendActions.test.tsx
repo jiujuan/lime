@@ -5490,11 +5490,6 @@ Extract it into the Agent Skills directory.`,
               task: true,
               subagent: true,
             },
-            code_command: {
-              prompt: "修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
-              content: "修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
-              entry_source: "at_code_command",
-            },
           },
         },
       });
@@ -5507,10 +5502,90 @@ Extract it into the Agent Skills directory.`,
       ]);
       const harnessMetadata = (
         mockSendMessage.mock.calls[0]?.[8]?.requestMetadata as
-          | { harness?: { code_command?: Record<string, unknown> } }
+          | { harness?: Record<string, unknown> }
           | undefined
       )?.harness;
-      expect(harnessMetadata?.code_command?.kind).toBeUndefined();
+      expect(harnessMetadata?.code_command).toBeUndefined();
+      expect(listServiceSkillUsage()).toEqual([]);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("catalog 下发的 agent_turn mention 应按 requestDefaults 切到编程底座", async () => {
+    saveSkillCatalog(
+      {
+        version: "tenant-2026-05-26",
+        tenantId: "tenant-demo",
+        syncedAt: "2026-05-26T12:00:00.000Z",
+        groups: [
+          {
+            key: "engineering",
+            title: "工程能力",
+            summary: "租户下发的工程类快捷入口。",
+            sort: 10,
+            itemCount: 0,
+          },
+        ],
+        items: [],
+        entries: [
+          {
+            id: "command:engineering_runtime",
+            kind: "command",
+            title: "工程模式",
+            summary: "通过统一 catalog requestDefaults 进入编程底座。",
+            commandKey: "engineering_runtime",
+            triggers: [{ mode: "mention", prefix: "@工程模式" }],
+            binding: {
+              executionKind: "agent_turn",
+              requestDefaults: {
+                executionStrategy: "code_orchestrated",
+              },
+            },
+          },
+        ],
+      },
+      "bootstrap_sync",
+    );
+    const harness = mountHook({
+      input: "@工程模式 收口 workspace 发送链的硬编码分支，并补治理 guard",
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness.getValue().handleSend();
+        expect(started).toBe(true);
+      });
+
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
+        "@工程模式 收口 workspace 发送链的硬编码分支，并补治理 guard",
+      );
+      expect(mockSendMessage.mock.calls[0]?.[5]).toBe("code_orchestrated");
+      expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
+        requestMetadata: {
+          harness: {
+            preferred_team_preset_id: "code-triage-team",
+            preferences: {
+              task: true,
+              subagent: true,
+            },
+          },
+        },
+      });
+      expect(listMentionEntryUsage()).toEqual([
+        expect.objectContaining({
+          kind: "builtin_command",
+          entryId: "engineering_runtime",
+          replayText: "收口 workspace 发送链的硬编码分支，并补治理 guard",
+        }),
+      ]);
+      const harnessMetadata = (
+        mockSendMessage.mock.calls[0]?.[8]?.requestMetadata as
+          | { harness?: Record<string, unknown> }
+          | undefined
+      )?.harness;
+      expect(harnessMetadata?.code_command).toBeUndefined();
       expect(listServiceSkillUsage()).toEqual([]);
     } finally {
       harness.unmount();
@@ -6706,6 +6781,88 @@ Extract it into the Agent Skills directory.`,
           kind: "scene",
           entryId: "campaign-launch",
           replayText: "帮我做一版新品活动启动方案",
+        }),
+      ]);
+      expect(mockHandleAutoLaunchMatchedSiteSkill).not.toHaveBeenCalled();
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("/runtime scene 应按 catalog requestDefaults 复用 code_orchestrated 编程底座", async () => {
+    mockGetSkillCatalog.mockResolvedValueOnce({
+      entries: [
+        {
+          id: "scene:engineering-mode",
+        },
+      ],
+    });
+    mockListSkillCatalogSceneEntries.mockReturnValueOnce([
+      {
+        id: "scene:engineering-mode",
+        kind: "scene",
+        title: "工程模式",
+        summary: "通过统一 runtime scene 进入编程底座。",
+        sceneKey: "engineering-mode",
+        commandPrefix: "/engineering-mode",
+        linkedSkillId: "cloud-video-dubbing",
+        executionKind: "agent_turn",
+        requestDefaults: {
+          executionStrategy: "code_orchestrated",
+        },
+      },
+    ]);
+    const harness = mountHook({
+      input: "/engineering-mode 收口 workspace 发送链的硬编码分支，并补治理 guard",
+      serviceSkills: [createCloudSceneSkill()],
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness.getValue().handleSend();
+        expect(started).toBe(true);
+      });
+
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage.mock.calls[0]?.[5]).toBe("code_orchestrated");
+      expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
+        displayContent:
+          "/engineering-mode 收口 workspace 发送链的硬编码分支，并补治理 guard",
+        capabilityRoute: {
+          kind: "runtime_scene",
+          sceneKey: "engineering-mode",
+          commandPrefix: "/engineering-mode",
+        },
+        requestMetadata: {
+          harness: {
+            preferred_team_preset_id: "code-triage-team",
+            preferences: {
+              task: true,
+              subagent: true,
+            },
+            service_scene_launch: {
+              kind: "local_service_skill",
+              service_scene_run: expect.objectContaining({
+                scene_key: "engineering-mode",
+                skill_id: "cloud-video-dubbing",
+                user_input:
+                  "收口 workspace 发送链的硬编码分支，并补治理 guard",
+              }),
+            },
+          },
+        },
+      });
+      const harnessMetadata = (
+        mockSendMessage.mock.calls[0]?.[8]?.requestMetadata as
+          | { harness?: Record<string, unknown> }
+          | undefined
+      )?.harness;
+      expect(harnessMetadata?.code_command).toBeUndefined();
+      expect(listSlashEntryUsage()).toEqual([
+        expect.objectContaining({
+          kind: "scene",
+          entryId: "engineering-mode",
+          replayText: "收口 workspace 发送链的硬编码分支，并补治理 guard",
         }),
       ]);
       expect(mockHandleAutoLaunchMatchedSiteSkill).not.toHaveBeenCalled();

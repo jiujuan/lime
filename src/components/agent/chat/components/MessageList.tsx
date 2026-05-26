@@ -1,7 +1,11 @@
 import React, { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { MessageListContainer } from "../styles";
+import {
+  MessageListContainer,
+  MessageListFrame,
+  MessageListJumpToLatestButton,
+} from "../styles";
 import type { AgentStreamTextOverlaySnapshot } from "../hooks/agentStreamTextOverlayStore";
 import type { Message } from "../types";
 import { MessageListItem } from "./MessageListItem";
@@ -133,7 +137,6 @@ const MessageListInner: React.FC<MessageListProps> = ({
 
   useMessageListAutoScroll({
     isRestoringSession,
-    isUserScrolling: scrollController.isUserScrolling,
     renderedMessageCount:
       renderWindow.renderedMessages.length + (trailingContent ? 1 : 0),
     scrollRef: scrollController.scrollRef,
@@ -345,89 +348,109 @@ const MessageListInner: React.FC<MessageListProps> = ({
     ],
   );
 
-  return (
-    <MessageListContainer
-      ref={scrollController.containerRef}
-      $taskCenterSurface={isTaskCenterEmptyState}
-    >
-      <div
-        data-testid="message-list-column"
-        className={[
-          "mx-auto flex min-h-full w-full max-w-[1040px] flex-col gap-4 py-4",
-          compactLeadingSpacing ? "pl-2.5 pr-3" : "pl-4 pr-4",
-          "justify-start",
-        ].join(" ")}
-      >
-        {leadingContent ? (
-          <div data-testid="message-list-leading-content">{leadingContent}</div>
-        ) : null}
-        {renderWindow.persistedHiddenHistoryCount > 0 ? (
-          <PersistedHistoryWindow
-            loadedMessages={
-              sessionHistoryWindow?.loadedMessages ??
-              renderWindow.renderedMessages.length
-            }
-            totalMessages={
-              sessionHistoryWindow?.totalMessages ??
-              renderWindow.renderedMessages.length
-            }
-            isLoadingFull={sessionHistoryWindow?.isLoadingFull === true}
-            error={sessionHistoryWindow?.error}
-            onLoadFullHistory={onLoadFullHistory}
-          />
-        ) : null}
-        {renderWindow.hiddenHistoryCount > 0 ? (
-          <HistoryWindow
-            hiddenHistoryCount={renderWindow.hiddenHistoryCount}
-            isRestoredHistoryWindow={renderWindow.isRestoredHistoryWindow}
-            renderedMessagesCount={renderWindow.renderedMessages.length}
-            onExpandAllHistory={renderWindow.handleExpandAllHistory}
-          />
-        ) : null}
-        {timelineState.messageGroups.length === 0 &&
-          (isRestoringSession ? (
-            <RestoringSessionEmptyState />
-          ) : isTaskCenterEmptyState ? (
-            <TaskCenterEmptyState />
-          ) : (
-            <DefaultConversationEmptyState />
-          ))}
+  const showJumpToLatest =
+    isSending && !scrollController.shouldAutoScroll && !isRestoringSession;
+  const jumpToLatestLabel = t("agentChat.messageList.jumpToLatest");
 
-        {timelineState.renderGroups.map((group, groupIndex) => {
-          return (
+  return (
+    <MessageListFrame data-testid="message-list-frame">
+      <MessageListContainer
+        ref={scrollController.containerRef}
+        $taskCenterSurface={isTaskCenterEmptyState}
+        data-testid="message-list-scroll-container"
+      >
+        <div
+          data-testid="message-list-column"
+          className={[
+            "mx-auto flex min-h-full w-full max-w-[1040px] flex-col gap-4 py-4",
+            compactLeadingSpacing ? "pl-2.5 pr-3" : "pl-4 pr-4",
+            "justify-start",
+          ].join(" ")}
+        >
+          {leadingContent ? (
+            <div data-testid="message-list-leading-content">
+              {leadingContent}
+            </div>
+          ) : null}
+          {renderWindow.persistedHiddenHistoryCount > 0 ? (
+            <PersistedHistoryWindow
+              loadedMessages={
+                sessionHistoryWindow?.loadedMessages ??
+                renderWindow.renderedMessages.length
+              }
+              totalMessages={
+                sessionHistoryWindow?.totalMessages ??
+                renderWindow.renderedMessages.length
+              }
+              isLoadingFull={sessionHistoryWindow?.isLoadingFull === true}
+              error={sessionHistoryWindow?.error}
+              onLoadFullHistory={onLoadFullHistory}
+            />
+          ) : null}
+          {renderWindow.hiddenHistoryCount > 0 ? (
+            <HistoryWindow
+              hiddenHistoryCount={renderWindow.hiddenHistoryCount}
+              isRestoredHistoryWindow={renderWindow.isRestoredHistoryWindow}
+              renderedMessagesCount={renderWindow.renderedMessages.length}
+              onExpandAllHistory={renderWindow.handleExpandAllHistory}
+            />
+          ) : null}
+          {timelineState.messageGroups.length === 0 &&
+            (isRestoringSession ? (
+              <RestoringSessionEmptyState />
+            ) : isTaskCenterEmptyState ? (
+              <TaskCenterEmptyState />
+            ) : (
+              <DefaultConversationEmptyState />
+            ))}
+
+          {timelineState.renderGroups.map((group, groupIndex) => {
+            return (
+              <section
+                key={group.id}
+                data-testid="message-turn-group"
+                data-group-index={groupIndex + 1}
+                className="py-2"
+              >
+                <div className="space-y-1">
+                  {group.messages.map((msg, messageIndex) => (
+                    <MessageListStreamingOverlayItem
+                      key={msg.id ?? `${group.id}:${messageIndex}`}
+                      msg={msg}
+                      group={group}
+                      onOverlayUpdate={
+                        scrollController.handleStreamingOverlayUpdate
+                      }
+                      render={renderMessageItem}
+                    />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+          {trailingContent ? (
             <section
-              key={group.id}
-              data-testid="message-turn-group"
-              data-group-index={groupIndex + 1}
+              data-testid="message-list-trailing-content"
               className="py-2"
             >
-              <div className="space-y-1">
-                {group.messages.map((msg, messageIndex) => (
-                  <MessageListStreamingOverlayItem
-                    key={msg.id ?? `${group.id}:${messageIndex}`}
-                    msg={msg}
-                    group={group}
-                    onOverlayUpdate={
-                      scrollController.handleStreamingOverlayUpdate
-                    }
-                    render={renderMessageItem}
-                  />
-                ))}
-              </div>
+              {trailingContent}
             </section>
-          );
-        })}
-        {trailingContent ? (
-          <section
-            data-testid="message-list-trailing-content"
-            className="py-2"
-          >
-            {trailingContent}
-          </section>
-        ) : null}
-        <div ref={scrollController.scrollRef} />
-      </div>
-    </MessageListContainer>
+          ) : null}
+          <div ref={scrollController.scrollRef} />
+        </div>
+      </MessageListContainer>
+      {showJumpToLatest ? (
+        <MessageListJumpToLatestButton
+          type="button"
+          data-testid="message-list-jump-to-latest"
+          aria-label={jumpToLatestLabel}
+          title={jumpToLatestLabel}
+          onClick={scrollController.jumpToLatest}
+        >
+          {jumpToLatestLabel}
+        </MessageListJumpToLatestButton>
+      ) : null}
+    </MessageListFrame>
   );
 };
 

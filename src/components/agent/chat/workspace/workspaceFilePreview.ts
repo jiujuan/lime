@@ -3,6 +3,7 @@ import type { CanvasState as GeneralCanvasState } from "@/components/general-cha
 type GeneralCanvasContentType = GeneralCanvasState["contentType"];
 
 const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdx"]);
+const HTML_EXTENSIONS = new Set(["html", "htm"]);
 const CODE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
   c: "c",
   cc: "cpp",
@@ -70,6 +71,10 @@ export function resolveGeneralCanvasFileContentType(
     ? CODE_LANGUAGE_BY_EXTENSION[extension]
     : undefined;
 
+  if (HTML_EXTENSIONS.has(extension)) {
+    return { contentType: "html", language: "html" };
+  }
+
   if (MARKDOWN_EXTENSIONS.has(extension) || looksLikeMarkdown(content)) {
     return { contentType: "markdown" };
   }
@@ -84,6 +89,9 @@ export function resolveGeneralCanvasFileContentType(
 export function buildGeneralCanvasStateFromWorkspaceFile(
   filePath: string,
   content: string,
+  options?: {
+    sourcePath?: string | null;
+  },
 ): GeneralCanvasState {
   const { contentType, language } = resolveGeneralCanvasFileContentType(
     filePath,
@@ -96,6 +104,7 @@ export function buildGeneralCanvasStateFromWorkspaceFile(
     content,
     language,
     filename: filePath,
+    sourcePath: options?.sourcePath || undefined,
     isEditing: false,
   };
 }

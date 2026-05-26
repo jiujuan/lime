@@ -35,6 +35,21 @@ function buildRuntimeCatalogFixture(): SkillCatalog {
         },
       },
       {
+        id: "command:engineering-runtime",
+        kind: "command",
+        title: "工程模式",
+        summary: "通过统一 catalog requestDefaults 进入编程底座。",
+        commandKey: "engineering_runtime",
+        aliases: ["工程模式"],
+        triggers: [{ mode: "mention", prefix: "@工程模式" }],
+        binding: {
+          executionKind: "agent_turn",
+          requestDefaults: {
+            executionStrategy: "code_orchestrated",
+          },
+        },
+      },
+      {
         id: "scene:campaign-launch",
         kind: "scene",
         title: "新品发布场景",
@@ -111,6 +126,18 @@ describe("runtimeInputCapabilityCatalog", () => {
     expect(
       runtimeCatalog.mentionCommandSkillIdMap.get("tenant_research_custom"),
     ).toBe("tenant-research");
+    expect(runtimeCatalog.mentionCommandPrefixKeyMap.get("@工程模式")).toBe(
+      "engineering_runtime",
+    );
+    expect(
+      runtimeCatalog.mentionAgentTurnRouteMap.get("engineering_runtime"),
+    ).toEqual({
+      commandKey: "engineering_runtime",
+      executionStrategy: "code_orchestrated",
+    });
+    expect(
+      runtimeCatalog.mentionAgentTurnRouteMap.has("tenant_research_custom"),
+    ).toBe(false);
   });
 
   it("hook 应跟随 skill catalog 变更同步运行时 capability 目录", async () => {

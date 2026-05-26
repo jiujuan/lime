@@ -75,6 +75,8 @@ pub(super) fn prepare_runtime_turn_prompt_strategy(
     request: &AsterChatRequest,
     session_id: &str,
     workspace_root: &str,
+    requested_strategy: AsterExecutionStrategy,
+    effective_strategy: AsterExecutionStrategy,
     execution_profile: TurnExecutionProfile,
     runtime_config: &lime_core::config::Config,
     request_tool_policy: &RequestToolPolicy,
@@ -84,8 +86,6 @@ pub(super) fn prepare_runtime_turn_prompt_strategy(
     auto_continue_config: Option<&AutoContinuePayload>,
     turn_input_builder: &mut TurnInputEnvelopeBuilder,
 ) -> RuntimeTurnPromptStrategy {
-    let persisted_strategy =
-        AsterExecutionStrategy::from_db_value(session_state_snapshot.execution_strategy());
     let session_prompt = if let Some(prompt) = session_state_snapshot.system_prompt() {
         tracing::debug!(
             "[AsterAgent] 找到 session，system_prompt: {:?}",
@@ -146,8 +146,6 @@ pub(super) fn prepare_runtime_turn_prompt_strategy(
     }
     turn_input_builder.set_base_system_prompt(system_prompt_source, resolved_prompt.clone());
 
-    let requested_strategy = request.execution_strategy.unwrap_or(persisted_strategy);
-    let effective_strategy = requested_strategy.effective_for_message(&request.message);
     turn_input_builder
         .set_requested_execution_strategy(Some(requested_strategy.as_db_value().to_string()))
         .set_effective_execution_strategy(Some(effective_strategy.as_db_value().to_string()));

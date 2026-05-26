@@ -9,12 +9,14 @@ const {
   mockUseModelRegistry,
   mockGetSystemProviderCatalog,
   mockTestConnection,
+  mockTestChat,
   mockFetchProviderModelsAuto,
 } = vi.hoisted(() => ({
   mockUseApiKeyProvider: vi.fn(),
   mockUseModelRegistry: vi.fn(),
   mockGetSystemProviderCatalog: vi.fn(),
   mockTestConnection: vi.fn(),
+  mockTestChat: vi.fn(),
   mockFetchProviderModelsAuto: vi.fn(),
 }));
 
@@ -30,7 +32,7 @@ vi.mock("@/lib/api/apiKeyProvider", () => ({
   apiKeyProviderApi: {
     getSystemProviderCatalog: mockGetSystemProviderCatalog,
     testConnection: mockTestConnection,
-    testChat: vi.fn(),
+    testChat: mockTestChat,
   },
 }));
 
@@ -76,6 +78,14 @@ vi.mock("./ProviderSetting", () => ({
     provider: ProviderWithKeysDisplay | null;
     authStatus?: "ready" | "login_required";
     onLogin?: () => void | Promise<void>;
+    onTestConnection?: (
+      providerId: string,
+      options?: {
+        modelName?: string;
+        requireChatReady?: boolean;
+        prompt?: string;
+      },
+    ) => Promise<unknown>;
     onDeleteProvider?: (providerId: string) => Promise<boolean | void>;
   }) => {
     if (props.provider && props.authStatus === "login_required") {
@@ -99,6 +109,21 @@ vi.mock("./ProviderSetting", () => ({
     return (
       <div data-testid="provider-setting-stub">
         {props.provider?.name ?? "未选择模型"}
+        {props.provider ? (
+          <button
+            type="button"
+            data-testid="provider-setting-test-chat-stub"
+            onClick={() => {
+              void props.onTestConnection?.(props.provider!.id, {
+                modelName: props.provider!.custom_models?.[0],
+                requireChatReady: true,
+                prompt: "试跑",
+              });
+            }}
+          >
+            试跑
+          </button>
+        ) : null}
         {props.provider && props.onDeleteProvider ? (
           <button
             type="button"
@@ -280,6 +305,7 @@ beforeEach(() => {
     ]),
   });
   mockTestConnection.mockResolvedValue({ success: true, latency_ms: 12 });
+  mockTestChat.mockResolvedValue({ success: true, latency_ms: 21 });
   mockFetchProviderModelsAuto.mockResolvedValue({
     source: "Api",
     models: [{ id: "deepseek-chat" }],
@@ -425,6 +451,25 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     expect(onOemLogin).toHaveBeenCalledTimes(1);
   });
 
+  it("Provider 设置页请求聊天试跑时应走真实聊天测试命令", async () => {
+    createHookState();
+    renderSection();
+    await flushEffects();
+
+    await act(async () => {
+      findByTestId<HTMLButtonElement>("provider-setting-test-chat-stub").click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockTestChat).toHaveBeenCalledWith(
+      "deepseek",
+      "deepseek-chat",
+      "试跑",
+    );
+    expect(mockTestConnection).not.toHaveBeenCalled();
+  });
+
   it("点击添加模型后，右侧进入可筛选的服务商目录", async () => {
     createHookState();
     const container = renderSection();
@@ -511,6 +556,7 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
       "deepseek",
       "sk-test",
       undefined,
+      { replaceExisting: true },
     );
     expect(mockFetchProviderModelsAuto).toHaveBeenCalledWith("deepseek");
     expect(container.textContent ?? "").toContain("从接口获取");
@@ -767,6 +813,7 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
       "custom-1",
       "sk-test",
       undefined,
+      { replaceExisting: true },
     );
     expect(mockTestConnection).toHaveBeenCalledWith("custom-1", "my-model");
     expect(hookState.selectProvider).toHaveBeenCalledWith("custom-1");

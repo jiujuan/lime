@@ -54,6 +54,9 @@ pub async fn execute_job(
                     web_search,
                     approval_policy,
                     sandbox_policy,
+                    provider_config,
+                    provider_preference,
+                    model_preference,
                     request_metadata,
                     content_id,
                 } => {
@@ -66,6 +69,9 @@ pub async fn execute_job(
                         web_search,
                         approval_policy,
                         sandbox_policy,
+                        provider_config,
+                        provider_preference,
+                        model_preference,
                         request_metadata,
                         content_id,
                     )
@@ -88,6 +94,9 @@ async fn execute_agent_turn(
     web_search: bool,
     approval_policy: Option<String>,
     sandbox_policy: Option<String>,
+    provider_config: Option<crate::commands::aster_agent_cmd::ConfigureProviderRequest>,
+    provider_preference: Option<String>,
+    model_preference: Option<String>,
     request_metadata: Option<Value>,
     content_id: Option<String>,
 ) -> Result<JobExecutionResult, String> {
@@ -119,6 +128,9 @@ async fn execute_agent_turn(
         web_search,
         approval_policy,
         sandbox_policy,
+        provider_config,
+        provider_preference,
+        model_preference,
         request_metadata,
         content_id.clone(),
     )?;

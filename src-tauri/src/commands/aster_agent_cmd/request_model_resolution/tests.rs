@@ -449,39 +449,42 @@ fn codex_compatibility_falls_back_to_supported_model() {
 }
 
 #[test]
-fn xiaomi_compatibility_canonicalizes_display_name_and_legacy_alias() {
+fn provider_custom_model_canonicalization_keeps_declared_model_ids() {
     let context = ProviderResolutionContext {
-        provider_selector: "custom-mimo".to_string(),
+        provider_selector: "custom-provider".to_string(),
         aster_provider_name: "anthropic".to_string(),
         compatibility_provider_key: "anthropic-compatible".to_string(),
-        registry_provider_ids: vec!["xiaomi".to_string()],
-        alias_key: "custom-mimo".to_string(),
+        registry_provider_ids: vec!["custom-provider".to_string()],
+        alias_key: "custom-provider".to_string(),
         custom_models: vec![],
         is_custom_provider: true,
         provider_type: Some(ApiProviderType::AnthropicCompatible),
         provider_group: None,
-        configured_api_host: Some("https://token-plan-cn.xiaomimimo.com/anthropic".to_string()),
+        configured_api_host: Some("https://provider.example.com/anthropic".to_string()),
         has_credentials: true,
     };
 
     assert_eq!(
-        resolve_provider_model_compatibility(&context, "MiMo-V2.5-Pro"),
-        "mimo-v2.5-pro"
+        resolve_provider_model_compatibility(&context, "Provider-Chat-Pro"),
+        "Provider-Chat-Pro"
     );
     assert_eq!(
-        resolve_provider_model_compatibility(&context, "mimo-v2-pro"),
-        "mimo-v2.5-pro"
+        resolve_provider_model_compatibility(&context, "provider-chat-flash"),
+        "provider-chat-flash"
     );
     assert_eq!(
         canonicalize_provider_custom_models(
             &context,
             &[
-                "MiMo-V2.5-Pro".to_string(),
-                "mimo-v2-pro".to_string(),
-                "mimo-v2-flash".to_string(),
+                "Provider-Chat-Pro".to_string(),
+                "provider-chat-flash".to_string(),
+                "provider-chat-flash".to_string(),
             ],
         ),
-        vec!["mimo-v2.5-pro".to_string()]
+        vec![
+            "Provider-Chat-Pro".to_string(),
+            "provider-chat-flash".to_string()
+        ]
     );
 }
 
@@ -1380,7 +1383,7 @@ fn responsive_chat_auto_candidate_demotes_known_unsupported_model() {
     assert_eq!(candidates[0].provider_selector, "unknown-provider");
     assert_eq!(candidates[0].model_name, "flash-lite");
     assert!(is_responsive_chat_unsupported_model_error(Some(
-        "Request failed: Bad request (400): Not supported model mimo-v2-flash"
+        "Request failed: Bad request (400): Not supported model stale-chat"
     )));
 }
 
@@ -1828,16 +1831,19 @@ fn user_locked_capability_gap_should_use_blocking_limit_status() {
 #[test]
 fn custom_provider_multi_candidate_reselection_is_disabled() {
     let context = ProviderResolutionContext {
-        provider_selector: "custom-mimo".to_string(),
+        provider_selector: "custom-provider".to_string(),
         aster_provider_name: "anthropic".to_string(),
         compatibility_provider_key: "anthropic-compatible".to_string(),
-        registry_provider_ids: vec!["xiaomi".to_string()],
-        alias_key: "custom-mimo".to_string(),
-        custom_models: vec!["mimo-v2.5-pro".to_string(), "mimo-v2-flash".to_string()],
+        registry_provider_ids: vec!["custom-provider".to_string()],
+        alias_key: "custom-provider".to_string(),
+        custom_models: vec![
+            "provider-chat-pro".to_string(),
+            "provider-chat-lite".to_string(),
+        ],
         is_custom_provider: true,
         provider_type: Some(ApiProviderType::AnthropicCompatible),
         provider_group: None,
-        configured_api_host: Some("https://token-plan-cn.xiaomimimo.com/anthropic".to_string()),
+        configured_api_host: Some("https://provider.example.com/anthropic".to_string()),
         has_credentials: true,
     };
 
@@ -1864,24 +1870,24 @@ fn configured_model_allowlist_disables_system_provider_auto_reselection() {
 }
 
 #[test]
-fn xiaomi_permission_recovery_prefers_non_flash_candidate() {
+fn model_recovery_prefers_configured_candidate_without_model_name_hardcode() {
     let context = ProviderResolutionContext {
-        provider_selector: "custom-mimo".to_string(),
+        provider_selector: "custom-provider".to_string(),
         aster_provider_name: "anthropic".to_string(),
         compatibility_provider_key: "anthropic-compatible".to_string(),
-        registry_provider_ids: vec!["xiaomi".to_string()],
-        alias_key: "custom-mimo".to_string(),
-        custom_models: vec!["mimo-v2.5-pro".to_string(), "mimo-v2-flash".to_string()],
+        registry_provider_ids: vec!["custom-provider".to_string()],
+        alias_key: "custom-provider".to_string(),
+        custom_models: vec!["stable-chat".to_string(), "stale-chat".to_string()],
         is_custom_provider: true,
         provider_type: Some(ApiProviderType::AnthropicCompatible),
         provider_group: None,
-        configured_api_host: Some("https://token-plan-cn.xiaomimimo.com/anthropic".to_string()),
+        configured_api_host: Some("https://provider.example.com/anthropic".to_string()),
         has_credentials: true,
     };
     let models = vec![
         build_model(
-            "mimo-v2.5-pro",
-            Some("mimo-v2"),
+            "stable-chat",
+            Some("provider-chat"),
             false,
             false,
             true,
@@ -1889,8 +1895,8 @@ fn xiaomi_permission_recovery_prefers_non_flash_candidate() {
             Some("2026-04-01"),
         ),
         build_model(
-            "mimo-v2-flash",
-            Some("mimo-v2"),
+            "stale-chat",
+            Some("provider-chat"),
             false,
             false,
             true,
@@ -1900,14 +1906,14 @@ fn xiaomi_permission_recovery_prefers_non_flash_candidate() {
     ];
 
     assert_eq!(
-        choose_provider_permission_recovery_model(&context, "mimo-v2-flash", &models, false, false)
+        choose_provider_model_recovery_model(&context, "stale-chat", &models, false, false)
             .as_deref(),
-        Some("mimo-v2.5-pro")
+        Some("stable-chat")
     );
 }
 
 #[test]
-fn permission_recovery_prefers_configured_model_for_system_provider() {
+fn model_recovery_prefers_configured_model_for_system_provider() {
     let context = ProviderResolutionContext {
         provider_selector: "deepseek".to_string(),
         aster_provider_name: "openai".to_string(),
@@ -1952,14 +1958,13 @@ fn permission_recovery_prefers_configured_model_for_system_provider() {
     ];
 
     assert_eq!(
-        choose_provider_permission_recovery_model(&context, "gpt-5.5", &models, false, false)
-            .as_deref(),
+        choose_provider_model_recovery_model(&context, "gpt-5.5", &models, false, false).as_deref(),
         Some("deepseek-chat")
     );
 }
 
 #[test]
-fn permission_recovery_falls_back_to_known_openai_fast_model() {
+fn model_recovery_falls_back_to_catalog_candidate_without_provider_allowlist() {
     let context = ProviderResolutionContext {
         provider_selector: "openai".to_string(),
         aster_provider_name: "openai".to_string(),
@@ -1995,14 +2000,13 @@ fn permission_recovery_falls_back_to_known_openai_fast_model() {
     ];
 
     assert_eq!(
-        choose_provider_permission_recovery_model(&context, "gpt-4o", &models, false, false)
-            .as_deref(),
+        choose_provider_model_recovery_model(&context, "gpt-4o", &models, false, false).as_deref(),
         Some("gpt-4o-mini")
     );
 }
 
 #[test]
-fn permission_recovery_can_use_uncataloged_configured_model() {
+fn model_recovery_can_use_uncataloged_configured_model() {
     let context = ProviderResolutionContext {
         provider_selector: "siliconflow-cn".to_string(),
         aster_provider_name: "openai".to_string(),
@@ -2027,8 +2031,7 @@ fn permission_recovery_can_use_uncataloged_configured_model() {
     )];
 
     assert_eq!(
-        choose_provider_permission_recovery_model(&context, "gpt-5.5", &models, false, false)
-            .as_deref(),
+        choose_provider_model_recovery_model(&context, "gpt-5.5", &models, false, false).as_deref(),
         Some("deepseek-ai/DeepSeek-V4-Flash")
     );
 }

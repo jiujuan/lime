@@ -51,6 +51,7 @@ import {
   isRuntimePermissionConfirmationWaitMessage,
   isSubmittedRuntimeActionConfirmation,
 } from "../utils/runtimeActionConfirmation";
+import { resolveAgentRuntimeErrorPresentation } from "../utils/agentRuntimeErrorPresentation";
 
 interface AgentThreadTimelineProps {
   turn: AgentThreadTurn;
@@ -373,6 +374,14 @@ function stringifyItemForDebug(item: AgentThreadItem): string {
   } catch {
     return String(item);
   }
+}
+
+function resolveUserFacingErrorMessage(errorMessage?: string | null): string {
+  const normalized = errorMessage?.trim();
+  if (!normalized) {
+    return "";
+  }
+  return resolveAgentRuntimeErrorPresentation(normalized).displayMessage;
 }
 
 function SurfaceCard({
@@ -899,6 +908,10 @@ function renderGroupItemDetails(
   }
 
   if (item.type === "warning" || item.type === "error") {
+    const displayMessage =
+      item.type === "error"
+        ? resolveUserFacingErrorMessage(item.message)
+        : item.message;
     return (
       <SurfaceCard
         icon={item.type === "warning" ? AlertTriangle : ShieldAlert}
@@ -917,7 +930,7 @@ function renderGroupItemDetails(
               : "text-sm text-muted-foreground"
           }
         >
-          {item.message}
+          {displayMessage}
         </div>
       </SurfaceCard>
     );
@@ -1339,7 +1352,7 @@ function resolveThreadInlineStatusHint(params: {
     return {
       tone: "error" as const,
       label: "失败",
-      detail: params.turn.error_message.trim(),
+      detail: resolveUserFacingErrorMessage(params.turn.error_message),
     };
   }
 

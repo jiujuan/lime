@@ -2586,6 +2586,429 @@ describe("HarnessStatusPanel", () => {
     expect(document.body.textContent).toContain("快照同步");
   });
 
+  it("code_orchestrated 编程底座应同时呈现工具输出、权限确认、文件写入和文件活动", () => {
+    const onRespondToAction = vi.fn();
+
+    renderPanel({
+      layout: "dialog",
+      onRespondToAction,
+      diagnosticRuntimeContext: {
+        sessionId: "session-code-orchestrated",
+        workspaceId: "workspace-code-orchestrated",
+        workingDir: "/tmp/workspace-code-orchestrated",
+        providerType: "openai",
+        model: "gpt-5.4",
+        executionStrategy: "code_orchestrated",
+        activeTheme: "default",
+        selectedTeamLabel: "代码团队",
+      },
+      harnessState: createHarnessState({
+        activeFileWrites: [
+          {
+            id: "write-code-test",
+            path: "/tmp/workspace/src/components/ImageCard.test.tsx",
+            displayName: "ImageCard.test.tsx",
+            phase: "streaming",
+            status: "streaming",
+            source: "artifact_snapshot",
+            updatedAt: new Date("2026-05-26T10:00:00.000Z"),
+            preview: "it('keeps image cards after history switch', () => {})",
+            latestChunk: "keeps image cards after history switch",
+            content: "it('keeps image cards after history switch', () => {})",
+          },
+        ],
+        outputSignals: [
+          {
+            id: "signal-code-test",
+            toolCallId: "tool-code-test",
+            toolName: "bash",
+            title: "回归测试结果",
+            summary: "vitest 已执行图片卡片历史切换回归测试。",
+            preview: "1 test passed",
+            content: "PASS ImageCard.test.tsx\n1 test passed",
+            outputFile: "/tmp/workspace/.lime/runtime/vitest-output.txt",
+            exitCode: 0,
+          },
+        ],
+        pendingApprovals: [
+          {
+            requestId: "approval-code-write",
+            actionType: "tool_confirmation",
+            toolName: "write_file",
+            prompt: "确认写入图片卡片历史切换回归测试",
+            arguments: {
+              filePath: "src/components/ImageCard.test.tsx",
+            },
+          },
+        ],
+        recentFileEvents: [
+          {
+            id: "event-code-test",
+            toolCallId: "tool-code-test",
+            path: "/tmp/workspace/src/components/ImageCard.test.tsx",
+            displayName: "ImageCard.test.tsx",
+            kind: "code",
+            action: "write",
+            sourceToolName: "write_file",
+            timestamp: new Date("2026-05-26T10:01:00.000Z"),
+            preview: "新增图片卡片历史切换回归测试",
+            clickable: true,
+          },
+        ],
+      }),
+    });
+
+    const writesSection = document.body.querySelector(
+      '[data-harness-section="writes"]',
+    ) as HTMLElement | null;
+    const outputsSection = document.body.querySelector(
+      '[data-harness-section="outputs"]',
+    ) as HTMLElement | null;
+    const approvalsSection = document.body.querySelector(
+      '[data-harness-section="approvals"]',
+    ) as HTMLElement | null;
+    const fileReviewSection = document.body.querySelector(
+      '[data-harness-section="file_review"]',
+    ) as HTMLElement | null;
+    const filesSection = document.body.querySelector(
+      '[data-harness-section="files"]',
+    ) as HTMLElement | null;
+
+    expect(document.body.textContent).toContain("本轮文件变更处理");
+    expect(writesSection?.textContent).toContain("ImageCard.test.tsx");
+    expect(writesSection?.textContent).toContain(
+      "keeps image cards after history switch",
+    );
+    expect(outputsSection?.textContent).toContain("回归测试结果");
+    expect(outputsSection?.textContent).toContain("1 test passed");
+    expect(outputsSection?.textContent).toContain("退出码 0");
+    expect(outputsSection?.textContent).toContain("输出位置");
+    expect(outputsSection?.textContent).toContain("输出文件");
+    expect(outputsSection?.textContent).toContain(
+      "/tmp/workspace/.lime/runtime/vitest-output.txt",
+    );
+    expect(approvalsSection?.textContent).toContain(
+      "确认写入图片卡片历史切换回归测试",
+    );
+    expect(approvalsSection?.textContent).toContain("工具确认");
+    expect(approvalsSection?.textContent).toContain("影响范围");
+    expect(approvalsSection?.textContent).toContain("风险提示");
+    expect(approvalsSection?.textContent).toContain(
+      "将修改工作区文件，请确认目标路径和内容符合预期。",
+    );
+    expect(approvalsSection?.textContent).toContain("参数摘要");
+    expect(approvalsSection?.textContent).toContain(
+      "src/components/ImageCard.test.tsx",
+    );
+    expect(approvalsSection?.textContent).toContain(
+      "请求标识：approval-code-write",
+    );
+    expect(fileReviewSection?.textContent).toContain("确认本轮文件应用状态");
+    expect(fileReviewSection?.textContent).toContain("待处理 1");
+    expect(fileReviewSection?.textContent).toContain("ImageCard.test.tsx");
+    expect(fileReviewSection?.textContent).toContain("新增图片卡片历史切换回归测试");
+    expect(filesSection?.textContent).toContain("ImageCard.test.tsx");
+    expect(filesSection?.textContent).toContain("新增图片卡片历史切换回归测试");
+
+    const approveButton = findButtonByText("允许并继续");
+    expect(approveButton).not.toBeNull();
+    act(() => {
+      approveButton?.click();
+    });
+    expect(onRespondToAction).toHaveBeenCalledWith({
+      requestId: "approval-code-write",
+      actionType: "tool_confirmation",
+      confirmed: true,
+      response: "approved",
+    });
+
+    const rejectButton = findButtonByText("拒绝");
+    expect(rejectButton).not.toBeNull();
+    act(() => {
+      rejectButton?.click();
+    });
+    expect(onRespondToAction).toHaveBeenCalledWith({
+      requestId: "approval-code-write",
+      actionType: "tool_confirmation",
+      confirmed: false,
+      response: "rejected",
+    });
+  });
+
+  it("code_orchestrated 编程底座应将 patch/diff 输出渲染为代码变更概览", () => {
+    const unifiedDiff = [
+      "diff --git a/src/components/ImageCard.tsx b/src/components/ImageCard.tsx",
+      "--- a/src/components/ImageCard.tsx",
+      "+++ b/src/components/ImageCard.tsx",
+      "@@ -1,2 +1,3 @@",
+      "-const title = \"oldTitle\";",
+      "+const title = \"newTitle\";",
+      "+const keepsHistory = true;",
+    ].join("\n");
+    const applyPatch = [
+      "*** Begin Patch",
+      "*** Update File: src/components/ImageCard.test.tsx",
+      "@@",
+      "-it('drops history cards', () => {})",
+      "+it('keeps history cards', () => {})",
+      "*** End Patch",
+    ].join("\n");
+
+    renderPanel({
+      layout: "dialog",
+      diagnosticRuntimeContext: {
+        sessionId: "session-code-diff",
+        workspaceId: "workspace-code-diff",
+        workingDir: "/tmp/workspace-code-diff",
+        providerType: "openai",
+        model: "gpt-5.4",
+        executionStrategy: "code_orchestrated",
+        activeTheme: "default",
+        selectedTeamLabel: "代码团队",
+      },
+      harnessState: createHarnessState({
+        outputSignals: [
+          {
+            id: "signal-code-diff",
+            toolCallId: "tool-code-diff",
+            toolName: "apply_patch",
+            title: "补丁预览",
+            summary: "已生成图片卡片修复补丁。",
+            preview: unifiedDiff,
+            content: unifiedDiff,
+          },
+        ],
+        recentFileEvents: [
+          {
+            id: "event-code-diff",
+            toolCallId: "tool-code-diff",
+            path: "/tmp/workspace/src/components/ImageCard.test.tsx",
+            displayName: "ImageCard.test.tsx",
+            kind: "code",
+            action: "edit",
+            sourceToolName: "apply_patch",
+            timestamp: new Date("2026-05-26T10:02:00.000Z"),
+            preview: applyPatch,
+            content: applyPatch,
+            clickable: true,
+          },
+        ],
+      }),
+    });
+
+    const outputsSection = document.body.querySelector(
+      '[data-harness-section="outputs"]',
+    ) as HTMLElement | null;
+    const fileReviewSection = document.body.querySelector(
+      '[data-harness-section="file_review"]',
+    ) as HTMLElement | null;
+
+    expect(
+      document.body.querySelectorAll('[data-testid="harness-diff-review-card"]')
+        .length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(outputsSection?.textContent).toContain("代码变更概览");
+    expect(outputsSection?.textContent).toContain(
+      "src/components/ImageCard.tsx",
+    );
+    expect(outputsSection?.textContent).toContain("修改前");
+    expect(outputsSection?.textContent).toContain("修改后");
+    expect(outputsSection?.textContent).toContain("oldTitle");
+    expect(outputsSection?.textContent).toContain("newTitle");
+    expect(fileReviewSection?.textContent).toContain("代码变更概览");
+    expect(fileReviewSection?.textContent).toContain(
+      "src/components/ImageCard.test.tsx",
+    );
+    expect(fileReviewSection?.textContent).toContain("keeps history cards");
+  });
+
+  it("文件变更处理区块应使用 locale 资源展示动作、类型和写入阶段", async () => {
+    await changeLimeLocale("en-US");
+
+    renderPanel({
+      harnessState: createHarnessState({
+        activeFileWrites: [
+          {
+            id: "write-locale-review",
+            path: "/tmp/workspace/src/locale.ts",
+            displayName: "locale.ts",
+            phase: "streaming",
+            status: "streaming",
+            source: "artifact_snapshot",
+            updatedAt: new Date("2026-05-26T12:00:00.000Z"),
+            preview: "export const locale = true;",
+            latestChunk: "export const locale = true;",
+            content: "export const locale = true;",
+          },
+        ],
+        recentFileEvents: [
+          {
+            id: "event-locale-review",
+            toolCallId: "tool-locale-review",
+            path: "/tmp/workspace/src/locale.ts",
+            displayName: "locale.ts",
+            kind: "code",
+            action: "write",
+            sourceToolName: "Write",
+            timestamp: new Date("2026-05-26T12:01:00.000Z"),
+            preview: "export const locale = true;",
+            clickable: true,
+          },
+        ],
+      }),
+    });
+
+    const section = document.body.querySelector(
+      '[data-harness-section="file_review"]',
+    ) as HTMLElement | null;
+    expect(section?.textContent).toContain("Confirm file application status");
+    expect(section?.textContent).toContain("locale.ts");
+    expect(section?.textContent).toContain("Write");
+    expect(section?.textContent).toContain("Code");
+    expect(section?.textContent).toContain("Writing 1");
+    expect(section?.textContent).toContain("Write 1");
+    expect(section?.textContent).not.toContain("正在写入 1");
+    expect(section?.textContent).not.toContain("代码");
+  });
+
+  it("文件变更处理区块应支持批量标记已应用", () => {
+    renderPanel({
+      harnessState: createHarnessState({
+        recentFileEvents: [
+          {
+            id: "event-review-apply-1",
+            toolCallId: "tool-review-apply-1",
+            path: "/tmp/workspace/src/app.ts",
+            displayName: "app.ts",
+            kind: "code",
+            action: "write",
+            sourceToolName: "Write",
+            timestamp: new Date("2026-05-26T11:00:00.000Z"),
+            preview: "export const app = true;",
+            clickable: true,
+          },
+          {
+            id: "event-review-apply-2",
+            toolCallId: "tool-review-apply-2",
+            path: "/tmp/workspace/src/card.tsx",
+            displayName: "card.tsx",
+            kind: "code",
+            action: "edit",
+            sourceToolName: "Edit",
+            timestamp: new Date("2026-05-26T11:01:00.000Z"),
+            preview: "<Card />",
+            clickable: true,
+          },
+        ],
+      }),
+    });
+
+    const section = document.body.querySelector(
+      '[data-harness-section="file_review"]',
+    ) as HTMLElement | null;
+    expect(section?.textContent).toContain("待处理 2");
+    expect(section?.textContent).toContain("已应用 0");
+
+    const selectAllButton = Array.from(
+      section?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.includes("全选变更"));
+
+    act(() => {
+      selectAllButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const markAppliedButton = Array.from(
+      section?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.includes("标记已应用 2"));
+
+    act(() => {
+      markAppliedButton?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    expect(mockToast.success).toHaveBeenCalledWith(
+      "已标记 2 个文件变更为已应用",
+    );
+    expect(section?.textContent).toContain("待处理 0");
+    expect(section?.textContent).toContain("已应用 2");
+  });
+
+  it("文件变更处理区块拒绝变更时应打开文件快照入口", () => {
+    const onOpenFileCheckpoints = vi.fn();
+
+    renderPanel({
+      harnessState: createHarnessState({
+        recentFileEvents: [
+          {
+            id: "event-review-reject-1",
+            toolCallId: "tool-review-reject-1",
+            path: "/tmp/workspace/src/reject.ts",
+            displayName: "reject.ts",
+            kind: "code",
+            action: "edit",
+            sourceToolName: "Edit",
+            timestamp: new Date("2026-05-26T11:02:00.000Z"),
+            preview: "const rejected = true;",
+            clickable: true,
+          },
+        ],
+      }),
+      onOpenFileCheckpoints,
+    });
+
+    const section = document.body.querySelector(
+      '[data-harness-section="file_review"]',
+    ) as HTMLElement | null;
+    const rejectButton = Array.from(
+      section?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.trim() === "拒绝并回滚");
+
+    act(() => {
+      rejectButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onOpenFileCheckpoints).toHaveBeenCalledTimes(1);
+    expect(section?.textContent).toContain("已拒绝");
+  });
+
+  it("文件变更处理区块没有快照入口时拒绝变更应提示回退路径", () => {
+    renderPanel({
+      harnessState: createHarnessState({
+        recentFileEvents: [
+          {
+            id: "event-review-reject-no-checkpoint",
+            toolCallId: "tool-review-reject-no-checkpoint",
+            path: "/tmp/workspace/src/no-checkpoint.ts",
+            displayName: "no-checkpoint.ts",
+            kind: "code",
+            action: "write",
+            sourceToolName: "Write",
+            timestamp: new Date("2026-05-26T11:03:00.000Z"),
+            preview: "const checkpoint = false;",
+            clickable: true,
+          },
+        ],
+      }),
+    });
+
+    const section = document.body.querySelector(
+      '[data-harness-section="file_review"]',
+    ) as HTMLElement | null;
+    const rejectButton = Array.from(
+      section?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.trim() === "拒绝并回滚");
+
+    act(() => {
+      rejectButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(mockToast.info).toHaveBeenCalledWith(
+      "当前会话没有可打开的文件快照入口，请在文件活动中查看路径。",
+    );
+    expect(section?.textContent).toContain("已拒绝");
+  });
+
   it("摘要卡和快速导航应支持跳转到对应区块", () => {
     const scrollIntoViewMock = vi.fn();
     const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
@@ -2925,6 +3348,56 @@ describe("HarnessStatusPanel", () => {
     expect(outputSection?.textContent).not.toContain("大结果转存");
     expect(outputSection?.textContent).not.toContain("截断输出");
     expect(outputSection?.textContent).toContain("1 / 4 条");
+  });
+
+  it("工具输出应展示执行状态、截断转存和文件位置", () => {
+    renderPanel({
+      harnessState: createHarnessState({
+        outputSignals: [
+          {
+            id: "signal-command-output",
+            toolCallId: "tool-command-output",
+            toolName: "bash",
+            title: "测试命令输出",
+            summary: "npm exec vitest run HarnessStatusPanel.test.tsx",
+            preview: "PASS HarnessStatusPanel.test.tsx",
+            outputFile: "/tmp/workspace/.lime/runtime/test-output.txt",
+            offloadFile: "/tmp/workspace/.lime/runtime/full-output.txt",
+            exitCode: 1,
+            stdoutLength: 2048,
+            stderrLength: 128,
+            sandboxed: true,
+            truncated: true,
+            offloaded: true,
+            offloadOriginalChars: 9000,
+            offloadOriginalTokens: 1800,
+          },
+        ],
+      }),
+    });
+
+    const outputSection = document.body.querySelector(
+      '[data-harness-section="outputs"]',
+    ) as HTMLElement | null;
+
+    expect(outputSection?.textContent).toContain("测试命令输出");
+    expect(outputSection?.textContent).toContain("退出码 1");
+    expect(outputSection?.textContent).toContain("输出已截断");
+    expect(outputSection?.textContent).toContain("完整输出已转存");
+    expect(outputSection?.textContent).toContain("隔离执行");
+    expect(outputSection?.textContent).toContain("stdout 2048");
+    expect(outputSection?.textContent).toContain("stderr 128");
+    expect(outputSection?.textContent).toContain("原始 9000 字符");
+    expect(outputSection?.textContent).toContain("约 1800 tokens");
+    expect(outputSection?.textContent).toContain("输出位置");
+    expect(outputSection?.textContent).toContain("输出文件");
+    expect(outputSection?.textContent).toContain("转存文件");
+    expect(outputSection?.textContent).toContain(
+      "/tmp/workspace/.lime/runtime/test-output.txt",
+    );
+    expect(outputSection?.textContent).toContain(
+      "/tmp/workspace/.lime/runtime/full-output.txt",
+    );
   });
 
   it("搜索输出应展示结果列表并支持悬浮预览", async () => {

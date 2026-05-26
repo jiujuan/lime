@@ -32,6 +32,7 @@ const CODE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
   css: "css",
   go: "go",
   h: "c",
+  htm: "html",
   html: "html",
   java: "java",
   js: "javascript",
@@ -317,6 +318,16 @@ function supportsPreviewFirstProgrammingFlow(
   );
 }
 
+function isHtmlPreviewArtifact(artifact: Pick<Artifact, "type" | "meta">) {
+  return (
+    artifact.type === "html" ||
+    (artifact.type === "code" &&
+      String(artifact.meta.language || "")
+        .trim()
+        .toLowerCase() === "html")
+  );
+}
+
 interface ResolveDefaultArtifactViewModeOptions {
   preferSourceWhenStreaming?: boolean;
 }
@@ -325,6 +336,10 @@ export function resolveDefaultArtifactViewMode(
   artifact: Pick<Artifact, "type" | "meta" | "status">,
   options: ResolveDefaultArtifactViewModeOptions = {},
 ): "source" | "preview" {
+  if (isHtmlPreviewArtifact(artifact)) {
+    return "preview";
+  }
+
   const writePhase = resolveArtifactWritePhase(artifact);
   if (
     options.preferSourceWhenStreaming &&
@@ -406,7 +421,7 @@ export function buildArtifactFromWrite({
   const type = resolveArtifactTypeFromFile(normalizedPath, metadata, content);
   const language = artifactDocument
     ? "json"
-    : type === "code" || type === "document"
+    : type === "code" || type === "document" || type === "html"
       ? resolveArtifactLanguageFromFile(normalizedPath)
       : undefined;
   const previewCandidate = artifactDocument

@@ -116,6 +116,117 @@ describe("deriveHarnessSessionState", () => {
     expect(state.activeFileWrites[0]?.preview).toContain("实时草稿");
   });
 
+  it("code_orchestrated 编程回合应形成工具输出、审批、文件写入和文件活动信号", () => {
+    const messages = [
+      createMessage({
+        runtimeStatus: {
+          phase: "routing",
+          title: "正在执行编程任务",
+          detail: "已进入 code_orchestrated 编程底座。",
+          checkpoints: ["准备工具", "等待确认", "写入测试"],
+        },
+        artifacts: [
+          {
+            id: "artifact-code-live",
+            type: "code",
+            title: "ImageCard.test.tsx",
+            content: "it('keeps image cards after history switch', () => {})",
+            status: "streaming",
+            meta: {
+              filePath: "src/components/ImageCard.test.tsx",
+              writePhase: "streaming",
+              previewText:
+                "it('keeps image cards after history switch', () => {})",
+              latestChunk: "keeps image cards after history switch",
+              lastUpdateSource: "artifact_snapshot",
+            },
+            position: { start: 0, end: 12 },
+            createdAt: Date.parse("2026-05-26T10:00:00.000Z"),
+            updatedAt: Date.parse("2026-05-26T10:01:00.000Z"),
+          },
+        ],
+      }),
+    ];
+    const pendingApprovals = [
+      {
+        requestId: "approval-code-write",
+        actionType: "tool_confirmation" as const,
+        toolName: "write_file",
+        prompt: "确认写入图片卡片历史切换回归测试",
+        arguments: {
+          filePath: "src/components/ImageCard.test.tsx",
+        },
+      },
+    ];
+    const items: AgentThreadItem[] = [
+      {
+        id: "command-code-test",
+        thread_id: "thread-code",
+        turn_id: "turn-code",
+        sequence: 1,
+        status: "completed",
+        started_at: "2026-05-26T10:02:00.000Z",
+        completed_at: "2026-05-26T10:03:00.000Z",
+        updated_at: "2026-05-26T10:03:00.000Z",
+        type: "command_execution",
+        command:
+          "npm exec vitest run src/components/agent/chat/ImageCard.test.tsx",
+        cwd: "/tmp/workspace",
+        aggregated_output: "PASS ImageCard.test.tsx\n1 test passed",
+        exit_code: 0,
+      },
+      {
+        id: "artifact-code-test",
+        thread_id: "thread-code",
+        turn_id: "turn-code",
+        sequence: 2,
+        status: "completed",
+        started_at: "2026-05-26T10:04:00.000Z",
+        completed_at: "2026-05-26T10:05:00.000Z",
+        updated_at: "2026-05-26T10:05:00.000Z",
+        type: "file_artifact",
+        path: "src/components/ImageCard.test.tsx",
+        source: "tool_result",
+        content: "新增图片卡片历史切换回归测试",
+      },
+    ];
+
+    const state = deriveHarnessSessionState(messages, pendingApprovals, items);
+
+    expect(state.runtimeStatus?.title).toBe("正在执行编程任务");
+    expect(state.pendingApprovals).toHaveLength(1);
+    expect(state.pendingApprovals[0]).toMatchObject({
+      requestId: "approval-code-write",
+      toolName: "write_file",
+    });
+    expect(state.activeFileWrites[0]).toMatchObject({
+      path: "src/components/ImageCard.test.tsx",
+      displayName: "ImageCard.test.tsx",
+      phase: "streaming",
+    });
+    expect(state.outputSignals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          toolName: "artifact",
+          artifactPath: "src/components/ImageCard.test.tsx",
+          title: "产物已写入",
+        }),
+        expect.objectContaining({
+          toolName: "command_execution",
+          title: "命令执行摘要",
+          summary:
+            "npm exec vitest run src/components/agent/chat/ImageCard.test.tsx",
+          exitCode: 0,
+        }),
+      ]),
+    );
+    expect(state.recentFileEvents[0]).toMatchObject({
+      path: "src/components/ImageCard.test.tsx",
+      action: "persist",
+      kind: "artifact",
+    });
+  });
+
   it("应为搜索工具调用生成可消费的搜索输出信号", () => {
     const messages = [
       createMessage({

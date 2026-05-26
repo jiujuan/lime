@@ -1,11 +1,39 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { safeInvoke } from "@/lib/dev-bridge";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
 import {
   convertLocalFileSrc,
+  isAbsoluteLocalFilePath,
+  openHtmlPreviewWindow,
   openPathWithDefaultApp,
   revealPathInFinder,
+  resolveLocalFilePreviewUrl,
 } from "./fileSystem";
+
+const { mockWebviewWindow, mockGetByLabel } = vi.hoisted(() => {
+  const ctor = vi.fn().mockImplementation(function (
+    this: {
+      label: string;
+      options: Record<string, unknown>;
+      once: (event: string, handler: () => void) => Promise<() => void>;
+    },
+    label: string,
+    options: Record<string, unknown>,
+  ) {
+    this.label = label;
+    this.options = options;
+    this.once = vi.fn((_event: string, handler: () => void) => {
+      handler();
+      return Promise.resolve(() => undefined);
+    });
+  });
+
+  return {
+    mockWebviewWindow: ctor,
+    mockGetByLabel: vi.fn(),
+  };
+});
 
 vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
@@ -15,9 +43,24 @@ vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: vi.fn(),
 }));
 
+vi.mock("@tauri-apps/api/webviewWindow", () => ({
+  WebviewWindow: Object.assign(mockWebviewWindow, {
+    getByLabel: mockGetByLabel,
+  }),
+}));
+
+vi.mock("@/lib/tauri-runtime", () => ({
+  hasTauriInvokeCapability: vi.fn(),
+}));
+
 describe("fileSystem API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(hasTauriInvokeCapability).mockReturnValue(false);
+    vi.mocked(convertFileSrc).mockImplementation((path: string) => {
+      return `asset://${path}`;
+    });
+    mockGetByLabel.mockResolvedValue(null);
   });
 
   it("应代理 reveal_in_finder", async () => {
@@ -55,5 +98,67 @@ describe("fileSystem API", () => {
     });
 
     expect(convertLocalFileSrc("/tmp/demo.txt")).toBe("/tmp/demo.txt");
+  });
+
+  it("应只为绝对本地路径生成可嵌入预览 URL", () => {
+    vi.mocked(convertFileSrc).mockReturnValueOnce("asset:///tmp/demo.html");
+
+    expect(isAbsoluteLocalFilePath("/tmp/demo.html")).toBe(true);
+    expect(isAbsoluteLocalFilePath("D:\\demo\\index.html")).toBe(true);
+    expect(isAbsoluteLocalFilePath("relative/demo.html")).toBe(false);
+    expect(resolveLocalFilePreviewUrl("/tmp/demo.html")).toBe(
+      "asset:///tmp/demo.html",
+    );
+    expect(resolveLocalFilePreviewUrl("relative/demo.html")).toBeNull();
+  });
+
+  it("文件 URL 转换不可用时不应误把原始路径当成 iframe URL", () => {
+    vi.mocked(convertFileSrc).mockReturnValueOnce("/tmp/demo.html");
+
+    expect(resolveLocalFilePreviewUrl("/tmp/demo.html")).toBeNull();
+  });
+
+  it("Tauri 环境应使用 WebviewWindow 打开 HTML 预览", async () => {
+    vi.mocked(hasTauriInvokeCapability).mockReturnValue(true);
+
+    await expect(
+      openHtmlPreviewWindow("/tmp/lime/prototype.html"),
+    ).resolves.toBe(true);
+
+    expect(mockWebviewWindow).toHaveBeenCalledWith(
+      expect.stringMatching(/^html-preview-/),
+      expect.objectContaining({
+        url: "asset:///tmp/lime/prototype.html",
+        title: "prototype.html",
+        width: 1280,
+      }),
+    );
+  });
+
+  it("已有 HTML 预览窗口时应复用并聚焦", async () => {
+    vi.mocked(hasTauriInvokeCapability).mockReturnValue(true);
+    const existingWindow = {
+      show: vi.fn().mockResolvedValue(undefined),
+      setFocus: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetByLabel.mockResolvedValue(existingWindow);
+
+    await expect(
+      openHtmlPreviewWindow("/tmp/lime/prototype.html"),
+    ).resolves.toBe(true);
+
+    expect(existingWindow.show).toHaveBeenCalledTimes(1);
+    expect(existingWindow.setFocus).toHaveBeenCalledTimes(1);
+    expect(mockWebviewWindow).not.toHaveBeenCalled();
+  });
+
+  it("非 Tauri 环境不应创建 HTML 预览窗口", async () => {
+    vi.mocked(hasTauriInvokeCapability).mockReturnValue(false);
+
+    await expect(
+      openHtmlPreviewWindow("/tmp/lime/prototype.html"),
+    ).resolves.toBe(false);
+
+    expect(mockWebviewWindow).not.toHaveBeenCalled();
   });
 });

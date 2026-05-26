@@ -204,6 +204,10 @@ impl ApiClient {
         Self::with_timeout(host, auth, Duration::from_secs(600))
     }
 
+    pub(crate) fn host(&self) -> &str {
+        &self.host
+    }
+
     pub fn with_timeout(host: String, auth: AuthMethod, timeout: Duration) -> Result<Self> {
         let mut client_builder = Client::builder().timeout(timeout);
         if should_bypass_system_proxy_for_url(&host) {

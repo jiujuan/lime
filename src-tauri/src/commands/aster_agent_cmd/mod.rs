@@ -236,12 +236,6 @@ const SERVICE_SKILL_LAUNCH_PRELOAD_PROMPT_MARKER: &str = "【站点技能预执�
 const TEAM_PREFERENCE_PROMPT_MARKER: &str = "【Team 协作偏好】";
 const LIME_TOOL_METADATA_BEGIN: &str = "[Lime 工具元数据开始]";
 const LIME_TOOL_METADATA_END: &str = "[Lime 工具元数据结束]";
-const FORCE_REACT_HINT_ENV_KEYS: &[&str] =
-    &["LIME_FORCE_REACT_HINTS", "PROXYCAST_FORCE_REACT_HINTS"];
-const CODE_ORCHESTRATED_HINT_ENV_KEYS: &[&str] = &[
-    "LIME_CODE_ORCHESTRATED_HINTS",
-    "PROXYCAST_CODE_ORCHESTRATED_HINTS",
-];
 
 static SHARED_TASK_MANAGER: OnceLock<Arc<TaskManager>> = OnceLock::new();
 
@@ -439,7 +433,8 @@ pub(crate) use command_api::{
     agent_runtime_get_tool_inventory, agent_runtime_interrupt_turn,
     agent_runtime_list_file_checkpoints, agent_runtime_list_sessions,
     agent_runtime_list_workspace_skill_bindings, agent_runtime_promote_queued_turn,
-    agent_runtime_remove_queued_turn, agent_runtime_replay_request, agent_runtime_resume_subagent,
+    agent_runtime_remove_queued_turn, agent_runtime_replay_request,
+    agent_runtime_restore_file_checkpoint, agent_runtime_resume_subagent,
     agent_runtime_resume_thread, agent_runtime_save_review_decision,
     agent_runtime_send_subagent_input, agent_runtime_set_objective, agent_runtime_spawn_subagent,
     agent_runtime_submit_turn, agent_runtime_update_objective_status, agent_runtime_update_session,
@@ -466,18 +461,18 @@ pub(crate) use dto::{
     AgentRuntimeCompactSessionRequest, AgentRuntimeDiagnosticPendingRequestSample,
     AgentRuntimeDiagnosticWarningSample, AgentRuntimeDiffFileCheckpointRequest,
     AgentRuntimeFileCheckpointDetail, AgentRuntimeFileCheckpointDiffResult,
-    AgentRuntimeFileCheckpointListResult, AgentRuntimeFileCheckpointSummary,
-    AgentRuntimeFileCheckpointThreadSummary, AgentRuntimeGetFileCheckpointRequest,
-    AgentRuntimeIncidentView, AgentRuntimeInterruptTurnRequest,
-    AgentRuntimeListFileCheckpointsRequest, AgentRuntimeListSessionsRequest,
-    AgentRuntimeOutcomeView, AgentRuntimePromoteQueuedTurnRequest,
+    AgentRuntimeFileCheckpointListResult, AgentRuntimeFileCheckpointRestoreResult,
+    AgentRuntimeFileCheckpointSummary, AgentRuntimeFileCheckpointThreadSummary,
+    AgentRuntimeGetFileCheckpointRequest, AgentRuntimeIncidentView,
+    AgentRuntimeInterruptTurnRequest, AgentRuntimeListFileCheckpointsRequest,
+    AgentRuntimeListSessionsRequest, AgentRuntimeOutcomeView, AgentRuntimePromoteQueuedTurnRequest,
     AgentRuntimeRemoveQueuedTurnRequest, AgentRuntimeReplayRequestRequest,
     AgentRuntimeReplayedActionRequiredView, AgentRuntimeRequestView,
-    AgentRuntimeRespondActionRequest, AgentRuntimeResumeSubagentRequest,
-    AgentRuntimeResumeSubagentResponse, AgentRuntimeResumeThreadRequest,
-    AgentRuntimeSaveReviewDecisionRequest, AgentRuntimeSendSubagentInputRequest,
-    AgentRuntimeSendSubagentInputResponse, AgentRuntimeSessionDetail,
-    AgentRuntimeSpawnSubagentRequest, AgentRuntimeSpawnSubagentResponse,
+    AgentRuntimeRespondActionRequest, AgentRuntimeRestoreFileCheckpointRequest,
+    AgentRuntimeResumeSubagentRequest, AgentRuntimeResumeSubagentResponse,
+    AgentRuntimeResumeThreadRequest, AgentRuntimeSaveReviewDecisionRequest,
+    AgentRuntimeSendSubagentInputRequest, AgentRuntimeSendSubagentInputResponse,
+    AgentRuntimeSessionDetail, AgentRuntimeSpawnSubagentRequest, AgentRuntimeSpawnSubagentResponse,
     AgentRuntimeSubmitTurnRequest, AgentRuntimeThreadArtifactView, AgentRuntimeThreadDiagnostics,
     AgentRuntimeThreadEvidenceSummary, AgentRuntimeThreadReadModel,
     AgentRuntimeThreadTelemetrySummary, AgentRuntimeThreadToolCallView,
@@ -842,68 +837,17 @@ impl AsterExecutionStrategy {
 
     fn from_db_value(value: Option<&str>) -> Self {
         match value {
+            Some("react") => Self::React,
             Some("code_orchestrated") => Self::CodeOrchestrated,
             Some("auto") => Self::Auto,
             _ => Self::Auto,
         }
     }
 
-    fn effective_for_message(self, message: &str) -> Self {
-        if should_force_react_for_message(message) {
-            return Self::React;
-        }
-
+    fn effective_strategy(self) -> Self {
         match self {
-            Self::Auto if should_use_code_orchestrated_for_message(message) => {
-                Self::CodeOrchestrated
-            }
-            Self::Auto => Self::React,
+            Self::Auto => Self::CodeOrchestrated,
             _ => self,
         }
     }
-}
-
-fn should_force_react_for_message(message: &str) -> bool {
-    let lowered = message.to_lowercase();
-    let default_hints = [
-        "toolsearch",
-        "调用 toolsearch",
-        "调用toolsearch",
-        "use toolsearch",
-        "call toolsearch",
-        "tool_search",
-        "websearch",
-        "web search",
-        "web_search",
-        "webfetch",
-        "web fetch",
-        "web_fetch",
-    ];
-    resolve_intent_hints(FORCE_REACT_HINT_ENV_KEYS, &default_hints)
-        .iter()
-        .any(|kw| lowered.contains(kw))
-}
-
-fn should_use_code_orchestrated_for_message(message: &str) -> bool {
-    let lowered = message.to_lowercase();
-    // 默认不做消息关键词硬编码推断，Auto 模式优先走 ReAct。
-    // 如需启用自动切换，可通过环境变量 LIME_CODE_ORCHESTRATED_HINTS 显式配置。
-    resolve_intent_hints(CODE_ORCHESTRATED_HINT_ENV_KEYS, &[])
-        .iter()
-        .any(|kw| lowered.contains(kw))
-}
-
-fn resolve_intent_hints(env_keys: &[&str], defaults: &[&str]) -> Vec<String> {
-    if let Some(raw) = lime_core::env_compat::var(env_keys) {
-        let parsed = raw
-            .split(',')
-            .map(|item| item.trim().to_lowercase())
-            .filter(|item| !item.is_empty())
-            .collect::<Vec<_>>();
-        if !parsed.is_empty() {
-            return parsed;
-        }
-    }
-
-    defaults.iter().map(|item| item.to_string()).collect()
 }

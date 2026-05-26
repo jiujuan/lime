@@ -365,6 +365,8 @@ pub enum AgentEvent {
         thread_id: String,
         turn_id: String,
         #[serde(skip_serializing_if = "Option::is_none")]
+        execution_strategy: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         output_schema_runtime: Option<TurnOutputSchemaRuntime>,
         #[serde(skip_serializing_if = "Option::is_none")]
         context_summary: Option<AgentTurnContextSummary>,

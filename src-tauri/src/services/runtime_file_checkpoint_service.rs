@@ -6,14 +6,14 @@
 use crate::agent::SessionDetail;
 use crate::commands::aster_agent_cmd::{
     AgentRuntimeFileCheckpointDetail, AgentRuntimeFileCheckpointDiffResult,
-    AgentRuntimeFileCheckpointListResult, AgentRuntimeFileCheckpointSummary,
-    AgentRuntimeFileCheckpointThreadSummary,
+    AgentRuntimeFileCheckpointListResult, AgentRuntimeFileCheckpointRestoreResult,
+    AgentRuntimeFileCheckpointSummary, AgentRuntimeFileCheckpointThreadSummary,
 };
 use lime_core::database::dao::agent_timeline::{AgentThreadItem, AgentThreadItemPayload};
 use serde_json::{Map, Value};
 use std::collections::HashSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
 struct RuntimeFileCheckpointRecord {
@@ -101,6 +101,69 @@ pub fn diff_file_checkpoint(
         current_version_id,
         previous_version_id: extract_previous_version_id(metadata, current_version_no),
         diff: extract_version_diff(metadata),
+    })
+}
+
+pub fn restore_file_checkpoint(
+    detail: &SessionDetail,
+    workspace_root: &Path,
+    checkpoint_id: &str,
+    confirm_restore: bool,
+    create_backup: bool,
+) -> Result<AgentRuntimeFileCheckpointRestoreResult, String> {
+    if !confirm_restore {
+        return Err("恢复文件快照需要显式确认".to_string());
+    }
+
+    let record = find_file_checkpoint_record(detail, checkpoint_id)?;
+    let metadata = record.metadata.as_ref();
+    let snapshot_path = extract_snapshot_path(metadata, record.summary.path.as_str())
+        .unwrap_or_else(|| record.summary.path.clone());
+    let live_relative_path = normalize_workspace_relative_path(record.summary.path.as_str())?;
+    let snapshot_relative_path = normalize_workspace_relative_path(snapshot_path.as_str())?;
+    let live_path = workspace_root.join(relative_path_to_platform_path(&live_relative_path));
+    let snapshot_path =
+        workspace_root.join(relative_path_to_platform_path(&snapshot_relative_path));
+
+    if !snapshot_path.is_file() {
+        return Err(format!(
+            "文件快照不存在或不可读取: {snapshot_relative_path}"
+        ));
+    }
+
+    let backup_path = if create_backup && live_path.exists() {
+        let backup_relative_path =
+            build_restore_backup_relative_path(&live_relative_path, chrono::Utc::now());
+        let backup_absolute_path =
+            workspace_root.join(relative_path_to_platform_path(&backup_relative_path));
+        if let Some(parent) = backup_absolute_path.parent() {
+            fs::create_dir_all(parent).map_err(|error| {
+                format!("创建恢复前备份目录失败: {backup_relative_path}, {error}")
+            })?;
+        }
+        fs::copy(&live_path, &backup_absolute_path)
+            .map_err(|error| format!("写入恢复前备份失败: {backup_relative_path}, {error}"))?;
+        Some(backup_relative_path)
+    } else {
+        None
+    };
+
+    if let Some(parent) = live_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("创建目标文件目录失败: {live_relative_path}, {error}"))?;
+    }
+
+    fs::copy(&snapshot_path, &live_path)
+        .map_err(|error| format!("恢复文件快照失败: {live_relative_path}, {error}"))?;
+
+    Ok(AgentRuntimeFileCheckpointRestoreResult {
+        session_id: detail.id.clone(),
+        thread_id: detail.thread_id.clone(),
+        checkpoint: record.summary.clone(),
+        live_path: live_relative_path,
+        snapshot_path: snapshot_relative_path,
+        backup_path,
+        restored_at: chrono::Utc::now().to_rfc3339(),
     })
 }
 
@@ -357,14 +420,56 @@ fn extract_version_diff(metadata: Option<&Value>) -> Option<Value> {
 }
 
 fn read_json_relative(workspace_root: &Path, relative_path: &str) -> Option<Value> {
-    let normalized = relative_path.trim();
-    if normalized.is_empty() {
-        return None;
-    }
-
-    let path = workspace_root.join(normalized.replace('/', std::path::MAIN_SEPARATOR_STR));
+    let normalized = normalize_workspace_relative_path(relative_path).ok()?;
+    let path = workspace_root.join(relative_path_to_platform_path(&normalized));
     let raw = fs::read_to_string(path).ok()?;
     serde_json::from_str::<Value>(&raw).ok()
+}
+
+fn normalize_workspace_relative_path(relative_path: &str) -> Result<String, String> {
+    let normalized = relative_path.trim().replace('\\', "/");
+    if normalized.is_empty() {
+        return Err("文件路径不能为空".to_string());
+    }
+    if normalized.starts_with('/') || normalized.starts_with('~') {
+        return Err(format!("文件路径必须位于当前工作区内: {relative_path}"));
+    }
+
+    let mut segments = Vec::new();
+    for segment in normalized.split('/') {
+        let segment = segment.trim();
+        if segment.is_empty() || segment == "." {
+            continue;
+        }
+        if segment == ".." || segment.contains(':') {
+            return Err(format!("文件路径必须位于当前工作区内: {relative_path}"));
+        }
+        segments.push(segment);
+    }
+
+    if segments.is_empty() {
+        return Err("文件路径不能为空".to_string());
+    }
+
+    Ok(segments.join("/"))
+}
+
+fn relative_path_to_platform_path(relative_path: &str) -> PathBuf {
+    relative_path
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<PathBuf>()
+}
+
+fn build_restore_backup_relative_path(
+    live_relative_path: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> String {
+    let backup_id = now.format("%Y%m%dT%H%M%SZ");
+    format!(
+        ".lime/file-checkpoint-backups/{backup_id}/{}",
+        live_relative_path.trim_start_matches('/')
+    )
 }
 
 #[cfg(test)]
@@ -405,6 +510,18 @@ mod tests {
     }
 
     fn build_item(metadata: Option<Value>) -> AgentThreadItem {
+        build_item_with_path(
+            ".lime/artifacts/thread-1/demo.artifact.json",
+            Some("# Demo"),
+            metadata,
+        )
+    }
+
+    fn build_item_with_path(
+        path: &str,
+        content: Option<&str>,
+        metadata: Option<Value>,
+    ) -> AgentThreadItem {
         AgentThreadItem {
             id: "artifact-document:req-1".to_string(),
             thread_id: "thread-1".to_string(),
@@ -415,9 +532,9 @@ mod tests {
             completed_at: Some("2026-04-15T00:00:01Z".to_string()),
             updated_at: "2026-04-15T00:00:01Z".to_string(),
             payload: AgentThreadItemPayload::FileArtifact {
-                path: ".lime/artifacts/thread-1/demo.artifact.json".to_string(),
+                path: path.to_string(),
                 source: "artifact_document_service".to_string(),
-                content: Some("# Demo".to_string()),
+                content: content.map(ToString::to_string),
                 metadata,
             },
         }
@@ -555,5 +672,98 @@ mod tests {
                 .and_then(Value::as_str),
             Some("更新结论段与证据链接")
         );
+    }
+
+    #[test]
+    fn restore_file_checkpoint_should_require_explicit_confirmation() {
+        let temp_dir = tempdir().expect("temp dir");
+        let detail = build_detail(build_item(Some(serde_json::json!({
+            "artifactVersion": {
+                "snapshotPath": ".lime/artifacts/thread-1/versions/demo/v0002.artifact.json"
+            }
+        }))));
+
+        let error = restore_file_checkpoint(
+            &detail,
+            temp_dir.path(),
+            "artifact-document:req-1",
+            false,
+            true,
+        )
+        .expect_err("restore without confirmation should fail");
+
+        assert!(error.contains("显式确认"));
+    }
+
+    #[test]
+    fn restore_file_checkpoint_should_restore_snapshot_and_backup_live_file() {
+        let temp_dir = tempdir().expect("temp dir");
+        let workspace_root = temp_dir.path();
+        let live_path = workspace_root.join(".lime/artifacts/thread-1/demo.artifact.json");
+        let snapshot_path =
+            workspace_root.join(".lime/artifacts/thread-1/versions/demo/v0002.artifact.json");
+        fs::create_dir_all(live_path.parent().expect("live parent")).expect("live dir");
+        fs::create_dir_all(snapshot_path.parent().expect("snapshot parent")).expect("snapshot dir");
+        fs::write(&live_path, r#"{"title":"当前版本"}"#).expect("write live");
+        fs::write(&snapshot_path, r#"{"title":"恢复版本"}"#).expect("write snapshot");
+        let detail = build_detail(build_item(Some(serde_json::json!({
+            "artifactVersionNo": 2,
+            "artifactVersionId": "artifact-document:req-1:v2",
+            "artifactVersion": {
+                "id": "artifact-document:req-1:v2",
+                "versionNo": 2,
+                "snapshotPath": ".lime/artifacts/thread-1/versions/demo/v0002.artifact.json"
+            }
+        }))));
+
+        let result = restore_file_checkpoint(
+            &detail,
+            workspace_root,
+            "artifact-document:req-1",
+            true,
+            true,
+        )
+        .expect("restore should succeed");
+
+        assert_eq!(
+            fs::read_to_string(&live_path).expect("read live"),
+            r#"{"title":"恢复版本"}"#
+        );
+        let backup_path = result.backup_path.expect("backup path");
+        assert!(backup_path.starts_with(".lime/file-checkpoint-backups/"));
+        assert_eq!(
+            fs::read_to_string(workspace_root.join(relative_path_to_platform_path(&backup_path)))
+                .expect("read backup"),
+            r#"{"title":"当前版本"}"#
+        );
+        assert_eq!(
+            result.snapshot_path,
+            ".lime/artifacts/thread-1/versions/demo/v0002.artifact.json"
+        );
+    }
+
+    #[test]
+    fn restore_file_checkpoint_should_reject_workspace_escape_path() {
+        let temp_dir = tempdir().expect("temp dir");
+        let detail = build_detail(build_item_with_path(
+            "../outside.json",
+            Some("# Demo"),
+            Some(serde_json::json!({
+                "artifactVersion": {
+                    "snapshotPath": ".lime/artifacts/thread-1/versions/demo/v0002.artifact.json"
+                }
+            })),
+        ));
+
+        let error = restore_file_checkpoint(
+            &detail,
+            temp_dir.path(),
+            "artifact-document:req-1",
+            true,
+            true,
+        )
+        .expect_err("path escape should fail");
+
+        assert!(error.contains("当前工作区"));
     }
 }

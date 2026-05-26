@@ -32,6 +32,22 @@ function createArtifact(overrides: Partial<Artifact> = {}): Artifact {
 }
 
 describe("messageArtifacts.buildArtifactFromWrite", () => {
+  it("应把 .htm 文件构建为 HTML 产物并标记 html 语言", () => {
+    const artifact = buildArtifactFromWrite({
+      filePath: "spring.htm",
+      content: "<!doctype html><html><body>Spring</body></html>",
+      context: {
+        source: "tool_result",
+        sourceMessageId: "assistant-htm",
+        status: "streaming",
+      },
+    });
+
+    expect(artifact.type).toBe("html");
+    expect(artifact.meta.language).toBe("html");
+    expect(artifact.meta.filePath).toBe("spring.htm");
+  });
+
   it("应从 artifactDocument metadata 直接构建结构化文档 artifact", () => {
     const artifactDocument = {
       schemaVersion: ARTIFACT_DOCUMENT_SCHEMA_VERSION,
@@ -213,7 +229,7 @@ describe("messageArtifacts.buildArtifactFromWrite", () => {
 });
 
 describe("messageArtifacts.resolveDefaultArtifactViewMode", () => {
-  it("可预览的编程产物在流式阶段应优先展示源码", () => {
+  it("HTML 产物在流式阶段也应优先展示网页预览", () => {
     const artifact = createArtifact({
       type: "html",
       status: "streaming",
@@ -228,7 +244,26 @@ describe("messageArtifacts.resolveDefaultArtifactViewMode", () => {
       resolveDefaultArtifactViewMode(artifact, {
         preferSourceWhenStreaming: true,
       }),
-    ).toBe("source");
+    ).toBe("preview");
+  });
+
+  it("HTML 代码产物在流式阶段也应优先展示网页预览", () => {
+    const artifact = createArtifact({
+      type: "code",
+      status: "streaming",
+      meta: {
+        filePath: "spring.htm",
+        filename: "spring.htm",
+        language: "html",
+        writePhase: "streaming",
+      },
+    });
+
+    expect(
+      resolveDefaultArtifactViewMode(artifact, {
+        preferSourceWhenStreaming: true,
+      }),
+    ).toBe("preview");
   });
 
   it("可预览的编程产物完成后应自动切回预览", () => {

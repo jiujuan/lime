@@ -22,6 +22,8 @@ use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 use tracing::{debug, warn};
 
+use crate::subprocess::{decode_process_output, summarize_decoded_with};
+
 use super::base::{PermissionCheckResult, Tool};
 use super::command_semantics::interpret_bash_command_result;
 use super::context::{ToolContext, ToolOptions, ToolResult};
@@ -866,6 +868,14 @@ fn preflight_windows_wsl_drive_mount(command: &str) -> Option<ToolResult> {
     preflight_windows_wsl_drive_mount_for(command, cfg!(target_os = "windows"))
 }
 
+fn resolved_shell_name() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "powershell"
+    } else {
+        "sh"
+    }
+}
+
 pub fn preflight_bash_read_targets(command: &str, cwd: &Path) -> Option<ToolResult> {
     let mut missing_paths = Vec::new();
 
@@ -1058,8 +1068,13 @@ impl BashTool {
 
         match result {
             Ok(Ok(output)) => {
-                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                let stdout_output = decode_process_output(&output.stdout);
+                let stderr_output = decode_process_output(&output.stderr);
+                let stdout_encoding = stdout_output.encoding;
+                let stderr_encoding = stderr_output.encoding;
+                let decoded_with = summarize_decoded_with(&[&stdout_output, &stderr_output]);
+                let stdout = stdout_output.text;
+                let stderr = stderr_output.text;
                 let exit_code = output.status.code().unwrap_or(-1);
 
                 debug!(
@@ -1085,12 +1100,40 @@ impl BashTool {
                     Ok(ToolResult::error(truncated_output)
                         .with_metadata("exit_code", serde_json::json!(exit_code))
                         .with_metadata("stdout_length", serde_json::json!(stdout.len()))
-                        .with_metadata("stderr_length", serde_json::json!(stderr.len())))
+                        .with_metadata("stderr_length", serde_json::json!(stderr.len()))
+                        .with_metadata("stdout_bytes", serde_json::json!(output.stdout.len()))
+                        .with_metadata("stderr_bytes", serde_json::json!(output.stderr.len()))
+                        .with_metadata("stdout", serde_json::json!(self.truncate_output(&stdout)))
+                        .with_metadata("stderr", serde_json::json!(self.truncate_output(&stderr)))
+                        .with_metadata("shell", serde_json::json!(resolved_shell_name()))
+                        .with_metadata("command", serde_json::json!(command))
+                        .with_metadata(
+                            "cwd",
+                            serde_json::json!(context.working_directory.display().to_string()),
+                        )
+                        .with_metadata("execution_surface", serde_json::json!("embedded"))
+                        .with_metadata("encoding", serde_json::json!(stdout_encoding))
+                        .with_metadata("stderr_encoding", serde_json::json!(stderr_encoding))
+                        .with_metadata("decoded_with", serde_json::json!(decoded_with)))
                 } else {
                     let mut result = ToolResult::success(truncated_output)
                         .with_metadata("exit_code", serde_json::json!(exit_code))
                         .with_metadata("stdout_length", serde_json::json!(stdout.len()))
-                        .with_metadata("stderr_length", serde_json::json!(stderr.len()));
+                        .with_metadata("stderr_length", serde_json::json!(stderr.len()))
+                        .with_metadata("stdout_bytes", serde_json::json!(output.stdout.len()))
+                        .with_metadata("stderr_bytes", serde_json::json!(output.stderr.len()))
+                        .with_metadata("stdout", serde_json::json!(self.truncate_output(&stdout)))
+                        .with_metadata("stderr", serde_json::json!(self.truncate_output(&stderr)))
+                        .with_metadata("shell", serde_json::json!(resolved_shell_name()))
+                        .with_metadata("command", serde_json::json!(command))
+                        .with_metadata(
+                            "cwd",
+                            serde_json::json!(context.working_directory.display().to_string()),
+                        )
+                        .with_metadata("execution_surface", serde_json::json!("embedded"))
+                        .with_metadata("encoding", serde_json::json!(stdout_encoding))
+                        .with_metadata("stderr_encoding", serde_json::json!(stderr_encoding))
+                        .with_metadata("decoded_with", serde_json::json!(decoded_with));
                     if exit_code != 0 {
                         result = result.with_metadata("reported_success", serde_json::json!(true));
                     }
@@ -1207,7 +1250,14 @@ impl BashTool {
             None => format!("Background task started with ID: {task_id}"),
         })
         .with_metadata("task_id", serde_json::json!(task_id))
-        .with_metadata("background", serde_json::json!(true));
+        .with_metadata("background", serde_json::json!(true))
+        .with_metadata("shell", serde_json::json!(resolved_shell_name()))
+        .with_metadata("command", serde_json::json!(command))
+        .with_metadata(
+            "cwd",
+            serde_json::json!(context.working_directory.display().to_string()),
+        )
+        .with_metadata("execution_surface", serde_json::json!("embedded"));
 
         if let Some(path) = output_file_text {
             result = result.with_metadata("output_file", serde_json::json!(path));

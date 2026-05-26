@@ -1,12 +1,16 @@
 import https from "node:https";
+import net from "node:net";
+import tls from "node:tls";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   installVitestNetworkGuard,
   isVitestNodeHttpRequestAllowed,
+  isVitestNodeSocketConnectAllowed,
   isVitestNetworkUrlAllowed,
   resolveNodeHttpRequestUrl,
+  resolveNodeSocketConnectUrl,
   resolveFetchUrl,
   vitestLiveProviderNetworkAllowed,
 } from "./vitest-network-guard";
@@ -80,6 +84,36 @@ describe("vitest-network-guard", () => {
     ).toBe(false);
   });
 
+  it("应解析 Node socket 连接参数并保持本地白名单", () => {
+    expect(
+      resolveNodeSocketConnectUrl("https:", [
+        {
+          host: "api.deepseek.com",
+          port: 443,
+        },
+      ])?.href,
+    ).toBe("https://api.deepseek.com/");
+    expect(
+      resolveNodeSocketConnectUrl("https:", [443, "api.deepseek.com"])?.href,
+    ).toBe("https://api.deepseek.com/");
+    expect(
+      isVitestNodeSocketConnectAllowed("http:", [
+        {
+          host: "127.0.0.1",
+          port: 3030,
+        },
+      ]),
+    ).toBe(true);
+    expect(
+      isVitestNodeSocketConnectAllowed("https:", [
+        {
+          host: "api.openai.com",
+          port: 443,
+        },
+      ]),
+    ).toBe(false);
+  });
+
   it("安装后应在真实请求发出前阻断外部 fetch", async () => {
     disableLiveProviderNetwork();
     installVitestNetworkGuard();
@@ -87,6 +121,33 @@ describe("vitest-network-guard", () => {
     await expect(
       fetch("https://api.deepseek.com/v1/chat/completions"),
     ).rejects.toThrow("默认禁止 Vitest 外部网络请求");
+  });
+
+  it("安装后应在真实请求发出前阻断 Node net.connect", () => {
+    disableLiveProviderNetwork();
+    installVitestNetworkGuard();
+
+    expect(() => {
+      net.connect({ host: "api.deepseek.com", port: 443 });
+    }).toThrow("默认禁止 Vitest 外部网络请求");
+  });
+
+  it("安装后应在真实请求发出前阻断 Node net.createConnection", () => {
+    disableLiveProviderNetwork();
+    installVitestNetworkGuard();
+
+    expect(() => {
+      net.createConnection({ host: "api.deepseek.com", port: 443 });
+    }).toThrow("默认禁止 Vitest 外部网络请求");
+  });
+
+  it("安装后应在真实请求发出前阻断 Node tls.connect", () => {
+    disableLiveProviderNetwork();
+    installVitestNetworkGuard();
+
+    expect(() => {
+      tls.connect({ host: "api.deepseek.com", port: 443 });
+    }).toThrow("默认禁止 Vitest 外部网络请求");
   });
 
   it("安装后应在真实请求发出前阻断 Node https.request", () => {

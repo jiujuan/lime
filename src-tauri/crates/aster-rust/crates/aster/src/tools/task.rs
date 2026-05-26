@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::AsyncReadExt;
 use tokio::process::{Child, Command};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
@@ -26,6 +26,9 @@ use uuid::Uuid;
 use super::context::ToolContext;
 use super::error::ToolError;
 use super::shell_runtime::build_platform_shell_command;
+use crate::subprocess::{
+    configure_command_for_gui, decode_process_output, wrap_powershell_command_for_utf8,
+};
 
 #[derive(Debug, Clone)]
 pub enum TaskShell {
@@ -428,8 +431,15 @@ impl TaskManager {
         let mut cmd = match shell {
             TaskShell::PlatformDefault => build_platform_shell_command(command),
             TaskShell::PowerShell { executable_path } => {
+                let command = wrap_powershell_command_for_utf8(command);
                 let mut cmd = Command::new(executable_path);
-                cmd.args(["-NoProfile", "-NonInteractive", "-Command", command]);
+                configure_command_for_gui(&mut cmd);
+                cmd.args([
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    command.as_str(),
+                ]);
                 cmd
             }
         };
@@ -469,36 +479,49 @@ impl TaskManager {
             }
         };
 
-        // Read stdout and stderr concurrently using shared output file
-        let output_file_stdout = Arc::clone(&output_file);
+        // Read stdout and stderr as bytes so Windows legacy encodings can be normalized once.
         let stdout_task = async move {
+            let mut bytes = Vec::new();
             if let Some(stdout) = stdout {
-                let mut reader = BufReader::new(stdout).lines();
-                while let Ok(Some(line)) = reader.next_line().await {
-                    let mut file = output_file_stdout.lock().await;
-                    let _ = file.write_all(format!("{}\n", line).as_bytes()).await;
-                }
+                let mut reader = stdout;
+                let _ = reader.read_to_end(&mut bytes).await;
             }
+            bytes
         };
 
-        let output_file_stderr = Arc::clone(&output_file);
         let stderr_task = async move {
+            let mut bytes = Vec::new();
             if let Some(stderr) = stderr {
-                let mut reader = BufReader::new(stderr).lines();
-                while let Ok(Some(line)) = reader.next_line().await {
-                    let mut file = output_file_stderr.lock().await;
+                let mut reader = stderr;
+                let _ = reader.read_to_end(&mut bytes).await;
+            }
+            bytes
+        };
+
+        // Wait for output streams with timeout
+        let timeout_result = tokio::time::timeout(max_runtime, async {
+            tokio::join!(stdout_task, stderr_task)
+        })
+        .await;
+
+        if let Ok((stdout_bytes, stderr_bytes)) = &timeout_result {
+            let stdout = decode_process_output(stdout_bytes);
+            let stderr = decode_process_output(stderr_bytes);
+            let mut file = output_file.lock().await;
+            if !stdout.text.is_empty() {
+                let _ = file.write_all(stdout.text.as_bytes()).await;
+                if !stdout.text.ends_with('\n') {
+                    let _ = file.write_all(b"\n").await;
+                }
+            }
+            if !stderr.text.is_empty() {
+                for line in stderr.text.lines() {
                     let _ = file
                         .write_all(format!("[stderr] {}\n", line).as_bytes())
                         .await;
                 }
             }
-        };
-
-        // Wait for output streams with timeout
-        let timeout_result = tokio::time::timeout(max_runtime, async {
-            tokio::join!(stdout_task, stderr_task);
-        })
-        .await;
+        }
 
         // Flush output file
         {

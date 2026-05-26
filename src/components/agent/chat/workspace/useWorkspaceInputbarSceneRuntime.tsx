@@ -452,7 +452,7 @@ function useWorkspaceInputbarScenePresentationRuntime({
         undefined,
         undefined,
         normalizedPrompt,
-        inputbarPresentation.inputbar.executionStrategy ?? "react",
+        inputbarPresentation.inputbar.executionStrategy ?? "auto",
         undefined,
         {
           skipSceneCommandRouting: true,
@@ -569,6 +569,7 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
   activeExecutionRuntime: GeneralWorkbenchDialogParams["executionRuntime"];
   pendingActions: GeneralWorkbenchDialogParams["pendingActions"];
   submittedActionsInFlight: GeneralWorkbenchDialogParams["submittedActionsInFlight"];
+  onRespondToAction?: GeneralWorkbenchDialogParams["onRespondToAction"];
   messages: Message[];
   queuedTurns: InputbarParams["queuedTurns"];
   resumeThread: GeneralWorkbenchDialogParams["onResumeThread"];
@@ -689,6 +690,7 @@ export function useWorkspaceInputbarSceneRuntime({
   activeExecutionRuntime,
   pendingActions,
   submittedActionsInFlight,
+  onRespondToAction,
   messages,
   queuedTurns,
   resumeThread,
@@ -901,6 +903,7 @@ export function useWorkspaceInputbarSceneRuntime({
         currentTurnId,
         pendingActions,
         submittedActionsInFlight,
+        onRespondToAction,
         messages,
         queuedTurns: resolvedQueuedTurns,
         canInterrupt: isSending,

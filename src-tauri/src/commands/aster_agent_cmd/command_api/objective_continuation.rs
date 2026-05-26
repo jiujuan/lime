@@ -142,6 +142,39 @@ pub(crate) fn build_objective_continuation_request(
     }
 }
 
+fn configure_provider_request_from_current_config(
+    config: &ProviderConfig,
+) -> ConfigureProviderRequest {
+    ConfigureProviderRequest {
+        provider_id: config.provider_selector.clone(),
+        provider_name: config.provider_name.clone(),
+        model_name: config.model_name.clone(),
+        // 自动续跑请求可能进入持久化队列，不能把密钥写入 queued_turn_runtimes.payload_json。
+        // Direct provider 的 API key 已在当前进程 provider 配置阶段写入运行时环境。
+        api_key: None,
+        base_url: config.base_url.clone(),
+        model_capabilities: None,
+        tool_call_strategy: config.toolshim.then_some(RuntimeToolCallStrategy::ToolShim),
+        toolshim_model: config.toolshim_model.clone(),
+    }
+}
+
+fn apply_provider_config_to_continuation_request(
+    request: &mut AsterChatRequest,
+    config: Option<ProviderConfig>,
+) {
+    let Some(config) = config else {
+        return;
+    };
+
+    request.provider_preference = config
+        .provider_selector
+        .clone()
+        .or_else(|| Some(config.provider_name.clone()));
+    request.model_preference = Some(config.model_name.clone());
+    request.provider_config = Some(configure_provider_request_from_current_config(&config));
+}
+
 fn insert_auto_continuation_guard_metadata(
     request: &mut AsterChatRequest,
     run_summary: &AutoContinuationRunSummary,
@@ -211,6 +244,10 @@ pub(crate) async fn maybe_submit_managed_objective_auto_continuation(
             let mut request = build_objective_continuation_request(
                 &objective,
                 ManagedObjectiveContinuationSource::AutoIdle,
+            );
+            apply_provider_config_to_continuation_request(
+                &mut request,
+                context.state.get_provider_config().await,
             );
             insert_auto_continuation_guard_metadata(&mut request, &run_summary, &policy);
             let queued_task = build_queued_turn_task(request)?;

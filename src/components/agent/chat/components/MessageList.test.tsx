@@ -181,11 +181,13 @@ const mockStreamingRenderer = vi.fn(
 const mockAgentThreadTimeline = vi.fn(
   ({
     actionRequests,
+    items,
     onOpenSavedSiteContent,
     placement,
     turn,
   }: {
     actionRequests?: Array<Record<string, unknown>>;
+    items?: AgentThreadItem[];
     onOpenSavedSiteContent?: (target: {
       projectId: string;
       contentId: string;
@@ -201,6 +203,15 @@ const mockAgentThreadTimeline = vi.fn(
       data-turn-id={turn?.id || ""}
     >
       执行轨迹{actionRequests?.length ? `:${actionRequests.length}` : ""}
+      {(items || [])
+        .filter((item) => item.type === "file_artifact")
+        .map((item) => (
+          <span
+            key={item.id}
+            data-testid="timeline-file-artifact-card"
+            data-artifact-path={item.path}
+          />
+        ))}
     </div>
   ),
 );
@@ -229,6 +240,7 @@ vi.mock("./AgentThreadTimeline", () => ({
   AgentThreadTimeline: (props: {
     actionRequests?: Array<Record<string, unknown>>;
     deferCompletedSingleDetails?: boolean;
+    items?: AgentThreadItem[];
     placement?: "leading" | "trailing" | "default";
   }) => mockAgentThreadTimeline(props),
 }));
@@ -297,6 +309,29 @@ async function renderZh(
 ): Promise<HTMLDivElement> {
   await changeLimeLocale("zh-CN");
   return render(messages, props);
+}
+
+function setScrollMetrics(
+  element: HTMLElement,
+  metrics: {
+    scrollTop: number;
+    scrollHeight: number;
+    clientHeight: number;
+  },
+) {
+  Object.defineProperty(element, "scrollTop", {
+    configurable: true,
+    writable: true,
+    value: metrics.scrollTop,
+  });
+  Object.defineProperty(element, "scrollHeight", {
+    configurable: true,
+    value: metrics.scrollHeight,
+  });
+  Object.defineProperty(element, "clientHeight", {
+    configurable: true,
+    value: metrics.clientHeight,
+  });
 }
 
 function createConversationMessages(count: number): Message[] {
@@ -390,6 +425,87 @@ describe("MessageList", () => {
     expect(messageColumn?.className).toContain("min-h-full");
     expect(messageColumn?.className).toContain("justify-start");
     expect(messageColumn?.className).not.toContain("justify-end");
+  });
+
+  it("执行中用户上滑后应暂停自动跟随并提供查看最新入口", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    mountedRoots.push({ container: host, root });
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const scrollIntoViewMock = vi.fn();
+    const initialMessages = createConversationMessages(6);
+    const nextMessages: Message[] = [
+      ...initialMessages,
+      {
+        id: "assistant-live-tail",
+        role: "assistant",
+        content: "最新输出还在继续",
+        timestamp: new Date("2026-04-25T10:06:00.000Z"),
+      },
+    ];
+
+    HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
+    window.requestAnimationFrame = ((callback: (timestamp: number) => void) => {
+      callback(0);
+      return 1;
+    }) as typeof window.requestAnimationFrame;
+
+    try {
+      act(() => {
+        root.render(<MessageList messages={initialMessages} isSending />);
+      });
+      scrollIntoViewMock.mockClear();
+
+      const scrollContainer = host.querySelector<HTMLElement>(
+        '[data-testid="message-list-scroll-container"]',
+      );
+      expect(scrollContainer).not.toBeNull();
+      setScrollMetrics(scrollContainer as HTMLElement, {
+        scrollTop: 536,
+        scrollHeight: 1000,
+        clientHeight: 400,
+      });
+
+      const wheelEvent = new Event("wheel", { bubbles: true }) as WheelEvent;
+      Object.defineProperty(wheelEvent, "deltaY", {
+        configurable: true,
+        value: -120,
+      });
+
+      act(() => {
+        scrollContainer?.dispatchEvent(wheelEvent);
+      });
+
+      expect(
+        host.querySelector('[data-testid="message-list-jump-to-latest"]')
+          ?.textContent,
+      ).toContain("View latest");
+
+      act(() => {
+        root.render(<MessageList messages={nextMessages} isSending />);
+      });
+
+      expect(scrollIntoViewMock).not.toHaveBeenCalled();
+
+      const jumpButton = host.querySelector<HTMLButtonElement>(
+        '[data-testid="message-list-jump-to-latest"]',
+      );
+      expect(jumpButton).not.toBeNull();
+
+      act(() => {
+        jumpButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
+
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({
+        behavior: "smooth",
+        block: "end",
+      });
+    } finally {
+      HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+      window.requestAnimationFrame = originalRequestAnimationFrame;
+    }
   });
 
   it("流式正文 overlay 应优先渲染并替代首 token 占位", () => {
@@ -5721,6 +5837,143 @@ describe("MessageList", () => {
     );
   });
 
+  it("同一路径产物同时存在消息 artifacts 与尾部 file_artifact 时只显示时间线卡片", () => {
+    const now = new Date();
+    const artifactContent = "# 最新导出\n\n这里是完整预览。";
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-dedup-artifact-card",
+        role: "assistant",
+        content: "导出完成。",
+        timestamp: now,
+        artifacts: [
+          {
+            id: "artifact-dedup-report",
+            type: "document",
+            title: "report.md",
+            content: artifactContent,
+            status: "complete",
+            meta: {
+              filePath: "exports\\x-article-export\\google\\report.md",
+              filename: "report.md",
+            },
+            position: { start: 0, end: artifactContent.length },
+            createdAt: now.getTime(),
+            updatedAt: now.getTime(),
+          },
+        ],
+      },
+    ];
+
+    const container = render(messages, {
+      currentTurnId: "turn-dedup-artifact-card",
+      turns: [
+        {
+          id: "turn-dedup-artifact-card",
+          thread_id: "thread-1",
+          prompt_text: "导出 report.md",
+          status: "completed",
+          started_at: "2026-04-10T10:30:00Z",
+          completed_at: "2026-04-10T10:30:05Z",
+          created_at: "2026-04-10T10:30:00Z",
+          updated_at: "2026-04-10T10:30:05Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "item-dedup-artifact-card",
+          thread_id: "thread-1",
+          turn_id: "turn-dedup-artifact-card",
+          sequence: 1,
+          status: "completed",
+          started_at: "2026-04-10T10:30:01Z",
+          completed_at: "2026-04-10T10:30:02Z",
+          updated_at: "2026-04-10T10:30:02Z",
+          type: "file_artifact",
+          path: "exports/x-article-export/google/report.md",
+          source: "artifact_snapshot",
+          content: artifactContent,
+        },
+      ],
+    });
+
+    expect(
+      container.querySelector('[data-testid="message-artifact-card"]'),
+    ).toBeNull();
+    expect(
+      container.querySelectorAll('[data-testid="timeline-file-artifact-card"]'),
+    ).toHaveLength(1);
+  });
+
+  it("绝对路径消息产物与文件名时间线产物等价时不应重复显示普通产物卡", () => {
+    const now = new Date();
+    const artifactContent = "# 山冶工造 PRD";
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-dedup-absolute-artifact",
+        role: "assistant",
+        content: "PRD 已生成。",
+        timestamp: now,
+        artifacts: [
+          {
+            id: "artifact-dedup-absolute-prd",
+            type: "document",
+            title: "山冶工造_PRD_V2_完整版.md",
+            content: artifactContent,
+            status: "complete",
+            meta: {
+              filePath:
+                "C:\\Users\\Administrator\\AppData\\Local\\lime\\projects\\default\\山冶工造_PRD_V2_完整版.md",
+              filename: "山冶工造_PRD_V2_完整版.md",
+            },
+            position: { start: 0, end: artifactContent.length },
+            createdAt: now.getTime(),
+            updatedAt: now.getTime(),
+          },
+        ],
+      },
+    ];
+
+    const container = render(messages, {
+      currentTurnId: "turn-dedup-absolute-artifact",
+      turns: [
+        {
+          id: "turn-dedup-absolute-artifact",
+          thread_id: "thread-1",
+          prompt_text: "生成 PRD",
+          status: "completed",
+          started_at: "2026-05-26T23:55:00Z",
+          completed_at: "2026-05-26T23:55:05Z",
+          created_at: "2026-05-26T23:55:00Z",
+          updated_at: "2026-05-26T23:55:05Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "item-dedup-absolute-artifact",
+          thread_id: "thread-1",
+          turn_id: "turn-dedup-absolute-artifact",
+          sequence: 1,
+          status: "completed",
+          started_at: "2026-05-26T23:55:01Z",
+          completed_at: "2026-05-26T23:55:02Z",
+          updated_at: "2026-05-26T23:55:02Z",
+          type: "file_artifact",
+          path: "山冶工造_PRD_V2_完整版.md",
+          source: "artifact_snapshot",
+          content: artifactContent,
+        },
+      ],
+    });
+
+    expect(
+      container.querySelector('[data-testid="message-artifact-card"]'),
+    ).toBeNull();
+    expect(
+      container.querySelectorAll('[data-testid="timeline-file-artifact-card"]'),
+    ).toHaveLength(1);
+  });
+
   it("已有尾部 file_artifact 卡片时，不应再额外渲染消息级在画布中打开入口", () => {
     const now = new Date();
     const messages: Message[] = [
@@ -7031,4 +7284,73 @@ describe("MessageList", () => {
       ) & Node.DOCUMENT_POSITION_PRECEDING,
     ).toBeTruthy();
   });
+
+  it("失败回复已有时间线错误卡时不应在正文和底部重复长错误", async () => {
+    const detail =
+      "当前 AI 服务商余额或额度不足，请在服务商后台充值或开通额度，或切换到其他可用模型后重试。";
+    const messages: Message[] = [
+      {
+        id: "msg-user-provider-failed",
+        role: "user",
+        content: "你好",
+        timestamp: new Date("2026-05-11T00:20:46Z"),
+      },
+      {
+        id: "msg-assistant-provider-failed",
+        role: "assistant",
+        content: `执行失败：${detail}`,
+        timestamp: new Date("2026-05-11T00:20:55Z"),
+        runtimeTurnId: "turn-provider-failed",
+        runtimeStatus: {
+          phase: "failed",
+          title: "当前处理失败",
+          detail,
+          checkpoints: [],
+        },
+      },
+    ];
+
+    const container = await renderZh(messages, {
+      currentTurnId: "turn-provider-failed",
+      turns: [
+        {
+          id: "turn-provider-failed",
+          thread_id: "thread-1",
+          prompt_text: "你好",
+          status: "failed",
+          error_message: detail,
+          started_at: "2026-05-11T00:20:46Z",
+          completed_at: "2026-05-11T00:20:55Z",
+          created_at: "2026-05-11T00:20:46Z",
+          updated_at: "2026-05-11T00:20:55Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "error-provider-failed",
+          thread_id: "thread-1",
+          turn_id: "turn-provider-failed",
+          sequence: 1,
+          status: "failed",
+          started_at: "2026-05-11T00:20:55Z",
+          updated_at: "2026-05-11T00:20:55Z",
+          type: "error",
+          message: detail,
+        },
+      ],
+    });
+
+    const assistantRenderer = container.querySelector(
+      '[data-testid="streaming-renderer"]',
+    );
+    const statusLine = container.querySelector(
+      '[data-testid="inputbar-runtime-status-line"]',
+    );
+
+    expect(assistantRenderer?.textContent).toBe("<empty-assistant>");
+    expect(statusLine?.textContent).toContain("失败");
+    expect(statusLine?.textContent).toContain("00:09");
+    expect(statusLine?.textContent).not.toContain(detail);
+  });
+
 });

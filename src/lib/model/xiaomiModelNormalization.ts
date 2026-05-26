@@ -4,13 +4,6 @@ function normalizeText(value?: string | null): string {
 
 const XIAOMI_HOST_KEYWORDS = ["xiaomimimo.com"];
 
-const XIAOMI_MODEL_ID_ALIASES: Record<string, string> = {
-  "mimo-v2-pro": "mimo-v2.5-pro",
-  "mimo-v2.5": "mimo-v2.5-pro",
-  "mimo-v2.5-pro": "mimo-v2.5-pro",
-  "mimo-v2-flash": "mimo-v2.5-pro",
-};
-
 export function isXiaomiLikeProvider(options: {
   providerId?: string | null;
   providerType?: string | null;
@@ -37,8 +30,7 @@ export function canonicalizeXiaomiModelId(modelId?: string | null): string {
     return "";
   }
 
-  const normalized = normalizeText(trimmed);
-  return XIAOMI_MODEL_ID_ALIASES[normalized] || trimmed;
+  return trimmed;
 }
 
 export function canonicalizeKnownProviderModelId(options: {
@@ -52,15 +44,5 @@ export function canonicalizeKnownProviderModelId(options: {
     return "";
   }
 
-  if (
-    isXiaomiLikeProvider({
-      providerId: options.providerId,
-      providerType: options.providerType,
-      apiHost: options.apiHost,
-    })
-  ) {
-    return canonicalizeXiaomiModelId(trimmed);
-  }
-
-  return trimmed;
+  return canonicalizeXiaomiModelId(trimmed);
 }

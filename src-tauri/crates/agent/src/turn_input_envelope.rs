@@ -7,6 +7,9 @@ use crate::{
     request_tool_policy::RequestToolPolicy,
 };
 
+const REQUESTED_EXECUTION_STRATEGY_METADATA_KEY: &str = "requested_execution_strategy";
+const EFFECTIVE_EXECUTION_STRATEGY_METADATA_KEY: &str = "effective_execution_strategy";
+
 fn normalize_optional_string(value: Option<String>) -> Option<String> {
     value.and_then(|value| {
         let trimmed = value.trim();
@@ -221,6 +224,18 @@ impl TurnInputEnvelope {
             build_provider_continuation_metadata(&self.provider_continuation)
         {
             metadata.insert("provider_continuation".to_string(), provider_continuation);
+        }
+        if let Some(requested_strategy) = self.requested_execution_strategy.as_ref() {
+            metadata.insert(
+                REQUESTED_EXECUTION_STRATEGY_METADATA_KEY.to_string(),
+                Value::String(requested_strategy.clone()),
+            );
+        }
+        if let Some(effective_strategy) = self.effective_execution_strategy.as_ref() {
+            metadata.insert(
+                EFFECTIVE_EXECUTION_STRATEGY_METADATA_KEY.to_string(),
+                Value::String(effective_strategy.clone()),
+            );
         }
         if metadata.is_empty() {
             None
@@ -600,8 +615,10 @@ mod tests {
         assert_eq!(
             diagnostics.turn_context_metadata_keys,
             vec![
+                "effective_execution_strategy".to_string(),
                 "project_id".to_string(),
                 "provider_continuation".to_string(),
+                "requested_execution_strategy".to_string(),
                 "task_mode_enabled".to_string(),
                 "theme".to_string()
             ]
@@ -618,6 +635,14 @@ mod tests {
                 "kind": "previous_response_id",
                 "previous_response_id": "resp-1"
             }))
+        );
+        assert_eq!(
+            turn_context.metadata.get("effective_execution_strategy"),
+            Some(&json!("react"))
+        );
+        assert_eq!(
+            turn_context.metadata.get("requested_execution_strategy"),
+            Some(&json!("auto"))
         );
     }
 

@@ -1,9 +1,14 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import { GitCompare } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import type { AgentI18nKey } from "@/i18n/agentResources";
 import type {
   AsterSessionExecutionRuntime,
   AsterSubagentSessionInfo,
+  AgentRuntimeFileCheckpointThreadSummary,
 } from "@/lib/api/agentRuntime";
 
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
@@ -25,11 +30,9 @@ interface AgentRuntimeStripProps {
   selectedTeamLabel?: string | null;
   selectedTeamSummary?: string | null;
   selectedTeamRoleCount?: number;
+  fileCheckpointSummary?: AgentRuntimeFileCheckpointThreadSummary | null;
+  onOpenFileCheckpoints?: () => void;
 }
-
-const THEME_LABELS: Record<string, string> = {
-  general: "通用对话",
-};
 
 interface CapabilityItem {
   key: string;
@@ -44,7 +47,6 @@ interface StatusItem {
 }
 
 export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
-  activeTheme,
   toolPreferences,
   runtimeToolAvailability = null,
   harnessState,
@@ -57,34 +59,84 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
   selectedTeamLabel = null,
   selectedTeamSummary = null,
   selectedTeamRoleCount = 0,
+  fileCheckpointSummary = null,
+  onOpenFileCheckpoints,
 }) => {
-  const themeLabel =
-    THEME_LABELS[activeTheme?.trim().toLowerCase() || ""] || "通用对话";
+  const { t } = useTranslation("agent");
+  const translate = useCallback(
+    (key: AgentI18nKey, values?: Record<string, number | string>) =>
+      t(key, values ?? {}),
+    [t],
+  );
+  const isCodeOrchestratedRuntime =
+    executionRuntime?.execution_strategy === "code_orchestrated";
+  const themeLabel = translate("agentChat.runtimeStrip.theme.general");
+  const stripTitle = isCodeOrchestratedRuntime
+    ? translate("agentChat.runtimeStrip.title.code")
+    : translate("agentChat.runtimeStrip.title.general");
   const hasSelectedTeam =
     Boolean(selectedTeamLabel?.trim()) || selectedTeamRoleCount > 0;
+  const selectedTeamBadgeLabel =
+    selectedTeamLabel?.trim() ||
+    translate("agentChat.runtimeStrip.team.badgeRoleCount", {
+      count: selectedTeamRoleCount,
+    });
+  const selectedTeamSummaryText =
+    selectedTeamSummary?.trim() ||
+    (hasSelectedTeam
+      ? translate("agentChat.runtimeStrip.team.configuredSummary", {
+          count: selectedTeamRoleCount,
+        })
+      : translate("agentChat.runtimeStrip.team.defaultSummary"));
+  const fileCheckpointCount = fileCheckpointSummary?.count ?? 0;
+  const canReviewFileCheckpoints =
+    isCodeOrchestratedRuntime &&
+    fileCheckpointCount > 0 &&
+    Boolean(onOpenFileCheckpoints);
 
   const capabilities = useMemo<CapabilityItem[]>(
     () => [
-      { key: "direct", label: "直接回答", enabled: true },
-      { key: "thinking", label: "深度思考", enabled: toolPreferences.thinking },
+      ...(isCodeOrchestratedRuntime
+        ? [
+            {
+              key: "code_tools",
+              label: translate("agentChat.runtimeStrip.capability.codeTools"),
+              enabled: runtimeToolAvailability?.taskRuntime !== false,
+            },
+          ]
+        : [
+            {
+              key: "direct",
+              label: translate("agentChat.runtimeStrip.capability.direct"),
+              enabled: true,
+            },
+          ]),
+      {
+        key: "thinking",
+        label: translate("agentChat.runtimeStrip.capability.thinking"),
+        enabled: toolPreferences.thinking,
+      },
       {
         key: "web_search",
-        label: "联网搜索",
+        label: translate("agentChat.runtimeStrip.capability.webSearch"),
         enabled:
           toolPreferences.webSearch &&
           runtimeToolAvailability?.webSearch !== false,
       },
       {
         key: "subagent",
-        label: "任务拆分",
+        label: translate("agentChat.runtimeStrip.capability.subagent"),
         enabled:
           toolPreferences.subagent &&
           runtimeToolAvailability?.subagentRuntime !== false,
       },
     ],
     [
+      isCodeOrchestratedRuntime,
+      runtimeToolAvailability?.taskRuntime,
       runtimeToolAvailability?.subagentRuntime,
       runtimeToolAvailability?.webSearch,
+      translate,
       toolPreferences,
     ],
   );
@@ -107,11 +159,79 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
         session.runtime_status === "failed" ||
         session.runtime_status === "aborted",
     ).length;
+    const codeToolGapCount = runtimeToolAvailability?.known
+      ? runtimeToolAvailability.missingTaskTools.length +
+        runtimeToolAvailability.missingSubagentCoreTools.length +
+        runtimeToolAvailability.missingSubagentTeamTools.length
+      : 0;
+    const codeOutputCount =
+      harnessState.outputSignals.length ||
+      harnessState.activeFileWrites.length ||
+      harnessState.recentFileEvents.length;
+
+    if (isCodeOrchestratedRuntime) {
+      nextItems.push({
+        key: "code_runtime_active",
+        label: translate("agentChat.runtimeStrip.status.codeRuntimeActive"),
+        tone: "secondary",
+      });
+
+      if (runtimeToolAvailability?.known) {
+        nextItems.push({
+          key: codeToolGapCount > 0 ? "code_tool_gap" : "code_tool_ready",
+          label:
+            codeToolGapCount > 0
+              ? translate("agentChat.runtimeStrip.status.codeToolGap", {
+                  count: codeToolGapCount,
+                })
+              : translate("agentChat.runtimeStrip.status.codeToolReady"),
+          tone: codeToolGapCount > 0 ? "secondary" : "outline",
+        });
+      }
+
+      nextItems.push({
+        key:
+          harnessState.pendingApprovals.length > 0
+            ? "code_approval_pending"
+            : "code_approval_ready",
+        label:
+          harnessState.pendingApprovals.length > 0
+            ? translate("agentChat.runtimeStrip.status.codeApprovalPending", {
+                count: harnessState.pendingApprovals.length,
+              })
+            : translate("agentChat.runtimeStrip.status.codeApprovalReady"),
+        tone:
+          harnessState.pendingApprovals.length > 0 ? "secondary" : "outline",
+      });
+
+      nextItems.push({
+        key: codeOutputCount > 0 ? "code_outputs" : "code_outputs_empty",
+        label:
+          codeOutputCount > 0
+            ? translate("agentChat.runtimeStrip.status.codeOutputs", {
+                count: codeOutputCount,
+              })
+            : translate("agentChat.runtimeStrip.status.codeOutputsEmpty"),
+        tone: "outline",
+      });
+
+      if (fileCheckpointCount > 0) {
+        nextItems.push({
+          key: "code_file_changes",
+          label: translate("agentChat.runtimeStrip.status.codeFileChanges", {
+            count: fileCheckpointCount,
+          }),
+          tone: "outline",
+        });
+      }
+    }
 
     if (isSending) {
       nextItems.push({
         key: "sending",
-        label: runtimeStatusTitle || "正在准备处理",
+        label:
+          runtimeStatusTitle ||
+          translate("agentChat.runtimeStrip.status.preparing"),
         tone: "secondary",
       });
     }
@@ -119,7 +239,9 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
     if (outputSchemaLabel) {
       nextItems.push({
         key: "output_schema_runtime",
-        label: `结构化输出 ${outputSchemaLabel}`,
+        label: translate("agentChat.runtimeStrip.status.outputSchema", {
+          label: outputSchemaLabel,
+        }),
         tone: isExecutionRuntimeActive ? "secondary" : "outline",
       });
     }
@@ -127,14 +249,18 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
     if (runtimeToolAvailability?.known) {
       nextItems.push({
         key: "runtime_surface",
-        label: `Runtime 工具面 ${runtimeToolAvailability.availableToolCount} 项`,
+        label: translate("agentChat.runtimeStrip.status.runtimeSurface", {
+          count: runtimeToolAvailability.availableToolCount,
+        }),
         tone: "outline",
       });
 
       if (!runtimeToolAvailability.taskRuntime) {
         nextItems.push({
           key: "task_runtime_gap",
-          label: `任务工具缺 ${runtimeToolAvailability.missingTaskTools.length}`,
+          label: translate("agentChat.runtimeStrip.status.taskToolGap", {
+            count: runtimeToolAvailability.missingTaskTools.length,
+          }),
           tone: "outline",
         });
       }
@@ -142,7 +268,7 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
       if (toolPreferences.webSearch && !runtimeToolAvailability.webSearch) {
         nextItems.push({
           key: "web_search_gap",
-          label: "联网搜索偏好已开，但 Runtime 未接通 WebSearch",
+          label: translate("agentChat.runtimeStrip.status.webSearchGap"),
           tone: "secondary",
         });
       }
@@ -153,12 +279,12 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
       ) {
         nextItems.push({
           key: "subagent_runtime_gap",
-          label: `任务拆分缺 ${
-            [
+          label: translate("agentChat.runtimeStrip.status.subagentToolGap", {
+            count: [
               ...runtimeToolAvailability.missingSubagentCoreTools,
               ...runtimeToolAvailability.missingSubagentTeamTools,
-            ].length
-          } 个 current tools`,
+            ].length,
+          }),
           tone: "secondary",
         });
       }
@@ -167,7 +293,7 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
     if (harnessState.plan.phase === "planning") {
       nextItems.push({
         key: "planning",
-        label: "正在整理执行计划",
+        label: translate("agentChat.runtimeStrip.status.planning"),
         tone: "secondary",
       });
     }
@@ -175,7 +301,9 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
     if (harnessState.plan.items.length > 0) {
       nextItems.push({
         key: "plan_items",
-        label: `当前计划 ${harnessState.plan.items.length} 项`,
+        label: translate("agentChat.runtimeStrip.status.planItems", {
+          count: harnessState.plan.items.length,
+        }),
         tone: "outline",
       });
     }
@@ -183,7 +311,9 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
     if (harnessState.pendingApprovals.length > 0) {
       nextItems.push({
         key: "pending",
-        label: `等待确认 ${harnessState.pendingApprovals.length}`,
+        label: translate("agentChat.runtimeStrip.status.pending", {
+          count: harnessState.pendingApprovals.length,
+        }),
         tone: "secondary",
       });
     }
@@ -193,8 +323,15 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
         key: "team_running",
         label:
           queuedTeamSessions > 0
-            ? `任务进行中 ${activeTeamSessions}/${childSubagentSessions.length} · 稍后开始 ${queuedTeamSessions}`
-            : `任务进行中 ${activeTeamSessions}/${childSubagentSessions.length}`,
+            ? translate("agentChat.runtimeStrip.status.teamRunningQueued", {
+                active: activeTeamSessions,
+                total: childSubagentSessions.length,
+                queued: queuedTeamSessions,
+              })
+            : translate("agentChat.runtimeStrip.status.teamRunning", {
+                active: activeTeamSessions,
+                total: childSubagentSessions.length,
+              }),
         tone: "secondary",
       });
     } else if (childSubagentSessions.length > 0) {
@@ -202,14 +339,21 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
         key: "team_sessions",
         label:
           completedTeamSessions > 0
-            ? `子任务 ${childSubagentSessions.length} · 已完成 ${completedTeamSessions}`
-            : `子任务 ${childSubagentSessions.length}`,
+            ? translate("agentChat.runtimeStrip.status.teamCompleted", {
+                total: childSubagentSessions.length,
+                completed: completedTeamSessions,
+              })
+            : translate("agentChat.runtimeStrip.status.teamSessions", {
+                total: childSubagentSessions.length,
+              }),
         tone: "outline",
       });
     } else if (harnessState.delegatedTasks.length > 0) {
       nextItems.push({
         key: "delegated",
-        label: `最近子任务 ${harnessState.delegatedTasks.length}`,
+        label: translate("agentChat.runtimeStrip.status.delegated", {
+          count: harnessState.delegatedTasks.length,
+        }),
         tone: "outline",
       });
     }
@@ -217,7 +361,9 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
     if (harnessState.outputSignals.length > 0) {
       nextItems.push({
         key: "outputs",
-        label: `最近产物 ${harnessState.outputSignals.length}`,
+        label: translate("agentChat.runtimeStrip.status.outputs", {
+          count: harnessState.outputSignals.length,
+        }),
         tone: "outline",
       });
     }
@@ -225,7 +371,7 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
     if (nextItems.length === 0) {
       nextItems.push({
         key: "default_mode",
-        label: "当前会先直接回答，必要时再调用更多能力",
+        label: translate("agentChat.runtimeStrip.status.defaultMode"),
         tone: "outline",
       });
     }
@@ -234,11 +380,14 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
   }, [
     childSubagentSessions,
     executionRuntime,
+    fileCheckpointCount,
     harnessState,
+    isCodeOrchestratedRuntime,
     isExecutionRuntimeActive,
     isSending,
     runtimeToolAvailability,
     runtimeStatusTitle,
+    translate,
     toolPreferences.subagent,
     toolPreferences.webSearch,
   ]);
@@ -246,6 +395,10 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
   return (
     <div
       data-testid="agent-runtime-strip"
+      data-runtime-kind={
+        isCodeOrchestratedRuntime ? "code_orchestrated" : "general"
+      }
+      data-execution-strategy={executionRuntime?.execution_strategy ?? ""}
       className={
         variant === "embedded"
           ? "rounded-xl border border-border/70 bg-[linear-gradient(135deg,hsl(var(--background)),hsl(var(--muted)/0.35))] px-4 py-3"
@@ -253,13 +406,20 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
       }
     >
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <div className="text-sm font-medium text-foreground">通用助手</div>
+        <div
+          className="text-sm font-medium text-foreground"
+          data-testid="agent-runtime-strip-title"
+        >
+          {stripTitle}
+        </div>
         <Badge variant="outline">{themeLabel}</Badge>
         {toolPreferences.subagent ? (
           <Badge variant={hasSelectedTeam ? "secondary" : "outline"}>
             {hasSelectedTeam
-              ? `分工 · ${selectedTeamLabel || `${selectedTeamRoleCount} 角色`}`
-              : "分工模式"}
+              ? translate("agentChat.runtimeStrip.team.badgeConfigured", {
+                  label: selectedTeamBadgeLabel,
+                })
+              : translate("agentChat.runtimeStrip.team.badgeEnabled")}
           </Badge>
         ) : null}
       </div>
@@ -267,6 +427,9 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
         {capabilities.map((item) => (
           <span
             key={item.key}
+            data-testid={`agent-runtime-strip-capability-${item.key}`}
+            data-capability-key={item.key}
+            data-enabled={String(item.enabled)}
             className={[
               "rounded-full border px-2.5 py-1 text-xs transition-colors",
               item.enabled
@@ -280,15 +443,10 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
       </div>
       {toolPreferences.subagent ? (
         <div className="mb-3 rounded-xl border border-border/70 bg-background/80 px-3 py-2 text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">当前任务分工</span>
-          <span>
-            {" "}
-            ·{" "}
-            {selectedTeamSummary?.trim() ||
-              (hasSelectedTeam
-                ? `已配置 ${selectedTeamRoleCount} 个角色，系统会按需拆出子任务。`
-                : "已开启分工模式，本次可选择或自定义分工方案。")}
+          <span className="font-medium text-foreground">
+            {translate("agentChat.runtimeStrip.team.title")}
           </span>
+          <span> · {selectedTeamSummaryText}</span>
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
@@ -297,10 +455,30 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
             key={item.key}
             variant={item.tone || "outline"}
             data-testid={`agent-runtime-strip-status-${item.key}`}
+            data-status-key={item.key}
           >
             {item.label}
           </Badge>
         ))}
+        {canReviewFileCheckpoints ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 rounded-full border-sky-200 bg-white px-2.5 text-xs text-sky-700 hover:bg-sky-50 dark:bg-background"
+            onClick={onOpenFileCheckpoints}
+            aria-label={translate(
+              "agentChat.runtimeStrip.action.reviewFileChangesAria",
+            )}
+            title={translate(
+              "agentChat.runtimeStrip.action.reviewFileChangesAria",
+            )}
+            data-testid="agent-runtime-strip-open-file-checkpoints"
+          >
+            <GitCompare className="mr-1.5 h-3.5 w-3.5" />
+            {translate("agentChat.runtimeStrip.action.reviewFileChanges")}
+          </Button>
+        ) : null}
       </div>
     </div>
   );

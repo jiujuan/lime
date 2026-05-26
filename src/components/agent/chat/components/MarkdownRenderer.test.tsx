@@ -874,9 +874,9 @@ describe("MarkdownRenderer", () => {
     expect(container.textContent).toContain("1 行");
   });
 
-  it("文本流程代码块应渲染为流程视图而不是语法高亮", () => {
+  it("显式 flow 代码块应渲染为流程视图而不是语法高亮", () => {
     const content = [
-      "```text",
+      "```flow",
       '用户操作 -> 点击"添加模型"',
       "↓",
       "选择服务商 -> 下拉选择 (OpenAI/Claude/自定义 API)",
@@ -894,6 +894,57 @@ describe("MarkdownRenderer", () => {
       container.querySelector('[data-testid="syntax-highlighter"]'),
     ).toBeNull();
     expect(container.textContent).toContain("5 行");
+  });
+
+  it("text 代码块即使包含流程箭头也应保持普通文本视图", () => {
+    const content = [
+      "```text",
+      '用户操作 -> 点击"添加模型"',
+      "↓",
+      "选择服务商 -> 下拉选择 (OpenAI/Claude/自定义 API)",
+      "↓",
+      "填写信息 -> API Key、Base URL、模型（可选）",
+      "```",
+    ].join("\n");
+
+    const container = render(content);
+
+    expect(
+      container.querySelector('[data-testid="markdown-flow-code-block"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="markdown-plain-code-block"]'),
+    ).not.toBeNull();
+  });
+
+  it("带箭头的 Markdown 大纲代码块不应误渲染为流程胶囊", () => {
+    const content = [
+      "```",
+      "导出 PDF / 分享",
+      "↓",
+      "---",
+      "## 11.5 余料管理页面",
+      "### 列表字段",
+      "- 余料编号；",
+      "- 图片；",
+      "- 分类；",
+      "↓",
+      "## 12. AI 能力规划",
+      "- 图像识别；",
+      "- 图像生成；",
+      "```",
+    ].join("\n");
+
+    const container = render(content);
+
+    expect(
+      container.querySelector('[data-testid="markdown-flow-code-block"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="markdown-plain-code-block"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("12 行");
+    expect(container.textContent).toContain("## 11.5 余料管理页面");
   });
 
   it("伪代码目录块即使标注为 typescript 也应降级为纯文本视图", () => {

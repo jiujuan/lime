@@ -10,6 +10,7 @@ import type {
   AgentRuntimeFileCheckpointDetail,
   AgentRuntimeFileCheckpointDiffResult,
   AgentRuntimeFileCheckpointListResult,
+  AgentRuntimeFileCheckpointRestoreResult,
   AgentRuntimeGetFileCheckpointRequest,
   AgentRuntimeInterruptTurnRequest,
   AgentRuntimeListFileCheckpointsRequest,
@@ -18,6 +19,7 @@ import type {
   AgentRuntimeReplayRequestRequest,
   AgentRuntimeReplayedActionRequiredView,
   AgentRuntimeRespondActionRequest,
+  AgentRuntimeRestoreFileCheckpointRequest,
   AgentRuntimeResumeThreadRequest,
   AgentRuntimeSubmitTurnRequest,
   AgentRuntimeThreadReadModel,
@@ -141,6 +143,15 @@ export function createThreadClient({
     );
   }
 
+  async function restoreAgentRuntimeFileCheckpoint(
+    request: AgentRuntimeRestoreFileCheckpointRequest,
+  ): Promise<AgentRuntimeFileCheckpointRestoreResult> {
+    return await invokeCommand<AgentRuntimeFileCheckpointRestoreResult>(
+      AGENT_RUNTIME_COMMANDS.restoreFileCheckpoint,
+      { request },
+    );
+  }
+
   return {
     compactAgentRuntimeSession,
     diffAgentRuntimeFileCheckpoint,
@@ -152,6 +163,7 @@ export function createThreadClient({
     removeAgentRuntimeQueuedTurn,
     replayAgentRuntimeRequest,
     respondAgentRuntimeAction,
+    restoreAgentRuntimeFileCheckpoint,
     resumeAgentRuntimeThread,
     submitAgentRuntimeTurn,
   };
@@ -168,6 +180,7 @@ export const {
   removeAgentRuntimeQueuedTurn,
   replayAgentRuntimeRequest,
   respondAgentRuntimeAction,
+  restoreAgentRuntimeFileCheckpoint,
   resumeAgentRuntimeThread,
   submitAgentRuntimeTurn,
 } = createThreadClient();

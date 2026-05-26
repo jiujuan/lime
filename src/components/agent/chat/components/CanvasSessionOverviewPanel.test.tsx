@@ -140,4 +140,38 @@ describe("CanvasSessionOverviewPanel", () => {
     expect(text).not.toContain("执行时间线");
     expect(text).not.toContain("排队消息");
   });
+
+  it("summarizes Provider 402 errors with user-facing copy", () => {
+    const rawProviderError =
+      "Agent provider execution failed: Request failed with status 402 Payment Required: Insufficient Balance";
+    const container = renderPanel({
+      currentTurnId: "turn-1",
+      threadItems: [
+        {
+          id: "item-provider-error",
+          sequence: 1,
+          started_at: "2026-05-11T01:41:00.000Z",
+          status: "failed",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          type: "error",
+          message: rawProviderError,
+          updated_at: "2026-05-11T01:45:00.000Z",
+        },
+      ],
+      turns: [
+        buildTurn({
+          status: "failed",
+          error_message: rawProviderError,
+        }),
+      ],
+    });
+
+    const text = container.textContent ?? "";
+
+    expect(text).toContain("provider balance or quota is insufficient");
+    expect(text).not.toContain("Agent provider execution failed");
+    expect(text).not.toContain("Payment Required");
+    expect(text).not.toContain("Insufficient Balance");
+  });
 });

@@ -5,7 +5,7 @@
 use crate::config::GlobalConfigManagerState;
 use crate::database::DbConnection;
 use crate::services::chat_history_service::{load_memory_source_candidates, MemorySourceCandidate};
-use lime_core::config::MemoryConfig;
+use lime_core::config::{MemoryConfig, MemoryEmbeddingProvider};
 use lime_memory::extractor::{self, ExtractionContext};
 use lime_memory::gatekeeper::ChatMessage;
 use lime_memory::{MemoryCategory, MemoryMetadata, MemorySource, MemoryType, UnifiedMemory};
@@ -200,6 +200,7 @@ pub async fn unified_memory_get(
 #[tauri::command]
 pub async fn unified_memory_create(
     db: State<'_, DbConnection>,
+    global_config: State<'_, GlobalConfigManagerState>,
     request: CreateRequest,
 ) -> Result<UnifiedMemory, String> {
     info!("[Unified Memory] Create memory: {}", request.title);
@@ -217,7 +218,7 @@ pub async fn unified_memory_create(
         infer_category_from_text(&request.title, &request.summary, &request.content)
     });
 
-    let memory = UnifiedMemory {
+    let mut memory = UnifiedMemory {
         id: uuid::Uuid::new_v4().to_string(),
         session_id: request.session_id,
         memory_type: MemoryType::Conversation,
@@ -243,6 +244,9 @@ pub async fn unified_memory_create(
         archived: false,
     };
 
+    let memory_config = global_config.config().memory;
+    attach_memory_embedding(&db, &memory_config, &mut memory).await;
+
     let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
     insert_unified_memory(&conn, &memory)?;
 
@@ -252,19 +256,25 @@ pub async fn unified_memory_create(
 #[tauri::command]
 pub async fn unified_memory_update(
     db: State<'_, DbConnection>,
+    global_config: State<'_, GlobalConfigManagerState>,
     id: String,
     request: UpdateRequest,
 ) -> Result<UnifiedMemory, String> {
     info!("[Unified Memory] Update memory: {}", id);
 
-    let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-    let existing = get_memory_by_id(&conn, &id)?;
-    let Some(existing) = existing else {
-        return Err("记忆不存在".to_string());
+    let existing = {
+        let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
+        let existing = get_memory_by_id(&conn, &id)?;
+        let Some(existing) = existing else {
+            return Err("记忆不存在".to_string());
+        };
+        existing
     };
 
+    let should_refresh_embedding =
+        request.title.is_some() || request.content.is_some() || request.summary.is_some();
     let now = chrono::Utc::now().timestamp_millis();
-    let updated = UnifiedMemory {
+    let mut updated = UnifiedMemory {
         id: existing.id,
         session_id: existing.session_id,
         memory_type: existing.memory_type,
@@ -304,7 +314,13 @@ pub async fn unified_memory_update(
         archived: existing.archived,
     };
 
-    update_unified_memory(&conn, &updated)?;
+    if should_refresh_embedding {
+        let memory_config = global_config.config().memory;
+        attach_memory_embedding(&db, &memory_config, &mut updated).await;
+    }
+
+    let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
+    update_unified_memory(&conn, &updated, should_refresh_embedding)?;
     Ok(updated)
 }
 
@@ -523,11 +539,17 @@ pub(crate) async fn analyze_unified_memory_candidates(
         pending_memories.truncate(max_generated_per_request);
     }
 
+    let mut memories_to_insert = Vec::with_capacity(pending_memories.len());
+    for pending in pending_memories {
+        let mut memory = pending_to_memory(pending);
+        attach_memory_embedding(db, memory_config, &mut memory).await;
+        memories_to_insert.push(memory);
+    }
+
     let generated_entries = {
         let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
         let mut inserted = 0u32;
-        for pending in pending_memories {
-            let memory = pending_to_memory(pending);
+        for memory in memories_to_insert {
             match insert_unified_memory(&conn, &memory) {
                 Ok(_) => inserted += 1,
                 Err(err) => {
@@ -789,6 +811,53 @@ pub(crate) fn get_memory_by_id(
     }
 }
 
+pub(crate) fn build_memory_embedding_text(memory: &UnifiedMemory) -> String {
+    [&memory.title, &memory.summary, &memory.content]
+        .into_iter()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+async fn attach_memory_embedding(
+    db: &DbConnection,
+    memory_config: &MemoryConfig,
+    memory: &mut UnifiedMemory,
+) {
+    if memory_config.embedding.provider == MemoryEmbeddingProvider::Disabled {
+        memory.metadata.embedding = None;
+        return;
+    }
+
+    let text = build_memory_embedding_text(memory);
+    if text.trim().is_empty() {
+        memory.metadata.embedding = None;
+        return;
+    }
+
+    match super::memory_search_cmd::embed_text_with_config(db, &text, &memory_config.embedding)
+        .await
+    {
+        Ok(embedding) => {
+            memory.metadata.embedding = Some(embedding);
+        }
+        Err(err) => {
+            warn!("[Unified Memory] 生成记忆嵌入失败，保存无向量记忆: {}", err);
+            memory.metadata.embedding = None;
+        }
+    }
+}
+
+pub(crate) fn embedding_to_blob(embedding: Option<&Vec<f32>>) -> Option<Vec<u8>> {
+    embedding.map(|values| {
+        values
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect()
+    })
+}
+
 fn insert_unified_memory(
     conn: &rusqlite::Connection,
     memory: &UnifiedMemory,
@@ -801,10 +870,11 @@ fn insert_unified_memory(
         serde_json::to_string(&memory.tags).map_err(|e| format!("序列化 tags 失败: {e}"))?;
     let source_json = serde_json::to_string(&memory.metadata.source)
         .map_err(|e| format!("序列化 source 失败: {e}"))?;
+    let embedding_blob = embedding_to_blob(memory.metadata.embedding.as_ref());
 
     conn.execute(
-        "INSERT INTO unified_memory (id, session_id, memory_type, category, title, content, summary, tags, confidence, importance, access_count, last_accessed_at, source, created_at, updated_at, archived)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+        "INSERT INTO unified_memory (id, session_id, memory_type, category, title, content, summary, tags, confidence, importance, access_count, last_accessed_at, source, embedding, created_at, updated_at, archived)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
         params![
             &memory.id,
             &memory.session_id,
@@ -819,6 +889,7 @@ fn insert_unified_memory(
             memory.metadata.access_count as i64,
             memory.metadata.last_accessed_at,
             &source_json,
+            embedding_blob,
             memory.created_at,
             memory.updated_at,
             if memory.archived { 1 } else { 0 },
@@ -832,32 +903,61 @@ fn insert_unified_memory(
 fn update_unified_memory(
     conn: &rusqlite::Connection,
     memory: &UnifiedMemory,
+    update_embedding: bool,
 ) -> Result<(), String> {
     let tags_json =
         serde_json::to_string(&memory.tags).map_err(|e| format!("序列化 tags 失败: {e}"))?;
 
-    conn.execute(
-        "UPDATE unified_memory
-         SET title = ?1,
-             content = ?2,
-             summary = ?3,
-             tags = ?4,
-             confidence = ?5,
-             importance = ?6,
-             updated_at = ?7
-         WHERE id = ?8",
-        params![
-            &memory.title,
-            &memory.content,
-            &memory.summary,
-            &tags_json,
-            memory.metadata.confidence,
-            memory.metadata.importance as i64,
-            memory.updated_at,
-            &memory.id,
-        ],
-    )
-    .map_err(|e| format!("更新记忆失败: {e}"))?;
+    if update_embedding {
+        let embedding_blob = embedding_to_blob(memory.metadata.embedding.as_ref());
+        conn.execute(
+            "UPDATE unified_memory
+             SET title = ?1,
+                 content = ?2,
+                 summary = ?3,
+                 tags = ?4,
+                 confidence = ?5,
+                 importance = ?6,
+                 embedding = ?7,
+                 updated_at = ?8
+             WHERE id = ?9",
+            params![
+                &memory.title,
+                &memory.content,
+                &memory.summary,
+                &tags_json,
+                memory.metadata.confidence,
+                memory.metadata.importance as i64,
+                embedding_blob,
+                memory.updated_at,
+                &memory.id,
+            ],
+        )
+        .map_err(|e| format!("更新记忆失败: {e}"))?;
+    } else {
+        conn.execute(
+            "UPDATE unified_memory
+             SET title = ?1,
+                 content = ?2,
+                 summary = ?3,
+                 tags = ?4,
+                 confidence = ?5,
+                 importance = ?6,
+                 updated_at = ?7
+             WHERE id = ?8",
+            params![
+                &memory.title,
+                &memory.content,
+                &memory.summary,
+                &tags_json,
+                memory.metadata.confidence,
+                memory.metadata.importance as i64,
+                memory.updated_at,
+                &memory.id,
+            ],
+        )
+        .map_err(|e| format!("更新记忆失败: {e}"))?;
+    }
 
     Ok(())
 }
@@ -1056,6 +1156,36 @@ fn is_duplicate(
             || normalize_text(&entry.summary) == normalized_summary
             || normalize_text(&entry.content).contains(&normalized_summary)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn memory_embedding_text_skips_empty_fields() {
+        let mut memory = UnifiedMemory::new_conversation(
+            "session-1".to_string(),
+            MemoryCategory::Context,
+            " 标题 ".to_string(),
+            " 正文 ".to_string(),
+            " ".to_string(),
+        );
+        memory.summary = String::new();
+
+        assert_eq!(build_memory_embedding_text(&memory), "标题\n\n正文");
+    }
+
+    #[test]
+    fn embedding_blob_uses_little_endian_f32_bytes() {
+        let embedding = vec![1.0_f32, -2.5_f32];
+        let blob = embedding_to_blob(Some(&embedding)).expect("embedding blob");
+
+        let mut expected = Vec::new();
+        expected.extend_from_slice(&1.0_f32.to_le_bytes());
+        expected.extend_from_slice(&(-2.5_f32).to_le_bytes());
+        assert_eq!(blob, expected);
+    }
 }
 
 fn build_fingerprint(content: &str) -> String {

@@ -1,392 +1,98 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TFunction } from "i18next";
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
   Database,
-  Files,
-  FolderTree,
-  Layers3,
   RefreshCw,
-  Sparkles,
-  type LucideIcon,
+  Search,
+  ShieldCheck,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import {
-  cleanupContextMemdir,
-  getContextMemoryAutoIndex,
-  getContextMemoryEffectiveSources,
-  getContextMemoryExtractionStatus,
-  getContextWorkingMemory,
-  ensureWorkspaceLocalAgentsGitignore,
-  scaffoldContextMemdir,
-  scaffoldRuntimeAgentsTemplate,
-  toggleContextMemoryAuto,
-  updateContextMemoryAutoNote,
-  type AutoMemoryIndexResponse,
-  type EffectiveMemorySourcesResponse,
-  type MemdirMemoryType,
-  type MemoryAutoConfig,
-  type MemoryConfig,
-  type MemoryProfileConfig,
-  type MemoryResolveConfig,
-  type MemorySourcesConfig,
-  type RuntimeAgentsTemplateTarget,
-} from "@/lib/api/memoryRuntime";
 import { getConfig, saveConfig, type Config } from "@/lib/api/appConfig";
-import { getUnifiedMemoryStats } from "@/lib/api/unifiedMemory";
+import type {
+  MemoryAutoConfig,
+  MemoryConfig,
+  MemoryEmbeddingConfig,
+  MemoryEmbeddingProvider,
+  MemoryProfileConfig,
+  MemoryResolveConfig,
+  MemorySourcesConfig,
+} from "@/lib/api/memoryRuntime";
 import {
-  buildLayerMetrics,
-  type LayerMetricsResult,
-} from "@/components/memory/memoryLayerMetrics";
-import { listTeamMemorySnapshots } from "@/lib/teamMemorySync";
+  getUnifiedMemoryStats,
+  type UnifiedMemoryStatsResponse,
+} from "@/lib/api/unifiedMemory";
 
-type SettingsTranslationKey =
-  keyof typeof import("@/i18n/resources/zh-CN/settings.json");
-type MemorySettingsTranslate = TFunction<"settings", undefined>;
-type MemorySettingsTab = "overview" | "sourcePolicy" | "memdir" | "sourceHits";
+type EmbeddingProviderChoice =
+  | "auto"
+  | "local_onnx"
+  | "ollama"
+  | "openai_api"
+  | "disabled";
 
-function memoryI18n(
+interface ProviderChoiceDefinition {
+  value: EmbeddingProviderChoice;
+  labelKey: string;
+  descriptionKey: string;
+  runtimeProvider: MemoryEmbeddingProvider;
+  providerId?: string;
+  model: string;
+}
+
+const PROVIDER_CHOICES: ProviderChoiceDefinition[] = [
+  {
+    value: "auto",
+    labelKey: "settings.memory.embedding.provider.auto.label",
+    descriptionKey: "settings.memory.embedding.provider.auto.description",
+    runtimeProvider: "auto",
+    model: "all-MiniLM-L6-v2",
+  },
+  {
+    value: "local_onnx",
+    labelKey: "settings.memory.embedding.provider.localOnnx.label",
+    descriptionKey: "settings.memory.embedding.provider.localOnnx.description",
+    runtimeProvider: "local_onnx",
+    model: "all-MiniLM-L6-v2",
+  },
+  {
+    value: "ollama",
+    labelKey: "settings.memory.embedding.provider.ollama.label",
+    descriptionKey: "settings.memory.embedding.provider.ollama.description",
+    runtimeProvider: "provider",
+    providerId: "ollama",
+    model: "nomic-embed-text",
+  },
+  {
+    value: "openai_api",
+    labelKey: "settings.memory.embedding.provider.openaiApi.label",
+    descriptionKey: "settings.memory.embedding.provider.openaiApi.description",
+    runtimeProvider: "openai_api",
+    model: "text-embedding-3-small",
+  },
+  {
+    value: "disabled",
+    labelKey: "settings.memory.embedding.provider.disabled.label",
+    descriptionKey: "settings.memory.embedding.provider.disabled.description",
+    runtimeProvider: "disabled",
+    model: "all-MiniLM-L6-v2",
+  },
+];
+
+function memoryT(
   t: TFunction<"settings">,
-  key: SettingsTranslationKey,
-  _legacyFallback: string,
+  key: string,
   values: Record<string, string | number | boolean> = {},
 ): string {
-  return String((t as MemorySettingsTranslate)(key, values));
+  const translate = t as unknown as (
+    key: string,
+    values?: Record<string, string | number | boolean>,
+  ) => string;
+  return String(translate(key, values));
 }
-
-interface ProfileOptionDefinition {
-  value: string;
-  labelKey: SettingsTranslationKey;
-  defaultLabel: string;
-}
-
-interface ProfileOption {
-  value: string;
-  label: string;
-}
-
-const STATUS_OPTION_DEFINITIONS: ProfileOptionDefinition[] = [
-  {
-    value: "高中生",
-    labelKey: "settings.memory.profile.status.highSchool",
-    defaultLabel: "高中生",
-  },
-  {
-    value: "大学生/本科生",
-    labelKey: "settings.memory.profile.status.undergraduate",
-    defaultLabel: "大学生/本科生",
-  },
-  {
-    value: "研究生",
-    labelKey: "settings.memory.profile.status.graduate",
-    defaultLabel: "研究生",
-  },
-  {
-    value: "自学者/专业人士",
-    labelKey: "settings.memory.profile.status.selfLearner",
-    defaultLabel: "自学者/专业人士",
-  },
-  {
-    value: "其他",
-    labelKey: "settings.memory.profile.status.other",
-    defaultLabel: "其他",
-  },
-];
-
-const STRENGTH_OPTION_DEFINITIONS: ProfileOptionDefinition[] = [
-  {
-    value: "数学/逻辑推理",
-    labelKey: "settings.memory.profile.strength.math",
-    defaultLabel: "数学/逻辑推理",
-  },
-  {
-    value: "计算机科学/编程",
-    labelKey: "settings.memory.profile.strength.computerScience",
-    defaultLabel: "计算机科学/编程",
-  },
-  {
-    value: "自然科学（物理学、化学、生物学）",
-    labelKey: "settings.memory.profile.strength.naturalScience",
-    defaultLabel: "自然科学（物理学、化学、生物学）",
-  },
-  {
-    value: "写作/阅读/人文",
-    labelKey: "settings.memory.profile.strength.humanities",
-    defaultLabel: "写作/阅读/人文",
-  },
-  {
-    value: "商业/经济学",
-    labelKey: "settings.memory.profile.strength.business",
-    defaultLabel: "商业/经济学",
-  },
-  {
-    value: "没有——我还在探索中。",
-    labelKey: "settings.memory.profile.strength.exploring",
-    defaultLabel: "没有——我还在探索中。",
-  },
-];
-
-const EXPLANATION_STYLE_OPTION_DEFINITIONS: ProfileOptionDefinition[] = [
-  {
-    value: "将晦涩难懂的概念变得直观易懂",
-    labelKey: "settings.memory.profile.explanationStyle.intuitive",
-    defaultLabel: "将晦涩难懂的概念变得直观易懂",
-  },
-  {
-    value: "先举例，后讲理论",
-    labelKey: "settings.memory.profile.explanationStyle.examplesFirst",
-    defaultLabel: "先举例，后讲理论",
-  },
-  {
-    value: "概念结构与全局观",
-    labelKey: "settings.memory.profile.explanationStyle.bigPicture",
-    defaultLabel: "概念结构与全局观",
-  },
-  {
-    value: "类比和隐喻",
-    labelKey: "settings.memory.profile.explanationStyle.analogies",
-    defaultLabel: "类比和隐喻",
-  },
-  {
-    value: "考试导向型讲解",
-    labelKey: "settings.memory.profile.explanationStyle.examOriented",
-    defaultLabel: "考试导向型讲解",
-  },
-  {
-    value: "我没有偏好——随机应变",
-    labelKey: "settings.memory.profile.explanationStyle.adaptive",
-    defaultLabel: "我没有偏好——随机应变",
-  },
-];
-
-const CHALLENGE_OPTION_DEFINITIONS: ProfileOptionDefinition[] = [
-  {
-    value: "照本宣科——把所有细节都直接告诉我（我能应付）",
-    labelKey: "settings.memory.profile.challenge.literal",
-    defaultLabel: "照本宣科——把所有细节都直接告诉我（我能应付）",
-  },
-  {
-    value: "一步一步地分解",
-    labelKey: "settings.memory.profile.challenge.stepByStep",
-    defaultLabel: "一步一步地分解",
-  },
-  {
-    value: "先从简单的例子或类比入手",
-    labelKey: "settings.memory.profile.challenge.simpleExamples",
-    defaultLabel: "先从简单的例子或类比入手",
-  },
-  {
-    value: "先解释重点和难点在哪里",
-    labelKey: "settings.memory.profile.challenge.hardParts",
-    defaultLabel: "先解释重点和难点在哪里",
-  },
-  {
-    value: "多种解释/角度",
-    labelKey: "settings.memory.profile.challenge.multipleAngles",
-    defaultLabel: "多种解释/角度",
-  },
-];
-
-interface MemdirMemoryTypeOptionDefinition {
-  value: MemdirMemoryType;
-  labelKey: SettingsTranslationKey;
-  defaultLabel: string;
-  descriptionKey: SettingsTranslationKey;
-  defaultDescription: string;
-}
-
-interface MemdirMemoryTypeOption {
-  value: MemdirMemoryType;
-  label: string;
-  description: string;
-}
-
-const MEMDIR_MEMORY_TYPE_OPTION_DEFINITIONS: MemdirMemoryTypeOptionDefinition[] =
-  [
-    {
-      value: "project",
-      labelKey: "settings.memory.memdir.type.project.label",
-      defaultLabel: "项目记忆",
-      descriptionKey: "settings.memory.memdir.type.project.description",
-      defaultDescription: "默认推荐，用于项目背景、约束、时间点与分工。",
-    },
-    {
-      value: "feedback",
-      labelKey: "settings.memory.memdir.type.feedback.label",
-      defaultLabel: "反馈记忆",
-      descriptionKey: "settings.memory.memdir.type.feedback.description",
-      defaultDescription: "记录被确认有效的做法与需要持续遵守的规则。",
-    },
-    {
-      value: "user",
-      labelKey: "settings.memory.memdir.type.user.label",
-      defaultLabel: "用户记忆",
-      descriptionKey: "settings.memory.memdir.type.user.description",
-      defaultDescription: "记录用户背景、长期偏好与协作方式。",
-    },
-    {
-      value: "reference",
-      labelKey: "settings.memory.memdir.type.reference.label",
-      defaultLabel: "参考记忆",
-      descriptionKey: "settings.memory.memdir.type.reference.description",
-      defaultDescription: "记录文档、工单、监控和知识库入口。",
-    },
-  ];
-
-interface MemdirRequiredSectionDefinition {
-  labelKey: SettingsTranslationKey;
-  defaultLabel: string;
-}
-
-interface MemdirWriteGuideDefinition {
-  descriptionKey: SettingsTranslationKey;
-  defaultDescription: string;
-  topicPlaceholderKey: SettingsTranslationKey;
-  defaultTopicPlaceholder: string;
-  placeholderKey: SettingsTranslationKey;
-  defaultPlaceholder: string;
-  requiredSections: MemdirRequiredSectionDefinition[];
-  noteKey: SettingsTranslationKey;
-  defaultNote: string;
-}
-
-interface MemdirWriteGuide {
-  description: string;
-  topicPlaceholder: string;
-  placeholder: string;
-  requiredSections: string[];
-  note: string;
-}
-
-const MEMDIR_REQUIRED_SECTIONS = {
-  why: {
-    labelKey: "settings.memory.memdir.requiredSection.why",
-    defaultLabel: "Why",
-  },
-  howToApply: {
-    labelKey: "settings.memory.memdir.requiredSection.howToApply",
-    defaultLabel: "How to apply",
-  },
-  absoluteDate: {
-    labelKey: "settings.memory.memdir.requiredSection.absoluteDate",
-    defaultLabel: "绝对日期",
-  },
-} satisfies Record<string, MemdirRequiredSectionDefinition>;
-
-const MEMDIR_WRITE_GUIDE_DEFINITIONS: Record<
-  MemdirMemoryType,
-  MemdirWriteGuideDefinition
-> = {
-  user: {
-    descriptionKey: "settings.memory.memdir.guide.user.description",
-    defaultDescription:
-      "记录用户背景、长期偏好和协作方式，帮助 Lime 调整解释深浅与默认协作节奏。",
-    topicPlaceholderKey: "settings.memory.memdir.guide.user.topicPlaceholder",
-    defaultTopicPlaceholder:
-      "可选：topic，例如 communication-style、domain-background",
-    placeholderKey: "settings.memory.memdir.guide.user.placeholder",
-    defaultPlaceholder:
-      "例如：用户熟悉 Rust，但第一次接触这个前端；解释前先给结论，再给必要上下文。",
-    requiredSections: [],
-    noteKey: "settings.memory.memdir.guide.user.note",
-    defaultNote: "适合沉淀长期稳定的人物画像，不要记录临时任务状态。",
-  },
-  feedback: {
-    descriptionKey: "settings.memory.memdir.guide.feedback.description",
-    defaultDescription:
-      "沉淀被反复验证有效的做法与明确要避免的模式，避免同一个纠偏再次发生。",
-    topicPlaceholderKey:
-      "settings.memory.memdir.guide.feedback.topicPlaceholder",
-    defaultTopicPlaceholder: "可选：topic，例如 workflow、testing-policy",
-    placeholderKey: "settings.memory.memdir.guide.feedback.placeholder",
-    defaultPlaceholder:
-      "Why:\n- 这条反馈为什么成立，避免了什么问题\n\nHow to apply:\n- 以后什么时候执行\n- 有哪些边界条件",
-    requiredSections: [
-      MEMDIR_REQUIRED_SECTIONS.why,
-      MEMDIR_REQUIRED_SECTIONS.howToApply,
-    ],
-    noteKey: "settings.memory.memdir.guide.feedback.note",
-    defaultNote: "反馈记忆必须说明原因和使用方式，只写一句结论很容易失真。",
-  },
-  project: {
-    descriptionKey: "settings.memory.memdir.guide.project.description",
-    defaultDescription:
-      "补足代码之外的项目背景、里程碑、冻结窗口和协作关系，帮助下一次快速进入上下文。",
-    topicPlaceholderKey:
-      "settings.memory.memdir.guide.project.topicPlaceholder",
-    defaultTopicPlaceholder: "可选：topic，例如 release-window、ownership-map",
-    placeholderKey: "settings.memory.memdir.guide.project.placeholder",
-    defaultPlaceholder:
-      "Why:\n- 这个背景/约束为什么重要\n\nHow to apply:\n- 这会如何影响当前实现或交付\n- 绝对日期：2026-04-15 / 2026-04-15 14:00",
-    requiredSections: [
-      MEMDIR_REQUIRED_SECTIONS.why,
-      MEMDIR_REQUIRED_SECTIONS.howToApply,
-      MEMDIR_REQUIRED_SECTIONS.absoluteDate,
-    ],
-    noteKey: "settings.memory.memdir.guide.project.note",
-    defaultNote:
-      "项目记忆不要写“今天/明天/下周”，请改成绝对日期，避免过期后误导后续决策。",
-  },
-  reference: {
-    descriptionKey: "settings.memory.memdir.guide.reference.description",
-    defaultDescription:
-      "记录外部文档、工单、监控、知识库或系统入口，方便下次知道去哪里查最新事实。",
-    topicPlaceholderKey:
-      "settings.memory.memdir.guide.reference.topicPlaceholder",
-    defaultTopicPlaceholder: "可选：topic，例如 grafana-dashboard、runbook",
-    placeholderKey: "settings.memory.memdir.guide.reference.placeholder",
-    defaultPlaceholder:
-      "例如：发布值班看板在 Grafana /d/release-ops；改协议前先查 release runbook 第 3 节。",
-    requiredSections: [],
-    noteKey: "settings.memory.memdir.guide.reference.note",
-    defaultNote:
-      "参考记忆应优先保存事实源入口，而不是把外部文档内容整段复制进来。",
-  },
-};
-
-const PROJECT_RELATIVE_DATE_TOKENS = [
-  "今天",
-  "明天",
-  "昨天",
-  "后天",
-  "今晚",
-  "今早",
-  "本周",
-  "下周",
-  "上周",
-  "本月",
-  "下个月",
-  "上个月",
-  "本季度",
-  "下季度",
-  "上季度",
-];
-
-const PROJECT_RELATIVE_DATE_ASCII_TOKENS = [
-  "today",
-  "tomorrow",
-  "yesterday",
-  "tonight",
-  "this week",
-  "next week",
-  "last week",
-  "this month",
-  "next month",
-  "last month",
-  "this quarter",
-  "next quarter",
-  "last quarter",
-];
 
 function normalizeProfile(profile?: MemoryProfileConfig): MemoryProfileConfig {
   return {
@@ -401,13 +107,13 @@ function normalizeSources(sources?: MemorySourcesConfig): MemorySourcesConfig {
   return {
     managed_policy_path: sources?.managed_policy_path ?? undefined,
     project_memory_paths:
-      sources?.project_memory_paths?.length &&
-      sources.project_memory_paths.filter((item) => item.trim().length > 0)
+      sources?.project_memory_paths?.filter((item) => item.trim().length > 0)
+        .length
         ? sources.project_memory_paths
         : [".lime/AGENTS.md"],
     project_rule_dirs:
-      sources?.project_rule_dirs?.length &&
-      sources.project_rule_dirs.filter((item) => item.trim().length > 0)
+      sources?.project_rule_dirs?.filter((item) => item.trim().length > 0)
+        .length
         ? sources.project_rule_dirs
         : [".agents/rules"],
     user_memory_path: sources?.user_memory_path ?? undefined,
@@ -434,6 +140,24 @@ function normalizeResolve(resolve?: MemoryResolveConfig): MemoryResolveConfig {
   };
 }
 
+function normalizeEmbedding(
+  embedding?: MemoryEmbeddingConfig,
+): MemoryEmbeddingConfig {
+  const provider = embedding?.provider ?? "auto";
+  const defaultModel =
+    provider === "local_onnx" || provider === "auto"
+      ? "all-MiniLM-L6-v2"
+      : provider === "provider" && embedding?.provider_id === "ollama"
+        ? "nomic-embed-text"
+        : "text-embedding-3-small";
+
+  return {
+    provider,
+    provider_id: embedding?.provider_id ?? undefined,
+    model: embedding?.model?.trim() || defaultModel,
+  };
+}
+
 function normalizeMemoryConfig(memory?: MemoryConfig): MemoryConfig {
   return {
     enabled: memory?.enabled ?? true,
@@ -444,490 +168,58 @@ function normalizeMemoryConfig(memory?: MemoryConfig): MemoryConfig {
     sources: normalizeSources(memory?.sources),
     auto: normalizeAuto(memory?.auto),
     resolve: normalizeResolve(memory?.resolve),
+    embedding: normalizeEmbedding(memory?.embedding),
   };
 }
 
-function parseLines(input: string): string[] {
-  return input
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
+function resolveProviderChoice(
+  embedding?: MemoryEmbeddingConfig,
+): EmbeddingProviderChoice {
+  const normalized = normalizeEmbedding(embedding);
+  if (
+    normalized.provider === "provider" &&
+    normalized.provider_id === "ollama"
+  ) {
+    return "ollama";
+  }
+  if (
+    normalized.provider === "auto" ||
+    normalized.provider === "local_onnx" ||
+    normalized.provider === "openai_api" ||
+    normalized.provider === "disabled"
+  ) {
+    return normalized.provider;
+  }
+  return "auto";
 }
 
-function mapMemdirTypeOptions(
-  t: TFunction<"settings">,
-): MemdirMemoryTypeOption[] {
-  return MEMDIR_MEMORY_TYPE_OPTION_DEFINITIONS.map((definition) => ({
-    value: definition.value,
-    label: memoryI18n(t, definition.labelKey, definition.defaultLabel),
-    description: memoryI18n(
-      t,
-      definition.descriptionKey,
-      definition.defaultDescription,
-    ),
-  }));
-}
+function buildEmbeddingConfig(
+  choice: EmbeddingProviderChoice,
+): MemoryEmbeddingConfig {
+  const definition =
+    PROVIDER_CHOICES.find((item) => item.value === choice) ??
+    PROVIDER_CHOICES[0];
 
-function resolveMemdirTypeLabel(
-  t: TFunction<"settings">,
-  type?: MemdirMemoryType | null,
-): string {
-  const definition = MEMDIR_MEMORY_TYPE_OPTION_DEFINITIONS.find(
-    (option) => option.value === type,
-  );
-  return definition
-    ? memoryI18n(t, definition.labelKey, definition.defaultLabel)
-    : memoryI18n(t, "settings.memory.source.bucket.uncategorized", "未分类");
-}
-
-function resolveMemdirWriteGuide(
-  t: TFunction<"settings">,
-  type: MemdirMemoryType,
-): MemdirWriteGuide {
-  const definition = MEMDIR_WRITE_GUIDE_DEFINITIONS[type];
   return {
-    description: memoryI18n(
-      t,
-      definition.descriptionKey,
-      definition.defaultDescription,
-    ),
-    topicPlaceholder: memoryI18n(
-      t,
-      definition.topicPlaceholderKey,
-      definition.defaultTopicPlaceholder,
-    ),
-    placeholder: memoryI18n(
-      t,
-      definition.placeholderKey,
-      definition.defaultPlaceholder,
-    ),
-    requiredSections: definition.requiredSections.map((section) =>
-      memoryI18n(t, section.labelKey, section.defaultLabel),
-    ),
-    note: memoryI18n(t, definition.noteKey, definition.defaultNote),
+    provider: definition.runtimeProvider,
+    provider_id: definition.providerId,
+    model: definition.model,
   };
 }
 
-function resolveSourceBucketLabel(
-  t: TFunction<"settings">,
-  bucket?: string | null,
-): string {
-  switch (bucket) {
-    case "managed":
-      return memoryI18n(t, "settings.memory.source.bucket.managed", "托管记忆");
-    case "user":
-      return memoryI18n(t, "settings.memory.source.bucket.user", "用户记忆");
-    case "project":
-      return memoryI18n(t, "settings.memory.source.bucket.project", "项目记忆");
-    case "local":
-      return memoryI18n(t, "settings.memory.source.bucket.local", "本地记忆");
-    case "rules":
-      return memoryI18n(t, "settings.memory.source.bucket.rules", "项目规则");
-    case "auto":
-      return memoryI18n(
-        t,
-        "settings.memory.source.bucket.auto",
-        "记忆目录（memdir）",
-      );
-    case "durable":
-      return "/memories";
-    case "additional":
-      return memoryI18n(
-        t,
-        "settings.memory.source.bucket.additional",
-        "附加目录",
-      );
-    default:
-      return (
-        bucket ||
-        memoryI18n(t, "settings.memory.source.bucket.uncategorized", "未分类")
-      );
+function formatCount(value?: number | null): string {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "--";
   }
-}
-
-function formatRelativeTimeLabel(
-  t: TFunction<"settings">,
-  timestamp?: number | null,
-): string {
-  if (!timestamp) {
-    return memoryI18n(t, "settings.memory.source.time.unknown", "未知时间");
-  }
-  const normalized =
-    timestamp > 1_000_000_000_000 ? timestamp : timestamp * 1000;
-  const date = new Date(normalized);
-  if (Number.isNaN(date.getTime())) {
-    return memoryI18n(t, "settings.memory.source.time.unknown", "未知时间");
-  }
-
-  const diffMs = Date.now() - date.getTime();
-  const diffMinutes = Math.floor(diffMs / 60_000);
-  if (diffMinutes < 1) {
-    return memoryI18n(t, "settings.memory.source.time.justNow", "刚刚");
-  }
-  if (diffMinutes < 60) {
-    return memoryI18n(
-      t,
-      "settings.memory.source.time.minutesAgo",
-      "{{count}} 分钟前",
-      { count: diffMinutes },
-    );
-  }
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) {
-    return memoryI18n(
-      t,
-      "settings.memory.source.time.hoursAgo",
-      "{{count}} 小时前",
-      { count: diffHours },
-    );
-  }
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) {
-    return memoryI18n(
-      t,
-      "settings.memory.source.time.daysAgo",
-      "{{count}} 天前",
-      { count: diffDays },
-    );
-  }
-  return `${date.getMonth() + 1}/${date.getDate()} ${date
-    .getHours()
-    .toString()
-    .padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
-}
-
-function normalizeStructuredLine(line: string): string {
-  return line
-    .trim()
-    .replace(/^[#*\-\s]+/u, "")
-    .replace(/：/gu, ":")
-    .toLowerCase();
-}
-
-function noteHasSection(note: string, headings: string[]): boolean {
-  return note.split("\n").some((line) => {
-    const normalized = normalizeStructuredLine(line);
-    return headings.some((heading) => normalized.startsWith(heading));
-  });
-}
-
-function containsAsciiPhrase(text: string, phrase: string): boolean {
-  let searchStart = 0;
-  while (searchStart < text.length) {
-    const index = text.indexOf(phrase, searchStart);
-    if (index < 0) {
-      return false;
-    }
-    const before = index === 0 ? "" : text[index - 1];
-    const after =
-      index + phrase.length >= text.length ? "" : text[index + phrase.length];
-    const beforeOk = before === "" || !/[a-z0-9_]/i.test(before);
-    const afterOk = after === "" || !/[a-z0-9_]/i.test(after);
-    if (beforeOk && afterOk) {
-      return true;
-    }
-    searchStart = index + phrase.length;
-  }
-  return false;
-}
-
-function findProjectRelativeDateToken(note: string): string | null {
-  for (const token of PROJECT_RELATIVE_DATE_TOKENS) {
-    if (note.includes(token)) {
-      return token;
-    }
-  }
-
-  const asciiNote = note.replace(/：/gu, ":").toLowerCase();
-  for (const token of PROJECT_RELATIVE_DATE_ASCII_TOKENS) {
-    if (containsAsciiPhrase(asciiNote, token)) {
-      return token;
-    }
-  }
-
-  return null;
-}
-
-function validateMemdirNote(
-  t: TFunction<"settings">,
-  note: string,
-  memoryType: MemdirMemoryType,
-): string | null {
-  if (memoryType === "feedback" || memoryType === "project") {
-    if (!noteHasSection(note, ["why", "为什么", "原因"])) {
-      return memoryI18n(
-        t,
-        "settings.memory.memdir.validation.missingWhy",
-        "反馈/项目记忆必须包含 `Why:` 段落。",
-      );
-    }
-    if (!noteHasSection(note, ["how to apply", "如何使用", "如何应用"])) {
-      return memoryI18n(
-        t,
-        "settings.memory.memdir.validation.missingHowToApply",
-        "反馈/项目记忆必须包含 `How to apply:` 段落。",
-      );
-    }
-  }
-
-  if (memoryType === "project") {
-    const relativeDateToken = findProjectRelativeDateToken(note);
-    if (relativeDateToken) {
-      return memoryI18n(
-        t,
-        "settings.memory.memdir.validation.relativeDate",
-        "项目记忆不能使用相对时间词“{{token}}”，请改成绝对日期，例如 2026-04-15。",
-        { token: relativeDateToken },
-      );
-    }
-  }
-
-  return null;
-}
-
-function resolveActionErrorMessage(error: unknown, fallback: string): string {
-  if (typeof error === "string" && error.trim()) {
-    return error;
-  }
-  if (error instanceof Error && error.message.trim()) {
-    return error.message;
-  }
-  return fallback;
-}
-
-function formatMemdirCleanupMessage(
-  t: TFunction<"settings">,
-  result: {
-    updated_files: number;
-    curated_topic_files: number;
-    removed_duplicate_links: number;
-    dropped_missing_links: number;
-    removed_duplicate_notes: number;
-    trimmed_notes: number;
-  },
-): string {
-  const touchedCount =
-    result.curated_topic_files +
-    result.removed_duplicate_links +
-    result.dropped_missing_links +
-    result.removed_duplicate_notes +
-    result.trimmed_notes;
-
-  if (result.updated_files === 0 || touchedCount === 0) {
-    return memoryI18n(
-      t,
-      "settings.memory.memdir.message.cleanupAlreadyClean",
-      "memdir 已经是干净状态，无需整理",
-    );
-  }
-
-  return memoryI18n(
-    t,
-    "settings.memory.memdir.message.cleanupDone",
-    "已整理 memdir：更新 {{updated}} 个文件，收口 {{topics}} 个 topic，清掉 {{touched}} 处重复或过期内容",
-    {
-      updated: result.updated_files,
-      topics: result.curated_topic_files,
-      touched:
-        result.removed_duplicate_links +
-        result.dropped_missing_links +
-        result.removed_duplicate_notes +
-        result.trimmed_notes,
-    },
-  );
-}
-
-interface MultiSelectSectionProps {
-  title: string;
-  subtitle?: string;
-  tipAriaLabel?: string;
-  options: ProfileOption[];
-  value: string[];
-  onToggle: (value: string) => void;
-  multiple?: boolean;
-  className?: string;
-  selectedText: string;
-  multiSelectText: string;
-  selectedSingleText: string;
-  pendingSingleText: string;
-}
-
-interface MemoryPanelProps {
-  icon: LucideIcon;
-  title: string;
-  description?: string;
-  tipAriaLabel?: string;
-  aside?: ReactNode;
-  className?: string;
-  children: ReactNode;
-}
-
-const INPUT_CLASS_NAME =
-  "w-full rounded-[16px] border border-slate-200 bg-slate-50/70 px-3.5 py-2.5 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:bg-white";
-const TEXTAREA_CLASS_NAME = `${INPUT_CLASS_NAME} min-h-24`;
-const TOGGLE_ROW_CLASS_NAME =
-  "flex items-center justify-between rounded-[18px] border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm text-slate-700";
-const ACTIVE_OPTION_BUTTON_CLASS =
-  "border-emerald-200 bg-[linear-gradient(135deg,rgba(240,253,250,0.98)_0%,rgba(236,253,245,0.96)_52%,rgba(224,242,254,0.95)_100%)] text-slate-800 shadow-sm shadow-emerald-950/10";
-const PRIMARY_ACTION_BUTTON_CLASS =
-  "rounded-full border border-emerald-200 bg-[linear-gradient(135deg,#0ea5e9_0%,#14b8a6_52%,#10b981_100%)] px-4 py-2 text-sm font-medium text-white shadow-sm shadow-emerald-950/15 transition hover:opacity-95 disabled:opacity-60";
-const PRIMARY_INLINE_BUTTON_CLASS =
-  "rounded-full border border-emerald-200 bg-[linear-gradient(135deg,#0ea5e9_0%,#14b8a6_52%,#10b981_100%)] px-3 py-1.5 text-xs font-medium text-white shadow-sm shadow-emerald-950/15 transition hover:opacity-95 disabled:opacity-60";
-
-function MemoryPanel({
-  icon: Icon,
-  title,
-  description,
-  tipAriaLabel,
-  aside,
-  className,
-  children,
-}: MemoryPanelProps) {
-  return (
-    <article
-      className={cn(
-        "rounded-[26px] border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-950/5",
-        className,
-      )}
-    >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">
-            <Icon className="h-4 w-4 text-sky-600" />
-            {title}
-            {description ? (
-              <WorkbenchInfoTip
-                ariaLabel={tipAriaLabel ?? `${title}说明`}
-                content={description}
-                tone="slate"
-              />
-            ) : null}
-          </div>
-        </div>
-        {aside ? (
-          <div className="flex flex-wrap items-center gap-2">{aside}</div>
-        ) : null}
-      </div>
-
-      <div className="mt-5">{children}</div>
-    </article>
-  );
-}
-
-function MultiSelectSection({
-  title,
-  subtitle,
-  tipAriaLabel,
-  options,
-  value,
-  onToggle,
-  multiple = true,
-  className,
-  selectedText,
-  multiSelectText,
-  selectedSingleText,
-  pendingSingleText,
-}: MultiSelectSectionProps) {
-  const badgeText = multiple
-    ? value.length > 0
-      ? selectedText.replace("{{count}}", String(value.length))
-      : multiSelectText
-    : value.length > 0
-      ? selectedSingleText
-      : pendingSingleText;
-
-  return (
-    <article
-      className={cn(
-        "rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4",
-        className,
-      )}
-    >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
-            {subtitle ? (
-              <WorkbenchInfoTip
-                ariaLabel={tipAriaLabel ?? `${title}说明`}
-                content={subtitle}
-                tone="slate"
-              />
-            ) : null}
-          </div>
-        </div>
-        <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500">
-          {badgeText}
-        </span>
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2.5">
-        {options.map((option) => {
-          const selected = value.includes(option.value);
-          return (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onToggle(option.value)}
-              className={cn(
-                "rounded-full border px-3.5 py-2 text-sm transition shadow-sm",
-                selected
-                  ? ACTIVE_OPTION_BUTTON_CLASS
-                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
-              )}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
-    </article>
-  );
-}
-
-function SourceStatusPill({
-  loaded,
-  exists,
-}: {
-  loaded: boolean;
-  exists: boolean;
-}) {
-  const { t } = useTranslation("settings");
-  return (
-    <span
-      className={cn(
-        "rounded-full border px-2 py-0.5 text-[10px] font-medium",
-        loaded
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : exists
-            ? "border-amber-200 bg-amber-50 text-amber-700"
-            : "border-slate-200 bg-slate-100 text-slate-500",
-      )}
-    >
-      {loaded
-        ? memoryI18n(t, "settings.memory.source.status.loaded", "已加载")
-        : exists
-          ? memoryI18n(t, "settings.memory.source.status.missed", "存在未命中")
-          : memoryI18n(t, "settings.memory.source.status.missing", "未发现")}
-    </span>
-  );
+  return new Intl.NumberFormat().format(value);
 }
 
 function LoadingSkeleton() {
   return (
-    <div className="space-y-6 pb-8">
-      <div className="h-[176px] animate-pulse rounded-[26px] border border-slate-200/80 bg-white" />
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.92fr)]">
-        <div className="h-[420px] animate-pulse rounded-[26px] border border-slate-200/80 bg-white" />
-        <div className="space-y-6">
-          <div className="h-[240px] animate-pulse rounded-[26px] border border-slate-200/80 bg-white" />
-          <div className="h-[220px] animate-pulse rounded-[26px] border border-slate-200/80 bg-white" />
-        </div>
-      </div>
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.18fr)_minmax(0,0.82fr)]">
-        <div className="h-[420px] animate-pulse rounded-[26px] border border-slate-200/80 bg-white" />
-        <div className="h-[420px] animate-pulse rounded-[26px] border border-slate-200/80 bg-white" />
-      </div>
+    <div className="mx-auto max-w-[820px] space-y-5 pb-8">
+      <div className="h-[88px] animate-pulse rounded-md border border-slate-200 bg-white" />
+      <div className="h-[160px] animate-pulse rounded-md border border-slate-200 bg-white" />
+      <div className="h-[220px] animate-pulse rounded-md border border-slate-200 bg-white" />
     </div>
   );
 }
@@ -941,81 +233,34 @@ export function MemorySettings() {
   const [snapshot, setSnapshot] = useState<MemoryConfig>(() =>
     normalizeMemoryConfig(),
   );
+  const [stats, setStats] = useState<UnifiedMemoryStatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [loadingLayerMetrics, setLoadingLayerMetrics] = useState(false);
-  const [loadingSourceState, setLoadingSourceState] = useState(false);
-  const [savingAutoNote, setSavingAutoNote] = useState(false);
-  const [scaffoldingTarget, setScaffoldingTarget] =
-    useState<RuntimeAgentsTemplateTarget | null>(null);
-  const [ensuringGitignore, setEnsuringGitignore] = useState(false);
-  const [layerMetrics, setLayerMetrics] = useState<LayerMetricsResult | null>(
-    null,
-  );
-  const [effectiveSources, setEffectiveSources] =
-    useState<EffectiveMemorySourcesResponse | null>(null);
-  const [autoIndex, setAutoIndex] = useState<AutoMemoryIndexResponse | null>(
-    null,
-  );
-  const [autoTopic, setAutoTopic] = useState("");
-  const [autoNote, setAutoNote] = useState("");
-  const [autoMemoryType, setAutoMemoryType] =
-    useState<MemdirMemoryType>("project");
-  const [scaffoldingMemdir, setScaffoldingMemdir] = useState(false);
-  const [cleaningMemdir, setCleaningMemdir] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<MemorySettingsTab>("overview");
 
-  const loadLayerMetrics = useCallback(async () => {
-    setLoadingLayerMetrics(true);
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true);
     try {
-      const [unifiedStats, sources, workingView, extractionStatus] =
-        await Promise.all([
-          getUnifiedMemoryStats(),
-          getContextMemoryEffectiveSources().catch(() => null),
-          getContextWorkingMemory(undefined, 24).catch(() => null),
-          getContextMemoryExtractionStatus().catch(() => null),
-        ]);
-      const teamSnapshotCount =
-        typeof window !== "undefined"
-          ? listTeamMemorySnapshots(window.localStorage).length
-          : 0;
-
-      setLayerMetrics(
-        buildLayerMetrics({
-          rulesSourceCount: sources?.loaded_sources ?? 0,
-          workingEntryCount: workingView?.total_entries ?? 0,
-          durableEntryCount: unifiedStats.total_entries,
-          teamSnapshotCount,
-          compactionCount: extractionStatus?.recent_compactions.length ?? 0,
-        }),
-      );
+      setStats(await getUnifiedMemoryStats());
     } catch (error) {
-      console.error("加载记忆命中层状态失败:", error);
+      console.error("加载记忆统计失败:", error);
+      setStats(null);
     } finally {
-      setLoadingLayerMetrics(false);
-    }
-  }, []);
-
-  const loadSourceState = useCallback(async () => {
-    setLoadingSourceState(true);
-    try {
-      const [sources, index] = await Promise.all([
-        getContextMemoryEffectiveSources().catch(() => null),
-        getContextMemoryAutoIndex().catch(() => null),
-      ]);
-      setEffectiveSources(sources);
-      setAutoIndex(index);
-    } finally {
-      setLoadingSourceState(false);
+      setStatsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    const load = async () => {
+    let disposed = false;
+
+    async function load() {
       setLoading(true);
       try {
         const nextConfig = await getConfig();
+        if (disposed) {
+          return;
+        }
         const nextMemory = normalizeMemoryConfig(nextConfig.memory);
         setConfig(nextConfig);
         setDraft(nextMemory);
@@ -1023,443 +268,70 @@ export function MemorySettings() {
       } catch (error) {
         console.error("加载记忆设置失败:", error);
       } finally {
-        setLoading(false);
+        if (!disposed) {
+          setLoading(false);
+        }
       }
+    }
+
+    void load();
+    void loadStats();
+
+    return () => {
+      disposed = true;
     };
-
-    load();
-  }, []);
-
-  useEffect(() => {
-    loadLayerMetrics();
-    loadSourceState();
-  }, [loadLayerMetrics, loadSourceState]);
+  }, [loadStats]);
 
   const dirty = useMemo(
     () => JSON.stringify(draft) !== JSON.stringify(snapshot),
     [draft, snapshot],
   );
-  const mapProfileOptions = useCallback(
-    (definitions: ProfileOptionDefinition[]): ProfileOption[] =>
-      definitions.map((definition) => ({
-        value: definition.value,
-        label: (t as MemorySettingsTranslate)(
-          definition.labelKey,
-          definition.defaultLabel,
-        ),
-      })),
-    [t],
-  );
-  const statusOptions = useMemo(
-    () => mapProfileOptions(STATUS_OPTION_DEFINITIONS),
-    [mapProfileOptions],
-  );
-  const strengthOptions = useMemo(
-    () => mapProfileOptions(STRENGTH_OPTION_DEFINITIONS),
-    [mapProfileOptions],
-  );
-  const explanationStyleOptions = useMemo(
-    () => mapProfileOptions(EXPLANATION_STYLE_OPTION_DEFINITIONS),
-    [mapProfileOptions],
-  );
-  const challengeOptions = useMemo(
-    () => mapProfileOptions(CHALLENGE_OPTION_DEFINITIONS),
-    [mapProfileOptions],
-  );
-  const memdirTypeOptions = useMemo(() => mapMemdirTypeOptions(t), [t]);
+  const providerChoice = resolveProviderChoice(draft.embedding);
+  const activeProvider =
+    PROVIDER_CHOICES.find((item) => item.value === providerChoice) ??
+    PROVIDER_CHOICES[0];
+  const embeddingConfig = normalizeEmbedding(draft.embedding);
+  const vectorSearchEnabled =
+    draft.enabled && embeddingConfig.provider !== "disabled";
+  const indexedCount = stats?.total_entries ?? stats?.memory_count ?? null;
+  const cachedEmbeddingCount = vectorSearchEnabled ? indexedCount : 0;
 
-  const toggleMulti = (
-    key: "strengths" | "explanation_style" | "challenge_preference",
-    option: string,
-  ) => {
-    setDraft((prev) => {
-      const profile = normalizeProfile(prev.profile);
-      const current = profile[key] || [];
-      const exists = current.includes(option);
-      return {
-        ...prev,
-        profile: {
-          ...profile,
-          [key]: exists
-            ? current.filter((item) => item !== option)
-            : [...current, option],
-        },
-      };
-    });
-  };
-
-  const setStatus = (value: string) => {
-    setDraft((prev) => ({
-      ...prev,
-      profile: {
-        ...normalizeProfile(prev.profile),
-        current_status: value,
-      },
+  const handleProviderChange = (choice: EmbeddingProviderChoice) => {
+    setDraft((previous) => ({
+      ...previous,
+      embedding: buildEmbeddingConfig(choice),
     }));
   };
 
   const handleCancel = () => {
     setDraft(snapshot);
-    setMessage(t("settings.memory.message.restored"));
-    setTimeout(() => setMessage(null), 2500);
+    setMessage(memoryT(t, "settings.memory.message.restored"));
+    window.setTimeout(() => setMessage(null), 2500);
   };
 
   const handleSave = async () => {
-    if (!config) return;
+    if (!config) {
+      return;
+    }
     setSaving(true);
     try {
       const updatedConfig: Config = {
         ...config,
-        memory: draft,
+        memory: normalizeMemoryConfig(draft),
       };
       await saveConfig(updatedConfig);
       setConfig(updatedConfig);
-      setSnapshot(draft);
-      setMessage(t("settings.memory.message.saved"));
-      setTimeout(() => setMessage(null), 2500);
-      await loadSourceState();
+      setSnapshot(updatedConfig.memory ?? normalizeMemoryConfig());
+      setDraft(updatedConfig.memory ?? normalizeMemoryConfig());
+      setMessage(memoryT(t, "settings.memory.message.saved"));
+      window.setTimeout(() => setMessage(null), 2500);
+      await loadStats();
     } catch (error) {
       console.error("保存记忆设置失败:", error);
-      setMessage(t("settings.memory.message.saveFailed"));
-      setTimeout(() => setMessage(null), 2500);
+      setMessage(memoryT(t, "settings.memory.message.saveFailed"));
+      window.setTimeout(() => setMessage(null), 2500);
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleToggleAutoImmediately = async () => {
-    const current = normalizeAuto(draft.auto).enabled ?? true;
-    const next = !current;
-    try {
-      const result = await toggleContextMemoryAuto(next);
-      setDraft((prev) => ({
-        ...prev,
-        auto: {
-          ...normalizeAuto(prev.auto),
-          enabled: result.enabled,
-        },
-      }));
-      setSnapshot((prev) => ({
-        ...prev,
-        auto: {
-          ...normalizeAuto(prev.auto),
-          enabled: result.enabled,
-        },
-      }));
-      setMessage(
-        result.enabled
-          ? memoryI18n(
-              t,
-              "settings.memory.memdir.message.autoEnabled",
-              "记忆目录已开启",
-            )
-          : memoryI18n(
-              t,
-              "settings.memory.memdir.message.autoDisabled",
-              "记忆目录已关闭",
-            ),
-      );
-      setTimeout(() => setMessage(null), 2500);
-      await loadSourceState();
-    } catch (error) {
-      console.error("切换记忆目录失败:", error);
-      setMessage(
-        memoryI18n(
-          t,
-          "settings.memory.memdir.message.toggleFailed",
-          "切换记忆目录失败",
-        ),
-      );
-      setTimeout(() => setMessage(null), 2500);
-    }
-  };
-
-  const handleUpdateAutoNote = async () => {
-    const note = autoNote.trim();
-    if (!note) {
-      setMessage(
-        memoryI18n(
-          t,
-          "settings.memory.memdir.message.emptyNote",
-          "请先输入要保存的 memdir 内容",
-        ),
-      );
-      setTimeout(() => setMessage(null), 2500);
-      return;
-    }
-
-    const validationError = validateMemdirNote(t, note, autoMemoryType);
-    if (validationError) {
-      setMessage(validationError);
-      setTimeout(() => setMessage(null), 3000);
-      return;
-    }
-
-    setSavingAutoNote(true);
-    try {
-      const index = await updateContextMemoryAutoNote(
-        note,
-        autoTopic.trim() || undefined,
-        undefined,
-        autoMemoryType,
-      );
-      setAutoIndex(index);
-      setAutoNote("");
-      setMessage(
-        memoryI18n(
-          t,
-          "settings.memory.memdir.message.noteWritten",
-          "已写入 memdir",
-        ),
-      );
-      setTimeout(() => setMessage(null), 2500);
-    } catch (error) {
-      console.error("写入 memdir 失败:", error);
-      setMessage(
-        resolveActionErrorMessage(
-          error,
-          memoryI18n(
-            t,
-            "settings.memory.memdir.message.writeFailed",
-            "写入 memdir 失败",
-          ),
-        ),
-      );
-      setTimeout(() => setMessage(null), 3500);
-    } finally {
-      setSavingAutoNote(false);
-    }
-  };
-
-  const handleScaffoldMemdir = async () => {
-    const workingDir = effectiveSources?.working_dir?.trim() || undefined;
-    if (!workingDir) {
-      setMessage(
-        memoryI18n(
-          t,
-          "settings.memory.memdir.message.workspaceMissingScaffold",
-          "当前未获取到 workspace 路径，暂无法初始化 memdir",
-        ),
-      );
-      setTimeout(() => setMessage(null), 2500);
-      return;
-    }
-
-    setScaffoldingMemdir(true);
-    try {
-      const result = await scaffoldContextMemdir(workingDir, false);
-      const createdCount = result.files.filter(
-        (file) => file.status === "created" || file.status === "overwritten",
-      ).length;
-      setMessage(
-        createdCount > 0
-          ? memoryI18n(
-              t,
-              "settings.memory.memdir.message.scaffolded",
-              "已初始化 memdir：{{path}}",
-              { path: result.root_dir },
-            )
-          : memoryI18n(
-              t,
-              "settings.memory.memdir.message.alreadyExists",
-              "memdir 已存在：{{path}}",
-              { path: result.root_dir },
-            ),
-      );
-      setTimeout(() => setMessage(null), 3000);
-      const [nextIndex, nextSources] = await Promise.all([
-        getContextMemoryAutoIndex().catch(() => null),
-        getContextMemoryEffectiveSources().catch(() => null),
-      ]);
-      if (nextIndex) {
-        setAutoIndex(nextIndex);
-      }
-      if (nextSources) {
-        setEffectiveSources(nextSources);
-      }
-    } catch (error) {
-      console.error("初始化 memdir 失败:", error);
-      setMessage(
-        memoryI18n(
-          t,
-          "settings.memory.memdir.message.scaffoldFailed",
-          "初始化 memdir 失败",
-        ),
-      );
-      setTimeout(() => setMessage(null), 2500);
-    } finally {
-      setScaffoldingMemdir(false);
-    }
-  };
-
-  const handleCleanupMemdir = async () => {
-    const workingDir = effectiveSources?.working_dir?.trim() || undefined;
-    if (!workingDir) {
-      setMessage(
-        memoryI18n(
-          t,
-          "settings.memory.memdir.message.workspaceMissingCleanup",
-          "当前未获取到 workspace 路径，暂无法整理 memdir",
-        ),
-      );
-      setTimeout(() => setMessage(null), 2500);
-      return;
-    }
-
-    setCleaningMemdir(true);
-    try {
-      const result = await cleanupContextMemdir(workingDir);
-      setMessage(formatMemdirCleanupMessage(t, result));
-      setTimeout(() => setMessage(null), 3500);
-      const [nextIndex, nextSources] = await Promise.all([
-        getContextMemoryAutoIndex().catch(() => null),
-        getContextMemoryEffectiveSources().catch(() => null),
-      ]);
-      if (nextIndex) {
-        setAutoIndex(nextIndex);
-      }
-      if (nextSources) {
-        setEffectiveSources(nextSources);
-      }
-    } catch (error) {
-      console.error("整理 memdir 失败:", error);
-      setMessage(
-        resolveActionErrorMessage(
-          error,
-          memoryI18n(
-            t,
-            "settings.memory.memdir.message.cleanupFailed",
-            "整理 memdir 失败",
-          ),
-        ),
-      );
-      setTimeout(() => setMessage(null), 3000);
-    } finally {
-      setCleaningMemdir(false);
-    }
-  };
-
-  const handleScaffoldRuntimeAgentsTemplate = async (
-    target: RuntimeAgentsTemplateTarget,
-  ) => {
-    const workingDir = effectiveSources?.working_dir?.trim() || undefined;
-    const targetLabelMap: Record<RuntimeAgentsTemplateTarget, string> = {
-      global: memoryI18n(
-        t,
-        "settings.memory.source.templateTarget.global",
-        "全局",
-      ),
-      workspace: "Workspace",
-      workspace_local: memoryI18n(
-        t,
-        "settings.memory.source.templateTarget.workspaceLocal",
-        "本机私有",
-      ),
-    };
-
-    if (target !== "global" && !workingDir) {
-      setMessage(
-        memoryI18n(
-          t,
-          "settings.memory.source.message.workspaceMissingTemplate",
-          "当前未获取到 workspace 路径，暂无法生成{{target}}模板",
-          { target: targetLabelMap[target] },
-        ),
-      );
-      setTimeout(() => setMessage(null), 2500);
-      return;
-    }
-
-    setScaffoldingTarget(target);
-    try {
-      const result = await scaffoldRuntimeAgentsTemplate(
-        target,
-        workingDir,
-        false,
-      );
-      if (result.status === "exists") {
-        setMessage(
-          memoryI18n(
-            t,
-            "settings.memory.source.message.templateExists",
-            "{{target}}模板已存在，未覆盖：{{path}}",
-            { path: result.path, target: targetLabelMap[target] },
-          ),
-        );
-      } else {
-        setMessage(
-          memoryI18n(
-            t,
-            "settings.memory.source.message.templateCreated",
-            "已生成{{target}}模板：{{path}}",
-            { path: result.path, target: targetLabelMap[target] },
-          ),
-        );
-      }
-      setTimeout(() => setMessage(null), 3000);
-      await Promise.all([loadSourceState(), loadLayerMetrics()]);
-    } catch (error) {
-      console.error("生成运行时 AGENTS 模板失败:", error);
-      setMessage(
-        memoryI18n(
-          t,
-          "settings.memory.source.message.templateFailed",
-          "生成{{target}}模板失败",
-          { target: targetLabelMap[target] },
-        ),
-      );
-      setTimeout(() => setMessage(null), 2500);
-    } finally {
-      setScaffoldingTarget(null);
-    }
-  };
-
-  const handleEnsureWorkspaceLocalGitignore = async () => {
-    const workingDir = effectiveSources?.working_dir?.trim() || undefined;
-    if (!workingDir) {
-      setMessage(
-        memoryI18n(
-          t,
-          "settings.memory.source.message.workspaceMissingGitignore",
-          "当前未获取到 workspace 路径，暂无法更新 .gitignore",
-        ),
-      );
-      setTimeout(() => setMessage(null), 2500);
-      return;
-    }
-
-    setEnsuringGitignore(true);
-    try {
-      const result = await ensureWorkspaceLocalAgentsGitignore(workingDir);
-      const actionText =
-        result.status === "exists"
-          ? memoryI18n(
-              t,
-              "settings.memory.source.gitignore.exists",
-              "已存在，无需重复添加",
-            )
-          : memoryI18n(t, "settings.memory.source.gitignore.written", "已写入");
-      setMessage(
-        memoryI18n(
-          t,
-          "settings.memory.source.message.gitignoreUpdated",
-          "{{action}} .gitignore：{{path}}",
-          { action: actionText, path: result.path },
-        ),
-      );
-      setTimeout(() => setMessage(null), 3000);
-    } catch (error) {
-      console.error("更新 .gitignore 失败:", error);
-      setMessage(
-        memoryI18n(
-          t,
-          "settings.memory.source.message.gitignoreFailed",
-          "更新 .gitignore 失败",
-        ),
-      );
-      setTimeout(() => setMessage(null), 2500);
-    } finally {
-      setEnsuringGitignore(false);
     }
   };
 
@@ -1467,1666 +339,211 @@ export function MemorySettings() {
     return <LoadingSkeleton />;
   }
 
-  const profile = normalizeProfile(draft.profile);
-  const sourcesConfig = normalizeSources(draft.sources);
-  const autoConfig = normalizeAuto(draft.auto);
-  const resolveConfig = normalizeResolve(draft.resolve);
-  const profileAnsweredCount = [
-    profile.current_status,
-    profile.strengths?.length ? "strengths" : "",
-    profile.explanation_style?.length ? "explanation_style" : "",
-    profile.challenge_preference?.length ? "challenge_preference" : "",
-  ].filter(Boolean).length;
-  const profileCompletionPercent = Math.round((profileAnsweredCount / 4) * 100);
-  const readyLayerLabel = layerMetrics
-    ? `${layerMetrics.readyLayers}/${layerMetrics.totalLayers}`
-    : "--";
-  const sourceHitLabel = effectiveSources
-    ? `${effectiveSources.loaded_sources}/${effectiveSources.total_sources}`
-    : "--";
-  const autoStatusLabel = autoConfig.enabled
-    ? autoIndex?.entry_exists
-      ? t("settings.memory.status.initialized")
-      : t("settings.memory.status.pendingInit")
-    : t("settings.memory.status.disabled");
-  const profileDimensionCountText = t(
-    "settings.memory.hero.profileDimensionCount",
-  );
-  const memoryEnabledText = t("settings.memory.toggle.enabled");
-  const memoryDisabledText = t("settings.memory.toggle.disabled");
-  const memoryModeText = t("settings.memory.toggle.mode", {
-    mode: draft.enabled ? memoryEnabledText : memoryDisabledText,
-  });
-  const dirtyHintText = dirty
-    ? t("settings.memory.toggle.unsavedHint")
-    : t("settings.memory.toggle.syncedHint");
-  const questionBadgeTexts = {
-    selectedText: t("settings.memory.profile.badge.selectedCount"),
-    multiSelectText: t("settings.memory.profile.badge.multiSelect"),
-    selectedSingleText: t(
-      "settings.memory.profile.badge.selectedSingle",
-      "已选择",
-    ),
-    pendingSingleText: t(
-      "settings.memory.profile.badge.pendingSingle",
-      "待选择",
-    ),
-  };
-  const selectedMemdirGuide = resolveMemdirWriteGuide(t, autoMemoryType);
-  const configuredSourcePolicyCount =
-    (sourcesConfig.project_memory_paths || []).length +
-    (sourcesConfig.project_rule_dirs || []).length +
-    (resolveConfig.additional_dirs || []).length;
-  const memorySettingsTabs: Array<{
-    id: MemorySettingsTab;
-    label: string;
-    icon: LucideIcon;
-    countLabel: string;
-  }> = [
-    {
-      id: "overview",
-      label: memoryI18n(t, "settings.memory.tabs.overview", "概览"),
-      icon: Sparkles,
-      countLabel: `${profileCompletionPercent}%`,
-    },
-    {
-      id: "sourcePolicy",
-      label: memoryI18n(t, "settings.memory.tabs.sourcePolicy", "来源策略"),
-      icon: FolderTree,
-      countLabel: String(configuredSourcePolicyCount),
-    },
-    {
-      id: "memdir",
-      label: memoryI18n(t, "settings.memory.tabs.memdir", "记忆目录"),
-      icon: Database,
-      countLabel: String(autoIndex?.items?.length ?? 0),
-    },
-    {
-      id: "sourceHits",
-      label: memoryI18n(t, "settings.memory.tabs.sourceHits", "命中详情"),
-      icon: Files,
-      countLabel: sourceHitLabel,
-    },
-  ];
   const messageIsError = Boolean(
     message &&
-    /失败|失敗|失敗しました|실패|failed|cannot|can't|required|请先|必须|不能|必須|必要|絶対日付|절대 날짜|绝对日期/u.test(
-      message,
-    ),
+      /失败|失敗|실패|failed|error|cannot|can't/u.test(message.toLowerCase()),
   );
 
   return (
-    <div className="space-y-6 pb-8">
+    <div className="mx-auto max-w-[820px] space-y-5 pb-8">
       {message ? (
         <div
           className={cn(
-            "flex items-center gap-3 rounded-[20px] border px-4 py-3 text-sm shadow-sm shadow-slate-950/5",
+            "flex items-center gap-3 rounded-md border px-4 py-3 text-sm shadow-sm shadow-slate-950/5",
             messageIsError
-              ? "border-rose-200 bg-rose-50/90 text-rose-700"
-              : "border-emerald-200 bg-emerald-50/90 text-emerald-700",
+              ? "border-rose-200 bg-rose-50 text-rose-700"
+              : "border-emerald-200 bg-emerald-50 text-emerald-700",
           )}
         >
           {messageIsError ? (
-            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            <AlertCircle className="h-4 w-4 shrink-0" />
           ) : (
-            <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
           )}
           <span>{message}</span>
         </div>
       ) : null}
 
-      <section className="rounded-[26px] border border-slate-200/80 bg-white px-5 py-4 shadow-sm shadow-slate-950/5">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div className="space-y-1.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
-                  {t("settings.memory.title")}
-                </h1>
-                <WorkbenchInfoTip
-                  ariaLabel={t("settings.memory.hero.tipAria")}
-                  content={t("settings.memory.hero.tip")}
-                  tone="mint"
-                />
-              </div>
-              <p className="text-sm text-slate-500">
-                {t("settings.memory.hero.description")}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
-                {t("settings.memory.hero.profileCompletion", {
-                  percent: profileCompletionPercent,
-                })}
-              </span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
-                {t("settings.memory.hero.readyLayers", {
-                  value: readyLayerLabel,
-                })}
-              </span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
-                {t("settings.memory.hero.sourceHits", {
-                  value: sourceHitLabel,
-                })}
-              </span>
-              <span
-                className={cn(
-                  "rounded-full border px-3 py-1.5 text-xs font-medium",
-                  autoConfig.enabled
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : "border-amber-200 bg-amber-50 text-amber-700",
-                )}
-              >
-                {t("settings.memory.hero.memdirStatus", {
-                  status: autoStatusLabel,
-                })}
-              </span>
-              <span
-                className={cn(
-                  "rounded-full border px-3 py-1.5 text-xs font-medium",
-                  dirty
-                    ? "border-amber-200 bg-amber-50 text-amber-700"
-                    : "border-emerald-200 bg-emerald-50 text-emerald-700",
-                )}
-              >
-                {t("settings.memory.hero.configStatus", {
-                  status: dirty
-                    ? t("settings.memory.status.pendingSave")
-                    : t("settings.memory.status.synced"),
-                })}
-              </span>
-            </div>
+      <section className="rounded-md border border-slate-200/90 bg-white p-5 shadow-sm shadow-slate-950/5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1.5">
+            <h1 className="text-[24px] font-semibold text-slate-950">
+              {memoryT(t, "settings.memory.title")}
+            </h1>
+            <p className="text-sm leading-6 text-slate-500">
+              {memoryT(t, "settings.memory.hero.description")}
+            </p>
           </div>
-
-          <div className="flex flex-col gap-4 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
-              <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-semibold text-slate-900">
-                    {t("settings.memory.toggle.title")}
-                  </p>
-                  <WorkbenchInfoTip
-                    ariaLabel={t("settings.memory.toggle.tipAria")}
-                    content={t("settings.memory.toggle.tip")}
-                    tone="slate"
-                  />
-                </div>
-                <p className="text-xs leading-5 text-slate-500">
-                  {memoryModeText}
-                  {dirtyHintText}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3 self-start rounded-full border border-slate-200 bg-white px-3 py-2">
-                <span className="text-xs font-medium text-slate-600">
-                  {draft.enabled
-                    ? t("settings.memory.status.enabled")
-                    : t("settings.memory.status.disabled")}
-                </span>
-                <Switch
-                  aria-label={t("settings.memory.toggle.aria")}
-                  checked={draft.enabled}
-                  onCheckedChange={(checked) =>
-                    setDraft((prev) => ({ ...prev, enabled: checked }))
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-              <button
-                type="button"
-                onClick={handleCancel}
-                disabled={!dirty || saving}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
-              >
-                {t("settings.memory.action.cancel")}
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={!dirty || saving}
-                className={PRIMARY_INLINE_BUTTON_CLASS}
-              >
-                {saving
-                  ? t("settings.memory.action.saving")
-                  : t("settings.memory.action.save")}
-              </button>
-            </div>
+          <div className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+            <span className="text-xs font-medium text-slate-600">
+              {draft.enabled
+                ? memoryT(t, "settings.memory.status.enabled")
+                : memoryT(t, "settings.memory.status.disabled")}
+            </span>
+            <Switch
+              aria-label={memoryT(t, "settings.memory.toggle.aria")}
+              checked={draft.enabled}
+              onCheckedChange={(checked) =>
+                setDraft((previous) => ({
+                  ...previous,
+                  enabled: checked,
+                }))
+              }
+            />
           </div>
         </div>
       </section>
 
-      <div
-        className="rounded-[26px] border border-slate-200/80 bg-white p-1.5 shadow-sm shadow-slate-950/5"
-        data-testid="memory-settings-section-tabs"
-        role="tablist"
-        aria-label={memoryI18n(t, "settings.memory.tabs.aria", "记忆设置分区")}
-      >
-        <div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-4">
-          {memorySettingsTabs.map((tab) => {
-            const active = activeTab === tab.id;
-            return (
+      <section className="rounded-md border border-slate-200/90 bg-white p-5 shadow-sm shadow-slate-950/5">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700">
+            <Database className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-slate-950">
+              {memoryT(t, "settings.memory.embedding.title")}
+            </p>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              {memoryT(t, "settings.memory.embedding.description")}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+              <ShieldCheck className="h-4 w-4 text-emerald-600" />
+              {memoryT(t, "settings.memory.embedding.status.provider")}
+            </div>
+            <p className="mt-2 text-base font-semibold text-slate-950">
+              {memoryT(t, activeProvider.labelKey)}
+            </p>
+          </div>
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+              <Search className="h-4 w-4 text-sky-600" />
+              {memoryT(t, "settings.memory.embedding.status.model")}
+            </div>
+            <p className="mt-2 text-base font-semibold text-slate-950">
+              {embeddingConfig.model || activeProvider.model}
+            </p>
+          </div>
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-medium text-slate-500">
+              {memoryT(t, "settings.memory.embedding.status.vectorSearch")}
+            </p>
+            <p
+              className={cn(
+                "mt-2 text-base font-semibold",
+                vectorSearchEnabled ? "text-emerald-700" : "text-slate-500",
+              )}
+            >
+              {vectorSearchEnabled
+                ? memoryT(t, "settings.memory.embedding.status.enabled")
+                : memoryT(t, "settings.memory.embedding.status.disabled")}
+            </p>
+          </div>
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-medium text-slate-500">
+                {memoryT(t, "settings.memory.embedding.status.indexed")}
+              </p>
               <button
-                key={tab.id}
                 type="button"
-                role="tab"
-                aria-selected={active}
-                aria-controls={`memory-settings-${tab.id}-panel`}
-                data-testid={`memory-settings-tab-${tab.id}`}
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "flex items-center justify-between gap-3 rounded-[20px] px-4 py-3 text-left text-sm font-medium transition",
-                  active
-                    ? "bg-slate-950 text-white shadow-sm shadow-slate-950/15"
-                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-950",
-                )}
+                onClick={() => loadStats()}
+                disabled={statsLoading}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
+                aria-label={memoryT(t, "settings.memory.action.refresh")}
               >
-                <span className="flex min-w-0 items-center gap-2">
-                  <tab.icon className="h-4 w-4 shrink-0" />
-                  <span className="truncate">{tab.label}</span>
-                </span>
-                <span
-                  className={cn(
-                    "rounded-full px-2 py-0.5 text-xs",
-                    active
-                      ? "bg-white/15 text-white"
-                      : "bg-slate-100 text-slate-500",
-                  )}
-                >
-                  {tab.countLabel}
-                </span>
+                <RefreshCw
+                  className={cn("h-3.5 w-3.5", statsLoading && "animate-spin")}
+                />
               </button>
-            );
-          })}
+            </div>
+            <p className="mt-2 text-base font-semibold text-slate-950">
+              {memoryT(t, "settings.memory.embedding.status.indexedValue", {
+                count: formatCount(indexedCount),
+              })}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {memoryT(t, "settings.memory.embedding.status.cachedValue", {
+                count: formatCount(cachedEmbeddingCount),
+              })}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-md border border-slate-200/90 bg-white p-5 shadow-sm shadow-slate-950/5">
+        <label
+          className="text-sm font-semibold text-slate-950"
+          htmlFor="memory-embedding-provider"
+        >
+          {memoryT(t, "settings.memory.embedding.providerSelect.title")}
+        </label>
+        <p className="mt-1 text-sm leading-6 text-slate-500">
+          {memoryT(t, "settings.memory.embedding.providerSelect.description")}
+        </p>
+
+        <div className="relative mt-4">
+          <select
+            id="memory-embedding-provider"
+            value={providerChoice}
+            onChange={(event) =>
+              handleProviderChange(event.target.value as EmbeddingProviderChoice)
+            }
+            className="w-full appearance-none rounded-md border border-slate-200 bg-slate-50 px-4 py-3 pr-10 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-400 focus:bg-white"
+            aria-label={memoryT(
+              t,
+              "settings.memory.embedding.providerSelect.aria",
+            )}
+          >
+            {PROVIDER_CHOICES.map((item) => (
+              <option key={item.value} value={item.value}>
+                {memoryT(t, item.labelKey)}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        </div>
+
+        <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">
+          <p className="text-sm font-semibold text-slate-900">
+            {memoryT(t, activeProvider.labelKey)}
+          </p>
+          <p className="mt-1 text-sm leading-6 text-slate-500">
+            {memoryT(t, activeProvider.descriptionKey)}
+          </p>
+        </div>
+      </section>
+
+      <div className="flex flex-col gap-3 rounded-md border border-slate-200/90 bg-white p-4 shadow-sm shadow-slate-950/5 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs leading-5 text-slate-500">
+          {dirty
+            ? memoryT(t, "settings.memory.toggle.unsavedHint")
+            : memoryT(t, "settings.memory.toggle.syncedHint")}
+        </p>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <button
+            type="button"
+            onClick={handleCancel}
+            disabled={!dirty || saving}
+            className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
+          >
+            {memoryT(t, "settings.memory.action.cancel")}
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!dirty || saving}
+            className="rounded-md border border-slate-950 bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
+          >
+            {saving
+              ? memoryT(t, "settings.memory.action.saving")
+              : memoryT(t, "settings.memory.action.save")}
+          </button>
         </div>
       </div>
-
-      {activeTab === "overview" ? (
-        <section
-          id="memory-settings-overview-panel"
-          data-testid="memory-settings-panel-overview"
-          role="tabpanel"
-          className="grid gap-6 xl:grid-cols-[minmax(0,1.28fr)_minmax(340px,0.92fr)]"
-        >
-          <MemoryPanel
-            icon={Sparkles}
-            title={t("settings.memory.profile.title")}
-            description={t("settings.memory.profile.description")}
-            tipAriaLabel={t("settings.memory.profile.tipAria")}
-            aside={
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-                {profileDimensionCountText}
-              </span>
-            }
-          >
-            <div className="space-y-4">
-              <MultiSelectSection
-                title={t(
-                  "settings.memory.profile.statusQuestion.title",
-                  "以下哪个选项最能形容你现在的状态?",
-                )}
-                subtitle={t(
-                  "settings.memory.profile.statusQuestion.subtitle",
-                  "单选，用于帮助代理判断你的知识密度和上下文称呼。",
-                )}
-                tipAriaLabel={t(
-                  "settings.memory.profile.statusQuestion.tipAria",
-                  "当前状态说明",
-                )}
-                options={statusOptions}
-                value={profile.current_status ? [profile.current_status] : []}
-                onToggle={(option) => setStatus(option)}
-                multiple={false}
-                {...questionBadgeTexts}
-              />
-
-              <div className="grid gap-4 xl:grid-cols-2">
-                <MultiSelectSection
-                  title={t(
-                    "settings.memory.profile.strengthQuestion.title",
-                    "你觉得自己有哪些方面比较擅长?",
-                  )}
-                  subtitle={t(
-                    "settings.memory.profile.strengthQuestion.subtitle",
-                    "可多选，用于强化优先理解的领域。",
-                  )}
-                  tipAriaLabel={t(
-                    "settings.memory.profile.strengthQuestion.tipAria",
-                    "擅长方向说明",
-                  )}
-                  options={strengthOptions}
-                  value={profile.strengths || []}
-                  onToggle={(option) => toggleMulti("strengths", option)}
-                  {...questionBadgeTexts}
-                />
-
-                <MultiSelectSection
-                  title={t(
-                    "settings.memory.profile.explanationQuestion.title",
-                    "我解释事情时通常更喜欢:",
-                  )}
-                  subtitle={t(
-                    "settings.memory.profile.explanationQuestion.subtitle",
-                    "可多选，用于调整表达风格与组织方式。",
-                  )}
-                  tipAriaLabel={t(
-                    "settings.memory.profile.explanationQuestion.tipAria",
-                    "解释偏好说明",
-                  )}
-                  options={explanationStyleOptions}
-                  value={profile.explanation_style || []}
-                  onToggle={(option) =>
-                    toggleMulti("explanation_style", option)
-                  }
-                  {...questionBadgeTexts}
-                />
-
-                <MultiSelectSection
-                  title={t(
-                    "settings.memory.profile.challengeQuestion.title",
-                    "当你遇到难题/概念时，你更倾向于:",
-                  )}
-                  subtitle={t(
-                    "settings.memory.profile.challengeQuestion.subtitle",
-                    "可多选，用于决定先讲例子、难点还是拆解步骤。",
-                  )}
-                  tipAriaLabel={t(
-                    "settings.memory.profile.challengeQuestion.tipAria",
-                    "难题偏好说明",
-                  )}
-                  options={challengeOptions}
-                  value={profile.challenge_preference || []}
-                  onToggle={(option) =>
-                    toggleMulti("challenge_preference", option)
-                  }
-                  className="xl:col-span-2"
-                  {...questionBadgeTexts}
-                />
-              </div>
-            </div>
-          </MemoryPanel>
-
-          <div className="space-y-6">
-            <MemoryPanel
-              icon={Layers3}
-              title={memoryI18n(
-                t,
-                "settings.memory.layers.title",
-                "记忆命中层可用性",
-              )}
-              description={memoryI18n(
-                t,
-                "settings.memory.layers.description",
-                "持续检查来源链、会话记忆、持久记忆、团队记忆与会话压缩的参与情况。",
-              )}
-              tipAriaLabel={memoryI18n(
-                t,
-                "settings.memory.layers.tipAria",
-                "记忆命中层可用性说明",
-              )}
-              aside={
-                <button
-                  type="button"
-                  onClick={() => loadLayerMetrics()}
-                  disabled={loadingLayerMetrics}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
-                >
-                  <RefreshCw
-                    className={cn(
-                      "h-3.5 w-3.5",
-                      loadingLayerMetrics && "animate-spin",
-                    )}
-                  />
-                  {memoryI18n(t, "settings.memory.action.refresh", "刷新")}
-                </button>
-              }
-            >
-              {layerMetrics ? (
-                <div className="space-y-3">
-                  <div className="rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-600">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.layers.readyCount",
-                      "已可用 {{ready}}/{{total}} 层",
-                      {
-                        ready: layerMetrics.readyLayers,
-                        total: layerMetrics.totalLayers,
-                      },
-                    )}
-                  </div>
-                  {layerMetrics.cards.map((card) => (
-                    <div
-                      key={card.key}
-                      className="rounded-[20px] border border-slate-200/80 bg-slate-50/60 p-4"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">
-                            {card.title}
-                          </p>
-                          <p className="mt-1 text-xs leading-5 text-slate-500">
-                            {card.description}
-                          </p>
-                        </div>
-                        <span
-                          className={cn(
-                            "rounded-full border px-2 py-0.5 text-[10px] font-medium",
-                            card.available
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : "border-slate-200 bg-slate-100 text-slate-500",
-                          )}
-                        >
-                          {card.available
-                            ? memoryI18n(
-                                t,
-                                "settings.memory.layers.card.available",
-                                "已生效",
-                              )
-                            : memoryI18n(
-                                t,
-                                "settings.memory.layers.card.pending",
-                                "待完善",
-                              )}
-                        </span>
-                      </div>
-                      <div className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">
-                        {card.value}
-                        <span className="ml-1 text-sm font-medium text-slate-500">
-                          {card.unit}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                  <p className="text-xs leading-5 text-slate-500">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.layers.footer",
-                      "更完整的分层详情、压缩摘要与项目资料附属层都在「记忆」页面查看。",
-                    )}
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm text-slate-500">
-                  {memoryI18n(
-                    t,
-                    "settings.memory.layers.loading",
-                    "正在加载记忆命中层状态...",
-                  )}
-                </p>
-              )}
-            </MemoryPanel>
-
-            <MemoryPanel
-              icon={FolderTree}
-              title={memoryI18n(
-                t,
-                "settings.memory.source.overview.title",
-                "来源链状态总览",
-              )}
-              description={memoryI18n(
-                t,
-                "settings.memory.source.overview.description",
-                "快速查看当前来源链解析策略和命中状态。",
-              )}
-              tipAriaLabel={memoryI18n(
-                t,
-                "settings.memory.source.overview.tipAria",
-                "来源链状态总览说明",
-              )}
-              aside={
-                <button
-                  type="button"
-                  onClick={() => loadSourceState()}
-                  disabled={loadingSourceState}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
-                >
-                  <RefreshCw
-                    className={cn(
-                      "h-3.5 w-3.5",
-                      loadingSourceState && "animate-spin",
-                    )}
-                  />
-                  {memoryI18n(
-                    t,
-                    "settings.memory.source.overview.refresh",
-                    "刷新来源",
-                  )}
-                </button>
-              }
-            >
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
-                  <p className="text-xs font-medium text-slate-500">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.source.overview.hitSources",
-                      "命中来源",
-                    )}
-                  </p>
-                  <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
-                    {sourceHitLabel}
-                  </p>
-                </div>
-                <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
-                  <p className="text-xs font-medium text-slate-500">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.source.overview.importPolicy",
-                      "@import 策略",
-                    )}
-                  </p>
-                  <p className="mt-2 text-lg font-semibold tracking-tight text-slate-900">
-                    {resolveConfig.follow_imports
-                      ? memoryI18n(
-                          t,
-                          "settings.memory.source.overview.followImports",
-                          "跟随导入",
-                        )
-                      : memoryI18n(
-                          t,
-                          "settings.memory.source.overview.importsDisabled",
-                          "关闭导入",
-                        )}
-                  </p>
-                </div>
-                <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
-                  <p className="text-xs font-medium text-slate-500">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.source.overview.maxImportDepth",
-                      "最大导入深度",
-                    )}
-                  </p>
-                  <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
-                    {resolveConfig.import_max_depth ?? 5}
-                  </p>
-                </div>
-                <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
-                  <p className="text-xs font-medium text-slate-500">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.source.overview.additionalDirsMemory",
-                      "额外目录记忆",
-                    )}
-                  </p>
-                  <p className="mt-2 text-lg font-semibold tracking-tight text-slate-900">
-                    {resolveConfig.load_additional_dirs_memory
-                      ? memoryI18n(
-                          t,
-                          "settings.memory.source.overview.loaded",
-                          "已加载",
-                        )
-                      : memoryI18n(
-                          t,
-                          "settings.memory.source.overview.notLoaded",
-                          "未加载",
-                        )}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
-                <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-                  <Files className="h-3.5 w-3.5 text-slate-400" />
-                  {memoryI18n(
-                    t,
-                    "settings.memory.source.overview.currentWorkspace",
-                    "当前工作目录",
-                  )}
-                </div>
-                <p className="mt-2 break-all text-sm leading-6 text-slate-700">
-                  {effectiveSources?.working_dir ||
-                    memoryI18n(
-                      t,
-                      "settings.memory.source.overview.workspaceMissing",
-                      "未返回工作目录",
-                    )}
-                </p>
-              </div>
-            </MemoryPanel>
-          </div>
-        </section>
-      ) : null}
-
-      {activeTab === "sourcePolicy" ? (
-        <section
-          id="memory-settings-sourcePolicy-panel"
-          data-testid="memory-settings-panel-sourcePolicy"
-          role="tabpanel"
-        >
-          <MemoryPanel
-            className="scroll-mt-4"
-            icon={Database}
-            title={memoryI18n(
-              t,
-              "settings.memory.source.policy.title",
-              "来源链策略",
-            )}
-            description={memoryI18n(
-              t,
-              "settings.memory.source.policy.description",
-              "统一管理组织策略、项目规则目录和额外仓库记忆的加载规则。",
-            )}
-            tipAriaLabel={memoryI18n(
-              t,
-              "settings.memory.source.policy.tipAria",
-              "来源链策略说明",
-            )}
-          >
-            <div className="space-y-4">
-              <div className="grid gap-4 xl:grid-cols-2">
-                <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-                  <p className="text-sm font-semibold text-slate-900">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.source.policy.basePathsTitle",
-                      "基础路径",
-                    )}
-                  </p>
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <label className="space-y-2">
-                      <span className="text-xs font-medium text-slate-500">
-                        {memoryI18n(
-                          t,
-                          "settings.memory.source.policy.managedPolicyFile",
-                          "组织策略文件",
-                        )}
-                      </span>
-                      <input
-                        type="text"
-                        value={sourcesConfig.managed_policy_path || ""}
-                        onChange={(event) =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            sources: {
-                              ...normalizeSources(prev.sources),
-                              managed_policy_path:
-                                event.target.value || undefined,
-                            },
-                          }))
-                        }
-                        className={INPUT_CLASS_NAME}
-                        placeholder={memoryI18n(
-                          t,
-                          "settings.memory.source.policy.managedPolicyPlaceholder",
-                          "例如 ~/.lime/AGENTS.md",
-                        )}
-                      />
-                    </label>
-
-                    <label className="space-y-2">
-                      <span className="text-xs font-medium text-slate-500">
-                        {memoryI18n(
-                          t,
-                          "settings.memory.source.policy.userMemoryFile",
-                          "用户记忆文件",
-                        )}
-                      </span>
-                      <input
-                        type="text"
-                        value={sourcesConfig.user_memory_path || ""}
-                        onChange={(event) =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            sources: {
-                              ...normalizeSources(prev.sources),
-                              user_memory_path: event.target.value || undefined,
-                            },
-                          }))
-                        }
-                        className={INPUT_CLASS_NAME}
-                        placeholder={memoryI18n(
-                          t,
-                          "settings.memory.source.policy.userMemoryPlaceholder",
-                          "留空时使用应用默认 ~/.lime/AGENTS.md 路径",
-                        )}
-                      />
-                    </label>
-
-                    <label className="space-y-2 md:col-span-2">
-                      <span className="text-xs font-medium text-slate-500">
-                        {memoryI18n(
-                          t,
-                          "settings.memory.source.policy.projectLocalMemoryFile",
-                          "项目本地私有文件",
-                        )}
-                      </span>
-                      <input
-                        type="text"
-                        value={sourcesConfig.project_local_memory_path || ""}
-                        onChange={(event) =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            sources: {
-                              ...normalizeSources(prev.sources),
-                              project_local_memory_path:
-                                event.target.value || undefined,
-                            },
-                          }))
-                        }
-                        className={INPUT_CLASS_NAME}
-                        placeholder={memoryI18n(
-                          t,
-                          "settings.memory.source.policy.projectLocalMemoryPlaceholder",
-                          "例如 .lime/AGENTS.local.md",
-                        )}
-                      />
-                    </label>
-                  </div>
-
-                  <div className="mt-4 rounded-[20px] border border-slate-200/80 bg-white/80 p-4">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">
-                          {memoryI18n(
-                            t,
-                            "settings.memory.source.policy.templateTitle",
-                            "显式生成模板",
-                          )}
-                        </p>
-                        <p className="mt-1 text-xs leading-5 text-slate-500">
-                          {memoryI18n(
-                            t,
-                            "settings.memory.source.policy.templateDescription",
-                            "只在你点击时创建模板文件，不会静默生成，也不会默认覆盖已有内容。",
-                          )}
-                        </p>
-                      </div>
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-500">
-                        {memoryI18n(
-                          t,
-                          "settings.memory.source.policy.currentWorkspace",
-                          "当前 Workspace：{{path}}",
-                          {
-                            path:
-                              effectiveSources?.working_dir ||
-                              memoryI18n(
-                                t,
-                                "settings.memory.source.policy.workspaceUnresolved",
-                                "未解析",
-                              ),
-                          },
-                        )}
-                      </span>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void handleScaffoldRuntimeAgentsTemplate("global")
-                        }
-                        disabled={scaffoldingTarget !== null}
-                        className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
-                      >
-                        {scaffoldingTarget === "global"
-                          ? memoryI18n(
-                              t,
-                              "settings.memory.source.policy.generating",
-                              "生成中...",
-                            )
-                          : memoryI18n(
-                              t,
-                              "settings.memory.source.policy.generateGlobalTemplate",
-                              "生成全局模板",
-                            )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void handleScaffoldRuntimeAgentsTemplate("workspace")
-                        }
-                        disabled={
-                          scaffoldingTarget !== null ||
-                          !effectiveSources?.working_dir
-                        }
-                        className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
-                      >
-                        {scaffoldingTarget === "workspace"
-                          ? memoryI18n(
-                              t,
-                              "settings.memory.source.policy.generating",
-                              "生成中...",
-                            )
-                          : memoryI18n(
-                              t,
-                              "settings.memory.source.policy.generateWorkspaceTemplate",
-                              "生成 Workspace 模板",
-                            )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void handleScaffoldRuntimeAgentsTemplate(
-                            "workspace_local",
-                          )
-                        }
-                        disabled={
-                          scaffoldingTarget !== null ||
-                          !effectiveSources?.working_dir
-                        }
-                        className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
-                      >
-                        {scaffoldingTarget === "workspace_local"
-                          ? memoryI18n(
-                              t,
-                              "settings.memory.source.policy.generating",
-                              "生成中...",
-                            )
-                          : memoryI18n(
-                              t,
-                              "settings.memory.source.policy.generateLocalTemplate",
-                              "生成本机模板",
-                            )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void handleEnsureWorkspaceLocalGitignore()
-                        }
-                        disabled={
-                          ensuringGitignore || !effectiveSources?.working_dir
-                        }
-                        className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
-                      >
-                        {ensuringGitignore
-                          ? memoryI18n(
-                              t,
-                              "settings.memory.source.policy.writing",
-                              "写入中...",
-                            )
-                          : memoryI18n(
-                              t,
-                              "settings.memory.source.policy.addLocalTemplateGitignore",
-                              "将本机模板加入 .gitignore",
-                            )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-                  <p className="text-sm font-semibold text-slate-900">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.source.policy.resolveRulesTitle",
-                      "解析规则",
-                    )}
-                  </p>
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <label className="space-y-2">
-                      <span className="text-xs font-medium text-slate-500">
-                        {memoryI18n(
-                          t,
-                          "settings.memory.source.policy.maxImportDepth",
-                          "最大导入深度",
-                        )}
-                      </span>
-                      <input
-                        type="number"
-                        min={1}
-                        max={20}
-                        value={resolveConfig.import_max_depth ?? 5}
-                        onChange={(event) => {
-                          const value = Number(event.target.value);
-                          setDraft((prev) => ({
-                            ...prev,
-                            resolve: {
-                              ...normalizeResolve(prev.resolve),
-                              import_max_depth: Number.isFinite(value)
-                                ? Math.max(1, Math.min(20, value))
-                                : 5,
-                            },
-                          }));
-                        }}
-                        className={INPUT_CLASS_NAME}
-                      />
-                    </label>
-
-                    <label className="space-y-2">
-                      <span className="text-xs font-medium text-slate-500">
-                        {memoryI18n(
-                          t,
-                          "settings.memory.source.policy.additionalDirCount",
-                          "额外目录数量",
-                        )}
-                      </span>
-                      <div className="rounded-[16px] border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700">
-                        {(resolveConfig.additional_dirs || []).length}
-                      </div>
-                    </label>
-                  </div>
-
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <label className={TOGGLE_ROW_CLASS_NAME}>
-                      <span>
-                        {memoryI18n(
-                          t,
-                          "settings.memory.source.policy.followImports",
-                          "跟随 @import",
-                        )}
-                      </span>
-                      <Switch
-                        aria-label={memoryI18n(
-                          t,
-                          "settings.memory.source.policy.followImportsAria",
-                          "跟随 @import",
-                        )}
-                        checked={resolveConfig.follow_imports ?? true}
-                        onCheckedChange={(checked) =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            resolve: {
-                              ...normalizeResolve(prev.resolve),
-                              follow_imports: checked,
-                            },
-                          }))
-                        }
-                      />
-                    </label>
-
-                    <label className={TOGGLE_ROW_CLASS_NAME}>
-                      <span>
-                        {memoryI18n(
-                          t,
-                          "settings.memory.source.policy.loadAdditionalDirs",
-                          "加载额外目录记忆",
-                        )}
-                      </span>
-                      <Switch
-                        aria-label={memoryI18n(
-                          t,
-                          "settings.memory.source.policy.loadAdditionalDirsAria",
-                          "加载额外目录记忆",
-                        )}
-                        checked={
-                          resolveConfig.load_additional_dirs_memory ?? false
-                        }
-                        onCheckedChange={(checked) =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            resolve: {
-                              ...normalizeResolve(prev.resolve),
-                              load_additional_dirs_memory: checked,
-                            },
-                          }))
-                        }
-                      />
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-4 xl:grid-cols-2">
-                <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-                  <span className="text-sm font-semibold text-slate-900">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.source.policy.projectMemoryFiles",
-                      "项目记忆文件",
-                    )}
-                  </span>
-                  <span className="text-xs leading-5 text-slate-500">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.source.policy.projectMemoryFilesDescription",
-                      "每行一个相对路径，例如 `.lime/AGENTS.md`。",
-                    )}
-                  </span>
-                  <textarea
-                    value={(sourcesConfig.project_memory_paths || []).join(
-                      "\n",
-                    )}
-                    onChange={(event) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        sources: {
-                          ...normalizeSources(prev.sources),
-                          project_memory_paths: parseLines(event.target.value),
-                        },
-                      }))
-                    }
-                    className={TEXTAREA_CLASS_NAME}
-                  />
-                </label>
-
-                <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-                  <span className="text-sm font-semibold text-slate-900">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.source.policy.projectRuleDirs",
-                      "项目规则目录",
-                    )}
-                  </span>
-                  <span className="text-xs leading-5 text-slate-500">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.source.policy.projectRuleDirsDescription",
-                      "每行一个相对路径，用于定义仓库级规则目录。",
-                    )}
-                  </span>
-                  <textarea
-                    value={(sourcesConfig.project_rule_dirs || []).join("\n")}
-                    onChange={(event) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        sources: {
-                          ...normalizeSources(prev.sources),
-                          project_rule_dirs: parseLines(event.target.value),
-                        },
-                      }))
-                    }
-                    className={TEXTAREA_CLASS_NAME}
-                  />
-                </label>
-              </div>
-
-              <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-                <span className="text-sm font-semibold text-slate-900">
-                  {memoryI18n(
-                    t,
-                    "settings.memory.source.policy.additionalDirs",
-                    "额外目录",
-                  )}
-                </span>
-                <span className="text-xs leading-5 text-slate-500">
-                  {memoryI18n(
-                    t,
-                    "settings.memory.source.policy.additionalDirsDescription",
-                    "每行一个绝对路径，可添加当前仓库之外的参考目录参与记忆解析。",
-                  )}
-                </span>
-                <textarea
-                  value={(resolveConfig.additional_dirs || []).join("\n")}
-                  onChange={(event) =>
-                    setDraft((prev) => ({
-                      ...prev,
-                      resolve: {
-                        ...normalizeResolve(prev.resolve),
-                        additional_dirs: parseLines(event.target.value),
-                      },
-                    }))
-                  }
-                  className={TEXTAREA_CLASS_NAME}
-                  placeholder={memoryI18n(
-                    t,
-                    "settings.memory.source.policy.additionalDirsPlaceholder",
-                    "例如 /absolute/path/to/extra-repo",
-                  )}
-                />
-              </label>
-            </div>
-          </MemoryPanel>
-        </section>
-      ) : null}
-
-      {activeTab === "memdir" ? (
-        <section
-          id="memory-settings-memdir-panel"
-          data-testid="memory-settings-panel-memdir"
-          role="tabpanel"
-        >
-          <MemoryPanel
-            className="scroll-mt-4"
-            icon={Database}
-            title={memoryI18n(
-              t,
-              "settings.memory.memdir.title",
-              "记忆目录（memdir）",
-            )}
-            description={memoryI18n(
-              t,
-              "settings.memory.memdir.description",
-              "管理 MEMORY.md 入口、四类记忆文件、类型化写入和当前索引预览。",
-            )}
-            tipAriaLabel={memoryI18n(
-              t,
-              "settings.memory.memdir.tipAria",
-              "记忆目录说明",
-            )}
-            aside={
-              <>
-                <button
-                  type="button"
-                  onClick={handleScaffoldMemdir}
-                  disabled={scaffoldingMemdir}
-                  className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-800 disabled:opacity-60"
-                >
-                  {scaffoldingMemdir
-                    ? memoryI18n(
-                        t,
-                        "settings.memory.memdir.action.initializing",
-                        "初始化中...",
-                      )
-                    : memoryI18n(
-                        t,
-                        "settings.memory.memdir.action.initialize",
-                        "初始化 memdir",
-                      )}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCleanupMemdir}
-                  disabled={cleaningMemdir}
-                  className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-white hover:text-slate-900 disabled:opacity-60"
-                >
-                  {cleaningMemdir
-                    ? memoryI18n(
-                        t,
-                        "settings.memory.memdir.action.cleaning",
-                        "整理中...",
-                      )
-                    : memoryI18n(
-                        t,
-                        "settings.memory.memdir.action.cleanup",
-                        "整理 memdir",
-                      )}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleToggleAutoImmediately}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-                >
-                  {autoConfig.enabled
-                    ? memoryI18n(
-                        t,
-                        "settings.memory.memdir.action.disableNow",
-                        "立即关闭",
-                      )
-                    : memoryI18n(
-                        t,
-                        "settings.memory.memdir.action.enableNow",
-                        "立即开启",
-                      )}
-                </button>
-              </>
-            }
-          >
-            <div className="space-y-4">
-              <div className="grid gap-4 xl:grid-cols-3">
-                <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-                  <span className="text-sm font-semibold text-slate-900">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.memdir.field.entrypoint",
-                      "入口文件",
-                    )}
-                  </span>
-                  <input
-                    type="text"
-                    value={autoConfig.entrypoint || "MEMORY.md"}
-                    onChange={(event) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        auto: {
-                          ...normalizeAuto(prev.auto),
-                          entrypoint: event.target.value,
-                        },
-                      }))
-                    }
-                    className={INPUT_CLASS_NAME}
-                  />
-                </label>
-
-                <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-                  <span className="text-sm font-semibold text-slate-900">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.memdir.field.maxLoadedLines",
-                      "加载行数上限",
-                    )}
-                  </span>
-                  <input
-                    type="number"
-                    min={20}
-                    max={1000}
-                    value={autoConfig.max_loaded_lines ?? 200}
-                    onChange={(event) => {
-                      const value = Number(event.target.value);
-                      setDraft((prev) => ({
-                        ...prev,
-                        auto: {
-                          ...normalizeAuto(prev.auto),
-                          max_loaded_lines: Number.isFinite(value)
-                            ? Math.max(20, Math.min(1000, value))
-                            : 200,
-                        },
-                      }));
-                    }}
-                    className={INPUT_CLASS_NAME}
-                  />
-                </label>
-
-                <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-                  <span className="text-sm font-semibold text-slate-900">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.memdir.field.rootDir",
-                      "memdir 根目录",
-                    )}
-                  </span>
-                  <input
-                    type="text"
-                    value={autoConfig.root_dir || ""}
-                    onChange={(event) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        auto: {
-                          ...normalizeAuto(prev.auto),
-                          root_dir: event.target.value || undefined,
-                        },
-                      }))
-                    }
-                    className={INPUT_CLASS_NAME}
-                    placeholder={memoryI18n(
-                      t,
-                      "settings.memory.memdir.field.rootDirPlaceholder",
-                      "默认自动推导，可留空",
-                    )}
-                  />
-                </label>
-              </div>
-
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.06fr)_minmax(360px,0.94fr)]">
-                <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                    <Database className="h-4 w-4 text-emerald-600" />
-                    {memoryI18n(
-                      t,
-                      "settings.memory.memdir.write.title",
-                      "写入 memdir",
-                    )}
-                  </div>
-                  <div className="mt-4 space-y-3">
-                    <div className="grid gap-2">
-                      <p className="text-xs leading-5 text-slate-500">
-                        {memoryI18n(
-                          t,
-                          "settings.memory.memdir.write.description",
-                          "先选择这条记忆应归入哪一类，再决定是否额外拆 topic 文件。",
-                        )}
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {memdirTypeOptions.map((option) => {
-                          const active = autoMemoryType === option.value;
-                          return (
-                            <button
-                              key={option.value}
-                              type="button"
-                              onClick={() => setAutoMemoryType(option.value)}
-                              className={cn(
-                                "rounded-full border px-3 py-1.5 text-xs font-medium transition",
-                                active
-                                  ? ACTIVE_OPTION_BUTTON_CLASS
-                                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
-                              )}
-                              title={option.description}
-                            >
-                              {option.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <div className="rounded-[18px] border border-white/90 bg-white/88 px-4 py-3 shadow-sm">
-                      <p className="text-sm font-medium text-slate-900">
-                        {resolveMemdirTypeLabel(t, autoMemoryType)}
-                      </p>
-                      <p className="mt-1 text-xs leading-5 text-slate-500">
-                        {selectedMemdirGuide.description}
-                      </p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {selectedMemdirGuide.requiredSections.length > 0 ? (
-                          selectedMemdirGuide.requiredSections.map(
-                            (section) => (
-                              <span
-                                key={section}
-                                className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700"
-                              >
-                                {memoryI18n(
-                                  t,
-                                  "settings.memory.memdir.requiredSectionBadge",
-                                  "必须包含 {{section}}",
-                                  { section },
-                                )}
-                              </span>
-                            ),
-                          )
-                        ) : (
-                          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                            {memoryI18n(
-                              t,
-                              "settings.memory.memdir.noTemplateRequired",
-                              "可直接写自然语言，不强制模板",
-                            )}
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-3 text-xs leading-5 text-slate-500">
-                        {selectedMemdirGuide.note}
-                      </p>
-                      <p className="mt-2 text-xs leading-5 text-slate-500">
-                        {memoryI18n(
-                          t,
-                          "settings.memory.memdir.topicMergeHint",
-                          "同一 topic 会被视为同一条当前记忆并覆盖更新；如果要保留多条并行结论，请拆成不同 topic。",
-                        )}
-                      </p>
-                    </div>
-                    <input
-                      type="text"
-                      value={autoTopic}
-                      onChange={(event) => setAutoTopic(event.target.value)}
-                      className={INPUT_CLASS_NAME}
-                      placeholder={selectedMemdirGuide.topicPlaceholder}
-                    />
-                    <textarea
-                      value={autoNote}
-                      onChange={(event) => setAutoNote(event.target.value)}
-                      className={TEXTAREA_CLASS_NAME}
-                      placeholder={selectedMemdirGuide.placeholder}
-                    />
-                    <button
-                      type="button"
-                      onClick={handleUpdateAutoNote}
-                      disabled={savingAutoNote}
-                      className={PRIMARY_ACTION_BUTTON_CLASS}
-                    >
-                      {savingAutoNote
-                        ? memoryI18n(
-                            t,
-                            "settings.memory.memdir.action.writing",
-                            "写入中...",
-                          )
-                        : memoryI18n(
-                            t,
-                            "settings.memory.memdir.action.write",
-                            "写入 memdir",
-                          )}
-                    </button>
-                    <p className="text-xs leading-5 text-slate-500">
-                      {memoryI18n(
-                        t,
-                        "settings.memory.memdir.cleanupHint",
-                        "“整理 memdir” 会去重入口链接、裁剪 README 历史段落，并把旧的 topic 日志收口成当前有效版本。",
-                      )}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                    <Files className="h-4 w-4 text-sky-600" />
-                    {memoryI18n(
-                      t,
-                      "settings.memory.memdir.index.title",
-                      "当前索引",
-                    )}
-                  </div>
-                  <div className="mt-4 rounded-[18px] border border-white/90 bg-white/88 px-4 py-3 shadow-sm">
-                    <p className="text-xs leading-5 text-slate-500">
-                      {autoIndex?.entry_exists
-                        ? memoryI18n(
-                            t,
-                            "settings.memory.memdir.index.exists",
-                            "已存在",
-                          )
-                        : memoryI18n(
-                            t,
-                            "settings.memory.memdir.index.uninitialized",
-                            "未初始化",
-                          )}
-                      {autoIndex
-                        ? memoryI18n(
-                            t,
-                            "settings.memory.memdir.index.lineCount",
-                            " · {{count}} 行",
-                            { count: autoIndex.total_lines },
-                          )
-                        : ""}
-                    </p>
-                  </div>
-                  {autoIndex?.preview_lines?.length ? (
-                    <pre className="mt-4 max-h-52 overflow-auto rounded-[18px] border border-white/90 bg-white/88 p-3 text-[11px] leading-relaxed text-slate-600 whitespace-pre-wrap break-words shadow-sm">
-                      {autoIndex.preview_lines.join("\n")}
-                    </pre>
-                  ) : (
-                    <p className="mt-4 text-sm leading-6 text-slate-500">
-                      {memoryI18n(
-                        t,
-                        "settings.memory.memdir.index.empty",
-                        "暂无 memdir 入口内容",
-                      )}
-                    </p>
-                  )}
-                  {autoIndex?.items?.length ? (
-                    <div className="mt-4 space-y-2">
-                      {autoIndex.items.slice(0, 6).map((item) => (
-                        <div
-                          key={item.relative_path}
-                          className="rounded-[16px] border border-slate-200/80 bg-slate-50/70 px-3 py-2"
-                        >
-                          <p className="text-sm font-medium text-slate-900">
-                            {item.title}
-                          </p>
-                          <p className="mt-1 text-xs leading-5 text-slate-500">
-                            {item.relative_path}
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {item.memory_type ? (
-                              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
-                                {resolveMemdirTypeLabel(t, item.memory_type)}
-                              </span>
-                            ) : null}
-                            {item.provider ? (
-                              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                                {memoryI18n(
-                                  t,
-                                  "settings.memory.memdir.index.provider",
-                                  "provider：{{provider}}",
-                                  { provider: item.provider },
-                                )}
-                              </span>
-                            ) : null}
-                            {item.updated_at ? (
-                              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                                {memoryI18n(
-                                  t,
-                                  "settings.memory.memdir.index.updatedAt",
-                                  "更新于 {{time}}",
-                                  {
-                                    time: formatRelativeTimeLabel(
-                                      t,
-                                      item.updated_at,
-                                    ),
-                                  },
-                                )}
-                              </span>
-                            ) : null}
-                          </div>
-                          {item.summary ? (
-                            <p className="mt-1 text-sm leading-6 text-slate-600">
-                              {item.summary}
-                            </p>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </MemoryPanel>
-        </section>
-      ) : null}
-
-      {activeTab === "sourceHits" ? (
-        <section
-          id="memory-settings-sourceHits-panel"
-          data-testid="memory-settings-panel-sourceHits"
-          role="tabpanel"
-        >
-          <MemoryPanel
-            className="scroll-mt-4"
-            icon={Files}
-            title={memoryI18n(
-              t,
-              "settings.memory.source.detail.title",
-              "来源链命中详情",
-            )}
-            description={memoryI18n(
-              t,
-              "settings.memory.source.detail.description",
-              "逐项查看来源链是否命中、是否已加载，以及实际预览内容。",
-            )}
-            tipAriaLabel={memoryI18n(
-              t,
-              "settings.memory.source.detail.tipAria",
-              "来源链命中详情说明",
-            )}
-            aside={
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-                {effectiveSources
-                  ? memoryI18n(
-                      t,
-                      "settings.memory.source.detail.hits",
-                      "命中 {{loaded}}/{{total}}",
-                      {
-                        loaded: effectiveSources.loaded_sources,
-                        total: effectiveSources.total_sources,
-                      },
-                    )
-                  : "--"}
-              </span>
-            }
-          >
-            {effectiveSources ? (
-              <div className="space-y-4">
-                <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.source.detail.workingDir",
-                      "工作目录：{{path}}",
-                      { path: effectiveSources.working_dir },
-                    )}
-                  </span>
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.source.detail.followImports",
-                      "跟随 @import：{{value}}",
-                      {
-                        value: effectiveSources.follow_imports
-                          ? memoryI18n(
-                              t,
-                              "settings.memory.source.detail.yes",
-                              "是",
-                            )
-                          : memoryI18n(
-                              t,
-                              "settings.memory.source.detail.no",
-                              "否",
-                            ),
-                      },
-                    )}
-                  </span>
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-                    {memoryI18n(
-                      t,
-                      "settings.memory.source.detail.importDepth",
-                      "导入深度：{{depth}}",
-                      { depth: effectiveSources.import_max_depth },
-                    )}
-                  </span>
-                </div>
-
-                <div className="grid gap-3 xl:grid-cols-2">
-                  {effectiveSources.sources.map((source) => (
-                    <div
-                      key={`${source.kind}-${source.path}`}
-                      className="rounded-[20px] border border-slate-200/80 bg-slate-50/60 p-4"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-sm font-semibold text-slate-900">
-                          {source.kind}
-                        </span>
-                        <SourceStatusPill
-                          loaded={source.loaded}
-                          exists={source.exists}
-                        />
-                      </div>
-                      <p className="mt-2 break-all text-xs leading-5 text-slate-500">
-                        {source.path}
-                      </p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                          {memoryI18n(
-                            t,
-                            "settings.memory.source.detail.sourceBucket",
-                            "来源分类：{{bucket}}",
-                            {
-                              bucket: resolveSourceBucketLabel(
-                                t,
-                                source.source_bucket,
-                              ),
-                            },
-                          )}
-                        </span>
-                        {source.provider ? (
-                          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                            provider：{source.provider}
-                          </span>
-                        ) : null}
-                        {source.memory_type ? (
-                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
-                            {resolveMemdirTypeLabel(t, source.memory_type)}
-                          </span>
-                        ) : null}
-                        {source.updated_at ? (
-                          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                            {memoryI18n(
-                              t,
-                              "settings.memory.source.detail.updatedAt",
-                              "最近更新：{{time}}",
-                              {
-                                time: formatRelativeTimeLabel(
-                                  t,
-                                  source.updated_at,
-                                ),
-                              },
-                            )}
-                          </span>
-                        ) : null}
-                      </div>
-                      {source.preview ? (
-                        <p className="mt-3 text-sm leading-6 text-slate-600 line-clamp-3">
-                          {source.preview}
-                        </p>
-                      ) : null}
-                      {source.warnings?.length > 0 ? (
-                        <p className="mt-3 text-xs leading-5 text-amber-600">
-                          {source.warnings.join("；")}
-                        </p>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-500">
-                {memoryI18n(
-                  t,
-                  "settings.memory.source.detail.loading",
-                  "正在加载来源命中结果...",
-                )}
-              </p>
-            )}
-          </MemoryPanel>
-        </section>
-      ) : null}
     </div>
   );
 }

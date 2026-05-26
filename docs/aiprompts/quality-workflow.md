@@ -234,7 +234,7 @@ LIME_ALLOW_LIVE_PROVIDER_SMOKE=1 npm run verify:gui-smoke
 LIME_REAL_API_TEST=1 npm run smoke:agent-runtime-approval-sandbox
 ```
 
-单项脚本统一使用 `--allow-live-provider`；Vitest 的 `*.live.test.*` 默认从 `npm test` / `npx vitest` 收集中排除，直接点名运行也必须设置 `LIME_ALLOW_LIVE_PROVIDER_SMOKE=1` 或 `LIME_REAL_API_TEST=1`；普通 Vitest 默认还会安装外部网络守卫，覆盖 `fetch`、`XMLHttpRequest` 与 Node `http` / `https` 请求，只允许 localhost / data / blob / file 等离线路径，避免未按 `.live.test` 命名的测试或 SDK 误打 Deepseek、OpenAI 或图片 Provider；Rust 真实联网测试必须同时使用 `#[ignore]` 和 `LIME_REAL_API_TEST=1` 二次门禁。设计画布只有 `--image-task live-single-layer` 需要该授权，connector outbox 只有 `--mode live` 需要该授权，Agent Apps 内容工厂的 action / completion E2E 与 `scripts/agent-apps-content-factory-flow.mjs` 需要该授权，replay / fixture / registry-only 路径不应调用真实 Provider。
+单项脚本统一使用 `--allow-live-provider`；`npm run smoke:managed-objective-continuation` 与 `npm run smoke:managed-objective-automation` 默认启动 localhost OpenAI-compatible fixture，不读取 `LIME_AGENT_QC_PROVIDER / LIME_E2E_PROVIDER / LIME_DEFAULT_PROVIDER` 作为真实 Provider 兜底，只有显式 `--allow-live-provider` 或 live Provider 环境授权后才可指定真实 provider/model；Vitest 的 `*.live.test.*` 默认从 `npm test` / `npx vitest` 收集中排除，直接点名运行也必须设置 `LIME_ALLOW_LIVE_PROVIDER_SMOKE=1` 或 `LIME_REAL_API_TEST=1`；普通 Vitest 默认还会安装外部网络守卫，覆盖 `fetch`、`XMLHttpRequest`、Node `http` / `https` 与 `net` / `tls` 直连请求，只允许 localhost / data / blob / file 等离线路径，避免未按 `.live.test` 命名的测试或 SDK 误打 Deepseek、OpenAI 或图片 Provider；Rust 真实联网测试必须同时使用 `#[ignore]` 和 `LIME_REAL_API_TEST=1` 二次门禁。设计画布只有 `--image-task live-single-layer` 需要该授权，connector outbox 只有 `--mode live` 需要该授权，Agent Apps 内容工厂的 action / completion E2E 与 `scripts/agent-apps-content-factory-flow.mjs` 需要该授权，replay / fixture / registry-only 路径不应调用真实 Provider。
 
 ### Layer 3：契约与桥接边界
 
@@ -293,7 +293,7 @@ CI 里的 `.github/workflows/quality.yml` 结果摘要现在也会透出 `bridge
 - 检查纯文本 `Claw @网页` 是否已经走 `原始用户消息 -> harness.webpage_skill_launch -> Agent 首刀 Skill(webpage_generate) -> write_file HTML artifact` 主链，而不是退回普通聊天口头方案、卡在 `ToolSearch / WebSearch / Read / Glob / Grep` 这类通用工具偏航，或没有真实 `.html` 文件就宣布完成
 - 检查纯文本 `Claw @PPT` 是否已经走 `原始用户消息 -> harness.presentation_skill_launch -> Agent 首刀 Skill(presentation_generate) -> write_file Markdown artifact` 主链，而不是退回普通聊天口头提纲、卡在 `ToolSearch / WebSearch / Read / Glob / Grep` 这类通用工具偏航，或没有真实演示稿文件就宣布完成
 - 检查纯文本 `Claw @表单` 是否已经走 `原始用户消息 -> harness.form_skill_launch -> Agent 首刀 Skill(form_generate) -> ```a2ui simple form JSON` 主链，而不是退回普通聊天字段建议、卡在 `ToolSearch / WebSearch / Read / Glob / Grep` 这类通用工具偏航，或回流成单文件 HTML 表单原型；同时确认 render contract 已收敛为 `form + json`
-- 检查纯文本 `Claw @代码` 是否已经走 `原始用户消息 -> harness.code_command + preferred_team_preset_id -> code_orchestrated -> code_execution / tools / team runtime` 主链，而不是继续停留在普通聊天、没有打开 `task/subagent` 偏好，或把代码任务改写成另一套 prompt / workflow 旁路
+- 检查自然语言代码任务是否已经在 `code_orchestrated` 会话 / 本轮策略下走 `原始用户消息 -> code_orchestrated runtime defaults -> code_execution / tools / team runtime` 主链；`@代码` 只作为 `command catalog(code_runtime)` mention 快捷入口触发同一条主链，不允许前端根据“代码 / 修复 / 重构 / 评审”等正文关键词改写 prompt、重新写入 `harness.code_command`，或把代码任务改写成另一套 workflow 旁路
 - 检查纯文本 `Claw @渠道预览` 是否已经走 `原始用户消息 -> displayContent 保留 -> /content_post_with_cover -> artifact` 主链，而不是退回普通聊天解释、重新长出另一套 `channel_preview_task` 协议，或静默混成正式 `@发布`；同时确认 `publish_command.intent=preview`、`entry_source=at_channel_preview_command` 与预览稿意图补齐仍然成立
 - 检查纯文本 `Claw @上传` 是否已经走 `原始用户消息 -> displayContent 保留 -> /content_post_with_cover -> artifact` 主链，而不是退回普通聊天解释、重新长出另一套 `upload_task` 协议，或静默混成正式 `@发布`；同时确认 `publish_command.intent=upload`、`entry_source=at_upload_command` 与上传稿意图补齐仍然成立；若命中平台后台，也要确认浏览器门禁继续生效
 - 检查纯文本 `Claw @发布` 是否已经走 `原始用户消息 -> displayContent 保留 -> dispatch /content_post_with_cover -> content_post workflow` 主链，而不是直接把 `@发布` 文本原样当普通聊天发送，或重新造一套 `publish_task` 协议；同时确认平台后台类输入会继续触发 `browser_requirement`
@@ -344,7 +344,7 @@ CI 里的 `.github/workflows/quality.yml` 结果摘要现在也会透出 `bridge
 - 修改 `@排版` parser、`useWorkspaceSendActions`、`runtime_turn`、`typesetting_skill_launch`、`lime task create typesetting`、`typesetting` skill 或 `lime_create_typesetting_task`，尤其是调整 `Claw @排版 -> harness.typesetting_skill_launch -> Agent 首刀 Skill(typesetting) -> task file` 主链
 - 修改 `@网页` parser、`useWorkspaceSendActions`、`runtime_turn`、`webpage_skill_launch`、`webpage_generate` skill 或 HTML artifact 预览链路，尤其是调整 `Claw @网页 -> harness.webpage_skill_launch -> Agent 首刀 Skill(webpage_generate) -> write_file HTML artifact` 主链
 - 修改 `@PPT` parser、`useWorkspaceSendActions`、`runtime_turn`、`presentation_skill_launch`、`presentation_generate` skill 或演示稿 artifact 预览链路，尤其是调整 `Claw @PPT -> harness.presentation_skill_launch -> Agent 首刀 Skill(presentation_generate) -> write_file Markdown artifact` 主链
-- 修改 `@代码` parser、`useWorkspaceSendActions`、mention builtin command 或 `code_orchestrated` 发送边界，尤其是调整 `Claw @代码 -> harness.code_command -> code_orchestrated -> tools / team runtime` 主链
+- 修改自然语言编程底座、`code_orchestrated` 发送边界、`@代码` mention 快捷入口、`parseMentionCommand`、`useWorkspaceSendActions` 或 mention builtin command，尤其要确认普通代码请求仍走 `原始用户消息 -> code_orchestrated runtime defaults -> tools / team runtime` 主链，`@代码` 只通过 catalog route 切同一条主链
 - 修改 `@渠道预览` parser、`useWorkspaceSendActions`、`publish_command` metadata 或 `content_post_with_cover` 预览意图编排，尤其是调整 `Claw @渠道预览 -> publish_command.intent=preview -> /content_post_with_cover -> artifact` 主链
 - 修改 `@上传` parser、`useWorkspaceSendActions`、`publish_command` metadata、浏览器门禁推导或 `content_post_with_cover` 上传意图编排，尤其是调整 `Claw @上传 -> publish_command.intent=upload -> /content_post_with_cover -> artifact` 主链
 - 修改 `@发布` parser、`useWorkspaceSendActions`、content post workflow 入口或浏览器门禁推导，尤其是调整 `Claw @发布 -> displayContent/raw -> /content_post_with_cover -> publish workflow` 主链
@@ -494,9 +494,9 @@ CI 里的 `.github/workflows/quality.yml` 结果摘要现在也会透出 `bridge
 - `npm run test:contracts`
 - 若 HTML artifact 预览主路径受影响，再补 `npm run verify:gui-smoke`
 
-如果本轮修改了 `Claw @代码` 或代码编排发送协议，最低校验至少包含：
+如果本轮修改了自然语言编程底座、`@代码` 快捷入口或代码编排发送协议，最低校验至少包含：
 
-- `npx vitest run "src/components/agent/chat/utils/codeWorkbenchCommand.test.ts" "src/components/agent/chat/workspace/useWorkspaceSendActions.test.tsx" "src/components/agent/chat/skill-selection/CharacterMention.test.tsx" "src/lib/api/skillCatalog.test.ts"`
+- `npx vitest run "src/components/agent/chat/utils/mentionCommandPrefixMatch.test.ts" "src/components/agent/chat/workspace/useWorkspaceSendActions.test.tsx" "src/components/agent/chat/skill-selection/CharacterMention.test.tsx" "src/lib/api/skillCatalog.test.ts" "src/lib/governance/legacySurfaceCatalog.test.ts"`
 - 如有改动扩散到 runtime/team/tool 协议，再补对应 `agentStream*` / runtime team / tool display 定向回归
 - 若命令边界或 harness 协议继续扩散，再补 `npm run test:contracts`
 - 若 GUI 主路径受影响，再补 `npm run verify:gui-smoke`

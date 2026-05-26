@@ -19,6 +19,7 @@ use self::health::{query_automation_health, AutomationHealthQuery, AutomationHea
 use self::schedule::{
     describe_schedule, next_run_for_schedule, preview_next_run, validate_schedule,
 };
+use crate::commands::aster_agent_cmd::ConfigureProviderRequest;
 use crate::database::dao::agent_run::AgentRunStatus;
 use crate::services::execution_tracker_service::{ExecutionTracker, RunHandle, RunSource};
 use chrono::Utc;
@@ -82,6 +83,12 @@ pub enum AutomationPayload {
         approval_policy: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         sandbox_policy: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        provider_config: Option<ConfigureProviderRequest>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        provider_preference: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model_preference: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request_metadata: Option<Value>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1269,6 +1276,10 @@ pub(super) fn append_payload_tracking_metadata(metadata: &mut Map<String, Value>
 }
 
 #[cfg(test)]
+#[path = "automation_owner_session_evidence_tests.rs"]
+mod automation_owner_session_evidence_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::database::schema::create_tables;
@@ -1663,6 +1674,9 @@ mod tests {
             web_search: false,
             approval_policy: None,
             sandbox_policy: None,
+            provider_config: None,
+            provider_preference: None,
+            model_preference: None,
             request_metadata: Some(json!({
                 "harness": {
                     "theme": "general",
@@ -1685,6 +1699,9 @@ mod tests {
             web_search: false,
             approval_policy: None,
             sandbox_policy: None,
+            provider_config: None,
+            provider_preference: None,
+            model_preference: None,
             request_metadata: Some(json!(["invalid"])),
             content_id: Some("content-1".to_string()),
         };
@@ -1721,6 +1738,9 @@ mod tests {
             web_search: false,
             approval_policy: Some("never".to_string()),
             sandbox_policy: Some("workspace-write".to_string()),
+            provider_config: None,
+            provider_preference: None,
+            model_preference: None,
             request_metadata: None,
             content_id: None,
         };

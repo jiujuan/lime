@@ -23,7 +23,10 @@ import {
 } from "@/lib/api/apiKeyProvider";
 import { ProviderSetting } from "./ProviderSetting";
 import { ImportExportDialog } from "./ImportExportDialog";
-import type { ConnectionTestResult } from "./connectionTestTypes";
+import type {
+  ConnectionTestOptions,
+  ConnectionTestResult,
+} from "./connectionTestTypes";
 import { resolveProviderTestModel } from "./ApiKeyProviderSection.helpers";
 import { ModelAddPanel } from "./ModelAddPanel";
 import { ModelProviderList } from "./ModelProviderList";
@@ -211,17 +214,20 @@ export const ApiKeyProviderSection = forwardRef<
 
   // ===== 连接测试 =====
   const handleTestConnection = useCallback(
-    async (providerId: string): Promise<ConnectionTestResult> => {
+    async (
+      providerId: string,
+      options?: ConnectionTestOptions,
+    ): Promise<ConnectionTestResult> => {
       try {
-        const modelName = resolveCurrentTestModel();
+        const modelName = options?.modelName ?? resolveCurrentTestModel();
+        const result = options?.requireChatReady
+          ? await apiKeyProviderApi.testChat(
+              providerId,
+              modelName,
+              options.prompt ?? "请用一句话回复：连接测试通过。",
+            )
+          : await apiKeyProviderApi.testConnection(providerId, modelName);
 
-        // 调用后端连接测试 API
-        const result = await apiKeyProviderApi.testConnection(
-          providerId,
-          modelName,
-        );
-
-        // 转换后端返回的 latency_ms 为前端期望的 latencyMs
         return {
           success: result.success,
           latencyMs: result.latency_ms,

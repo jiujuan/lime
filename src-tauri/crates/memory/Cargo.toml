@@ -5,9 +5,6 @@ edition = "2021"
 authors = ["you"]
 
 [dependencies]
-# 项目内依赖
-lime-embedding = { path = "../embedding" }
-
 # 序列化
 serde.workspace = true
 serde_json.workspace = true

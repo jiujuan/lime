@@ -91,11 +91,11 @@ afterEach(() => {
 });
 
 describe("useWorkspaceArtifactViewModeControl", () => {
-  it("流式 HTML 产物应优先展示源码，完成后自动切到预览", async () => {
+  it("流式 HTML 产物应优先展示预览，完成后保持预览", async () => {
     const { render, getValue } = renderHook();
 
     await render();
-    expect(getValue().artifactViewMode).toBe("source");
+    expect(getValue().artifactViewMode).toBe("preview");
 
     await render({
       displayedArtifact: createArtifact({

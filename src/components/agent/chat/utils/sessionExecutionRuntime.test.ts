@@ -40,6 +40,25 @@ describe("sessionExecutionRuntime", () => {
     });
   });
 
+  it("应根据 turn_context 事件同步后端 effective execution strategy", () => {
+    const runtime = applyTurnContextExecutionRuntime(null, {
+      type: "turn_context",
+      session_id: "session-code",
+      thread_id: "thread-code",
+      turn_id: "turn-code",
+      execution_strategy: "code_orchestrated",
+      output_schema_runtime: null,
+    });
+
+    expect(runtime).toMatchObject({
+      session_id: "session-code",
+      source: "turn_context",
+      execution_strategy: "code_orchestrated",
+      latest_turn_id: "turn-code",
+      latest_turn_status: "running",
+    });
+  });
+
   it("应在 model_change 后保留 provider 与 output schema，并更新模型", () => {
     const fromTurnContext = applyTurnContextExecutionRuntime(null, {
       type: "turn_context",

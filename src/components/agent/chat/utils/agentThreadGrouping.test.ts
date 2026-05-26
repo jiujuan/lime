@@ -388,4 +388,28 @@ describe("agentThreadGrouping", () => {
     expect(model.summaryText).toBeNull();
     expect(model.orderedBlocks[0]?.previewLines).toEqual([]);
   });
+
+  it("Provider 402 alert 摘要应显示用户友好提示", () => {
+    const items: AgentThreadItem[] = [
+      {
+        ...createBaseItem("provider-error-1", 1),
+        type: "error",
+        status: "failed",
+        message:
+          "Agent provider execution failed: Request failed with status 402 Payment Required: Insufficient Balance",
+      },
+    ];
+
+    const model = buildAgentThreadDisplayModel(items);
+
+    expect(model.orderedBlocks[0]?.previewLines[0]).toContain(
+      "当前 AI 服务商余额或额度不足",
+    );
+    expect(model.orderedBlocks[0]?.previewLines[0]).not.toContain(
+      "Payment Required",
+    );
+    expect(model.orderedBlocks[0]?.previewLines[0]).not.toContain(
+      "Insufficient Balance",
+    );
+  });
 });

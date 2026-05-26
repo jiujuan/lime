@@ -141,6 +141,7 @@ fn prepare_runtime_turn_policy(
     session_id: &str,
     session_recent_preferences: Option<&lime_agent::SessionExecutionRuntimePreferences>,
     auto_continue_enabled: bool,
+    effective_strategy: AsterExecutionStrategy,
 ) -> RuntimeTurnPolicyPreparation {
     let runtime_chat_mode = resolve_runtime_chat_mode(request.metadata.as_ref());
     let mode_default_web_search = default_web_search_enabled_for_chat_mode(runtime_chat_mode);
@@ -185,6 +186,7 @@ fn prepare_runtime_turn_policy(
         runtime_chat_mode,
         &request_tool_policy,
         auto_continue_enabled,
+        effective_strategy,
     );
 
     RuntimeTurnPolicyPreparation {
@@ -387,6 +389,12 @@ pub(super) async fn prepare_runtime_turn_submit_preparation(
     )
     .await?;
 
+    let persisted_strategy =
+        AsterExecutionStrategy::from_db_value(session_state_snapshot.execution_strategy());
+    let requested_strategy = request.execution_strategy.unwrap_or(persisted_strategy);
+    let effective_strategy = requested_strategy.effective_strategy();
+    apply_code_orchestrated_runtime_defaults(request, effective_strategy);
+
     let RuntimeTurnPolicyPreparation {
         request_tool_policy,
         execution_profile,
@@ -395,6 +403,7 @@ pub(super) async fn prepare_runtime_turn_submit_preparation(
         session_id,
         session_recent_preferences.as_ref(),
         auto_continue_enabled,
+        effective_strategy,
     );
 
     let RuntimeTurnRequestPreparation {
@@ -429,6 +438,8 @@ pub(super) async fn prepare_runtime_turn_submit_preparation(
         request,
         session_id,
         workspace_root,
+        requested_strategy,
+        effective_strategy,
         execution_profile,
         runtime_config,
         &request_tool_policy,

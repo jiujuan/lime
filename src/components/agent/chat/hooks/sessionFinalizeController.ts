@@ -97,6 +97,6 @@ export function resolveSessionExecutionStrategyOverride(params: {
     params.topicExecutionStrategy ||
     params.shadowExecutionStrategyFallback ||
     params.defaultExecutionStrategy ||
-    "react"
+    "auto"
   );
 }

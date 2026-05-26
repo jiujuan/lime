@@ -161,8 +161,11 @@ function classifyLanguageMarker(
     normalizedMarker.includes("accept_language") ||
     normalizedMarker.includes("browser_launch_language") ||
     normalizedFileLower.includes("/browser_environment") ||
+    normalizedFileLower.includes("/browserenvironment") ||
     normalizedFileLower.includes("/browser_runtime_cmd") ||
     normalizedFileLower.includes("/webview_cmd") ||
+    normalizedFileLower.includes("/webview-api") ||
+    normalizedText.includes("browser language") ||
     normalizedText.includes("accept-language")
   ) {
     return "browserEnvironmentLanguage";
@@ -170,7 +173,10 @@ function classifyLanguageMarker(
 
   if (
     normalizedMarker.includes("response_language") ||
-    normalizedMarker.includes("responselanguage")
+    normalizedMarker.includes("responselanguage") ||
+    normalizedText.includes("metadata.language") ||
+    normalizedText.includes("response language") ||
+    normalizedText.includes("response-language")
   ) {
     return "agentResponseLanguage";
   }
@@ -183,14 +189,24 @@ function classifyLanguageMarker(
     normalizedFileLower.includes("/messagelist") ||
     normalizedFileLower.includes("/messagelistitem") ||
     normalizedFileLower.includes("/general_chat/") ||
+    normalizedFileLower.includes("/general-chat/") ||
+    normalizedFileLower.includes("/markdownpreview") ||
     normalizedFileLower.includes("/streamingrenderer") ||
     normalizedFileLower.includes("/toolcalldisplay") ||
+    normalizedFileLower.includes("/workspace/useworkspaceartifactpreviewactions") ||
+    normalizedFileLower.includes("/workspace/useworkspaceartifactworkbenchactions") ||
     normalizedFileLower.includes("/zhihurenderer") ||
     normalizedFileLower.includes("/x-article-export") ||
+    normalizedText.includes("handlecodeblockclick") ||
+    normalizedText.includes("shouldcollapsecodeblockinchat") ||
     normalizedText.includes("code fence") ||
     normalizedText.includes("data-language") ||
     normalizedText.includes("代码块语言") ||
-    normalizedText.includes("language-")
+    normalizedText.includes("language-") ||
+    normalizedText.includes('language: "html"') ||
+    normalizedText.includes('language: "json"') ||
+    normalizedText.includes('language: "text"') ||
+    normalizedText.includes('language: "typescript"')
   ) {
     return "codeLanguage";
   }
@@ -200,7 +216,13 @@ function classifyLanguageMarker(
     normalizedMarker.includes("targetlanguage") ||
     normalizedFileLower.includes("/artifact_") ||
     normalizedFileLower.includes("/artifact/") ||
+    normalizedFileLower.includes("/artifact-protocol/") ||
+    normalizedFileLower.includes("/agentthreadtimeline") ||
+    normalizedFileLower.includes("/home/homecoverassets") ||
+    normalizedFileLower.includes("/hooks/useasteragentchat.test") ||
     normalizedFileLower.includes("/creation_tools") ||
+    normalizedFileLower.includes("/api/knowledge") ||
+    normalizedFileLower.includes("/knowledgemocks") ||
     normalizedFileLower.includes("/knowledge/") ||
     normalizedFileLower.includes("/media/") ||
     normalizedFileLower.includes("/media_task_cmd") ||
@@ -212,19 +234,34 @@ function classifyLanguageMarker(
     normalizedFileLower.includes("/mentioncommandreplaytext") ||
     normalizedFileLower.includes("/messageartifacts") ||
     normalizedFileLower.includes("/runtime_evidence_modality") ||
+    normalizedFileLower.includes("/workspace/useworkspacecanvasworkflowactions") ||
     normalizedFileLower.includes("/taskmessagepreview") ||
     normalizedFileLower.includes("/taskpreviewfromtoolresult") ||
+    normalizedFileLower.includes("/translationworkbenchcommand") ||
     normalizedFileLower.includes("/workspaceartifactpreview") ||
-    normalizedFileLower.includes("/workspacefilepreview")
+    normalizedFileLower.includes("/workspacefilepreview") ||
+    normalizedText.includes("video-dubbing-language")
   ) {
     return "contentTargetLanguage";
   }
 
   if (
+    normalizedFileLower.includes("/crates/lime-cli/src/main.rs") ||
+    normalizedFileLower.includes("/asrprovider") ||
+    normalizedFileLower.includes("/agent/chat/types") ||
+    normalizedFileLower.includes("/mediataskmocks") ||
+    normalizedFileLower.includes("/workspace/useworkspacesendactions") ||
+    normalizedFileLower.includes("/runtime_evidence_pack_service_tests") ||
     normalizedFileLower.includes("asr_cmd") ||
     normalizedFileLower.includes("voice_model") ||
     normalizedFileLower.includes("/voice") ||
     normalizedFileLower.includes("/transcription") ||
+    normalizedFileLower.includes("transcriptiontaskpreview") ||
+    normalizedFileLower.includes("transcriptcorrection") ||
+    normalizedText.includes("parsedcommand.language") ||
+    normalizedText.includes("transcription_task") ||
+    normalizedText.includes("transcription_generate") ||
+    normalizedText.includes("transcript_language") ||
     normalizedMarker.includes("preferredlanguage") ||
     normalizedMarker.includes("preferred_language")
   ) {
@@ -236,11 +273,26 @@ function classifyLanguageMarker(
     normalizedMarker === "i18n.language" ||
     normalizedMarker === "resolvedlanguage" ||
     normalizedFileLower.includes("/src/i18n/") ||
+    normalizedFileLower.includes("/api-key-provider/") ||
     normalizedFileLower.includes("/appsidebar") ||
+    normalizedFileLower.includes("/configsystemmocks") ||
+    normalizedFileLower.includes("/crashdiagnostic") ||
     normalizedFileLower.includes("/general/appearance/") ||
+    normalizedFileLower.includes("/memory/memorypage") ||
     normalizedFileLower.includes("/runtime_api.rs") ||
+    normalizedFileLower.includes("/settings-v2/agent/providers/") ||
+    normalizedFileLower.includes("/settings-v2/shared/language/") ||
+    normalizedFileLower.includes("/appconfigtypes") ||
     normalizedFileLower.includes("config/tests.rs") ||
     normalizedFileLower.includes("config/types.rs") ||
+    normalizedText.includes("interface language") ||
+    normalizedText.includes("i18n: { language") ||
+    normalizedText.includes("config().language") ||
+    normalizedText.includes("config.language") ||
+    normalizedText.includes("getfixedt(instance.language") ||
+    normalizedText.includes("getfixedt(currenti18n.language") ||
+    normalizedText.includes("navigator.language") ||
+    normalizedText.includes("settings-v2/shared/language") ||
     normalizedText.includes("documentelement.lang")
   ) {
     return "uiLocale";

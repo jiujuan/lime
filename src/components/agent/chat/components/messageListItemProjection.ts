@@ -1,4 +1,7 @@
-import { resolveArtifactProtocolFilePath } from "@/lib/artifact-protocol";
+import {
+  areArtifactProtocolPathsEquivalent,
+  resolveArtifactProtocolFilePath,
+} from "@/lib/artifact-protocol";
 import { isHiddenConversationArtifactPath } from "../utils/internalArtifactVisibility";
 import { resolveLatestProjectFileSavedSiteContentTargetFromMessage } from "../utils/latestSavedSiteContentTarget";
 import { isPureRuntimePeerMessageText } from "../utils/runtimePeerMessageDisplay";
@@ -46,6 +49,36 @@ import {
   MESSAGE_LIST_LONG_HISTORICAL_MESSAGE_PREVIEW_CHARS,
   MESSAGE_LIST_LONG_HISTORICAL_MESSAGE_THRESHOLD,
 } from "./messageListConstants";
+
+function normalizeFailureContentForCompare(value?: string | null): string {
+  return (value || "").trim().replace(/\s+/g, " ");
+}
+
+function isRuntimeFailureOnlyAssistantText(
+  message: Message,
+  actionContent: string,
+): boolean {
+  if (
+    message.role !== "assistant" ||
+    message.runtimeStatus?.phase !== "failed"
+  ) {
+    return false;
+  }
+
+  const detailText = normalizeFailureContentForCompare(
+    message.runtimeStatus.detail,
+  );
+  const contentText = normalizeFailureContentForCompare(actionContent);
+  if (!detailText || !contentText) {
+    return false;
+  }
+
+  return (
+    contentText === detailText ||
+    contentText === `执行失败：${detailText}` ||
+    contentText === `当前处理失败 ${detailText}`
+  );
+}
 
 export interface ResolveMessageListItemProjectionOptions {
   activeCurrentTurnId: string | null;
@@ -270,6 +303,9 @@ export function resolveMessageListItemProjection({
   const hasTrailingArtifactTimelineItems = trailingTimelineItems.some(
     (item) => item.type === "file_artifact",
   );
+  const trailingArtifactPaths = trailingTimelineItems.flatMap((item) =>
+    item.type === "file_artifact" ? [item.path] : [],
+  );
   const timelineActionRequests = inlineProcessCoverage.actionRequestCounts.size
     ? undefined
     : message.actionRequests;
@@ -303,7 +339,13 @@ export function resolveMessageListItemProjection({
       (message.id === lastAssistantMessageId && hasActiveInteractiveRuntime));
   const shouldReadOnlyInteractiveContent =
     message.role === "assistant" && !isCurrentInteractiveAssistantMessage;
-  const actionContent = displayContent.trim();
+  const rawActionContent = displayContent.trim();
+  const shouldSuppressDuplicatedFailureText =
+    Boolean(timeline) &&
+    isRuntimeFailureOnlyAssistantText(message, rawActionContent);
+  const actionContent = shouldSuppressDuplicatedFailureText
+    ? ""
+    : rawActionContent;
   const installedSkillMessageLabel =
     message.role === "user" ? resolveInstalledSkillMessageLabel(message) : null;
   const isUserCommandMessage =
@@ -359,10 +401,10 @@ export function resolveMessageListItemProjection({
       : "";
   const rendererContent = shouldCollapseLongHistoricalMessage
     ? buildHistoricalMessagePreview(
-        displayContent,
+        actionContent,
         MESSAGE_LIST_LONG_HISTORICAL_MESSAGE_PREVIEW_CHARS,
       )
-    : displayContent;
+    : actionContent;
   const rendererRawContent =
     shouldCollapseLongHistoricalMessage || shouldFlattenHistoricalAssistantContent
       ? rendererContent
@@ -420,12 +462,16 @@ export function resolveMessageListItemProjection({
       : null;
   const visibleAssistantArtifacts =
     message.role === "assistant" && !shouldSuppressImageProcessFlow
-      ? (message.artifacts || []).filter(
-          (artifact) =>
-            !isHiddenConversationArtifactPath(
-              resolveArtifactProtocolFilePath(artifact),
-            ),
-        )
+      ? (message.artifacts || []).filter((artifact) => {
+          const artifactPath = resolveArtifactProtocolFilePath(artifact);
+          if (isHiddenConversationArtifactPath(artifactPath)) {
+            return false;
+          }
+
+          return !trailingArtifactPaths.some((timelinePath) =>
+            areArtifactProtocolPathsEquivalent(artifactPath, timelinePath),
+          );
+        })
       : [];
   const shouldRenderMessageCanvasShortcut = Boolean(
     messageSavedSiteContentTarget &&

@@ -9,7 +9,11 @@ fn write_registered_skill(
     directory: &str,
     source_verification_report_id: Option<&str>,
 ) {
-    let skill_dir = workspace.path().join(".agents").join("skills").join(directory);
+    let skill_dir = workspace
+        .path()
+        .join(".agents")
+        .join("skills")
+        .join(directory);
     fs::create_dir_all(skill_dir.join(".lime")).expect("create skill metadata dir");
     fs::write(
         skill_dir.join("SKILL.md"),

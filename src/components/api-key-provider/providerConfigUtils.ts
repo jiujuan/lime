@@ -8,7 +8,6 @@ import type {
   ProviderDeclaredPromptCacheMode,
   ProviderType,
 } from "@/lib/types/provider";
-import { canonicalizeKnownProviderModelId } from "@/lib/model/xiaomiModelNormalization";
 import { getProviderPromptCacheMode } from "@/lib/model/providerPromptCacheSupport";
 import type { EnhancedModelMetadata } from "@/lib/types/modelRegistry";
 
@@ -167,25 +166,14 @@ interface ProviderModelNormalizationOptions {
 
 function normalizeProviderModelId(
   modelId: string,
-  options?: ProviderModelNormalizationOptions,
+  _options?: ProviderModelNormalizationOptions,
 ): string {
   const trimmed = modelId.trim();
   if (!trimmed) {
     return "";
   }
 
-  if (!options) {
-    return trimmed;
-  }
-
-  return (
-    canonicalizeKnownProviderModelId({
-      providerId: options.providerId,
-      providerType: options.providerType,
-      apiHost: options.apiHost,
-      modelId: trimmed,
-    }) || trimmed
-  );
+  return trimmed;
 }
 
 function canonicalizeProviderModelIds(

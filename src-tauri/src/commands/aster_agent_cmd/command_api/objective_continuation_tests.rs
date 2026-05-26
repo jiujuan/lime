@@ -100,6 +100,61 @@ fn continuation_request_carries_source_metadata() {
 }
 
 #[test]
+fn continuation_request_can_inherit_direct_provider_config() {
+    let mut request = build_objective_continuation_request(
+        &objective(ManagedObjectiveStatus::Active),
+        ManagedObjectiveContinuationSource::AutoIdle,
+    );
+
+    apply_provider_config_to_continuation_request(
+        &mut request,
+        Some(ProviderConfig {
+            provider_name: "openai".to_string(),
+            provider_selector: Some("fixture-openai".to_string()),
+            model_name: "lime-fixture-chat".to_string(),
+            api_key: Some("fixture-key".to_string()),
+            base_url: Some("http://127.0.0.1:56013".to_string()),
+            credential_uuid: None,
+            force_responses_api: false,
+            toolshim: true,
+            toolshim_model: Some("toolshim-fixture".to_string()),
+        }),
+    );
+
+    let provider_config = request
+        .provider_config
+        .as_ref()
+        .expect("continuation request should inherit provider config");
+    assert_eq!(
+        request.provider_preference.as_deref(),
+        Some("fixture-openai")
+    );
+    assert_eq!(
+        request.model_preference.as_deref(),
+        Some("lime-fixture-chat")
+    );
+    assert_eq!(
+        provider_config.provider_id.as_deref(),
+        Some("fixture-openai")
+    );
+    assert_eq!(provider_config.provider_name, "openai");
+    assert_eq!(provider_config.model_name, "lime-fixture-chat");
+    assert_eq!(provider_config.api_key, None);
+    assert_eq!(
+        provider_config.base_url.as_deref(),
+        Some("http://127.0.0.1:56013")
+    );
+    assert_eq!(
+        provider_config.tool_call_strategy,
+        Some(RuntimeToolCallStrategy::ToolShim)
+    );
+    assert_eq!(
+        provider_config.toolshim_model.as_deref(),
+        Some("toolshim-fixture")
+    );
+}
+
+#[test]
 fn auto_guard_requires_explicit_policy_enable() {
     let objective = objective(ManagedObjectiveStatus::Active);
     let decision = resolve_auto_continuation_guard(guard_input(&objective, Default::default()));

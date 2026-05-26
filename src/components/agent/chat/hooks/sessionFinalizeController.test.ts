@@ -147,6 +147,6 @@ describe("sessionFinalizeController", () => {
         topicExecutionStrategy: null,
         shadowExecutionStrategyFallback: null,
       }),
-    ).toBe("react");
+    ).toBe("auto");
   });
 });

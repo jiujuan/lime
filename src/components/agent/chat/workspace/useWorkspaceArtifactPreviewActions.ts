@@ -364,6 +364,26 @@ export function useWorkspaceArtifactPreviewActions({
 
         suppressBrowserAssistCanvasAutoOpen();
         setSelectedArtifactId(null);
+        if (!content.trim()) {
+          void (async () => {
+            const preview = await handleHarnessLoadFilePreview(fileName);
+            const nextContent =
+              !preview.error && !preview.isBinary && preview.content !== null
+                ? preview.content || ""
+                : content;
+            setGeneralCanvasState(
+              buildGeneralCanvasStateFromWorkspaceFile(fileName, nextContent, {
+                sourcePath:
+                  !preview.error && !preview.isBinary
+                    ? preview.path || fileName
+                    : null,
+              }),
+            );
+            openCanvasForReason("user_open_file", setLayoutMode);
+          })();
+          return;
+        }
+
         setGeneralCanvasState(
           buildGeneralCanvasStateFromWorkspaceFile(fileName, content),
         );
@@ -407,6 +427,7 @@ export function useWorkspaceArtifactPreviewActions({
     [
       activeTheme,
       applyContentToCanvas,
+      handleHarnessLoadFilePreview,
       isThemeWorkbench,
       openArtifactInWorkbench,
       setGeneralCanvasState,

@@ -10,3 +10,9 @@ export interface ConnectionTestResult {
   error?: string;
   models?: string[];
 }
+
+export interface ConnectionTestOptions {
+  modelName?: string;
+  requireChatReady?: boolean;
+  prompt?: string;
+}

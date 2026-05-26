@@ -127,9 +127,6 @@ fn canonical_provider_selector(provider_selector: &str) -> String {
     }
 }
 
-const XIAOMI_HOST_KEYWORDS: [&str; 1] = ["xiaomimimo.com"];
-const PROVIDER_PERMISSION_RECOVERY_MODELS: [(&str, &str); 1] = [("openai", "gpt-4o-mini")];
-
 fn provider_alias_config_key(provider_key: &str) -> String {
     match normalize_identifier(provider_key).as_str() {
         "gemini_api_key" => "gemini".to_string(),
@@ -862,55 +859,13 @@ fn find_model_meta<'a>(
         .find(|model| normalize_identifier(&model.id) == normalized)
 }
 
-fn is_xiaomi_like_provider_context(context: &ProviderResolutionContext) -> bool {
-    let provider_selector = normalize_identifier(&context.provider_selector);
-    let compatibility_provider = normalize_identifier(&context.compatibility_provider_key);
-    let provider_type = context
-        .provider_type
-        .map(|provider_type| normalize_identifier(&provider_type.to_string()))
-        .unwrap_or_default();
-    let api_host = context
-        .configured_api_host
-        .as_deref()
-        .map(normalize_identifier)
-        .unwrap_or_default();
-
-    matches!(provider_selector.as_str(), "xiaomi" | "mimo" | "xiaomimimo")
-        || matches!(
-            compatibility_provider.as_str(),
-            "xiaomi" | "mimo" | "xiaomimimo"
-        )
-        || matches!(provider_type.as_str(), "xiaomi" | "mimo" | "xiaomimimo")
-        || XIAOMI_HOST_KEYWORDS
-            .iter()
-            .any(|keyword| api_host.contains(keyword))
-}
-
-fn canonicalize_xiaomi_model_id(model_id: &str) -> String {
-    let trimmed = model_id.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-
-    match normalize_identifier(trimmed).as_str() {
-        "mimo-v2-pro" | "mimo-v2.5" | "mimo-v2.5-pro" | "mimo-v2-flash" => {
-            "mimo-v2.5-pro".to_string()
-        }
-        _ => trimmed.to_string(),
-    }
-}
-
 fn canonicalize_known_provider_model_id(
-    context: &ProviderResolutionContext,
+    _context: &ProviderResolutionContext,
     model_id: &str,
 ) -> String {
     let trimmed = model_id.trim();
     if trimmed.is_empty() {
         return String::new();
-    }
-
-    if is_xiaomi_like_provider_context(context) {
-        return canonicalize_xiaomi_model_id(trimmed);
     }
 
     trimmed.to_string()
@@ -1478,54 +1433,7 @@ fn should_auto_reselect_multi_candidate_model(context: &ProviderResolutionContex
     !context.is_custom_provider && context.custom_models.is_empty()
 }
 
-fn provider_matches_permission_recovery_selector(
-    context: &ProviderResolutionContext,
-    provider_selector: &str,
-) -> bool {
-    let target = canonical_provider_selector(provider_selector);
-    let provider_selector = canonical_provider_selector(&context.provider_selector);
-    !context.is_custom_provider && provider_selector == target
-}
-
-fn choose_known_provider_permission_recovery_model(
-    context: &ProviderResolutionContext,
-    current_model_id: &str,
-    models: &[EnhancedModelMetadata],
-    thinking_enabled: bool,
-    has_images: bool,
-) -> Option<String> {
-    let normalized_current_id = normalize_identifier(current_model_id);
-    let candidate_id =
-        PROVIDER_PERMISSION_RECOVERY_MODELS
-            .iter()
-            .find_map(|(provider_selector, model_id)| {
-                provider_matches_permission_recovery_selector(context, provider_selector)
-                    .then_some(*model_id)
-            })?;
-
-    if normalize_identifier(candidate_id) == normalized_current_id {
-        return None;
-    }
-
-    let model = find_model_meta(candidate_id, models);
-    if !configured_custom_model_matches_runtime_request(
-        candidate_id,
-        model,
-        thinking_enabled,
-        has_images,
-        &[RuntimeModelCapabilityRequirement::TextGeneration],
-    ) {
-        return None;
-    }
-
-    Some(
-        model
-            .map(|item| item.id.clone())
-            .unwrap_or_else(|| candidate_id.to_string()),
-    )
-}
-
-fn choose_provider_permission_recovery_model(
+fn choose_provider_model_recovery_model(
     context: &ProviderResolutionContext,
     current_model_id: &str,
     models: &[EnhancedModelMetadata],
@@ -1541,20 +1449,6 @@ fn choose_provider_permission_recovery_model(
         &[RuntimeModelCapabilityRequirement::TextGeneration],
     ) {
         return Some(candidate);
-    }
-
-    if let Some(candidate) = choose_known_provider_permission_recovery_model(
-        context,
-        current_model_id,
-        models,
-        thinking_enabled,
-        has_images,
-    ) {
-        return Some(candidate);
-    }
-
-    if !context.is_custom_provider || !is_xiaomi_like_provider_context(context) {
-        return None;
     }
 
     let normalized_current_id = normalize_identifier(current_model_id);
@@ -1585,8 +1479,6 @@ fn choose_provider_permission_recovery_model(
             !current_lineage.is_empty() && normalize_model_lineage_key(&left.id) == current_lineage;
         let right_same_lineage = !current_lineage.is_empty()
             && normalize_model_lineage_key(&right.id) == current_lineage;
-        let left_non_flash = !normalize_identifier(&left.id).contains("flash");
-        let right_non_flash = !normalize_identifier(&right.id).contains("flash");
         let left_reasoning_match =
             model_has_reasoning_capability(Some(left), &left.id) == thinking_enabled;
         let right_reasoning_match =
@@ -1598,7 +1490,6 @@ fn choose_provider_permission_recovery_model(
             .cmp(&right_same_family)
             .reverse()
             .then(left_same_lineage.cmp(&right_same_lineage).reverse())
-            .then(left_non_flash.cmp(&right_non_flash).reverse())
             .then(left_reasoning_match.cmp(&right_reasoning_match).reverse())
             .then(left_vision_match.cmp(&right_vision_match).reverse())
             .then(
@@ -3364,7 +3255,7 @@ async fn build_runtime_request_provider_config_from_preference(
     })
 }
 
-pub(super) async fn resolve_runtime_provider_auth_recovery_config(
+pub(super) async fn resolve_runtime_provider_model_recovery_config(
     app: &AppHandle,
     db: &DbConnection,
     api_key_provider_service: &ApiKeyProviderServiceState,
@@ -3383,7 +3274,7 @@ pub(super) async fn resolve_runtime_provider_auth_recovery_config(
         .map(|images| !images.is_empty())
         .unwrap_or(false);
 
-    let Some(fallback_model) = choose_provider_permission_recovery_model(
+    let Some(fallback_model) = choose_provider_model_recovery_model(
         &context,
         &failed_model,
         &catalog,

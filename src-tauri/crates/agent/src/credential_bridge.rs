@@ -583,6 +583,8 @@ fn set_provider_env_vars(config: &AsterProviderConfig) {
         }
         if config.base_url.is_none() {
             update_openai_lime_tenant_custom_header(None);
+            std::env::remove_var("OPENAI_HOST");
+            std::env::remove_var("OPENAI_BASE_PATH");
         }
     }
 
@@ -800,6 +802,32 @@ mod tests {
             std::env::var("OPENAI_FORCE_RESPONSES_API").ok().as_deref(),
             Some("1")
         );
+    }
+
+    #[test]
+    fn test_set_provider_env_vars_openai_without_base_url_clears_previous_endpoint() {
+        let _env_guard = env_lock();
+        std::env::set_var("OPENAI_HOST", "https://api.deepseek.com");
+        std::env::set_var("OPENAI_BASE_PATH", "v1/chat/completions");
+        std::env::set_var("OPENAI_FORCE_RESPONSES_API", "1");
+
+        let config = AsterProviderConfig {
+            provider_name: "openai".to_string(),
+            provider_selector: Some("openai".to_string()),
+            model_name: "gpt-5.4".to_string(),
+            api_key: Some("test-key".to_string()),
+            base_url: None,
+            credential_uuid: "test-uuid".to_string(),
+            force_responses_api: false,
+            toolshim: false,
+            toolshim_model: None,
+        };
+
+        set_provider_env_vars(&config);
+
+        assert_eq!(std::env::var("OPENAI_HOST").ok(), None);
+        assert_eq!(std::env::var("OPENAI_BASE_PATH").ok(), None);
+        assert_eq!(std::env::var("OPENAI_FORCE_RESPONSES_API").ok(), None);
     }
 
     #[test]

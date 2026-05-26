@@ -30,7 +30,7 @@
     "issueCount": 0,
     "localeCount": 5,
     "namespaceCount": 13,
-    "sourceKeyCount": 7318
+    "sourceKeyCount": 7493
   },
   "coverage": {
     "localeSummaries": [
@@ -45,8 +45,8 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agent",
-            "sourceKeyCount": 587,
-            "translatedKeyCount": 587
+            "sourceKeyCount": 813,
+            "translatedKeyCount": 813
           },
           {
             "extraKeyCount": 0,
@@ -77,24 +77,24 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agentMessageList",
-            "sourceKeyCount": 71,
-            "translatedKeyCount": 71
+            "sourceKeyCount": 220,
+            "translatedKeyCount": 220
           },
           {
             "extraKeyCount": 0,
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agentRuntime",
-            "sourceKeyCount": 601,
-            "translatedKeyCount": 601
+            "sourceKeyCount": 641,
+            "translatedKeyCount": 641
           },
           {
             "extraKeyCount": 0,
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agentSkills",
-            "sourceKeyCount": 980,
-            "translatedKeyCount": 980
+            "sourceKeyCount": 914,
+            "translatedKeyCount": 914
           },
           {
             "extraKeyCount": 0,
@@ -109,8 +109,8 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "common",
-            "sourceKeyCount": 262,
-            "translatedKeyCount": 262
+            "sourceKeyCount": 261,
+            "translatedKeyCount": 261
           },
           {
             "extraKeyCount": 0,
@@ -125,28 +125,28 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "navigation",
-            "sourceKeyCount": 153,
-            "translatedKeyCount": 153
+            "sourceKeyCount": 156,
+            "translatedKeyCount": 156
           },
           {
             "extraKeyCount": 0,
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "settings",
-            "sourceKeyCount": 2717,
-            "translatedKeyCount": 2717
+            "sourceKeyCount": 2534,
+            "translatedKeyCount": 2534
           },
           {
             "extraKeyCount": 0,
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "workspace",
-            "sourceKeyCount": 871,
-            "translatedKeyCount": 871
+            "sourceKeyCount": 878,
+            "translatedKeyCount": 878
           }
         ],
-        "sourceKeyCount": 7318,
-        "translatedKeyCount": 7318
+        "sourceKeyCount": 7493,
+        "translatedKeyCount": 7493
       },
       {
         "coverageRatio": 1,
@@ -159,8 +159,8 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agent",
-            "sourceKeyCount": 587,
-            "translatedKeyCount": 587
+            "sourceKeyCount": 813,
+            "translatedKeyCount": 813
           },
           {
             "extraKeyCount": 0,
@@ -191,24 +191,24 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agentMessageList",
-            "sourceKeyCount": 71,
-            "translatedKeyCount": 71
+            "sourceKeyCount": 220,
+            "translatedKeyCount": 220
           },
           {
             "extraKeyCount": 0,
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agentRuntime",
-            "sourceKeyCount": 601,
-            "translatedKeyCount": 601
+            "sourceKeyCount": 641,
+            "translatedKeyCount": 641
           },
           {
             "extraKeyCount": 0,
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agentSkills",
-            "sourceKeyCount": 980,
-            "translatedKeyCount": 980
+            "sourceKeyCount": 914,
+            "translatedKeyCount": 914
           },
           {
             "extraKeyCount": 0,
@@ -223,8 +223,8 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "common",
-            "sourceKeyCount": 262,
-            "translatedKeyCount": 262
+            "sourceKeyCount": 261,
+            "translatedKeyCount": 261
           },
           {
             "extraKeyCount": 0,
@@ -239,28 +239,28 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "navigation",
-            "sourceKeyCount": 153,
-            "translatedKeyCount": 153
+            "sourceKeyCount": 156,
+            "translatedKeyCount": 156
           },
           {
             "extraKeyCount": 0,
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "settings",
-            "sourceKeyCount": 2717,
-            "translatedKeyCount": 2717
+            "sourceKeyCount": 2534,
+            "translatedKeyCount": 2534
           },
           {
             "extraKeyCount": 0,
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "workspace",
-            "sourceKeyCount": 871,
-            "translatedKeyCount": 871
+            "sourceKeyCount": 878,
+            "translatedKeyCount": 878
           }
         ],
-        "sourceKeyCount": 7318,
-        "translatedKeyCount": 7318
+        "sourceKeyCount": 7493,
+        "translatedKeyCount": 7493
       },
       {
         "coverageRatio": 1,
@@ -273,8 +273,8 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agent",
-            "sourceKeyCount": 587,
-            "translatedKeyCount": 587
+            "sourceKeyCount": 813,
+            "translatedKeyCount": 813
           },
           {
             "extraKeyCount": 0,
@@ -305,24 +305,24 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agentMessageList",
-            "sourceKeyCount": 71,
-            "translatedKeyCount": 71
+            "sourceKeyCount": 220,
+            "translatedKeyCount": 220
           },
           {
             "extraKeyCount": 0,
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agentRuntime",
-            "sourceKeyCount": 601,
-            "translatedKeyCount": 601
+            "sourceKeyCount": 641,
+            "translatedKeyCount": 641
           },
           {
             "extraKeyCount": 0,
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agentSkills",
-            "sourceKeyCount": 980,
-            "translatedKeyCount": 980
+            "sourceKeyCount": 914,
+            "translatedKeyCount": 914
           },
           {
             "extraKeyCount": 0,
@@ -337,8 +337,8 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "common",
-            "sourceKeyCount": 262,
-            "translatedKeyCount": 262
+            "sourceKeyCount": 261,
+            "translatedKeyCount": 261
           },
           {
             "extraKeyCount": 0,
@@ -353,28 +353,28 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "navigation",
-            "sourceKeyCount": 153,
-            "translatedKeyCount": 153
+            "sourceKeyCount": 156,
+            "translatedKeyCount": 156
           },
           {
             "extraKeyCount": 0,
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "settings",
-            "sourceKeyCount": 2717,
-            "translatedKeyCount": 2717
+            "sourceKeyCount": 2534,
+            "translatedKeyCount": 2534
           },
           {
             "extraKeyCount": 0,
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "workspace",
-            "sourceKeyCount": 871,
-            "translatedKeyCount": 871
+            "sourceKeyCount": 878,
+            "translatedKeyCount": 878
           }
         ],
-        "sourceKeyCount": 7318,
-        "translatedKeyCount": 7318
+        "sourceKeyCount": 7493,
+        "translatedKeyCount": 7493
       },
       {
         "coverageRatio": 1,
@@ -387,8 +387,8 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agent",
-            "sourceKeyCount": 587,
-            "translatedKeyCount": 587
+            "sourceKeyCount": 813,
+            "translatedKeyCount": 813
           },
           {
             "extraKeyCount": 0,
@@ -419,24 +419,24 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agentMessageList",
-            "sourceKeyCount": 71,
-            "translatedKeyCount": 71
+            "sourceKeyCount": 220,
+            "translatedKeyCount": 220
           },
           {
             "extraKeyCount": 0,
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agentRuntime",
-            "sourceKeyCount": 601,
-            "translatedKeyCount": 601
+            "sourceKeyCount": 641,
+            "translatedKeyCount": 641
           },
           {
             "extraKeyCount": 0,
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agentSkills",
-            "sourceKeyCount": 980,
-            "translatedKeyCount": 980
+            "sourceKeyCount": 914,
+            "translatedKeyCount": 914
           },
           {
             "extraKeyCount": 0,
@@ -451,8 +451,8 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "common",
-            "sourceKeyCount": 262,
-            "translatedKeyCount": 262
+            "sourceKeyCount": 261,
+            "translatedKeyCount": 261
           },
           {
             "extraKeyCount": 0,
@@ -467,28 +467,28 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "navigation",
-            "sourceKeyCount": 153,
-            "translatedKeyCount": 153
+            "sourceKeyCount": 156,
+            "translatedKeyCount": 156
           },
           {
             "extraKeyCount": 0,
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "settings",
-            "sourceKeyCount": 2717,
-            "translatedKeyCount": 2717
+            "sourceKeyCount": 2534,
+            "translatedKeyCount": 2534
           },
           {
             "extraKeyCount": 0,
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "workspace",
-            "sourceKeyCount": 871,
-            "translatedKeyCount": 871
+            "sourceKeyCount": 878,
+            "translatedKeyCount": 878
           }
         ],
-        "sourceKeyCount": 7318,
-        "translatedKeyCount": 7318
+        "sourceKeyCount": 7493,
+        "translatedKeyCount": 7493
       }
     ],
     "summary": {
@@ -497,10 +497,9 @@
       "fullCoverageLocaleCount": 4,
       "localeCount": 4,
       "missingKeyCount": 0,
-      "sourceKeyCount": 7318,
-      "translatedKeyCount": 29272
+      "sourceKeyCount": 7493,
+      "translatedKeyCount": 29972
     }
   },
   "issues": []
 }
-

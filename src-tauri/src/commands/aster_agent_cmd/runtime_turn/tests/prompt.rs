@@ -280,7 +280,13 @@ fn workspace_skill_runtime_enable_metadata_should_force_full_runtime_context() {
         &metadata
     )));
     assert_eq!(
-        resolve_turn_execution_profile(&request, RuntimeChatMode::General, &policy, false,),
+        resolve_turn_execution_profile(
+            &request,
+            RuntimeChatMode::General,
+            &policy,
+            false,
+            AsterExecutionStrategy::React,
+        ),
         TurnExecutionProfile::FullRuntime
     );
     assert!(!should_enable_model_skill_tool(Some(&metadata)));

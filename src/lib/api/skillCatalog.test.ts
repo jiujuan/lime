@@ -859,6 +859,9 @@ describe("skillCatalog", () => {
           ],
           aliases: ["launch", "campaign"],
           executionKind: "scene",
+          requestDefaults: {
+            executionStrategy: "code_orchestrated",
+          },
           renderContract: {
             resultKind: "tool_timeline",
             detailKind: "scene_detail",
@@ -912,6 +915,9 @@ describe("skillCatalog", () => {
           prompt: "请帮我规划新品发布内容。",
         },
       ],
+      requestDefaults: {
+        executionStrategy: "code_orchestrated",
+      },
     });
   });
 

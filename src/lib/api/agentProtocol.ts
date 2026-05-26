@@ -505,6 +505,7 @@ export interface AgentEventTurnContext {
   session_id: string;
   thread_id: string;
   turn_id: string;
+  execution_strategy?: AsterExecutionStrategy | null;
   output_schema_runtime?: AsterTurnOutputSchemaRuntime | null;
   context_summary?: AgentTurnContextSummary | null;
   approval_policy?: string | null;
@@ -876,6 +877,14 @@ function normalizeOptionalNumber(value: unknown): number | undefined {
     : undefined;
 }
 
+function normalizeExecutionStrategy(
+  value: unknown,
+): AsterExecutionStrategy | null {
+  return value === "react" || value === "code_orchestrated" || value === "auto"
+    ? value
+    : null;
+}
+
 export function parseAgentEvent(data: unknown): AgentEvent | null {
   if (!data || typeof data !== "object") {
     return null;
@@ -1118,6 +1127,9 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
         session_id: (event.session_id as string) || "",
         thread_id: (event.thread_id as string) || "",
         turn_id: (event.turn_id as string) || "",
+        execution_strategy: normalizeExecutionStrategy(
+          event.execution_strategy,
+        ),
         output_schema_runtime:
           (event.output_schema_runtime as
             | AsterTurnOutputSchemaRuntime

@@ -4,7 +4,9 @@ import {
   listSkillCatalogCommandEntries,
   subscribeSkillCatalogChanged,
   type SkillCatalog,
+  type SkillCatalogCommandEntry,
 } from "@/lib/api/skillCatalog";
+import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
 import {
   INPUTBAR_BUILTIN_COMMANDS,
   listBuiltinCommandsFromSkillCatalog,
@@ -13,16 +15,23 @@ import {
   type RuntimeSceneSlashCommand,
 } from "./builtinCommands";
 
+export interface RuntimeMentionAgentTurnRoute {
+  commandKey: string;
+  executionStrategy?: AsterExecutionStrategy;
+}
+
 export interface RuntimeInputCapabilityCatalog {
   builtinCommands: BuiltinInputCommand[];
   sceneCommands: RuntimeSceneSlashCommand[];
   mentionCommandPrefixKeyMap: Map<string, string>;
   mentionCommandSkillIdMap: Map<string, string>;
+  mentionAgentTurnRouteMap: Map<string, RuntimeMentionAgentTurnRoute>;
 }
 
 export interface RuntimeMentionCommandCatalog {
   mentionCommandPrefixKeyMap: Map<string, string>;
   mentionCommandSkillIdMap: Map<string, string>;
+  mentionAgentTurnRouteMap: Map<string, RuntimeMentionAgentTurnRoute>;
 }
 
 function normalizeMentionCommandPrefix(value?: string | null): string {
@@ -70,12 +79,57 @@ function buildMentionCommandPrefixKeyMap(
   );
 }
 
+export function parseCatalogExecutionStrategy(
+  value?: string,
+): AsterExecutionStrategy | undefined {
+  return value === "react" || value === "code_orchestrated" || value === "auto"
+    ? value
+    : undefined;
+}
+
+function buildAgentTurnRoute(
+  entry: SkillCatalogCommandEntry,
+): RuntimeMentionAgentTurnRoute | null {
+  const commandKey = entry.commandKey.trim();
+  if (!commandKey || entry.binding?.executionKind !== "agent_turn") {
+    return null;
+  }
+
+  const requestDefaults = entry.binding.requestDefaults ?? {};
+  const executionStrategy = parseCatalogExecutionStrategy(
+    requestDefaults.executionStrategy ?? requestDefaults.execution_strategy,
+  );
+
+  if (!executionStrategy) {
+    return null;
+  }
+
+  return {
+    commandKey,
+    executionStrategy,
+  };
+}
+
+function buildMentionAgentTurnRouteMap(
+  catalog: SkillCatalog,
+): Map<string, RuntimeMentionAgentTurnRoute> {
+  return new Map(
+    listSkillCatalogCommandEntries(catalog)
+      .map((entry) => buildAgentTurnRoute(entry))
+      .filter(
+        (route): route is RuntimeMentionAgentTurnRoute => Boolean(route),
+      )
+      .map((route) => [route.commandKey, route] as const),
+  );
+}
+
 export function buildRuntimeMentionCommandCatalog(
   catalog: SkillCatalog,
 ): RuntimeMentionCommandCatalog {
   return {
     mentionCommandPrefixKeyMap: buildMentionCommandPrefixKeyMap(catalog),
     mentionCommandSkillIdMap: buildMentionCommandSkillIdMap(catalog),
+    mentionAgentTurnRouteMap: buildMentionAgentTurnRouteMap(catalog),
   };
 }
 

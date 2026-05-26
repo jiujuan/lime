@@ -52,7 +52,10 @@ fn should_preserve_persisted_terminal_turn(
     ) && matches!(runtime.status, AgentThreadTurnStatus::Running)
 }
 
-pub(super) fn apply_aster_runtime_snapshot(detail: &mut SessionDetail, snapshot: &SessionRuntimeSnapshot) {
+pub(super) fn apply_aster_runtime_snapshot(
+    detail: &mut SessionDetail,
+    snapshot: &SessionRuntimeSnapshot,
+) {
     if let Some(thread) = snapshot.threads.first() {
         detail.thread_id = thread.thread.id.clone();
     }

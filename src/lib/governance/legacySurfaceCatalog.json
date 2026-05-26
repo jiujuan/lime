@@ -1066,6 +1066,16 @@
       "allowedPaths": []
     },
     {
+      "id": "agent-chat-code-workbench-command-parser-entry",
+      "classification": "dead",
+      "description": "已删除的旧工作台专用 parser 与测试入口；编程底座当前收敛到 command catalog agent_turn route 与 code_orchestrated runtime，不得恢复这些文件",
+      "targets": [
+        "src/components/agent/chat/utils/codeWorkbenchCommand.ts",
+        "src/components/agent/chat/utils/codeWorkbenchCommand.test.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
       "id": "stable-processing-notice-entry",
       "classification": "dead-candidate",
       "description": "已删除的稳定处理中提示组件与 Hook，当前聊天主链不再暴露该独立短暂提示壳",
@@ -3687,6 +3697,60 @@
         "src/components/agent/chat/components/EmptyState.tsx",
         "src/components/agent/chat/components/EmptyStateComposerPanel.tsx",
         "src/components/agent/chat/components/Inputbar/components/InputbarModelExtra.tsx"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "agent-chat-code-workbench-command-parser-symbols",
+      "classification": "dead",
+      "description": "已删除的旧工作台专用 parser 文件不得恢复可调用 parser、prompt 兼容类型、快捷触发词、运行策略或独立 mention catalog 适配",
+      "patterns": [
+        "parseCodeWorkbenchCommand",
+        "ParsedCodeWorkbenchCommand",
+        "ParseCodeWorkbenchCommandOptions",
+        "mentionCommandPrefixKeyMap",
+        "parseMentionCommand",
+        "code_runtime",
+        "code_orchestrated",
+        "codeOrchestratedDefaults",
+        "code_orchestrated_defaults",
+        "applyCodeOrchestratedDefaults",
+        "harness.code_command",
+        "@代码",
+        "@code",
+        "@coding",
+        "@开发"
+      ],
+      "includePathPrefixes": [
+        "src/components/agent/chat/utils/codeWorkbenchCommand.ts",
+        "src/components/agent/chat/utils/codeWorkbenchCommand.test.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "agent-chat-code-workbench-workspace-send-hardcode",
+      "classification": "dead",
+      "description": "Workspace 发送主链不得重新为 @代码 / code_runtime 增加专用 parser、专用命令键判断、正文关键词路由或独立 code_command metadata；编程底座必须由 code_orchestrated 主链承载，@代码 只允许作为 command catalog 的 agent_turn 快捷入口",
+      "patterns": [
+        "parseCodeWorkbenchCommand",
+        "commandKey: \"code_runtime\"",
+        "commandKey === \"code_runtime\"",
+        "codeOrchestratedDefaults",
+        "code_orchestrated_defaults",
+        "applyCodeOrchestratedDefaults",
+        "harness.code_command",
+        "code_command:",
+        ".includes(\"代码\")",
+        ".includes('代码')",
+        ".includes(\"修复\")",
+        ".includes('修复')",
+        ".includes(\"重构\")",
+        ".includes('重构')",
+        ".includes(\"评审\")",
+        ".includes('评审')"
+      ],
+      "includePathPrefixes": [
+        "src/components/agent/chat/workspace/useWorkspaceSendActions.ts"
       ],
       "allowedPaths": []
     },

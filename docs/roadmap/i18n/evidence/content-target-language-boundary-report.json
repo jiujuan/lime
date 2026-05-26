@@ -171,14 +171,14 @@
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/aster_agent_cmd/tests.rs",
-      "line": 5905,
+      "line": 5897,
       "marker": "target_language",
       "text": "\"target_language\": \"中文\","
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/aster_agent_cmd/tests.rs",
-      "line": 7660,
+      "line": 7706,
       "marker": "target_language",
       "text": "\"target_language\": \"中文\""
     },
@@ -474,140 +474,217 @@
       "file": "src-tauri/src/commands/media_task_cmd.rs",
       "line": 4963,
       "marker": "target_language",
+      "text": "\"target_language\": target_language.clone(),"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src-tauri/src/commands/media_task_cmd.rs",
+      "line": 4990,
+      "marker": "target_language",
       "text": "\"target_language\": target_language,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 5019,
+      "line": 5021,
       "marker": "target_language",
       "text": "\"target_language\": read_image_task_payload_string(payload, &[\"target_language\", \"targetLanguage\"]),"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 5043,
+      "line": 5045,
       "marker": "language",
       "text": "language: Option<&str>,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 5055,
+      "line": 5057,
       "marker": "language",
       "text": "\"language\": language,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 5079,
+      "line": 5081,
       "marker": "language",
       "text": "let language = normalize_optional_string(request.language.clone());"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 5111,
+      "line": 5113,
       "marker": "language",
       "text": "language.as_deref(),"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 5122,
+      "line": 5124,
       "marker": "language",
       "text": "language.as_deref(),"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 5137,
+      "line": 5139,
       "marker": "language",
       "text": "\"language\": language,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 6087,
+      "line": 6089,
       "marker": "target_language",
       "text": "target_language: Some(\"zh-CN\".to_string()),"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 6118,
+      "line": 6120,
       "marker": "target_language",
       "text": "target_language: Some(\"zh-CN\".to_string()),"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 6392,
+      "line": 6175,
+      "marker": "target_language",
+      "text": ".get(\"target_language\")"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src-tauri/src/commands/media_task_cmd.rs",
+      "line": 6231,
+      "marker": "target_language",
+      "text": ".pointer(\"/audio_output/target_language\")"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src-tauri/src/commands/media_task_cmd.rs",
+      "line": 6418,
       "marker": "target_language",
       "text": "target_language: None,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 6439,
+      "line": 6465,
       "marker": "language",
       "text": "language: Some(\"zh-CN\".to_string()),"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 6468,
+      "line": 6494,
       "marker": "language",
       "text": "language: Some(\"zh-CN\".to_string()),"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 6684,
+      "line": 6548,
+      "marker": "language",
+      "text": "first.record.payload.get(\"language\").and_then(Value::as_str),"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src-tauri/src/commands/media_task_cmd.rs",
+      "line": 6603,
+      "marker": "language",
+      "text": ".pointer(\"/transcript/language\")"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src-tauri/src/commands/media_task_cmd.rs",
+      "line": 6722,
       "marker": "language",
       "text": "language: Some(\"zh-CN\".to_string()),"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 6733,
+      "line": 6771,
       "marker": "language",
       "text": "language: Some(\"zh\".to_string()),"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 6858,
+      "line": 6896,
       "marker": "language",
-      "text": "\"language\": \"zh\""
+      "text": "\"language\": \"en\""
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 6884,
+      "line": 6922,
       "marker": "language",
-      "text": "language: Some(\"zh\".to_string()),"
+      "text": "language: Some(\"auto\".to_string()),"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 7006,
-      "marker": "target_language",
-      "text": "target_language: Some(\"zh-CN\".to_string()),"
+      "line": 6991,
+      "marker": "language",
+      "text": ".pointer(\"/transcript/language\")"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 7145,
-      "marker": "target_language",
-      "text": "target_language: Some(\"zh-CN\".to_string()),"
+      "line": 7040,
+      "marker": "language",
+      "text": "!body_text.contains(\"name=\\\"language\\\"\"),"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/commands/media_task_cmd.rs",
-      "line": 7328,
+      "line": 7041,
+      "marker": "language",
+      "text": "\"auto transcription language must not be sent as an explicit provider language\""
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src-tauri/src/commands/media_task_cmd.rs",
+      "line": 7056,
       "marker": "target_language",
-      "text": "target_language: Some(\"zh-CN\".to_string()),"
+      "text": "target_language: Some(\"en-US\".to_string()),"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src-tauri/src/commands/media_task_cmd.rs",
+      "line": 7123,
+      "marker": "target_language",
+      "text": ".pointer(\"/audio_output/target_language\")"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src-tauri/src/commands/media_task_cmd.rs",
+      "line": 7203,
+      "marker": "target_language",
+      "text": "target_language: Some(\"en-US\".to_string()),"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src-tauri/src/commands/media_task_cmd.rs",
+      "line": 7269,
+      "marker": "target_language",
+      "text": ".pointer(\"/audio_output/target_language\")"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src-tauri/src/commands/media_task_cmd.rs",
+      "line": 7394,
+      "marker": "target_language",
+      "text": "target_language: Some(\"en-US\".to_string()),"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src-tauri/src/commands/media_task_cmd.rs",
+      "line": 7508,
+      "marker": "target_language",
+      "text": ".pointer(\"/audio_output/target_language\")"
     },
     {
       "category": "contentTargetLanguage",
@@ -780,51 +857,51 @@
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/services/artifact_output_schema_service.rs",
-      "line": 150,
-      "marker": "language",
-      "text": "&& context.language.is_none()"
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src-tauri/src/services/artifact_output_schema_service.rs",
-      "line": 293,
+      "line": 292,
       "marker": "language",
       "text": "\"language\","
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/services/artifact_output_schema_service.rs",
-      "line": 333,
+      "line": 332,
       "marker": "language",
       "text": "\"language\": {"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/services/artifact_output_schema_service.rs",
-      "line": 335,
+      "line": 334,
       "marker": "language",
       "text": "\"enum\": [context.language.as_deref().unwrap_or(\"zh-CN\")]"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/services/artifact_output_schema_service.rs",
-      "line": 1099,
+      "line": 1098,
       "marker": "target_language",
       "text": "\"target_language\": \"en-US\""
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/services/artifact_output_schema_service.rs",
-      "line": 1115,
+      "line": 1114,
       "marker": "language",
       "text": ".and_then(|properties| properties.get(\"language\"))"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src-tauri/src/services/artifact_output_schema_service.rs",
-      "line": 1116,
+      "line": 1115,
       "marker": "language",
       "text": ".and_then(|language| language.get(\"enum\"))"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src-tauri/src/services/artifact_output_schema_service.rs",
+      "line": 1126,
+      "marker": "target_language",
+      "text": "\"target_language\": \"en-US\""
     },
     {
       "category": "contentTargetLanguage",
@@ -856,6 +933,27 @@
     },
     {
       "category": "contentTargetLanguage",
+      "file": "src/components/agent/chat/components/AgentThreadTimeline.test.tsx",
+      "line": 307,
+      "marker": "language",
+      "text": "language: \"zh-CN\","
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/components/agent/chat/components/AgentThreadTimelineArtifactCard.test.tsx",
+      "line": 64,
+      "marker": "language",
+      "text": "language: \"zh-CN\","
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/components/agent/chat/components/AgentThreadTimelineArtifactCard.test.tsx",
+      "line": 277,
+      "marker": "locale",
+      "text": "it(\"AgentUI projection 标签应按当前 locale 渲染\", async () => {"
+    },
+    {
+      "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/components/CanvasSessionOverviewPanel.test.tsx",
       "line": 92,
       "marker": "locale",
@@ -871,98 +969,98 @@
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/components/CanvasSessionOverviewPanel.tsx",
-      "line": 64,
+      "line": 73,
       "marker": "locale",
       "text": "locale: string,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/components/CanvasSessionOverviewPanel.tsx",
-      "line": 72,
+      "line": 81,
       "marker": "locale",
       "text": "locale,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/components/CanvasSessionOverviewPanel.tsx",
-      "line": 162,
+      "line": 171,
       "marker": "locale",
       "text": "locale: string,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/components/CanvasSessionOverviewPanel.tsx",
-      "line": 167,
+      "line": 176,
       "marker": "locale",
       "text": "locale,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/components/CanvasSessionOverviewPanel.tsx",
-      "line": 375,
+      "line": 384,
       "marker": "locale",
       "text": "const locale = i18n.language;"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/components/CanvasSessionOverviewPanel.tsx",
-      "line": 390,
+      "line": 399,
       "marker": "locale",
       "text": ".map((item) => buildActivityView(item, t, locale))"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/components/CanvasSessionOverviewPanel.tsx",
-      "line": 401,
+      "line": 410,
       "marker": "locale",
       "text": "locale,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/components/CanvasSessionOverviewPanel.tsx",
-      "line": 408,
+      "line": 417,
       "marker": "locale",
       "text": "const formattedInProgressCount = formatNumber(inProgressCount, { locale });"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/components/CanvasSessionOverviewPanel.tsx",
-      "line": 409,
+      "line": 418,
       "marker": "locale",
       "text": "const formattedTraceCount = formatNumber(sortedItems.length, { locale });"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/components/CanvasSessionOverviewPanel.tsx",
-      "line": 411,
+      "line": 420,
       "marker": "locale",
       "text": "locale,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/components/CanvasSessionOverviewPanel.tsx",
-      "line": 413,
+      "line": 422,
       "marker": "locale",
       "text": "const formattedQueuedCount = formatNumber(queuedTurns.length, { locale });"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/components/CanvasSessionOverviewPanel.tsx",
-      "line": 437,
+      "line": 446,
       "marker": "locale",
       "text": "locale,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/components/CanvasSessionOverviewPanel.tsx",
-      "line": 659,
+      "line": 668,
       "marker": "locale",
       "text": "index: formatNumber(index + 1, { locale }),"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/components/CanvasSessionOverviewPanel.tsx",
-      "line": 666,
+      "line": 675,
       "marker": "locale",
       "text": "locale,"
     },
@@ -996,10 +1094,52 @@
     },
     {
       "category": "contentTargetLanguage",
+      "file": "src/components/agent/chat/home/homeCoverAssets.ts",
+      "line": 20,
+      "marker": "language",
+      "text": "\"video-dubbing-language\":"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/components/agent/chat/home/homeCoverAssets.ts",
+      "line": 21,
+      "marker": "language",
+      "text": "\"/home-covers/home-cover-video-dubbing-language.jpg\","
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/components/agent/chat/home/homeCoverAssets.ts",
+      "line": 37,
+      "marker": "language",
+      "text": "if (/dub|voice|audio|language|配音/.test(normalized)) {"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/components/agent/chat/home/homeSkillSurfaceAdapters.ts",
+      "line": 37,
+      "marker": "language",
+      "text": "\"video-dubbing-language\": \"video-dubbing-language\","
+    },
+    {
+      "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/hooks/agentStreamSlashSkillPreflight.test.ts",
       "line": 178,
       "marker": "target_language",
       "text": "target_language: \"中文\","
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx",
+      "line": 6321,
+      "marker": "language",
+      "text": "language: \"zh-CN\","
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx",
+      "line": 6392,
+      "marker": "language",
+      "text": "language: \"zh-CN\","
     },
     {
       "category": "contentTargetLanguage",
@@ -1213,13 +1353,6 @@
     },
     {
       "category": "contentTargetLanguage",
-      "file": "src/components/agent/chat/utils/artifactTimelineNavigation.test.ts",
-      "line": 79,
-      "marker": "language",
-      "text": "language: \"json\","
-    },
-    {
-      "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/artifactToolSources.test.ts",
       "line": 114,
       "marker": "language",
@@ -1235,147 +1368,161 @@
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/mentionCommandReplayText.ts",
-      "line": 531,
+      "line": 511,
       "marker": "targetLanguage",
       "text": "const targetLanguage = normalizeText(parsedCommand.targetLanguage);"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/mentionCommandReplayText.ts",
-      "line": 538,
+      "line": 518,
       "marker": "targetLanguage",
       "text": "!targetLanguage &&"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/mentionCommandReplayText.ts",
-      "line": 548,
+      "line": 528,
       "marker": "targetLanguage",
       "text": "targetLanguage ? `目标语言:${targetLanguage}` : undefined,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/mentionCommandReplayText.ts",
-      "line": 862,
+      "line": 824,
       "marker": "language",
       "text": "const language = normalizeText(parsedCommand.language);"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/mentionCommandReplayText.ts",
-      "line": 881,
+      "line": 843,
       "marker": "language",
       "text": "!language &&"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/mentionCommandReplayText.ts",
-      "line": 892,
+      "line": 854,
       "marker": "language",
       "text": "language ? `语言:${language}` : undefined,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/mentionCommandReplayText.ts",
-      "line": 903,
+      "line": 865,
       "marker": "targetLanguage",
       "text": "const targetLanguage = normalizeText(parsedCommand.targetLanguage);"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/mentionCommandReplayText.ts",
-      "line": 907,
+      "line": 869,
       "marker": "targetLanguage",
       "text": "if (!targetLanguage && !voiceStyle && !prompt) {"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/mentionCommandReplayText.ts",
-      "line": 912,
+      "line": 874,
       "marker": "targetLanguage",
       "text": "targetLanguage ? `目标语言:${targetLanguage}` : undefined,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/mentionCommandReplayText.ts",
-      "line": 1474,
+      "line": 1430,
       "marker": "targetLanguage",
       "text": "targetLanguage: slotValues.target_language,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/mentionCommandReplayText.ts",
-      "line": 1542,
+      "line": 1487,
       "marker": "language",
       "text": "language: slotValues.language,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/mentionCommandReplayText.ts",
-      "line": 1553,
+      "line": 1498,
       "marker": "targetLanguage",
       "text": "targetLanguage: slotValues.target_language,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/messageArtifacts.test.ts",
-      "line": 42,
+      "line": 47,
+      "marker": "language",
+      "text": "expect(artifact.meta.language).toBe(\"html\");"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/components/agent/chat/utils/messageArtifacts.test.ts",
+      "line": 58,
       "marker": "language",
       "text": "language: \"zh-CN\","
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/messageArtifacts.test.ts",
-      "line": 74,
+      "line": 90,
       "marker": "language",
       "text": "expect(artifact.meta.language).toBe(\"json\");"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/messageArtifacts.test.ts",
-      "line": 98,
+      "line": 114,
       "marker": "language",
       "text": "language: \"zh-CN\","
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/messageArtifacts.test.ts",
-      "line": 147,
+      "line": 163,
       "marker": "language",
       "text": "language: \"zh-CN\","
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/messageArtifacts.test.ts",
-      "line": 173,
+      "line": 189,
       "marker": "language",
       "text": "language: \"zh-CN\","
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/messageArtifacts.ts",
-      "line": 313,
+      "line": 314,
       "marker": "language",
       "text": "String(artifact.meta.language || \"\")"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/messageArtifacts.ts",
-      "line": 354,
+      "line": 325,
       "marker": "language",
       "text": "String(artifact.meta.language || \"\")"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/messageArtifacts.ts",
-      "line": 407,
+      "line": 369,
+      "marker": "language",
+      "text": "String(artifact.meta.language || \"\")"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/components/agent/chat/utils/messageArtifacts.ts",
+      "line": 422,
       "marker": "language",
       "text": "const language = artifactDocument"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/messageArtifacts.ts",
-      "line": 425,
+      "line": 440,
       "marker": "language",
       "text": "...(language ? { language } : {}),"
     },
@@ -1508,13 +1655,6 @@
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/utils/taskPreviewFromToolResult.ts",
-      "line": 1097,
-      "marker": "language",
-      "text": "language: \"text\","
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/agent/chat/utils/taskPreviewFromToolResult.ts",
       "line": 1130,
       "marker": "language",
       "text": "language: \"zh-CN\","
@@ -1581,6 +1721,13 @@
       "line": 14,
       "marker": "targetLanguage",
       "text": "targetLanguage?: string;"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/components/agent/chat/utils/translationWorkbenchCommand.ts",
+      "line": 22,
+      "marker": "language",
+      "text": "/(?:(内容|正文|原文|content|text)|(原语言|源语言|source(?:[_\\s-]?language)?|source|from)|(目标语言|目标语种|语言|target(?:[_\\s-]?language)?|target|to)|(风格|语气|style|tone)|(输出|格式|output|format))\\s*[:：=..."
     },
     {
       "category": "contentTargetLanguage",
@@ -1690,23 +1837,9 @@
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/artifactWorkbenchActions.test.ts",
-      "line": 22,
-      "marker": "language",
-      "text": "language: \"json\","
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/agent/chat/workspace/artifactWorkbenchActions.test.ts",
       "line": 37,
       "marker": "language",
       "text": "language: \"zh-CN\","
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/agent/chat/workspace/artifactWorkbenchActions.test.ts",
-      "line": 81,
-      "marker": "language",
-      "text": "language: \"json\","
     },
     {
       "category": "contentTargetLanguage",
@@ -1823,13 +1956,6 @@
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/ArtifactWorkbenchShell.test.tsx",
-      "line": 189,
-      "marker": "language",
-      "text": "language: \"json\","
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/agent/chat/workspace/ArtifactWorkbenchShell.test.tsx",
       "line": 205,
       "marker": "language",
       "text": "language: \"zh-CN\","
@@ -1837,30 +1963,9 @@
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/ArtifactWorkbenchShell.test.tsx",
-      "line": 251,
-      "marker": "language",
-      "text": "language: \"json\","
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/agent/chat/workspace/ArtifactWorkbenchShell.test.tsx",
       "line": 266,
       "marker": "language",
       "text": "language: \"zh-CN\","
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/agent/chat/workspace/ArtifactWorkbenchShell.test.tsx",
-      "line": 280,
-      "marker": "language",
-      "text": "language: \"text\","
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/agent/chat/workspace/ArtifactWorkbenchShell.test.tsx",
-      "line": 327,
-      "marker": "language",
-      "text": "language: \"json\","
     },
     {
       "category": "contentTargetLanguage",
@@ -1875,13 +1980,6 @@
       "line": 407,
       "marker": "language",
       "text": "language: \"bash\","
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/agent/chat/workspace/ArtifactWorkbenchShell.test.tsx",
-      "line": 425,
-      "marker": "language",
-      "text": "language: \"json\","
     },
     {
       "category": "contentTargetLanguage",
@@ -1948,6 +2046,13 @@
     },
     {
       "category": "contentTargetLanguage",
+      "file": "src/components/agent/chat/workspace/useWorkspaceCanvasWorkflowActions.test.tsx",
+      "line": 58,
+      "marker": "language",
+      "text": "language: \"zh-CN\","
+    },
+    {
+      "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/useWorkspaceSendActions.test.tsx",
       "line": 303,
       "marker": "target_language",
@@ -1984,98 +2089,98 @@
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/useWorkspaceSendActions.test.tsx",
-      "line": 6197,
+      "line": 6322,
       "marker": "target_language",
       "text": "target_language: \"英文\","
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/useWorkspaceSendActions.test.tsx",
-      "line": 6222,
+      "line": 6347,
       "marker": "target_language",
       "text": "target_language: \"英文\","
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/useWorkspaceSendActions.test.tsx",
-      "line": 6715,
+      "line": 6922,
       "marker": "target_language",
       "text": "target_language: \"中文\","
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/useWorkspaceSendActions.test.tsx",
-      "line": 6722,
+      "line": 6929,
       "marker": "target_language",
       "text": "target_language: \"中文\","
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/useWorkspaceSendActions.ts",
-      "line": 682,
+      "line": 689,
       "marker": "target_language",
       "text": "\"target_language\","
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/useWorkspaceSendActions.ts",
-      "line": 708,
+      "line": 715,
       "marker": "target_language",
       "text": "\"target_language\","
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/useWorkspaceSendActions.ts",
-      "line": 1009,
+      "line": 976,
       "marker": "targetLanguage",
       "text": "targetLanguage: resolvePreferredRecentCommandText("
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/useWorkspaceSendActions.ts",
-      "line": 1010,
+      "line": 977,
       "marker": "targetLanguage",
       "text": "params.parsedCommand.targetLanguage,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/useWorkspaceSendActions.ts",
-      "line": 1011,
+      "line": 978,
       "marker": "target_language",
       "text": "slotValues.target_language,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/useWorkspaceSendActions.ts",
-      "line": 2097,
+      "line": 2064,
       "marker": "target_language",
       "text": "target_language: params.parsedCommand.targetLanguage,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/useWorkspaceSendActions.ts",
-      "line": 2344,
+      "line": 2311,
       "marker": "target_language",
       "text": "[\"reference_video\", \"target_language\", \"voice_style\"].includes("
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/useWorkspaceSendActions.ts",
-      "line": 2510,
+      "line": 2477,
       "marker": "targetLanguage",
       "text": "...(params.parsedCommand.targetLanguage"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/useWorkspaceSendActions.ts",
-      "line": 2512,
+      "line": 2479,
       "marker": "target_language",
       "text": "target_language: params.parsedCommand.targetLanguage,"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/useWorkspaceSendActions.ts",
-      "line": 2561,
+      "line": 2528,
       "marker": "target_language",
       "text": "target_language: params.parsedCommand.targetLanguage,"
     },
@@ -2095,59 +2200,52 @@
     },
     {
       "category": "contentTargetLanguage",
+      "file": "src/components/agent/chat/workspace/workspaceFilePreview.test.ts",
+      "line": 20,
+      "marker": "language",
+      "text": "language: \"javascript\","
+    },
+    {
+      "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/workspaceFilePreview.ts",
-      "line": 66,
+      "line": 67,
       "marker": "language",
       "text": "language?: string;"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/workspaceFilePreview.ts",
-      "line": 69,
+      "line": 70,
       "marker": "language",
       "text": "const language = extension"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/workspaceFilePreview.ts",
-      "line": 77,
+      "line": 82,
       "marker": "language",
       "text": "if (language && language !== \"markdown\") {"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/workspaceFilePreview.ts",
-      "line": 78,
+      "line": 83,
       "marker": "language",
       "text": "return { contentType: \"code\", language };"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/workspaceFilePreview.ts",
-      "line": 88,
+      "line": 96,
       "marker": "language",
       "text": "const { contentType, language } = resolveGeneralCanvasFileContentType("
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/components/agent/chat/workspace/workspaceFilePreview.ts",
-      "line": 97,
+      "line": 105,
       "marker": "language",
       "text": "language,"
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/artifact/ArtifactRenderer.ui.test.tsx",
-      "line": 113,
-      "marker": "language",
-      "text": "language: \"typescript\","
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/artifact/ArtifactRenderer.ui.test.tsx",
-      "line": 139,
-      "marker": "language",
-      "text": "language: \"typescript\","
     },
     {
       "category": "contentTargetLanguage",
@@ -2159,23 +2257,9 @@
     {
       "category": "contentTargetLanguage",
       "file": "src/components/artifact/ArtifactRenderer.ui.test.tsx",
-      "line": 455,
-      "marker": "language",
-      "text": "language: \"json\","
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/artifact/ArtifactRenderer.ui.test.tsx",
       "line": 492,
       "marker": "language",
       "text": "language: \"zh-CN\","
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/artifact/ArtifactRenderer.ui.test.tsx",
-      "line": 512,
-      "marker": "language",
-      "text": "language: \"json\","
     },
     {
       "category": "contentTargetLanguage",
@@ -2187,23 +2271,9 @@
     {
       "category": "contentTargetLanguage",
       "file": "src/components/artifact/ArtifactRenderer.ui.test.tsx",
-      "line": 583,
-      "marker": "language",
-      "text": "language: \"json\","
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/artifact/ArtifactRenderer.ui.test.tsx",
       "line": 610,
       "marker": "language",
       "text": "language: \"zh-CN\","
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/artifact/ArtifactRenderer.ui.test.tsx",
-      "line": 616,
-      "marker": "language",
-      "text": "language: \"typescript\","
     },
     {
       "category": "contentTargetLanguage",
@@ -2445,13 +2515,6 @@
     },
     {
       "category": "contentTargetLanguage",
-      "file": "src/components/artifact/ArtifactToolbar.ui.test.tsx",
-      "line": 19,
-      "marker": "language",
-      "text": "language: \"html\","
-    },
-    {
-      "category": "contentTargetLanguage",
       "file": "src/components/artifact/renderers/artifact-document/ArtifactDocumentBlocks.tsx",
       "line": 922,
       "marker": "language",
@@ -2533,20 +2596,6 @@
       "line": 365,
       "marker": "language",
       "text": "language: normalizeText(document.language),"
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/artifact/renderers/CodeRenderer.test.tsx",
-      "line": 22,
-      "marker": "language",
-      "text": "language: \"typescript\","
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/artifact/renderers/CodeRenderer.test.tsx",
-      "line": 95,
-      "marker": "language",
-      "text": "meta: { language: \"html\", filename: \"index.html\" },"
     },
     {
       "category": "contentTargetLanguage",
@@ -2676,13 +2725,6 @@
     },
     {
       "category": "contentTargetLanguage",
-      "file": "src/components/artifact/renderers/HtmlRenderer.tsx",
-      "line": 392,
-      "marker": "language",
-      "text": "meta: { ...artifact.meta, language: \"html\" },"
-    },
-    {
-      "category": "contentTargetLanguage",
       "file": "src/components/artifact/renderers/MermaidRenderer.tsx",
       "line": 697,
       "marker": "language",
@@ -2708,62 +2750,6 @@
       "line": 363,
       "marker": "language",
       "text": "meta: { ...artifact.meta, language: \"xml\" },"
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/general-chat/canvas/CanvasPanel.tsx",
-      "line": 55,
-      "marker": "language",
-      "text": "? `code.${state.language || \"txt\"}`"
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/general-chat/canvas/CanvasPanel.tsx",
-      "line": 83,
-      "marker": "language",
-      "text": "{state.language && ("
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/general-chat/canvas/CanvasPanel.tsx",
-      "line": 85,
-      "marker": "language",
-      "text": "{state.language}"
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/general-chat/canvas/CanvasPanel.tsx",
-      "line": 172,
-      "marker": "language",
-      "text": "language={state.language || \"plaintext\"}"
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/general-chat/canvas/CodePreview.tsx",
-      "line": 15,
-      "marker": "language",
-      "text": "language: string;"
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/general-chat/canvas/CodePreview.tsx",
-      "line": 27,
-      "marker": "language",
-      "text": "language: _language,"
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/general-chat/canvas/MarkdownPreview.test.tsx",
-      "line": 23,
-      "marker": "language",
-      "text": "ArtifactPlaceholder: ({ language }: { language: string }) => ("
-    },
-    {
-      "category": "contentTargetLanguage",
-      "file": "src/components/general-chat/canvas/MarkdownPreview.test.tsx",
-      "line": 24,
-      "marker": "language",
-      "text": "<div data-testid=\"artifact-placeholder\">{language}</div>"
     },
     {
       "category": "contentTargetLanguage",
@@ -2796,16 +2782,30 @@
     {
       "category": "contentTargetLanguage",
       "file": "src/lib/api/agentRuntime/types.d.ts",
-      "line": 1184,
+      "line": 1383,
       "marker": "targetLanguage",
       "text": "targetLanguage?: string;"
     },
     {
       "category": "contentTargetLanguage",
       "file": "src/lib/api/agentRuntime/types.ts",
-      "line": 1428,
+      "line": 1515,
       "marker": "targetLanguage",
       "text": "targetLanguage?: string;"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/lib/api/knowledge.ts",
+      "line": 19,
+      "marker": "language",
+      "text": "language?: string | null;"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/lib/api/knowledge.ts",
+      "line": 91,
+      "marker": "language",
+      "text": "language?: string;"
     },
     {
       "category": "contentTargetLanguage",
@@ -2879,10 +2879,45 @@
     },
     {
       "category": "contentTargetLanguage",
+      "file": "src/lib/artifact-protocol/index.test.ts",
+      "line": 25,
+      "marker": "language",
+      "text": "language: \"zh-CN\","
+    },
+    {
+      "category": "contentTargetLanguage",
       "file": "src/lib/artifact/types.ts",
       "line": 54,
       "marker": "language",
       "text": "language?: string;"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/lib/base-setup/seededServiceSkillPackage.ts",
+      "line": 64,
+      "marker": "language",
+      "text": "pathOrUri: \"seeded://service-skills/video-dubbing-language\","
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/lib/base-setup/seededServiceSkillPackage.ts",
+      "line": 366,
+      "marker": "language",
+      "text": "id: \"video-dubbing-language\","
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/lib/base-setup/seededServiceSkillPackage.ts",
+      "line": 368,
+      "marker": "language",
+      "text": "entryKey: \"video-dubbing-language\","
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/lib/base-setup/seededServiceSkillPackage.ts",
+      "line": 369,
+      "marker": "language",
+      "text": "skillKey: \"video-dubbing-language\","
     },
     {
       "category": "contentTargetLanguage",
@@ -2914,6 +2949,27 @@
     },
     {
       "category": "contentTargetLanguage",
+      "file": "src/lib/deepLink/websiteLaunch.ts",
+      "line": 123,
+      "marker": "language",
+      "text": "slug: \"video-dubbing-language\","
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/lib/deepLink/websiteLaunch.ts",
+      "line": 127,
+      "marker": "language",
+      "text": "skillId: \"video-dubbing-language\","
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/lib/tauri-mock/knowledgeMocks.ts",
+      "line": 53,
+      "marker": "language",
+      "text": "language: \"zh-CN\","
+    },
+    {
+      "category": "contentTargetLanguage",
       "file": "src/lib/tauri-mock/mediaTaskMocks.ts",
       "line": 328,
       "marker": "target_language",
@@ -2925,6 +2981,20 @@
       "line": 329,
       "marker": "targetLanguage",
       "text": "request.targetLanguage ?? request.target_language ?? null,"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/lib/tauri-mock/mediaTaskMocks.ts",
+      "line": 362,
+      "marker": "target_language",
+      "text": "target_language:"
+    },
+    {
+      "category": "contentTargetLanguage",
+      "file": "src/lib/tauri-mock/mediaTaskMocks.ts",
+      "line": 363,
+      "marker": "targetLanguage",
+      "text": "request.targetLanguage ?? request.target_language ?? null,"
     }
   ],
   "filters": {
@@ -2932,7 +3002,7 @@
   },
   "rootDir": "/Users/coso/Documents/dev/ai/aiclientproxy/lime",
   "schemaVersion": "lime.i18n.languageBoundaryReport.v1",
-  "scannedFileCount": 3010,
+  "scannedFileCount": 3128,
   "sourceDirs": [
     "src",
     "src-tauri"
@@ -2941,13 +3011,13 @@
     "categorySummaries": [
       {
         "category": "contentTargetLanguage",
-        "count": 418
+        "count": 428
       }
     ],
-    "entryCount": 418,
+    "entryCount": 428,
     "fileSummaries": [
       {
-        "count": 46,
+        "count": 57,
         "file": "src-tauri/src/commands/media_task_cmd.rs"
       },
       {
@@ -2955,7 +3025,7 @@
         "file": "src/components/artifact/ArtifactToolbar.test.ts"
       },
       {
-        "count": 22,
+        "count": 21,
         "file": "src/components/agent/chat/utils/taskPreviewFromToolResult.ts"
       },
       {
@@ -2979,16 +3049,8 @@
         "file": "src/components/agent/chat/utils/mentionCommandReplayText.ts"
       },
       {
-        "count": 12,
-        "file": "src/components/agent/chat/workspace/ArtifactWorkbenchShell.test.tsx"
-      },
-      {
         "count": 11,
         "file": "src-tauri/src/services/artifact_output_schema_service.rs"
-      },
-      {
-        "count": 11,
-        "file": "src/components/artifact/ArtifactRenderer.ui.test.tsx"
       },
       {
         "count": 10,
@@ -3020,15 +3082,27 @@
       },
       {
         "count": 8,
+        "file": "src/components/agent/chat/utils/translationWorkbenchCommand.ts"
+      },
+      {
+        "count": 8,
         "file": "src/components/agent/chat/workspace/artifactWorkbenchDocument.tsx"
       },
       {
-        "count": 7,
-        "file": "src/components/agent/chat/utils/translationWorkbenchCommand.ts"
+        "count": 8,
+        "file": "src/lib/base-setup/seededServiceSkillPackage.ts"
       },
       {
         "count": 7,
         "file": "src/components/agent/chat/utils/voiceWorkbenchCommand.ts"
+      },
+      {
+        "count": 7,
+        "file": "src/components/agent/chat/workspace/ArtifactWorkbenchShell.test.tsx"
+      },
+      {
+        "count": 6,
+        "file": "src/components/agent/chat/utils/messageArtifacts.test.ts"
       },
       {
         "count": 6,
@@ -3048,15 +3122,15 @@
       },
       {
         "count": 5,
-        "file": "src/components/agent/chat/utils/messageArtifacts.test.ts"
+        "file": "src/components/agent/chat/utils/messageArtifacts.ts"
       },
       {
         "count": 5,
         "file": "src/components/agent/chat/workspace/serviceSkillSceneLaunch.test.ts"
       },
       {
-        "count": 4,
-        "file": "src/components/agent/chat/utils/messageArtifacts.ts"
+        "count": 5,
+        "file": "src/components/artifact/ArtifactRenderer.ui.test.tsx"
       },
       {
         "count": 4,
@@ -3064,11 +3138,7 @@
       },
       {
         "count": 4,
-        "file": "src/components/general-chat/canvas/CanvasPanel.tsx"
-      },
-      {
-        "count": 4,
-        "file": "src/lib/base-setup/seededServiceSkillPackage.ts"
+        "file": "src/lib/tauri-mock/mediaTaskMocks.ts"
       },
       {
         "count": 3,
@@ -3080,11 +3150,7 @@
       },
       {
         "count": 3,
-        "file": "src/components/agent/chat/utils/artifactTimelineNavigation.test.ts"
-      },
-      {
-        "count": 3,
-        "file": "src/components/agent/chat/workspace/artifactWorkbenchActions.test.ts"
+        "file": "src/components/agent/chat/home/homeCoverAssets.ts"
       },
       {
         "count": 3,
@@ -3124,6 +3190,10 @@
       },
       {
         "count": 2,
+        "file": "src/components/agent/chat/components/AgentThreadTimelineArtifactCard.test.tsx"
+      },
+      {
+        "count": 2,
         "file": "src/components/agent/chat/components/CanvasSessionOverviewPanel.test.tsx"
       },
       {
@@ -3132,7 +3202,15 @@
       },
       {
         "count": 2,
+        "file": "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx"
+      },
+      {
+        "count": 2,
         "file": "src/components/agent/chat/service-skills/creationReplaySlotPrefill.test.ts"
+      },
+      {
+        "count": 2,
+        "file": "src/components/agent/chat/utils/artifactTimelineNavigation.test.ts"
       },
       {
         "count": 2,
@@ -3164,15 +3242,7 @@
       },
       {
         "count": 2,
-        "file": "src/components/artifact/renderers/CodeRenderer.test.tsx"
-      },
-      {
-        "count": 2,
-        "file": "src/components/general-chat/canvas/CodePreview.tsx"
-      },
-      {
-        "count": 2,
-        "file": "src/components/general-chat/canvas/MarkdownPreview.test.tsx"
+        "file": "src/lib/api/knowledge.ts"
       },
       {
         "count": 2,
@@ -3184,7 +3254,11 @@
       },
       {
         "count": 2,
-        "file": "src/lib/tauri-mock/mediaTaskMocks.ts"
+        "file": "src/lib/deepLink/websiteLaunch.ts"
+      },
+      {
+        "count": 1,
+        "file": "src/components/agent/chat/components/AgentThreadTimeline.test.tsx"
       },
       {
         "count": 1,
@@ -3193,6 +3267,10 @@
       {
         "count": 1,
         "file": "src/components/agent/chat/components/Inputbar/knowledge/InputbarKnowledgeControl.tsx"
+      },
+      {
+        "count": 1,
+        "file": "src/components/agent/chat/home/homeSkillSurfaceAdapters.ts"
       },
       {
         "count": 1,
@@ -3208,6 +3286,10 @@
       },
       {
         "count": 1,
+        "file": "src/components/agent/chat/workspace/artifactWorkbenchActions.test.ts"
+      },
+      {
+        "count": 1,
         "file": "src/components/agent/chat/workspace/artifactWorkbenchRewrite.test.ts"
       },
       {
@@ -3216,15 +3298,15 @@
       },
       {
         "count": 1,
-        "file": "src/components/artifact/ArtifactToolbar.ui.test.tsx"
+        "file": "src/components/agent/chat/workspace/useWorkspaceCanvasWorkflowActions.test.tsx"
+      },
+      {
+        "count": 1,
+        "file": "src/components/agent/chat/workspace/workspaceFilePreview.test.ts"
       },
       {
         "count": 1,
         "file": "src/components/artifact/renderers/ArtifactDocumentRenderer.test.tsx"
-      },
-      {
-        "count": 1,
-        "file": "src/components/artifact/renderers/HtmlRenderer.tsx"
       },
       {
         "count": 1,
@@ -3256,7 +3338,15 @@
       },
       {
         "count": 1,
+        "file": "src/lib/artifact-protocol/index.test.ts"
+      },
+      {
+        "count": 1,
         "file": "src/lib/artifact/types.ts"
+      },
+      {
+        "count": 1,
+        "file": "src/lib/tauri-mock/knowledgeMocks.ts"
       }
     ],
     "markerSummaries": [
@@ -3265,15 +3355,15 @@
         "marker": "language"
       },
       {
-        "count": 82,
+        "count": 90,
         "marker": "target_language"
       },
       {
-        "count": 48,
+        "count": 49,
         "marker": "targetLanguage"
       },
       {
-        "count": 31,
+        "count": 32,
         "marker": "locale"
       }
     ],

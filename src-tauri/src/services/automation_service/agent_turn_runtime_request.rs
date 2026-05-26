@@ -1,7 +1,7 @@
 //! 自动化 AgentTurn 到标准 runtime turn 请求的组包边界。
 
 use super::AutomationJobRecord;
-use crate::commands::aster_agent_cmd::AsterChatRequest;
+use crate::commands::aster_agent_cmd::{AsterChatRequest, ConfigureProviderRequest};
 use chrono::Utc;
 use serde_json::{Map, Value};
 
@@ -19,6 +19,9 @@ pub(super) fn build_agent_turn_runtime_request(
     web_search: bool,
     approval_policy: Option<String>,
     sandbox_policy: Option<String>,
+    provider_config: Option<ConfigureProviderRequest>,
+    provider_preference: Option<String>,
+    model_preference: Option<String>,
     request_metadata: Option<Value>,
     content_id: Option<String>,
 ) -> Result<AgentTurnRuntimeRequest, String> {
@@ -35,9 +38,9 @@ pub(super) fn build_agent_turn_runtime_request(
             session_id: session_id.to_string(),
             event_name,
             images: None,
-            provider_config: None,
-            provider_preference: None,
-            model_preference: None,
+            provider_config,
+            provider_preference,
+            model_preference,
             thinking_enabled: None,
             approval_policy: Some(access_mode.approval_policy().to_string()),
             sandbox_policy: Some(access_mode.sandbox_policy().to_string()),
@@ -201,6 +204,9 @@ mod tests {
             false,
             None,
             None,
+            None,
+            None,
+            None,
             Some(json!({
                 "harness": {
                     "access_mode": "current",
@@ -270,6 +276,55 @@ mod tests {
                 .and_then(Value::as_str),
             Some("content-1")
         );
+    }
+
+    #[test]
+    fn agent_turn_runtime_request_should_forward_explicit_provider_config_without_preferences() {
+        let built = build_agent_turn_runtime_request(
+            &sample_job(),
+            "session-fixture",
+            "生成 Markdown 趋势摘要".to_string(),
+            None,
+            false,
+            None,
+            None,
+            Some(ConfigureProviderRequest {
+                provider_id: Some("fixture-openai".to_string()),
+                provider_name: "openai".to_string(),
+                model_name: "lime-fixture-chat".to_string(),
+                api_key: Some("fixture-key".to_string()),
+                base_url: Some("http://127.0.0.1:12345".to_string()),
+                model_capabilities: None,
+                tool_call_strategy: None,
+                toolshim_model: None,
+            }),
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("build runtime request");
+
+        let queued_task = build_queued_turn_task(built.request).expect("build queued task");
+        let payload: AsterChatRequest =
+            serde_json::from_value(queued_task.payload).expect("deserialize queued payload");
+        let provider_config = payload
+            .provider_config
+            .expect("fixture provider_config should be forwarded");
+
+        assert_eq!(
+            provider_config.provider_id.as_deref(),
+            Some("fixture-openai")
+        );
+        assert_eq!(provider_config.provider_name, "openai");
+        assert_eq!(provider_config.model_name, "lime-fixture-chat");
+        assert_eq!(provider_config.api_key.as_deref(), Some("fixture-key"));
+        assert_eq!(
+            provider_config.base_url.as_deref(),
+            Some("http://127.0.0.1:12345")
+        );
+        assert!(payload.provider_preference.is_none());
+        assert!(payload.model_preference.is_none());
     }
 
     #[test]

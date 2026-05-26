@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn is_runtime_model_permission_denied_error(message: &str) -> bool {
+pub(super) fn is_runtime_model_unavailable_error(message: &str) -> bool {
     let normalized = message.trim().to_ascii_lowercase();
     (normalized.contains("authentication failed")
         && normalized.contains("403")
@@ -12,6 +12,23 @@ pub(super) fn is_runtime_model_permission_denied_error(message: &str) -> bool {
         || (normalized.contains("model")
             && normalized.contains("not in")
             && normalized.contains("allowlist"))
+        || normalized.contains("param incorrect")
+        || normalized.contains("parameter incorrect")
+        || normalized.contains("unsupported model")
+        || normalized.contains("unsupported_model")
+        || normalized.contains("not supported model")
+        || normalized.contains("model not supported")
+        || normalized.contains("model is not supported")
+        || normalized.contains("model not found")
+        || normalized.contains("model_not_found")
+        || normalized.contains("model does not exist")
+        || normalized.contains("no such model")
+        || normalized.contains("invalid model")
+        || (normalized.contains("模型")
+            && (normalized.contains("白名单")
+                || normalized.contains("不支持")
+                || normalized.contains("不存在")
+                || normalized.contains("无效")))
 }
 
 pub(super) fn build_submit_accepted_runtime_status() -> AgentRuntimeStatus {
@@ -69,19 +86,19 @@ pub(super) fn describe_provider_request_attempt(
     )
 }
 
-pub(super) fn build_runtime_model_permission_fallback_failure_message(
+pub(super) fn build_runtime_model_recovery_failure_message(
     primary_model: &str,
     fallback_model: &str,
     fallback_error: &str,
 ) -> String {
-    if is_runtime_model_permission_denied_error(fallback_error) {
+    if is_runtime_model_unavailable_error(fallback_error) {
         return format!(
-            "当前模型 `{primary_model}` 未在租户白名单中开放；自动切换到 `{fallback_model}` 后仍被同类权限策略拒绝。请在设置里切换到已授权模型，或把当前服务商的可用模型写入模型列表。"
+            "当前模型 `{primary_model}` 暂不可用；自动切换到 `{fallback_model}` 后仍被同类模型可用性策略拒绝。请在设置里切换到已确认可用的模型，或把当前服务商的可用模型写入模型列表。"
         );
     }
 
     format!(
-        "当前模型 `{primary_model}` 未在租户白名单中开放；自动切换到 `{fallback_model}` 后重试失败：{fallback_error}"
+        "当前模型 `{primary_model}` 暂不可用；自动切换到 `{fallback_model}` 后重试失败：{fallback_error}"
     )
 }
 

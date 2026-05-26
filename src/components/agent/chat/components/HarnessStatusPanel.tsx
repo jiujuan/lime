@@ -14,6 +14,7 @@ import { open as openExternal } from "@tauri-apps/plugin-shell";
 import {
   AlertCircle,
   Bot,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Clock3,
@@ -29,9 +30,12 @@ import {
   Search,
   ShieldAlert,
   Sparkles,
+  SquareCheckBig,
   TerminalSquare,
+  Undo2,
   Workflow,
   Wrench,
+  XCircle,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -107,6 +111,7 @@ import { useAgentUiProjectionEvents } from "../projection/useConversationProject
 import { SearchResultPreviewList } from "./SearchResultPreviewList";
 import type {
   ActionRequired,
+  ConfirmResponse,
   AgentThreadItem,
   AgentThreadTurn,
   Message,
@@ -118,6 +123,7 @@ import type {
   HarnessOutputSignal,
   HarnessSessionState,
 } from "../utils/harnessState";
+import { resolveFileKind } from "../utils/harnessState";
 import { formatArtifactWritePhaseLabel } from "../utils/messageArtifacts";
 import {
   isUnifiedWebSearchToolName,
@@ -131,6 +137,14 @@ import {
   normalizeToolNameKey,
   resolveToolDisplayLabel,
 } from "../utils/toolDisplayInfo";
+import {
+  buildDiffReviewFileTreeItems,
+  buildDiffReviewSideBySideRows,
+  resolveDiffReviewSummaryFromCandidates,
+  type DiffReviewFile,
+  type DiffReviewLine,
+  type DiffReviewSummary,
+} from "../utils/diffReview";
 import { deriveRuntimeToolAvailability } from "../utils/runtimeToolAvailability";
 import {
   buildWorkflowSummaryText,
@@ -173,6 +187,7 @@ interface HarnessStatusPanelProps {
   onOpenFile?: (fileName: string, content: string) => void;
   onRevealPath?: (path: string) => Promise<void>;
   onOpenPath?: (path: string) => Promise<void>;
+  onOpenFileCheckpoints?: () => void;
   childSubagentSessions?: AsterSubagentSessionInfo[];
   onOpenSubagentSession?: (sessionId: string) => void;
   toolInventory?: AgentRuntimeToolInventory | null;
@@ -192,6 +207,7 @@ interface HarnessStatusPanelProps {
   currentTurnId?: string | null;
   pendingActions?: ActionRequired[];
   submittedActionsInFlight?: ActionRequired[];
+  onRespondToAction?: (response: ConfirmResponse) => void | Promise<void>;
   queuedTurns?: QueuedTurnSnapshot[];
   canInterrupt?: boolean;
   onInterruptCurrentTurn?: () => void | Promise<void>;
@@ -233,6 +249,96 @@ type FileFilterValue = "all" | HarnessFileKind;
 type OutputFilterValue = "all" | "path" | "offload" | "truncated" | "summary";
 type FileDisplayMode = "timeline" | "grouped";
 type ToolInventoryFilterValue = "all" | "runtime" | "persisted" | "default";
+type ApprovalRiskKind = "file_change" | "command" | "input" | "default";
+type OutputPathKind = "output" | "offload" | "artifact";
+type FileChangeDecisionStatus = "pending" | "applied" | "rejected";
+
+interface FileChangeReviewEntry {
+  key: string;
+  path: string;
+  displayName: string;
+  kind: HarnessFileKind;
+  latestAction: HarnessFileAction;
+  latestEvent?: HarnessSessionState["recentFileEvents"][number];
+  activeWrite?: HarnessActiveFileWrite;
+  count: number;
+  events: HarnessSessionState["recentFileEvents"];
+  actionSummaryItems: FileChangeReviewSummaryItem[];
+  preview?: string;
+  content?: string;
+  timestamp?: Date;
+  status: FileChangeDecisionStatus;
+}
+
+type FileChangeReviewSummaryItem =
+  | {
+      type: "action";
+      action: HarnessFileAction;
+      count: number;
+    }
+  | {
+      type: "phase";
+      phase: HarnessActiveFileWrite["phase"];
+      count: number;
+    };
+
+type AgentTranslation = (
+  key: string,
+  options?: Record<string, unknown>,
+) => string;
+
+const APPROVAL_RISK_LABEL_KEY_BY_KIND: Record<ApprovalRiskKind, string> = {
+  file_change: "agentChat.harness.approvals.risk.file_change",
+  command: "agentChat.harness.approvals.risk.command",
+  input: "agentChat.harness.approvals.risk.input",
+  default: "agentChat.harness.approvals.risk.default",
+};
+
+const OUTPUT_PATH_LABEL_KEY_BY_KIND: Record<OutputPathKind, string> = {
+  output: "agentChat.harness.outputs.paths.output",
+  offload: "agentChat.harness.outputs.paths.offload",
+  artifact: "agentChat.harness.outputs.paths.artifact",
+};
+
+const FILE_CHANGE_STATUS_LABEL_KEY_BY_STATUS: Record<
+  FileChangeDecisionStatus,
+  string
+> = {
+  pending: "agentChat.harness.fileReview.status.pending",
+  applied: "agentChat.harness.fileReview.status.applied",
+  rejected: "agentChat.harness.fileReview.status.rejected",
+};
+
+const FILE_REVIEW_ACTION_LABEL_KEY_BY_ACTION: Record<
+  HarnessFileAction,
+  string
+> = {
+  read: "agentChat.harness.fileReview.action.read",
+  write: "agentChat.harness.fileReview.action.write",
+  edit: "agentChat.harness.fileReview.action.edit",
+  offload: "agentChat.harness.fileReview.action.offload",
+  persist: "agentChat.harness.fileReview.action.persist",
+};
+
+const FILE_REVIEW_KIND_LABEL_KEY_BY_KIND: Record<HarnessFileKind, string> = {
+  document: "agentChat.harness.fileReview.kind.document",
+  code: "agentChat.harness.fileReview.kind.code",
+  log: "agentChat.harness.fileReview.kind.log",
+  artifact: "agentChat.harness.fileReview.kind.artifact",
+  offload: "agentChat.harness.fileReview.kind.offload",
+  other: "agentChat.harness.fileReview.kind.other",
+};
+
+const FILE_REVIEW_PHASE_LABEL_KEY_BY_PHASE: Record<
+  HarnessActiveFileWrite["phase"],
+  string
+> = {
+  preparing: "agentChat.harness.fileReview.phase.preparing",
+  streaming: "agentChat.harness.fileReview.phase.streaming",
+  persisted: "agentChat.harness.fileReview.phase.persisted",
+  completed: "agentChat.harness.fileReview.phase.completed",
+  failed: "agentChat.harness.fileReview.phase.failed",
+};
 
 type HarnessSectionKey =
   | "team_config"
@@ -243,6 +349,7 @@ type HarnessSectionKey =
   | "reliability"
   | "runtime-facts"
   | "inventory"
+  | "file_review"
   | "approvals"
   | "writes"
   | "files"
@@ -1040,6 +1147,198 @@ function summarizeFileActions(
     .join(" · ");
 }
 
+function summarizeFileReviewActions(
+  events: HarnessSessionState["recentFileEvents"],
+  activeWrite?: HarnessActiveFileWrite,
+): FileChangeReviewSummaryItem[] {
+  const items: FileChangeReviewSummaryItem[] = [];
+
+  if (activeWrite) {
+    items.push({
+      type: "phase",
+      phase: activeWrite.phase,
+      count: 1,
+    });
+  }
+
+  const counts = new Map<HarnessFileAction, number>();
+  for (const event of events) {
+    counts.set(event.action, (counts.get(event.action) ?? 0) + 1);
+  }
+
+  for (const [action, count] of counts.entries()) {
+    items.push({
+      type: "action",
+      action,
+      count,
+    });
+  }
+
+  return items;
+}
+
+function translateFileReviewAction(
+  translate: AgentTranslation,
+  action: HarnessFileAction,
+): string {
+  return translate(FILE_REVIEW_ACTION_LABEL_KEY_BY_ACTION[action] || action);
+}
+
+function translateFileReviewKind(
+  translate: AgentTranslation,
+  kind: HarnessFileKind,
+): string {
+  return translate(FILE_REVIEW_KIND_LABEL_KEY_BY_KIND[kind] || kind);
+}
+
+function translateFileReviewPhase(
+  translate: AgentTranslation,
+  phase: HarnessActiveFileWrite["phase"],
+): string {
+  return translate(FILE_REVIEW_PHASE_LABEL_KEY_BY_PHASE[phase] || phase);
+}
+
+function formatFileReviewSummaryItem(
+  translate: AgentTranslation,
+  item: FileChangeReviewSummaryItem,
+): string {
+  if (item.type === "phase") {
+    return translate("agentChat.harness.fileReview.phaseCount", {
+      label: translateFileReviewPhase(translate, item.phase),
+      count: item.count,
+    });
+  }
+
+  return translate("agentChat.harness.fileReview.actionCount", {
+    label: translateFileReviewAction(translate, item.action),
+    count: item.count,
+  });
+}
+
+function summarizeFileReviewActionText(
+  translate: AgentTranslation,
+  items: FileChangeReviewSummaryItem[],
+): string {
+  return items
+    .map((item) => formatFileReviewSummaryItem(translate, item))
+    .join(" · ");
+}
+
+function isReviewableFileEvent(
+  event: HarnessSessionState["recentFileEvents"][number],
+): boolean {
+  if (!event.path.trim()) {
+    return false;
+  }
+  if (event.action === "write" || event.action === "edit") {
+    return true;
+  }
+  if (event.action !== "persist") {
+    return false;
+  }
+  return event.kind !== "log" && event.kind !== "offload";
+}
+
+function buildFileChangeReviewEntries(params: {
+  activeFileWrites: HarnessActiveFileWrite[];
+  recentFileEvents: HarnessSessionState["recentFileEvents"];
+  decisions: Record<string, FileChangeDecisionStatus>;
+}): FileChangeReviewEntry[] {
+  const entries = new Map<string, FileChangeReviewEntry>();
+
+  for (const write of params.activeFileWrites) {
+    const path = write.path.trim();
+    if (!path) {
+      continue;
+    }
+    const key = path;
+    entries.set(key, {
+      key,
+      path,
+      displayName: write.displayName || getFileName(path),
+      kind: resolveFileKind(path, "artifact"),
+      latestAction: "write",
+      activeWrite: write,
+      count: 1,
+      events: [],
+      actionSummaryItems: summarizeFileReviewActions([], write),
+      preview: write.preview || write.latestChunk,
+      content: write.content,
+      timestamp: write.updatedAt,
+      status: params.decisions[key] || "pending",
+    });
+  }
+
+  for (const event of params.recentFileEvents) {
+    if (!isReviewableFileEvent(event)) {
+      continue;
+    }
+
+    const key = event.path.trim();
+    const existing = entries.get(key);
+    const eventTime = event.timestamp?.getTime() ?? 0;
+    const existingTime = existing?.timestamp?.getTime() ?? 0;
+    if (!existing) {
+      entries.set(key, {
+        key,
+        path: event.path,
+        displayName: event.displayName,
+        kind: event.kind,
+        latestAction: event.action,
+        latestEvent: event,
+        count: 1,
+        events: [event],
+        actionSummaryItems: summarizeFileReviewActions([event]),
+        preview: event.preview,
+        content: event.content,
+        timestamp: event.timestamp,
+        status: params.decisions[key] || "pending",
+      });
+      continue;
+    }
+
+    const events = [...existing.events, event];
+    entries.set(key, {
+      ...existing,
+      displayName:
+        eventTime >= existingTime ? event.displayName : existing.displayName,
+      kind: eventTime >= existingTime ? event.kind : existing.kind,
+      latestAction:
+        eventTime >= existingTime ? event.action : existing.latestAction,
+      latestEvent: eventTime >= existingTime ? event : existing.latestEvent,
+      count: events.length + (existing.activeWrite ? 1 : 0),
+      events,
+      actionSummaryItems: summarizeFileReviewActions(
+        events,
+        existing.activeWrite,
+      ),
+      preview: event.preview || existing.preview,
+      content: event.content || existing.content,
+      timestamp: eventTime >= existingTime ? event.timestamp : existing.timestamp,
+      status: params.decisions[key] || "pending",
+    });
+  }
+
+  return Array.from(entries.values()).sort((left, right) => {
+    const leftTime = left.timestamp?.getTime() ?? 0;
+    const rightTime = right.timestamp?.getTime() ?? 0;
+    return rightTime - leftTime;
+  });
+}
+
+function countFileChangeStatuses(entries: FileChangeReviewEntry[]): Record<
+  FileChangeDecisionStatus,
+  number
+> {
+  return entries.reduce(
+    (result, entry) => ({
+      ...result,
+      [entry.status]: result[entry.status] + 1,
+    }),
+    { pending: 0, applied: 0, rejected: 0 },
+  );
+}
+
 function matchesOutputFilter(
   signal: HarnessOutputSignal,
   filter: OutputFilterValue,
@@ -1066,6 +1365,57 @@ function pickPathFromArguments(
   return extractArtifactProtocolPathsFromValue(argumentsValue)[0];
 }
 
+function pickCommandFromArguments(
+  argumentsValue?: Record<string, unknown>,
+): string | undefined {
+  const command = argumentsValue?.cmd ?? argumentsValue?.command;
+  return typeof command === "string" && command.trim()
+    ? command.trim()
+    : undefined;
+}
+
+function isFileMutationApproval(item: ActionRequired): boolean {
+  const normalizedToolName = normalizeToolNameKey(item.toolName || "");
+  return [
+    "write",
+    "writefile",
+    "edit",
+    "editfile",
+    "multiedit",
+    "createfile",
+    "delete",
+    "remove",
+    "move",
+    "patch",
+    "applypatch",
+  ].some((keyword) => normalizedToolName.includes(keyword));
+}
+
+function resolveApprovalRiskKind(item: ActionRequired): ApprovalRiskKind {
+  if (pickCommandFromArguments(item.arguments)) {
+    return "command";
+  }
+  if (pickPathFromArguments(item.arguments) && isFileMutationApproval(item)) {
+    return "file_change";
+  }
+  if (item.actionType === "ask_user" || item.actionType === "elicitation") {
+    return "input";
+  }
+  return "default";
+}
+
+function resolveApprovalActionLabelKey(item: ActionRequired): string {
+  switch (item.actionType) {
+    case "ask_user":
+      return "agentChat.harness.approvals.action.askUser";
+    case "elicitation":
+      return "agentChat.harness.approvals.action.elicitation";
+    case "tool_confirmation":
+    default:
+      return "agentChat.harness.approvals.action.tool";
+  }
+}
+
 function describeApproval(item: ActionRequired): string | undefined {
   const hints: string[] = [];
 
@@ -1078,12 +1428,313 @@ function describeApproval(item: ActionRequired): string | undefined {
     hints.push(path);
   }
 
-  const command = item.arguments?.cmd ?? item.arguments?.command;
-  if (typeof command === "string" && command.trim()) {
-    hints.push(command.trim());
+  const command = pickCommandFromArguments(item.arguments);
+  if (command) {
+    hints.push(command);
   }
 
   return hints.length > 0 ? hints.join(" · ") : undefined;
+}
+
+function resolveDiffReviewStatusLabelKey(
+  status?: DiffReviewFile["status"],
+): string {
+  switch (status) {
+    case "added":
+      return "agentChat.harness.diff.status.added";
+    case "deleted":
+      return "agentChat.harness.diff.status.deleted";
+    case "modified":
+      return "agentChat.harness.diff.status.modified";
+    case "unknown":
+    default:
+      return "agentChat.harness.diff.status.unknown";
+  }
+}
+
+function resolveDiffReviewLineClass(
+  kind: DiffReviewLine["kind"] | "change",
+  side: "before" | "after",
+): string {
+  if (kind === "hunk") {
+    return "border-sky-200 bg-sky-50 text-sky-800";
+  }
+  if (kind === "change") {
+    return side === "before"
+      ? "border-rose-200 bg-rose-50 text-rose-800"
+      : "border-emerald-200 bg-emerald-50 text-emerald-800";
+  }
+  if (kind === "remove") {
+    return "border-rose-200 bg-rose-50 text-rose-800";
+  }
+  if (kind === "add") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  }
+  return "border-border bg-background text-muted-foreground";
+}
+
+function buildFileChangeReviewDiffSummary(
+  entry: FileChangeReviewEntry,
+): DiffReviewSummary | null {
+  return resolveDiffReviewSummaryFromCandidates(
+    [
+      entry.content,
+      entry.preview,
+      entry.latestEvent?.content,
+      entry.latestEvent?.preview,
+      entry.activeWrite?.content,
+      entry.activeWrite?.preview,
+      entry.activeWrite?.latestChunk,
+    ],
+    { fallbackPath: entry.path },
+  );
+}
+
+function buildOutputSignalDiffSummary(
+  signal: HarnessOutputSignal,
+): DiffReviewSummary | null {
+  return resolveDiffReviewSummaryFromCandidates(
+    [signal.content, signal.preview, signal.summary],
+    { fallbackPath: getSignalPath(signal) },
+  );
+}
+
+function DiffReviewMiniPanel({
+  summary,
+  translate,
+  onOpenPath,
+  stopPropagation = false,
+}: {
+  summary: DiffReviewSummary;
+  translate: AgentTranslation;
+  onOpenPath: (path: string) => void | Promise<void>;
+  stopPropagation?: boolean;
+}) {
+  const treeItems = buildDiffReviewFileTreeItems(summary.files).filter(
+    (item) => item.kind === "file",
+  );
+  const visibleTreeItems = treeItems.slice(0, 5);
+  const remainingTreeItemCount = Math.max(0, treeItems.length - 5);
+  const firstFile = summary.files[0] ?? null;
+  const sideBySideRows = firstFile
+    ? buildDiffReviewSideBySideRows(firstFile, { maxRows: 8 })
+    : [];
+
+  return (
+    <div
+      className="mt-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-3"
+      data-testid="harness-diff-review-card"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-900">
+          <FileCode2 className="h-4 w-4 text-slate-600" />
+          {translate("agentChat.harness.diff.title")}
+        </div>
+        <Badge variant="outline" className="border-slate-300 bg-background">
+          {translate("agentChat.harness.diff.badge", {
+            files: summary.files.length,
+            additions: summary.additions,
+            deletions: summary.deletions,
+            hunks: summary.hunks,
+          })}
+        </Badge>
+      </div>
+
+      {visibleTreeItems.length > 0 ? (
+        <div className="mt-3 space-y-1">
+          <div className="text-[11px] font-medium text-slate-700">
+            {translate("agentChat.harness.diff.filesTitle")}
+          </div>
+          <div className="space-y-1">
+            {visibleTreeItems.map((item) => (
+              <div
+                key={item.id}
+                className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-slate-200 bg-background px-2 py-1 text-[11px] text-slate-700"
+              >
+                <Badge variant="secondary">
+                  {translate(resolveDiffReviewStatusLabelKey(item.status))}
+                </Badge>
+                <PathTextLink
+                  path={item.path}
+                  className="text-[11px]"
+                  stopPropagation={stopPropagation}
+                  onOpenPath={onOpenPath}
+                />
+                <span className="text-emerald-700">+{item.additions}</span>
+                <span className="text-rose-700">-{item.deletions}</span>
+              </div>
+            ))}
+            {remainingTreeItemCount > 0 ? (
+              <div className="text-[11px] text-muted-foreground">
+                {translate("agentChat.harness.diff.moreFiles", {
+                  count: remainingTreeItemCount,
+                })}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {firstFile && sideBySideRows.length > 0 ? (
+        <div className="mt-3 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[11px] font-medium text-slate-700">
+              {translate("agentChat.harness.diff.sideBySideTitle")}
+            </div>
+            <PathTextLink
+              path={firstFile.path}
+              className="text-[11px]"
+              stopPropagation={stopPropagation}
+              onOpenPath={onOpenPath}
+            />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="text-[11px] font-medium text-rose-700">
+              {translate("agentChat.harness.diff.before")}
+            </div>
+            <div className="text-[11px] font-medium text-emerald-700">
+              {translate("agentChat.harness.diff.after")}
+            </div>
+          </div>
+          <div className="space-y-1">
+            {sideBySideRows.map((row) => (
+              <div key={row.id} className="grid gap-1 sm:grid-cols-2">
+                <div
+                  className={cn(
+                    "min-h-6 whitespace-pre-wrap break-words rounded-md border px-2 py-1 font-mono text-[11px] leading-5",
+                    row.before === null
+                      ? "border-dashed border-slate-200 bg-background text-slate-400"
+                      : resolveDiffReviewLineClass(row.kind, "before"),
+                  )}
+                >
+                  {row.before ?? ""}
+                </div>
+                <div
+                  className={cn(
+                    "min-h-6 whitespace-pre-wrap break-words rounded-md border px-2 py-1 font-mono text-[11px] leading-5",
+                    row.after === null
+                      ? "border-dashed border-slate-200 bg-background text-slate-400"
+                      : resolveDiffReviewLineClass(row.kind, "after"),
+                  )}
+                >
+                  {row.after ?? ""}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function buildOutputStatusDescriptors(signal: HarnessOutputSignal): Array<{
+  key: string;
+  labelKey: string;
+  values?: Record<string, string | number>;
+  variant: ComponentProps<typeof Badge>["variant"];
+}> {
+  const descriptors: Array<{
+    key: string;
+    labelKey: string;
+    values?: Record<string, string | number>;
+    variant: ComponentProps<typeof Badge>["variant"];
+  }> = [];
+
+  if (signal.exitCode !== undefined) {
+    descriptors.push({
+      key: "exit-code",
+      labelKey:
+        signal.exitCode === 0
+          ? "agentChat.harness.outputs.status.exitSuccess"
+          : "agentChat.harness.outputs.status.exitFailed",
+      values: { code: signal.exitCode },
+      variant: signal.exitCode === 0 ? "secondary" : "destructive",
+    });
+  }
+
+  if (signal.truncated) {
+    descriptors.push({
+      key: "truncated",
+      labelKey: "agentChat.harness.outputs.status.truncated",
+      variant: "outline",
+    });
+  }
+
+  if (signal.offloaded || signal.offloadFile) {
+    descriptors.push({
+      key: "offloaded",
+      labelKey: "agentChat.harness.outputs.status.offloaded",
+      variant: "outline",
+    });
+  }
+
+  if (signal.sandboxed !== undefined) {
+    descriptors.push({
+      key: "sandboxed",
+      labelKey: signal.sandboxed
+        ? "agentChat.harness.outputs.status.sandboxed"
+        : "agentChat.harness.outputs.status.unsandboxed",
+      variant: "outline",
+    });
+  }
+
+  if (signal.stdoutLength !== undefined) {
+    descriptors.push({
+      key: "stdout",
+      labelKey: "agentChat.harness.outputs.status.stdout",
+      values: { count: signal.stdoutLength },
+      variant: "outline",
+    });
+  }
+
+  if (signal.stderrLength !== undefined) {
+    descriptors.push({
+      key: "stderr",
+      labelKey: "agentChat.harness.outputs.status.stderr",
+      values: { count: signal.stderrLength },
+      variant: signal.stderrLength > 0 ? "destructive" : "outline",
+    });
+  }
+
+  if (signal.offloadOriginalChars !== undefined) {
+    descriptors.push({
+      key: "original-chars",
+      labelKey: "agentChat.harness.outputs.status.originalChars",
+      values: { count: signal.offloadOriginalChars },
+      variant: "outline",
+    });
+  }
+
+  if (signal.offloadOriginalTokens !== undefined) {
+    descriptors.push({
+      key: "original-tokens",
+      labelKey: "agentChat.harness.outputs.status.originalTokens",
+      values: { count: signal.offloadOriginalTokens },
+      variant: "outline",
+    });
+  }
+
+  return descriptors;
+}
+
+function getOutputSignalPaths(signal: HarnessOutputSignal): Array<{
+  key: OutputPathKind;
+  path: string;
+}> {
+  return [
+    signal.outputFile
+      ? { key: "output" as const, path: signal.outputFile }
+      : null,
+    signal.offloadFile
+      ? { key: "offload" as const, path: signal.offloadFile }
+      : null,
+    signal.artifactPath
+      ? { key: "artifact" as const, path: signal.artifactPath }
+      : null,
+  ].filter(
+    (item): item is { key: OutputPathKind; path: string } => Boolean(item),
+  );
 }
 
 function formatRuntimePhaseLabel(
@@ -2288,6 +2939,7 @@ export function HarnessStatusPanel({
   onOpenFile,
   onRevealPath,
   onOpenPath,
+  onOpenFileCheckpoints,
   childSubagentSessions = [],
   onOpenSubagentSession,
   toolInventory,
@@ -2307,6 +2959,7 @@ export function HarnessStatusPanel({
   currentTurnId = null,
   pendingActions = [],
   submittedActionsInFlight = [],
+  onRespondToAction,
   queuedTurns = [],
   canInterrupt = false,
   onInterruptCurrentTurn,
@@ -2320,6 +2973,10 @@ export function HarnessStatusPanel({
   diagnosticRuntimeContext = null,
 }: HarnessStatusPanelProps) {
   const { t, i18n } = useTranslation("agent");
+  const translateAgent = useCallback<AgentTranslation>(
+    (key, options) => String(t(key as never, options as never)),
+    [t],
+  );
   const translateProjection = useCallback<AgentUiProjectionTranslation>(
     (key, options) => String(t(key as never, options as never)),
     [t],
@@ -2334,6 +2991,12 @@ export function HarnessStatusPanel({
     useState<FileDisplayMode>("timeline");
   const [toolInventoryFilter, setToolInventoryFilter] =
     useState<ToolInventoryFilterValue>("all");
+  const [fileChangeDecisions, setFileChangeDecisions] = useState<
+    Record<string, FileChangeDecisionStatus>
+  >({});
+  const [selectedFileChangeKeys, setSelectedFileChangeKeys] = useState<
+    string[]
+  >([]);
   const [previewDialog, setPreviewDialog] = useState<PreviewDialogState>({
     open: false,
     title: "",
@@ -3054,6 +3717,25 @@ export function HarnessStatusPanel({
       turns,
     ],
   );
+  const submittedActionIds = useMemo(
+    () => new Set(submittedActionsInFlight.map((item) => item.requestId)),
+    [submittedActionsInFlight],
+  );
+  const handleApprovalResponse = useCallback(
+    (item: ActionRequired, confirmed: boolean) => {
+      if (!onRespondToAction || item.actionType !== "tool_confirmation") {
+        return;
+      }
+
+      void onRespondToAction({
+        requestId: item.requestId,
+        actionType: item.actionType,
+        confirmed,
+        response: confirmed ? "approved" : "rejected",
+      });
+    },
+    [onRespondToAction],
+  );
   const runtimeFactSummary = useMemo(() => {
     const decisionReason =
       threadRead?.decision_reason ||
@@ -3232,6 +3914,62 @@ export function HarnessStatusPanel({
       });
   }, [filteredFileEvents]);
 
+  const fileChangeReviewEntries = useMemo(
+    () =>
+      buildFileChangeReviewEntries({
+        activeFileWrites: harnessState.activeFileWrites,
+        recentFileEvents: harnessState.recentFileEvents,
+        decisions: fileChangeDecisions,
+      }),
+    [
+      fileChangeDecisions,
+      harnessState.activeFileWrites,
+      harnessState.recentFileEvents,
+    ],
+  );
+  const fileChangeStatusCounts = useMemo(
+    () => countFileChangeStatuses(fileChangeReviewEntries),
+    [fileChangeReviewEntries],
+  );
+  const selectableFileChangeKeys = useMemo(
+    () => fileChangeReviewEntries.map((entry) => entry.key),
+    [fileChangeReviewEntries],
+  );
+  const selectedFileChangeSet = useMemo(
+    () => new Set(selectedFileChangeKeys),
+    [selectedFileChangeKeys],
+  );
+  const selectedFileChangeEntries = useMemo(
+    () =>
+      fileChangeReviewEntries.filter((entry) =>
+        selectedFileChangeSet.has(entry.key),
+      ),
+    [fileChangeReviewEntries, selectedFileChangeSet],
+  );
+  const selectedFileChangeCount = selectedFileChangeEntries.length;
+  const allFileChangesSelected =
+    selectableFileChangeKeys.length > 0 &&
+    selectedFileChangeCount === selectableFileChangeKeys.length;
+
+  useEffect(() => {
+    const knownKeys = new Set(selectableFileChangeKeys);
+    setSelectedFileChangeKeys((previous) =>
+      previous.filter((key) => knownKeys.has(key)),
+    );
+    setFileChangeDecisions((previous) => {
+      let changed = false;
+      const next: Record<string, FileChangeDecisionStatus> = {};
+      for (const key of Object.keys(previous)) {
+        if (knownKeys.has(key)) {
+          next[key] = previous[key];
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : previous;
+    });
+  }, [selectableFileChangeKeys]);
+
   const availableSections = useMemo(() => {
     const sections: HarnessSectionNavItem[] = [];
 
@@ -3250,6 +3988,12 @@ export function HarnessStatusPanel({
     }
     if (threadReliabilityView.shouldRender) {
       sections.push({ key: "reliability", label: "可靠性" });
+    }
+    if (fileChangeReviewEntries.length > 0) {
+      sections.push({
+        key: "file_review",
+        label: String(t("agentChat.harness.fileReview.title" as never)),
+      });
     }
     if (harnessState.activeFileWrites.length > 0) {
       sections.push({ key: "writes", label: "文件写入" });
@@ -3286,6 +4030,7 @@ export function HarnessStatusPanel({
     return sections;
   }, [
     environment.skillsCount,
+    fileChangeReviewEntries.length,
     hasAgentUiProjectionSection,
     hasToolInventorySection,
     harnessState.delegatedTasks.length,
@@ -3300,6 +4045,7 @@ export function HarnessStatusPanel({
     hasSelectedTeamConfig,
     realTeamSummary.total,
     runtimeTaskPresentation,
+    t,
     threadReliabilityView.shouldRender,
   ]);
 
@@ -3369,6 +4115,26 @@ export function HarnessStatusPanel({
             ? `已配置 ${selectedTeamRoles?.length || 0} 个角色`
             : "本次已启用任务分工"),
         icon: Workflow,
+      });
+    }
+
+    if (fileChangeReviewEntries.length > 0) {
+      cards.push({
+        sectionKey: "file_review",
+        title: String(t("agentChat.harness.fileReview.title" as never)),
+        value: String(
+          t(
+            "agentChat.harness.fileReview.summaryValue" as never,
+            {
+              pending: fileChangeStatusCounts.pending,
+              total: fileChangeReviewEntries.length,
+            } as never,
+          ),
+        ),
+        hint:
+          fileChangeReviewEntries[0]?.displayName ||
+          String(t("agentChat.harness.fileReview.emptyHint" as never)),
+        icon: SquareCheckBig,
       });
     }
 
@@ -3473,6 +4239,8 @@ export function HarnessStatusPanel({
     hasHandoffSection,
     hasToolInventorySection,
     hasSelectedTeamConfig,
+    fileChangeReviewEntries,
+    fileChangeStatusCounts.pending,
     harnessState.activeFileWrites,
     harnessState.pendingApprovals.length,
     harnessState.plan.items,
@@ -3498,6 +4266,7 @@ export function HarnessStatusPanel({
     threadReliabilityView.statusLabel,
     threadReliabilityView.summary,
     translateProjection,
+    t,
   ]);
 
   const openPreview = useCallback(
@@ -5820,6 +6589,419 @@ export function HarnessStatusPanel({
                 </Section>
               ) : null}
 
+              {fileChangeReviewEntries.length > 0 ? (
+                <Section
+                  sectionKey="file_review"
+                  title={String(
+                    t("agentChat.harness.fileReview.title" as never),
+                  )}
+                  badge={String(
+                    t(
+                      "agentChat.harness.fileReview.badge" as never,
+                      {
+                        pending: fileChangeStatusCounts.pending,
+                        total: fileChangeReviewEntries.length,
+                      } as never,
+                    ),
+                  )}
+                  registerRef={registerSectionRef}
+                >
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-3 py-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-medium text-sky-950">
+                            {String(
+                              t(
+                                "agentChat.harness.fileReview.summaryTitle" as never,
+                              ),
+                            )}
+                          </div>
+                          <div className="mt-1 text-xs leading-5 text-sky-800">
+                            {String(
+                              t(
+                                "agentChat.harness.fileReview.summary" as never,
+                                {
+                                  pending: fileChangeStatusCounts.pending,
+                                  applied: fileChangeStatusCounts.applied,
+                                  rejected: fileChangeStatusCounts.rejected,
+                                } as never,
+                              ),
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge
+                            variant="outline"
+                            className="border-sky-300 bg-white text-sky-700"
+                          >
+                            {String(
+                              t(
+                                "agentChat.harness.fileReview.pendingCount" as never,
+                                {
+                                  count: fileChangeStatusCounts.pending,
+                                } as never,
+                              ),
+                            )}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className="border-emerald-300 bg-white text-emerald-700"
+                          >
+                            {String(
+                              t(
+                                "agentChat.harness.fileReview.appliedCount" as never,
+                                {
+                                  count: fileChangeStatusCounts.applied,
+                                } as never,
+                              ),
+                            )}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className="border-rose-300 bg-white text-rose-700"
+                          >
+                            {String(
+                              t(
+                                "agentChat.harness.fileReview.rejectedCount" as never,
+                                {
+                                  count: fileChangeStatusCounts.rejected,
+                                } as never,
+                              ),
+                            )}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setSelectedFileChangeKeys(
+                              allFileChangesSelected
+                                ? []
+                                : selectableFileChangeKeys,
+                            )
+                          }
+                          aria-label={String(
+                            t(
+                              allFileChangesSelected
+                                ? ("agentChat.harness.fileReview.clearSelectionAria" as never)
+                                : ("agentChat.harness.fileReview.selectAllAria" as never),
+                            ),
+                          )}
+                        >
+                          <SquareCheckBig className="mr-1 h-4 w-4" />
+                          {allFileChangesSelected
+                            ? String(
+                                t(
+                                  "agentChat.harness.fileReview.clearSelection" as never,
+                                ),
+                              )
+                            : String(
+                                t(
+                                  "agentChat.harness.fileReview.selectAll" as never,
+                                ),
+                              )}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={selectedFileChangeCount === 0}
+                          onClick={() => {
+                            setFileChangeDecisions((previous) => ({
+                              ...previous,
+                              ...Object.fromEntries(
+                                selectedFileChangeEntries.map((entry) => [
+                                  entry.key,
+                                  "applied" as const,
+                                ]),
+                              ),
+                            }));
+                            toast.success(
+                              String(
+                                t(
+                                  "agentChat.harness.fileReview.toast.applied" as never,
+                                  {
+                                    count: selectedFileChangeCount,
+                                  } as never,
+                                ),
+                              ),
+                            );
+                          }}
+                        >
+                          <CheckCircle2 className="mr-1 h-4 w-4" />
+                          {String(
+                            t(
+                              "agentChat.harness.fileReview.markApplied" as never,
+                              {
+                                count: selectedFileChangeCount,
+                              } as never,
+                            ),
+                          )}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={selectedFileChangeCount === 0}
+                          onClick={() => {
+                            setFileChangeDecisions((previous) => ({
+                              ...previous,
+                              ...Object.fromEntries(
+                                selectedFileChangeEntries.map((entry) => [
+                                  entry.key,
+                                  "rejected" as const,
+                                ]),
+                              ),
+                            }));
+                            if (onOpenFileCheckpoints) {
+                              onOpenFileCheckpoints();
+                            } else {
+                              toast.info(
+                                String(
+                                  t(
+                                    "agentChat.harness.fileReview.toast.rejectedNoCheckpoint" as never,
+                                  ),
+                                ),
+                              );
+                            }
+                          }}
+                        >
+                          <XCircle className="mr-1 h-4 w-4" />
+                          {String(
+                            t(
+                              "agentChat.harness.fileReview.markRejected" as never,
+                              {
+                                count: selectedFileChangeCount,
+                              } as never,
+                            ),
+                          )}
+                        </Button>
+                      </div>
+                      {onOpenFileCheckpoints ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={onOpenFileCheckpoints}
+                        >
+                          <Undo2 className="mr-1 h-4 w-4" />
+                          {String(
+                            t(
+                              "agentChat.harness.fileReview.openCheckpoints" as never,
+                            ),
+                          )}
+                        </Button>
+                      ) : null}
+                    </div>
+
+                    <div className="space-y-2">
+                      {fileChangeReviewEntries.map((entry) => {
+                        const Icon = resolveKindIcon(entry.kind);
+                        const selected = selectedFileChangeSet.has(entry.key);
+                        const latestActionLabel = translateFileReviewAction(
+                          translateAgent,
+                          entry.latestAction,
+                        );
+                        const kindLabel = translateFileReviewKind(
+                          translateAgent,
+                          entry.kind,
+                        );
+                        const actionSummary = summarizeFileReviewActionText(
+                          translateAgent,
+                          entry.actionSummaryItems,
+                        );
+                        const diffSummary =
+                          buildFileChangeReviewDiffSummary(entry);
+                        return (
+                          <div
+                            key={entry.key}
+                            className={cn(
+                              "rounded-xl border bg-background p-3",
+                              selected
+                                ? "border-primary/50 ring-1 ring-primary/20"
+                                : "border-border",
+                            )}
+                            data-testid={`harness-file-review-item-${entry.displayName}`}
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <label className="flex min-w-0 flex-1 items-start gap-3">
+                                <input
+                                  type="checkbox"
+                                  className="mt-1 h-4 w-4 rounded border-border"
+                                  checked={selected}
+                                  onChange={(event) => {
+                                    const checked = event.currentTarget.checked;
+                                    setSelectedFileChangeKeys((previous) =>
+                                      checked
+                                        ? previous.includes(entry.key)
+                                          ? previous
+                                          : [...previous, entry.key]
+                                        : previous.filter(
+                                            (key) => key !== entry.key,
+                                          ),
+                                    );
+                                  }}
+                                  aria-label={String(
+                                    t(
+                                      "agentChat.harness.fileReview.selectItemAria" as never,
+                                      {
+                                        path: entry.path,
+                                      } as never,
+                                    ),
+                                  )}
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="flex items-center gap-2">
+                                    <Icon className="h-4 w-4 text-muted-foreground" />
+                                    <span className="truncate text-sm font-medium text-foreground">
+                                      {entry.displayName}
+                                    </span>
+                                  </span>
+                                  <PathTextLink
+                                    path={entry.path}
+                                    className="mt-1 text-xs"
+                                    stopPropagation={true}
+                                    onOpenPath={handleOpenPathValue}
+                                  />
+                                  <span className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                    <Clock3 className="h-3.5 w-3.5" />
+                                    <span>{formatTime(entry.timestamp)}</span>
+                                    <span>·</span>
+                                    <span>{latestActionLabel}</span>
+                                    <span>·</span>
+                                    <span>{actionSummary}</span>
+                                  </span>
+                                </span>
+                              </label>
+                              <div className="flex shrink-0 flex-wrap items-center gap-2">
+                                <Badge variant="secondary">{kindLabel}</Badge>
+                                <Badge
+                                  variant={
+                                    entry.status === "applied"
+                                      ? "secondary"
+                                      : entry.status === "rejected"
+                                        ? "destructive"
+                                        : "outline"
+                                  }
+                                >
+                                  {String(
+                                    t(
+                                      FILE_CHANGE_STATUS_LABEL_KEY_BY_STATUS[
+                                        entry.status
+                                      ] as never,
+                                    ),
+                                  )}
+                                </Badge>
+                              </div>
+                            </div>
+
+                            {diffSummary ? (
+                              <DiffReviewMiniPanel
+                                summary={diffSummary}
+                                translate={translateAgent}
+                                onOpenPath={handleOpenPathValue}
+                                stopPropagation={true}
+                              />
+                            ) : entry.preview ? (
+                              <div className="mt-2 rounded-lg bg-muted/50 p-2 text-xs text-muted-foreground">
+                                <InteractiveText
+                                  text={entry.preview}
+                                  mono={true}
+                                  stopPropagation={true}
+                                  onOpenUrl={handleOpenExternalLink}
+                                />
+                              </div>
+                            ) : null}
+
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  void openPreview({
+                                    title: entry.displayName,
+                                    description: joinDisplayParts([
+                                      latestActionLabel,
+                                      kindLabel,
+                                      actionSummary,
+                                    ]),
+                                    path: entry.path,
+                                    content: entry.content,
+                                    preview: entry.preview,
+                                  })
+                                }
+                              >
+                                <Eye className="mr-1 h-4 w-4" />
+                                {String(
+                                  t(
+                                    "agentChat.harness.fileReview.preview" as never,
+                                  ),
+                                )}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  setFileChangeDecisions((previous) => ({
+                                    ...previous,
+                                    [entry.key]: "applied",
+                                  }))
+                                }
+                              >
+                                <CheckCircle2 className="mr-1 h-4 w-4" />
+                                {String(
+                                  t(
+                                    "agentChat.harness.fileReview.applyOne" as never,
+                                  ),
+                                )}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setFileChangeDecisions((previous) => ({
+                                    ...previous,
+                                    [entry.key]: "rejected",
+                                  }));
+                                  if (onOpenFileCheckpoints) {
+                                    onOpenFileCheckpoints();
+                                  } else {
+                                    toast.info(
+                                      String(
+                                        t(
+                                          "agentChat.harness.fileReview.toast.rejectedNoCheckpoint" as never,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }}
+                              >
+                                <Undo2 className="mr-1 h-4 w-4" />
+                                {String(
+                                  t(
+                                    "agentChat.harness.fileReview.rejectOne" as never,
+                                  ),
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </Section>
+              ) : null}
+
               {hasAgentUiProjectionSection ? (
                 <Section
                   sectionKey="agentui"
@@ -6202,6 +7384,11 @@ export function HarnessStatusPanel({
                         );
                         const canOpenUrl =
                           !canOpenPreview && Boolean(signalUrl);
+                        const outputStatusDescriptors =
+                          buildOutputStatusDescriptors(signal);
+                        const outputPaths = getOutputSignalPaths(signal);
+                        const diffSummary =
+                          buildOutputSignalDiffSummary(signal);
 
                         return (
                           <button
@@ -6242,19 +7429,71 @@ export function HarnessStatusPanel({
                                   stopPropagation={true}
                                   onOpenUrl={handleOpenExternalLink}
                                 />
-                                <PathTextLink
-                                  path={signalPath}
-                                  className="mt-1 text-xs"
-                                  stopPropagation={true}
-                                  onOpenPath={handleOpenPathValue}
-                                />
+                                {outputStatusDescriptors.length > 0 ? (
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {outputStatusDescriptors.map(
+                                      (descriptor) => (
+                                        <Badge
+                                          key={descriptor.key}
+                                          variant={descriptor.variant}
+                                        >
+                                          {String(
+                                            t(
+                                              descriptor.labelKey as never,
+                                              descriptor.values as never,
+                                            ),
+                                          )}
+                                        </Badge>
+                                      ),
+                                    )}
+                                  </div>
+                                ) : null}
                               </div>
                               <Badge variant="outline">
                                 {resolveFriendlyToolLabel(signal.toolName) ||
                                   signal.toolName}
                               </Badge>
                             </div>
-                            {signal.preview ? (
+                            {outputPaths.length > 0 ? (
+                              <div className="mt-3 space-y-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs">
+                                <div className="font-medium text-foreground">
+                                  {String(
+                                    t(
+                                      "agentChat.harness.outputs.paths.title" as never,
+                                    ),
+                                  )}
+                                </div>
+                                {outputPaths.map((item) => (
+                                  <div
+                                    key={`${item.key}:${item.path}`}
+                                    className="flex flex-wrap gap-x-2 gap-y-1 text-muted-foreground"
+                                  >
+                                    <span>
+                                      {String(
+                                        t(
+                                          OUTPUT_PATH_LABEL_KEY_BY_KIND[
+                                            item.key
+                                          ] as never,
+                                        ),
+                                      )}
+                                    </span>
+                                    <PathTextLink
+                                      path={item.path}
+                                      stopPropagation={true}
+                                      onOpenPath={handleOpenPathValue}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                            {diffSummary ? (
+                              <DiffReviewMiniPanel
+                                summary={diffSummary}
+                                translate={translateAgent}
+                                onOpenPath={handleOpenPathValue}
+                                stopPropagation={true}
+                              />
+                            ) : signal.preview ? (
                               <div className="mt-2 rounded-lg bg-muted/50 p-2 text-xs text-muted-foreground">
                                 <InteractiveText
                                   text={signal.preview}
@@ -7109,31 +8348,194 @@ export function HarnessStatusPanel({
                   registerRef={registerSectionRef}
                 >
                   <div className="space-y-3">
-                    {harnessState.pendingApprovals.map((item) => (
-                      <div
-                        key={item.requestId}
-                        className="rounded-xl border border-amber-200 bg-amber-50/80 p-3"
-                      >
-                        <div className="flex items-center gap-2 text-sm font-medium text-amber-900">
-                          <ShieldAlert className="h-4 w-4" />
-                          <InteractiveText
-                            text={item.prompt || "等待用户确认"}
-                            className="text-sm"
-                            onOpenUrl={handleOpenExternalLink}
-                          />
+                    {harnessState.pendingApprovals.map((item) => {
+                      const approvalPath = pickPathFromArguments(
+                        item.arguments,
+                      );
+                      const approvalCommand = pickCommandFromArguments(
+                        item.arguments,
+                      );
+                      const approvalSummary = describeApproval(item);
+                      const riskKind = resolveApprovalRiskKind(item);
+                      const approvalTarget =
+                        approvalSummary || item.toolName || item.requestId;
+                      const canInlineRespond =
+                        item.actionType === "tool_confirmation" &&
+                        Boolean(onRespondToAction);
+                      const approvalSubmitting =
+                        submittedActionIds.has(item.requestId) ||
+                        item.status === "submitted";
+
+                      return (
+                        <div
+                          key={item.requestId}
+                          className="rounded-xl border border-amber-200 bg-amber-50/80 p-3"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 text-sm font-medium text-amber-950">
+                                <ShieldAlert className="h-4 w-4 shrink-0" />
+                                <InteractiveText
+                                  text={
+                                    item.prompt ||
+                                    String(
+                                      t(
+                                        "agentChat.harness.approvals.waiting" as never,
+                                      ),
+                                    )
+                                  }
+                                  className="text-sm"
+                                  onOpenUrl={handleOpenExternalLink}
+                                />
+                              </div>
+                            </div>
+                            <Badge variant="secondary">
+                              {String(
+                                t(
+                                  resolveApprovalActionLabelKey(item) as never,
+                                ),
+                              )}
+                            </Badge>
+                          </div>
+                          <div className="mt-3 grid gap-2 md:grid-cols-2">
+                            <div className="rounded-lg border border-amber-100 bg-white/70 px-3 py-2">
+                              <div className="text-[11px] font-medium text-amber-950">
+                                {String(
+                                  t(
+                                    "agentChat.harness.approvals.impactScope" as never,
+                                  ),
+                                )}
+                              </div>
+                              {approvalPath ? (
+                                <PathTextLink
+                                  path={approvalPath}
+                                  className="mt-1 text-xs"
+                                  onOpenPath={handleOpenPathValue}
+                                />
+                              ) : approvalCommand ? (
+                                <InteractiveText
+                                  text={approvalCommand}
+                                  mono={true}
+                                  className="mt-1 text-xs text-amber-900"
+                                  onOpenUrl={handleOpenExternalLink}
+                                />
+                              ) : (
+                                <div className="mt-1 text-xs text-amber-800">
+                                  {String(
+                                    t(
+                                      "agentChat.harness.approvals.scope.currentRun" as never,
+                                    ),
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <div className="rounded-lg border border-amber-100 bg-white/70 px-3 py-2">
+                              <div className="text-[11px] font-medium text-amber-950">
+                                {String(
+                                  t(
+                                    "agentChat.harness.approvals.riskTitle" as never,
+                                  ),
+                                )}
+                              </div>
+                              <div className="mt-1 text-xs text-amber-800">
+                                {String(
+                                  t(
+                                    APPROVAL_RISK_LABEL_KEY_BY_KIND[
+                                      riskKind
+                                    ] as never,
+                                  ),
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          {approvalSummary ? (
+                            <div className="mt-3 rounded-lg bg-amber-100/60 px-3 py-2">
+                              <div className="text-[11px] font-medium text-amber-950">
+                                {String(
+                                  t(
+                                    "agentChat.harness.approvals.argumentSummary" as never,
+                                  ),
+                                )}
+                              </div>
+                              <InteractiveText
+                                text={approvalSummary}
+                                className="mt-1 text-xs text-amber-800"
+                                onOpenUrl={handleOpenExternalLink}
+                              />
+                            </div>
+                          ) : null}
+                          <div className="mt-2 text-xs text-amber-700">
+                            {String(
+                              t(
+                                "agentChat.harness.approvals.requestRef" as never,
+                                { id: item.requestId } as never,
+                              ),
+                            )}
+                          </div>
+                          {canInlineRespond ? (
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                disabled={approvalSubmitting}
+                                aria-label={String(
+                                  t(
+                                    "agentChat.harness.approvals.approveAria" as never,
+                                    { target: approvalTarget } as never,
+                                  ),
+                                )}
+                                onClick={() =>
+                                  handleApprovalResponse(item, true)
+                                }
+                              >
+                                {approvalSubmitting ? (
+                                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <CheckCircle2 className="mr-1 h-4 w-4" />
+                                )}
+                                {String(
+                                  t(
+                                    approvalSubmitting
+                                      ? ("agentChat.harness.approvals.submitting" as never)
+                                      : ("agentChat.harness.approvals.approve" as never),
+                                  ),
+                                )}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={approvalSubmitting}
+                                aria-label={String(
+                                  t(
+                                    "agentChat.harness.approvals.rejectAria" as never,
+                                    { target: approvalTarget } as never,
+                                  ),
+                                )}
+                                onClick={() =>
+                                  handleApprovalResponse(item, false)
+                                }
+                              >
+                                <XCircle className="mr-1 h-4 w-4" />
+                                {String(
+                                  t(
+                                    "agentChat.harness.approvals.reject" as never,
+                                  ),
+                                )}
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="mt-3 rounded-lg border border-amber-100 bg-white/70 px-3 py-2 text-xs text-amber-800">
+                              {String(
+                                t(
+                                  "agentChat.harness.approvals.responseHint" as never,
+                                ),
+                              )}
+                            </div>
+                          )}
                         </div>
-                        {describeApproval(item) ? (
-                          <InteractiveText
-                            text={describeApproval(item)}
-                            className="mt-2 text-xs text-amber-800"
-                            onOpenUrl={handleOpenExternalLink}
-                          />
-                        ) : null}
-                        <div className="mt-2 text-xs text-amber-700">
-                          请求 ID：{item.requestId}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </Section>
               ) : null}

@@ -203,4 +203,49 @@ describe("i18n language boundary report", () => {
     expect(focusedReport.filters.category).toBe("contentTargetLanguage");
     expect(focusedReport.summary.entryCount).toBe(2);
   });
+
+  it("应识别常见语言字段的上下文语义，减少泛名 language 误报", () => {
+    const root = createTempDir();
+    writeFile(
+      root,
+      "src/components/agent/chat/workspace/useWorkspaceArtifactPreviewActions.ts",
+      "handleCodeBlockClick: (language: string, code: string) => void;\n",
+    );
+    writeFile(
+      root,
+      "src/components/agent/chat/workspace/useWorkspaceTranscriptionTaskPreviewRuntime.ts",
+      'const language = entry.transcript_language?.trim() || currentPreview.language;\n',
+    );
+    writeFile(
+      root,
+      "src/components/agent/chat/utils/harnessRequestMetadata.test.ts",
+      'it("应以独立字段透传 Agent response language 且不复用 UI locale", () => {});\n',
+    );
+    writeFile(
+      root,
+      "src/components/settings-v2/system/chrome-relay/index.test.tsx",
+      '"browser language and content preferences";\n',
+    );
+    writeFile(
+      root,
+      "src/components/workspace/document/editor/slashCommandItems.tsx",
+      'const t = instance.getFixedT(instance.language, "workspace");\n',
+    );
+
+    const report = analyzeI18nLanguageBoundaryReport({
+      rootDir: root,
+      sourceDirs: ["src"],
+    });
+
+    expect(report.summary.unknownCount).toBe(0);
+    expect(report.summary.categorySummaries).toEqual(
+      expect.arrayContaining([
+        { category: "codeLanguage", count: 1 },
+        { category: "asrLanguage", count: 1 },
+        { category: "agentResponseLanguage", count: 1 },
+        { category: "browserEnvironmentLanguage", count: 1 },
+        { category: "uiLocale", count: 1 },
+      ]),
+    );
+  });
 });

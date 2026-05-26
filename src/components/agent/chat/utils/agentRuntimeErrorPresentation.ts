@@ -1,7 +1,12 @@
+import i18n from "i18next";
+
 const DEFAULT_RUNTIME_ERROR_MESSAGE = "执行链路返回失败，请查看详情后重试。";
 
 const PROVIDER_AUTH_ERROR_MESSAGE =
   "当前 Provider 鉴权未通过，请前往设置 -> AI 服务商检查 API Key、Base URL 或授权配置后重试。";
+
+const PROVIDER_QUOTA_ERROR_MESSAGE =
+  "当前 AI 服务商余额或额度不足，请在服务商后台充值或开通额度，或切换到其他可用模型后重试。";
 
 const PROVIDER_SESSION_EXPIRED_ERROR_MESSAGE =
   "当前模型通道返回了不兼容的工具 schema，请前往设置 -> AI 服务商检查 Provider 配置或切换模型后重试。";
@@ -20,6 +25,19 @@ function looksLikeHttpStatus(message: string, status: "401" | "403"): boolean {
 
 function includesAny(message: string, candidates: readonly string[]): boolean {
   return candidates.some((candidate) => message.includes(candidate));
+}
+
+function readAgentRuntimeCopy(key: string, fallback: string): string {
+  if (!i18n.isInitialized) {
+    return fallback;
+  }
+
+  return String(
+    i18n.t(key, {
+      ns: "agent",
+      defaultValue: fallback,
+    }),
+  );
 }
 
 function isLikelyProviderAuthError(message: string): boolean {
@@ -55,6 +73,29 @@ function isLikelyProviderAuthError(message: string): boolean {
   );
 }
 
+function isLikelyProviderQuotaError(message: string): boolean {
+  return (
+    message.includes("402") ||
+    includesAny(message, [
+      "payment required",
+      "insufficient balance",
+      "insufficient_quota",
+      "insufficient quota",
+      "insufficient credit",
+      "no credit",
+      "exhausted balance",
+      "balance exhausted",
+      "billing hard limit",
+      "quota exceeded",
+      "余额不足",
+      "额度不足",
+      "余额已用尽",
+      "额度已用尽",
+      "请充值",
+    ])
+  );
+}
+
 function isLikelyProviderSessionExpiredError(message: string): boolean {
   return (
     message.includes("invalid schema for function 'sendmessage'") &&
@@ -84,6 +125,17 @@ export function resolveAgentRuntimeErrorPresentation(errorMessage: string): {
     return {
       displayMessage: PROVIDER_CHANNEL_ERROR_MESSAGE,
       toastMessage: PROVIDER_CHANNEL_ERROR_MESSAGE,
+    };
+  }
+
+  if (isLikelyProviderQuotaError(lowerMessage)) {
+    const message = readAgentRuntimeCopy(
+      "agentChat.runtimeError.providerQuota",
+      PROVIDER_QUOTA_ERROR_MESSAGE,
+    );
+    return {
+      displayMessage: message,
+      toastMessage: message,
     };
   }
 

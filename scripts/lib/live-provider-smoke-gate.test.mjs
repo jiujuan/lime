@@ -144,6 +144,32 @@ describe("live-provider-smoke-gate", () => {
     expect(`${result.stdout}${result.stderr}`).toContain("默认禁止执行");
   });
 
+  it("Managed Objective continuation 指定 Deepseek 时必须显式授权", () => {
+    const result = spawnSync(
+      "node",
+      [
+        "scripts/managed-objective-continuation-smoke.mjs",
+        "--provider-preference",
+        "deepseek",
+        "--model-preference",
+        "deepseek-v4-flash",
+        "--no-write",
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          [LIVE_PROVIDER_SMOKE_ENV]: "",
+          [REAL_API_TEST_ENV]: "",
+        },
+      },
+    );
+
+    expect(result.status).toBe(1);
+    expect(`${result.stdout}${result.stderr}`).toContain("默认禁止执行");
+  });
+
   it("提交真实 AgentRuntime / Provider 的脚本必须默认接入 live gate", () => {
     const riskyCommandPattern =
       /"agent_runtime_submit_turn"|"test_api_key_provider_chat"/;
@@ -185,7 +211,9 @@ function listSmokeScripts() {
     .map((entry) => {
       const filePath = path.join(scriptsDir, entry.name);
       return {
-        relativePath: path.relative(process.cwd(), filePath).replaceAll("\\", "/"),
+        relativePath: path
+          .relative(process.cwd(), filePath)
+          .replaceAll("\\", "/"),
         content: fs.readFileSync(filePath, "utf8"),
       };
     });

@@ -42,6 +42,7 @@ export function getTextCountStatus(result) {
 export function isStatusClassificationDrift(status, classification) {
   return (
     (status === "已删除" || status === "零引用") &&
+    classification !== "dead" &&
     classification !== "dead-candidate"
   );
 }

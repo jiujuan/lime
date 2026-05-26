@@ -491,6 +491,132 @@ describe("DecisionPanel copywriting", () => {
     expect(container.textContent).not.toContain("Claude");
   });
 
+  it("tool_confirmation 应展示待确认动作、工具名和参数摘要，并继续提交允许响应", () => {
+    const request: ActionRequired = {
+      requestId: "req-tool-confirm-summary",
+      actionType: "tool_confirmation",
+      toolName: "exec_command",
+      prompt: "允许执行测试命令？",
+      arguments: {
+        command: "npm test -- DecisionPanel",
+        cwd: "/workspace/lime",
+        target_path: "src/components/agent/chat/components/DecisionPanel.tsx",
+        sandboxed: true,
+      },
+    };
+    const { container, onSubmit } = renderDecisionPanel(request);
+
+    expect(
+      container.querySelector(
+        '[data-testid="decision-panel-tool-confirmation-summary"]',
+      ),
+    ).toBeTruthy();
+    expect(container.textContent).toContain("待确认动作");
+    expect(container.textContent).toContain("等待确认");
+    expect(container.textContent).toContain("允许执行测试命令？");
+    expect(container.textContent).toContain("助手想要使用");
+    expect(container.textContent).toContain("exec_command");
+    expect(
+      container.querySelector(
+        '[data-testid="decision-panel-tool-confirmation-impact"]',
+      ),
+    ).toBeTruthy();
+    expect(container.textContent).toContain("风险判断");
+    expect(container.textContent).toContain("需确认");
+    expect(container.textContent).toContain("将执行本地命令");
+    expect(container.textContent).toContain("影响范围");
+    expect(container.textContent).toContain("文件");
+    expect(container.textContent).toContain("本次授权");
+    expect(container.textContent).toContain(
+      "仅允许当前这一次工具操作，不会改变后续默认权限。",
+    );
+    expect(container.textContent).toContain("参数摘要");
+    expect(container.textContent).toContain("命令");
+    expect(container.textContent).toContain("npm test -- DecisionPanel");
+    expect(container.textContent).toContain("目录");
+    expect(container.textContent).toContain("/workspace/lime");
+    expect(container.textContent).toContain("路径");
+    expect(container.textContent).toContain(
+      "src/components/agent/chat/components/DecisionPanel.tsx",
+    );
+    expect(container.textContent).toContain("查看完整参数");
+    expect(
+      container.querySelectorAll(
+        '[data-testid="decision-panel-tool-confirmation-argument"]',
+      ).length,
+    ).toBeGreaterThanOrEqual(3);
+
+    clickButton(findButtonByText(container, "允许"));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit).toHaveBeenCalledWith({
+      requestId: "req-tool-confirm-summary",
+      confirmed: true,
+      response: "允许",
+      actionType: "tool_confirmation",
+    });
+  });
+
+  it("tool_confirmation 应对高影响命令展示高风险判断", () => {
+    const request: ActionRequired = {
+      requestId: "req-tool-confirm-destructive",
+      actionType: "tool_confirmation",
+      toolName: "exec_command",
+      prompt: "允许删除依赖目录？",
+      arguments: {
+        command: "rm -rf node_modules",
+        cwd: "/workspace/lime",
+      },
+    };
+    const { container } = renderDecisionPanel(request);
+    const impact = container.querySelector(
+      '[data-testid="decision-panel-tool-confirmation-impact"]',
+    );
+
+    expect(impact).toBeTruthy();
+    expect(impact?.textContent).toContain("风险判断");
+    expect(impact?.textContent).toContain("高风险");
+    expect(impact?.textContent).toContain("包含高影响命令");
+    expect(impact?.textContent).toContain("影响范围");
+    expect(impact?.textContent).toContain("目录");
+    expect(impact?.textContent).toContain("/workspace/lime");
+    expect(impact?.textContent).toContain("本次授权");
+  });
+
+  it("tool_confirmation 应优先展示运行时结构化权限事实，而不是前端启发式判断", () => {
+    const request: ActionRequired = {
+      requestId: "req-tool-confirm-structured-permission-facts",
+      actionType: "tool_confirmation",
+      toolName: "exec_command",
+      prompt: "允许执行运行时预检？",
+      arguments: {
+        command: "rm -rf node_modules",
+        cwd: "/workspace/lime",
+        permission_facts: {
+          risk_level: "low",
+          risk_reason_label: "后端已判定为只读预检",
+          scope_kind: "url",
+          scope_value: "https://example.com/preflight",
+          authorization_summary: "仅允许本次只读预检请求",
+        },
+      },
+    };
+    const { container } = renderDecisionPanel(request);
+    const impact = container.querySelector(
+      '[data-testid="decision-panel-tool-confirmation-impact"]',
+    );
+
+    expect(impact).toBeTruthy();
+    expect(impact?.textContent).toContain("低风险");
+    expect(impact?.textContent).toContain("后端已判定为只读预检");
+    expect(impact?.textContent).toContain("链接");
+    expect(impact?.textContent).toContain("https://example.com/preflight");
+    expect(impact?.textContent).toContain("仅允许本次只读预检请求");
+    expect(impact?.textContent).not.toContain("高风险");
+    expect(impact?.textContent).not.toContain("包含高影响命令");
+    expect(impact?.textContent).not.toContain("/workspace/lime");
+  });
+
   it("tool_confirmation 提交中时，应展示处理中并禁用按钮", async () => {
     const request: ActionRequired = {
       requestId: "req-tool-confirm-loading",

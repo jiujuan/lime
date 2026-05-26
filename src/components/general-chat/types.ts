@@ -277,7 +277,7 @@ export interface Message {
  * 画布内容类型
  * @description 标识画布中显示的内容类型
  */
-export type CanvasContentType = "code" | "file" | "markdown" | "empty";
+export type CanvasContentType = "code" | "file" | "html" | "markdown" | "empty";
 
 /**
  * 画布状态
@@ -294,6 +294,8 @@ export interface CanvasState {
   language?: string;
   /** 文件名 */
   filename?: string;
+  /** 真实源文件路径，用于 Tauri WebView 以受控文件 URL 预览 */
+  sourcePath?: string;
   /** 是否处于编辑模式 */
   isEditing: boolean;
 }

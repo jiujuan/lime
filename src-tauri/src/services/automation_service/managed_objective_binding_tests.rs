@@ -34,6 +34,9 @@ fn agent_payload_with_objective(objective: &str) -> AutomationPayload {
         web_search: false,
         approval_policy: None,
         sandbox_policy: None,
+        provider_config: None,
+        provider_preference: None,
+        model_preference: None,
         request_metadata: Some(json!({
             "harness": {
                 "managed_objective": {

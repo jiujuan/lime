@@ -7,11 +7,12 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
+import i18n from "i18next";
 import { toast } from "sonner";
+import { initLimeI18n } from "@/i18n/createI18n";
 import type { LayoutMode } from "@/lib/workspace/workbenchContract";
 import {
   browserExecuteAction,
-  launchBrowserSession,
   siteRunAdapter,
   type SiteAdapterRunResult,
 } from "@/lib/webview-api";
@@ -58,21 +59,6 @@ function isFailedBrowserAssistLaunchState(
   return normalizeBrowserAssistState(value) === "failed";
 }
 
-const EXISTING_SESSION_LAUNCH_ERROR_PATTERNS = [
-  "附着当前 chrome",
-  "existing_session",
-  "现有 chrome / 扩展桥接",
-  "运行时附着链路尚未接入",
-];
-
-function isExistingSessionLaunchError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  const normalized = message.trim().toLowerCase();
-  return EXISTING_SESSION_LAUNCH_ERROR_PATTERNS.some((pattern) =>
-    normalized.includes(pattern),
-  );
-}
-
 function normalizeBrowserAssistBackend(
   value: string | null | undefined,
 ): "lime_extension_bridge" | "cdp_direct" | undefined {
@@ -82,8 +68,38 @@ function normalizeBrowserAssistBackend(
   return undefined;
 }
 
-function buildAttachedSessionOnlyErrorMessage(targetLabel: string): string {
-  return `当前流程要求复用已附着的 Chrome 会话执行 ${targetLabel}，不会自动拉起新的托管浏览器。请先确认 Lime Chrome 插件已连接并打开目标站点。`;
+function getWorkspaceText(
+  key: string,
+  options?: Record<string, unknown>,
+): string {
+  const instance = i18n.isInitialized ? i18n : initLimeI18n();
+  return String(instance.t(key as never, { ns: "workspace", ...options }));
+}
+
+function getBrowserAssistFallbackTitle(): string {
+  return getWorkspaceText("workspace.browserAssistRenderer.titleFallback");
+}
+
+function getBrowserAssistAttachedLaunchHint(): string {
+  return getWorkspaceText("workspace.browserAssistRenderer.launching.detail");
+}
+
+function buildAttachedSessionOnlyErrorMessage(
+  targetLabel: string,
+  error?: unknown,
+): string {
+  const detail =
+    error instanceof Error
+      ? error.message.trim()
+      : typeof error === "string"
+        ? error.trim()
+        : "";
+  return getWorkspaceText(
+    detail
+      ? "workspace.browserAssistRenderer.failed.attachedOnlyWithDetail"
+      : "workspace.browserAssistRenderer.failed.attachedOnly",
+    { target: targetLabel, detail },
+  );
 }
 
 function resolveBrowserActionPageSnapshot(
@@ -269,34 +285,6 @@ export function useWorkspaceBrowserAssistRuntime({
       launchNonce: siteSkillLaunchNonce ?? null,
     });
   }, [contentId, initialSiteSkillLaunch, projectId, siteSkillLaunchNonce]);
-  const initialSiteSkillPreferredBackend = useMemo(
-    () =>
-      normalizeBrowserAssistBackend(initialSiteSkillLaunch?.preferredBackend) ||
-      (initialSiteSkillLaunch?.requireAttachedSession
-        ? "lime_extension_bridge"
-        : undefined),
-    [
-      initialSiteSkillLaunch?.preferredBackend,
-      initialSiteSkillLaunch?.requireAttachedSession,
-    ],
-  );
-  const shouldRestrictBrowserAssistToAttachedSession = useMemo(() => {
-    if (activeTheme !== "general") {
-      return false;
-    }
-
-    return (
-      initialSiteSkillLaunch?.requireAttachedSession === true ||
-      initialSiteSkillPreferredBackend === "lime_extension_bridge" ||
-      initialSiteSkillLaunch?.autoLaunch === false
-    );
-  }, [
-    activeTheme,
-    initialSiteSkillLaunch?.autoLaunch,
-    initialSiteSkillLaunch?.requireAttachedSession,
-    initialSiteSkillPreferredBackend,
-  ]);
-
   const browserAssistArtifact = useMemo(
     () =>
       artifacts.find(
@@ -479,7 +467,7 @@ export function useWorkspaceBrowserAssistRuntime({
             sessionId: result.session_id,
             profileKey: result.profile_key,
             url: result.source_url?.trim() || result.entry_url?.trim(),
-            title: result.adapter || "浏览器协助",
+            title: result.adapter || getBrowserAssistFallbackTitle(),
             targetId: result.target_id,
             source: "runtime_launch",
             updatedAt: Date.now(),
@@ -723,7 +711,7 @@ export function useWorkspaceBrowserAssistRuntime({
       const fallbackTitle =
         browserAssistSessionState?.title ||
         browserAssistArtifact?.title?.trim() ||
-        "浏览器协助";
+        getBrowserAssistFallbackTitle();
       const transportKind = normalizeBrowserAssistState(
         browserAssistSessionState?.transportKind ||
           readFirstString(artifactMeta ? [artifactMeta] : [], [
@@ -929,6 +917,7 @@ export function useWorkspaceBrowserAssistRuntime({
           currentBrowserAssistScopeKey ||
           resolveBrowserAssistSessionScopeKey(projectId, sessionId);
         const launchKey = `${generalBrowserAssistProfileKey}:${targetUrl}`;
+        const browserAssistTitle = getBrowserAssistFallbackTitle();
         if (autoLaunchingBrowserAssistKeyRef.current === launchKey) {
           openBrowserAssistCanvas(GENERAL_BROWSER_ASSIST_ARTIFACT_ID);
           return true;
@@ -939,127 +928,52 @@ export function useWorkspaceBrowserAssistRuntime({
             scopeKey: browserAssistScopeKey,
             profileKey: generalBrowserAssistProfileKey,
             url: targetUrl,
-            title: "浏览器协助",
+            title: browserAssistTitle,
+            launchHint: getBrowserAssistAttachedLaunchHint(),
           }),
         );
         openBrowserAssistCanvas(GENERAL_BROWSER_ASSIST_ARTIFACT_ID);
 
+        let attachedSessionError: unknown = null;
         try {
           if (
             await attachExistingSessionBrowserAssist({
               profileKey: generalBrowserAssistProfileKey,
               url: targetUrl,
-              fallbackTitle: "浏览器协助",
+              fallbackTitle: browserAssistTitle,
               silent: options?.silent,
             })
           ) {
             return true;
           }
-        } catch {
-          // 既有附着会话附着失败时继续尝试托管浏览器兜底。
-        }
-
-        if (shouldRestrictBrowserAssistToAttachedSession) {
-          const errorMessage =
-            buildAttachedSessionOnlyErrorMessage("浏览器协助");
-          upsertGeneralArtifact(
-            buildFailedBrowserAssistArtifact({
-              scopeKey: browserAssistScopeKey,
-              profileKey: generalBrowserAssistProfileKey,
-              url: targetUrl,
-              title: "浏览器协助",
-              error: errorMessage,
-            }),
-          );
-          autoLaunchingBrowserAssistKeyRef.current = "";
-          if (!options?.silent) {
-            toast.error(errorMessage);
-          }
-          return false;
-        }
-
-        setBrowserAssistLaunching(true);
-
-        try {
-          const result = await launchBrowserSession({
-            profile_key: generalBrowserAssistProfileKey,
-            url: targetUrl,
-            open_window: false,
-            stream_mode: "both",
-          });
-
-          commitBrowserAssistSessionState(
-            createBrowserAssistSessionState({
-              sessionId: result.session.session_id,
-              profileKey: result.session.profile_key,
-              url:
-                result.session.last_page_info?.url?.trim() ||
-                result.session.target_url?.trim() ||
-                targetUrl,
-              title:
-                result.session.last_page_info?.title?.trim() ||
-                result.session.target_title?.trim() ||
-                "浏览器协助",
-              targetId: result.session.target_id,
-              transportKind: result.session.transport_kind,
-              lifecycleState: result.session.lifecycle_state,
-              controlMode: result.session.control_mode,
-              source: "runtime_launch",
-              updatedAt: Date.now(),
-            }),
-          );
-          openBrowserAssistCanvas(GENERAL_BROWSER_ASSIST_ARTIFACT_ID);
-
-          if (!options?.silent) {
-            toast.success(
-              `浏览器工作台已启动：${
-                result.session.target_title ||
-                result.session.target_url ||
-                targetUrl
-              }`,
-            );
-          }
-          return true;
         } catch (error) {
-          if (
-            isExistingSessionLaunchError(error) &&
-            (await attachExistingSessionBrowserAssist({
-              profileKey: generalBrowserAssistProfileKey,
-              url: targetUrl,
-              fallbackTitle: "浏览器协助",
-              silent: options?.silent,
-            }))
-          ) {
-            return true;
-          }
-          upsertGeneralArtifact(
-            buildFailedBrowserAssistArtifact({
-              scopeKey: browserAssistScopeKey,
-              profileKey: generalBrowserAssistProfileKey,
-              url: targetUrl,
-              title: "浏览器协助",
-              error: error instanceof Error ? error.message : String(error),
-            }),
-          );
-          autoLaunchingBrowserAssistKeyRef.current = "";
-          if (!options?.silent) {
-            toast.error(
-              `启动浏览器工作台失败: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
-            );
-          }
-          return false;
-        } finally {
-          setBrowserAssistLaunching(false);
+          attachedSessionError = error;
         }
+
+        const errorMessage = buildAttachedSessionOnlyErrorMessage(
+          browserAssistTitle,
+          attachedSessionError,
+        );
+        upsertGeneralArtifact(
+          buildFailedBrowserAssistArtifact({
+            scopeKey: browserAssistScopeKey,
+            profileKey: generalBrowserAssistProfileKey,
+            url: targetUrl,
+            title: browserAssistTitle,
+            error: errorMessage,
+          }),
+        );
+        autoLaunchingBrowserAssistKeyRef.current = "";
+        if (!options?.silent) {
+          toast.error(errorMessage);
+        }
+        return false;
       },
       [
         activeTheme,
         browserAssistArtifact,
         browserAssistSessionState?.profileKey,
         browserAssistSessionState?.sessionId,
-        commitBrowserAssistSessionState,
         currentBrowserAssistScopeKey,
         generalBrowserAssistProfileKey,
         attachExistingSessionBrowserAssist,
@@ -1067,7 +981,6 @@ export function useWorkspaceBrowserAssistRuntime({
         openBrowserAssistCanvas,
         projectId,
         sessionId,
-        shouldRestrictBrowserAssistToAttachedSession,
         upsertGeneralArtifact,
       ],
     );
@@ -1150,7 +1063,10 @@ export function useWorkspaceBrowserAssistRuntime({
         browserAssistSessionState.sessionId || currentSessionId || "",
       url:
         browserAssistSessionState.url || currentUrl || "https://www.google.com",
-      title: browserAssistSessionState.title || currentTitle || "浏览器协助",
+      title:
+        browserAssistSessionState.title ||
+        currentTitle ||
+        getBrowserAssistFallbackTitle(),
       targetId: browserAssistSessionState.targetId || currentTargetId,
       transportKind:
         browserAssistSessionState.transportKind || currentTransportKind,
@@ -1255,7 +1171,8 @@ export function useWorkspaceBrowserAssistRuntime({
     const nextProfileKey =
       browserAssistSessionState.profileKey || generalBrowserAssistProfileKey;
     const nextUrl = browserAssistSessionState.url || "https://www.google.com";
-    const nextTitle = browserAssistSessionState.title || "浏览器协助";
+    const nextTitle =
+      browserAssistSessionState.title || getBrowserAssistFallbackTitle();
     const artifactMeta = asRecord(browserAssistArtifact?.meta);
     const currentArtifactProfileKey = readFirstString(
       artifactMeta ? [artifactMeta] : [],
@@ -1300,12 +1217,14 @@ export function useWorkspaceBrowserAssistRuntime({
         profileKey: nextProfileKey,
         url: nextUrl,
         title: nextTitle,
+        launchHint: getBrowserAssistAttachedLaunchHint(),
       }),
     );
     autoOpenBrowserAssistCanvas(GENERAL_BROWSER_ASSIST_ARTIFACT_ID);
     const launchRequestId = browserAssistLaunchRequestIdRef.current + 1;
     browserAssistLaunchRequestIdRef.current = launchRequestId;
     void (async () => {
+      let attachedSessionError: unknown = null;
       try {
         if (
           await attachExistingSessionBrowserAssist({
@@ -1317,12 +1236,15 @@ export function useWorkspaceBrowserAssistRuntime({
         ) {
           return;
         }
-      } catch {
-        // 既有附着会话附着失败时继续尝试托管浏览器兜底。
+      } catch (error) {
+        attachedSessionError = error;
       }
 
-      if (shouldRestrictBrowserAssistToAttachedSession) {
-        const errorMessage = buildAttachedSessionOnlyErrorMessage(nextTitle);
+      if (browserAssistLaunchRequestIdRef.current === launchRequestId) {
+        const errorMessage = buildAttachedSessionOnlyErrorMessage(
+          nextTitle,
+          attachedSessionError,
+        );
         upsertGeneralArtifact(
           buildFailedBrowserAssistArtifact({
             scopeKey: browserAssistScopeKey,
@@ -1333,69 +1255,6 @@ export function useWorkspaceBrowserAssistRuntime({
           }),
         );
         autoLaunchingBrowserAssistKeyRef.current = "";
-        return;
-      }
-
-      try {
-        setBrowserAssistLaunching(true);
-        const result = await launchBrowserSession({
-          profile_key: nextProfileKey,
-          url: nextUrl,
-          open_window: false,
-          stream_mode: "both",
-        });
-        if (browserAssistLaunchRequestIdRef.current !== launchRequestId) {
-          return;
-        }
-
-        commitBrowserAssistSessionState(
-          createBrowserAssistSessionState({
-            sessionId: result.session.session_id,
-            profileKey: result.session.profile_key,
-            url:
-              result.session.last_page_info?.url?.trim() ||
-              result.session.target_url?.trim() ||
-              nextUrl,
-            title:
-              result.session.last_page_info?.title?.trim() ||
-              result.session.target_title?.trim() ||
-              nextTitle,
-            targetId: result.session.target_id,
-            transportKind: result.session.transport_kind,
-            lifecycleState: result.session.lifecycle_state,
-            controlMode: result.session.control_mode,
-            source: "runtime_launch",
-            updatedAt: Date.now(),
-          }),
-        );
-        autoOpenBrowserAssistCanvas(GENERAL_BROWSER_ASSIST_ARTIFACT_ID);
-      } catch (error) {
-        if (
-          isExistingSessionLaunchError(error) &&
-          (await attachExistingSessionBrowserAssist({
-            profileKey: nextProfileKey,
-            url: nextUrl,
-            fallbackTitle: nextTitle,
-            silent: true,
-          }))
-        ) {
-          return;
-        }
-        upsertGeneralArtifact(
-          buildFailedBrowserAssistArtifact({
-            scopeKey: browserAssistScopeKey,
-            profileKey: nextProfileKey,
-            url: nextUrl,
-            title: nextTitle,
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        );
-        autoLaunchingBrowserAssistKeyRef.current = "";
-        console.warn("[AgentChatPage] 自动拉起浏览器协助实时会话失败:", error);
-      } finally {
-        if (browserAssistLaunchRequestIdRef.current === launchRequestId) {
-          setBrowserAssistLaunching(false);
-        }
       }
     })();
   }, [
@@ -1410,7 +1269,6 @@ export function useWorkspaceBrowserAssistRuntime({
     attachExistingSessionBrowserAssist,
     projectId,
     sessionId,
-    shouldRestrictBrowserAssistToAttachedSession,
     upsertGeneralArtifact,
   ]);
 

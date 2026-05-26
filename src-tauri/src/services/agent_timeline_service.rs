@@ -9,6 +9,9 @@ use serde_json::Value;
 use std::collections::HashMap;
 use tauri::{AppHandle, Emitter};
 
+mod tool_events;
+use self::tool_events::{build_tool_end_payload, build_tool_start_payload};
+
 fn emit_event(app: &AppHandle, event_name: &str, event: &RuntimeAgentEvent) {
     if let Err(error) = app.emit(event_name, event) {
         tracing::error!("[AgentTimeline] 发送事件失败: {}", error);
@@ -230,7 +233,19 @@ impl AgentTimelineRecorder {
             }
             RuntimeAgentEvent::RuntimeStatus { .. } => {}
             RuntimeAgentEvent::TurnContext { .. } => {}
-            RuntimeAgentEvent::ToolEnd { .. } => {}
+            RuntimeAgentEvent::ToolStart {
+                tool_name,
+                tool_id,
+                arguments,
+            } => {
+                let event =
+                    self.record_tool_start_event(tool_name, tool_id, arguments.as_deref())?;
+                emit_event(app, event_name, &event);
+            }
+            RuntimeAgentEvent::ToolEnd { tool_id, result } => {
+                let event = self.record_tool_end_event(tool_id, result)?;
+                emit_event(app, event_name, &event);
+            }
             RuntimeAgentEvent::ArtifactSnapshot { artifact } => {
                 let metadata_value = artifact
                     .metadata
@@ -459,6 +474,57 @@ impl AgentTimelineRecorder {
         self.persist_item_and_build_event(item)
     }
 
+    fn record_tool_start_event(
+        &mut self,
+        tool_name: &str,
+        tool_id: &str,
+        arguments: Option<&str>,
+    ) -> Result<RuntimeAgentEvent, String> {
+        let item = self.build_item(
+            tool_id.to_string(),
+            AgentThreadItemStatus::InProgress,
+            None,
+            build_tool_start_payload(tool_name, arguments),
+        );
+        self.persist_item_and_build_event(item)
+    }
+
+    fn record_tool_end_event(
+        &mut self,
+        tool_id: &str,
+        result: &lime_agent::AgentToolResult,
+    ) -> Result<RuntimeAgentEvent, String> {
+        let (previous_tool_name, previous_arguments) = self.previous_tool_call_snapshot(tool_id);
+        let item = self.build_item(
+            tool_id.to_string(),
+            if result.success {
+                AgentThreadItemStatus::Completed
+            } else {
+                AgentThreadItemStatus::Failed
+            },
+            Some(Utc::now().to_rfc3339()),
+            build_tool_end_payload(tool_id, result, previous_tool_name, previous_arguments),
+        );
+        self.persist_item_and_build_event(item)
+    }
+
+    fn previous_tool_call_snapshot(&self, tool_id: &str) -> (Option<String>, Option<Value>) {
+        let Ok(conn) = lock_db(&self.db) else {
+            return (None, None);
+        };
+        let Ok(Some(item)) = AgentTimelineDao::get_item(&conn, tool_id) else {
+            return (None, None);
+        };
+        match item.payload {
+            AgentThreadItemPayload::ToolCall {
+                tool_name,
+                arguments,
+                ..
+            } => (Some(tool_name), arguments),
+            _ => (None, None),
+        }
+    }
+
     fn complete_projection_items(
         &mut self,
         status: AgentThreadItemStatus,
@@ -646,6 +712,7 @@ mod tests {
     use lime_core::database::schema::create_tables;
     use rusqlite::Connection;
     use serde_json::json;
+    use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
     fn setup_db() -> DbConnection {
@@ -833,6 +900,105 @@ mod tests {
         assert_eq!(item.sequence, 4);
         assert_eq!(item.completed_at.as_deref(), Some("2026-03-13T00:00:03Z"));
         assert!(matches!(item.status, AgentThreadItemStatus::Completed));
+    }
+
+    #[test]
+    fn side_tool_events_should_persist_workspace_skill_metadata() {
+        let db = setup_db();
+        let mut recorder =
+            AgentTimelineRecorder::from_started_turn(db.clone(), running_turn("turn-skill-1"))
+                .expect("应从 turn_started 创建 recorder");
+        let tool_id = "agent-app-required-skill:turn-skill-1:0:capability-report";
+
+        let start_event = recorder
+            .record_tool_start_event(
+                "Skill(project:capability-report)",
+                tool_id,
+                Some(r#"{"skill":"project:capability-report"}"#),
+            )
+            .expect("应记录 side tool start");
+        assert!(
+            matches!(start_event, RuntimeAgentEvent::ItemStarted { item } if item.id == tool_id)
+        );
+
+        let end_event = recorder
+            .record_tool_end_event(
+                tool_id,
+                &lime_agent::AgentToolResult {
+                    success: true,
+                    output: "ok".to_string(),
+                    error: None,
+                    images: None,
+                    metadata: Some(HashMap::from([
+                        (
+                            "toolName".to_string(),
+                            json!("Skill(project:capability-report)"),
+                        ),
+                        (
+                            "workspace_skill_source".to_string(),
+                            json!({
+                                "sourceDraftId": "capdraft-1",
+                                "sourceVerificationReportId": "capver-1",
+                            }),
+                        ),
+                        (
+                            "workspace_skill_runtime_enable".to_string(),
+                            json!({
+                                "source": "agent_envelope_scheduled_run",
+                                "skill": "project:capability-report",
+                            }),
+                        ),
+                    ])),
+                },
+            )
+            .expect("应记录 side tool end");
+
+        let RuntimeAgentEvent::ItemCompleted { item } = end_event else {
+            panic!("side tool end 应完成 timeline item");
+        };
+        assert_eq!(item.id, tool_id);
+        assert_eq!(item.sequence, 1);
+        assert!(matches!(item.status, AgentThreadItemStatus::Completed));
+
+        let AgentThreadItemPayload::ToolCall {
+            tool_name,
+            arguments,
+            output,
+            success,
+            metadata,
+            ..
+        } = item.payload
+        else {
+            panic!("side tool event 应保存为 tool_call item");
+        };
+        assert_eq!(tool_name, "Skill(project:capability-report)");
+        assert_eq!(
+            arguments
+                .as_ref()
+                .and_then(|value| value.get("skill"))
+                .and_then(Value::as_str),
+            Some("project:capability-report")
+        );
+        assert_eq!(output.as_deref(), Some("ok"));
+        assert_eq!(success, Some(true));
+        assert_eq!(
+            metadata
+                .as_ref()
+                .and_then(|value| value.pointer("/workspace_skill_source/sourceDraftId")),
+            Some(&json!("capdraft-1"))
+        );
+        assert_eq!(
+            metadata
+                .as_ref()
+                .and_then(|value| value.pointer("/workspace_skill_runtime_enable/skill")),
+            Some(&json!("project:capability-report"))
+        );
+
+        let conn = lock_db(&db).expect("获取数据库锁");
+        let persisted = AgentTimelineDao::get_item(&conn, tool_id)
+            .expect("读取 item")
+            .expect("item 应已持久化");
+        assert!(matches!(persisted.status, AgentThreadItemStatus::Completed));
     }
 
     #[test]

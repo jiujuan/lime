@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS unified_memory (
     source TEXT NOT NULL,                        -- 'auto_extracted' | 'manual' | 'imported'
 
     -- 向量嵌入（可选，用于语义搜索）
-    embedding BLOB,                             -- 768 维 f32 数组
+    embedding BLOB,                             -- f32 数组，维度由当前嵌入模型决定
 
     -- 时间戳
     created_at INTEGER NOT NULL,               -- 创建时间（毫秒时间戳）

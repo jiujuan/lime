@@ -2,6 +2,7 @@ use super::runtime_turn_agent_app_skill_contract::{
     build_agent_app_required_skill_tool_params, resolve_agent_app_required_skill_contract,
 };
 use super::*;
+use aster::providers::base::Provider;
 
 pub(super) fn emit_runtime_side_event(
     app: &AppHandle,
@@ -95,6 +96,16 @@ pub(super) fn build_image_skill_launch_tool_context(
     ToolContext::new(Path::new(workspace_root).to_path_buf())
         .with_session_id(session_id.to_string())
         .with_environment(environment)
+}
+
+pub(super) fn attach_provider_to_tool_context(
+    context: ToolContext,
+    provider: Option<Arc<dyn Provider>>,
+) -> ToolContext {
+    match provider {
+        Some(provider) => context.with_provider(provider),
+        None => context,
+    }
 }
 
 pub(super) fn image_skill_launch_agent_tool_result(
@@ -279,6 +290,7 @@ pub(super) fn agent_app_required_skill_failed_tool_result(
 
 pub(super) async fn execute_agent_app_required_skill_contract(
     app: &AppHandle,
+    agent: &Agent,
     request: &AsterChatRequest,
     timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
     workspace_root: &str,
@@ -301,6 +313,7 @@ pub(super) async fn execute_agent_app_required_skill_contract(
         request.project_id.as_deref(),
         None,
     );
+    let context = attach_provider_to_tool_context(context, agent.provider().await.ok());
     let source = "agent_app_required_skill_contract_preexecution";
 
     for (index, skill_name) in required_skill_names.iter().enumerate() {

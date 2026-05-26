@@ -83,6 +83,511 @@ function formatArguments(args?: Record<string, unknown>): string {
   }
 }
 
+interface ToolConfirmationArgumentRow {
+  id: string;
+  label: string;
+  value: string;
+  mono?: boolean;
+}
+
+interface ToolConfirmationImpactSummary {
+  risk: "low" | "medium" | "high";
+  riskReason: "command" | "destructiveCommand" | "file" | "network" | "default";
+  riskReasonText?: string;
+  scopeKind: "path" | "url" | "cwd" | "tool";
+  scopeValue: string;
+  authorizationText?: string;
+}
+
+type ToolConfirmationRisk = ToolConfirmationImpactSummary["risk"];
+type ToolConfirmationRiskReason = ToolConfirmationImpactSummary["riskReason"];
+type ToolConfirmationScopeKind = ToolConfirmationImpactSummary["scopeKind"];
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function stringifyArgumentPreview(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized || undefined;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    const normalized = value
+      .map((item) => stringifyArgumentPreview(item))
+      .filter((item): item is string => Boolean(item));
+    return normalized.length > 0 ? normalized.join(", ") : undefined;
+  }
+
+  if (value && typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return undefined;
+    }
+  }
+
+  return undefined;
+}
+
+function clipArgumentPreview(value: string): string {
+  const maxLength = 180;
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
+}
+
+function readArgumentPreview(
+  args: Record<string, unknown> | undefined,
+  keys: string[],
+): string | undefined {
+  if (!args) return undefined;
+  for (const key of keys) {
+    const value = stringifyArgumentPreview(args[key]);
+    if (value) {
+      return clipArgumentPreview(value);
+    }
+  }
+  return undefined;
+}
+
+function readStringFact(
+  record: Record<string, unknown> | undefined,
+  keys: string[],
+): string | undefined {
+  if (!record) return undefined;
+  for (const key of keys) {
+    const value = stringifyArgumentPreview(record[key]);
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function findPermissionFactsRecord(
+  args: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!args) return undefined;
+  const direct =
+    asRecord(args.permission_facts) ||
+    asRecord(args.permissionFacts) ||
+    asRecord(args.permission_review) ||
+    asRecord(args.permissionReview) ||
+    asRecord(args.permission);
+  if (direct) return direct;
+
+  const metadata = asRecord(args.metadata);
+  return (
+    asRecord(metadata?.permission_facts) ||
+    asRecord(metadata?.permissionFacts) ||
+    asRecord(metadata?.permission_review) ||
+    asRecord(metadata?.permissionReview) ||
+    asRecord(metadata?.permission)
+  );
+}
+
+function normalizeToolConfirmationRisk(
+  value?: string,
+): ToolConfirmationRisk | undefined {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (
+    normalized === "high" ||
+    normalized === "critical" ||
+    normalized === "destructive" ||
+    normalized === "danger"
+  ) {
+    return "high";
+  }
+  if (
+    normalized === "medium" ||
+    normalized === "moderate" ||
+    normalized === "reversible" ||
+    normalized === "ask" ||
+    normalized === "requires_confirmation"
+  ) {
+    return "medium";
+  }
+  if (
+    normalized === "low" ||
+    normalized === "read_only" ||
+    normalized === "readonly" ||
+    normalized === "safe" ||
+    normalized === "none"
+  ) {
+    return "low";
+  }
+  return undefined;
+}
+
+function normalizeToolConfirmationRiskReason(
+  value?: string,
+): ToolConfirmationRiskReason | undefined {
+  const normalized = value?.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (!normalized) return undefined;
+  if (
+    normalized === "destructive" ||
+    normalized === "destructive_command" ||
+    normalized === "high_impact_command"
+  ) {
+    return "destructiveCommand";
+  }
+  if (
+    normalized === "command" ||
+    normalized === "shell" ||
+    normalized === "local_command"
+  ) {
+    return "command";
+  }
+  if (
+    normalized === "file" ||
+    normalized === "filesystem" ||
+    normalized === "file_write" ||
+    normalized === "file_read"
+  ) {
+    return "file";
+  }
+  if (
+    normalized === "network" ||
+    normalized === "browser" ||
+    normalized === "web" ||
+    normalized === "http"
+  ) {
+    return "network";
+  }
+  if (normalized === "default" || normalized === "tool") {
+    return "default";
+  }
+  return undefined;
+}
+
+function normalizeToolConfirmationScopeKind(
+  value?: string,
+): ToolConfirmationScopeKind | undefined {
+  const normalized = value?.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (!normalized) return undefined;
+  if (
+    normalized === "path" ||
+    normalized === "file" ||
+    normalized === "file_path" ||
+    normalized === "target_path"
+  ) {
+    return "path";
+  }
+  if (
+    normalized === "url" ||
+    normalized === "uri" ||
+    normalized === "endpoint" ||
+    normalized === "link"
+  ) {
+    return "url";
+  }
+  if (
+    normalized === "cwd" ||
+    normalized === "directory" ||
+    normalized === "working_directory" ||
+    normalized === "workspace"
+  ) {
+    return "cwd";
+  }
+  if (normalized === "tool" || normalized === "runtime") {
+    return "tool";
+  }
+  return undefined;
+}
+
+function readStructuredToolConfirmationImpactSummary(
+  args: Record<string, unknown> | undefined,
+): ToolConfirmationImpactSummary | undefined {
+  const facts = findPermissionFactsRecord(args);
+  const factRiskValue = readStringFact(facts, [
+    "risk_level",
+    "riskLevel",
+    "risk",
+    "level",
+  ]);
+  const topLevelRiskValue = readStringFact(args, ["risk_level", "riskLevel"]);
+  const risk = normalizeToolConfirmationRisk(
+    factRiskValue || topLevelRiskValue,
+  );
+  const factScopeKindValue = readStringFact(facts, [
+    "scope_kind",
+    "scopeKind",
+    "permission_scope_kind",
+    "permissionScopeKind",
+  ]);
+  const topLevelScopeKindValue = readStringFact(args, [
+    "scope_kind",
+    "scopeKind",
+    "permission_scope_kind",
+    "permissionScopeKind",
+  ]);
+  const scopeKind = normalizeToolConfirmationScopeKind(
+    factScopeKindValue || topLevelScopeKindValue,
+  );
+  const factScopeValue = readStringFact(facts, [
+    "scope_value",
+    "scopeValue",
+    "permission_scope",
+    "permissionScope",
+    "target",
+    "target_path",
+    "targetPath",
+    "path",
+    "url",
+    "cwd",
+  ]);
+  const topLevelScopeValue = readStringFact(args, [
+    "scope_value",
+    "scopeValue",
+    "permission_scope",
+    "permissionScope",
+  ]);
+  const scopeValue = factScopeValue || topLevelScopeValue;
+
+  if (
+    !facts &&
+    !factRiskValue &&
+    !topLevelRiskValue &&
+    !factScopeKindValue &&
+    !topLevelScopeKindValue &&
+    !factScopeValue &&
+    !topLevelScopeValue
+  ) {
+    return undefined;
+  }
+
+  const riskReasonRaw =
+    readStringFact(facts, ["risk_reason", "riskReason", "reason", "category"]) ||
+    readStringFact(args, ["risk_reason", "riskReason"]);
+  const riskReason = normalizeToolConfirmationRiskReason(riskReasonRaw);
+  const riskReasonText = readStringFact(facts, [
+    "risk_reason_label",
+    "riskReasonLabel",
+    "risk_reason_text",
+    "riskReasonText",
+    "reason_label",
+    "reasonLabel",
+    "summary",
+  ]);
+  const authorizationText = readStringFact(facts, [
+    "authorization_label",
+    "authorizationLabel",
+    "authorization_summary",
+    "authorizationSummary",
+    "authorization_scope",
+    "authorizationScope",
+    "permission_mode",
+    "permissionMode",
+  ]);
+
+  return {
+    risk: risk ?? "low",
+    riskReason: riskReason ?? "default",
+    riskReasonText,
+    scopeKind: scopeKind ?? "tool",
+    scopeValue: scopeValue ? clipArgumentPreview(scopeValue) : "",
+    authorizationText,
+  };
+}
+
+function resolveToolConfirmationArgumentRows(
+  args: Record<string, unknown> | undefined,
+  labels: {
+    command: string;
+    cwd: string;
+    path: string;
+    url: string;
+    mode: string;
+    input: string;
+  },
+): ToolConfirmationArgumentRow[] {
+  if (!args) return [];
+
+  const rows: ToolConfirmationArgumentRow[] = [];
+  const usedKeys = new Set<string>([
+    "permission",
+    "permission_facts",
+    "permissionFacts",
+    "permission_review",
+    "permissionReview",
+    "metadata",
+    "risk_level",
+    "riskLevel",
+    "risk_reason",
+    "riskReason",
+    "scope_kind",
+    "scopeKind",
+    "permission_scope",
+    "permissionScope",
+    "authorization_scope",
+    "authorizationScope",
+  ]);
+  const pushKnown = (
+    id: string,
+    label: string,
+    aliases: string[],
+    mono = true,
+  ) => {
+    const value = readArgumentPreview(args, aliases);
+    if (!value) return;
+    rows.push({ id, label, value, mono });
+    aliases.forEach((key) => usedKeys.add(key));
+  };
+
+  pushKnown("command", labels.command, ["command", "cmd", "script", "code"]);
+  pushKnown("cwd", labels.cwd, ["cwd", "working_directory", "workingDirectory"]);
+  pushKnown("path", labels.path, [
+    "path",
+    "file",
+    "file_path",
+    "filePath",
+    "target_path",
+    "targetPath",
+    "source_path",
+    "sourcePath",
+  ]);
+  pushKnown("url", labels.url, ["url", "uri", "href", "endpoint"]);
+  pushKnown("mode", labels.mode, ["mode", "action", "operation"], false);
+  pushKnown("input", labels.input, ["input", "prompt", "text"], false);
+
+  if (rows.length >= 4) {
+    return rows.slice(0, 4);
+  }
+
+  for (const [key, rawValue] of Object.entries(args)) {
+    if (rows.length >= 4) break;
+    if (usedKeys.has(key)) continue;
+    const value = stringifyArgumentPreview(rawValue);
+    if (!value) continue;
+    rows.push({
+      id: key,
+      label: key,
+      value: clipArgumentPreview(value),
+      mono: typeof rawValue !== "boolean",
+    });
+  }
+
+  return rows;
+}
+
+function isShellLikeTool(toolName?: string): boolean {
+  const normalized = toolName?.toLowerCase() ?? "";
+  return (
+    normalized.includes("bash") ||
+    normalized.includes("shell") ||
+    normalized.includes("terminal") ||
+    normalized.includes("exec")
+  );
+}
+
+function isFileLikeTool(toolName?: string): boolean {
+  const normalized = toolName?.toLowerCase() ?? "";
+  return (
+    normalized.includes("write") ||
+    normalized.includes("edit") ||
+    normalized.includes("file")
+  );
+}
+
+function isNetworkLikeTool(toolName?: string): boolean {
+  const normalized = toolName?.toLowerCase() ?? "";
+  return (
+    normalized.includes("web") ||
+    normalized.includes("fetch") ||
+    normalized.includes("http") ||
+    normalized.includes("browser")
+  );
+}
+
+function looksDestructiveCommand(command?: string): boolean {
+  if (!command) return false;
+  return /\b(rm\s+-rf|sudo|chmod\s+777|chown|git\s+reset|git\s+clean|del\s+\/f|rmdir\s+\/s|powershell|curl\b[\s\S]*\|\s*(?:sh|bash))\b/i.test(
+    command,
+  );
+}
+
+function resolveToolConfirmationImpactSummary(
+  toolName: string | undefined,
+  args: Record<string, unknown> | undefined,
+): ToolConfirmationImpactSummary {
+  const structuredSummary = readStructuredToolConfirmationImpactSummary(args);
+  if (structuredSummary) {
+    return {
+      ...structuredSummary,
+      scopeValue: structuredSummary.scopeValue || toolName || "",
+    };
+  }
+
+  const command = readArgumentPreview(args, ["command", "cmd", "script", "code"]);
+  const cwd = readArgumentPreview(args, [
+    "cwd",
+    "working_directory",
+    "workingDirectory",
+  ]);
+  const path = readArgumentPreview(args, [
+    "path",
+    "file",
+    "file_path",
+    "filePath",
+    "target_path",
+    "targetPath",
+    "source_path",
+    "sourcePath",
+  ]);
+  const url = readArgumentPreview(args, ["url", "uri", "href", "endpoint"]);
+
+  const scopeKind = path ? "path" : url ? "url" : cwd ? "cwd" : "tool";
+  const scopeValue = path || url || cwd || toolName || "";
+
+  if (looksDestructiveCommand(command)) {
+    return {
+      risk: "high",
+      riskReason: "destructiveCommand",
+      scopeKind,
+      scopeValue,
+    };
+  }
+
+  if (isShellLikeTool(toolName)) {
+    return {
+      risk: "medium",
+      riskReason: "command",
+      scopeKind,
+      scopeValue,
+    };
+  }
+
+  if (isFileLikeTool(toolName)) {
+    return {
+      risk: "medium",
+      riskReason: "file",
+      scopeKind,
+      scopeValue,
+    };
+  }
+
+  if (isNetworkLikeTool(toolName)) {
+    return {
+      risk: "low",
+      riskReason: "network",
+      scopeKind,
+      scopeValue,
+    };
+  }
+
+  return {
+    risk: "low",
+    riskReason: "default",
+    scopeKind,
+    scopeValue,
+  };
+}
+
 /** 从 requested_schema 中提取 answer.enum 选项 */
 function extractElicitationOptions(
   requestedSchema?: Record<string, unknown>,
@@ -398,6 +903,21 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
   const submittedAnswer = resolveSubmittedAnswerText(request);
   const isRuntimeActionConfirmation = isRuntimeActionConfirmationRequestId(
     request.requestId,
+  );
+  const toolConfirmationArgumentRows = resolveToolConfirmationArgumentRows(
+    request.arguments,
+    {
+      command: t("agentChat.decisionPanel.permission.argument.command"),
+      cwd: t("agentChat.decisionPanel.permission.argument.cwd"),
+      path: t("agentChat.decisionPanel.permission.argument.path"),
+      url: t("agentChat.decisionPanel.permission.argument.url"),
+      mode: t("agentChat.decisionPanel.permission.argument.mode"),
+      input: t("agentChat.decisionPanel.permission.argument.input"),
+    },
+  );
+  const toolConfirmationImpactSummary = resolveToolConfirmationImpactSummary(
+    request.toolName,
+    request.arguments,
   );
   const isFallbackAskPending =
     request.actionType === "ask_user" && request.isFallback;
@@ -941,24 +1461,143 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {/* 工具信息 */}
-        <div className="flex items-center gap-2">
-          {getToolIcon(request.toolName)}
-          <span className="text-sm">
-            {t("agentChat.decisionPanel.assistantWantsUse")}
-            <span className="ml-1 font-medium">
+        <div
+          className="space-y-3 rounded-[12px] border border-amber-200 bg-white px-3 py-3 dark:border-amber-800 dark:bg-background/80"
+          data-testid="decision-panel-tool-confirmation-summary"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                {t("agentChat.decisionPanel.permission.pendingAction")}
+              </div>
+              <p className="mt-1 whitespace-pre-wrap text-sm leading-5 text-foreground">
+                {request.prompt ||
+                  t("agentChat.decisionPanel.permission.defaultActionPrompt")}
+              </p>
+            </div>
+            <Badge variant="outline" className="shrink-0 text-xs">
+              {t("agentChat.decisionPanel.permission.statusPending")}
+            </Badge>
+          </div>
+
+          <div className="flex items-center gap-2 rounded-lg border border-amber-100 bg-amber-50/70 px-3 py-2 text-sm dark:border-amber-900 dark:bg-amber-950/20">
+            <span className="text-amber-700 dark:text-amber-300">
+              {getToolIcon(request.toolName)}
+            </span>
+            <span className="text-muted-foreground">
+              {t("agentChat.decisionPanel.assistantWantsUse")}
+            </span>
+            <span className="min-w-0 break-all font-medium text-foreground">
               {request.toolName || t("agentChat.decisionPanel.unknownTool")}
             </span>
-          </span>
+          </div>
+
+          <div
+            className="grid gap-2 sm:grid-cols-3"
+            data-testid="decision-panel-tool-confirmation-impact"
+          >
+            <div className="rounded-lg border border-border bg-background px-3 py-2">
+              <div className="text-xs font-medium text-muted-foreground">
+                {t("agentChat.decisionPanel.permission.risk.label")}
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <Badge
+                  variant={
+                    toolConfirmationImpactSummary.risk === "high"
+                      ? "destructive"
+                      : "outline"
+                  }
+                  className={cn(
+                    "text-xs",
+                    toolConfirmationImpactSummary.risk === "medium" &&
+                      "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950/20 dark:text-amber-200",
+                    toolConfirmationImpactSummary.risk === "low" &&
+                      "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-200",
+                  )}
+                >
+                  {t(
+                    `agentChat.decisionPanel.permission.risk.${toolConfirmationImpactSummary.risk}`,
+                  )}
+                </Badge>
+                <span className="text-xs text-foreground">
+                  {toolConfirmationImpactSummary.riskReasonText ??
+                    t(
+                      `agentChat.decisionPanel.permission.riskReason.${toolConfirmationImpactSummary.riskReason}`,
+                    )}
+                </span>
+              </div>
+            </div>
+            <div className="rounded-lg border border-border bg-background px-3 py-2">
+              <div className="text-xs font-medium text-muted-foreground">
+                {t("agentChat.decisionPanel.permission.scope.label")}
+              </div>
+              <div className="mt-1 text-xs text-foreground">
+                <span className="font-medium">
+                  {t(
+                    `agentChat.decisionPanel.permission.scope.${toolConfirmationImpactSummary.scopeKind}`,
+                  )}
+                </span>
+                <span className="ml-1 break-words font-mono">
+                  {toolConfirmationImpactSummary.scopeValue ||
+                    t("agentChat.decisionPanel.permission.scope.unknown")}
+                </span>
+              </div>
+            </div>
+            <div className="rounded-lg border border-border bg-background px-3 py-2">
+              <div className="text-xs font-medium text-muted-foreground">
+                {t("agentChat.decisionPanel.permission.authorization.label")}
+              </div>
+              <p className="mt-1 text-xs leading-5 text-foreground">
+                {toolConfirmationImpactSummary.authorizationText ??
+                  t("agentChat.decisionPanel.permission.authorization.oneTime")}
+              </p>
+            </div>
+          </div>
+
+          {toolConfirmationArgumentRows.length > 0 ? (
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-muted-foreground">
+                {t("agentChat.decisionPanel.permission.parameterSummary")}
+              </div>
+              <div className="grid gap-2">
+                {toolConfirmationArgumentRows.map((row) => (
+                  <div
+                    key={row.id}
+                    className="grid gap-1 rounded-lg border border-border bg-background px-3 py-2 text-xs sm:grid-cols-[96px_minmax(0,1fr)]"
+                    data-testid="decision-panel-tool-confirmation-argument"
+                  >
+                    <span className="font-medium text-muted-foreground">
+                      {row.label}
+                    </span>
+                    <span
+                      className={cn(
+                        "min-w-0 break-words text-foreground",
+                        row.mono && "font-mono",
+                      )}
+                    >
+                      {row.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <p className="text-xs leading-5 text-muted-foreground">
+            {t("agentChat.decisionPanel.permission.reviewHint")}
+          </p>
         </div>
 
         {/* 参数预览 */}
         {request.arguments && (
-          <div className="rounded-lg bg-muted/50 p-3">
-            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">
+          <details className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs">
+            <summary className="cursor-pointer font-medium text-muted-foreground">
+              {t("agentChat.decisionPanel.permission.rawArguments")}
+            </summary>
+            <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">
               {formatArguments(request.arguments)}
             </pre>
-          </div>
+          </details>
         )}
 
         {/* 操作按钮 */}

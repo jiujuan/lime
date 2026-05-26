@@ -453,9 +453,6 @@ const SEEDED_COMMAND_PROJECTION_SPECS: SeededCommandProjectionSpec[] = [
       "daima",
       "代码",
       "开发",
-      "代码评审",
-      "修复",
-      "重构",
     ],
     trigger: "@代码",
     triggerHints: ["@code", "@coding", "@开发", "@Code Agent"],
@@ -463,6 +460,9 @@ const SEEDED_COMMAND_PROJECTION_SPECS: SeededCommandProjectionSpec[] = [
     outputHint: "代码执行 timeline",
     commandBinding: {
       executionKind: "agent_turn",
+      requestDefaults: {
+        executionStrategy: "code_orchestrated",
+      },
     },
     commandRenderContract: COMMAND_TIMELINE_JSON_CONTRACT,
   },

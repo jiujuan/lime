@@ -28,7 +28,6 @@ const LIME_TENANT_HEADER: &str = "X-Lime-Tenant-ID";
 const LIME_TENANT_PARAM: &str = "lime_tenant_id";
 const PROVIDER_MODELS_CACHE_KEY_PREFIX: &str = "provider_models_fetch_cache:";
 const PROVIDER_MODELS_CACHE_TTL_SECONDS: i64 = 10 * 24 * 60 * 60;
-const XIAOMI_MODEL_FETCH_DEFAULT_MODEL: &str = "mimo-v2.5-pro";
 const XIAOMI_MODEL_FETCH_HOST_KEYWORDS: &[&str] = &["xiaomimimo.com"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1649,7 +1648,23 @@ impl ModelRegistryService {
 
         if Self::is_xiaomi_like_model_fetch(provider_id, api_host, provider_type) {
             let now = chrono::Utc::now().timestamp();
-            let models = self.build_xiaomi_declared_models(provider_id, custom_models, now);
+            let models = self.build_declared_models(provider_id, custom_models, now);
+
+            if models.is_empty() {
+                return Ok(FetchModelsResult {
+                    models,
+                    source: ModelFetchSource::Error,
+                    error: Some("Mimo / xiaomimimo Anthropic 兼容入口不提供标准 /models 枚举。".to_string()),
+                    request_url: None,
+                    diagnostic_hint: Some(
+                        "请在 Provider 模型列表中填写当前服务商实际可用的模型 ID；Lime 不再内置固定模型名作为兜底。"
+                            .to_string(),
+                    ),
+                    error_kind: Some(ModelFetchErrorKind::Other),
+                    should_prompt_error: false,
+                    from_cache: false,
+                });
+            }
 
             if let Err(error) = self.save_provider_models_cache(
                 provider_id,
@@ -1668,7 +1683,7 @@ impl ModelRegistryService {
                 error: None,
                 request_url: None,
                 diagnostic_hint: Some(
-                    "Mimo / xiaomimimo Anthropic 兼容入口不提供标准 /models 枚举；已使用当前可用模型并写入 10 天缓存。"
+                    "Mimo / xiaomimimo Anthropic 兼容入口不提供标准 /models 枚举；已使用 Provider 中声明的模型并写入 10 天缓存。"
                         .to_string(),
                 ),
                 error_kind: None,
@@ -2822,39 +2837,6 @@ impl ModelRegistryService {
             .collect()
     }
 
-    fn canonicalize_xiaomi_model_id(model_id: &str) -> String {
-        let trimmed = model_id.trim();
-        if trimmed.is_empty() {
-            return String::new();
-        }
-
-        match trimmed.to_ascii_lowercase().as_str() {
-            "mimo-v2-pro" | "mimo-v2.5" | "mimo-v2.5-pro" | "mimo-v2-flash" => {
-                XIAOMI_MODEL_FETCH_DEFAULT_MODEL.to_string()
-            }
-            _ => trimmed.to_string(),
-        }
-    }
-
-    fn build_xiaomi_declared_models(
-        &self,
-        provider_id: &str,
-        custom_models: &[String],
-        now: i64,
-    ) -> Vec<EnhancedModelMetadata> {
-        let mut seen = std::collections::HashSet::new();
-        custom_models
-            .iter()
-            .map(|model| Self::canonicalize_xiaomi_model_id(model))
-            .chain(std::iter::once(
-                XIAOMI_MODEL_FETCH_DEFAULT_MODEL.to_string(),
-            ))
-            .filter(|model| !model.trim().is_empty())
-            .filter(|model| seen.insert(model.to_ascii_lowercase()))
-            .map(|model| self.build_provider_declared_model(&model, provider_id, now))
-            .collect()
-    }
-
     fn build_responses_compatible_declared_models(
         &self,
         provider_id: &str,
@@ -3666,7 +3648,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_xiaomi_fetch_uses_known_mimo_model_without_models_api() {
+    async fn test_xiaomi_fetch_uses_declared_models_without_models_api() {
         let (service, _db) = setup_cache_service();
 
         let result = service
@@ -3675,15 +3657,16 @@ mod tests {
                 "https://token-plan-sgp.xiaomimimo.com/anthropic",
                 "sk-test",
                 Some(ApiProviderType::Openai),
-                &["mimo-v2-flash".to_string(), "mimo-v2.5".to_string()],
+                &["mimo-v2.5-flash".to_string(), "mimo-v2.5-pro".to_string()],
             )
             .await
-            .expect("mimo known model should resolve without /models");
+            .expect("mimo declared models should resolve without /models");
 
         assert_eq!(result.source, ModelFetchSource::Api);
         assert_eq!(result.request_url, None);
-        assert_eq!(result.models.len(), 1);
-        assert_eq!(result.models[0].id, "mimo-v2.5-pro");
+        assert_eq!(result.models.len(), 2);
+        assert_eq!(result.models[0].id, "mimo-v2.5-flash");
+        assert_eq!(result.models[1].id, "mimo-v2.5-pro");
         assert_eq!(result.models[0].source, ModelSource::Custom);
         assert!(result
             .diagnostic_hint
@@ -3701,7 +3684,32 @@ mod tests {
             .expect("mimo known model should be cached");
 
         assert!(cached.from_cache);
-        assert_eq!(cached.models[0].id, "mimo-v2.5-pro");
+        assert_eq!(cached.models[0].id, "mimo-v2.5-flash");
+        assert_eq!(cached.models[1].id, "mimo-v2.5-pro");
+    }
+
+    #[tokio::test]
+    async fn test_xiaomi_fetch_errors_without_declared_models() {
+        let (service, _db) = setup_cache_service();
+
+        let result = service
+            .fetch_models_from_api_with_hints(
+                "xiaomi",
+                "https://token-plan-sgp.xiaomimimo.com/anthropic",
+                "sk-test",
+                Some(ApiProviderType::Openai),
+                &[],
+            )
+            .await
+            .expect("mimo missing declared models should return structured error");
+
+        assert_eq!(result.source, ModelFetchSource::Error);
+        assert!(result.models.is_empty());
+        assert!(result
+            .diagnostic_hint
+            .as_deref()
+            .unwrap_or_default()
+            .contains("不再内置固定模型名"));
     }
 
     #[tokio::test]

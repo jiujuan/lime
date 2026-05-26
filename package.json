@@ -2,7 +2,7 @@
   "name": "lime",
   "private": true,
   "workspaces": ["packages/*"],
-  "version": "1.51.0",
+  "version": "1.52.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -159,6 +159,7 @@
     "knowledge:release-scope-report": "node scripts/knowledge-release-scope-report.mjs",
     "smoke:agent-runtime-approval-sandbox": "node scripts/agent-runtime-approval-sandbox-smoke.mjs",
     "smoke:managed-objective-continuation": "node scripts/managed-objective-continuation-smoke.mjs",
+    "smoke:managed-objective-automation": "node scripts/managed-objective-automation-smoke.mjs",
     "agent-qc:gui-owner-check": "node scripts/agent-qc-gui-owner-check.mjs",
     "agent-qc:process-owner-check": "node scripts/agent-qc-process-owner-check.mjs",
     "agent-qc:secret-scan": "node scripts/agent-qc-secret-scan.mjs",

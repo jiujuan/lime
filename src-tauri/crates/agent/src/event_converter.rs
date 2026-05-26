@@ -791,6 +791,18 @@ fn read_object_string(
         .map(str::to_string)
 }
 
+fn read_metadata_string(
+    metadata: &HashMap<String, serde_json::Value>,
+    keys: &[&str],
+) -> Option<String> {
+    keys.iter()
+        .filter_map(|key| metadata.get(*key))
+        .find_map(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
 fn read_object_u32(
     object: &serde_json::Map<String, serde_json::Value>,
     keys: &[&str],
@@ -1042,6 +1054,19 @@ pub(crate) fn build_turn_context_summary(
     }
 }
 
+fn extract_turn_execution_strategy(turn_context: Option<&TurnContextOverride>) -> Option<String> {
+    let metadata = &turn_context?.metadata;
+    read_metadata_string(
+        metadata,
+        &[
+            "effective_execution_strategy",
+            "effectiveExecutionStrategy",
+            "execution_strategy",
+            "executionStrategy",
+        ],
+    )
+}
+
 /// 将 Aster AgentEvent 转换为 TauriAgentEvent 列表
 ///
 /// 一个 AgentEvent 可能产生多个 TauriAgentEvent
@@ -1049,6 +1074,8 @@ pub fn convert_agent_event(event: AgentEvent) -> Vec<TauriAgentEvent> {
     match event {
         AgentEvent::TurnStarted { turn } => {
             let context_summary = build_turn_context_summary(turn.context_override.as_ref());
+            let execution_strategy =
+                extract_turn_execution_strategy(turn.context_override.as_ref());
             let approval_policy = turn
                 .context_override
                 .as_ref()
@@ -1065,6 +1092,7 @@ pub fn convert_agent_event(event: AgentEvent) -> Vec<TauriAgentEvent> {
                     session_id: turn.session_id.clone(),
                     thread_id: turn.thread_id.clone(),
                     turn_id: turn.id.clone(),
+                    execution_strategy,
                     output_schema_runtime: turn.output_schema_runtime.clone(),
                     context_summary,
                     approval_policy,
@@ -2103,6 +2131,44 @@ mod tests {
                     .expect("expected output schema runtime");
                 assert_eq!(runtime.provider_name.as_deref(), Some("openai"));
                 assert_eq!(runtime.model_name.as_deref(), Some("gpt-5.4"));
+            }
+            other => panic!("Expected TurnContext event, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_convert_turn_started_with_execution_strategy_emits_turn_context() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "effective_execution_strategy".to_string(),
+            serde_json::Value::String("code_orchestrated".to_string()),
+        );
+        let turn = TurnRuntime::new(
+            "turn-code",
+            "session-code",
+            "thread-code",
+            Some("修复图片卡片回归".to_string()),
+            Some(aster::session::TurnContextOverride {
+                metadata,
+                ..aster::session::TurnContextOverride::default()
+            }),
+        );
+
+        let events = convert_agent_event(AgentEvent::TurnStarted { turn });
+
+        assert_eq!(events.len(), 3);
+        match &events[2] {
+            TauriAgentEvent::TurnContext {
+                session_id,
+                thread_id,
+                turn_id,
+                execution_strategy,
+                ..
+            } => {
+                assert_eq!(session_id, "session-code");
+                assert_eq!(thread_id, "thread-code");
+                assert_eq!(turn_id, "turn-code");
+                assert_eq!(execution_strategy.as_deref(), Some("code_orchestrated"));
             }
             other => panic!("Expected TurnContext event, got {other:?}"),
         }

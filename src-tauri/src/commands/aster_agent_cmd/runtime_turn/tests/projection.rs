@@ -187,27 +187,33 @@ fn agent_app_runtime_runtime_event_projection_builds_stream_text_task_event() {
 }
 
 #[test]
-fn model_permission_detection_should_include_tenant_whitelist_400() {
-    assert!(is_runtime_model_permission_denied_error(
+fn model_unavailable_detection_should_include_tenant_whitelist_and_invalid_model_errors() {
+    assert!(is_runtime_model_unavailable_error(
         "Agent provider execution failed: Request failed: Bad request (400): 当前模型未在租户白名单中开放"
     ));
-    assert!(is_runtime_model_permission_denied_error(
+    assert!(is_runtime_model_unavailable_error(
         "Authentication failed (403): illegal access"
     ));
-    assert!(!is_runtime_model_permission_denied_error(
+    assert!(is_runtime_model_unavailable_error(
+        "Agent provider execution failed: Request failed: Bad request (400): Param Incorrect"
+    ));
+    assert!(is_runtime_model_unavailable_error(
+        "Request failed: Bad request (400): Not supported model stale-chat"
+    ));
+    assert!(!is_runtime_model_unavailable_error(
         "Request failed: Bad request (400): invalid schema"
     ));
 }
 
 #[test]
-fn model_permission_fallback_failure_message_should_name_both_models() {
-    let message = build_runtime_model_permission_fallback_failure_message(
+fn model_recovery_failure_message_should_name_both_models() {
+    let message = build_runtime_model_recovery_failure_message(
         "gpt-4o",
         "gpt-4o-mini",
-        "Agent provider execution failed: Request failed: Bad request (400): 当前模型未在租户白名单中开放",
+        "Agent provider execution failed: Request failed: Bad request (400): Param Incorrect",
     );
 
     assert!(message.contains("gpt-4o"));
     assert!(message.contains("gpt-4o-mini"));
-    assert!(message.contains("同类权限策略拒绝"));
+    assert!(message.contains("同类模型可用性策略拒绝"));
 }

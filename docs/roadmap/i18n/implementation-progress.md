@@ -742,3 +742,84 @@ benchmark 摘要：
 - `npm run typecheck` 通过。
 - `git diff --check` 通过。
 - `npm run verify:local` 已重新跑到 Rust 单测阶段，但当前工作区仍有 4 个与本刀无关的 Rust 失败：`commands::aster_agent_cmd::tool_runtime::connector_tools::tests::agent_app_connector_fixture_executes_host_managed_mutation`、`commands::skill_cmd::tests::test_rename_user_local_skill_dir_moves_skill_directory`、`commands::skill_cmd::tests::test_replace_user_local_skill_package_replaces_existing_tree`、`dev_bridge::dispatcher::tests::skill_execution_catalog_commands_are_bridged`；这些失败不来自本次 i18n 资源修复，暂不在本刀扩大写集。
+
+## 2026-05-26：P2 media task content / ASR language 边界回归
+
+本轮继续完成：
+
+- `audio_generate` 任务创建时会把显式 `target_language` 同步写入顶层 payload 与 pending `audio_output` 摘要；后续 failed / completed `audio_output` 继续沿同一任务 payload 复制该内容目标语言，避免 evidence / task preview 只能看到顶层字段。
+- OpenAI-compatible audio generation 回归改为中文 source text + `target_language: "en-US"`，断言 provider instruction 与 completed `audio_output.target_language` 都使用显式内容目标语言，而不是 UI locale 或历史中文默认。
+- `transcription_generate` 回归补强 `language` 语义：创建态 transcript 保存显式 ASR language；执行态 `language: "auto"` 不会作为 provider multipart `language` 参数发送，完成态 transcript language 以 provider 返回的 `"en"` 为准。
+- `src/lib/tauri-mock/mediaTaskMocks.ts` 同步补齐 mock `audio_output.voice_style` / `target_language`，让前端 DevBridge / mock 视图与 Rust task artifact 摘要保持同构。
+- 重新刷新 `docs/roadmap/i18n/evidence/language-boundary-report.json` 与 `docs/roadmap/i18n/evidence/content-target-language-boundary-report.json`；当前全量报告为 `entryCount=1999`、`unknownLanguageLike=97`，聚焦报告为 `contentTargetLanguage=444`，其中 `media_task_cmd.rs` 作为 media task 热点为 57 个 marker。
+
+验证：
+
+- `cargo test --manifest-path "src-tauri/Cargo.toml" create_audio_generation_task_artifact_inner_should_write_voice_contract_payload` 通过。
+- `cargo test --manifest-path "src-tauri/Cargo.toml" complete_audio_generation_task_artifact_inner_should_write_audio_output_result`、`execute_audio_generation_task_should_mark_provider_resolver_unavailable_without_fabricated_audio`、`execute_audio_generation_task_with_openai_compatible_provider_should_write_audio_output` 通过。
+- `cargo test --manifest-path "src-tauri/Cargo.toml" create_transcription_task_artifact_inner_should_write_audio_transcription_contract_payload`、`execute_audio_transcription_task_with_openai_compatible_provider_should_write_transcript_output` 通过。
+- `npm test -- "src/lib/tauri-mock/core.test.ts" "src/lib/api/mediaTasks.test.ts"`、`npm run typecheck -- --pretty false`、`npm run i18n:check`、`npm run test:contracts` 通过。
+- `npm run i18n:language-boundary-report:json -- --category contentTargetLanguage --output "docs/roadmap/i18n/evidence/content-target-language-boundary-report.json"` 与全量 `npm run i18n:language-boundary-report:json -- --output "docs/roadmap/i18n/evidence/language-boundary-report.json"` 通过。
+
+## 2026-05-26：P3 language boundary unknown 收敛
+
+本轮继续完成：
+
+- `scripts/i18n-language-boundary-report.ts` 补充 context-aware 分类规则，把此前泛名 `language` 误报中的 code fence / Artifact preview、transcription task preview、ASR provider、Browser language、i18n mock、Knowledge metadata、Agent response language guard 与 service skill 语言类 ID 分别归回 `codeLanguage`、`contentTargetLanguage`、`asrLanguage`、`browserEnvironmentLanguage`、`uiLocale` 与 `agentResponseLanguage`。
+- `scripts/i18n-language-boundary-report.test.ts` 新增回归，锁住 code block handler、transcription preview、response language、browser language 与 i18n `getFixedT(instance.language)` 这些高频上下文不再进入 unknown。
+- 重新刷新 `docs/roadmap/i18n/evidence/language-boundary-report.json` 与 `docs/roadmap/i18n/evidence/content-target-language-boundary-report.json`；当前全量报告保持 `entryCount=1999`，`unknownLanguageLike` 从 97 收敛到 1，唯一剩余项是 `src/lib/model/oemCloudModelMetadata.ts` 的 `"vision-language"` 模型能力别名，不是 UI locale / 自然语言偏好；聚焦 content target 报告为 `contentTargetLanguage=428`。
+
+验证：
+
+- `npm test -- "scripts/i18n-language-boundary-report.test.ts"` 通过。
+- `npm run i18n:language-boundary-report:json -- --output "docs/roadmap/i18n/evidence/language-boundary-report.json"` 通过。
+- `npm run i18n:language-boundary-report:json -- --category contentTargetLanguage --output "docs/roadmap/i18n/evidence/content-target-language-boundary-report.json"` 通过。
+
+## 2026-05-26：P3 Patch retirement gate 结构化证据
+
+本轮继续完成：
+
+- `scripts/i18n-patch-retirement-gate.mjs` 的输出新增 `schemaVersion=lime.i18n.patchRetirementGate.v1`、`generatedAt` 与 `advisoryIssues`，让 Patch 退出门禁 evidence 可被后续 CI / PR 审阅稳定消费。
+- gate 仍只把 Patch 非 `no-hit`、`retirementCandidate=false`、threshold issue 和 legacy violation 作为阻断项；legacy classification drift / zero-reference 候选进入 advisory，不阻塞 DOM Patch no-hit 退出，但会在报告中显式提示。
+- 新增 evidence `docs/roadmap/i18n/evidence/patch-retirement-gate-report.json`；当前门禁 `retirementReady=true`，Patch 报告 `status=no-hit`、`retirementCandidate=true`、`totalRuns=19`、`totalMatchedSegments=0`、`totalReplacedNodes=0`，legacy report `violationCount=0`、`zeroReferenceCandidateCount=0`，同时提示 `classificationDriftCandidateCount=26` 需要按治理计划继续收口。
+
+验证：
+
+- `npm test -- "scripts/i18n-patch-retirement-gate.test.ts"` 通过。
+- `npm run i18n:patch-retirement-gate:json -- --output "docs/roadmap/i18n/evidence/patch-retirement-gate-report.json"` 通过。
+- `npm run i18n:patch-retirement-gate -- --check` 通过。
+
+## 2026-05-26：P3 legacy classification drift false advisory 收口
+
+本轮继续完成：
+
+- `scripts/lib/legacy-surface-report-summary.mjs` 修正 classification drift 判定：当 surface 已被治理目录册明确标为 `dead`，且扫描状态为“已删除”或“零引用”时，视为已完成 dead 收口，不再误进入 `classificationDriftCandidates`；`dead-candidate` 仍保持原有非漂移候选口径。
+- `scripts/lib/legacy-surface-report-summary.test.ts` 增加 `dead-monitor` 回归，锁住 `classification: "dead"` + 零引用不会被当成分类漂移，避免已下线 surface 继续制造 patch retirement gate advisory 噪声。
+- 使用 `npm run governance:legacy-report -- --json --output ".lime/governance/legacy-surface-report.json"` 刷新 legacy report 事实源；当前 summary 为 `zeroReferenceCandidates=0`、`classificationDriftCandidates=0`、`violations=0`。
+- 重新刷新 `docs/roadmap/i18n/evidence/patch-retirement-gate-report.json`；当前 Patch gate `retirementReady=true`，Patch 报告仍为 `status=no-hit`、`retirementCandidate=true`、`totalRuns=19`、`totalMatchedSegments=0`、`totalReplacedNodes=0`，legacy 指标已变为 `classificationDriftCandidateCount=0`、`violationCount=0`、`zeroReferenceCandidateCount=0`，`advisoryIssues=[]`。
+
+验证：
+
+- `npm test -- "scripts/lib/legacy-surface-report-summary.test.ts"` 通过。
+- `npm run governance:legacy-report -- --json --output ".lime/governance/legacy-surface-report.json"` 通过并刷新治理 evidence。
+- `npm run i18n:patch-retirement-gate:json -- --output "docs/roadmap/i18n/evidence/patch-retirement-gate-report.json"` 通过。
+- `npm run i18n:patch-retirement-gate -- --check` 通过，输出 `classificationDriftCandidates=0`、`问题: 无`、`提示: 无`。
+- `npm run i18n:check` 通过，当前 `sourceKeys=7493`、coverage `100.0%`。
+- 定向 `git diff --check` 通过。
+
+## 2026-05-26：P3 translation coverage evidence 可落盘刷新
+
+本轮继续完成：
+
+- `scripts/detect-missing-translations.ts` 补齐 `--output <path>`，使 `npm run i18n:check:json -- --output "docs/roadmap/i18n/evidence/translation-coverage-report.json"` 能直接生成版本化 coverage evidence，不再依赖 stdout 重定向或手工复制。
+- `scripts/detect-missing-translations.test.ts` 增加 CLI `--output` 回归，锁住结构化 JSON 报告写入文件且不污染 stdout。
+- 刷新 `docs/roadmap/i18n/evidence/translation-coverage-report.json`、`docs/roadmap/i18n/evidence/source-locale-export.json` 与 `docs/roadmap/i18n/evidence/translation-pr-pack.json`；当前三份证据统一到 `sourceKeyCount=7493`、`namespaceCount=13`，translation coverage `hasIssues=false`、`missingKeyCount=0`、`extraKeyCount=0`、coverage `100.0%`，translation PR pack `proposedEntryCount=0`。
+- `npm run i18n:unused:json -- --check` 当前也保持 `unusedKeyCount=0`，说明本轮刷新没有把新资源面变成 dead key 积压。
+
+验证：
+
+- `npm test -- "scripts/detect-missing-translations.test.ts"` 通过。
+- `npm run i18n:check:json -- --output "docs/roadmap/i18n/evidence/translation-coverage-report.json"` 通过。
+- `npm run i18n:source-export:json -- --output "docs/roadmap/i18n/evidence/source-locale-export.json"` 通过。
+- `npm run i18n:translation-pr-pack:json -- --output "docs/roadmap/i18n/evidence/translation-pr-pack.json"` 通过。
+- `npm run i18n:unused:json -- --check` 通过，`unusedKeyCount=0`。

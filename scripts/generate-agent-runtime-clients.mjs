@@ -16,6 +16,10 @@ const outputPath = path.join(
   projectRoot,
   "src/lib/api/agentRuntime/commandManifest.generated.ts",
 );
+const declarationOutputPath = path.join(
+  projectRoot,
+  "src/lib/api/agentRuntime/commandManifest.generated.d.ts",
+);
 
 const allowedDomains = new Set([
   "thread",
@@ -237,6 +241,88 @@ ${byDomainBody}
 `;
 }
 
+function buildGeneratedDeclarationOutput(schemaEntries) {
+  const domains = [...allowedDomains];
+  const lifecycles = [...allowedLifecycles];
+  const mockStrategies = [...allowedMockStrategies];
+
+  const commandObjectBody = schemaEntries
+    .map((entry) => `  readonly ${entry.key}: ${JSON.stringify(entry.command)};`)
+    .join("\n");
+
+  const descriptorBody = schemaEntries
+    .map(
+      (entry) => `  {
+    readonly key: ${JSON.stringify(entry.key)};
+    readonly command: ${JSON.stringify(entry.command)};
+    readonly domain: ${JSON.stringify(entry.domain)};
+    readonly requestType: ${JSON.stringify(entry.requestType)};
+    readonly responseType: ${JSON.stringify(entry.responseType)};
+    readonly lifecycle: ${JSON.stringify(entry.lifecycle)};
+    readonly mockStrategy: ${JSON.stringify(entry.mockStrategy)};
+    readonly docsSection: ${JSON.stringify(entry.docsSection)};
+  },`,
+    )
+    .join("\n");
+
+  const namesBody = schemaEntries
+    .map((entry) => `  ${JSON.stringify(entry.command)},`)
+    .join("\n");
+
+  const byDomainBody = domains
+    .map((domain) => {
+      const entries = schemaEntries.filter((entry) => entry.domain === domain);
+      const lines = entries.map((entry) => `    ${JSON.stringify(entry.command)},`);
+      return `  readonly ${JSON.stringify(domain)}: readonly [\n${lines.join("\n")}\n  ];`;
+    })
+    .join("\n");
+
+  return `/**
+ * 由 scripts/generate-agent-runtime-clients.mjs 自动生成，请勿手改。
+ */
+
+export declare const AGENT_RUNTIME_COMMANDS: {
+${commandObjectBody}
+};
+
+export type AgentRuntimeCommandKey = keyof typeof AGENT_RUNTIME_COMMANDS;
+export type AgentRuntimeCommandName =
+  (typeof AGENT_RUNTIME_COMMANDS)[AgentRuntimeCommandKey];
+export type AgentRuntimeCommandDomain = ${domains
+    .map((value) => JSON.stringify(value))
+    .join(" | ")};
+export type AgentRuntimeCommandLifecycle = ${lifecycles
+    .map((value) => JSON.stringify(value))
+    .join(" | ")};
+export type AgentRuntimeCommandMockStrategy = ${mockStrategies
+    .map((value) => JSON.stringify(value))
+    .join(" | ")};
+
+export interface AgentRuntimeCommandDescriptor {
+  readonly key: AgentRuntimeCommandKey;
+  readonly command: AgentRuntimeCommandName;
+  readonly domain: AgentRuntimeCommandDomain;
+  readonly requestType: string;
+  readonly responseType: string;
+  readonly lifecycle: AgentRuntimeCommandLifecycle;
+  readonly mockStrategy: AgentRuntimeCommandMockStrategy;
+  readonly docsSection: string;
+}
+
+export declare const AGENT_RUNTIME_COMMAND_DESCRIPTORS: readonly [
+${descriptorBody}
+];
+
+export declare const AGENT_RUNTIME_COMMAND_NAMES: readonly [
+${namesBody}
+];
+
+export declare const AGENT_RUNTIME_COMMANDS_BY_DOMAIN: {
+${byDomainBody}
+};
+`;
+}
+
 async function main() {
   const schema = await readJson(schemaPath);
   const catalog = await readJson(catalogPath);
@@ -244,9 +330,11 @@ async function main() {
   assertCatalogMatchesSchema(schemaEntries, catalog);
 
   const output = buildGeneratedOutput(schemaEntries);
+  const declarationOutput = buildGeneratedDeclarationOutput(schemaEntries);
   const checkOnly = process.argv.includes("--check");
 
   let current = "";
+  let currentDeclaration = "";
   try {
     current = await fs.readFile(outputPath, "utf8");
   } catch (error) {
@@ -254,9 +342,16 @@ async function main() {
       throw error;
     }
   }
+  try {
+    currentDeclaration = await fs.readFile(declarationOutputPath, "utf8");
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+  }
 
   if (checkOnly) {
-    if (current !== output) {
+    if (current !== output || currentDeclaration !== declarationOutput) {
       throw new Error(
         "agent runtime generated manifest 已过期，请先运行 npm run generate:agent-runtime-clients",
       );
@@ -266,6 +361,7 @@ async function main() {
 
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
   await fs.writeFile(outputPath, output, "utf8");
+  await fs.writeFile(declarationOutputPath, declarationOutput, "utf8");
 }
 
 main().catch((error) => {

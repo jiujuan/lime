@@ -1365,6 +1365,7 @@ pub fn run() {
             commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_list_file_checkpoints,
             commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_get_file_checkpoint,
             commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_diff_file_checkpoint,
+            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_restore_file_checkpoint,
             commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_export_analysis_handoff,
             commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_export_handoff_bundle,
             commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_export_evidence_pack,

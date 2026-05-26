@@ -13,6 +13,10 @@ use super::path_guard::{
 };
 use super::shell_runtime::detect_powershell_executable;
 use super::task::{TaskManager, TaskShell};
+use crate::subprocess::{
+    configure_command_for_gui, decode_process_output, summarize_decoded_with,
+    wrap_powershell_command_for_utf8,
+};
 use async_trait::async_trait;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -153,8 +157,15 @@ impl PowerShellTool {
 
     fn build_command(&self, command: &str, context: &ToolContext) -> Result<Command, ToolError> {
         let executable_path = self.executable_path()?;
+        let command = wrap_powershell_command_for_utf8(command);
         let mut cmd = Command::new(executable_path);
-        cmd.args(["-NoProfile", "-NonInteractive", "-Command", command]);
+        configure_command_for_gui(&mut cmd);
+        cmd.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            command.as_str(),
+        ]);
         cmd.current_dir(&context.working_directory);
         cmd.env("ASTER_TERMINAL", "1");
         for (key, value) in &context.environment {
@@ -298,8 +309,13 @@ impl PowerShellTool {
 
         match result {
             Ok(Ok(output)) => {
-                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                let stdout_output = decode_process_output(&output.stdout);
+                let stderr_output = decode_process_output(&output.stderr);
+                let stdout_encoding = stdout_output.encoding;
+                let stderr_encoding = stderr_output.encoding;
+                let decoded_with = summarize_decoded_with(&[&stdout_output, &stderr_output]);
+                let stdout = stdout_output.text;
+                let stderr = stderr_output.text;
                 let exit_code = output.status.code().unwrap_or(-1);
                 let interpretation =
                     interpret_powershell_command_result(command, exit_code, &stdout, &stderr);
@@ -314,12 +330,40 @@ impl PowerShellTool {
                     Ok(ToolResult::error(formatted)
                         .with_metadata("exit_code", json!(exit_code))
                         .with_metadata("stdout_length", json!(stdout.len()))
-                        .with_metadata("stderr_length", json!(stderr.len())))
+                        .with_metadata("stderr_length", json!(stderr.len()))
+                        .with_metadata("stdout_bytes", json!(output.stdout.len()))
+                        .with_metadata("stderr_bytes", json!(output.stderr.len()))
+                        .with_metadata("stdout", json!(self.truncate_output(&stdout)))
+                        .with_metadata("stderr", json!(self.truncate_output(&stderr)))
+                        .with_metadata("shell", json!("powershell"))
+                        .with_metadata("command", json!(command))
+                        .with_metadata(
+                            "cwd",
+                            json!(context.working_directory.display().to_string()),
+                        )
+                        .with_metadata("execution_surface", json!("embedded"))
+                        .with_metadata("encoding", json!(stdout_encoding))
+                        .with_metadata("stderr_encoding", json!(stderr_encoding))
+                        .with_metadata("decoded_with", json!(decoded_with)))
                 } else {
                     let mut result = ToolResult::success(formatted)
                         .with_metadata("exit_code", json!(exit_code))
                         .with_metadata("stdout_length", json!(stdout.len()))
-                        .with_metadata("stderr_length", json!(stderr.len()));
+                        .with_metadata("stderr_length", json!(stderr.len()))
+                        .with_metadata("stdout_bytes", json!(output.stdout.len()))
+                        .with_metadata("stderr_bytes", json!(output.stderr.len()))
+                        .with_metadata("stdout", json!(self.truncate_output(&stdout)))
+                        .with_metadata("stderr", json!(self.truncate_output(&stderr)))
+                        .with_metadata("shell", json!("powershell"))
+                        .with_metadata("command", json!(command))
+                        .with_metadata(
+                            "cwd",
+                            json!(context.working_directory.display().to_string()),
+                        )
+                        .with_metadata("execution_surface", json!("embedded"))
+                        .with_metadata("encoding", json!(stdout_encoding))
+                        .with_metadata("stderr_encoding", json!(stderr_encoding))
+                        .with_metadata("decoded_with", json!(decoded_with));
                     if exit_code != 0 {
                         result = result.with_metadata("reported_success", json!(true));
                     }
@@ -370,6 +414,12 @@ impl PowerShellTool {
         .with_metadata("task_id", json!(task_id))
         .with_metadata("background", json!(true))
         .with_metadata("shell", json!("powershell"))
+        .with_metadata("command", json!(command))
+        .with_metadata(
+            "cwd",
+            json!(context.working_directory.display().to_string()),
+        )
+        .with_metadata("execution_surface", json!("embedded"))
         .with_metadata("summary", json!(summary))
         .with_metadata("executable", json!(executable_path.display().to_string()));
 

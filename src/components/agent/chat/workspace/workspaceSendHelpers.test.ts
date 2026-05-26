@@ -83,6 +83,35 @@ describe("workspaceSendHelpers runtime team preview", () => {
       },
       preferredTeamPresetId: undefined,
     });
+
+    const catalogRoutedScene = resolveCodeOrchestratedRuntimeDefaults({
+      executionStrategy: "code_orchestrated",
+      effectiveToolPreferences: {
+        webSearch: false,
+        thinking: false,
+        task: false,
+        subagent: false,
+      },
+      mappedTheme: "general",
+      sendOptions: {
+        capabilityRoute: {
+          kind: "runtime_scene",
+          sceneKey: "engineering-mode",
+          commandPrefix: "/engineering-mode",
+        },
+      },
+      allowCatalogRoutedRuntimeDefaults: true,
+    });
+
+    expect(catalogRoutedScene).toEqual({
+      effectiveToolPreferences: {
+        webSearch: false,
+        thinking: false,
+        task: true,
+        subagent: true,
+      },
+      preferredTeamPresetId: "code-triage-team",
+    });
   });
 
   it("initialDispatchKey 应稳定编码首轮 prompt 与图片签名", () => {

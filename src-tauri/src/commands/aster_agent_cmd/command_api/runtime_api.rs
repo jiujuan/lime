@@ -18,7 +18,7 @@ use crate::services::runtime_evidence_pack_service::{
     RuntimeEvidencePackExportResult,
 };
 use crate::services::runtime_file_checkpoint_service::{
-    diff_file_checkpoint, get_file_checkpoint, list_file_checkpoints,
+    diff_file_checkpoint, get_file_checkpoint, list_file_checkpoints, restore_file_checkpoint,
 };
 use crate::services::runtime_handoff_artifact_service::{
     export_runtime_handoff_bundle, RuntimeHandoffBundleExportResult,
@@ -676,6 +676,46 @@ pub async fn agent_runtime_diff_file_checkpoint(
     let context =
         load_runtime_export_context(&runtime, &request.session_id, "获取文件快照 diff 前").await?;
     diff_file_checkpoint(&context.detail, request.checkpoint_id.as_str())
+}
+
+/// 统一运行时：恢复单个文件快照到当前工作区文件。
+#[tauri::command]
+pub async fn agent_runtime_restore_file_checkpoint(
+    app: AppHandle,
+    state: State<'_, AsterAgentState>,
+    db: State<'_, DbConnection>,
+    api_key_provider_service: State<'_, ApiKeyProviderServiceState>,
+    logs: State<'_, LogState>,
+    config_manager: State<'_, GlobalConfigManagerState>,
+    mcp_manager: State<'_, McpManagerState>,
+    automation_state: State<'_, AutomationServiceState>,
+    request: AgentRuntimeRestoreFileCheckpointRequest,
+) -> Result<AgentRuntimeFileCheckpointRestoreResult, String> {
+    let runtime = build_runtime_command_context(
+        app,
+        state,
+        db,
+        api_key_provider_service,
+        logs,
+        config_manager,
+        mcp_manager,
+        automation_state,
+    );
+    tracing::info!(
+        "[AsterAgent] 恢复文件快照: session_id={}, checkpoint_id={}, create_backup={}",
+        request.session_id,
+        request.checkpoint_id,
+        request.create_backup
+    );
+    let context =
+        load_runtime_export_context(&runtime, &request.session_id, "恢复文件快照前").await?;
+    restore_file_checkpoint(
+        &context.detail,
+        &context.workspace_root,
+        request.checkpoint_id.as_str(),
+        request.confirm_restore,
+        request.create_backup,
+    )
 }
 
 struct RuntimeExportContext {

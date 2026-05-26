@@ -1018,6 +1018,20 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor?.targets).toEqual(["src/components/agent/chat/config.ts"]);
   });
 
+  it("应禁止 @代码 专用 parser 与测试入口重新回流", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "agent-chat-code-workbench-command-parser-entry",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.targets).toEqual([
+      "src/components/agent/chat/utils/codeWorkbenchCommand.ts",
+      "src/components/agent/chat/utils/codeWorkbenchCommand.test.ts",
+    ]);
+  });
+
   it("应记录已删除的稳定处理中提示组件与 Hook", () => {
     const monitor = legacySurfaceCatalogJson.imports.find(
       (entry) => entry.id === "stable-processing-notice-entry",
@@ -2768,6 +2782,70 @@ describe("legacySurfaceCatalog", () => {
       "src/components/agent/chat/components/EmptyState.tsx",
       "src/components/agent/chat/components/EmptyStateComposerPanel.tsx",
       "src/components/agent/chat/components/Inputbar/components/InputbarModelExtra.tsx",
+    ]);
+  });
+
+  it("应禁止 @代码 专用 parser 文件恢复 parser 符号", () => {
+    const monitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) =>
+        entry.id === "agent-chat-code-workbench-command-parser-symbols",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.patterns).toEqual([
+      "parseCodeWorkbenchCommand",
+      "ParsedCodeWorkbenchCommand",
+      "ParseCodeWorkbenchCommandOptions",
+      "mentionCommandPrefixKeyMap",
+      "parseMentionCommand",
+      "code_runtime",
+      "code_orchestrated",
+      "codeOrchestratedDefaults",
+      "code_orchestrated_defaults",
+      "applyCodeOrchestratedDefaults",
+      "harness.code_command",
+      "@代码",
+      "@code",
+      "@coding",
+      "@开发",
+    ]);
+    expect(monitor?.includePathPrefixes).toEqual([
+      "src/components/agent/chat/utils/codeWorkbenchCommand.ts",
+      "src/components/agent/chat/utils/codeWorkbenchCommand.test.ts",
+    ]);
+  });
+
+  it("应禁止 Workspace 发送主链恢复 @代码 专用硬编码或正文关键词路由", () => {
+    const monitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) =>
+        entry.id === "agent-chat-code-workbench-workspace-send-hardcode",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.patterns).toEqual([
+      "parseCodeWorkbenchCommand",
+      'commandKey: "code_runtime"',
+      'commandKey === "code_runtime"',
+      "codeOrchestratedDefaults",
+      "code_orchestrated_defaults",
+      "applyCodeOrchestratedDefaults",
+      "harness.code_command",
+      "code_command:",
+      '.includes("代码")',
+      ".includes('代码')",
+      '.includes("修复")',
+      ".includes('修复')",
+      '.includes("重构")',
+      ".includes('重构')",
+      '.includes("评审")',
+      ".includes('评审')",
+    ]);
+    expect(monitor?.includePathPrefixes).toEqual([
+      "src/components/agent/chat/workspace/useWorkspaceSendActions.ts",
     ]);
   });
 

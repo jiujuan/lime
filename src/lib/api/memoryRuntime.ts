@@ -31,6 +31,8 @@ export type {
   MemoryAnalysisResult,
   MemoryAutoConfig,
   MemoryAutoToggleResponse,
+  MemoryEmbeddingConfig,
+  MemoryEmbeddingProvider,
   MemdirScaffoldFile,
   MemdirCleanupResult,
   MemdirScaffoldResult,

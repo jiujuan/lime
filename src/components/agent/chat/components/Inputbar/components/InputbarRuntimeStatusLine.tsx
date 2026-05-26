@@ -193,7 +193,6 @@ export const InputbarRuntimeStatusLine: React.FC<
       : null;
   const detailText =
     runtime.status === "waiting_input" ||
-    runtime.status === "failed" ||
     runtime.status === "aborted"
       ? runtime.detail?.trim() ||
         (runtime.status === "aborted"

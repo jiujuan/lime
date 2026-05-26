@@ -120,6 +120,11 @@ describe("mockPriorityCommands", () => {
       shouldDisallowMockFallbackInBrowser("agent_runtime_diff_file_checkpoint"),
     ).toBe(true);
     expect(
+      shouldDisallowMockFallbackInBrowser(
+        "agent_runtime_restore_file_checkpoint",
+      ),
+    ).toBe(true);
+    expect(
       shouldDisallowMockFallbackInBrowser("agent_runtime_list_sessions"),
     ).toBe(true);
     expect(

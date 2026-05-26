@@ -277,7 +277,7 @@ describe("模型辅助函数", () => {
     ).toBe("gpt-5.3-codex, gpt-5.2");
   });
 
-  test("parseCustomModelsValue 应规范化 MiMo 展示名与历史别名", () => {
+  test("parseCustomModelsValue 应保留 MiMo 用户声明模型并只做去重", () => {
     expect(
       parseCustomModelsValue(
         "MiMo-V2.5-Pro, mimo-v2-pro, mimo-v2.5, mimo-v2-flash",
@@ -287,17 +287,17 @@ describe("模型辅助函数", () => {
           apiHost: "https://token-plan-cn.xiaomimimo.com/anthropic",
         },
       ),
-    ).toEqual(["mimo-v2.5-pro"]);
+    ).toEqual(["MiMo-V2.5-Pro", "mimo-v2-pro", "mimo-v2.5", "mimo-v2-flash"]);
   });
 
-  test("serializeCustomModels 应输出规范化后的 MiMo 模型 ID", () => {
+  test("serializeCustomModels 应保留 MiMo 用户声明模型顺序", () => {
     expect(
       serializeCustomModels(["MiMo-V2.5-Pro", "mimo-v2-pro", "mimo-v2.5"], {
         providerId: "custom-mimo",
         providerType: "anthropic-compatible",
         apiHost: "https://token-plan-cn.xiaomimimo.com/anthropic",
       }),
-    ).toBe("mimo-v2.5-pro");
+    ).toBe("MiMo-V2.5-Pro, mimo-v2-pro, mimo-v2.5");
   });
 
   test("非 Xiaomi Provider 不应误改写模型 ID", () => {

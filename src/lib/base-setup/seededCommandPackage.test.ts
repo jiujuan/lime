@@ -162,6 +162,9 @@ describe("seededCommandPackage", () => {
           binding: {
             skillId: undefined,
             executionKind: "agent_turn",
+            requestDefaults: {
+              executionStrategy: "code_orchestrated",
+            },
           },
           renderContract: expect.objectContaining({
             resultKind: "tool_timeline",

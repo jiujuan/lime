@@ -4809,9 +4809,41 @@ export function AgentChatWorkspace({
   const handleWorkspaceFileClick = useCallback(
     (fileName: string, content: string) => {
       setFocusedArtifactBlockId(null);
-      handleFileClick(fileName, content);
+      const normalizedFileName = fileName.trim();
+      if (content.trim() || !normalizedFileName) {
+        handleFileClick(fileName, content);
+        return;
+      }
+
+      void (async () => {
+        const absolutePath =
+          resolveAbsoluteWorkspacePath(project?.rootPath, normalizedFileName) ||
+          normalizedFileName;
+        const preview = await handleHarnessLoadFilePreview(absolutePath);
+        if (preview.error) {
+          toast.error(
+            t("agentChat.filePreview.openFailed", {
+              message: preview.error,
+            }),
+          );
+          return;
+        }
+        if (preview.isBinary) {
+          toast.info(t("agentChat.filePreview.binaryUnsupported"));
+          return;
+        }
+
+        const nextContent =
+          typeof preview.content === "string" ? preview.content : "";
+        const nextFilePath = isAbsoluteWorkspacePath(normalizedFileName)
+          ? preview.path || normalizedFileName
+          : normalizedFileName;
+        startTransition(() => {
+          handleFileClick(nextFilePath, nextContent);
+        });
+      })();
     },
-    [handleFileClick],
+    [handleFileClick, handleHarnessLoadFilePreview, project?.rootPath, t],
   );
   const openProjectFilePreviewInCanvas = useCallback(
     async ({
@@ -6039,6 +6071,7 @@ export function AgentChatWorkspace({
       currentTurnId={currentTurnId}
       pendingActions={pendingActions}
       submittedActionsInFlight={submittedActionsInFlight}
+      onRespondToAction={handlePermissionResponse}
       queuedTurns={queuedTurns}
       canInterrupt={isSending}
       onInterruptCurrentTurn={stopSending}
@@ -6396,6 +6429,7 @@ export function AgentChatWorkspace({
     activeExecutionRuntime,
     pendingActions,
     submittedActionsInFlight,
+    onRespondToAction: handlePermissionResponse,
     messages: displayMessages,
     queuedTurns,
     resumeThread,

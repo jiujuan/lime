@@ -16,13 +16,16 @@ interface RenderResult {
 
 const mountedRoots: RenderResult[] = [];
 
-function renderTool(toolCall: ToolCallState): RenderResult {
+function renderTool(
+  toolCall: ToolCallState,
+  props: { onFileClick?: (fileName: string, content: string) => void } = {},
+): RenderResult {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
 
   act(() => {
-    root.render(<ToolCallDisplay toolCall={toolCall} />);
+    root.render(<ToolCallDisplay toolCall={toolCall} {...props} />);
   });
 
   const rendered = { container, root };
@@ -323,6 +326,433 @@ describe("ToolCallDisplay", () => {
     ).toBeTruthy();
     expect(container.textContent).toContain("text");
     expect(container.textContent).toContain("复制");
+  });
+
+  it("命令结果带 stdout/stderr 分流时应展示友好的输出分区", () => {
+    const { container } = renderTool({
+      id: "tool-exec-streams-1",
+      name: "bash",
+      arguments: JSON.stringify({ command: "npm test" }),
+      status: "failed",
+      result: {
+        success: false,
+        output: JSON.stringify({
+          stdout: "✓ parser.test.ts\n✓ renderer.test.ts",
+          stderr: "FAIL src/runtime.test.ts\nExpected status 0",
+        }),
+        metadata: {
+          exit_code: 1,
+          cwd: "/workspace/lime",
+          stdout_length: 37,
+          stderr_length: 42,
+          sandboxed: true,
+          sandbox_type: "workspace-write",
+        },
+      },
+      startTime: new Date("2026-03-20T12:11:00.000Z"),
+      endTime: new Date("2026-03-20T12:11:01.000Z"),
+    });
+
+    act(() => {
+      const toggle = container.querySelector(
+        'button[title="查看结果"]',
+      ) as HTMLButtonElement | null;
+      toggle?.click();
+    });
+
+    expect(container.textContent).toContain("命令摘要");
+    expect(container.textContent).toContain("退出码：1");
+    expect(container.textContent).toContain("命令输出");
+    expect(
+      container.querySelector(
+        '[data-testid="tool-call-command-output-streams"]',
+      ),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="tool-call-command-output-stdout"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="tool-call-command-output-stderr"]'),
+    ).toBeTruthy();
+    expect(container.textContent).toContain("✓ parser.test.ts");
+    expect(container.textContent).toContain("FAIL src/runtime.test.ts");
+    expect(
+      container.querySelector('[data-testid="tool-call-rendered-result"]'),
+    ).toBeNull();
+    expect(container.textContent).not.toContain('"stdout"');
+  });
+
+  it("Windows shell 结果应标记为内置执行并展示编码信息", () => {
+    const { container } = renderTool({
+      id: "tool-powershell-embedded-1",
+      name: "PowerShell",
+      arguments: JSON.stringify({ command: "Write-Output '你好'" }),
+      status: "completed",
+      result: {
+        success: true,
+        output: "你好",
+        metadata: {
+          exit_code: 0,
+          cwd: "C:\\Users\\Administrator\\AppData\\Local\\lime",
+          shell: "powershell",
+          execution_surface: "embedded",
+          encoding: "utf-8",
+          decoded_with: "strict",
+          stdout_length: 6,
+          stderr_length: 0,
+        },
+      },
+      startTime: new Date("2026-05-27T12:11:00.000Z"),
+      endTime: new Date("2026-05-27T12:11:01.000Z"),
+    });
+
+    act(() => {
+      const toggle = container.querySelector(
+        'button[title="查看结果"]',
+      ) as HTMLButtonElement | null;
+      toggle?.click();
+    });
+
+    expect(container.textContent).toContain("Shell");
+    expect(container.textContent).toContain("powershell");
+    expect(container.textContent).toContain("内置执行");
+    expect(container.textContent).toContain("编码：utf-8");
+    expect(container.textContent).toContain("严格解码");
+    expect(container.textContent).not.toContain("外部终端");
+  });
+
+  it("Windows 旧编码 fallback 应展示为兼容解码", () => {
+    const { container } = renderTool({
+      id: "tool-powershell-fallback-1",
+      name: "PowerShell",
+      arguments: JSON.stringify({ command: "Write-Output '你好'" }),
+      status: "completed",
+      result: {
+        success: true,
+        output: "你好",
+        metadata: {
+          exit_code: 0,
+          shell: "powershell",
+          execution_surface: "embedded",
+          encoding: "gbk",
+          decoded_with: "fallback",
+          stdout_length: 6,
+          stderr_length: 0,
+        },
+      },
+      startTime: new Date("2026-05-27T12:11:00.000Z"),
+      endTime: new Date("2026-05-27T12:11:01.000Z"),
+    });
+
+    act(() => {
+      const toggle = container.querySelector(
+        'button[title="查看结果"]',
+      ) as HTMLButtonElement | null;
+      toggle?.click();
+    });
+
+    expect(container.textContent).toContain("编码：gbk");
+    expect(container.textContent).toContain("兼容解码");
+    expect(container.textContent).not.toContain("外部终端");
+  });
+
+  it("apply_patch 工具应把补丁参数渲染为文件级变更审阅", () => {
+    const { container } = renderTool({
+      id: "tool-apply-patch-review-1",
+      name: "apply_patch",
+      arguments: JSON.stringify({
+        patch: [
+          "*** Begin Patch",
+          "*** Update File: src/components/App.tsx",
+          "@@",
+          "-const title = \"Old\";",
+          "+const title = \"New\";",
+          "+const subtitle = \"Ready\";",
+          "*** End Patch",
+        ].join("\n"),
+      }),
+      status: "completed",
+      result: {
+        success: true,
+        output: "Patch applied successfully",
+      },
+      startTime: new Date("2026-03-20T12:11:30.000Z"),
+      endTime: new Date("2026-03-20T12:11:31.000Z"),
+    });
+
+    act(() => {
+      const toggle = container.querySelector(
+        'button[title="查看结果"]',
+      ) as HTMLButtonElement | null;
+      toggle?.click();
+    });
+
+    expect(
+      container.querySelector('[data-testid="tool-call-diff-review"]'),
+    ).toBeTruthy();
+    expect(container.textContent).toContain("变更审阅");
+    expect(container.textContent).toContain("1 个文件");
+    expect(container.textContent).toContain("+2 行");
+    expect(container.textContent).toContain("-1 行");
+    expect(container.textContent).toContain("1 处变更");
+    expect(container.textContent).toContain("修改");
+    expect(container.textContent).toContain("src/components/App.tsx");
+    expect(container.textContent).toContain('const title = "Old";');
+    expect(container.textContent).toContain('const subtitle = "Ready";');
+  });
+
+  it("文件级变更审阅应可作为 diff 审阅内容打开到画布", () => {
+    const onFileClick = vi.fn();
+    const { container } = renderTool(
+      {
+        id: "tool-apply-patch-review-canvas-1",
+        name: "apply_patch",
+        arguments: JSON.stringify({
+          patch: [
+            "*** Begin Patch",
+            "*** Update File: src/components/App.tsx",
+            "@@",
+            "-const title = \"Old\";",
+            "+const title = \"New\";",
+            "+const subtitle = \"Ready\";",
+            "*** End Patch",
+          ].join("\n"),
+        }),
+        status: "completed",
+        result: {
+          success: true,
+          output: "Patch applied successfully",
+        },
+        startTime: new Date("2026-03-20T12:11:30.000Z"),
+        endTime: new Date("2026-03-20T12:11:31.000Z"),
+      },
+      { onFileClick },
+    );
+
+    act(() => {
+      const toggle = container.querySelector(
+        'button[title="查看结果"]',
+      ) as HTMLButtonElement | null;
+      toggle?.click();
+    });
+
+    act(() => {
+      const openButton = container.querySelector(
+        'button[aria-label="在画布中打开变更审阅：src/components/App.tsx"]',
+      ) as HTMLButtonElement | null;
+      openButton?.click();
+    });
+
+    expect(onFileClick).toHaveBeenCalledTimes(1);
+    expect(onFileClick.mock.calls[0]?.[0]).toBe(
+      "src/components/App.tsx.diff.md",
+    );
+    expect(onFileClick.mock.calls[0]?.[1]).toContain(
+      "# src/components/App.tsx 的变更审阅",
+    );
+    expect(onFileClick.mock.calls[0]?.[1]).toContain("- 状态：修改");
+    expect(onFileClick.mock.calls[0]?.[1]).toContain("- +2 行");
+    expect(onFileClick.mock.calls[0]?.[1]).toContain("- -1 行");
+    expect(onFileClick.mock.calls[0]?.[1]).toContain("- 1 处变更");
+    expect(onFileClick.mock.calls[0]?.[1]).toContain("````diff");
+    expect(onFileClick.mock.calls[0]?.[1]).toContain(
+      '-const title = "Old";',
+    );
+    expect(onFileClick.mock.calls[0]?.[1]).toContain(
+      '+const title = "New";',
+    );
+  });
+
+  it("长补丁应默认保留文件级预览，并支持展开完整变更", () => {
+    const { container } = renderTool({
+      id: "tool-apply-patch-review-long-1",
+      name: "apply_patch",
+      arguments: JSON.stringify({
+        patch: [
+          "*** Begin Patch",
+          "*** Update File: src/runtime/longPatch.ts",
+          "@@",
+          " const stable = true;",
+          "-const oldValue = \"legacy\";",
+          "+const nextValue1 = \"current\";",
+          "+const nextValue2 = \"current\";",
+          "+const nextValue3 = \"current\";",
+          "+const nextValue4 = \"current\";",
+          "+const nextValue5 = \"current\";",
+          "+const nextValue6 = \"current\";",
+          "+const nextValue7 = \"current\";",
+          "+const nextValue8 = \"current\";",
+          "+const nextValue9 = \"current\";",
+          "+const nextValue10 = \"current\";",
+          "*** End Patch",
+        ].join("\n"),
+      }),
+      status: "completed",
+      result: {
+        success: true,
+        output: "Patch applied successfully",
+      },
+      startTime: new Date("2026-03-20T12:11:32.000Z"),
+      endTime: new Date("2026-03-20T12:11:33.000Z"),
+    });
+
+    act(() => {
+      const toggle = container.querySelector(
+        'button[title="查看结果"]',
+      ) as HTMLButtonElement | null;
+      toggle?.click();
+    });
+
+    expect(container.textContent).toContain("src/runtime/longPatch.ts");
+    expect(container.textContent).toContain("展开其余 5 行");
+    expect(container.textContent).toContain('const nextValue5 = "current";');
+    expect(container.textContent).not.toContain(
+      'const nextValue10 = "current";',
+    );
+
+    act(() => {
+      const expandButton = Array.from(
+        container.querySelectorAll("button"),
+      ).find((button) => button.textContent?.includes("展开其余"));
+      expandButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain("收起完整变更");
+    expect(container.textContent).toContain('const nextValue10 = "current";');
+    expect(
+      container.querySelector('[data-testid="tool-call-diff-review-file-lines"]'),
+    ).toBeTruthy();
+  });
+
+  it("命令 stdout 返回 unified diff 时应同时保留输出分区并展示变更审阅", () => {
+    const { container } = renderTool({
+      id: "tool-exec-diff-review-1",
+      name: "bash",
+      arguments: JSON.stringify({ command: "git diff -- src/app.ts" }),
+      status: "completed",
+      result: {
+        success: true,
+        output: JSON.stringify({
+          stdout: [
+            "diff --git a/src/app.ts b/src/app.ts",
+            "--- a/src/app.ts",
+            "+++ b/src/app.ts",
+            "@@ -1,2 +1,3 @@",
+            "-const count = 1;",
+            "+const count = 2;",
+            "+const enabled = true;",
+            " export const name = \"lime\";",
+          ].join("\n"),
+        }),
+        metadata: {
+          exit_code: 0,
+          stdout_length: 168,
+          stderr_length: 0,
+        },
+      },
+      startTime: new Date("2026-03-20T12:11:40.000Z"),
+      endTime: new Date("2026-03-20T12:11:41.000Z"),
+    });
+
+    act(() => {
+      const toggle = container.querySelector(
+        'button[title="查看结果"]',
+      ) as HTMLButtonElement | null;
+      toggle?.click();
+    });
+
+    expect(
+      container.querySelector('[data-testid="tool-call-command-output-stdout"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="tool-call-diff-review"]'),
+    ).toBeTruthy();
+    expect(container.textContent).toContain("src/app.ts");
+    expect(container.textContent).toContain("+2 行");
+    expect(container.textContent).toContain("-1 行");
+    expect(container.textContent).toContain("const enabled = true;");
+    expect(
+      container.querySelector('[data-testid="tool-call-rendered-result"]'),
+    ).toBeNull();
+  });
+
+  it("多文件补丁应按通用路径结构聚合变更范围", () => {
+    const { container } = renderTool({
+      id: "tool-apply-patch-review-scope-1",
+      name: "apply_patch",
+      arguments: JSON.stringify({
+        patch: [
+          "*** Begin Patch",
+          "*** Update File: src/components/App.tsx",
+          "@@",
+          "-const title = \"Old\";",
+          "+const title = \"New\";",
+          "*** Update File: src/components/Panel.tsx",
+          "@@",
+          "+export const ready = true;",
+          "*** Update File: src-tauri/src/app/runner.rs",
+          "@@",
+          "-let mode = \"legacy\";",
+          "+let mode = \"current\";",
+          "+let enabled = true;",
+          "*** Update File: README.md",
+          "@@",
+          "+Lime supports code review from tool results.",
+          "*** End Patch",
+        ].join("\n"),
+      }),
+      status: "completed",
+      result: {
+        success: true,
+        output: "Patch applied successfully",
+      },
+      startTime: new Date("2026-03-20T12:11:42.000Z"),
+      endTime: new Date("2026-03-20T12:11:43.000Z"),
+    });
+
+    act(() => {
+      const toggle = container.querySelector(
+        'button[title="查看结果"]',
+      ) as HTMLButtonElement | null;
+      toggle?.click();
+    });
+
+    const scope = container.querySelector(
+      '[data-testid="tool-call-diff-review-scope"]',
+    );
+    const scopeItems = Array.from(
+      container.querySelectorAll(
+        '[data-testid="tool-call-diff-review-scope-item"]',
+      ),
+    );
+
+    expect(scope).toBeTruthy();
+    expect(scope?.textContent).toContain("变更范围");
+    expect(scopeItems).toHaveLength(3);
+    expect(scopeItems.some((item) => item.textContent?.includes("src/components"))).toBe(
+      true,
+    );
+    expect(scopeItems.some((item) => item.textContent?.includes("src-tauri/src"))).toBe(
+      true,
+    );
+    expect(scopeItems.some((item) => item.textContent?.includes("仓库根目录"))).toBe(
+      true,
+    );
+    expect(
+      scopeItems.some((item) =>
+        item.textContent?.includes("src/components2 个文件+2-1"),
+      ),
+    ).toBe(true);
+    expect(
+      scopeItems.some((item) =>
+        item.textContent?.includes("src-tauri/src1 个文件+2-1"),
+      ),
+    ).toBe(true);
+    expect(
+      scopeItems.some((item) =>
+        item.textContent?.includes("仓库根目录1 个文件+1-0"),
+      ),
+    ).toBe(true);
   });
 
   it("结果区应压缩内部元信息与长路径提示", () => {

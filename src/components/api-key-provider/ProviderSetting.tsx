@@ -44,8 +44,12 @@ import {
 import { getProviderModelAutoFetchCapability } from "@/lib/model/providerModelFetchSupport";
 import { getProviderPromptCacheMode } from "@/lib/model/providerPromptCacheSupport";
 import { getProviderAccessHelp } from "@/lib/provider/providerAccessHelp";
+import { resolveAgentRuntimeErrorPresentation } from "@/components/agent/chat/utils/agentRuntimeErrorPresentation";
 import { dedupeModelIds, getProviderTypeLabel } from "./providerConfigUtils";
-import type { ConnectionTestResult } from "./connectionTestTypes";
+import type {
+  ConnectionTestOptions,
+  ConnectionTestResult,
+} from "./connectionTestTypes";
 import {
   buildFalModelFetchStatus,
   buildResponsesModelFetchStatus,
@@ -78,7 +82,10 @@ export interface ProviderSettingProps {
     options?: { replaceExisting?: boolean },
   ) => Promise<void>;
   /** 测试连接回调 */
-  onTestConnection?: (providerId: string) => Promise<ConnectionTestResult>;
+  onTestConnection?: (
+    providerId: string,
+    options?: ConnectionTestOptions,
+  ) => Promise<ConnectionTestResult>;
   /** 删除或停用 Provider 配置回调 */
   onDeleteProvider?: (providerId: string) => Promise<boolean | void>;
   /** 是否正在加载 */
@@ -247,6 +254,11 @@ function readActionErrorMessage(error: unknown): string | null {
 
 function formatActionError(error: unknown, fallback: string): string {
   return readActionErrorMessage(error) ?? fallback;
+}
+
+function formatProviderRuntimeError(error: string | undefined, fallback: string) {
+  const rawMessage = error?.trim() || fallback;
+  return resolveAgentRuntimeErrorPresentation(rawMessage).displayMessage;
 }
 
 // ============================================================================
@@ -460,6 +472,9 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     (!modelFetchApiKeyRequired || hasApiKey || canUseDraftApiKey);
   const apiKeyInputValue = apiKeyDirty ? apiKeyDraft : apiKeyMask;
   const primaryModel = modelList[0] ?? null;
+  const shouldRunChatReadinessTest = Boolean(
+    primaryModel && !isLikelyImageModelCommandModel(primaryModel),
+  );
   const normalizedModelSet = useMemo(
     () => new Set(modelList.map((model) => model.toLowerCase())),
     [modelList],
@@ -975,43 +990,69 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     try {
       await persistDraftApiHost();
       await persistDraftApiKey();
+      const testPrompt = t(
+        "settings.providers.setting.feedback.connection.chatReadyPrompt",
+        "请用一句话回复：连接测试通过。",
+      );
       const result = onTestConnection
-        ? await onTestConnection(provider.id)
-        : await apiKeyProviderApi
-            .testConnection(provider.id, primaryModel ?? undefined)
-            .then((response) => ({
-              success: response.success,
-              latencyMs: response.latency_ms,
-              error: response.error,
-              models: response.models,
-            }));
+        ? await onTestConnection(provider.id, {
+            modelName: primaryModel ?? undefined,
+            requireChatReady: shouldRunChatReadinessTest,
+            prompt: testPrompt,
+          })
+        : shouldRunChatReadinessTest
+          ? await apiKeyProviderApi
+              .testChat(provider.id, primaryModel ?? undefined, testPrompt)
+              .then((response) => ({
+                success: response.success,
+                latencyMs: response.latency_ms,
+                error: response.error,
+              }))
+          : await apiKeyProviderApi
+              .testConnection(provider.id, primaryModel ?? undefined)
+              .then((response) => ({
+                success: response.success,
+                latencyMs: response.latency_ms,
+                error: response.error,
+                models: response.models,
+              }));
 
       if (result.success) {
         setConnectionStatus({
           tone: "success",
           message:
             result.latencyMs !== undefined
-              ? t(
-                  "settings.providers.setting.feedback.connection.successWithLatency",
-                  {
-                    latencyMs: result.latencyMs,
-                  },
-                )
-              : t("settings.providers.setting.feedback.connection.success"),
+              ? shouldRunChatReadinessTest
+                ? t(
+                    "settings.providers.setting.feedback.connection.chatReadyWithLatency",
+                    {
+                      latencyMs: result.latencyMs,
+                    },
+                  )
+                : t(
+                    "settings.providers.setting.feedback.connection.successWithLatency",
+                    {
+                      latencyMs: result.latencyMs,
+                    },
+                  )
+              : shouldRunChatReadinessTest
+                ? t("settings.providers.setting.feedback.connection.chatReady")
+                : t("settings.providers.setting.feedback.connection.success"),
         });
       } else {
         setConnectionStatus({
           tone: "error",
-          message:
-            result.error ||
+          message: formatProviderRuntimeError(
+            result.error,
             t("settings.providers.setting.feedback.connection.failureDefault"),
+          ),
         });
       }
     } catch (error) {
       setConnectionStatus({
         tone: "error",
-        message: formatActionError(
-          error,
+        message: formatProviderRuntimeError(
+          readActionErrorMessage(error) ?? undefined,
           t("settings.providers.setting.feedback.connection.errorDefault"),
         ),
       });
@@ -1028,6 +1069,7 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     primaryModel,
     providerApiKeyRequired,
     provider.id,
+    shouldRunChatReadinessTest,
     t,
   ]);
 
@@ -1743,6 +1785,11 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                       "settings.providers.setting.body.connection.testing",
                       "测试中...",
                     )
+                  : shouldRunChatReadinessTest
+                    ? t(
+                        "settings.providers.setting.body.connection.testChat",
+                        "试跑当前模型",
+                      )
                   : t(
                       "settings.providers.setting.body.connection.test",
                       "测试连接",

@@ -1,9 +1,19 @@
-import { act } from "react";
+import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
+import { resolveLocalFilePreviewUrl } from "@/lib/api/fileSystem";
 import type { Artifact } from "@/lib/artifact/types";
 import { HtmlRenderer } from "./HtmlRenderer";
+
+vi.mock("@/lib/api/fileSystem", () => ({
+  isAbsoluteLocalFilePath: vi.fn((path: string) =>
+    path.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(path),
+  ),
+  resolveLocalFilePreviewUrl: vi.fn((path: string | null | undefined) =>
+    path ? `asset://local/${path}` : null,
+  ),
+}));
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
@@ -25,7 +35,7 @@ function buildArtifact(overrides: Partial<Artifact> = {}): Artifact {
 
 function renderHtmlRenderer(
   overrides: Partial<Artifact> = {},
-  options: { isStreaming?: boolean } = {},
+  options: Partial<ComponentProps<typeof HtmlRenderer>> = {},
 ) {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -35,7 +45,7 @@ function renderHtmlRenderer(
     root.render(
       <HtmlRenderer
         artifact={buildArtifact(overrides)}
-        isStreaming={options.isStreaming}
+        {...options}
       />,
     );
   });
@@ -112,5 +122,47 @@ describe("HtmlRenderer", () => {
     expect(text).toContain("Source content:");
     expect(text).not.toContain("HTML 渲染失败");
     expect(text).not.toContain("源码内容");
+  });
+
+  it("受外部工具栏控制时应切到源码且不渲染内部工具栏", () => {
+    const container = renderHtmlRenderer(
+      { content: "<main>Hello</main>" },
+      { hideToolbar: true, viewMode: "source" },
+    );
+
+    expect(container.querySelector("iframe")).toBeNull();
+    expect(container.textContent).toContain("<main>Hello</main>");
+    expect(container.textContent).not.toContain("Preview");
+    expect(container.textContent).not.toContain("Source");
+  });
+
+  it("有真实 HTML 文件路径时应使用文件 URL 预览而不是 srcDoc", () => {
+    const container = renderHtmlRenderer({
+      content: "<!doctype html><html><body><div id=\"app\">{{ title }}</div></body></html>",
+      meta: { filename: "prototype.html", filePath: "/tmp/lime/prototype.html" },
+    });
+
+    const iframe = container.querySelector("iframe");
+    expect(resolveLocalFilePreviewUrl).toHaveBeenCalledWith(
+      "/tmp/lime/prototype.html",
+    );
+    expect(iframe?.getAttribute("src")).toBe(
+      "asset://local//tmp/lime/prototype.html",
+    );
+    expect(iframe?.getAttribute("srcdoc")).toBeNull();
+    expect(iframe?.getAttribute("sandbox")).toContain("allow-same-origin");
+  });
+
+  it("真实文件 URL 不可用时应回退 srcDoc 预览", () => {
+    vi.mocked(resolveLocalFilePreviewUrl).mockReturnValueOnce(null);
+    const container = renderHtmlRenderer({
+      content: "<main>Fallback</main>",
+      meta: { filename: "prototype.html", filePath: "/tmp/lime/prototype.html" },
+    });
+
+    const iframe = container.querySelector("iframe");
+    expect(iframe?.getAttribute("src")).toBeNull();
+    expect(iframe?.getAttribute("srcdoc")).toContain("Fallback");
+    expect(iframe?.getAttribute("sandbox")).not.toContain("allow-same-origin");
   });
 });

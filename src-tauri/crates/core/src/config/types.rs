@@ -2627,6 +2627,53 @@ impl Default for MemoryResolveConfig {
     }
 }
 
+/// 记忆嵌入模型提供方式
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryEmbeddingProvider {
+    /// 自动选择可用提供方：内置模型优先，其次 OpenAI API
+    #[default]
+    Auto,
+    /// 本地 ONNX 嵌入模型
+    LocalOnnx,
+    /// Lime 内置模型通道
+    Builtin,
+    /// OpenAI API Key Provider
+    OpenaiApi,
+    /// 指定 API Key Provider
+    Provider,
+    /// 关闭向量搜索，仅保留全文检索
+    Disabled,
+}
+
+/// 记忆嵌入模型配置
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MemoryEmbeddingConfig {
+    /// 嵌入模型提供方式
+    #[serde(default)]
+    pub provider: MemoryEmbeddingProvider,
+    /// 指定 Provider ID，仅 provider 模式使用
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
+    /// 嵌入模型 ID
+    #[serde(default = "default_memory_embedding_model")]
+    pub model: String,
+}
+
+fn default_memory_embedding_model() -> String {
+    "text-embedding-3-small".to_string()
+}
+
+impl Default for MemoryEmbeddingConfig {
+    fn default() -> Self {
+        Self {
+            provider: MemoryEmbeddingProvider::Auto,
+            provider_id: None,
+            model: default_memory_embedding_model(),
+        }
+    }
+}
+
 /// 记忆管理配置
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct MemoryConfig {
@@ -2654,6 +2701,9 @@ pub struct MemoryConfig {
     /// 记忆解析行为配置
     #[serde(default)]
     pub resolve: MemoryResolveConfig,
+    /// 向量嵌入模型配置
+    #[serde(default)]
+    pub embedding: MemoryEmbeddingConfig,
 }
 
 /// 图像生成服务配置

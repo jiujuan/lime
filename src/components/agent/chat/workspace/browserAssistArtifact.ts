@@ -97,6 +97,7 @@ export function buildPendingBrowserAssistArtifact(params: {
   profileKey: string;
   url: string;
   title?: string;
+  launchHint?: string;
 }): Artifact {
   const now = Date.now();
 
@@ -113,8 +114,7 @@ export function buildPendingBrowserAssistArtifact(params: {
       profileKey: params.profileKey,
       url: params.url,
       launchState: "launching",
-      launchHint:
-        "正在启动 Chrome、连接调试通道并等待首帧画面，通常需要 3–8 秒。",
+      launchHint: params.launchHint?.trim() || undefined,
       launchError: undefined,
     },
     position: { start: 0, end: 0 },

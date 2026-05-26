@@ -204,6 +204,39 @@ export const agentRuntimeMocks: Record<string, (args?: any) => any> = {
       summary: "mock diff",
     },
   }),
+  agent_runtime_restore_file_checkpoint: (args) => {
+    const request = args?.request ?? {};
+    const checkpoint = {
+      checkpoint_id: request.checkpoint_id || "artifact-document:req-1",
+      turn_id: "turn-1",
+      path: ".lime/artifacts/mock-thread/demo.artifact.json",
+      source: "artifact_document_service",
+      updated_at: "2026-04-15T00:00:00Z",
+      version_no: 2,
+      version_id: "artifact-document:req-1:v2",
+      request_id: "req-1",
+      title: "Mock Checkpoint",
+      kind: "analysis",
+      status: "ready",
+      preview_text: "mock preview",
+      snapshot_path:
+        ".lime/artifacts/mock-thread/versions/demo/v0002.artifact.json",
+      validation_issue_count: 0,
+    };
+
+    return {
+      session_id: request.session_id || "mock-session",
+      thread_id: "mock-thread",
+      checkpoint,
+      live_path: checkpoint.path,
+      snapshot_path: checkpoint.snapshot_path,
+      backup_path:
+        request.create_backup === false
+          ? null
+          : ".lime/file-checkpoint-backups/20260415T000100Z/.lime/artifacts/mock-thread/demo.artifact.json",
+      restored_at: "2026-04-15T00:01:00Z",
+    };
+  },
   agent_runtime_export_analysis_handoff: () => ({
     session_id: "mock-session",
     thread_id: "mock-thread",

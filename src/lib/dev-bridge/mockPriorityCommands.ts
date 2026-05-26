@@ -81,6 +81,7 @@ const bridgeTruthCommands = new Set<string>([
   "agent_runtime_list_file_checkpoints",
   "agent_runtime_get_file_checkpoint",
   "agent_runtime_diff_file_checkpoint",
+  "agent_runtime_restore_file_checkpoint",
   "agent_runtime_promote_queued_turn",
   "agent_runtime_remove_queued_turn",
   "agent_runtime_respond_action",

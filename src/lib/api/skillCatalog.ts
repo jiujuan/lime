@@ -153,6 +153,7 @@ export interface SkillCatalogSceneEntry {
   homePresentation?: SkillCatalogHomePresentation;
   linkedSkillId?: string;
   executionKind?: SkillCatalogExecutionKind | "scene";
+  requestDefaults?: Record<string, string>;
   placeholder?: string;
   templates?: SkillCatalogSceneTemplate[];
   renderContract?: SkillCatalogRenderContract;
@@ -1335,6 +1336,9 @@ function parseSkillCatalogEntry(value: unknown): SkillCatalogEntry | null {
     if (!sceneKey || !commandPrefix) {
       return null;
     }
+    const requestDefaults =
+      normalizeStringRecord(value.requestDefaults) ??
+      normalizeStringRecord(value.request_defaults);
 
     return {
       id,
@@ -1349,6 +1353,7 @@ function parseSkillCatalogEntry(value: unknown): SkillCatalogEntry | null {
       homePresentation,
       linkedSkillId: normalizeText(value.linkedSkillId) ?? undefined,
       executionKind: parseSceneExecutionKind(value.executionKind),
+      ...(requestDefaults ? { requestDefaults } : {}),
       placeholder: normalizeText(value.placeholder) ?? undefined,
       templates: parseSkillCatalogSceneTemplates(value.templates),
       renderContract: parseRenderContract(value.renderContract),

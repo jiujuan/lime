@@ -282,6 +282,16 @@ export interface AgentRuntimeFileCheckpointDiffResult {
   diff?: unknown;
 }
 
+export interface AgentRuntimeFileCheckpointRestoreResult {
+  session_id: string;
+  thread_id: string;
+  checkpoint: AgentRuntimeFileCheckpointSummary;
+  live_path: string;
+  snapshot_path: string;
+  backup_path?: string | null;
+  restored_at: string | number;
+}
+
 export interface AgentRuntimeThreadDiagnostics {
   latest_turn_status?: string;
   latest_turn_started_at?: string | number;
@@ -1233,6 +1243,13 @@ export interface AgentRuntimeGetFileCheckpointRequest {
 export interface AgentRuntimeDiffFileCheckpointRequest {
   session_id: string;
   checkpoint_id: string;
+}
+
+export interface AgentRuntimeRestoreFileCheckpointRequest {
+  session_id: string;
+  checkpoint_id: string;
+  confirm_restore: boolean;
+  create_backup?: boolean;
 }
 
 export interface AgentRuntimeRemoveQueuedTurnRequest {

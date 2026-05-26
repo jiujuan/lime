@@ -354,6 +354,7 @@ impl RuntimeTurnPreparedExecution {
 
         if let Err(error) = execute_agent_app_required_skill_contract(
             app,
+            agent,
             request,
             &self.runtime_turn_execution_context.timeline_recorder,
             workspace_root,

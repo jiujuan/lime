@@ -358,6 +358,9 @@ function buildMockMediaTaskOutput(
               duration_ms: request.durationMs ?? request.duration_ms ?? null,
               source_text: prompt,
               voice: request.voice ?? null,
+              voice_style: request.voiceStyle ?? request.voice_style ?? null,
+              target_language:
+                request.targetLanguage ?? request.target_language ?? null,
             },
           }
         : {

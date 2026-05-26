@@ -10,7 +10,7 @@ const OLLAMA_RUNTIME_PROBE_TIMEOUT_SECS: u64 = 5;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum RuntimeToolCallStrategy {
+pub enum RuntimeToolCallStrategy {
     Native,
     ToolShim,
 }

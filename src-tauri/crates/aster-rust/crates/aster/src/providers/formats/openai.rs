@@ -66,6 +66,36 @@ struct StreamingToolCallAccumulator {
     arguments: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenAiSystemPromptRolePolicy {
+    /// OpenAI-compatible providers are safest with the broadly supported system role.
+    System,
+    /// First-party OpenAI reasoning chat models expect the newer developer role.
+    DeveloperForOpenAiReasoningModels,
+}
+
+fn is_openai_reasoning_chat_model(model_name: &str) -> bool {
+    model_name.starts_with("o1")
+        || model_name.starts_with("o2")
+        || model_name.starts_with("o3")
+        || model_name.starts_with("o4")
+        || model_name.starts_with("gpt-5")
+}
+
+fn system_prompt_role_for_model(
+    policy: OpenAiSystemPromptRolePolicy,
+    model_name: &str,
+) -> &'static str {
+    match policy {
+        OpenAiSystemPromptRolePolicy::DeveloperForOpenAiReasoningModels
+            if is_openai_reasoning_chat_model(model_name) =>
+        {
+            "developer"
+        }
+        _ => "system",
+    }
+}
+
 fn tool_input_delta_message(
     id: String,
     name: Option<String>,
@@ -823,17 +853,33 @@ pub fn create_request(
     image_format: &ImageFormat,
     for_streaming: bool,
 ) -> anyhow::Result<Value, Error> {
+    create_request_with_system_prompt_role_policy(
+        model_config,
+        system,
+        messages,
+        tools,
+        image_format,
+        for_streaming,
+        OpenAiSystemPromptRolePolicy::System,
+    )
+}
+
+pub fn create_request_with_system_prompt_role_policy(
+    model_config: &ModelConfig,
+    system: &str,
+    messages: &[Message],
+    tools: &[Tool],
+    image_format: &ImageFormat,
+    for_streaming: bool,
+    system_prompt_role_policy: OpenAiSystemPromptRolePolicy,
+) -> anyhow::Result<Value, Error> {
     if model_config.model_name.starts_with("o1-mini") {
         return Err(anyhow!(
             "o1-mini model is not currently supported since aster uses tool calling and o1-mini does not support it. Please use o1 or o3 models instead."
         ));
     }
 
-    let is_ox_model = model_config.model_name.starts_with("o1")
-        || model_config.model_name.starts_with("o2")
-        || model_config.model_name.starts_with("o3")
-        || model_config.model_name.starts_with("o4")
-        || model_config.model_name.starts_with("gpt-5");
+    let is_ox_model = is_openai_reasoning_chat_model(&model_config.model_name);
 
     // Only extract reasoning effort for O-series models
     let (model_name, reasoning_effort) = if is_ox_model {
@@ -856,7 +902,7 @@ pub fn create_request(
     };
 
     let system_message = json!({
-        "role": if is_ox_model { "developer" } else { "system" },
+        "role": system_prompt_role_for_model(system_prompt_role_policy, &model_config.model_name),
         "content": system
     });
 
@@ -1708,7 +1754,7 @@ mod tests {
             "model": "o1",
             "messages": [
                 {
-                    "role": "developer",
+                    "role": "system",
                     "content": "system"
                 }
             ],
@@ -1724,10 +1770,35 @@ mod tests {
     }
 
     #[test]
-    fn test_create_request_o3_custom_reasoning_effort() -> anyhow::Result<()> {
-        // Test custom reasoning effort for O3 model
+    fn test_create_request_first_party_openai_gpt5_uses_developer_role() -> anyhow::Result<()> {
         let model_config = ModelConfig {
-            model_name: "o3-mini-high".to_string(),
+            model_name: "gpt-5.4".to_string(),
+            context_limit: Some(4096),
+            temperature: None,
+            max_tokens: Some(1024),
+            toolshim: false,
+            toolshim_model: None,
+            fast_model: None,
+        };
+        let request = create_request_with_system_prompt_role_policy(
+            &model_config,
+            "system",
+            &[],
+            &[],
+            &ImageFormat::OpenAi,
+            false,
+            OpenAiSystemPromptRolePolicy::DeveloperForOpenAiReasoningModels,
+        )?;
+
+        assert_eq!(request["messages"][0]["role"], "developer");
+        assert_eq!(request["model"], "gpt-5.4");
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_request_openai_compatible_gpt5_defaults_to_system_role() -> anyhow::Result<()> {
+        let model_config = ModelConfig {
+            model_name: "gpt-5.4".to_string(),
             context_limit: Some(4096),
             temperature: None,
             max_tokens: Some(1024),
@@ -1742,6 +1813,59 @@ mod tests {
             &[],
             &ImageFormat::OpenAi,
             false,
+        )?;
+
+        assert_eq!(request["messages"][0]["role"], "system");
+        assert_eq!(request["model"], "gpt-5.4");
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_request_deepseek_v4_uses_system_role() -> anyhow::Result<()> {
+        let model_config = ModelConfig {
+            model_name: "deepseek-v4-flash".to_string(),
+            context_limit: Some(4096),
+            temperature: None,
+            max_tokens: Some(1024),
+            toolshim: false,
+            toolshim_model: None,
+            fast_model: None,
+        };
+        let request = create_request(
+            &model_config,
+            "system",
+            &[],
+            &[],
+            &ImageFormat::OpenAi,
+            true,
+        )?;
+
+        assert_eq!(request["messages"][0]["role"], "system");
+        assert_eq!(request["model"], "deepseek-v4-flash");
+        assert_eq!(request["stream"], true);
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_request_o3_custom_reasoning_effort() -> anyhow::Result<()> {
+        // Test custom reasoning effort for O3 model
+        let model_config = ModelConfig {
+            model_name: "o3-mini-high".to_string(),
+            context_limit: Some(4096),
+            temperature: None,
+            max_tokens: Some(1024),
+            toolshim: false,
+            toolshim_model: None,
+            fast_model: None,
+        };
+        let request = create_request_with_system_prompt_role_policy(
+            &model_config,
+            "system",
+            &[],
+            &[],
+            &ImageFormat::OpenAi,
+            false,
+            OpenAiSystemPromptRolePolicy::DeveloperForOpenAiReasoningModels,
         )?;
         let obj = request.as_object().unwrap();
         let expected = json!({

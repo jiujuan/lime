@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import type { Artifact } from "@/lib/artifact/types";
 import {
   resolveBrowserAssistSessionScopeKey,
@@ -99,12 +100,13 @@ function renderHook(props?: Partial<HookProps>) {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
   window.localStorage.clear();
   window.sessionStorage.clear();
   mockSiteRunAdapter.mockReset();
@@ -244,7 +246,7 @@ describe("useWorkspaceBrowserAssistRuntime", () => {
     expect(setLayoutMode).not.toHaveBeenCalled();
   });
 
-  it("existing_session 启动失败时应回退到当前 Chrome 扩展桥接", async () => {
+  it("打开浏览器协助时应只连接当前 Chrome 扩展桥接", async () => {
     mockBrowserExecuteAction.mockResolvedValue({
       success: true,
       action: "navigate",
@@ -396,9 +398,24 @@ describe("useWorkspaceBrowserAssistRuntime", () => {
     expect(mockLaunchBrowserSession).not.toHaveBeenCalled();
     expect(upsertGeneralArtifact).toHaveBeenCalledWith(
       expect.objectContaining({
-        status: "error",
+        status: "pending",
+        meta: expect.objectContaining({
+          launchHint:
+            "正在连接已附着的 Chrome / CDP 会话；Lime 不会自动启动新的托管浏览器。",
+        }),
       }),
     );
+    expect(upsertGeneralArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "error",
+        error: expect.stringContaining("不会自动拉起新的托管浏览器"),
+      }),
+    );
+    expect(
+      upsertGeneralArtifact.mock.calls.some((call) =>
+        JSON.stringify(call[0]).includes("正在启动 Chrome"),
+      ),
+    ).toBe(false);
   });
 
   it("只有 transient 恢复态时不应自动补拉旧浏览器会话", async () => {
@@ -431,5 +448,65 @@ describe("useWorkspaceBrowserAssistRuntime", () => {
         url: "https://www.google.com/",
       }),
     );
+  });
+
+  it("恢复旧 Browser Assist 上下文失败时只标记附着失败，不应拉起托管浏览器", async () => {
+    mockBrowserExecuteAction.mockRejectedValue(
+      new Error("没有可用的 Chrome observer 连接"),
+    );
+
+    const storageKey = resolveBrowserAssistSessionStorageKey(
+      "workspace-1",
+      "session-1",
+    );
+    window.sessionStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        profileKey: "general-browser",
+        url: "https://creator.xiaohongshu.com/",
+        title: "浏览器协助",
+        updatedAt: Date.now(),
+      }),
+    );
+    const upsertGeneralArtifact = vi.fn();
+    const { render } = renderHook({
+      openBrowserAssistOnMount: true,
+      initialUserPrompt: "打开 https://creator.xiaohongshu.com/",
+      upsertGeneralArtifact,
+    });
+
+    await render();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockBrowserExecuteAction).toHaveBeenCalledWith({
+      profile_key: "general-browser",
+      backend: "lime_extension_bridge",
+      action: "navigate",
+      args: {
+        url: "https://creator.xiaohongshu.com/",
+        wait_for_page_info: true,
+      },
+      timeout_ms: 20000,
+    });
+    expect(mockLaunchBrowserSession).not.toHaveBeenCalled();
+    expect(upsertGeneralArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "error",
+        error: expect.stringContaining("不会自动拉起新的托管浏览器"),
+        meta: expect.objectContaining({
+          launchState: "failed",
+          launchError: expect.stringContaining("Chrome 插件或 CDP 会话已连接"),
+        }),
+      }),
+    );
+    expect(
+      upsertGeneralArtifact.mock.calls.some((call) =>
+        JSON.stringify(call[0]).includes("正在启动 Chrome"),
+      ),
+    ).toBe(false);
   });
 });

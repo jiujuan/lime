@@ -805,6 +805,17 @@ mod tests {
                     }
                 }),
             ),
+            (
+                "agent_runtime_restore_file_checkpoint",
+                serde_json::json!({
+                    "request": {
+                        "session_id": "session-1",
+                        "checkpoint_id": "checkpoint-1",
+                        "confirm_restore": true,
+                        "create_backup": true
+                    }
+                }),
+            ),
         ];
 
         for (cmd, args) in cases {

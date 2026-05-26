@@ -1,4 +1,5 @@
 use lime_core::config::{Config, EnvironmentVariableOverride, WebSearchProvider};
+use lime_infra::configure_tokio_command_for_gui;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Mutex, OnceLock};
@@ -366,6 +367,7 @@ async fn read_shell_environment_output() -> Result<Vec<u8>, String> {
         let script = r#"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-ChildItem Env: | ForEach-Object { "{0}={1}" -f $_.Name, $_.Value }"#;
         for shell in ["pwsh", "powershell"] {
             let mut command = Command::new(shell);
+            configure_tokio_command_for_gui(&mut command);
             let output = command
                 .arg("-NoLogo")
                 .arg("-Command")
@@ -391,6 +393,7 @@ async fn read_shell_environment_output() -> Result<Vec<u8>, String> {
 
         for args in [vec!["-lic", "env -0"], vec!["-lc", "env -0"]] {
             let mut command = Command::new(&shell);
+            configure_tokio_command_for_gui(&mut command);
             let output = command.args(&args).output().await;
             match output {
                 Ok(result) if result.status.success() => return Ok(result.stdout),

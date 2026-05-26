@@ -80,13 +80,17 @@ describe("i18n patch retirement gate", () => {
     expect(exitCode).toBe(0);
     expect(writeSpy).toHaveBeenCalledTimes(1);
     const report = JSON.parse(String(writeSpy.mock.calls[0]?.[0] ?? "")) as {
+      advisoryIssues: string[];
       gateIssues: string[];
       legacy: { violationCount: number };
       patch: { retirementCandidate: boolean; status: string };
       retirementReady: boolean;
+      schemaVersion: string;
     };
 
+    expect(report.schemaVersion).toBe("lime.i18n.patchRetirementGate.v1");
     expect(report.retirementReady).toBe(true);
+    expect(report.advisoryIssues).toEqual([]);
     expect(report.gateIssues).toEqual([]);
     expect(report.patch.status).toBe("no-hit");
     expect(report.patch.retirementCandidate).toBe(true);
@@ -151,6 +155,7 @@ describe("i18n patch retirement gate", () => {
     expect(exitCode).toBe(1);
     expect(writeSpy).toHaveBeenCalledTimes(1);
     const report = JSON.parse(String(writeSpy.mock.calls[0]?.[0] ?? "")) as {
+      advisoryIssues: string[];
       gateIssues: string[];
       legacy: { classificationDriftCandidateCount: number; violationCount: number };
       patch: { retirementCandidate: boolean; status: string; thresholdIssueCount: number };
@@ -162,6 +167,9 @@ describe("i18n patch retirement gate", () => {
     expect(report.patch.thresholdIssueCount).toBe(1);
     expect(report.legacy.violationCount).toBe(1);
     expect(report.legacy.classificationDriftCandidateCount).toBe(1);
+    expect(report.advisoryIssues).toEqual(
+      expect.arrayContaining([expect.stringContaining("分类漂移候选")]),
+    );
     expect(report.gateIssues).toEqual(
       expect.arrayContaining([
         expect.stringContaining("Patch status 必须为 no-hit"),

@@ -1,0 +1,598 @@
+import { summarizeEvidencePack } from "./managed-objective-continuation-smoke-core.mjs";
+
+const CHAT_COMPLETIONS_PATH = "/v1/chat/completions";
+const COMPLETION_AUDIT_POLICY = "artifact_or_evidence_required";
+const AUTOMATION_SMOKE_SKILL_TITLE =
+  "Managed Objective Automation Smoke Report";
+
+function pickString(target, ...keys) {
+  for (const key of keys) {
+    const value = target?.[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
+function pickArray(target, ...keys) {
+  for (const key of keys) {
+    const value = target?.[key];
+    if (Array.isArray(value)) {
+      return value;
+    }
+  }
+  return [];
+}
+
+function numberField(target, ...keys) {
+  for (const key of keys) {
+    const value = target?.[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return 0;
+}
+
+function completionAuditSummaryFromPack(evidencePack) {
+  return (
+    evidencePack?.completion_audit_summary ||
+    evidencePack?.completionAuditSummary ||
+    null
+  );
+}
+
+export function workspaceIdFromDefaultProject(workspace) {
+  return String(
+    workspace?.id || workspace?.workspace_id || workspace?.workspaceId || "",
+  ).trim();
+}
+
+export function workspaceRootFromDefaultProject(workspace) {
+  return String(
+    workspace?.root_path || workspace?.rootPath || workspace?.path || "",
+  ).trim();
+}
+
+export function metadataFromRun(run) {
+  if (!run?.metadata) {
+    return null;
+  }
+  if (typeof run.metadata === "object") {
+    return run.metadata;
+  }
+  try {
+    return JSON.parse(String(run.metadata));
+  } catch {
+    return null;
+  }
+}
+
+export function sessionIdFromRun(run) {
+  return String(run?.session_id || run?.sessionId || "").trim();
+}
+
+export function fixtureChatRequests(fixtureRequests) {
+  return fixtureRequests.filter(
+    (request) => request.path === CHAT_COMPLETIONS_PATH,
+  );
+}
+
+export function fixtureChatRequestCount(fixtureRequests) {
+  return fixtureChatRequests(fixtureRequests).length;
+}
+
+export function buildCapabilityDraftRequest(workspaceRoot) {
+  return {
+    workspaceRoot,
+    name: AUTOMATION_SMOKE_SKILL_TITLE,
+    description:
+      "把 Managed Objective automation smoke 的离线 fixture 结果整理成 Markdown 证据报告。",
+    userGoal:
+      "自动化任务执行后，生成一份 Markdown 报告，用于证明 workspace skill 预执行、automation owner run 与 completion audit 均已记录。",
+    sourceKind: "fixture",
+    sourceRefs: ["scripts/managed-objective-automation-smoke.mjs"],
+    permissionSummary: ["Level 0 只读发现", "Level 1 draft-scoped write"],
+    generatedFiles: [
+      {
+        relativePath: "SKILL.md",
+        content: [
+          "---",
+          `name: ${AUTOMATION_SMOKE_SKILL_TITLE}`,
+          "description: 把 Managed Objective automation smoke 的离线 fixture 结果整理成 Markdown 证据报告。",
+          "---",
+          "",
+          `# ${AUTOMATION_SMOKE_SKILL_TITLE}`,
+          "",
+          "## 何时使用",
+          "当自动化任务需要把离线 fixture 结果整理成可审计 Markdown 报告时使用。",
+          "",
+          "## 输入",
+          "- objective: Managed Objective 摘要。",
+          "- fixture_status: 本地 fixture 执行状态。",
+          "",
+          "## 执行步骤",
+          "1. 读取自动化任务上下文和 fixture 状态。",
+          "2. 确认 workspace skill 预执行已经进入 runtime timeline。",
+          "3. 输出 Markdown 报告，包含状态、证据和下一步。",
+          "",
+          "## 输出",
+          "- markdown_report: Markdown 证据报告。",
+        ].join("\n"),
+      },
+      {
+        relativePath: "contract/input.schema.json",
+        content: JSON.stringify(
+          {
+            type: "object",
+            required: ["objective"],
+            properties: {
+              objective: { type: "string" },
+              fixture_status: { type: "string" },
+            },
+            additionalProperties: false,
+          },
+          null,
+          2,
+        ),
+      },
+      {
+        relativePath: "contract/output.schema.json",
+        content: JSON.stringify(
+          {
+            type: "object",
+            required: ["markdown_report"],
+            properties: {
+              markdown_report: { type: "string" },
+              evidence_notes: { type: "array", items: { type: "string" } },
+            },
+            additionalProperties: false,
+          },
+          null,
+          2,
+        ),
+      },
+      {
+        relativePath: "examples/input.sample.json",
+        content: JSON.stringify(
+          {
+            objective: "Managed Objective automation smoke",
+            fixture_status: "completed",
+          },
+          null,
+          2,
+        ),
+      },
+    ],
+  };
+}
+
+export async function registerAutomationSmokeWorkspaceSkill(
+  options,
+  workspaceRoot,
+  invoke,
+) {
+  const createRequest = buildCapabilityDraftRequest(workspaceRoot);
+  const draft = await invoke(options, "capability_draft_create", {
+    request: createRequest,
+  });
+  const draftId = pickString(draft, "draftId", "draft_id");
+  if (!draftId) {
+    throw new Error("capability_draft_create 未返回 draftId");
+  }
+
+  const verification = await invoke(options, "capability_draft_verify", {
+    request: { workspaceRoot, draftId },
+  });
+  const verificationStatus = pickString(
+    verification?.draft,
+    "verificationStatus",
+    "verification_status",
+  );
+  if (verificationStatus !== "verified_pending_registration") {
+    throw new Error(
+      `Capability Draft verification 状态异常: ${verificationStatus}`,
+    );
+  }
+  const failedChecks = pickArray(verification?.report, "checks").filter(
+    (check) => pickString(check, "status") === "failed",
+  );
+  if (failedChecks.length > 0) {
+    throw new Error(
+      `Capability Draft verification 存在失败项: ${JSON.stringify(failedChecks)}`,
+    );
+  }
+
+  const registrationResult = await invoke(
+    options,
+    "capability_draft_register",
+    {
+      request: { workspaceRoot, draftId },
+    },
+  );
+  const registration = registrationResult?.registration || {};
+  const skillDirectory = pickString(
+    registration,
+    "skillDirectory",
+    "skill_directory",
+  );
+  const registeredSkillDirectory = pickString(
+    registration,
+    "registeredSkillDirectory",
+    "registered_skill_directory",
+  );
+  const sourceDraftId =
+    pickString(registration, "sourceDraftId", "source_draft_id") || draftId;
+  const sourceVerificationReportId = pickString(
+    registration,
+    "sourceVerificationReportId",
+    "source_verification_report_id",
+  );
+  if (!skillDirectory || !registeredSkillDirectory) {
+    throw new Error("capability_draft_register 未返回 Skill 注册目录");
+  }
+  if (!sourceVerificationReportId) {
+    throw new Error("capability_draft_register 未返回 verification provenance");
+  }
+
+  const bindingSnapshot = await invoke(
+    options,
+    "agent_runtime_list_workspace_skill_bindings",
+    {
+      request: {
+        workspaceRoot,
+        caller: "assistant",
+        workbench: true,
+        browserAssist: false,
+      },
+    },
+  );
+  const binding = pickArray(bindingSnapshot, "bindings").find((item) => {
+    return (
+      pickString(item, "directory") === skillDirectory ||
+      pickString(
+        item,
+        "registeredSkillDirectory",
+        "registered_skill_directory",
+      ) === registeredSkillDirectory
+    );
+  });
+  if (!binding) {
+    throw new Error("runtime binding readiness 未找到刚注册的 workspace skill");
+  }
+  const bindingStatus = pickString(binding, "bindingStatus", "binding_status");
+  if (bindingStatus !== "ready_for_manual_enable") {
+    throw new Error(`workspace skill binding 尚不可启用: ${bindingStatus}`);
+  }
+
+  return {
+    workspaceRoot,
+    skillDirectory,
+    skillName: `project:${skillDirectory}`,
+    registeredSkillDirectory,
+    sourceDraftId,
+    sourceVerificationReportId,
+    verificationReportId: pickString(
+      verification?.report,
+      "reportId",
+      "report_id",
+    ),
+    registrationId: pickString(
+      registration,
+      "registrationId",
+      "registration_id",
+    ),
+    bindingStatus,
+    permissionSummary: pickArray(
+      registration,
+      "permissionSummary",
+      "permission_summary",
+    ),
+  };
+}
+
+function normalizeSkillBinding(skillBinding) {
+  const skillDirectory = pickString(skillBinding, "skillDirectory");
+  const skillName =
+    pickString(skillBinding, "skillName") ||
+    (skillDirectory ? `project:${skillDirectory}` : "");
+  if (!skillDirectory || !skillName) {
+    throw new Error(
+      "buildAutomationJobRequest 需要已注册的 workspace skill binding",
+    );
+  }
+  return {
+    workspaceRoot: pickString(skillBinding, "workspaceRoot"),
+    skillDirectory,
+    skillName,
+    registeredSkillDirectory: pickString(
+      skillBinding,
+      "registeredSkillDirectory",
+    ),
+    sourceDraftId: pickString(skillBinding, "sourceDraftId"),
+    sourceVerificationReportId: pickString(
+      skillBinding,
+      "sourceVerificationReportId",
+    ),
+    permissionSummary: Array.isArray(skillBinding?.permissionSummary)
+      ? skillBinding.permissionSummary
+      : [],
+  };
+}
+
+function buildManagedObjectiveHarness(skillBinding) {
+  const binding = normalizeSkillBinding(skillBinding);
+  return {
+    agent_envelope: {
+      source: "managed_objective_automation_smoke",
+      skill: binding.skillName,
+      skill_directory: binding.skillDirectory,
+      source_draft_id: binding.sourceDraftId,
+      source_verification_report_id: binding.sourceVerificationReportId,
+      registered_skill_directory: binding.registeredSkillDirectory,
+    },
+    workspace_skill_runtime_enable: {
+      source: "agent_envelope_scheduled_run",
+      approval: "manual",
+      authorization_scope: "session",
+      workspace_root: binding.workspaceRoot,
+      bindings: [
+        {
+          directory: binding.skillDirectory,
+          skill: binding.skillName,
+          registered_skill_directory: binding.registeredSkillDirectory,
+          source_draft_id: binding.sourceDraftId,
+          source_verification_report_id: binding.sourceVerificationReportId,
+          permission_summary: binding.permissionSummary,
+        },
+      ],
+    },
+    agent_app_runtime_skill_contract: {
+      policy: "must_use_required_skills_before_final_artifact",
+      required_skills: [{ skill: binding.skillName, required: true }],
+    },
+    managed_objective: {
+      source: "managed_objective_due_job",
+      owner_type: "automation_job",
+      state: "planned",
+      objective:
+        "Managed Objective automation smoke：通过离线 fixture 执行一次自动化任务，并导出 owner evidence。",
+      success_criteria: [
+        "automation job 执行通过 agent_runtime_submit_turn",
+        "运行记录能按 runtime session 查询 automation owner",
+        "evidence pack 能解释 automation owner 与 objective audit",
+      ],
+      continuation_policy: {
+        mode: "automation_due_job",
+        dispatch: "agent_runtime_submit_turn",
+      },
+      completion_audit: COMPLETION_AUDIT_POLICY,
+      completion_evidence_policy: {
+        kind: "artifact_or_evidence_required",
+        required_successes: 1,
+        failure_block_after: 2,
+        evidence_pack_ref:
+          ".lime/harness/managed-objective-automation-smoke/evidence-pack",
+        artifact_refs: ["reports/managed-objective-automation-smoke.md"],
+        blocked_user_prompt: "请检查自动化配置后重试。",
+      },
+    },
+  };
+}
+
+function futureAtSchedule() {
+  return {
+    kind: "at",
+    at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  };
+}
+
+function normalizeLocalFixtureProviderConfig(provider) {
+  const providerConfig = provider?.providerConfig;
+  const baseUrl = String(
+    providerConfig?.base_url || providerConfig?.baseUrl || "",
+  ).trim();
+  if (!providerConfig || !baseUrl) {
+    throw new Error(
+      "buildAutomationJobRequest 需要 localhost fixture provider_config",
+    );
+  }
+  if (!/^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?(?:\/|$)/.test(baseUrl)) {
+    throw new Error(
+      "默认 automation smoke 只允许 localhost fixture provider_config",
+    );
+  }
+
+  return {
+    ...providerConfig,
+    base_url: baseUrl,
+  };
+}
+
+export function buildAutomationJobRequest(workspaceId, skillBinding, provider) {
+  const timestamp = new Date().toISOString();
+  return {
+    name: `Managed Objective automation smoke ${timestamp}`,
+    description: "offline managed objective automation owner smoke",
+    enabled: true,
+    workspace_id: workspaceId,
+    execution_mode: "skill",
+    schedule: futureAtSchedule(),
+    payload: {
+      kind: "agent_turn",
+      prompt: [
+        "请生成一份 Markdown 证据报告，标题必须是 `# Managed Objective Automation Smoke Report`。",
+        "报告需包含 status、evidence、next step 三个要点。",
+        "不要调用外部网络；只使用当前离线 fixture 与已预执行的 workspace skill 证据。",
+      ].join("\n"),
+      web_search: false,
+      approval_policy: "on-request",
+      sandbox_policy: "workspace-write",
+      provider_config: normalizeLocalFixtureProviderConfig(provider),
+      request_metadata: {
+        artifact_mode: "draft",
+        artifact_stage: "stage2",
+        artifact_kind: "report",
+        artifact_request_id: `managed-objective-automation-smoke:${timestamp}`,
+        title: "Managed Objective Automation Smoke Report",
+        harness: buildManagedObjectiveHarness(skillBinding),
+      },
+    },
+    delivery: { mode: "none", best_effort: true },
+    timeout_secs: 120,
+    max_retries: 1,
+  };
+}
+
+export function buildAutomationFixtureMarkdown() {
+  return [
+    "# Managed Objective Automation Smoke Report",
+    "",
+    "- status: completed",
+    "- evidence: workspace skill preexecution and automation owner run were recorded.",
+    "- next step: export evidence pack and verify completion audit summary.",
+  ].join("\n");
+}
+
+export function buildAutomationSmokeEvidence({
+  generatedAt,
+  options,
+  health,
+  workspace,
+  provider,
+  providerSessionId,
+  job,
+  runResult,
+  latestRun,
+  latestRunMetadata,
+  runtimeSnapshot,
+  evidencePack,
+  fixtureRequests,
+}) {
+  const runSessionId = sessionIdFromRun(latestRun);
+  const harness = latestRunMetadata?.harness || null;
+  const managedObjective =
+    harness?.managed_objective || harness?.managedObjective || null;
+  const workspaceSkillRuntimeEnable =
+    harness?.workspace_skill_runtime_enable ||
+    harness?.workspaceSkillRuntimeEnable ||
+    null;
+  const agentEnvelope =
+    harness?.agent_envelope || harness?.agentEnvelope || null;
+  const auditSummary = completionAuditSummaryFromPack(evidencePack);
+  const chatRequests = fixtureChatRequests(fixtureRequests);
+  const assertions = {
+    jobCreated: Boolean(job?.id),
+    runSucceeded:
+      Number(runResult?.success_count ?? runResult?.successCount ?? 0) >= 1,
+    runHistoryHasSession: Boolean(runSessionId),
+    ownerRunMatchesJob:
+      String(latestRun?.source || "") === "automation" &&
+      String(latestRun?.source_ref || latestRun?.sourceRef || "") ===
+        String(job?.id || ""),
+    managedObjectiveProjected:
+      managedObjective?.owner_id === job?.id &&
+      managedObjective?.continuation_policy?.dispatch ===
+        "agent_runtime_submit_turn",
+    ownerRunHasAuditInputs:
+      Boolean(agentEnvelope) &&
+      Boolean(workspaceSkillRuntimeEnable) &&
+      managedObjective?.completion_audit === COMPLETION_AUDIT_POLICY,
+    evidencePackExported: Boolean(evidencePack),
+    ownerAuditInputReady: Array.isArray(auditSummary?.ownerAuditStatuses)
+      ? auditSummary.ownerAuditStatuses.includes("audit_input_ready")
+      : false,
+    workspaceSkillToolCallRecorded:
+      numberField(
+        auditSummary,
+        "workspaceSkillToolCallCount",
+        "workspace_skill_tool_call_count",
+      ) > 0 || auditSummary?.requiredEvidence?.workspaceSkillToolCall === true,
+    artifactRecorded:
+      numberField(auditSummary, "artifactCount", "artifact_count") > 0 ||
+      numberField(
+        evidencePack,
+        "recentArtifactCount",
+        "recent_artifact_count",
+      ) > 0,
+    completionAuditCompleted: auditSummary?.decision === "completed",
+    fixtureReceivedChatCompletion: chatRequests.length > 0,
+  };
+
+  return {
+    schemaVersion: "v1",
+    scenarioId: "managed-objective-automation-owner",
+    status: Object.values(assertions).every(Boolean) ? "pass" : "fail",
+    generatedAt,
+    command: "smoke:managed-objective-automation",
+    coverage: {
+      usesDevBridgeCurrentCommands: true,
+      usesAutomationJobOwner: true,
+      usesCurrentRuntimeSubmitTurn: true,
+      usesRegisteredWorkspaceSkill: Boolean(workspaceSkillRuntimeEnable),
+      usesLocalFixtureProvider: provider?.source === "localhost-fixture",
+      avoidsLiveProviderByDefault: !options.allowLiveProvider,
+      evidencePackExported: Boolean(evidencePack),
+    },
+    config: {
+      timeoutMs: options.timeoutMs,
+      intervalMs: options.intervalMs,
+      providerMode: "fixture",
+    },
+    devBridge: {
+      healthStatus: health?.status || null,
+    },
+    workspace: {
+      id:
+        workspace?.id ||
+        workspace?.workspace_id ||
+        workspace?.workspaceId ||
+        null,
+      name: workspace?.name || null,
+    },
+    provider: {
+      providerPreference: provider?.providerPreference || null,
+      providerName: provider?.providerName || null,
+      modelPreference: provider?.modelPreference || null,
+      source: provider?.source || null,
+      baseUrl: provider?.providerConfig?.base_url || null,
+      providerSessionId,
+    },
+    automation: {
+      jobId: job?.id || null,
+      runResult,
+      latestRun: latestRun
+        ? {
+            id: latestRun.id || null,
+            source: latestRun.source || null,
+            sourceRef: latestRun.source_ref || latestRun.sourceRef || null,
+            sessionId: runSessionId || null,
+            status: latestRun.status || null,
+            startedAt: latestRun.started_at || latestRun.startedAt || null,
+            finishedAt: latestRun.finished_at || latestRun.finishedAt || null,
+          }
+        : null,
+      runMetadata: {
+        agentEnvelope,
+        managedObjective,
+        workspaceSkillRuntimeEnable,
+      },
+    },
+    runtime: {
+      sessionId: runSessionId || null,
+      finalSnapshot: runtimeSnapshot,
+    },
+    evidencePack: summarizeEvidencePack(evidencePack),
+    fixture: {
+      requestCount: fixtureRequests.length,
+      chatCompletionRequestCount: chatRequests.length,
+      models: Array.from(
+        new Set(
+          chatRequests.map((request) => request.body?.model).filter(Boolean),
+        ),
+      ),
+    },
+    assertions,
+  };
+}

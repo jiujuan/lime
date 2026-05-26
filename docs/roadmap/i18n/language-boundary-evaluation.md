@@ -2,7 +2,7 @@
 
 > 关联 PRD：`docs/roadmap/i18n/prd.md`
 > 关联进度：`docs/roadmap/i18n/implementation-progress.md`
-> 评估时间：2026-05-24
+> 评估时间：2026-05-26
 
 ## 评估目标
 
@@ -20,20 +20,20 @@
   - `unknownLanguageLike`
 - 证据已落盘到 `docs/roadmap/i18n/evidence/language-boundary-report.json`。
 - 报告已支持 `--category <category>` 聚焦输出，并在 summary 中提供 file / marker 热点，便于后续把新增 language-like 字段挂回明确边界。
-- 当前全量扫描 3007 个源码文件，识别 1935 个 marker。
+- 当前全量扫描 3128 个源码文件，识别 1999 个 marker。
 - `contentTargetLanguage` 聚焦证据已落盘到 `docs/roadmap/i18n/evidence/content-target-language-boundary-report.json`。
 
 ## 当前统计
 
 | 分类 | 数量 | 说明 |
 | ---- | ---- | ---- |
-| `uiLocale` | 1081 | 主要来自 i18next、格式化、设置页、配置默认值和运行时导出 locale |
-| `contentTargetLanguage` | 418 | Artifact、Knowledge、media task、workspace artifact preview 等内容 / 产物语言 |
-| `codeLanguage` | 121 | code fence、Markdown renderer、Artifact parser、general chat code block language |
-| `asrLanguage` | 97 | 语音模型、语音输入、转写任务和 ASR 配置 |
-| `browserEnvironmentLanguage` | 91 | Browser Environment preset 的 `Accept-Language`、locale、WebView 启动语言 |
-| `agentResponseLanguage` | 32 | Agent request metadata、prompt stage 与 runtime projection 的 response language |
-| `unknownLanguageLike` | 95 | 仍需人工判定的 language-like marker |
+| `uiLocale` | 1111 | 主要来自 i18next、格式化、设置页、配置默认值和运行时导出 locale |
+| `contentTargetLanguage` | 428 | Artifact、Knowledge、media task、workspace artifact preview 等内容 / 产物语言 |
+| `codeLanguage` | 177 | code fence、Markdown renderer、Artifact parser、general chat code block language |
+| `asrLanguage` | 123 | 语音模型、语音输入、转写任务和 ASR 配置 |
+| `browserEnvironmentLanguage` | 114 | Browser Environment preset 的 `Accept-Language`、locale、WebView 启动语言 |
+| `agentResponseLanguage` | 45 | Agent request metadata、prompt stage 与 runtime projection 的 response language |
+| `unknownLanguageLike` | 1 | 当前仅剩 `vision-language` 模型能力别名这一条人工复核 false positive，不是 UI locale / 自然语言偏好 |
 
 ## Content target language 证据
 
@@ -43,20 +43,20 @@
 npm run i18n:language-boundary-report:json -- --category contentTargetLanguage --output "docs/roadmap/i18n/evidence/content-target-language-boundary-report.json"
 ```
 
-当前 `contentTargetLanguage=418`，marker 分布为：
+当前 `contentTargetLanguage=428`，marker 分布为：
 
 | marker | 数量 | 说明 |
 | ------ | ---- | ---- |
 | `language` | 257 | Artifact document、Knowledge、media task 等内容元数据 |
-| `target_language` | 82 | Service Skill / task payload 中的显式任务目标语言 |
-| `targetLanguage` | 48 | 前端派生 payload、预览或 helper 层的 camelCase 形式 |
-| `locale` | 31 | 已被 Artifact / content 相关路径吸收的 locale-like 内容字段，后续修改时仍需人工确认是否真是内容语言 |
+| `target_language` | 90 | Service Skill / task payload 中的显式任务目标语言 |
+| `targetLanguage` | 49 | 前端派生 payload、预览或 helper 层的 camelCase 形式 |
+| `locale` | 32 | 已被 Artifact / content 相关路径吸收的 locale-like 内容字段，后续修改时仍需人工确认是否真是内容语言 |
 
 当前热点文件前五位：
 
 | 文件 | 数量 | 边界判断 |
 | ---- | ---- | ---- |
-| `src-tauri/src/commands/media_task_cmd.rs` | 46 | media task 产物语言 / 内容语言 |
+| `src-tauri/src/commands/media_task_cmd.rs` | 57 | media task 产物语言 / 内容语言 |
 | `src/components/artifact/ArtifactToolbar.test.ts` | 24 | Artifact UI 测试里的内容 language fixture |
 | `src/components/agent/chat/utils/taskPreviewFromToolResult.ts` | 22 | tool result preview 的内容语言展示 |
 | `src-tauri/crates/knowledge/src/lib.rs` | 19 | Knowledge 内容语言元数据 |
@@ -68,6 +68,8 @@ npm run i18n:language-boundary-report:json -- --category contentTargetLanguage -
 
 Artifact document runtime 也已收口：validator 会保留显式 `document.language`，只在缺失时回退 `zh-CN`；stage2 output schema 会优先读取 turn metadata 里的 `target_language` / `artifact_language` / `content_target_language` 并把文档 `language` enum 收窄到该内容语言。该链路没有读取 UI locale 或 `Config.language`。
 
+Media task runtime 继续收口：`audio_generate` 会把显式 `target_language` 同步保留到 pending / failed / completed 的 `audio_output` 摘要，并在支持 instruction 的 provider 请求中按该内容目标语言生成语音指令；`transcription_generate` 的 `language: "auto"` 只表示 ASR 自动识别，不会被发送为 provider 的显式语言参数，完成态 transcript language 以 provider 返回值为准。两条链路都没有从 UI locale 或 `Config.language` 自动派生内容 / ASR 语言。
+
 ## 结论
 
 当前不应直接新增一个全局 `response language` 并复用 `Config.language`。
@@ -75,16 +77,16 @@ Artifact document runtime 也已收口：validator 会保留显式 `document.lan
 原因：
 
 1. 仓库里已经有 UI locale、Browser Environment、Artifact / Knowledge 内容语言、ASR 语言和 code block language 多套语义。
-2. `unknownLanguageLike=95` 已收敛到可人工 review 的规模，但仍说明还有若干泛名字段尚未被清晰归类，贸然接入统一字段会扩大语义混用风险。
+2. `unknownLanguageLike=1` 已收敛到人工复核 false positive：`src/lib/model/oemCloudModelMetadata.ts` 的 `"vision-language"` 是模型能力别名，不是自然语言偏好；这证明 current 代码里的真实 language-like 字段已基本挂回明确边界。
 3. Browser Environment 里的 `Accept-Language` 已经是独立事实源，不能跟随 Lime UI locale 自动变化。
 4. Artifact / Knowledge 的 `language` 更接近内容产物语言，也不应被 UI language 自动覆盖。
 
 ## 建议下一步
 
-1. 先按 `unknownLanguageLike` 与 `contentTargetLanguage` 热点继续人工复核，尤其是 workspace artifact preview、transcription task preview、CLI 参数、mock fixture 和 Artifact renderer 中的泛名 `language` / `locale` 字段。
-2. 实现 AI response language 前，先选定独立事实源，例如 workspace preference 或 agent request metadata，而不是复用 `Config.language`。
+1. 继续把唯一剩余 `unknownLanguageLike` 当作人工复核哨兵保留；如果后续出现新的 unknown，必须在同一刀内归类或说明其不是自然语言偏好。
+2. 后续扩展 AI response language 时，继续沿 workspace preference / agent request metadata 独立事实源，不回退复用 `Config.language`。
 3. 每次修改 language-like 字段时复跑 `npm run i18n:language-boundary-report:json`；若改动涉及 Artifact / 文档 / 文章 / 翻译 / media task，再额外复跑 `--category contentTargetLanguage`。
-4. 在剩余 unknown 被确认不会与 UI locale 混用后，再推进 response language 设置入口和 request metadata 注入。
+4. 后续新增 language-like 字段时，优先扩展分类规则和测试，而不是重新扩大模糊 unknown 池。
 
 ## 证据链接
 

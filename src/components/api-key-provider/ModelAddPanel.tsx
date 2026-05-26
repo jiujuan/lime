@@ -143,6 +143,7 @@ interface ModelAddPanelProps {
     providerId: string,
     apiKey: string,
     alias?: string,
+    options?: { replaceExisting?: boolean },
   ) => Promise<unknown>;
   onActivated: (providerId: string) => void;
   onCancel: () => void;
@@ -299,7 +300,7 @@ const FEATURED_TEMPLATES: ProviderTemplate[] = [
     apiHost: "https://token-plan-cn.xiaomimimo.com/anthropic",
     recommended: true,
     apiKeyUrl: "https://mimo.mi.com/",
-    defaultModels: ["mimo-v2.5-pro"],
+    defaultModels: [],
     iconProviderId: "xiaomi",
     providerResourceId: "xiaomi",
     region: "cn",
@@ -1237,7 +1238,9 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
           persistedApiKey.value === nextApiKey
         )
       ) {
-        await onAddApiKey(providerId, nextApiKey);
+        await onAddApiKey(providerId, nextApiKey, undefined, {
+          replaceExisting: true,
+        });
         setPersistedApiKey({ providerId, value: nextApiKey });
       }
 
@@ -1506,7 +1509,9 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
           persistedApiKey.value === nextApiKey
         )
       ) {
-        await onAddApiKey(providerId, nextApiKey);
+        await onAddApiKey(providerId, nextApiKey, undefined, {
+          replaceExisting: true,
+        });
         setPersistedApiKey({ providerId, value: nextApiKey });
       }
 

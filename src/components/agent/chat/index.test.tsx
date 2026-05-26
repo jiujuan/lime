@@ -15,11 +15,19 @@ import {
   resolveBrowserAssistSessionScopeKey,
   resolveBrowserAssistSessionStorageKey,
 } from "./utils/browserAssistSession";
+import { agentEnUSResource } from "@/i18n/agentResources";
 import {
   notifyTaskCenterTaskOpen,
   requestTaskCenterDraftTask,
 } from "./taskCenterDraftTaskEvents";
 import { TASK_CENTER_OPEN_TAB_IDS_STORAGE_KEY } from "./utils/taskCenterTabs";
+
+const WORKSPACE_HARNESS_TITLE =
+  agentEnUSResource["agentChat.workspaceHarnessDialog.title"];
+const WORKSPACE_HARNESS_DESCRIPTION =
+  agentEnUSResource["agentChat.workspaceHarnessDialog.description"];
+const GENERAL_ASSISTANT_TITLE =
+  agentEnUSResource["agentChat.runtimeStrip.title.general"];
 
 const {
   mockUseDeveloperFeatureFlags,
@@ -3617,14 +3625,14 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     ) as HTMLDivElement | null;
     expect(navbar?.dataset.showHarnessToggle).toBe("true");
     expect(navbar?.dataset.harnessToggleLabel).toBe("Harness");
-    expect(document.body.textContent).not.toContain("处理工作台");
-    expect(document.body.textContent).not.toContain("通用助手");
+    expect(document.body.textContent).not.toContain(WORKSPACE_HARNESS_TITLE);
+    expect(document.body.textContent).not.toContain(GENERAL_ASSISTANT_TITLE);
 
     clickButton(container, "toggle-harness");
     await flushEffects();
 
-    expect(document.body.textContent).toContain("处理工作台");
-    expect(document.body.textContent).toContain("通用助手");
+    expect(document.body.textContent).toContain(WORKSPACE_HARNESS_TITLE);
+    expect(document.body.textContent).toContain(GENERAL_ASSISTANT_TITLE);
   });
 
   it("通用模式有处理活动时应通过顶部 Harness 按钮打开弹窗，而不是常驻右侧占位", async () => {
@@ -3645,17 +3653,15 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     ) as HTMLDivElement | null;
     expect(navbar?.dataset.showHarnessToggle).toBe("true");
     expect(navbar?.dataset.harnessToggleLabel).toBe("Harness");
-    expect(document.body.textContent).not.toContain("处理工作台");
-    expect(document.body.textContent).not.toContain("通用助手");
+    expect(document.body.textContent).not.toContain(WORKSPACE_HARNESS_TITLE);
+    expect(document.body.textContent).not.toContain(GENERAL_ASSISTANT_TITLE);
 
     clickButton(container, "toggle-harness");
     await flushEffects();
 
-    expect(document.body.textContent).toContain("处理工作台");
-    expect(document.body.textContent).toContain("通用助手");
-    expect(document.body.textContent).toContain(
-      "集中查看计划、待确认事项、任务进展、文件活动和处理结果。",
-    );
+    expect(document.body.textContent).toContain(WORKSPACE_HARNESS_TITLE);
+    expect(document.body.textContent).toContain(GENERAL_ASSISTANT_TITLE);
+    expect(document.body.textContent).toContain(WORKSPACE_HARNESS_DESCRIPTION);
   });
 
   it("处理工作台调试信息开关关闭时仍应保留入口，但不触发工具库存读取", async () => {
@@ -3674,13 +3680,13 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     ) as HTMLDivElement | null;
     expect(navbar?.dataset.showHarnessToggle).toBe("true");
     expect(navbar?.dataset.harnessToggleLabel).toBe("Harness");
-    expect(document.body.textContent).not.toContain("处理工作台");
+    expect(document.body.textContent).not.toContain(WORKSPACE_HARNESS_TITLE);
     expect(mockGetAgentRuntimeToolInventory).not.toHaveBeenCalled();
 
     clickButton(container, "toggle-harness");
     await flushEffects();
 
-    expect(document.body.textContent).toContain("处理工作台");
+    expect(document.body.textContent).toContain(WORKSPACE_HARNESS_TITLE);
     expect(mockGetAgentRuntimeToolInventory).not.toHaveBeenCalled();
   });
 
@@ -4207,7 +4213,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     clickButton(container, "toggle-harness");
     await flushEffects();
 
-    expect(document.body.textContent).toContain("处理工作台");
+    expect(document.body.textContent).toContain(WORKSPACE_HARNESS_TITLE);
     expect(document.body.textContent).not.toContain("已激活技能");
     expect(
       document.body.querySelector('button[aria-label="跳转到已激活技能"]'),
@@ -4513,6 +4519,58 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     expect(generalCanvas?.dataset.contentType).toBe("markdown");
     expect(generalCanvas?.dataset.content || "").toContain(
       "![封面](images/cover.png)",
+    );
+  });
+
+  it("工具结果只提供文件路径时应读取真实文件预览再打开通用画布", async () => {
+    mockCanvasWorkbenchLayoutState.renderPreview = true;
+    vi.spyOn(fileBrowserModule, "readFilePreview").mockResolvedValue({
+      path: "/tmp/project-tool-file/src/components/App.tsx",
+      content: "export function App() {\n  return <main>Lime</main>;\n}\n",
+      isBinary: false,
+      size: 56,
+      error: null,
+    });
+
+    const container = renderPage({
+      projectId: "project-tool-file",
+      theme: "general",
+      lockTheme: true,
+    });
+    await flushEffects(10);
+
+    const latestMessageListProps = mockMessageList.mock.calls.at(-1)?.[0] as
+      | {
+          onFileClick?: (fileName: string, content: string) => void;
+        }
+      | undefined;
+
+    act(() => {
+      latestMessageListProps?.onFileClick?.("src/components/App.tsx", "");
+    });
+    await flushEffects(12);
+
+    expect(fileBrowserModule.readFilePreview).toHaveBeenCalledWith(
+      "/tmp/project-tool-file/src/components/App.tsx",
+      64 * 1024,
+    );
+    expect(
+      container
+        .querySelector('[data-testid="layout-transition"]')
+        ?.getAttribute("data-mode"),
+    ).toBe("chat-canvas");
+
+    const generalCanvas = container.querySelector(
+      '[data-testid="general-canvas"]',
+    ) as HTMLDivElement | null;
+    expect(generalCanvas).not.toBeNull();
+    expect(generalCanvas?.dataset.filename).toBe("src/components/App.tsx");
+    expect(generalCanvas?.dataset.baseFilePath).toBe(
+      "/tmp/project-tool-file/src/components/App.tsx",
+    );
+    expect(generalCanvas?.dataset.contentType).toBe("code");
+    expect(generalCanvas?.dataset.content || "").toContain(
+      "return <main>Lime</main>;",
     );
   });
 

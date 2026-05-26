@@ -5,8 +5,8 @@
   "sourceLocale": "zh-CN",
   "sourceLocaleExport": {
     "namespaceCount": 13,
-    "sourceKeyCount": 7200,
-    "totalRawBytes": 627489
+    "sourceKeyCount": 7493,
+    "totalRawBytes": 646959
   },
   "translationCoverage": {
     "coverageRatio": 1,
@@ -14,14 +14,14 @@
     "fullCoverageLocaleCount": 4,
     "localeCount": 4,
     "missingKeyCount": 0,
-    "sourceKeyCount": 7200,
-    "translatedKeyCount": 28800
+    "sourceKeyCount": 7493,
+    "translatedKeyCount": 29972
   },
   "summary": {
     "localeCount": 5,
     "localesWithGaps": 0,
     "namespaceCount": 13,
     "proposedEntryCount": 0,
-    "sourceKeyCount": 7200
+    "sourceKeyCount": 7493
   }
 }

@@ -15,9 +15,92 @@ fn resolve_turn_execution_profile_should_use_fast_chat_for_plain_general_message
     let policy = lime_agent::resolve_request_tool_policy(Some(false), false);
 
     assert_eq!(
-        resolve_turn_execution_profile(&request, RuntimeChatMode::General, &policy, false,),
+        resolve_turn_execution_profile(
+            &request,
+            RuntimeChatMode::General,
+            &policy,
+            false,
+            AsterExecutionStrategy::React,
+        ),
         TurnExecutionProfile::FastChat
     );
+}
+
+#[test]
+fn resolve_turn_execution_profile_should_use_full_runtime_for_code_orchestrated_effective_strategy()
+{
+    let request = build_runtime_turn_test_request(
+        "继续修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
+        Some(json!({
+            "harness": {
+                "theme": "general",
+                "chat_mode": "general",
+                "preferences": {
+                    "web_search": false,
+                    "thinking": false,
+                    "task": false,
+                    "subagent": false
+                }
+            }
+        })),
+    );
+    let policy = lime_agent::resolve_request_tool_policy(Some(false), false);
+
+    assert_eq!(
+        resolve_turn_execution_profile(
+            &request,
+            RuntimeChatMode::General,
+            &policy,
+            false,
+            AsterExecutionStrategy::CodeOrchestrated,
+        ),
+        TurnExecutionProfile::FullRuntime
+    );
+}
+
+#[test]
+fn apply_code_orchestrated_runtime_defaults_should_enable_code_runtime_preferences() {
+    let mut request = build_runtime_turn_test_request(
+        "继续修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
+        Some(json!({
+            "harness": {
+                "theme": "general",
+                "chat_mode": "general",
+                "preferences": {
+                    "web_search": false,
+                    "thinking": false,
+                    "task": false,
+                    "subagent": false
+                }
+            }
+        })),
+    );
+
+    apply_code_orchestrated_runtime_defaults(
+        &mut request,
+        AsterExecutionStrategy::CodeOrchestrated,
+    );
+
+    let harness = request
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.get("harness"))
+        .and_then(serde_json::Value::as_object)
+        .expect("harness metadata");
+    let preferences = harness
+        .get("preferences")
+        .and_then(serde_json::Value::as_object)
+        .expect("preferences metadata");
+
+    assert_eq!(preferences.get("task"), Some(&json!(true)));
+    assert_eq!(preferences.get("subagent"), Some(&json!(true)));
+    assert_eq!(harness.get("task_mode_enabled"), Some(&json!(true)));
+    assert_eq!(harness.get("subagent_mode_enabled"), Some(&json!(true)));
+    assert_eq!(
+        harness.get("preferred_team_preset_id"),
+        Some(&json!("code-triage-team"))
+    );
+    assert!(harness.get("code_command").is_none());
 }
 
 #[test]
@@ -40,7 +123,13 @@ fn resolve_turn_execution_profile_should_keep_fast_chat_for_default_browser_assi
     let policy = lime_agent::resolve_request_tool_policy(Some(false), false);
 
     assert_eq!(
-        resolve_turn_execution_profile(&request, RuntimeChatMode::General, &policy, false,),
+        resolve_turn_execution_profile(
+            &request,
+            RuntimeChatMode::General,
+            &policy,
+            false,
+            AsterExecutionStrategy::React,
+        ),
         TurnExecutionProfile::FastChat
     );
 }
@@ -62,7 +151,13 @@ fn resolve_turn_execution_profile_should_use_full_runtime_for_service_skill_laun
     let policy = lime_agent::resolve_request_tool_policy(Some(false), false);
 
     assert_eq!(
-        resolve_turn_execution_profile(&request, RuntimeChatMode::General, &policy, false,),
+        resolve_turn_execution_profile(
+            &request,
+            RuntimeChatMode::General,
+            &policy,
+            false,
+            AsterExecutionStrategy::React,
+        ),
         TurnExecutionProfile::FullRuntime
     );
 }
@@ -88,7 +183,13 @@ fn resolve_turn_execution_profile_should_use_full_runtime_for_image_skill_launch
     let policy = lime_agent::resolve_request_tool_policy(Some(false), false);
 
     assert_eq!(
-        resolve_turn_execution_profile(&request, RuntimeChatMode::General, &policy, false,),
+        resolve_turn_execution_profile(
+            &request,
+            RuntimeChatMode::General,
+            &policy,
+            false,
+            AsterExecutionStrategy::React,
+        ),
         TurnExecutionProfile::FullRuntime
     );
 }
@@ -100,7 +201,13 @@ fn resolve_turn_execution_profile_should_keep_fast_chat_for_allowed_web_search()
     let policy = lime_agent::resolve_request_tool_policy(Some(true), false);
 
     assert_eq!(
-        resolve_turn_execution_profile(&request, RuntimeChatMode::General, &policy, false,),
+        resolve_turn_execution_profile(
+            &request,
+            RuntimeChatMode::General,
+            &policy,
+            false,
+            AsterExecutionStrategy::React,
+        ),
         TurnExecutionProfile::FastChat
     );
 }
@@ -117,7 +224,13 @@ fn resolve_turn_execution_profile_should_use_full_runtime_for_required_web_searc
     );
 
     assert_eq!(
-        resolve_turn_execution_profile(&request, RuntimeChatMode::General, &policy, false,),
+        resolve_turn_execution_profile(
+            &request,
+            RuntimeChatMode::General,
+            &policy,
+            false,
+            AsterExecutionStrategy::React,
+        ),
         TurnExecutionProfile::FullRuntime
     );
 }

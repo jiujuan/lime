@@ -2,7 +2,10 @@ use super::api_client::{ApiClient, AuthMethod};
 use super::base::{ConfigKey, ModelInfo, Provider, ProviderMetadata, ProviderUsage, Usage};
 use super::embedding::{EmbeddingCapable, EmbeddingRequest, EmbeddingResponse};
 use super::errors::ProviderError;
-use super::formats::openai::{create_request, get_usage, response_to_message};
+use super::formats::openai::{
+    create_request_with_system_prompt_role_policy, get_usage, response_to_message,
+    OpenAiSystemPromptRolePolicy,
+};
 use super::formats::openai_responses::{
     create_responses_request, get_responses_usage, responses_api_to_message,
     responses_api_to_streaming_message, ResponsesApiResponse, ResponsesRequestOptions,
@@ -207,6 +210,35 @@ impl OpenAiProvider {
 
     fn uses_responses_api(model_name: &str) -> bool {
         Self::force_responses_api() || Self::looks_like_codex_responses_model(model_name)
+    }
+
+    fn is_first_party_openai_host(host: &str) -> bool {
+        let trimmed = host.trim();
+        if trimmed.eq_ignore_ascii_case("api.openai.com") {
+            return true;
+        }
+
+        url::Url::parse(trimmed)
+            .ok()
+            .and_then(|url| {
+                url.host_str()
+                    .map(|host| host.eq_ignore_ascii_case("api.openai.com"))
+            })
+            .unwrap_or(false)
+    }
+
+    fn chat_completions_system_prompt_role_policy_for_host(
+        host: &str,
+    ) -> OpenAiSystemPromptRolePolicy {
+        if Self::is_first_party_openai_host(host) {
+            OpenAiSystemPromptRolePolicy::DeveloperForOpenAiReasoningModels
+        } else {
+            OpenAiSystemPromptRolePolicy::System
+        }
+    }
+
+    fn chat_completions_system_prompt_role_policy(&self) -> OpenAiSystemPromptRolePolicy {
+        Self::chat_completions_system_prompt_role_policy_for_host(self.api_client.host())
     }
 
     fn responses_path_from_base_path(base_path: &str) -> String {
@@ -431,13 +463,14 @@ impl Provider for OpenAiProvider {
             log.write(&json_response, Some(&usage))?;
             Ok((message, ProviderUsage::new(model, usage)))
         } else {
-            let payload = create_request(
+            let payload = create_request_with_system_prompt_role_policy(
                 model_config,
                 system,
                 messages,
                 tools,
                 &ImageFormat::OpenAi,
                 false,
+                self.chat_completions_system_prompt_role_policy(),
             )?;
 
             let mut log = RequestLog::start(model_config, &payload)?;
@@ -558,13 +591,14 @@ impl Provider for OpenAiProvider {
                 }
             }))
         } else {
-            let payload = create_request(
+            let payload = create_request_with_system_prompt_role_policy(
                 model_config,
                 system,
                 messages,
                 tools,
                 &ImageFormat::OpenAi,
                 true,
+                self.chat_completions_system_prompt_role_policy(),
             )?;
             let mut log = RequestLog::start(model_config, &payload)?;
 
@@ -655,6 +689,7 @@ mod tests {
     use super::OpenAiProvider;
     use crate::conversation::message::Message;
     use crate::model::ModelConfig;
+    use crate::providers::formats::openai::OpenAiSystemPromptRolePolicy;
     use crate::session::TurnContextOverride;
     use std::collections::HashMap;
 
@@ -674,6 +709,28 @@ mod tests {
         std::env::set_var("OPENAI_FORCE_RESPONSES_API", "1");
         assert!(OpenAiProvider::uses_responses_api("gpt-4o"));
         std::env::remove_var("OPENAI_FORCE_RESPONSES_API");
+    }
+
+    #[test]
+    fn test_chat_completions_system_prompt_role_policy_is_provider_aware() {
+        assert_eq!(
+            OpenAiProvider::chat_completions_system_prompt_role_policy_for_host(
+                "https://api.openai.com"
+            ),
+            OpenAiSystemPromptRolePolicy::DeveloperForOpenAiReasoningModels
+        );
+        assert_eq!(
+            OpenAiProvider::chat_completions_system_prompt_role_policy_for_host(
+                "https://api.deepseek.com/v1"
+            ),
+            OpenAiSystemPromptRolePolicy::System
+        );
+        assert_eq!(
+            OpenAiProvider::chat_completions_system_prompt_role_policy_for_host(
+                "https://open.bigmodel.cn/api/paas/v4"
+            ),
+            OpenAiSystemPromptRolePolicy::System
+        );
     }
 
     #[tokio::test]

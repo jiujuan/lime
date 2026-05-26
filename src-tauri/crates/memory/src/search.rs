@@ -33,7 +33,7 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 /// # Parameters
 ///
 /// * `db` - Database connection
-/// * `query_embedding` - Query vector (1536-dim for text-embedding-3-small)
+/// * `query_embedding` - 查询向量，维度由当前嵌入模型决定
 /// * `category` - Optional category filter
 /// * `min_similarity` - Minimum similarity threshold (0.0-1.0)
 ///

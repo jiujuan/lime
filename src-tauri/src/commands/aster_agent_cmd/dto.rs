@@ -271,6 +271,22 @@ pub struct AgentRuntimeDiffFileCheckpointRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct AgentRuntimeRestoreFileCheckpointRequest {
+    #[serde(alias = "sessionId")]
+    pub session_id: String,
+    #[serde(alias = "checkpointId")]
+    pub checkpoint_id: String,
+    #[serde(default, alias = "confirmRestore")]
+    pub confirm_restore: bool,
+    #[serde(default = "default_restore_checkpoint_backup", alias = "createBackup")]
+    pub create_backup: bool,
+}
+
+fn default_restore_checkpoint_backup() -> bool {
+    true
+}
+
+#[derive(Debug, Deserialize)]
 pub struct AgentRuntimeRemoveQueuedTurnRequest {
     #[serde(alias = "sessionId")]
     pub session_id: String,
@@ -536,6 +552,18 @@ pub struct AgentRuntimeFileCheckpointDiffResult {
     pub previous_version_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub diff: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRuntimeFileCheckpointRestoreResult {
+    pub session_id: String,
+    pub thread_id: String,
+    pub checkpoint: AgentRuntimeFileCheckpointSummary,
+    pub live_path: String,
+    pub snapshot_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backup_path: Option<String>,
+    pub restored_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

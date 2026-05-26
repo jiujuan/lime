@@ -6,10 +6,87 @@
  * @requirements 3.3, 4.4
  */
 
-import React, { useState } from "react";
-import type { CanvasState } from "../types";
+import React, { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { ExternalLink, X } from "lucide-react";
+import {
+  isAbsoluteLocalFilePath,
+  openHtmlPreviewWindow,
+  openPathWithDefaultApp,
+  resolveLocalFilePreviewUrl,
+} from "@/lib/api/fileSystem";
+import type { CanvasContentType, CanvasState } from "../types";
 import { CodePreview } from "./CodePreview";
 import { MarkdownPreview } from "./MarkdownPreview";
+
+type HtmlViewMode = "preview" | "source";
+type CanvasPanelFallbackTitleKey =
+  | "workspace.canvasPanel.fallbackTitle.code"
+  | "workspace.canvasPanel.fallbackTitle.html"
+  | "workspace.canvasPanel.fallbackTitle.markdown"
+  | "workspace.canvasPanel.fallbackTitle.file"
+  | "workspace.canvasPanel.fallbackTitle.empty";
+
+function assertNever(value: never): never {
+  throw new Error(`未支持的画布内容类型: ${String(value)}`);
+}
+
+function resolveDownloadFilename(state: CanvasState): string {
+  if (state.filename) {
+    return state.filename;
+  }
+
+  switch (state.contentType) {
+    case "code":
+    case "html":
+      return `code.${
+        state.language || (state.contentType === "html" ? "html" : "txt")
+      }`;
+    case "markdown":
+      return "content.md";
+    case "file":
+      return "file.txt";
+    case "empty":
+      return "content.txt";
+    default:
+      return assertNever(state.contentType);
+  }
+}
+
+function resolveFallbackTitleKey(
+  contentType: CanvasContentType,
+): CanvasPanelFallbackTitleKey {
+  switch (contentType) {
+    case "code":
+      return "workspace.canvasPanel.fallbackTitle.code";
+    case "html":
+      return "workspace.canvasPanel.fallbackTitle.html";
+    case "markdown":
+      return "workspace.canvasPanel.fallbackTitle.markdown";
+    case "file":
+      return "workspace.canvasPanel.fallbackTitle.file";
+    case "empty":
+      return "workspace.canvasPanel.fallbackTitle.empty";
+    default:
+      return assertNever(contentType);
+  }
+}
+
+function resolveHtmlPreviewPath(
+  state: Pick<CanvasState, "sourcePath" | "filename">,
+  baseFilePath?: string,
+): string | null {
+  if (state.sourcePath && isAbsoluteLocalFilePath(state.sourcePath)) {
+    return state.sourcePath;
+  }
+  if (baseFilePath && isAbsoluteLocalFilePath(baseFilePath)) {
+    return baseFilePath;
+  }
+  if (state.filename && isAbsoluteLocalFilePath(state.filename)) {
+    return state.filename;
+  }
+  return null;
+}
 
 interface CanvasPanelProps {
   /** 画布状态 */
@@ -37,8 +114,19 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
   toolbarActions,
   chrome = "default",
 }) => {
+  const { t } = useTranslation("workspace");
   const [copied, setCopied] = useState(false);
+  const [htmlViewMode, setHtmlViewMode] = useState<HtmlViewMode>("preview");
   const isEmbeddedChrome = chrome === "embedded";
+  const isHtmlContent = state.contentType === "html";
+  const htmlPreviewPath = isHtmlContent
+    ? resolveHtmlPreviewPath(state, baseFilePath)
+    : null;
+  const htmlPreviewUrl = resolveLocalFilePreviewUrl(htmlPreviewPath);
+
+  useEffect(() => {
+    setHtmlViewMode("preview");
+  }, [state.filename, state.contentType]);
 
   // 复制内容
   const handleCopy = () => {
@@ -49,11 +137,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
 
   // 下载内容
   const handleDownload = () => {
-    const filename =
-      state.filename ||
-      (state.contentType === "code"
-        ? `code.${state.language || "txt"}`
-        : "content.md");
+    const filename = resolveDownloadFilename(state);
     const blob = new Blob([state.content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -61,6 +145,20 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleOpenHtmlPreviewExternally = () => {
+    if (!htmlPreviewPath) {
+      return;
+    }
+    void (async () => {
+      const openedInWindow = await openHtmlPreviewWindow(htmlPreviewPath, {
+        title: state.filename || t("workspace.canvasPanel.htmlPreviewTitle"),
+      });
+      if (!openedInWindow) {
+        await openPathWithDefaultApp(htmlPreviewPath);
+      }
+    })();
   };
 
   if (!state.isOpen) {
@@ -77,8 +175,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
         <div className="flex items-center justify-between border-b border-border bg-muted/50 px-4 py-2">
           <div className="flex min-w-0 items-center gap-2">
             <span className="truncate text-sm font-medium text-foreground">
-              {state.filename ||
-                (state.contentType === "code" ? "代码预览" : "内容预览")}
+              {state.filename || t(resolveFallbackTitleKey(state.contentType))}
             </span>
             {state.language && (
               <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
@@ -165,26 +262,127 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-auto bg-white">
-        {state.contentType === "code" ? (
-          <CodePreview
-            code={state.content}
-            language={state.language || "plaintext"}
-            isEditing={state.isEditing}
-            onContentChange={onContentChange}
-          />
-        ) : state.contentType === "markdown" ? (
-          <MarkdownPreview
-            content={state.content}
-            baseFilePath={baseFilePath}
-            isEditing={state.isEditing}
-            onContentChange={onContentChange}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full text-muted-foreground">
-            无内容
+      {isHtmlContent ? (
+        <div className="flex items-center justify-between border-b border-ink-200 bg-ink-50 px-4 py-2">
+          <div className="min-w-0 truncate text-xs text-ink-500">
+            {state.filename || "HTML"}
           </div>
-        )}
+          <div className="inline-flex shrink-0 items-center rounded-lg border border-ink-200 bg-white p-0.5">
+            <button
+              type="button"
+              data-testid="canvas-html-preview-mode"
+              onClick={() => setHtmlViewMode("preview")}
+              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                htmlViewMode === "preview"
+                  ? "bg-ink-900 text-white"
+                  : "text-ink-600 hover:bg-ink-50"
+              }`}
+            >
+              {t("workspace.artifactToolbar.view.preview")}
+            </button>
+            <button
+              type="button"
+              data-testid="canvas-html-source-mode"
+              onClick={() => setHtmlViewMode("source")}
+              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                htmlViewMode === "source"
+                  ? "bg-ink-900 text-white"
+                  : "text-ink-600 hover:bg-ink-50"
+              }`}
+            >
+              {t("workspace.artifactToolbar.view.source")}
+            </button>
+          </div>
+          {htmlPreviewPath ? (
+            <button
+              type="button"
+              data-testid="canvas-html-open-external"
+              onClick={handleOpenHtmlPreviewExternally}
+              className="ml-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-500 transition-colors hover:bg-ink-50 hover:text-ink-800"
+              title={t("workspace.artifactToolbar.action.openInWindow")}
+              aria-label={t("workspace.artifactToolbar.action.openInWindow")}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+          {isEmbeddedChrome ? (
+            <button
+              type="button"
+              data-testid="canvas-html-close"
+              onClick={onClose}
+              className="ml-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-500 transition-colors hover:bg-ink-50 hover:text-ink-800"
+              title={t("workspace.artifactToolbar.action.close")}
+              aria-label={t("workspace.artifactToolbar.action.close")}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="min-h-0 flex-1 overflow-auto bg-white">
+        {(() => {
+          switch (state.contentType) {
+            case "html":
+              return htmlViewMode === "preview" ? (
+                htmlPreviewUrl ? (
+                  <iframe
+                    src={htmlPreviewUrl}
+                    sandbox="allow-scripts allow-forms allow-popups allow-modals"
+                    className="h-full min-h-[420px] w-full border-0 bg-white"
+                    title={
+                      state.filename ||
+                      t("workspace.canvasPanel.htmlPreviewTitle")
+                    }
+                  />
+                ) : (
+                  <iframe
+                    srcDoc={state.content}
+                    sandbox="allow-scripts allow-forms allow-popups allow-modals"
+                    className="h-full min-h-[420px] w-full border-0 bg-white"
+                    title={
+                      state.filename ||
+                      t("workspace.canvasPanel.htmlPreviewTitle")
+                    }
+                  />
+                )
+              ) : (
+                <CodePreview
+                  code={state.content}
+                  language={state.language || "html"}
+                  isEditing={state.isEditing}
+                  onContentChange={onContentChange}
+                />
+              );
+            case "code":
+              return (
+                <CodePreview
+                  code={state.content}
+                  language={state.language || "plaintext"}
+                  isEditing={state.isEditing}
+                  onContentChange={onContentChange}
+                />
+              );
+            case "markdown":
+              return (
+                <MarkdownPreview
+                  content={state.content}
+                  baseFilePath={baseFilePath}
+                  isEditing={state.isEditing}
+                  onContentChange={onContentChange}
+                />
+              );
+            case "file":
+            case "empty":
+              return (
+                <div className="flex h-full items-center justify-center text-muted-foreground">
+                  {t("workspace.canvasPanel.emptyContent")}
+                </div>
+              );
+            default:
+              return assertNever(state.contentType);
+          }
+        })()}
       </div>
     </div>
   );

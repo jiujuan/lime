@@ -198,4 +198,26 @@ describe("InputbarRuntimeStatusLine", () => {
     expect(statusLine?.querySelector(`[title="${detail}"]`)).toBeNull();
     expect(statusLine?.querySelector(`[aria-label="${detail}"]`)).not.toBeNull();
   });
+
+  it("失败状态行应保持简短，不重复展示长错误详情", () => {
+    const detail =
+      "当前 AI 服务商余额或额度不足，请在服务商后台充值或开通额度，或切换到其他可用模型后重试。";
+    const container = renderStatusLine({
+      status: "failed",
+      detail,
+      batchDescriptor: null,
+      queuedTurnCount: 0,
+      pendingRequestCount: 0,
+      subtaskStats: null,
+      startedAt: "2026-04-15T09:00:00Z",
+      completedAt: "2026-04-15T09:00:09Z",
+    });
+
+    const statusLine = container.querySelector(
+      '[data-testid="inputbar-runtime-status-line"]',
+    );
+    expect(statusLine?.textContent).toContain("失败");
+    expect(statusLine?.textContent).toContain("00:09");
+    expect(statusLine?.textContent).not.toContain(detail);
+  });
 });

@@ -367,7 +367,7 @@ export function useWorkspaceKnowledgeRuntime({
       false,
       false,
       prompt,
-      executionStrategy || "react",
+      executionStrategy || "auto",
       undefined,
       {
         requestMetadata,

@@ -707,7 +707,7 @@ describe("EmptyState", () => {
 
     expect(onSend).toHaveBeenCalledWith(
       "整理最近发布计划",
-      "react",
+      "auto",
       undefined,
       {
         capabilityRoute: {
@@ -1757,7 +1757,7 @@ describe("EmptyState", () => {
       sendButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(onSend).toHaveBeenCalledWith("@技能A", "react", undefined);
+    expect(onSend).toHaveBeenCalledWith("@技能A", "auto", undefined);
   });
 
   it("应把服务型技能与选择回调透传给 CharacterMention", async () => {
@@ -1872,7 +1872,7 @@ describe("EmptyState", () => {
     act(() => {
       sendButton?.click();
     });
-    expect(onSend).toHaveBeenCalledWith("帮我设计封面", "react", undefined, {
+    expect(onSend).toHaveBeenCalledWith("帮我设计封面", "auto", undefined, {
       capabilityRoute: {
         kind: "installed_skill",
         skillKey: "canvas-design",
@@ -1884,7 +1884,7 @@ describe("EmptyState", () => {
     act(() => {
       sendButton?.click();
     });
-    expect(onSend).toHaveBeenCalledWith("帮我设计封面", "react", undefined);
+    expect(onSend).toHaveBeenCalledWith("帮我设计封面", "auto", undefined);
   });
 
   it("首页选择 builtin command 后发送应透传结构化 capability route", async () => {
@@ -1928,7 +1928,7 @@ describe("EmptyState", () => {
 
     expect(onSend).toHaveBeenCalledWith(
       "帮我整理这篇文章的配图方向",
-      "react",
+      "auto",
       undefined,
       {
         capabilityRoute: {
@@ -2054,7 +2054,7 @@ describe("EmptyState", () => {
 
     expect(onSend).toHaveBeenCalledWith(
       "按项目资料写一版介绍",
-      "react",
+      "auto",
       undefined,
       {
         requestMetadata: {
@@ -2133,7 +2133,7 @@ describe("EmptyState", () => {
 
     expect(onSend).toHaveBeenCalledWith(
       prompt,
-      "react",
+      "auto",
       undefined,
       expect.objectContaining({
         capabilityRoute: {
@@ -2262,7 +2262,7 @@ describe("EmptyState", () => {
 
     expect(onSend).toHaveBeenCalledWith(
       expect.stringContaining("本轮可优先参考这些参考对象"),
-      "react",
+      "auto",
       undefined,
       expect.objectContaining({
         capabilityRoute: expect.objectContaining({
@@ -2939,7 +2939,7 @@ describe("EmptyState", () => {
 
     expect(onSend).toHaveBeenCalledWith(
       "请输出一篇新品发布文案",
-      "react",
+      "auto",
       undefined,
     );
   });
@@ -2977,7 +2977,7 @@ describe("EmptyState", () => {
 
     expect(onSend).toHaveBeenCalledWith(
       "请输出一篇用户访谈纪要",
-      "react",
+      "auto",
       undefined,
     );
   });
@@ -3032,7 +3032,7 @@ describe("EmptyState", () => {
 
     expect(onSend).toHaveBeenCalledWith(
       "请输出一篇品牌故事",
-      "react",
+      "auto",
       undefined,
       {
         capabilityRoute: {
@@ -3099,7 +3099,7 @@ describe("EmptyState", () => {
       sendButton?.click();
     });
 
-    expect(onSend).toHaveBeenCalledWith("整理最近发布计划", "react", undefined);
+    expect(onSend).toHaveBeenCalledWith("整理最近发布计划", "auto", undefined);
   });
 
   it("通用主题不应在首屏直接展示浏览器协助入口", async () => {

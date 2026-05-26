@@ -444,7 +444,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   setProviderType,
   model,
   setModel,
-  executionStrategy = "react",
+  executionStrategy = "auto",
   setExecutionStrategy,
   accessMode,
   setAccessMode,

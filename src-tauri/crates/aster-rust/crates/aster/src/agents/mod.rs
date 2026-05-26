@@ -21,6 +21,7 @@ pub mod subagent_execution_tool;
 pub mod subagent_handler;
 mod subagent_task_config;
 pub mod subagent_tool;
+mod tool_argument_coercion;
 mod tool_execution;
 pub mod types;
 

@@ -642,6 +642,7 @@ export interface ResolveCodeOrchestratedRuntimeDefaultsOptions {
   preferredTeamPresetId?: string | null;
   selectedTeam?: TeamDefinition | null;
   hasExplicitCommandOrSkillLaunch?: boolean;
+  allowCatalogRoutedRuntimeDefaults?: boolean;
 }
 
 export interface ResolvedCodeOrchestratedRuntimeDefaults {
@@ -674,12 +675,13 @@ export function resolveCodeOrchestratedRuntimeDefaults(
     preferredTeamPresetId,
     selectedTeam,
     hasExplicitCommandOrSkillLaunch,
+    allowCatalogRoutedRuntimeDefaults,
   } = options;
 
   if (
     executionStrategy !== "code_orchestrated" ||
     sendOptions?.purpose ||
-    sendOptions?.capabilityRoute ||
+    (sendOptions?.capabilityRoute && !allowCatalogRoutedRuntimeDefaults) ||
     sendOptions?.skillRequest ||
     hasExplicitCommandOrSkillLaunch
   ) {

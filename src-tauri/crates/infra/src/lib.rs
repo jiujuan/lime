@@ -9,12 +9,14 @@
 //! 注意：plugin 模块因依赖 Tauri 无法迁移，保留在主 crate
 
 pub mod injection;
+pub mod process;
 pub mod proxy;
 pub mod resilience;
 pub mod telemetry;
 
 // 重新导出常用类型
 pub use injection::{InjectionConfig, InjectionMode, InjectionResult, InjectionRule, Injector};
+pub use process::{configure_std_command_for_gui, configure_tokio_command_for_gui};
 pub use proxy::{ProxyClientFactory, ProxyError, ProxyProtocol};
 pub use resilience::{
     Failover, FailoverConfig, Retrier, RetryConfig, TimeoutConfig, TimeoutController,

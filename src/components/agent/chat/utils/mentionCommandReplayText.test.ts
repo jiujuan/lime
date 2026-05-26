@@ -9,7 +9,6 @@ import { parseAnalysisWorkbenchCommand } from "./analysisWorkbenchCommand";
 import { parseBroadcastWorkbenchCommand } from "./broadcastWorkbenchCommand";
 import { parseBrowserWorkbenchCommand } from "./browserWorkbenchCommand";
 import { parseChannelPreviewWorkbenchCommand } from "./channelPreviewWorkbenchCommand";
-import { parseCodeWorkbenchCommand } from "./codeWorkbenchCommand";
 import { parseComplianceWorkbenchCommand } from "./complianceWorkbenchCommand";
 import { parseCompetitorWorkbenchCommand } from "./competitorWorkbenchCommand";
 import { parseCoverWorkbenchCommand } from "./coverWorkbenchCommand";
@@ -40,15 +39,15 @@ import { parseUrlParseWorkbenchCommand } from "./urlParseWorkbenchCommand";
 import { parseVideoWorkbenchCommand } from "./videoWorkbenchCommand";
 import { parseVoiceWorkbenchCommand } from "./voiceWorkbenchCommand";
 import { parseWebpageWorkbenchCommand } from "./webpageWorkbenchCommand";
+import { parseMentionCommand } from "./mentionCommandPrefixMatch";
 
 function parseSeededCodeCommand(text: string) {
   const { mentionCommandPrefixKeyMap } = buildRuntimeMentionCommandCatalog(
     getSeededSkillCatalog(),
   );
 
-  return parseCodeWorkbenchCommand(text, {
+  return parseMentionCommand(text, mentionCommandPrefixKeyMap, {
     commandKey: "code_runtime",
-    mentionCommandPrefixKeyMap,
   });
 }
 

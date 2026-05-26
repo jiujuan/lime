@@ -59,11 +59,7 @@ export function useInputbarSend({
 
     const webSearch = webSearchEnabled;
     const thinking = thinkingEnabled;
-    let strategy = executionStrategy || "react";
-
-    if (webSearch && strategy !== "react") {
-      strategy = "react";
-    }
+    const strategy = executionStrategy || "auto";
 
     const capabilityDispatch = resolveInputCapabilityDispatch(
       activeCapability,

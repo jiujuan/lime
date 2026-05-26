@@ -70,6 +70,7 @@ export type TranslationReportFormat = "text" | "json";
 interface CliOptions extends TranslationCheckOptions {
   fix: boolean;
   format: TranslationReportFormat;
+  output?: string;
   verbose: boolean;
 }
 
@@ -522,6 +523,11 @@ function parseCliArgs(argv: string[]): CliOptions {
         `Unknown or missing format value: ${next ?? "(missing)"}`,
       );
     }
+    if (arg === "--output" && next) {
+      options.output = next;
+      index += 1;
+      continue;
+    }
     if (arg === "--verbose") {
       options.verbose = true;
       continue;
@@ -537,7 +543,7 @@ function parseCliArgs(argv: string[]): CliOptions {
       continue;
     }
     if (arg === "-h" || arg === "--help") {
-      console.log(`Usage: npm run detect-translations -- [--fix] [--format text|json] [--verbose] [--resources-dir <dir>] [--source-locale <locale>]`);
+      console.log(`Usage: npm run detect-translations -- [--fix] [--format text|json] [--output <path>] [--verbose] [--resources-dir <dir>] [--source-locale <locale>]`);
       process.exit(0);
     }
 
@@ -555,12 +561,18 @@ export function runCli(argv = process.argv.slice(2)): number {
   }
 
   const result = analyzeTranslations(options);
-  console.log(
-    formatTranslationReport(result, {
-      format: options.format,
-      verbose: options.verbose,
-    }),
-  );
+  const report = formatTranslationReport(result, {
+    format: options.format,
+    verbose: options.verbose,
+  });
+
+  if (options.output) {
+    const outputPath = path.resolve(options.output);
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, report.endsWith(os.EOL) ? report : `${report}${os.EOL}`);
+  } else {
+    console.log(report);
+  }
   return hasTranslationIssues(result) ? 1 : 0;
 }
 

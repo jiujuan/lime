@@ -273,6 +273,7 @@ describe("agentProtocol", () => {
         session_id: "session-ctx",
         thread_id: "thread-ctx",
         turn_id: "turn-ctx",
+        execution_strategy: "code_orchestrated",
         output_schema_runtime: null,
         approval_policy: "on-request",
         sandbox_policy: "workspace-write",
@@ -319,6 +320,7 @@ describe("agentProtocol", () => {
       session_id: "session-ctx",
       thread_id: "thread-ctx",
       turn_id: "turn-ctx",
+      execution_strategy: "code_orchestrated",
       output_schema_runtime: null,
       approval_policy: "on-request",
       sandbox_policy: "workspace-write",
@@ -359,6 +361,21 @@ describe("agentProtocol", () => {
           },
         ],
       },
+    });
+  });
+
+  it("应拒绝 turn_context 中未知的 execution_strategy", () => {
+    expect(
+      parseAgentEvent({
+        type: "turn_context",
+        session_id: "session-ctx",
+        thread_id: "thread-ctx",
+        turn_id: "turn-ctx",
+        execution_strategy: "code-workbench",
+      }),
+    ).toMatchObject({
+      type: "turn_context",
+      execution_strategy: null,
     });
   });
 

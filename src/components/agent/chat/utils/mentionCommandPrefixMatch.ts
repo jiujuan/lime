@@ -5,6 +5,13 @@ export interface MentionCommandPrefixMatch {
   body: string;
 }
 
+export interface ParsedMentionCommand {
+  rawText: string;
+  commandKey: string;
+  trigger: string;
+  body: string;
+}
+
 function normalizeMentionCommandPrefix(value?: string | null): string {
   if (typeof value !== "string") {
     return "";
@@ -72,5 +79,29 @@ export function resolveMentionCommandPrefixMatch(
     commandKey: matchedCommandKey,
     hasBody: body.length > 0,
     body,
+  };
+}
+
+export function parseMentionCommand(
+  text: string,
+  mentionCommandPrefixKeyMap: ReadonlyMap<string, string>,
+  options?: {
+    commandKey?: string;
+  },
+): ParsedMentionCommand | null {
+  const matched = resolveMentionCommandPrefixMatch(
+    text,
+    mentionCommandPrefixKeyMap,
+    options,
+  );
+  if (!matched) {
+    return null;
+  }
+
+  return {
+    rawText: text,
+    commandKey: matched.commandKey,
+    trigger: matched.commandPrefix,
+    body: matched.body,
   };
 }

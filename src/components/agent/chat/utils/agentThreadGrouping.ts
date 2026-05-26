@@ -11,6 +11,7 @@ import { shouldHideTurnSummaryFromConversation } from "./turnSummaryPresentation
 import { summarizeThreadProcessBatch } from "./toolBatchGrouping";
 import { resolveAgentThreadToolProcessPreview } from "./toolProcessSummary";
 import { normalizeProcessDisplayText } from "./processDisplayText";
+import { resolveAgentRuntimeErrorPresentation } from "./agentRuntimeErrorPresentation";
 
 export type AgentThreadGroupKind =
   | "process"
@@ -667,7 +668,10 @@ function summarizeAlertItem(item: AgentThreadItem): string | null {
     ]);
   }
   if (item.type === "error") {
-    return prefixAction(item.message, "碰到错误：", [
+    const displayMessage = resolveAgentRuntimeErrorPresentation(
+      item.message,
+    ).displayMessage;
+    return prefixAction(displayMessage, "碰到错误：", [
       "收到提醒：",
       "碰到错误：",
     ]);

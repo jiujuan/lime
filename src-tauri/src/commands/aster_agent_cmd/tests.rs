@@ -4910,6 +4910,14 @@ mod tests {
     }
 
     #[test]
+    fn test_aster_execution_strategy_from_db_value_react_is_react() {
+        assert_eq!(
+            AsterExecutionStrategy::from_db_value(Some("react")),
+            AsterExecutionStrategy::React
+        );
+    }
+
+    #[test]
     fn test_aster_execution_strategy_from_db_value_unknown_is_auto() {
         assert_eq!(
             AsterExecutionStrategy::from_db_value(Some("unknown")),
@@ -4918,38 +4926,21 @@ mod tests {
     }
 
     #[test]
-    fn test_aster_execution_strategy_auto_prefers_react_when_tool_search_explicit() {
-        let strategy =
-            AsterExecutionStrategy::Auto.effective_for_message("请先调用 ToolSearch 再继续");
+    fn test_aster_execution_strategy_auto_defaults_code_orchestrated() {
+        let strategy = AsterExecutionStrategy::Auto.effective_strategy();
+        assert_eq!(strategy, AsterExecutionStrategy::CodeOrchestrated);
+    }
+
+    #[test]
+    fn test_aster_execution_strategy_react_stays_react() {
+        let strategy = AsterExecutionStrategy::React.effective_strategy();
         assert_eq!(strategy, AsterExecutionStrategy::React);
     }
 
     #[test]
-    fn test_aster_execution_strategy_auto_prefers_react_for_generic_web_search() {
-        let strategy =
-            AsterExecutionStrategy::Auto.effective_for_message("帮我联网搜索今天的 AI 新闻");
-        assert_eq!(strategy, AsterExecutionStrategy::React);
-    }
-
-    #[test]
-    fn test_aster_execution_strategy_auto_defaults_react_for_code_task() {
-        let strategy = AsterExecutionStrategy::Auto
-            .effective_for_message("请抓取这个仓库并修复 Rust 编译错误，然后给出补丁");
-        assert_eq!(strategy, AsterExecutionStrategy::React);
-    }
-
-    #[test]
-    fn test_aster_execution_strategy_code_orchestrated_still_prefers_react_for_web_search() {
-        let strategy = AsterExecutionStrategy::CodeOrchestrated
-            .effective_for_message("请使用 WebSearch 工具检索并给出来源");
-        assert_eq!(strategy, AsterExecutionStrategy::React);
-    }
-
-    #[test]
-    fn test_aster_execution_strategy_code_orchestrated_forces_react_for_websearch_instruction() {
-        let strategy = AsterExecutionStrategy::CodeOrchestrated
-            .effective_for_message("请必须使用 WebSearch 工具检索，不要用已有知识回答");
-        assert_eq!(strategy, AsterExecutionStrategy::React);
+    fn test_aster_execution_strategy_code_orchestrated_stays_code_orchestrated() {
+        let strategy = AsterExecutionStrategy::CodeOrchestrated.effective_strategy();
+        assert_eq!(strategy, AsterExecutionStrategy::CodeOrchestrated);
     }
 
     #[test]
@@ -7393,6 +7384,23 @@ mod tests {
     #[test]
     fn test_runtime_turn_source_keeps_prompt_strategy_entry_order_contract() {
         let source = runtime_turn_source();
+        let preparation_source = aster_agent_cmd_source("runtime_turn/flow/preparation.rs");
+        let preparation_slice = source_slice(
+            &preparation_source,
+            "let persisted_strategy =",
+            "let RuntimeTurnPolicyPreparation",
+        );
+
+        assert_markers_in_order(
+            preparation_slice,
+            &[
+                "let persisted_strategy =",
+                "let requested_strategy = request.execution_strategy.unwrap_or(persisted_strategy);",
+                "let effective_strategy = requested_strategy.effective_strategy();",
+                "apply_code_orchestrated_runtime_defaults(request, effective_strategy);",
+            ],
+        );
+
         let strategy_slice = source_slice(
             &source,
             "turn_input_builder.set_base_system_prompt(system_prompt_source, resolved_prompt.clone());",
@@ -7402,7 +7410,6 @@ mod tests {
         assert_markers_in_order(
             strategy_slice,
             &[
-                "let requested_strategy = request.execution_strategy.unwrap_or(persisted_strategy);",
                 "turn_input_builder",
                 ".set_requested_execution_strategy(",
                 "if should_override_system_prompt_for_fast_response(",
@@ -7610,6 +7617,17 @@ mod tests {
         .unwrap_or_else(|error| panic!("应能读取 aster 源码 {relative_path}: {error}"))
     }
 
+    fn aster_agent_cmd_source(relative_path: &str) -> String {
+        fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src/commands/aster_agent_cmd")
+                .join(relative_path),
+        )
+        .unwrap_or_else(|error| {
+            panic!("应能读取 aster_agent_cmd 源码 {relative_path}: {error}")
+        })
+    }
+
     fn source_slice<'a>(source: &'a str, start_marker: &str, end_marker: &str) -> &'a str {
         let start = source
             .find(start_marker)
@@ -7629,6 +7647,32 @@ mod tests {
                 .unwrap_or_else(|| panic!("未按顺序找到标记: {marker}"));
             cursor += offset + marker.len();
         }
+    }
+
+    #[test]
+    fn test_execution_strategy_sources_do_not_route_from_user_message_text() {
+        let main_source = aster_agent_cmd_source("mod.rs");
+        let preparation_source = aster_agent_cmd_source("runtime_turn/flow/preparation.rs");
+
+        for forbidden in [
+            "effective_for_message",
+            "should_force_react_for_message",
+            "should_use_code_orchestrated_for_message",
+            "FORCE_REACT_HINT",
+            "CODE_ORCHESTRATED_HINT",
+            "LIME_CODE_ORCHESTRATED_HINTS",
+            "PROXYCAST_CODE_ORCHESTRATED_HINTS",
+        ] {
+            assert!(
+                !main_source.contains(forbidden),
+                "执行策略不应再通过用户消息文本或环境 hint 词表分流: {forbidden}"
+            );
+        }
+        assert!(preparation_source.contains("let effective_strategy = requested_strategy.effective_strategy();"));
+        assert!(
+            !preparation_source.contains("effective_for_message(&request.message)"),
+            "自然语言编程底座应由结构化 execution_strategy 归一化决定，而不是解析用户消息文本"
+        );
     }
 
     #[test]

@@ -4959,8 +4959,8 @@ pub(crate) fn create_audio_generation_task_artifact_inner(
             "source_text": source_text.as_str(),
             "raw_text": raw_text,
             "voice": voice.clone(),
-            "voice_style": voice_style,
-            "target_language": target_language,
+            "voice_style": voice_style.clone(),
+            "target_language": target_language.clone(),
             "mime_type": mime_type.clone(),
             "audio_path": audio_path.clone(),
             "duration_ms": request.duration_ms,
@@ -4986,6 +4986,8 @@ pub(crate) fn create_audio_generation_task_artifact_inner(
                 "duration_ms": request.duration_ms,
                 "source_text": source_text.clone(),
                 "voice": voice,
+                "voice_style": voice_style,
+                "target_language": target_language,
             }
         }),
         TaskWriteOptions {
@@ -6170,6 +6172,14 @@ mod tests {
             first
                 .record
                 .payload
+                .get("target_language")
+                .and_then(Value::as_str),
+            Some("zh-CN")
+        );
+        assert_eq!(
+            first
+                .record
+                .payload
                 .get("routing_slot")
                 .and_then(Value::as_str),
             Some(crate::commands::modality_runtime_contracts::VOICE_GENERATION_ROUTING_SLOT)
@@ -6205,6 +6215,22 @@ mod tests {
                 .pointer("/audio_output/mime_type")
                 .and_then(Value::as_str),
             Some(AUDIO_TASK_DEFAULT_MIME_TYPE)
+        );
+        assert_eq!(
+            first
+                .record
+                .payload
+                .pointer("/audio_output/voice_style")
+                .and_then(Value::as_str),
+            Some("温暖")
+        );
+        assert_eq!(
+            first
+                .record
+                .payload
+                .pointer("/audio_output/target_language")
+                .and_then(Value::as_str),
+            Some("zh-CN")
         );
 
         let listed = list_media_task_artifacts_inner(ListMediaTaskArtifactsRequest {
@@ -6519,6 +6545,10 @@ mod tests {
             Some(&json!(["text_generation", "audio_transcription"]))
         );
         assert_eq!(
+            first.record.payload.get("language").and_then(Value::as_str),
+            Some("zh-CN")
+        );
+        assert_eq!(
             first
                 .record
                 .payload
@@ -6565,6 +6595,14 @@ mod tests {
                 .pointer("/transcript/output_format")
                 .and_then(Value::as_str),
             Some("srt")
+        );
+        assert_eq!(
+            first
+                .record
+                .payload
+                .pointer("/transcript/language")
+                .and_then(Value::as_str),
+            Some("zh-CN")
         );
 
         let listed = list_media_task_artifacts_inner(ListMediaTaskArtifactsRequest {
@@ -6855,7 +6893,7 @@ mod tests {
                         Some((authorization, body_text));
                     Json(json!({
                         "text": "这里是会议转写结果。",
-                        "language": "zh"
+                        "language": "en"
                     }))
                 }
             }),
@@ -6881,7 +6919,7 @@ mod tests {
                 raw_text: Some("@转写 meeting.wav".to_string()),
                 source_url: None,
                 source_path: Some(source_path.to_string_lossy().to_string()),
-                language: Some("zh".to_string()),
+                language: Some("auto".to_string()),
                 output_format: Some("json".to_string()),
                 speaker_labels: Some(false),
                 timestamps: Some(false),
@@ -6950,6 +6988,14 @@ mod tests {
             result
                 .record
                 .payload
+                .pointer("/transcript/language")
+                .and_then(Value::as_str),
+            Some("en")
+        );
+        assert_eq!(
+            result
+                .record
+                .payload
                 .pointer("/transcript/provider_id")
                 .and_then(Value::as_str),
             Some("openai-asr")
@@ -6990,6 +7036,10 @@ mod tests {
         assert!(body_text.contains("whisper-1"));
         assert!(body_text.contains("name=\"response_format\""));
         assert!(body_text.contains("json"));
+        assert!(
+            !body_text.contains("name=\"language\""),
+            "auto transcription language must not be sent as an explicit provider language"
+        );
     }
 
     #[test]
@@ -7003,7 +7053,7 @@ mod tests {
                 raw_text: Some("@配音 请把这段内容生成温暖旁白。".to_string()),
                 voice: Some("warm_narrator".to_string()),
                 voice_style: Some("温暖".to_string()),
-                target_language: Some("zh-CN".to_string()),
+                target_language: Some("en-US".to_string()),
                 mime_type: None,
                 audio_path: None,
                 duration_ms: None,
@@ -7065,6 +7115,14 @@ mod tests {
                 .pointer("/audio_output/duration_ms")
                 .and_then(Value::as_u64),
             Some(3200)
+        );
+        assert_eq!(
+            completed
+                .record
+                .payload
+                .pointer("/audio_output/target_language")
+                .and_then(Value::as_str),
+            Some("en-US")
         );
         assert_eq!(
             completed
@@ -7142,7 +7200,7 @@ mod tests {
                 raw_text: Some("@配音 请生成一段清晰的产品播报。".to_string()),
                 voice: Some("clear_narrator".to_string()),
                 voice_style: Some("清晰".to_string()),
-                target_language: Some("zh-CN".to_string()),
+                target_language: Some("en-US".to_string()),
                 mime_type: None,
                 audio_path: None,
                 duration_ms: None,
@@ -7203,6 +7261,14 @@ mod tests {
                 .pointer("/audio_output/error_code")
                 .and_then(Value::as_str),
             Some("audio_provider_resolver_unavailable")
+        );
+        assert_eq!(
+            result
+                .record
+                .payload
+                .pointer("/audio_output/target_language")
+                .and_then(Value::as_str),
+            Some("en-US")
         );
         assert_eq!(
             result
@@ -7325,7 +7391,7 @@ mod tests {
                 raw_text: Some("@配音 请生成一段清晰的产品播报。".to_string()),
                 voice: Some("alloy".to_string()),
                 voice_style: Some("clear".to_string()),
-                target_language: Some("zh-CN".to_string()),
+                target_language: Some("en-US".to_string()),
                 mime_type: None,
                 audio_path: None,
                 duration_ms: None,
@@ -7435,10 +7501,18 @@ mod tests {
             body.get("response_format").and_then(Value::as_str),
             Some("mp3")
         );
+        assert_eq!(
+            result
+                .record
+                .payload
+                .pointer("/audio_output/target_language")
+                .and_then(Value::as_str),
+            Some("en-US")
+        );
         assert!(body
             .get("instructions")
             .and_then(Value::as_str)
-            .is_some_and(|value| value.contains("clear") && value.contains("zh-CN")));
+            .is_some_and(|value| value.contains("clear") && value.contains("en-US")));
     }
 
     #[test]

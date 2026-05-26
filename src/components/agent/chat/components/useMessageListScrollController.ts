@@ -7,17 +7,18 @@ import {
   useState,
 } from "react";
 
+const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 64;
+const USER_SCROLL_IDLE_MS = 500;
+
 interface UseMessageListAutoScrollOptions {
   isRestoringSession: boolean;
   renderedMessageCount: number;
   scrollRef: RefObject<HTMLDivElement | null>;
   shouldAutoScroll: boolean;
-  isUserScrolling: boolean;
 }
 
 export function useMessageListAutoScroll({
   isRestoringSession,
-  isUserScrolling,
   renderedMessageCount,
   scrollRef,
   shouldAutoScroll,
@@ -28,7 +29,7 @@ export function useMessageListAutoScroll({
     const previousVisibleMessageCount = previousVisibleMessageCountRef.current;
     previousVisibleMessageCountRef.current = renderedMessageCount;
 
-    if (!shouldAutoScroll || isUserScrolling || !scrollRef.current) {
+    if (!shouldAutoScroll || !scrollRef.current) {
       return;
     }
 
@@ -44,11 +45,17 @@ export function useMessageListAutoScroll({
     });
   }, [
     isRestoringSession,
-    isUserScrolling,
     renderedMessageCount,
     scrollRef,
     shouldAutoScroll,
   ]);
+}
+
+function isNearScrollBottom(container: HTMLDivElement): boolean {
+  const { scrollTop, scrollHeight, clientHeight } = container;
+  return (
+    scrollHeight - scrollTop - clientHeight <= AUTO_SCROLL_BOTTOM_THRESHOLD_PX
+  );
 }
 
 export function useMessageListScrollController() {
@@ -56,6 +63,20 @@ export function useMessageListScrollController() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isUserScrolling, setIsUserScrolling] = useState(false);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const markUserScrolling = useCallback(() => {
+    setIsUserScrolling(true);
+
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+
+    scrollTimeoutRef.current = setTimeout(() => {
+      setIsUserScrolling(false);
+      scrollTimeoutRef.current = null;
+    }, USER_SCROLL_IDLE_MS);
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -63,53 +84,73 @@ export function useMessageListScrollController() {
       return;
     }
 
-    let scrollTimeout: ReturnType<typeof setTimeout>;
-
     const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+      markUserScrolling();
+      setShouldAutoScroll(isNearScrollBottom(container));
+    };
 
-      setIsUserScrolling(true);
-      setShouldAutoScroll(isAtBottom);
+    const handleWheel = (event: WheelEvent) => {
+      markUserScrolling();
 
-      clearTimeout(scrollTimeout);
-      scrollTimeout = setTimeout(() => {
-        setIsUserScrolling(false);
-      }, 500);
+      if (event.deltaY < 0) {
+        setShouldAutoScroll(false);
+      }
     };
 
     container.addEventListener("scroll", handleScroll, { passive: true });
+    container.addEventListener("wheel", handleWheel, { passive: true });
 
     return () => {
       container.removeEventListener("scroll", handleScroll);
-      clearTimeout(scrollTimeout);
+      container.removeEventListener("wheel", handleWheel);
+
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+        scrollTimeoutRef.current = null;
+      }
     };
+  }, [markUserScrolling]);
+
+  const scrollToTail = useCallback((behavior: "auto" | "smooth") => {
+    scrollRef.current?.scrollIntoView({
+      behavior,
+      block: "end",
+    });
   }, []);
 
-  const handleStreamingOverlayUpdate = useCallback(() => {
-    if (!shouldAutoScroll || isUserScrolling || !scrollRef.current) {
+  const jumpToLatest = useCallback(() => {
+    setShouldAutoScroll(true);
+    setIsUserScrolling(false);
+
+    const run = () => scrollToTail("smooth");
+    if (typeof window !== "undefined" && window.requestAnimationFrame) {
+      window.requestAnimationFrame(run);
       return;
     }
 
-    const scrollToTail = () => {
-      scrollRef.current?.scrollIntoView({
-        behavior: "auto",
-        block: "end",
-      });
-    };
+    run();
+  }, [scrollToTail]);
+
+  const handleStreamingOverlayUpdate = useCallback(() => {
+    if (!shouldAutoScroll || !scrollRef.current) {
+      return;
+    }
+
+    const run = () => scrollToTail("auto");
 
     if (typeof window !== "undefined" && window.requestAnimationFrame) {
-      window.requestAnimationFrame(scrollToTail);
+      window.requestAnimationFrame(run);
       return;
     }
 
-    scrollToTail();
-  }, [isUserScrolling, shouldAutoScroll]);
+    run();
+  }, [scrollToTail, shouldAutoScroll]);
 
   return {
     containerRef,
     handleStreamingOverlayUpdate,
     isUserScrolling,
+    jumpToLatest,
     scrollRef,
     shouldAutoScroll,
   };

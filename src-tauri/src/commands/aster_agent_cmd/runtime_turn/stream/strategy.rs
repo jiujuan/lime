@@ -139,7 +139,7 @@ where
             .await
             .map_err(|fallback_err| fallback_err.message)
         }
-        Err(primary_error) if is_runtime_model_permission_denied_error(&primary_error.message) => {
+        Err(primary_error) if is_runtime_model_unavailable_error(&primary_error.message) => {
             let recovery_result: Result<Option<String>, String> = async {
                 let Some(provider_config) = request.provider_config.as_ref() else {
                     return Ok(None);
@@ -154,7 +154,7 @@ where
                 }
 
                 let api_key_provider_service = app.state::<ApiKeyProviderServiceState>();
-                let Some(fallback_provider_config) = resolve_runtime_provider_auth_recovery_config(
+                let Some(fallback_provider_config) = resolve_runtime_provider_model_recovery_config(
                     app,
                     db,
                     api_key_provider_service.inner(),
@@ -168,7 +168,7 @@ where
                 };
 
                 tracing::warn!(
-                    "[AsterAgent] 模型访问受限，自动回退同 provider 候选: session={}, provider={}, failed_model={}, fallback_model={}",
+                    "[AsterAgent] 模型不可用，自动回退同 provider 候选: session={}, provider={}, failed_model={}, fallback_model={}",
                     session_id,
                     provider_selector,
                     provider_config.model_name,
@@ -202,7 +202,7 @@ where
                     describe_provider_request_attempt(&fallback_request);
                 let fallback_attempt_started_at = Instant::now();
                 tracing::info!(
-                    "[AsterAgent][TTFT] runtime stream permission fallback attempt start: session_id={}, event_name={}, provider_selector={}, provider_name={}, failed_model={}, fallback_model={}",
+                    "[AsterAgent][TTFT] runtime stream model recovery attempt start: session_id={}, event_name={}, provider_selector={}, provider_name={}, failed_model={}, fallback_model={}",
                     session_id,
                     request.event_name,
                     fallback_provider_selector,
@@ -236,7 +236,7 @@ where
                 {
                     Ok(assistant_output) => {
                         tracing::info!(
-                            "[AsterAgent][TTFT] runtime stream permission fallback attempt success: session_id={}, event_name={}, provider_selector={}, provider_name={}, failed_model={}, fallback_model={}, elapsed_ms={}",
+                            "[AsterAgent][TTFT] runtime stream model recovery attempt success: session_id={}, event_name={}, provider_selector={}, provider_name={}, failed_model={}, fallback_model={}, elapsed_ms={}",
                             session_id,
                             request.event_name,
                             fallback_provider_selector,
@@ -249,13 +249,13 @@ where
                     }
                     Err(fallback_error) => {
                         let fallback_message =
-                            build_runtime_model_permission_fallback_failure_message(
+                            build_runtime_model_recovery_failure_message(
                                 &provider_config.model_name,
                                 &fallback_model_name,
                                 &fallback_error.message,
                             );
                         tracing::warn!(
-                            "[AsterAgent][TTFT] runtime stream permission fallback attempt failed: session_id={}, event_name={}, provider_selector={}, provider_name={}, failed_model={}, fallback_model={}, elapsed_ms={}, error={}",
+                            "[AsterAgent][TTFT] runtime stream model recovery attempt failed: session_id={}, event_name={}, provider_selector={}, provider_name={}, failed_model={}, fallback_model={}, elapsed_ms={}, error={}",
                             session_id,
                             request.event_name,
                             fallback_provider_selector,

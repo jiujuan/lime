@@ -560,10 +560,10 @@ describe("i18n namespace loader", () => {
         "skills.workspace.curatedTask.suggestion.action.start",
       );
       expect(resources[locale].agent).toHaveProperty(
-        "skills.workspace.curatedTask.home.title",
+        "memoryLibrary.title",
       );
       expect(resources[locale].agent).toHaveProperty(
-        "skills.workspace.curatedTask.home.referenceSummary.focused",
+        "memoryLibrary.points.title",
       );
       expect(resources[locale].agent).toHaveProperty(
         "sceneAppExecutionSummary.followup.action.saveInspiration",
@@ -932,6 +932,12 @@ describe("i18n namespace loader", () => {
         "workspace.browserAssistRenderer.launching.title",
       );
       expect(resources[locale].workspace).toHaveProperty(
+        "workspace.browserAssistRenderer.launching.detail",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.browserAssistRenderer.failed.attachedOnlyWithDetail",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
         "workspace.browserAssistRenderer.replay.title",
       );
       expect(resources[locale].workspace).toHaveProperty(
@@ -1128,13 +1134,13 @@ describe("i18n namespace loader", () => {
         "settings.memory.title",
       );
       expect(resources[locale].settings).toHaveProperty(
-        "settings.memory.hero.profileCompletion",
+        "settings.memory.embedding.provider.ollama.label",
       );
       expect(resources[locale].settings).toHaveProperty(
-        "settings.memory.memdir.message.emptyNote",
+        "settings.memory.embedding.status.indexedValue",
       );
       expect(resources[locale].settings).toHaveProperty(
-        "settings.memory.source.detail.followImports",
+        "settings.memory.embedding.providerSelect.description",
       );
       expect(resources[locale].settings).toHaveProperty(
         "settings.webSearch.providers.googleEngine.label",

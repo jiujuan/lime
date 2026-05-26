@@ -91,6 +91,7 @@ export {
   removeAgentRuntimeQueuedTurn,
   replayAgentRuntimeRequest,
   respondAgentRuntimeAction,
+  restoreAgentRuntimeFileCheckpoint,
   resumeAgentRuntimeThread,
   submitAgentRuntimeTurn,
 } from "./threadClient";

@@ -330,6 +330,7 @@ export function applyTurnContextExecutionRuntime(
     current,
     {
       session_id: event.session_id,
+      execution_strategy: event.execution_strategy ?? undefined,
       output_schema_runtime: outputSchemaRuntime,
       provider_name: outputSchemaRuntime?.providerName ?? undefined,
       model_name: outputSchemaRuntime?.modelName ?? undefined,

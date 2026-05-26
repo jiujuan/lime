@@ -23,6 +23,7 @@ import type {
 } from "../types";
 import { sortThreadItems } from "../utils/threadTimelineView";
 import { extractFileNameFromPath } from "../workspace/workspacePath";
+import { resolveAgentRuntimeErrorPresentation } from "../utils/agentRuntimeErrorPresentation";
 
 interface CanvasSessionOverviewPanelProps {
   turns: AgentThreadTurn[];
@@ -57,6 +58,14 @@ function shortenText(value?: string | null, maxLength = 120): string {
     return normalized;
   }
   return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function resolveUserFacingErrorSummary(value?: string | null): string {
+  const normalized = (value || "").trim();
+  if (!normalized) {
+    return "";
+  }
+  return resolveAgentRuntimeErrorPresentation(normalized).displayMessage;
 }
 
 function formatTimeLabel(
@@ -292,7 +301,7 @@ function buildActivityView(
         id: item.id,
         title: t("agentChat.sessionOverview.activity.error.title"),
         summary:
-          shortenText(item.message, 100) ||
+          shortenText(resolveUserFacingErrorSummary(item.message), 100) ||
           t("agentChat.sessionOverview.activity.error.summaryFallback"),
         timeLabel,
         statusLabel,

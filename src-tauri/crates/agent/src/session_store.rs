@@ -15,9 +15,9 @@ use lime_core::database::agent_session_repository::{
     self, SessionRecordDetail, SessionRecordMetadata, SessionRecordPreviewMessage,
 };
 use lime_core::database::dao::agent::SessionArchiveFilter;
+use lime_core::database::dao::agent_timeline::AgentTimelineDao;
 #[cfg(test)]
 use lime_core::database::dao::agent_timeline::{AgentThreadTurn, AgentThreadTurnStatus};
-use lime_core::database::dao::agent_timeline::AgentTimelineDao;
 use lime_core::database::DbConnection;
 use lime_core::workspace::WorkspaceManager;
 use lime_services::aster_session_store::LimeSessionStore;
@@ -57,6 +57,9 @@ pub use self::session_store_runtime_detail::{
 };
 use self::session_store_runtime_projection::build_runtime_session_info;
 
+use self::session_store_history_visibility::{
+    load_chat_user_visible_message_flags_from_conn, load_user_visible_message_flags_from_conn,
+};
 #[cfg(test)]
 use self::session_store_subagent_context::{
     apply_runtime_status_to_child_subagent_session, build_child_subagent_session_summaries,
@@ -67,9 +70,6 @@ use self::session_store_subagent_context::{
 };
 pub use self::session_store_subagent_context::{
     ChildSubagentRuntimeStatus, ChildSubagentSession, SubagentParentContext,
-};
-use self::session_store_history_visibility::{
-    load_chat_user_visible_message_flags_from_conn, load_user_visible_message_flags_from_conn,
 };
 use self::session_store_todo_projection::load_session_todo_items_from_conn;
 use self::session_store_types::{

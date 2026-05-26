@@ -1,22 +1,40 @@
 import http from "node:http";
 import https from "node:https";
+import net from "node:net";
+import tls from "node:tls";
 
-const LIVE_PROVIDER_SMOKE_ENV = "LIME_ALLOW_LIVE_PROVIDER_SMOKE";
-const REAL_API_TEST_ENV = "LIME_REAL_API_TEST";
+import {
+  LIVE_PROVIDER_SMOKE_ENV,
+  REAL_API_TEST_ENV,
+  type FetchInit,
+  type FetchInput,
+  isVitestResolvedNetworkUrlAllowed,
+  resolveFetchUrl,
+  resolveNodeHttpRequestUrl,
+  resolveNodeSocketConnectUrl,
+  vitestLiveProviderNetworkAllowed,
+} from "./vitest-network-policy";
+
+export {
+  isVitestNetworkUrlAllowed,
+  isVitestNodeHttpRequestAllowed,
+  isVitestNodeSocketConnectAllowed,
+  resolveFetchUrl,
+  resolveNodeHttpRequestUrl,
+  resolveNodeSocketConnectUrl,
+  vitestLiveProviderNetworkAllowed,
+} from "./vitest-network-policy";
+
 const GUARD_STATE_KEY = Symbol.for("lime.vitestNetworkGuard");
-const LOCAL_HTTP_HOSTS = new Set([
-  "localhost",
-  "127.0.0.1",
-  "0.0.0.0",
-  "::1",
-  "[::1]",
-]);
 
 type FetchLike = typeof fetch;
 type HttpRequestLike = typeof http.request;
 type HttpGetLike = typeof http.get;
 type HttpsRequestLike = typeof https.request;
 type HttpsGetLike = typeof https.get;
+type NetConnectLike = typeof net.connect;
+type NetCreateConnectionLike = typeof net.createConnection;
+type TlsConnectLike = typeof tls.connect;
 type XmlHttpRequestOpenLike = XMLHttpRequest["open"];
 
 interface GuardState {
@@ -26,10 +44,16 @@ interface GuardState {
   nativeHttpGet?: HttpGetLike;
   nativeHttpsRequest?: HttpsRequestLike;
   nativeHttpsGet?: HttpsGetLike;
+  nativeNetConnect?: NetConnectLike;
+  nativeNetCreateConnection?: NetCreateConnectionLike;
+  nativeTlsConnect?: TlsConnectLike;
   guardedHttpRequest?: HttpRequestLike;
   guardedHttpGet?: HttpGetLike;
   guardedHttpsRequest?: HttpsRequestLike;
   guardedHttpsGet?: HttpsGetLike;
+  guardedNetConnect?: NetConnectLike;
+  guardedNetCreateConnection?: NetCreateConnectionLike;
+  guardedTlsConnect?: TlsConnectLike;
   nativeXmlHttpRequestOpen?: XmlHttpRequestOpenLike;
   guardedXmlHttpRequestOpen?: XmlHttpRequestOpenLike;
 }
@@ -49,6 +73,11 @@ function getGuardState(): GuardState {
       nativeHttpGet: http.get.bind(http) as HttpGetLike,
       nativeHttpsRequest: https.request.bind(https) as HttpsRequestLike,
       nativeHttpsGet: https.get.bind(https) as HttpsGetLike,
+      nativeNetConnect: net.connect.bind(net) as NetConnectLike,
+      nativeNetCreateConnection: net.createConnection.bind(
+        net,
+      ) as NetCreateConnectionLike,
+      nativeTlsConnect: tls.connect.bind(tls) as TlsConnectLike,
       nativeXmlHttpRequestOpen:
         typeof XMLHttpRequest !== "undefined"
           ? XMLHttpRequest.prototype.open
@@ -59,185 +88,14 @@ function getGuardState(): GuardState {
   return root[GUARD_STATE_KEY];
 }
 
-function isTruthyEnv(value: unknown): boolean {
-  return /^(1|true|yes|on)$/i.test(String(value || "").trim());
-}
-
-export function vitestLiveProviderNetworkAllowed(
-  env: NodeJS.ProcessEnv = process.env,
-): boolean {
-  return (
-    isTruthyEnv(env[LIVE_PROVIDER_SMOKE_ENV]) ||
-    isTruthyEnv(env[REAL_API_TEST_ENV])
-  );
-}
-
-export function resolveFetchUrl(input: RequestInfo | URL): URL | null {
-  const rawUrl =
-    typeof input === "string"
-      ? input
-      : input instanceof URL
-        ? input.href
-        : typeof Request !== "undefined" && input instanceof Request
-          ? input.url
-          : typeof (input as { url?: unknown })?.url === "string"
-            ? String((input as { url: string }).url)
-            : null;
-
-  if (!rawUrl) {
-    return null;
-  }
-
-  try {
-    return new URL(rawUrl, "http://127.0.0.1");
-  } catch {
-    return null;
-  }
-}
-
-export function isVitestNetworkUrlAllowed(input: RequestInfo | URL): boolean {
-  const url = resolveFetchUrl(input);
-
-  if (!url) {
-    return true;
-  }
-
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    return true;
-  }
-
-  const hostname = url.hostname.toLowerCase();
-  return LOCAL_HTTP_HOSTS.has(hostname) || hostname.endsWith(".localhost");
-}
-
-function isUrlAllowed(url: URL | null): boolean {
-  if (!url) {
-    return true;
-  }
-
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    return true;
-  }
-
-  const hostname = url.hostname.toLowerCase();
-  return LOCAL_HTTP_HOSTS.has(hostname) || hostname.endsWith(".localhost");
-}
-
-function stringOption(value: unknown): string | undefined {
-  if (typeof value === "string" && value.trim()) {
-    return value.trim();
-  }
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return String(value);
-  }
-  return undefined;
-}
-
-function isRequestOptions(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !(value instanceof URL);
-}
-
-function mergeUrlWithOptions(
-  baseUrl: URL,
-  options: Record<string, unknown> | undefined,
-): URL {
-  if (!options) {
-    return baseUrl;
-  }
-
-  const merged = new URL(baseUrl.href);
-  const protocol = stringOption(options.protocol);
-  if (protocol) {
-    merged.protocol = protocol.endsWith(":") ? protocol : `${protocol}:`;
-  }
-
-  const hostname = stringOption(options.hostname);
-  const host = stringOption(options.host);
-  if (hostname) {
-    merged.hostname = hostname;
-  } else if (host) {
-    merged.host = host;
-  }
-
-  const port = stringOption(options.port);
-  if (port) {
-    merged.port = port;
-  }
-
-  const pathValue = stringOption(options.path);
-  if (pathValue) {
-    const [pathname, search = ""] = pathValue.split("?", 2);
-    merged.pathname = pathname || "/";
-    merged.search = search ? `?${search}` : "";
-  } else {
-    const pathname = stringOption(options.pathname);
-    if (pathname) {
-      merged.pathname = pathname;
-    }
-    const search = stringOption(options.search);
-    if (search) {
-      merged.search = search.startsWith("?") ? search : `?${search}`;
-    }
-  }
-
-  return merged;
-}
-
-export function resolveNodeHttpRequestUrl(
-  defaultProtocol: "http:" | "https:",
-  args: unknown[],
-): URL | null {
-  const first = args[0];
-  const second = args[1];
-  const options = isRequestOptions(second) ? second : undefined;
-
-  if (typeof first === "string" || first instanceof URL) {
-    try {
-      return mergeUrlWithOptions(new URL(String(first)), options);
-    } catch {
-      return null;
-    }
-  }
-
-  if (!isRequestOptions(first)) {
-    return null;
-  }
-
-  const requestOptions = first;
-  const protocol =
-    stringOption(requestOptions.protocol)?.replace(/:?$/, ":") ||
-    defaultProtocol;
-  const hostname =
-    stringOption(requestOptions.hostname) || stringOption(requestOptions.host);
-
-  if (!hostname) {
-    return null;
-  }
-
-  const port = stringOption(requestOptions.port);
-  const pathValue = stringOption(requestOptions.path) || "/";
-  const url = new URL(`${protocol}//${hostname}`);
-  if (port) {
-    url.port = port;
-  }
-  const [pathname, search = ""] = pathValue.split("?", 2);
-  url.pathname = pathname || "/";
-  url.search = search ? `?${search}` : "";
-  return url;
-}
-
-export function isVitestNodeHttpRequestAllowed(
-  defaultProtocol: "http:" | "https:",
-  args: unknown[],
-): boolean {
-  return isUrlAllowed(resolveNodeHttpRequestUrl(defaultProtocol, args));
-}
-
 function assertVitestNetworkRequestAllowed(
   url: URL | null,
   rawInput: unknown,
 ): void {
-  if (vitestLiveProviderNetworkAllowed() || isUrlAllowed(url)) {
+  if (
+    vitestLiveProviderNetworkAllowed() ||
+    isVitestResolvedNetworkUrlAllowed(url)
+  ) {
     return;
   }
 
@@ -248,8 +106,8 @@ function assertVitestNetworkRequestAllowed(
 
 function createGuardedFetch(state: GuardState): FetchLike {
   const guardedFetch = (async (
-    input: RequestInfo | URL,
-    init?: RequestInit,
+    input: FetchInput | URL,
+    init?: FetchInit,
   ): Promise<Response> => {
     assertVitestNetworkRequestAllowed(resolveFetchUrl(input), input);
 
@@ -309,10 +167,69 @@ function createGuardedHttpGet(
   }) as HttpGetLike | HttpsGetLike;
 }
 
+function createGuardedNetConnect(state: GuardState): NetConnectLike {
+  return ((...args: Parameters<NetConnectLike>) => {
+    assertVitestNetworkRequestAllowed(
+      resolveNodeSocketConnectUrl("http:", args),
+      args[0],
+    );
+
+    if (!state.nativeNetConnect) {
+      throw new Error(
+        "[vitest-network-guard] 当前运行环境没有可用 net connect。",
+      );
+    }
+
+    return (state.nativeNetConnect as (...requestArgs: unknown[]) => unknown)(
+      ...args,
+    );
+  }) as NetConnectLike;
+}
+
+function createGuardedNetCreateConnection(
+  state: GuardState,
+): NetCreateConnectionLike {
+  return ((...args: Parameters<NetCreateConnectionLike>) => {
+    assertVitestNetworkRequestAllowed(
+      resolveNodeSocketConnectUrl("http:", args),
+      args[0],
+    );
+
+    if (!state.nativeNetCreateConnection) {
+      throw new Error(
+        "[vitest-network-guard] 当前运行环境没有可用 net createConnection。",
+      );
+    }
+
+    return (
+      state.nativeNetCreateConnection as (...requestArgs: unknown[]) => unknown
+    )(...args);
+  }) as NetCreateConnectionLike;
+}
+
+function createGuardedTlsConnect(state: GuardState): TlsConnectLike {
+  return ((...args: Parameters<TlsConnectLike>) => {
+    assertVitestNetworkRequestAllowed(
+      resolveNodeSocketConnectUrl("https:", args),
+      args[0],
+    );
+
+    if (!state.nativeTlsConnect) {
+      throw new Error(
+        "[vitest-network-guard] 当前运行环境没有可用 tls connect。",
+      );
+    }
+
+    return (state.nativeTlsConnect as (...requestArgs: unknown[]) => unknown)(
+      ...args,
+    );
+  }) as TlsConnectLike;
+}
+
 function createGuardedXmlHttpRequestOpen(
   state: GuardState,
 ): XmlHttpRequestOpenLike {
-  return (function guardedXmlHttpRequestOpen(
+  return function guardedXmlHttpRequestOpen(
     this: XMLHttpRequest,
     method: string,
     url: string | URL,
@@ -328,15 +245,10 @@ function createGuardedXmlHttpRequestOpen(
       );
     }
 
-    return (state.nativeXmlHttpRequestOpen as (...args: unknown[]) => void).call(
-      this,
-      method,
-      url,
-      async,
-      username,
-      password,
-    );
-  }) as XmlHttpRequestOpenLike;
+    return (
+      state.nativeXmlHttpRequestOpen as (...args: unknown[]) => void
+    ).call(this, method, url, async, username, password);
+  } as XmlHttpRequestOpenLike;
 }
 
 function isGuardedFetch(value: unknown): boolean {
@@ -350,9 +262,8 @@ function isGuardedFetch(value: unknown): boolean {
 function isGuardedXmlHttpRequestOpen(value: unknown): boolean {
   return Boolean(
     value &&
-      typeof value === "function" &&
-      (value as { __limeVitestNetworkGuard?: boolean })
-        .__limeVitestNetworkGuard,
+    typeof value === "function" &&
+    (value as { __limeVitestNetworkGuard?: boolean }).__limeVitestNetworkGuard,
   );
 }
 
@@ -399,6 +310,30 @@ function patchNodeHttpModules(state: GuardState): void {
       ) as HttpsGetLike;
     }
     https.get = state.guardedHttpsGet;
+  }
+}
+
+function patchNodeSocketModules(state: GuardState): void {
+  if (net.connect !== state.guardedNetConnect) {
+    if (!state.guardedNetConnect) {
+      state.guardedNetConnect = createGuardedNetConnect(state);
+    }
+    net.connect = state.guardedNetConnect;
+  }
+
+  if (net.createConnection !== state.guardedNetCreateConnection) {
+    if (!state.guardedNetCreateConnection) {
+      state.guardedNetCreateConnection =
+        createGuardedNetCreateConnection(state);
+    }
+    net.createConnection = state.guardedNetCreateConnection;
+  }
+
+  if (tls.connect !== state.guardedTlsConnect) {
+    if (!state.guardedTlsConnect) {
+      state.guardedTlsConnect = createGuardedTlsConnect(state);
+    }
+    tls.connect = state.guardedTlsConnect;
   }
 }
 
@@ -455,5 +390,6 @@ export function installVitestNetworkGuard(): void {
   }
 
   patchNodeHttpModules(state);
+  patchNodeSocketModules(state);
   patchXmlHttpRequest(state);
 }

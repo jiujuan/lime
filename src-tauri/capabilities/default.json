@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Lime 默认权限配置",
-  "windows": ["main", "browser-connector-guide-*"],
+  "windows": ["main", "browser-connector-guide-*", "html-preview-*"],
   "permissions": [
     "core:default",
     "core:event:default",
@@ -23,6 +23,7 @@
     "core:window:allow-outer-size",
     "core:window:allow-start-dragging",
     "core:webview:default",
+    "core:webview:allow-create-webview-window",
     "core:app:default",
     "core:resources:default",
     "core:image:default",

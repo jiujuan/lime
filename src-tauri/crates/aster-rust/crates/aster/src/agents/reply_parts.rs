@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use async_stream::try_stream;
 use futures::stream::StreamExt;
-use serde_json::{json, Value};
+use serde_json::Value;
 use tracing::debug;
 
 use super::super::agents::Agent;
@@ -24,6 +24,7 @@ use crate::tools::VIEW_IMAGE_TOOL_NAME;
 
 use crate::agents::code_execution_extension::EXTENSION_NAME as CODE_EXECUTION_EXTENSION;
 use crate::agents::subagent_tool::AGENT_TOOL_NAME;
+use crate::agents::tool_argument_coercion::coerce_tool_arguments;
 use crate::session::{apply_session_update, query_session, SessionStore, TokenStatsUpdate};
 #[cfg(test)]
 use crate::session::{SessionManager, SessionType, TurnContextOverride};
@@ -170,56 +171,6 @@ fn strip_images_for_text_only_provider(messages: &[Message]) -> Conversation {
     Conversation::new_unvalidated(stripped_messages)
 }
 
-fn coerce_value(s: &str, schema: &Value) -> Value {
-    let type_str = schema.get("type");
-
-    match type_str {
-        Some(Value::String(t)) => match t.as_str() {
-            "number" | "integer" => try_coerce_number(s),
-            "boolean" => try_coerce_boolean(s),
-            _ => Value::String(s.to_string()),
-        },
-        Some(Value::Array(types)) => {
-            // Try each type in order
-            for t in types {
-                if let Value::String(type_name) = t {
-                    match type_name.as_str() {
-                        "number" | "integer" if s.parse::<f64>().is_ok() => {
-                            return try_coerce_number(s)
-                        }
-                        "boolean" if matches!(s.to_lowercase().as_str(), "true" | "false") => {
-                            return try_coerce_boolean(s)
-                        }
-                        _ => continue,
-                    }
-                }
-            }
-            Value::String(s.to_string())
-        }
-        _ => Value::String(s.to_string()),
-    }
-}
-
-fn try_coerce_number(s: &str) -> Value {
-    if let Ok(n) = s.parse::<f64>() {
-        if n.fract() == 0.0 && n >= i64::MIN as f64 && n <= i64::MAX as f64 {
-            json!(n as i64)
-        } else {
-            json!(n)
-        }
-    } else {
-        Value::String(s.to_string())
-    }
-}
-
-fn try_coerce_boolean(s: &str) -> Value {
-    match s.to_lowercase().as_str() {
-        "true" => json!(true),
-        "false" => json!(false),
-        _ => Value::String(s.to_string()),
-    }
-}
-
 fn resolve_turn_tool_surface_mode() -> Option<String> {
     current_turn_context()?
         .metadata
@@ -346,29 +297,6 @@ fn turn_surface_prompt_guidance(tool_surface_mode: Option<&str>) -> Option<&'sta
         Some(TURN_TOOL_SURFACE_LOCAL_WORKSPACE) => Some(LOCAL_WORKSPACE_TURN_GUIDANCE),
         _ => None,
     }
-}
-
-fn coerce_tool_arguments(
-    arguments: Option<serde_json::Map<String, Value>>,
-    tool_schema: &Value,
-) -> Option<serde_json::Map<String, Value>> {
-    let args = arguments?;
-
-    let properties = tool_schema.get("properties").and_then(|p| p.as_object())?;
-
-    let mut coerced = serde_json::Map::new();
-
-    for (key, value) in args.iter() {
-        let coerced_value =
-            if let (Value::String(s), Some(prop_schema)) = (value, properties.get(key)) {
-                coerce_value(s, prop_schema)
-            } else {
-                value.clone()
-            };
-        coerced.insert(key.clone(), coerced_value);
-    }
-
-    Some(coerced)
 }
 
 fn normalize_response_tool_requests(response: &Message, tool_requests: &[ToolRequest]) -> Message {
@@ -908,6 +836,7 @@ mod tests {
         ServerNotification,
     };
     use rmcp::object;
+    use serde_json::json;
     use std::collections::HashMap;
     use std::path::PathBuf;
     use tokio::sync::{mpsc, Mutex};

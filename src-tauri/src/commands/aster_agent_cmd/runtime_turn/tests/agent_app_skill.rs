@@ -141,6 +141,29 @@ async fn agent_app_required_skill_params_should_execute_lime_skill_fast_path() {
 }
 
 #[test]
+fn agent_app_required_skill_context_should_inherit_runtime_provider() {
+    let provider: Arc<dyn Provider> = Arc::new(AutoCompactThresholdTestProvider::new(None));
+    let context = build_image_skill_launch_tool_context(
+        ".",
+        "session-with-direct-provider",
+        "thread-1",
+        "turn-1",
+        None,
+        None,
+    );
+    let context = attach_provider_to_tool_context(context, Some(provider));
+
+    assert!(context.provider.is_some());
+    assert_eq!(
+        context
+            .provider
+            .as_ref()
+            .map(|provider| provider.get_name()),
+        Some("auto-compact-threshold-test")
+    );
+}
+
+#[test]
 fn agent_app_required_skill_tool_end_should_project_invocation_metadata() {
     let tool_result = aster::tools::ToolResult::success("{}").with_metadata(
         "content_factory_skill_evidence",

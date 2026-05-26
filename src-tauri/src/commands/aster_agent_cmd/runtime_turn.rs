@@ -1,7 +1,7 @@
 use super::agentruntime_profile::{
     profile_failure_category, AgentRuntimeProfileEvent, AgentRuntimeProfileStream,
 };
-use super::request_model_resolution::resolve_runtime_provider_auth_recovery_config;
+use super::request_model_resolution::resolve_runtime_provider_model_recovery_config;
 use super::runtime_auto_compaction::{
     auto_compaction_failure_count, record_auto_compaction_failure, reset_auto_compaction_failure,
     resolve_auto_compact_threshold_override, resolve_auto_compaction_threshold_budget,
@@ -143,10 +143,10 @@ pub(crate) use runtime_turn_queue::{build_queued_turn_task, build_runtime_queue_
 use runtime_turn_request_metadata::should_skip_artifact_document_autopersist;
 #[cfg(test)]
 use runtime_turn_request_metadata::{
-    backfill_runtime_access_policies, merge_runtime_turn_default_tool_surface_metadata,
-    merge_runtime_turn_tool_surface_metadata, normalize_runtime_turn_request_metadata,
-    resolve_fast_chat_tool_surface_mode, resolve_mcp_prewarm_skip_reason,
-    resolve_turn_execution_profile, should_prewarm_mcp_runtime,
+    apply_code_orchestrated_runtime_defaults, backfill_runtime_access_policies,
+    merge_runtime_turn_default_tool_surface_metadata, merge_runtime_turn_tool_surface_metadata,
+    normalize_runtime_turn_request_metadata, resolve_fast_chat_tool_surface_mode,
+    resolve_mcp_prewarm_skip_reason, resolve_turn_execution_profile, should_prewarm_mcp_runtime,
 };
 #[allow(unused_imports)]
 pub(crate) use runtime_turn_request_metadata::{
@@ -176,15 +176,16 @@ use runtime_turn_request_resolution_user_lock::{
 };
 #[cfg(test)]
 use runtime_turn_skill_launch::{
-    agent_app_required_skill_agent_tool_result, build_image_skill_launch_tool_context,
+    agent_app_required_skill_agent_tool_result, attach_provider_to_tool_context,
+    build_image_skill_launch_tool_context,
 };
 use runtime_turn_skill_launch::{
     emit_runtime_side_event, emit_service_skill_preload_runtime_events,
     execute_agent_app_required_skill_contract, execute_image_skill_launch_direct_task,
 };
 use runtime_turn_status::{
-    build_runtime_model_permission_fallback_failure_message, describe_provider_request_attempt,
-    emit_submit_accepted_runtime_status, is_runtime_model_permission_denied_error,
+    build_runtime_model_recovery_failure_message, describe_provider_request_attempt,
+    emit_submit_accepted_runtime_status, is_runtime_model_unavailable_error,
     RuntimeTurnKeepaliveGuard,
 };
 #[cfg(test)]

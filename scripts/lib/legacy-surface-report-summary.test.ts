@@ -67,6 +67,12 @@ describe("legacy-surface-report-summary", () => {
           references: [],
           violations: [],
         },
+        {
+          id: "dead-monitor",
+          classification: "dead",
+          references: [],
+          violations: [],
+        },
       ],
       rustTextResults: [],
       rustTextCountResults: [],

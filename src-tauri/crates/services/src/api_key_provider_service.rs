@@ -305,6 +305,53 @@ data: [DONE]\n";
     }
 
     #[test]
+    fn test_pick_test_model_candidates_tries_explicit_then_declared_models() {
+        let candidates = ApiKeyProviderService::pick_test_model_candidates(
+            Some("stale-chat".to_string()),
+            &[
+                "stable-chat".to_string(),
+                "stale-chat".to_string(),
+                "preview-chat".to_string(),
+            ],
+            &["fallback-mini".to_string()],
+        );
+
+        assert_eq!(
+            candidates,
+            vec![
+                "stale-chat".to_string(),
+                "fallback-mini".to_string(),
+                "stable-chat".to_string(),
+                "preview-chat".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_should_try_next_test_model_after_model_unavailable_errors() {
+        assert!(
+            ApiKeyProviderService::should_try_next_test_model_after_error(
+                "API 返回错误: 400 Bad Request - Param Incorrect"
+            )
+        );
+        assert!(
+            ApiKeyProviderService::should_try_next_test_model_after_error(
+                "Request failed: Bad request (400): Not supported model stale-chat"
+            )
+        );
+        assert!(
+            ApiKeyProviderService::should_try_next_test_model_after_error(
+                "当前模型未在租户白名单中开放"
+            )
+        );
+        assert!(
+            !ApiKeyProviderService::should_try_next_test_model_after_error(
+                "API 返回错误: 401 Unauthorized - invalid api key"
+            )
+        );
+    }
+
+    #[test]
     fn test_openai_image_connection_test_detection_prefers_explicit_or_image_only_providers() {
         assert!(
             ApiKeyProviderService::should_use_openai_image_connection_test(
@@ -1445,72 +1492,94 @@ impl ApiKeyProviderService {
             .get_next_api_key(db, provider_id)?
             .ok_or_else(|| "没有可用的 API Key".to_string())?;
 
-        let test_model =
-            Self::pick_test_model(model_name, &provider.custom_models, &fallback_models)
-                .ok_or_else(|| "缺少模型名称：请在自定义模型中填写一个模型名".to_string())?;
+        let test_models =
+            Self::pick_test_model_candidates(model_name, &provider.custom_models, &fallback_models);
+        if test_models.is_empty() {
+            return Err("缺少模型名称：请在自定义模型中填写一个模型名".to_string());
+        }
 
         let start = Instant::now();
+        let mut last_error = None;
 
-        // 根据 Provider 协议类型选择测试方式
-        let result = match effective_provider_type {
-            // Codex 协议直接走 /responses 端点
-            ApiProviderType::Codex => {
-                self.test_codex_responses_endpoint(
-                    &api_key,
-                    &provider.api_host,
-                    &test_model,
-                    &prompt,
-                    effective_provider_type,
-                )
-                .await
-            }
-            // OpenAI Responses API 走 /v1/responses
-            provider_type if Self::uses_openai_responses_protocol(provider_type) => {
-                self.test_openai_responses_once(&api_key, &provider.api_host, &test_model, &prompt)
+        for (index, test_model) in test_models.iter().enumerate() {
+            // 根据 Provider 协议类型选择测试方式
+            let result = match effective_provider_type {
+                // Codex 协议直接走 /responses 端点
+                ApiProviderType::Codex => {
+                    self.test_codex_responses_endpoint(
+                        &api_key,
+                        &provider.api_host,
+                        test_model,
+                        &prompt,
+                        effective_provider_type,
+                    )
                     .await
-            }
-            // Anthropic / AnthropicCompatible 统一走 /v1/messages
-            provider_type if Self::uses_anthropic_protocol(provider_type) => {
-                self.test_anthropic_chat_once(
-                    &api_key,
-                    &provider.api_host,
-                    &test_model,
-                    &prompt,
-                    provider.supports_automatic_prompt_cache(),
-                    effective_provider_type,
-                )
-                .await
-            }
-            // 其余默认 OpenAI 兼容
-            _ => {
-                self.test_openai_chat_once(
-                    &api_key,
-                    &provider.api_host,
-                    &test_model,
-                    &prompt,
-                    effective_provider_type,
-                )
-                .await
-            }
-        };
-        let latency_ms = start.elapsed().as_millis() as u64;
+                }
+                // OpenAI Responses API 走 /v1/responses
+                provider_type if Self::uses_openai_responses_protocol(provider_type) => {
+                    self.test_openai_responses_once(
+                        &api_key,
+                        &provider.api_host,
+                        test_model,
+                        &prompt,
+                    )
+                    .await
+                }
+                // Anthropic / AnthropicCompatible 统一走 /v1/messages
+                provider_type if Self::uses_anthropic_protocol(provider_type) => {
+                    self.test_anthropic_chat_once(
+                        &api_key,
+                        &provider.api_host,
+                        test_model,
+                        &prompt,
+                        provider.supports_automatic_prompt_cache(),
+                        effective_provider_type,
+                    )
+                    .await
+                }
+                // 其余默认 OpenAI 兼容
+                _ => {
+                    self.test_openai_chat_once(
+                        &api_key,
+                        &provider.api_host,
+                        test_model,
+                        &prompt,
+                        effective_provider_type,
+                    )
+                    .await
+                }
+            };
 
-        match result {
-            Ok((content, raw)) => Ok(ChatTestResult {
-                success: true,
-                latency_ms: Some(latency_ms),
-                error: None,
-                content: Some(content),
-                raw: Some(raw),
-            }),
-            Err(e) => Ok(ChatTestResult {
-                success: false,
-                latency_ms: Some(latency_ms),
-                error: Some(e),
-                content: None,
-                raw: None,
-            }),
+            match result {
+                Ok((content, raw)) => {
+                    let latency_ms = start.elapsed().as_millis() as u64;
+                    return Ok(ChatTestResult {
+                        success: true,
+                        latency_ms: Some(latency_ms),
+                        error: None,
+                        content: Some(content),
+                        raw: Some(raw),
+                    });
+                }
+                Err(error) => {
+                    let should_try_next = index + 1 < test_models.len()
+                        && Self::should_try_next_test_model_after_error(&error);
+                    last_error = Some(error);
+                    if !should_try_next {
+                        break;
+                    }
+                }
+            }
         }
+
+        let latency_ms = start.elapsed().as_millis() as u64;
+        Ok(ChatTestResult {
+            success: false,
+            latency_ms: Some(latency_ms),
+            error: Some(last_error.unwrap_or_else(|| "所有候选模型均未完成连接测试".to_string())),
+            content: None,
+            raw: None,
+        })
     }
 
     #[inline]
@@ -1577,6 +1646,77 @@ impl ApiKeyProviderService {
                     (!normalized.is_empty()).then(|| normalized.to_string())
                 })
             })
+    }
+
+    fn push_unique_test_model(
+        candidates: &mut Vec<String>,
+        seen: &mut HashSet<String>,
+        model: &str,
+    ) {
+        let normalized = model.trim();
+        if normalized.is_empty() {
+            return;
+        }
+
+        if seen.insert(normalized.to_ascii_lowercase()) {
+            candidates.push(normalized.to_string());
+        }
+    }
+
+    fn pick_test_model_candidates(
+        model_name: Option<String>,
+        custom_models: &[String],
+        fallback_models: &[String],
+    ) -> Vec<String> {
+        let mut candidates = Vec::new();
+        let mut seen = HashSet::new();
+
+        if let Some(explicit_model) = model_name.as_deref() {
+            Self::push_unique_test_model(&mut candidates, &mut seen, explicit_model);
+        }
+
+        if let Some(primary_model) = Self::pick_test_model(None, custom_models, fallback_models) {
+            Self::push_unique_test_model(&mut candidates, &mut seen, &primary_model);
+        }
+
+        for model in custom_models {
+            Self::push_unique_test_model(&mut candidates, &mut seen, model);
+        }
+
+        if let Some(preferred_fallback) = Self::pick_preferred_fallback_model(fallback_models) {
+            Self::push_unique_test_model(&mut candidates, &mut seen, &preferred_fallback);
+        }
+
+        for model in fallback_models {
+            Self::push_unique_test_model(&mut candidates, &mut seen, model);
+        }
+
+        candidates
+    }
+
+    fn should_try_next_test_model_after_error(error: &str) -> bool {
+        let normalized = error.trim().to_ascii_lowercase();
+        if normalized.is_empty() {
+            return false;
+        }
+
+        normalized.contains("param incorrect")
+            || normalized.contains("parameter incorrect")
+            || normalized.contains("unsupported model")
+            || normalized.contains("unsupported_model")
+            || normalized.contains("not supported model")
+            || normalized.contains("model not supported")
+            || normalized.contains("model is not supported")
+            || normalized.contains("model not found")
+            || normalized.contains("model_not_found")
+            || normalized.contains("model does not exist")
+            || normalized.contains("no such model")
+            || normalized.contains("invalid model")
+            || (normalized.contains("模型")
+                && (normalized.contains("白名单")
+                    || normalized.contains("不支持")
+                    || normalized.contains("不存在")
+                    || normalized.contains("无效")))
     }
 
     fn looks_like_openai_image_model(model: &str) -> bool {

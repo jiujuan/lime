@@ -287,4 +287,35 @@ describe("detect-missing-translations", () => {
 
     logSpy.mockRestore();
   });
+
+  it("CLI 应支持 --output 写出结构化报告文件", () => {
+    const resourcesDir = createTempResourcesDir();
+    const outputPath = path.join(resourcesDir, "reports", "coverage.json");
+    writeResource(resourcesDir, "zh-CN", "common", { "common.save": "保存" });
+    writeResource(resourcesDir, "en-US", "common", { "common.save": "Save" });
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const exitCode = runCli([
+      "--format",
+      "json",
+      "--output",
+      outputPath,
+      "--resources-dir",
+      resourcesDir,
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(logSpy).not.toHaveBeenCalled();
+    expect(JSON.parse(fs.readFileSync(outputPath, "utf8"))).toEqual(
+      expect.objectContaining({
+        summary: expect.objectContaining({
+          hasIssues: false,
+          sourceKeyCount: 1,
+        }),
+      }),
+    );
+
+    logSpy.mockRestore();
+  });
+
 });

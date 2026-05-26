@@ -493,6 +493,7 @@ const FLOW_ARROW_ONLY_PATTERN = /^(↓|⬇|⇣|↧|->|=>|→|↘|v)$/u;
 const CODE_SIGNAL_PATTERN =
   /[{}[\];=]|\b(const|let|var|function|class|return|import|export|interface|type|async|await)\b/;
 const LANGUAGE_CLASS_PATTERN = /\blanguage-([^\s]+)/i;
+const FLOW_VIEW_LANGUAGES = new Set(["flow"]);
 const CODE_LANGUAGE_ALIASES: Record<string, string> = {
   "c#": "csharp",
   "c++": "cpp",
@@ -569,23 +570,16 @@ function resolveCodePresentationMode(
   if (!trimmed) {
     return "plain";
   }
+  if (FLOW_VIEW_LANGUAGES.has(normalizedLanguage)) {
+    return "flow";
+  }
 
   const lines = trimmed
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-  const arrowRows = lines.filter((line) =>
-    FLOW_ARROW_ONLY_PATTERN.test(line),
-  ).length;
   const bulletRows = lines.filter((line) => /^[-*]\s+/.test(line)).length;
   const hasCodeSignals = CODE_SIGNAL_PATTERN.test(trimmed);
-
-  if (
-    (PLAIN_TEXT_LANGUAGES.has(normalizedLanguage) || !hasCodeSignals) &&
-    arrowRows >= 2
-  ) {
-    return "flow";
-  }
 
   if (
     PLAIN_TEXT_LANGUAGES.has(normalizedLanguage) ||

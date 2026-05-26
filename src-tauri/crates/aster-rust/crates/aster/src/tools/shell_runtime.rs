@@ -4,6 +4,11 @@ use std::path::PathBuf;
 
 use tokio::process::Command;
 
+#[cfg(target_os = "windows")]
+use crate::subprocess::{
+    configure_command_for_gui, wrap_cmd_command_for_utf8, wrap_powershell_command_for_utf8,
+};
+
 pub(crate) fn build_platform_shell_command(command: &str) -> Command {
     #[cfg(target_os = "windows")]
     {
@@ -75,15 +80,24 @@ fn detect_cmd_executable() -> PathBuf {
 
 #[cfg(target_os = "windows")]
 fn build_powershell_command(executable_path: PathBuf, command: &str) -> Command {
+    let command = wrap_powershell_command_for_utf8(command);
     let mut cmd = Command::new(executable_path);
-    cmd.args(["-NoProfile", "-NonInteractive", "-Command", command]);
+    configure_command_for_gui(&mut cmd);
+    cmd.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        command.as_str(),
+    ]);
     cmd
 }
 
 #[cfg(target_os = "windows")]
 fn build_cmd_command(executable_path: PathBuf, command: &str) -> Command {
+    let command = wrap_cmd_command_for_utf8(command);
     let mut cmd = Command::new(executable_path);
-    cmd.args(["/C", command]);
+    configure_command_for_gui(&mut cmd);
+    cmd.args(["/D", "/S", "/C", command.as_str()]);
     cmd
 }
 

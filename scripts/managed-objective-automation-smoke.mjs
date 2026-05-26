@@ -1,0 +1,354 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import process from "node:process";
+import { fileURLToPath } from "node:url";
+import {
+  assertSmoke,
+  invokeDevBridge,
+  sleep,
+  summarizeThreadRead,
+  threadSettled,
+  waitForHealth,
+} from "./lib/managed-objective-continuation-smoke-core.mjs";
+import {
+  assertLiveProviderSmokeAllowed,
+  liveProviderSmokeAllowed,
+} from "./lib/live-provider-smoke-gate.mjs";
+import {
+  buildAutomationFixtureMarkdown,
+  buildAutomationJobRequest,
+  buildAutomationSmokeEvidence,
+  fixtureChatRequestCount,
+  metadataFromRun,
+  registerAutomationSmokeWorkspaceSkill,
+  sessionIdFromRun,
+  workspaceIdFromDefaultProject,
+  workspaceRootFromDefaultProject,
+} from "./lib/managed-objective-automation-smoke-support.mjs";
+import { startOpenAiCompatibleFixtureServer } from "./lib/openai-compatible-fixture-server.mjs";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootDir = path.resolve(__dirname, "..");
+const DEFAULT_OUTPUT = path.join(
+  rootDir,
+  ".lime/qc/managed-objective-automation-smoke.json",
+);
+const DEFAULT_HEALTH_URL = "http://127.0.0.1:3030/health";
+const DEFAULT_INVOKE_URL = "http://127.0.0.1:3030/invoke";
+const DEFAULT_TIMEOUT_MS = 180_000;
+const DEFAULT_INTERVAL_MS = 1_000;
+const LOG_PREFIX = "[smoke:managed-objective-automation]";
+
+function printHelp() {
+  console.log(`
+Lime Managed Objective Automation Smoke
+
+用途:
+  通过 DevBridge current 命令验证 automation job owner 能默认离线执行 Managed Objective，
+  并能从 run history / runtime session / evidence pack 回看 owner 关系。
+
+用法:
+  npm run smoke:managed-objective-automation
+
+选项:
+  --output <path>       evidence JSON 输出路径，默认 .lime/qc/managed-objective-automation-smoke.json
+  --health-url <url>    DevBridge health 地址，默认 ${DEFAULT_HEALTH_URL}
+  --invoke-url <url>    DevBridge invoke 地址，默认 ${DEFAULT_INVOKE_URL}
+  --timeout-ms <ms>     总等待超时，默认 ${DEFAULT_TIMEOUT_MS}
+  --interval-ms <ms>    轮询间隔，默认 ${DEFAULT_INTERVAL_MS}
+  --allow-live-provider 保留统一 live gate 语义；本 smoke 默认且推荐使用 localhost fixture
+  --no-write            只运行校验并打印摘要，不写 evidence JSON
+  -h, --help            显示帮助
+`);
+}
+
+function parseArgs(argv) {
+  const options = {
+    output: DEFAULT_OUTPUT,
+    healthUrl: DEFAULT_HEALTH_URL,
+    invokeUrl: DEFAULT_INVOKE_URL,
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+    intervalMs: DEFAULT_INTERVAL_MS,
+    allowLiveProvider: liveProviderSmokeAllowed(),
+    write: true,
+    logPrefix: LOG_PREFIX,
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--help" || arg === "-h") {
+      printHelp();
+      process.exit(0);
+    }
+    if (arg === "--output" && argv[index + 1]) {
+      options.output = path.resolve(rootDir, String(argv[index + 1]));
+      index += 1;
+      continue;
+    }
+    if (arg === "--health-url" && argv[index + 1]) {
+      options.healthUrl = String(argv[index + 1]).trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--invoke-url" && argv[index + 1]) {
+      options.invokeUrl = String(argv[index + 1]).trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--timeout-ms" && argv[index + 1]) {
+      options.timeoutMs = Number(argv[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (arg === "--interval-ms" && argv[index + 1]) {
+      options.intervalMs = Number(argv[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (arg === "--allow-live-provider") {
+      options.allowLiveProvider = true;
+      continue;
+    }
+    if (arg === "--no-write") {
+      options.write = false;
+      continue;
+    }
+    throw new Error(`未知参数: ${arg}`);
+  }
+
+  if (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 30_000) {
+    throw new Error("--timeout-ms 必须是 >= 30000 的数字");
+  }
+  if (!Number.isFinite(options.intervalMs) || options.intervalMs < 100) {
+    throw new Error("--interval-ms 必须是 >= 100 的数字");
+  }
+  if (!options.healthUrl || !options.invokeUrl) {
+    throw new Error("--health-url / --invoke-url 不能为空");
+  }
+
+  return options;
+}
+
+function writeEvidence(outputPath, evidence) {
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, `${JSON.stringify(evidence, null, 2)}\n`);
+  return outputPath;
+}
+
+function writeEvidenceWithFallback(outputPath, evidence) {
+  try {
+    return writeEvidence(outputPath, evidence);
+  } catch (error) {
+    if (outputPath !== DEFAULT_OUTPUT) {
+      throw error;
+    }
+    const fallbackPath = path.join(
+      os.tmpdir(),
+      "managed-objective-automation-smoke.json",
+    );
+    const writtenPath = writeEvidence(fallbackPath, evidence);
+    console.warn(
+      `${LOG_PREFIX} default evidence write failed, fallback=${writtenPath}: ${error.message}`,
+    );
+    return writtenPath;
+  }
+}
+
+async function resolveWorkspaceRoot(options, workspace, workspaceId) {
+  const directRoot = workspaceRootFromDefaultProject(workspace);
+  if (directRoot) {
+    return directRoot;
+  }
+
+  const ensured = await invokeDevBridge(options, "workspace_ensure_ready", {
+    id: workspaceId,
+  });
+  const ensuredRoot = workspaceRootFromDefaultProject(ensured);
+  assertSmoke(ensuredRoot, "默认 workspace 缺少 rootPath");
+  return ensuredRoot;
+}
+
+async function waitForRuntimeFixtureCompletion(
+  options,
+  sessionId,
+  fixtureRequests,
+) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const threadRead = await invokeDevBridge(
+      options,
+      "agent_runtime_get_thread_read",
+      {
+        sessionId,
+      },
+    );
+    lastSnapshot = {
+      threadRead: summarizeThreadRead(threadRead),
+      fixtureChatRequestCount: fixtureChatRequestCount(fixtureRequests),
+    };
+    if (
+      lastSnapshot.fixtureChatRequestCount > 0 &&
+      threadSettled(threadRead) &&
+      (lastSnapshot.threadRead.turnCount || 0) >= 1
+    ) {
+      return lastSnapshot;
+    }
+    await sleep(options.intervalMs);
+  }
+
+  throw new Error(
+    `${LOG_PREFIX} wait runtime fixture completion timeout; last=${JSON.stringify(lastSnapshot)}`,
+  );
+}
+
+async function runSmoke(options) {
+  console.log(`${LOG_PREFIX} stage=health`);
+  const health = await waitForHealth(options);
+
+  console.log(`${LOG_PREFIX} stage=fixture-provider`);
+  if (options.allowLiveProvider) {
+    assertLiveProviderSmokeAllowed({
+      allowed: options.allowLiveProvider,
+      scriptName: "smoke:managed-objective-automation",
+    });
+  }
+  const fixture = await startOpenAiCompatibleFixtureServer({
+    content: buildAutomationFixtureMarkdown(),
+  });
+  console.log(
+    `${LOG_PREFIX} provider=localhost-fixture baseUrl=${fixture.baseUrl}`,
+  );
+
+  try {
+    console.log(`${LOG_PREFIX} stage=workspace`);
+    const workspace = await invokeDevBridge(
+      options,
+      "get_or_create_default_project",
+      {},
+      30_000,
+    );
+    const workspaceId = workspaceIdFromDefaultProject(workspace);
+    assertSmoke(workspaceId, "默认 workspace 缺少 id");
+    const workspaceRoot = await resolveWorkspaceRoot(
+      options,
+      workspace,
+      workspaceId,
+    );
+
+    console.log(`${LOG_PREFIX} stage=register-workspace-skill`);
+    const skillBinding = await registerAutomationSmokeWorkspaceSkill(
+      options,
+      workspaceRoot,
+      invokeDevBridge,
+    );
+    console.log(
+      `${LOG_PREFIX} workspace-skill=${skillBinding.skillName} directory=${skillBinding.skillDirectory}`,
+    );
+
+    console.log(`${LOG_PREFIX} stage=create-automation-job`);
+    const job = await invokeDevBridge(options, "create_automation_job", {
+      request: buildAutomationJobRequest(
+        workspaceId,
+        skillBinding,
+        fixture.provider,
+      ),
+    });
+    assertSmoke(job?.id, "create_automation_job 未返回 job id");
+
+    console.log(`${LOG_PREFIX} stage=run-automation-job job=${job.id}`);
+    const runResult = await invokeDevBridge(
+      options,
+      "run_automation_job_now",
+      { id: job.id },
+      options.timeoutMs,
+    );
+
+    console.log(`${LOG_PREFIX} stage=run-history`);
+    const runs = await invokeDevBridge(options, "get_automation_run_history", {
+      id: job.id,
+      limit: 5,
+    });
+    const latestRun = Array.isArray(runs) ? runs[0] : null;
+    const latestRunMetadata = metadataFromRun(latestRun);
+    const runSessionId = sessionIdFromRun(latestRun);
+    assertSmoke(runSessionId, "automation run history 缺少 runtime session_id");
+
+    console.log(
+      `${LOG_PREFIX} stage=wait-runtime-fixture session=${runSessionId}`,
+    );
+    const runtimeSnapshot = await waitForRuntimeFixtureCompletion(
+      options,
+      runSessionId,
+      fixture.requests,
+    );
+
+    console.log(
+      `${LOG_PREFIX} stage=export-evidence-pack session=${runSessionId}`,
+    );
+    const evidencePack = await invokeDevBridge(
+      options,
+      "agent_runtime_export_evidence_pack",
+      {
+        sessionId: runSessionId,
+      },
+    );
+
+    const evidence = buildAutomationSmokeEvidence({
+      generatedAt: new Date().toISOString(),
+      options,
+      health,
+      workspace,
+      skillBinding,
+      provider: fixture.provider,
+      providerSessionId: null,
+      job,
+      runResult,
+      latestRun,
+      latestRunMetadata,
+      runtimeSnapshot,
+      evidencePack,
+      fixtureRequests: fixture.requests,
+    });
+
+    for (const [key, value] of Object.entries(evidence.assertions)) {
+      assertSmoke(value, `assertion failed: ${key}`);
+    }
+    assertSmoke(
+      evidence.status === "pass",
+      "managed objective automation smoke evidence 未通过全部断言",
+    );
+
+    return evidence;
+  } finally {
+    await fixture.close();
+  }
+}
+
+async function main() {
+  const options = parseArgs(process.argv.slice(2));
+  const evidence = await runSmoke(options);
+
+  if (options.write) {
+    const writtenPath = writeEvidenceWithFallback(options.output, evidence);
+    console.log(`${LOG_PREFIX} evidence=${writtenPath}`);
+  } else {
+    console.log(JSON.stringify(evidence, null, 2));
+  }
+
+  console.log(
+    `${LOG_PREFIX} pass job=${evidence.automation.jobId} session=${evidence.runtime.sessionId} fixtureRequests=${evidence.fixture.chatCompletionRequestCount}`,
+  );
+}
+
+main().catch((error) => {
+  console.error(
+    `${LOG_PREFIX} failed: ${error instanceof Error ? error.stack || error.message : String(error)}`,
+  );
+  process.exitCode = 1;
+});

@@ -47,6 +47,56 @@ describe("agentStreamErrorController", () => {
     });
   });
 
+  it("Provider 402 失败 assistant patch 应使用友好提示", () => {
+    const rawProviderError =
+      "Agent provider execution failed: Request failed with status 402 Payment Required: Insufficient Balance";
+    const patch = buildAgentStreamFailedAssistantMessagePatch({
+      accumulatedContent: "",
+      errorMessage: rawProviderError,
+      previousContent: "",
+    });
+
+    expect(patch.content).toContain("当前 AI 服务商余额或额度不足");
+    expect(patch.runtimeStatus?.detail).toContain(
+      "当前 AI 服务商余额或额度不足",
+    );
+    expect(patch.content).not.toContain("Payment Required");
+    expect(patch.content).not.toContain("Insufficient Balance");
+  });
+
+  it("Provider 402 失败 timeline summary 应使用友好提示", () => {
+    const rawProviderError =
+      "Agent provider execution failed: Request failed with status 402 Payment Required: Insufficient Balance";
+    const items: AgentThreadItem[] = [
+      {
+        id: "pending-item",
+        thread_id: "session-1",
+        turn_id: "pending-turn",
+        sequence: 1,
+        status: "in_progress",
+        started_at: "2026-05-05T08:01:00.000Z",
+        updated_at: "2026-05-05T08:01:00.000Z",
+        type: "turn_summary",
+        text: "处理中",
+      },
+    ];
+
+    const item = buildAgentStreamFailedTimelineItemUpdate({
+      errorMessage: rawProviderError,
+      failedAt: "2026-05-05T08:02:00.000Z",
+      items,
+      pendingItemKey: "pending-item",
+    });
+
+    expect(item?.type).toBe("turn_summary");
+    if (item?.type !== "turn_summary") {
+      throw new Error("expected turn_summary item");
+    }
+    expect(item.text).toContain("当前 AI 服务商余额或额度不足");
+    expect(item.text).not.toContain("Payment Required");
+    expect(item.text).not.toContain("Insufficient Balance");
+  });
+
   it("应在无局部输出时回退 previousContent，并按需带回 usage", () => {
     const usage = { input_tokens: 1, output_tokens: 2 };
     expect(

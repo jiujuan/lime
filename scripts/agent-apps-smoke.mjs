@@ -507,6 +507,62 @@ async function readJsonWithTimeout(url, init, timeoutMs) {
   }
 }
 
+function isTransportFailure(response) {
+  if (!response || response.ok) {
+    return false;
+  }
+  if (response.error) {
+    return true;
+  }
+  const message =
+    typeof response.body?.error === "string"
+      ? response.body.error
+      : typeof response.body === "string"
+        ? response.body
+        : "";
+  return /failed to fetch|timeout|abort|connection|health check/i.test(message);
+}
+
+async function invokeDevBridgeCommand(options, cmd, args, timeoutMs) {
+  const invokeUrl = resolveInvokeUrl(options.healthUrl);
+  const deadline = Date.now() + Math.min(options.timeoutMs, Math.max(timeoutMs, 30_000));
+  let lastResponse = null;
+
+  while (Date.now() < deadline) {
+    const response = await readJsonWithTimeout(
+      invokeUrl,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cmd, args }),
+      },
+      timeoutMs,
+    );
+    lastResponse = response;
+    const body = response.body;
+
+    if (response.ok && isObjectRecord(body) && !body.error) {
+      return body.result;
+    }
+
+    if (!isTransportFailure(response)) {
+      throw new Error(
+        `[smoke:agent-apps] DevBridge command failed: ${cmd}: ${sanitizeDiagnosticText(
+          body?.error ?? response.error ?? JSON.stringify(body),
+        )}`,
+      );
+    }
+
+    await sleep(options.intervalMs);
+  }
+
+  throw new Error(
+    `[smoke:agent-apps] DevBridge command unavailable after retry: ${cmd}: ${sanitizeDiagnosticText(
+      lastResponse?.error ?? lastResponse?.body?.error ?? "unknown transport failure",
+    )}`,
+  );
+}
+
 function isObjectRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -1841,7 +1897,7 @@ async function ensureContentFactoryInstalled(page, options, reason) {
     return { status: "already_installed", reason };
   }
 
-  await page.evaluate(async () => {
+  const state = await page.evaluate(async () => {
     const api = await import("/src/lib/api/agentApps.ts");
     const fixtureResponse = await fetch(
       "/src/features/agent-app/fixtures/content-factory-app.json",
@@ -1859,11 +1915,18 @@ async function ensureContentFactoryInstalled(page, options, reason) {
     if (!app) {
       throw new Error("Content Factory cloud bootstrap fixture is missing.");
     }
-    await api.installCloudAgentAppRelease({
+    const review = await api.reviewCloudAgentAppRelease({
       app,
       packageManifest,
     });
+    return review.state;
   });
+  await invokeDevBridgeCommand(
+    options,
+    "agent_app_save_installed_state",
+    { request: { state } },
+    30_000,
+  );
 
   await page.click('[data-testid="agent-apps-refresh"]');
   await page.waitForSelector(installedSelector, {
@@ -1872,6 +1935,7 @@ async function ensureContentFactoryInstalled(page, options, reason) {
   return {
     status: "seeded_from_fixture",
     reason,
+    appId: state?.appId ?? "content-factory-app",
   };
 }
 

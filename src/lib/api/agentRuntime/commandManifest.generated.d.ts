@@ -1,6 +1,7 @@
 /**
  * 由 scripts/generate-agent-runtime-clients.mjs 自动生成，请勿手改。
  */
+
 export declare const AGENT_RUNTIME_COMMANDS: {
   readonly submitTurn: "agent_runtime_submit_turn";
   readonly interruptTurn: "agent_runtime_interrupt_turn";
@@ -17,6 +18,7 @@ export declare const AGENT_RUNTIME_COMMANDS: {
   readonly listFileCheckpoints: "agent_runtime_list_file_checkpoints";
   readonly getFileCheckpoint: "agent_runtime_get_file_checkpoint";
   readonly diffFileCheckpoint: "agent_runtime_diff_file_checkpoint";
+  readonly restoreFileCheckpoint: "agent_runtime_restore_file_checkpoint";
   readonly promoteQueuedTurn: "agent_runtime_promote_queued_turn";
   readonly removeQueuedTurn: "agent_runtime_remove_queued_turn";
   readonly respondAction: "agent_runtime_respond_action";
@@ -39,20 +41,14 @@ export declare const AGENT_RUNTIME_COMMANDS: {
   readonly resumeSubagent: "agent_runtime_resume_subagent";
   readonly closeSubagent: "agent_runtime_close_subagent";
 };
+
 export type AgentRuntimeCommandKey = keyof typeof AGENT_RUNTIME_COMMANDS;
 export type AgentRuntimeCommandName =
   (typeof AGENT_RUNTIME_COMMANDS)[AgentRuntimeCommandKey];
-export type AgentRuntimeCommandDomain =
-  | "thread"
-  | "session"
-  | "export"
-  | "inventory"
-  | "subagent";
+export type AgentRuntimeCommandDomain = "thread" | "session" | "export" | "inventory" | "subagent";
 export type AgentRuntimeCommandLifecycle = "current" | "compat" | "deprecated";
-export type AgentRuntimeCommandMockStrategy =
-  | "default-mock"
-  | "mock-priority"
-  | "bridge-only";
+export type AgentRuntimeCommandMockStrategy = "default-mock" | "mock-priority" | "bridge-only";
+
 export interface AgentRuntimeCommandDescriptor {
   readonly key: AgentRuntimeCommandKey;
   readonly command: AgentRuntimeCommandName;
@@ -63,6 +59,7 @@ export interface AgentRuntimeCommandDescriptor {
   readonly mockStrategy: AgentRuntimeCommandMockStrategy;
   readonly docsSection: string;
 }
+
 export declare const AGENT_RUNTIME_COMMAND_DESCRIPTORS: readonly [
   {
     readonly key: "submitTurn";
@@ -210,6 +207,16 @@ export declare const AGENT_RUNTIME_COMMAND_DESCRIPTORS: readonly [
     readonly domain: "thread";
     readonly requestType: "AgentRuntimeDiffFileCheckpointRequest";
     readonly responseType: "AgentRuntimeFileCheckpointDiffResult";
+    readonly lifecycle: "current";
+    readonly mockStrategy: "bridge-only";
+    readonly docsSection: "agent-runtime.thread";
+  },
+  {
+    readonly key: "restoreFileCheckpoint";
+    readonly command: "agent_runtime_restore_file_checkpoint";
+    readonly domain: "thread";
+    readonly requestType: "AgentRuntimeRestoreFileCheckpointRequest";
+    readonly responseType: "AgentRuntimeFileCheckpointRestoreResult";
     readonly lifecycle: "current";
     readonly mockStrategy: "bridge-only";
     readonly docsSection: "agent-runtime.thread";
@@ -425,6 +432,7 @@ export declare const AGENT_RUNTIME_COMMAND_DESCRIPTORS: readonly [
     readonly docsSection: "agent-runtime.subagent";
   },
 ];
+
 export declare const AGENT_RUNTIME_COMMAND_NAMES: readonly [
   "agent_runtime_submit_turn",
   "agent_runtime_interrupt_turn",
@@ -441,6 +449,7 @@ export declare const AGENT_RUNTIME_COMMAND_NAMES: readonly [
   "agent_runtime_list_file_checkpoints",
   "agent_runtime_get_file_checkpoint",
   "agent_runtime_diff_file_checkpoint",
+  "agent_runtime_restore_file_checkpoint",
   "agent_runtime_promote_queued_turn",
   "agent_runtime_remove_queued_turn",
   "agent_runtime_respond_action",
@@ -463,8 +472,9 @@ export declare const AGENT_RUNTIME_COMMAND_NAMES: readonly [
   "agent_runtime_resume_subagent",
   "agent_runtime_close_subagent",
 ];
+
 export declare const AGENT_RUNTIME_COMMANDS_BY_DOMAIN: {
-  readonly thread: readonly [
+  readonly "thread": readonly [
     "agent_runtime_submit_turn",
     "agent_runtime_interrupt_turn",
     "agent_runtime_compact_session",
@@ -480,18 +490,19 @@ export declare const AGENT_RUNTIME_COMMANDS_BY_DOMAIN: {
     "agent_runtime_list_file_checkpoints",
     "agent_runtime_get_file_checkpoint",
     "agent_runtime_diff_file_checkpoint",
+    "agent_runtime_restore_file_checkpoint",
     "agent_runtime_promote_queued_turn",
     "agent_runtime_remove_queued_turn",
     "agent_runtime_respond_action",
   ];
-  readonly session: readonly [
+  readonly "session": readonly [
     "agent_runtime_create_session",
     "agent_runtime_list_sessions",
     "agent_runtime_get_session",
     "agent_runtime_update_session",
     "agent_runtime_delete_session",
   ];
-  readonly export: readonly [
+  readonly "export": readonly [
     "agent_runtime_export_analysis_handoff",
     "agent_runtime_export_handoff_bundle",
     "agent_runtime_export_evidence_pack",
@@ -499,11 +510,11 @@ export declare const AGENT_RUNTIME_COMMANDS_BY_DOMAIN: {
     "agent_runtime_save_review_decision",
     "agent_runtime_export_replay_case",
   ];
-  readonly inventory: readonly [
+  readonly "inventory": readonly [
     "agent_runtime_get_tool_inventory",
     "agent_runtime_list_workspace_skill_bindings",
   ];
-  readonly subagent: readonly [
+  readonly "subagent": readonly [
     "agent_runtime_spawn_subagent",
     "agent_runtime_send_subagent_input",
     "agent_runtime_wait_subagents",

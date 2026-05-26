@@ -6,6 +6,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const PATCH_REPORT_SCHEMA_VERSION = "lime.i18n.patchMetricsReport.v1";
+const PATCH_RETIREMENT_GATE_SCHEMA_VERSION = "lime.i18n.patchRetirementGate.v1";
 
 function parseArgs(argv) {
   const result = {
@@ -164,8 +165,22 @@ function buildGateState({ patchReport, legacyReport }) {
     );
   }
 
+  const advisoryIssues = [];
+  if (legacyDriftCandidates.length > 0) {
+    advisoryIssues.push(
+      `Legacy surface report 存在 ${legacyDriftCandidates.length} 个分类漂移候选；不阻塞 Patch no-hit 退出，但需要按治理计划继续收口。`,
+    );
+  }
+  if (legacyZeroReferenceCandidates.length > 0) {
+    advisoryIssues.push(
+      `Legacy surface report 存在 ${legacyZeroReferenceCandidates.length} 个零引用候选；不阻塞 Patch no-hit 退出，但应后续确认 dead/deprecated 分类。`,
+    );
+  }
+
   return {
+    advisoryIssues,
     gateIssues: [...patchIssues, ...legacyIssues],
+    generatedAt: new Date().toISOString(),
     legacy: {
       classificationDriftCandidateCount: legacyDriftCandidates.length,
       summaryPath: legacyReport.sourcePath,
@@ -183,6 +198,7 @@ function buildGateState({ patchReport, legacyReport }) {
       totalRuns: patchReport.summary.totalRuns,
     },
     retirementReady: patchIssues.length === 0 && legacyIssues.length === 0,
+    schemaVersion: PATCH_RETIREMENT_GATE_SCHEMA_VERSION,
   };
 }
 
@@ -209,6 +225,15 @@ function formatGateReport(report, format) {
     }
   } else {
     lines.push("问题: 无");
+  }
+
+  if (report.advisoryIssues.length > 0) {
+    lines.push("提示:");
+    for (const issue of report.advisoryIssues) {
+      lines.push(`- ${issue}`);
+    }
+  } else {
+    lines.push("提示: 无");
   }
 
   return `${lines.join("\n")}\n`;

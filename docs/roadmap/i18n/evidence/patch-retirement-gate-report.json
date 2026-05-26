@@ -1,0 +1,23 @@
+{
+  "advisoryIssues": [],
+  "gateIssues": [],
+  "generatedAt": "2026-05-26T14:59:25.833Z",
+  "legacy": {
+    "classificationDriftCandidateCount": 0,
+    "summaryPath": "/Users/coso/Documents/dev/ai/aiclientproxy/lime/.lime/governance/legacy-surface-report.json",
+    "violationCount": 0,
+    "zeroReferenceCandidateCount": 0
+  },
+  "patch": {
+    "recommendationCount": 1,
+    "sourcePath": "/Users/coso/Documents/dev/ai/aiclientproxy/lime/.lime/i18n/patch-metrics-report.json",
+    "retirementCandidate": true,
+    "status": "no-hit",
+    "thresholdIssueCount": 0,
+    "totalMatchedSegments": 0,
+    "totalReplacedNodes": 0,
+    "totalRuns": 19
+  },
+  "retirementReady": true,
+  "schemaVersion": "lime.i18n.patchRetirementGate.v1"
+}

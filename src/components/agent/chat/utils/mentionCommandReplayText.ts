@@ -2,7 +2,6 @@ import type { ParsedAnalysisWorkbenchCommand } from "./analysisWorkbenchCommand"
 import type { ParsedBroadcastWorkbenchCommand } from "./broadcastWorkbenchCommand";
 import type { ParsedBrowserWorkbenchCommand } from "./browserWorkbenchCommand";
 import type { ParsedChannelPreviewWorkbenchCommand } from "./channelPreviewWorkbenchCommand";
-import type { ParsedCodeWorkbenchCommand } from "./codeWorkbenchCommand";
 import type { ParsedComplianceWorkbenchCommand } from "./complianceWorkbenchCommand";
 import type { ParsedCompetitorWorkbenchCommand } from "./competitorWorkbenchCommand";
 import type { ParsedCoverWorkbenchCommand } from "./coverWorkbenchCommand";
@@ -62,7 +61,6 @@ interface BuildMentionCommandReplayTextInput {
   parsedCommand:
     | ParsedAnalysisWorkbenchCommand
     | ParsedChannelPreviewWorkbenchCommand
-    | ParsedCodeWorkbenchCommand
     | ParsedComplianceWorkbenchCommand
     | ParsedCompetitorWorkbenchCommand
     | ParsedCoverWorkbenchCommand
@@ -636,14 +634,6 @@ function buildUrlParseReplayText(
   ]);
 }
 
-function buildCodeReplayText(
-  parsedCommand: ParsedCodeWorkbenchCommand,
-): string | undefined {
-  const prompt = normalizeText(parsedCommand.prompt);
-
-  return prompt || normalizeText(parsedCommand.body);
-}
-
 function buildImageReplayText(
   parsedCommand: ParsedImageWorkbenchCommand,
 ): string | undefined {
@@ -1149,12 +1139,6 @@ export function buildMentionCommandReplayText(
     );
   }
 
-  if (input.commandKey === "code_runtime") {
-    return buildCodeReplayText(
-      input.parsedCommand as ParsedCodeWorkbenchCommand,
-    );
-  }
-
   if (input.commandKey === "channel_preview_runtime") {
     return buildPublishLikeReplayText(
       input.parsedCommand as ParsedChannelPreviewWorkbenchCommand,
@@ -1477,16 +1461,6 @@ function buildMentionCommandReplayTextFromSlotValues(params: {
       ),
       prompt: slotValues.prompt,
     } as ParsedUrlParseWorkbenchCommand);
-  }
-
-  if (commandKey === "code_runtime") {
-    return buildCodeReplayText({
-      body: "",
-      prompt: resolvePromptWithContentFallback({
-        prompt: slotValues.prompt,
-        content: slotValues.content,
-      }),
-    } as ParsedCodeWorkbenchCommand);
   }
 
   if (

@@ -541,6 +541,7 @@ function renderInputbar(
     isLoading: false,
     characters: [],
     skills: [],
+    executionStrategy: "react",
   };
 
   const render = (
@@ -2800,6 +2801,79 @@ describe("Inputbar", () => {
       subagent: false,
     });
     expect(toast.info).toHaveBeenCalledWith("Web search is on");
+  });
+
+  it("联网搜索不应覆盖 auto / code_orchestrated 执行策略", async () => {
+    const renderAndSendWithStrategy = async (
+      executionStrategy: "react" | "code_orchestrated" | "auto",
+      input: string,
+    ) => {
+      const onSend = vi.fn().mockResolvedValue(true);
+      const { container } = renderInputbar({
+        input,
+        onSend,
+        executionStrategy,
+        toolStates: { webSearch: true, thinking: false, subagent: false },
+      });
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const sendButton = container.querySelector(
+        '[data-testid="send-btn"]',
+      ) as HTMLButtonElement | null;
+      expect(sendButton).toBeTruthy();
+
+      await act(async () => {
+        sendButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await Promise.resolve();
+      });
+
+      return onSend;
+    };
+
+    const autoSend = await renderAndSendWithStrategy(
+      "auto",
+      "请联网检查这个依赖变更并修复编译错误",
+    );
+    const codeSend = await renderAndSendWithStrategy(
+      "code_orchestrated",
+      "请联网确认 API 变更并补回归测试",
+    );
+    const reactSend = await renderAndSendWithStrategy(
+      "react",
+      "请联网找一段资料",
+    );
+
+    expect(autoSend).toHaveBeenCalledWith(
+      undefined,
+      true,
+      false,
+      undefined,
+      "auto",
+      undefined,
+      undefined,
+    );
+    expect(codeSend).toHaveBeenCalledWith(
+      undefined,
+      true,
+      false,
+      undefined,
+      "code_orchestrated",
+      undefined,
+      undefined,
+    );
+
+    expect(reactSend).toHaveBeenCalledWith(
+      undefined,
+      true,
+      false,
+      undefined,
+      "react",
+      undefined,
+      undefined,
+    );
   });
 
   it("通用聊天态复杂任务应显示任务分工建议并支持开启多代理", async () => {

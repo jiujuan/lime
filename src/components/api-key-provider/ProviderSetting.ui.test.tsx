@@ -191,7 +191,7 @@ describe("ProviderSetting", () => {
     expect(container.textContent ?? "").toContain("密钥、模型优先级和测试连接");
   });
 
-  it("详情页应保留密钥保存、模型优先级和测试连接", async () => {
+  it("详情页应保留密钥保存、模型优先级和模型试跑", async () => {
     const container = renderSetting(createProvider());
     await flushEffects();
     const text = container.textContent ?? "";
@@ -202,7 +202,7 @@ describe("ProviderSetting", () => {
     expect(text).toContain("保存密钥");
     expect(text).toContain("模型优先级");
     expect(text).toContain("从接口获取");
-    expect(text).toContain("测试连接");
+    expect(text).toContain("试跑当前模型");
     expect(text).toContain("主模型");
     expect(text).toContain("deepseek-chat");
     expect(text).not.toContain("协议配置表单");
@@ -321,9 +321,15 @@ describe("ProviderSetting", () => {
     expect(onUpdate).toHaveBeenCalledWith("xiaomi", {
       api_host: "https://token-plan-sgp.xiaomimimo.com/anthropic",
     });
-    expect(onTestConnection).toHaveBeenCalledWith("xiaomi");
+    expect(onTestConnection).toHaveBeenCalledWith(
+      "xiaomi",
+      expect.objectContaining({
+        modelName: "mimo-v2.5-pro",
+        requireChatReady: true,
+      }),
+    );
     expect(callOrder).toEqual(["update", "test"]);
-    expect(container.textContent ?? "").toContain("连接成功 · 96ms");
+    expect(container.textContent ?? "").toContain("聊天试跑通过 · 96ms");
   });
 
   it("Lime Hub 未登录时应展示登录提示，不展示模型配置表单", async () => {
@@ -1066,9 +1072,49 @@ describe("ProviderSetting", () => {
       undefined,
       { replaceExisting: true },
     );
-    expect(onTestConnection).toHaveBeenCalledWith("deepseek");
-    expect(container.textContent ?? "").toContain("连接成功 · 128ms");
+    expect(onTestConnection).toHaveBeenCalledWith(
+      "deepseek",
+      expect.objectContaining({
+        modelName: "deepseek-chat",
+        requireChatReady: true,
+      }),
+    );
+    expect(container.textContent ?? "").toContain("聊天试跑通过 · 128ms");
     expect(container.textContent ?? "").not.toContain("错误详情");
     expect(container.textContent ?? "").not.toContain("对话测试");
+  });
+
+  it("模型试跑遇到 402 余额不足时应展示可操作提示", async () => {
+    const onTestConnection = vi.fn().mockResolvedValue({
+      success: false,
+      error:
+        "Agent provider execution failed: Request failed with status 402 Payment Required: Insufficient Balance",
+    });
+    const container = renderSetting(createProvider(), {
+      onTestConnection,
+    });
+    await flushEffects();
+
+    const button = container.querySelector<HTMLButtonElement>(
+      '[data-testid="provider-test-connection-button"]',
+    );
+
+    await act(async () => {
+      button?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onTestConnection).toHaveBeenCalledWith(
+      "deepseek",
+      expect.objectContaining({
+        modelName: "deepseek-chat",
+        requireChatReady: true,
+      }),
+    );
+    expect(container.textContent ?? "").toContain(
+      "当前 AI 服务商余额或额度不足，请在服务商后台充值或开通额度，或切换到其他可用模型后重试。",
+    );
+    expect(container.textContent ?? "").not.toContain("Insufficient Balance");
   });
 });

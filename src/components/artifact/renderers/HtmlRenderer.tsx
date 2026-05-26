@@ -25,7 +25,12 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ArtifactRendererProps } from "@/lib/artifact/types";
+import { resolveArtifactProtocolFilePath } from "@/lib/artifact-protocol";
+import {
+  isAbsoluteLocalFilePath,
+  resolveLocalFilePreviewUrl,
+} from "@/lib/api/fileSystem";
+import type { Artifact, ArtifactRendererProps } from "@/lib/artifact/types";
 import { CodeRenderer } from "./CodeRenderer";
 
 /**
@@ -77,6 +82,52 @@ const SIZE_OPTIONS = [
  * 视图模式类型
  */
 type ViewMode = "preview" | "source";
+
+const HTML_SRCDOC_SANDBOX = "allow-scripts allow-forms allow-popups allow-modals";
+const HTML_FILE_SANDBOX =
+  "allow-scripts allow-forms allow-popups allow-modals allow-same-origin";
+
+function readStringMeta(
+  meta: Artifact["meta"],
+  key: string,
+): string | null {
+  const value = meta[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function resolveHtmlArtifactPreviewPath(artifact: Artifact): string | null {
+  const candidatePaths = [
+    readStringMeta(artifact.meta, "filePath"),
+    readStringMeta(artifact.meta, "sourcePath"),
+    readStringMeta(artifact.meta, "absolutePath"),
+    readStringMeta(artifact.meta, "absoluteFilePath"),
+    readStringMeta(artifact.meta, "absolute_file_path"),
+    resolveArtifactProtocolFilePath(artifact),
+  ];
+
+  for (const candidatePath of candidatePaths) {
+    if (candidatePath && isAbsoluteLocalFilePath(candidatePath)) {
+      return candidatePath;
+    }
+  }
+
+  return null;
+}
+
+function appendPreviewRefreshNonce(url: string, nonce: number): string {
+  if (nonce <= 0) {
+    return url;
+  }
+
+  try {
+    const parsedUrl = new URL(url);
+    parsedUrl.searchParams.set("lime_preview_reload", String(nonce));
+    return parsedUrl.toString();
+  } catch {
+    const separator = url.includes("?") ? "&" : "?";
+    return `${url}${separator}lime_preview_reload=${nonce}`;
+  }
+}
 
 /**
  * 流式指示器组件
@@ -275,18 +326,66 @@ RefreshButton.displayName = "RefreshButton";
  * @param isStreaming - 是否处于流式生成状态
  */
 export const HtmlRenderer: React.FC<ArtifactRendererProps> = memo(
-  ({ artifact, isStreaming = false }) => {
+  ({
+    artifact,
+    isStreaming = false,
+    hideToolbar = false,
+    viewMode: externalViewMode,
+    onViewModeChange,
+    previewSize: externalPreviewSize,
+    onPreviewSizeChange,
+  }) => {
     const { t } = useTranslation("errors");
-    // 视图模式状态
-    const [viewMode, setViewMode] = useState<ViewMode>("preview");
-    // 预览尺寸状态
-    const [previewSize, setPreviewSize] = useState<PreviewSize>("desktop");
+    const [internalViewMode, setInternalViewMode] =
+      useState<ViewMode>("preview");
+    const [internalPreviewSize, setInternalPreviewSize] =
+      useState<PreviewSize>("desktop");
     // 刷新状态
     const [isRefreshing, setIsRefreshing] = useState(false);
     // 错误状态
     const [error, setError] = useState<string | null>(null);
     // iframe 引用
     const iframeRef = useRef<HTMLIFrameElement>(null);
+    const viewMode = externalViewMode ?? internalViewMode;
+    const previewSize = externalPreviewSize ?? internalPreviewSize;
+    const htmlPreviewPath = useMemo(
+      () => resolveHtmlArtifactPreviewPath(artifact),
+      [artifact],
+    );
+    const htmlPreviewUrl = useMemo(
+      () => resolveLocalFilePreviewUrl(htmlPreviewPath),
+      [htmlPreviewPath],
+    );
+    const [refreshNonce, setRefreshNonce] = useState(0);
+    const iframeSrc = useMemo(
+      () =>
+        htmlPreviewUrl
+          ? appendPreviewRefreshNonce(htmlPreviewUrl, refreshNonce)
+          : null,
+      [htmlPreviewUrl, refreshNonce],
+    );
+
+    const handleViewModeChange = useCallback(
+      (mode: ViewMode) => {
+        if (onViewModeChange) {
+          onViewModeChange(mode);
+          return;
+        }
+        setInternalViewMode(mode);
+      },
+      [onViewModeChange],
+    );
+
+    const handlePreviewSizeChange = useCallback(
+      (size: PreviewSize) => {
+        if (onPreviewSizeChange) {
+          onPreviewSizeChange(size);
+          return;
+        }
+        setInternalPreviewSize(size);
+      },
+      [onPreviewSizeChange],
+    );
 
     /**
      * 验证 HTML 内容
@@ -294,7 +393,10 @@ export const HtmlRenderer: React.FC<ArtifactRendererProps> = memo(
      */
     useEffect(() => {
       try {
-        if (!artifact.content || typeof artifact.content !== "string") {
+        if (
+          !htmlPreviewUrl &&
+          (!artifact.content || typeof artifact.content !== "string")
+        ) {
           throw new Error(t("errors.htmlRenderer.error.emptyOrInvalidContent"));
         }
         setError(null);
@@ -310,7 +412,7 @@ export const HtmlRenderer: React.FC<ArtifactRendererProps> = memo(
         );
         setError(errorMessage);
       }
-    }, [artifact.content, t]);
+    }, [artifact.content, htmlPreviewUrl, t]);
 
     /**
      * 刷新预览
@@ -318,33 +420,10 @@ export const HtmlRenderer: React.FC<ArtifactRendererProps> = memo(
      */
     const refreshPreview = useCallback(() => {
       try {
-        if (iframeRef.current) {
-          setIsRefreshing(true);
-          setError(null);
-          // 先清空再设置，确保触发重新渲染
-          iframeRef.current.srcdoc = "";
-          // 使用 requestAnimationFrame 确保 DOM 更新后再设置新内容
-          requestAnimationFrame(() => {
-            try {
-              if (iframeRef.current) {
-                iframeRef.current.srcdoc = artifact.content;
-              }
-            } catch (err) {
-              const errorMessage =
-                err instanceof Error
-                  ? err.message
-                  : t("errors.htmlRenderer.error.refreshFailed");
-              console.error(
-                "[HtmlRenderer] Error refreshing preview:",
-                errorMessage,
-                err,
-              );
-              setError(errorMessage);
-            }
-            // 短暂延迟后取消刷新状态
-            setTimeout(() => setIsRefreshing(false), 300);
-          });
-        }
+        setIsRefreshing(true);
+        setError(null);
+        setRefreshNonce((previous) => previous + 1);
+        window.setTimeout(() => setIsRefreshing(false), 300);
       } catch (err) {
         const errorMessage =
           err instanceof Error
@@ -358,7 +437,7 @@ export const HtmlRenderer: React.FC<ArtifactRendererProps> = memo(
         setError(errorMessage);
         setIsRefreshing(false);
       }
-    }, [artifact.content, t]);
+    }, [t]);
 
     /**
      * 处理 iframe 加载错误
@@ -396,34 +475,37 @@ export const HtmlRenderer: React.FC<ArtifactRendererProps> = memo(
 
     return (
       <div className="h-full flex flex-col bg-white rounded-lg overflow-hidden border border-gray-200">
-        {/* 工具栏 */}
-        <div className="flex items-center gap-3 px-3 py-2 border-b border-gray-200 bg-gray-50">
-          {/* 视图模式切换 */}
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
-
-          {/* 预览尺寸选择器（仅在预览模式显示） */}
-          {viewMode === "preview" && (
-            <>
-              <div className="w-px h-5 bg-gray-300" />
-              <SizeSelector value={previewSize} onChange={setPreviewSize} />
-            </>
-          )}
-
-          {/* 刷新按钮（仅在预览模式显示） */}
-          {viewMode === "preview" && (
-            <RefreshButton
-              onClick={refreshPreview}
-              isRefreshing={isRefreshing}
+        {!hideToolbar ? (
+          <div className="flex items-center gap-3 px-3 py-2 border-b border-gray-200 bg-gray-50">
+            <ViewModeToggle
+              value={viewMode}
+              onChange={handleViewModeChange}
             />
-          )}
 
-          {/* 当前尺寸标签 */}
-          {viewMode === "preview" && previewSize !== "desktop" && (
-            <span className="text-xs text-gray-500 ml-auto">
-              {PREVIEW_WIDTHS[previewSize]}px
-            </span>
-          )}
-        </div>
+            {viewMode === "preview" && (
+              <>
+                <div className="w-px h-5 bg-gray-300" />
+                <SizeSelector
+                  value={previewSize}
+                  onChange={handlePreviewSizeChange}
+                />
+              </>
+            )}
+
+            {viewMode === "preview" && (
+              <RefreshButton
+                onClick={refreshPreview}
+                isRefreshing={isRefreshing}
+              />
+            )}
+
+            {viewMode === "preview" && previewSize !== "desktop" && (
+              <span className="text-xs text-gray-500 ml-auto">
+                {PREVIEW_WIDTHS[previewSize]}px
+              </span>
+            )}
+          </div>
+        ) : null}
 
         {/* 内容区域 */}
         <div className="flex-1 overflow-auto relative bg-gray-100">
@@ -438,14 +520,17 @@ export const HtmlRenderer: React.FC<ArtifactRendererProps> = memo(
             <div className="h-full flex items-start justify-center p-4">
               {/* 
                 沙箱化 iframe
-                - sandbox="allow-scripts" 允许脚本执行但限制其他能力
+                - srcDoc 预览继续隔离同源，避免生成内容访问宿主页面
+                - 已落盘 HTML 使用真实文件 URL，保留相对资源与框架脚本加载能力
                 - 脚本无法访问父窗口、无法导航、无法提交表单等
                 Requirement 5.1, 5.2, 5.5
               */}
               <iframe
+                key={`${iframeSrc ?? "srcdoc"}:${refreshNonce}`}
                 ref={iframeRef}
-                srcDoc={artifact.content}
-                sandbox="allow-scripts"
+                src={iframeSrc ?? undefined}
+                srcDoc={iframeSrc ? undefined : artifact.content}
+                sandbox={iframeSrc ? HTML_FILE_SANDBOX : HTML_SRCDOC_SANDBOX}
                 style={iframeStyle}
                 className={cn(
                   "bg-white border-0 shadow-sm transition-all duration-200",
@@ -458,7 +543,11 @@ export const HtmlRenderer: React.FC<ArtifactRendererProps> = memo(
             </div>
           ) : (
             /* 源码视图 - 复用 CodeRenderer */
-            <CodeRenderer artifact={sourceArtifact} isStreaming={isStreaming} />
+            <CodeRenderer
+              artifact={sourceArtifact}
+              isStreaming={isStreaming}
+              hideToolbar={true}
+            />
           )}
 
           {/* 流式指示器 */}

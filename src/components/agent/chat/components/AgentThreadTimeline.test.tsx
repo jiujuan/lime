@@ -1000,6 +1000,33 @@ describe("AgentThreadTimeline", () => {
     expect(container.textContent).not.toContain("askProfileKeys");
   });
 
+  it("Provider 402 失败不应在普通时间线暴露原始错误", () => {
+    const rawProviderError =
+      "Agent provider execution failed: Request failed with status 402 Payment Required: Insufficient Balance";
+    const items: AgentThreadItem[] = [
+      {
+        ...createBaseItem("provider-error-1", 1),
+        type: "error",
+        message: rawProviderError,
+      },
+    ];
+
+    const container = renderTimeline(items, {
+      turn: {
+        status: "failed",
+        error_message: rawProviderError,
+      },
+    });
+
+    expect(container.textContent).toContain("碰到错误");
+    expect(container.textContent).toContain("当前 AI 服务商余额或额度不足");
+    expect(container.textContent).not.toContain(
+      "Agent provider execution failed",
+    );
+    expect(container.textContent).not.toContain("Payment Required");
+    expect(container.textContent).not.toContain("Insufficient Balance");
+  });
+
   it("普通 aborted 回合应显示已暂停提示", () => {
     const items: AgentThreadItem[] = [
       {

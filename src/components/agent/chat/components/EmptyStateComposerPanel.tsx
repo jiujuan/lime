@@ -208,7 +208,7 @@ export function EmptyStateComposerPanel({
   setProviderType,
   model,
   setModel,
-  executionStrategy = "react",
+  executionStrategy = "auto",
   setExecutionStrategy,
   accessMode,
   setAccessMode,
@@ -422,8 +422,7 @@ export function EmptyStateComposerPanel({
     }
   };
 
-  const effectiveGuideHelpLabel =
-    guideHelpLabel ?? copy.guideHelpDefaultLabel;
+  const effectiveGuideHelpLabel = guideHelpLabel ?? copy.guideHelpDefaultLabel;
   const topExtra =
     guideHelpActive ||
     activeBuiltinCommand ||
@@ -593,9 +592,7 @@ export function EmptyStateComposerPanel({
           className={`${EMPTY_STATE_PASSIVE_BADGE_CLASSNAME} max-w-[240px] items-center overflow-hidden`}
           title={copy.currentModel.title(currentModelSummary)}
         >
-          <span className="mr-1 text-slate-500">
-            {copy.currentModel.label}
-          </span>
+          <span className="mr-1 text-slate-500">{copy.currentModel.label}</span>
           <span className="truncate">{trimmedModel}</span>
         </Badge>
       ) : null}

@@ -1072,7 +1072,7 @@ function useWorkspaceCanvasPreviewRuntime({
       state: generalCanvas.state,
       baseFilePath: resolveAbsoluteWorkspacePath(
         defaultPreview.workspaceRoot,
-        generalCanvas.state.filename,
+        generalCanvas.state.sourcePath || generalCanvas.state.filename,
       ),
       onClose: generalCanvas.onCloseCanvas,
       onContentChange: generalCanvas.onContentChange,
@@ -1253,6 +1253,14 @@ function useWorkspaceCanvasPreviewRuntime({
         state={buildGeneralCanvasStateFromWorkspaceFile(
           target.filePath || target.title,
           target.content,
+          {
+            sourcePath:
+              target.absolutePath ||
+              resolveAbsoluteWorkspacePath(
+                defaultPreview.workspaceRoot,
+                target.filePath,
+              ),
+          },
         )}
         baseFilePath={
           target.absolutePath ||

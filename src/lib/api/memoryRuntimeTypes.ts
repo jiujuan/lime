@@ -27,6 +27,20 @@ export interface MemoryResolveConfig {
   load_additional_dirs_memory?: boolean;
 }
 
+export type MemoryEmbeddingProvider =
+  | "auto"
+  | "local_onnx"
+  | "builtin"
+  | "openai_api"
+  | "provider"
+  | "disabled";
+
+export interface MemoryEmbeddingConfig {
+  provider?: MemoryEmbeddingProvider;
+  provider_id?: string | null;
+  model?: string | null;
+}
+
 export interface MemoryConfig {
   enabled: boolean;
   max_entries?: number;
@@ -36,6 +50,7 @@ export interface MemoryConfig {
   sources?: MemorySourcesConfig;
   auto?: MemoryAutoConfig;
   resolve?: MemoryResolveConfig;
+  embedding?: MemoryEmbeddingConfig;
 }
 
 export interface MemoryStatsResponse {

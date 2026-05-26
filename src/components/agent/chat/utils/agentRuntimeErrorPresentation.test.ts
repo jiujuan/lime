@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 import { resolveAgentRuntimeErrorPresentation } from "./agentRuntimeErrorPresentation";
 
@@ -33,6 +34,21 @@ describe("agentRuntimeErrorPresentation", () => {
         "当前模型通道返回了不兼容的工具 schema，请前往设置 -> AI 服务商检查 Provider 配置或切换模型后重试。",
       toastMessage:
         "当前模型通道返回了不兼容的工具 schema，请前往设置 -> AI 服务商检查 Provider 配置或切换模型后重试。",
+    });
+  });
+
+  it("402 与余额不足错误应转换为额度提示", async () => {
+    await changeLimeLocale("zh-CN");
+
+    expect(
+      resolveAgentRuntimeErrorPresentation(
+        "Agent provider execution failed: Request failed with status 402 Payment Required: Insufficient Balance",
+      ),
+    ).toEqual({
+      displayMessage:
+        "当前 AI 服务商余额或额度不足，请在服务商后台充值或开通额度，或切换到其他可用模型后重试。",
+      toastMessage:
+        "当前 AI 服务商余额或额度不足，请在服务商后台充值或开通额度，或切换到其他可用模型后重试。",
     });
   });
 });

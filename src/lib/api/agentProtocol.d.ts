@@ -383,6 +383,7 @@ export interface AgentEventTurnContext {
     session_id: string;
     thread_id: string;
     turn_id: string;
+    execution_strategy?: AsterExecutionStrategy | null;
     output_schema_runtime?: AsterTurnOutputSchemaRuntime | null;
     context_summary?: AgentTurnContextSummary | null;
     approval_policy?: string | null;

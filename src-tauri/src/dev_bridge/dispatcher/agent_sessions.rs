@@ -85,6 +85,7 @@ pub(super) async fn try_handle(
             | "agent_runtime_list_file_checkpoints"
             | "agent_runtime_get_file_checkpoint"
             | "agent_runtime_diff_file_checkpoint"
+            | "agent_runtime_restore_file_checkpoint"
             | "agent_runtime_get_tool_inventory"
             | "agent_runtime_list_workspace_skill_bindings"
             | "agent_runtime_replay_request"
@@ -589,6 +590,36 @@ pub(super) async fn try_handle(
 
             serde_json::to_value(
                 crate::commands::aster_agent_cmd::agent_runtime_diff_file_checkpoint(
+                    app_handle.clone(),
+                    aster_state,
+                    db,
+                    api_key_provider_service,
+                    logs,
+                    config_manager,
+                    mcp_manager,
+                    automation_state,
+                    request,
+                )
+                .await?,
+            )?
+        }
+        "agent_runtime_restore_file_checkpoint" => {
+            let request = parse_request::<
+                crate::commands::aster_agent_cmd::AgentRuntimeRestoreFileCheckpointRequest,
+            >(args)?;
+            let aster_state = app_handle.state::<crate::agent::AsterAgentState>();
+            let db = app_handle.state::<crate::database::DbConnection>();
+            let api_key_provider_service =
+                app_handle
+                    .state::<crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState>();
+            let logs = app_handle.state::<crate::app::LogState>();
+            let config_manager = app_handle.state::<crate::config::GlobalConfigManagerState>();
+            let mcp_manager = app_handle.state::<crate::mcp::McpManagerState>();
+            let automation_state =
+                app_handle.state::<crate::services::automation_service::AutomationServiceState>();
+
+            serde_json::to_value(
+                crate::commands::aster_agent_cmd::agent_runtime_restore_file_checkpoint(
                     app_handle.clone(),
                     aster_state,
                     db,
