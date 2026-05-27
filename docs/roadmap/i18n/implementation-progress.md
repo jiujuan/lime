@@ -856,6 +856,22 @@ benchmark 摘要：
 - `npm run i18n:source-export:json -- --output "docs/roadmap/i18n/evidence/source-locale-export.json"` 通过。
 - `npm run i18n:translation-pr-pack:json -- --output "docs/roadmap/i18n/evidence/translation-pr-pack.json"` 通过。
 
+## 2026-05-27：P3 translation evidence 内容漂移重刷
+
+本轮继续完成：
+
+- 重新生成 `docs/roadmap/i18n/evidence/source-locale-export.json` 与 `docs/roadmap/i18n/evidence/translation-pr-pack.json`，对齐当前 `src/i18n/resources` 里的 code review metric 文案事实源。
+- 当前三份 P3 translation evidence 仍统一为 `sourceKeyCount=7549`、`namespaceCount=13`；coverage 保持 `hasIssues=false`，translation PR pack 保持 `proposedEntryCount=0`。
+- 本轮只修正 source export / PR pack 的原文内容与 raw bytes 漂移，没有引入新的 locale key，也没有扩大 legacy Patch 兜底范围。
+
+验证：
+
+- `npm run i18n:check:json -- --output "docs/roadmap/i18n/evidence/translation-coverage-report.json"` 通过。
+- `npm run i18n:source-export:json -- --output "docs/roadmap/i18n/evidence/source-locale-export.json"` 通过。
+- `npm run i18n:translation-pr-pack:json -- --output "docs/roadmap/i18n/evidence/translation-pr-pack.json"` 通过。
+- `npm run i18n:check` 通过，当前 `sourceKeys=7549`、coverage `100.0%`。
+- `npm run i18n:unused -- --check` 通过，当前 `unused=0`。
+
 ## 2026-05-27：P3 GUI smoke Patch 退出门禁证据刷新
 
 本轮继续完成：

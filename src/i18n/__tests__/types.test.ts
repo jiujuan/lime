@@ -778,7 +778,9 @@ function assertI18nKeyTypes() {
     ns: "agent",
     count: 1,
   });
-  i18n.t("agentChat.harness.codeReview.footer", { ns: "agent" });
+  i18n.t("agentChat.harness.codeReview.metric.checkpointsEmpty", {
+    ns: "agent",
+  });
   i18n.t("agentChat.harnessVerification.section.title", { ns: "agent" });
   i18n.t("agentChat.harnessVerification.artifact.description", {
     ns: "agent",

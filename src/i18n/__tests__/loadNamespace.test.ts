@@ -659,7 +659,7 @@ describe("i18n namespace loader", () => {
         "agentChat.harness.codeReview.action.review",
         "agentChat.harness.codeReview.metric.files",
         "agentChat.harness.codeReview.metric.outputsPassing",
-        "agentChat.harness.codeReview.footer",
+        "agentChat.harness.codeReview.metric.checkpointsEmpty",
       ]) {
         expect(resources[locale].agent).toHaveProperty(codeReviewKey);
       }

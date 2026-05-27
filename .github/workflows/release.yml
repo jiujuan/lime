@@ -532,7 +532,7 @@ jobs:
           RELEASE_DIR="src-tauri/target/${TARGET_TRIPLE}/release"
           PREBUILT_ROOT="src-tauri/target/sherpa-onnx-prebuilt"
 
-          SHERPA_ONNX_VERSION="$(node -e 'const fs = require("fs"); const lock = fs.readFileSync("src-tauri/Cargo.lock", "utf8"); const match = lock.match(/\[\[package\]\]\nname = "sherpa-onnx-sys"\nversion = "([^"]+)"/); if (!match) throw new Error("Unable to resolve sherpa-onnx-sys version from src-tauri/Cargo.lock"); process.stdout.write(match[1]);')"
+          SHERPA_ONNX_VERSION="$(node -e 'const fs = require("fs"); const lock = fs.readFileSync("src-tauri/Cargo.lock", "utf8"); const entry = lock.split(/\r?\n\[\[package\]\]\r?\n/).find((block) => /(?:^|\r?\n)name = "sherpa-onnx-sys"(?:\r?\n|$)/.test(block)); if (!entry) throw new Error("Unable to find sherpa-onnx-sys in src-tauri/Cargo.lock"); const match = entry.match(/(?:^|\r?\n)version = "([^"]+)"/); if (!match) throw new Error("Unable to resolve sherpa-onnx-sys version from src-tauri/Cargo.lock"); process.stdout.write(match[1]);')"
 
           case "${TARGET_TRIPLE}" in
             x86_64-pc-windows-msvc)
