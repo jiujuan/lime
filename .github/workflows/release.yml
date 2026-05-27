@@ -539,6 +539,11 @@ jobs:
           RELEASE_DIR="src-tauri/target/${TARGET_TRIPLE}/release"
           PREBUILT_ROOT="src-tauri/target/sherpa-onnx-prebuilt"
 
+          cargo clean \
+            --manifest-path "src-tauri/Cargo.toml" \
+            -p sherpa-onnx-sys \
+            --target "${TARGET_TRIPLE}" || true
+
           cargo build \
             --manifest-path "src-tauri/Cargo.toml" \
             -p voice-core \
