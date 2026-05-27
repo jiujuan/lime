@@ -530,7 +530,7 @@ jobs:
           CARGO_PROFILE_RELEASE_LTO: "off"
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 32
           CARGO_INCREMENTAL: 0
-          CARGO_TARGET_DIR: src-tauri/target
+          CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
           SCCACHE_GHA_ENABLED: "true"
           RUSTC_WRAPPER: sccache
         run: |
@@ -571,6 +571,7 @@ jobs:
           # 增加并行编译单元
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 32
           CARGO_INCREMENTAL: 0
+          CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
           SCCACHE_GHA_ENABLED: "true"
           RUSTC_WRAPPER: sccache
         with:
@@ -660,7 +661,7 @@ jobs:
           # 增加并行编译单元
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 32
           CARGO_INCREMENTAL: 0
-          CARGO_TARGET_DIR: src-tauri/target
+          CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
           RUSTFLAGS: "-C link-arg=-Wl,-rpath,@executable_path/../Frameworks"
           SCCACHE_GHA_ENABLED: "true"
           RUSTC_WRAPPER: sccache
@@ -712,7 +713,7 @@ jobs:
           CARGO_PROFILE_RELEASE_LTO: "off"
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 32
           CARGO_INCREMENTAL: 0
-          CARGO_TARGET_DIR: src-tauri/target
+          CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
           RUSTFLAGS: "-C link-arg=-Wl,-rpath,@executable_path/../Frameworks"
           SCCACHE_GHA_ENABLED: "true"
           RUSTC_WRAPPER: sccache
@@ -1277,7 +1278,7 @@ jobs:
           CARGO_PROFILE_RELEASE_LTO: "off"
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 32
           CARGO_INCREMENTAL: 0
-          CARGO_TARGET_DIR: src-tauri/target
+          CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
           SCCACHE_GHA_ENABLED: "true"
           RUSTC_WRAPPER: sccache
         run: |
