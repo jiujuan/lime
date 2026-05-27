@@ -2554,6 +2554,7 @@ interface UseWorkspaceSendActionsParams {
   sessionId?: string | null;
   executionStrategy: ExecutionStrategy;
   accessMode?: AgentAccessMode;
+  providerType?: string | null;
   preferredTeamPresetId?: string | null;
   selectedTeam?: TeamDefinition | null;
   selectedTeamLabel?: string;
@@ -2712,6 +2713,7 @@ export function useWorkspaceSendActions({
   sessionId,
   executionStrategy,
   accessMode: _accessMode,
+  providerType,
   preferredTeamPresetId,
   selectedTeam,
   selectedTeamLabel,
@@ -5216,6 +5218,7 @@ export function useWorkspaceSendActions({
             ...(sendOptions || {}),
             toolPreferencesOverride: effectiveToolPreferences,
           },
+          currentProviderType: providerType,
           effectiveToolPreferences,
           mappedTheme,
           isThemeWorkbench,
@@ -5384,6 +5387,7 @@ export function useWorkspaceSendActions({
       messagesCount,
       mentionedCharacters,
       preferredTeamPresetId,
+      providerType,
       rollbackAfterSendFailure,
       selectedTeam,
       selectedTeamLabel,

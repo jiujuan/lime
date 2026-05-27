@@ -207,6 +207,38 @@ describe("CodeReviewSummaryPanel", () => {
     expect(container.textContent).toContain("1 条输出需要处理");
   });
 
+  it("只有输出时主按钮应打开输出区块", () => {
+    const { container, onOpenSection, onOpenFileCheckpoints } = renderPanel({
+      harnessState: {
+        ...createEmptyHarnessState(),
+        outputSignals: [
+          {
+            id: "signal-only",
+            toolCallId: "tool-test",
+            toolName: "bash",
+            title: "类型检查",
+            summary: "typecheck passed",
+            preview: "tsc --noEmit",
+            exitCode: 0,
+          },
+        ],
+        hasSignals: true,
+      },
+      fileCheckpointSummary: null,
+    });
+
+    const primaryAction = container.querySelector(
+      '[data-testid="code-review-summary-primary-action"]',
+    ) as HTMLButtonElement | null;
+
+    act(() => {
+      primaryAction?.click();
+    });
+
+    expect(onOpenSection).toHaveBeenCalledWith("outputs");
+    expect(onOpenFileCheckpoints).not.toHaveBeenCalled();
+  });
+
   it("没有快照时只展示空态入口", () => {
     const { container } = renderPanel({
       harnessState: {

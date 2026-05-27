@@ -78,6 +78,22 @@ const I18N_PATCH_RETIREMENT_RECOMMENDED_COMMANDS = [
   "npm run i18n:patch-retirement-gate -- --check",
 ];
 
+const I18N_RELEASE_DOCS_WORKFLOW_RECOMMENDED_COMMANDS = [
+  "npm run i18n:release-docs-report:json -- --output docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
+];
+
+const I18N_APP_METADATA_WORKFLOW_RECOMMENDED_COMMANDS = [
+  "npm run i18n:app-metadata-report:json -- --output docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
+];
+
+const I18N_RTL_READINESS_RECOMMENDED_COMMANDS = [
+  "npm run i18n:rtl-readiness-report:json -- --output docs/roadmap/i18n/evidence/rtl-readiness-inventory.json",
+];
+
+const I18N_RTL_SMOKE_RECOMMENDED_COMMANDS = [
+  "npm run i18n:rtl-smoke",
+];
+
 const I18N_PATCH_RETIREMENT_FILES = new Set([
   "scripts/i18n-patch-metrics-report.mjs",
   "scripts/i18n-patch-retirement-gate.mjs",
@@ -85,6 +101,91 @@ const I18N_PATCH_RETIREMENT_FILES = new Set([
   "scripts/lib/legacy-surface-report-core.mjs",
   "scripts/report-legacy-surfaces.mjs",
   "scripts/verify-gui-smoke.mjs",
+]);
+
+const I18N_RELEASE_DOCS_WORKFLOW_FILES = new Set([
+  "README.md",
+  "README.en.md",
+  "RELEASE_NOTES.md",
+  "RELEASE_NOTES.en.md",
+  "docs/README.md",
+  "docs/nuxt.config.ts",
+  "docs/package.json",
+  "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
+  "docs/roadmap/i18n/release-docs-workflow-evaluation.md",
+  "scripts/i18n-release-docs-workflow-report.test.ts",
+  "scripts/i18n-release-docs-workflow-report.ts",
+]);
+
+const I18N_RELEASE_DOCS_WORKFLOW_PREFIXES = [
+  "docs/bussniss/",
+  "docs/content/",
+  "docs/develop/",
+  "docs/oem/",
+];
+
+const I18N_APP_METADATA_WORKFLOW_FILES = new Set([
+  "docs/roadmap/i18n/app-metadata-workflow-evaluation.md",
+  "docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
+  "package.json",
+  "scripts/i18n-app-metadata-workflow-report.test.ts",
+  "scripts/i18n-app-metadata-workflow-report.ts",
+  "src-tauri/Cargo.toml",
+  "src-tauri/capabilities/agent-app-shell.json",
+  "src-tauri/tauri.conf.headless.json",
+  "src-tauri/tauri.conf.json",
+]);
+
+const I18N_RTL_READINESS_FILES = new Set([
+  "docs/roadmap/i18n/evidence/rtl-readiness-inventory.json",
+  "docs/roadmap/i18n/rtl-readiness-evaluation.md",
+  "scripts/i18n-rtl-readiness-report.test.ts",
+  "scripts/i18n-rtl-readiness-report.ts",
+  "src/i18n/createI18n.ts",
+  "src/i18n/locales.ts",
+]);
+
+const I18N_RTL_SMOKE_FILES = new Set([
+  "scripts/i18n-rtl-playwright-smoke.mjs",
+]);
+
+const I18N_RTL_SURFACE_FILES = new Set([
+  "src/App.tsx",
+  "src/components/AppSidebar.tsx",
+  "src/components/Modal.tsx",
+  "src/components/agent/chat/components/team-workspace-board/TeamWorkspaceBoardHeader.tsx",
+  "src/components/agent/chat/components/team-workspace-board/TeamWorkspaceBoardShell.tsx",
+  "src/components/agent/chat/components/team-workspace-board/TeamWorkspaceCanvasLaneCard.tsx",
+  "src/components/agent/chat/components/team-workspace-board/TeamWorkspaceCanvasStage.tsx",
+  "src/components/agent/chat/components/team-workspace-board/TeamWorkspaceCanvasToolbar.tsx",
+  "src/components/agent/chat/workspace/WorkspaceConversationScene.tsx",
+  "src/components/agent/chat/workspace/WorkspaceGeneralWorkbenchSidebar.tsx",
+  "src/components/agent/chat/workspace/WorkspaceHarnessDialogs.tsx",
+  "src/components/agent/chat/workspace/WorkspaceMainArea.tsx",
+  "src/components/agent/chat/workspace/WorkspaceShellScene.tsx",
+  "src/components/api-key-provider/ImportExportDialog.tsx",
+  "src/components/app-sidebar/AppSidebarConversationShelf.tsx",
+  "src/components/channels/ImConfigPage.tsx",
+  "src/components/connect/ConnectConfirmDialog.tsx",
+  "src/components/settings-v2/_layout/SettingsSidebar.tsx",
+  "src/components/settings-v2/_layout/index.tsx",
+  "src/components/settings-v2/agent/providers/index.tsx",
+  "src/components/settings-v2/general/appearance/index.tsx",
+  "src/components/settings-v2/general/hotkeys/index.tsx",
+  "src/components/settings-v2/general/memory/index.tsx",
+  "src/components/settings-v2/system/about/index.tsx",
+  "src/components/settings-v2/system/automation/index.tsx",
+  "src/components/settings-v2/system/channels/ChannelLogTailPanel.tsx",
+  "src/components/settings-v2/system/channels/ChannelsDebugWorkbench.tsx",
+  "src/components/settings-v2/system/developer/index.tsx",
+  "src/components/settings-v2/system/environment/index.tsx",
+  "src/components/settings-v2/system/experimental/index.tsx",
+  "src/components/settings-v2/system/web-search/index.tsx",
+  "src/components/skills/SkillScaffoldDialog.tsx",
+  "src/components/workspace/canvas/shared/CanvasBreadcrumbHeader.tsx",
+  "src/components/workspace/document/DocumentToolbar.tsx",
+  "src/components/workspace/video/VideoSidebar.tsx",
+  "src/features/knowledge/KnowledgePage.tsx",
 ]);
 
 const I18N_HARDCODED_SCAN_PREFIXES = [
@@ -358,6 +459,31 @@ function isI18nPatchRetirementChange(file) {
   return I18N_PATCH_RETIREMENT_FILES.has(file);
 }
 
+function isI18nReleaseDocsWorkflowChange(file) {
+  return (
+    I18N_RELEASE_DOCS_WORKFLOW_FILES.has(file) ||
+    I18N_RELEASE_DOCS_WORKFLOW_PREFIXES.some((prefix) =>
+      file.startsWith(prefix),
+    )
+  );
+}
+
+function isI18nAppMetadataWorkflowChange(file) {
+  return I18N_APP_METADATA_WORKFLOW_FILES.has(file);
+}
+
+function isI18nRtlReadinessChange(file) {
+  return (
+    I18N_RTL_READINESS_FILES.has(file) ||
+    I18N_RTL_SMOKE_FILES.has(file) ||
+    I18N_RTL_SURFACE_FILES.has(file)
+  );
+}
+
+function isI18nRtlSmokeChange(file) {
+  return I18N_RTL_SMOKE_FILES.has(file) || I18N_RTL_SURFACE_FILES.has(file);
+}
+
 function isI18nHardcodedScanChange(file) {
   return (
     file === "src/App.tsx" ||
@@ -456,6 +582,22 @@ function collectRecommendedCommands(changedFiles, { docsOnly = false } = {}) {
     commands.push(...I18N_BUNDLE_STRATEGY_RECOMMENDED_COMMANDS);
   }
 
+  if (changedFiles.some(isI18nReleaseDocsWorkflowChange)) {
+    commands.push(...I18N_RELEASE_DOCS_WORKFLOW_RECOMMENDED_COMMANDS);
+  }
+
+  if (changedFiles.some(isI18nAppMetadataWorkflowChange)) {
+    commands.push(...I18N_APP_METADATA_WORKFLOW_RECOMMENDED_COMMANDS);
+  }
+
+  if (changedFiles.some(isI18nRtlReadinessChange)) {
+    commands.push(...I18N_RTL_READINESS_RECOMMENDED_COMMANDS);
+  }
+
+  if (changedFiles.some(isI18nRtlSmokeChange)) {
+    commands.push(...I18N_RTL_SMOKE_RECOMMENDED_COMMANDS);
+  }
+
   return Array.from(new Set(commands));
 }
 
@@ -545,7 +687,7 @@ function detectTasks(changedFiles, { full = false } = {}) {
       docs: true,
       docsOnly: true,
       fallback: false,
-      recommendedCommands: [],
+      recommendedCommands,
       workflow: false,
     };
   }

@@ -1062,6 +1062,65 @@ Extract it into the Agent Skills directory.`,
     }
   });
 
+  it("切到非 OEM Provider 时不应继续透传 OEM 低额度路由", async () => {
+    mockResolveOemCloudRuntimeContext.mockReturnValue({
+      baseUrl: "https://lime.example.com",
+      controlPlaneBaseUrl: "https://lime.example.com",
+      sceneBaseUrl: "https://lime.example.com",
+      gatewayBaseUrl: "https://gateway.example.com",
+      tenantId: "tenant-1",
+      sessionToken: "session-token",
+      hubProviderName: "lime-hub",
+      loginPath: "/login",
+      desktopClientId: "desktop-client",
+      desktopOauthRedirectUrl: "lime://oauth/callback",
+      desktopOauthNextPath: "/welcome",
+    });
+    mockGetOemCloudBootstrapSnapshot.mockReturnValue({
+      providerPreference: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        providerSource: "oem_cloud",
+        providerKey: "lime-hub",
+        defaultModel: "gpt-5.5",
+        needsValidation: false,
+        updatedAt: "2026-04-24T00:00:00.000Z",
+      },
+      providerOffersSummary: [
+        {
+          providerKey: "lime-hub",
+          source: "oem_cloud",
+          state: "available_quota_low",
+          defaultModel: "gpt-5.5",
+          configMode: "managed",
+          quotaStatus: "low",
+          fallbackToLocalAllowed: false,
+          canInvoke: true,
+        },
+      ],
+    });
+    const harness = mountHook({ providerType: "deepseek" });
+
+    try {
+      await act(async () => {
+        const started = await harness
+          .getValue()
+          .handleSend([], false, false, "继续处理当前话题", "react");
+        expect(started).toBe(true);
+      });
+
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      const args = mockSendMessage.mock.calls[0] as Parameters<
+        HookProps["sendMessage"]
+      >;
+      expect(args?.[8]?.requestMetadata?.harness).not.toHaveProperty(
+        "oem_routing",
+      );
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("OEM bootstrap features 应透传为 tenant_feature_flags 策略输入", async () => {
     mockResolveOemCloudRuntimeContext.mockReturnValue({
       baseUrl: "https://lime.example.com",

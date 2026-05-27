@@ -112,10 +112,11 @@ function printSummary(changedFiles, tasks) {
 
   if (tasks.docsOnly) {
     console.log("[local-ci] 当前仅检测到文档改动，跳过本地代码校验。");
-    return;
   }
 
-  console.log("[local-ci] 计划执行:");
+  if (!tasks.docsOnly) {
+    console.log("[local-ci] 计划执行:");
+  }
   if (tasks.integrity) {
     console.log("[local-ci] - 一致性校验");
   }

@@ -497,6 +497,25 @@ function buildOemRoutingRequestMetadata():
   };
 }
 
+function normalizeProviderSelection(value?: string | null): string {
+  return value?.trim().toLowerCase() || "";
+}
+
+function providerMatchesOemRouting(
+  providerType: string | null | undefined,
+  oemRouting: HarnessOemRoutingRequestMetadata | undefined,
+): boolean {
+  const normalizedProvider = normalizeProviderSelection(providerType);
+  const normalizedOemProvider = normalizeProviderSelection(
+    oemRouting?.provider_key,
+  );
+  if (!normalizedProvider || !normalizedOemProvider) {
+    return true;
+  }
+
+  return normalizedProvider === normalizedOemProvider;
+}
+
 function buildTenantFeatureFlagsRequestMetadata():
   | HarnessTenantFeatureFlagsRequestMetadata
   | undefined {
@@ -607,6 +626,7 @@ interface PrimeBrowserAssistBeforeSendOptions {
 interface BuildWorkspaceRequestMetadataOptions {
   workspaceRequestMetadataBase?: Record<string, unknown>;
   sendOptions?: HandleSendOptions;
+  currentProviderType?: string | null;
   effectiveToolPreferences: ChatToolPreferences;
   mappedTheme: ThemeType;
   isThemeWorkbench: boolean;
@@ -941,6 +961,7 @@ export function buildWorkspaceRequestMetadata(
   const {
     workspaceRequestMetadataBase,
     sendOptions,
+    currentProviderType,
     effectiveToolPreferences,
     mappedTheme,
     isThemeWorkbench,
@@ -1004,45 +1025,54 @@ export function buildWorkspaceRequestMetadata(
   const resolvedTenantFeatureFlags =
     buildTenantFeatureFlagsRequestMetadata() ||
     readExistingTenantFeatureFlags(existingHarnessMetadata);
+  const oemRoutingMatchesCurrentProvider = providerMatchesOemRouting(
+    currentProviderType,
+    resolvedOemRouting,
+  );
+  const harnessMetadata = buildHarnessRequestMetadata({
+    base: existingHarnessMetadata,
+    theme: mappedTheme,
+    turnPurpose: sendOptions?.purpose,
+    preferences: {
+      webSearch: effectiveToolPreferences.webSearch,
+      thinking: effectiveToolPreferences.thinking,
+      task: effectiveToolPreferences.task,
+      subagent: effectiveToolPreferences.subagent,
+    },
+    sessionMode: isThemeWorkbench ? "general_workbench" : "default",
+    gateKey: isThemeWorkbench ? currentGateKey : undefined,
+    runTitle: themeWorkbenchActiveQueueTitle?.trim() || undefined,
+    contentId: contentId || undefined,
+    browserRequirement: resolvedBrowserRequirement,
+    browserRequirementReason: resolvedBrowserRequirementReason,
+    browserLaunchUrl: resolvedBrowserLaunchUrl,
+    browserAssistProfileKey:
+      mappedTheme === "general"
+        ? browserAssistProfileKey || GENERAL_BROWSER_ASSIST_PROFILE_KEY
+        : undefined,
+    browserAssistPreferredBackend,
+    browserAssistAutoLaunch,
+    preferredTeamPresetId: resolvedPreferredTeamPresetId,
+    selectedTeamId: resolvedSelectedTeamId,
+    selectedTeamSource: resolvedSelectedTeamSource,
+    selectedTeamLabel: resolvedSelectedTeamLabel,
+    selectedTeamDescription: resolvedSelectedTeamDescription,
+    selectedTeamSummary: resolvedSelectedTeamSummary,
+    selectedTeamRoles: resolvedSelectedTeamRoles,
+    teamMemoryShadow: resolvedTeamMemoryShadow,
+    agentResponseLanguage,
+    oemRouting: oemRoutingMatchesCurrentProvider ? resolvedOemRouting : undefined,
+    tenantFeatureFlags: resolvedTenantFeatureFlags,
+  });
+  if (!oemRoutingMatchesCurrentProvider) {
+    delete harnessMetadata.oem_routing;
+    delete harnessMetadata.oemRouting;
+  }
 
   return {
     ...(workspaceRequestMetadataBase || {}),
     ...(sendOptions?.requestMetadata || {}),
-    harness: buildHarnessRequestMetadata({
-      base: existingHarnessMetadata,
-      theme: mappedTheme,
-      turnPurpose: sendOptions?.purpose,
-      preferences: {
-        webSearch: effectiveToolPreferences.webSearch,
-        thinking: effectiveToolPreferences.thinking,
-        task: effectiveToolPreferences.task,
-        subagent: effectiveToolPreferences.subagent,
-      },
-      sessionMode: isThemeWorkbench ? "general_workbench" : "default",
-      gateKey: isThemeWorkbench ? currentGateKey : undefined,
-      runTitle: themeWorkbenchActiveQueueTitle?.trim() || undefined,
-      contentId: contentId || undefined,
-      browserRequirement: resolvedBrowserRequirement,
-      browserRequirementReason: resolvedBrowserRequirementReason,
-      browserLaunchUrl: resolvedBrowserLaunchUrl,
-      browserAssistProfileKey:
-        mappedTheme === "general"
-          ? browserAssistProfileKey || GENERAL_BROWSER_ASSIST_PROFILE_KEY
-          : undefined,
-      browserAssistPreferredBackend,
-      browserAssistAutoLaunch,
-      preferredTeamPresetId: resolvedPreferredTeamPresetId,
-      selectedTeamId: resolvedSelectedTeamId,
-      selectedTeamSource: resolvedSelectedTeamSource,
-      selectedTeamLabel: resolvedSelectedTeamLabel,
-      selectedTeamDescription: resolvedSelectedTeamDescription,
-      selectedTeamSummary: resolvedSelectedTeamSummary,
-      selectedTeamRoles: resolvedSelectedTeamRoles,
-      teamMemoryShadow: resolvedTeamMemoryShadow,
-      agentResponseLanguage,
-      oemRouting: resolvedOemRouting,
-      tenantFeatureFlags: resolvedTenantFeatureFlags,
-    }),
+    harness: harnessMetadata,
   };
 }
 

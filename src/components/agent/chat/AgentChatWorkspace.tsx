@@ -3834,6 +3834,7 @@ export function AgentChatWorkspace({
     sessionId,
     executionStrategy,
     accessMode,
+    providerType,
     preferredTeamPresetId,
     selectedTeam,
     selectedTeamLabel,
