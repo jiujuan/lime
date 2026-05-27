@@ -289,12 +289,12 @@ jobs:
 
           const target = process.env.TARGET_TRIPLE;
           const srcTauri = path.resolve('src-tauri');
-          const workspace = process.env.GITHUB_WORKSPACE || path.resolve('.');
           const portablePath = (value) => value.replace(/\\/g, '/');
+          const windowsPath = (value) => value.replace(/\//g, '\\');
           const unique = (values) => [...new Set(values.filter(Boolean))];
 
           if (target === 'x86_64-pc-windows-msvc') {
-            const runtimeDir = path.join(workspace, '.release-runtime-libs', target);
+            const runtimeDir = path.join(srcTauri, '.release-runtime-libs', target);
             const dlls = ['onnxruntime.dll', 'sherpa-onnx-c-api.dll'];
             const hookPath = path.join(runtimeDir, 'windows-runtime-libs.nsh');
             fs.mkdirSync(path.dirname(hookPath), { recursive: true });
@@ -305,7 +305,7 @@ jobs:
                 '  SetOutPath "$INSTDIR"',
                 ...dlls.map(
                   (name) =>
-                    `  File /a "/oname=${name}" "${portablePath(path.join(runtimeDir, name))}"`,
+                    `  File /a /oname=${name} "${windowsPath(path.join(runtimeDir, name))}"`,
                 ),
                 '!macroend',
                 '',
@@ -531,7 +531,7 @@ jobs:
           set -euo pipefail
           TARGET_TRIPLE="${{ matrix.target }}"
           RELEASE_DIR="src-tauri/target/${TARGET_TRIPLE}/release"
-          RUNTIME_LIB_DIR=".release-runtime-libs/${TARGET_TRIPLE}"
+          RUNTIME_LIB_DIR="src-tauri/.release-runtime-libs/${TARGET_TRIPLE}"
           PREBUILT_ROOT="src-tauri/target/sherpa-onnx-prebuilt"
 
           SHERPA_ONNX_VERSION="$(node -e 'const fs = require("fs"); const lock = fs.readFileSync("src-tauri/Cargo.lock", "utf8"); const entry = lock.split(/\r?\n\[\[package\]\]\r?\n/).find((block) => /(?:^|\r?\n)name = "sherpa-onnx-sys"(?:\r?\n|$)/.test(block)); if (!entry) throw new Error("Unable to find sherpa-onnx-sys in src-tauri/Cargo.lock"); const match = entry.match(/(?:^|\r?\n)version = "([^"]+)"/); if (!match) throw new Error("Unable to resolve sherpa-onnx-sys version from src-tauri/Cargo.lock"); process.stdout.write(match[1]);')"
@@ -612,6 +612,29 @@ jobs:
           printf 'Staged ONNX runtime shared libraries for bundler under %s:\n' "${RUNTIME_LIB_DIR}"
           printf ' - %s\n' "${libs[@]}"
 
+      - name: Verify Windows ONNX runtime bundle inputs
+        if: matrix.platform == 'windows-2022'
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUNTIME_LIB_DIR="src-tauri/.release-runtime-libs/${{ matrix.target }}"
+          HOOK_FILE="$RUNTIME_LIB_DIR/windows-runtime-libs.nsh"
+
+          if [ ! -f "$HOOK_FILE" ]; then
+            echo "::error::Expected NSIS runtime hook missing before Tauri build: $HOOK_FILE"
+            exit 1
+          fi
+
+          for dll in onnxruntime.dll sherpa-onnx-c-api.dll; do
+            dll_path="$RUNTIME_LIB_DIR/$dll"
+            if [ ! -f "$dll_path" ]; then
+              echo "::error::Expected staged ONNX runtime DLL missing before Tauri build: $dll_path"
+              exit 1
+            fi
+            powershell -NoProfile -Command "if (-not (Test-Path -LiteralPath '$dll_path')) { throw 'PowerShell cannot see staged ONNX runtime DLL: $dll_path' }"
+            grep -F "$dll" "$HOOK_FILE"
+          done
+
       - name: Build Tauri app (Windows installer, stage only)
         id: build_windows_stage
         if: matrix.platform == 'windows-2022'
@@ -640,12 +663,13 @@ jobs:
         run: |
           set -euo pipefail
           RELEASE_DIR="src-tauri/target/${{ matrix.target }}/release"
-          RUNTIME_LIB_DIR=".release-runtime-libs/${{ matrix.target }}"
+          RUNTIME_LIB_DIR="src-tauri/.release-runtime-libs/${{ matrix.target }}"
           for dll in onnxruntime.dll sherpa-onnx-c-api.dll; do
             if [ ! -f "$RUNTIME_LIB_DIR/$dll" ]; then
               echo "::error::Expected staged ONNX runtime DLL missing: $RUNTIME_LIB_DIR/$dll"
               exit 1
             fi
+            powershell -NoProfile -Command "if (-not (Test-Path -LiteralPath '$RUNTIME_LIB_DIR/$dll')) { throw 'PowerShell cannot see staged ONNX runtime DLL: $RUNTIME_LIB_DIR/$dll' }"
           done
 
           HOOK_FILE="$RUNTIME_LIB_DIR/windows-runtime-libs.nsh"
