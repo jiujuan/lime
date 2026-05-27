@@ -288,18 +288,15 @@ jobs:
           const path = require('path');
 
           const target = process.env.TARGET_TRIPLE;
-          const runnerTemp = process.env.RUNNER_TEMP;
           const srcTauri = path.resolve('src-tauri');
+          const workspace = process.env.GITHUB_WORKSPACE || path.resolve('.');
           const portablePath = (value) => value.replace(/\\/g, '/');
           const unique = (values) => [...new Set(values.filter(Boolean))];
 
           if (target === 'x86_64-pc-windows-msvc') {
-            if (!runnerTemp) {
-              throw new Error('RUNNER_TEMP is required to stage Windows runtime libraries');
-            }
-            const runtimeDir = path.join(runnerTemp, 'lime-release-runtime-libs', target);
+            const runtimeDir = path.join(workspace, '.release-runtime-libs', target);
             const dlls = ['onnxruntime.dll', 'sherpa-onnx-c-api.dll'];
-            const hookPath = path.join(srcTauri, 'target', 'release-runtime-libs.nsh');
+            const hookPath = path.join(runtimeDir, 'windows-runtime-libs.nsh');
             fs.mkdirSync(path.dirname(hookPath), { recursive: true });
             fs.writeFileSync(
               hookPath,
@@ -534,7 +531,7 @@ jobs:
           set -euo pipefail
           TARGET_TRIPLE="${{ matrix.target }}"
           RELEASE_DIR="src-tauri/target/${TARGET_TRIPLE}/release"
-          RUNTIME_LIB_DIR="${RUNNER_TEMP}/lime-release-runtime-libs/${TARGET_TRIPLE}"
+          RUNTIME_LIB_DIR=".release-runtime-libs/${TARGET_TRIPLE}"
           PREBUILT_ROOT="src-tauri/target/sherpa-onnx-prebuilt"
 
           SHERPA_ONNX_VERSION="$(node -e 'const fs = require("fs"); const lock = fs.readFileSync("src-tauri/Cargo.lock", "utf8"); const entry = lock.split(/\r?\n\[\[package\]\]\r?\n/).find((block) => /(?:^|\r?\n)name = "sherpa-onnx-sys"(?:\r?\n|$)/.test(block)); if (!entry) throw new Error("Unable to find sherpa-onnx-sys in src-tauri/Cargo.lock"); const match = entry.match(/(?:^|\r?\n)version = "([^"]+)"/); if (!match) throw new Error("Unable to resolve sherpa-onnx-sys version from src-tauri/Cargo.lock"); process.stdout.write(match[1]);')"
@@ -643,7 +640,7 @@ jobs:
         run: |
           set -euo pipefail
           RELEASE_DIR="src-tauri/target/${{ matrix.target }}/release"
-          RUNTIME_LIB_DIR="${RUNNER_TEMP}/lime-release-runtime-libs/${{ matrix.target }}"
+          RUNTIME_LIB_DIR=".release-runtime-libs/${{ matrix.target }}"
           for dll in onnxruntime.dll sherpa-onnx-c-api.dll; do
             if [ ! -f "$RUNTIME_LIB_DIR/$dll" ]; then
               echo "::error::Expected staged ONNX runtime DLL missing: $RUNTIME_LIB_DIR/$dll"
@@ -651,7 +648,7 @@ jobs:
             fi
           done
 
-          HOOK_FILE="src-tauri/target/release-runtime-libs.nsh"
+          HOOK_FILE="$RUNTIME_LIB_DIR/windows-runtime-libs.nsh"
           if [ ! -f "$HOOK_FILE" ]; then
             echo "::error::Expected NSIS runtime hook missing: $HOOK_FILE"
             exit 1
