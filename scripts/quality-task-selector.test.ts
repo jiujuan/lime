@@ -28,5 +28,8 @@ describe("quality-task-selector", () => {
 
     expect(writeSpy).toHaveBeenCalledTimes(1);
     expect(String(writeSpy.mock.calls[0]?.[0] ?? "")).toContain("i18n_unused=true");
+    expect(String(writeSpy.mock.calls[0]?.[0] ?? "")).toContain(
+      "recommended_commands=npm run i18n:unused -- --check",
+    );
   });
 });

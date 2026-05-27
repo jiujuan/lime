@@ -7,6 +7,7 @@ mod responsive_chat;
 use fast_response::{
     extract_fast_response_fallback_preference, extract_fast_response_routing,
     extract_fast_response_routing_slot, extract_fast_response_service_model_slot,
+    FastResponseFallbackPreference,
 };
 use lime_core::database::dao::api_key_provider::{ApiProviderType, ProviderGroup};
 use lime_core::models::model_registry::{
@@ -2513,9 +2514,12 @@ fn honors_explicit_model_lock_with_capability_check(
     model_preference_source: RequestPreferenceSource,
 ) -> bool {
     matches!(
+        model_preference_source,
+        RequestPreferenceSource::FastResponseFallback
+    ) || (matches!(
         task_profile.user_lock_policy.as_deref(),
         Some("honor_explicit_model_lock_with_capability_check")
-    ) && matches!(model_preference_source, RequestPreferenceSource::Request)
+    ) && matches!(model_preference_source, RequestPreferenceSource::Request))
 }
 
 fn should_allow_cross_provider_runtime_fallback(
@@ -2524,6 +2528,12 @@ fn should_allow_cross_provider_runtime_fallback(
 ) -> bool {
     !matches!(provider_preference_source, RequestPreferenceSource::Request)
         && !matches!(model_preference_source, RequestPreferenceSource::Request)
+}
+
+fn should_lock_fast_response_fallback_selection(
+    preference: &FastResponseFallbackPreference,
+) -> bool {
+    lime_core::models::provider_type::is_custom_provider_id(&preference.provider_selector)
 }
 
 fn should_reselect_for_runtime_capability_gap(
@@ -3425,6 +3435,11 @@ pub(super) async fn resolve_runtime_request_provider_resolution(
         resolve_service_scene_model_preference(request.metadata.as_ref());
     let service_model_setting_preference =
         resolve_service_model_setting_preference(app, &task_profile);
+    let fast_response_fallback_preference = if request_targets_responsive_chat {
+        extract_fast_response_fallback_preference(request.metadata.as_ref())
+    } else {
+        None
+    };
     let session_context =
         if request.provider_preference.is_some() && request.model_preference.is_some() {
             None
@@ -3636,6 +3651,80 @@ pub(super) async fn resolve_runtime_request_provider_resolution(
         }
     }
 
+    if let Some(fallback_preference) = fast_response_fallback_preference
+        .as_ref()
+        .filter(|preference| should_lock_fast_response_fallback_selection(preference))
+    {
+        let selection = build_runtime_request_provider_config_from_preference(
+            app,
+            db,
+            api_key_provider_service,
+            request,
+            &task_profile,
+            &fallback_preference.provider_selector,
+            &fallback_preference.model_name,
+            RequestPreferenceSource::FastResponseFallback,
+            false,
+        )
+        .await?;
+        tracing::info!(
+            "[AsterAgent] 快速响应检测到自定义 Provider 当前选择，锁定前端 provider/model: session={}, provider={}, model={}",
+            request.session_id,
+            fallback_preference.provider_selector,
+            fallback_preference.model_name
+        );
+        let mut notes = vec![
+            "快速响应检测到当前选择为自定义 Provider，已锁定前端当前 provider/model，避免自动切换到其他 Provider。"
+                .to_string(),
+        ];
+        if let Some(note) = fallback_note.clone() {
+            notes.push(note);
+        }
+        let limit_state = build_limit_state(
+            runtime_limit_status_for_selection(&selection),
+            selection.candidate_count,
+            true,
+            false,
+            oem_locked,
+            selection.capability_gap.clone(),
+            notes,
+        );
+        let routing_decision = build_routing_decision(
+            &task_profile,
+            "fast_response_current_selection",
+            compose_routing_decision_reason(
+                "当前回合命中快速响应路由，但前端当前模型来自自定义 Provider；运行时保持当前 provider/model，不进入跨 Provider 自动候选。",
+                Some(&selection),
+                oem_locked,
+                fallback_note.as_deref(),
+            ),
+            Some(&selection),
+            Some(fallback_preference.provider_selector.clone()),
+            Some(fallback_preference.model_name.clone()),
+            Some("fast_response_routing.current_selection".to_string()),
+        );
+        let cost_state = build_cost_state(Some(&selection), None, "estimated");
+        let runtime_summary = build_runtime_summary(
+            &routing_decision,
+            &limit_state,
+            &cost_state,
+            &permission_state,
+            oem_limit_event.as_ref(),
+        );
+
+        return Ok(RuntimeRequestProviderResolution {
+            provider_config: Some(selection.provider_config),
+            task_profile,
+            routing_decision,
+            limit_state,
+            cost_state,
+            permission_state: permission_state.clone(),
+            limit_event: oem_limit_event,
+            oem_policy: oem_policy.clone(),
+            runtime_summary,
+        });
+    }
+
     if let Some(setting_preference) = service_model_setting_preference.as_ref() {
         match build_runtime_request_provider_config_from_preference(
             app,
@@ -3830,9 +3919,7 @@ pub(super) async fn resolve_runtime_request_provider_resolution(
     }
 
     if request_targets_responsive_chat {
-        if let Some(fallback_preference) =
-            extract_fast_response_fallback_preference(request.metadata.as_ref())
-        {
+        if let Some(fallback_preference) = fast_response_fallback_preference.as_ref() {
             match build_runtime_request_provider_config_from_preference(
                 app,
                 db,
@@ -3878,8 +3965,8 @@ pub(super) async fn resolve_runtime_request_provider_resolution(
                             fallback_note.as_deref(),
                         ),
                         Some(&selection),
-                        Some(fallback_preference.provider_selector),
-                        Some(fallback_preference.model_name),
+                        Some(fallback_preference.provider_selector.clone()),
+                        Some(fallback_preference.model_name.clone()),
                         Some("fast_response_routing.fallback".to_string()),
                     );
                     let cost_state = build_cost_state(Some(&selection), None, "estimated");

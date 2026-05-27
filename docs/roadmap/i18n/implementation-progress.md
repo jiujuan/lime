@@ -927,3 +927,154 @@ benchmark 摘要：
 
 - `npm test -- "scripts/quality-task-planner.test.ts" "scripts/i18n-bundle-report.test.ts"` 通过。
 - `npm run verify:tasks -- --format json` 能在当前 i18n bundle 报告改动下输出 `npm run i18n:bundle-report:json -- --output docs/roadmap/i18n/evidence/bundle-strategy-report.json` 推荐命令。
+
+## 2026-05-27：P4 evidence 推荐命令接入质量选择器
+
+本轮继续完成：
+
+- `scripts/quality-task-planner.mjs` 将发布材料 / 官网文档 / 帮助文档事实源变更映射到 `i18n:release-docs-report:json` 推荐命令；docs-only 变更仍跳过代码校验，但会保留 evidence 刷新建议。
+- installer / app metadata 相关的 `package.json`、`src-tauri/Cargo.toml`、`tauri.conf*.json` 与 `agent-app-shell.json` 变更现在会推荐刷新 `app-metadata-workflow-inventory.json`。
+- RTL 方向基础与 readiness inventory 审计过的设置页、侧栏、Workspace、弹窗和 Knowledge 主路径 surface 变更，会推荐刷新 `rtl-readiness-inventory.json`；布局敏感 surface 同时推荐 `npm run i18n:rtl-smoke`。
+- `scripts/local-ci.mjs` 调整 docs-only 摘要输出顺序，确保 docs-only 仍跳过本地代码校验，但不会吞掉 P4 evidence 推荐命令。
+
+验证：
+
+- `npm test -- "scripts/quality-task-planner.test.ts" "scripts/quality-task-selector.test.ts"` 通过。
+- 定向 `detectTasks(["docs/content/02.user-guide/9.mcp.md"])` 确认 docs-only 发布材料变更会保留 `i18n:release-docs-report:json` 推荐命令，且不触发前端 / GUI smoke。
+- `npm run verify:tasks -- --format json` 能在当前 evidence 变更下输出 `i18n:app-metadata-report:json` 与 `i18n:rtl-readiness-report:json` 推荐命令。
+
+## 2026-05-27：P4 Chrome extension i18n inventory 接入质量选择器
+
+本轮继续完成：
+
+- 新增 `scripts/i18n-chrome-extension-workflow-report.ts` 与测试 `scripts/i18n-chrome-extension-workflow-report.test.ts`，把 `extensions/lime-chrome` 的 manifest、Chrome `_locales` 状态、`InstallI18n` registry、options 页语言集合、页面 `data-i18n` 属性和核心术语出现情况做成可重复 inventory。
+- `package.json` 新增 `i18n:chrome-extension-report` 与 `i18n:chrome-extension-report:json`，后续可直接刷新 `docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json`。
+- `scripts/quality-task-planner.mjs` 已把 Chrome extension i18n surface 变更接入 `recommendedCommands`，当扩展 manifest、页面、`install-i18n.js`、options 语言脚本或对应 evidence / evaluation 变更时，推荐刷新 Chrome extension inventory。
+- `docs/roadmap/i18n/chrome-extension-evaluation.md` 已补充 machine-readable evidence 链接，继续保持当前结论：不迁移 `_locales/messages.json`，但扩展术语与页面级 registry 状态必须可复验。
+
+验证：
+
+- `npm test -- "scripts/i18n-chrome-extension-workflow-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖 2 个文件、23 个用例。
+- `npm run i18n:chrome-extension-report:json -- --output "docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json"` 通过，当前报告显示 manifest 无 `default_locale`、无 `_locales/`，`InstallI18n` 支持 `de / en / es / fr / pt / zh`，options 页支持 `en / zh`，核心术语 5/5 出现。
+
+## 2026-05-27：P4 Release Notes 英文 companion 补齐
+
+本轮继续完成：
+
+- 新增 `RELEASE_NOTES.en.md`，按 `RELEASE_NOTES.md` 当前 `v1.52.0` 结构补齐英文 companion，并明确中文发布说明仍是 primary/source 版本。
+- `README.en.md` 的 Release Notes 入口已指向 `RELEASE_NOTES.en.md`；`scripts/i18n-release-docs-workflow-report.ts` 同步补充英文 README companion 链接检查，以及中英文 release notes 标题版本一致性检查。
+- `docs/roadmap/i18n/release-docs-workflow-evaluation.md` 已从“Release Notes 无英文 companion”更新为“README 与 Release Notes 已有最小 `zh-CN / en-US` companion 覆盖，但文档站仍没有独立 locale workflow”。
+- 这一步直接推进 PRD P4 验收“发布材料至少覆盖 `zh-CN / en-US`”；官网文档与帮助文档仍需要后续独立 workflow。
+
+验证：
+
+- `npm run i18n:release-docs-report:json -- --output "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过，当前报告显示 `hasBilingualRootReadme=true`、`hasReleaseNotesCompanion=true`、`hasReleaseNotesCompanionVersionMatch=true`、`readmeEnglishLinksReleaseNotesCompanion=true`。
+- `jq empty "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过，确认 evidence JSON 有效。
+
+## 2026-05-27：P4 release docs translation scope manifest
+
+本轮继续完成：
+
+- 新增 `docs/roadmap/i18n/release-docs-translation-scope.json`，把发布材料、官网文档和帮助文档拆成 `required / pilot / source-only` 三类翻译范围；当前 required 为 README 与 Release Notes，pilot 为 `docs/content/index.md`。
+- `scripts/i18n-release-docs-workflow-report.ts` 已读取 translation scope manifest，并输出 scope item 数、required companion 缺失数、source locale、target locales 与 source / companion 文件存在情况。
+- `docs/roadmap/i18n/release-docs-workflow-evaluation.md` 已更新结论：发布材料已有最小 `zh-CN / en-US` companion 覆盖和可机器读取的 translation scope，但文档站仍没有 locale 构建 workflow。
+
+验证：
+
+- `npm run i18n:release-docs-report:json -- --output "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过，当前报告显示 `hasReleaseDocsTranslationScope=true`、`releaseDocsScopeItemCount=15`、`releaseDocsRequiredCompanionMissingCount=0`。
+- `jq empty "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json" "docs/roadmap/i18n/release-docs-translation-scope.json"` 通过，确认 evidence 与 scope manifest 均为有效 JSON。
+
+## 2026-05-27：P4 release docs pilot companion advisory
+
+本轮继续完成：
+
+- `scripts/i18n-release-docs-workflow-report.ts` 在 required companion 门禁之外新增 `missingPilotEnglishCompanions` 与 `releaseDocsPilotCompanionMissingCount`，把 pilot 文档的英文 companion 缺口暴露为非阻断 advisory。
+- 刷新 `docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json` 后，当前 required companion 缺失数仍为 `0`，pilot companion 缺失数为 `1`，具体是 `docs/content/index.md`。
+- `docs/roadmap/i18n/release-docs-workflow-evaluation.md` 已同步说明：README 与 Release Notes 的最低 `zh-CN / en-US` 发布材料覆盖不受 pilot 缺失影响，但文档首页 pilot 是下一步官网 / 帮助文档 companion 的明确候选。
+
+验证：
+
+- `npm test -- "scripts/i18n-release-docs-workflow-report.test.ts"` 通过，覆盖 required 门禁和 pilot advisory。
+- `npm run i18n:release-docs-report:json -- --output "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过，已刷新 evidence。
+
+## 2026-05-27：P4 app metadata translation scope manifest
+
+本轮继续完成：
+
+- 新增 `docs/roadmap/i18n/app-metadata-translation-scope.json`，把 installer / app metadata 字段拆成 translatable、stable brand / identifier 与 source-only 三类；当前 `generatedMetadataAllowed=false`，避免在发布链路未设计前生成平行配置。
+- `scripts/i18n-app-metadata-workflow-report.ts` 已读取 metadata scope，并在 inventory 中输出 scope item 数、可翻译字段数、稳定字段数、source-only 字段数、owner、source locale、target locales 与 workflow status。
+- 刷新 `docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json` 后，当前 scope 共 `10` 项，其中 translatable 字段 `2` 项、stable 字段 `6` 项、source-only 字段 `2` 项；installer localization workflow 仍为 `false`。
+- `scripts/quality-task-planner.mjs` 已把 metadata scope 纳入 P4 app metadata evidence 推荐范围；单独改 scope manifest 时保持 docs-only，但推荐刷新 `app-metadata-workflow-inventory.json`。
+- `docs/roadmap/i18n/app-metadata-workflow-evaluation.md` 已同步记录：这一步只建立可机器读取的 ownership / scope，不改真实安装器或 Tauri 配置。
+
+验证：
+
+- `npm test -- "scripts/i18n-app-metadata-workflow-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖 app metadata scope 读取与 docs-only 推荐命令。
+- `npm run i18n:app-metadata-report:json -- --output "docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json"` 通过，已刷新 evidence。
+
+## 2026-05-27：P4 docs home English companion pilot
+
+本轮继续完成：
+
+- 新增 `docs/content/index.en.md`，作为文档首页 `docs/content/index.md` 的英文 companion pilot；内容保持与 source 页同一定位：创作者故事优先、技术连接能力作为扩展说明。
+- `docs/roadmap/i18n/release-docs-translation-scope.json` 已把 `docs/content/index.md` 的 pilot `enUSPath` 指向 `docs/content/index.en.md`。
+- 刷新 `docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json` 后，当前 release docs scope 的 required companion 缺失数为 `0`，pilot companion 缺失数也为 `0`；existing English companion 数从 README / Release Notes 的 `2` 扩展到 `3`。
+- `docs/roadmap/i18n/release-docs-workflow-evaluation.md` 已同步记录：文档首页已有英文 companion pilot，但 docs site 仍没有 locale route / locale build workflow，不能把该 pilot 误判成完整文档站国际化。
+
+验证：
+
+- `npm test -- "scripts/i18n-release-docs-workflow-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖 pilot companion 存在时 advisory 为 `0`。
+- `npm run i18n:release-docs-report:json -- --output "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过，已刷新 release docs evidence。
+
+## 2026-05-27：P4 docs companion pilot 避免文档站假路由
+
+本轮继续完成：
+
+- 将文档首页英文 companion 从 `docs/content/index.en.md` 移到 `docs/roadmap/i18n/companions/docs-content-index.en.md`，避免在 `docs/nuxt.config.ts` 尚无 locale route 的情况下，被 Docus / Nuxt Content 当成普通内容页收集。
+- `docs/roadmap/i18n/release-docs-translation-scope.json` 已同步把 `docs/content/index.md` 的 pilot `enUSPath` 指向 roadmap companion 目录；release docs evidence 仍显示 required companion 缺失数 `0`、pilot companion 缺失数 `0`、existing English companion 数 `3`。
+- `scripts/i18n-release-docs-workflow-report.ts` 新增 `docsSite.contentEnglishCompanionFiles` 与 `summary.docsContentEnglishCompanionFileCount`，专门检测 `docs/content` 内是否出现 `.en.md` / `.en-US.md` companion；当前应保持为 `0`，直到真正引入 docs locale route / build workflow。
+- `docs/roadmap/i18n/release-docs-workflow-evaluation.md` 已同步说明：当前已有文档首页英文 companion pilot，但它不是文档站 locale route，也不代表完整 docs i18n workflow 已完成。
+
+验证：
+
+- `npm test -- "scripts/i18n-release-docs-workflow-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖 companion 不落入 `docs/content` 的口径。
+- `npm run i18n:release-docs-report:json -- --output "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过，已刷新 release docs evidence。
+
+## 2026-05-27：P4 docs companion 接入质量选择器
+
+本轮继续完成：
+
+- `scripts/quality-task-planner.mjs` 已把 `docs/roadmap/i18n/companions/` 纳入 release docs workflow 触发面；后续修改文档 companion pilot 时，会保持 docs-only，但推荐刷新 `release-docs-workflow-inventory.json`。
+- `scripts/quality-task-planner.test.ts` 新增 companion 目录回归，锁住 `docsOnly=true`、不触发 frontend / GUI smoke，并保留 `i18n:release-docs-report:json` 推荐命令。
+- 这一步补齐 P4 发布材料 / 官网文档 companion pilot 的质量闭环，避免 companion 内容变更后 evidence 失效。
+
+验证：
+
+- `npm test -- "scripts/quality-task-planner.test.ts" "scripts/i18n-release-docs-workflow-report.test.ts"` 通过，覆盖 2 个文件、26 个用例。
+- 定向 `detectTasks(["docs/roadmap/i18n/companions/docs-content-index.en.md"])` 输出 `docsOnly=true`，且推荐 `npm run i18n:release-docs-report:json -- --output docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json`。
+
+## 2026-05-27：P4 release docs companion orphan 检测
+
+本轮继续完成：
+
+- `scripts/i18n-release-docs-workflow-report.ts` 新增 companion 目录审计：收集 `docs/roadmap/i18n/companions/` 下英文 Markdown companion，并与 `release-docs-translation-scope.json` 中的 `enUSPath` 交叉比对。
+- inventory 现在输出 `releaseDocsTranslationScope.companionFiles`、`orphanEnglishCompanions` 与 `summary.releaseDocsOrphanCompanionCount`，避免后续出现未被 scope 管理的游离英文 companion。
+- 刷新 `docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json` 后，当前 companion 文件为 `docs/roadmap/i18n/companions/docs-content-index.en.md`，orphan companion 数为 `0`；required / pilot companion 缺失数仍为 `0`。
+
+验证：
+
+- `npm test -- "scripts/i18n-release-docs-workflow-report.test.ts"` 通过，覆盖 companion 正常引用和 orphan companion 反向用例。
+- `npm run i18n:release-docs-report:json -- --output "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过，已刷新 release docs evidence。
+
+## 2026-05-27：P4 release docs source-only 剩余范围量化
+
+本轮继续完成：
+
+- `scripts/i18n-release-docs-workflow-report.ts` 新增 `sourceOnlyWithoutCompanions` 与 `sourceOnlyWithoutCompanionCount`，把 translation scope 中明确暂不翻译的 source-only 文档数量直接暴露到 inventory。
+- 刷新 `docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json` 后，当前 required companion 缺失数为 `0`、pilot companion 缺失数为 `0`、orphan companion 数为 `0`；source-only without companion 数为 `12`，对应现有帮助文档 / API reference / open platform / legal 长尾。
+- 这一步不改变当前门禁，但让 P4 “官网文档、帮助文档进入独立翻译 workflow” 的剩余范围可机器读取，避免只看 required / pilot 就误判 docs workflow 已完成。
+
+验证：
+
+- `npm test -- "scripts/i18n-release-docs-workflow-report.test.ts"` 通过，覆盖 source-only without companion 统计。
+- `npm run i18n:release-docs-report:json -- --output "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过，已刷新 release docs evidence。

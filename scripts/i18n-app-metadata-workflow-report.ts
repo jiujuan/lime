@@ -8,6 +8,20 @@ import { fileURLToPath } from "node:url";
 export type AppMetadataWorkflowReportFormat = "text" | "json";
 
 export interface AppMetadataWorkflowReport {
+  appMetadataTranslationScope: {
+    generatedMetadataAllowed: boolean;
+    itemCount: number;
+    owner: string | null;
+    path: string;
+    requiredBeforeMultilingualReleaseCount: number;
+    schemaVersion: string | null;
+    sourceLocale: string | null;
+    stableFieldCount: number;
+    sourceOnlyFieldCount: number;
+    targetLocales: string[];
+    translatableFieldCount: number;
+    workflowStatus: string | null;
+  };
   appPackageJson: {
     description: string | null;
     name: string | null;
@@ -40,9 +54,12 @@ export interface AppMetadataWorkflowReport {
   schemaVersion: string;
   summary: {
     hasInstallerLocalizationWorkflow: boolean;
+    hasMetadataTranslationScope: boolean;
     hasLocalizedAppMetadataArtifacts: boolean;
     hasLocalizedMetadataFields: boolean;
     hasLocaleAwareMetadataSources: boolean;
+    metadataScopeItemCount: number;
+    metadataTranslatableFieldCount: number;
   };
 }
 
@@ -58,6 +75,11 @@ const REPO_ROOT = path.resolve(__dirname, "..");
 
 function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join("/");
+}
+
+function displayPath(filePath: string, repoRoot: string): string {
+  const relative = path.relative(repoRoot, filePath);
+  return normalizePath(relative && !relative.startsWith("..") ? relative : filePath);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -78,6 +100,21 @@ function fileExists(filePath: string): boolean {
 
 function readText(filePath: string): string | null {
   return fileExists(filePath) ? fs.readFileSync(filePath, "utf8") : null;
+}
+
+function readOptionalJsonObject(filePath: string): Record<string, unknown> | null {
+  if (!fileExists(filePath)) {
+    return null;
+  }
+  return readJsonObject(filePath);
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 function parseTomlSectionValue(
@@ -182,6 +219,36 @@ function readShellCapability(filePath: string): AppMetadataWorkflowReport["shell
   };
 }
 
+function analyzeMetadataTranslationScope(
+  repoRoot: string,
+  scopePath: string,
+): AppMetadataWorkflowReport["appMetadataTranslationScope"] {
+  const scope = readOptionalJsonObject(scopePath);
+  const items = Array.isArray(scope?.items) ? scope.items.filter(isRecord) : [];
+  const countByLocalization = (values: string[]) =>
+    items.filter((item) => {
+      const localization = readString(item.localization);
+      return Boolean(localization && values.includes(localization));
+    }).length;
+
+  return {
+    generatedMetadataAllowed: scope?.generatedMetadataAllowed === true,
+    itemCount: items.length,
+    owner: readString(scope?.owner),
+    path: displayPath(scopePath, repoRoot),
+    requiredBeforeMultilingualReleaseCount: items.filter(
+      (item) => readString(item.priority) === "required-before-multilingual-release",
+    ).length,
+    schemaVersion: readString(scope?.schemaVersion),
+    sourceLocale: readString(scope?.sourceLocale),
+    stableFieldCount: countByLocalization(["stable-brand", "stable-identifier"]),
+    sourceOnlyFieldCount: countByLocalization(["source-only", "internal-source-only"]),
+    targetLocales: readStringArray(scope?.targetLocales),
+    translatableFieldCount: countByLocalization(["translatable"]),
+    workflowStatus: readString(scope?.workflowStatus),
+  };
+}
+
 export function analyzeAppMetadataWorkflowReport(
   options: Pick<CliOptions, "repoRoot">,
 ): AppMetadataWorkflowReport {
@@ -196,17 +263,29 @@ export function analyzeAppMetadataWorkflowReport(
     "capabilities",
     "agent-app-shell.json",
   );
+  const appMetadataTranslationScopePath = path.join(
+    repoRoot,
+    "docs",
+    "roadmap",
+    "i18n",
+    "app-metadata-translation-scope.json",
+  );
 
   const appPackageJson = readPackageJson(appPackageJsonPath);
   const cargoToml = readCargoToml(cargoTomlPath);
   const tauriConfig = readTauriConfig(tauriConfigPath);
   const headlessConfig = readTauriConfig(tauriHeadlessConfigPath);
   const shellCapability = readShellCapability(shellCapabilityPath);
+  const appMetadataTranslationScope = analyzeMetadataTranslationScope(
+    repoRoot,
+    appMetadataTranslationScopePath,
+  );
 
   const localeAwareMetadataSources = [
     path.join(repoRoot, "README.en.md"),
     path.join(repoRoot, "docs", "roadmap", "i18n", "glossary.md"),
     path.join(repoRoot, "docs", "roadmap", "i18n", "release-docs-workflow-evaluation.md"),
+    appMetadataTranslationScopePath,
   ].filter(fileExists);
 
   const localizedMetadataFields = [
@@ -220,6 +299,7 @@ export function analyzeAppMetadataWorkflowReport(
   ].filter((value): value is string => Boolean(value && value.trim().length > 0));
 
   return {
+    appMetadataTranslationScope,
     appPackageJson,
     headlessTauriConfig: {
       identifier: headlessConfig.identifier,
@@ -233,9 +313,12 @@ export function analyzeAppMetadataWorkflowReport(
     schemaVersion: "lime.i18n.appMetadataWorkflowReport.v1",
     summary: {
       hasInstallerLocalizationWorkflow: false,
+      hasMetadataTranslationScope: fileExists(appMetadataTranslationScopePath),
       hasLocalizedAppMetadataArtifacts: localizedMetadataFields.length > 0,
       hasLocalizedMetadataFields: localizedMetadataFields.length > 0,
       hasLocaleAwareMetadataSources: localeAwareMetadataSources.length > 0,
+      metadataScopeItemCount: appMetadataTranslationScope.itemCount,
+      metadataTranslatableFieldCount: appMetadataTranslationScope.translatableFieldCount,
     },
   };
 }
@@ -253,6 +336,9 @@ export function formatAppMetadataWorkflowReport(
     `repoRoot: ${normalizePath(report.repoRoot)}`,
     `localized metadata artifacts: ${report.summary.hasLocalizedAppMetadataArtifacts ? "yes" : "no"}`,
     `installer localization workflow: ${report.summary.hasInstallerLocalizationWorkflow ? "yes" : "no"}`,
+    `metadata translation scope: ${report.summary.hasMetadataTranslationScope ? "yes" : "no"}`,
+    `metadata scope items: ${report.summary.metadataScopeItemCount}`,
+    `metadata translatable fields: ${report.summary.metadataTranslatableFieldCount}`,
     `locale-aware sources: ${report.summary.hasLocaleAwareMetadataSources ? "yes" : "no"}`,
     `package name/version: ${report.appPackageJson.name ?? "(missing)"} / ${report.appPackageJson.version ?? "(missing)"}`,
     `root description: ${report.appPackageJson.description ?? "(missing)"}`,

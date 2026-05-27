@@ -3,6 +3,7 @@
 > 关联 PRD：`docs/roadmap/i18n/prd.md`
 > 关联进度：`docs/roadmap/i18n/implementation-progress.md`
 > 关联 inventory：`docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json`
+> 关联 scope：`docs/roadmap/i18n/app-metadata-translation-scope.json`
 > 评估时间：2026-05-23
 
 ## 评估目标
@@ -16,22 +17,25 @@
 - `src-tauri/tauri.conf.json` 与 `src-tauri/tauri.conf.headless.json` 的 `productName`、窗口标题和 identifier 都是固定值。
 - `package.json` 与 `src-tauri/Cargo.toml` 的 description 仍是单一英文描述，不是分 locale 的 metadata bundle。
 - `agent-app-shell.json` 的 description 仍是单一中文说明，没有 companion 版本。
+- `docs/roadmap/i18n/app-metadata-translation-scope.json` 已定义 installer / app metadata 的最小 ownership 与字段分类：`productName`、窗口标题和 bundle identifier 属于稳定品牌 / 标识字段，`package.json.description` 与 Tauri file association description 属于未来多语言发布前需要处理的 translatable 字段。
 
 ## 结论
 
-当前**没有**独立的 installer / app metadata 翻译工作流。
+当前**没有**独立的 installer / app metadata 翻译工作流；但已有可机器读取的 metadata translation scope，能区分稳定字段、source-only 字段和未来多语言发布前必须处理的可翻译字段。
 
 ## 现状评价
 
 1. app / installer 元数据确实已经有若干文本字段，但它们不是可按 locale 切换的资源。
 2. 当前仓库更接近“单份元数据 + 少量 companion 文档”形态，而不是“多语言 metadata workflow”形态。
-3. 若要做多语言 installer / metadata，必须先定义 source locale、哪些字段允许本地化、哪些字段必须保持稳定，以及发布链路如何消费这些值。
+3. Metadata translation scope 已经先定义 source locale、owner、哪些字段允许本地化、哪些字段必须保持稳定，以及当前是否允许生成 metadata；这一步只建立事实源，不改真实安装器配置。
+4. 若要做多语言 installer / metadata，下一步必须先设计发布链路如何消费这些值，而不是手工复制多份 Tauri 配置。
 
 ## 建议工作流
 
 - 先把 installer / app metadata 的 owner、source locale 与发布边界写成单独规则。
 - 再决定是继续维持单份元数据，还是把字段抽成生成式资源。
 - 若未来接入多语言发布链路，应优先产出 build-time inventory / generator，而不是手工维护多份配置。
+- 在 `generatedMetadataAllowed=false` 期间，不允许新增平行的 locale 配置文件或手工派生 installer metadata；只能更新 scope 和 inventory evidence。
 
 ## 重新评估条件
 
@@ -45,6 +49,7 @@
 ## 证据链接
 
 - [app-metadata-workflow-inventory.json](</Users/coso/Documents/dev/ai/aiclientproxy/lime/docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json>)
+- [app-metadata-translation-scope.json](</Users/coso/Documents/dev/ai/aiclientproxy/lime/docs/roadmap/i18n/app-metadata-translation-scope.json>)
 - [package.json](</Users/coso/Documents/dev/ai/aiclientproxy/lime/package.json>)
 - [src-tauri/Cargo.toml](</Users/coso/Documents/dev/ai/aiclientproxy/lime/src-tauri/Cargo.toml>)
 - [src-tauri/tauri.conf.json](</Users/coso/Documents/dev/ai/aiclientproxy/lime/src-tauri/tauri.conf.json>)

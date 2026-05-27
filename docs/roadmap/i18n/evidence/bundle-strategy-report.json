@@ -2,13 +2,13 @@
   "bundleGroups": [
     {
       "fileCount": 40,
-      "keyCount": 17520,
+      "keyCount": 17540,
       "localeRawBytes": {
-        "en-US": 302154,
-        "ja-JP": 338662,
-        "ko-KR": 324064,
-        "zh-CN": 296675,
-        "zh-TW": 297075
+        "en-US": 302451,
+        "ja-JP": 339004,
+        "ko-KR": 324375,
+        "zh-CN": 296975,
+        "zh-TW": 297375
       },
       "namespace": "agent",
       "partNames": [
@@ -22,9 +22,9 @@
         "agentTeamWorkspace"
       ],
       "role": "inline",
-      "sourceLocaleKeyCount": 3504,
-      "sourceLocaleRawBytes": 296675,
-      "totalRawBytes": 1558630
+      "sourceLocaleKeyCount": 3508,
+      "sourceLocaleRawBytes": 296975,
+      "totalRawBytes": 1560180
     },
     {
       "fileCount": 5,
@@ -139,7 +139,7 @@
     "inlineGroupCount": 6,
     "lazyGroupCount": 0,
     "sourceLocaleFileCount": 13,
-    "sourceLocaleKeyCount": 7549,
-    "totalRawBytes": 3450322
+    "sourceLocaleKeyCount": 7553,
+    "totalRawBytes": 3451872
   }
 }

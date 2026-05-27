@@ -5,6 +5,7 @@
       "dev",
       "generate"
     ],
+    "contentEnglishCompanionFiles": [],
     "contentFileCount": 13,
     "hasI18nConfig": false,
     "hasLocaleRouting": false,
@@ -15,23 +16,91 @@
       "04.api-reference",
       "07.legal",
       "08.open-platform"
+    ],
+    "unscopedContentSourceFiles": []
+  },
+  "releaseDocsTranslationScope": {
+    "companionFiles": [
+      "docs/roadmap/i18n/companions/docs-content-index.en.md"
+    ],
+    "existingEnglishCompanionCount": 3,
+    "existingSourceCount": 15,
+    "itemCount": 15,
+    "missingEnglishCompanions": [],
+    "missingPilotEnglishCompanions": [],
+    "missingSources": [],
+    "orphanEnglishCompanions": [],
+    "path": "docs/roadmap/i18n/release-docs-translation-scope.json",
+    "pilotCount": 1,
+    "requiredCount": 2,
+    "schemaVersion": "lime.i18n.releaseDocsTranslationScope.v1",
+    "scopedSourceFiles": [
+      "docs/content/02.user-guide/16.gateway-tunnel-webhook.md",
+      "docs/content/02.user-guide/17.runtime-agents.md",
+      "docs/content/02.user-guide/9.mcp.md",
+      "docs/content/03.providers/1.overview.md",
+      "docs/content/04.api-reference/1.overview.md",
+      "docs/content/04.api-reference/2.openai-api.md",
+      "docs/content/04.api-reference/3.claude-api.md",
+      "docs/content/07.legal/1.disclaimer.md",
+      "docs/content/08.open-platform/1.overview.md",
+      "docs/content/08.open-platform/3.plugin-development.md",
+      "docs/content/08.open-platform/4.connect.md",
+      "docs/content/08.open-platform/6.connect-webhook.md",
+      "docs/content/index.md",
+      "README.md",
+      "RELEASE_NOTES.md"
+    ],
+    "sourceLocale": "zh-CN",
+    "sourceOnlyCount": 12,
+    "sourceOnlyWithoutCompanionCount": 12,
+    "sourceOnlyWithoutCompanions": [
+      "docs/content/02.user-guide/9.mcp.md",
+      "docs/content/02.user-guide/16.gateway-tunnel-webhook.md",
+      "docs/content/02.user-guide/17.runtime-agents.md",
+      "docs/content/03.providers/1.overview.md",
+      "docs/content/04.api-reference/1.overview.md",
+      "docs/content/04.api-reference/2.openai-api.md",
+      "docs/content/04.api-reference/3.claude-api.md",
+      "docs/content/07.legal/1.disclaimer.md",
+      "docs/content/08.open-platform/1.overview.md",
+      "docs/content/08.open-platform/3.plugin-development.md",
+      "docs/content/08.open-platform/4.connect.md",
+      "docs/content/08.open-platform/6.connect-webhook.md"
+    ],
+    "targetLocales": [
+      "en-US"
     ]
   },
   "releaseNotes": {
-    "englishCompanionExists": false,
-    "sourceExists": true
+    "englishCompanionExists": true,
+    "englishCompanionVersion": "v1.52.0",
+    "sourceVersion": "v1.52.0",
+    "sourceExists": true,
+    "versionsMatch": true
   },
   "repoRoot": "/Users/coso/Documents/dev/ai/aiclientproxy/lime",
   "rootReadme": {
     "englishCompanionExists": true,
+    "englishLinksReleaseNotesCompanion": true,
     "sourceExists": true
   },
   "schemaVersion": "lime.i18n.releaseDocsWorkflowReport.v1",
   "summary": {
     "contentFileCount": 13,
+    "docsContentEnglishCompanionFileCount": 0,
     "docsTranslationWorkflowPresent": false,
+    "docsUnscopedContentSourceFileCount": 0,
     "hasBilingualRootReadme": true,
     "hasDocsLocaleWorkflow": false,
-    "hasReleaseNotesCompanion": false
+    "hasReleaseDocsTranslationScope": true,
+    "hasReleaseNotesCompanion": true,
+    "hasReleaseNotesCompanionVersionMatch": true,
+    "readmeEnglishLinksReleaseNotesCompanion": true,
+    "releaseDocsPilotCompanionMissingCount": 0,
+    "releaseDocsOrphanCompanionCount": 0,
+    "releaseDocsRequiredCompanionMissingCount": 0,
+    "releaseDocsScopeItemCount": 15,
+    "releaseDocsSourceOnlyWithoutCompanionCount": 12
   }
 }

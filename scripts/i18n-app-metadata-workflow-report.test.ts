@@ -101,13 +101,73 @@ describe("i18n app metadata workflow report", () => {
         2,
       ),
     );
+    writeFile(
+      root,
+      "docs/roadmap/i18n/app-metadata-translation-scope.json",
+      JSON.stringify(
+        {
+          schemaVersion: "lime.i18n.appMetadataTranslationScope.v1",
+          sourceLocale: "zh-CN",
+          targetLocales: ["en-US"],
+          workflowStatus: "not-started",
+          owner: "release",
+          generatedMetadataAllowed: false,
+          items: [
+            {
+              path: "package.json",
+              field: "description",
+              localization: "translatable",
+              priority: "required-before-multilingual-release",
+            },
+            {
+              path: "src-tauri/tauri.conf.json",
+              field: "productName",
+              localization: "stable-brand",
+              priority: "stable",
+            },
+            {
+              path: "src-tauri/tauri.conf.json",
+              field: "identifier",
+              localization: "stable-identifier",
+              priority: "stable",
+            },
+            {
+              path: "src-tauri/capabilities/agent-app-shell.json",
+              field: "description",
+              localization: "internal-source-only",
+              priority: "source-only",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+    );
 
     const report = analyzeAppMetadataWorkflowReport({ repoRoot: root });
 
     expect(report.schemaVersion).toBe("lime.i18n.appMetadataWorkflowReport.v1");
     expect(report.summary.hasInstallerLocalizationWorkflow).toBe(false);
+    expect(report.summary.hasMetadataTranslationScope).toBe(true);
     expect(report.summary.hasLocalizedAppMetadataArtifacts).toBe(true);
-    expect(report.summary.hasLocaleAwareMetadataSources).toBe(false);
+    expect(report.summary.hasLocaleAwareMetadataSources).toBe(true);
+    expect(report.summary.metadataScopeItemCount).toBe(4);
+    expect(report.summary.metadataTranslatableFieldCount).toBe(1);
+    expect(report.appMetadataTranslationScope).toEqual(
+      expect.objectContaining({
+        generatedMetadataAllowed: false,
+        itemCount: 4,
+        owner: "release",
+        requiredBeforeMultilingualReleaseCount: 1,
+        schemaVersion: "lime.i18n.appMetadataTranslationScope.v1",
+        sourceLocale: "zh-CN",
+        sourceOnlyFieldCount: 1,
+        stableFieldCount: 2,
+        targetLocales: ["en-US"],
+        translatableFieldCount: 1,
+        workflowStatus: "not-started",
+      }),
+    );
     expect(report.tauriConfig.productName).toBe("Lime");
     expect(report.tauriConfig.deepLinkSchemes).toEqual(["lime"]);
     expect(formatAppMetadataWorkflowReport(report, "text")).toContain(

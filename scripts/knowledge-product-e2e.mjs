@@ -298,11 +298,23 @@ async function clickSideNav(page, options, name) {
     .click({ timeout: options.timeoutMs });
 }
 
+async function clickVisibleButton(page, options, name) {
+  const button = page.getByRole("button", { name, exact: true }).first();
+  if (!(await button.isVisible().catch(() => false))) {
+    return false;
+  }
+  await button.click({ timeout: options.timeoutMs });
+  return true;
+}
+
 async function openKnowledgeOverview(page, options) {
   const text = await page
     .locator("body")
     .innerText()
     .catch(() => "");
+  if (text.includes("让 Lime 记住这个项目") && text.includes("项目资料清单")) {
+    return;
+  }
   if (
     text.includes("项目资料状态说明") ||
     text.includes("存到哪里？") ||
@@ -323,8 +335,16 @@ async function openKnowledgeOverview(page, options) {
       }
     }
 
-    await clickSideNav(page, options, "灵感");
-    await waitText(page, options, "灵感页", ["收藏过的想法"]);
+    if (
+      (await clickVisibleButton(page, options, "回到项目资料")) ||
+      (await clickVisibleButton(page, options, "稍后处理"))
+    ) {
+      await waitText(page, options, "返回项目资料首页", [
+        "让 Lime 记住这个项目",
+        "项目资料清单",
+      ]);
+      return;
+    }
   }
 
   await clickSideNav(page, options, "项目资料");

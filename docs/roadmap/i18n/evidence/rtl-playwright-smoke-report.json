@@ -11,8 +11,11 @@
   "schemaVersion": "lime.i18n.rtlPlaywrightSmokeReport.v1",
   "screenshots": {
     "home": "/Users/coso/Documents/dev/ai/aiclientproxy/lime/docs/roadmap/i18n/evidence/rtl-home-automated.png",
+    "homeFullPage": "/Users/coso/Documents/dev/ai/aiclientproxy/lime/docs/roadmap/i18n/evidence/rtl-home-fullpage.png",
     "settings": "/Users/coso/Documents/dev/ai/aiclientproxy/lime/docs/roadmap/i18n/evidence/rtl-settings-automated.png",
-    "userMenu": "/Users/coso/Documents/dev/ai/aiclientproxy/lime/docs/roadmap/i18n/evidence/rtl-user-menu-automated.png"
+    "settingsFullPage": "/Users/coso/Documents/dev/ai/aiclientproxy/lime/docs/roadmap/i18n/evidence/rtl-settings-fullpage.png",
+    "userMenu": "/Users/coso/Documents/dev/ai/aiclientproxy/lime/docs/roadmap/i18n/evidence/rtl-user-menu-automated.png",
+    "userMenuFullPage": "/Users/coso/Documents/dev/ai/aiclientproxy/lime/docs/roadmap/i18n/evidence/rtl-user-menu-fullpage.png"
   },
   "summary": {
     "homeSidebarOnRight": true,

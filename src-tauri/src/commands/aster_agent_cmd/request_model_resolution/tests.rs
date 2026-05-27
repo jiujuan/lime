@@ -2438,6 +2438,46 @@ fn fast_response_fallback_preference_reads_workspace_selection() {
 }
 
 #[test]
+fn fast_response_custom_fallback_selection_locks_current_provider_and_model() {
+    let custom_preference = FastResponseFallbackPreference {
+        provider_selector: "custom-cb381b4f-d2fa-4eff-ba22-c867c38ba8d3".to_string(),
+        model_name: "gpt-5.5".to_string(),
+    };
+    let builtin_preference = FastResponseFallbackPreference {
+        provider_selector: "deepseek".to_string(),
+        model_name: "deepseek-v4-flash".to_string(),
+    };
+    let task_profile = lime_agent::SessionExecutionRuntimeTaskProfile {
+        kind: "chat".to_string(),
+        source: "fast_response_routing".to_string(),
+        traits: vec!["fast_response_routing".to_string()],
+        modality_contract_key: None,
+        routing_slot: Some("responsive_chat_model".to_string()),
+        execution_profile_key: None,
+        executor_adapter_key: None,
+        executor_kind: None,
+        executor_binding_key: None,
+        permission_profile_keys: Vec::new(),
+        user_lock_policy: None,
+        service_model_slot: Some("responsive_chat".to_string()),
+        scene_kind: None,
+        scene_skill_id: None,
+        entry_source: None,
+    };
+
+    assert!(should_lock_fast_response_fallback_selection(
+        &custom_preference
+    ));
+    assert!(!should_lock_fast_response_fallback_selection(
+        &builtin_preference
+    ));
+    assert!(honors_explicit_model_lock_with_capability_check(
+        &task_profile,
+        RequestPreferenceSource::FastResponseFallback
+    ));
+}
+
+#[test]
 fn runtime_task_profile_marks_oem_runtime_from_harness_oem_routing() {
     let request = AsterChatRequest {
         message: "继续处理".to_string(),

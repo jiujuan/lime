@@ -1,0 +1,182 @@
+{
+  "chromeLocales": {
+    "localeDirs": [],
+    "localesDirExists": false
+  },
+  "extensionRoot": "/Users/coso/Documents/dev/ai/aiclientproxy/lime/extensions/lime-chrome",
+  "installI18n": {
+    "registeredLocales": [
+      "de",
+      "en",
+      "es",
+      "fr",
+      "pt",
+      "zh"
+    ],
+    "scriptExists": true,
+    "supportedLocales": [
+      "de",
+      "en",
+      "es",
+      "fr",
+      "pt",
+      "zh"
+    ]
+  },
+  "manifest": {
+    "actionDefaultTitle": "Lime Browser Bridge",
+    "defaultLocale": null,
+    "description": "Attach Lime to your current Chrome tab via the Lime browser bridge.",
+    "hasDefaultLocale": false,
+    "hasMessageReferences": false,
+    "name": "Lime Browser Bridge",
+    "version": "0.4.0"
+  },
+  "optionsPage": {
+    "scriptExists": true,
+    "supportedLanguages": [
+      "en",
+      "zh"
+    ]
+  },
+  "pages": [
+    {
+      "dataI18nAttributeCount": 36,
+      "dataI18nLikeAttributeCount": 36,
+      "installI18nRegisteredLocales": [
+        "de",
+        "en",
+        "es",
+        "fr",
+        "pt",
+        "zh"
+      ],
+      "path": "extensions/lime-chrome/pages/compare-methods.html"
+    },
+    {
+      "dataI18nAttributeCount": 24,
+      "dataI18nLikeAttributeCount": 24,
+      "installI18nRegisteredLocales": [
+        "de",
+        "en",
+        "es",
+        "fr",
+        "pt",
+        "zh"
+      ],
+      "path": "extensions/lime-chrome/pages/install-direct-cdp.html"
+    },
+    {
+      "dataI18nAttributeCount": 39,
+      "dataI18nLikeAttributeCount": 39,
+      "installI18nRegisteredLocales": [
+        "de",
+        "en",
+        "es",
+        "fr",
+        "pt",
+        "zh"
+      ],
+      "path": "extensions/lime-chrome/pages/install-extension.html"
+    },
+    {
+      "dataI18nAttributeCount": 38,
+      "dataI18nLikeAttributeCount": 38,
+      "installI18nRegisteredLocales": [],
+      "path": "extensions/lime-chrome/pages/options.html"
+    },
+    {
+      "dataI18nAttributeCount": 0,
+      "dataI18nLikeAttributeCount": 0,
+      "installI18nRegisteredLocales": [],
+      "path": "extensions/lime-chrome/pages/popup.html"
+    },
+    {
+      "dataI18nAttributeCount": 0,
+      "dataI18nLikeAttributeCount": 0,
+      "installI18nRegisteredLocales": [],
+      "path": "extensions/lime-chrome/popup.html"
+    }
+  ],
+  "repoRoot": "/Users/coso/Documents/dev/ai/aiclientproxy/lime",
+  "schemaVersion": "lime.i18n.chromeExtensionWorkflowReport.v1",
+  "summary": {
+    "dataI18nAttributeCount": 137,
+    "htmlPageCount": 6,
+    "installI18nSupportedLocaleCount": 6,
+    "manifestHasDefaultLocale": false,
+    "optionsSupportedLanguageCount": 2,
+    "pageRegistryLocaleCount": 6,
+    "standardChromeLocaleWorkflowPresent": false,
+    "terminologyPresentCount": 5
+  },
+  "terminology": [
+    {
+      "files": [
+        "extensions/lime-chrome/CHROME_WEB_STORE_SUBMISSION.md",
+        "extensions/lime-chrome/lib/constants.js",
+        "extensions/lime-chrome/manifest.json",
+        "extensions/lime-chrome/pages/compare-methods.html",
+        "extensions/lime-chrome/pages/install-direct-cdp.html",
+        "extensions/lime-chrome/pages/install-extension.html",
+        "extensions/lime-chrome/pages/options.html",
+        "extensions/lime-chrome/pages/popup.html",
+        "extensions/lime-chrome/pages/scripts/options.js",
+        "extensions/lime-chrome/pages/scripts/options.test.js",
+        "extensions/lime-chrome/PRIVACY_POLICY.md"
+      ],
+      "occurrenceCount": 45,
+      "present": true,
+      "term": "Lime Browser Bridge"
+    },
+    {
+      "files": [
+        "extensions/lime-chrome/pages/options.html",
+        "extensions/lime-chrome/pages/scripts/options.js",
+        "extensions/lime-chrome/pages/scripts/options.test.js",
+        "extensions/lime-chrome/popup.html",
+        "extensions/lime-chrome/README.md"
+      ],
+      "occurrenceCount": 9,
+      "present": true,
+      "term": "Lime Browser Connector"
+    },
+    {
+      "files": [
+        "extensions/lime-chrome/CHROME_WEB_STORE_SUBMISSION.md",
+        "extensions/lime-chrome/lib/cdp/tabs/agent-group.js",
+        "extensions/lime-chrome/lib/cdp/tabs/session-indicators.js",
+        "extensions/lime-chrome/pages/options.html",
+        "extensions/lime-chrome/pages/scripts/options.js"
+      ],
+      "occurrenceCount": 12,
+      "present": true,
+      "term": "Lime Agent"
+    },
+    {
+      "files": [
+        "extensions/lime-chrome/pages/install-direct-cdp.html"
+      ],
+      "occurrenceCount": 3,
+      "present": true,
+      "term": "Browser Connection"
+    },
+    {
+      "files": [
+        "extensions/lime-chrome/background.js",
+        "extensions/lime-chrome/lib/cdp/events/input.js",
+        "extensions/lime-chrome/lib/cdp/index.js",
+        "extensions/lime-chrome/lib/cdp/relay/connection.js",
+        "extensions/lime-chrome/lib/cdp/tabs/manager.js",
+        "extensions/lime-chrome/lib/constants.js",
+        "extensions/lime-chrome/pages/options.html",
+        "extensions/lime-chrome/pages/scripts/options.js",
+        "extensions/lime-chrome/pages/scripts/options.test.js",
+        "extensions/lime-chrome/pages/scripts/popup.js"
+      ],
+      "occurrenceCount": 141,
+      "present": true,
+      "term": "Relay"
+    }
+  ]
+}

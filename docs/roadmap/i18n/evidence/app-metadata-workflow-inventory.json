@@ -1,8 +1,24 @@
 {
+  "appMetadataTranslationScope": {
+    "generatedMetadataAllowed": false,
+    "itemCount": 10,
+    "owner": "release",
+    "path": "docs/roadmap/i18n/app-metadata-translation-scope.json",
+    "requiredBeforeMultilingualReleaseCount": 2,
+    "schemaVersion": "lime.i18n.appMetadataTranslationScope.v1",
+    "sourceLocale": "zh-CN",
+    "stableFieldCount": 6,
+    "sourceOnlyFieldCount": 2,
+    "targetLocales": [
+      "en-US"
+    ],
+    "translatableFieldCount": 2,
+    "workflowStatus": "not-started"
+  },
   "appPackageJson": {
     "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
     "name": "lime",
-    "version": "1.47.0"
+    "version": "1.52.0"
   },
   "headlessTauriConfig": {
     "identifier": "com.limecloud.lime.headless",
@@ -33,8 +49,11 @@
   "schemaVersion": "lime.i18n.appMetadataWorkflowReport.v1",
   "summary": {
     "hasInstallerLocalizationWorkflow": false,
+    "hasMetadataTranslationScope": true,
     "hasLocalizedAppMetadataArtifacts": true,
     "hasLocalizedMetadataFields": true,
-    "hasLocaleAwareMetadataSources": true
+    "hasLocaleAwareMetadataSources": true,
+    "metadataScopeItemCount": 10,
+    "metadataTranslatableFieldCount": 2
   }
 }

@@ -56,17 +56,17 @@
           "markers": [
             {
               "kind": "physical-position-css",
-              "line": 387,
+              "line": 384,
               "snippet": "border-right: 1px solid var(--sidebar-border);"
             },
             {
               "kind": "physical-position-css",
-              "line": 487,
+              "line": 484,
               "snippet": "text-align: left;"
             },
             {
               "kind": "physical-position-css",
-              "line": 665,
+              "line": 662,
               "snippet": "text-align: left;"
             }
           ],
@@ -77,17 +77,17 @@
           "markers": [
             {
               "kind": "physical-position-css",
-              "line": 62,
+              "line": 54,
               "snippet": "left: number;"
             },
             {
               "kind": "physical-position-css",
-              "line": 227,
+              "line": 219,
               "snippet": "padding-right: 2px;"
             },
             {
               "kind": "physical-position-css",
-              "line": 338,
+              "line": 330,
               "snippet": "text-align: left;"
             }
           ],
@@ -118,9 +118,30 @@
     },
     {
       "fileCount": 14,
-      "markerCount": 33,
+      "markerCount": 32,
       "name": "settings",
       "files": [
+        {
+          "markerCount": 6,
+          "markers": [
+            {
+              "kind": "physical-justify-class",
+              "line": 648,
+              "snippet": "<div className=\"flex flex-wrap items-center gap-1.5 xl:justify-end\">"
+            },
+            {
+              "kind": "physical-text-align-class",
+              "line": 738,
+              "snippet": "\"rounded-[20px] border px-4 py-4 text-left transition shadow-sm\","
+            },
+            {
+              "kind": "physical-text-align-class",
+              "line": 800,
+              "snippet": "\"rounded-[20px] border px-4 py-4 text-left shadow-sm transition\","
+            }
+          ],
+          "path": "src/components/settings-v2/general/appearance/index.tsx"
+        },
         {
           "markerCount": 5,
           "markers": [
@@ -143,27 +164,6 @@
           "path": "src/components/settings-v2/_layout/SettingsSidebar.tsx"
         },
         {
-          "markerCount": 5,
-          "markers": [
-            {
-              "kind": "physical-justify-class",
-              "line": 555,
-              "snippet": "<div className=\"flex flex-wrap items-center gap-1.5 xl:justify-end\">"
-            },
-            {
-              "kind": "physical-text-align-class",
-              "line": 639,
-              "snippet": "\"rounded-[20px] border px-4 py-4 text-left transition shadow-sm\","
-            },
-            {
-              "kind": "physical-text-align-class",
-              "line": 701,
-              "snippet": "\"rounded-[20px] border px-4 py-4 text-left shadow-sm transition\","
-            }
-          ],
-          "path": "src/components/settings-v2/general/appearance/index.tsx"
-        },
-        {
           "markerCount": 3,
           "markers": [
             {
@@ -183,27 +183,6 @@
             }
           ],
           "path": "src/components/settings-v2/_layout/index.tsx"
-        },
-        {
-          "markerCount": 3,
-          "markers": [
-            {
-              "kind": "physical-justify-class",
-              "line": 1597,
-              "snippet": "<div className=\"flex flex-wrap items-center gap-2 xl:justify-end\">"
-            },
-            {
-              "kind": "physical-justify-class",
-              "line": 1677,
-              "snippet": "<div className=\"flex flex-wrap items-center gap-2 lg:justify-end\">"
-            },
-            {
-              "kind": "physical-text-align-class",
-              "line": 1720,
-              "snippet": "\"flex items-center justify-between gap-3 rounded-[20px] px-4 py-3 text-left text-sm font-medium transition\","
-            }
-          ],
-          "path": "src/components/settings-v2/general/memory/index.tsx"
         },
         {
           "markerCount": 3,
@@ -231,17 +210,17 @@
           "markers": [
             {
               "kind": "physical-justify-class",
-              "line": 1139,
+              "line": 1243,
               "snippet": "<div className=\"flex flex-wrap items-center gap-2 xl:justify-end\">"
             },
             {
               "kind": "physical-text-align-class",
-              "line": 1507,
+              "line": 1611,
               "snippet": "<TableHead className=\"min-w-[240px] text-right\">"
             },
             {
               "kind": "physical-justify-class",
-              "line": 1719,
+              "line": 1832,
               "snippet": "<div className=\"flex justify-end gap-2\">"
             }
           ],
@@ -310,6 +289,17 @@
             }
           ],
           "path": "src/components/settings-v2/system/about/index.tsx"
+        },
+        {
+          "markerCount": 1,
+          "markers": [
+            {
+              "kind": "physical-justify-class",
+              "line": 526,
+              "snippet": "<div className=\"flex flex-wrap items-center gap-2 sm:justify-end\">"
+            }
+          ],
+          "path": "src/components/settings-v2/general/memory/index.tsx"
         },
         {
           "markerCount": 1,
@@ -532,9 +522,9 @@
     "auditedFileCount": 38,
     "directionAwareFoundationFileCount": 1,
     "highRiskFileCount": 23,
-    "missingPlaywrightSmokeEvidence": true,
-    "missingRtlScreenshotEvidence": true,
+    "missingPlaywrightSmokeEvidence": false,
+    "missingRtlScreenshotEvidence": false,
     "surfaceCount": 5,
-    "totalMarkerCount": 98
+    "totalMarkerCount": 97
   }
 }

@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "lime.i18n.appMetadataTranslationScope.v1",
+  "sourceLocale": "zh-CN",
+  "targetLocales": ["en-US"],
+  "workflowStatus": "not-started",
+  "owner": "release",
+  "generatedMetadataAllowed": false,
+  "items": [
+    {
+      "path": "package.json",
+      "field": "description",
+      "kind": "package-description",
+      "localization": "translatable",
+      "priority": "required-before-multilingual-release",
+      "consumer": "package-registry"
+    },
+    {
+      "path": "package.json",
+      "field": "keywords",
+      "kind": "package-keywords",
+      "localization": "source-only",
+      "priority": "source-only",
+      "consumer": "package-registry"
+    },
+    {
+      "path": "src-tauri/tauri.conf.json",
+      "field": "productName",
+      "kind": "app-product-name",
+      "localization": "stable-brand",
+      "priority": "stable",
+      "consumer": "tauri-bundle"
+    },
+    {
+      "path": "src-tauri/tauri.conf.json",
+      "field": "app.windows[0].title",
+      "kind": "window-title",
+      "localization": "stable-brand",
+      "priority": "stable",
+      "consumer": "tauri-window"
+    },
+    {
+      "path": "src-tauri/tauri.conf.json",
+      "field": "identifier",
+      "kind": "bundle-identifier",
+      "localization": "stable-identifier",
+      "priority": "stable",
+      "consumer": "tauri-bundle"
+    },
+    {
+      "path": "src-tauri/tauri.conf.json",
+      "field": "bundle.fileAssociations[0].description",
+      "kind": "file-association-description",
+      "localization": "translatable",
+      "priority": "required-before-multilingual-release",
+      "consumer": "os-file-association"
+    },
+    {
+      "path": "src-tauri/tauri.conf.headless.json",
+      "field": "productName",
+      "kind": "headless-product-name",
+      "localization": "stable-brand",
+      "priority": "stable",
+      "consumer": "tauri-headless-bundle"
+    },
+    {
+      "path": "src-tauri/tauri.conf.headless.json",
+      "field": "app.windows[0].title",
+      "kind": "headless-window-title",
+      "localization": "stable-brand",
+      "priority": "stable",
+      "consumer": "tauri-headless-window"
+    },
+    {
+      "path": "src-tauri/tauri.conf.headless.json",
+      "field": "identifier",
+      "kind": "headless-bundle-identifier",
+      "localization": "stable-identifier",
+      "priority": "stable",
+      "consumer": "tauri-headless-bundle"
+    },
+    {
+      "path": "src-tauri/capabilities/agent-app-shell.json",
+      "field": "description",
+      "kind": "capability-description",
+      "localization": "internal-source-only",
+      "priority": "source-only",
+      "consumer": "tauri-capability"
+    }
+  ]
+}

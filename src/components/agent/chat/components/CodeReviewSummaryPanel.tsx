@@ -60,25 +60,37 @@ function resolveReviewableFileChanges(
 }
 
 function resolvePassingOutputCount(harnessState: HarnessSessionState): number {
-  return harnessState.outputSignals.filter((signal) => {
-    if (typeof signal.exitCode === "number") {
-      return signal.exitCode === 0;
-    }
-    return /pass|passed|ok|success|成功|通过/i.test(
-      [signal.title, signal.summary, signal.preview].filter(Boolean).join(" "),
-    );
-  }).length;
+  return harnessState.outputSignals.filter(isPassingOutputSignal).length;
 }
 
 function resolveFailedOutputCount(harnessState: HarnessSessionState): number {
-  return harnessState.outputSignals.filter((signal) => {
-    if (typeof signal.exitCode === "number") {
-      return signal.exitCode !== 0;
-    }
-    return /fail|failed|error|失败|错误|报错/i.test(
-      [signal.title, signal.summary, signal.preview].filter(Boolean).join(" "),
-    );
-  }).length;
+  return harnessState.outputSignals.filter(isFailedOutputSignal).length;
+}
+
+function outputSignalText(
+  signal: HarnessSessionState["outputSignals"][number],
+): string {
+  return [signal.title, signal.summary, signal.preview]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function isPassingOutputSignal(
+  signal: HarnessSessionState["outputSignals"][number],
+): boolean {
+  if (typeof signal.exitCode === "number") {
+    return signal.exitCode === 0;
+  }
+  return /pass|passed|ok|success|成功|通过/i.test(outputSignalText(signal));
+}
+
+function isFailedOutputSignal(
+  signal: HarnessSessionState["outputSignals"][number],
+): boolean {
+  if (typeof signal.exitCode === "number") {
+    return signal.exitCode !== 0;
+  }
+  return /fail|failed|error|失败|错误|报错/i.test(outputSignalText(signal));
 }
 
 export function CodeReviewSummaryPanel({
@@ -93,16 +105,33 @@ export function CodeReviewSummaryPanel({
     [harnessState],
   );
   const visibleFileChanges = fileChanges.slice(0, 3);
+  const hiddenFileChangeCount = Math.max(
+    fileChanges.length - visibleFileChanges.length,
+    0,
+  );
   const passingOutputCount = resolvePassingOutputCount(harnessState);
   const failedOutputCount = resolveFailedOutputCount(harnessState);
-  const latestOutputSignal = harnessState.outputSignals[0] || null;
+  const outputSignalForDetail =
+    harnessState.outputSignals.find(isFailedOutputSignal) ||
+    harnessState.outputSignals[0] ||
+    null;
   const outputDetail =
-    latestOutputSignal?.title ||
-    latestOutputSignal?.summary ||
-    latestOutputSignal?.preview ||
+    outputSignalForDetail?.title ||
+    outputSignalForDetail?.summary ||
+    outputSignalForDetail?.preview ||
     null;
   const checkpointCount = fileCheckpointSummary?.count ?? 0;
   const latestCheckpoint = fileCheckpointSummary?.latest_checkpoint || null;
+  const primaryActionKey =
+    failedOutputCount > 0 && harnessState.outputSignals.length > 0
+      ? "agentChat.harness.codeReview.action.viewFailedOutput"
+      : fileChanges.length > 0
+        ? "agentChat.harness.codeReview.action.review"
+        : harnessState.outputSignals.length > 0
+          ? "agentChat.harness.codeReview.action.viewOutput"
+          : checkpointCount > 0
+            ? "agentChat.harness.codeReview.action.viewSnapshots"
+            : "agentChat.harness.codeReview.action.review";
   const hasReviewSurface =
     fileChanges.length > 0 ||
     harnessState.outputSignals.length > 0 ||
@@ -141,6 +170,13 @@ export function CodeReviewSummaryPanel({
           variant="outline"
           className="shrink-0"
           onClick={() => {
+            if (
+              failedOutputCount > 0 &&
+              harnessState.outputSignals.length > 0
+            ) {
+              onOpenSection("outputs");
+              return;
+            }
             if (fileChanges.length > 0) {
               onOpenSection("file_review");
               return;
@@ -157,7 +193,7 @@ export function CodeReviewSummaryPanel({
           }}
           data-testid="code-review-summary-primary-action"
         >
-          {t("agentChat.harness.codeReview.action.review")}
+          {t(primaryActionKey)}
         </Button>
       </div>
 
@@ -184,6 +220,13 @@ export function CodeReviewSummaryPanel({
             {visibleFileChanges.length > 0
               ? visibleFileChanges.map((item) => item.displayName).join(", ")
               : t("agentChat.harness.codeReview.metric.filesEmpty")}
+            {hiddenFileChangeCount > 0 ? (
+              <div className="mt-1 text-current/70">
+                {t("agentChat.harness.codeReview.metric.filesMore", {
+                  count: hiddenFileChangeCount,
+                })}
+              </div>
+            ) : null}
           </div>
         </button>
 

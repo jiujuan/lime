@@ -82,6 +82,10 @@ const I18N_RELEASE_DOCS_WORKFLOW_RECOMMENDED_COMMANDS = [
   "npm run i18n:release-docs-report:json -- --output docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
 ];
 
+const I18N_CHROME_EXTENSION_WORKFLOW_RECOMMENDED_COMMANDS = [
+  "npm run i18n:chrome-extension-report:json -- --output docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json",
+];
+
 const I18N_APP_METADATA_WORKFLOW_RECOMMENDED_COMMANDS = [
   "npm run i18n:app-metadata-report:json -- --output docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
 ];
@@ -112,6 +116,7 @@ const I18N_RELEASE_DOCS_WORKFLOW_FILES = new Set([
   "docs/nuxt.config.ts",
   "docs/package.json",
   "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
+  "docs/roadmap/i18n/release-docs-translation-scope.json",
   "docs/roadmap/i18n/release-docs-workflow-evaluation.md",
   "scripts/i18n-release-docs-workflow-report.test.ts",
   "scripts/i18n-release-docs-workflow-report.ts",
@@ -122,9 +127,27 @@ const I18N_RELEASE_DOCS_WORKFLOW_PREFIXES = [
   "docs/content/",
   "docs/develop/",
   "docs/oem/",
+  "docs/roadmap/i18n/companions/",
+];
+
+const I18N_CHROME_EXTENSION_WORKFLOW_FILES = new Set([
+  "docs/roadmap/i18n/chrome-extension-evaluation.md",
+  "docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json",
+  "extensions/lime-chrome/CHROME_WEB_STORE_SUBMISSION.md",
+  "extensions/lime-chrome/README.md",
+  "extensions/lime-chrome/manifest.json",
+  "extensions/lime-chrome/pages/scripts/install-i18n.js",
+  "extensions/lime-chrome/pages/scripts/options.js",
+  "scripts/i18n-chrome-extension-workflow-report.test.ts",
+  "scripts/i18n-chrome-extension-workflow-report.ts",
+]);
+
+const I18N_CHROME_EXTENSION_WORKFLOW_PREFIXES = [
+  "extensions/lime-chrome/pages/",
 ];
 
 const I18N_APP_METADATA_WORKFLOW_FILES = new Set([
+  "docs/roadmap/i18n/app-metadata-translation-scope.json",
   "docs/roadmap/i18n/app-metadata-workflow-evaluation.md",
   "docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
   "package.json",
@@ -468,6 +491,15 @@ function isI18nReleaseDocsWorkflowChange(file) {
   );
 }
 
+function isI18nChromeExtensionWorkflowChange(file) {
+  return (
+    I18N_CHROME_EXTENSION_WORKFLOW_FILES.has(file) ||
+    I18N_CHROME_EXTENSION_WORKFLOW_PREFIXES.some((prefix) =>
+      file.startsWith(prefix),
+    )
+  );
+}
+
 function isI18nAppMetadataWorkflowChange(file) {
   return I18N_APP_METADATA_WORKFLOW_FILES.has(file);
 }
@@ -584,6 +616,10 @@ function collectRecommendedCommands(changedFiles, { docsOnly = false } = {}) {
 
   if (changedFiles.some(isI18nReleaseDocsWorkflowChange)) {
     commands.push(...I18N_RELEASE_DOCS_WORKFLOW_RECOMMENDED_COMMANDS);
+  }
+
+  if (changedFiles.some(isI18nChromeExtensionWorkflowChange)) {
+    commands.push(...I18N_CHROME_EXTENSION_WORKFLOW_RECOMMENDED_COMMANDS);
   }
 
   if (changedFiles.some(isI18nAppMetadataWorkflowChange)) {

@@ -165,6 +165,88 @@ describe("quality-task-planner", () => {
     ]);
   });
 
+  it("发布材料文档改动应在 docs-only 下推荐刷新 release docs evidence", () => {
+    const tasks = detectTasks(["docs/content/02.user-guide/9.mcp.md"]);
+
+    expect(tasks.docsOnly).toBe(true);
+    expect(tasks.docs).toBe(true);
+    expect(tasks.frontend).toBe(false);
+    expect(tasks.recommendedCommands).toEqual([
+      "npm run i18n:release-docs-report:json -- --output docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
+    ]);
+  });
+
+  it("release docs 翻译范围 manifest 改动应推荐刷新 release docs evidence", () => {
+    const tasks = detectTasks([
+      "docs/roadmap/i18n/release-docs-translation-scope.json",
+    ]);
+
+    expect(tasks.docsOnly).toBe(true);
+    expect(tasks.docs).toBe(true);
+    expect(tasks.recommendedCommands).toEqual([
+      "npm run i18n:release-docs-report:json -- --output docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
+    ]);
+  });
+
+  it("release docs companion 改动应保持 docs-only 并推荐刷新 evidence", () => {
+    const tasks = detectTasks([
+      "docs/roadmap/i18n/companions/docs-content-index.en.md",
+    ]);
+
+    expect(tasks.docsOnly).toBe(true);
+    expect(tasks.docs).toBe(true);
+    expect(tasks.frontend).toBe(false);
+    expect(tasks.recommendedCommands).toEqual([
+      "npm run i18n:release-docs-report:json -- --output docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
+    ]);
+  });
+
+  it("Chrome extension i18n surface 改动应推荐刷新 extension evidence", () => {
+    const tasks = detectTasks(["extensions/lime-chrome/pages/options.html"]);
+
+    expect(tasks.docsOnly).toBe(false);
+    expect(tasks.frontend).toBe(false);
+    expect(tasks.recommendedCommands).toEqual([
+      "npm run i18n:chrome-extension-report:json -- --output docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json",
+    ]);
+  });
+
+  it("installer / app metadata 改动应推荐刷新 app metadata evidence", () => {
+    const tasks = detectTasks(["src-tauri/tauri.conf.json"]);
+
+    expect(tasks.integrity).toBe(true);
+    expect(tasks.rust).toBe(true);
+    expect(tasks.recommendedCommands).toEqual([
+      "npm run i18n:app-metadata-report:json -- --output docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
+    ]);
+  });
+
+  it("app metadata 翻译范围 manifest 改动应保持 docs-only 并推荐刷新 evidence", () => {
+    const tasks = detectTasks([
+      "docs/roadmap/i18n/app-metadata-translation-scope.json",
+    ]);
+
+    expect(tasks.docsOnly).toBe(true);
+    expect(tasks.docs).toBe(true);
+    expect(tasks.rust).toBe(false);
+    expect(tasks.recommendedCommands).toEqual([
+      "npm run i18n:app-metadata-report:json -- --output docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
+    ]);
+  });
+
+  it("RTL 主路径 surface 改动应推荐 readiness inventory 与 RTL smoke", () => {
+    const tasks = detectTasks([
+      "src/components/settings-v2/_layout/index.tsx",
+    ]);
+
+    expect(tasks.frontend).toBe(true);
+    expect(tasks.guiSmoke).toBe(true);
+    expect(tasks.recommendedCommands).toEqual([
+      "npm run i18n:rtl-readiness-report:json -- --output docs/roadmap/i18n/evidence/rtl-readiness-inventory.json",
+      "npm run i18n:rtl-smoke",
+    ]);
+  });
+
   it("前端源码改动应触发硬编码文案扫描", () => {
     const tasks = detectTasks(["src/components/settings/LanguagePicker.tsx"]);
 
@@ -184,6 +266,8 @@ describe("quality-task-planner", () => {
     expect(tasks.recommendedCommands).toEqual([
       "npm run knowledge:product-e2e",
       "npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running",
+      "npm run i18n:rtl-readiness-report:json -- --output docs/roadmap/i18n/evidence/rtl-readiness-inventory.json",
+      "npm run i18n:rtl-smoke",
     ]);
   });
 
@@ -197,6 +281,8 @@ describe("quality-task-planner", () => {
     expect(tasks.recommendedCommands).toEqual([
       "npm run knowledge:product-e2e",
       "npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running",
+      "npm run i18n:rtl-readiness-report:json -- --output docs/roadmap/i18n/evidence/rtl-readiness-inventory.json",
+      "npm run i18n:rtl-smoke",
     ]);
   });
 

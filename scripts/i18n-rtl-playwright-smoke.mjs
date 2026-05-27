@@ -136,6 +136,17 @@ async function captureBox(page, selector) {
     });
 }
 
+async function captureFullPageScreenshot(page, evidenceDir, fileName) {
+  const screenshotPath = path.join(evidenceDir, fileName);
+  await page.screenshot({
+    fullPage: true,
+    path: screenshotPath,
+    scale: "css",
+    type: "png",
+  });
+  return screenshotPath;
+}
+
 async function runSmoke(options) {
   fs.mkdirSync(options.evidenceDir, { recursive: true });
 
@@ -183,16 +194,16 @@ async function runSmoke(options) {
     );
 
     console.log("[i18n:rtl-smoke] capturing home screenshot");
-    const homeScreenshotPath = path.join(
+    const homeScreenshotPath = await captureFullPageScreenshot(
+      page,
       options.evidenceDir,
       "rtl-home-automated.png",
     );
-    await page.screenshot({
-      fullPage: true,
-      path: homeScreenshotPath,
-      scale: "css",
-      type: "png",
-    });
+    const homeFullPageScreenshotPath = await captureFullPageScreenshot(
+      page,
+      options.evidenceDir,
+      "rtl-home-fullpage.png",
+    );
 
     console.log("[i18n:rtl-smoke] opening user menu");
     await page.locator('button[aria-label="打开用户菜单"]').first().click();
@@ -203,16 +214,16 @@ async function runSmoke(options) {
     });
 
     console.log("[i18n:rtl-smoke] capturing user menu screenshot");
-    const userMenuScreenshotPath = path.join(
+    const userMenuScreenshotPath = await captureFullPageScreenshot(
+      page,
       options.evidenceDir,
       "rtl-user-menu-automated.png",
     );
-    await page.screenshot({
-      fullPage: true,
-      path: userMenuScreenshotPath,
-      scale: "css",
-      type: "png",
-    });
+    const userMenuFullPageScreenshotPath = await captureFullPageScreenshot(
+      page,
+      options.evidenceDir,
+      "rtl-user-menu-fullpage.png",
+    );
 
     console.log("[i18n:rtl-smoke] opening settings page");
     await userMenuDialog
@@ -233,16 +244,16 @@ async function runSmoke(options) {
     });
 
     console.log("[i18n:rtl-smoke] capturing settings screenshot");
-    const settingsScreenshotPath = path.join(
+    const settingsScreenshotPath = await captureFullPageScreenshot(
+      page,
       options.evidenceDir,
       "rtl-settings-automated.png",
     );
-    await page.screenshot({
-      fullPage: true,
-      path: settingsScreenshotPath,
-      scale: "css",
-      type: "png",
-    });
+    const settingsFullPageScreenshotPath = await captureFullPageScreenshot(
+      page,
+      options.evidenceDir,
+      "rtl-settings-fullpage.png",
+    );
 
     await page.getByRole("button", { name: "回到首页" }).click();
     const report = {
@@ -258,8 +269,11 @@ async function runSmoke(options) {
       schemaVersion: "lime.i18n.rtlPlaywrightSmokeReport.v1",
       screenshots: {
         home: homeScreenshotPath,
+        homeFullPage: homeFullPageScreenshotPath,
         settings: settingsScreenshotPath,
+        settingsFullPage: settingsFullPageScreenshotPath,
         userMenu: userMenuScreenshotPath,
+        userMenuFullPage: userMenuFullPageScreenshotPath,
       },
       summary: {
         homeSidebarOnRight: homeSidebarBox.x > homeMainBox.x,

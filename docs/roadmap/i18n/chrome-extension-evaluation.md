@@ -14,7 +14,9 @@
 - 扩展页面主要是静态 HTML：`pages/options.html`、`pages/install-extension.html`、`pages/install-direct-cdp.html`、`pages/compare-methods.html`、`pages/popup.html`。
 - `extensions/lime-chrome/pages/scripts/install-i18n.js` 提供的是轻量页面级 registry：按 `lang` 注册字符串、按 `data-i18n` 选择器写入 DOM、同步 `document.documentElement.lang`。
 - 语言集合是扩展自管的 `zh / en / de / es / fr / pt`，并通过 `navigator.language` 或 `?lang=` 推导。
+- options 页当前只开放 `en / zh` 选择；安装引导页 registry 继续覆盖 `zh / en / de / es / fr / pt`。
 - 页面里的不少文案本身就是安装引导、比较说明、诊断提示，且混合了少量 HTML 片段。
+- `scripts/i18n-chrome-extension-workflow-report.ts` 已把 manifest、`_locales`、`InstallI18n` registry、`data-i18n` 属性和核心术语做成可重复 inventory；当前证据落在 `docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json`。
 
 ## 结论
 
@@ -44,6 +46,7 @@
 
 ## 证据链接
 
+- [chrome-extension-workflow-inventory.json](</Users/coso/Documents/dev/ai/aiclientproxy/lime/docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json>)
 - [manifest.json](</Users/coso/Documents/dev/ai/aiclientproxy/lime/extensions/lime-chrome/manifest.json>)
 - [install-i18n.js](</Users/coso/Documents/dev/ai/aiclientproxy/lime/extensions/lime-chrome/pages/scripts/install-i18n.js>)
 - [options.html](</Users/coso/Documents/dev/ai/aiclientproxy/lime/extensions/lime-chrome/pages/options.html>)
