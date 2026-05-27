@@ -110,6 +110,7 @@ describe("quality-task-planner", () => {
     expect(tasks.docsOnly).toBe(false);
     expect(tasks.recommendedCommands).toEqual([
       "npm run i18n:translation-pr-pack:json -- --output docs/roadmap/i18n/evidence/translation-pr-pack.json",
+      "npm run i18n:bundle-report:json -- --output docs/roadmap/i18n/evidence/bundle-strategy-report.json",
     ]);
   });
 
@@ -133,6 +134,34 @@ describe("quality-task-planner", () => {
     expect(tasks.frontend).toBe(false);
     expect(tasks.recommendedCommands).toEqual([
       "npm run i18n:patch-retirement-gate -- --check",
+    ]);
+  });
+
+  it("bundle strategy 脚本改动应触发 i18n 校验并推荐刷新 bundle evidence", () => {
+    const tasks = detectTasks(["scripts/i18n-bundle-report.ts"]);
+
+    expect(tasks.i18n).toBe(true);
+    expect(tasks.i18nHardcoded).toBe(false);
+    expect(tasks.i18nUnused).toBe(true);
+    expect(tasks.frontend).toBe(false);
+    expect(tasks.guiSmoke).toBe(false);
+    expect(tasks.docsOnly).toBe(false);
+    expect(tasks.recommendedCommands).toEqual([
+      "npm run i18n:bundle-report:json -- --output docs/roadmap/i18n/evidence/bundle-strategy-report.json",
+    ]);
+  });
+
+  it("bundle loader 边界改动应推荐刷新 bundle evidence", () => {
+    const tasks = detectTasks(["src/i18n/loadNamespace.ts"]);
+
+    expect(tasks.i18n).toBe(true);
+    expect(tasks.i18nHardcoded).toBe(false);
+    expect(tasks.i18nUnused).toBe(true);
+    expect(tasks.frontend).toBe(true);
+    expect(tasks.guiSmoke).toBe(false);
+    expect(tasks.docsOnly).toBe(false);
+    expect(tasks.recommendedCommands).toEqual([
+      "npm run i18n:bundle-report:json -- --output docs/roadmap/i18n/evidence/bundle-strategy-report.json",
     ]);
   });
 

@@ -1,0 +1,145 @@
+{
+  "bundleGroups": [
+    {
+      "fileCount": 40,
+      "keyCount": 17520,
+      "localeRawBytes": {
+        "en-US": 302154,
+        "ja-JP": 338662,
+        "ko-KR": 324064,
+        "zh-CN": 296675,
+        "zh-TW": 297075
+      },
+      "namespace": "agent",
+      "partNames": [
+        "agent",
+        "agentExperts",
+        "agentHome",
+        "agentInputbar",
+        "agentMessageList",
+        "agentRuntime",
+        "agentSkills",
+        "agentTeamWorkspace"
+      ],
+      "role": "inline",
+      "sourceLocaleKeyCount": 3504,
+      "sourceLocaleRawBytes": 296675,
+      "totalRawBytes": 1558630
+    },
+    {
+      "fileCount": 5,
+      "keyCount": 12670,
+      "localeRawBytes": {
+        "en-US": 235012,
+        "ja-JP": 263141,
+        "ko-KR": 252246,
+        "zh-CN": 226601,
+        "zh-TW": 227590
+      },
+      "namespace": "settings",
+      "partNames": [
+        "settings"
+      ],
+      "role": "inline",
+      "sourceLocaleKeyCount": 2534,
+      "sourceLocaleRawBytes": 226601,
+      "totalRawBytes": 1204590
+    },
+    {
+      "fileCount": 5,
+      "keyCount": 4405,
+      "localeRawBytes": {
+        "en-US": 79219,
+        "ja-JP": 88994,
+        "ko-KR": 85060,
+        "zh-CN": 77041,
+        "zh-TW": 77279
+      },
+      "namespace": "workspace",
+      "partNames": [
+        "workspace"
+      ],
+      "role": "inline",
+      "sourceLocaleKeyCount": 881,
+      "sourceLocaleRawBytes": 77041,
+      "totalRawBytes": 407593
+    },
+    {
+      "fileCount": 5,
+      "keyCount": 1305,
+      "localeRawBytes": {
+        "en-US": 22159,
+        "ja-JP": 27493,
+        "ko-KR": 25698,
+        "zh-CN": 21312,
+        "zh-TW": 21401
+      },
+      "namespace": "common",
+      "partNames": [
+        "common"
+      ],
+      "role": "inline",
+      "sourceLocaleKeyCount": 261,
+      "sourceLocaleRawBytes": 21312,
+      "totalRawBytes": 118063
+    },
+    {
+      "fileCount": 5,
+      "keyCount": 1065,
+      "localeRawBytes": {
+        "en-US": 19163,
+        "ja-JP": 22560,
+        "ko-KR": 20848,
+        "zh-CN": 18767,
+        "zh-TW": 18914
+      },
+      "namespace": "errors",
+      "partNames": [
+        "errors"
+      ],
+      "role": "inline",
+      "sourceLocaleKeyCount": 213,
+      "sourceLocaleRawBytes": 18767,
+      "totalRawBytes": 100252
+    },
+    {
+      "fileCount": 5,
+      "keyCount": 780,
+      "localeRawBytes": {
+        "en-US": 11836,
+        "ja-JP": 13493,
+        "ko-KR": 12759,
+        "zh-CN": 11541,
+        "zh-TW": 11565
+      },
+      "namespace": "navigation",
+      "partNames": [
+        "navigation"
+      ],
+      "role": "inline",
+      "sourceLocaleKeyCount": 156,
+      "sourceLocaleRawBytes": 11541,
+      "totalRawBytes": 61194
+    }
+  ],
+  "coreNamespaces": [
+    "common",
+    "navigation",
+    "settings",
+    "workspace",
+    "agent",
+    "errors"
+  ],
+  "localeCount": 5,
+  "resourcesDir": "/Users/coso/Documents/dev/ai/aiclientproxy/lime/src/i18n/resources",
+  "schemaVersion": "lime.i18n.bundleStrategyReport.v1",
+  "sourceLocale": "zh-CN",
+  "summary": {
+    "coreGroupCount": 6,
+    "inlineGroupCount": 6,
+    "lazyGroupCount": 0,
+    "sourceLocaleFileCount": 13,
+    "sourceLocaleKeyCount": 7549,
+    "totalRawBytes": 3450322
+  }
+}

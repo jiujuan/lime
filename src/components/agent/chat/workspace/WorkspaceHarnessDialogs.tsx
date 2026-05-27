@@ -57,11 +57,13 @@ function resolveCodeWorkbenchGuideMetrics(
   harnessState: HarnessPanelBaseProps["harnessState"],
 ) {
   const fileChangePaths = new Set<string>();
+  let latestFileName: string | null = null;
 
   for (const activeWrite of harnessState.activeFileWrites) {
     const path = activeWrite.path.trim();
     if (path) {
       fileChangePaths.add(path);
+      latestFileName ||= activeWrite.displayName || path;
     }
   }
 
@@ -69,16 +71,14 @@ function resolveCodeWorkbenchGuideMetrics(
     const path = event.path.trim();
     if (path && isReviewableCodeFileAction(event.action)) {
       fileChangePaths.add(path);
+      latestFileName ||= event.displayName || path;
     }
   }
 
   return {
     pendingFileChangeCount: fileChangePaths.size,
     totalFileChangeCount: fileChangePaths.size,
-    latestFileName:
-      harnessState.activeFileWrites[0]?.displayName ||
-      harnessState.recentFileEvents[0]?.displayName ||
-      null,
+    latestFileName,
   };
 }
 
@@ -181,7 +181,7 @@ export function GeneralWorkbenchHarnessDialogSection({
     isCodeRuntime:
       panelBaseProps.diagnosticRuntimeContext?.executionStrategy ===
       "code_orchestrated",
-    hasFileCheckpoints: Boolean(diagnosticSessionId),
+    hasFileCheckpoints: (fileCheckpointSummary?.count ?? 0) > 0,
   });
   const openFileCheckpoints = diagnosticSessionId
     ? () => setFileCheckpointDialogOpen(true)
@@ -298,7 +298,7 @@ export function GeneralWorkbenchDialogSection({
       executionRuntime?.execution_strategy === "code_orchestrated" ||
       panelBaseProps.diagnosticRuntimeContext?.executionStrategy ===
         "code_orchestrated",
-    hasFileCheckpoints: Boolean(diagnosticSessionId),
+    hasFileCheckpoints: (fileCheckpointSummary?.count ?? 0) > 0,
   });
   const openFileCheckpoints = diagnosticSessionId
     ? () => setFileCheckpointDialogOpen(true)

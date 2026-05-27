@@ -47,6 +47,7 @@ export interface I18nBundleReport {
 
 interface CliOptions {
   format: I18nBundleReportFormat;
+  output?: string;
   resourcesDir: string;
   sourceLocale: string;
 }
@@ -301,6 +302,12 @@ function parseCliArgs(argv: string[]): CliOptions {
       throw new Error(`Unknown or missing format value: ${next}`);
     }
 
+    if (arg === "--output" && next) {
+      options.output = next;
+      index += 1;
+      continue;
+    }
+
     if (arg === "--resources-dir" && next) {
       options.resourcesDir = next;
       index += 1;
@@ -315,7 +322,7 @@ function parseCliArgs(argv: string[]): CliOptions {
 
     if (arg === "--help" || arg === "-h") {
       console.log(
-        "Usage: npm run i18n:bundle-report -- [--format text|json] [--resources-dir <dir>] [--source-locale <locale>]",
+        "Usage: npm run i18n:bundle-report -- [--format text|json] [--output <path>] [--resources-dir <dir>] [--source-locale <locale>]",
       );
       process.exit(0);
     }
@@ -329,7 +336,16 @@ function parseCliArgs(argv: string[]): CliOptions {
 export function runCli(argv = process.argv.slice(2)): number {
   const options = parseCliArgs(argv);
   const report = analyzeI18nBundleReport(options);
-  process.stdout.write(formatI18nBundleReport(report, options.format));
+  const content = formatI18nBundleReport(report, options.format);
+
+  if (options.output) {
+    const outputPath = path.resolve(options.output);
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, content, "utf8");
+  } else {
+    process.stdout.write(content);
+  }
+
   return 0;
 }
 

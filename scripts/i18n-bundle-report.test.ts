@@ -134,4 +134,33 @@ describe("i18n bundle report", () => {
       }),
     );
   });
+
+  it("CLI 应支持把 bundle evidence 写入指定文件", () => {
+    const root = createTempDir();
+    writeResource(root, "zh-CN", "common", {
+      "common.save": "保存",
+    });
+    writeResource(root, "en-US", "common", {
+      "common.save": "Save",
+    });
+
+    const outputPath = path.join(root, "reports", "bundle-report.json");
+    const exitCode = runCli([
+      "--format",
+      "json",
+      "--output",
+      outputPath,
+      "--resources-dir",
+      path.join(root, "resources"),
+      "--source-locale",
+      "zh-CN",
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(fs.readFileSync(outputPath, "utf8"))).toEqual(
+      expect.objectContaining({
+        schemaVersion: "lime.i18n.bundleStrategyReport.v1",
+      }),
+    );
+  });
 });

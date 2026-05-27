@@ -901,3 +901,29 @@ benchmark 摘要：
 
 - `npm run verify:gui-smoke -- --reuse-running` 通过。
 - `npm run i18n:patch-retirement-gate:json -- --output "docs/roadmap/i18n/evidence/patch-retirement-gate-report.json" --patch-report ".lime/i18n/patch-metrics-report.json" --legacy-report ".lime/governance/legacy-surface-report.json"` 通过。
+
+## 2026-05-27：P3 bundle 体积与 chunk 策略 evidence 落盘
+
+本轮继续完成：
+
+- `scripts/i18n-bundle-report.ts` 新增 `--output <path>`，使 bundle footprint / chunk strategy 报告可以直接落成版本化 evidence，而不是依赖 stdout 复制。
+- 新增 `docs/roadmap/i18n/evidence/bundle-strategy-report.json`；当前报告覆盖 5 个 locale、13 个 source locale 文件、7549 个 source key，总 raw bytes 为 3450322。
+- 当前 core namespace 仍全部 inline；最大 inline group 是 `agent`，由 `agent / agentExperts / agentHome / agentInputbar / agentMessageList / agentRuntime / agentSkills / agentTeamWorkspace` 8 个资源分片组成，source locale 为 3504 key、296675 bytes。
+- `settings` 是第二大 inline group，source locale 为 2534 key、226601 bytes；后续新增非启动路径 namespace 时应继续默认走 lazy chunk 候选，避免桌面首屏被非核心资源拖慢。
+
+验证：
+
+- `npm run i18n:bundle-report:json -- --output "docs/roadmap/i18n/evidence/bundle-strategy-report.json"` 通过。
+
+## 2026-05-27：P3 bundle strategy evidence 接入质量选择器
+
+本轮继续完成：
+
+- `scripts/quality-task-planner.mjs` 将 i18n 资源、`loadNamespace.ts`、`bundledNamespaceParts.ts` 与 `scripts/i18n-bundle-report.ts` 纳入 bundle strategy 推荐命令范围。
+- 资源改动现在会同时推荐刷新 `translation-pr-pack.json` 与 `bundle-strategy-report.json`；bundle loader / 报告脚本改动会推荐刷新 `bundle-strategy-report.json`。
+- `docs/aiprompts/quality-workflow.md` 同步记录该口径，确保 P3 bundle 体积与 chunk 策略 evidence 不停留在一次性手工报告，而是进入质量任务选择器的治理闭环。
+
+验证：
+
+- `npm test -- "scripts/quality-task-planner.test.ts" "scripts/i18n-bundle-report.test.ts"` 通过。
+- `npm run verify:tasks -- --format json` 能在当前 i18n bundle 报告改动下输出 `npm run i18n:bundle-report:json -- --output docs/roadmap/i18n/evidence/bundle-strategy-report.json` 推荐命令。

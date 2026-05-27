@@ -51,4 +51,15 @@ describe("agentRuntimeErrorPresentation", () => {
         "当前 AI 服务商余额或额度不足，请在服务商后台充值或开通额度，或切换到其他可用模型后重试。",
     });
   });
+
+  it("普通错误里包含 402 字符串时不应误判为额度不足", () => {
+    expect(
+      resolveAgentRuntimeErrorPresentation(
+        "requestKey 2026042402 failed: 模型通道暂时不可用",
+      ),
+    ).toEqual({
+      displayMessage: "requestKey 2026042402 failed: 模型通道暂时不可用",
+      toastMessage: "响应错误: requestKey 2026042402 failed: 模型通道暂时不可用",
+    });
+  });
 });

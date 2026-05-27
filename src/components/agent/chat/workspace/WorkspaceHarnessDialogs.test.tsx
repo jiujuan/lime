@@ -287,4 +287,81 @@ describe("WorkspaceHarnessDialogs", () => {
     expect(guide?.textContent).toContain("File changes need review");
     expect(guide?.textContent).toContain("Review changes");
   });
+
+  it("正在写入阶段的文件名不应被普通文件读取事件覆盖", () => {
+    renderDialog({
+      harnessState: createHarnessState({
+        activeFileWrites: [
+          {
+            id: "write-code",
+            path: "/tmp/workspace/src/real-change.ts",
+            displayName: "real-change.ts",
+            phase: "streaming",
+            status: "streaming",
+            source: "artifact_snapshot",
+            updatedAt: new Date("2026-05-26T10:00:00.000Z"),
+          },
+        ],
+        recentFileEvents: [
+          {
+            id: "event-read",
+            toolCallId: "tool-read",
+            path: "/tmp/workspace/README.md",
+            displayName: "README.md",
+            kind: "document",
+            action: "read",
+            sourceToolName: "read_file",
+            timestamp: new Date("2026-05-26T10:01:00.000Z"),
+            clickable: true,
+          },
+        ],
+      }),
+    });
+
+    const guide = document.body.querySelector(
+      '[data-testid="code-workbench-guide"]',
+    ) as HTMLElement | null;
+
+    expect(guide?.getAttribute("data-stage")).toBe("writing");
+    expect(guide?.textContent).toContain("real-change.ts");
+    expect(guide?.textContent).not.toContain("README.md");
+  });
+
+  it("没有真实文件快照时不应在导轨显示快照可回滚", async () => {
+    await changeLimeLocale("zh-CN");
+
+    renderDialog({
+      threadRead: {
+        thread_id: "session-code",
+        file_checkpoint_summary: {
+          count: 0,
+          latest_checkpoint: null,
+        },
+      },
+      harnessState: createHarnessState({
+        recentFileEvents: [
+          {
+            id: "event-code-edit",
+            toolCallId: "tool-code-edit",
+            path: "/tmp/workspace/src/main.ts",
+            displayName: "main.ts",
+            kind: "code",
+            action: "edit",
+            sourceToolName: "edit_file",
+            timestamp: new Date("2026-05-26T10:01:00.000Z"),
+            preview: "Update main entry",
+            clickable: true,
+          },
+        ],
+      }),
+    });
+
+    const guide = document.body.querySelector(
+      '[data-testid="code-workbench-guide"]',
+    ) as HTMLElement | null;
+
+    expect(guide?.getAttribute("data-stage")).toBe("review");
+    expect(guide?.textContent).toContain("文件变更待处理");
+    expect(guide?.textContent).not.toContain("快照可回滚");
+  });
 });

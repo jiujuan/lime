@@ -62,6 +62,18 @@ const I18N_TRANSLATION_REVIEW_PACK_RECOMMENDED_COMMANDS = [
   "npm run i18n:translation-pr-pack:json -- --output docs/roadmap/i18n/evidence/translation-pr-pack.json",
 ];
 
+const I18N_BUNDLE_STRATEGY_RECOMMENDED_COMMANDS = [
+  "npm run i18n:bundle-report:json -- --output docs/roadmap/i18n/evidence/bundle-strategy-report.json",
+];
+
+const I18N_BUNDLE_STRATEGY_FILES = new Set([
+  "docs/roadmap/i18n/evidence/bundle-strategy-report.json",
+  "scripts/i18n-bundle-report.test.ts",
+  "scripts/i18n-bundle-report.ts",
+  "src/i18n/bundledNamespaceParts.ts",
+  "src/i18n/loadNamespace.ts",
+]);
+
 const I18N_PATCH_RETIREMENT_RECOMMENDED_COMMANDS = [
   "npm run i18n:patch-retirement-gate -- --check",
 ];
@@ -335,6 +347,13 @@ function isI18nTranslationReviewPackChange(file) {
   );
 }
 
+function isI18nBundleStrategyChange(file) {
+  return (
+    file.startsWith("src/i18n/resources/") ||
+    I18N_BUNDLE_STRATEGY_FILES.has(file)
+  );
+}
+
 function isI18nPatchRetirementChange(file) {
   return I18N_PATCH_RETIREMENT_FILES.has(file);
 }
@@ -433,7 +452,11 @@ function collectRecommendedCommands(changedFiles, { docsOnly = false } = {}) {
     commands.push(...I18N_TRANSLATION_REVIEW_PACK_RECOMMENDED_COMMANDS);
   }
 
-  return commands;
+  if (changedFiles.some(isI18nBundleStrategyChange)) {
+    commands.push(...I18N_BUNDLE_STRATEGY_RECOMMENDED_COMMANDS);
+  }
+
+  return Array.from(new Set(commands));
 }
 
 function isIntegrityChange(file) {

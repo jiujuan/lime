@@ -19,7 +19,10 @@ function normalizeRuntimeErrorMessage(errorMessage: string): string {
   return normalized || DEFAULT_RUNTIME_ERROR_MESSAGE;
 }
 
-function looksLikeHttpStatus(message: string, status: "401" | "403"): boolean {
+function looksLikeHttpStatus(
+  message: string,
+  status: "401" | "402" | "403",
+): boolean {
   return new RegExp(`(^|\\D)${status}(\\D|$)`).test(message);
 }
 
@@ -75,7 +78,7 @@ function isLikelyProviderAuthError(message: string): boolean {
 
 function isLikelyProviderQuotaError(message: string): boolean {
   return (
-    message.includes("402") ||
+    looksLikeHttpStatus(message, "402") ||
     includesAny(message, [
       "payment required",
       "insufficient balance",

@@ -142,6 +142,7 @@
 - legacy DOM Patch 只允许作为迁移期兜底，不允许成为新功能或新文案的本地化事实源；确需临时例外时，必须写入对应路线图或执行计划并说明退出条件
 - 动态用户可见文案使用 i18next interpolation / plural / context；日期、数字、相对时间、列表和排序优先复用 `src/i18n/format.ts`
 - 协议 facts / JSON schema / stable enum（例如 `type/status/failureCategory/reasonCode`）不得随 locale 翻译；只翻译 presentation 层，避免测试、join key 或跨模块判断被本地化文案污染
+- i18n 资源、loader 或 bundle 策略变更后，质量任务选择器的 `recommendedCommands` 会提示刷新 `translation-pr-pack.json` 与 `bundle-strategy-report.json`；这类 evidence 用于证明翻译 PR 可审阅、bundle 体积与 chunk 策略没有漂移
 - 优先补现有 `*.test.tsx` 的关键文案、状态与交互断言
 - 如果目标区域已有 snapshot / 结构化快照机制，沿用现有机制
 - 不要因为“只是 UI”就跳过回归
