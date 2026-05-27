@@ -537,6 +537,7 @@ jobs:
           set -euo pipefail
           TARGET_TRIPLE="${{ matrix.target }}"
           RELEASE_DIR="src-tauri/target/${TARGET_TRIPLE}/release"
+          PREBUILT_ROOT="src-tauri/target/sherpa-onnx-prebuilt"
 
           cargo build \
             --manifest-path "src-tauri/Cargo.toml" \
@@ -551,9 +552,18 @@ jobs:
             libs=(libonnxruntime.1.24.4.dylib libonnxruntime.dylib libsherpa-onnx-c-api.dylib)
           fi
 
+          mkdir -p "${RELEASE_DIR}"
           for lib in "${libs[@]}"; do
             if [ ! -f "${RELEASE_DIR}/${lib}" ]; then
+              source_path="$(find "${PREBUILT_ROOT}" -path "*/lib/${lib}" | sort | head -n 1 || true)"
+              if [ -n "${source_path}" ]; then
+                cp -f "${source_path}" "${RELEASE_DIR}/${lib}"
+              fi
+            fi
+
+            if [ ! -f "${RELEASE_DIR}/${lib}" ]; then
               echo "::error::Expected ONNX runtime shared library missing before Tauri build: ${RELEASE_DIR}/${lib}"
+              find "${PREBUILT_ROOT}" -maxdepth 4 -type f | sort || true
               exit 1
             fi
           done
