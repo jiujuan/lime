@@ -27,6 +27,8 @@ const LOCAL_ONNX_HF_ENDPOINT_ENV: &str = "LIME_LOCAL_ONNX_HF_ENDPOINT";
 const LOCAL_ONNX_MODEL_REPO: &str = "Qdrant/all-MiniLM-L6-v2-onnx";
 #[cfg(feature = "local-onnx")]
 const LOCAL_ONNX_MODEL_REVISION: &str = "main";
+#[cfg(feature = "local-onnx")]
+const ORT_DYLIB_PATH_ENV: &str = "ORT_DYLIB_PATH";
 
 /// OpenAI Embedding API 请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -132,6 +134,54 @@ fn local_onnx_hf_endpoint() -> String {
 }
 
 #[cfg(feature = "local-onnx")]
+fn ort_dylib_name() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "onnxruntime.dll"
+    } else if cfg!(target_os = "macos") {
+        "libonnxruntime.dylib"
+    } else {
+        "libonnxruntime.so"
+    }
+}
+
+#[cfg(feature = "local-onnx")]
+fn resolve_packaged_ort_dylib_path_from_exe(exe_path: &Path) -> Option<PathBuf> {
+    let exe_dir = exe_path.parent()?;
+    let dylib_name = ort_dylib_name();
+
+    let next_to_exe = exe_dir.join(dylib_name);
+    if next_to_exe.is_file() {
+        return Some(next_to_exe);
+    }
+
+    if cfg!(target_os = "macos") {
+        let frameworks_dir = exe_dir.parent()?.join("Frameworks");
+        let bundled_framework = frameworks_dir.join(dylib_name);
+        if bundled_framework.is_file() {
+            return Some(bundled_framework);
+        }
+    }
+
+    None
+}
+
+#[cfg(feature = "local-onnx")]
+fn configure_local_onnx_runtime_library_path() {
+    if std::env::var_os(ORT_DYLIB_PATH_ENV).is_some() {
+        return;
+    }
+
+    let Some(path) = std::env::current_exe()
+        .ok()
+        .and_then(|exe_path| resolve_packaged_ort_dylib_path_from_exe(&exe_path))
+    else {
+        return;
+    };
+
+    std::env::set_var(ORT_DYLIB_PATH_ENV, path);
+}
+
+#[cfg(feature = "local-onnx")]
 fn local_onnx_manual_cache_path(cache_dir: &Path, file: &str) -> PathBuf {
     let mut path = cache_dir
         .join("manual")
@@ -215,6 +265,8 @@ fn build_local_onnx_model_from_manual_cache(
 
 #[cfg(feature = "local-onnx")]
 fn build_local_onnx_model(spec: &LocalOnnxModelSpec) -> Result<TextEmbedding, String> {
+    configure_local_onnx_runtime_library_path();
+
     let cache_dir = local_onnx_cache_dir();
     std::fs::create_dir_all(&cache_dir)
         .map_err(|e| format!("创建本地 ONNX 嵌入模型缓存目录失败: {e}"))?;
@@ -562,6 +614,53 @@ mod tests {
     fn test_normalize_local_onnx_model_rejects_unsupported_model() {
         let error = normalize_local_onnx_model_name(Some("text-embedding-3-small")).unwrap_err();
         assert!(error.contains("不支持的本地 ONNX 嵌入模型"));
+    }
+
+    #[cfg(feature = "local-onnx")]
+    #[test]
+    fn test_resolve_packaged_ort_dylib_path_from_exe() {
+        let root = std::env::temp_dir().join(format!(
+            "lime-embedding-ort-path-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let exe_dir = if cfg!(target_os = "macos") {
+            root.join("Contents").join("MacOS")
+        } else {
+            root.clone()
+        };
+        std::fs::create_dir_all(&exe_dir).unwrap();
+
+        let exe_path = exe_dir.join(if cfg!(target_os = "windows") {
+            "Lime.exe"
+        } else {
+            "lime"
+        });
+        let next_to_exe = exe_dir.join(ort_dylib_name());
+        std::fs::write(&next_to_exe, []).unwrap();
+        assert_eq!(
+            resolve_packaged_ort_dylib_path_from_exe(&exe_path),
+            Some(next_to_exe.clone())
+        );
+
+        std::fs::remove_file(&next_to_exe).unwrap();
+        if cfg!(target_os = "macos") {
+            let frameworks_dir = root.join("Contents").join("Frameworks");
+            std::fs::create_dir_all(&frameworks_dir).unwrap();
+            let framework_dylib = frameworks_dir.join(ort_dylib_name());
+            std::fs::write(&framework_dylib, []).unwrap();
+            assert_eq!(
+                resolve_packaged_ort_dylib_path_from_exe(&exe_path),
+                Some(framework_dylib)
+            );
+        } else {
+            assert_eq!(resolve_packaged_ort_dylib_path_from_exe(&exe_path), None);
+        }
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[cfg(feature = "local-onnx")]

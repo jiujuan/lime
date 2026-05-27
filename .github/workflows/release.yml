@@ -277,6 +277,70 @@ jobs:
           echo "tauri.conf.headless.json version is now: $(node -e "console.log(JSON.parse(require('fs').readFileSync('tauri.conf.headless.json','utf8')).version)")"
           echo "createUpdaterArtifacts: $(node -e "console.log(JSON.parse(require('fs').readFileSync('tauri.conf.json','utf8')).bundle.createUpdaterArtifacts)")"
 
+      - name: Configure ONNX runtime bundling
+        shell: bash
+        env:
+          TARGET_TRIPLE: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const target = process.env.TARGET_TRIPLE;
+          const srcTauri = path.resolve('src-tauri');
+          const portablePath = (value) => value.replace(/\\/g, '/');
+          const unique = (values) => [...new Set(values.filter(Boolean))];
+
+          if (target === 'x86_64-pc-windows-msvc') {
+            const releaseDir = path.join(srcTauri, 'target', target, 'release');
+            const dlls = ['onnxruntime.dll', 'sherpa-onnx-c-api.dll'];
+            const hookPath = path.join(srcTauri, 'target', 'release-runtime-libs.nsh');
+            fs.mkdirSync(path.dirname(hookPath), { recursive: true });
+            fs.writeFileSync(
+              hookPath,
+              [
+                '!macro NSIS_HOOK_POSTINSTALL',
+                '  SetOutPath "$INSTDIR"',
+                ...dlls.map(
+                  (name) =>
+                    `  File /a "/oname=${name}" "${portablePath(path.join(releaseDir, name))}"`,
+                ),
+                '!macroend',
+                '',
+              ].join('\n'),
+            );
+
+            const configPath = path.join(srcTauri, 'tauri.windows.conf.json');
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            config.bundle = config.bundle || {};
+            config.bundle.windows = config.bundle.windows || {};
+            config.bundle.windows.nsis = config.bundle.windows.nsis || {};
+            config.bundle.windows.nsis.installerHooks = hookPath;
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
+            console.log(`Configured Windows ONNX runtime NSIS hook: ${hookPath}`);
+          } else if (target.endsWith('apple-darwin')) {
+            const configPath = path.join(srcTauri, 'tauri.conf.json');
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            const frameworks = [
+              'libonnxruntime.1.24.4.dylib',
+              'libonnxruntime.dylib',
+              'libsherpa-onnx-c-api.dylib',
+            ].map((name) => portablePath(path.join(srcTauri, 'target', target, 'release', name)));
+
+            config.bundle = config.bundle || {};
+            config.bundle.macOS = config.bundle.macOS || {};
+            config.bundle.macOS.frameworks = unique([
+              ...(config.bundle.macOS.frameworks || []),
+              ...frameworks,
+            ]);
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
+            console.log(`Configured macOS ONNX runtime frameworks for ${target}`);
+          } else {
+            console.log(`No ONNX runtime bundling override needed for ${target}`);
+          }
+          NODE
+
       - name: Resolve updater endpoint
         shell: bash
         run: |
@@ -480,6 +544,27 @@ jobs:
           # 默认不启用 voice feature（包含 whisper-rs，编译很慢）
           args: --target ${{ matrix.target }} --config tauri.windows.conf.json
 
+      - name: Verify packaged ONNX runtime libraries (Windows)
+        if: matrix.platform == 'windows-2022'
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_DIR="src-tauri/target/${{ matrix.target }}/release"
+          for dll in onnxruntime.dll sherpa-onnx-c-api.dll; do
+            if [ ! -f "$RELEASE_DIR/$dll" ]; then
+              echo "::error::Expected ONNX runtime DLL missing: $RELEASE_DIR/$dll"
+              exit 1
+            fi
+          done
+
+          HOOK_FILE="src-tauri/target/release-runtime-libs.nsh"
+          if [ ! -f "$HOOK_FILE" ]; then
+            echo "::error::Expected NSIS runtime hook missing: $HOOK_FILE"
+            exit 1
+          fi
+          grep -F 'onnxruntime.dll' "$HOOK_FILE"
+          grep -F 'sherpa-onnx-c-api.dll' "$HOOK_FILE"
+
       - name: Stage Windows release assets
         if: matrix.platform == 'windows-2022'
         shell: bash
@@ -538,6 +623,7 @@ jobs:
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 32
           CARGO_INCREMENTAL: 0
           CARGO_TARGET_DIR: src-tauri/target
+          RUSTFLAGS: "-C link-arg=-Wl,-rpath,@executable_path/../Frameworks"
           SCCACHE_GHA_ENABLED: "true"
           RUSTC_WRAPPER: sccache
           # Apple 签名环境变量
@@ -589,6 +675,7 @@ jobs:
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 32
           CARGO_INCREMENTAL: 0
           CARGO_TARGET_DIR: src-tauri/target
+          RUSTFLAGS: "-C link-arg=-Wl,-rpath,@executable_path/../Frameworks"
           SCCACHE_GHA_ENABLED: "true"
           RUSTC_WRAPPER: sccache
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -685,6 +772,27 @@ jobs:
           fi
 
           echo "Validating notarized app bundle: $app_bundle"
+          FRAMEWORKS_DIR="$app_bundle/Contents/Frameworks"
+          for dylib in libonnxruntime.1.24.4.dylib libonnxruntime.dylib libsherpa-onnx-c-api.dylib; do
+            if [ ! -f "$FRAMEWORKS_DIR/$dylib" ]; then
+              echo "::error::Expected ONNX runtime dylib missing: $FRAMEWORKS_DIR/$dylib"
+              exit 1
+            fi
+          done
+
+          MAIN_BINARY="$app_bundle/Contents/MacOS/Lime"
+          if [ ! -f "$MAIN_BINARY" ]; then
+            MAIN_BINARY="$(find "$app_bundle/Contents/MacOS" -maxdepth 1 -type f | sort | head -n 1)"
+          fi
+          if [ -z "$MAIN_BINARY" ] || [ ! -f "$MAIN_BINARY" ]; then
+            echo "::error::Unable to resolve macOS app main binary under $app_bundle/Contents/MacOS"
+            exit 1
+          fi
+          if ! otool -l "$MAIN_BINARY" | grep -F '@executable_path/../Frameworks' >/dev/null; then
+            echo "::error::macOS app binary is missing ONNX runtime Frameworks rpath: $MAIN_BINARY"
+            exit 1
+          fi
+
           spctl -a -vv "$app_bundle"
           xcrun stapler validate "$app_bundle"
 

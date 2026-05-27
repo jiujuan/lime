@@ -21,7 +21,7 @@ cpal = "0.15"
 whisper-rs = { version = "0.12", optional = true }
 
 # SenseVoice 本地识别（可选，链接 sherpa-onnx 运行时，不内置模型文件）
-sherpa-onnx = { version = "1.13", default-features = false, features = ["static"], optional = true }
+sherpa-onnx = { version = "1.13", default-features = false, features = ["shared"], optional = true }
 
 # WAV 处理
 hound = "3.5"

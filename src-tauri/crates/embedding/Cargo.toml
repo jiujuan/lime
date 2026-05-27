@@ -21,7 +21,7 @@ tokio = { version = "1", features = ["full"] }
 
 # 本地 ONNX 嵌入
 dirs = { workspace = true, optional = true }
-fastembed = { version = "5.13.4", default-features = false, features = ["hf-hub-native-tls", "ort-download-binaries-native-tls"], optional = true }
+fastembed = { version = "5.13.4", default-features = false, features = ["hf-hub-native-tls", "ort-load-dynamic"], optional = true }
 
 # 错误处理
 anyhow = "1"
