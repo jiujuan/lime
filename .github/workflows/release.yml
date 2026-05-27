@@ -523,6 +523,44 @@ jobs:
             exit 1
           fi
 
+      - name: Prepare ONNX runtime shared libraries
+        if: matrix.platform == 'windows-2022' || startsWith(matrix.platform, 'macos')
+        shell: bash
+        env:
+          CARGO_PROFILE_RELEASE_LTO: "off"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 32
+          CARGO_INCREMENTAL: 0
+          CARGO_TARGET_DIR: src-tauri/target
+          SCCACHE_GHA_ENABLED: "true"
+          RUSTC_WRAPPER: sccache
+        run: |
+          set -euo pipefail
+          TARGET_TRIPLE="${{ matrix.target }}"
+          RELEASE_DIR="src-tauri/target/${TARGET_TRIPLE}/release"
+
+          cargo build \
+            --manifest-path "src-tauri/Cargo.toml" \
+            -p voice-core \
+            --features local-sensevoice \
+            --target "${TARGET_TRIPLE}" \
+            --release
+
+          if [ "${TARGET_TRIPLE}" = "x86_64-pc-windows-msvc" ]; then
+            libs=(onnxruntime.dll sherpa-onnx-c-api.dll)
+          else
+            libs=(libonnxruntime.1.24.4.dylib libonnxruntime.dylib libsherpa-onnx-c-api.dylib)
+          fi
+
+          for lib in "${libs[@]}"; do
+            if [ ! -f "${RELEASE_DIR}/${lib}" ]; then
+              echo "::error::Expected ONNX runtime shared library missing before Tauri build: ${RELEASE_DIR}/${lib}"
+              exit 1
+            fi
+          done
+
+          printf 'Prepared ONNX runtime shared libraries under %s:\n' "${RELEASE_DIR}"
+          printf ' - %s\n' "${libs[@]}"
+
       - name: Build Tauri app (Windows installer, stage only)
         id: build_windows_stage
         if: matrix.platform == 'windows-2022'
