@@ -526,43 +526,76 @@ jobs:
       - name: Prepare ONNX runtime shared libraries
         if: matrix.platform == 'windows-2022' || startsWith(matrix.platform, 'macos')
         shell: bash
-        env:
-          CARGO_PROFILE_RELEASE_LTO: "off"
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 32
-          CARGO_INCREMENTAL: 0
-          CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
-          SCCACHE_GHA_ENABLED: "true"
-          RUSTC_WRAPPER: sccache
         run: |
           set -euo pipefail
           TARGET_TRIPLE="${{ matrix.target }}"
           RELEASE_DIR="src-tauri/target/${TARGET_TRIPLE}/release"
           PREBUILT_ROOT="src-tauri/target/sherpa-onnx-prebuilt"
 
-          cargo clean \
-            --manifest-path "src-tauri/Cargo.toml" \
-            -p sherpa-onnx-sys \
-            --target "${TARGET_TRIPLE}" || true
+          SHERPA_ONNX_VERSION="$(node - <<'NODE'
+          const fs = require('fs');
+          const lock = fs.readFileSync('src-tauri/Cargo.lock', 'utf8');
+          const match = lock.match(/\[\[package\]\]\nname = "sherpa-onnx-sys"\nversion = "([^"]+)"/);
+          if (!match) {
+            throw new Error('Unable to resolve sherpa-onnx-sys version from src-tauri/Cargo.lock');
+          }
+          process.stdout.write(match[1]);
+          NODE
+          )"
 
-          cargo build \
-            --manifest-path "src-tauri/Cargo.toml" \
-            -p voice-core \
-            --features local-sensevoice \
-            --target "${TARGET_TRIPLE}" \
-            --release
+          case "${TARGET_TRIPLE}" in
+            x86_64-pc-windows-msvc)
+              archive_name="sherpa-onnx-v${SHERPA_ONNX_VERSION}-win-x64-shared-MT-Release-lib.tar.bz2"
+              libs=(onnxruntime.dll sherpa-onnx-c-api.dll)
+              ;;
+            aarch64-apple-darwin)
+              archive_name="sherpa-onnx-v${SHERPA_ONNX_VERSION}-osx-arm64-shared-lib.tar.bz2"
+              libs=(libonnxruntime.1.24.4.dylib libonnxruntime.dylib libsherpa-onnx-c-api.dylib)
+              ;;
+            x86_64-apple-darwin)
+              archive_name="sherpa-onnx-v${SHERPA_ONNX_VERSION}-osx-x64-shared-lib.tar.bz2"
+              libs=(libonnxruntime.1.24.4.dylib libonnxruntime.dylib libsherpa-onnx-c-api.dylib)
+              ;;
+            *)
+              echo "::error::Unsupported sherpa-onnx release target: ${TARGET_TRIPLE}"
+              exit 1
+              ;;
+          esac
 
-          if [ "${TARGET_TRIPLE}" = "x86_64-pc-windows-msvc" ]; then
-            libs=(onnxruntime.dll sherpa-onnx-c-api.dll)
-          else
-            libs=(libonnxruntime.1.24.4.dylib libonnxruntime.dylib libsherpa-onnx-c-api.dylib)
+          archive_stem="${archive_name%.tar.bz2}"
+          archive_path="${PREBUILT_ROOT}/${archive_name}"
+          extracted_dir="${PREBUILT_ROOT}/${archive_stem}"
+          lib_dir="${extracted_dir}/lib"
+          url="https://github.com/k2-fsa/sherpa-onnx/releases/download/v${SHERPA_ONNX_VERSION}/${archive_name}"
+
+          mkdir -p "${PREBUILT_ROOT}" "${RELEASE_DIR}"
+          if [ ! -d "${lib_dir}" ]; then
+            if [ ! -f "${archive_path}" ]; then
+              echo "Downloading sherpa-onnx shared runtime: ${url}"
+              curl --fail --location --retry 5 --retry-connrefused --connect-timeout 30 \
+                --output "${archive_path}.part" \
+                "${url}"
+              mv "${archive_path}.part" "${archive_path}"
+            fi
+
+            rm -rf "${extracted_dir}"
+            tar -xjf "${archive_path}" -C "${PREBUILT_ROOT}"
           fi
 
-          mkdir -p "${RELEASE_DIR}"
+          if [ ! -d "${lib_dir}" ]; then
+            echo "::error::Downloaded sherpa-onnx archive did not contain expected lib directory: ${lib_dir}"
+            find "${PREBUILT_ROOT}" -maxdepth 4 -type f | sort || true
+            exit 1
+          fi
+
           for lib in "${libs[@]}"; do
             if [ ! -f "${RELEASE_DIR}/${lib}" ]; then
-              source_path="$(find "${PREBUILT_ROOT}" -path "*/lib/${lib}" | sort | head -n 1 || true)"
+              source_path="${lib_dir}/${lib}"
+              if [ ! -e "${source_path}" ]; then
+                source_path="$(find "${PREBUILT_ROOT}" -path "*/lib/${lib}" | sort | head -n 1 || true)"
+              fi
               if [ -n "${source_path}" ]; then
-                cp -f "${source_path}" "${RELEASE_DIR}/${lib}"
+                cp -fL "${source_path}" "${RELEASE_DIR}/${lib}"
               fi
             fi
 
