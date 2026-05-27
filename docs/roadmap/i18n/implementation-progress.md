@@ -871,6 +871,7 @@ benchmark 摘要：
 - `npm run i18n:translation-pr-pack:json -- --output "docs/roadmap/i18n/evidence/translation-pr-pack.json"` 通过。
 - `npm run i18n:check` 通过，当前 `sourceKeys=7549`、coverage `100.0%`。
 - `npm run i18n:unused -- --check` 通过，当前 `unused=0`。
+- `npm run verify:local` 通过，当前写集触发 app version、i18n 结构、unused key、lint、typecheck 与 Vitest smart 61 批次。
 
 ## 2026-05-27：P3 GUI smoke Patch 退出门禁证据刷新
 
@@ -886,3 +887,17 @@ benchmark 摘要：
 - `npm run i18n:patch-retirement-gate:json -- --output "docs/roadmap/i18n/evidence/patch-retirement-gate-report.json" --patch-report ".lime/i18n/patch-metrics-report.json" --legacy-report ".lime/governance/legacy-surface-report.json"` 通过。
 - `npm run i18n:patch-retirement-gate -- --check --format json --patch-report ".lime/i18n/patch-metrics-report.json" --legacy-report ".lime/governance/legacy-surface-report.json"` 通过。
 - 本轮观察到 `verify:gui-smoke` 进程已自然退出，`.lime/locks/gui-smoke.lock/owner.json` 已清理；同时 `code-runtime-fixture-smoke`、`runtime-approval-sandbox-smoke`、`agent-apps-smoke` 与 `at-command-registry-e2e` 产物均为通过状态。
+
+## 2026-05-27：P3/P4 GUI smoke Patch gate 复验
+
+本轮继续完成：
+
+- 复用已运行的 headless Tauri 环境执行 `npm run verify:gui-smoke -- --reuse-running`，覆盖 DevBridge、workspace ready、browser runtime、site adapters、code runtime 页面级 smoke、code runtime fixture、approval sandbox、@ command registry、Agent Apps、Knowledge GUI 与 design canvas。
+- GUI smoke 刷新的 `.lime/i18n/patch-metrics-report.json` 继续显示 `status=no-hit`、`retirementCandidate=true`、`totalRuns=10`、`totalMatchedSegments=0`、`totalReplacedNodes=0`。
+- GUI smoke 刷新的 `.lime/governance/legacy-surface-report.json` 继续显示 `classificationDriftCandidates=[]`、`violations=[]`、`zeroReferenceCandidates=[]`。
+- 已重新落盘 `docs/roadmap/i18n/evidence/patch-retirement-gate-report.json`；当前 `retirementReady=true`、`gateIssues=[]`、`advisoryIssues=[]`。
+
+验证：
+
+- `npm run verify:gui-smoke -- --reuse-running` 通过。
+- `npm run i18n:patch-retirement-gate:json -- --output "docs/roadmap/i18n/evidence/patch-retirement-gate-report.json" --patch-report ".lime/i18n/patch-metrics-report.json" --legacy-report ".lime/governance/legacy-surface-report.json"` 通过。

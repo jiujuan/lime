@@ -203,6 +203,7 @@ describe("CodeReviewSummaryPanel", () => {
     ) as HTMLElement | null;
 
     expect(outputs?.textContent).toContain("测试输出 1");
+    expect(outputs?.textContent).toContain("测试失败");
     expect(container.textContent).toContain("1 条输出需要处理");
   });
 
@@ -232,6 +233,42 @@ describe("CodeReviewSummaryPanel", () => {
 
     expect(checkpoints?.disabled).toBe(true);
     expect(checkpoints?.textContent).toContain("暂无可回滚快照");
+  });
+
+  it("只有快照时主按钮应直接打开快照入口", () => {
+    const { container, onOpenSection, onOpenFileCheckpoints } = renderPanel({
+      harnessState: createEmptyHarnessState(),
+      fileCheckpointSummary: {
+        count: 1,
+        latest_checkpoint: {
+          checkpoint_id: "checkpoint-only",
+          turn_id: "turn-only",
+          path: "src/App.tsx",
+          source: "tool_result",
+          updated_at: "2026-05-27T02:00:00.000Z",
+          validation_issue_count: 0,
+        },
+      },
+    });
+
+    const primaryAction = container.querySelector(
+      '[data-testid="code-review-summary-primary-action"]',
+    ) as HTMLButtonElement | null;
+    const files = container.querySelector(
+      '[data-testid="code-review-summary-files"]',
+    ) as HTMLButtonElement | null;
+    const outputs = container.querySelector(
+      '[data-testid="code-review-summary-outputs"]',
+    ) as HTMLButtonElement | null;
+
+    act(() => {
+      primaryAction?.click();
+    });
+
+    expect(files?.disabled).toBe(true);
+    expect(outputs?.disabled).toBe(true);
+    expect(onOpenSection).not.toHaveBeenCalled();
+    expect(onOpenFileCheckpoints).toHaveBeenCalledTimes(1);
   });
 
   it("没有审阅事实时不渲染", () => {

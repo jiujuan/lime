@@ -95,6 +95,12 @@ export function CodeReviewSummaryPanel({
   const visibleFileChanges = fileChanges.slice(0, 3);
   const passingOutputCount = resolvePassingOutputCount(harnessState);
   const failedOutputCount = resolveFailedOutputCount(harnessState);
+  const latestOutputSignal = harnessState.outputSignals[0] || null;
+  const outputDetail =
+    latestOutputSignal?.title ||
+    latestOutputSignal?.summary ||
+    latestOutputSignal?.preview ||
+    null;
   const checkpointCount = fileCheckpointSummary?.count ?? 0;
   const latestCheckpoint = fileCheckpointSummary?.latest_checkpoint || null;
   const hasReviewSurface =
@@ -134,9 +140,21 @@ export function CodeReviewSummaryPanel({
           size="sm"
           variant="outline"
           className="shrink-0"
-          onClick={() =>
-            onOpenSection(fileChanges.length > 0 ? "file_review" : "outputs")
-          }
+          onClick={() => {
+            if (fileChanges.length > 0) {
+              onOpenSection("file_review");
+              return;
+            }
+            if (harnessState.outputSignals.length > 0) {
+              onOpenSection("outputs");
+              return;
+            }
+            if (checkpointCount > 0 && onOpenFileCheckpoints) {
+              onOpenFileCheckpoints?.();
+              return;
+            }
+            onOpenSection("runtime");
+          }}
           data-testid="code-review-summary-primary-action"
         >
           {t("agentChat.harness.codeReview.action.review")}
@@ -152,6 +170,7 @@ export function CodeReviewSummaryPanel({
               ? "border-sky-200 bg-sky-50 hover:bg-sky-100"
               : "border-slate-200 bg-slate-50 text-slate-500",
           )}
+          disabled={fileChanges.length === 0}
           onClick={() => onOpenSection("file_review")}
           data-testid="code-review-summary-files"
         >
@@ -178,6 +197,7 @@ export function CodeReviewSummaryPanel({
                 ? "border-emerald-200 bg-emerald-50 hover:bg-emerald-100"
                 : "border-slate-200 bg-slate-50 text-slate-500",
           )}
+          disabled={harnessState.outputSignals.length === 0}
           onClick={() => onOpenSection("outputs")}
           data-testid="code-review-summary-outputs"
         >
@@ -188,15 +208,22 @@ export function CodeReviewSummaryPanel({
             })}
           </div>
           <div className="mt-1 text-xs leading-5">
-            {failedOutputCount > 0
-              ? t("agentChat.harness.codeReview.metric.outputsFailed", {
-                  count: failedOutputCount,
-                })
-              : passingOutputCount > 0
-                ? t("agentChat.harness.codeReview.metric.outputsPassing", {
-                    count: passingOutputCount,
+            <div>
+              {failedOutputCount > 0
+                ? t("agentChat.harness.codeReview.metric.outputsFailed", {
+                    count: failedOutputCount,
                   })
-              : t("agentChat.harness.codeReview.metric.outputsEmpty")}
+                : passingOutputCount > 0
+                  ? t("agentChat.harness.codeReview.metric.outputsPassing", {
+                      count: passingOutputCount,
+                    })
+                  : t("agentChat.harness.codeReview.metric.outputsEmpty")}
+            </div>
+            {outputDetail ? (
+              <div className="mt-1 truncate text-current/75">
+                {outputDetail}
+              </div>
+            ) : null}
           </div>
         </button>
 
