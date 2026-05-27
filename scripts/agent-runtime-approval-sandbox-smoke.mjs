@@ -58,6 +58,8 @@ Lime Agent Runtime Approval / Sandbox Smoke
   --interval-ms <ms> live runtime 轮询间隔，默认 ${DEFAULT_INTERVAL_MS}
   --provider-preference <id> live runtime 使用的 provider 偏好；默认读取 LIME_AGENT_QC_PROVIDER / LIME_E2E_PROVIDER，未设置时自动选本地启用 provider
   --model-preference <name>  live runtime 使用的 model 偏好；默认读取 LIME_AGENT_QC_MODEL / LIME_E2E_MODEL，未设置时自动选 provider 的首个自定义模型
+  --devbridge-denied-runtime
+                      采集真实 DevBridge denied-only runtime 权限确认 transcript；只拒绝权限，不继续模型执行，不要求真实 Provider
   --allow-live-provider / --live-runtime
                       确认允许调用真实模型 Provider 并采集 live runtime transcript；默认仅生成确定性投影摘要
   --skip-live-runtime 跳过 DevBridge live runtime transcript，仅生成确定性投影摘要
@@ -75,6 +77,7 @@ function parseArgs(argv) {
     intervalMs: DEFAULT_INTERVAL_MS,
     providerPreference: DEFAULT_PROVIDER_PREFERENCE,
     modelPreference: DEFAULT_MODEL_PREFERENCE,
+    devBridgeDeniedRuntime: false,
     liveRuntime: liveProviderSmokeAllowed(),
     liveProviderExplicitlyAllowed: false,
     write: true,
@@ -123,6 +126,10 @@ function parseArgs(argv) {
     }
     if (arg === "--skip-live-runtime" || arg === "--no-live-runtime") {
       options.liveRuntime = false;
+      continue;
+    }
+    if (arg === "--devbridge-denied-runtime") {
+      options.devBridgeDeniedRuntime = true;
       continue;
     }
     if (arg === "--allow-live-provider" || arg === "--live-runtime") {
@@ -448,9 +455,11 @@ function buildRuntimeContractMetadata() {
 async function runPermissionDecisionFlow(options, workspaceId, providerPreference, decision) {
   const confirmed = decision === "resolved";
   const responseLabel = confirmed ? "允许本次执行" : "拒绝";
+  const submittedStrategy = "code_orchestrated";
   const sessionId = await invoke(options, "agent_runtime_create_session", {
     workspaceId,
     name: `Agent QC approval ${decision} ${Date.now()}`,
+    executionStrategy: submittedStrategy,
     runStartHooks: false,
   });
   const turnId = `qc-approval-${decision}-${Date.now()}-${process.pid}`;
@@ -460,6 +469,19 @@ async function runPermissionDecisionFlow(options, workspaceId, providerPreferenc
     sandboxPolicy: SANDBOX_POLICY,
   };
 
+  const turnConfig = {
+    execution_strategy: submittedStrategy,
+    approval_policy: APPROVAL_POLICY,
+    sandbox_policy: SANDBOX_POLICY,
+    metadata: buildRuntimeContractMetadata(),
+  };
+  if (providerPreference?.providerPreference) {
+    turnConfig.provider_preference = providerPreference.providerPreference;
+  }
+  if (providerPreference?.modelPreference) {
+    turnConfig.model_preference = providerPreference.modelPreference;
+  }
+
   await invoke(options, "agent_runtime_submit_turn", {
     request: {
       message:
@@ -468,13 +490,7 @@ async function runPermissionDecisionFlow(options, workspaceId, providerPreferenc
       workspace_id: workspaceId,
       event_name: eventName,
       turn_id: turnId,
-      turn_config: {
-        provider_preference: providerPreference.providerPreference,
-        model_preference: providerPreference.modelPreference,
-        approval_policy: APPROVAL_POLICY,
-        sandbox_policy: SANDBOX_POLICY,
-        metadata: buildRuntimeContractMetadata(),
-      },
+      turn_config: turnConfig,
       skip_pre_submit_resume: true,
     },
   });
@@ -524,6 +540,7 @@ async function runPermissionDecisionFlow(options, workspaceId, providerPreferenc
     turnId,
     requestId,
     providerPreference,
+    submittedStrategy,
     submittedPolicies,
     before: requested.summary,
     respond: {
@@ -531,6 +548,53 @@ async function runPermissionDecisionFlow(options, workspaceId, providerPreferenc
       responseLabel,
     },
     after: completed.summary,
+  };
+}
+
+async function collectDevBridgeDeniedRuntimeTranscript(options) {
+  const health = await waitForHealth(options);
+  const workspace = await invoke(options, "get_or_create_default_project");
+  const workspaceId = workspace?.id;
+  assert(workspaceId, "get_or_create_default_project 缺少 workspace id");
+
+  const deniedFlow = await runPermissionDecisionFlow(
+    options,
+    workspaceId,
+    null,
+    "denied",
+  );
+  const flows = [deniedFlow];
+
+  return {
+    kind: "devbridge-runtime-permission-confirmation-denied-only",
+    health,
+    workspaceId,
+    providerPreference: null,
+    flows,
+    assertions: {
+      devBridgeHealthy: health?.status === "ok" || Boolean(health),
+      permissionRequestCreatedBeforeModel: flows.every(
+        (flow) =>
+          flow.before.permissionStatus === "requires_confirmation" &&
+          flow.before.confirmationStatus === "requested" &&
+          flow.before.pendingRequestCount > 0 &&
+          flow.before.latestTurnStatus === "failed" &&
+          String(flow.before.confirmationRequestId || "").includes(flow.turnId),
+      ),
+      deniedDecisionClearsPendingRequest:
+        deniedFlow.after.confirmationStatus === "denied" &&
+        deniedFlow.after.pendingRequestCount === 0,
+      approvalPolicySubmitted: flows.every(
+        (flow) => flow.submittedPolicies.approvalPolicy === APPROVAL_POLICY,
+      ),
+      sandboxPolicySubmitted: flows.every(
+        (flow) => flow.submittedPolicies.sandboxPolicy === SANDBOX_POLICY,
+      ),
+      codeOrchestratedSubmitted: flows.every(
+        (flow) => flow.submittedStrategy === "code_orchestrated",
+      ),
+      providerNotRequired: flows.every((flow) => !flow.providerPreference),
+    },
   };
 }
 
@@ -644,12 +708,25 @@ async function main() {
   const liveRuntimeTranscript = options.liveRuntime
     ? await collectLiveRuntimeTranscript(options)
     : null;
+  const devBridgeDeniedRuntimeTranscript = options.devBridgeDeniedRuntime
+    ? await collectDevBridgeDeniedRuntimeTranscript(options)
+    : null;
 
   const evidence = buildApprovalSandboxSmokeEvidence({
     commandResults,
     generatedAt: new Date().toISOString(),
+    devBridgeDeniedRuntimeTranscript,
     liveRuntimeTranscript,
   });
+
+  if (
+    options.devBridgeDeniedRuntime &&
+    !evidence.coverage.devBridgeDeniedRuntimeTranscript
+  ) {
+    throw new Error(
+      "[smoke:agent-runtime-approval-sandbox] DevBridge denied-only runtime transcript 未满足门禁断言",
+    );
+  }
 
   if (options.liveRuntime && !evidence.coverage.liveRuntimeTranscript) {
     throw new Error(

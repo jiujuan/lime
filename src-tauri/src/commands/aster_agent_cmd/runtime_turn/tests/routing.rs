@@ -264,6 +264,105 @@ fn should_prewarm_mcp_runtime_should_skip_web_search_only_required_turn() {
 }
 
 #[test]
+fn should_prewarm_mcp_runtime_should_skip_pending_runtime_permission_confirmation() {
+    let request = build_runtime_turn_test_request(
+        "请先确认本轮运行时权限",
+        Some(json!({
+            "lime_runtime": {
+                "permission_state": {
+                    "status": "requires_confirmation",
+                    "requiredProfileKeys": ["browser_control", "web_search"],
+                    "askProfileKeys": ["browser_control", "web_search"],
+                    "blockingProfileKeys": [],
+                    "decisionSource": "execution_profile_registry",
+                    "decisionScope": "declared_permission_profiles_only",
+                    "confirmationStatus": "not_requested",
+                    "confirmationSource": "declared_profile_only"
+                }
+            }
+        })),
+    );
+    let policy = lime_agent::resolve_request_tool_policy(Some(false), false);
+
+    assert!(!should_prewarm_mcp_runtime(
+        &request,
+        TurnExecutionProfile::FullRuntime,
+        RuntimeChatMode::General,
+        &policy,
+    ));
+    assert_eq!(
+        resolve_mcp_prewarm_skip_reason(
+            &request,
+            TurnExecutionProfile::FullRuntime,
+            RuntimeChatMode::General,
+            &policy,
+        ),
+        Some("runtime_permission_confirmation_pending")
+    );
+}
+
+#[test]
+fn should_prewarm_mcp_runtime_should_skip_explicit_harness_request() {
+    let request = build_runtime_turn_test_request(
+        "请修复 fixture 并运行校验",
+        Some(json!({
+            "harness": {
+                "skip_mcp_prewarm": true,
+                "code_runtime_fixture": {
+                    "scenario_id": "natural-language-code-runtime-fixture"
+                }
+            }
+        })),
+    );
+    let policy = lime_agent::resolve_request_tool_policy(Some(false), false);
+
+    assert!(!should_prewarm_mcp_runtime(
+        &request,
+        TurnExecutionProfile::FullRuntime,
+        RuntimeChatMode::General,
+        &policy,
+    ));
+    assert_eq!(
+        resolve_mcp_prewarm_skip_reason(
+            &request,
+            TurnExecutionProfile::FullRuntime,
+            RuntimeChatMode::General,
+            &policy,
+        ),
+        Some("request_skip_mcp_prewarm")
+    );
+}
+
+#[test]
+fn should_prewarm_mcp_runtime_should_skip_explicit_camel_case_harness_request() {
+    let request = build_runtime_turn_test_request(
+        "请修复 fixture 并运行校验",
+        Some(json!({
+            "harness": {
+                "skipMcpPrewarm": true
+            }
+        })),
+    );
+    let policy = lime_agent::resolve_request_tool_policy(Some(false), false);
+
+    assert!(!should_prewarm_mcp_runtime(
+        &request,
+        TurnExecutionProfile::FullRuntime,
+        RuntimeChatMode::General,
+        &policy,
+    ));
+    assert_eq!(
+        resolve_mcp_prewarm_skip_reason(
+            &request,
+            TurnExecutionProfile::FullRuntime,
+            RuntimeChatMode::General,
+            &policy,
+        ),
+        Some("request_skip_mcp_prewarm")
+    );
+}
+
+#[test]
 fn should_prewarm_mcp_runtime_should_keep_full_context_turns_warm() {
     let mut request = build_runtime_turn_test_request(
         "请帮我抓取站点内容",

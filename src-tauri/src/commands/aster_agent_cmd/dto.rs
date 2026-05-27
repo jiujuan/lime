@@ -896,6 +896,7 @@ struct RuntimePermissionConfirmationProjection {
     status: &'static str,
     request_id: String,
     source: &'static str,
+    kind: RuntimeConfirmationItemKind,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -962,6 +963,7 @@ fn latest_resolved_tool_confirmation_item(
                     status,
                     request_id: request_id.clone(),
                     source: "runtime_action_required",
+                    kind,
                 })
             }
             lime_core::database::dao::agent_timeline::AgentThreadItemStatus::Failed => {
@@ -969,6 +971,7 @@ fn latest_resolved_tool_confirmation_item(
                     status: "denied",
                     request_id: request_id.clone(),
                     source: "runtime_action_required",
+                    kind,
                 })
             }
             _ => None,
@@ -976,12 +979,56 @@ fn latest_resolved_tool_confirmation_item(
     })
 }
 
+fn runtime_permission_state_from_confirmation_projection(
+    projection: RuntimePermissionConfirmationProjection,
+) -> lime_agent::SessionExecutionRuntimePermissionState {
+    lime_agent::SessionExecutionRuntimePermissionState {
+        status: "requires_confirmation".to_string(),
+        required_profile_keys: Vec::new(),
+        ask_profile_keys: Vec::new(),
+        blocking_profile_keys: Vec::new(),
+        decision_source: "runtime_action_required".to_string(),
+        decision_scope: "runtime_permission_confirmation".to_string(),
+        confirmation_status: Some(projection.status.to_string()),
+        confirmation_request_id: Some(projection.request_id),
+        confirmation_source: Some(projection.source.to_string()),
+        notes: vec!["真实权限确认请求来自当前线程 action_required 队列".to_string()],
+    }
+}
+
+fn runtime_permission_state_from_pending_request(
+    request: &AgentRuntimeRequestView,
+) -> lime_agent::SessionExecutionRuntimePermissionState {
+    lime_agent::SessionExecutionRuntimePermissionState {
+        status: "requires_confirmation".to_string(),
+        required_profile_keys: Vec::new(),
+        ask_profile_keys: Vec::new(),
+        blocking_profile_keys: Vec::new(),
+        decision_source: "runtime_action_required".to_string(),
+        decision_scope: "runtime_permission_confirmation".to_string(),
+        confirmation_status: Some("requested".to_string()),
+        confirmation_request_id: Some(request.id.clone()),
+        confirmation_source: Some("runtime_action_required".to_string()),
+        notes: vec!["真实权限确认请求已进入 action_required 队列".to_string()],
+    }
+}
+
 fn apply_pending_confirmation_to_permission_state(
     permission_state: Option<lime_agent::SessionExecutionRuntimePermissionState>,
     pending_requests: &[AgentRuntimeRequestView],
     resolved_confirmation: Option<RuntimePermissionConfirmationProjection>,
 ) -> Option<lime_agent::SessionExecutionRuntimePermissionState> {
-    let mut permission_state = permission_state?;
+    let Some(mut permission_state) = permission_state else {
+        if let Some(projection) = resolved_confirmation
+            .filter(|projection| projection.kind == RuntimeConfirmationItemKind::RuntimePermission)
+        {
+            return Some(runtime_permission_state_from_confirmation_projection(
+                projection,
+            ));
+        }
+        return latest_pending_permission_confirmation_request(pending_requests)
+            .map(runtime_permission_state_from_pending_request);
+    };
     if permission_state.status != "requires_confirmation" {
         return Some(permission_state);
     }
@@ -3523,6 +3570,114 @@ mod tests {
                 .map(|diagnostics| diagnostics.pending_request_count),
             Some(1)
         );
+    }
+
+    #[test]
+    fn thread_read_should_project_runtime_permission_pending_request_without_runtime_summary() {
+        let detail = build_session_detail(
+            vec![AgentThreadTurn {
+                id: "turn-permission".to_string(),
+                thread_id: "thread-1".to_string(),
+                prompt_text: "需要运行时权限".to_string(),
+                status: AgentThreadTurnStatus::Failed,
+                started_at: seconds_ago(20),
+                completed_at: Some(seconds_ago(10)),
+                error_message: Some("运行时权限声明需要真实确认".to_string()),
+                created_at: seconds_ago(20),
+                updated_at: seconds_ago(10),
+            }],
+            vec![AgentThreadItem {
+                id: "runtime_permission_confirmation:turn-permission".to_string(),
+                thread_id: "thread-1".to_string(),
+                turn_id: "turn-permission".to_string(),
+                sequence: 1,
+                status: AgentThreadItemStatus::InProgress,
+                started_at: seconds_ago(15),
+                completed_at: None,
+                updated_at: seconds_ago(15),
+                payload: AgentThreadItemPayload::RequestUserInput {
+                    request_id: "runtime_permission_confirmation:turn-permission".to_string(),
+                    action_type: "elicitation".to_string(),
+                    prompt: Some("请确认运行时权限".to_string()),
+                    questions: None,
+                    response: None,
+                },
+            }],
+        );
+
+        let thread_read = AgentRuntimeThreadReadModel::from_session_detail(&detail, &[]);
+
+        assert_eq!(thread_read.status, "waiting_request");
+        assert_eq!(
+            thread_read
+                .permission_state
+                .as_ref()
+                .map(|state| state.status.as_str()),
+            Some("requires_confirmation")
+        );
+        assert_eq!(
+            thread_read
+                .permission_state
+                .as_ref()
+                .and_then(|state| state.confirmation_status.as_deref()),
+            Some("requested")
+        );
+        assert_eq!(
+            thread_read
+                .permission_state
+                .as_ref()
+                .and_then(|state| state.confirmation_request_id.as_deref()),
+            Some("runtime_permission_confirmation:turn-permission")
+        );
+    }
+
+    #[test]
+    fn thread_read_should_project_runtime_permission_denied_request_without_runtime_summary() {
+        let detail = build_session_detail(
+            vec![AgentThreadTurn {
+                id: "turn-permission".to_string(),
+                thread_id: "thread-1".to_string(),
+                prompt_text: "需要运行时权限".to_string(),
+                status: AgentThreadTurnStatus::Failed,
+                started_at: seconds_ago(20),
+                completed_at: Some(seconds_ago(10)),
+                error_message: Some("运行时权限声明需要真实确认".to_string()),
+                created_at: seconds_ago(20),
+                updated_at: seconds_ago(10),
+            }],
+            vec![AgentThreadItem {
+                id: "runtime_permission_confirmation:turn-permission".to_string(),
+                thread_id: "thread-1".to_string(),
+                turn_id: "turn-permission".to_string(),
+                sequence: 1,
+                status: AgentThreadItemStatus::Completed,
+                started_at: seconds_ago(15),
+                completed_at: Some(seconds_ago(5)),
+                updated_at: seconds_ago(5),
+                payload: AgentThreadItemPayload::RequestUserInput {
+                    request_id: "runtime_permission_confirmation:turn-permission".to_string(),
+                    action_type: "elicitation".to_string(),
+                    prompt: Some("请确认运行时权限".to_string()),
+                    questions: None,
+                    response: Some(serde_json::json!({
+                        "confirmed": true,
+                        "response": "{\"answer\":\"拒绝\"}",
+                        "userData": { "answer": "拒绝" },
+                    })),
+                },
+            }],
+        );
+
+        let thread_read = AgentRuntimeThreadReadModel::from_session_detail(&detail, &[]);
+
+        assert_eq!(
+            thread_read
+                .permission_state
+                .as_ref()
+                .and_then(|state| state.confirmation_status.as_deref()),
+            Some("denied")
+        );
+        assert!(thread_read.pending_requests.is_empty());
     }
 
     #[test]

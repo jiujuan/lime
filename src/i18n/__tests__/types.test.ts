@@ -754,6 +754,31 @@ function assertI18nKeyTypes() {
     ns: "agent",
     title: "Example",
   });
+  i18n.t("agentChat.harness.codeWorkbench.title", { ns: "agent" });
+  i18n.t("agentChat.harness.codeWorkbench.stage.review.description", {
+    ns: "agent",
+    pending: 2,
+    total: 3,
+  });
+  i18n.t("agentChat.harness.codeWorkbench.metric.fileChanges", {
+    ns: "agent",
+    pending: 2,
+    total: 3,
+  });
+  i18n.t("agentChat.harness.codeWorkbench.metric.checkpoints", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.harness.codeReview.description", {
+    ns: "agent",
+    files: 1,
+    outputs: 2,
+    checkpoints: 3,
+  });
+  i18n.t("agentChat.harness.codeReview.metric.outputsPassing", {
+    ns: "agent",
+    count: 1,
+  });
+  i18n.t("agentChat.harness.codeReview.footer", { ns: "agent" });
   i18n.t("agentChat.harnessVerification.section.title", { ns: "agent" });
   i18n.t("agentChat.harnessVerification.artifact.description", {
     ns: "agent",

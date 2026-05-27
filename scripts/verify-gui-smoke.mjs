@@ -1704,6 +1704,49 @@ async function main() {
       options.timeoutMs + 30_000,
     );
 
+    await runCommand(
+      npmCommand,
+      [
+        "run",
+        "smoke:code-runtime-fixture",
+        "--",
+        "--health-url",
+        options.healthUrl,
+        "--invoke-url",
+        options.invokeUrl,
+        "--timeout-ms",
+        String(options.timeoutMs),
+        "--interval-ms",
+        String(options.intervalMs),
+      ],
+      "smoke:code-runtime-fixture",
+      options.timeoutMs + 30_000,
+    );
+
+    await runCommand(
+      npmCommand,
+      [
+        "run",
+        "smoke:agent-runtime-approval-sandbox",
+        "--",
+        "--health-url",
+        options.healthUrl,
+        "--invoke-url",
+        options.invokeUrl,
+        "--timeout-ms",
+        String(options.timeoutMs),
+        "--interval-ms",
+        String(options.intervalMs),
+        "--devbridge-denied-runtime",
+        ...(options.includeLiveProviderSmokes
+          ? ["--allow-live-provider"]
+          : ["--skip-live-runtime"]),
+      ],
+      "smoke:agent-runtime-approval-sandbox",
+      options.timeoutMs + 30_000,
+      options.includeLiveProviderSmokes ? liveProviderSmokeEnv() : {},
+    );
+
     await runPageSmokeCommand(
       options,
       [

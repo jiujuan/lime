@@ -823,3 +823,50 @@ benchmark 摘要：
 - `npm run i18n:source-export:json -- --output "docs/roadmap/i18n/evidence/source-locale-export.json"` 通过。
 - `npm run i18n:translation-pr-pack:json -- --output "docs/roadmap/i18n/evidence/translation-pr-pack.json"` 通过。
 - `npm run i18n:unused:json -- --check` 通过，`unusedKeyCount=0`。
+
+## 2026-05-27：P2 code runtime 工作台导轨 / 审阅摘要五语言回归
+
+本轮继续完成：
+
+- `src/components/agent/chat/components/CodeWorkbenchGuide.tsx` 的 code runtime 工作台导轨已走 `agentChat.harness.codeWorkbench.*` namespace，覆盖权限确认、文件写入、变更复核、工具输出和运行态五个阶段的标题、说明、主操作和指标。
+- 快照回滚提示只在真实 file checkpoint 存在且当前阶段需要复核文件变更 / 输出时展示，避免权限确认阶段提前给出误导性回滚信号。
+- `src/components/agent/chat/components/CodeReviewSummaryPanel.tsx` 的代码审阅摘要已走 `agentChat.harness.codeReview.*` namespace，覆盖文件变更、测试 / 工具输出、快照入口和审阅 footer。
+- `WorkspaceHarnessDialogs` 的 code_orchestrated 弹窗补了英文界面回归，证明新增导轨在真实弹窗入口下使用 `agent` namespace 文案，不依赖 legacy DOM Patch。
+- `loadNamespace.test.ts` 与 `types.test.ts` 增加 code workbench / code review key 哨兵，确保五语言资源结构和 i18next 类型绑定继续覆盖这组新 key。
+
+验证：
+
+- `npm test -- "src/components/agent/chat/components/CodeWorkbenchGuide.test.tsx" "src/components/agent/chat/components/CodeReviewSummaryPanel.test.tsx" "src/components/agent/chat/workspace/WorkspaceHarnessDialogs.test.tsx" "src/i18n/__tests__/loadNamespace.test.ts" "src/i18n/__tests__/types.test.ts"` 通过，覆盖 5 个文件、16 个用例。
+- `npx eslint --max-warnings 0 "src/components/agent/chat/components/CodeWorkbenchGuide.tsx" "src/components/agent/chat/components/CodeWorkbenchGuide.test.tsx" "src/components/agent/chat/components/CodeReviewSummaryPanel.tsx" "src/components/agent/chat/components/CodeReviewSummaryPanel.test.tsx" "src/components/agent/chat/workspace/WorkspaceHarnessDialogs.tsx" "src/components/agent/chat/workspace/WorkspaceHarnessDialogs.test.tsx" "src/i18n/__tests__/loadNamespace.test.ts" "src/i18n/__tests__/types.test.ts"` 通过。
+- `npm run i18n:check` 通过，当前 `sourceKeys=7549`、coverage `100.0%`。
+- `npm run i18n:unused -- --check` 通过，当前 `unused=0`。
+- `npm run i18n:scan -- --files "src/components/agent/chat/components/CodeWorkbenchGuide.tsx" "src/components/agent/chat/components/CodeReviewSummaryPanel.tsx" "src/components/agent/chat/workspace/WorkspaceHarnessDialogs.tsx"` 通过，当前变更文件硬编码用户可见文案 `findings=0`。
+
+## 2026-05-27：P3 translation evidence 跟随 code runtime 资源刷新
+
+本轮继续完成：
+
+- 刷新 `docs/roadmap/i18n/evidence/translation-coverage-report.json`、`docs/roadmap/i18n/evidence/source-locale-export.json` 与 `docs/roadmap/i18n/evidence/translation-pr-pack.json`，让 P3 版本化 evidence 跟随 code runtime 工作台导轨 / 审阅摘要五语言资源。
+- 三份 evidence 当前统一到 `sourceKeyCount=7549`、`namespaceCount=13`；translation coverage 继续保持 `hasIssues=false`，translation PR pack 继续保持 `proposedEntryCount=0`。
+- 这条证据把 PRD P3 “source locale 导出 / 覆盖率报告 / 翻译 PR pack 可审阅”重新对齐到当前 `src/i18n/resources` 事实源，避免路线图证据停留在旧的 `7493` key 口径。
+
+验证：
+
+- `npm run i18n:check:json -- --output "docs/roadmap/i18n/evidence/translation-coverage-report.json"` 通过。
+- `npm run i18n:source-export:json -- --output "docs/roadmap/i18n/evidence/source-locale-export.json"` 通过。
+- `npm run i18n:translation-pr-pack:json -- --output "docs/roadmap/i18n/evidence/translation-pr-pack.json"` 通过。
+
+## 2026-05-27：P3 GUI smoke Patch 退出门禁证据刷新
+
+本轮继续完成：
+
+- 复用本轮已结束的 `npm run verify:gui-smoke -- --timeout-ms 600000` 产物，刷新 `docs/roadmap/i18n/evidence/patch-retirement-gate-report.json`。
+- 最新 `.lime/i18n/patch-metrics-report.json` 显示 `status=no-hit`、`retirementCandidate=true`、`totalMatchedSegments=0`、`totalReplacedNodes=0`、`totalRuns=10`。
+- 最新 `.lime/governance/legacy-surface-report.json` 显示 `classificationDriftCandidateCount=0`、`violationCount=0`、`zeroReferenceCandidateCount=0`。
+- 版本化 Patch gate evidence 当前 `retirementReady=true`、`gateIssues=0`、`advisoryIssues=0`，说明当前 GUI smoke 样本仍未依赖 legacy DOM Patch，且 legacy surface 审计没有阻断项。
+
+验证：
+
+- `npm run i18n:patch-retirement-gate:json -- --output "docs/roadmap/i18n/evidence/patch-retirement-gate-report.json" --patch-report ".lime/i18n/patch-metrics-report.json" --legacy-report ".lime/governance/legacy-surface-report.json"` 通过。
+- `npm run i18n:patch-retirement-gate -- --check --format json --patch-report ".lime/i18n/patch-metrics-report.json" --legacy-report ".lime/governance/legacy-surface-report.json"` 通过。
+- 本轮观察到 `verify:gui-smoke` 进程已自然退出，`.lime/locks/gui-smoke.lock/owner.json` 已清理；同时 `code-runtime-fixture-smoke`、`runtime-approval-sandbox-smoke`、`agent-apps-smoke` 与 `at-command-registry-e2e` 产物均为通过状态。

@@ -62,6 +62,24 @@ pub(crate) fn latest_model_delta_timing_from_run(run: &AgentRun) -> Option<Value
             "requestedModel": json_string_field(&routing_value, &["requestedModel", "requested_model"]),
         })
     });
+    let turn_state = json_nested_object(&metadata, &["turn_state"])
+        .or_else(|| json_nested_object(&metadata, &["turnState"]))
+        .map(|turn_state| Value::Object(turn_state.clone()));
+    let execution_profile = turn_state.as_ref().and_then(|turn_state| {
+        json_string_field(turn_state, &["execution_profile", "executionProfile"])
+    });
+    let requested_execution_strategy = turn_state.as_ref().and_then(|turn_state| {
+        json_string_field(
+            turn_state,
+            &["requested_execution_strategy", "requestedExecutionStrategy"],
+        )
+    });
+    let effective_execution_strategy = turn_state.as_ref().and_then(|turn_state| {
+        json_string_field(
+            turn_state,
+            &["effective_execution_strategy", "effectiveExecutionStrategy"],
+        )
+    });
 
     Some(json!({
         "source": "agent_runs.metadata",
@@ -74,6 +92,9 @@ pub(crate) fn latest_model_delta_timing_from_run(run: &AgentRun) -> Option<Value
         "firstVisibleDeltaMs": first_visible_delta_ms,
         "firstThinkingDeltaMs": first_thinking_delta_ms,
         "firstTextDeltaMs": first_text_delta_ms,
+        "executionProfile": execution_profile,
+        "requestedExecutionStrategy": requested_execution_strategy,
+        "effectiveExecutionStrategy": effective_execution_strategy,
         "routing": routing,
     }))
 }

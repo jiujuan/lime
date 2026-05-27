@@ -536,7 +536,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), rusqlite::Error> {
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             working_dir TEXT,
-            execution_strategy TEXT NOT NULL DEFAULT 'react',
+            execution_strategy TEXT NOT NULL DEFAULT 'auto',
             session_type TEXT NOT NULL DEFAULT 'user',
             user_set_name INTEGER NOT NULL DEFAULT 0,
             extension_data_json TEXT NOT NULL DEFAULT '{}',
@@ -566,7 +566,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), rusqlite::Error> {
 
     // Migration: 添加 execution_strategy 列（如果不存在）
     let _ = conn.execute(
-        "ALTER TABLE agent_sessions ADD COLUMN execution_strategy TEXT NOT NULL DEFAULT 'react'",
+        "ALTER TABLE agent_sessions ADD COLUMN execution_strategy TEXT NOT NULL DEFAULT 'auto'",
         [],
     );
     let _ = conn.execute(

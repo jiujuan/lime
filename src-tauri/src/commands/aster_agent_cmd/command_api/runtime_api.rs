@@ -1976,6 +1976,11 @@ mod tests {
                     "model_first_visible_delta_ms": 986,
                     "model_first_thinking_delta_ms": 986,
                     "model_first_text_delta_ms": 1377,
+                    "turn_state": {
+                        "execution_profile": "full_runtime",
+                        "requested_execution_strategy": "auto",
+                        "effective_execution_strategy": "code_orchestrated"
+                    },
                     "request_metadata": {
                         "lime_runtime": {
                             "routing_decision": {
@@ -2001,6 +2006,9 @@ mod tests {
         assert_eq!(timing["source"], "agent_runs.metadata");
         assert_eq!(timing["runId"], "run-ttft-1");
         assert_eq!(timing["firstTextDeltaMs"], 1377);
+        assert_eq!(timing["executionProfile"], "full_runtime");
+        assert_eq!(timing["requestedExecutionStrategy"], "auto");
+        assert_eq!(timing["effectiveExecutionStrategy"], "code_orchestrated");
         assert_eq!(timing["routing"]["decisionSource"], "responsive_chat_auto");
         assert_eq!(
             timing["routing"]["decisionReason"],

@@ -129,7 +129,8 @@ fn normalize_execution_strategy(execution_strategy: Option<String>) -> String {
     match execution_strategy.as_deref() {
         Some("code_orchestrated") => "code_orchestrated".to_string(),
         Some("auto") => "auto".to_string(),
-        _ => "react".to_string(),
+        Some("react") => "react".to_string(),
+        _ => "auto".to_string(),
     }
 }
 

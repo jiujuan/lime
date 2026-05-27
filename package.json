@@ -158,6 +158,7 @@
     "knowledge:provider-e2e": "node scripts/knowledge-provider-e2e.mjs",
     "knowledge:release-scope-report": "node scripts/knowledge-release-scope-report.mjs",
     "smoke:agent-runtime-approval-sandbox": "node scripts/agent-runtime-approval-sandbox-smoke.mjs",
+    "smoke:code-runtime-fixture": "node scripts/code-runtime-fixture-smoke.mjs",
     "smoke:managed-objective-continuation": "node scripts/managed-objective-continuation-smoke.mjs",
     "smoke:managed-objective-automation": "node scripts/managed-objective-automation-smoke.mjs",
     "agent-qc:gui-owner-check": "node scripts/agent-qc-gui-owner-check.mjs",

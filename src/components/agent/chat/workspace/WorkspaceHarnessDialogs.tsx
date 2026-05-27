@@ -3,6 +3,11 @@ import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { AgentThreadFileCheckpointDialog } from "../components/AgentThreadFileCheckpointDialog";
 import { AgentRuntimeStrip } from "../components/AgentRuntimeStrip";
+import { CodeReviewSummaryPanel } from "../components/CodeReviewSummaryPanel";
+import {
+  CodeWorkbenchGuide,
+  type CodeWorkbenchGuideTarget,
+} from "../components/CodeWorkbenchGuide";
 import { HarnessStatusPanel } from "../components/HarnessStatusPanel";
 import { TeamMemoryShadowCard } from "../components/TeamMemoryShadowCard";
 import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
@@ -42,6 +47,111 @@ type HarnessPanelBaseProps = Pick<
   | "onOpenFile"
 >;
 
+function isReviewableCodeFileAction(
+  action: HarnessPanelBaseProps["harnessState"]["recentFileEvents"][number]["action"],
+): boolean {
+  return action === "write" || action === "edit";
+}
+
+function resolveCodeWorkbenchGuideMetrics(
+  harnessState: HarnessPanelBaseProps["harnessState"],
+) {
+  const fileChangePaths = new Set<string>();
+
+  for (const activeWrite of harnessState.activeFileWrites) {
+    const path = activeWrite.path.trim();
+    if (path) {
+      fileChangePaths.add(path);
+    }
+  }
+
+  for (const event of harnessState.recentFileEvents) {
+    const path = event.path.trim();
+    if (path && isReviewableCodeFileAction(event.action)) {
+      fileChangePaths.add(path);
+    }
+  }
+
+  return {
+    pendingFileChangeCount: fileChangePaths.size,
+    totalFileChangeCount: fileChangePaths.size,
+    latestFileName:
+      harnessState.activeFileWrites[0]?.displayName ||
+      harnessState.recentFileEvents[0]?.displayName ||
+      null,
+  };
+}
+
+function openHarnessSection(target: CodeWorkbenchGuideTarget): void {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const section = document.querySelector(
+    `[data-harness-section="${target}"]`,
+  );
+  section?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function renderCodeWorkbenchGuide({
+  panelBaseProps,
+  isCodeRuntime,
+  hasFileCheckpoints,
+}: {
+  panelBaseProps: HarnessPanelBaseProps;
+  isCodeRuntime: boolean;
+  hasFileCheckpoints: boolean;
+}) {
+  if (!isCodeRuntime) {
+    return null;
+  }
+
+  const metrics = resolveCodeWorkbenchGuideMetrics(
+    panelBaseProps.harnessState,
+  );
+
+  return (
+    <CodeWorkbenchGuide
+      pendingApprovalsCount={panelBaseProps.harnessState.pendingApprovals.length}
+      activeWriteCount={panelBaseProps.harnessState.activeFileWrites.length}
+      outputSignalCount={panelBaseProps.harnessState.outputSignals.length}
+      pendingFileChangeCount={metrics.pendingFileChangeCount}
+      totalFileChangeCount={metrics.totalFileChangeCount}
+      latestFileName={metrics.latestFileName}
+      hasRuntimeStatus={Boolean(panelBaseProps.harnessState.runtimeStatus)}
+      hasFileCheckpoints={hasFileCheckpoints}
+      onOpenSection={openHarnessSection}
+    />
+  );
+}
+
+function renderCodeReviewSummaryPanel({
+  panelBaseProps,
+  isCodeRuntime,
+  fileCheckpointSummary,
+  onOpenFileCheckpoints,
+}: {
+  panelBaseProps: HarnessPanelBaseProps;
+  isCodeRuntime: boolean;
+  fileCheckpointSummary: NonNullable<
+    HarnessPanelBaseProps["threadRead"]
+  >["file_checkpoint_summary"] | null;
+  onOpenFileCheckpoints?: () => void;
+}) {
+  if (!isCodeRuntime) {
+    return null;
+  }
+
+  return (
+    <CodeReviewSummaryPanel
+      harnessState={panelBaseProps.harnessState}
+      fileCheckpointSummary={fileCheckpointSummary}
+      onOpenSection={openHarnessSection}
+      onOpenFileCheckpoints={onOpenFileCheckpoints}
+    />
+  );
+}
+
 interface GeneralWorkbenchHarnessDialogSectionProps extends HarnessPanelBaseProps {
   enabled: boolean;
   open: boolean;
@@ -66,6 +176,34 @@ export function GeneralWorkbenchHarnessDialogSection({
     panelBaseProps.threadRead?.file_checkpoint_summary || null;
   const latestFileCheckpoint =
     fileCheckpointSummary?.latest_checkpoint || null;
+  const codeWorkbenchGuide = renderCodeWorkbenchGuide({
+    panelBaseProps,
+    isCodeRuntime:
+      panelBaseProps.diagnosticRuntimeContext?.executionStrategy ===
+      "code_orchestrated",
+    hasFileCheckpoints: Boolean(diagnosticSessionId),
+  });
+  const openFileCheckpoints = diagnosticSessionId
+    ? () => setFileCheckpointDialogOpen(true)
+    : undefined;
+  const codeReviewSummaryPanel = renderCodeReviewSummaryPanel({
+    panelBaseProps,
+    isCodeRuntime:
+      panelBaseProps.diagnosticRuntimeContext?.executionStrategy ===
+      "code_orchestrated",
+    fileCheckpointSummary,
+    onOpenFileCheckpoints: openFileCheckpoints,
+  });
+  const leadContent =
+    codeWorkbenchGuide || codeReviewSummaryPanel || teamMemorySnapshot ? (
+      <div className="space-y-3">
+        {codeWorkbenchGuide}
+        {codeReviewSummaryPanel}
+        {teamMemorySnapshot ? (
+          <TeamMemoryShadowCard snapshot={teamMemorySnapshot} />
+        ) : null}
+      </div>
+    ) : undefined;
 
   if (!enabled) {
     return null;
@@ -84,16 +222,8 @@ export function GeneralWorkbenchHarnessDialogSection({
             {...panelBaseProps}
             layout="dialog"
             teamMemorySnapshot={teamMemorySnapshot}
-            onOpenFileCheckpoints={
-              diagnosticSessionId
-                ? () => setFileCheckpointDialogOpen(true)
-                : undefined
-            }
-            leadContent={
-              teamMemorySnapshot ? (
-                <TeamMemoryShadowCard snapshot={teamMemorySnapshot} />
-              ) : undefined
-            }
+            onOpenFileCheckpoints={openFileCheckpoints}
+            leadContent={leadContent}
           />
         </DialogContent>
       </Dialog>
@@ -162,6 +292,26 @@ export function GeneralWorkbenchDialogSection({
     panelBaseProps.threadRead?.file_checkpoint_summary || null;
   const latestFileCheckpoint =
     fileCheckpointSummary?.latest_checkpoint || null;
+  const codeWorkbenchGuide = renderCodeWorkbenchGuide({
+    panelBaseProps,
+    isCodeRuntime:
+      executionRuntime?.execution_strategy === "code_orchestrated" ||
+      panelBaseProps.diagnosticRuntimeContext?.executionStrategy ===
+        "code_orchestrated",
+    hasFileCheckpoints: Boolean(diagnosticSessionId),
+  });
+  const openFileCheckpoints = diagnosticSessionId
+    ? () => setFileCheckpointDialogOpen(true)
+    : undefined;
+  const codeReviewSummaryPanel = renderCodeReviewSummaryPanel({
+    panelBaseProps,
+    isCodeRuntime:
+      executionRuntime?.execution_strategy === "code_orchestrated" ||
+      panelBaseProps.diagnosticRuntimeContext?.executionStrategy ===
+        "code_orchestrated",
+    fileCheckpointSummary,
+    onOpenFileCheckpoints: openFileCheckpoints,
+  });
 
   if (!enabled) {
     return null;
@@ -180,16 +330,14 @@ export function GeneralWorkbenchDialogSection({
             {...panelBaseProps}
             layout="dialog"
             teamMemorySnapshot={teamMemorySnapshot}
-            onOpenFileCheckpoints={
-              diagnosticSessionId
-                ? () => setFileCheckpointDialogOpen(true)
-                : undefined
-            }
+            onOpenFileCheckpoints={openFileCheckpoints}
             title={t("agentChat.workspaceHarnessDialog.title")}
             description={t("agentChat.workspaceHarnessDialog.description")}
             toggleLabel={t("agentChat.workspaceHarnessDialog.toggleLabel")}
             leadContent={
               <div className="space-y-3">
+                {codeWorkbenchGuide}
+                {codeReviewSummaryPanel}
                 <AgentRuntimeStrip
                   activeTheme={activeTheme}
                   toolPreferences={toolPreferences}
@@ -205,11 +353,7 @@ export function GeneralWorkbenchDialogSection({
                   selectedTeamSummary={panelBaseProps.selectedTeamSummary}
                   selectedTeamRoleCount={selectedTeamRoleCount}
                   fileCheckpointSummary={fileCheckpointSummary}
-                  onOpenFileCheckpoints={
-                    diagnosticSessionId
-                      ? () => setFileCheckpointDialogOpen(true)
-                      : undefined
-                  }
+                  onOpenFileCheckpoints={openFileCheckpoints}
                 />
                 {teamMemorySnapshot ? (
                   <TeamMemoryShadowCard snapshot={teamMemorySnapshot} />

@@ -155,6 +155,14 @@ pub(super) fn should_prewarm_mcp_runtime(
     runtime_chat_mode: RuntimeChatMode,
     request_tool_policy: &RequestToolPolicy,
 ) -> bool {
+    if request_metadata_skips_mcp_prewarm(request.metadata.as_ref()) {
+        return false;
+    }
+
+    if request_metadata_requires_runtime_permission_confirmation(request.metadata.as_ref()) {
+        return false;
+    }
+
     matches!(execution_profile, TurnExecutionProfile::FullRuntime)
         && !is_web_search_only_runtime(request, runtime_chat_mode, request_tool_policy)
 }
@@ -165,6 +173,14 @@ pub(super) fn resolve_mcp_prewarm_skip_reason(
     runtime_chat_mode: RuntimeChatMode,
     request_tool_policy: &RequestToolPolicy,
 ) -> Option<&'static str> {
+    if request_metadata_skips_mcp_prewarm(request.metadata.as_ref()) {
+        return Some("request_skip_mcp_prewarm");
+    }
+
+    if request_metadata_requires_runtime_permission_confirmation(request.metadata.as_ref()) {
+        return Some("runtime_permission_confirmation_pending");
+    }
+
     if !matches!(execution_profile, TurnExecutionProfile::FullRuntime) {
         return Some("fast_chat");
     }
@@ -174,6 +190,20 @@ pub(super) fn resolve_mcp_prewarm_skip_reason(
     }
 
     None
+}
+
+fn request_metadata_skips_mcp_prewarm(request_metadata: Option<&serde_json::Value>) -> bool {
+    extract_harness_bool(request_metadata, &["skip_mcp_prewarm", "skipMcpPrewarm"]).unwrap_or(false)
+}
+
+pub(super) fn request_metadata_requires_runtime_permission_confirmation(
+    request_metadata: Option<&serde_json::Value>,
+) -> bool {
+    extract_runtime_resolution_payload::<lime_agent::SessionExecutionRuntimePermissionState>(
+        request_metadata,
+        "permission_state",
+    )
+    .is_some_and(|permission_state| permission_state_requires_turn_gating(&permission_state))
 }
 
 pub(super) fn resolve_fast_chat_tool_surface_mode(

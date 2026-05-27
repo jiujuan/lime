@@ -301,7 +301,7 @@ async fn create_runtime_session_internal_impl(
 
     let execution_strategy = Some(
         execution_strategy
-            .unwrap_or(AsterExecutionStrategy::React)
+            .unwrap_or(AsterExecutionStrategy::Auto)
             .as_db_value()
             .to_string(),
     );
@@ -467,6 +467,58 @@ mod tests {
             serde_json::to_string_pretty(&settings).expect("序列化 settings 失败"),
         )
         .expect("写入 settings.json 失败");
+    }
+
+    #[tokio::test]
+    async fn create_runtime_session_internal_without_strategy_should_default_to_auto() {
+        ensure_session_runtime_test_manager().await;
+
+        let conn = Connection::open_in_memory().expect("创建内存数据库失败");
+        create_tables(&conn).expect("初始化表结构失败");
+        let db = Arc::new(Mutex::new(conn));
+
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        let workspace_root = temp_dir.path().join("workspace");
+        std::fs::create_dir_all(&workspace_root).expect("创建 workspace 目录失败");
+
+        let manager = WorkspaceManager::new(db.clone());
+        let workspace = manager
+            .create(
+                "Default Code Runtime Workspace".to_string(),
+                workspace_root.clone(),
+            )
+            .expect("创建 workspace 失败");
+
+        let session_id = create_runtime_session_internal(
+            &db,
+            None,
+            workspace.id.clone(),
+            Some("Default Code Runtime Test".to_string()),
+            None,
+        )
+        .await
+        .expect("创建 runtime session 失败");
+
+        let detail =
+            AsterAgentWrapper::get_session_sync(&db, &session_id).expect("读取 session 失败");
+        assert_eq!(detail.execution_strategy.as_deref(), Some("auto"));
+
+        let sessions = list_runtime_sessions_internal(
+            &db,
+            SessionArchiveFilter::ActiveOnly,
+            Some(workspace.id.as_str()),
+            Some(10),
+        )
+        .expect("列出 session 失败");
+        let listed = sessions
+            .iter()
+            .find(|session| session.id == session_id)
+            .expect("应能在 workspace session 列表中找到新会话");
+        assert_eq!(listed.execution_strategy.as_deref(), Some("auto"));
+
+        delete_managed_session(&session_id)
+            .await
+            .expect("清理测试 session 失败");
     }
 
     #[tokio::test]

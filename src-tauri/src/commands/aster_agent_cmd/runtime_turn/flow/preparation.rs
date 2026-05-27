@@ -349,6 +349,60 @@ async fn prepare_runtime_turn_request(
     }
 }
 
+fn fail_pending_runtime_permission_confirmation_before_provider_bootstrap(
+    app: &AppHandle,
+    db: &DbConnection,
+    request: &AsterChatRequest,
+    session_id: &str,
+    workspace_root: &str,
+    resolved_turn_id: &str,
+) -> Result<(), String> {
+    let Some(permission_state) = extract_runtime_resolution_payload::<
+        lime_agent::SessionExecutionRuntimePermissionState,
+    >(request.metadata.as_ref(), "permission_state") else {
+        return Ok(());
+    };
+    if !permission_state_requires_turn_gating(&permission_state) {
+        return Ok(());
+    }
+
+    let timeline_recorder = Arc::new(Mutex::new(AgentTimelineRecorder::create(
+        db.clone(),
+        session_id,
+        resolved_turn_id,
+        request.message.clone(),
+    )?));
+    maybe_emit_runtime_permission_confirmation_request(
+        app,
+        request,
+        workspace_root,
+        session_id,
+        resolved_turn_id,
+        &timeline_recorder,
+        &permission_state,
+    );
+
+    let error = format_permission_turn_gating_error(&permission_state);
+    let terminal_events = {
+        let mut recorder = match timeline_recorder.lock() {
+            Ok(guard) => guard,
+            Err(error) => error.into_inner(),
+        };
+        recorder.fail_turn(&error)
+    };
+    if let Err(record_error) = &terminal_events {
+        tracing::warn!(
+            "[AsterAgent] 记录权限确认阻断 turn 时间线失败（已降级返回错误）: {}",
+            record_error
+        );
+    }
+    if let Ok(events) = terminal_events {
+        emit_runtime_events(app, &request.event_name, events);
+    }
+
+    Err(error)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn prepare_runtime_turn_submit_preparation(
     app: &AppHandle,
@@ -449,6 +503,15 @@ pub(super) async fn prepare_runtime_turn_submit_preparation(
         auto_continue_config.as_ref(),
         &mut turn_input_builder,
     );
+
+    fail_pending_runtime_permission_confirmation_before_provider_bootstrap(
+        app,
+        db,
+        request,
+        session_id,
+        workspace_root,
+        resolved_turn_id,
+    )?;
 
     apply_runtime_turn_provider_config(state, db, session_id, request.provider_config.as_ref())
         .await?;

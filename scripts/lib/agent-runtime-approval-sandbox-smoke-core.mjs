@@ -201,9 +201,25 @@ function liveRuntimeTranscriptSatisfiesReleaseGate(liveRuntimeTranscript) {
   );
 }
 
+function devBridgeDeniedRuntimeTranscriptSatisfiesGate(
+  devBridgeDeniedRuntimeTranscript,
+) {
+  const assertions = devBridgeDeniedRuntimeTranscript?.assertions;
+  return Boolean(
+    assertions?.devBridgeHealthy &&
+      assertions?.permissionRequestCreatedBeforeModel &&
+      assertions?.deniedDecisionClearsPendingRequest &&
+      assertions?.approvalPolicySubmitted &&
+      assertions?.sandboxPolicySubmitted &&
+      assertions?.codeOrchestratedSubmitted &&
+      assertions?.providerNotRequired,
+  );
+}
+
 function buildApprovalSandboxSmokeEvidence({
   commandResults,
   generatedAt,
+  devBridgeDeniedRuntimeTranscript = null,
   liveRuntimeTranscript = null,
 }) {
   const transcriptSteps = createTranscriptSteps();
@@ -211,6 +227,20 @@ function buildApprovalSandboxSmokeEvidence({
   const failureModeCoverage = createFailureModeCoverage();
   const liveRuntimeTranscriptVerified =
     liveRuntimeTranscriptSatisfiesReleaseGate(liveRuntimeTranscript);
+  const devBridgeDeniedRuntimeTranscriptVerified =
+    devBridgeDeniedRuntimeTranscriptSatisfiesGate(
+      devBridgeDeniedRuntimeTranscript,
+    );
+  const transcriptKind = liveRuntimeTranscriptVerified
+    ? "verified_projection_and_live_runtime_transcript"
+    : devBridgeDeniedRuntimeTranscriptVerified
+      ? "verified_projection_and_devbridge_denied_runtime_transcript"
+      : "verified_projection_summary";
+  const limitation = liveRuntimeTranscriptVerified
+    ? "该 smoke 同时输出投影/组件事实源与 DevBridge live runtime permission confirmation transcript；tool result/error 和 timeout recovery 仍由定向回归覆盖。"
+    : devBridgeDeniedRuntimeTranscriptVerified
+      ? "该 smoke 同时输出投影/组件事实源与 DevBridge denied-only runtime permission transcript；denied-only 分支不会继续模型执行，不消耗真实 Provider，resolved/live 长任务仍需 live-provider gate 或 qcloop 证明。"
+      : "该 smoke 输出的是由前端提交、投影、UI 与超时恢复事实源生成的结构化 transcript summary；正式发布如需 live session 级证据，仍应由 qcloop 或 replay 采集。";
 
   return {
     schemaVersion: "v2",
@@ -218,12 +248,8 @@ function buildApprovalSandboxSmokeEvidence({
     status: "pass",
     generatedAt,
     evidenceKind: "runtime-approval-sandbox-verified-transcript-smoke",
-    transcriptKind: liveRuntimeTranscriptVerified
-      ? "verified_projection_and_live_runtime_transcript"
-      : "verified_projection_summary",
-    limitation: liveRuntimeTranscriptVerified
-      ? "该 smoke 同时输出投影/组件事实源与 DevBridge live runtime permission confirmation transcript；tool result/error 和 timeout recovery 仍由定向回归覆盖。"
-      : "该 smoke 输出的是由前端提交、投影、UI 与超时恢复事实源生成的结构化 transcript summary；正式发布如需 live session 级证据，仍应由 qcloop 或 replay 采集。",
+    transcriptKind,
+    limitation,
     coverage: {
       submitPreferences: true,
       approvalDecisionProjection: true,
@@ -232,8 +258,10 @@ function buildApprovalSandboxSmokeEvidence({
       permissionRecoveryUi: true,
       harnessPermissionInventory: true,
       runtimeTranscriptSummary: true,
+      devBridgeDeniedRuntimeTranscript: devBridgeDeniedRuntimeTranscriptVerified,
       liveRuntimeTranscript: liveRuntimeTranscriptVerified,
     },
+    devBridgeDeniedRuntimeTranscript,
     liveRuntimeTranscript,
     transcriptSteps,
     evidenceChecks,
@@ -282,6 +310,26 @@ function renderApprovalSandboxTranscriptLines(evidence) {
         mode.companionCommand ? `; companion=${mode.companionCommand}` : ""
       }`,
     );
+  }
+
+  const deniedRuntime = evidence.devBridgeDeniedRuntimeTranscript;
+  if (deniedRuntime) {
+    lines.push(
+      `[smoke:agent-runtime-approval-sandbox] devbridge-denied.transcript.kind=${deniedRuntime.kind}; devBridgeStatus=${deniedRuntime.health?.status || "unknown"}; workspaceId=${deniedRuntime.workspaceId || ""}; devBridgeDeniedRuntimeTranscript=${evidence.coverage.devBridgeDeniedRuntimeTranscript ? "true" : "false"}`,
+    );
+    for (const flow of deniedRuntime.flows || []) {
+      lines.push(
+        `[smoke:agent-runtime-approval-sandbox] devbridge-denied.transcript.${flow.decision}.request: sessionId=${flow.sessionId}; turnId=${flow.turnId}; requestId=${flow.requestId}; permissionStatus=${flow.before?.permissionStatus}; confirmationStatus=${flow.before?.confirmationStatus}; pendingRequestCount=${flow.before?.pendingRequestCount}; latestTurnStatus=${flow.before?.latestTurnStatus}; executionStrategy=${flow.submittedStrategy}; approvalPolicy=${flow.submittedPolicies?.approvalPolicy}; sandboxPolicy=${flow.submittedPolicies?.sandboxPolicy}`,
+      );
+      lines.push(
+        `[smoke:agent-runtime-approval-sandbox] devbridge-denied.transcript.${flow.decision}.decision: confirmed=${flow.respond?.confirmed}; response=${flow.respond?.responseLabel}; afterConfirmationStatus=${flow.after?.confirmationStatus}; afterPendingRequestCount=${flow.after?.pendingRequestCount}; afterThreadStatus=${flow.after?.threadStatus}`,
+      );
+    }
+    for (const [key, value] of Object.entries(deniedRuntime.assertions || {})) {
+      lines.push(
+        `[smoke:agent-runtime-approval-sandbox] devbridge-denied.assertion.${key}: ${value ? "satisfied" : "missing"}`,
+      );
+    }
   }
 
   const live = evidence.liveRuntimeTranscript;

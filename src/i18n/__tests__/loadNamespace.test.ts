@@ -643,6 +643,26 @@ describe("i18n namespace loader", () => {
       expect(resources[locale].agent).toHaveProperty(
         "agentChat.searchResultPreview.previewAria",
       );
+      for (const codeWorkbenchKey of [
+        "agentChat.harness.codeWorkbench.title",
+        "agentChat.harness.codeWorkbench.badge",
+        "agentChat.harness.codeWorkbench.stage.approval.title",
+        "agentChat.harness.codeWorkbench.stage.review.description",
+        "agentChat.harness.codeWorkbench.metric.fileChanges",
+        "agentChat.harness.codeWorkbench.metric.checkpoints",
+      ]) {
+        expect(resources[locale].agent).toHaveProperty(codeWorkbenchKey);
+      }
+      for (const codeReviewKey of [
+        "agentChat.harness.codeReview.title",
+        "agentChat.harness.codeReview.description",
+        "agentChat.harness.codeReview.action.review",
+        "agentChat.harness.codeReview.metric.files",
+        "agentChat.harness.codeReview.metric.outputsPassing",
+        "agentChat.harness.codeReview.footer",
+      ]) {
+        expect(resources[locale].agent).toHaveProperty(codeReviewKey);
+      }
       expect(resources[locale].agent).toHaveProperty(
         "agentChat.harnessVerification.section.title",
       );

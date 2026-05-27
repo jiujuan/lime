@@ -852,6 +852,20 @@ fn extract_recent_access_mode_from_metadata(
     SessionExecutionRuntimeAccessMode::from_access_mode_text(access_mode.as_deref())
 }
 
+fn extract_execution_strategy_from_metadata(
+    metadata: &std::collections::HashMap<String, Value>,
+) -> Option<String> {
+    extract_text_from_metadata(
+        metadata,
+        &[
+            "effective_execution_strategy",
+            "effectiveExecutionStrategy",
+            "execution_strategy",
+            "executionStrategy",
+        ],
+    )
+}
+
 fn extract_recent_team_roles_from_values(
     values: Vec<Value>,
 ) -> Option<Vec<SessionExecutionRuntimeRecentTeamRole>> {
@@ -1339,6 +1353,11 @@ pub fn build_session_execution_runtime(
             runtime.context_summary = crate::protocol_projection::project_turn_context_summary(
                 latest_turn.context_override.as_ref(),
             );
+            runtime.execution_strategy = latest_turn
+                .context_override
+                .as_ref()
+                .and_then(|value| extract_execution_strategy_from_metadata(&value.metadata))
+                .or(runtime.execution_strategy);
             runtime.output_schema_runtime = latest_turn.output_schema_runtime.clone();
             runtime.model_name = latest_turn
                 .output_schema_runtime
@@ -1446,6 +1465,8 @@ pub fn build_session_execution_runtime(
         && runtime.oem_policy.is_none()
         && runtime.runtime_summary.is_none()
         && runtime.limit_event.is_none()
+        && (runtime.execution_strategy.is_none()
+            || runtime.source == SessionExecutionRuntimeSource::Session)
     {
         return None;
     }
@@ -1633,6 +1654,62 @@ mod tests {
             Some("gpt-5.2")
         );
         assert!(runtime.recent_preferences.is_none());
+    }
+
+    #[test]
+    fn prefers_effective_execution_strategy_from_latest_turn_context_metadata() {
+        let now = Utc::now();
+        let latest_turn = TurnRuntime {
+            id: "turn-code".to_string(),
+            session_id: "session-code".to_string(),
+            thread_id: "thread-code".to_string(),
+            status: TurnStatus::Completed,
+            input_text: Some("修复代码并运行校验".to_string()),
+            error_message: None,
+            context_override: Some(TurnContextOverride {
+                metadata: std::collections::HashMap::from([(
+                    "effective_execution_strategy".to_string(),
+                    json!("code_orchestrated"),
+                )]),
+                ..TurnContextOverride::default()
+            }),
+            output_schema_runtime: None,
+            created_at: now - Duration::seconds(10),
+            started_at: Some(now - Duration::seconds(10)),
+            completed_at: Some(now),
+            updated_at: now,
+        };
+        let snapshot = SessionRuntimeSnapshot {
+            session_id: "session-code".to_string(),
+            threads: vec![ThreadRuntimeSnapshot {
+                thread: ThreadRuntime::new(
+                    "thread-code",
+                    "session-code",
+                    PathBuf::from("/tmp/workspace"),
+                ),
+                turns: vec![latest_turn],
+                items: Vec::new(),
+            }],
+        };
+
+        let runtime = build_session_execution_runtime(
+            "session-code",
+            None,
+            Some("auto".to_string()),
+            Some(&snapshot),
+            None,
+        )
+        .expect("runtime");
+
+        assert_eq!(
+            runtime.source,
+            SessionExecutionRuntimeSource::RuntimeSnapshot
+        );
+        assert_eq!(runtime.latest_turn_id.as_deref(), Some("turn-code"));
+        assert_eq!(
+            runtime.execution_strategy.as_deref(),
+            Some("code_orchestrated")
+        );
     }
 
     #[test]

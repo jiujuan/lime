@@ -30,7 +30,7 @@
     "issueCount": 0,
     "localeCount": 5,
     "namespaceCount": 13,
-    "sourceKeyCount": 7493
+    "sourceKeyCount": 7549
   },
   "coverage": {
     "localeSummaries": [
@@ -45,8 +45,8 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agent",
-            "sourceKeyCount": 813,
-            "translatedKeyCount": 813
+            "sourceKeyCount": 866,
+            "translatedKeyCount": 866
           },
           {
             "extraKeyCount": 0,
@@ -141,12 +141,12 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "workspace",
-            "sourceKeyCount": 878,
-            "translatedKeyCount": 878
+            "sourceKeyCount": 881,
+            "translatedKeyCount": 881
           }
         ],
-        "sourceKeyCount": 7493,
-        "translatedKeyCount": 7493
+        "sourceKeyCount": 7549,
+        "translatedKeyCount": 7549
       },
       {
         "coverageRatio": 1,
@@ -159,8 +159,8 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agent",
-            "sourceKeyCount": 813,
-            "translatedKeyCount": 813
+            "sourceKeyCount": 866,
+            "translatedKeyCount": 866
           },
           {
             "extraKeyCount": 0,
@@ -255,12 +255,12 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "workspace",
-            "sourceKeyCount": 878,
-            "translatedKeyCount": 878
+            "sourceKeyCount": 881,
+            "translatedKeyCount": 881
           }
         ],
-        "sourceKeyCount": 7493,
-        "translatedKeyCount": 7493
+        "sourceKeyCount": 7549,
+        "translatedKeyCount": 7549
       },
       {
         "coverageRatio": 1,
@@ -273,8 +273,8 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agent",
-            "sourceKeyCount": 813,
-            "translatedKeyCount": 813
+            "sourceKeyCount": 866,
+            "translatedKeyCount": 866
           },
           {
             "extraKeyCount": 0,
@@ -369,12 +369,12 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "workspace",
-            "sourceKeyCount": 878,
-            "translatedKeyCount": 878
+            "sourceKeyCount": 881,
+            "translatedKeyCount": 881
           }
         ],
-        "sourceKeyCount": 7493,
-        "translatedKeyCount": 7493
+        "sourceKeyCount": 7549,
+        "translatedKeyCount": 7549
       },
       {
         "coverageRatio": 1,
@@ -387,8 +387,8 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agent",
-            "sourceKeyCount": 813,
-            "translatedKeyCount": 813
+            "sourceKeyCount": 866,
+            "translatedKeyCount": 866
           },
           {
             "extraKeyCount": 0,
@@ -483,12 +483,12 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "workspace",
-            "sourceKeyCount": 878,
-            "translatedKeyCount": 878
+            "sourceKeyCount": 881,
+            "translatedKeyCount": 881
           }
         ],
-        "sourceKeyCount": 7493,
-        "translatedKeyCount": 7493
+        "sourceKeyCount": 7549,
+        "translatedKeyCount": 7549
       }
     ],
     "summary": {
@@ -497,8 +497,8 @@
       "fullCoverageLocaleCount": 4,
       "localeCount": 4,
       "missingKeyCount": 0,
-      "sourceKeyCount": 7493,
-      "translatedKeyCount": 29972
+      "sourceKeyCount": 7549,
+      "translatedKeyCount": 30196
     }
   },
   "issues": []

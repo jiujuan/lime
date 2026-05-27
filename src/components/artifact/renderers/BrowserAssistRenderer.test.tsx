@@ -78,8 +78,8 @@ describe("BrowserAssistRenderer", () => {
       }),
     );
 
-    expect(container.textContent).toContain("正在启动浏览器协助");
-    expect(container.textContent).toContain("通常需要 3-8 秒");
+    expect(container.textContent).toContain("正在连接浏览器协助");
+    expect(container.textContent).toContain("正在连接已附着的 Chrome / CDP 会话");
     expect(container.textContent).toContain("https://example.com");
   });
 
@@ -97,9 +97,11 @@ describe("BrowserAssistRenderer", () => {
       }),
     );
 
-    expect(launching.textContent).toContain("Starting browser assist");
-    expect(launching.textContent).toContain("usually takes 3-8 seconds");
-    expect(launching.textContent).not.toContain("正在启动浏览器协助");
+    expect(launching.textContent).toContain("Connecting browser assist");
+    expect(launching.textContent).toContain(
+      "Connecting an attached Chrome / CDP session",
+    );
+    expect(launching.textContent).not.toContain("正在连接浏览器协助");
 
     const replay = await renderArtifact(
       createArtifact({

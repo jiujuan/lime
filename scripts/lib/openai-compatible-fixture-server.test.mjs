@@ -163,4 +163,65 @@ describe("openai-compatible-fixture-server", () => {
     expect(text).toContain('"finish_reason":"tool_calls"');
     expect(text).toContain("data: [DONE]");
   });
+
+  it("应支持 scripted streaming tool call，供真实 runtime 编程 smoke 复用", async () => {
+    const fixture = await startFixture({
+      scriptedResponses: [
+        {
+          type: "tool_call",
+          id: "call-read-fixture",
+          name: "Read",
+          arguments: {
+            path: ".lime/qc/code-runtime-fixture/src/greeting.ts",
+          },
+        },
+        {
+          type: "text",
+          content: "CODE_RUNTIME_OK",
+        },
+      ],
+    });
+
+    const first = await fetch(`${fixture.baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: DEFAULT_FIXTURE_MODEL,
+        messages: [{ role: "user", content: "fix code" }],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "Read",
+              parameters: { type: "object", properties: {} },
+            },
+          },
+        ],
+        stream: true,
+      }),
+    });
+
+    expect(first.ok).toBe(true);
+    const firstText = await first.text();
+    expect(firstText).toContain('"tool_calls"');
+    expect(firstText).toContain('"Read"');
+    expect(firstText).toContain(
+      ".lime/qc/code-runtime-fixture/src/greeting.ts",
+    );
+
+    const second = await fetch(`${fixture.baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: DEFAULT_FIXTURE_MODEL,
+        messages: [{ role: "tool", content: "read ok" }],
+        stream: true,
+      }),
+    });
+
+    expect(second.ok).toBe(true);
+    const secondText = await second.text();
+    expect(secondText).toContain("CODE_RUNTIME_OK");
+    expect(fixture.requests).toHaveLength(2);
+  });
 });

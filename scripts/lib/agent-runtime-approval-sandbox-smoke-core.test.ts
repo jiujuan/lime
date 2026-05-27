@@ -92,6 +92,67 @@ describe("agent-runtime-approval-sandbox-smoke-core", () => {
     );
   });
 
+  it("denied-only DevBridge transcript 满足门禁时不应标记为 live Provider 证据", () => {
+    const evidence = buildApprovalSandboxSmokeEvidence({
+      commandResults: [],
+      generatedAt: "2026-05-10T00:00:00.000Z",
+      devBridgeDeniedRuntimeTranscript: {
+        kind: "devbridge-runtime-permission-confirmation-denied-only",
+        health: { status: "ok" },
+        workspaceId: "workspace-1",
+        flows: [
+          {
+            decision: "denied",
+            sessionId: "session-denied",
+            turnId: "turn-denied",
+            requestId: "runtime_permission_confirmation:turn-denied",
+            submittedStrategy: "code_orchestrated",
+            submittedPolicies: {
+              approvalPolicy: "on-request",
+              sandboxPolicy: "workspace-write",
+            },
+            before: {
+              permissionStatus: "requires_confirmation",
+              confirmationStatus: "requested",
+              pendingRequestCount: 1,
+              latestTurnStatus: "failed",
+            },
+            respond: {
+              confirmed: false,
+              responseLabel: "拒绝",
+            },
+            after: {
+              confirmationStatus: "denied",
+              pendingRequestCount: 0,
+              threadStatus: "failed",
+            },
+          },
+        ],
+        assertions: {
+          devBridgeHealthy: true,
+          permissionRequestCreatedBeforeModel: true,
+          deniedDecisionClearsPendingRequest: true,
+          approvalPolicySubmitted: true,
+          sandboxPolicySubmitted: true,
+          codeOrchestratedSubmitted: true,
+          providerNotRequired: true,
+        },
+      },
+    });
+
+    expect(evidence.transcriptKind).toBe(
+      "verified_projection_and_devbridge_denied_runtime_transcript",
+    );
+    expect(evidence.coverage.devBridgeDeniedRuntimeTranscript).toBe(true);
+    expect(evidence.coverage.liveRuntimeTranscript).toBe(false);
+
+    const lines = renderApprovalSandboxTranscriptLines(evidence).join("\n");
+    expect(lines).toContain("devbridge-denied.transcript.denied.request");
+    expect(lines).toContain(
+      "devbridge-denied.assertion.providerNotRequired: satisfied",
+    );
+  });
+
   it("应把 transcript、evidence 与 failure mode 渲染到 stdout 友好的行文本", () => {
     const evidence = buildApprovalSandboxSmokeEvidence({
       commandResults: [],

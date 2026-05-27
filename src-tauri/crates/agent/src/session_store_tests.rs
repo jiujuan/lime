@@ -65,6 +65,24 @@ fn insert_test_workspace(db: &DbConnection, workspace_id: &str, root_path: &str)
         .expect("insert workspace");
 }
 
+#[test]
+fn create_session_record_sync_without_strategy_should_default_to_auto() {
+    let db = create_test_db();
+
+    let session = create_session_record_sync(
+        &db,
+        CreateSessionRecordInput {
+            session_id: Some("session-default-auto".to_string()),
+            title: Some("默认编程底座".to_string()),
+            model: Some("agent:test".to_string()),
+            ..CreateSessionRecordInput::default()
+        },
+    )
+    .expect("create session");
+
+    assert_eq!(session.execution_strategy.as_deref(), Some("auto"));
+}
+
 fn build_detail_with_turn_status(status: AgentThreadTurnStatus) -> SessionDetail {
     build_detail_with_turn_status_updated_at(status, Utc::now())
 }

@@ -155,19 +155,38 @@ function sendStreamingChatCompletion(response, { model, content }) {
 }
 
 function buildStructuredOutputToolCall() {
+  return buildToolCall({
+    idPrefix: "call-fixture-structured-output",
+    name: STRUCTURED_OUTPUT_TOOL_NAME,
+    arguments: buildStructuredOutputArguments(),
+  });
+}
+
+function normalizeToolCallArguments(argumentsPayload) {
+  if (typeof argumentsPayload === "string") {
+    return argumentsPayload;
+  }
+  return JSON.stringify(argumentsPayload || {});
+}
+
+function buildToolCall({
+  id,
+  idPrefix = "call-fixture-tool",
+  name,
+  arguments: argumentsPayload,
+}) {
   return {
-    id: `call-fixture-structured-output-${Date.now()}`,
+    id: id || `${idPrefix}-${Date.now()}`,
     type: "function",
     function: {
-      name: STRUCTURED_OUTPUT_TOOL_NAME,
-      arguments: JSON.stringify(buildStructuredOutputArguments()),
+      name,
+      arguments: normalizeToolCallArguments(argumentsPayload),
     },
   };
 }
 
-function sendStreamingStructuredOutputToolCall(response, { model }) {
+function sendStreamingToolCall(response, { model, toolCall }) {
   const id = `chatcmpl-fixture-${Date.now()}`;
-  const toolCall = buildStructuredOutputToolCall();
   response.writeHead(200, {
     "content-type": "text/event-stream; charset=utf-8",
     "cache-control": "no-cache",
@@ -186,7 +205,7 @@ function sendStreamingStructuredOutputToolCall(response, { model }) {
             id: toolCall.id,
             type: "function",
             function: {
-              name: STRUCTURED_OUTPUT_TOOL_NAME,
+              name: toolCall.function.name,
               arguments: "",
             },
           },
@@ -228,7 +247,7 @@ function sendStreamingStructuredOutputToolCall(response, { model }) {
   response.end();
 }
 
-function sendJsonStructuredOutputToolCall(response, { model }) {
+function sendJsonToolCall(response, { model, toolCall }) {
   jsonResponse(response, 200, {
     id: `chatcmpl-fixture-${Date.now()}`,
     object: "chat.completion",
@@ -240,7 +259,7 @@ function sendJsonStructuredOutputToolCall(response, { model }) {
         message: {
           role: "assistant",
           content: null,
-          tool_calls: [buildStructuredOutputToolCall()],
+          tool_calls: [toolCall],
         },
         finish_reason: "tool_calls",
       },
@@ -250,6 +269,20 @@ function sendJsonStructuredOutputToolCall(response, { model }) {
       completion_tokens: 1,
       total_tokens: 2,
     },
+  });
+}
+
+function sendStreamingStructuredOutputToolCall(response, { model }) {
+  sendStreamingToolCall(response, {
+    model,
+    toolCall: buildStructuredOutputToolCall(),
+  });
+}
+
+function sendJsonStructuredOutputToolCall(response, { model }) {
+  sendJsonToolCall(response, {
+    model,
+    toolCall: buildStructuredOutputToolCall(),
   });
 }
 
@@ -293,6 +326,51 @@ function buildProviderDescriptor({ baseUrl, model, apiKey }) {
   };
 }
 
+function normalizeScriptedResponses(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => (item && typeof item === "object" ? item : null))
+    .filter(Boolean);
+}
+
+function scriptedResponseAt(scriptedResponses, requestIndex) {
+  if (scriptedResponses.length === 0) {
+    return null;
+  }
+  return scriptedResponses[Math.min(requestIndex, scriptedResponses.length - 1)];
+}
+
+function sendScriptedChatCompletion(response, { model, scripted, stream }) {
+  if (scripted.type === "tool_call") {
+    const toolCall = buildToolCall({
+      id: scripted.id,
+      idPrefix: scripted.idPrefix,
+      name: scripted.name,
+      arguments: scripted.arguments,
+    });
+    if (stream) {
+      sendStreamingToolCall(response, { model, toolCall });
+    } else {
+      sendJsonToolCall(response, { model, toolCall });
+    }
+    return true;
+  }
+
+  if (scripted.type === "text" || typeof scripted.content === "string") {
+    const content = String(scripted.content || "");
+    if (stream) {
+      sendStreamingChatCompletion(response, { model, content });
+    } else {
+      sendJsonChatCompletion(response, { model, content });
+    }
+    return true;
+  }
+
+  return false;
+}
+
 export async function startOpenAiCompatibleFixtureServer(options = {}) {
   const model =
     String(options.model || DEFAULT_FIXTURE_MODEL).trim() ||
@@ -301,6 +379,7 @@ export async function startOpenAiCompatibleFixtureServer(options = {}) {
     String(options.apiKey || DEFAULT_FIXTURE_API_KEY).trim() ||
     DEFAULT_FIXTURE_API_KEY;
   const content = String(options.content || "MO_OK");
+  const scriptedResponses = normalizeScriptedResponses(options.scriptedResponses);
   const requests = [];
 
   const server = http.createServer(async (request, response) => {
@@ -339,7 +418,19 @@ export async function startOpenAiCompatibleFixtureServer(options = {}) {
         authorization: request.headers.authorization || null,
         body,
       });
+      const requestIndex = requests.length - 1;
       const responseModel = String(body?.model || model);
+      const scripted = scriptedResponseAt(scriptedResponses, requestIndex);
+      if (
+        scripted &&
+        sendScriptedChatCompletion(response, {
+          model: responseModel,
+          scripted,
+          stream: body?.stream === true,
+        })
+      ) {
+        return;
+      }
       const shouldCallStructuredOutput = hasStructuredOutputTool(body);
       if (body?.stream === true && shouldCallStructuredOutput) {
         sendStreamingStructuredOutputToolCall(response, {

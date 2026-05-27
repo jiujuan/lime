@@ -120,6 +120,48 @@ const USER_FACING_FORBIDDEN_TEXT = [
   "Bad request",
 ];
 
+function rewriteKnowledgeCompileInvokePayload(rawPostData) {
+  if (!rawPostData) {
+    return null;
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(rawPostData);
+  } catch {
+    return null;
+  }
+
+  if (payload?.cmd !== "knowledge_compile_pack") {
+    return null;
+  }
+
+  const args = payload.args && typeof payload.args === "object"
+    ? { ...payload.args }
+    : {};
+  const request = args.request && typeof args.request === "object"
+    ? { ...args.request }
+    : {};
+  const builderRuntime =
+    request.builderRuntime && typeof request.builderRuntime === "object"
+      ? { ...request.builderRuntime }
+      : {};
+
+  return JSON.stringify({
+    ...payload,
+    args: {
+      ...args,
+      request: {
+        ...request,
+        builderRuntime: {
+          ...builderRuntime,
+          enabled: false,
+        },
+      },
+    },
+  });
+}
+
 function printHelp() {
   console.log(`
 Lime Knowledge GUI Smoke
@@ -1052,6 +1094,7 @@ async function runPlaywrightGuiFlow(options) {
 
   const page = context.pages()[0] ?? (await context.newPage());
   const consoleErrors = [];
+  let offlineBuilderCompileInterceptCount = 0;
 
   page.on("console", (message) => {
     if (message.type() === "error") {
@@ -1060,6 +1103,27 @@ async function runPlaywrightGuiFlow(options) {
   });
   page.on("pageerror", (error) => {
     consoleErrors.push(error.stack || error.message);
+  });
+  await page.route(options.invokeUrl, async (route) => {
+    const rewrittenPostData = rewriteKnowledgeCompileInvokePayload(
+      route.request().postData(),
+    );
+    if (!rewrittenPostData) {
+      await route.continue();
+      return;
+    }
+
+    offlineBuilderCompileInterceptCount += 1;
+    const headers = {
+      ...route.request().headers(),
+      "content-type": "application/json",
+    };
+    delete headers["content-length"];
+
+    await route.continue({
+      postData: rewrittenPostData,
+      headers,
+    });
   });
 
   try {
@@ -1282,6 +1346,14 @@ async function runPlaywrightGuiFlow(options) {
 
     logStage("verify-builder-import-review");
     await verifyBuilderImportAndReview(page, options);
+    if (offlineBuilderCompileInterceptCount < 1) {
+      throw new Error(
+        "[smoke:knowledge-gui] 未拦截到整理新资料的 knowledge_compile_pack 请求，无法证明默认 GUI smoke 没有调用真实 Provider",
+      );
+    }
+    console.log(
+      `[smoke:knowledge-gui] offline builder runtime enforced for ${offlineBuilderCompileInterceptCount} knowledge_compile_pack request(s)`,
+    );
 
     if (consoleErrors.length > 0) {
       throw new Error(

@@ -26,6 +26,7 @@ struct TrackedArtifactState {
     file_path: String,
     content: String,
     closed: bool,
+    metadata: HashMap<String, Value>,
 }
 
 #[derive(Debug, Clone)]
@@ -142,7 +143,12 @@ impl WriteArtifactEventEmitter {
         let mut events = Vec::new();
 
         for path in paths {
-            let artifact_id = self.ensure_tool_artifact(tool_id, path.as_str(), content.as_str());
+            let artifact_id = self.ensure_tool_artifact(
+                tool_id,
+                path.as_str(),
+                content.as_str(),
+                base_metadata.clone().unwrap_or_default(),
+            );
             let phase = if content.trim().is_empty() {
                 "preparing"
             } else {
@@ -195,6 +201,7 @@ impl WriteArtifactEventEmitter {
                     file_path: block.path.clone(),
                     content: block.content.clone(),
                     closed: block.is_complete,
+                    metadata: HashMap::new(),
                 },
             );
 
@@ -250,13 +257,16 @@ impl WriteArtifactEventEmitter {
                         file_path: artifact.file_path.clone(),
                         content: artifact.content.clone(),
                         closed: true,
+                        metadata: HashMap::new(),
                     },
                 );
             }
 
             if result.success {
+                let merged_metadata =
+                    self.merged_tool_end_metadata(&artifact.artifact_id, result.metadata.as_ref());
                 let metadata = build_snapshot_metadata(
-                    result.metadata.as_ref(),
+                    Some(&merged_metadata),
                     "tool_result",
                     "completed",
                     true,
@@ -288,7 +298,13 @@ impl WriteArtifactEventEmitter {
         artifact_id
     }
 
-    fn ensure_tool_artifact(&mut self, tool_id: &str, file_path: &str, content: &str) -> String {
+    fn ensure_tool_artifact(
+        &mut self,
+        tool_id: &str,
+        file_path: &str,
+        content: &str,
+        metadata: HashMap<String, Value>,
+    ) -> String {
         if let Some(existing) = self
             .tool_artifact_ids
             .get(tool_id)
@@ -304,6 +320,9 @@ impl WriteArtifactEventEmitter {
                 })
             })
         {
+            if let Some(state) = self.tracked_artifacts.get_mut(&existing) {
+                merge_missing_metadata(&mut state.metadata, metadata);
+            }
             return existing;
         }
 
@@ -322,9 +341,28 @@ impl WriteArtifactEventEmitter {
                 file_path: file_path.to_string(),
                 content: content.to_string(),
                 closed: false,
+                metadata,
             },
         );
         artifact_id
+    }
+
+    fn merged_tool_end_metadata(
+        &self,
+        artifact_id: &str,
+        result_metadata: Option<&HashMap<String, Value>>,
+    ) -> HashMap<String, Value> {
+        let mut merged = self
+            .tracked_artifacts
+            .get(artifact_id)
+            .map(|state| state.metadata.clone())
+            .unwrap_or_default();
+        if let Some(result_metadata) = result_metadata {
+            for (key, value) in result_metadata {
+                merged.insert(key.clone(), value.clone());
+            }
+        }
+        merged
     }
 
     fn collect_tool_end_artifacts(
@@ -514,6 +552,12 @@ fn build_snapshot_metadata(
     }
 
     metadata
+}
+
+fn merge_missing_metadata(target: &mut HashMap<String, Value>, source: HashMap<String, Value>) {
+    for (key, value) in source {
+        target.entry(key).or_insert(value);
+    }
 }
 
 fn truncate_chars(value: &str, limit: usize) -> Option<String> {
@@ -959,6 +1003,70 @@ mod tests {
                 );
             }
             _ => panic!("expected tool_end"),
+        }
+    }
+
+    #[test]
+    fn tool_end_preserves_embedded_checkpoint_metadata() {
+        let mut emitter = WriteArtifactEventEmitter::new("session-1");
+        let mut tool_start = RuntimeAgentEvent::ToolStart {
+            tool_name: "Write".to_string(),
+            tool_id: "tool-1".to_string(),
+            arguments: Some(
+                serde_json::json!({
+                    "path": "src/greeting.ts",
+                    "content": "export const greeting = 'Hello Lime Runtime';",
+                    "metadata": {
+                        "artifactVersionNo": 2,
+                        "artifactVersionId": "code-runtime-fixture:v2",
+                        "artifactVersions": [
+                            { "id": "code-runtime-fixture:v1", "versionNo": 1 },
+                            { "id": "code-runtime-fixture:v2", "versionNo": 2 }
+                        ],
+                        "artifactVersionDiff": {
+                            "summary": "更新 greeting 文案"
+                        }
+                    }
+                })
+                .to_string(),
+            ),
+        };
+        emitter.process_event(&mut tool_start);
+
+        let mut tool_end = RuntimeAgentEvent::ToolEnd {
+            tool_id: "tool-1".to_string(),
+            result: AgentToolResult {
+                success: true,
+                output: "写入完成".to_string(),
+                error: None,
+                images: None,
+                metadata: None,
+            },
+        };
+
+        let extras = emitter.process_event(&mut tool_end);
+        assert_eq!(extras.len(), 1);
+
+        match &extras[0] {
+            RuntimeAgentEvent::ArtifactSnapshot { artifact } => {
+                let metadata = artifact.metadata.as_ref().expect("artifact metadata");
+                assert_eq!(
+                    metadata.get("artifactVersionId").and_then(Value::as_str),
+                    Some("code-runtime-fixture:v2")
+                );
+                assert_eq!(
+                    metadata
+                        .get("artifactVersionDiff")
+                        .and_then(|value| value.get("summary"))
+                        .and_then(Value::as_str),
+                    Some("更新 greeting 文案")
+                );
+                assert_eq!(
+                    metadata.get("writePhase").and_then(Value::as_str),
+                    Some("completed")
+                );
+            }
+            _ => panic!("expected artifact snapshot"),
         }
     }
 
