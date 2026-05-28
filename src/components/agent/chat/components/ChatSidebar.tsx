@@ -1712,6 +1712,13 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                                         <>
                                           <div className="min-w-0 flex-1">
                                             <div className="flex items-center gap-1.5">
+                                              {item.status === "running" ? (
+                                                <Loader2
+                                                  className="h-3.5 w-3.5 shrink-0 animate-spin text-sky-500"
+                                                  data-testid={`chat-sidebar-task-title-loading-${item.id}`}
+                                                  aria-hidden="true"
+                                                />
+                                              ) : null}
                                               <div className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
                                                 {item.title || "未命名任务"}
                                               </div>

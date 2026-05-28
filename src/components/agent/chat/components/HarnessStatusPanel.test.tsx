@@ -3073,6 +3073,8 @@ describe("HarnessStatusPanel", () => {
     });
 
     expect(document.body.textContent).toContain("workspace/approval-draft.md");
+    expect(document.body.textContent).toContain("允许会继续当前编程运行");
+    expect(document.body.textContent).toContain("拒绝会结束这次操作请求");
   });
 
   it("应渲染最近文件活动区块", () => {

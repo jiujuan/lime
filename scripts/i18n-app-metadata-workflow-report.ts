@@ -8,11 +8,20 @@ import { fileURLToPath } from "node:url";
 export type AppMetadataWorkflowReportFormat = "text" | "json";
 
 export interface AppMetadataWorkflowReport {
+  appMetadataLocaleBuildManifest: {
+    exists: boolean;
+    generatedConfigEmissionAllowed: boolean | null;
+    manifestGenerationAllowed: boolean | null;
+    path: string;
+    schemaVersion: string | null;
+    workflowStatus: string | null;
+  };
   appMetadataTranslationScope: {
     generatedMetadataAllowed: boolean;
     itemCount: number;
     owner: string | null;
     path: string;
+    manifestGenerationAllowed: boolean;
     requiredBeforeMultilingualReleaseCount: number;
     schemaVersion: string | null;
     sourceLocale: string | null;
@@ -21,6 +30,12 @@ export interface AppMetadataWorkflowReport {
     targetLocales: string[];
     translatableFieldCount: number;
     workflowStatus: string | null;
+  };
+  metadataFieldCoverage: {
+    missingScopedFields: string[];
+    reviewedFields: string[];
+    scopedFields: string[];
+    unscopedMetadataFields: string[];
   };
   appPackageJson: {
     description: string | null;
@@ -54,12 +69,17 @@ export interface AppMetadataWorkflowReport {
   schemaVersion: string;
   summary: {
     hasInstallerLocalizationWorkflow: boolean;
+    hasAppMetadataLocaleBuildManifest: boolean;
     hasMetadataTranslationScope: boolean;
     hasLocalizedAppMetadataArtifacts: boolean;
     hasLocalizedMetadataFields: boolean;
     hasLocaleAwareMetadataSources: boolean;
     metadataScopeItemCount: number;
+    metadataMissingScopedFieldCount: number;
+    metadataReviewedFieldCount: number;
     metadataTranslatableFieldCount: number;
+    metadataUnscopedFieldCount: number;
+    appMetadataLocaleBuildManifestReady: boolean;
   };
 }
 
@@ -72,6 +92,19 @@ interface CliOptions {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const REPO_ROOT = path.resolve(__dirname, "..");
+const REVIEWED_METADATA_FIELDS = [
+  { path: "package.json", field: "description" },
+  { path: "package.json", field: "keywords" },
+  { path: "src-tauri/tauri.conf.json", field: "productName" },
+  { path: "src-tauri/tauri.conf.json", field: "identifier" },
+  { path: "src-tauri/tauri.conf.json", field: "app.windows[0].title" },
+  { path: "src-tauri/tauri.conf.json", field: "bundle.fileAssociations[0].name" },
+  { path: "src-tauri/tauri.conf.json", field: "bundle.fileAssociations[0].description" },
+  { path: "src-tauri/tauri.conf.headless.json", field: "productName" },
+  { path: "src-tauri/tauri.conf.headless.json", field: "identifier" },
+  { path: "src-tauri/tauri.conf.headless.json", field: "app.windows[0].title" },
+  { path: "src-tauri/capabilities/agent-app-shell.json", field: "description" },
+] as const;
 
 function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join("/");
@@ -115,6 +148,55 @@ function readString(value: unknown): string | null {
 
 function readStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function fieldKey(sourcePath: string, field: string): string {
+  return `${normalizePath(sourcePath)}#${field}`;
+}
+
+function readFieldPath(source: unknown, fieldPath: string): unknown {
+  let current = source;
+  const segmentPattern = /([^[.\]]+)|\[(\d+)\]/g;
+
+  for (const match of fieldPath.matchAll(segmentPattern)) {
+    const property = match[1];
+    const index = match[2] ? Number.parseInt(match[2], 10) : null;
+
+    if (property) {
+      if (!isRecord(current)) {
+        return undefined;
+      }
+      current = current[property];
+      continue;
+    }
+
+    if (index !== null) {
+      if (!Array.isArray(current)) {
+        return undefined;
+      }
+      current = current[index];
+    }
+  }
+
+  return current;
+}
+
+function hasMetadataValue(value: unknown): boolean {
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+  return value !== null && value !== undefined;
+}
+
+function readJsonField(repoRoot: string, sourcePath: string, field: string): unknown {
+  const filePath = path.join(repoRoot, sourcePath);
+  if (!fileExists(filePath)) {
+    return undefined;
+  }
+  return readFieldPath(readJsonObject(filePath), field);
 }
 
 function parseTomlSectionValue(
@@ -234,6 +316,7 @@ function analyzeMetadataTranslationScope(
   return {
     generatedMetadataAllowed: scope?.generatedMetadataAllowed === true,
     itemCount: items.length,
+    manifestGenerationAllowed: Boolean(scope && scope.manifestGenerationAllowed !== false),
     owner: readString(scope?.owner),
     path: displayPath(scopePath, repoRoot),
     requiredBeforeMultilingualReleaseCount: items.filter(
@@ -246,6 +329,61 @@ function analyzeMetadataTranslationScope(
     targetLocales: readStringArray(scope?.targetLocales),
     translatableFieldCount: countByLocalization(["translatable"]),
     workflowStatus: readString(scope?.workflowStatus),
+  };
+}
+
+function readLocaleBuildManifest(
+  repoRoot: string,
+  manifestPath: string,
+): AppMetadataWorkflowReport["appMetadataLocaleBuildManifest"] {
+  const manifest = readOptionalJsonObject(manifestPath);
+  const summary = isRecord(manifest?.summary) ? manifest.summary : {};
+  const scope = isRecord(manifest?.scope) ? manifest.scope : {};
+
+  return {
+    exists: Boolean(manifest),
+    generatedConfigEmissionAllowed:
+      typeof summary.generatedConfigEmissionAllowed === "boolean"
+        ? summary.generatedConfigEmissionAllowed
+        : null,
+    manifestGenerationAllowed:
+      typeof summary.manifestGenerationAllowed === "boolean"
+        ? summary.manifestGenerationAllowed
+        : null,
+    path: displayPath(manifestPath, repoRoot),
+    schemaVersion: readString(manifest?.schemaVersion),
+    workflowStatus:
+      readString(summary.workflowStatus) ?? readString(scope.workflowStatus),
+  };
+}
+
+function analyzeMetadataFieldCoverage(
+  repoRoot: string,
+  scopePath: string,
+): AppMetadataWorkflowReport["metadataFieldCoverage"] {
+  const scope = readOptionalJsonObject(scopePath);
+  const items = Array.isArray(scope?.items) ? scope.items.filter(isRecord) : [];
+  const scopedFields = items
+    .map((item) => {
+      const sourcePath = readString(item.path);
+      const field = readString(item.field);
+      return sourcePath && field ? fieldKey(sourcePath, field) : null;
+    })
+    .filter((value): value is string => Boolean(value))
+    .sort((left, right) => left.localeCompare(right));
+  const scopedFieldSet = new Set(scopedFields);
+  const reviewedFields = REVIEWED_METADATA_FIELDS.filter(({ path: sourcePath, field }) =>
+    hasMetadataValue(readJsonField(repoRoot, sourcePath, field)),
+  )
+    .map(({ path: sourcePath, field }) => fieldKey(sourcePath, field))
+    .sort((left, right) => left.localeCompare(right));
+  const reviewedFieldSet = new Set(reviewedFields);
+
+  return {
+    missingScopedFields: scopedFields.filter((key) => !reviewedFieldSet.has(key)),
+    reviewedFields,
+    scopedFields,
+    unscopedMetadataFields: reviewedFields.filter((key) => !scopedFieldSet.has(key)),
   };
 }
 
@@ -270,6 +408,14 @@ export function analyzeAppMetadataWorkflowReport(
     "i18n",
     "app-metadata-translation-scope.json",
   );
+  const appMetadataLocaleBuildManifestPath = path.join(
+    repoRoot,
+    "docs",
+    "roadmap",
+    "i18n",
+    "evidence",
+    "app-metadata-locale-build-manifest.json",
+  );
 
   const appPackageJson = readPackageJson(appPackageJsonPath);
   const cargoToml = readCargoToml(cargoTomlPath);
@@ -279,6 +425,14 @@ export function analyzeAppMetadataWorkflowReport(
   const appMetadataTranslationScope = analyzeMetadataTranslationScope(
     repoRoot,
     appMetadataTranslationScopePath,
+  );
+  const metadataFieldCoverage = analyzeMetadataFieldCoverage(
+    repoRoot,
+    appMetadataTranslationScopePath,
+  );
+  const appMetadataLocaleBuildManifest = readLocaleBuildManifest(
+    repoRoot,
+    appMetadataLocaleBuildManifestPath,
   );
 
   const localeAwareMetadataSources = [
@@ -297,9 +451,14 @@ export function analyzeAppMetadataWorkflowReport(
     headlessConfig.title,
     shellCapability.description,
   ].filter((value): value is string => Boolean(value && value.trim().length > 0));
+  const appMetadataLocaleBuildManifestReady =
+    appMetadataLocaleBuildManifest.workflowStatus === "ready" &&
+    appMetadataLocaleBuildManifest.manifestGenerationAllowed === true;
 
   return {
+    appMetadataLocaleBuildManifest,
     appMetadataTranslationScope,
+    metadataFieldCoverage,
     appPackageJson,
     headlessTauriConfig: {
       identifier: headlessConfig.identifier,
@@ -312,13 +471,18 @@ export function analyzeAppMetadataWorkflowReport(
     tauriConfig,
     schemaVersion: "lime.i18n.appMetadataWorkflowReport.v1",
     summary: {
-      hasInstallerLocalizationWorkflow: false,
+      appMetadataLocaleBuildManifestReady,
+      hasInstallerLocalizationWorkflow: appMetadataLocaleBuildManifestReady,
+      hasAppMetadataLocaleBuildManifest: appMetadataLocaleBuildManifest.exists,
       hasMetadataTranslationScope: fileExists(appMetadataTranslationScopePath),
       hasLocalizedAppMetadataArtifacts: localizedMetadataFields.length > 0,
       hasLocalizedMetadataFields: localizedMetadataFields.length > 0,
       hasLocaleAwareMetadataSources: localeAwareMetadataSources.length > 0,
       metadataScopeItemCount: appMetadataTranslationScope.itemCount,
+      metadataMissingScopedFieldCount: metadataFieldCoverage.missingScopedFields.length,
+      metadataReviewedFieldCount: metadataFieldCoverage.reviewedFields.length,
       metadataTranslatableFieldCount: appMetadataTranslationScope.translatableFieldCount,
+      metadataUnscopedFieldCount: metadataFieldCoverage.unscopedMetadataFields.length,
     },
   };
 }
@@ -334,10 +498,14 @@ export function formatAppMetadataWorkflowReport(
   const lines = [
     "[i18n:app-metadata] workflow inventory",
     `repoRoot: ${normalizePath(report.repoRoot)}`,
+    `app metadata locale build manifest: ${report.summary.appMetadataLocaleBuildManifestReady ? "ready" : "missing"}`,
     `localized metadata artifacts: ${report.summary.hasLocalizedAppMetadataArtifacts ? "yes" : "no"}`,
     `installer localization workflow: ${report.summary.hasInstallerLocalizationWorkflow ? "yes" : "no"}`,
     `metadata translation scope: ${report.summary.hasMetadataTranslationScope ? "yes" : "no"}`,
     `metadata scope items: ${report.summary.metadataScopeItemCount}`,
+    `metadata reviewed fields: ${report.summary.metadataReviewedFieldCount}`,
+    `metadata unscoped fields: ${report.summary.metadataUnscopedFieldCount}`,
+    `metadata missing scoped fields: ${report.summary.metadataMissingScopedFieldCount}`,
     `metadata translatable fields: ${report.summary.metadataTranslatableFieldCount}`,
     `locale-aware sources: ${report.summary.hasLocaleAwareMetadataSources ? "yes" : "no"}`,
     `package name/version: ${report.appPackageJson.name ?? "(missing)"} / ${report.appPackageJson.version ?? "(missing)"}`,

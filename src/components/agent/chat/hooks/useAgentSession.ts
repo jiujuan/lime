@@ -16,6 +16,7 @@ import type {
   AsterSubagentParentContext,
   AsterSubagentSessionInfo,
   AgentRuntimeThreadReadModel,
+  AsterSessionDetail,
   AsterTodoItem,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
@@ -137,12 +138,66 @@ const FRESH_SESSION_POST_CREATE_PERSISTENCE_IDLE_TIMEOUT_MS = 1_000;
 const SESSION_DETAIL_DEFERRED_HYDRATION_RETRY_DELAY_MS = 15_000;
 const SESSION_DETAIL_DEFERRED_HYDRATION_MAX_RETRY = 1;
 
+function shouldAutoResumeHydratedRuntimeThread(
+  threadRead: AgentRuntimeThreadReadModel | null | undefined,
+): boolean {
+  const status = threadRead?.status?.trim().toLowerCase();
+  return (
+    status === "queued" ||
+    status === "running" ||
+    (threadRead?.queued_turns?.length ?? 0) > 0
+  );
+}
+
+function resolveRuntimeThreadStatusFromSessionDetail(
+  detail: AsterSessionDetail,
+): Topic["status"] | null {
+  const status = detail.thread_read?.status?.trim().toLowerCase();
+  if (status === "running" || status === "queued") {
+    return "running";
+  }
+
+  if ((detail.thread_read?.queued_turns?.length ?? 0) > 0) {
+    return "running";
+  }
+
+  if ((detail.queued_turns?.length ?? 0) > 0) {
+    return "running";
+  }
+
+  if (
+    status === "waiting_request" ||
+    (detail.thread_read?.pending_requests?.length ?? 0) > 0
+  ) {
+    return "waiting";
+  }
+
+  if (status === "failed") {
+    return "failed";
+  }
+
+  return null;
+}
+
+function resolveRuntimePreviewFromSessionDetail(
+  detail: AsterSessionDetail,
+): string | null {
+  const queuedPreview =
+    detail.queued_turns?.[0]?.message_preview ||
+    detail.thread_read?.queued_turns?.[0]?.message_preview;
+  if (queuedPreview?.trim()) {
+    return queuedPreview.trim();
+  }
+
+  return null;
+}
+
 function mapSessionDetailToTopic(
   sessionId: string,
   detail: Awaited<ReturnType<AgentRuntimeAdapter["getSession"]>>,
   fallbackWorkspaceId: string | null,
 ): Topic {
-  return mapSessionToTopic({
+  const topic = mapSessionToTopic({
     id: sessionId,
     name: detail.name,
     created_at: detail.created_at,
@@ -153,6 +208,18 @@ function mapSessionDetailToTopic(
     workspace_id: detail.workspace_id ?? fallbackWorkspaceId ?? undefined,
     working_dir: detail.working_dir,
   });
+  const runtimeStatus = resolveRuntimeThreadStatusFromSessionDetail(detail);
+  if (!runtimeStatus) {
+    return topic;
+  }
+
+  return {
+    ...topic,
+    status: runtimeStatus,
+    statusReason: "default",
+    lastPreview:
+      resolveRuntimePreviewFromSessionDetail(detail) ?? topic.lastPreview,
+  };
 }
 
 function upsertTopicFromSessionDetail(
@@ -514,6 +581,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const executionRuntimeRef = useRef<AsterSessionExecutionRuntime | null>(
     executionRuntime,
   );
+  const autoResumeRuntimeSessionIdsRef = useRef<Set<string>>(new Set());
   const restoreCandidateSessionIdRef = useRef<string | null>(
     loadScopedSessionRestoreCandidate(),
   );
@@ -681,6 +749,72 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       setThreadRead(snapshot.threadRead);
     },
     [],
+  );
+
+  const maybeAutoResumeHydratedRuntimeThread = useCallback(
+    (
+      targetSessionId: string,
+      threadRead: AgentRuntimeThreadReadModel | null | undefined,
+    ) => {
+      const resolvedSessionId = targetSessionId.trim();
+      if (
+        !resolvedSessionId ||
+        !shouldAutoResumeHydratedRuntimeThread(threadRead)
+      ) {
+        return;
+      }
+
+      if (autoResumeRuntimeSessionIdsRef.current.has(resolvedSessionId)) {
+        return;
+      }
+      autoResumeRuntimeSessionIdsRef.current.add(resolvedSessionId);
+
+      void (async () => {
+        try {
+          const resumed = await runtime.resumeThread(resolvedSessionId);
+          if (resumed && sessionIdRef.current === resolvedSessionId) {
+            await refreshAgentSessionReadModelState({
+              runtime,
+              sessionIdRef,
+              targetSessionId: resolvedSessionId,
+              applyReadModelSnapshot,
+              onWarn: (error) => {
+                console.warn("[AsterChat] 自动恢复后刷新运行态摘要失败:", error);
+              },
+            });
+          }
+        } catch (error) {
+          console.warn("[AsterChat] 自动恢复运行时线程失败:", error);
+        } finally {
+          autoResumeRuntimeSessionIdsRef.current.delete(resolvedSessionId);
+        }
+      })();
+    },
+    [applyReadModelSnapshot, runtime, sessionIdRef],
+  );
+
+  const maybeAutoResumeSessionDetail = useCallback(
+    (
+      targetSessionId: string,
+      detail: Awaited<ReturnType<AgentRuntimeAdapter["getSession"]>>,
+    ) => {
+      if (shouldAutoResumeHydratedRuntimeThread(detail.thread_read)) {
+        maybeAutoResumeHydratedRuntimeThread(targetSessionId, detail.thread_read);
+        return;
+      }
+
+      const queuedTurns = detail.queued_turns;
+      if (!queuedTurns || queuedTurns.length === 0) {
+        return;
+      }
+
+      maybeAutoResumeHydratedRuntimeThread(targetSessionId, {
+        thread_id: detail.thread_id ?? targetSessionId,
+        status: "queued",
+        queued_turns: queuedTurns,
+      });
+    },
+    [maybeAutoResumeHydratedRuntimeThread],
   );
 
   const resolveSessionHistoryWindow = useCallback(
@@ -1707,6 +1841,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         switchSuccessMetricContext,
       );
 
+      maybeAutoResumeSessionDetail(topicId, detail);
+
       if (postFinalizePersistencePlan.persistedWorkspaceId) {
         savePersistedSessionWorkspaceId(
           topicId,
@@ -1806,6 +1942,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       loadSessionModelPreference,
       markSessionExecutionStrategySynced,
       markSessionModelPreferenceSynced,
+      maybeAutoResumeSessionDetail,
       persistSessionAccessMode,
       persistSessionRestoreCandidate,
       resolveSessionHistoryWindow,

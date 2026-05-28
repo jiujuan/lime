@@ -266,6 +266,7 @@ interface WorkspaceCanvasPreviewRuntimeResult {
   canvasWorkbenchDefaultPreview: CanvasWorkbenchDefaultPreview | null;
   handleOpenCanvasWorkbenchPath: (path: string) => Promise<void>;
   handleRevealCanvasWorkbenchPath: (path: string) => Promise<void>;
+  handleCloseCanvasWorkbench: () => void;
   liveCanvasPreview: ReactNode;
   hasLiveCanvasPreviewContent: boolean;
   teamWorkbenchView: CanvasWorkbenchTeamView | null;
@@ -1461,6 +1462,7 @@ function useWorkspaceCanvasPreviewRuntime({
     canvasWorkbenchDefaultPreview,
     handleOpenCanvasWorkbenchPath,
     handleRevealCanvasWorkbenchPath,
+    handleCloseCanvasWorkbench: artifactPreview.onCloseCanvas,
     liveCanvasPreview: renderLiveCanvasPreview(),
     hasLiveCanvasPreviewContent,
     teamWorkbenchView,

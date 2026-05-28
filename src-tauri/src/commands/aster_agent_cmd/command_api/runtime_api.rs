@@ -36,7 +36,8 @@ use lime_core::database::dao::agent::AgentDao;
 #[cfg(test)]
 use lime_core::database::dao::agent_run::AgentRun;
 use lime_core::database::dao::agent_run::AgentRunDao;
-use lime_core::database::dao::agent_timeline::{AgentThreadItemStatus, AgentThreadTurnStatus};
+#[cfg(test)]
+use lime_core::database::dao::agent_timeline::AgentThreadTurnStatus;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -80,8 +81,8 @@ fn normalize_runtime_session_history_before_message_id(
 }
 
 fn should_list_runtime_queue_snapshots(
-    detail: &lime_agent::SessionDetail,
-    history_limit: Option<usize>,
+    _detail: &lime_agent::SessionDetail,
+    _history_limit: Option<usize>,
     history_offset: usize,
     history_before_message_id: Option<i64>,
 ) -> bool {
@@ -89,21 +90,7 @@ fn should_list_runtime_queue_snapshots(
         return false;
     }
 
-    if detail.is_persisted_empty() {
-        return false;
-    }
-    if history_limit.is_none() {
-        return true;
-    }
-
-    detail
-        .turns
-        .iter()
-        .any(|turn| matches!(turn.status, AgentThreadTurnStatus::Running))
-        || detail
-            .items
-            .iter()
-            .any(|item| matches!(item.status, AgentThreadItemStatus::InProgress))
+    true
 }
 
 async fn resume_runtime_queue_with_warning(
@@ -541,11 +528,7 @@ pub async fn agent_runtime_get_thread_read(
     tracing::info!("[AsterAgent] 获取运行时线程读模型: {}", session_id);
 
     let detail = AsterAgentWrapper::get_runtime_session_detail(runtime.db(), &session_id).await?;
-    let queued_turns = if detail.is_persisted_empty() {
-        Vec::new()
-    } else {
-        list_runtime_queue_snapshots_service(&session_id).await?
-    };
+    let queued_turns = list_runtime_queue_snapshots_service(&session_id).await?;
     let projection = sync_thread_reliability_projection(runtime.db(), &detail)?;
     let interrupt_marker = runtime.state().get_interrupt_marker(&session_id).await;
     let mut thread_read = AgentRuntimeThreadReadModel::from_parts(
@@ -740,11 +723,7 @@ async fn load_runtime_export_context(
     resume_runtime_queue_with_warning(runtime, session_id, action_label).await;
 
     let detail = AsterAgentWrapper::get_runtime_session_detail(runtime.db(), session_id).await?;
-    let queued_turns = if detail.is_persisted_empty() {
-        Vec::new()
-    } else {
-        list_runtime_queue_snapshots_service(session_id).await?
-    };
+    let queued_turns = list_runtime_queue_snapshots_service(session_id).await?;
     let projection = sync_thread_reliability_projection(runtime.db(), &detail)?;
     let interrupt_marker = runtime.state().get_interrupt_marker(session_id).await;
     let thread_read = AgentRuntimeThreadReadModel::from_parts(
@@ -1666,6 +1645,27 @@ mod tests {
         }
     }
 
+    fn empty_detail() -> lime_agent::SessionDetail {
+        lime_agent::SessionDetail {
+            id: "session-runtime-empty-queue".to_string(),
+            name: "空持久化队列".to_string(),
+            created_at: 0,
+            updated_at: 0,
+            thread_id: "session-runtime-empty-queue".to_string(),
+            model: Some("agent:test".to_string()),
+            working_dir: None,
+            workspace_id: None,
+            messages: Vec::new(),
+            execution_strategy: Some("react".to_string()),
+            execution_runtime: None,
+            turns: Vec::new(),
+            items: Vec::new(),
+            todo_items: Vec::new(),
+            child_subagent_sessions: Vec::new(),
+            subagent_parent_context: None,
+        }
+    }
+
     fn thread_read_for_harness_projection(runtime_summary: Value) -> AgentRuntimeThreadReadModel {
         AgentRuntimeThreadReadModel {
             thread_id: "thread-agent-app".to_string(),
@@ -1760,10 +1760,23 @@ mod tests {
     }
 
     #[test]
-    fn should_skip_runtime_queue_snapshots_for_completed_limited_history() {
+    fn should_list_runtime_queue_snapshots_for_first_history_page() {
         let detail = detail_with_turn_status(AgentThreadTurnStatus::Completed);
 
-        assert!(!should_list_runtime_queue_snapshots(
+        assert!(should_list_runtime_queue_snapshots(
+            &detail,
+            Some(80),
+            0,
+            None
+        ));
+    }
+
+    #[test]
+    fn should_list_runtime_queue_snapshots_for_empty_first_history_page() {
+        let detail = empty_detail();
+
+        assert!(detail.is_persisted_empty());
+        assert!(should_list_runtime_queue_snapshots(
             &detail,
             Some(80),
             0,

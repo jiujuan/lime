@@ -35,14 +35,49 @@ describe("i18n release docs workflow report", () => {
     const root = createTempDir();
 
     writeFile(root, "README.md", "# Lime\n");
-    writeFile(root, "README.en.md", "# Lime\n[Release Notes](./RELEASE_NOTES.en.md)\n<sub>companion</sub>\n");
+    writeFile(
+      root,
+      "README.en.md",
+      "# Lime\n[Release Notes](./RELEASE_NOTES.en.md)\n<sub>companion</sub>\n",
+    );
     writeFile(root, "RELEASE_NOTES.md", "## Lime v1.0.0\n");
     writeFile(root, "RELEASE_NOTES.en.md", "## Lime v1.0.0\n");
-    writeFile(root, "docs/package.json", JSON.stringify({ scripts: { dev: "nuxt dev", build: "nuxt build" } }, null, 2));
-    writeFile(root, "docs/nuxt.config.ts", `export default { extends: ["docus"], app: { baseURL: "/lime/" } };\n`);
+    writeFile(
+      root,
+      "docs/package.json",
+      JSON.stringify(
+        { scripts: { dev: "nuxt dev", build: "nuxt build" } },
+        null,
+        2,
+      ),
+    );
+    writeFile(
+      root,
+      "docs/nuxt.config.ts",
+      `export default { extends: ["docus"], app: { baseURL: "/lime/" } };\n`,
+    );
     writeFile(root, "docs/content/02.user-guide/a.md", "# Guide\n");
-    writeFile(root, "docs/roadmap/i18n/companions/user-guide-a.en.md", "# Guide\n");
+    writeFile(
+      root,
+      "docs/roadmap/i18n/companions/user-guide-a.en.md",
+      "# Guide\n",
+    );
     writeFile(root, "docs/content/08.open-platform/b.md", "# Open Platform\n");
+    writeFile(
+      root,
+      "docs/roadmap/i18n/evidence/docs-locale-build-manifest.json",
+      JSON.stringify(
+        {
+          schemaVersion: "lime.i18n.docsLocaleBuildManifest.v1",
+          summary: {
+            routeEmissionAllowed: false,
+            workflowStatus: "ready",
+          },
+        },
+        null,
+        2,
+      ),
+    );
     writeFile(
       root,
       "docs/roadmap/i18n/release-docs-translation-scope.json",
@@ -90,9 +125,11 @@ describe("i18n release docs workflow report", () => {
     expect(report.summary.hasReleaseNotesCompanion).toBe(true);
     expect(report.summary.hasReleaseNotesCompanionVersionMatch).toBe(true);
     expect(report.summary.readmeEnglishLinksReleaseNotesCompanion).toBe(true);
-    expect(report.summary.hasDocsLocaleWorkflow).toBe(false);
+    expect(report.summary.hasDocsLocaleWorkflow).toBe(true);
     expect(report.summary.hasReleaseDocsTranslationScope).toBe(true);
-    expect(report.summary.docsTranslationWorkflowPresent).toBe(false);
+    expect(report.summary.hasReleaseDocsTranslationQueue).toBe(true);
+    expect(report.summary.docsLocaleBuildManifestReady).toBe(true);
+    expect(report.summary.docsTranslationWorkflowPresent).toBe(true);
     expect(report.summary.docsContentEnglishCompanionFileCount).toBe(0);
     expect(report.summary.docsUnscopedContentSourceFileCount).toBe(0);
     expect(report.summary.releaseDocsRequiredCompanionMissingCount).toBe(0);
@@ -100,8 +137,49 @@ describe("i18n release docs workflow report", () => {
     expect(report.summary.releaseDocsOrphanCompanionCount).toBe(0);
     expect(report.summary.releaseDocsScopeItemCount).toBe(4);
     expect(report.summary.releaseDocsSourceOnlyWithoutCompanionCount).toBe(1);
+    expect(report.summary.releaseDocsTranslationQueueItemCount).toBe(1);
+    expect(report.summary.releaseDocsTranslationQueueMissingSourceCount).toBe(
+      0,
+    );
+    expect(
+      report.summary.releaseDocsTranslationQueuePilotCompanionMissingCount,
+    ).toBe(0);
+    expect(
+      report.summary.releaseDocsTranslationQueueRequiredCompanionMissingCount,
+    ).toBe(0);
+    expect(
+      report.summary.releaseDocsTranslationQueueSourceOnlyCandidateCount,
+    ).toBe(1);
     expect(report.releaseNotes.sourceVersion).toBe("v1.0.0");
     expect(report.releaseNotes.englishCompanionVersion).toBe("v1.0.0");
+    expect(report.releaseDocsTranslationQueue).toEqual(
+      expect.objectContaining({
+        blockingReason: null,
+        generatedFromScopePath:
+          "docs/roadmap/i18n/release-docs-translation-scope.json",
+        itemCount: 1,
+        missingSourceCount: 0,
+        pilotCompanionMissingCount: 0,
+        requiredCompanionMissingCount: 0,
+        sourceLocale: "zh-CN",
+        sourceOnlyCandidateCount: 1,
+        targetLocales: ["en-US"],
+        workflowStatus: "ready",
+      }),
+    );
+    expect(report.releaseDocsTranslationQueue.items).toEqual([
+      {
+        enUSPath: null,
+        englishCompanionExists: false,
+        kind: "open-platform",
+        path: "docs/content/08.open-platform/b.md",
+        priority: "source-only",
+        reason:
+          "Source-only docs item is queued as a future translation candidate.",
+        sourceExists: true,
+        status: "source-only-candidate",
+      },
+    ]);
     expect(report.releaseDocsTranslationScope).toEqual(
       expect.objectContaining({
         existingEnglishCompanionCount: 3,
@@ -128,12 +206,29 @@ describe("i18n release docs workflow report", () => {
     expect(report.summary.contentFileCount).toBe(2);
     expect(report.docsSite.contentEnglishCompanionFiles).toEqual([]);
     expect(report.docsSite.unscopedContentSourceFiles).toEqual([]);
-    expect(report.docsSite.topLevelContentDirs).toEqual(["02.user-guide", "08.open-platform"]);
+    expect(report.docsSite.topLevelContentDirs).toEqual([
+      "02.user-guide",
+      "08.open-platform",
+    ]);
     expect(report.docsSite.buildScripts).toEqual(["build", "dev"]);
     expect(report.docsSite.hasI18nConfig).toBe(false);
+    expect(report.docsLocaleBuildManifest).toEqual(
+      expect.objectContaining({
+        exists: true,
+        routeEmissionAllowed: false,
+        schemaVersion: "lime.i18n.docsLocaleBuildManifest.v1",
+        workflowStatus: "ready",
+      }),
+    );
 
     expect(formatReleaseDocsWorkflowReport(report, "text")).toContain(
       "[i18n:release-docs] workflow inventory",
+    );
+    expect(formatReleaseDocsWorkflowReport(report, "text")).toContain(
+      "translation queue source-only candidates: 1",
+    );
+    expect(formatReleaseDocsWorkflowReport(report, "text")).toContain(
+      "docs locale build manifest: ready",
     );
     expect(JSON.parse(formatReleaseDocsWorkflowReport(report, "json"))).toEqual(
       expect.objectContaining({
@@ -149,10 +244,22 @@ describe("i18n release docs workflow report", () => {
     writeFile(root, "README.en.md", "# Lime\n");
     writeFile(root, "RELEASE_NOTES.md", "## Lime v1.0.0\n");
     writeFile(root, "RELEASE_NOTES.en.md", "## Lime v1.0.0\n");
-    writeFile(root, "docs/package.json", JSON.stringify({ scripts: { dev: "nuxt dev" } }, null, 2));
-    writeFile(root, "docs/nuxt.config.ts", `export default { extends: ["docus"] };\n`);
+    writeFile(
+      root,
+      "docs/package.json",
+      JSON.stringify({ scripts: { dev: "nuxt dev" } }, null, 2),
+    );
+    writeFile(
+      root,
+      "docs/nuxt.config.ts",
+      `export default { extends: ["docus"] };\n`,
+    );
     writeFile(root, "docs/content/index.md", "# Docs\n");
-    writeFile(root, "docs/roadmap/i18n/companions/docs-content-index.en.md", "# Docs\n");
+    writeFile(
+      root,
+      "docs/roadmap/i18n/companions/docs-content-index.en.md",
+      "# Docs\n",
+    );
     writeFile(root, "docs/roadmap/i18n/companions/orphan.en.md", "# Orphan\n");
     writeFile(
       root,
@@ -203,8 +310,16 @@ describe("i18n release docs workflow report", () => {
     writeFile(root, "README.en.md", "# Lime\n");
     writeFile(root, "RELEASE_NOTES.md", "## Lime v1.0.0\n");
     writeFile(root, "RELEASE_NOTES.en.md", "## Lime v1.0.0\n");
-    writeFile(root, "docs/package.json", JSON.stringify({ scripts: { dev: "nuxt dev" } }, null, 2));
-    writeFile(root, "docs/nuxt.config.ts", `export default { extends: ["docus"] };\n`);
+    writeFile(
+      root,
+      "docs/package.json",
+      JSON.stringify({ scripts: { dev: "nuxt dev" } }, null, 2),
+    );
+    writeFile(
+      root,
+      "docs/nuxt.config.ts",
+      `export default { extends: ["docus"] };\n`,
+    );
     writeFile(root, "docs/content/index.md", "# Docs\n");
     writeFile(root, "docs/content/02.user-guide/untracked.md", "# Untracked\n");
     writeFile(
@@ -249,24 +364,123 @@ describe("i18n release docs workflow report", () => {
     ]);
   });
 
+  it("应把缺失 source 和 required companion 暴露为 release docs 翻译队列阻断项", () => {
+    const root = createTempDir();
+
+    writeFile(root, "README.md", "# Lime\n");
+    writeFile(root, "RELEASE_NOTES.md", "## Lime v1.0.0\n");
+    writeFile(root, "RELEASE_NOTES.en.md", "## Lime v1.0.0\n");
+    writeFile(
+      root,
+      "docs/package.json",
+      JSON.stringify({ scripts: { dev: "nuxt dev" } }, null, 2),
+    );
+    writeFile(
+      root,
+      "docs/nuxt.config.ts",
+      `export default { extends: ["docus"] };\n`,
+    );
+    writeFile(root, "docs/content/index.md", "# Docs\n");
+    writeFile(
+      root,
+      "docs/roadmap/i18n/release-docs-translation-scope.json",
+      JSON.stringify(
+        {
+          schemaVersion: "lime.i18n.releaseDocsTranslationScope.v1",
+          sourceLocale: "zh-CN",
+          targetLocales: ["en-US"],
+          items: [
+            {
+              path: "README.md",
+              kind: "readme",
+              priority: "required",
+              enUSPath: "README.en.md",
+            },
+            {
+              path: "docs/content/missing.md",
+              kind: "help-doc",
+              priority: "source-only",
+              enUSPath: null,
+            },
+            {
+              path: "docs/content/index.md",
+              kind: "docs-home",
+              priority: "pilot",
+              enUSPath: null,
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+    );
+
+    const report = analyzeReleaseDocsWorkflowReport({ repoRoot: root });
+
+    expect(report.releaseDocsTranslationQueue.workflowStatus).toBe("blocked");
+    expect(report.releaseDocsTranslationQueue.blockingReason).toBe(
+      "One or more scope items point to missing source files.",
+    );
+    expect(report.summary.releaseDocsTranslationQueueItemCount).toBe(3);
+    expect(report.summary.releaseDocsTranslationQueueMissingSourceCount).toBe(
+      1,
+    );
+    expect(
+      report.summary.releaseDocsTranslationQueueRequiredCompanionMissingCount,
+    ).toBe(1);
+    expect(
+      report.summary.releaseDocsTranslationQueuePilotCompanionMissingCount,
+    ).toBe(1);
+    expect(
+      report.summary.releaseDocsTranslationQueueSourceOnlyCandidateCount,
+    ).toBe(0);
+    expect(
+      report.releaseDocsTranslationQueue.items.map((item) => item.status),
+    ).toEqual([
+      "required-companion-missing",
+      "missing-source",
+      "pilot-companion-missing",
+    ]);
+  });
+
   it("应支持 CLI 输出与文件写入", () => {
     const root = createTempDir();
     writeFile(root, "README.md", "# Lime\n");
     writeFile(root, "README.en.md", "# Lime\n");
     writeFile(root, "RELEASE_NOTES.md", "## Lime v1.0.0\n");
-    writeFile(root, "docs/package.json", JSON.stringify({ scripts: { dev: "nuxt dev" } }, null, 2));
-    writeFile(root, "docs/nuxt.config.ts", `export default { extends: ["docus"] };\n`);
+    writeFile(
+      root,
+      "docs/package.json",
+      JSON.stringify({ scripts: { dev: "nuxt dev" } }, null, 2),
+    );
+    writeFile(
+      root,
+      "docs/nuxt.config.ts",
+      `export default { extends: ["docus"] };\n`,
+    );
 
     const outFile = path.join(root, "report.json");
-    const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const writeSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
 
-    const exitCode = runCli(["--format", "json", "--repo-root", root, "--output", outFile]);
+    const exitCode = runCli([
+      "--format",
+      "json",
+      "--repo-root",
+      root,
+      "--output",
+      outFile,
+    ]);
 
     expect(exitCode).toBe(0);
     expect(writeSpy).not.toHaveBeenCalled();
     expect(JSON.parse(fs.readFileSync(outFile, "utf8"))).toEqual(
       expect.objectContaining({
         schemaVersion: "lime.i18n.releaseDocsWorkflowReport.v1",
+        releaseDocsTranslationQueue: expect.objectContaining({
+          workflowStatus: "missing-scope",
+        }),
       }),
     );
   });

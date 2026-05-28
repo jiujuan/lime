@@ -85,6 +85,7 @@ describe("taskCenterTabProjection", () => {
       isPinned: true,
       renamable: true,
       isActive: false,
+      status: "running",
     });
     expect(items[2]?.updatedAt).toBeInstanceOf(Date);
   });

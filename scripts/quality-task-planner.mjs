@@ -79,6 +79,7 @@ const I18N_PATCH_RETIREMENT_RECOMMENDED_COMMANDS = [
 ];
 
 const I18N_RELEASE_DOCS_WORKFLOW_RECOMMENDED_COMMANDS = [
+  "npm run i18n:docs-locale-manifest:json -- --output docs/roadmap/i18n/evidence/docs-locale-build-manifest.json",
   "npm run i18n:release-docs-report:json -- --output docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
 ];
 
@@ -87,6 +88,7 @@ const I18N_CHROME_EXTENSION_WORKFLOW_RECOMMENDED_COMMANDS = [
 ];
 
 const I18N_APP_METADATA_WORKFLOW_RECOMMENDED_COMMANDS = [
+  "npm run i18n:app-metadata-locale-manifest:json -- --output docs/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json",
   "npm run i18n:app-metadata-report:json -- --output docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
 ];
 
@@ -94,8 +96,14 @@ const I18N_RTL_READINESS_RECOMMENDED_COMMANDS = [
   "npm run i18n:rtl-readiness-report:json -- --output docs/roadmap/i18n/evidence/rtl-readiness-inventory.json",
 ];
 
-const I18N_RTL_SMOKE_RECOMMENDED_COMMANDS = [
-  "npm run i18n:rtl-smoke",
+const I18N_RTL_SMOKE_RECOMMENDED_COMMANDS = ["npm run i18n:rtl-smoke"];
+
+const I18N_P4_READINESS_RECOMMENDED_COMMANDS = [
+  "npm run i18n:p4-readiness-report:json -- --output docs/roadmap/i18n/evidence/p4-readiness-report.json",
+];
+
+const I18N_ROADMAP_READINESS_RECOMMENDED_COMMANDS = [
+  "npm run i18n:roadmap-readiness-report:json -- --output docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
 ];
 
 const I18N_PATCH_RETIREMENT_FILES = new Set([
@@ -115,9 +123,12 @@ const I18N_RELEASE_DOCS_WORKFLOW_FILES = new Set([
   "docs/README.md",
   "docs/nuxt.config.ts",
   "docs/package.json",
+  "docs/roadmap/i18n/evidence/docs-locale-build-manifest.json",
   "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
   "docs/roadmap/i18n/release-docs-translation-scope.json",
   "docs/roadmap/i18n/release-docs-workflow-evaluation.md",
+  "scripts/i18n-docs-locale-build-manifest.test.ts",
+  "scripts/i18n-docs-locale-build-manifest.ts",
   "scripts/i18n-release-docs-workflow-report.test.ts",
   "scripts/i18n-release-docs-workflow-report.ts",
 ]);
@@ -149,8 +160,11 @@ const I18N_CHROME_EXTENSION_WORKFLOW_PREFIXES = [
 const I18N_APP_METADATA_WORKFLOW_FILES = new Set([
   "docs/roadmap/i18n/app-metadata-translation-scope.json",
   "docs/roadmap/i18n/app-metadata-workflow-evaluation.md",
+  "docs/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json",
   "docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
   "package.json",
+  "scripts/i18n-app-metadata-locale-build-manifest.test.ts",
+  "scripts/i18n-app-metadata-locale-build-manifest.ts",
   "scripts/i18n-app-metadata-workflow-report.test.ts",
   "scripts/i18n-app-metadata-workflow-report.ts",
   "src-tauri/Cargo.toml",
@@ -168,8 +182,20 @@ const I18N_RTL_READINESS_FILES = new Set([
   "src/i18n/locales.ts",
 ]);
 
-const I18N_RTL_SMOKE_FILES = new Set([
-  "scripts/i18n-rtl-playwright-smoke.mjs",
+const I18N_RTL_SMOKE_FILES = new Set(["scripts/i18n-rtl-playwright-smoke.mjs"]);
+
+const I18N_P4_READINESS_FILES = new Set([
+  "docs/roadmap/i18n/evidence/p4-readiness-report.json",
+  "docs/roadmap/i18n/prd.md",
+  "scripts/i18n-p4-readiness-report.test.ts",
+  "scripts/i18n-p4-readiness-report.ts",
+]);
+
+const I18N_ROADMAP_READINESS_FILES = new Set([
+  "docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
+  "docs/roadmap/i18n/prd.md",
+  "scripts/i18n-roadmap-readiness-report.test.ts",
+  "scripts/i18n-roadmap-readiness-report.ts",
 ]);
 
 const I18N_RTL_SURFACE_FILES = new Set([
@@ -441,10 +467,7 @@ function isDocsChange(file) {
 }
 
 function isDocsOnlyChange(files) {
-  return (
-    files.length > 0 &&
-    files.every((file) => isDocsChange(file))
-  );
+  return files.length > 0 && files.every((file) => isDocsChange(file));
 }
 
 function isFrontendChange(file) {
@@ -514,6 +537,38 @@ function isI18nRtlReadinessChange(file) {
 
 function isI18nRtlSmokeChange(file) {
   return I18N_RTL_SMOKE_FILES.has(file) || I18N_RTL_SURFACE_FILES.has(file);
+}
+
+function isI18nP4ReadinessChange(file) {
+  return (
+    I18N_P4_READINESS_FILES.has(file) ||
+    isI18nReleaseDocsWorkflowChange(file) ||
+    isI18nChromeExtensionWorkflowChange(file) ||
+    isI18nAppMetadataWorkflowChange(file) ||
+    isI18nRtlReadinessChange(file)
+  );
+}
+
+function isI18nRoadmapReadinessChange(file) {
+  return (
+    I18N_ROADMAP_READINESS_FILES.has(file) ||
+    isI18nTranslationReviewPackChange(file) ||
+    isI18nBundleStrategyChange(file) ||
+    isI18nPatchRetirementChange(file) ||
+    isI18nP4ReadinessChange(file) ||
+    file === "docs/roadmap/i18n/evidence/translation-coverage-report.json" ||
+    file === "docs/roadmap/i18n/evidence/source-locale-export.json" ||
+    file === "docs/roadmap/i18n/evidence/language-boundary-report.json" ||
+    file ===
+      "docs/roadmap/i18n/evidence/content-target-language-boundary-report.json" ||
+    file ===
+      "docs/roadmap/i18n/evidence/i18next-cli-parity-benchmark.json" ||
+    file === "docs/roadmap/i18n/glossary.md" ||
+    file === "docs/roadmap/i18n/implementation-progress.md" ||
+    file === "docs/roadmap/i18n/language-boundary-evaluation.md" ||
+    file === "docs/roadmap/i18n/response-language-injection-evaluation.md" ||
+    file === "docs/roadmap/i18n/toolchain-evaluation.md"
+  );
 }
 
 function isI18nHardcodedScanChange(file) {
@@ -634,6 +689,14 @@ function collectRecommendedCommands(changedFiles, { docsOnly = false } = {}) {
     commands.push(...I18N_RTL_SMOKE_RECOMMENDED_COMMANDS);
   }
 
+  if (changedFiles.some(isI18nP4ReadinessChange)) {
+    commands.push(...I18N_P4_READINESS_RECOMMENDED_COMMANDS);
+  }
+
+  if (changedFiles.some(isI18nRoadmapReadinessChange)) {
+    commands.push(...I18N_ROADMAP_READINESS_RECOMMENDED_COMMANDS);
+  }
+
   return Array.from(new Set(commands));
 }
 
@@ -652,14 +715,14 @@ function detectTasks(changedFiles, { full = false } = {}) {
   });
 
   if (full) {
-      return {
-        integrity: true,
-        i18n: true,
-        i18nHardcoded: true,
-        i18nUnused: true,
-        frontend: true,
-        rust: true,
-        bridge: true,
+    return {
+      integrity: true,
+      i18n: true,
+      i18nHardcoded: true,
+      i18nUnused: true,
+      frontend: true,
+      rust: true,
+      bridge: true,
       bridgeReasons: collectBridgeReasons([], { full: true }),
       guiSmoke: true,
       docs: true,

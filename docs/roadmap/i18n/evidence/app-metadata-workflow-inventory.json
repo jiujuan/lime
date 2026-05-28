@@ -1,19 +1,58 @@
 {
+  "appMetadataLocaleBuildManifest": {
+    "exists": true,
+    "generatedConfigEmissionAllowed": false,
+    "manifestGenerationAllowed": true,
+    "path": "docs/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json",
+    "schemaVersion": "lime.i18n.appMetadataLocaleBuildManifest.v1",
+    "workflowStatus": "ready"
+  },
   "appMetadataTranslationScope": {
     "generatedMetadataAllowed": false,
-    "itemCount": 10,
+    "itemCount": 11,
+    "manifestGenerationAllowed": true,
     "owner": "release",
     "path": "docs/roadmap/i18n/app-metadata-translation-scope.json",
     "requiredBeforeMultilingualReleaseCount": 2,
     "schemaVersion": "lime.i18n.appMetadataTranslationScope.v1",
     "sourceLocale": "zh-CN",
-    "stableFieldCount": 6,
+    "stableFieldCount": 7,
     "sourceOnlyFieldCount": 2,
     "targetLocales": [
       "en-US"
     ],
     "translatableFieldCount": 2,
-    "workflowStatus": "not-started"
+    "workflowStatus": "ready"
+  },
+  "metadataFieldCoverage": {
+    "missingScopedFields": [],
+    "reviewedFields": [
+      "package.json#description",
+      "package.json#keywords",
+      "src-tauri/capabilities/agent-app-shell.json#description",
+      "src-tauri/tauri.conf.headless.json#app.windows[0].title",
+      "src-tauri/tauri.conf.headless.json#identifier",
+      "src-tauri/tauri.conf.headless.json#productName",
+      "src-tauri/tauri.conf.json#app.windows[0].title",
+      "src-tauri/tauri.conf.json#bundle.fileAssociations[0].description",
+      "src-tauri/tauri.conf.json#bundle.fileAssociations[0].name",
+      "src-tauri/tauri.conf.json#identifier",
+      "src-tauri/tauri.conf.json#productName"
+    ],
+    "scopedFields": [
+      "package.json#description",
+      "package.json#keywords",
+      "src-tauri/capabilities/agent-app-shell.json#description",
+      "src-tauri/tauri.conf.headless.json#app.windows[0].title",
+      "src-tauri/tauri.conf.headless.json#identifier",
+      "src-tauri/tauri.conf.headless.json#productName",
+      "src-tauri/tauri.conf.json#app.windows[0].title",
+      "src-tauri/tauri.conf.json#bundle.fileAssociations[0].description",
+      "src-tauri/tauri.conf.json#bundle.fileAssociations[0].name",
+      "src-tauri/tauri.conf.json#identifier",
+      "src-tauri/tauri.conf.json#productName"
+    ],
+    "unscopedMetadataFields": []
   },
   "appPackageJson": {
     "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
@@ -48,12 +87,17 @@
   },
   "schemaVersion": "lime.i18n.appMetadataWorkflowReport.v1",
   "summary": {
-    "hasInstallerLocalizationWorkflow": false,
+    "appMetadataLocaleBuildManifestReady": true,
+    "hasInstallerLocalizationWorkflow": true,
+    "hasAppMetadataLocaleBuildManifest": true,
     "hasMetadataTranslationScope": true,
     "hasLocalizedAppMetadataArtifacts": true,
     "hasLocalizedMetadataFields": true,
     "hasLocaleAwareMetadataSources": true,
-    "metadataScopeItemCount": 10,
-    "metadataTranslatableFieldCount": 2
+    "metadataScopeItemCount": 11,
+    "metadataMissingScopedFieldCount": 0,
+    "metadataReviewedFieldCount": 11,
+    "metadataTranslatableFieldCount": 2,
+    "metadataUnscopedFieldCount": 0
   }
 }

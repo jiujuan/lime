@@ -1,4 +1,11 @@
 {
+  "docsLocaleBuildManifest": {
+    "exists": true,
+    "path": "docs/roadmap/i18n/evidence/docs-locale-build-manifest.json",
+    "routeEmissionAllowed": false,
+    "schemaVersion": "lime.i18n.docsLocaleBuildManifest.v1",
+    "workflowStatus": "ready"
+  },
   "docsSite": {
     "buildScripts": [
       "build",
@@ -18,6 +25,142 @@
       "08.open-platform"
     ],
     "unscopedContentSourceFiles": []
+  },
+  "releaseDocsTranslationQueue": {
+    "blockingReason": null,
+    "generatedFromScopePath": "docs/roadmap/i18n/release-docs-translation-scope.json",
+    "itemCount": 12,
+    "items": [
+      {
+        "enUSPath": null,
+        "englishCompanionExists": false,
+        "kind": "help-doc",
+        "path": "docs/content/02.user-guide/9.mcp.md",
+        "priority": "source-only",
+        "sourceExists": true,
+        "reason": "Source-only docs item is queued as a future translation candidate.",
+        "status": "source-only-candidate"
+      },
+      {
+        "enUSPath": null,
+        "englishCompanionExists": false,
+        "kind": "help-doc",
+        "path": "docs/content/02.user-guide/16.gateway-tunnel-webhook.md",
+        "priority": "source-only",
+        "sourceExists": true,
+        "reason": "Source-only docs item is queued as a future translation candidate.",
+        "status": "source-only-candidate"
+      },
+      {
+        "enUSPath": null,
+        "englishCompanionExists": false,
+        "kind": "help-doc",
+        "path": "docs/content/02.user-guide/17.runtime-agents.md",
+        "priority": "source-only",
+        "sourceExists": true,
+        "reason": "Source-only docs item is queued as a future translation candidate.",
+        "status": "source-only-candidate"
+      },
+      {
+        "enUSPath": null,
+        "englishCompanionExists": false,
+        "kind": "docs-provider",
+        "path": "docs/content/03.providers/1.overview.md",
+        "priority": "source-only",
+        "sourceExists": true,
+        "reason": "Source-only docs item is queued as a future translation candidate.",
+        "status": "source-only-candidate"
+      },
+      {
+        "enUSPath": null,
+        "englishCompanionExists": false,
+        "kind": "api-reference",
+        "path": "docs/content/04.api-reference/1.overview.md",
+        "priority": "source-only",
+        "sourceExists": true,
+        "reason": "Source-only docs item is queued as a future translation candidate.",
+        "status": "source-only-candidate"
+      },
+      {
+        "enUSPath": null,
+        "englishCompanionExists": false,
+        "kind": "api-reference",
+        "path": "docs/content/04.api-reference/2.openai-api.md",
+        "priority": "source-only",
+        "sourceExists": true,
+        "reason": "Source-only docs item is queued as a future translation candidate.",
+        "status": "source-only-candidate"
+      },
+      {
+        "enUSPath": null,
+        "englishCompanionExists": false,
+        "kind": "api-reference",
+        "path": "docs/content/04.api-reference/3.claude-api.md",
+        "priority": "source-only",
+        "sourceExists": true,
+        "reason": "Source-only docs item is queued as a future translation candidate.",
+        "status": "source-only-candidate"
+      },
+      {
+        "enUSPath": null,
+        "englishCompanionExists": false,
+        "kind": "legal",
+        "path": "docs/content/07.legal/1.disclaimer.md",
+        "priority": "source-only",
+        "sourceExists": true,
+        "reason": "Source-only docs item is queued as a future translation candidate.",
+        "status": "source-only-candidate"
+      },
+      {
+        "enUSPath": null,
+        "englishCompanionExists": false,
+        "kind": "open-platform",
+        "path": "docs/content/08.open-platform/1.overview.md",
+        "priority": "source-only",
+        "sourceExists": true,
+        "reason": "Source-only docs item is queued as a future translation candidate.",
+        "status": "source-only-candidate"
+      },
+      {
+        "enUSPath": null,
+        "englishCompanionExists": false,
+        "kind": "open-platform",
+        "path": "docs/content/08.open-platform/3.plugin-development.md",
+        "priority": "source-only",
+        "sourceExists": true,
+        "reason": "Source-only docs item is queued as a future translation candidate.",
+        "status": "source-only-candidate"
+      },
+      {
+        "enUSPath": null,
+        "englishCompanionExists": false,
+        "kind": "open-platform",
+        "path": "docs/content/08.open-platform/4.connect.md",
+        "priority": "source-only",
+        "sourceExists": true,
+        "reason": "Source-only docs item is queued as a future translation candidate.",
+        "status": "source-only-candidate"
+      },
+      {
+        "enUSPath": null,
+        "englishCompanionExists": false,
+        "kind": "open-platform",
+        "path": "docs/content/08.open-platform/6.connect-webhook.md",
+        "priority": "source-only",
+        "sourceExists": true,
+        "reason": "Source-only docs item is queued as a future translation candidate.",
+        "status": "source-only-candidate"
+      }
+    ],
+    "missingSourceCount": 0,
+    "pilotCompanionMissingCount": 0,
+    "requiredCompanionMissingCount": 0,
+    "sourceLocale": "zh-CN",
+    "sourceOnlyCandidateCount": 12,
+    "targetLocales": [
+      "en-US"
+    ],
+    "workflowStatus": "ready"
   },
   "releaseDocsTranslationScope": {
     "companionFiles": [
@@ -89,14 +232,21 @@
   "summary": {
     "contentFileCount": 13,
     "docsContentEnglishCompanionFileCount": 0,
-    "docsTranslationWorkflowPresent": false,
+    "docsLocaleBuildManifestReady": true,
+    "docsTranslationWorkflowPresent": true,
     "docsUnscopedContentSourceFileCount": 0,
     "hasBilingualRootReadme": true,
-    "hasDocsLocaleWorkflow": false,
+    "hasDocsLocaleWorkflow": true,
+    "hasReleaseDocsTranslationQueue": true,
     "hasReleaseDocsTranslationScope": true,
     "hasReleaseNotesCompanion": true,
     "hasReleaseNotesCompanionVersionMatch": true,
     "readmeEnglishLinksReleaseNotesCompanion": true,
+    "releaseDocsTranslationQueueItemCount": 12,
+    "releaseDocsTranslationQueueMissingSourceCount": 0,
+    "releaseDocsTranslationQueuePilotCompanionMissingCount": 0,
+    "releaseDocsTranslationQueueRequiredCompanionMissingCount": 0,
+    "releaseDocsTranslationQueueSourceOnlyCandidateCount": 12,
     "releaseDocsPilotCompanionMissingCount": 0,
     "releaseDocsOrphanCompanionCount": 0,
     "releaseDocsRequiredCompanionMissingCount": 0,

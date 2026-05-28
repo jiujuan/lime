@@ -45,6 +45,145 @@ vi.mock("sonner", () => ({
   toast: mockToast,
 }));
 
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    i18n: {
+      language: "zh-CN",
+    },
+    t: (key: string, options?: Record<string, unknown>) => {
+      const translations: Record<string, string> = {
+        "agentChat.canvasWorkbench.close": "关闭画布工作台",
+        "agentChat.canvasWorkbench.kind.artifact": "产物",
+        "agentChat.canvasWorkbench.kind.currentDraft": "当前文稿",
+        "agentChat.canvasWorkbench.kind.currentVersion": "当前",
+        "agentChat.canvasWorkbench.kind.defaultDraft": "主稿",
+        "agentChat.canvasWorkbench.kind.taskDocument": "文档",
+        "agentChat.canvasWorkbench.kind.taskFile": "任务文件",
+        "agentChat.canvasWorkbench.kind.version": "版本",
+        "agentChat.canvasWorkbench.kind.versionTitle": `文稿版本 ${String(
+          options?.count ?? 0,
+        )}`,
+        "agentChat.canvasWorkbench.kind.workspaceFile": "文件",
+        "agentChat.canvasWorkbench.tabs.files": "文件",
+        "agentChat.canvasWorkbench.tabs.generated": "生成",
+        "agentChat.canvasWorkbench.tabs.sessionMain": "Session · Main",
+        "agentChat.canvasWorkbench.tabs.switchAria": `切换画布标签-${String(
+          options?.label ?? "",
+        )}`,
+        "agentChat.canvasWorkbench.tabs.closeFileAria": `关闭文件标签-${String(
+          options?.label ?? "",
+        )}`,
+        "agentChat.canvasWorkbench.workspaceFile.binaryUnsupported":
+          "该文件为二进制内容，暂不支持画布文本预览。",
+        "agentChat.canvasWorkbench.workspaceFile.readFailed": "读取文件失败",
+        "agentChat.canvasWorkbench.clipboard.unsupported":
+          "当前环境不支持剪贴板写入",
+        "agentChat.canvasWorkbench.clipboard.copied": "已复制路径",
+        "agentChat.canvasWorkbench.clipboard.copyFailed": "复制路径失败",
+        "agentChat.canvasWorkbench.workspace.loadFailed": `读取目录失败：${String(
+          options?.message ?? "",
+        )}`,
+        "agentChat.canvasWorkbench.workspace.expandDirectoryAria": `展开目录-${String(
+          options?.name ?? "",
+        )}`,
+        "agentChat.canvasWorkbench.workspace.collapseDirectoryAria": `折叠目录-${String(
+          options?.name ?? "",
+        )}`,
+        "agentChat.canvasWorkbench.workspace.selectFileAria": `选择工作区文件-${String(
+          options?.name ?? "",
+        )}`,
+        "agentChat.canvasWorkbench.workspace.unavailable":
+          "当前工作区路径不可用，暂时无法浏览项目文件。",
+        "agentChat.canvasWorkbench.workspace.empty":
+          "当前会话没有绑定可浏览的工作区目录。",
+        "agentChat.canvasWorkbench.workspace.resultDir": "结果目录",
+        "agentChat.canvasWorkbench.workspace.projectDir": "项目目录",
+        "agentChat.canvasWorkbench.workspace.loading": "正在加载目录...",
+        "agentChat.canvasWorkbench.workspace.emptyDirectory": "暂无目录内容。",
+        "agentChat.canvasWorkbench.team.empty": "当前没有可展示的生成结果。",
+        "agentChat.canvasWorkbench.actions.copyPath": "复制当前路径",
+        "agentChat.canvasWorkbench.actions.revealPath": "定位当前文件",
+        "agentChat.canvasWorkbench.actions.openPath": "系统打开当前文件",
+        "agentChat.canvasWorkbench.actions.download": "下载当前画布项",
+        "agentChat.canvasWorkbench.coding.tabs.preview": "预览",
+        "agentChat.canvasWorkbench.coding.tabs.files": "文件",
+        "agentChat.canvasWorkbench.coding.tabs.changes": "变更",
+        "agentChat.canvasWorkbench.coding.tabs.outputs": "输出",
+        "agentChat.canvasWorkbench.coding.tabs.logs": "日志",
+        "agentChat.canvasWorkbench.coding.preview.htmlBadge": "HTML",
+        "agentChat.canvasWorkbench.coding.preview.empty":
+          "还没有可预览的编程结果。",
+        "agentChat.canvasWorkbench.coding.preview.staticHtmlHint":
+          "当前展示静态 HTML 预览。",
+        "agentChat.canvasWorkbench.coding.changes.empty":
+          "还没有可对比的文件变更。",
+        "agentChat.canvasWorkbench.coding.changes.noBaseline":
+          "当前文件还没有上一版本可对比。",
+        "agentChat.canvasWorkbench.coding.changes.title": "当前文件变更",
+        "agentChat.canvasWorkbench.coding.changes.badge": `变更 ${String(
+          options?.count ?? 0,
+        )}`,
+        "agentChat.canvasWorkbench.coding.changes.queueTitle": "本轮文件变更",
+        "agentChat.canvasWorkbench.coding.changes.queueSummary": `${String(
+          options?.count ?? 0,
+        )} 个文件，${String(options?.pending ?? 0)} 个仍在写入`,
+        "agentChat.canvasWorkbench.coding.changes.checkpointBadge": `快照 ${String(
+          options?.count ?? 0,
+        )}`,
+        "agentChat.canvasWorkbench.coding.changes.source": `来源：${String(
+          options?.source ?? "",
+        )}`,
+        "agentChat.canvasWorkbench.coding.changes.detailTitle": "当前文件",
+        "agentChat.canvasWorkbench.coding.changes.latestCheckpoint": `最近快照：${String(
+          options?.path ?? "",
+        )}`,
+        "agentChat.canvasWorkbench.coding.changes.noDiffBadge": "暂无 diff",
+        "agentChat.canvasWorkbench.coding.changes.noDiff":
+          "当前变更只有文件摘要，暂时没有上一版 diff。",
+        "agentChat.canvasWorkbench.coding.changes.status.completed": "已写入",
+        "agentChat.canvasWorkbench.coding.changes.status.inProgress": "写入中",
+        "agentChat.canvasWorkbench.coding.changes.status.failed": "失败",
+        "agentChat.canvasWorkbench.coding.changes.status.pendingReview":
+          "待审阅",
+        "agentChat.canvasWorkbench.coding.changes.status.applied": "已应用",
+        "agentChat.canvasWorkbench.coding.changes.status.rejected":
+          "已标记回退",
+        "agentChat.canvasWorkbench.coding.outputs.empty":
+          "本轮还没有可展示的输出。",
+        "agentChat.canvasWorkbench.coding.logs.empty":
+          "本轮还没有可展示的日志。",
+        "agentChat.canvasWorkbench.documentInspector.title": "当前文稿",
+        "agentChat.canvasWorkbench.documentInspector.summaryFallback":
+          "当前结构化文稿已接入文档检查器，可继续查看概览、来源、版本与编辑状态。",
+        "agentChat.canvasWorkbench.documentInspector.expand":
+          "展开当前文稿检查器",
+        "agentChat.canvasWorkbench.documentInspector.collapse":
+          "折叠当前文稿检查器",
+        "agentChat.canvasWorkbench.documentInspector.expandShort": "展开",
+        "agentChat.canvasWorkbench.documentInspector.collapseShort": "收起",
+        "agentChat.canvasWorkbench.documentInspector.sourceCount": `来源 ${String(
+          options?.count ?? 0,
+        )}`,
+        "agentChat.canvasWorkbench.documentInspector.versionCount": `版本 ${String(
+          options?.count ?? 0,
+        )}`,
+        "agentChat.canvasWorkbench.documentInspector.diffCount": `差异 ${String(
+          options?.count ?? 0,
+        )}`,
+        "agentChat.canvasWorkbench.documentInspector.collapsedHint":
+          "默认先收起概览、来源、版本与编辑，避免主画布被说明区挤压；需要时再展开查看。",
+        "agentChat.canvasWorkbench.document.view.preview": "正文",
+        "agentChat.canvasWorkbench.document.view.previewAria":
+          "切换文档视图-正文",
+        "agentChat.canvasWorkbench.document.view.changes": "变更",
+        "agentChat.canvasWorkbench.document.view.changesAria":
+          "切换文档视图-变更",
+      };
+      return translations[key] ?? key;
+    },
+  }),
+}));
+
 vi.mock("@/lib/api/fileBrowser", () => ({
   listDirectory: mockListDirectory,
 }));
@@ -863,6 +1002,7 @@ describe("CanvasWorkbenchLayout", () => {
   });
 
   it("sessionView 存在但没有默认主稿时，Session · Main 应回退渲染会话过程面板", async () => {
+    const onClose = vi.fn();
     const renderPreview = vi.fn((target: CanvasWorkbenchPreviewTarget) => (
       <div data-testid="preview-panel">
         {target.kind}:{target.title}
@@ -888,6 +1028,7 @@ describe("CanvasWorkbenchLayout", () => {
       })),
       onOpenPath: vi.fn(async () => undefined),
       onRevealPath: vi.fn(async () => undefined),
+      onClose,
       renderPreview,
       sessionView: {
         eyebrow: "Session Runtime",
@@ -915,6 +1056,9 @@ describe("CanvasWorkbenchLayout", () => {
     ).toContain("session-runtime-panel");
     expect(renderSessionPanel).toHaveBeenCalled();
     expect(renderPreview).not.toHaveBeenCalled();
+
+    clickByAriaLabel(container, "关闭画布工作台");
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("workspaceView 存在时，应优先使用运行时注入的头部语义", async () => {
@@ -1351,6 +1495,259 @@ describe("CanvasWorkbenchLayout", () => {
     expect(imageListingRequestCount).toBe(2);
     expect(container.textContent).toContain("image-1.jpg");
     expect(container.textContent).toContain("image-2.jpg");
+  });
+
+  it("coding 模式应固定为预览优先标签，并把文件标签收进文件区", async () => {
+    const loadFilePreview = vi.fn(async (path: string) => ({
+      path,
+      content:
+        path === "/workspace/README.md"
+          ? "README 内容"
+          : "<!doctype html><html><body><h1>更新后的页面</h1></body></html>",
+      isBinary: false,
+      size: 128,
+      error: null,
+    }));
+
+    const container = mount({
+      artifacts: [],
+      canvasState: null,
+      taskFiles: [
+        createTaskFile(
+          "task-current",
+          "index.html",
+          "<!doctype html><html><body><h1>页面预览</h1></body></html>",
+          30,
+        ),
+      ],
+      selectedFileId: "task-current",
+      workspaceRoot: "/workspace",
+      workspaceUnavailable: false,
+      defaultPreview: {
+        selectionKey: "task:task-current",
+        title: "index.html",
+        content: "<!doctype html><html><body><h1>页面预览</h1></body></html>",
+        filePath: "index.html",
+        absolutePath: "/workspace/index.html",
+        previousContent:
+          "<!doctype html><html><body><h1>上一版</h1></body></html>",
+      } satisfies CanvasWorkbenchDefaultPreview,
+      loadFilePreview,
+      onOpenPath: vi.fn(async () => undefined),
+      onRevealPath: vi.fn(async () => undefined),
+      renderPreview: (target) => (
+        <div data-testid="preview-panel">
+          {target.kind}:{target.title}
+        </div>
+      ),
+      workbenchMode: "coding",
+      outputView: {
+        tabBadge: "1",
+        leadContent: ({ openTab }) => (
+          <button
+            type="button"
+            data-testid="output-lead-probe"
+            onClick={() => openTab("changes")}
+          >
+            失败输出修复入口
+          </button>
+        ),
+        renderPanel: () => <div data-testid="output-view">输出摘要</div>,
+      },
+      logView: {
+        tabBadge: "运行中",
+        renderPanel: () => <div data-testid="log-view">运行日志</div>,
+      },
+    });
+
+    await flushEffects();
+
+    expect(
+      container.querySelector('[data-testid="canvas-workbench-panel-preview"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="preview-panel"]')?.textContent,
+    ).toContain("default-canvas:index.html");
+    expect(container.textContent).toContain("当前展示静态 HTML 预览。");
+    expect(
+      container.querySelector(
+        'button[aria-label="切换画布标签-预览 · index.html"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('button[aria-label="切换画布标签-文件"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('button[aria-label="切换画布标签-变更"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('button[aria-label="切换画布标签-输出"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('button[aria-label="切换画布标签-日志"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('button[aria-label="切换画布标签-index.html"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        'button[aria-label="切换画布标签-Session · Main"]',
+      ),
+    ).toBeNull();
+
+    clickByAriaLabel(container, "切换画布标签-变更");
+    await flushEffects();
+    expect(
+      container.querySelector('[data-testid="canvas-workbench-panel-changes"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("当前文件变更");
+
+    clickByAriaLabel(container, "切换画布标签-输出");
+    await flushEffects();
+    expect(
+      container.querySelector('[data-testid="output-view"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="output-lead-probe"]'),
+    ).not.toBeNull();
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="output-lead-probe"]',
+        ) as HTMLButtonElement | null
+      )?.click();
+    });
+    await flushEffects();
+    expect(
+      container.querySelector('[data-testid="canvas-workbench-panel-changes"]'),
+    ).not.toBeNull();
+
+    clickByAriaLabel(container, "切换画布标签-日志");
+    await flushEffects();
+    expect(container.querySelector('[data-testid="log-view"]')).not.toBeNull();
+
+    clickByAriaLabel(container, "切换画布标签-文件");
+    await flushEffects();
+    clickByAriaLabel(container, "选择工作区文件-README.md");
+    await flushEffects();
+
+    expect(loadFilePreview).toHaveBeenCalledWith("/workspace/README.md");
+    expect(
+      container.querySelector('[data-testid="canvas-workbench-panel-preview"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="preview-panel"]')?.textContent,
+    ).toContain("default-canvas:README.md");
+    expect(
+      container.querySelector('button[aria-label="切换画布标签-README.md"]'),
+    ).toBeNull();
+  });
+
+  it("coding 模式的变更标签应展示本轮多文件变更队列", async () => {
+    const openChangedFile = vi.fn(async () => undefined);
+    const container = mount({
+      artifacts: [],
+      canvasState: null,
+      taskFiles: [
+        createTaskFile(
+          "task-current",
+          "index.html",
+          "<!doctype html><html><body><h1>更新后的页面</h1></body></html>",
+          30,
+        ),
+      ],
+      selectedFileId: "task-current",
+      workspaceRoot: "/workspace",
+      workspaceUnavailable: false,
+      defaultPreview: {
+        selectionKey: "task:task-current",
+        title: "index.html",
+        content:
+          "<!doctype html><html><body><h1>更新后的页面</h1></body></html>",
+        filePath: "index.html",
+        absolutePath: "/workspace/index.html",
+        previousContent:
+          "<!doctype html><html><body><h1>上一版</h1></body></html>",
+      } satisfies CanvasWorkbenchDefaultPreview,
+      loadFilePreview: vi.fn(async (path: string) => ({
+        path,
+        content: "",
+        isBinary: false,
+        size: 0,
+        error: null,
+      })),
+      onOpenPath: vi.fn(async () => undefined),
+      onRevealPath: vi.fn(async () => undefined),
+      renderPreview: (target) => (
+        <div data-testid="preview-panel">
+          {target.kind}:{target.title}
+        </div>
+      ),
+      workbenchMode: "coding",
+      changeView: {
+        checkpointCount: 2,
+        latestCheckpointPath: ".lime/artifacts/thread-1/index.v2.html",
+        onOpenFile: openChangedFile,
+        items: [
+          {
+            id: "change-index",
+            path: "index.html",
+            absolutePath: "/workspace/index.html",
+            displayName: "index.html",
+            source: "runtime",
+            status: "completed",
+            reviewStatus: "pending_review",
+            preview: "<h1>更新后的页面</h1>",
+          },
+          {
+            id: "change-app",
+            path: "src/App.tsx",
+            absolutePath: "/workspace/src/App.tsx",
+            displayName: "App.tsx",
+            source: "runtime",
+            status: "in_progress",
+            preview: "export function App() {}",
+          },
+        ],
+      },
+    });
+
+    await flushEffects();
+
+    const changesTab = container.querySelector(
+      'button[aria-label="切换画布标签-变更"]',
+    );
+    expect(changesTab?.textContent).toContain("2");
+
+    clickByAriaLabel(container, "切换画布标签-变更");
+    await flushEffects();
+
+    expect(
+      container.querySelector('[data-testid="canvas-workbench-panel-changes"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("本轮文件变更");
+    expect(container.textContent).toContain("2 个文件，1 个仍在写入");
+    expect(container.textContent).toContain("index.html");
+    expect(container.textContent).toContain("src/App.tsx");
+    expect(container.textContent).toContain("快照 2");
+    expect(container.textContent).toContain("待审阅");
+    expect(container.textContent).toContain("写入中");
+    expect(container.textContent).toContain("当前文件");
+    expect(container.textContent).toContain("变更");
+    expect(container.textContent).toContain("来源：runtime");
+
+    const changeItems = container.querySelectorAll(
+      '[data-testid="canvas-workbench-change-item"]',
+    );
+    expect(changeItems).toHaveLength(2);
+    expect(
+      container.querySelector(
+        '[data-testid="canvas-workbench-changes-checkpoints"]',
+      ),
+    ).not.toBeNull();
+    (changeItems[1] as HTMLButtonElement).click();
+    await flushEffects();
+    expect(openChangedFile).toHaveBeenCalledWith("/workspace/src/App.tsx");
   });
 
   it("启用 teamView 且没有默认预览时应默认落在 team 标签", async () => {

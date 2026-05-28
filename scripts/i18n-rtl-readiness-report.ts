@@ -35,13 +35,23 @@ export interface I18nRtlReadinessReport {
   };
   repoRoot: string;
   schemaVersion: string;
+  smokeCoverage: {
+    coveredSurfaces: string[];
+    evidencePath: string;
+    missingSurfaces: string[];
+    requiredSurfaces: string[];
+    summaryKeys: string[];
+  };
   surfaces: I18nRtlReadinessSurfaceReport[];
   summary: {
     auditedFileCount: number;
     directionAwareFoundationFileCount: number;
     highRiskFileCount: number;
     missingPlaywrightSmokeEvidence: boolean;
+    missingRequiredSurfaceSmokeEvidence: boolean;
     missingRtlScreenshotEvidence: boolean;
+    requiredSurfaceSmokeCoveredCount: number;
+    requiredSurfaceSmokeMissingCount: number;
     surfaceCount: number;
     totalMarkerCount: number;
   };
@@ -125,6 +135,25 @@ const RTL_SURFACE_GROUPS = [
   },
 ] as const;
 
+const REQUIRED_RTL_SMOKE_SURFACES = [
+  {
+    name: "sidebar",
+    summaryKey: "homeSidebarOnRight",
+  },
+  {
+    name: "settings",
+    summaryKey: "settingsNavVisible",
+  },
+  {
+    name: "workspace",
+    summaryKey: "workspaceVisible",
+  },
+  {
+    name: "dialogs",
+    summaryKey: "userMenuDialogVisible",
+  },
+] as const;
+
 const LAYOUT_MARKERS: Array<{ kind: string; regex: RegExp }> = [
   {
     kind: "physical-spacing-class",
@@ -159,6 +188,19 @@ function displayPath(filePath: string, repoRoot: string): string {
 
 function fileExists(filePath: string): boolean {
   return fs.existsSync(filePath) && fs.statSync(filePath).isFile();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readJsonObject(filePath: string): Record<string, unknown> | null {
+  if (!fileExists(filePath)) {
+    return null;
+  }
+
+  const parsed = JSON.parse(fs.readFileSync(filePath, "utf8")) as unknown;
+  return isRecord(parsed) ? parsed : null;
 }
 
 function collectEvidenceFiles(repoRoot: string): string[] {
@@ -271,6 +313,38 @@ function buildFoundationReport(repoRoot: string) {
   };
 }
 
+function buildSmokeCoverageReport(repoRoot: string): I18nRtlReadinessReport["smokeCoverage"] {
+  const evidencePath = path.join(
+    repoRoot,
+    "docs",
+    "roadmap",
+    "i18n",
+    "evidence",
+    "rtl-playwright-smoke-report.json",
+  );
+  const report = readJsonObject(evidencePath);
+  const summary = isRecord(report?.summary) ? report.summary : {};
+  const summaryKeys = Object.keys(summary).sort((left, right) =>
+    left.localeCompare(right),
+  );
+  const coveredSurfaces = REQUIRED_RTL_SMOKE_SURFACES.filter(
+    (surface) => summary[surface.summaryKey] === true,
+  ).map((surface) => surface.name);
+  const requiredSurfaces = REQUIRED_RTL_SMOKE_SURFACES.map(
+    (surface) => surface.name,
+  );
+
+  return {
+    coveredSurfaces,
+    evidencePath: displayPath(evidencePath, repoRoot),
+    missingSurfaces: requiredSurfaces.filter(
+      (surface) => !coveredSurfaces.includes(surface),
+    ),
+    requiredSurfaces,
+    summaryKeys,
+  };
+}
+
 export function analyzeI18nRtlReadinessReport(
   options: Pick<CliOptions, "repoRoot">,
 ): I18nRtlReadinessReport {
@@ -298,11 +372,13 @@ export function analyzeI18nRtlReadinessReport(
   const missingPlaywrightSmokeEvidence = !evidenceFiles.some((fileName) =>
     /rtl.*playwright|playwright.*rtl/i.test(fileName),
   );
+  const smokeCoverage = buildSmokeCoverageReport(repoRoot);
 
   return {
     foundation,
     repoRoot,
     schemaVersion: "lime.i18n.rtlReadinessReport.v1",
+    smokeCoverage,
     surfaces,
     summary: {
       auditedFileCount,
@@ -311,7 +387,11 @@ export function analyzeI18nRtlReadinessReport(
         : 0,
       highRiskFileCount,
       missingPlaywrightSmokeEvidence,
+      missingRequiredSurfaceSmokeEvidence:
+        smokeCoverage.missingSurfaces.length > 0,
       missingRtlScreenshotEvidence,
+      requiredSurfaceSmokeCoveredCount: smokeCoverage.coveredSurfaces.length,
+      requiredSurfaceSmokeMissingCount: smokeCoverage.missingSurfaces.length,
       surfaceCount: surfaces.length,
       totalMarkerCount,
     },
@@ -342,6 +422,8 @@ export function formatI18nRtlReadinessReport(
     `direction-aware foundation: ${report.summary.directionAwareFoundationFileCount > 0 ? "yes" : "no"}`,
     `rtl screenshot evidence: ${report.summary.missingRtlScreenshotEvidence ? "missing" : "present"}`,
     `rtl playwright smoke evidence: ${report.summary.missingPlaywrightSmokeEvidence ? "missing" : "present"}`,
+    `required surface smoke coverage: ${report.summary.requiredSurfaceSmokeCoveredCount}/${report.smokeCoverage.requiredSurfaces.length}`,
+    `missing required surface smoke: ${report.smokeCoverage.missingSurfaces.join(", ") || "(none)"}`,
     `total directional markers: ${report.summary.totalMarkerCount}`,
     `high-risk files: ${report.summary.highRiskFileCount}`,
     "top risk files:",

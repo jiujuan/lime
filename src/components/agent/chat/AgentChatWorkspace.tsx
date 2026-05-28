@@ -6039,6 +6039,39 @@ export function AgentChatWorkspace({
   }, [generalWorkbenchScaffoldRuntime]);
   const handleApplyGeneralWorkbenchFollowUpAction =
     applyWorkbenchFollowUpActionPayload;
+  const handleSubmitCodeFixPrompt = useCallback(
+    async (prompt: string) => {
+      const normalizedPrompt = prompt.trim();
+      if (!normalizedPrompt) {
+        return;
+      }
+
+      await handleSendRef.current(
+        [],
+        webSearchPreferenceRef.current,
+        effectiveChatToolPreferences.thinking,
+        normalizedPrompt,
+        "code_orchestrated",
+        undefined,
+        {
+          skipSceneCommandRouting: true,
+          displayContent: normalizedPrompt,
+          requestMetadata: {
+            harness: {
+              code_fix: {
+                source: "failed_output",
+              },
+            },
+          },
+        },
+      );
+    },
+    [
+      effectiveChatToolPreferences.thinking,
+      handleSendRef,
+      webSearchPreferenceRef,
+    ],
+  );
   const effectiveInitialInputCapability = useMemo(
     () =>
       resolveEffectiveInitialInputCapability({
@@ -6106,6 +6139,7 @@ export function AgentChatWorkspace({
       onOpenSubagentSession={handleOpenSubagentSession}
       onLoadFilePreview={handleHarnessLoadFilePreview}
       onOpenFile={handleWorkspaceFileClick}
+      onSubmitCodeFixPrompt={handleSubmitCodeFixPrompt}
     />
   );
   const generalWorkbenchSidebarNode = (
@@ -6804,6 +6838,8 @@ export function AgentChatWorkspace({
     inputbarScene,
     canvasScene,
     handleSendFromEmptyState,
+    harnessState,
+    onSubmitCodeFixPrompt: handleSubmitCodeFixPrompt,
     shellChromeRuntime,
     generalWorkbenchHarnessDialog,
     teamWorkspaceEnabled: teamSessionRuntime.teamWorkspaceEnabled,

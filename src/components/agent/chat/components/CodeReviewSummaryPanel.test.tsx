@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLimeLocale } from "@/i18n/createI18n";
+import { buildCodeFixPromptFromHarnessSignal } from "../utils/codeFixPrompt";
 import { CodeReviewSummaryPanel } from "./CodeReviewSummaryPanel";
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
@@ -44,6 +45,11 @@ function renderPanel(
     ComponentProps<typeof CodeReviewSummaryPanel>["onOpenSection"]
   >();
   const onOpenFileCheckpoints = vi.fn();
+  const onSubmitCodeFixPrompt = vi.fn<
+    NonNullable<
+      ComponentProps<typeof CodeReviewSummaryPanel>["onSubmitCodeFixPrompt"]
+    >
+  >();
 
   act(() => {
     root.render(
@@ -88,13 +94,19 @@ function renderPanel(
         }}
         onOpenSection={onOpenSection}
         onOpenFileCheckpoints={onOpenFileCheckpoints}
+        onSubmitCodeFixPrompt={onSubmitCodeFixPrompt}
         {...overrides}
       />,
     );
   });
 
   mountedRoots.push({ root, container });
-  return { container, onOpenSection, onOpenFileCheckpoints };
+  return {
+    container,
+    onOpenSection,
+    onOpenFileCheckpoints,
+    onSubmitCodeFixPrompt,
+  };
 }
 
 beforeEach(async () => {
@@ -135,6 +147,7 @@ describe("CodeReviewSummaryPanel", () => {
     ) as HTMLButtonElement | null;
 
     expect(panel?.textContent).toContain("代码审阅摘要");
+    expect(panel?.textContent).toContain("待审阅变更");
     expect(panel?.textContent).toContain("文件变更 1");
     expect(panel?.textContent).toContain("测试输出 1");
     expect(panel?.textContent).toContain("快照 1");
@@ -164,11 +177,60 @@ describe("CodeReviewSummaryPanel", () => {
     expect(panel?.textContent).toContain("File changes 1");
     expect(panel?.textContent).toContain("Test output 1");
     expect(panel?.textContent).toContain("Snapshots 1");
+    expect(panel?.textContent).toContain("Changes need review");
     expect(panel?.textContent).toContain("Review result");
   });
 
-  it("失败输出应在输出入口提示需要处理", () => {
-    const { container } = renderPanel({
+  it("应从失败输出生成继续修复 prompt", () => {
+    const prompt = buildCodeFixPromptFromHarnessSignal({
+      signal: {
+        toolName: "bash",
+        title: "回归测试失败",
+        summary: "vitest failed",
+        preview: "ImageCard.test.tsx failed",
+      },
+      fileChanges: [
+        {
+          path: "/tmp/workspace/src/ImageCard.tsx",
+          displayName: "ImageCard.tsx",
+        },
+      ],
+      fileCheckpointSummary: {
+        count: 1,
+        latest_checkpoint: {
+          checkpoint_id: "checkpoint-1",
+          turn_id: "turn-1",
+          path: "src/ImageCard.tsx",
+          source: "tool_result",
+          updated_at: "2026-05-27T01:00:00.000Z",
+          validation_issue_count: 0,
+        },
+      },
+      copy: {
+        intro: "请继续修复本轮编程任务中的失败输出。",
+        requirements:
+          "请先定位根因，只修改必要文件，运行相关验证，并在完成后说明改动与验证结果。",
+        failedTool: "失败工具",
+        failedTitle: "失败标题",
+        failedSummary: "失败摘要",
+        failedPreview: "失败片段",
+        relatedFiles: "相关文件",
+        latestCheckpoint: "最近文件快照",
+      },
+    });
+
+    expect(prompt).toContain("请继续修复本轮编程任务中的失败输出。");
+    expect(prompt).toContain("- 失败工具: bash");
+    expect(prompt).toContain("- 失败标题: 回归测试失败");
+    expect(prompt).toContain("ImageCard.test.tsx failed");
+    expect(prompt).toContain(
+      "相关文件: ImageCard.tsx (/tmp/workspace/src/ImageCard.tsx)",
+    );
+    expect(prompt).toContain("最近文件快照: src/ImageCard.tsx");
+  });
+
+  it("失败输出应在输出入口提示需要处理", async () => {
+    const { container, onOpenSection, onSubmitCodeFixPrompt } = renderPanel({
       harnessState: {
         ...createEmptyHarnessState(),
         outputSignals: [
@@ -201,10 +263,143 @@ describe("CodeReviewSummaryPanel", () => {
     const outputs = container.querySelector(
       '[data-testid="code-review-summary-outputs"]',
     ) as HTMLElement | null;
+    const status = container.querySelector(
+      '[data-testid="code-review-summary-status"]',
+    ) as HTMLElement | null;
+    const outputPreview = container.querySelector(
+      '[data-testid="code-review-summary-output-preview"]',
+    ) as HTMLElement | null;
+    const fixAction = container.querySelector(
+      '[data-testid="code-review-summary-fix-action"]',
+    ) as HTMLButtonElement | null;
+    const focus = container.querySelector(
+      '[data-testid="code-review-summary-focus"]',
+    ) as HTMLElement | null;
+    const focusOutput = container.querySelector(
+      '[data-testid="code-review-summary-focus-output"]',
+    ) as HTMLButtonElement | null;
+    const focusFiles = container.querySelector(
+      '[data-testid="code-review-summary-focus-files"]',
+    ) as HTMLButtonElement | null;
+    const pair = container.querySelector(
+      '[data-testid="code-review-summary-pair"]',
+    ) as HTMLElement | null;
+    const pairOutput = container.querySelector(
+      '[data-testid="code-review-summary-pair-output"]',
+    ) as HTMLButtonElement | null;
+    const pairFile = container.querySelector(
+      '[data-testid="code-review-summary-pair-file"]',
+    ) as HTMLButtonElement | null;
 
     expect(outputs?.textContent).toContain("测试输出 1");
     expect(outputs?.textContent).toContain("测试失败");
+    expect(outputs?.dataset.tone).toBe("danger");
+    expect(status?.textContent).toContain("先处理失败输出");
+    expect(focus?.dataset.tone).toBe("danger");
+    expect(focus?.textContent).toContain("当前审阅焦点");
+    expect(focus?.textContent).toContain("先看失败输出");
+    expect(focus?.textContent).toContain("测试失败");
+    expect(focus?.textContent).toContain("ImageCard.tsx");
+    expect(pair?.textContent).toContain("失败输出");
+    expect(pair?.textContent).toContain("相关文件");
+    expect(pair?.textContent).toContain("ImageCard.tsx");
+    expect(pair?.textContent).toContain("共 1 个文件变更");
+    expect(pair?.textContent).not.toContain("失败输出提到了这个文件");
     expect(container.textContent).toContain("1 条输出需要处理");
+    expect(outputPreview?.textContent).toContain("失败片段");
+    expect(outputPreview?.textContent).toContain("1 test failed");
+    expect(fixAction?.textContent).toContain("继续修复");
+
+    act(() => {
+      focusOutput?.click();
+    });
+    act(() => {
+      focusFiles?.click();
+    });
+    act(() => {
+      pairOutput?.click();
+    });
+    act(() => {
+      pairFile?.click();
+    });
+
+    await act(async () => {
+      fixAction?.click();
+    });
+
+    expect(onOpenSection).toHaveBeenCalledWith("outputs");
+    expect(onOpenSection).toHaveBeenCalledWith("file_review");
+    expect(onOpenSection).toHaveBeenCalledTimes(4);
+    expect(onSubmitCodeFixPrompt).toHaveBeenCalledTimes(1);
+    expect(onSubmitCodeFixPrompt.mock.calls[0]?.[0]).toContain("测试失败");
+    expect(onSubmitCodeFixPrompt.mock.calls[0]?.[0]).toContain(
+      "1 test failed",
+    );
+  });
+
+  it("英文界面继续修复应生成英文 prompt", async () => {
+    await changeLimeLocale("en-US");
+
+    const { container, onSubmitCodeFixPrompt } = renderPanel({
+      harnessState: {
+        ...createEmptyHarnessState(),
+        outputSignals: [
+          {
+            id: "signal-failed",
+            toolCallId: "tool-test",
+            toolName: "bash",
+            title: "Test failed",
+            summary: "vitest failed",
+            preview: "1 test failed",
+            exitCode: 1,
+          },
+        ],
+        recentFileEvents: [
+          {
+            id: "event-code",
+            toolCallId: "tool-write",
+            path: "/tmp/workspace/src/ImageCard.tsx",
+            displayName: "ImageCard.tsx",
+            kind: "code",
+            action: "edit",
+            sourceToolName: "edit_file",
+            clickable: true,
+          },
+        ],
+        hasSignals: true,
+      },
+    });
+
+    const fixAction = container.querySelector(
+      '[data-testid="code-review-summary-fix-action"]',
+    ) as HTMLButtonElement | null;
+    const focus = container.querySelector(
+      '[data-testid="code-review-summary-focus"]',
+    ) as HTMLElement | null;
+
+    expect(fixAction?.textContent).toContain("Continue fixing");
+    expect(focus?.textContent).toContain("Current review focus");
+    expect(focus?.textContent).toContain("Check failed output");
+
+    await act(async () => {
+      fixAction?.click();
+    });
+
+    const submittedPrompt = onSubmitCodeFixPrompt.mock.calls[0]?.[0] || "";
+    expect(submittedPrompt).toContain(
+      "Continue fixing the failed output from this coding run.",
+    );
+    expect(submittedPrompt).toContain("- Failed tool: bash");
+    expect(submittedPrompt).toContain("Failure preview:");
+    expect(submittedPrompt).not.toContain("请继续修复");
+  });
+
+  it("没有失败输出时不展示继续修复入口", () => {
+    const { container } = renderPanel();
+
+    expect(
+      container.querySelector('[data-testid="code-review-summary-fix-action"]'),
+    ).toBeNull();
   });
 
   it("存在失败输出时主按钮应优先打开输出区块", () => {
@@ -298,7 +493,125 @@ describe("CodeReviewSummaryPanel", () => {
     ) as HTMLElement | null;
 
     expect(outputs?.textContent).toContain("回归测试失败");
+    expect(outputs?.dataset.tone).toBe("danger");
     expect(outputs?.textContent).not.toContain("类型检查通过");
+  });
+
+  it("失败输出提到的文件应优先进入审阅焦点和修复 prompt", async () => {
+    const { container, onSubmitCodeFixPrompt } = renderPanel({
+      harnessState: {
+        ...createEmptyHarnessState(),
+        outputSignals: [
+          {
+            id: "signal-failed",
+            toolCallId: "tool-failed",
+            toolName: "bash",
+            title: "回归测试失败",
+            summary: "ImageCard.test.tsx assertion failed",
+            preview: "src/ImageCard.test.tsx: expected image card to render",
+            exitCode: 1,
+          },
+        ],
+        recentFileEvents: [
+          {
+            id: "event-code-1",
+            toolCallId: "tool-write-1",
+            path: "/tmp/workspace/src/App.tsx",
+            displayName: "App.tsx",
+            kind: "code",
+            action: "edit",
+            sourceToolName: "edit_file",
+            clickable: true,
+          },
+          {
+            id: "event-code-2",
+            toolCallId: "tool-write-2",
+            path: "/tmp/workspace/src/ImageCard.test.tsx",
+            displayName: "ImageCard.test.tsx",
+            kind: "code",
+            action: "edit",
+            sourceToolName: "edit_file",
+            clickable: true,
+          },
+          {
+            id: "event-code-3",
+            toolCallId: "tool-write-3",
+            path: "/tmp/workspace/src/ImageCard.tsx",
+            displayName: "ImageCard.tsx",
+            kind: "code",
+            action: "edit",
+            sourceToolName: "edit_file",
+            clickable: true,
+          },
+        ],
+        hasSignals: true,
+      },
+      fileCheckpointSummary: null,
+    });
+
+    const files = container.querySelector(
+      '[data-testid="code-review-summary-files"]',
+    ) as HTMLElement | null;
+    const focus = container.querySelector(
+      '[data-testid="code-review-summary-focus"]',
+    ) as HTMLElement | null;
+    const pairFile = container.querySelector(
+      '[data-testid="code-review-summary-pair-file"]',
+    ) as HTMLElement | null;
+    const fixAction = container.querySelector(
+      '[data-testid="code-review-summary-fix-action"]',
+    ) as HTMLButtonElement | null;
+
+    expect(focus?.textContent).toContain("ImageCard.test.tsx");
+    expect(pairFile?.textContent).toContain("ImageCard.test.tsx");
+    expect(pairFile?.textContent).toContain("失败输出提到了这个文件");
+    expect(files?.textContent?.indexOf("ImageCard.test.tsx")).toBeLessThan(
+      files?.textContent?.indexOf("App.tsx") ?? Number.POSITIVE_INFINITY,
+    );
+
+    await act(async () => {
+      fixAction?.click();
+    });
+
+    const submittedPrompt = onSubmitCodeFixPrompt.mock.calls[0]?.[0] || "";
+    expect(submittedPrompt.indexOf("ImageCard.test.tsx")).toBeLessThan(
+      submittedPrompt.indexOf("App.tsx"),
+    );
+  });
+
+  it("输出预览应裁剪长内容，避免摘要卡膨胀", () => {
+    const longPreview = Array.from(
+      { length: 12 },
+      (_, index) => `line-${index + 1} ${"x".repeat(60)}`,
+    ).join("\n");
+    const { container } = renderPanel({
+      harnessState: {
+        ...createEmptyHarnessState(),
+        outputSignals: [
+          {
+            id: "signal-long",
+            toolCallId: "tool-long",
+            toolName: "bash",
+            title: "测试输出",
+            summary: "vitest passed",
+            preview: longPreview,
+            exitCode: 0,
+          },
+        ],
+        hasSignals: true,
+      },
+      fileCheckpointSummary: null,
+    });
+
+    const outputPreview = container.querySelector(
+      '[data-testid="code-review-summary-output-preview"]',
+    ) as HTMLElement | null;
+
+    expect(outputPreview?.textContent).toContain("输出片段");
+    expect(outputPreview?.textContent).toContain("line-1");
+    expect(outputPreview?.textContent).toContain("line-4");
+    expect(outputPreview?.textContent).toContain("...");
+    expect(outputPreview?.textContent).not.toContain("line-5");
   });
 
   it("文件变更超过三条时应提示剩余数量", () => {
@@ -363,6 +676,59 @@ describe("CodeReviewSummaryPanel", () => {
     expect(files?.textContent).toContain("另有 1 个文件");
   });
 
+  it("应展示详细文件审阅区的应用和回退状态", () => {
+    const { container } = renderPanel({
+      fileChangeReviewSummary: {
+        total: 3,
+        pending: 0,
+        applied: 2,
+        rejected: 1,
+      },
+    });
+
+    const panel = container.querySelector(
+      '[data-testid="code-review-summary-panel"]',
+    ) as HTMLElement | null;
+    const status = container.querySelector(
+      '[data-testid="code-review-summary-status"]',
+    ) as HTMLElement | null;
+    const files = container.querySelector(
+      '[data-testid="code-review-summary-files"]',
+    ) as HTMLElement | null;
+    const reviewState = container.querySelector(
+      '[data-testid="code-review-summary-review-state"]',
+    ) as HTMLElement | null;
+
+    expect(panel?.dataset.status).toBe("snapshots");
+    expect(status?.textContent).toContain("已标记回退");
+    expect(files?.dataset.confirmed).toBe("3");
+    expect(files?.textContent).toContain("待处理 0 · 已应用 2 · 回退 1");
+    expect(reviewState?.textContent).toContain(
+      "待处理 0 个，已应用 2 个，已标记回退 1 个。",
+    );
+  });
+
+  it("全部文件已应用时应展示变更已确认", () => {
+    const { container } = renderPanel({
+      fileChangeReviewSummary: {
+        total: 1,
+        pending: 0,
+        applied: 1,
+        rejected: 0,
+      },
+    });
+
+    const panel = container.querySelector(
+      '[data-testid="code-review-summary-panel"]',
+    ) as HTMLElement | null;
+    const status = container.querySelector(
+      '[data-testid="code-review-summary-status"]',
+    ) as HTMLElement | null;
+
+    expect(panel?.dataset.status).toBe("outputs");
+    expect(status?.textContent).toContain("变更已确认");
+  });
+
   it("只有输出时主按钮应打开输出区块", () => {
     const { container, onOpenSection, onOpenFileCheckpoints } = renderPanel({
       harnessState: {
@@ -386,12 +752,20 @@ describe("CodeReviewSummaryPanel", () => {
     const primaryAction = container.querySelector(
       '[data-testid="code-review-summary-primary-action"]',
     ) as HTMLButtonElement | null;
+    const panel = container.querySelector(
+      '[data-testid="code-review-summary-panel"]',
+    ) as HTMLElement | null;
+    const outputs = container.querySelector(
+      '[data-testid="code-review-summary-outputs"]',
+    ) as HTMLElement | null;
 
     act(() => {
       primaryAction?.click();
     });
 
     expect(primaryAction?.textContent).toContain("查看输出");
+    expect(panel?.dataset.status).toBe("outputs");
+    expect(outputs?.dataset.tone).toBe("success");
     expect(onOpenSection).toHaveBeenCalledWith("outputs");
     expect(onOpenFileCheckpoints).not.toHaveBeenCalled();
   });
@@ -449,12 +823,16 @@ describe("CodeReviewSummaryPanel", () => {
     const outputs = container.querySelector(
       '[data-testid="code-review-summary-outputs"]',
     ) as HTMLButtonElement | null;
+    const panel = container.querySelector(
+      '[data-testid="code-review-summary-panel"]',
+    ) as HTMLElement | null;
 
     act(() => {
       primaryAction?.click();
     });
 
     expect(primaryAction?.textContent).toContain("查看快照");
+    expect(panel?.dataset.status).toBe("snapshots");
     expect(files?.disabled).toBe(true);
     expect(outputs?.disabled).toBe(true);
     expect(onOpenSection).not.toHaveBeenCalled();

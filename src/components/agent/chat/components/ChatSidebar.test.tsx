@@ -331,6 +331,11 @@ describe("ChatSidebar", () => {
     expect(container.textContent).toContain("待继续");
     expect(container.textContent).toContain("最近对话");
     expect(container.textContent).toContain("归档");
+    expect(
+      container.querySelector(
+        '[data-testid="chat-sidebar-task-title-loading-topic-running"]',
+      ),
+    ).not.toBeNull();
   });
 
   it("点击归档分组中的对话时，不应把它当成普通任务切换入口", () => {
@@ -655,6 +660,21 @@ describe("ChatSidebar", () => {
 
     expect(container.textContent).toContain("任务一");
     expect(container.textContent).toContain("进行中");
+  });
+
+  it("当前运行中的任务标题旁应显示加载状态", () => {
+    const container = renderSidebar({
+      currentTopicId: "topic-1",
+      threadStatus: "running",
+    });
+
+    expect(container.textContent).toContain("任务一");
+    expect(container.textContent).toContain("进行中");
+    expect(
+      container.querySelector(
+        '[data-testid="chat-sidebar-task-title-loading-topic-1"]',
+      ),
+    ).not.toBeNull();
   });
 
   it("当前任务存在待处理请求时应覆盖失败态并显示待处理摘要", () => {

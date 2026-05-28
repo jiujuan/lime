@@ -45,6 +45,11 @@ function renderDialog(
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const onSubmitCodeFixPrompt = vi.fn<
+    NonNullable<
+      ComponentProps<typeof GeneralWorkbenchDialogSection>["onSubmitCodeFixPrompt"]
+    >
+  >();
 
   act(() => {
     root.render(
@@ -103,13 +108,14 @@ function renderDialog(
             },
           },
         }}
+        onSubmitCodeFixPrompt={onSubmitCodeFixPrompt}
         {...overrides}
       />,
     );
   });
 
   mountedRoots.push({ root, container });
-  return container;
+  return { container, onSubmitCodeFixPrompt };
 }
 
 beforeEach(async () => {
@@ -325,6 +331,131 @@ describe("WorkspaceHarnessDialogs", () => {
     expect(guide?.getAttribute("data-stage")).toBe("writing");
     expect(guide?.textContent).toContain("real-change.ts");
     expect(guide?.textContent).not.toContain("README.md");
+  });
+
+  it("code_orchestrated 工作台弹窗应在失败输出时优先引导查看输出", async () => {
+    const { onSubmitCodeFixPrompt } = renderDialog({
+      harnessState: createHarnessState({
+        outputSignals: [
+          {
+            id: "signal-code-pass",
+            toolCallId: "tool-code-pass",
+            toolName: "bash",
+            title: "类型检查通过",
+            summary: "typecheck passed",
+            preview: "tsc --noEmit",
+            exitCode: 0,
+          },
+          {
+            id: "signal-code-failed",
+            toolCallId: "tool-code-failed",
+            toolName: "bash",
+            title: "回归测试失败",
+            summary: "vitest failed",
+            preview: "1 test failed",
+            exitCode: 1,
+          },
+        ],
+        recentFileEvents: [
+          {
+            id: "event-code-edit",
+            toolCallId: "tool-code-edit",
+            path: "/tmp/workspace/src/main.ts",
+            displayName: "main.ts",
+            kind: "code",
+            action: "edit",
+            sourceToolName: "edit_file",
+            timestamp: new Date("2026-05-26T10:01:00.000Z"),
+            preview: "Update main entry",
+            clickable: true,
+          },
+        ],
+      }),
+    });
+
+    const guide = document.body.querySelector(
+      '[data-testid="code-workbench-guide"]',
+    ) as HTMLElement | null;
+
+    expect(guide?.getAttribute("data-stage")).toBe("failed_output");
+    expect(guide?.textContent).toContain("先查看失败输出");
+    expect(guide?.textContent).toContain("失败输出 1");
+
+    const fixAction = document.body.querySelector(
+      '[data-testid="code-review-summary-fix-action"]',
+    ) as HTMLButtonElement | null;
+
+    expect(fixAction?.textContent).toContain("继续修复");
+
+    await act(async () => {
+      fixAction?.click();
+    });
+
+    expect(onSubmitCodeFixPrompt).toHaveBeenCalledTimes(1);
+    expect(onSubmitCodeFixPrompt.mock.calls[0]?.[0]).toContain("回归测试失败");
+    expect(onSubmitCodeFixPrompt.mock.calls[0]?.[0]).toContain(
+      "1 test failed",
+    );
+  });
+
+  it("代码审阅摘要应跟随文件审阅区的已应用状态变化", () => {
+    renderDialog({
+      harnessState: createHarnessState({
+        recentFileEvents: [
+          {
+            id: "event-code-edit",
+            toolCallId: "tool-code-edit",
+            path: "/tmp/workspace/src/main.ts",
+            displayName: "main.ts",
+            kind: "code",
+            action: "edit",
+            sourceToolName: "edit_file",
+            timestamp: new Date("2026-05-26T10:01:00.000Z"),
+            preview: "Update main entry",
+            clickable: true,
+          },
+        ],
+      }),
+    });
+
+    const summary = document.body.querySelector(
+      '[data-testid="code-review-summary-panel"]',
+    ) as HTMLElement | null;
+    const files = document.body.querySelector(
+      '[data-testid="code-review-summary-files"]',
+    ) as HTMLElement | null;
+    const selectAll = Array.from(document.body.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("全选变更"),
+    ) as HTMLButtonElement | undefined;
+
+    expect(summary?.textContent).toContain("待审阅变更");
+    expect(summary?.textContent).toContain(
+      "待处理 1 个，已应用 0 个，已标记回退 0 个。",
+    );
+    expect(files?.dataset.confirmed).toBe("0");
+    expect(selectAll).toBeTruthy();
+
+    act(() => {
+      selectAll?.click();
+    });
+
+    const markApplied = Array.from(
+      document.body.querySelectorAll("button"),
+    ).find((button) => button.textContent?.includes("标记已应用 1")) as
+      | HTMLButtonElement
+      | undefined;
+
+    expect(markApplied).toBeTruthy();
+
+    act(() => {
+      markApplied?.click();
+    });
+
+    expect(summary?.textContent).toContain("变更已确认");
+    expect(summary?.textContent).toContain(
+      "待处理 0 个，已应用 1 个，已标记回退 0 个。",
+    );
+    expect(files?.dataset.confirmed).toBe("1");
   });
 
   it("没有真实文件快照时不应在导轨显示快照可回滚", async () => {

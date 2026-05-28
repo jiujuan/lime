@@ -4,8 +4,10 @@ import type {
   ReactNode,
   SetStateAction,
 } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { StepProgress } from "@/lib/workspace/workbenchUi";
+import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime";
+import type { AgentThreadItem } from "@/lib/api/agentProtocol";
 import { useWorkspaceNavigationActions } from "./useWorkspaceNavigationActions";
 import { useWorkspaceInputbarSceneRuntime } from "./useWorkspaceInputbarSceneRuntime";
 import { useWorkspaceCanvasSceneRuntime } from "./useWorkspaceCanvasSceneRuntime";
@@ -13,10 +15,17 @@ import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayId
 import { CanvasSessionOverviewPanel } from "../components/CanvasSessionOverviewPanel";
 import { MessageList } from "../components/MessageList";
 import { TeamWorkspaceDock } from "../components/TeamWorkspaceDock";
+import { CodeReviewSummaryPanel } from "../components/CodeReviewSummaryPanel";
+import type { CodeWorkbenchGuideTarget } from "../components/CodeWorkbenchGuide";
+import type { HarnessFileChangeReviewSummary } from "../components/HarnessStatusPanel";
 import type {
+  CanvasWorkbenchChangeItem,
+  CanvasWorkbenchChangeView,
   CanvasWorkbenchHeaderView,
   CanvasWorkbenchSessionView,
   CanvasWorkbenchSummaryStat,
+  CanvasWorkbenchTab,
+  CanvasWorkbenchUtilityView,
 } from "../components/CanvasWorkbenchLayout";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import type { CreationMode } from "../components/types";
@@ -32,12 +41,14 @@ import type { SyncStatus } from "../hooks/useContentSync";
 import type { ArtifactTimelineOpenTarget } from "../utils/artifactTimelineNavigation";
 import { buildAgentTaskRuntimeCardModel } from "../utils/agentTaskRuntime";
 import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface";
+import type { HarnessSessionState } from "../utils/harnessState";
 import {
   buildStepProgressProps,
   buildTeamWorkspaceDockProps,
   type TeamWorkbenchSurfaceProps,
 } from "./chatSurfaceProps";
 import { WorkspaceConversationScene } from "./WorkspaceConversationScene";
+import { extractFileNameFromPath } from "./workspacePath";
 
 type InputbarScene = Pick<
   ReturnType<typeof useWorkspaceInputbarSceneRuntime>,
@@ -62,6 +73,7 @@ type CanvasScene = Pick<
   | "canvasWorkbenchDefaultPreview"
   | "handleOpenCanvasWorkbenchPath"
   | "handleRevealCanvasWorkbenchPath"
+  | "handleCloseCanvasWorkbench"
   | "renderCanvasWorkbenchPreview"
 >;
 type WorkspaceConversationSceneProps = ComponentProps<
@@ -244,6 +256,246 @@ const EMPTY_PROJECTED_QUEUED_TURNS: NonNullable<
 const EMPTY_PROJECTED_CHILD_SUBAGENT_SESSIONS: NonNullable<
   ConversationScenePresentationParams["messageList"]["childSubagentSessions"]
 > = [];
+
+const CODE_OUTPUT_ITEM_TYPES = new Set([
+  "command_execution",
+  "tool_call",
+  "error",
+  "warning",
+]);
+
+function normalizeChangePath(value: string): string {
+  return value.replace(/\\/g, "/").trim().toLowerCase();
+}
+
+function readMetadataRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readMetadataText(
+  metadata: Record<string, unknown> | null,
+  keys: string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = metadata?.[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
+function readMetadataRecordValue(
+  metadata: Record<string, unknown> | null,
+  keys: string[],
+): Record<string, unknown> | null {
+  for (const key of keys) {
+    const value = readMetadataRecord(metadata?.[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function readMetadataVersionNo(
+  metadata: Record<string, unknown> | null,
+): number | undefined {
+  const versionRecord = readMetadataRecordValue(metadata, [
+    "artifactVersion",
+    "artifact_version",
+  ]);
+  const rawValue =
+    metadata?.artifactVersionNo ??
+    metadata?.artifact_version_no ??
+    metadata?.versionNo ??
+    metadata?.version_no ??
+    versionRecord?.versionNo ??
+    versionRecord?.version_no;
+  if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
+    return rawValue;
+  }
+  if (typeof rawValue === "string" && rawValue.trim()) {
+    const parsed = Number(rawValue.trim());
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function buildFileArtifactChangeItem(
+  item: Extract<AgentThreadItem, { type: "file_artifact" }>,
+  fileCheckpointSummary?: AgentRuntimeFileCheckpointThreadSummary | null,
+): CanvasWorkbenchChangeItem | null {
+  const path = item.path.trim();
+  if (!path) {
+    return null;
+  }
+
+  const metadata = readMetadataRecord(item.metadata);
+  const versionRecord = readMetadataRecordValue(metadata, [
+    "artifactVersion",
+    "artifact_version",
+  ]);
+  const preview =
+    readMetadataText(metadata, [
+      "previewText",
+      "preview_text",
+      "artifactSummary",
+      "artifact_summary",
+      "summary",
+    ]) || item.content;
+  const latestCheckpoint = fileCheckpointSummary?.latest_checkpoint || null;
+  const metadataCheckpointPath =
+    readMetadataText(metadata, ["snapshotPath", "snapshot_path"]) ||
+    readMetadataText(versionRecord, ["snapshotPath", "snapshot_path"]);
+  const checkpointMatches =
+    latestCheckpoint?.path &&
+    normalizeChangePath(latestCheckpoint.path) === normalizeChangePath(path);
+  const versionNo = readMetadataVersionNo(metadata);
+
+  return {
+    id: item.id,
+    path,
+    displayName:
+      readMetadataText(metadata, [
+        "artifactTitle",
+        "artifact_title",
+        "title",
+        "fileName",
+        "filename",
+    ]) || extractFileNameFromPath(path),
+    source: item.source,
+    status: item.status,
+    reviewStatus:
+      item.status === "completed" ? "pending_review" : undefined,
+    preview,
+    currentContent: item.content || preview || null,
+    previousContent: null,
+    checkpointPath: checkpointMatches
+      ? latestCheckpoint.path
+      : metadataCheckpointPath || null,
+    checkpointLabel:
+      (checkpointMatches && latestCheckpoint.version_no) || versionNo
+        ? `v${latestCheckpoint?.version_no || versionNo}`
+        : null,
+  };
+}
+
+function upsertChangeItem(
+  byPath: Map<string, CanvasWorkbenchChangeItem>,
+  item: CanvasWorkbenchChangeItem | null,
+) {
+  if (!item) {
+    return;
+  }
+  const key = normalizeChangePath(item.path);
+  const previous = byPath.get(key);
+  if (!previous) {
+    byPath.set(key, item);
+    return;
+  }
+
+  byPath.set(key, {
+    ...previous,
+    ...item,
+    id: previous.id,
+    currentContent: item.currentContent || previous.currentContent,
+    previousContent: item.previousContent ?? previous.previousContent,
+    preview: item.preview || previous.preview,
+    source: item.source || previous.source,
+    absolutePath: item.absolutePath || previous.absolutePath,
+    status:
+      previous.status === "in_progress" || item.status === "in_progress"
+        ? "in_progress"
+        : previous.status === "failed" || item.status === "failed"
+          ? "failed"
+          : item.status || previous.status,
+    reviewStatus: item.reviewStatus || previous.reviewStatus,
+    checkpointPath: item.checkpointPath || previous.checkpointPath,
+    checkpointLabel: item.checkpointLabel || previous.checkpointLabel,
+  });
+}
+
+function buildHarnessFileChangeReviewSummary(
+  items: readonly CanvasWorkbenchChangeItem[],
+): HarnessFileChangeReviewSummary | null {
+  if (items.length === 0) {
+    return null;
+  }
+
+  return items.reduce<HarnessFileChangeReviewSummary>(
+    (summary, item) => {
+      if (item.reviewStatus === "applied") {
+        summary.applied += 1;
+      } else if (item.reviewStatus === "rejected") {
+        summary.rejected += 1;
+      } else {
+        summary.pending += 1;
+      }
+      return summary;
+    },
+    {
+      total: items.length,
+      pending: 0,
+      applied: 0,
+      rejected: 0,
+    },
+  );
+}
+
+function mapCodeReviewTargetToWorkbenchTab(
+  target: CodeWorkbenchGuideTarget,
+): CanvasWorkbenchTab {
+  if (target === "outputs") {
+    return "outputs";
+  }
+  if (target === "file_review") {
+    return "changes";
+  }
+  return "logs";
+}
+
+function buildCanvasWorkbenchChangeView({
+  threadItems,
+  fileCheckpointSummary,
+  onOpenFile,
+}: {
+  threadItems: AgentThreadItem[];
+  fileCheckpointSummary?: AgentRuntimeFileCheckpointThreadSummary | null;
+  onOpenFile?: (path: string) => void | Promise<void>;
+}): CanvasWorkbenchChangeView | null {
+  const byPath = new Map<string, CanvasWorkbenchChangeItem>();
+
+  threadItems
+    .filter(
+      (item): item is Extract<AgentThreadItem, { type: "file_artifact" }> =>
+        item.type === "file_artifact",
+    )
+    .forEach((item) => {
+      upsertChangeItem(
+        byPath,
+        buildFileArtifactChangeItem(item, fileCheckpointSummary),
+      );
+    });
+
+  const items = [...byPath.values()];
+  if (items.length === 0 && !(fileCheckpointSummary?.count ?? 0)) {
+    return null;
+  }
+
+  const latestCheckpoint = fileCheckpointSummary?.latest_checkpoint || null;
+  const latestCheckpointPath =
+    latestCheckpoint?.snapshot_path || latestCheckpoint?.path || null;
+
+  return {
+    items,
+    checkpointCount: fileCheckpointSummary?.count ?? 0,
+    latestCheckpointPath,
+    onOpenFile,
+  };
+}
 
 interface SessionRuntimeProjectionState {
   key: string;
@@ -437,6 +689,8 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   workspaceHealthError: boolean;
   focusedTimelineItemId: string | null;
   timelineFocusRequestKey: number;
+  harnessState?: HarnessSessionState | null;
+  onSubmitCodeFixPrompt?: (prompt: string) => void | Promise<void>;
 }
 
 export function useWorkspaceConversationSceneRuntime({
@@ -589,6 +843,8 @@ export function useWorkspaceConversationSceneRuntime({
   workspaceHealthError,
   focusedTimelineItemId,
   timelineFocusRequestKey,
+  harnessState,
+  onSubmitCodeFixPrompt,
 }: UseWorkspaceConversationSceneRuntimeParams) {
   const sessionRuntimeProjectionSessionId = sessionId ?? "no-session";
   const sessionRuntimeProjectionFirstMessageId =
@@ -765,6 +1021,7 @@ export function useWorkspaceConversationSceneRuntime({
     !isThemeWorkbench &&
     activeTheme === "general" &&
     layoutMode === "chat-canvas";
+  const isCodeOrchestratedWorkbench = executionStrategy === "code_orchestrated";
   const currentSessionTurn =
     projectedTurns.find((turn) => turn.id === projectedCurrentTurnId) ||
     projectedTurns.at(-1) ||
@@ -802,9 +1059,63 @@ export function useWorkspaceConversationSceneRuntime({
   const runtimeItemCount = projectedThreadItems.filter(
     (item) => item.type !== "user_message" && item.type !== "agent_message",
   ).length;
+  const outputItemCount = projectedThreadItems.filter((item) =>
+    CODE_OUTPUT_ITEM_TYPES.has(item.type),
+  ).length;
+  const failedOutputItemCount = projectedThreadItems.filter(
+    (item) => CODE_OUTPUT_ITEM_TYPES.has(item.type) && item.status === "failed",
+  ).length;
   const inProgressItemCount = projectedThreadItems.filter(
     (item) => item.status === "in_progress",
   ).length;
+  const fileCheckpointSummary =
+    projectedThreadRead?.file_checkpoint_summary || null;
+  const changeView = useMemo(() => {
+    return buildCanvasWorkbenchChangeView({
+      threadItems: isCodeOrchestratedWorkbench ? projectedThreadItems : [],
+      fileCheckpointSummary,
+      onOpenFile: canvasScene.handleOpenCanvasWorkbenchPath,
+    });
+  }, [
+    canvasScene.handleOpenCanvasWorkbenchPath,
+    fileCheckpointSummary,
+    isCodeOrchestratedWorkbench,
+    projectedThreadItems,
+  ]);
+  const fileChangeReviewSummary = useMemo(
+    () => buildHarnessFileChangeReviewSummary(changeView?.items ?? []),
+    [changeView?.items],
+  );
+  const submitCodeFixPrompt = useCallback(
+    (prompt: string) => {
+      const normalizedPrompt = prompt.trim();
+      if (!normalizedPrompt) {
+        return;
+      }
+
+      if (onSubmitCodeFixPrompt) {
+        return onSubmitCodeFixPrompt(normalizedPrompt);
+      }
+
+      handleSendFromEmptyState(
+        normalizedPrompt,
+        "code_orchestrated",
+        undefined,
+        {
+          displayContent: normalizedPrompt,
+          skipSceneCommandRouting: true,
+          requestMetadata: {
+            harness: {
+              code_fix: {
+                source: "failed_output",
+              },
+            },
+          },
+        },
+      );
+    },
+    [handleSendFromEmptyState, onSubmitCodeFixPrompt],
+  );
   const sessionSummaryStats: CanvasWorkbenchSummaryStat[] = [
     {
       key: "session-status",
@@ -901,6 +1212,49 @@ export function useWorkspaceConversationSceneRuntime({
         currentTurnId={projectedCurrentTurnId}
         pendingActions={projectedPendingActions}
         queuedTurns={projectedQueuedTurns}
+        isSending={isSending}
+        focusedItemId={focusedTimelineItemId}
+      />
+    ),
+  };
+  const outputView: CanvasWorkbenchUtilityView = {
+    enabled: isCodeOrchestratedWorkbench,
+    tabBadge:
+      outputItemCount > 0
+        ? outputItemCount > 99
+          ? "99+"
+          : `${outputItemCount}`
+        : undefined,
+    tabBadgeTone:
+      failedOutputItemCount > 0
+        ? "rose"
+        : outputItemCount > 0
+          ? "sky"
+          : "slate",
+    leadContent:
+      isCodeOrchestratedWorkbench && harnessState
+        ? ({ openTab }) => (
+            <CodeReviewSummaryPanel
+              harnessState={harnessState}
+              fileCheckpointSummary={fileCheckpointSummary}
+              fileChangeReviewSummary={fileChangeReviewSummary}
+              onOpenSection={(target) =>
+                openTab(mapCodeReviewTargetToWorkbenchTab(target))
+              }
+              onOpenFileCheckpoints={() => openTab("changes")}
+              onSubmitCodeFixPrompt={submitCodeFixPrompt}
+            />
+          )
+        : undefined,
+    renderPanel: () => (
+      <CanvasSessionOverviewPanel
+        turns={projectedTurns}
+        threadItems={projectedThreadItems.filter((item) =>
+          CODE_OUTPUT_ITEM_TYPES.has(item.type),
+        )}
+        currentTurnId={projectedCurrentTurnId}
+        pendingActions={[]}
+        queuedTurns={[]}
         isSending={isSending}
         focusedItemId={focusedTimelineItemId}
       />
@@ -1245,9 +1599,14 @@ export function useWorkspaceConversationSceneRuntime({
       loadFilePreview: handleHarnessLoadFilePreview,
       onOpenPath: canvasScene.handleOpenCanvasWorkbenchPath,
       onRevealPath: canvasScene.handleRevealCanvasWorkbenchPath,
+      onClose: canvasScene.handleCloseCanvasWorkbench,
       renderPreview: canvasScene.renderCanvasWorkbenchPreview,
+      workbenchMode: isCodeOrchestratedWorkbench ? "coding" : "default",
       workspaceView,
       sessionView,
+      outputView: isCodeOrchestratedWorkbench ? outputView : null,
+      logView: isCodeOrchestratedWorkbench ? sessionView : null,
+      changeView: isCodeOrchestratedWorkbench ? changeView : null,
       onLayoutModeChange: shouldSyncCanvasWorkbenchLayoutMode
         ? setCanvasWorkbenchLayoutMode
         : undefined,

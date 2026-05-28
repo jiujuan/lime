@@ -1,0 +1,237 @@
+{
+  "docsContent": {
+    "englishCompanionFileCount": 0,
+    "routeEmissionAllowed": false
+  },
+  "entries": [
+    {
+      "kind": "readme",
+      "path": "README.md",
+      "priority": "required",
+      "sourceExists": true,
+      "targets": [
+        {
+          "action": "include-companion",
+          "companionExists": true,
+          "companionPath": "README.en.md",
+          "locale": "en-US"
+        }
+      ]
+    },
+    {
+      "kind": "release-notes",
+      "path": "RELEASE_NOTES.md",
+      "priority": "required",
+      "sourceExists": true,
+      "targets": [
+        {
+          "action": "include-companion",
+          "companionExists": true,
+          "companionPath": "RELEASE_NOTES.en.md",
+          "locale": "en-US"
+        }
+      ]
+    },
+    {
+      "kind": "docs-home",
+      "path": "docs/content/index.md",
+      "priority": "pilot",
+      "sourceExists": true,
+      "targets": [
+        {
+          "action": "include-companion",
+          "companionExists": true,
+          "companionPath": "docs/roadmap/i18n/companions/docs-content-index.en.md",
+          "locale": "en-US"
+        }
+      ]
+    },
+    {
+      "kind": "help-doc",
+      "path": "docs/content/02.user-guide/9.mcp.md",
+      "priority": "source-only",
+      "sourceExists": true,
+      "targets": [
+        {
+          "action": "queue-source-only",
+          "companionExists": false,
+          "companionPath": null,
+          "locale": "en-US"
+        }
+      ]
+    },
+    {
+      "kind": "help-doc",
+      "path": "docs/content/02.user-guide/16.gateway-tunnel-webhook.md",
+      "priority": "source-only",
+      "sourceExists": true,
+      "targets": [
+        {
+          "action": "queue-source-only",
+          "companionExists": false,
+          "companionPath": null,
+          "locale": "en-US"
+        }
+      ]
+    },
+    {
+      "kind": "help-doc",
+      "path": "docs/content/02.user-guide/17.runtime-agents.md",
+      "priority": "source-only",
+      "sourceExists": true,
+      "targets": [
+        {
+          "action": "queue-source-only",
+          "companionExists": false,
+          "companionPath": null,
+          "locale": "en-US"
+        }
+      ]
+    },
+    {
+      "kind": "docs-provider",
+      "path": "docs/content/03.providers/1.overview.md",
+      "priority": "source-only",
+      "sourceExists": true,
+      "targets": [
+        {
+          "action": "queue-source-only",
+          "companionExists": false,
+          "companionPath": null,
+          "locale": "en-US"
+        }
+      ]
+    },
+    {
+      "kind": "api-reference",
+      "path": "docs/content/04.api-reference/1.overview.md",
+      "priority": "source-only",
+      "sourceExists": true,
+      "targets": [
+        {
+          "action": "queue-source-only",
+          "companionExists": false,
+          "companionPath": null,
+          "locale": "en-US"
+        }
+      ]
+    },
+    {
+      "kind": "api-reference",
+      "path": "docs/content/04.api-reference/2.openai-api.md",
+      "priority": "source-only",
+      "sourceExists": true,
+      "targets": [
+        {
+          "action": "queue-source-only",
+          "companionExists": false,
+          "companionPath": null,
+          "locale": "en-US"
+        }
+      ]
+    },
+    {
+      "kind": "api-reference",
+      "path": "docs/content/04.api-reference/3.claude-api.md",
+      "priority": "source-only",
+      "sourceExists": true,
+      "targets": [
+        {
+          "action": "queue-source-only",
+          "companionExists": false,
+          "companionPath": null,
+          "locale": "en-US"
+        }
+      ]
+    },
+    {
+      "kind": "legal",
+      "path": "docs/content/07.legal/1.disclaimer.md",
+      "priority": "source-only",
+      "sourceExists": true,
+      "targets": [
+        {
+          "action": "queue-source-only",
+          "companionExists": false,
+          "companionPath": null,
+          "locale": "en-US"
+        }
+      ]
+    },
+    {
+      "kind": "open-platform",
+      "path": "docs/content/08.open-platform/1.overview.md",
+      "priority": "source-only",
+      "sourceExists": true,
+      "targets": [
+        {
+          "action": "queue-source-only",
+          "companionExists": false,
+          "companionPath": null,
+          "locale": "en-US"
+        }
+      ]
+    },
+    {
+      "kind": "open-platform",
+      "path": "docs/content/08.open-platform/3.plugin-development.md",
+      "priority": "source-only",
+      "sourceExists": true,
+      "targets": [
+        {
+          "action": "queue-source-only",
+          "companionExists": false,
+          "companionPath": null,
+          "locale": "en-US"
+        }
+      ]
+    },
+    {
+      "kind": "open-platform",
+      "path": "docs/content/08.open-platform/4.connect.md",
+      "priority": "source-only",
+      "sourceExists": true,
+      "targets": [
+        {
+          "action": "queue-source-only",
+          "companionExists": false,
+          "companionPath": null,
+          "locale": "en-US"
+        }
+      ]
+    },
+    {
+      "kind": "open-platform",
+      "path": "docs/content/08.open-platform/6.connect-webhook.md",
+      "priority": "source-only",
+      "sourceExists": true,
+      "targets": [
+        {
+          "action": "queue-source-only",
+          "companionExists": false,
+          "companionPath": null,
+          "locale": "en-US"
+        }
+      ]
+    }
+  ],
+  "repoRoot": "/Users/coso/Documents/dev/ai/aiclientproxy/lime",
+  "schemaVersion": "lime.i18n.docsLocaleBuildManifest.v1",
+  "scopePath": "docs/roadmap/i18n/release-docs-translation-scope.json",
+  "sourceLocale": "zh-CN",
+  "summary": {
+    "blockedEntryCount": 0,
+    "companionEntryCount": 3,
+    "entryCount": 15,
+    "missingSourceCount": 0,
+    "pilotCompanionMissingCount": 0,
+    "requiredCompanionMissingCount": 0,
+    "routeEmissionAllowed": false,
+    "sourceOnlyCandidateCount": 12,
+    "targetLocaleCount": 1,
+    "workflowStatus": "ready"
+  },
+  "targetLocales": [
+    "en-US"
+  ]
+}

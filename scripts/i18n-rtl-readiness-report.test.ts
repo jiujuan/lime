@@ -102,6 +102,22 @@ describe("i18n rtl readiness report", () => {
         "",
       ].join("\n"),
     );
+    writeFile(
+      root,
+      "docs/roadmap/i18n/evidence/rtl-playwright-smoke-report.json",
+      JSON.stringify(
+        {
+          schemaVersion: "lime.i18n.rtlPlaywrightSmokeReport.v1",
+          summary: {
+            homeSidebarOnRight: true,
+            settingsNavVisible: true,
+            userMenuDialogVisible: true,
+          },
+        },
+        null,
+        2,
+      ),
+    );
 
     const report = analyzeI18nRtlReadinessReport({ repoRoot: root });
 
@@ -111,7 +127,22 @@ describe("i18n rtl readiness report", () => {
     expect(report.summary.totalMarkerCount).toBeGreaterThan(0);
     expect(report.summary.highRiskFileCount).toBeGreaterThan(0);
     expect(report.summary.missingRtlScreenshotEvidence).toBe(true);
-    expect(report.summary.missingPlaywrightSmokeEvidence).toBe(true);
+    expect(report.summary.missingPlaywrightSmokeEvidence).toBe(false);
+    expect(report.summary.missingRequiredSurfaceSmokeEvidence).toBe(true);
+    expect(report.summary.requiredSurfaceSmokeCoveredCount).toBe(3);
+    expect(report.summary.requiredSurfaceSmokeMissingCount).toBe(1);
+    expect(report.smokeCoverage).toEqual(
+      expect.objectContaining({
+        coveredSurfaces: ["sidebar", "settings", "dialogs"],
+        missingSurfaces: ["workspace"],
+        requiredSurfaces: ["sidebar", "settings", "workspace", "dialogs"],
+        summaryKeys: [
+          "homeSidebarOnRight",
+          "settingsNavVisible",
+          "userMenuDialogVisible",
+        ],
+      }),
+    );
 
     const appShell = report.surfaces.find(
       (surface) => surface.name === "app-shell",
@@ -132,11 +163,43 @@ describe("i18n rtl readiness report", () => {
     expect(formatI18nRtlReadinessReport(report, "text")).toContain(
       "[i18n:rtl] readiness inventory",
     );
+    expect(formatI18nRtlReadinessReport(report, "text")).toContain(
+      "missing required surface smoke: workspace",
+    );
     expect(JSON.parse(formatI18nRtlReadinessReport(report, "json"))).toEqual(
       expect.objectContaining({
         schemaVersion: "lime.i18n.rtlReadinessReport.v1",
       }),
     );
+  });
+
+  it("应识别 PRD 要求的 RTL smoke surface 全部覆盖", () => {
+    const root = createTempDir();
+
+    writeFile(
+      root,
+      "docs/roadmap/i18n/evidence/rtl-playwright-smoke-report.json",
+      JSON.stringify(
+        {
+          schemaVersion: "lime.i18n.rtlPlaywrightSmokeReport.v1",
+          summary: {
+            homeSidebarOnRight: true,
+            settingsNavVisible: true,
+            userMenuDialogVisible: true,
+            workspaceVisible: true,
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const report = analyzeI18nRtlReadinessReport({ repoRoot: root });
+
+    expect(report.summary.missingRequiredSurfaceSmokeEvidence).toBe(false);
+    expect(report.summary.requiredSurfaceSmokeCoveredCount).toBe(4);
+    expect(report.summary.requiredSurfaceSmokeMissingCount).toBe(0);
+    expect(report.smokeCoverage.missingSurfaces).toEqual([]);
   });
 
   it("应支持 CLI 写出 JSON evidence", () => {

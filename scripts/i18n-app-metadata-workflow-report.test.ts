@@ -69,7 +69,15 @@ describe("i18n app metadata workflow report", () => {
           productName: "Lime",
           identifier: "com.limecloud.lime",
           app: { windows: [{ title: "Lime" }] },
-          bundle: { targets: "all" },
+          bundle: {
+            fileAssociations: [
+              {
+                description: "Lime Skill Package",
+                name: "Lime Skill Package",
+              },
+            ],
+            targets: "all",
+          },
           plugins: { updater: { pubkey: "lime-dev-placeholder" }, "deep-link": { desktop: { schemes: ["lime"] } } },
         },
         null,
@@ -103,14 +111,35 @@ describe("i18n app metadata workflow report", () => {
     );
     writeFile(
       root,
+      "docs/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json",
+      JSON.stringify(
+        {
+          schemaVersion: "lime.i18n.appMetadataLocaleBuildManifest.v1",
+          scope: {
+            generatedConfigEmissionAllowed: false,
+            manifestGenerationAllowed: true,
+          },
+          summary: {
+            generatedConfigEmissionAllowed: false,
+            manifestGenerationAllowed: true,
+            workflowStatus: "ready",
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    writeFile(
+      root,
       "docs/roadmap/i18n/app-metadata-translation-scope.json",
       JSON.stringify(
         {
           schemaVersion: "lime.i18n.appMetadataTranslationScope.v1",
           sourceLocale: "zh-CN",
           targetLocales: ["en-US"],
-          workflowStatus: "not-started",
+          workflowStatus: "ready",
           owner: "release",
+          manifestGenerationAllowed: true,
           generatedMetadataAllowed: false,
           items: [
             {
@@ -132,6 +161,42 @@ describe("i18n app metadata workflow report", () => {
               priority: "stable",
             },
             {
+              path: "src-tauri/tauri.conf.json",
+              field: "app.windows[0].title",
+              localization: "stable-brand",
+              priority: "stable",
+            },
+            {
+              path: "src-tauri/tauri.conf.json",
+              field: "bundle.fileAssociations[0].name",
+              localization: "stable-brand",
+              priority: "stable",
+            },
+            {
+              path: "src-tauri/tauri.conf.json",
+              field: "bundle.fileAssociations[0].description",
+              localization: "translatable",
+              priority: "required-before-multilingual-release",
+            },
+            {
+              path: "src-tauri/tauri.conf.headless.json",
+              field: "productName",
+              localization: "stable-brand",
+              priority: "stable",
+            },
+            {
+              path: "src-tauri/tauri.conf.headless.json",
+              field: "identifier",
+              localization: "stable-identifier",
+              priority: "stable",
+            },
+            {
+              path: "src-tauri/tauri.conf.headless.json",
+              field: "app.windows[0].title",
+              localization: "stable-brand",
+              priority: "stable",
+            },
+            {
               path: "src-tauri/capabilities/agent-app-shell.json",
               field: "description",
               localization: "internal-source-only",
@@ -147,25 +212,46 @@ describe("i18n app metadata workflow report", () => {
     const report = analyzeAppMetadataWorkflowReport({ repoRoot: root });
 
     expect(report.schemaVersion).toBe("lime.i18n.appMetadataWorkflowReport.v1");
-    expect(report.summary.hasInstallerLocalizationWorkflow).toBe(false);
+    expect(report.summary.hasInstallerLocalizationWorkflow).toBe(true);
+    expect(report.summary.hasAppMetadataLocaleBuildManifest).toBe(true);
+    expect(report.summary.appMetadataLocaleBuildManifestReady).toBe(true);
     expect(report.summary.hasMetadataTranslationScope).toBe(true);
     expect(report.summary.hasLocalizedAppMetadataArtifacts).toBe(true);
     expect(report.summary.hasLocaleAwareMetadataSources).toBe(true);
-    expect(report.summary.metadataScopeItemCount).toBe(4);
-    expect(report.summary.metadataTranslatableFieldCount).toBe(1);
+    expect(report.summary.metadataMissingScopedFieldCount).toBe(0);
+    expect(report.summary.metadataReviewedFieldCount).toBe(10);
+    expect(report.summary.metadataScopeItemCount).toBe(10);
+    expect(report.summary.metadataTranslatableFieldCount).toBe(2);
+    expect(report.summary.metadataUnscopedFieldCount).toBe(0);
     expect(report.appMetadataTranslationScope).toEqual(
       expect.objectContaining({
         generatedMetadataAllowed: false,
-        itemCount: 4,
+        manifestGenerationAllowed: true,
+        itemCount: 10,
         owner: "release",
-        requiredBeforeMultilingualReleaseCount: 1,
+        requiredBeforeMultilingualReleaseCount: 2,
         schemaVersion: "lime.i18n.appMetadataTranslationScope.v1",
         sourceLocale: "zh-CN",
         sourceOnlyFieldCount: 1,
-        stableFieldCount: 2,
+        stableFieldCount: 7,
         targetLocales: ["en-US"],
-        translatableFieldCount: 1,
-        workflowStatus: "not-started",
+        translatableFieldCount: 2,
+        workflowStatus: "ready",
+      }),
+    );
+    expect(report.appMetadataLocaleBuildManifest).toEqual(
+      expect.objectContaining({
+        exists: true,
+        generatedConfigEmissionAllowed: false,
+        manifestGenerationAllowed: true,
+        schemaVersion: "lime.i18n.appMetadataLocaleBuildManifest.v1",
+        workflowStatus: "ready",
+      }),
+    );
+    expect(report.metadataFieldCoverage).toEqual(
+      expect.objectContaining({
+        missingScopedFields: [],
+        unscopedMetadataFields: [],
       }),
     );
     expect(report.tauriConfig.productName).toBe("Lime");
@@ -178,6 +264,105 @@ describe("i18n app metadata workflow report", () => {
         schemaVersion: "lime.i18n.appMetadataWorkflowReport.v1",
       }),
     );
+  });
+
+  it("应识别 metadata scope 漏管和引用失效字段", () => {
+    const root = createTempDir();
+
+    writeFile(
+      root,
+      "package.json",
+      JSON.stringify(
+        {
+          name: "lime",
+          version: "1.47.0",
+          description: "AI content workspace for Chinese creators.",
+        },
+        null,
+        2,
+      ),
+    );
+    writeFile(root, "src-tauri/Cargo.toml", '[package]\nname = "lime"\nversion = "1.47.0"\n');
+    writeFile(
+      root,
+      "src-tauri/tauri.conf.json",
+      JSON.stringify(
+        {
+          productName: "Lime",
+          identifier: "com.limecloud.lime",
+          app: { windows: [{ title: "Lime" }] },
+          bundle: {
+            fileAssociations: [
+              {
+                description: "Lime Skill Package",
+                name: "Lime Skill Package",
+              },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    writeFile(
+      root,
+      "src-tauri/tauri.conf.headless.json",
+      JSON.stringify({ productName: "Lime" }, null, 2),
+    );
+    writeFile(
+      root,
+      "src-tauri/capabilities/agent-app-shell.json",
+      JSON.stringify({ identifier: "agent-app-shell" }, null, 2),
+    );
+    writeFile(
+      root,
+      "docs/roadmap/i18n/app-metadata-translation-scope.json",
+      JSON.stringify(
+        {
+          schemaVersion: "lime.i18n.appMetadataTranslationScope.v1",
+          sourceLocale: "zh-CN",
+          targetLocales: ["en-US"],
+          workflowStatus: "not-started",
+          owner: "release",
+          generatedMetadataAllowed: false,
+          items: [
+            {
+              path: "package.json",
+              field: "description",
+              localization: "translatable",
+              priority: "required-before-multilingual-release",
+            },
+            {
+              path: "src-tauri/tauri.conf.json",
+              field: "bundle.fileAssociations[1].description",
+              localization: "translatable",
+              priority: "required-before-multilingual-release",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+    );
+
+    const report = analyzeAppMetadataWorkflowReport({ repoRoot: root });
+
+    expect(report.summary.hasInstallerLocalizationWorkflow).toBe(false);
+    expect(report.summary.hasAppMetadataLocaleBuildManifest).toBe(false);
+    expect(report.summary.appMetadataLocaleBuildManifestReady).toBe(false);
+    expect(report.summary.metadataMissingScopedFieldCount).toBe(1);
+    expect(report.summary.metadataUnscopedFieldCount).toBe(6);
+    expect(report.metadataFieldCoverage.missingScopedFields).toEqual([
+      "src-tauri/tauri.conf.json#bundle.fileAssociations[1].description",
+    ]);
+    expect(report.metadataFieldCoverage.unscopedMetadataFields).toEqual([
+      "src-tauri/tauri.conf.headless.json#productName",
+      "src-tauri/tauri.conf.json#app.windows[0].title",
+      "src-tauri/tauri.conf.json#bundle.fileAssociations[0].description",
+      "src-tauri/tauri.conf.json#bundle.fileAssociations[0].name",
+      "src-tauri/tauri.conf.json#identifier",
+      "src-tauri/tauri.conf.json#productName",
+    ]);
   });
 
   it("应支持 CLI 写出 JSON", () => {

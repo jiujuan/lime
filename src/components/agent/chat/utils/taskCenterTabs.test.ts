@@ -94,6 +94,27 @@ describe("taskCenterTabs", () => {
     ).toEqual(["topic-a", "topic-b"]);
   });
 
+  it("默认标签应纳入非当前运行中任务", () => {
+    const topics = [
+      createTopic("done-recent", {
+        updatedAt: new Date("2026-04-20T04:00:00.000Z"),
+      }),
+      createTopic("running-background", {
+        status: "running",
+        updatedAt: new Date("2026-04-20T01:00:00.000Z"),
+      }),
+      createTopic("done-older", {
+        updatedAt: new Date("2026-04-20T03:00:00.000Z"),
+      }),
+    ];
+
+    expect(buildDefaultTaskCenterTabIds(topics, null)).toEqual([
+      "running-background",
+      "done-recent",
+      "done-older",
+    ]);
+  });
+
   it("应按 workspace 读取和更新标签列表", () => {
     const currentMap = {
       "workspace-a": ["topic-a", "topic-b"],

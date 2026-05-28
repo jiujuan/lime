@@ -84,6 +84,7 @@ export function useAgentContext(options: UseAgentContextOptions) {
   const initialPreferencesRef = useRef(
     resolveWorkspaceAgentPreferences(workspaceId),
   );
+  const executionStrategyWorkspaceRef = useRef(workspaceId?.trim() ?? "");
   const [providerType, setProviderTypeState] = useState(
     () => initialPreferencesRef.current.providerType,
   );
@@ -99,6 +100,11 @@ export function useAgentContext(options: UseAgentContextOptions) {
   );
   const [workspacePathMissing, setWorkspacePathMissing] =
     useState<WorkspacePathMissingState | null>(null);
+  const resolvedExecutionStrategyWorkspace = workspaceId?.trim() ?? "";
+  const effectiveExecutionStrategy =
+    executionStrategyWorkspaceRef.current === resolvedExecutionStrategyWorkspace
+      ? executionStrategy
+      : resolvePersistedExecutionStrategy(workspaceId);
 
   const providerTypeRef = useRef(providerType);
   const modelRef = useRef(model);
@@ -532,10 +538,12 @@ export function useAgentContext(options: UseAgentContextOptions) {
 
     const resolvedWorkspaceId = workspaceId?.trim();
     if (!resolvedWorkspaceId) {
+      executionStrategyWorkspaceRef.current = "";
       setExecutionStrategyState("react");
       setAccessModeState(DEFAULT_AGENT_ACCESS_MODE);
       return;
     }
+    executionStrategyWorkspaceRef.current = resolvedWorkspaceId;
     setExecutionStrategyState(
       resolvePersistedExecutionStrategy(resolvedWorkspaceId),
     );
@@ -620,7 +628,7 @@ export function useAgentContext(options: UseAgentContextOptions) {
     model,
     setModel,
     modelRef,
-    executionStrategy,
+    executionStrategy: effectiveExecutionStrategy,
     setExecutionStrategy,
     setExecutionStrategyState,
     accessMode,

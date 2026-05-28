@@ -117,6 +117,9 @@ describe("TaskCenterTabStrip", () => {
       container.querySelector('[data-testid="task-center-tab-unread-topic-a"]'),
     ).toBeTruthy();
     expect(
+      container.querySelector('[data-testid="task-center-tab-loading-topic-a"]'),
+    ).toBeTruthy();
+    expect(
       container.querySelector('[data-testid="task-center-tab-close-topic-b"]')
         ?.className,
     ).toContain("group-hover:opacity-100");

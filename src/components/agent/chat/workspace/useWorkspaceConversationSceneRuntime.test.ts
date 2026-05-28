@@ -4,6 +4,25 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useWorkspaceConversationSceneRuntime } from "./useWorkspaceConversationSceneRuntime";
 
+vi.mock("react-i18next", async () => {
+  const agentZhCN = (await import("@/i18n/resources/zh-CN/agent.json"))
+    .default as Record<string, string>;
+
+  return {
+    useTranslation: () => ({
+      i18n: {
+        language: "zh-CN",
+      },
+      t: (key: string, options?: Record<string, unknown>) => {
+        const template = agentZhCN[key] ?? key;
+        return template.replace(/{{\s*([^}]+?)\s*}}/g, (_, name: string) =>
+          String(options?.[name.trim()] ?? ""),
+        );
+      },
+    }),
+  };
+});
+
 vi.mock("react-syntax-highlighter", () => ({
   Prism: ({ children }: { children?: unknown }) =>
     React.createElement(
@@ -21,6 +40,31 @@ vi.mock("react-syntax-highlighter/dist/esm/styles/prism", () => ({
 type HookProps = Parameters<typeof useWorkspaceConversationSceneRuntime>[0];
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
+
+function createEmptyHarnessState(): NonNullable<HookProps["harnessState"]> {
+  return {
+    runtimeStatus: null,
+    pendingApprovals: [],
+    latestContextTrace: [],
+    plan: {
+      phase: "idle",
+      items: [],
+    },
+    activity: {
+      planning: 0,
+      filesystem: 0,
+      execution: 0,
+      web: 0,
+      skills: 0,
+      delegation: 0,
+    },
+    delegatedTasks: [],
+    outputSignals: [],
+    activeFileWrites: [],
+    recentFileEvents: [],
+    hasSignals: false,
+  };
+}
 
 function createBaseParams(overrides: Record<string, unknown> = {}) {
   const noop = vi.fn();
@@ -54,6 +98,7 @@ function createBaseParams(overrides: Record<string, unknown> = {}) {
       canvasWorkbenchDefaultPreview: null,
       handleOpenCanvasWorkbenchPath: noop,
       handleRevealCanvasWorkbenchPath: noop,
+      handleCloseCanvasWorkbench: noop,
       renderCanvasWorkbenchPreview: noop,
     },
     handleSendFromEmptyState: noop,
@@ -187,6 +232,8 @@ function createBaseParams(overrides: Record<string, unknown> = {}) {
     workspaceHealthError: false,
     focusedTimelineItemId: null,
     timelineFocusRequestKey: 0,
+    harnessState: createEmptyHarnessState(),
+    onSubmitCodeFixPrompt: undefined,
     ...overrides,
   } as any;
 }
@@ -291,6 +338,21 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     const sceneProps = getRenderedSceneProps(params);
     expect(sceneProps.canvasWorkbenchLayoutProps.onLayoutModeChange).toBe(
       setCanvasWorkbenchLayoutMode,
+    );
+  });
+
+  it("应向画布壳透传关闭动作", () => {
+    const handleCloseCanvasWorkbench = vi.fn();
+    const params = createBaseParams({
+      canvasScene: {
+        ...createBaseParams().canvasScene,
+        handleCloseCanvasWorkbench,
+      },
+    });
+
+    const sceneProps = getRenderedSceneProps(params);
+    expect(sceneProps.canvasWorkbenchLayoutProps.onClose).toBe(
+      handleCloseCanvasWorkbench,
     );
   });
 
@@ -711,6 +773,242 @@ describe("useWorkspaceConversationSceneRuntime", () => {
         sectionEyebrow: "项目目录",
       }),
     );
+  });
+
+  it("code_orchestrated 会话应启用 coding 工作台模式并透出输出/日志入口", async () => {
+    const openChangedFile = vi.fn(async () => undefined);
+    const handleSendFromEmptyState = vi.fn();
+    const params = createBaseParams({
+      executionStrategy: "code_orchestrated",
+      handleSendFromEmptyState,
+      canvasScene: {
+        ...createBaseParams().canvasScene,
+        handleOpenCanvasWorkbenchPath: openChangedFile,
+      },
+      harnessState: {
+        ...createEmptyHarnessState(),
+        outputSignals: [
+          {
+            id: "signal-command",
+            toolCallId: "item-command",
+            toolName: "bash",
+            title: "npm test",
+            summary: "exit code 1",
+            preview: "FAIL src/App.test.tsx\nExpected title",
+            content: "FAIL src/App.test.tsx\nExpected title",
+            exitCode: 1,
+          },
+        ],
+        recentFileEvents: [
+          {
+            id: "file-index",
+            toolCallId: "item-file-index",
+            path: "index.html",
+            displayName: "index.html",
+            kind: "code",
+            action: "write",
+            sourceToolName: "write_file",
+            clickable: true,
+          },
+          {
+            id: "file-app",
+            toolCallId: "item-file-app",
+            path: "src/App.tsx",
+            displayName: "App.tsx",
+            kind: "code",
+            action: "edit",
+            sourceToolName: "edit_file",
+            clickable: true,
+          },
+        ],
+        hasSignals: true,
+      },
+      threadRead: {
+        thread_id: "thread-1",
+        file_checkpoint_summary: {
+          count: 2,
+          latest_checkpoint: {
+            checkpoint_id: "checkpoint-index",
+            turn_id: "turn-1",
+            path: "index.html",
+            source: "runtime",
+            updated_at: "2026-05-27T10:00:04.000Z",
+            version_no: 2,
+            title: "index.html",
+            kind: "code",
+            status: "completed",
+            preview_text: "更新后的页面",
+            snapshot_path: ".lime/artifacts/thread-1/index.v2.html",
+            validation_issue_count: 0,
+          },
+        },
+      },
+      effectiveThreadItems: [
+        {
+          id: "item-command",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          sequence: 1,
+          status: "failed",
+          started_at: "2026-05-27T10:00:00.000Z",
+          updated_at: "2026-05-27T10:00:01.000Z",
+          type: "command_execution",
+          command: "npm test",
+          cwd: "/tmp/demo-project",
+          aggregated_output: "FAIL src/App.test.tsx\nExpected title",
+          exit_code: 1,
+        },
+        {
+          id: "item-error",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          sequence: 2,
+          status: "failed",
+          started_at: "2026-05-27T10:00:02.000Z",
+          updated_at: "2026-05-27T10:00:03.000Z",
+          type: "error",
+          message: "测试失败",
+        },
+        {
+          id: "item-file-index",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          sequence: 3,
+          status: "completed",
+          started_at: "2026-05-27T10:00:04.000Z",
+          updated_at: "2026-05-27T10:00:05.000Z",
+          type: "file_artifact",
+          path: "index.html",
+          source: "runtime",
+          content: "<h1>更新后的页面</h1>",
+          metadata: {
+            artifactTitle: "index.html",
+            previewText: "更新后的页面",
+            artifactVersion: {
+              versionNo: 2,
+              snapshotPath: ".lime/artifacts/thread-1/index.v2.html",
+            },
+          },
+        },
+        {
+          id: "item-file-app",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          sequence: 4,
+          status: "in_progress",
+          started_at: "2026-05-27T10:00:06.000Z",
+          updated_at: "2026-05-27T10:00:07.000Z",
+          type: "file_artifact",
+          path: "src/App.tsx",
+          source: "runtime",
+          content: "export function App() {}",
+          metadata: {
+            artifactTitle: "App.tsx",
+          },
+        },
+      ],
+    });
+
+    const sceneProps = getRenderedSceneProps(params);
+    const canvasProps = sceneProps.canvasWorkbenchLayoutProps;
+
+    expect(canvasProps.workbenchMode).toBe("coding");
+    expect(canvasProps.outputView?.tabBadge).toBe("2");
+    expect(canvasProps.outputView?.tabBadgeTone).toBe("rose");
+    expect(typeof canvasProps.outputView?.renderPanel).toBe("function");
+    expect(canvasProps.outputView?.leadContent).toBeTruthy();
+    expect(canvasProps.logView).toBe(canvasProps.sessionView);
+    expect(canvasProps.changeView?.checkpointCount).toBe(2);
+    expect(canvasProps.changeView?.latestCheckpointPath).toBe(
+      ".lime/artifacts/thread-1/index.v2.html",
+    );
+    expect(canvasProps.changeView?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "item-file-index",
+          path: "index.html",
+          displayName: "index.html",
+          status: "completed",
+          reviewStatus: "pending_review",
+          checkpointPath: "index.html",
+          checkpointLabel: "v2",
+        }),
+        expect.objectContaining({
+          id: "item-file-app",
+          path: "src/App.tsx",
+          displayName: "App.tsx",
+          status: "in_progress",
+        }),
+      ]),
+    );
+    canvasProps.changeView?.onOpenFile?.("/tmp/demo/index.html");
+    expect(openChangedFile).toHaveBeenCalledWith("/tmp/demo/index.html");
+
+    const lead = canvasProps.outputView?.leadContent;
+    const openTab = vi.fn();
+    const resolvedLead =
+      typeof lead === "function" ? lead({ openTab }) : lead;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(resolvedLead);
+    });
+
+    expect(container.textContent).toContain("代码审阅摘要");
+    expect(container.textContent).toContain("先处理失败输出");
+    expect(container.textContent).toContain("npm test");
+    expect(container.textContent).toContain("文件变更 2");
+    expect(container.textContent).toContain("待处理 2");
+    const primaryButton = container.querySelector(
+      '[data-testid="code-review-summary-primary-action"]',
+    ) as HTMLButtonElement | null;
+    const fixButton = container.querySelector(
+      '[data-testid="code-review-summary-fix-action"]',
+    ) as HTMLButtonElement | null;
+    expect(fixButton).not.toBeNull();
+    act(() => {
+      primaryButton?.click();
+    });
+    expect(openTab).toHaveBeenCalledWith("outputs");
+    await act(async () => {
+      fixButton?.click();
+      await Promise.resolve();
+    });
+    expect(handleSendFromEmptyState).toHaveBeenCalledWith(
+      expect.stringContaining("请继续修复"),
+      "code_orchestrated",
+      undefined,
+      expect.objectContaining({
+        displayContent: expect.stringContaining("请继续修复"),
+        skipSceneCommandRouting: true,
+        requestMetadata: {
+          harness: {
+            code_fix: {
+              source: "failed_output",
+            },
+          },
+        },
+      }),
+    );
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("非 code_orchestrated 会话应保持默认画布工作台模式", () => {
+    const sceneProps = getRenderedSceneProps(
+      createBaseParams({
+        executionStrategy: "react",
+      }),
+    );
+    const canvasProps = sceneProps.canvasWorkbenchLayoutProps;
+
+    expect(canvasProps.workbenchMode).toBe("default");
+    expect(canvasProps.outputView).toBeNull();
+    expect(canvasProps.logView).toBeNull();
+    expect(canvasProps.changeView).toBeNull();
   });
 
   it("应把做法执行摘要卡透传给 WorkspaceConversationScene", () => {

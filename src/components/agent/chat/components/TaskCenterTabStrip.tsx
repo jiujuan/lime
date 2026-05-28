@@ -6,6 +6,7 @@ import {
   Pin,
   Pencil,
   Plus,
+  Loader2,
   X,
 } from "lucide-react";
 import type { CSSProperties } from "react";
@@ -165,13 +166,24 @@ export function TaskCenterTabStrip({
                       void onSelectTask(item.id);
                     }}
                   >
-                    <MessageSquareText
-                      className={cn(
-                        "h-3.5 w-3.5 shrink-0",
-                        statusMeta.iconClassName,
-                      )}
-                      aria-hidden="true"
-                    />
+                    {item.status === "running" ? (
+                      <Loader2
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0 animate-spin",
+                          statusMeta.iconClassName,
+                        )}
+                        data-testid={`task-center-tab-loading-${item.id}`}
+                        aria-label={statusMeta.label}
+                      />
+                    ) : (
+                      <MessageSquareText
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0",
+                          statusMeta.iconClassName,
+                        )}
+                        aria-hidden="true"
+                      />
+                    )}
                     <span className="truncate text-[11px] font-semibold">
                       {item.title}
                     </span>

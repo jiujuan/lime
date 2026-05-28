@@ -2,7 +2,7 @@
 
 > 关联 PRD：`docs/roadmap/i18n/prd.md`
 > 关联进度：`docs/roadmap/i18n/implementation-progress.md`
-> 评估时间：2026-05-23
+> 评估时间：2026-05-27
 
 ## 评估目标
 
@@ -17,10 +17,14 @@
 - options 页当前只开放 `en / zh` 选择；安装引导页 registry 继续覆盖 `zh / en / de / es / fr / pt`。
 - 页面里的不少文案本身就是安装引导、比较说明、诊断提示，且混合了少量 HTML 片段。
 - `scripts/i18n-chrome-extension-workflow-report.ts` 已把 manifest、`_locales`、`InstallI18n` registry、`data-i18n` 属性和核心术语做成可重复 inventory；当前证据落在 `docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json`。
+- Inventory 已新增 registry drift 检测：`InstallI18n` 的 `SUPPORTED` 与页面注册 locale 双向比对，options 页的 `SUPPORTED_LANGUAGES` 与 `OPTIONS_TRANSLATIONS` 双向比对；当前 `installI18nLocaleDriftCount=0`、`optionsLanguageDriftCount=0`。
+- Inventory 现在显式记录标准 Chrome locale 决策：`standardChromeLocaleDecisionRecorded=true`、`standardChromeLocaleWorkflowRequired=false`、`decision.status=deferred`。这表示“当前不迁移 `_locales/messages.json`”是已完成的 P4 评估结论，而不是未处理缺口。
 
 ## 结论
 
 当前**不迁移**到 `_locales/messages.json`。
+
+该结论已经进入 P4 readiness 证据：只要 decision 仍被记录、`standardChromeLocaleWorkflowRequired=false`、registry drift 为 `0` 且术语覆盖完整，P4 不再把 `chrome-standard-locales-not-used` 视为 known gap。若未来把标准 workflow 改为 required，或移除该 decision，P4 readiness 会重新暴露缺口。
 
 ## 原因
 
@@ -33,6 +37,7 @@
 
 - 继续使用 `InstallI18n` 作为扩展页级适配层。
 - 继续保持扩展内文案与桌面端术语一致，但不把它升级成新的全局 i18n 主事实源。
+- 新增或删除扩展 locale 时，必须同步 `InstallI18n` supported list、页面注册、options supported languages 与 translations，并刷新 inventory；drift count 必须归零。
 - 若后续需要 Chrome Web Store 级别的标准化，优先考虑 build-time 导出而不是手工双维护。
 
 ## 重新评估条件

@@ -338,6 +338,7 @@ beforeEach(() => {
   mockDeleteAgentRuntimeSession.mockReset();
   mockCompactAgentRuntimeSession.mockReset();
   mockInterruptAgentRuntimeTurn.mockReset();
+  mockResumeAgentRuntimeThread.mockReset();
   mockReplayAgentRuntimeRequest.mockReset();
   mockPromoteAgentRuntimeQueuedTurn.mockReset();
   mockRemoveAgentRuntimeQueuedTurn.mockReset();
@@ -375,6 +376,7 @@ beforeEach(() => {
   mockDeleteAgentRuntimeSession.mockResolvedValue(undefined);
   mockCompactAgentRuntimeSession.mockResolvedValue(undefined);
   mockInterruptAgentRuntimeTurn.mockResolvedValue(undefined);
+  mockResumeAgentRuntimeThread.mockResolvedValue(false);
   mockReplayAgentRuntimeRequest.mockResolvedValue(null);
   mockPromoteAgentRuntimeQueuedTurn.mockResolvedValue(true);
   mockRemoveAgentRuntimeQueuedTurn.mockResolvedValue(true);
@@ -1116,6 +1118,95 @@ describe("useAsterAgentChat 任务快照", () => {
           position: 1,
         },
       ]);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("页面刷新恢复到排队会话时应自动恢复后台执行", async () => {
+    const workspaceId = "ws-auto-resume-after-reload";
+    const sessionId = "session-auto-resume-after-reload";
+    sessionStorage.setItem(
+      `aster_curr_sessionId_${workspaceId}`,
+      JSON.stringify(sessionId),
+    );
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: sessionId,
+        name: "刷新后继续执行",
+        created_at: 1700000100,
+        updated_at: 1700000101,
+        messages_count: 1,
+      },
+    ]);
+    mockGetAgentRuntimeSession.mockResolvedValue({
+      id: sessionId,
+      name: "刷新后继续执行",
+      created_at: 1700000100,
+      updated_at: 1700000101,
+      messages: [],
+      turns: [],
+      items: [],
+      queued_turns: [
+        {
+          queuedTurnId: "queued-after-reload-1",
+          messagePreview: "刷新后继续完成这个任务",
+          messageText: "刷新后继续完成这个任务",
+          createdAt: 1700000200000,
+          imageCount: 0,
+          position: 1,
+        },
+      ],
+      thread_read: {
+        thread_id: "thread-after-reload",
+        status: "queued",
+        pending_requests: [],
+        incidents: [],
+        queued_turns: [
+          {
+            queuedTurnId: "queued-after-reload-1",
+            messagePreview: "刷新后继续完成这个任务",
+            messageText: "刷新后继续完成这个任务",
+            createdAt: 1700000200000,
+            imageCount: 0,
+            position: 1,
+          },
+        ],
+      },
+    });
+    mockResumeAgentRuntimeThread.mockResolvedValueOnce(true);
+    mockGetAgentRuntimeThreadRead.mockResolvedValueOnce({
+      thread_id: "thread-after-reload",
+      status: "running",
+      active_turn_id: "queued-after-reload-1",
+      pending_requests: [],
+      incidents: [],
+      queued_turns: [],
+    });
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+      await flushEffects();
+      await flushEffects();
+
+      expect(mockResumeAgentRuntimeThread).toHaveBeenCalledWith({
+        session_id: sessionId,
+      });
+      expect(mockSubmitAgentRuntimeTurn).not.toHaveBeenCalled();
+      expect(mockGetAgentRuntimeThreadRead).toHaveBeenCalledWith(sessionId);
+      expect(harness.getValue().threadRead).toMatchObject({
+        thread_id: "thread-after-reload",
+        status: "running",
+        active_turn_id: "queued-after-reload-1",
+      });
+      expect(harness.getValue().queuedTurns).toEqual([]);
+      expect(
+        harness.getValue().topics.find((topic) => topic.id === sessionId),
+      ).toMatchObject({
+        status: "running",
+      });
     } finally {
       harness.unmount();
     }
@@ -2058,6 +2149,7 @@ describe("useAsterAgentChat queue hydration", () => {
       await act(async () => {
         await harness.getValue().switchTopic("session-queue");
       });
+      await flushEffects();
 
       expect(harness.getValue().queuedTurns).toEqual([
         {
@@ -2069,6 +2161,69 @@ describe("useAsterAgentChat queue hydration", () => {
           position: 1,
         },
       ]);
+      expect(
+        harness.getValue().topics.find((topic) => topic.id === "session-queue"),
+      ).toMatchObject({
+        status: "running",
+      });
+      expect(mockResumeAgentRuntimeThread).toHaveBeenCalledWith({
+        session_id: "session-queue",
+      });
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("切换到 running thread_read 时只恢复线程，不重复提交 turn", async () => {
+    const sessionId = "session-running-auto-resume";
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: sessionId,
+        name: "运行中的话题",
+        created_at: 1,
+        updated_at: 2,
+      },
+    ]);
+    mockGetAgentRuntimeSession.mockResolvedValue({
+      id: sessionId,
+      messages: [],
+      turns: [],
+      items: [],
+      queued_turns: [],
+      thread_read: {
+        thread_id: "thread-running-auto-resume",
+        status: "running",
+        active_turn_id: "turn-running-1",
+        pending_requests: [],
+        incidents: [],
+        queued_turns: [],
+      },
+    });
+
+    const harness = mountHook("ws-running-auto-resume");
+
+    try {
+      await flushEffects();
+      await act(async () => {
+        await harness.getValue().switchTopic(sessionId);
+      });
+      await flushEffects();
+
+      expect(mockResumeAgentRuntimeThread).toHaveBeenCalledWith({
+        session_id: sessionId,
+      });
+      expect(mockSubmitAgentRuntimeTurn).not.toHaveBeenCalled();
+      expect(harness.getValue().isSending).toBe(false);
+      expect(harness.getValue().threadRead).toMatchObject({
+        thread_id: "thread-running-auto-resume",
+        status: "running",
+        active_turn_id: "turn-running-1",
+      });
+      expect(
+        harness.getValue().topics.find((topic) => topic.id === sessionId),
+      ).toMatchObject({
+        status: "running",
+      });
     } finally {
       harness.unmount();
     }
@@ -2311,10 +2466,6 @@ describe("useAsterAgentChat queue hydration", () => {
     const sessionId = "session-thread-resume";
     const harness = mountHook("ws-thread-resume");
     let resumed = false;
-    mockResumeAgentRuntimeThread.mockImplementation(async () => {
-      resumed = true;
-      return true;
-    });
     mockGetAgentRuntimeSession.mockImplementation(async () =>
       resumed
         ? {
@@ -2402,6 +2553,11 @@ describe("useAsterAgentChat queue hydration", () => {
       expect(harness.getValue().threadRead).toMatchObject({
         thread_id: "thread-thread-resume",
         status: "queued",
+      });
+
+      mockResumeAgentRuntimeThread.mockImplementation(async () => {
+        resumed = true;
+        return true;
       });
 
       await act(async () => {

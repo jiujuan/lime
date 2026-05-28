@@ -179,6 +179,21 @@ export interface HarnessFilePreviewResult {
   size?: number;
 }
 
+export interface HarnessFileChangeReviewSummary {
+  total: number;
+  pending: number;
+  applied: number;
+  rejected: number;
+}
+
+interface HarnessLeadContentContext {
+  fileChangeReviewSummary: HarnessFileChangeReviewSummary;
+}
+
+type HarnessLeadContent =
+  | ReactNode
+  | ((context: HarnessLeadContentContext) => ReactNode);
+
 interface HarnessStatusPanelProps {
   harnessState: HarnessSessionState;
   environment: HarnessEnvironmentSummary;
@@ -197,7 +212,7 @@ interface HarnessStatusPanelProps {
   title?: string;
   description?: string;
   toggleLabel?: string;
-  leadContent?: ReactNode;
+  leadContent?: HarnessLeadContent;
   selectedTeamLabel?: string | null;
   selectedTeamSummary?: string | null;
   selectedTeamRoles?: TeamRoleDefinition[] | null;
@@ -3931,6 +3946,24 @@ export function HarnessStatusPanel({
     () => countFileChangeStatuses(fileChangeReviewEntries),
     [fileChangeReviewEntries],
   );
+  const fileChangeReviewSummary = useMemo<HarnessFileChangeReviewSummary>(
+    () => ({
+      total: fileChangeReviewEntries.length,
+      pending: fileChangeStatusCounts.pending,
+      applied: fileChangeStatusCounts.applied,
+      rejected: fileChangeStatusCounts.rejected,
+    }),
+    [
+      fileChangeReviewEntries.length,
+      fileChangeStatusCounts.applied,
+      fileChangeStatusCounts.pending,
+      fileChangeStatusCounts.rejected,
+    ],
+  );
+  const resolvedLeadContent =
+    typeof leadContent === "function"
+      ? leadContent({ fileChangeReviewSummary })
+      : leadContent;
   const selectableFileChangeKeys = useMemo(
     () => fileChangeReviewEntries.map((entry) => entry.key),
     [fileChangeReviewEntries],
@@ -4538,14 +4571,14 @@ export function HarnessStatusPanel({
           ) : null}
         </div>
 
-        {!isDialogLayout && leadContent ? (
+        {!isDialogLayout && resolvedLeadContent ? (
           <div
             className={cn(
               "border-b border-border px-4 py-4",
               isDialogLayout && "shrink-0 px-5 py-4",
             )}
           >
-            {leadContent}
+            {resolvedLeadContent}
           </div>
         ) : null}
 
@@ -4584,8 +4617,8 @@ export function HarnessStatusPanel({
             )}
           >
             <div className="space-y-4 pb-1">
-              {isDialogLayout && leadContent ? (
-                <div className="pt-4">{leadContent}</div>
+              {isDialogLayout && resolvedLeadContent ? (
+                <div className="pt-4">{resolvedLeadContent}</div>
               ) : null}
 
               {isDialogLayout ? (
@@ -8365,6 +8398,18 @@ export function HarnessStatusPanel({
                       const approvalSubmitting =
                         submittedActionIds.has(item.requestId) ||
                         item.status === "submitted";
+                      const approvalOutcomeHint = (
+                        <div
+                          className="rounded-lg border border-amber-100 bg-white/70 px-3 py-2 text-xs leading-5 text-amber-800"
+                          data-testid="harness-approval-outcome-hint"
+                        >
+                          {String(
+                            t(
+                              "agentChat.harness.approvals.outcomeHint" as never,
+                            ),
+                          )}
+                        </div>
+                      );
 
                       return (
                         <div
@@ -8473,64 +8518,70 @@ export function HarnessStatusPanel({
                             )}
                           </div>
                           {canInlineRespond ? (
-                            <div className="mt-3 flex flex-wrap items-center gap-2">
-                              <Button
-                                type="button"
-                                size="sm"
-                                disabled={approvalSubmitting}
-                                aria-label={String(
-                                  t(
-                                    "agentChat.harness.approvals.approveAria" as never,
-                                    { target: approvalTarget } as never,
-                                  ),
-                                )}
-                                onClick={() =>
-                                  handleApprovalResponse(item, true)
-                                }
-                              >
-                                {approvalSubmitting ? (
-                                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                                ) : (
-                                  <CheckCircle2 className="mr-1 h-4 w-4" />
-                                )}
-                                {String(
-                                  t(
-                                    approvalSubmitting
-                                      ? ("agentChat.harness.approvals.submitting" as never)
-                                      : ("agentChat.harness.approvals.approve" as never),
-                                  ),
-                                )}
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={approvalSubmitting}
-                                aria-label={String(
-                                  t(
-                                    "agentChat.harness.approvals.rejectAria" as never,
-                                    { target: approvalTarget } as never,
-                                  ),
-                                )}
-                                onClick={() =>
-                                  handleApprovalResponse(item, false)
-                                }
-                              >
-                                <XCircle className="mr-1 h-4 w-4" />
-                                {String(
-                                  t(
-                                    "agentChat.harness.approvals.reject" as never,
-                                  ),
-                                )}
-                              </Button>
+                            <div className="mt-3 space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  disabled={approvalSubmitting}
+                                  aria-label={String(
+                                    t(
+                                      "agentChat.harness.approvals.approveAria" as never,
+                                      { target: approvalTarget } as never,
+                                    ),
+                                  )}
+                                  onClick={() =>
+                                    handleApprovalResponse(item, true)
+                                  }
+                                >
+                                  {approvalSubmitting ? (
+                                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <CheckCircle2 className="mr-1 h-4 w-4" />
+                                  )}
+                                  {String(
+                                    t(
+                                      approvalSubmitting
+                                        ? ("agentChat.harness.approvals.submitting" as never)
+                                        : ("agentChat.harness.approvals.approve" as never),
+                                    ),
+                                  )}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={approvalSubmitting}
+                                  aria-label={String(
+                                    t(
+                                      "agentChat.harness.approvals.rejectAria" as never,
+                                      { target: approvalTarget } as never,
+                                    ),
+                                  )}
+                                  onClick={() =>
+                                    handleApprovalResponse(item, false)
+                                  }
+                                >
+                                  <XCircle className="mr-1 h-4 w-4" />
+                                  {String(
+                                    t(
+                                      "agentChat.harness.approvals.reject" as never,
+                                    ),
+                                  )}
+                                </Button>
+                              </div>
+                              {approvalOutcomeHint}
                             </div>
                           ) : (
-                            <div className="mt-3 rounded-lg border border-amber-100 bg-white/70 px-3 py-2 text-xs text-amber-800">
-                              {String(
-                                t(
-                                  "agentChat.harness.approvals.responseHint" as never,
-                                ),
-                              )}
+                            <div className="mt-3 space-y-2">
+                              <div className="rounded-lg border border-amber-100 bg-white/70 px-3 py-2 text-xs text-amber-800">
+                                {String(
+                                  t(
+                                    "agentChat.harness.approvals.responseHint" as never,
+                                  ),
+                                )}
+                              </div>
+                              {approvalOutcomeHint}
                             </div>
                           )}
                         </div>

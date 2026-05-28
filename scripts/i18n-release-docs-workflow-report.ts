@@ -8,7 +8,31 @@ import { fileURLToPath } from "node:url";
 
 export type ReleaseDocsWorkflowReportFormat = "text" | "json";
 
+type ReleaseDocsTranslationQueueStatus =
+  | "missing-source"
+  | "pilot-companion-missing"
+  | "required-companion-missing"
+  | "source-only-candidate";
+
+interface ReleaseDocsTranslationQueueItem {
+  enUSPath: string | null;
+  englishCompanionExists: boolean;
+  kind: string | null;
+  path: string;
+  priority: string | null;
+  reason: string;
+  sourceExists: boolean;
+  status: ReleaseDocsTranslationQueueStatus;
+}
+
 export interface ReleaseDocsWorkflowReport {
+  docsLocaleBuildManifest: {
+    exists: boolean;
+    path: string;
+    routeEmissionAllowed: boolean | null;
+    schemaVersion: string | null;
+    workflowStatus: string | null;
+  };
   docsSite: {
     buildScripts: string[];
     contentEnglishCompanionFiles: string[];
@@ -39,6 +63,19 @@ export interface ReleaseDocsWorkflowReport {
     sourceOnlyWithoutCompanions: string[];
     targetLocales: string[];
   };
+  releaseDocsTranslationQueue: {
+    blockingReason: string | null;
+    generatedFromScopePath: string;
+    itemCount: number;
+    items: ReleaseDocsTranslationQueueItem[];
+    missingSourceCount: number;
+    pilotCompanionMissingCount: number;
+    requiredCompanionMissingCount: number;
+    sourceLocale: string | null;
+    sourceOnlyCandidateCount: number;
+    targetLocales: string[];
+    workflowStatus: "blocked" | "missing-scope" | "ready";
+  };
   releaseNotes: {
     englishCompanionExists: boolean;
     englishCompanionVersion: string | null;
@@ -56,20 +93,34 @@ export interface ReleaseDocsWorkflowReport {
   summary: {
     contentFileCount: number;
     docsContentEnglishCompanionFileCount: number;
+    docsLocaleBuildManifestReady: boolean;
     docsTranslationWorkflowPresent: boolean;
     docsUnscopedContentSourceFileCount: number;
     hasBilingualRootReadme: boolean;
     hasDocsLocaleWorkflow: boolean;
+    hasReleaseDocsTranslationQueue: boolean;
     hasReleaseDocsTranslationScope: boolean;
     hasReleaseNotesCompanion: boolean;
     hasReleaseNotesCompanionVersionMatch: boolean;
     readmeEnglishLinksReleaseNotesCompanion: boolean;
+    releaseDocsTranslationQueueItemCount: number;
+    releaseDocsTranslationQueueMissingSourceCount: number;
+    releaseDocsTranslationQueuePilotCompanionMissingCount: number;
+    releaseDocsTranslationQueueRequiredCompanionMissingCount: number;
+    releaseDocsTranslationQueueSourceOnlyCandidateCount: number;
     releaseDocsPilotCompanionMissingCount: number;
     releaseDocsOrphanCompanionCount: number;
     releaseDocsRequiredCompanionMissingCount: number;
     releaseDocsScopeItemCount: number;
     releaseDocsSourceOnlyWithoutCompanionCount: number;
   };
+}
+
+interface ReleaseDocsScopeItem {
+  enUSPath: string | null;
+  kind: string | null;
+  path: string | null;
+  priority: string | null;
 }
 
 interface CliOptions {
@@ -89,7 +140,9 @@ function normalizePath(filePath: string): string {
 
 function displayPath(filePath: string, repoRoot: string): string {
   const relative = path.relative(repoRoot, filePath);
-  return normalizePath(relative && !relative.startsWith("..") ? relative : filePath);
+  return normalizePath(
+    relative && !relative.startsWith("..") ? relative : filePath,
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -187,7 +240,9 @@ function parseReleaseNotesVersion(filePath: string): string | null {
   return match?.[1] ?? null;
 }
 
-function readOptionalJsonObject(filePath: string): Record<string, unknown> | null {
+function readOptionalJsonObject(
+  filePath: string,
+): Record<string, unknown> | null {
   if (!fileExists(filePath)) {
     return null;
   }
@@ -199,7 +254,21 @@ function readString(value: unknown): string | null {
 }
 
 function readStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function readScopeItems(
+  scope: Record<string, unknown> | null,
+): ReleaseDocsScopeItem[] {
+  const rawItems = Array.isArray(scope?.items) ? scope.items : [];
+  return rawItems.filter(isRecord).map((item) => ({
+    enUSPath: readString(item.enUSPath),
+    kind: readString(item.kind),
+    path: readString(item.path),
+    priority: readString(item.priority),
+  }));
 }
 
 function analyzeTranslationScope(
@@ -208,7 +277,7 @@ function analyzeTranslationScope(
   companionsDir: string,
 ): ReleaseDocsWorkflowReport["releaseDocsTranslationScope"] {
   const scope = readOptionalJsonObject(scopePath);
-  const items = Array.isArray(scope?.items) ? scope.items : [];
+  const items = readScopeItems(scope);
   const companionFiles = collectFiles(companionsDir)
     .filter(isEnglishMarkdownCompanion)
     .map((filePath) => displayPath(filePath, repoRoot));
@@ -225,12 +294,9 @@ function analyzeTranslationScope(
   let sourceOnlyCount = 0;
 
   for (const item of items) {
-    if (!isRecord(item)) {
-      continue;
-    }
-    const sourcePath = readString(item.path);
-    const priority = readString(item.priority);
-    const enUSPath = readString(item.enUSPath);
+    const sourcePath = item.path;
+    const priority = item.priority;
+    const enUSPath = item.enUSPath;
     if (enUSPath) {
       referencedEnglishCompanions.add(normalizePath(enUSPath));
     }
@@ -275,7 +341,7 @@ function analyzeTranslationScope(
     companionFiles,
     existingEnglishCompanionCount,
     existingSourceCount,
-    itemCount: items.filter(isRecord).length,
+    itemCount: items.length,
     missingEnglishCompanions,
     missingPilotEnglishCompanions,
     missingSources,
@@ -286,12 +352,120 @@ function analyzeTranslationScope(
     pilotCount,
     requiredCount,
     schemaVersion: readString(scope?.schemaVersion),
-    scopedSourceFiles: Array.from(scopedSourcePaths).sort((left, right) => left.localeCompare(right)),
+    scopedSourceFiles: Array.from(scopedSourcePaths).sort((left, right) =>
+      left.localeCompare(right),
+    ),
     sourceLocale: readString(scope?.sourceLocale),
     sourceOnlyCount,
     sourceOnlyWithoutCompanionCount: sourceOnlyWithoutCompanions.length,
     sourceOnlyWithoutCompanions,
     targetLocales: readStringArray(scope?.targetLocales),
+  };
+}
+
+function analyzeTranslationQueue(
+  repoRoot: string,
+  scopePath: string,
+): ReleaseDocsWorkflowReport["releaseDocsTranslationQueue"] {
+  const scope = readOptionalJsonObject(scopePath);
+  const items = readScopeItems(scope);
+  const queueItems: ReleaseDocsTranslationQueueItem[] = [];
+
+  for (const item of items) {
+    const sourcePath = item.path;
+    if (!sourcePath) {
+      continue;
+    }
+
+    const enUSPath = item.enUSPath;
+    const sourceExists = fileExists(path.join(repoRoot, sourcePath));
+    const englishCompanionExists = Boolean(
+      enUSPath && fileExists(path.join(repoRoot, enUSPath)),
+    );
+    const baseItem = {
+      enUSPath,
+      englishCompanionExists,
+      kind: item.kind,
+      path: sourcePath,
+      priority: item.priority,
+      sourceExists,
+    };
+
+    if (!sourceExists) {
+      queueItems.push({
+        ...baseItem,
+        reason: "Scope item points to a missing source file.",
+        status: "missing-source",
+      });
+      continue;
+    }
+
+    if (item.priority === "required" && !englishCompanionExists) {
+      queueItems.push({
+        ...baseItem,
+        reason: "Required release material is missing its English companion.",
+        status: "required-companion-missing",
+      });
+      continue;
+    }
+
+    if (item.priority === "pilot" && !englishCompanionExists) {
+      queueItems.push({
+        ...baseItem,
+        reason: "Pilot docs item is missing its English companion.",
+        status: "pilot-companion-missing",
+      });
+      continue;
+    }
+
+    if (item.priority === "source-only" && !englishCompanionExists) {
+      queueItems.push({
+        ...baseItem,
+        reason:
+          "Source-only docs item is queued as a future translation candidate.",
+        status: "source-only-candidate",
+      });
+    }
+  }
+
+  const missingSourceCount = queueItems.filter(
+    (item) => item.status === "missing-source",
+  ).length;
+  const requiredCompanionMissingCount = queueItems.filter(
+    (item) => item.status === "required-companion-missing",
+  ).length;
+  const pilotCompanionMissingCount = queueItems.filter(
+    (item) => item.status === "pilot-companion-missing",
+  ).length;
+  const sourceOnlyCandidateCount = queueItems.filter(
+    (item) => item.status === "source-only-candidate",
+  ).length;
+  const workflowStatus = !scope
+    ? "missing-scope"
+    : missingSourceCount > 0 || requiredCompanionMissingCount > 0
+      ? "blocked"
+      : "ready";
+  const blockingReason =
+    workflowStatus === "missing-scope"
+      ? "release-docs-translation-scope.json is missing."
+      : missingSourceCount > 0
+        ? "One or more scope items point to missing source files."
+        : requiredCompanionMissingCount > 0
+          ? "One or more required release materials are missing English companions."
+          : null;
+
+  return {
+    blockingReason,
+    generatedFromScopePath: displayPath(scopePath, repoRoot),
+    itemCount: queueItems.length,
+    items: queueItems,
+    missingSourceCount,
+    pilotCompanionMissingCount,
+    requiredCompanionMissingCount,
+    sourceLocale: readString(scope?.sourceLocale),
+    sourceOnlyCandidateCount,
+    targetLocales: readStringArray(scope?.targetLocales),
+    workflowStatus,
   };
 }
 
@@ -319,6 +493,14 @@ export function analyzeReleaseDocsWorkflowReport(
     "i18n",
     "release-docs-translation-scope.json",
   );
+  const docsLocaleBuildManifestPath = path.join(
+    repoRoot,
+    "docs",
+    "roadmap",
+    "i18n",
+    "evidence",
+    "docs-locale-build-manifest.json",
+  );
   const releaseDocsCompanionsDir = path.join(
     repoRoot,
     "docs",
@@ -337,25 +519,49 @@ export function analyzeReleaseDocsWorkflowReport(
   const contentFileCount = contentFiles.length;
   const topLevelContentDirs = listTopLevelDirs(docsContentDir);
   const packageScripts = readPackageScripts(docsPackageJsonPath);
-  const hasI18nConfig = hasConfigMarkers(docsNuxtConfigPath, ["i18n", "locales"]);
-  const hasLocaleRouting = hasConfigMarkers(docsNuxtConfigPath, ["locales", "baseURL"]);
+  const hasI18nConfig = hasConfigMarkers(docsNuxtConfigPath, [
+    "i18n",
+    "locales",
+  ]);
+  const hasLocaleRouting = hasConfigMarkers(docsNuxtConfigPath, [
+    "locales",
+    "baseURL",
+  ]);
   const hasTranslationScripts = packageScripts.some((script) =>
     /i18n|locale|translation/.test(script),
   );
+  const docsLocaleBuildManifest = readOptionalJsonObject(
+    docsLocaleBuildManifestPath,
+  );
+  const docsLocaleBuildManifestSummary = isRecord(
+    docsLocaleBuildManifest?.summary,
+  )
+    ? docsLocaleBuildManifest.summary
+    : {};
+  const docsLocaleBuildManifestReady =
+    docsLocaleBuildManifestSummary.workflowStatus === "ready" &&
+    docsLocaleBuildManifestSummary.routeEmissionAllowed === false;
   const sourceReleaseNotesVersion = parseReleaseNotesVersion(releaseNotesPath);
-  const englishReleaseNotesVersion = parseReleaseNotesVersion(releaseNotesEnPath);
+  const englishReleaseNotesVersion =
+    parseReleaseNotesVersion(releaseNotesEnPath);
   const releaseNotesVersionsMatch =
     Boolean(sourceReleaseNotesVersion) &&
     sourceReleaseNotesVersion === englishReleaseNotesVersion;
-  const readmeEnglishLinksReleaseNotesCompanion = readText(rootReadmeEnPath).includes(
-    "./RELEASE_NOTES.en.md",
-  );
+  const readmeEnglishLinksReleaseNotesCompanion = readText(
+    rootReadmeEnPath,
+  ).includes("./RELEASE_NOTES.en.md");
   const releaseDocsTranslationScope = analyzeTranslationScope(
     repoRoot,
     releaseDocsTranslationScopePath,
     releaseDocsCompanionsDir,
   );
-  const scopedSourceFileSet = new Set(releaseDocsTranslationScope.scopedSourceFiles);
+  const releaseDocsTranslationQueue = analyzeTranslationQueue(
+    repoRoot,
+    releaseDocsTranslationScopePath,
+  );
+  const scopedSourceFileSet = new Set(
+    releaseDocsTranslationScope.scopedSourceFiles,
+  );
   const unscopedContentSourceFiles = contentSourceFiles.filter(
     (filePath) => !scopedSourceFileSet.has(filePath),
   );
@@ -368,6 +574,19 @@ export function analyzeReleaseDocsWorkflowReport(
     dirExists(docsOemDir);
 
   return {
+    docsLocaleBuildManifest: {
+      exists: Boolean(docsLocaleBuildManifest),
+      path: displayPath(docsLocaleBuildManifestPath, repoRoot),
+      routeEmissionAllowed:
+        typeof docsLocaleBuildManifestSummary.routeEmissionAllowed ===
+        "boolean"
+          ? docsLocaleBuildManifestSummary.routeEmissionAllowed
+          : null,
+      schemaVersion: readString(docsLocaleBuildManifest?.schemaVersion),
+      workflowStatus: readString(
+        docsLocaleBuildManifestSummary.workflowStatus,
+      ),
+    },
     docsSite: {
       buildScripts: packageScripts,
       contentEnglishCompanionFiles,
@@ -378,6 +597,7 @@ export function analyzeReleaseDocsWorkflowReport(
       topLevelContentDirs,
       unscopedContentSourceFiles,
     },
+    releaseDocsTranslationQueue,
     releaseDocsTranslationScope,
     releaseNotes: {
       englishCompanionExists: fileExists(releaseNotesEnPath),
@@ -389,21 +609,44 @@ export function analyzeReleaseDocsWorkflowReport(
     repoRoot,
     rootReadme: {
       englishCompanionExists: fileExists(rootReadmeEnPath),
-      englishLinksReleaseNotesCompanion: readmeEnglishLinksReleaseNotesCompanion,
+      englishLinksReleaseNotesCompanion:
+        readmeEnglishLinksReleaseNotesCompanion,
       sourceExists: fileExists(rootReadmePath),
     },
     schemaVersion: "lime.i18n.releaseDocsWorkflowReport.v1",
     summary: {
       contentFileCount,
       docsContentEnglishCompanionFileCount: contentEnglishCompanionFiles.length,
-      docsTranslationWorkflowPresent: hasTranslationScripts || hasI18nConfig || hasLocaleRouting,
+      docsLocaleBuildManifestReady,
+      docsTranslationWorkflowPresent:
+        hasTranslationScripts ||
+        hasI18nConfig ||
+        hasLocaleRouting ||
+        docsLocaleBuildManifestReady,
       docsUnscopedContentSourceFileCount: unscopedContentSourceFiles.length,
-      hasBilingualRootReadme: fileExists(rootReadmePath) && fileExists(rootReadmeEnPath),
-      hasDocsLocaleWorkflow: hasI18nConfig || hasLocaleRouting,
-      hasReleaseDocsTranslationScope: fileExists(releaseDocsTranslationScopePath),
+      hasBilingualRootReadme:
+        fileExists(rootReadmePath) && fileExists(rootReadmeEnPath),
+      hasDocsLocaleWorkflow:
+        hasI18nConfig || hasLocaleRouting || docsLocaleBuildManifestReady,
+      hasReleaseDocsTranslationQueue:
+        fileExists(releaseDocsTranslationScopePath) &&
+        releaseDocsTranslationScope.itemCount > 0,
+      hasReleaseDocsTranslationScope: fileExists(
+        releaseDocsTranslationScopePath,
+      ),
       hasReleaseNotesCompanion: fileExists(releaseNotesEnPath),
       hasReleaseNotesCompanionVersionMatch: releaseNotesVersionsMatch,
       readmeEnglishLinksReleaseNotesCompanion,
+      releaseDocsTranslationQueueItemCount:
+        releaseDocsTranslationQueue.itemCount,
+      releaseDocsTranslationQueueMissingSourceCount:
+        releaseDocsTranslationQueue.missingSourceCount,
+      releaseDocsTranslationQueuePilotCompanionMissingCount:
+        releaseDocsTranslationQueue.pilotCompanionMissingCount,
+      releaseDocsTranslationQueueRequiredCompanionMissingCount:
+        releaseDocsTranslationQueue.requiredCompanionMissingCount,
+      releaseDocsTranslationQueueSourceOnlyCandidateCount:
+        releaseDocsTranslationQueue.sourceOnlyCandidateCount,
       releaseDocsPilotCompanionMissingCount:
         releaseDocsTranslationScope.missingPilotEnglishCompanions.length,
       releaseDocsOrphanCompanionCount:
@@ -434,11 +677,17 @@ export function formatReleaseDocsWorkflowReport(
     `release notes version match: ${report.summary.hasReleaseNotesCompanionVersionMatch ? "yes" : "no"}`,
     `translation scope manifest: ${report.summary.hasReleaseDocsTranslationScope ? "yes" : "no"}`,
     `translation scope items: ${report.summary.releaseDocsScopeItemCount}`,
+    `translation queue workflow: ${report.releaseDocsTranslationQueue.workflowStatus}`,
+    `translation queue items: ${report.summary.releaseDocsTranslationQueueItemCount}`,
+    `translation queue source-only candidates: ${report.summary.releaseDocsTranslationQueueSourceOnlyCandidateCount}`,
+    `translation queue required blockers: ${report.summary.releaseDocsTranslationQueueRequiredCompanionMissingCount}`,
+    `translation queue missing sources: ${report.summary.releaseDocsTranslationQueueMissingSourceCount}`,
     `required companion missing: ${report.summary.releaseDocsRequiredCompanionMissingCount}`,
     `pilot companion missing: ${report.summary.releaseDocsPilotCompanionMissingCount}`,
     `orphan companion files: ${report.summary.releaseDocsOrphanCompanionCount}`,
     `source-only without companion: ${report.summary.releaseDocsSourceOnlyWithoutCompanionCount}`,
     `docs locale workflow: ${report.summary.hasDocsLocaleWorkflow ? "yes" : "no"}`,
+    `docs locale build manifest: ${report.summary.docsLocaleBuildManifestReady ? "ready" : "missing"}`,
     `docs translation scripts: ${report.summary.docsTranslationWorkflowPresent ? "yes" : "no"}`,
     `docs/content files: ${report.summary.contentFileCount}`,
     `docs/content English companion files: ${report.summary.docsContentEnglishCompanionFileCount}`,
@@ -526,7 +775,9 @@ export function runCli(argv: string[] = process.argv.slice(2)): number {
   const output = formatReleaseDocsWorkflowReport(report, options.format);
 
   if (options.output) {
-    fs.mkdirSync(path.dirname(path.resolve(options.output)), { recursive: true });
+    fs.mkdirSync(path.dirname(path.resolve(options.output)), {
+      recursive: true,
+    });
     fs.writeFileSync(path.resolve(options.output), output, "utf8");
   } else {
     process.stdout.write(output);

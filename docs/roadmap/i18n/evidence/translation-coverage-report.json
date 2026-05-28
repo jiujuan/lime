@@ -30,7 +30,7 @@
     "issueCount": 0,
     "localeCount": 5,
     "namespaceCount": 13,
-    "sourceKeyCount": 7549
+    "sourceKeyCount": 7581
   },
   "coverage": {
     "localeSummaries": [
@@ -45,8 +45,8 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agent",
-            "sourceKeyCount": 866,
-            "translatedKeyCount": 866
+            "sourceKeyCount": 898,
+            "translatedKeyCount": 898
           },
           {
             "extraKeyCount": 0,
@@ -145,8 +145,8 @@
             "translatedKeyCount": 881
           }
         ],
-        "sourceKeyCount": 7549,
-        "translatedKeyCount": 7549
+        "sourceKeyCount": 7581,
+        "translatedKeyCount": 7581
       },
       {
         "coverageRatio": 1,
@@ -159,8 +159,8 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agent",
-            "sourceKeyCount": 866,
-            "translatedKeyCount": 866
+            "sourceKeyCount": 898,
+            "translatedKeyCount": 898
           },
           {
             "extraKeyCount": 0,
@@ -259,8 +259,8 @@
             "translatedKeyCount": 881
           }
         ],
-        "sourceKeyCount": 7549,
-        "translatedKeyCount": 7549
+        "sourceKeyCount": 7581,
+        "translatedKeyCount": 7581
       },
       {
         "coverageRatio": 1,
@@ -273,8 +273,8 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agent",
-            "sourceKeyCount": 866,
-            "translatedKeyCount": 866
+            "sourceKeyCount": 898,
+            "translatedKeyCount": 898
           },
           {
             "extraKeyCount": 0,
@@ -373,8 +373,8 @@
             "translatedKeyCount": 881
           }
         ],
-        "sourceKeyCount": 7549,
-        "translatedKeyCount": 7549
+        "sourceKeyCount": 7581,
+        "translatedKeyCount": 7581
       },
       {
         "coverageRatio": 1,
@@ -387,8 +387,8 @@
             "coverageRatio": 1,
             "missingKeyCount": 0,
             "namespace": "agent",
-            "sourceKeyCount": 866,
-            "translatedKeyCount": 866
+            "sourceKeyCount": 898,
+            "translatedKeyCount": 898
           },
           {
             "extraKeyCount": 0,
@@ -487,8 +487,8 @@
             "translatedKeyCount": 881
           }
         ],
-        "sourceKeyCount": 7549,
-        "translatedKeyCount": 7549
+        "sourceKeyCount": 7581,
+        "translatedKeyCount": 7581
       }
     ],
     "summary": {
@@ -497,8 +497,8 @@
       "fullCoverageLocaleCount": 4,
       "localeCount": 4,
       "missingKeyCount": 0,
-      "sourceKeyCount": 7549,
-      "translatedKeyCount": 30196
+      "sourceKeyCount": 7581,
+      "translatedKeyCount": 30324
     }
   },
   "issues": []

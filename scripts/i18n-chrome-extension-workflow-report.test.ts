@@ -58,7 +58,13 @@ describe("i18n chrome extension workflow report", () => {
     writeFile(
       extensionRoot,
       "pages/scripts/options.js",
-      "const SUPPORTED_LANGUAGES = ['en', 'zh'];\nconst copy = 'Lime Browser Connector Relay';\n",
+      [
+        "const SUPPORTED_LANGUAGES = ['en', 'zh'];",
+        "const OPTIONS_TRANSLATIONS = {",
+        "  en: { title: 'Lime Browser Connector Relay' },",
+        "  zh: { title: 'Lime Browser Connector Relay' },",
+        "};",
+      ].join("\n"),
     );
     writeFile(
       extensionRoot,
@@ -88,9 +94,24 @@ describe("i18n chrome extension workflow report", () => {
     expect(report.manifest.hasDefaultLocale).toBe(false);
     expect(report.chromeLocales.localesDirExists).toBe(false);
     expect(report.summary.standardChromeLocaleWorkflowPresent).toBe(false);
+    expect(report.summary.standardChromeLocaleDecisionRecorded).toBe(true);
+    expect(report.summary.standardChromeLocaleWorkflowRequired).toBe(false);
+    expect(report.decision).toEqual(
+      expect.objectContaining({
+        standardChromeLocaleWorkflowRequired: false,
+        status: "deferred",
+      }),
+    );
+    expect(report.summary.installI18nLocaleDriftCount).toBe(0);
+    expect(report.summary.optionsLanguageDriftCount).toBe(0);
     expect(report.installI18n.supportedLocales).toEqual(["de", "en", "zh"]);
     expect(report.installI18n.registeredLocales).toEqual(["de", "en", "zh"]);
+    expect(report.installI18n.supportedButUnregisteredLocales).toEqual([]);
+    expect(report.installI18n.registeredButUnsupportedLocales).toEqual([]);
     expect(report.optionsPage.supportedLanguages).toEqual(["en", "zh"]);
+    expect(report.optionsPage.translationLocales).toEqual(["en", "zh"]);
+    expect(report.optionsPage.supportedButMissingTranslations).toEqual([]);
+    expect(report.optionsPage.translationButUnsupportedLanguages).toEqual([]);
     expect(report.summary.htmlPageCount).toBe(2);
     expect(report.summary.dataI18nAttributeCount).toBe(2);
     const optionsPage = report.pages.find((page) => page.path.endsWith("pages/options.html"));
@@ -108,11 +129,62 @@ describe("i18n chrome extension workflow report", () => {
     expect(formatChromeExtensionWorkflowReport(report, "text")).toContain(
       "[i18n:chrome-extension] workflow inventory",
     );
+    expect(formatChromeExtensionWorkflowReport(report, "text")).toContain(
+      "standard Chrome locale decision: deferred",
+    );
     expect(JSON.parse(formatChromeExtensionWorkflowReport(report, "json"))).toEqual(
       expect.objectContaining({
         schemaVersion: "lime.i18n.chromeExtensionWorkflowReport.v1",
       }),
     );
+  });
+
+  it("应识别扩展 registry 与 options translation locale 漂移", () => {
+    const root = createTempDir();
+    const extensionRoot = path.join(root, "extensions", "lime-chrome");
+
+    writeFile(
+      extensionRoot,
+      "manifest.json",
+      JSON.stringify({ manifest_version: 3, name: "Lime Browser Bridge" }, null, 2),
+    );
+    writeFile(
+      extensionRoot,
+      "pages/scripts/install-i18n.js",
+      "var SUPPORTED = ['en', 'zh', 'de'];\n",
+    );
+    writeFile(
+      extensionRoot,
+      "pages/scripts/options.js",
+      [
+        "const SUPPORTED_LANGUAGES = ['en', 'zh'];",
+        "const OPTIONS_TRANSLATIONS = {",
+        "  en: { title: 'Lime Browser Bridge' },",
+        "  pt: { title: 'Lime Browser Bridge' },",
+        "};",
+      ].join("\n"),
+    );
+    writeFile(
+      extensionRoot,
+      "pages/options.html",
+      [
+        '<h1 data-i18n="title">Lime Browser Bridge</h1>',
+        "<script>InstallI18n.register('en', { title: 'Lime Browser Bridge' });</script>",
+        "<script>InstallI18n.register('pt', { title: 'Lime Browser Bridge' });</script>",
+      ].join("\n"),
+    );
+
+    const report = analyzeChromeExtensionWorkflowReport({
+      extensionRoot,
+      repoRoot: root,
+    });
+
+    expect(report.summary.installI18nLocaleDriftCount).toBe(3);
+    expect(report.installI18n.supportedButUnregisteredLocales).toEqual(["de", "zh"]);
+    expect(report.installI18n.registeredButUnsupportedLocales).toEqual(["pt"]);
+    expect(report.summary.optionsLanguageDriftCount).toBe(2);
+    expect(report.optionsPage.supportedButMissingTranslations).toEqual(["zh"]);
+    expect(report.optionsPage.translationButUnsupportedLanguages).toEqual(["pt"]);
   });
 
   it("应支持 CLI 写出 JSON", () => {

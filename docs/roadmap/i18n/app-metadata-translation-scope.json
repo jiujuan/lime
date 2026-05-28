@@ -2,8 +2,9 @@
   "schemaVersion": "lime.i18n.appMetadataTranslationScope.v1",
   "sourceLocale": "zh-CN",
   "targetLocales": ["en-US"],
-  "workflowStatus": "not-started",
+  "workflowStatus": "ready",
   "owner": "release",
+  "manifestGenerationAllowed": true,
   "generatedMetadataAllowed": false,
   "items": [
     {
@@ -12,7 +13,10 @@
       "kind": "package-description",
       "localization": "translatable",
       "priority": "required-before-multilingual-release",
-      "consumer": "package-registry"
+      "consumer": "package-registry",
+      "localizedValues": {
+        "en-US": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows."
+      }
     },
     {
       "path": "package.json",
@@ -48,11 +52,22 @@
     },
     {
       "path": "src-tauri/tauri.conf.json",
+      "field": "bundle.fileAssociations[0].name",
+      "kind": "file-association-type-name",
+      "localization": "stable-brand",
+      "priority": "stable",
+      "consumer": "os-file-association"
+    },
+    {
+      "path": "src-tauri/tauri.conf.json",
       "field": "bundle.fileAssociations[0].description",
       "kind": "file-association-description",
       "localization": "translatable",
       "priority": "required-before-multilingual-release",
-      "consumer": "os-file-association"
+      "consumer": "os-file-association",
+      "localizedValues": {
+        "en-US": "Lime Skill Package"
+      }
     },
     {
       "path": "src-tauri/tauri.conf.headless.json",

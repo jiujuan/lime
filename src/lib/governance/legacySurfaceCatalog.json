@@ -1076,6 +1076,15 @@
       "allowedPaths": []
     },
     {
+      "id": "agent-chat-canvas-workbench-output-lead-entry",
+      "classification": "dead",
+      "description": "已删除的旧 CanvasWorkbenchOutputLead 平行输出 lead；编程工作台输出修复 current 入口统一收敛到 CodeReviewSummaryPanel 与 CanvasWorkbenchLayout outputView",
+      "targets": [
+        "src/components/agent/chat/workspace/CanvasWorkbenchOutputLead.tsx"
+      ],
+      "allowedPaths": []
+    },
+    {
       "id": "stable-processing-notice-entry",
       "classification": "dead-candidate",
       "description": "已删除的稳定处理中提示组件与 Hook，当前聊天主链不再暴露该独立短暂提示壳",
@@ -3724,6 +3733,21 @@
       "includePathPrefixes": [
         "src/components/agent/chat/utils/codeWorkbenchCommand.ts",
         "src/components/agent/chat/utils/codeWorkbenchCommand.test.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "agent-chat-canvas-workbench-output-lead-symbols",
+      "classification": "dead",
+      "description": "旧 CanvasWorkbenchOutputLead 输出 lead、修复信号 builder 与旧 data-testid 不得回流；current 只允许 CodeReviewSummaryPanel 承载失败输出继续修复入口",
+      "patterns": [
+        "CanvasWorkbenchOutputLead",
+        "buildCodeFixSignalFromThreadItems",
+        "canvas-workbench-output"
+      ],
+      "includePathPrefixes": [
+        "src/components/agent/chat",
+        "scripts"
       ],
       "allowedPaths": []
     },

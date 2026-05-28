@@ -1,38 +1,35 @@
-## Lime v1.52.0
+## Lime v1.53.0
 
-### ✨ 新功能
-- Managed Objective 自动化 smoke 扩展为独立入口，覆盖 owner session、continuation、completion audit 与 evidence pack 的端到端证据链
-- Agent 运行时新增请求元数据、工具输入能力、文件 checkpoint、timeline artifact、可靠性状态与 diff review 展示
-- ToolCallDisplay、DecisionPanel、HarnessStatusPanel 与 AgentRuntimeStrip 补齐运行时权限、命令执行摘要、证据状态和错误呈现
-- HTML artifact renderer 支持 asset protocol 预览路径，Tauri CSP 同步放行 asset/font/media/frame 资源
-- 本地记忆嵌入接入 ONNX embedding 特性，模型按需下载，不进入安装包
-- API Key Provider 与模型配置面板补齐连接测试类型、模型注册与 OpenAI-compatible provider 兼容信息
+### 新功能
+- 编程工作台对齐 OpenVibeCoding 主路径，新增中央预览 / 文件 / 变更 / 输出 / 日志标签与右侧对话结构
+- 编程模式默认优先展示 HTML 可视预览，多文件变更队列与输出面板从首屏诊断卡中拆出
+- 失败输出新增“继续修复”入口，基于现有 Harness 输出、文件变更和 checkpoint 生成结构化修复请求并回到同一 `code_orchestrated` session
+- i18n P4 readiness 新增发布文档、Chrome extension、app metadata、RTL 与全路线图聚合报告
 
-### 🐛 修复
-- 修正 automation due job 与 agent session 的 owner 绑定，避免续跑和证据导出丢失原始 session 关系
-- 修正 Agent message projection、artifact preview、workspace send action 与 message scroll controller 的边界状态
-- 修正 memory search / unified memory 命令输出、HTML 预览、文件系统 API mock 与媒体任务 mock 的一致性问题
-- 修正 live provider smoke 与 Vitest 网络守卫的默认阻断策略，避免普通测试误触发外部网络或真实 Provider
+### 修复
+- 修正运行时队列在独立 session 间的 active turn 隔离，避免一个 session 的执行阻塞其它 session
+- 修正 runtime turn 专用线程或 Tokio runtime 启动失败时的兜底与 gate 释放，降低队列卡死风险
+- 修正空持久化线程与首屏 history page 的 queued turn 投影，让恢复态能继续暴露真实队列
+- 修正 Agent Chat 会话恢复后未自动续跑 hydrated runtime queue 的问题
 
-### 🔧 优化与重构
-- 拆分 DevBridge agent session dispatcher、automation executor 与 runtime request metadata 组包逻辑
-- 收敛 Agent Chat 运行时状态、session finalize、artifact/message 工具函数和 workspace send helper 的测试边界
-- 简化 Memory 页面与设置页记忆配置路径，减少旧展示面与 current memory runtime 的重复实现
-- 统一 @代码 / mention 命令前缀匹配、runtime tool surface、agent command catalog 与 mock priority command 的事实源
+### 优化与重构
+- 收敛 `CanvasWorkbenchLayout` 的 coding mode、utility tab、change view 与 i18n 文案边界
+- 代码审阅摘要补齐失败输出短预览、当前审阅焦点、相关文件排序与输出 / 文件 pair 展示
+- Harness 状态面板、任务中心 tab、workspace scene runtime 与 sidebar 进一步对齐编程工作台信息架构
+- 删除旧的 RTL evidence 截图与过期 readiness 产物，改由新的 P4 / roadmap readiness evidence 记录当前状态
 
-### 🧪 测试与质量
-- 新增 managed-objective-automation smoke 与 openai-compatible fixture server，默认走本地 fixture 而非真实 Provider
-- 增强 agent-runtime-tool-surface page smoke，覆盖 runtime tool surface、workspace skill binding 与 GUI 页面可读性
-- 新增 diff review、workspace file preview、harness state、runtime input capability、agent runtime error presentation 等前端回归
-- 扩展 command contract、legacy surface catalog、i18n patch retirement gate、translation coverage 与 language boundary 报告测试
-- Rust 侧补齐 request model resolution、runtime turn routing/prompt/projection、timeline service、automation owner session evidence 等定向测试
+### 测试与质量
+- 新增编程工作台布局、输出修复、变更队列、对话恢复和 runtime queue 的前端 / Rust 回归
+- 新增 i18n docs locale manifest、app metadata locale manifest、P4 readiness 与 roadmap readiness 报告测试
+- 质量任务规划器会在 i18n P4 / roadmap evidence 变化后推荐刷新对应 readiness 报告
+- RTL smoke 证据扩展到 Workspace surface，并把 required surface coverage 纳入 readiness inventory
 
-### 📚 文档
-- 更新命令边界、质量工作流、Agent UI、i18n 与 managed objective 路线图记录
-- 新增 HTML preview provider readiness 记录与 i18n patch retirement gate evidence
-- 发布说明与版本事实源同步到 `1.52.0`
+### 文档
+- 新增 OpenVibeCoding 编程工作台对齐计划
+- 更新 Agent UI roadmap、i18n P0-P4 执行进度、release docs workflow、app metadata workflow 与 RTL readiness 评估
+- 发布说明与版本事实源同步到 `1.53.0`
 
-### 📦 其他
-- 根应用、Tauri workspace、Tauri 配置、CLI npm package 与锁文件版本统一更新到 `1.52.0`
+### 其他
+- 根应用、Tauri workspace、Tauri 配置、CLI npm package 与锁文件版本统一更新到 `1.53.0`
 
-**完整变更**: `v1.51.0` -> `v1.52.0`
+**完整变更**: `v1.52.0` -> `v1.53.0`

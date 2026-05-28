@@ -7,6 +7,7 @@ import {
   ShieldAlert,
   TerminalSquare,
   Workflow,
+  XCircle,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +25,7 @@ export type CodeWorkbenchGuideTarget =
 type CodeWorkbenchGuideStage =
   | "approval"
   | "writing"
+  | "failed_output"
   | "review"
   | "outputs"
   | "ready";
@@ -32,6 +34,7 @@ interface CodeWorkbenchGuideProps {
   pendingApprovalsCount: number;
   activeWriteCount: number;
   outputSignalCount: number;
+  failedOutputSignalCount: number;
   pendingFileChangeCount: number;
   totalFileChangeCount: number;
   latestFileName?: string | null;
@@ -77,6 +80,17 @@ const GUIDE_BY_STAGE: Record<
     toneClassName: "border-sky-200 bg-sky-50 text-sky-950",
     showCheckpointMetric: false,
   },
+  failed_output: {
+    stage: "failed_output",
+    titleKey: "agentChat.harness.codeWorkbench.stage.failedOutput.title",
+    descriptionKey:
+      "agentChat.harness.codeWorkbench.stage.failedOutput.description",
+    actionKey: "agentChat.harness.codeWorkbench.stage.failedOutput.action",
+    target: "outputs",
+    icon: XCircle,
+    toneClassName: "border-rose-200 bg-rose-50 text-rose-950",
+    showCheckpointMetric: true,
+  },
   review: {
     stage: "review",
     titleKey: "agentChat.harness.codeWorkbench.stage.review.title",
@@ -115,12 +129,14 @@ const GUIDE_BY_STAGE: Record<
 function resolveGuideStage({
   pendingApprovalsCount,
   activeWriteCount,
+  failedOutputSignalCount,
   pendingFileChangeCount,
   outputSignalCount,
 }: Pick<
   CodeWorkbenchGuideProps,
   | "pendingApprovalsCount"
   | "activeWriteCount"
+  | "failedOutputSignalCount"
   | "pendingFileChangeCount"
   | "outputSignalCount"
 >): CodeWorkbenchGuideStage {
@@ -129,6 +145,9 @@ function resolveGuideStage({
   }
   if (activeWriteCount > 0) {
     return "writing";
+  }
+  if (failedOutputSignalCount > 0) {
+    return "failed_output";
   }
   if (pendingFileChangeCount > 0) {
     return "review";
@@ -143,6 +162,7 @@ export function CodeWorkbenchGuide({
   pendingApprovalsCount,
   activeWriteCount,
   outputSignalCount,
+  failedOutputSignalCount,
   pendingFileChangeCount,
   totalFileChangeCount,
   latestFileName,
@@ -154,6 +174,7 @@ export function CodeWorkbenchGuide({
   const stage = resolveGuideStage({
     pendingApprovalsCount,
     activeWriteCount,
+    failedOutputSignalCount,
     pendingFileChangeCount,
     outputSignalCount,
   });
@@ -163,6 +184,7 @@ export function CodeWorkbenchGuide({
     approvals: pendingApprovalsCount,
     writes: activeWriteCount,
     outputs: outputSignalCount,
+    failedOutputs: failedOutputSignalCount,
     pending: pendingFileChangeCount,
     total: totalFileChangeCount,
     file: latestFileName || t("agentChat.harness.codeWorkbench.fileFallback"),
@@ -174,21 +196,31 @@ export function CodeWorkbenchGuide({
         label: t("agentChat.harness.codeWorkbench.metric.approvals", {
           count: pendingApprovalsCount,
         }),
-        active: pendingApprovalsCount > 0,
+        tone: pendingApprovalsCount > 0 ? "active" : "muted",
       },
       {
         key: "writes",
         label: t("agentChat.harness.codeWorkbench.metric.writes", {
           count: activeWriteCount,
         }),
-        active: activeWriteCount > 0,
+        tone: activeWriteCount > 0 ? "active" : "muted",
       },
       {
         key: "outputs",
-        label: t("agentChat.harness.codeWorkbench.metric.outputs", {
-          count: outputSignalCount,
-        }),
-        active: outputSignalCount > 0,
+        label:
+          failedOutputSignalCount > 0
+            ? t("agentChat.harness.codeWorkbench.metric.failedOutputs", {
+                count: failedOutputSignalCount,
+              })
+            : t("agentChat.harness.codeWorkbench.metric.outputs", {
+                count: outputSignalCount,
+              }),
+        tone:
+          failedOutputSignalCount > 0
+            ? "danger"
+            : outputSignalCount > 0
+              ? "active"
+              : "muted",
       },
       {
         key: "file_changes",
@@ -196,11 +228,12 @@ export function CodeWorkbenchGuide({
           pending: pendingFileChangeCount,
           total: totalFileChangeCount,
         }),
-        active: pendingFileChangeCount > 0,
+        tone: pendingFileChangeCount > 0 ? "active" : "muted",
       },
     ],
     [
       activeWriteCount,
+      failedOutputSignalCount,
       outputSignalCount,
       pendingApprovalsCount,
       pendingFileChangeCount,
@@ -241,6 +274,14 @@ export function CodeWorkbenchGuide({
           <p className="mt-1 text-xs leading-5 text-current/80">
             {description}
           </p>
+          {stage === "approval" ? (
+            <p
+              className="mt-1 text-xs leading-5 text-current/70"
+              data-testid="code-workbench-guide-approval-hint"
+            >
+              {t("agentChat.harness.codeWorkbench.stage.approval.hint")}
+            </p>
+          ) : null}
         </div>
         <Button
           type="button"
@@ -260,14 +301,21 @@ export function CodeWorkbenchGuide({
             key={item.key}
             className={cn(
               "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs",
-              item.active
+              item.tone === "danger"
+                ? "border-rose-300 bg-white/80 text-rose-700"
+                : item.tone === "active"
                 ? "border-current/25 bg-white/80 text-current"
                 : "border-current/10 bg-white/50 text-current/60",
             )}
             data-testid={`code-workbench-guide-metric-${item.key}`}
-            data-active={String(item.active)}
+            data-active={String(item.tone !== "muted")}
+            data-tone={item.tone}
           >
-            {item.active ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
+            {item.tone === "danger" ? (
+              <XCircle className="h-3.5 w-3.5" />
+            ) : item.tone === "active" ? (
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            ) : null}
             {item.label}
           </span>
         ))}

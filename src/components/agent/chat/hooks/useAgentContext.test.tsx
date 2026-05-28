@@ -87,6 +87,57 @@ function mountHook(
   };
 }
 
+function mountRerenderableHook(
+  initialWorkspaceId = "",
+  sessionId: string | null = null,
+): HookHarness & { rerender: (workspaceId: string) => void } {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  const sendMessage = vi.fn(async () => undefined);
+  let hookValue: ReturnType<typeof useAgentContext> | null = null;
+
+  function TestComponent({ workspaceId }: { workspaceId: string }) {
+    hookValue = useAgentContext({
+      workspaceId,
+      sessionIdRef: { current: sessionId },
+      topicsUpdaterRef: { current: mockTopicsUpdater },
+      sendMessageRef: { current: sendMessage },
+      runtime: {
+        setSessionExecutionStrategy: mockSetSessionExecutionStrategy,
+        setSessionProviderSelection: mockSetSessionProviderSelection,
+      },
+    });
+    return null;
+  }
+
+  act(() => {
+    root.render(<TestComponent workspaceId={initialWorkspaceId} />);
+  });
+
+  return {
+    getValue: () => {
+      if (!hookValue) {
+        throw new Error("hook 尚未初始化");
+      }
+      return hookValue;
+    },
+    rerender: (workspaceId: string) => {
+      act(() => {
+        root.render(<TestComponent workspaceId={workspaceId} />);
+      });
+    },
+    unmount: () => {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    },
+    sendMessage,
+  };
+}
+
 describe("useAgentContext", () => {
   beforeEach(() => {
     (
@@ -136,6 +187,31 @@ describe("useAgentContext", () => {
           "null",
       ),
     ).toBe("full-access");
+
+    harness.unmount();
+  });
+
+  it("workspace 从空值解析完成的同一帧应投影默认编程执行策略", async () => {
+    const harness = mountRerenderableHook("");
+
+    expect(harness.getValue().executionStrategy).toBe("react");
+
+    harness.rerender("workspace-code-runtime");
+
+    expect(harness.getValue().executionStrategy).toBe("code_orchestrated");
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(harness.getValue().executionStrategy).toBe("code_orchestrated");
+    expect(
+      JSON.parse(
+        localStorage.getItem(
+          "aster_execution_strategy_workspace-code-runtime",
+        ) || "null",
+      ),
+    ).toBe("code_orchestrated");
 
     harness.unmount();
   });

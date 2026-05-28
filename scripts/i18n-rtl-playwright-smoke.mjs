@@ -19,7 +19,7 @@ function printHelp() {
 Lime RTL Playwright Smoke
 
 用途:
-  在现有 Lime 页面上强制 RTL 方向，验证首页、设置页和用户菜单
+  在现有 Lime 页面上强制 RTL 方向，验证首页、Workspace、设置页和用户菜单
   在方向反转下仍可交互，并输出截图与 JSON evidence。
 
 用法:
@@ -256,6 +256,31 @@ async function runSmoke(options) {
     );
 
     await page.getByRole("button", { name: "回到首页" }).click();
+    await page.getByTestId("workspace-shell-scene").waitFor({
+      state: "visible",
+      timeout: options.timeoutMs,
+    });
+    const workspaceBox = await captureBox(
+      page,
+      '[data-testid="workspace-shell-scene"]',
+    );
+    assert(
+      workspaceBox.width > 0 && workspaceBox.height > 0,
+      `[i18n:rtl-smoke] expected workspace shell to be visible, got ${JSON.stringify(workspaceBox)}`,
+    );
+
+    console.log("[i18n:rtl-smoke] capturing workspace screenshot");
+    const workspaceScreenshotPath = await captureFullPageScreenshot(
+      page,
+      options.evidenceDir,
+      "rtl-workspace-automated.png",
+    );
+    const workspaceFullPageScreenshotPath = await captureFullPageScreenshot(
+      page,
+      options.evidenceDir,
+      "rtl-workspace-fullpage.png",
+    );
+
     const report = {
       appUrl: options.appUrl,
       consoleErrorCount: consoleErrors.length + pageErrors.length,
@@ -274,11 +299,14 @@ async function runSmoke(options) {
         settingsFullPage: settingsFullPageScreenshotPath,
         userMenu: userMenuScreenshotPath,
         userMenuFullPage: userMenuFullPageScreenshotPath,
+        workspace: workspaceScreenshotPath,
+        workspaceFullPage: workspaceFullPageScreenshotPath,
       },
       summary: {
         homeSidebarOnRight: homeSidebarBox.x > homeMainBox.x,
         settingsNavVisible: true,
         userMenuDialogVisible: true,
+        workspaceVisible: workspaceBox.width > 0 && workspaceBox.height > 0,
       },
     };
 

@@ -6,6 +6,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { Info } from "lucide-react";
 import styled from "styled-components";
 import type { Character } from "@/lib/api/memory";
@@ -40,6 +41,7 @@ import { useWorkspaceKnowledgeRuntime } from "./knowledge/useWorkspaceKnowledgeR
 
 interface GeneralWorkbenchEntryPromptAccessoryProps {
   prompt: GeneralWorkbenchEntryPromptState;
+  restartLabel: string;
   onRestart: () => void;
   onContinue: () => Promise<void> | void;
 }
@@ -133,6 +135,7 @@ const GeneralWorkbenchEntryPromptButton = styled.button<{
 
 function renderGeneralWorkbenchEntryPromptAccessory({
   prompt,
+  restartLabel,
   onRestart,
   onContinue,
 }: GeneralWorkbenchEntryPromptAccessoryProps): ReactNode {
@@ -156,7 +159,7 @@ function renderGeneralWorkbenchEntryPromptAccessory({
           data-testid="theme-workbench-entry-restart"
           onClick={onRestart}
         >
-          重新开始
+          {restartLabel}
         </GeneralWorkbenchEntryPromptButton>
         <GeneralWorkbenchEntryPromptButton
           type="button"
@@ -271,6 +274,7 @@ function useWorkspaceInputbarScenePresentationRuntime({
   isThemeWorkbench,
   inputbarPresentation,
 }: UseWorkspaceInputbarScenePresentationRuntimeParams): WorkspaceInputbarScenePresentationRuntimeResult {
+  const { t } = useTranslation("agent");
   const handleSelectCharacter = useCallback(
     (character: Character) => {
       setMentionedCharacters((previous) => {
@@ -363,6 +367,9 @@ function useWorkspaceInputbarScenePresentationRuntime({
       inputbarPresentation.generalWorkbenchEntryPrompt
         ? renderGeneralWorkbenchEntryPromptAccessory({
             prompt: inputbarPresentation.generalWorkbenchEntryPrompt,
+            restartLabel: t(
+              "agentChat.workspace.generalWorkbenchEntryPrompt.restart",
+            ),
             onRestart:
               inputbarPresentation.onRestartGeneralWorkbenchEntryPrompt,
             onContinue:
@@ -373,6 +380,7 @@ function useWorkspaceInputbarScenePresentationRuntime({
       inputbarPresentation.generalWorkbenchEntryPrompt,
       inputbarPresentation.onContinueGeneralWorkbenchEntryPrompt,
       inputbarPresentation.onRestartGeneralWorkbenchEntryPrompt,
+      t,
     ],
   );
 
@@ -746,6 +754,35 @@ export function useWorkspaceInputbarSceneRuntime({
     () => deriveRuntimeToolAvailability(toolInventory),
     [toolInventory],
   );
+  const handleSubmitCodeFixPrompt = useCallback(
+    async (prompt: string) => {
+      const normalizedPrompt = prompt.trim();
+      if (!normalizedPrompt) {
+        return;
+      }
+
+      await handleSend(
+        undefined,
+        undefined,
+        undefined,
+        normalizedPrompt,
+        "code_orchestrated",
+        undefined,
+        {
+          skipSceneCommandRouting: true,
+          displayContent: normalizedPrompt,
+          requestMetadata: {
+            harness: {
+              code_fix: {
+                source: "failed_output",
+              },
+            },
+          },
+        },
+      );
+    },
+    [handleSend],
+  );
   const handleInputbarToolStatesChange = useCallback(
     (
       nextToolStates: Pick<
@@ -951,6 +988,7 @@ export function useWorkspaceInputbarSceneRuntime({
         onOpenSubagentSession: handleOpenSubagentSession,
         onLoadFilePreview: handleHarnessLoadFilePreview,
         onOpenFile: handleFileClick,
+        onSubmitCodeFixPrompt: handleSubmitCodeFixPrompt,
       },
     },
   });

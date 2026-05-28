@@ -3,8 +3,14 @@
     "localeDirs": [],
     "localesDirExists": false
   },
+  "decision": {
+    "standardChromeLocaleWorkflowRequired": false,
+    "status": "deferred",
+    "summary": "当前扩展保留轻量 InstallI18n registry；仅当扩展规模、共享翻译产物或发布标准化约束变化时，再迁移到 Chrome _locales/messages.json。"
+  },
   "extensionRoot": "/Users/coso/Documents/dev/ai/aiclientproxy/lime/extensions/lime-chrome",
   "installI18n": {
+    "registeredButUnsupportedLocales": [],
     "registeredLocales": [
       "de",
       "en",
@@ -14,6 +20,7 @@
       "zh"
     ],
     "scriptExists": true,
+    "supportedButUnregisteredLocales": [],
     "supportedLocales": [
       "de",
       "en",
@@ -34,7 +41,13 @@
   },
   "optionsPage": {
     "scriptExists": true,
+    "supportedButMissingTranslations": [],
     "supportedLanguages": [
+      "en",
+      "zh"
+    ],
+    "translationButUnsupportedLanguages": [],
+    "translationLocales": [
       "en",
       "zh"
     ]
@@ -103,10 +116,14 @@
   "summary": {
     "dataI18nAttributeCount": 137,
     "htmlPageCount": 6,
+    "installI18nLocaleDriftCount": 0,
     "installI18nSupportedLocaleCount": 6,
     "manifestHasDefaultLocale": false,
+    "optionsLanguageDriftCount": 0,
     "optionsSupportedLanguageCount": 2,
     "pageRegistryLocaleCount": 6,
+    "standardChromeLocaleDecisionRecorded": true,
+    "standardChromeLocaleWorkflowRequired": false,
     "standardChromeLocaleWorkflowPresent": false,
     "terminologyPresentCount": 5
   },

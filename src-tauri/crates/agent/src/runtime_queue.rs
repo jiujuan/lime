@@ -40,6 +40,58 @@ fn runtime_turn_panic_message(error: Box<dyn std::any::Any + Send>) -> String {
     "runtime turn 后台任务 panic: unknown panic payload".to_string()
 }
 
+fn release_runtime_turn_gate_after_start_failure(
+    session_id: &str,
+    queued_turn_id: &str,
+) -> Result<bool, String> {
+    let runtime_queue_service = require_shared_session_runtime_queue_service()
+        .map_err(|error| format!("读取 runtime queue service 失败: {error}"))?;
+    Ok(runtime_queue_service.finish_active_turn_if_matches(session_id, queued_turn_id))
+}
+
+async fn run_runtime_turn_and_continue<C>(
+    session_id: String,
+    event_name: String,
+    queued_turn_id: String,
+    context: C,
+    executor: RuntimeQueueExecutor<C>,
+    emitter: RuntimeQueueEventEmitter,
+    payload: Value,
+) where
+    C: Clone + Send + Sync + 'static,
+{
+    let result = AssertUnwindSafe(executor(context.clone(), payload))
+        .catch_unwind()
+        .await;
+    match result {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => {
+            tracing::warn!("[AsterAgent][Queue] 队列任务执行失败: {}", error);
+            emit_runtime_queue_event(
+                &emitter,
+                &event_name,
+                RuntimeAgentEvent::Error { message: error },
+            );
+        }
+        Err(error) => {
+            let message = runtime_turn_panic_message(error);
+            tracing::error!("[AsterAgent][Queue] {}", message);
+            emit_runtime_queue_event(&emitter, &event_name, RuntimeAgentEvent::Error { message });
+        }
+    }
+    if let Err(error) = continue_runtime_queue_after_turn(
+        session_id,
+        queued_turn_id,
+        context.clone(),
+        executor.clone(),
+        emitter.clone(),
+    )
+    .await
+    {
+        tracing::warn!("[AsterAgent][Queue] 调度下一条排队 turn 失败: {}", error);
+    }
+}
+
 fn spawn_runtime_turn_task<C>(
     session_id: String,
     event_name: String,
@@ -54,6 +106,13 @@ fn spawn_runtime_turn_task<C>(
     let thread_name = format!("lime-runtime-turn-{}", session_id);
     let event_name_for_thread = event_name.clone();
     let emitter_for_thread = emitter.clone();
+    let fallback_session_id = session_id.clone();
+    let fallback_event_name = event_name.clone();
+    let fallback_queued_turn_id = queued_turn_id.clone();
+    let fallback_context = context.clone();
+    let fallback_executor = executor.clone();
+    let fallback_emitter = emitter.clone();
+    let fallback_payload = payload.clone();
     let spawn_result = std::thread::Builder::new()
         .name(thread_name)
         .stack_size(RUNTIME_TURN_THREAD_STACK_SIZE)
@@ -68,59 +127,123 @@ fn spawn_runtime_turn_task<C>(
             {
                 Ok(runtime) => runtime,
                 Err(error) => {
-                    let message = format!("创建 runtime turn 专用运行时失败: {error}");
-                    tracing::error!("[AsterAgent][Queue] {}", message);
-                    emit_runtime_queue_event(
-                        &emitter_for_thread,
-                        &event_name_for_thread,
-                        RuntimeAgentEvent::Error { message },
+                    tracing::warn!(
+                        "[AsterAgent][Queue] 创建 runtime turn 专用运行时失败，尝试 current-thread 兜底: {}",
+                        error
                     );
-                    return;
+                    match tokio::runtime::Builder::new_current_thread()
+                        .enable_io()
+                        .enable_time()
+                        .build()
+                    {
+                        Ok(runtime) => runtime,
+                        Err(fallback_error) => {
+                            let message = format!(
+                                "创建 runtime turn 专用运行时失败: {error}; current-thread 兜底也失败: {fallback_error}"
+                            );
+                            tracing::error!("[AsterAgent][Queue] {}", message);
+                            emit_runtime_queue_event(
+                                &emitter_for_thread,
+                                &event_name_for_thread,
+                                RuntimeAgentEvent::Error { message },
+                            );
+                            match release_runtime_turn_gate_after_start_failure(
+                                &session_id,
+                                &queued_turn_id,
+                            ) {
+                                Ok(true) => tracing::warn!(
+                                    "[AsterAgent][Queue] 已释放无法启动的 runtime turn gate: session_id={}, queued_turn_id={}",
+                                    session_id,
+                                    queued_turn_id
+                                ),
+                                Ok(false) => {}
+                                Err(release_error) => tracing::warn!(
+                                    "[AsterAgent][Queue] 释放无法启动的 runtime turn gate 失败: session_id={}, queued_turn_id={}, error={}",
+                                    session_id,
+                                    queued_turn_id,
+                                    release_error
+                                ),
+                            }
+                            return;
+                        }
+                    }
                 }
             };
 
-            runtime.block_on(async move {
-                let result = AssertUnwindSafe(executor(context.clone(), payload))
-                    .catch_unwind()
-                    .await;
-                match result {
-                    Ok(Ok(())) => {}
-                    Ok(Err(error)) => {
-                        tracing::warn!("[AsterAgent][Queue] 队列任务执行失败: {}", error);
-                        emit_runtime_queue_event(
-                            &emitter_for_thread,
-                            &event_name_for_thread,
-                            RuntimeAgentEvent::Error { message: error },
-                        );
-                    }
-                    Err(error) => {
-                        let message = runtime_turn_panic_message(error);
-                        tracing::error!("[AsterAgent][Queue] {}", message);
-                        emit_runtime_queue_event(
-                            &emitter_for_thread,
-                            &event_name_for_thread,
-                            RuntimeAgentEvent::Error { message },
-                        );
-                    }
-                }
-                if let Err(error) = continue_runtime_queue_after_turn(
-                    session_id,
-                    queued_turn_id,
-                    context.clone(),
-                    executor.clone(),
-                    emitter_for_thread.clone(),
-                )
-                .await
-                {
-                    tracing::warn!("[AsterAgent][Queue] 调度下一条排队 turn 失败: {}", error);
-                }
-            });
+            runtime.block_on(run_runtime_turn_and_continue(
+                session_id,
+                event_name_for_thread,
+                queued_turn_id,
+                context,
+                executor,
+                emitter_for_thread,
+                payload,
+            ));
         });
 
     if let Err(error) = spawn_result {
-        let message = format!("启动 runtime turn 专用线程失败: {error}");
+        let message = format!("启动 runtime turn 专用线程失败，回退到当前 Tokio runtime: {error}");
         tracing::error!("[AsterAgent][Queue] {}", message);
-        emit_runtime_queue_event(&emitter, &event_name, RuntimeAgentEvent::Error { message });
+        emit_runtime_queue_event(
+            &fallback_emitter,
+            &fallback_event_name,
+            RuntimeAgentEvent::Warning {
+                code: Some("runtime_turn_thread_spawn_failed".to_string()),
+                message,
+            },
+        );
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn(run_runtime_turn_and_continue(
+                fallback_session_id,
+                fallback_event_name,
+                fallback_queued_turn_id,
+                fallback_context,
+                fallback_executor,
+                fallback_emitter,
+                fallback_payload,
+            ));
+        } else {
+            emit_runtime_queue_event(
+                &fallback_emitter,
+                &fallback_event_name,
+                RuntimeAgentEvent::Error {
+                    message: "启动 runtime turn 专用线程失败，且当前线程没有可用 Tokio runtime 兜底"
+                        .to_string(),
+                },
+            );
+            let release_result = if let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .enable_time()
+                .build()
+            {
+                runtime.block_on(continue_runtime_queue_after_turn(
+                    fallback_session_id.clone(),
+                    fallback_queued_turn_id.clone(),
+                    fallback_context,
+                    fallback_executor,
+                    fallback_emitter,
+                ))
+            } else {
+                let runtime_queue_service = require_shared_session_runtime_queue_service()
+                    .map_err(|error| format!("读取 runtime queue service 失败: {error}"))
+                    .map(|service| {
+                        service.finish_active_turn_if_matches(
+                            &fallback_session_id,
+                            &fallback_queued_turn_id,
+                        )
+                    })
+                    .map(|_| false);
+                runtime_queue_service
+            };
+            if let Err(release_error) = release_result {
+                tracing::warn!(
+                    "[AsterAgent][Queue] 释放无法启动的 runtime turn gate 失败: session_id={}, queued_turn_id={}, error={}",
+                    fallback_session_id,
+                    fallback_queued_turn_id,
+                    release_error
+                );
+            }
+        }
     }
 }
 
@@ -508,6 +631,87 @@ mod tests {
         assert_eq!(follow, RuntimeQueueSubmitResult::StartNow);
         assert_eq!(
             service.active_turn_id("session-release").as_deref(),
+            Some("follow")
+        );
+    }
+
+    #[tokio::test]
+    async fn independent_sessions_start_without_blocking_each_other() {
+        let store = Arc::new(InMemoryThreadRuntimeStore::default());
+        let service = SessionRuntimeQueueService::new(store.clone());
+        let first = service
+            .submit_turn(queued_turn("session-a", "a-running", 1), true)
+            .await
+            .expect("submit first session turn");
+        let same_session_follow = service
+            .submit_turn(queued_turn("session-a", "a-follow", 2), true)
+            .await
+            .expect("submit follow turn");
+        let other_session = service
+            .submit_turn(queued_turn("session-b", "b-running", 3), true)
+            .await
+            .expect("submit other session turn");
+
+        assert_eq!(first, RuntimeQueueSubmitResult::StartNow);
+        assert_eq!(
+            same_session_follow,
+            RuntimeQueueSubmitResult::Enqueued {
+                queued_turn: Box::new(queued_turn("session-a", "a-follow", 2)),
+                position: 1
+            }
+        );
+        assert_eq!(other_session, RuntimeQueueSubmitResult::StartNow);
+        assert_eq!(
+            service.active_turn_id("session-a").as_deref(),
+            Some("a-running")
+        );
+        assert_eq!(
+            service.active_turn_id("session-b").as_deref(),
+            Some("b-running")
+        );
+        assert_eq!(
+            store
+                .list_queued_turns("session-a")
+                .await
+                .expect("list session-a queue")
+                .len(),
+            1
+        );
+        assert!(
+            store
+                .list_queued_turns("session-b")
+                .await
+                .expect("list session-b queue")
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn completed_active_turn_starts_next_queued_turn() {
+        let store = Arc::new(InMemoryThreadRuntimeStore::default());
+        let service = SessionRuntimeQueueService::new(store.clone());
+        let first = service
+            .submit_turn(queued_turn("session-continue", "running", 1), true)
+            .await
+            .expect("submit first turn");
+
+        assert_eq!(first, RuntimeQueueSubmitResult::StartNow);
+        store
+            .enqueue_turn(queued_turn("session-continue", "follow", 2))
+            .await
+            .expect("enqueue follow turn");
+
+        let next = service
+            .finish_matching_turn_and_take_next("session-continue", "running")
+            .await
+            .expect("finish running turn");
+
+        assert_eq!(
+            next.as_ref().map(|turn| turn.queued_turn_id.as_str()),
+            Some("follow")
+        );
+        assert_eq!(
+            service.active_turn_id("session-continue").as_deref(),
             Some("follow")
         );
     }

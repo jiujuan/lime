@@ -1,8 +1,92 @@
 # Lime 全球本地化执行进度
 
 > 关联 PRD：`docs/roadmap/i18n/prd.md`
-> 当前阶段：P2 / P3 并行收口
-> 更新日期：2026-05-24
+> 当前阶段：P0-P4 readiness 完成审计
+> 更新日期：2026-05-27
+
+## 2026-05-27：P0-P4 全路线图 readiness 审计
+
+本轮完成：
+
+- 新增 `scripts/i18n-roadmap-readiness-report.ts` 与测试 `scripts/i18n-roadmap-readiness-report.test.ts`，把 PRD P0-P4 的交付项、验收项、底层 evidence 和已知缺口聚合成 machine-readable completion audit。
+- `package.json` 新增 `i18n:roadmap-readiness-report` / `i18n:roadmap-readiness-report:json`，用于只读生成全路线图 readiness，不刷新底层 evidence、不修改 locale resources。
+- `scripts/quality-task-planner.mjs` / `scripts/quality-task-planner.test.ts` 已把全路线图 readiness evidence 接入推荐命令；i18n resources、P3 自动化 evidence、Patch gate、P4 子 evidence 或 P4 readiness 变化后，都会提示刷新 `docs/roadmap/i18n/evidence/roadmap-readiness-report.json`。
+- 已刷新 `translation-coverage-report.json`、`source-locale-export.json`、`translation-pr-pack.json` 与 `bundle-strategy-report.json`，让 P3 自动化 evidence 回到同一 source locale 快照；当前四份报告的 `sourceKeyCount` 统一为 `7581`。
+- 新增 `docs/roadmap/i18n/evidence/roadmap-readiness-report.json`；当前结果为 `overallStatus=ready`，P0 / P1 / P2 / P3 / P4 均为 `ready`，交付项 `23/23` 通过，验收项 `16/16` 通过，缺失 evidence 为 `0`，known gap 为 `0`。
+
+当前口径：
+
+- Chrome extension 已完成是否迁移 `_locales/messages.json` 的评估，当前记录为 `standardChromeLocaleDecisionRecorded=true`、`standardChromeLocaleWorkflowRequired=false`；继续保留轻量 `InstallI18n` registry，并用 drift / terminology inventory 作为门禁。
+- Installer / app metadata 已完成 build-time locale manifest workflow，当前 `appMetadataLocaleBuildManifestReady=true`、`hasInstallerLocalizationWorkflow=true`；`generatedConfigEmissionAllowed=false` 仍表示不改写真实 Tauri / installer 配置。
+- 文档站、installer 与 Chrome extension 的现状仍不等于已经生成多语言发布产物；本阶段完成的是 PRD P4 要求的评估、scope、manifest、smoke 与发布前审阅 workflow。
+
+验证：
+
+- `npm test -- "scripts/i18n-roadmap-readiness-report.test.ts"` 通过，覆盖 3 个用例。
+- `npm test -- "scripts/quality-task-planner.test.ts"` 通过，覆盖 26 个用例。
+- `npm run i18n:check:json -- --output "docs/roadmap/i18n/evidence/translation-coverage-report.json"` 通过。
+- `npm run i18n:source-export:json -- --output "docs/roadmap/i18n/evidence/source-locale-export.json"` 通过。
+- `npm run i18n:translation-pr-pack:json -- --output "docs/roadmap/i18n/evidence/translation-pr-pack.json"` 通过。
+- `npm run i18n:bundle-report:json -- --output "docs/roadmap/i18n/evidence/bundle-strategy-report.json"` 通过。
+- `npm run i18n:roadmap-readiness-report:json -- --output "docs/roadmap/i18n/evidence/roadmap-readiness-report.json"` 通过。
+
+## 2026-05-27：P4 app metadata locale build manifest workflow
+
+本轮完成：
+
+- 新增 `scripts/i18n-app-metadata-locale-build-manifest.ts` 与测试 `scripts/i18n-app-metadata-locale-build-manifest.test.ts`，把 `app-metadata-translation-scope.json` 转成 build-time locale manifest；它只读提取 app / installer metadata 字段，检查 required localized value，不写回 `package.json`、`tauri.conf*.json` 或平台安装器配置。
+- `docs/roadmap/i18n/app-metadata-translation-scope.json` 已把 `workflowStatus` 更新为 `ready`，新增 `manifestGenerationAllowed=true`，并为两个 `translatable` 字段补齐 `en-US` localized value：`package.json#description` 与 `src-tauri/tauri.conf.json#bundle.fileAssociations[0].description`。
+- `package.json` 新增 `i18n:app-metadata-locale-manifest` / `i18n:app-metadata-locale-manifest:json` / `i18n:app-metadata-locale-manifest:check`，用于发布前生成和检查 metadata locale manifest。
+- `scripts/i18n-app-metadata-workflow-report.ts` 已消费 `app-metadata-locale-build-manifest.json`，当前 `appMetadataLocaleBuildManifestReady=true`、`hasInstallerLocalizationWorkflow=true`；`generatedConfigEmissionAllowed=false` 保持不变，避免把 manifest 误报成真实平台安装包配置生成。
+- `scripts/quality-task-planner.mjs` / `scripts/quality-task-planner.test.ts` 已把 app metadata locale manifest 接入推荐命令；metadata scope、Tauri config、package metadata 或相关脚本变化后，会提示先刷新 `app-metadata-locale-build-manifest.json`，再刷新 inventory / P4 / roadmap readiness。
+- 已刷新 `docs/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json`；当前 `workflowStatus=ready`，11 个 metadata entry 中 2 个 localized entry、7 个 stable entry、2 个 source-only entry，missing field 与 required localized missing 均为 `0`。
+
+验证：
+
+- `npm test -- "scripts/i18n-app-metadata-locale-build-manifest.test.ts" "scripts/i18n-app-metadata-workflow-report.test.ts" "scripts/i18n-p4-readiness-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过。
+- `npm run i18n:app-metadata-locale-manifest:json -- --output "docs/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json"` 通过。
+- `npm run i18n:app-metadata-report:json -- --output "docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json"` 通过。
+- `npm run i18n:p4-readiness-report:json -- --output "docs/roadmap/i18n/evidence/p4-readiness-report.json"` 通过，当前 `knownGapCount=0`、`overallStatus=ready`。
+- `npm run i18n:roadmap-readiness-report:json -- --output "docs/roadmap/i18n/evidence/roadmap-readiness-report.json"` 通过，当前 `overallStatus=ready`。
+
+## 2026-05-27：P4 Chrome extension standard locale decision 收口
+
+本轮完成：
+
+- `scripts/i18n-chrome-extension-workflow-report.ts` 新增 `decision` 与 summary 字段：`standardChromeLocaleDecisionRecorded=true`、`standardChromeLocaleWorkflowRequired=false`，明确当前不迁移 `_locales/messages.json` 是已记录的 P4 决策，不再作为 known gap。
+- `scripts/i18n-p4-readiness-report.ts` 继续保留回归门禁：如果未来缺少该 decision，或把 `standardChromeLocaleWorkflowRequired` 改为 `true` 但仍没有 `_locales` workflow，会重新输出 `chrome-standard-locales-not-used` 缺口。
+- 刷新 `docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json` 后，Chrome extension 当前仍没有 `_locales/`，但 InstallI18n registry drift、options language drift 均为 `0`，术语覆盖 `5/5`。
+
+验证：
+
+- `npm test -- "scripts/i18n-chrome-extension-workflow-report.test.ts" "scripts/i18n-p4-readiness-report.test.ts"` 通过。
+- `npm run i18n:chrome-extension-report:json -- --output "docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json"` 通过。
+- `npm run i18n:p4-readiness-report:json -- --output "docs/roadmap/i18n/evidence/p4-readiness-report.json"` 通过，当前 `knownGapCount=0`。
+- `npm run i18n:roadmap-readiness-report:json -- --output "docs/roadmap/i18n/evidence/roadmap-readiness-report.json"` 通过，当前 `overallStatus=ready`。
+
+## 2026-05-27：P4 docs locale build manifest workflow
+
+本轮完成：
+
+- 新增 `scripts/i18n-docs-locale-build-manifest.ts` 与测试 `scripts/i18n-docs-locale-build-manifest.test.ts`，把 release docs translation scope 转成 build-time locale manifest；它只读检查 source、required companion、pilot companion 与 source-only 队列，不改写 `docs/content`。
+- `package.json` 新增 `i18n:docs-locale-manifest` / `i18n:docs-locale-manifest:json` / `i18n:docs-locale-manifest:check`，让发布材料 / 官网文档 / 帮助文档的 locale workflow 有独立入口。
+- `scripts/i18n-release-docs-workflow-report.ts` 已消费 `docs-locale-build-manifest.json`，当前 `docsLocaleBuildManifestReady=true`、`hasDocsLocaleWorkflow=true`、`docsTranslationWorkflowPresent=true`；P4 readiness 因此不再保留 `docs-locale-build-workflow-missing`。
+- `scripts/quality-task-planner.mjs` / `scripts/quality-task-planner.test.ts` 已把 docs locale manifest evidence 接入推荐命令；docs content、release docs scope、companion 或相关脚本变化后，会提示刷新 `docs/roadmap/i18n/evidence/docs-locale-build-manifest.json`。
+- 已刷新 `docs/roadmap/i18n/evidence/docs-locale-build-manifest.json`；当前 `workflowStatus=ready`，source locale 为 `zh-CN`，target locales 为 `en-US`，15 个 scope entry 中 3 个已有 companion、12 个为 source-only candidate，missing source / required companion missing / pilot companion missing 均为 `0`，`docs/content` route emission 保持 `disabled`。
+
+当前边界：
+
+- 文档站仍没有真实 locale route、语言切换或多站点发布产物；本轮只完成 build-time manifest workflow，不把英文 companion 冒充为已发布英文站点。
+
+验证：
+
+- `npm test -- "scripts/i18n-docs-locale-build-manifest.test.ts" "scripts/i18n-release-docs-workflow-report.test.ts" "scripts/i18n-p4-readiness-report.test.ts"` 通过。
+- `npm test -- "scripts/quality-task-planner.test.ts"` 通过。
+- `npm run i18n:docs-locale-manifest:check` 通过。
+- `npm run i18n:docs-locale-manifest:json -- --output "docs/roadmap/i18n/evidence/docs-locale-build-manifest.json"` 通过。
+- `npm run i18n:release-docs-report:json -- --output "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过。
+- `npm run i18n:p4-readiness-report:json -- --output "docs/roadmap/i18n/evidence/p4-readiness-report.json"` 通过。
+- `npm run i18n:roadmap-readiness-report:json -- --output "docs/roadmap/i18n/evidence/roadmap-readiness-report.json"` 通过。
 
 ## 主目标
 
@@ -1078,3 +1162,118 @@ benchmark 摘要：
 
 - `npm test -- "scripts/i18n-release-docs-workflow-report.test.ts"` 通过，覆盖 source-only without companion 统计。
 - `npm run i18n:release-docs-report:json -- --output "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过，已刷新 release docs evidence。
+
+## 2026-05-27：P4 release docs content scope drift 检测
+
+本轮继续完成：
+
+- `scripts/i18n-release-docs-workflow-report.ts` 新增 `docsSite.unscopedContentSourceFiles` 与 `summary.docsUnscopedContentSourceFileCount`，把 `docs/content` 中未纳入 `release-docs-translation-scope.json` 的 source Markdown 暴露为 evidence drift。
+- `releaseDocsTranslationScope.scopedSourceFiles` 现在输出 scope 已覆盖的 source 文件列表，后续新增 `docs/content` 页面如果没有进入 required / pilot / source-only 范围，会被 inventory 明确列出。
+- 当前真实仓库 evidence 显示 `docsUnscopedContentSourceFileCount=0`，说明现有 `docs/content` source 文件都已进入 translation scope；source-only without companion 数仍为 `12`，文档站长尾翻译未被误判为完成。
+
+验证：
+
+- `npm test -- "scripts/i18n-release-docs-workflow-report.test.ts"` 覆盖未纳入 scope 的反向用例。
+- `npm run i18n:release-docs-report:json -- --output "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 刷新 release docs evidence，确认当前 unscoped 数为 `0`。
+
+## 2026-05-27：P4 app metadata scope drift 检测
+
+本轮继续完成：
+
+- `scripts/i18n-app-metadata-workflow-report.ts` 新增 `metadataFieldCoverage`，把真实 app / installer metadata 字段与 `app-metadata-translation-scope.json` 做双向比对：真实字段未入 scope 会进入 `unscopedMetadataFields`，scope 引用失效字段会进入 `missingScopedFields`。
+- `docs/roadmap/i18n/app-metadata-translation-scope.json` 补入 `src-tauri/tauri.conf.json#bundle.fileAssociations[0].name`，将 Skill Package 文件关联类型名归为稳定品牌字段，避免 file association 只审计 description 而漏掉 name。
+- 刷新 `docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json` 后，当前审计字段 `11` 个，`metadataUnscopedFieldCount=0`、`metadataMissingScopedFieldCount=0`；`hasInstallerLocalizationWorkflow` 仍为 `false`，不误判为多语言 installer workflow 已完成。
+- `docs/roadmap/i18n/app-metadata-workflow-evaluation.md` 已同步说明：在 `generatedMetadataAllowed=false` 期间，不新增平行 locale 配置，只用 scope + inventory 管住发布元数据漂移。
+
+验证：
+
+- `npm test -- "scripts/i18n-app-metadata-workflow-report.test.ts"` 通过，覆盖正常 scope 覆盖、漏管字段和失效引用字段。
+- `npm run i18n:app-metadata-report:json -- --output "docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json"` 通过，已刷新 app metadata evidence。
+
+## 2026-05-27：P4 Chrome extension registry drift 检测
+
+本轮继续完成：
+
+- `scripts/i18n-chrome-extension-workflow-report.ts` 新增扩展 locale registry 双向漂移检测：`InstallI18n` 的 `SUPPORTED` 与页面 `InstallI18n.register(...)` 结果互相比对，输出 `supportedButUnregisteredLocales`、`registeredButUnsupportedLocales` 与 `installI18nLocaleDriftCount`。
+- options 页新增 `OPTIONS_TRANSLATIONS` locale 读取，并与 `SUPPORTED_LANGUAGES` 双向比对，输出 `supportedButMissingTranslations`、`translationButUnsupportedLanguages` 与 `optionsLanguageDriftCount`。
+- 刷新 `docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json` 后，当前仍不使用 Chrome 标准 `_locales` workflow，但 `InstallI18n` 6 个 supported locale 与页面注册完全一致，options 页 `en / zh` 支持与翻译对象一致，两个 drift count 均为 `0`。
+- `docs/roadmap/i18n/chrome-extension-evaluation.md` 已同步说明：当前继续保留轻量 `InstallI18n` registry，但新增 / 删除扩展 locale 时必须刷新 inventory 并解释或归零 drift。
+
+验证：
+
+- `npm test -- "scripts/i18n-chrome-extension-workflow-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖正常无 drift、故意 registry drift 与质量任务推荐。
+- `npm run i18n:chrome-extension-report:json -- --output "docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json"` 通过，已刷新 Chrome extension evidence。
+
+## 2026-05-27：P4 RTL required smoke surface 覆盖审计
+
+本轮继续完成：
+
+- `scripts/i18n-rtl-readiness-report.ts` 新增 `smokeCoverage`，读取 `rtl-playwright-smoke-report.json` 的 summary，并按 PRD 点名的 `sidebar / settings / workspace / dialogs` 四个主路径 surface 计算 covered / missing。
+- 刷新 `docs/roadmap/i18n/evidence/rtl-readiness-inventory.json` 后，当前有 Playwright smoke evidence，但 required surface coverage 只有 `3/4`：`sidebar / settings / dialogs` 已覆盖，`workspace` 缺明确 smoke summary 断言，`missingRequiredSurfaceSmokeEvidence=true`。
+- `docs/roadmap/i18n/rtl-readiness-evaluation.md` 已同步把 Workspace smoke 缺口写入结论：当前仍不应把 RTL locale 加入主支持列表；下一刀应优先补 `i18n:rtl-smoke` 的 Workspace 可见性 / 主工作台交互断言，使 required surface missing count 归零。
+
+验证：
+
+- `npm test -- "scripts/i18n-rtl-readiness-report.test.ts"` 通过，覆盖部分 smoke surface 缺口与全部 surface 覆盖两种情况。
+- `npm run i18n:rtl-readiness-report:json -- --output "docs/roadmap/i18n/evidence/rtl-readiness-inventory.json"` 通过，已刷新 RTL readiness evidence。
+
+## 2026-05-27：P4 RTL Workspace smoke 补齐
+
+本轮继续完成：
+
+- `scripts/i18n-rtl-playwright-smoke.mjs` 在设置页验证后回到首页，等待 `data-testid="workspace-shell-scene"` 可见，并把 Workspace shell 的可见性断言、截图路径与 `workspaceVisible=true` 写入 `rtl-playwright-smoke-report.json`。
+- 复跑 `npm run i18n:rtl-smoke` 后，控制台 error 与 page error 均为 `0`，新增 `rtl-workspace-automated.png` 与 `rtl-workspace-fullpage.png`。
+- 复刷 `docs/roadmap/i18n/evidence/rtl-readiness-inventory.json` 后，PRD required surface coverage 从 `3/4` 提升到 `4/4`，`missingRequiredSurfaceSmokeEvidence=false`；覆盖面为 `sidebar / settings / workspace / dialogs`。
+- `docs/roadmap/i18n/rtl-readiness-evaluation.md` 与 `rtl-screenshot-smoke-report.md` 已同步更新：当前 required surface 的强制 RTL smoke 已齐，但仍不等于开放 `ar` / `fa-IR` 这类真实 RTL locale。
+
+验证：
+
+- `npm run bridge:health -- --timeout-ms 120000` 通过，DevBridge 就绪。
+- `node --check "scripts/i18n-rtl-playwright-smoke.mjs"` 通过。
+- `npm run i18n:rtl-smoke` 通过，生成 Workspace 截图与 `workspaceVisible=true`。
+- `npm run i18n:rtl-readiness-report:json -- --output "docs/roadmap/i18n/evidence/rtl-readiness-inventory.json"` 通过，确认 required surface missing count 为 `0`。
+
+## 2026-05-27：P4 release docs translation queue evidence
+
+本轮继续完成：
+
+- `scripts/i18n-release-docs-workflow-report.ts` 在 translation scope / companion / drift 统计之外新增 `releaseDocsTranslationQueue`，把缺失 source、required companion blocker、pilot companion advisory 与 source-only candidate 拆成可机器读取的队列事实源。
+- 刷新 `docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json` 后，当前 queue 状态为 `ready`；`releaseDocsTranslationQueueMissingSourceCount=0`、`releaseDocsTranslationQueueRequiredCompanionMissingCount=0`、`releaseDocsTranslationQueuePilotCompanionMissingCount=0`，12 个 source-only 文档进入后续翻译候选队列。
+- `docs/roadmap/i18n/release-docs-workflow-evaluation.md` 已同步更新结论：发布材料已具备最小 `zh-CN / en-US` companion 覆盖，官网 / 帮助文档已有独立 translation scope 与 queue，但文档站仍没有 locale route / locale build workflow，不能宣称完整 docs i18n 发布链路完成。
+
+验证：
+
+- `npm test -- "scripts/i18n-release-docs-workflow-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖 2 个文件、29 个用例。
+- `npm run i18n:release-docs-report:json -- --output "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过，已刷新 release docs evidence。
+- `jq empty "docs/roadmap/i18n/release-docs-translation-scope.json" "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过，确认 scope 与 inventory JSON 有效。
+
+## 2026-05-27：P4 readiness 聚合审计
+
+本轮继续完成：
+
+- 新增 `scripts/i18n-p4-readiness-report.ts` 与 `npm run i18n:p4-readiness-report:json`，聚合 Chrome extension、release docs、RTL readiness 与 app metadata 四份 P4 evidence，按 PRD P4 的 4 条交付和 3 条验收逐条输出 passed / failed。
+- 新增 `docs/roadmap/i18n/evidence/p4-readiness-report.json`，当前 `deliverablesReady=true`、`acceptanceReady=true`，4 条交付与 3 条验收均有对应 evidence 通过；总体状态为 `ready-with-known-gaps`。
+- readiness 报告当时显式保留 3 个 known gap：Chrome extension 当前决策是保留 InstallI18n registry、官网 / 帮助文档仍没有 locale route / build workflow、installer / app metadata 仍没有真实多语言生成 workflow。后续 `docs-locale-build-manifest.json` 与 `app-metadata-locale-build-manifest.json` 已补上 build-time manifest workflow，Chrome 标准 `_locales` 也已收成 explicit decision evidence；当前 P4 known gap 已归零，但真实 locale route / 多站点发布 / 平台 installer 配置生成仍不能被误报为已完成。
+- `scripts/quality-task-planner.mjs` 已把 P4 readiness report 接入推荐命令；任一 P4 子 evidence 或对应脚本 / 文档变化时，都会推荐刷新 `p4-readiness-report.json`。
+
+验证：
+
+- `npm test -- "scripts/i18n-p4-readiness-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖 2 个文件、28 个用例。
+- `npm run i18n:p4-readiness-report:json -- --output "docs/roadmap/i18n/evidence/p4-readiness-report.json"` 通过，已刷新 P4 readiness evidence。
+- `jq empty "docs/roadmap/i18n/evidence/p4-readiness-report.json" "docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json" "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json" "docs/roadmap/i18n/evidence/rtl-readiness-inventory.json" "docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json"` 通过，确认聚合报告和四份输入 evidence 均为有效 JSON。
+
+## 2026-05-27：P4 RTL evidence 漂移恢复
+
+本轮继续完成：
+
+- 重新检查当前工作树时发现 `rtl-playwright-smoke-report.json`、`rtl-readiness-inventory.json`、`rtl-screenshot-smoke-report.md` 与多张 RTL 截图在文件系统中缺失，导致 P4 readiness 聚合报告可能引用旧结论。
+- 已在 DevBridge 健康状态通过后复跑 `npm run i18n:rtl-smoke`，重新生成首页、用户菜单、设置页与 Workspace 的 RTL 截图，并写回 `rtl-playwright-smoke-report.json`；本轮 smoke 结果为 `consoleErrorCount=0`、`homeSidebarOnRight=true`、`settingsNavVisible=true`、`userMenuDialogVisible=true`、`workspaceVisible=true`。
+- 已重建 `docs/roadmap/i18n/evidence/rtl-screenshot-smoke-report.md`，把 Workspace fullpage 截图纳入截图证据范围，避免 `rtl-readiness-inventory.json` 因 Markdown 截图证据缺失而误报 `missingRtlScreenshotEvidence=true`。
+- 已顺序刷新 `rtl-readiness-inventory.json` 与 `p4-readiness-report.json`，当时 RTL readiness 重新显示 `missingPlaywrightSmokeEvidence=false`、`missingRequiredSurfaceSmokeEvidence=false`、`missingRtlScreenshotEvidence=false`，P4 总状态回到 `ready-with-known-gaps`；后续 Chrome decision 与 app metadata locale manifest 收口后，P4 总状态已更新为 `ready`。
+
+验证：
+
+- `npm run bridge:health -- --timeout-ms 120000` 通过，DevBridge 就绪。
+- `npm run i18n:rtl-smoke` 通过，控制台 error 与 page error 均为 `0`。
+- `npm run i18n:rtl-readiness-report:json -- --output "docs/roadmap/i18n/evidence/rtl-readiness-inventory.json"` 通过。
+- `npm run i18n:p4-readiness-report:json -- --output "docs/roadmap/i18n/evidence/p4-readiness-report.json"` 通过。

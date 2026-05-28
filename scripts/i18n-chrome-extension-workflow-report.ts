@@ -26,10 +26,17 @@ export interface ChromeExtensionWorkflowReport {
     localeDirs: string[];
     localesDirExists: boolean;
   };
+  decision: {
+    standardChromeLocaleWorkflowRequired: boolean;
+    status: "deferred" | "ready" | "required";
+    summary: string;
+  };
   extensionRoot: string;
   installI18n: {
+    registeredButUnsupportedLocales: string[];
     registeredLocales: string[];
     scriptExists: boolean;
+    supportedButUnregisteredLocales: string[];
     supportedLocales: string[];
   };
   manifest: {
@@ -43,7 +50,10 @@ export interface ChromeExtensionWorkflowReport {
   };
   optionsPage: {
     scriptExists: boolean;
+    supportedButMissingTranslations: string[];
     supportedLanguages: string[];
+    translationButUnsupportedLanguages: string[];
+    translationLocales: string[];
   };
   pages: ChromeExtensionWorkflowPageReport[];
   repoRoot: string;
@@ -51,10 +61,14 @@ export interface ChromeExtensionWorkflowReport {
   summary: {
     dataI18nAttributeCount: number;
     htmlPageCount: number;
+    installI18nLocaleDriftCount: number;
     installI18nSupportedLocaleCount: number;
     manifestHasDefaultLocale: boolean;
+    optionsLanguageDriftCount: number;
     optionsSupportedLanguageCount: number;
     pageRegistryLocaleCount: number;
+    standardChromeLocaleDecisionRecorded: boolean;
+    standardChromeLocaleWorkflowRequired: boolean;
     standardChromeLocaleWorkflowPresent: boolean;
     terminologyPresentCount: number;
   };
@@ -161,6 +175,11 @@ function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values)).sort((left, right) => left.localeCompare(right));
 }
 
+function difference(left: string[], right: string[]): string[] {
+  const rightSet = new Set(right);
+  return uniqueSorted(left.filter((value) => !rightSet.has(value)));
+}
+
 function parseStringArrayLiteral(content: string, variableName: string): string[] {
   const pattern = new RegExp(
     String.raw`\b(?:const|let|var)\s+${variableName}\s*=\s*\[([\s\S]*?)\]`,
@@ -179,6 +198,116 @@ function parseStringArrayLiteral(content: string, variableName: string): string[
     }
   }
   return uniqueSorted(values);
+}
+
+function findObjectLiteralBody(content: string, variableName: string): string | null {
+  const pattern = new RegExp(
+    String.raw`\b(?:const|let|var)\s+${variableName}\s*=\s*\{`,
+    "m",
+  );
+  const match = content.match(pattern);
+  if (!match?.index) {
+    return null;
+  }
+
+  const start = match.index + match[0].length;
+  let depth = 1;
+  let quote: string | null = null;
+  let escaped = false;
+
+  for (let index = start; index < content.length; index += 1) {
+    const char = content[index];
+    if (!char) {
+      continue;
+    }
+
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === '"' || char === "'" || char === "`") {
+      quote = char;
+      continue;
+    }
+    if (char === "{") {
+      depth += 1;
+      continue;
+    }
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return content.slice(start, index);
+      }
+    }
+  }
+
+  return null;
+}
+
+function parseTopLevelObjectKeys(content: string, variableName: string): string[] {
+  const body = findObjectLiteralBody(content, variableName);
+  if (!body) {
+    return [];
+  }
+
+  const keys: string[] = [];
+  let segmentStart = 0;
+  let depth = 0;
+  let quote: string | null = null;
+  let escaped = false;
+
+  const pushSegmentKey = (segment: string) => {
+    const match = segment.match(/^\s*(?:(["'])([^"']+)\1|([A-Za-z_$][\w$-]*))\s*:/);
+    const key = match?.[2] ?? match?.[3];
+    if (key) {
+      keys.push(key);
+    }
+  };
+
+  for (let index = 0; index < body.length; index += 1) {
+    const char = body[index];
+    if (!char) {
+      continue;
+    }
+
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === '"' || char === "'" || char === "`") {
+      quote = char;
+      continue;
+    }
+    if (char === "{" || char === "[" || char === "(") {
+      depth += 1;
+      continue;
+    }
+    if (char === "}" || char === "]" || char === ")") {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (char === "," && depth === 0) {
+      pushSegmentKey(body.slice(segmentStart, index));
+      segmentStart = index + 1;
+    }
+  }
+
+  pushSegmentKey(body.slice(segmentStart));
+  return uniqueSorted(keys);
 }
 
 function parseInstallI18nRegistrations(content: string): string[] {
@@ -298,8 +427,14 @@ export function analyzeChromeExtensionWorkflowReport(
   const pages = buildPageReports(repoRoot, htmlFiles);
   const installI18nContent = readText(installI18nPath);
   const optionsScriptContent = readText(optionsScriptPath);
+  const installI18nSupportedLocales = parseStringArrayLiteral(installI18nContent, "SUPPORTED");
   const installI18nRegisteredLocales = uniqueSorted(
     registryFiles.flatMap((filePath) => parseInstallI18nRegistrations(readText(filePath))),
+  );
+  const optionsSupportedLanguages = parseStringArrayLiteral(optionsScriptContent, "SUPPORTED_LANGUAGES");
+  const optionsTranslationLocales = parseTopLevelObjectKeys(
+    optionsScriptContent,
+    "OPTIONS_TRANSLATIONS",
   );
   const terminology = buildTerminologyReport(repoRoot, allFiles);
   const dataI18nAttributeCount = pages.reduce(
@@ -316,16 +451,39 @@ export function analyzeChromeExtensionWorkflowReport(
       localeDirs,
       localesDirExists: dirExists(localesDir),
     },
+    decision: {
+      standardChromeLocaleWorkflowRequired: false,
+      status: "deferred",
+      summary:
+        "当前扩展保留轻量 InstallI18n registry；仅当扩展规模、共享翻译产物或发布标准化约束变化时，再迁移到 Chrome _locales/messages.json。",
+    },
     extensionRoot,
     installI18n: {
+      registeredButUnsupportedLocales: difference(
+        installI18nRegisteredLocales,
+        installI18nSupportedLocales,
+      ),
       registeredLocales: installI18nRegisteredLocales,
       scriptExists: fileExists(installI18nPath),
-      supportedLocales: parseStringArrayLiteral(installI18nContent, "SUPPORTED"),
+      supportedButUnregisteredLocales: difference(
+        installI18nSupportedLocales,
+        installI18nRegisteredLocales,
+      ),
+      supportedLocales: installI18nSupportedLocales,
     },
     manifest,
     optionsPage: {
       scriptExists: fileExists(optionsScriptPath),
-      supportedLanguages: parseStringArrayLiteral(optionsScriptContent, "SUPPORTED_LANGUAGES"),
+      supportedButMissingTranslations: difference(
+        optionsSupportedLanguages,
+        optionsTranslationLocales,
+      ),
+      supportedLanguages: optionsSupportedLanguages,
+      translationButUnsupportedLanguages: difference(
+        optionsTranslationLocales,
+        optionsSupportedLanguages,
+      ),
+      translationLocales: optionsTranslationLocales,
     },
     pages,
     repoRoot,
@@ -333,10 +491,18 @@ export function analyzeChromeExtensionWorkflowReport(
     summary: {
       dataI18nAttributeCount,
       htmlPageCount: pages.length,
-      installI18nSupportedLocaleCount: parseStringArrayLiteral(installI18nContent, "SUPPORTED").length,
+      installI18nLocaleDriftCount:
+        difference(installI18nSupportedLocales, installI18nRegisteredLocales).length +
+        difference(installI18nRegisteredLocales, installI18nSupportedLocales).length,
+      installI18nSupportedLocaleCount: installI18nSupportedLocales.length,
       manifestHasDefaultLocale: manifest.hasDefaultLocale,
-      optionsSupportedLanguageCount: parseStringArrayLiteral(optionsScriptContent, "SUPPORTED_LANGUAGES").length,
+      optionsLanguageDriftCount:
+        difference(optionsSupportedLanguages, optionsTranslationLocales).length +
+        difference(optionsTranslationLocales, optionsSupportedLanguages).length,
+      optionsSupportedLanguageCount: optionsSupportedLanguages.length,
       pageRegistryLocaleCount: pageRegistryLocales.length,
+      standardChromeLocaleDecisionRecorded: true,
+      standardChromeLocaleWorkflowRequired: false,
       standardChromeLocaleWorkflowPresent:
         manifest.hasDefaultLocale && dirExists(localesDir) && localeDirs.length > 0,
       terminologyPresentCount: terminology.filter((term) => term.present).length,
@@ -363,12 +529,16 @@ export function formatChromeExtensionWorkflowReport(
     `Chrome _locales/: ${report.chromeLocales.localesDirExists ? "yes" : "no"}`,
     `InstallI18n supported locales: ${report.installI18n.supportedLocales.join(", ") || "(none)"}`,
     `InstallI18n registered locales: ${report.installI18n.registeredLocales.join(", ") || "(none)"}`,
+    `InstallI18n locale drift: ${report.summary.installI18nLocaleDriftCount}`,
     `options supported languages: ${report.optionsPage.supportedLanguages.join(", ") || "(none)"}`,
+    `options translation locales: ${report.optionsPage.translationLocales.join(", ") || "(none)"}`,
+    `options language drift: ${report.summary.optionsLanguageDriftCount}`,
     `HTML pages: ${report.summary.htmlPageCount}`,
     `data-i18n attributes: ${report.summary.dataI18nAttributeCount}`,
     `terminology present: ${report.summary.terminologyPresentCount}/${report.terminology.length}`,
     `missing terminology: ${missingTerms.join(", ") || "(none)"}`,
     `standard Chrome locale workflow: ${report.summary.standardChromeLocaleWorkflowPresent ? "yes" : "no"}`,
+    `standard Chrome locale decision: ${report.decision.status}`,
   ];
 
   return `${lines.join("\n")}\n`;

@@ -8,8 +8,12 @@ import {
   CodeWorkbenchGuide,
   type CodeWorkbenchGuideTarget,
 } from "../components/CodeWorkbenchGuide";
-import { HarnessStatusPanel } from "../components/HarnessStatusPanel";
+import {
+  HarnessStatusPanel,
+  type HarnessFileChangeReviewSummary,
+} from "../components/HarnessStatusPanel";
 import { TeamMemoryShadowCard } from "../components/TeamMemoryShadowCard";
+import { countFailedHarnessOutputSignals } from "../utils/harnessOutputSignals";
 import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 
 type HarnessPanelBaseProps = Pick<
@@ -115,6 +119,9 @@ function renderCodeWorkbenchGuide({
       pendingApprovalsCount={panelBaseProps.harnessState.pendingApprovals.length}
       activeWriteCount={panelBaseProps.harnessState.activeFileWrites.length}
       outputSignalCount={panelBaseProps.harnessState.outputSignals.length}
+      failedOutputSignalCount={countFailedHarnessOutputSignals(
+        panelBaseProps.harnessState.outputSignals,
+      )}
       pendingFileChangeCount={metrics.pendingFileChangeCount}
       totalFileChangeCount={metrics.totalFileChangeCount}
       latestFileName={metrics.latestFileName}
@@ -129,14 +136,18 @@ function renderCodeReviewSummaryPanel({
   panelBaseProps,
   isCodeRuntime,
   fileCheckpointSummary,
+  fileChangeReviewSummary,
   onOpenFileCheckpoints,
+  onSubmitCodeFixPrompt,
 }: {
   panelBaseProps: HarnessPanelBaseProps;
   isCodeRuntime: boolean;
   fileCheckpointSummary: NonNullable<
     HarnessPanelBaseProps["threadRead"]
   >["file_checkpoint_summary"] | null;
+  fileChangeReviewSummary?: HarnessFileChangeReviewSummary | null;
   onOpenFileCheckpoints?: () => void;
+  onSubmitCodeFixPrompt?: (prompt: string) => void | Promise<void>;
 }) {
   if (!isCodeRuntime) {
     return null;
@@ -146,8 +157,10 @@ function renderCodeReviewSummaryPanel({
     <CodeReviewSummaryPanel
       harnessState={panelBaseProps.harnessState}
       fileCheckpointSummary={fileCheckpointSummary}
+      fileChangeReviewSummary={fileChangeReviewSummary}
       onOpenSection={openHarnessSection}
       onOpenFileCheckpoints={onOpenFileCheckpoints}
+      onSubmitCodeFixPrompt={onSubmitCodeFixPrompt}
     />
   );
 }
@@ -157,6 +170,7 @@ interface GeneralWorkbenchHarnessDialogSectionProps extends HarnessPanelBaseProp
   open: boolean;
   onOpenChange: (open: boolean) => void;
   teamMemorySnapshot?: TeamMemorySnapshot | null;
+  onSubmitCodeFixPrompt?: (prompt: string) => void | Promise<void>;
 }
 
 export function GeneralWorkbenchHarnessDialogSection({
@@ -164,6 +178,7 @@ export function GeneralWorkbenchHarnessDialogSection({
   open,
   onOpenChange,
   teamMemorySnapshot = null,
+  onSubmitCodeFixPrompt,
   ...panelBaseProps
 }: GeneralWorkbenchHarnessDialogSectionProps) {
   const [fileCheckpointDialogOpen, setFileCheckpointDialogOpen] =
@@ -186,24 +201,30 @@ export function GeneralWorkbenchHarnessDialogSection({
   const openFileCheckpoints = diagnosticSessionId
     ? () => setFileCheckpointDialogOpen(true)
     : undefined;
-  const codeReviewSummaryPanel = renderCodeReviewSummaryPanel({
-    panelBaseProps,
-    isCodeRuntime:
-      panelBaseProps.diagnosticRuntimeContext?.executionStrategy ===
-      "code_orchestrated",
-    fileCheckpointSummary,
-    onOpenFileCheckpoints: openFileCheckpoints,
-  });
+  const isCodeRuntime =
+    panelBaseProps.diagnosticRuntimeContext?.executionStrategy ===
+    "code_orchestrated";
   const leadContent =
-    codeWorkbenchGuide || codeReviewSummaryPanel || teamMemorySnapshot ? (
-      <div className="space-y-3">
-        {codeWorkbenchGuide}
-        {codeReviewSummaryPanel}
-        {teamMemorySnapshot ? (
-          <TeamMemoryShadowCard snapshot={teamMemorySnapshot} />
-        ) : null}
-      </div>
-    ) : undefined;
+    codeWorkbenchGuide || isCodeRuntime || teamMemorySnapshot
+      ? ({ fileChangeReviewSummary }: {
+          fileChangeReviewSummary: HarnessFileChangeReviewSummary;
+        }) => (
+          <div className="space-y-3">
+            {codeWorkbenchGuide}
+            {renderCodeReviewSummaryPanel({
+              panelBaseProps,
+              isCodeRuntime,
+              fileCheckpointSummary,
+              fileChangeReviewSummary,
+              onOpenFileCheckpoints: openFileCheckpoints,
+              onSubmitCodeFixPrompt,
+            })}
+            {teamMemorySnapshot ? (
+              <TeamMemoryShadowCard snapshot={teamMemorySnapshot} />
+            ) : null}
+          </div>
+        )
+      : undefined;
 
   if (!enabled) {
     return null;
@@ -264,6 +285,7 @@ interface GeneralWorkbenchDialogSectionProps extends HarnessPanelBaseProps {
     typeof AgentRuntimeStrip
   >["selectedTeamRoleCount"];
   teamMemorySnapshot?: TeamMemorySnapshot | null;
+  onSubmitCodeFixPrompt?: (prompt: string) => void | Promise<void>;
 }
 
 export function GeneralWorkbenchDialogSection({
@@ -279,6 +301,7 @@ export function GeneralWorkbenchDialogSection({
   runtimeStatusTitle,
   selectedTeamRoleCount,
   teamMemorySnapshot = null,
+  onSubmitCodeFixPrompt,
   ...panelBaseProps
 }: GeneralWorkbenchDialogSectionProps) {
   const { t } = useTranslation("agent");
@@ -303,15 +326,10 @@ export function GeneralWorkbenchDialogSection({
   const openFileCheckpoints = diagnosticSessionId
     ? () => setFileCheckpointDialogOpen(true)
     : undefined;
-  const codeReviewSummaryPanel = renderCodeReviewSummaryPanel({
-    panelBaseProps,
-    isCodeRuntime:
-      executionRuntime?.execution_strategy === "code_orchestrated" ||
-      panelBaseProps.diagnosticRuntimeContext?.executionStrategy ===
-        "code_orchestrated",
-    fileCheckpointSummary,
-    onOpenFileCheckpoints: openFileCheckpoints,
-  });
+  const isCodeRuntime =
+    executionRuntime?.execution_strategy === "code_orchestrated" ||
+    panelBaseProps.diagnosticRuntimeContext?.executionStrategy ===
+      "code_orchestrated";
 
   if (!enabled) {
     return null;
@@ -334,10 +352,17 @@ export function GeneralWorkbenchDialogSection({
             title={t("agentChat.workspaceHarnessDialog.title")}
             description={t("agentChat.workspaceHarnessDialog.description")}
             toggleLabel={t("agentChat.workspaceHarnessDialog.toggleLabel")}
-            leadContent={
+            leadContent={({ fileChangeReviewSummary }) => (
               <div className="space-y-3">
                 {codeWorkbenchGuide}
-                {codeReviewSummaryPanel}
+                {renderCodeReviewSummaryPanel({
+                  panelBaseProps,
+                  isCodeRuntime,
+                  fileCheckpointSummary,
+                  fileChangeReviewSummary,
+                  onOpenFileCheckpoints: openFileCheckpoints,
+                  onSubmitCodeFixPrompt,
+                })}
                 <AgentRuntimeStrip
                   activeTheme={activeTheme}
                   toolPreferences={toolPreferences}
@@ -359,7 +384,7 @@ export function GeneralWorkbenchDialogSection({
                   <TeamMemoryShadowCard snapshot={teamMemorySnapshot} />
                 ) : null}
               </div>
-            }
+            )}
           />
         </DialogContent>
       </Dialog>

@@ -1,0 +1,142 @@
+{
+  "acceptance": [
+    {
+      "evidencePath": "docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json",
+      "id": "extension-terminology-consistent",
+      "notes": [],
+      "requirement": "extension 与桌面 App 的术语一致。",
+      "signals": {
+        "terminologyPresentCount": 5,
+        "terminologyTotal": 5
+      },
+      "status": "passed"
+    },
+    {
+      "evidencePath": "docs/roadmap/i18n/evidence/rtl-readiness-inventory.json",
+      "id": "rtl-required-surfaces-stable",
+      "notes": [],
+      "requirement": "RTL 不破坏设置页、侧栏、Workspace、弹窗主路径。",
+      "signals": {
+        "requiredSurfaceSmokeCoveredCount": 4,
+        "requiredSurfaceSmokeMissingCount": 0
+      },
+      "status": "passed"
+    },
+    {
+      "evidencePath": "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
+      "id": "release-materials-zh-cn-en-us-covered",
+      "notes": [],
+      "requirement": "发布材料至少覆盖 zh-CN / en-US。",
+      "signals": {
+        "hasBilingualRootReadme": true,
+        "hasReleaseNotesCompanion": true,
+        "hasReleaseNotesCompanionVersionMatch": true,
+        "readmeEnglishLinksReleaseNotesCompanion": true
+      },
+      "status": "passed"
+    }
+  ],
+  "deliverables": [
+    {
+      "evidencePath": "docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json",
+      "id": "chrome-extension-workflow-evaluated",
+      "notes": [
+        "当前结论是保留轻量 InstallI18n registry，并用 drift count 约束。"
+      ],
+      "requirement": "Chrome extension 评估是否迁移到 _locales/messages.json 标准结构。",
+      "signals": {
+        "installI18nLocaleDriftCount": 0,
+        "optionsLanguageDriftCount": 0,
+        "standardChromeLocaleWorkflowPresent": false,
+        "standardChromeLocaleDecisionRecorded": true,
+        "standardChromeLocaleWorkflowRequired": false,
+        "terminologyPresentCount": 5,
+        "terminologyTotal": 5
+      },
+      "status": "passed"
+    },
+    {
+      "evidencePath": "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
+      "id": "release-docs-workflow-ready",
+      "notes": [],
+      "requirement": "发布说明、官网文档、帮助文档进入独立翻译 workflow。",
+      "signals": {
+        "docsUnscopedContentSourceFileCount": 0,
+        "hasDocsLocaleWorkflow": true,
+        "hasReleaseDocsTranslationQueue": true,
+        "releaseDocsTranslationQueueItemCount": 12,
+        "releaseDocsTranslationQueueRequiredCompanionMissingCount": 0,
+        "releaseDocsTranslationQueueSourceOnlyCandidateCount": 12,
+        "workflowStatus": "ready"
+      },
+      "status": "passed"
+    },
+    {
+      "evidencePath": "docs/roadmap/i18n/evidence/rtl-readiness-inventory.json",
+      "id": "rtl-readiness-smoke-complete",
+      "notes": [
+        "这只证明强制 RTL smoke surface 完成，不等于真实 RTL locale 已开放。"
+      ],
+      "requirement": "引入 RTL locale 前完成布局审计、截图回归与 Playwright smoke。",
+      "signals": {
+        "highRiskFileCount": 23,
+        "missingPlaywrightSmokeEvidence": false,
+        "missingRequiredSurfaceSmokeEvidence": false,
+        "missingRtlScreenshotEvidence": false,
+        "requiredSurfaceSmokeCoveredCount": 4,
+        "requiredSurfaceSmokeMissingCount": 0
+      },
+      "status": "passed"
+    },
+    {
+      "evidencePath": "docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
+      "id": "app-metadata-localization-evaluated",
+      "notes": [],
+      "requirement": "多平台 installer / app metadata 本地化评估。",
+      "signals": {
+        "hasInstallerLocalizationWorkflow": true,
+        "hasMetadataTranslationScope": true,
+        "metadataMissingScopedFieldCount": 0,
+        "metadataReviewedFieldCount": 11,
+        "metadataUnscopedFieldCount": 0
+      },
+      "status": "passed"
+    }
+  ],
+  "evidence": {
+    "appMetadata": {
+      "exists": true,
+      "path": "docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
+      "schemaVersion": "lime.i18n.appMetadataWorkflowReport.v1"
+    },
+    "chromeExtension": {
+      "exists": true,
+      "path": "docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json",
+      "schemaVersion": "lime.i18n.chromeExtensionWorkflowReport.v1"
+    },
+    "releaseDocs": {
+      "exists": true,
+      "path": "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
+      "schemaVersion": "lime.i18n.releaseDocsWorkflowReport.v1"
+    },
+    "rtlReadiness": {
+      "exists": true,
+      "path": "docs/roadmap/i18n/evidence/rtl-readiness-inventory.json",
+      "schemaVersion": "lime.i18n.rtlReadinessReport.v1"
+    }
+  },
+  "knownGaps": [],
+  "repoRoot": "/Users/coso/Documents/dev/ai/aiclientproxy/lime",
+  "schemaVersion": "lime.i18n.p4ReadinessReport.v1",
+  "summary": {
+    "acceptanceFailedCount": 0,
+    "acceptancePassedCount": 3,
+    "acceptanceReady": true,
+    "deliverableFailedCount": 0,
+    "deliverablePassedCount": 4,
+    "deliverablesReady": true,
+    "knownGapCount": 0,
+    "missingEvidenceCount": 0,
+    "overallStatus": "ready"
+  }
+}

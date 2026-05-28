@@ -18,13 +18,14 @@ import {
 } from "./buildHomeSkillSurface";
 import { buildHomeSurfaceCopy } from "./homeSurfaceCopy";
 
-type AgentResourceKey = keyof typeof agentZhCNResource;
+const agentZhCNResourceTable: Record<string, string> = agentZhCNResource;
+const agentEnUSResourceTable: Record<string, string> = agentEnUSResource;
 
 const TEST_HOME_SURFACE_COPY = buildHomeSurfaceCopy(
-  (key) => agentZhCNResource[key as AgentResourceKey],
+  (key) => agentZhCNResourceTable[key],
 );
 const TEST_HOME_SURFACE_EN_COPY = buildHomeSurfaceCopy((key, values) =>
-  agentEnUSResource[key as AgentResourceKey].replace(
+  agentEnUSResourceTable[key].replace(
     "{{example}}",
     String(values?.example ?? ""),
   ),

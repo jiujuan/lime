@@ -5690,6 +5690,7 @@ Extract it into the Agent Skills directory.`,
           | undefined
       )?.harness;
       expect(harnessMetadata?.code_command).toBeUndefined();
+      expect(harnessMetadata?.fast_response_routing).toBeUndefined();
       expect(listMentionEntryUsage()).toEqual([]);
       expect(listServiceSkillUsage()).toEqual([]);
     } finally {

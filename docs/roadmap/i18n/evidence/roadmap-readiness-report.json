@@ -1,0 +1,636 @@
+{
+  "evidence": {
+    "bundleStrategy": {
+      "exists": true,
+      "path": "docs/roadmap/i18n/evidence/bundle-strategy-report.json",
+      "schemaVersion": "lime.i18n.bundleStrategyReport.v1"
+    },
+    "contentTargetLanguageBoundary": {
+      "exists": true,
+      "path": "docs/roadmap/i18n/evidence/content-target-language-boundary-report.json",
+      "schemaVersion": "lime.i18n.languageBoundaryReport.v1"
+    },
+    "i18nextCliParityBenchmark": {
+      "exists": true,
+      "path": "docs/roadmap/i18n/evidence/i18next-cli-parity-benchmark.json",
+      "schemaVersion": "lime.i18n.i18nextCliParityBenchmark.v1"
+    },
+    "languageBoundary": {
+      "exists": true,
+      "path": "docs/roadmap/i18n/evidence/language-boundary-report.json",
+      "schemaVersion": "lime.i18n.languageBoundaryReport.v1"
+    },
+    "p4Readiness": {
+      "exists": true,
+      "path": "docs/roadmap/i18n/evidence/p4-readiness-report.json",
+      "schemaVersion": "lime.i18n.p4ReadinessReport.v1"
+    },
+    "patchRetirementGate": {
+      "exists": true,
+      "path": "docs/roadmap/i18n/evidence/patch-retirement-gate-report.json",
+      "schemaVersion": "lime.i18n.patchRetirementGate.v1"
+    },
+    "sourceLocaleExport": {
+      "exists": true,
+      "path": "docs/roadmap/i18n/evidence/source-locale-export.json",
+      "schemaVersion": "lime.i18n.sourceLocaleExport.v1"
+    },
+    "translationCoverage": {
+      "exists": true,
+      "path": "docs/roadmap/i18n/evidence/translation-coverage-report.json",
+      "schemaVersion": "lime.i18n.translationCheckReport.v1"
+    },
+    "translationPrPack": {
+      "exists": true,
+      "path": "docs/roadmap/i18n/evidence/translation-pr-pack.json",
+      "schemaVersion": "lime.i18n.translationPrPack.v1"
+    }
+  },
+  "phases": [
+    {
+      "acceptance": [
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/translation-coverage-report.json",
+          "id": "zh-cn-en-us-startup-resource-ready",
+          "notes": [],
+          "requirement": "App 能以 zh-CN / en-US 启动。",
+          "signals": {
+            "sourceLocale": "zh-CN",
+            "supportedCoverageLocales": [
+              "en-US",
+              "ja-JP",
+              "ko-KR",
+              "zh-CN",
+              "zh-TW"
+            ],
+            "translationCoverageReady": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "src/i18n/locales.ts",
+          "id": "legacy-patch-fallback-kept",
+          "notes": [],
+          "requirement": "未迁移页面仍可由 Patch Layer 兜底。",
+          "signals": {
+            "hasLegacyMapper": true,
+            "legacyPatchProviderExists": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "src/i18n/createI18n.ts",
+          "id": "provider-startup-no-suspense",
+          "notes": [
+            "这是静态启动配置证据，真实 GUI 启动由 P1 / P3 smoke evidence 继续约束。"
+          ],
+          "requirement": "新 provider 不造成首屏白屏或明显闪烁。",
+          "signals": {
+            "hasFallbackLng": true,
+            "useSuspenseFalse": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "src/i18n/__tests__/locales.test.ts",
+          "id": "normalize-fallback-unit-tests",
+          "notes": [],
+          "requirement": "单测覆盖 normalize 与 fallback。",
+          "signals": {
+            "loadNamespaceTestHasFallback": true,
+            "localesTestHasNormalize": true
+          },
+          "status": "passed"
+        }
+      ],
+      "deliverables": [
+        {
+          "evidencePath": "src/i18n/locales.ts",
+          "id": "locale-registry-normalize",
+          "notes": [],
+          "requirement": "新增 locale registry 与 normalize。",
+          "signals": {
+            "hasNormalizeLocale": true,
+            "hasNormalizeLocalePreference": true,
+            "hasSupportedLocales": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "src/i18n/createI18n.ts",
+          "id": "create-i18n-provider-resources",
+          "notes": [],
+          "requirement": "新增 createI18n、provider、核心 resources。",
+          "signals": {
+            "coreNamespaces": [
+              "common",
+              "navigation",
+              "settings",
+              "workspace",
+              "errors"
+            ],
+            "hasBundledResources": true,
+            "hasInitReactI18next": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "src/i18n/legacy-patch/I18nPatchProvider.tsx",
+          "id": "legacy-patch-boundary",
+          "notes": [],
+          "requirement": "将现有 Patch Layer 移到 legacy-patch 或明确标注 legacy boundary。",
+          "signals": {
+            "legacyPatchProviderExists": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "src/i18n/locales.ts",
+          "id": "config-language-compat",
+          "notes": [],
+          "requirement": "Config.language 读取兼容 zh / en，写入新 locale。",
+          "signals": {
+            "appConfigTypesExists": true,
+            "hasEnCompat": true,
+            "hasZhCompat": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "src/i18n/createI18n.ts",
+          "id": "document-lang-dir-sync",
+          "notes": [],
+          "requirement": "document.documentElement.lang 与 dir 同步。",
+          "signals": {
+            "syncsDir": true,
+            "syncsLang": true,
+            "usesDirectionHelper": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "package.json",
+          "id": "i18n-check-entry",
+          "notes": [],
+          "requirement": "修复或替换失效的 detect-translations* 脚本入口。",
+          "signals": {
+            "hasDetectTranslations": true,
+            "hasI18nCheck": true
+          },
+          "status": "passed"
+        }
+      ],
+      "id": "P0",
+      "knownGaps": [],
+      "status": "ready",
+      "summary": {
+        "acceptanceFailedCount": 0,
+        "acceptancePassedCount": 4,
+        "deliverableFailedCount": 0,
+        "deliverablePassedCount": 6,
+        "knownGapCount": 0
+      },
+      "title": "骨架与兼容层"
+    },
+    {
+      "acceptance": [
+        {
+          "evidencePath": "src/components/AppSidebar.test.tsx",
+          "id": "language-switch-updates-shell",
+          "notes": [],
+          "requirement": "切换语言后设置页、侧栏、Workspace shell 立即更新。",
+          "signals": {
+            "testsEnglishSwitch": true,
+            "testsRootLang": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "src/components/AppSidebar.test.tsx",
+          "id": "language-choice-persisted",
+          "notes": [],
+          "requirement": "重启后保留选择。",
+          "signals": {
+            "testsEnUsPersistence": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/patch-retirement-gate-report.json",
+          "id": "workspace-gui-smoke-evidence",
+          "notes": [
+            "当前使用 GUI smoke 产出的 Patch gate 作为默认 workspace 冒烟代理证据；若要做最终发布审计，应补独立 workspace smoke evidence。"
+          ],
+          "requirement": "GUI smoke 覆盖默认 workspace 准备态。",
+          "signals": {
+            "patchRetirementReady": true,
+            "patchTotalRuns": 10
+          },
+          "status": "passed"
+        }
+      ],
+      "deliverables": [
+        {
+          "evidencePath": "src/components/settings-v2/general/appearance/index.tsx",
+          "id": "settings-language-selector-key-based",
+          "notes": [],
+          "requirement": "设置页语言选择器迁移到 key-based i18n。",
+          "signals": {
+            "hasChangeLimeLocale": true,
+            "hasUiLocaleOptions": true,
+            "usesTranslation": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/source-locale-export.json",
+          "id": "shell-core-namespaces-covered",
+          "notes": [],
+          "requirement": "侧栏、顶部栏、主导航、Workspace shell、空态、基础按钮迁移。",
+          "signals": {
+            "coreNamespaces": [
+              "common",
+              "navigation",
+              "settings",
+              "workspace",
+              "errors"
+            ],
+            "coreNamespacesReady": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/translation-coverage-report.json",
+          "id": "core-source-en-us-established",
+          "notes": [],
+          "requirement": "common、navigation、settings、workspace、errors namespace 建立 source + en-US。",
+          "signals": {
+            "coreNamespacesReady": true,
+            "supportedCoverageLocales": [
+              "en-US",
+              "ja-JP",
+              "ko-KR",
+              "zh-CN",
+              "zh-TW"
+            ],
+            "translationCoverageReady": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "src/components/AppSidebar.test.tsx",
+          "id": "ui-regression-tests",
+          "notes": [],
+          "requirement": "新增 UI 回归测试，覆盖语言选择、持久化、关键文案。",
+          "signals": {
+            "appSidebarTestHasLocaleChange": true,
+            "appSidebarTestHasPersistence": true,
+            "appSidebarTestHasRootLang": true
+          },
+          "status": "passed"
+        }
+      ],
+      "id": "P1",
+      "knownGaps": [],
+      "status": "ready",
+      "summary": {
+        "acceptanceFailedCount": 0,
+        "acceptancePassedCount": 3,
+        "deliverableFailedCount": 0,
+        "deliverablePassedCount": 4,
+        "knownGapCount": 0
+      },
+      "title": "设置页与主导航迁移"
+    },
+    {
+      "acceptance": [
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/language-boundary-report.json",
+          "id": "ui-zh-agent-en-combo",
+          "notes": [
+            "该项证明 response language 与 UI locale 分离，未执行 live model 英文回复端到端。"
+          ],
+          "requirement": "UI 中文、Agent 英文回复的组合可用。",
+          "signals": {
+            "agentResponseLanguageCount": 45
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/language-boundary-report.json",
+          "id": "ui-en-browser-preset-boundary",
+          "notes": [],
+          "requirement": "UI 英文、Browser preset 为日区/美区的组合不互相污染。",
+          "signals": {
+            "browserEnvironmentLanguageCount": 114,
+            "uiLocaleCount": 1111
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/content-target-language-boundary-report.json",
+          "id": "artifact-target-language-not-ui-locale",
+          "notes": [],
+          "requirement": "Artifact 目标语言不因 UI 切换而改变。",
+          "signals": {
+            "contentTargetEntryCount": 428,
+            "contentTargetUnknownCount": 0
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/source-locale-export.json",
+          "id": "error-code-translation-display",
+          "notes": [],
+          "requirement": "关键错误能通过 error code 翻译展示。",
+          "signals": {
+            "hasErrorsNamespace": true,
+            "sourceExportHasErrorCodeCopy": true
+          },
+          "status": "passed"
+        }
+      ],
+      "deliverables": [
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/source-locale-export.json",
+          "id": "agent-namespace-migrated",
+          "notes": [],
+          "requirement": "Agent Chat 主路径迁移 agent namespace。",
+          "signals": {
+            "p2Namespaces": [
+              "agent",
+              "agentInputbar",
+              "agentRuntime",
+              "agentSkills",
+              "workspace",
+              "errors"
+            ],
+            "p2NamespacesReady": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/language-boundary-report.json",
+          "id": "agent-response-language-metadata",
+          "notes": [],
+          "requirement": "增加 AI response language 设置与 request metadata 注入。",
+          "signals": {
+            "agentResponseLanguageCount": 45,
+            "hasSettingsCopy": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/content-target-language-boundary-report.json",
+          "id": "content-target-language-boundary",
+          "notes": [],
+          "requirement": "Artifact / 文档 / 文章 / 翻译类任务明确 content target language。",
+          "signals": {
+            "contentTargetEntryCount": 428,
+            "contentTargetUnknownCount": 0
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/source-locale-export.json",
+          "id": "browser-environment-language-copy-boundary",
+          "notes": [],
+          "requirement": "Browser Environment 设置页文案明确 Accept-Language 与 UI language 的差异。",
+          "signals": {
+            "mentionsAcceptLanguage": true,
+            "mentionsUiLanguageBoundary": true,
+            "mentionsUiLanguageBoundaryEnglish": false
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/source-locale-export.json",
+          "id": "knowledge-browser-artifact-main-entries",
+          "notes": [],
+          "requirement": "Knowledge / SceneApp / Browser / Artifact 主要入口迁移对应 namespace。",
+          "signals": {
+            "p2NamespacesReady": true,
+            "sourceExportHasArtifactCopy": true,
+            "sourceExportHasBrowserCopy": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/source-locale-export.json",
+          "id": "errors-namespace-present",
+          "notes": [],
+          "requirement": "用户可见 toast / error 进入 errors namespace。",
+          "signals": {
+            "hasErrorsNamespace": true,
+            "sourceKeyCount": 7581
+          },
+          "status": "passed"
+        }
+      ],
+      "id": "P2",
+      "knownGaps": [],
+      "status": "ready",
+      "summary": {
+        "acceptanceFailedCount": 0,
+        "acceptancePassedCount": 4,
+        "deliverableFailedCount": 0,
+        "deliverablePassedCount": 6,
+        "knownGapCount": 0
+      },
+      "title": "Agent / Artifact / Browser / Knowledge 主路径"
+    },
+    {
+      "acceptance": [
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/translation-coverage-report.json",
+          "id": "i18n-check-green",
+          "notes": [],
+          "requirement": "npm run i18n:check 能在本地发现漏 key 与无效 locale。",
+          "signals": {
+            "hasIssues": false,
+            "issueCount": 0,
+            "missingKeyCount": 0
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "scripts/quality-task-planner.mjs",
+          "id": "quality-selector-i18n-coverage",
+          "notes": [],
+          "requirement": "npm run verify:local 或质量选择器能覆盖 i18n 结构风险。",
+          "signals": {
+            "recommendsBundleReport": true,
+            "recommendsP4Readiness": true,
+            "recommendsTranslationPrPack": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/translation-pr-pack.json",
+          "id": "translation-pr-reviewable",
+          "notes": [],
+          "requirement": "翻译 PR 可审阅、可回滚、不会覆盖人工修订。",
+          "signals": {
+            "localesWithGaps": 0,
+            "proposedEntryCount": 0
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/source-locale-export.json",
+          "id": "automation-evidence-source-key-sync",
+          "notes": [],
+          "requirement": "P3 自动化 evidence 必须基于同一份 source locale 快照。",
+          "signals": {
+            "distinctSourceKeyCounts": [
+              7581
+            ],
+            "sourceKeyCounts": {
+              "bundleStrategy": 7581,
+              "sourceLocaleExport": 7581,
+              "translationCoverage": 7581,
+              "translationPrPack": 7581
+            }
+          },
+          "status": "passed"
+        }
+      ],
+      "deliverables": [
+        {
+          "evidencePath": "package.json",
+          "id": "i18n-workflow-scripts",
+          "notes": [],
+          "requirement": "建立 source export、missing key、unused key、protected dynamic key、coverage report。",
+          "signals": {
+            "hasBundleReport": true,
+            "hasCheck": true,
+            "hasSourceExport": true,
+            "hasTranslationPrPack": true,
+            "hasUnused": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/i18next-cli-parity-benchmark.json",
+          "id": "i18next-cli-evaluated",
+          "notes": [],
+          "requirement": "评估官方 i18next-cli 作为抽取 / lint / locale sync / type generation 候选。",
+          "signals": {
+            "hasBenchmarkSummary": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "docs/roadmap/i18n/glossary.md",
+          "id": "glossary-established",
+          "notes": [],
+          "requirement": "建立 glossary：产品名、功能名、Agent 术语、Browser Runtime 术语、SceneApp 术语。",
+          "signals": {
+            "glossaryExists": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/translation-pr-pack.json",
+          "id": "translation-pr-pack-review-only",
+          "notes": [],
+          "requirement": "自动翻译只创建 PR，不直接覆盖 source locale。",
+          "signals": {
+            "localesWithGaps": 0,
+            "proposedEntryCount": 0
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": ".github/pull_request_template.md",
+          "id": "pr-template-namespace-required",
+          "notes": [],
+          "requirement": "PR 模板要求标注新增/变更文案的 namespace。",
+          "signals": {
+            "prTemplateExists": true
+          },
+          "status": "passed"
+        },
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/bundle-strategy-report.json",
+          "id": "bundle-strategy-report",
+          "notes": [],
+          "requirement": "资源规模扩大后补 bundle 体积与 chunk 策略报告。",
+          "signals": {
+            "inlineGroupCount": 6,
+            "sourceLocaleKeyCount": 7581,
+            "totalRawBytes": 3465895
+          },
+          "status": "passed"
+        }
+      ],
+      "id": "P3",
+      "knownGaps": [],
+      "status": "ready",
+      "summary": {
+        "acceptanceFailedCount": 0,
+        "acceptancePassedCount": 4,
+        "deliverableFailedCount": 0,
+        "deliverablePassedCount": 6,
+        "knownGapCount": 0
+      },
+      "title": "自动化与治理"
+    },
+    {
+      "acceptance": [
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/p4-readiness-report.json",
+          "id": "p4-acceptance-ready",
+          "notes": [],
+          "requirement": "extension 术语、RTL 主路径和 zh-CN / en-US 发布材料验收通过。",
+          "signals": {
+            "acceptanceFailedCount": 0,
+            "acceptancePassedCount": 3,
+            "acceptanceReady": true
+          },
+          "status": "passed"
+        }
+      ],
+      "deliverables": [
+        {
+          "evidencePath": "docs/roadmap/i18n/evidence/p4-readiness-report.json",
+          "id": "p4-deliverables-ready",
+          "notes": [],
+          "requirement": "Chrome extension、发布材料、RTL 与 app metadata 评估完成。",
+          "signals": {
+            "deliverableFailedCount": 0,
+            "deliverablePassedCount": 4,
+            "deliverablesReady": true
+          },
+          "status": "passed"
+        }
+      ],
+      "id": "P4",
+      "knownGaps": [],
+      "status": "ready",
+      "summary": {
+        "acceptanceFailedCount": 0,
+        "acceptancePassedCount": 1,
+        "deliverableFailedCount": 0,
+        "deliverablePassedCount": 1,
+        "knownGapCount": 0
+      },
+      "title": "扩展与发布材料"
+    }
+  ],
+  "repoRoot": "/Users/coso/Documents/dev/ai/aiclientproxy/lime",
+  "schemaVersion": "lime.i18n.roadmapReadinessReport.v1",
+  "summary": {
+    "acceptanceFailedCount": 0,
+    "acceptancePassedCount": 16,
+    "deliverableFailedCount": 0,
+    "deliverablePassedCount": 23,
+    "knownGapCount": 0,
+    "missingEvidenceCount": 0,
+    "overallStatus": "ready",
+    "phaseCount": 5,
+    "phaseIncompleteCount": 0,
+    "phaseReadyCount": 5,
+    "phaseReadyWithKnownGapsCount": 0
+  }
+}
