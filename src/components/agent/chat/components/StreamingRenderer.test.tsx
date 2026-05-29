@@ -48,6 +48,29 @@ vi.mock("@/lib/artifact/hooks/useDebouncedValue", () => ({
   useDebouncedValue: <T,>(value: T) => value,
 }));
 
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string, values?: Record<string, unknown>) => {
+      if (key === "agentChat.fileChangesSummary.summary") {
+        return `${values?.count ?? 0} 个文件已更改`;
+      }
+      if (key === "agentChat.fileChangesSummary.review") {
+        return "在此审查";
+      }
+      if (key === "agentChat.fileChangesSummary.guide") {
+        return "引导";
+      }
+      if (key === "agentChat.fileChangesSummary.writing") {
+        return "正在写入文件…";
+      }
+      if (key === "agentChat.fileChangesSummary.truncated") {
+        return `… (+${values?.added ?? 0} −${values?.removed ?? 0} 行，diff 已截断)`;
+      }
+      return key;
+    },
+  }),
+}));
+
 vi.mock("./MarkdownRenderer", () => ({
   MarkdownRenderer: (props: {
     content: string;
@@ -426,6 +449,81 @@ describe("StreamingRenderer", () => {
     ).toBeNull();
   });
 
+  it("文件变更批次应渲染为审查卡并默认列出改动预览", () => {
+    const onFileClick = vi.fn();
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "file_changes_batch",
+          aggregate: {
+            fileCount: 1,
+            totalAdded: 18,
+            totalRemoved: 7,
+            files: [
+              {
+                path: "src/components/CreationFlow.tsx",
+                kind: "update",
+                linesAdded: 18,
+                linesRemoved: 7,
+                truncated: false,
+                source: "backend",
+                status: "completed",
+                diff: [
+                  {
+                    kind: "add",
+                    value: "主图里面的编辑，比如文字拖拽、放大、缩小、选择字号、选择字体这些都还不能用",
+                  },
+                  {
+                    kind: "add",
+                    value: "这个底部这个图片滚动有实际意义吗，感觉很碍手碍脚。",
+                  },
+                  {
+                    kind: "add",
+                    value: "样板中心的厂家这里直接多个厂家标签切换，显示出他的最新样板款式的列表",
+                  },
+                  {
+                    kind: "add",
+                    value: "设置好了，点击生成图片，不能直接生成图片",
+                  },
+                  {
+                    kind: "remove",
+                    value: "旧的主图入口说明",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+      onFileClick,
+    });
+
+    const card = container.querySelector('[data-testid="file-changes-summary-card"]');
+    expect(card).not.toBeNull();
+    expect(card?.textContent).toContain("1 个文件已更改");
+    expect(card?.textContent).toContain("+18");
+    expect(card?.textContent).toContain("-7");
+    expect(card?.textContent).toContain("在此审查");
+    expect(card?.textContent).toContain("引导");
+    expect(
+      container.querySelectorAll('[data-testid="file-changes-summary-row"]'),
+    ).toHaveLength(4);
+    expect(card?.textContent).toContain("主图里面的编辑");
+    expect(card?.textContent).not.toContain("旧的主图入口说明");
+
+    const reviewButton = Array.from(card?.querySelectorAll("button") || []).find(
+      (button) => button.textContent?.includes("在此审查"),
+    );
+    act(() => {
+      reviewButton?.click();
+    });
+    expect(onFileClick).toHaveBeenCalledWith(
+      "src/components/CreationFlow.tsx",
+      "",
+    );
+  });
+
   it("普通工具列表应透传已保存站点内容打开回调", () => {
     const onOpenSavedSiteContent = vi.fn();
     const { container } = renderHarness({
@@ -795,7 +893,8 @@ describe("StreamingRenderer", () => {
       '[data-testid="streaming-process-group"] button',
     );
     expect(processGroupButton?.getAttribute("aria-expanded")).toBe("false");
-    expect(container.textContent).toContain("先理解截图里的消息顺序");
+    expect(processGroupButton?.textContent).toContain("已完成思考");
+    expect(container.textContent).not.toContain("先理解截图里的消息顺序");
     expect(
       container.querySelector('[data-testid="thinking-block"]'),
     ).toBeNull();
@@ -807,6 +906,7 @@ describe("StreamingRenderer", () => {
       processGroupButton?.click();
     });
 
+    expect(container.textContent).toContain("先理解截图里的消息顺序");
     expect(
       container
         .querySelector('[data-testid="thinking-block"]')
@@ -1374,6 +1474,46 @@ describe("StreamingRenderer", () => {
       processGroup?.click();
     });
 
+    expect(
+      container
+        .querySelector('[data-testid="thinking-block"]')
+        ?.getAttribute("data-visual-style"),
+    ).toBe("grouped-inline");
+  });
+
+  it("仅思考过程组应把状态作为外层标题，展开后再显示思考正文", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "thinking",
+          text: "**Inspecting folder for details**",
+        },
+      ],
+      isStreaming: false,
+    });
+
+    const processGroup = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+    expect(processGroup).not.toBeNull();
+    expect(processGroup?.getAttribute("aria-expanded")).toBe("false");
+    expect(processGroup?.textContent).toContain("已完成思考");
+    expect(processGroup?.textContent).not.toContain(
+      "**Inspecting folder for details**",
+    );
+    expect(container.textContent).not.toContain(
+      "**Inspecting folder for details**",
+    );
+
+    act(() => {
+      processGroup?.click();
+    });
+
+    expect(processGroup?.getAttribute("aria-expanded")).toBe("true");
+    expect(container.textContent).toContain(
+      "**Inspecting folder for details**",
+    );
     expect(
       container
         .querySelector('[data-testid="thinking-block"]')

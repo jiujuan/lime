@@ -852,6 +852,7 @@
   "agentChat.filePreview.binaryUnsupported": "This file is binary and cannot be previewed in the workbench yet",
   "agentChat.fileChangesSummary.summary": "{{count}} file(s) changed",
   "agentChat.fileChangesSummary.review": "Review here",
+  "agentChat.fileChangesSummary.guide": "Guide",
   "agentChat.fileChangesSummary.writing": "Writing files…",
   "agentChat.fileChangesSummary.truncated": "… (+{{added}} −{{removed}} lines, diff truncated)",
   "agentChat.streamingRenderer.pendingA2ui": "Parsing the structured question. Please wait.",

@@ -734,6 +734,22 @@ function buildStreamingProcessSummary(entries: StreamingProcessEntry[]): {
   }
 
   if (toolCount === 0) {
+    if (thinkingCount > 0) {
+      const firstThinking = entries.find((entry) => entry.kind === "thinking");
+      const summaryText =
+        firstThinking?.kind === "thinking"
+          ? resolveThinkingDisplayParts(
+              firstThinking.text,
+              firstThinking.defaultExpanded === true,
+            ).statusLabel
+          : "已完成思考";
+      return {
+        summaryText,
+        descriptor: null,
+        metaText: thinkingCount > 1 ? `${thinkingCount} 条思路` : null,
+      };
+    }
+
     return {
       summaryText: primarySummary,
       descriptor: null,
@@ -1283,6 +1299,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
               defaultExpanded={Boolean(entry.defaultExpanded)}
               grouped={grouped}
               groupMarker={groupMarker}
+              hideSummary={grouped}
               isStreaming={isStreaming}
             />
           );

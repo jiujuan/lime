@@ -852,6 +852,7 @@
   "agentChat.filePreview.binaryUnsupported": "이 파일은 바이너리 형식이라 아직 워크벤치에서 미리 볼 수 없습니다",
   "agentChat.fileChangesSummary.summary": "{{count}}개 파일 변경됨",
   "agentChat.fileChangesSummary.review": "여기서 검토",
+  "agentChat.fileChangesSummary.guide": "가이드",
   "agentChat.fileChangesSummary.writing": "파일 쓰는 중…",
   "agentChat.fileChangesSummary.truncated": "… (+{{added}} −{{removed}}줄, diff 잘림)",
   "agentChat.streamingRenderer.pendingA2ui": "구조화된 질문을 분석 중입니다. 잠시만 기다려 주세요.",

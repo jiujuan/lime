@@ -852,6 +852,7 @@
   "agentChat.filePreview.binaryUnsupported": "このファイルはバイナリ形式のため、ワークベンチではまだプレビューできません",
   "agentChat.fileChangesSummary.summary": "{{count}} 個のファイルが変更されました",
   "agentChat.fileChangesSummary.review": "ここで確認",
+  "agentChat.fileChangesSummary.guide": "ガイド",
   "agentChat.fileChangesSummary.writing": "ファイルを書き込み中…",
   "agentChat.fileChangesSummary.truncated": "… (+{{added}} −{{removed}} 行、diff は切り詰められました)",
   "agentChat.streamingRenderer.pendingA2ui": "構造化された質問を解析しています。お待ちください。",

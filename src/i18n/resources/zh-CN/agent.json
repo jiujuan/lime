@@ -852,6 +852,7 @@
   "agentChat.filePreview.binaryUnsupported": "该文件是二进制格式，暂不支持在工作台预览",
   "agentChat.fileChangesSummary.summary": "{{count}} 个文件已更改",
   "agentChat.fileChangesSummary.review": "在此审查",
+  "agentChat.fileChangesSummary.guide": "引导",
   "agentChat.fileChangesSummary.writing": "正在写入文件…",
   "agentChat.fileChangesSummary.truncated": "… (+{{added}} −{{removed}} 行，diff 已截断)",
   "agentChat.streamingRenderer.pendingA2ui": "正在解析结构化问题，请稍等。",
