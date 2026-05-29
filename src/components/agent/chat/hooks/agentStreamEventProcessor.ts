@@ -49,6 +49,7 @@ import {
   findMessageArtifact,
   upsertMessageArtifact,
 } from "../utils/messageArtifacts";
+import { aggregateFileChanges } from "../utils/fileChangeSummary";
 import {
   collectArtifactDocumentSourcesFromToolCalls,
   mergeSourcesIntoArtifactDocument,
@@ -1095,6 +1096,35 @@ export function handleToolEndEvent({
         };
       });
 
+      // 文件工具完成后，把所有 file mutation tool_use parts 收拢成一个 file_changes_batch
+      const updatedToolCallsForAggregate = updatedToolCalls;
+      const hasFileMutationTools = updatedToolCallsForAggregate.some(
+        (tc) => isFileMutationToolName(tc.name) && tc.status !== "running",
+      );
+      const finalContentParts = hasFileMutationTools
+        ? (() => {
+            const nonFileParts = updatedContentParts.filter(
+              (part) =>
+                !(
+                  part.type === "tool_use" &&
+                  isFileMutationToolName(part.toolCall.name)
+                ) && part.type !== "file_changes_batch",
+            );
+            const completedFileCalls = updatedToolCallsForAggregate.filter(
+              (tc) =>
+                isFileMutationToolName(tc.name) && tc.status !== "running",
+            );
+            const aggregate = aggregateFileChanges(completedFileCalls);
+            if (aggregate.fileCount === 0) {
+              return updatedContentParts;
+            }
+            return [
+              ...nonFileParts,
+              { type: "file_changes_batch" as const, aggregate },
+            ];
+          })()
+        : updatedContentParts;
+
       const imageTaskPreview = buildImageTaskPreviewFromToolResult({
         toolId: data.tool_id,
         toolName: currentToolCall?.name || "",
@@ -1116,7 +1146,7 @@ export function handleToolEndEvent({
       return {
         ...message,
         toolCalls: updatedToolCalls,
-        contentParts: updatedContentParts,
+        contentParts: finalContentParts,
         imageWorkbenchPreview: imageTaskPreview
           ? {
               ...(message.imageWorkbenchPreview || {}),

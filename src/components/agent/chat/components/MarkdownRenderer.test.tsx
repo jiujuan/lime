@@ -556,6 +556,34 @@ describe("MarkdownRenderer", () => {
     expect(table?.textContent).toContain("美国要求伊朗在周五前答复止战方案");
   });
 
+  it("旧历史压缩 Markdown 应恢复块级结构，避免表格吞掉后续正文", () => {
+    const content =
+      "##结论`/Users/coso/.yansu-agent` 是 **Yansu Agent 桌面/本地代理应用的数据目录**，不是普通项目目录。它包含：- 本地可执行依赖：`bin/`、`git/`、`opencli/`- 本地 AI/识别模型：`models/`、`sherpa/`- 活动记录与截图：`activity/`、`activity.db`---##目录体积分布主要占用如下：| 路径 | 大小 | 判断 ||---|---:|---|| `activity/` | **974M** | 最大头，主要是截图快照 || `models/` | **729M** | 本地 ONNX 模型 || `sherpa/` | **229M** | 语音识别/音频相关模型 |最值得关注的是：```text/Users/coso/.yansu-agent/activity/snapshots/2026-05-26973M/Users/coso/.yansu-agent/models/gliner-pii-base/model.onnx634M```---##关键发现###1. `activity/` 是最大空间来源";
+
+    const container = render(content);
+    const headings = container.querySelectorAll("[data-markdown-heading-level]");
+    const table = container.querySelector(
+      '[data-testid="markdown-table-scroll"] table',
+    );
+    const codeBlock = container.querySelector(
+      '[data-testid="markdown-plain-code-block"]',
+    );
+
+    expect(headings).toHaveLength(4);
+    expect(headings[0]?.textContent).toContain("结论");
+    expect(headings[1]?.textContent).toContain("目录体积分布");
+    expect(headings[2]?.textContent).toContain("关键发现");
+    expect(headings[3]?.textContent).toContain("activity/");
+    expect(container.querySelectorAll("li")).toHaveLength(3);
+    expect(table).not.toBeNull();
+    expect(table?.querySelectorAll("tbody tr")).toHaveLength(3);
+    expect(table?.textContent).not.toContain("关键发现");
+    expect(codeBlock).not.toBeNull();
+    expect(codeBlock?.textContent).toContain(
+      "/Users/coso/.yansu-agent/activity/snapshots/2026-05-26",
+    );
+  });
+
   it("不应改写代码块里的紧凑竖线文本", () => {
     const content = [
       "```text",

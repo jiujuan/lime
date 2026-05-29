@@ -140,13 +140,13 @@ rmcp = { version = "0.12.0", features = ["client", "transport-io", "transport-ch
 
 
 # Tauri
-tauri = { version = "2.11.1", features = ["tray-icon", "image-png", "unstable", "macos-private-api", "protocol-asset"] }
-tauri-build = { version = "2.6.1", features = [] }
+tauri = { version = "2.11.2", features = ["tray-icon", "image-png", "unstable", "macos-private-api", "protocol-asset"] }
+tauri-build = { version = "2.6.2", features = [] }
 tauri-plugin-shell = "2.3.5"
 tauri-plugin-autostart = "2.5.1"
 tauri-plugin-dialog = "2.7.1"
 tauri-plugin-single-instance = "2.4.2"
-tauri-plugin-global-shortcut = "2.3.1"
+tauri-plugin-global-shortcut = "2.3.2"
 tauri-plugin-updater = "2.10.1"
 
 # 测试

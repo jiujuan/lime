@@ -287,7 +287,27 @@ function normalizeInlineCoverageKey(
   value: string | null | undefined,
 ): string | null {
   const normalized = value?.trim().toLowerCase();
-  return normalized || null;
+  if (!normalized) {
+    return null;
+  }
+
+  if (
+    normalized === "bash" ||
+    normalized === "exec_command" ||
+    normalized === "command_execution"
+  ) {
+    return "command_execution";
+  }
+
+  if (
+    normalized === "websearch" ||
+    normalized === "web_search" ||
+    normalized === "search_query"
+  ) {
+    return "web_search";
+  }
+
+  return normalized;
 }
 
 function incrementInlineCoverageCount(
@@ -331,6 +351,16 @@ export function createInlineCoverageMatcher(coverage: InlineProcessCoverage) {
         return consumeInlineCoverageCount(
           remainingToolNameCounts,
           normalizeInlineCoverageKey(item.tool_name),
+        );
+      case "command_execution":
+        return consumeInlineCoverageCount(
+          remainingToolNameCounts,
+          normalizeInlineCoverageKey("command_execution"),
+        );
+      case "web_search":
+        return consumeInlineCoverageCount(
+          remainingToolNameCounts,
+          normalizeInlineCoverageKey(item.action || "web_search"),
         );
       case "approval_request":
       case "request_user_input":
@@ -420,6 +450,11 @@ export function filterConversationDisplayContentParts(
       return options.preserveToolUseParts;
     }
 
+    // file_changes_batch 是文件改动汇总卡，不属于 process flow，始终保留
+    if (part.type === "file_changes_batch") {
+      return true;
+    }
+
     return true;
   });
   return filtered.length > 0 ? filtered : undefined;
@@ -439,6 +474,29 @@ export function mergeStreamingOverlayContentParts(
   };
   if (!parts?.length) {
     return [textPart];
+  }
+
+  const committedText = parts
+    .filter((part): part is Extract<typeof part, { type: "text" }> => {
+      return part.type === "text";
+    })
+    .map((part) => part.text)
+    .join("");
+  if (committedText && overlayContent.startsWith(committedText)) {
+    const pendingText = overlayContent.slice(committedText.length);
+    if (!pendingText) {
+      return parts;
+    }
+    const nextParts = [...parts];
+    const lastPart = nextParts[nextParts.length - 1];
+    if (lastPart?.type === "text") {
+      nextParts[nextParts.length - 1] = {
+        type: "text",
+        text: `${lastPart.text}${pendingText}`,
+      };
+      return nextParts;
+    }
+    return [...nextParts, { type: "text", text: pendingText }];
   }
 
   const firstTextIndex = parts.findIndex((part) => part.type === "text");

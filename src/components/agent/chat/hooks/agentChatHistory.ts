@@ -32,6 +32,10 @@ import {
   sanitizeMessageTextForDisplay,
 } from "../utils/internalImagePlaceholder";
 import {
+  aggregateFileChanges,
+  isFileMutationToolName,
+} from "../utils/fileChangeSummary";
+import {
   isRetainedSkillProcessMessage,
   SKILL_INLINE_PROCESS_RETENTION,
 } from "../utils/skillInlineProcessRetention";
@@ -386,7 +390,13 @@ function mergeHydratedContentParts(
   const localHasProcess = local.some(contentPartContainsProcess);
   const remoteHasProcess = remote.some(contentPartContainsProcess);
   if (localHasProcess && !remoteHasProcess) {
-    return local;
+    let merged = [...local];
+    for (const part of remote) {
+      if (part.type === "text" && part.text.trim()) {
+        merged = appendTextToParts(merged, part.text);
+      }
+    }
+    return merged;
   }
 
   return remote;
@@ -597,9 +607,40 @@ function hydrateSessionDetailMessagesFromThreadItems(
         role: "assistant",
         hasImages: Boolean(assistantDraft.images?.length),
       }) || [];
+
+    // 历史重建：把文件工具的 tool_use parts 聚合成 file_changes_batch，
+    // 与流式路径（agentStreamEventProcessor.ts）保持一致。
+    const finalParts = (() => {
+      const hasFileMutationParts = sanitizedParts.some(
+        (part) =>
+          part.type === "tool_use" && isFileMutationToolName(part.toolCall.name),
+      );
+      if (!hasFileMutationParts) {
+        return sanitizedParts;
+      }
+      const nonFileParts = sanitizedParts.filter(
+        (part) =>
+          !(
+            part.type === "tool_use" &&
+            isFileMutationToolName(part.toolCall.name)
+          ),
+      );
+      const fileCalls = (assistantDraft?.toolCalls || []).filter(
+        (tc) => isFileMutationToolName(tc.name) && tc.status !== "running",
+      );
+      const aggregate = aggregateFileChanges(fileCalls);
+      if (aggregate.fileCount === 0) {
+        return sanitizedParts;
+      }
+      return [
+        ...nonFileParts,
+        { type: "file_changes_batch" as const, aggregate },
+      ];
+    })();
+
     messages.push({
       ...assistantDraft,
-      contentParts: sanitizedParts.length > 0 ? sanitizedParts : undefined,
+      contentParts: finalParts.length > 0 ? finalParts : undefined,
       thinkingContent: extractThinkingContentFromParts(sanitizedParts),
     });
     assistantDraft = null;
@@ -770,17 +811,11 @@ function hydrateSessionDetailMessagesFromThreadItems(
   );
 }
 
-function shouldMergeTimelineProcessMessages(
-  timelineMessages: Message[],
-  compactCompletedHistory: boolean,
-): boolean {
+function shouldMergeTimelineProcessMessages(timelineMessages: Message[]): boolean {
   if (!hasHistoryAssistantProcessGap(timelineMessages)) {
     return false;
   }
-  if (!compactCompletedHistory) {
-    return true;
-  }
-  return timelineMessages.some(isRetainedSkillProcessMessage);
+  return true;
 }
 
 const AUXILIARY_HISTORY_TURN_ID_PREFIX = "auxiliary-runtime-projection-";
@@ -1490,6 +1525,31 @@ function findNextLocalAssistantAfterUser(
   return -1;
 }
 
+function findNextLocalProcessAssistantIndex(
+  localAssistantMessages: Message[],
+  startIndex: number,
+  matchedLocalMessageIds: Set<string>,
+): number {
+  for (
+    let index = Math.max(0, startIndex);
+    index < localAssistantMessages.length;
+    index += 1
+  ) {
+    const candidate = localAssistantMessages[index];
+    if (!candidate) {
+      continue;
+    }
+    if (candidate.id && matchedLocalMessageIds.has(candidate.id)) {
+      continue;
+    }
+    if (hasRetainableLocalAssistantProcessState(candidate)) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
 function shouldPreserveLocalAssistantVisibleOutput(
   localMessage: Message | undefined,
   remoteMessage: Message,
@@ -1818,10 +1878,26 @@ export const mergeHydratedMessagesWithLocalState = (
               matchedLocalMessageIds,
               lastMatchedLocalUserMessageIndex,
             );
+      const processAssistantIndex =
+        matchedAssistantIndex >= 0 ||
+        sequentialAssistantIndex >= 0 ||
+        hasRetainableLocalAssistantProcessState(message)
+          ? -1
+          : findNextLocalProcessAssistantIndex(
+              localAssistantMessages,
+              localAssistantCursor,
+              matchedLocalMessageIds,
+            );
       const resolvedMatchedAssistantIndex =
         matchedAssistantIndex >= 0
           ? matchedAssistantIndex
-          : sequentialAssistantIndex;
+          : sequentialAssistantIndex >= 0
+            ? sequentialAssistantIndex
+            : processAssistantIndex;
+      const didMatchLocalProcessAssistantOnly =
+        processAssistantIndex >= 0 &&
+        matchedAssistantIndex < 0 &&
+        sequentialAssistantIndex < 0;
       const localAssistantMessage =
         resolvedMatchedAssistantIndex >= 0
           ? localAssistantMessages[resolvedMatchedAssistantIndex]
@@ -1867,9 +1943,16 @@ export const mergeHydratedMessagesWithLocalState = (
         (hasMatchedUserTurn || hasRecoverableLocalUserTurn) &&
         hasRetainableLocalAssistantProcessState(localAssistantMessage) &&
         !hasRetainableLocalAssistantProcessState(message);
+      const shouldRestoreHistoricalProcessState =
+        (hasMatchedUserTurn ||
+          hasRecoverableLocalUserTurn ||
+          didMatchLocalProcessAssistantOnly) &&
+        hasRetainableLocalAssistantProcessState(localAssistantMessage) &&
+        !hasRetainableLocalAssistantProcessState(message);
       const shouldRetainLocalProcessState =
         !hasRenderableAssistantTextContent(message) ||
-        shouldPreserveLocalRuntimeSnapshot;
+        shouldPreserveLocalRuntimeSnapshot ||
+        shouldRestoreHistoricalProcessState;
       const shouldRetainLocalThinkingState =
         shouldRetainLocalProcessState || Boolean(message.thinkingContent);
       const contentParts = shouldRetainLocalProcessState
@@ -2137,6 +2220,9 @@ const messageContentPartsSignature = (parts?: ContentPart[]): string => {
           ? normalizeSignatureText(part.toolCall.result.error)
           : "";
         return `tool_use:${part.toolCall.id}:${part.toolCall.status}:${part.toolCall.name}:${output}:${error}`;
+      }
+      if (part.type === "file_changes_batch") {
+        return `file_changes_batch:${part.aggregate.fileCount}:+${part.aggregate.totalAdded}-${part.aggregate.totalRemoved}`;
       }
       const prompt = part.actionRequired.prompt
         ? normalizeSignatureText(part.actionRequired.prompt)
@@ -2568,7 +2654,6 @@ export const hydrateSessionDetailMessages = (
   if (hydratedMessages.length > 0) {
     const hydratedWithTimelineProcess = shouldMergeTimelineProcessMessages(
       timelineMessages,
-      compactCompletedHistory,
     )
       ? mergeHydratedMessagesWithLocalState(timelineMessages, hydratedMessages)
       : hydratedMessages;

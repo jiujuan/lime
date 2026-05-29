@@ -14,6 +14,9 @@
 - 修正项目列表延迟加载、已有目录复用、项目路径冲突检测和默认 workspace ready 态的边界
 - 修正图片输入策略、Browser Assist 证据索引和 workspace 查询 mock 的若干投影边界
 - responsive chat 自动模型选择会识别最近的额度、鉴权或 Provider 不可用错误，并跳过不可用候选
+- 修正 Bash / PowerShell 路径权限解析在纯变量赋值片段上可能 panic 的问题
+- 修正 native tool panic 会中断工具流的问题，现在会收敛为单个工具错误结果
+- 修正新会话或 runtime metadata 缺失时 provider / model 偏好可能没有随 turn 提交的问题
 
 ### 优化与重构
 - 团队工作台文案从内部运行时术语收敛到任务、负责人、交付物和处理状态，并把技术细节默认折叠
@@ -22,11 +25,14 @@
 - 移除旧的 provider continuation 导出依赖，并清理旧首页截图资源
 - 工作区工具权限支持显式只读本地路径，便于在保持 workspace 限制的同时读取用户授权的外部文件
 - 工具过程摘要、工具展示信息和 Agent 文本归一化抽出独立 helper，降低 UI 组件重复逻辑
+- 文件写入 / 编辑工具会产出结构化 `file_change` metadata，前端聚合展示文件改动摘要，避免多个文件工具调用刷屏
+- Tauri patch 依赖更新到 `2.11.2` / `2.6.2`，同步 global shortcut patch 版本
 
 ### 测试与质量
 - 新增纯文本工具调用解析、工具别名归一化、`view_image` 权限、自动压缩超时和图片策略的 Rust 回归
 - 新增项目选择 / 创建、文件管理、团队工作台、画布布局、对话恢复、Crash Recovery 和错误展示的前端回归
 - 新增 OpenAI / Responses 工具调用格式、responsive chat Provider 不可用、显式只读路径权限、runtime 预热和工具过程摘要回归
+- 新增文件改动摘要、工具 panic 防护、shell 路径解析 panic 防护和模型偏好随 turn 提交的回归
 - 更新 GUI smoke 的知识工作区检查，以覆盖新的工作区路径和 ready 状态
 - 更新 Agent UI TTFT sample matrix，覆盖 runtime MCP prewarm 首字前预算路径
 - 发布门禁将覆盖 `cargo fmt`、`cargo test`、`cargo clippy`、`npm run lint`、`npm test` 和 `npm run verify:gui-smoke`

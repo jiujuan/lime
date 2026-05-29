@@ -18,7 +18,6 @@
   "agentChat.messageList.firstTokenStatus.submitted.title": "요청 제출됨",
   "agentChat.messageList.streamingInline.queued": "출력 대기",
   "agentChat.messageList.streamingInline.running": "출력 중...",
-  "agentChat.messageList.jumpToLatest": "최신 보기",
   "agentChat.messageList.historicalAssistantPreview.longNotice": "이 기록 메시지는 길어서(약 {{countLabel}}자) 먼저 일반 텍스트 미리보기를 표시합니다.",
   "agentChat.messageList.historicalAssistantPreview.compactNotice": "이전 어시스턴트 답변이 길어서(약 {{countLabel}}자) 먼저 일반 텍스트 미리보기를 표시합니다.",
   "agentChat.messageList.historicalAssistantPreview.expandFull": "전체 내용 펼치기",

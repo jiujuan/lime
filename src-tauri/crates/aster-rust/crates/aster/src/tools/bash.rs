@@ -669,7 +669,9 @@ fn collect_bash_path_candidates(command: &str) -> Vec<PathMutationCandidate> {
             continue;
         }
         let normalized_words = normalize_command_words(&raw_words);
-        let command_name = normalized_words[0].as_str();
+        let Some(command_name) = normalized_words.first().map(String::as_str) else {
+            continue;
+        };
 
         match command_name {
             "rm" | "rmdir" => {
@@ -1992,5 +1994,22 @@ mod tests {
         assert!(!result.safe);
         assert_eq!(result.reason, Some("Dangerous".to_string()));
         assert!(result.warning.is_none());
+    }
+
+    #[test]
+    fn test_collect_bash_path_candidates_pure_env_assign_segment_does_not_panic() {
+        // Regression: 用户截图里的命令分段后第一段是纯 env 赋值，
+        // normalize_command_words 会跳过 prefix 后返回空，索引 [0] 会越界 panic。
+        let command = r#"p='/Users/coso/.yansu-agent' if [ -d "$p" ]; then echo ok; fi"#;
+        let candidates = collect_bash_path_candidates(command);
+        assert!(candidates.is_empty());
+    }
+
+    #[test]
+    fn test_validate_bash_command_paths_pure_env_assign_segment_is_safe() {
+        // 同上场景从公开入口再确认一次，确保 PermissionCheck 不会 panic。
+        let command = r#"p='/Users/coso/.yansu-agent' if [ -d "$p" ]; then ls "$p"; fi"#;
+        let result = validate_bash_command_paths(command, Path::new("/tmp"));
+        assert!(result.is_none());
     }
 }

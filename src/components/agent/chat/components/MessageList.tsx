@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import {
   MessageListContainer,
   MessageListFrame,
-  MessageListJumpToLatestButton,
 } from "../styles";
 import type { AgentStreamTextOverlaySnapshot } from "../hooks/agentStreamTextOverlayStore";
 import type { Message } from "../types";
@@ -137,6 +136,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
 
   useMessageListAutoScroll({
     isRestoringSession,
+    isSending,
     renderedMessageCount:
       renderWindow.renderedMessages.length + (trailingContent ? 1 : 0),
     scrollRef: scrollController.scrollRef,
@@ -348,10 +348,6 @@ const MessageListInner: React.FC<MessageListProps> = ({
     ],
   );
 
-  const showJumpToLatest =
-    isSending && !scrollController.shouldAutoScroll && !isRestoringSession;
-  const jumpToLatestLabel = t("agentChat.messageList.jumpToLatest");
-
   return (
     <MessageListFrame data-testid="message-list-frame">
       <MessageListContainer
@@ -439,17 +435,6 @@ const MessageListInner: React.FC<MessageListProps> = ({
           <div ref={scrollController.scrollRef} />
         </div>
       </MessageListContainer>
-      {showJumpToLatest ? (
-        <MessageListJumpToLatestButton
-          type="button"
-          data-testid="message-list-jump-to-latest"
-          aria-label={jumpToLatestLabel}
-          title={jumpToLatestLabel}
-          onClick={scrollController.jumpToLatest}
-        >
-          {jumpToLatestLabel}
-        </MessageListJumpToLatestButton>
-      ) : null}
     </MessageListFrame>
   );
 };

@@ -88,41 +88,6 @@ export const MessageListFrame = styled.div`
   height: 100%;
 `;
 
-export const MessageListJumpToLatestButton = styled.button`
-  position: absolute;
-  right: 22px;
-  bottom: 18px;
-  z-index: 20;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 32px;
-  padding: 0 13px;
-  border: 1px solid var(--lime-surface-border-strong, rgba(187, 247, 208, 0.9));
-  border-radius: 999px;
-  background: var(--lime-home-card-surface-strong, #ffffff);
-  color: var(--lime-text-strong, #0f172a);
-  font-size: 12px;
-  font-weight: 600;
-  box-shadow: 0 14px 30px -24px rgba(15, 23, 42, 0.32);
-  cursor: pointer;
-  transition:
-    border-color 0.16s ease,
-    box-shadow 0.16s ease,
-    transform 0.16s ease;
-
-  &:hover {
-    border-color: var(--lime-brand-strong, #166534);
-    box-shadow: 0 16px 34px -24px rgba(15, 23, 42, 0.42);
-    transform: translateY(-1px);
-  }
-
-  &:focus-visible {
-    outline: 2px solid rgba(34, 197, 94, 0.28);
-    outline-offset: 2px;
-  }
-`;
-
 // Linear Layout Wrapper: Always Row, Left Aligned
 export const MessageWrapper = styled.div<{
   $isUser: boolean;

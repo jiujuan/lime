@@ -18,7 +18,6 @@
   "agentChat.messageList.firstTokenStatus.submitted.title": "リクエストを送信しました",
   "agentChat.messageList.streamingInline.queued": "出力待ち",
   "agentChat.messageList.streamingInline.running": "出力中...",
-  "agentChat.messageList.jumpToLatest": "最新を表示",
   "agentChat.messageList.historicalAssistantPreview.longNotice": "この履歴メッセージは長いため（約 {{countLabel}} 文字）、先にプレーンテキストのプレビューを表示しています。",
   "agentChat.messageList.historicalAssistantPreview.compactNotice": "この履歴のアシスタント返信は長いため（約 {{countLabel}} 文字）、先にプレーンテキストのプレビューを表示しています。",
   "agentChat.messageList.historicalAssistantPreview.expandFull": "全文を展開",

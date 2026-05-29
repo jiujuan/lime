@@ -596,6 +596,99 @@ describe("agentStreamRuntimeHandler", () => {
     expect(playTypewriterSound).toHaveBeenCalledTimes(1);
   });
 
+  it("tool_start 前应先把已渲染文本提交到 contentParts，保持文字和工具顺序", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-05-29T10:00:00.000Z"),
+        isThinking: true,
+        contentParts: [],
+      },
+    ];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const baseOptions = {
+      requestState,
+      callbacks: {
+        activateStream: vi.fn(),
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+      },
+      eventName: "agent-runtime-interleave-test",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-1",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      content: "分析一下项目",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    };
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: { type: "text_delta", text: "先分析。" } as AgentEvent,
+    });
+    expect(messages[0]?.contentParts).toEqual([]);
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_start",
+        tool_id: "tool-1",
+        tool_name: "Bash",
+        arguments: JSON.stringify({ command: "pwd" }),
+      } as AgentEvent,
+    });
+
+    expect(messages[0]?.content).toBe("先分析。");
+    expect(messages[0]?.contentParts).toEqual([
+      { type: "text", text: "先分析。" },
+      expect.objectContaining({
+        type: "tool_use",
+        toolCall: expect.objectContaining({
+          id: "tool-1",
+          name: "Bash",
+          status: "running",
+        }),
+      }),
+    ]);
+  });
+
   it("thinking 关闭时不应把 reasoning_delta 渲染进助手正文", () => {
     let messages: Message[] = [
       {

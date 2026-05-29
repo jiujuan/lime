@@ -186,6 +186,17 @@ export function useAgentContext(options: UseAgentContextOptions) {
     [],
   );
 
+  const clearSessionModelPreferenceSynced = useCallback(
+    (targetSessionId: string) => {
+      const trimmedSessionId = targetSessionId.trim();
+      if (!trimmedSessionId) {
+        return;
+      }
+      syncedSessionProviderSelectionRef.current.delete(trimmedSessionId);
+    },
+    [],
+  );
+
   const getSyncedSessionModelPreference = useCallback(
     (targetSessionId: string): SessionModelPreference | null => {
       const trimmedSessionId = targetSessionId.trim();
@@ -341,7 +352,11 @@ export function useAgentContext(options: UseAgentContextOptions) {
   );
 
   const applySessionModelPreference = useCallback(
-    (sessionId: string, preference: SessionModelPreference) => {
+    (
+      sessionId: string,
+      preference: SessionModelPreference,
+      options?: { markSynced?: boolean },
+    ) => {
       providerTypeRef.current = preference.providerType;
       modelRef.current = preference.model;
       setProviderTypeState(preference.providerType);
@@ -353,13 +368,21 @@ export function useAgentContext(options: UseAgentContextOptions) {
         preference.providerType,
         preference.model,
       );
-      markSessionModelPreferenceSynced(
-        sessionId,
-        preference.providerType,
-        preference.model,
-      );
+      if (options?.markSynced === true) {
+        markSessionModelPreferenceSynced(
+          sessionId,
+          preference.providerType,
+          preference.model,
+        );
+      } else {
+        clearSessionModelPreferenceSynced(sessionId);
+      }
     },
-    [markSessionModelPreferenceSynced, persistSessionModelPreference],
+    [
+      clearSessionModelPreferenceSynced,
+      markSessionModelPreferenceSynced,
+      persistSessionModelPreference,
+    ],
   );
 
   const applyWorkspaceModelPreference = useCallback(

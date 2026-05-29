@@ -18,6 +18,9 @@
 - Fixed deferred project-list loading, existing-folder reuse, project-path conflict checks, and default workspace readiness edges.
 - Fixed several projection boundaries around image input policy, Browser Assist evidence indexing, and workspace query mocks.
 - Made responsive-chat automatic model selection recognize recent quota, authentication, and provider-unavailable failures, then skip unavailable candidates.
+- Fixed Bash / PowerShell path permission parsing so pure variable-assignment segments no longer panic.
+- Fixed native tool panics so they collapse into a single tool error result instead of interrupting the tool stream.
+- Fixed provider / model preferences so new sessions and sessions missing runtime metadata still submit the selected preference with the turn.
 
 ### Improvements And Refactors
 
@@ -27,12 +30,15 @@
 - Removed the old provider-continuation export dependency and cleaned up the stale home screenshot asset.
 - Allowed workspace tool permissions to include explicit read-only local paths while preserving workspace restrictions.
 - Extracted tool-process summaries, tool display info, and Agent text normalization into focused helpers to reduce UI duplication.
+- File write / edit tools now emit structured `file_change` metadata, and the frontend aggregates it into a concise file-change summary card.
+- Updated Tauri patch dependencies to `2.11.2` / `2.6.2` and aligned the global shortcut patch version.
 
 ### Tests And Quality
 
 - Added Rust regressions for plaintext tool-call parsing, tool alias normalization, `view_image` permissions, compaction timeout, and image policy.
 - Added frontend regressions for project selection / creation, file management, team workbench, canvas layout, conversation restore, Crash Recovery, and error presentation.
 - Added regressions for OpenAI / Responses tool-call formats, responsive-chat provider-unavailable handling, explicit read-only path permissions, runtime warmup, and tool-process summaries.
+- Added regressions for file-change summaries, tool panic containment, shell path parsing panic protection, and model preferences submitted with turns.
 - Updated the GUI smoke knowledge-workspace check to cover the new workspace path and readiness state.
 - Updated the Agent UI TTFT sample matrix to cover the runtime MCP prewarm before-first-token budget path.
 - Release gates cover `cargo fmt`, `cargo test`, `cargo clippy`, `npm run lint`, `npm test`, and `npm run verify:gui-smoke`.

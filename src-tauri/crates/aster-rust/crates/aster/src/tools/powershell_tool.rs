@@ -749,7 +749,9 @@ fn collect_powershell_path_candidates(command: &str) -> Vec<PathMutationCandidat
             continue;
         }
         let normalized_words = normalize_powershell_words(&raw_words);
-        let command_name = normalized_words[0].as_str();
+        let Some(command_name) = normalized_words.first().map(String::as_str) else {
+            continue;
+        };
 
         match command_name {
             "set-content" | "add-content" | "clear-content" | "remove-item" | "copy-item"
@@ -1556,5 +1558,14 @@ mod tests {
         let tool = PowerShellTool::with_executable_path(Arc::new(TaskManager::new()), None);
         let result = tool.format_output_with_message("", "", 1, Some("No matches found"));
         assert_eq!(result, "No matches found");
+    }
+
+    #[test]
+    fn test_collect_powershell_path_candidates_pure_env_assign_segment_does_not_panic() {
+        // Regression: bash 端同款 panic 模式（normalize 跳完前缀后为空时索引 [0]）。
+        // PowerShell 这边以 `$p = '...'` 开头的赋值段做等价覆盖。
+        let command = "$p = 'C:/Users/coso/.yansu-agent'; if (Test-Path $p) { Get-ChildItem $p }";
+        let candidates = collect_powershell_path_candidates(command);
+        assert!(candidates.is_empty());
     }
 }

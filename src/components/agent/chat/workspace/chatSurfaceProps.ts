@@ -4,7 +4,6 @@ import { ChatNavbar } from "../components/ChatNavbar";
 import { ChatSidebar } from "../components/ChatSidebar";
 import { EmptyState } from "../components/EmptyState";
 import { TeamWorkspaceBoard } from "../components/TeamWorkspaceBoard";
-import { TeamWorkspaceDock } from "../components/TeamWorkspaceDock";
 import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface";
 
 export type TeamWorkbenchSurfaceProps = Omit<
@@ -63,32 +62,15 @@ interface BuildTeamWorkspaceDockPropsParams {
   enabled: boolean;
   shouldShowFloatingInputOverlay: boolean;
   layoutMode: "chat" | "chat-canvas";
-  onActivateWorkbench: NonNullable<
-    ComponentProps<typeof TeamWorkspaceDock>["onActivateWorkbench"]
-  >;
+  onActivateWorkbench: () => void;
   withBottomOverlay: boolean;
   surfaceProps: TeamWorkbenchSurfaceProps;
 }
 
-export function buildTeamWorkspaceDockProps({
-  enabled,
-  shouldShowFloatingInputOverlay,
-  layoutMode,
-  onActivateWorkbench,
-  withBottomOverlay,
-  surfaceProps,
-}: BuildTeamWorkspaceDockPropsParams): ComponentProps<
-  typeof TeamWorkspaceDock
-> | null {
-  if (!enabled || shouldShowFloatingInputOverlay || layoutMode !== "chat") {
-    return null;
-  }
-
-  return {
-    onActivateWorkbench,
-    withBottomOverlay,
-    ...surfaceProps,
-  };
+export function buildTeamWorkspaceDockProps(
+  _params: BuildTeamWorkspaceDockPropsParams,
+): null {
+  return null;
 }
 
 interface BuildWorkspaceEmptyStatePropsParams {

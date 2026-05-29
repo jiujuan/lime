@@ -1242,10 +1242,14 @@ fn tool_execution_panic_message(error: Box<dyn std::any::Any + Send>) -> String 
     format!("tool execution panic: {detail}")
 }
 
-fn tool_execution_panic_result(error: Box<dyn std::any::Any + Send>) -> ToolResult<CallToolResult> {
+fn tool_execution_panic_error(error: Box<dyn std::any::Any + Send>) -> ErrorData {
     let message = tool_execution_panic_message(error);
     error!("[AsterAgent] {}", message);
-    Err(ErrorData::new(ErrorCode::INTERNAL_ERROR, message, None))
+    ErrorData::new(ErrorCode::INTERNAL_ERROR, message, None)
+}
+
+fn tool_execution_panic_result(error: Box<dyn std::any::Any + Send>) -> ToolResult<CallToolResult> {
+    Err(tool_execution_panic_error(error))
 }
 
 #[derive(Debug)]
@@ -3131,6 +3135,29 @@ impl Agent {
         session: &Session,
         pinned_provider: Option<Arc<dyn Provider>>,
     ) -> (String, Result<ToolCallResult, ErrorData>) {
+        let request_id_for_panic = request_id.clone();
+        let dispatch = self.dispatch_tool_call_with_provider_inner(
+            tool_call,
+            request_id,
+            cancellation_token,
+            session,
+            pinned_provider,
+        );
+
+        match AssertUnwindSafe(dispatch).catch_unwind().await {
+            Ok(result) => result,
+            Err(error) => (request_id_for_panic, Err(tool_execution_panic_error(error))),
+        }
+    }
+
+    async fn dispatch_tool_call_with_provider_inner(
+        &self,
+        tool_call: CallToolRequestParam,
+        request_id: String,
+        cancellation_token: Option<CancellationToken>,
+        session: &Session,
+        pinned_provider: Option<Arc<dyn Provider>>,
+    ) -> (String, Result<ToolCallResult, ErrorData>) {
         if tool_call.name == FINAL_OUTPUT_TOOL_NAME {
             return if let Some(final_output_tool) = self.final_output_tool.lock().await.as_mut() {
                 let result = final_output_tool.execute_tool_call(tool_call.clone()).await;
@@ -4900,8 +4927,53 @@ mod tests {
         }
     }
 
+    struct PanickingDispatchTool;
+
+    #[async_trait]
+    impl crate::tools::Tool for PanickingDispatchTool {
+        fn name(&self) -> &str {
+            "PanicDispatch"
+        }
+
+        fn description(&self) -> &str {
+            "panic dispatch regression test tool"
+        }
+
+        fn input_schema(&self) -> Value {
+            serde_json::json!({
+                "type": "object",
+                "additionalProperties": true
+            })
+        }
+
+        async fn execute(
+            &self,
+            _params: Value,
+            _context: &crate::tools::ToolContext,
+        ) -> std::result::Result<crate::tools::ToolResult, crate::tools::ToolError> {
+            panic!("index out of bounds: the len is 0 but the index is 0");
+        }
+    }
+
     async fn panicking_tool_result_future() -> crate::mcp_utils::ToolResult<CallToolResult> {
         panic!("index out of bounds: the len is 0 but the index is 0");
+    }
+
+    fn tool_request(id: &str, name: &str, arguments: Value) -> ToolRequest {
+        ToolRequest {
+            id: id.to_string(),
+            tool_call: Ok(CallToolRequestParam {
+                name: std::borrow::Cow::Owned(name.to_string()),
+                arguments: Some(
+                    arguments
+                        .as_object()
+                        .cloned()
+                        .expect("tool arguments should be an object"),
+                ),
+            }),
+            metadata: None,
+            tool_meta: None,
+        }
     }
 
     #[tokio::test]
@@ -4922,6 +4994,107 @@ mod tests {
             "tool panic should stay scoped to the tool result"
         );
         assert!(stream.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_dispatch_tool_call_converts_native_tool_panic_to_tool_error() -> Result<()> {
+        let agent = Agent::new();
+        agent
+            .tool_registry()
+            .write()
+            .await
+            .register(Box::new(PanickingDispatchTool));
+
+        let temp_dir = tempfile::tempdir()?;
+        let session = SessionManager::create_session(
+            temp_dir.path().to_path_buf(),
+            "panic-dispatch".to_string(),
+            SessionType::User,
+        )
+        .await?;
+
+        let (request_id, result) = agent
+            .dispatch_tool_call_with_provider(
+                CallToolRequestParam {
+                    name: std::borrow::Cow::Borrowed("PanicDispatch"),
+                    arguments: Some(serde_json::Map::new()),
+                },
+                "req-panic".to_string(),
+                None,
+                &session,
+                None,
+            )
+            .await;
+
+        assert_eq!(request_id, "req-panic");
+        let Err(error) = result else {
+            panic!("panicking native tool should become a dispatch error");
+        };
+        assert!(
+            error
+                .message
+                .contains("tool execution panic: index out of bounds"),
+            "dispatch panic should stay scoped to the tool request"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_handle_approved_tools_converts_dispatch_panic_to_tool_error() -> Result<()> {
+        let agent = Agent::new();
+        agent
+            .tool_registry()
+            .write()
+            .await
+            .register(Box::new(PanickingDispatchTool));
+
+        let temp_dir = tempfile::tempdir()?;
+        let session = SessionManager::create_session(
+            temp_dir.path().to_path_buf(),
+            "panic-dispatch-stream".to_string(),
+            SessionType::User,
+        )
+        .await?;
+        let permission_check_result = PermissionCheckResult {
+            approved: vec![tool_request(
+                "req-panic-stream",
+                "PanicDispatch",
+                serde_json::json!({}),
+            )],
+            needs_approval: vec![],
+            denied: vec![],
+        };
+
+        let mut tool_futures = agent
+            .handle_approved_and_denied_tools(
+                &permission_check_result,
+                &HashMap::new(),
+                None,
+                &session,
+                None,
+            )
+            .await?;
+
+        assert_eq!(tool_futures.len(), 1);
+        let (request_id, mut stream) = tool_futures.pop().expect("tool stream");
+        assert_eq!(request_id, "req-panic-stream");
+
+        let Some(ToolStreamItem::Result(result)) = stream.next().await else {
+            panic!("tool stream should yield a terminal error result");
+        };
+        let Err(error) = result else {
+            panic!("panicking native tool should become a tool error");
+        };
+        assert!(
+            error
+                .message
+                .contains("tool execution panic: index out of bounds"),
+            "approved tool panic should produce a matching tool response"
+        );
+        assert!(stream.next().await.is_none());
+
+        Ok(())
     }
 
     impl CountingSessionStore {

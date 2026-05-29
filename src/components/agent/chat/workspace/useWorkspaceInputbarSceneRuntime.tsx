@@ -15,7 +15,6 @@ import type {
   AgentInitialKnowledgePackSelectionParams,
 } from "@/types/page";
 import { Inputbar } from "../components/Inputbar";
-import { TeamWorkspaceDock } from "../components/TeamWorkspaceDock";
 import { useWorkspaceNavigationActions } from "./useWorkspaceNavigationActions";
 import type { Message } from "../types";
 import type { LayoutMode } from "@/lib/workspace/workbenchContract";
@@ -210,9 +209,7 @@ interface FloatingTeamWorkspaceDockParams {
   enabled: boolean;
   layoutMode: "chat" | "chat-canvas";
   showFloatingInputOverlay: boolean;
-  onActivateWorkbench: NonNullable<
-    ComponentProps<typeof TeamWorkspaceDock>["onActivateWorkbench"]
-  >;
+  onActivateWorkbench: () => void;
 }
 
 interface UseWorkspaceInputbarScenePresentationRuntimeParams {
@@ -384,25 +381,6 @@ function useWorkspaceInputbarScenePresentationRuntime({
     ],
   );
 
-  const floatingTeamWorkspaceDockProps = useMemo<ComponentProps<
-    typeof TeamWorkspaceDock
-  > | null>(
-    () =>
-      !inputbarPresentation.floatingTeamWorkspaceDock.enabled ||
-      !inputbarPresentation.floatingTeamWorkspaceDock
-        .showFloatingInputOverlay ||
-      inputbarPresentation.floatingTeamWorkspaceDock.layoutMode !== "chat"
-        ? null
-        : {
-            placement: "inline",
-            onActivateWorkbench:
-              inputbarPresentation.floatingTeamWorkspaceDock
-                .onActivateWorkbench,
-            ...teamWorkbenchSurfaceProps,
-          },
-    [inputbarPresentation.floatingTeamWorkspaceDock, teamWorkbenchSurfaceProps],
-  );
-
   const workspaceInputbarProps = useMemo<WorkspaceInputbarBuilderParams>(
     () => ({
       ...inputbarPresentation.inputbar,
@@ -422,15 +400,7 @@ function useWorkspaceInputbarScenePresentationRuntime({
     ],
   );
 
-  const overlayAccessory =
-    generalWorkbenchEntryPromptAccessory || floatingTeamWorkspaceDockProps ? (
-      <>
-        {generalWorkbenchEntryPromptAccessory}
-        {floatingTeamWorkspaceDockProps ? (
-          <TeamWorkspaceDock {...floatingTeamWorkspaceDockProps} />
-        ) : null}
-      </>
-    ) : undefined;
+  const overlayAccessory = generalWorkbenchEntryPromptAccessory || undefined;
   const inputbarNode = (
     <Inputbar {...workspaceInputbarProps} overlayAccessory={overlayAccessory} />
   );

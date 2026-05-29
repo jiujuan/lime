@@ -383,6 +383,7 @@ interface UseAgentSessionOptions {
   applySessionModelPreference: (
     sessionId: string,
     preference: SessionModelPreference,
+    options?: { markSynced?: boolean },
   ) => void;
   markSessionModelPreferenceSynced: (
     sessionId: string,
@@ -1585,7 +1586,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     (topicId: string) => {
       const topicPreference = loadSessionModelPreference(topicId);
       if (topicPreference) {
-        applySessionModelPreference(topicId, topicPreference);
+        applySessionModelPreference(topicId, topicPreference, {
+          markSynced: false,
+        });
       }
 
       const shadowAccessMode = loadSessionAccessMode(topicId);
@@ -1868,6 +1871,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         applySessionModelPreference(
           topicId,
           postFinalizePersistencePlan.providerPreferenceToApply,
+          {
+            markSynced:
+              metadataSyncPlan.modelPreferenceSource === "execution_runtime",
+          },
         );
       }
 

@@ -12,6 +12,7 @@ const USER_SCROLL_IDLE_MS = 500;
 
 interface UseMessageListAutoScrollOptions {
   isRestoringSession: boolean;
+  isSending: boolean;
   renderedMessageCount: number;
   scrollRef: RefObject<HTMLDivElement | null>;
   shouldAutoScroll: boolean;
@@ -19,6 +20,7 @@ interface UseMessageListAutoScrollOptions {
 
 export function useMessageListAutoScroll({
   isRestoringSession,
+  isSending,
   renderedMessageCount,
   scrollRef,
   shouldAutoScroll,
@@ -29,7 +31,7 @@ export function useMessageListAutoScroll({
     const previousVisibleMessageCount = previousVisibleMessageCountRef.current;
     previousVisibleMessageCountRef.current = renderedMessageCount;
 
-    if (!shouldAutoScroll || !scrollRef.current) {
+    if ((!shouldAutoScroll && !isSending) || !scrollRef.current) {
       return;
     }
 
@@ -45,6 +47,7 @@ export function useMessageListAutoScroll({
     });
   }, [
     isRestoringSession,
+    isSending,
     renderedMessageCount,
     scrollRef,
     shouldAutoScroll,
@@ -89,12 +92,8 @@ export function useMessageListScrollController() {
       setShouldAutoScroll(isNearScrollBottom(container));
     };
 
-    const handleWheel = (event: WheelEvent) => {
+    const handleWheel = () => {
       markUserScrolling();
-
-      if (event.deltaY < 0) {
-        setShouldAutoScroll(false);
-      }
     };
 
     container.addEventListener("scroll", handleScroll, { passive: true });
@@ -118,23 +117,12 @@ export function useMessageListScrollController() {
     });
   }, []);
 
-  const jumpToLatest = useCallback(() => {
-    setShouldAutoScroll(true);
-    setIsUserScrolling(false);
-
-    const run = () => scrollToTail("smooth");
-    if (typeof window !== "undefined" && window.requestAnimationFrame) {
-      window.requestAnimationFrame(run);
-      return;
-    }
-
-    run();
-  }, [scrollToTail]);
-
   const handleStreamingOverlayUpdate = useCallback(() => {
-    if (!shouldAutoScroll || !scrollRef.current) {
+    if (!scrollRef.current) {
       return;
     }
+
+    setShouldAutoScroll(true);
 
     const run = () => scrollToTail("auto");
 
@@ -144,13 +132,12 @@ export function useMessageListScrollController() {
     }
 
     run();
-  }, [scrollToTail, shouldAutoScroll]);
+  }, [scrollToTail]);
 
   return {
     containerRef,
     handleStreamingOverlayUpdate,
     isUserScrolling,
-    jumpToLatest,
     scrollRef,
     shouldAutoScroll,
   };

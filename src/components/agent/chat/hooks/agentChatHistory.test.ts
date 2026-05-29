@@ -690,7 +690,7 @@ describe("agentChatHistory", () => {
     );
   });
 
-  it("已完成旧会话压缩水合时应跳过工具过程，仅保留可见正文", () => {
+  it("已完成旧会话压缩水合时应保留工具过程并让最终正文接在工具之后", () => {
     const detail: AsterSessionDetail = {
       id: "session-compact-history",
       created_at: 1,
@@ -710,10 +710,22 @@ describe("agentChatHistory", () => {
       ],
       items: [
         {
-          id: "item-compact-history",
+          id: "thinking-compact-history",
           thread_id: "session-compact-history",
           turn_id: "turn-compact-history",
           sequence: 1,
+          type: "reasoning",
+          text: "大量思考过程",
+          status: "completed",
+          started_at: "2026-04-30T10:00:00.500Z",
+          completed_at: "2026-04-30T10:00:01.000Z",
+          updated_at: "2026-04-30T10:00:01.000Z",
+        } as never,
+        {
+          id: "item-compact-history",
+          thread_id: "session-compact-history",
+          turn_id: "turn-compact-history",
+          sequence: 2,
           type: "tool_call",
           tool_name: "Bash",
           arguments: { command: "printf slow" },
@@ -764,15 +776,22 @@ describe("agentChatHistory", () => {
     expect(messages[1]).toMatchObject({
       role: "assistant",
       content: "最终回复正文",
-      thinkingContent: undefined,
-      toolCalls: undefined,
+      thinkingContent: "大量思考过程",
     });
-    expect(messages[1]?.contentParts).toEqual([
-      {
-        type: "text",
-        text: "最终回复正文",
-      },
+    expect(messages[1]?.toolCalls?.[0]).toMatchObject({
+      id: "item-compact-history",
+      name: "Bash",
+      status: "completed",
+    });
+    expect(messages[1]?.contentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "tool_use",
+      "text",
     ]);
+    expect(messages[1]?.contentParts?.at(-1)).toEqual({
+      type: "text",
+      text: "最终回复正文",
+    });
   });
 
   it("仍在运行的会话即使请求压缩水合，也应保留工具过程", () => {

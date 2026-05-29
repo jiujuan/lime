@@ -427,7 +427,7 @@ describe("MessageList", () => {
     expect(messageColumn?.className).not.toContain("justify-end");
   });
 
-  it("执行中用户上滑后应暂停自动跟随并提供查看最新入口", () => {
+  it("执行中新消息应贴底自动跟随且不显示查看最新入口", () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
     const root = createRoot(host);
@@ -462,46 +462,93 @@ describe("MessageList", () => {
         '[data-testid="message-list-scroll-container"]',
       );
       expect(scrollContainer).not.toBeNull();
+      expect(
+        host.querySelector('[data-testid="message-list-jump-to-latest"]'),
+      ).toBeNull();
       setScrollMetrics(scrollContainer as HTMLElement, {
         scrollTop: 536,
         scrollHeight: 1000,
         clientHeight: 400,
       });
 
-      const wheelEvent = new Event("wheel", { bubbles: true }) as WheelEvent;
-      Object.defineProperty(wheelEvent, "deltaY", {
-        configurable: true,
-        value: -120,
-      });
-
-      act(() => {
-        scrollContainer?.dispatchEvent(wheelEvent);
-      });
-
-      expect(
-        host.querySelector('[data-testid="message-list-jump-to-latest"]')
-          ?.textContent,
-      ).toContain("View latest");
-
       act(() => {
         root.render(<MessageList messages={nextMessages} isSending />);
-      });
-
-      expect(scrollIntoViewMock).not.toHaveBeenCalled();
-
-      const jumpButton = host.querySelector<HTMLButtonElement>(
-        '[data-testid="message-list-jump-to-latest"]',
-      );
-      expect(jumpButton).not.toBeNull();
-
-      act(() => {
-        jumpButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       });
 
       expect(scrollIntoViewMock).toHaveBeenCalledWith({
         behavior: "smooth",
         block: "end",
       });
+      expect(
+        host.querySelector('[data-testid="message-list-jump-to-latest"]'),
+      ).toBeNull();
+    } finally {
+      HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+      window.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
+  it("执行中流式追加同一条消息时也应贴底自动跟随", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    mountedRoots.push({ container: host, root });
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const scrollIntoViewMock = vi.fn();
+    const messages: Message[] = [
+      {
+        id: "user-stream-follow",
+        role: "user",
+        content: "继续输出",
+        timestamp: new Date("2026-04-25T10:00:00.000Z"),
+      },
+      {
+        id: "assistant-stream-follow",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-04-25T10:00:01.000Z"),
+      },
+    ];
+
+    HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
+    window.requestAnimationFrame = ((callback: (timestamp: number) => void) => {
+      callback(0);
+      return 1;
+    }) as typeof window.requestAnimationFrame;
+
+    try {
+      act(() => {
+        root.render(<MessageList messages={messages} isSending />);
+      });
+      scrollIntoViewMock.mockClear();
+
+      const scrollContainer = host.querySelector<HTMLElement>(
+        '[data-testid="message-list-scroll-container"]',
+      );
+      expect(scrollContainer).not.toBeNull();
+      setScrollMetrics(scrollContainer as HTMLElement, {
+        scrollTop: 0,
+        scrollHeight: 1200,
+        clientHeight: 400,
+      });
+
+      act(() => {
+        upsertAgentStreamTextOverlay({
+          messageId: "assistant-stream-follow",
+          eventName: "response.output_text.delta",
+          content: "第一段流式内容",
+          updatedAt: 1,
+        });
+      });
+
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({
+        behavior: "auto",
+        block: "end",
+      });
+      expect(
+        host.querySelector('[data-testid="message-list-jump-to-latest"]'),
+      ).toBeNull();
     } finally {
       HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
       window.requestAnimationFrame = originalRequestAnimationFrame;
@@ -546,6 +593,37 @@ describe("MessageList", () => {
             text: "overlay 正文已经可见",
           }),
         ]),
+        isStreaming: true,
+      }),
+    );
+  });
+
+  it("流式正文 overlay 不应刷掉当前 thinking 过程", () => {
+    upsertAgentStreamTextOverlay({
+      messageId: "assistant-overlay-thinking",
+      eventName: "agent-runtime-overlay-thinking-test",
+      content: "正文已经开始输出。",
+    });
+
+    render([
+      {
+        id: "assistant-overlay-thinking",
+        role: "assistant",
+        content: "",
+        isThinking: true,
+        thinkingContent: "先检查目录结构，再输出结论。",
+        timestamp: new Date("2026-05-30T09:00:00.000Z"),
+      } as Message,
+    ]);
+
+    expect(mockStreamingRenderer).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        content: "正文已经开始输出。",
+        thinkingContent: "先检查目录结构，再输出结论。",
+        contentParts: [
+          { type: "thinking", text: "先检查目录结构，再输出结论。" },
+          { type: "text", text: "正文已经开始输出。" },
+        ],
         isStreaming: true,
       }),
     );
@@ -4133,7 +4211,7 @@ describe("MessageList", () => {
     );
   });
 
-  it("已完成 assistant 消息应只向正文传递可见正文片段", () => {
+  it("已完成 assistant 消息有内联工具序列时应交给正文按顺序渲染", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -4208,14 +4286,21 @@ describe("MessageList", () => {
       ],
     });
 
-    expect(mockStreamingRenderer).not.toHaveBeenCalledWith(
-      expect.objectContaining({ suppressProcessFlow: true }),
-    );
     expect(mockStreamingRenderer).toHaveBeenCalledWith(
       expect.objectContaining({
-        thinkingContent: undefined,
-        toolCalls: undefined,
-        contentParts: [{ type: "text", text: "最终说明" }],
+        suppressProcessFlow: false,
+        thinkingContent: "这段思考应只留在执行轨迹中。",
+        toolCalls: [
+          expect.objectContaining({
+            id: "tool-process-suppressed-1",
+            status: "completed",
+          }),
+        ],
+        contentParts: [
+          { type: "thinking", text: "这段思考应只留在执行轨迹中。" },
+          expect.objectContaining({ type: "tool_use" }),
+          { type: "text", text: "最终说明" },
+        ],
       }),
     );
   });
@@ -4645,7 +4730,7 @@ describe("MessageList", () => {
     );
   });
 
-  it("持久化 reasoning 已接管时不应重复传递本地思考过程", () => {
+  it("消息内已有思考顺序时不应被持久化 reasoning 顶到正文外", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -4673,7 +4758,7 @@ describe("MessageList", () => {
       },
     ];
 
-    render(messages, {
+    const container = render(messages, {
       currentTurnId: "turn-thinking-persisted",
       turns: [
         {
@@ -4703,10 +4788,132 @@ describe("MessageList", () => {
       ],
     });
 
+    expect(
+      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
+    ).toBeNull();
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        thinkingContent: "先分析意图。",
+        contentParts: [
+          { type: "thinking", text: "先分析意图。" },
+          { type: "text", text: "最终说明" },
+        ],
+      }),
+    );
+  });
+
+  it("完成态 timeline 多段 reasoning 应按 sequence 穿插到正文流", () => {
+    const now = new Date("2026-05-30T09:10:00.000Z");
+    const messages: Message[] = [
+      {
+        id: "msg-user-timeline-interleaved-reasoning",
+        role: "user",
+        content: "帮我分析一下这个文件夹",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-timeline-interleaved-reasoning",
+        role: "assistant",
+        content:
+          "我先围绕你给出的路径做只读侦查。\n\n已确认该目录存在。",
+        timestamp: new Date("2026-05-30T09:10:05.000Z"),
+      },
+    ];
+
+    const container = render(messages, {
+      currentTurnId: "turn-timeline-interleaved-reasoning",
+      turns: [
+        {
+          id: "turn-timeline-interleaved-reasoning",
+          thread_id: "thread-timeline-interleaved-reasoning",
+          prompt_text: "帮我分析一下这个文件夹",
+          status: "completed",
+          started_at: "2026-05-30T09:10:00.000Z",
+          completed_at: "2026-05-30T09:10:05.000Z",
+          created_at: "2026-05-30T09:10:00.000Z",
+          updated_at: "2026-05-30T09:10:05.000Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "reasoning-timeline-interleaved-1",
+          thread_id: "thread-timeline-interleaved-reasoning",
+          turn_id: "turn-timeline-interleaved-reasoning",
+          sequence: 1,
+          status: "completed",
+          started_at: "2026-05-30T09:10:00.500Z",
+          completed_at: "2026-05-30T09:10:01.000Z",
+          updated_at: "2026-05-30T09:10:01.000Z",
+          type: "reasoning",
+          text: "Inspecting folder for details",
+        },
+        {
+          id: "agent-timeline-interleaved-1",
+          thread_id: "thread-timeline-interleaved-reasoning",
+          turn_id: "turn-timeline-interleaved-reasoning",
+          sequence: 2,
+          status: "completed",
+          started_at: "2026-05-30T09:10:01.000Z",
+          completed_at: "2026-05-30T09:10:01.500Z",
+          updated_at: "2026-05-30T09:10:01.500Z",
+          type: "agent_message",
+          text: "我先围绕你给出的路径做只读侦查。",
+        },
+        {
+          id: "tool-timeline-interleaved-1",
+          thread_id: "thread-timeline-interleaved-reasoning",
+          turn_id: "turn-timeline-interleaved-reasoning",
+          sequence: 3,
+          status: "completed",
+          started_at: "2026-05-30T09:10:01.500Z",
+          completed_at: "2026-05-30T09:10:02.000Z",
+          updated_at: "2026-05-30T09:10:02.000Z",
+          type: "command_execution",
+          command: "ls /Users/coso/yansu-agent",
+          cwd: "/Users/coso",
+          aggregated_output: "activity models sherpa bin",
+          exit_code: 0,
+        },
+        {
+          id: "reasoning-timeline-interleaved-2",
+          thread_id: "thread-timeline-interleaved-reasoning",
+          turn_id: "turn-timeline-interleaved-reasoning",
+          sequence: 4,
+          status: "completed",
+          started_at: "2026-05-30T09:10:02.500Z",
+          completed_at: "2026-05-30T09:10:03.000Z",
+          updated_at: "2026-05-30T09:10:03.000Z",
+          type: "reasoning",
+          text: "Analyzing file sizes",
+        },
+        {
+          id: "agent-timeline-interleaved-2",
+          thread_id: "thread-timeline-interleaved-reasoning",
+          turn_id: "turn-timeline-interleaved-reasoning",
+          sequence: 5,
+          status: "completed",
+          started_at: "2026-05-30T09:10:04.000Z",
+          completed_at: "2026-05-30T09:10:05.000Z",
+          updated_at: "2026-05-30T09:10:05.000Z",
+          type: "agent_message",
+          text: "已确认该目录存在。",
+        },
+      ],
+    });
+
+    expect(
+      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
+    ).toBeNull();
     expect(mockStreamingRenderer).toHaveBeenCalledWith(
       expect.objectContaining({
         thinkingContent: undefined,
-        contentParts: [{ type: "text", text: "最终说明" }],
+        contentParts: [
+          { type: "thinking", text: "Inspecting folder for details" },
+          { type: "text", text: "我先围绕你给出的路径做只读侦查。" },
+          expect.objectContaining({ type: "tool_use" }),
+          { type: "thinking", text: "Analyzing file sizes" },
+          { type: "text", text: "已确认该目录存在。" },
+        ],
       }),
     );
   });
@@ -5218,7 +5425,7 @@ describe("MessageList", () => {
     );
   });
 
-  it("已完成旧消息残留 runtimeStatus 时不应把思考过程重复塞回正文", () => {
+  it("已完成旧消息残留 runtimeStatus 时仍应尊重 contentParts 思考顺序", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -5231,11 +5438,11 @@ describe("MessageList", () => {
           title: "历史运行态",
           detail: "旧版本残留的运行态不应影响正文。",
         },
-        thinkingContent: "这段思考只应留在执行轨迹里。",
+        thinkingContent: "这段思考应跟随正文顺序显示。",
         contentParts: [
           {
             type: "thinking",
-            text: "这段思考只应留在执行轨迹里。",
+            text: "这段思考应跟随正文顺序显示。",
           },
           {
             type: "text",
@@ -5249,13 +5456,94 @@ describe("MessageList", () => {
 
     expect(mockStreamingRenderer).toHaveBeenCalledWith(
       expect.objectContaining({
-        thinkingContent: undefined,
-        contentParts: [{ type: "text", text: "这是最终回答。" }],
+        thinkingContent: "这段思考应跟随正文顺序显示。",
+        contentParts: [
+          { type: "thinking", text: "这段思考应跟随正文顺序显示。" },
+          { type: "text", text: "这是最终回答。" },
+        ],
       }),
     );
   });
 
-  it("已完成工具调用应回到消息顶部执行轨迹展示，不再占用正文主视觉", () => {
+  it("恢复历史对话时只有内联思考的已完成助手消息也应按正文顺序渲染", () => {
+    const messages: Message[] = [
+      {
+        id: "msg-user-restored-inline-thinking",
+        role: "user",
+        content: "先思考再总结",
+        timestamp: new Date("2026-05-29T11:00:00.000Z"),
+      },
+      {
+        id: "msg-assistant-restored-inline-thinking",
+        role: "assistant",
+        content: "总结完成。",
+        thinkingContent: "先拆解历史恢复的消息结构。",
+        contentParts: [
+          {
+            type: "thinking",
+            text: "先拆解历史恢复的消息结构。",
+          },
+          {
+            type: "text",
+            text: "总结完成。",
+          },
+        ],
+        timestamp: new Date("2026-05-29T11:00:02.000Z"),
+      },
+    ];
+
+    const container = render(messages, {
+      isRestoringSession: true,
+      sessionHistoryWindow: {
+        loadedMessages: 2,
+        totalMessages: 18,
+        isLoadingFull: false,
+        error: null,
+      },
+      turns: [
+        {
+          id: "turn-restored-inline-thinking",
+          thread_id: "thread-restored-inline-thinking",
+          prompt_text: "先思考再总结",
+          status: "completed",
+          started_at: "2026-05-29T11:00:00.000Z",
+          completed_at: "2026-05-29T11:00:02.000Z",
+          created_at: "2026-05-29T11:00:00.000Z",
+          updated_at: "2026-05-29T11:00:02.000Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "reasoning-restored-inline-thinking",
+          thread_id: "thread-restored-inline-thinking",
+          turn_id: "turn-restored-inline-thinking",
+          sequence: 1,
+          status: "completed",
+          started_at: "2026-05-29T11:00:00.500Z",
+          completed_at: "2026-05-29T11:00:01.500Z",
+          updated_at: "2026-05-29T11:00:01.500Z",
+          type: "reasoning",
+          text: "先拆解历史恢复的消息结构。",
+        },
+      ],
+    });
+
+    expect(
+      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
+    ).toBeNull();
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "总结完成。",
+        thinkingContent: "先拆解历史恢复的消息结构。",
+        contentParts: [
+          { type: "thinking", text: "先拆解历史恢复的消息结构。" },
+          { type: "text", text: "总结完成。" },
+        ],
+      }),
+    );
+  });
+
+  it("已完成工具调用应保留在正文内与文字按顺序穿插展示", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -5264,6 +5552,7 @@ describe("MessageList", () => {
         content: "已经定位到问题根因。",
         timestamp: now,
         contentParts: [
+          { type: "thinking", text: "先检查文件变更。" },
           {
             type: "tool_use",
             toolCall: {
@@ -5320,17 +5609,100 @@ describe("MessageList", () => {
     ).toBeNull();
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container.querySelector(
         '[data-testid="assistant-primary-timeline-shell"]',
       ),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(mockStreamingRenderer).toHaveBeenCalledWith(
       expect.objectContaining({
-        renderProposedPlanBlocks: false,
-        toolCalls: undefined,
-        contentParts: [{ type: "text", text: "已经定位到问题根因。" }],
+        suppressProcessFlow: false,
+        contentParts: [
+          { type: "thinking", text: "先检查文件变更。" },
+          expect.objectContaining({ type: "tool_use" }),
+          { type: "text", text: "已经定位到问题根因。" },
+        ],
+      }),
+    );
+  });
+
+  it("恢复历史对话时有内联过程的已完成助手消息不应退化成纯最终正文", () => {
+    const messages: Message[] = [
+      {
+        id: "msg-user-restored-inline-process",
+        role: "user",
+        content: "修一下消息顺序",
+        timestamp: new Date("2026-05-29T10:00:00.000Z"),
+      } as Message,
+      {
+        id: "msg-assistant-restored-inline-process",
+        role: "assistant",
+        content: "已经修好消息顺序。",
+        contentParts: [
+          {
+            type: "thinking",
+            text: "先定位历史恢复路径。",
+          },
+          {
+            type: "tool_use",
+            toolCall: {
+              id: "tool-restored-inline-process",
+              name: "Bash",
+              arguments: JSON.stringify({ command: "npm test -- MessageList" }),
+              status: "completed",
+              result: { success: true, output: "ok" },
+              startTime: new Date("2026-05-29T10:00:01.000Z"),
+              endTime: new Date("2026-05-29T10:00:03.000Z"),
+            },
+          },
+          {
+            type: "text",
+            text: "已经修好消息顺序。",
+          },
+        ],
+        toolCalls: [
+          {
+            id: "tool-restored-inline-process",
+            name: "Bash",
+            arguments: JSON.stringify({ command: "npm test -- MessageList" }),
+            status: "completed",
+            result: { success: true, output: "ok" },
+            startTime: new Date("2026-05-29T10:00:01.000Z"),
+            endTime: new Date("2026-05-29T10:00:03.000Z"),
+          },
+        ],
+        thinkingContent: "先定位历史恢复路径。",
+        timestamp: new Date("2026-05-29T10:00:04.000Z"),
+      } as Message,
+    ];
+
+    render(messages, {
+      sessionHistoryWindow: {
+        loadedMessages: 2,
+        totalMessages: 42,
+        isLoadingFull: false,
+        error: null,
+      },
+    });
+
+    expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "已经修好消息顺序。",
+        suppressProcessFlow: false,
+        contentParts: [
+          { type: "thinking", text: "先定位历史恢复路径。" },
+          expect.objectContaining({ type: "tool_use" }),
+          { type: "text", text: "已经修好消息顺序。" },
+        ],
+        thinkingContent: "先定位历史恢复路径。",
+        toolCalls: [
+          expect.objectContaining({
+            id: "tool-restored-inline-process",
+            status: "completed",
+          }),
+        ],
       }),
     );
   });
@@ -5600,7 +5972,7 @@ describe("MessageList", () => {
     ).not.toBeNull();
   });
 
-  it("完成态 process 不再占正文时，计划信息应回到消息前序执行轨迹", () => {
+  it("完成态 timeline 已有计划时应禁用正文计划块解析并保留内联思考顺序", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -5661,7 +6033,13 @@ describe("MessageList", () => {
       expect.objectContaining({
         renderProposedPlanBlocks: false,
         thinkingContent: undefined,
-        contentParts: [{ type: "text", text: "已经整理完执行思路。" }],
+        contentParts: [
+          {
+            type: "thinking",
+            text: "先对照用户截图，再确认 thread item 是否有重复来源。",
+          },
+          { type: "text", text: "已经整理完执行思路。" },
+        ],
       }),
     );
   });

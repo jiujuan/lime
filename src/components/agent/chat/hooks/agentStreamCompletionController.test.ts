@@ -76,8 +76,49 @@ describe("agentStreamCompletionController", () => {
         surfaceThinkingDeltas: true,
       }),
     ).toEqual([
-      { type: "tool_use", toolCall: { id: "tool-a" } },
       { type: "text", text: "最终" },
+      { type: "tool_use", toolCall: { id: "tool-a" } },
+    ]);
+  });
+
+  it("完成态修正文案时应保留已交错的文本槽位", () => {
+    const parts = [
+      { type: "text", text: "先说明。" },
+      { type: "tool_use", toolCall: { id: "tool-a" } },
+      { type: "text", text: "再总结。" },
+    ] as unknown as Message["contentParts"];
+
+    expect(
+      reconcileAgentStreamFinalContentParts({
+        parts,
+        finalContent: "先说明。再总结。补充最终结论。",
+        rawContent: "先说明。再总结。",
+        surfaceThinkingDeltas: true,
+      }),
+    ).toEqual([
+      { type: "text", text: "先说明。" },
+      { type: "tool_use", toolCall: { id: "tool-a" } },
+      { type: "text", text: "再总结。补充最终结论。" },
+    ]);
+  });
+
+  it("完成态最终正文只是已有文本延伸时应追加尾巴，不把工具顶到后面", () => {
+    const parts = [
+      { type: "text", text: "第一段。" },
+      { type: "tool_use", toolCall: { id: "tool-a" } },
+    ] as unknown as Message["contentParts"];
+
+    expect(
+      reconcileAgentStreamFinalContentParts({
+        parts,
+        finalContent: "第一段。最终补充。",
+        rawContent: "第一段。最终补充。",
+        surfaceThinkingDeltas: true,
+      }),
+    ).toEqual([
+      { type: "text", text: "第一段。" },
+      { type: "tool_use", toolCall: { id: "tool-a" } },
+      { type: "text", text: "最终补充。" },
     ]);
   });
 

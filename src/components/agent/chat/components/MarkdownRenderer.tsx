@@ -518,6 +518,10 @@ const CODE_LANGUAGE_ALIASES: Record<string, string> = {
 const COMPACT_PIPE_TABLE_SEPARATOR_PATTERN = /\|\|[ \t:|-]{3,}\|\|/;
 const MARKDOWN_FENCE_LINE_PATTERN = /^\s*(`{3,}|~{3,})/;
 const MARKDOWN_FENCE_OPEN_PATTERN = /^(\s*)(`{3,}|~{3,})\s*([^\s`]*)?.*$/;
+const INLINE_COLLAPSED_FENCE_PATTERN =
+  /```([A-Za-z0-9_+.#-]+)(?![ \t]*\n)([\s\S]*?)```/g;
+const COLLAPSED_MARKDOWN_TRAILING_TABLE_TEXT_PATTERN =
+  /\|(?=[\u3400-\u9fffA-Za-z][^|\n]{0,24}[：:])/g;
 
 interface MarkdownRendererProps {
   content: string;
@@ -631,6 +635,10 @@ function normalizeCompactPipeTableLine(line: string): string {
 
   const leadingWhitespace = line.match(/^\s*/)?.[0] ?? "";
   const headerSource = line.slice(0, separatorMatch.index).trim();
+  if (!headerSource.startsWith("|")) {
+    return line;
+  }
+
   const headerCells = parsePipeTableCells(headerSource);
   const nonEmptyHeaderCells = headerCells.filter(Boolean);
   if (headerCells.length < 2 || nonEmptyHeaderCells.length < 2) {
@@ -659,6 +667,131 @@ function normalizeCompactPipeTableLine(line: string): string {
   return tableLines
     .map((tableLine) => `${leadingWhitespace}${tableLine}`)
     .join("\n");
+}
+
+function shouldNormalizeCollapsedMarkdownBlocks(markdown: string): boolean {
+  const trimmed = markdown.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const lines = trimmed.split("\n");
+  const hasSparseLineBreaks =
+    lines.length <= 2 || trimmed.length / Math.max(lines.length, 1) > 800;
+  if (!hasSparseLineBreaks) {
+    return false;
+  }
+
+  const markerCount = [
+    /(^|[^#])#{1,6}(?!#)\S/.test(trimmed),
+    /---#{1,6}(?!#)\S/.test(trimmed),
+    /[：:]-\s*\S|`-\s*\S/.test(trimmed),
+    COMPACT_PIPE_TABLE_SEPARATOR_PATTERN.test(trimmed),
+    INLINE_COLLAPSED_FENCE_PATTERN.test(trimmed),
+  ].filter(Boolean).length;
+
+  INLINE_COLLAPSED_FENCE_PATTERN.lastIndex = 0;
+  return markerCount >= 2;
+}
+
+function normalizeCollapsedFenceBody(body: string): string {
+  const trimmed = body.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  return trimmed
+    .replace(/(\/(?:Users|home|var|tmp|opt|Applications)\b)/g, "\n$1")
+    .replace(/^\n/, "");
+}
+
+function normalizeInlineCollapsedCodeFences(markdown: string): string {
+  return markdown.replace(
+    INLINE_COLLAPSED_FENCE_PATTERN,
+    (_match, language: string, body: string) => {
+      const normalizedLanguage = language.trim() || "text";
+      const normalizedBody = normalizeCollapsedFenceBody(body);
+      return `\n\n\`\`\`${normalizedLanguage}\n${normalizedBody}\n\`\`\`\n\n`;
+    },
+  );
+}
+
+function transformOutsideMarkdownFences(
+  markdown: string,
+  transform: (text: string) => string,
+): string {
+  const outputLines: string[] = [];
+  let pendingOutsideLines: string[] = [];
+  let activeFence: { marker: "`" | "~"; markerLength: number } | null = null;
+
+  const flushOutsideLines = () => {
+    if (pendingOutsideLines.length === 0) {
+      return;
+    }
+    outputLines.push(transform(pendingOutsideLines.join("\n")));
+    pendingOutsideLines = [];
+  };
+
+  for (const line of markdown.split("\n")) {
+    const fenceMatch = MARKDOWN_FENCE_OPEN_PATTERN.exec(line);
+    if (!activeFence && fenceMatch) {
+      flushOutsideLines();
+      const markerRun = fenceMatch[2] || "";
+      activeFence = {
+        marker: markerRun.startsWith("~") ? "~" : "`",
+        markerLength: markerRun.length,
+      };
+      outputLines.push(line);
+      continue;
+    }
+
+    if (activeFence) {
+      outputLines.push(line);
+      if (fenceMatch) {
+        const markerRun = fenceMatch[2] || "";
+        const marker = markerRun.startsWith("~") ? "~" : "`";
+        if (
+          marker === activeFence.marker &&
+          markerRun.length >= activeFence.markerLength &&
+          line.trim() === markerRun
+        ) {
+          activeFence = null;
+        }
+      }
+      continue;
+    }
+
+    pendingOutsideLines.push(line);
+  }
+
+  flushOutsideLines();
+  return outputLines.join("\n");
+}
+
+function normalizeCollapsedMarkdownTextBlocks(markdown: string): string {
+  return markdown
+    .replace(/---(?=#{1,6}(?!#)\S)/g, "\n\n---\n\n")
+    .replace(/(^|[^A-Za-z0-9#\n])(?=#{1,6}(?!#)\S)/g, "$1\n\n")
+    .replace(/(^|\n)(#{1,6})(?=\S)/g, "$1$2 ")
+    .replace(/([：:])(\|[^\n]*?\|\|[ \t:|-]{3,}\|\|)/g, "$1\n\n$2")
+    .replace(COLLAPSED_MARKDOWN_TRAILING_TABLE_TEXT_PATTERN, "|\n\n")
+    .replace(/([：:])-\s*/g, "$1\n- ")
+    .replace(/`-\s*/g, "`\n- ")
+    .replace(/([：:])```/g, "$1\n\n```")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function normalizeCollapsedMarkdownBlocks(markdown: string): string {
+  if (!shouldNormalizeCollapsedMarkdownBlocks(markdown)) {
+    return markdown;
+  }
+
+  const withCodeFences = normalizeInlineCollapsedCodeFences(markdown);
+  return transformOutsideMarkdownFences(
+    withCodeFences,
+    normalizeCollapsedMarkdownTextBlocks,
+  );
 }
 
 function normalizeCompactPipeTables(markdown: string): string {
@@ -1046,7 +1179,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
       }
 
       return {
-        text: normalizeCompactPipeTables(normalizeMarkdownTableFences(result)),
+        text: normalizeCompactPipeTables(
+          normalizeMarkdownTableFences(normalizeCollapsedMarkdownBlocks(result)),
+        ),
         images,
       };
     }, [renderContent]);

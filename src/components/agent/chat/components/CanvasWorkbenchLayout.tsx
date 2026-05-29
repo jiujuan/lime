@@ -142,6 +142,7 @@ interface CanvasWorkbenchCopy {
   tab: {
     files: string;
     generated: string;
+    tasks: string;
     sessionMain: string;
   };
   workspaceFile: {
@@ -234,6 +235,7 @@ export type CanvasWorkbenchPreviewTarget =
 export interface CanvasWorkbenchTeamView extends CanvasWorkbenchHeaderView {
   enabled: boolean;
   autoFocusToken?: string | number | null;
+  preferActiveOnMount?: boolean;
   preferFullscreenPreview?: boolean;
   preferFixedPanel?: boolean;
   triggerState?: {
@@ -1229,6 +1231,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
         generated: translateWorkbench(
           "agentChat.canvasWorkbench.tabs.generated",
         ),
+        tasks: translateWorkbench("agentChat.canvasWorkbench.tabs.tasks"),
         sessionMain: translateWorkbench(
           "agentChat.canvasWorkbench.tabs.sessionMain",
         ),
@@ -1245,8 +1248,12 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     [translateWorkbench],
   );
   const isCodingWorkbench = workbenchMode === "coding";
+  const shouldShowTeamTab = Boolean(
+    teamView?.enabled &&
+      (teamView.preferActiveOnMount || teamView.autoFocusToken != null),
+  );
   const shouldPreferTeamTabByDefault =
-    !isCodingWorkbench && teamView?.enabled === true && !defaultPreview;
+    !isCodingWorkbench && shouldShowTeamTab && !defaultPreview;
   const hasDefaultPreviewContent = Boolean(defaultPreview?.content.trim());
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [isStackedLayout, setIsStackedLayout] = useState(false);
@@ -1399,7 +1406,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     if (isCodingWorkbench) {
       return;
     }
-    if (activeTab !== "team" || teamView?.enabled) {
+    if (activeTab !== "team" || shouldShowTeamTab) {
       return;
     }
     setActiveTab(
@@ -1414,7 +1421,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     isCodingWorkbench,
     openDocumentTabs,
     sessionView?.renderPanel,
-    teamView?.enabled,
+    shouldShowTeamTab,
   ]);
 
   useEffect(() => {
@@ -1547,7 +1554,8 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   useEffect(() => {
     if (
       isCodingWorkbench ||
-      !teamView?.enabled ||
+      !shouldShowTeamTab ||
+      !teamView ||
       teamView.autoFocusToken == null
     ) {
       return;
@@ -1559,7 +1567,12 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
 
     teamAutoFocusTokenRef.current = teamView.autoFocusToken;
     setActiveTab("team");
-  }, [isCodingWorkbench, teamView?.autoFocusToken, teamView?.enabled]);
+  }, [
+    isCodingWorkbench,
+    shouldShowTeamTab,
+    teamView,
+    teamView?.autoFocusToken,
+  ]);
 
   const handleOpenDocumentSelection = useCallback(
     (selectionKey: string) => {
@@ -1586,7 +1599,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
       if (activeTab === tabKey) {
         const fallbackTab =
           openDocumentTabs.find((currentTabKey) => currentTabKey !== tabKey) ||
-          (teamView?.enabled && shouldPreferTeamTabByDefault
+          (shouldShowTeamTab && shouldPreferTeamTabByDefault
             ? "team"
             : "session");
         setActiveTab(fallbackTab as CanvasWorkbenchTab);
@@ -1597,8 +1610,8 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
       fallbackSelectionKey,
       openDocumentTabs,
       selectedKey,
+      shouldShowTeamTab,
       shouldPreferTeamTabByDefault,
-      teamView?.enabled,
     ],
   );
 
@@ -1771,14 +1784,14 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   ]);
 
   const teamTarget = useMemo<CanvasWorkbenchPreviewTarget | null>(() => {
-    if (!teamView?.enabled) {
+    if (!shouldShowTeamTab || !teamView) {
       return null;
     }
     return {
       kind: "team-workbench",
       title: teamView.title || workbenchCopy.tab.generated,
     };
-  }, [teamView, workbenchCopy.tab.generated]);
+  }, [shouldShowTeamTab, teamView, workbenchCopy.tab.generated]);
 
   const hasCustomSessionView = Boolean(sessionView?.renderPanel);
   const shouldShowSessionTab = Boolean(sessionContext || hasCustomSessionView);
@@ -1799,14 +1812,14 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
       return;
     }
     setActiveTab(
-      openDocumentTabs[0] || (teamView?.enabled ? "team" : "workspace"),
+      openDocumentTabs[0] || (shouldShowTeamTab ? "team" : "workspace"),
     );
   }, [
     activeTab,
     isCodingWorkbench,
     openDocumentTabs,
     shouldShowSessionTab,
-    teamView?.enabled,
+    shouldShowTeamTab,
   ]);
 
   const activeSelectionPath = activePreviewContext?.selectionPath;
@@ -2048,12 +2061,13 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
         badge: workspaceBadge,
         badgeTone: workspaceView?.tabBadgeTone,
       },
-      ...(teamView?.enabled
+      ...(shouldShowTeamTab && teamView
         ? [
             {
               key: "team" as const,
               label:
                 teamView.tabLabel?.trim() ||
+                workbenchCopy.tab.tasks ||
                 teamView.title?.trim() ||
                 workbenchCopy.tab.generated,
               badge:
@@ -2086,12 +2100,14 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     sessionView?.tabBadgeTone,
     sessionView?.tabLabel,
     sessionContext,
+    shouldShowTeamTab,
     shouldShowSessionTab,
     teamView,
     canvasT,
     workbenchCopy.tab.files,
     workbenchCopy.tab.generated,
     workbenchCopy.tab.sessionMain,
+    workbenchCopy.tab.tasks,
     workspacePanelRootPath,
     workspaceView?.tabBadge,
     workspaceView?.tabBadgeTone,
@@ -2662,7 +2678,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   };
 
   const renderTeamPanel = () => {
-    if (!teamView?.enabled || !teamTarget) {
+    if (!shouldShowTeamTab || !teamView || !teamTarget) {
       return (
         <div data-testid="canvas-workbench-panel-team" className="p-5">
           <div className={WORKBENCH_MUTED_PANEL_CLASSNAME}>

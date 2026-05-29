@@ -227,6 +227,10 @@ export type ContentPart =
   | ({
       type: "action_required";
       actionRequired: ActionRequired;
+    } & AgentUiProjectionContentPartMeta)
+  | ({
+      type: "file_changes_batch";
+      aggregate: import("./utils/fileChangeSummary").FileChangesAggregate;
     } & AgentUiProjectionContentPartMeta);
 
 export type BrowserTaskRequirement =

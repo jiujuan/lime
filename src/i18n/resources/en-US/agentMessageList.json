@@ -18,7 +18,6 @@
   "agentChat.messageList.firstTokenStatus.submitted.title": "Request submitted",
   "agentChat.messageList.streamingInline.queued": "Waiting to write",
   "agentChat.messageList.streamingInline.running": "Writing...",
-  "agentChat.messageList.jumpToLatest": "View latest",
   "agentChat.messageList.historicalAssistantPreview.longNotice": "This history message is long (about {{countLabel}} characters), so a plain-text preview is shown first.",
   "agentChat.messageList.historicalAssistantPreview.compactNotice": "This assistant reply is long (about {{countLabel}} characters), so a plain-text preview is shown first.",
   "agentChat.messageList.historicalAssistantPreview.expandFull": "Show full content",

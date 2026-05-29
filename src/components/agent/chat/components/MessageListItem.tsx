@@ -179,7 +179,6 @@ export function MessageListItem({
     hasImageWorkbenchLeadContent,
     historicalAssistantPreviewContent,
     imageWorkbenchRendererState,
-    inlineProcessCoverage,
     installedSkillMessageLabel,
     isConversationTailAssistant,
     isUserCommandMessage,
@@ -207,6 +206,7 @@ export function MessageListItem({
     shouldRenderImageWorkbenchBareBubble,
     shouldRenderMessageCanvasShortcut,
     shouldRenderPrimaryTimelineOutsideBubble,
+    shouldRenderProposedPlanBlocks,
     shouldRenderRuntimePeerCards,
     shouldSuppressInlineA2UI,
     shouldSuppressRendererProcessFlow,
@@ -375,10 +375,7 @@ export function MessageListItem({
                 rendererRawContent={rendererRawContent}
                 rendererThinkingContent={rendererThinkingContent}
                 rendererToolCalls={rendererToolCalls}
-                renderProposedPlanBlocks={
-                  !primaryTimeline ||
-                  inlineProcessCoverage.hasInlineProcessEntries
-                }
+                renderProposedPlanBlocks={shouldRenderProposedPlanBlocks}
                 shouldCollapseCodeBlock={shouldCollapseCodeBlock}
                 shouldCollapseLongHistoricalMessage={
                   shouldCollapseLongHistoricalMessage

@@ -381,6 +381,33 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     expect(sceneProps.onSelectServiceSkill).toBe(onSelectServiceSkill);
   });
 
+  it("聊天区不应再透传当前进展 Dock 入口", () => {
+    const params = createBaseParams({
+      teamWorkspaceEnabled: true,
+      layoutMode: "chat",
+      inputbarScene: {
+        ...createBaseParams().inputbarScene,
+        teamWorkbenchSurfaceProps: {
+          shellVisible: true,
+          childSubagentSessions: [
+            {
+              id: "child-1",
+              name: "执行",
+              created_at: 1,
+              updated_at: 2,
+              session_type: "sub_agent",
+              runtime_status: "running",
+            },
+          ],
+        },
+      },
+    });
+
+    const sceneProps = getRenderedSceneProps(params);
+
+    expect(sceneProps.teamWorkspaceDockProps).toBeNull();
+  });
+
   it("需要用户关注时才向画布壳透传会话进展面板", () => {
     const params = createBaseParams({
       turns: [

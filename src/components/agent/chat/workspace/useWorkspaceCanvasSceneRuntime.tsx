@@ -356,6 +356,43 @@ interface BuildCanvasTeamWorkbenchViewParams {
   renderTeamWorkbenchPanel: () => ReactNode;
 }
 
+function hasTeamWorkbenchActivity({
+  dispatchPreviewState,
+  liveActivityBySessionId,
+  teamWaitSummary,
+  teamControlSummary,
+  executionSummary,
+}: {
+  dispatchPreviewState?: TeamWorkspaceRuntimeFormationState | null;
+  liveActivityBySessionId?: Record<string, TeamWorkspaceActivityEntry[]>;
+  teamWaitSummary?: TeamWorkspaceWaitSummary | null;
+  teamControlSummary?: TeamWorkspaceControlSummary | null;
+  executionSummary: ReturnType<typeof summarizeTeamWorkspaceExecution>;
+}): boolean {
+  if (
+    dispatchPreviewState?.status === "forming" ||
+    dispatchPreviewState?.status === "failed"
+  ) {
+    return true;
+  }
+
+  if (
+    dispatchPreviewState?.status === "formed" &&
+    dispatchPreviewState.members.length > 0
+  ) {
+    return true;
+  }
+
+  return (
+    executionSummary.totalSessionCount > 0 ||
+    Object.values(liveActivityBySessionId ?? {}).some(
+      (entries) => (entries?.length ?? 0) > 0,
+    ) ||
+    Boolean(teamWaitSummary) ||
+    Boolean(teamControlSummary)
+  );
+}
+
 function resolveTeamWorkbenchTriggerState({
   enabled,
   teamDispatchPreviewState,
@@ -450,6 +487,20 @@ export function buildCanvasTeamWorkbenchView({
     teamControlSummary,
     executionSummary,
   });
+  const preferActiveOnMount =
+    autoFocusToken != null ||
+    hasTeamWorkbenchActivity({
+      dispatchPreviewState,
+      liveActivityBySessionId,
+      teamWaitSummary,
+      teamControlSummary,
+      executionSummary,
+    });
+
+  if (!preferActiveOnMount) {
+    return null;
+  }
+
   const headerBadges: CanvasWorkbenchHeaderBadge[] = [
     {
       key: "team-runtime",
@@ -542,6 +593,7 @@ export function buildCanvasTeamWorkbenchView({
           : "slate",
     subtitle: "主对话保留调度记录，画布按任务分别展示执行过程与结果。",
     autoFocusToken,
+    preferActiveOnMount,
     preferFixedPanel: true,
     triggerState,
     badges: headerBadges,

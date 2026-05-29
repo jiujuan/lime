@@ -66,6 +66,7 @@ vi.mock("react-i18next", () => ({
         "agentChat.canvasWorkbench.kind.workspaceFile": "文件",
         "agentChat.canvasWorkbench.tabs.files": "文件",
         "agentChat.canvasWorkbench.tabs.generated": "生成",
+        "agentChat.canvasWorkbench.tabs.tasks": "任务",
         "agentChat.canvasWorkbench.tabs.sessionMain": "结果",
         "agentChat.canvasWorkbench.tabs.switchAria": `切换画布标签-${String(
           options?.label ?? "",
@@ -1795,7 +1796,7 @@ describe("CanvasWorkbenchLayout", () => {
     expect(openChangedFile).toHaveBeenCalledWith("/workspace/src/App.tsx");
   });
 
-  it("启用 teamView 且没有默认预览时应默认落在 team 标签", async () => {
+  it("启用 teamView 且有任务进展时应默认落在 team 标签", async () => {
     const onClose = vi.fn();
     const renderPreview = vi.fn((target: CanvasWorkbenchPreviewTarget) => (
       <div data-testid="preview-panel">preview:{target.kind}</div>
@@ -1825,6 +1826,7 @@ describe("CanvasWorkbenchLayout", () => {
       teamView: {
         enabled: true,
         title: "生成",
+        preferActiveOnMount: true,
         subtitle: "任务进行时",
         badges: [
           {
@@ -1864,7 +1866,7 @@ describe("CanvasWorkbenchLayout", () => {
       container.querySelector('[data-testid="team-panel"]'),
     ).not.toBeNull();
     expect(
-      container.querySelector('button[aria-label="切换画布标签-生成"]'),
+      container.querySelector('button[aria-label="切换画布标签-任务"]'),
     ).not.toBeNull();
     expect(renderPreview).toHaveBeenCalled();
     expect(renderTeamPanel).toHaveBeenCalled();
@@ -1877,7 +1879,7 @@ describe("CanvasWorkbenchLayout", () => {
     );
     expect(headerRow?.className).not.toContain("flex-col");
     expect(
-      headerRow?.querySelector('button[aria-label="切换画布标签-生成"]'),
+      headerRow?.querySelector('button[aria-label="切换画布标签-任务"]'),
     ).not.toBeNull();
     expect(
       headerRow?.querySelector('button[aria-label="关闭画布工作台"]'),
@@ -1885,6 +1887,58 @@ describe("CanvasWorkbenchLayout", () => {
 
     clickByAriaLabel(container, "关闭画布工作台");
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("启用 teamView 但没有任务进展时应隐藏任务标签并默认落在文件标签", async () => {
+    const renderPreview = vi.fn((target: CanvasWorkbenchPreviewTarget) => (
+      <div data-testid="preview-panel">preview:{target.kind}</div>
+    ));
+    const renderTeamPanel = vi.fn(() => (
+      <div data-testid="team-panel">team-panel</div>
+    ));
+
+    const container = mount({
+      artifacts: [],
+      canvasState: null,
+      taskFiles: [],
+      workspaceRoot: "/workspace",
+      workspaceUnavailable: false,
+      defaultPreview: null,
+      loadFilePreview: vi.fn(async (path: string) => ({
+        path,
+        content: "",
+        isBinary: false,
+        size: 0,
+        error: null,
+      })),
+      onOpenPath: vi.fn(async () => undefined),
+      onRevealPath: vi.fn(async () => undefined),
+      onClose: vi.fn(),
+      renderPreview,
+      teamView: {
+        enabled: true,
+        title: "生成",
+        subtitle: "任务待机",
+        renderPreview: () => <div>unused-team-preview</div>,
+        renderPanel: renderTeamPanel,
+      },
+    });
+
+    await flushEffects();
+
+    expect(
+      container.querySelector('[data-testid="canvas-workbench-panel-workspace"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="canvas-workbench-panel-team"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('button[aria-label="切换画布标签-任务"]'),
+    ).toBeNull();
+    expect(renderPreview).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "team-workbench" }),
+    );
+    expect(renderTeamPanel).not.toHaveBeenCalled();
   });
 
   it("teamView 的 autoFocusToken 变化时应切到 team 标签", async () => {

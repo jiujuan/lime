@@ -4205,6 +4205,16 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
 
   it("首条发送创建新会话时不应额外回写 provider/model 或 accessMode", async () => {
     const workspaceId = "ws-first-send-no-eager-sync";
+    const selectedProvider = "openai";
+    const selectedModel = "gpt-5.5";
+    localStorage.setItem(
+      `agent_pref_provider_${workspaceId}`,
+      JSON.stringify(selectedProvider),
+    );
+    localStorage.setItem(
+      `agent_pref_model_${workspaceId}`,
+      JSON.stringify(selectedModel),
+    );
     const harness = mountHook(workspaceId);
 
     mockCreateAgentRuntimeSession.mockResolvedValue("session-first-send");
@@ -4232,6 +4242,14 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
         { runStartHooks: true },
       );
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
+          ?.provider_preference,
+      ).toBe(selectedProvider);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
+          ?.model_preference,
+      ).toBe(selectedModel);
       expect(mockUpdateAgentRuntimeSession).not.toHaveBeenCalledWith({
         session_id: "session-first-send",
         provider_name: harness.getValue().providerType,
@@ -9781,6 +9799,68 @@ describe("useAsterAgentChat 兼容接口", () => {
         mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
           ?.model_preference,
       ).toBeUndefined();
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("execution_runtime 缺失且 session provider/model 回写未完成时，应随 turn 提交偏好", async () => {
+    const workspaceId = "ws-runtime-model-shadow-pending-sync";
+    const topicId = "topic-runtime-model-shadow-pending-sync";
+    const selectedProvider = "custom-cb381b4f-d2fa-4eff-ba22-c867c38ba8d3";
+    const selectedModel = "gpt-5.5";
+    const scheduledTasks: Array<() => void> = [];
+    localStorage.setItem(
+      `agent_topic_model_pref_${workspaceId}_${topicId}`,
+      JSON.stringify({
+        providerType: selectedProvider,
+        model: selectedModel,
+      }),
+    );
+    mockScheduleMinimumDelayIdleTask.mockImplementation((task: () => void) => {
+      scheduledTasks.push(task);
+      return () => undefined;
+    });
+    mockGetAgentRuntimeSession.mockResolvedValue({
+      id: topicId,
+      messages: [],
+      execution_strategy: "react",
+    });
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+
+      await act(async () => {
+        await harness.getValue().switchTopic(topicId);
+      });
+      await flushEffects();
+      expect(scheduledTasks.length).toBeGreaterThan(0);
+      mockSubmitAgentRuntimeTurn.mockClear();
+
+      await act(async () => {
+        await harness
+          .getValue()
+          .sendMessage(
+            "继续沿用本地话题模型处理",
+            [],
+            false,
+            false,
+            false,
+            "react",
+          );
+      });
+
+      expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
+          ?.provider_preference,
+      ).toBe(selectedProvider);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
+          ?.model_preference,
+      ).toBe(selectedModel);
     } finally {
       harness.unmount();
     }

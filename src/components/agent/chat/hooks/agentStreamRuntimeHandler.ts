@@ -506,6 +506,62 @@ export function handleTurnStreamEvent({
     }
   };
 
+  const commitRenderedTextBeforeProcessPart = () => {
+    flushPendingTextRender();
+    const renderedContent = requestState.renderedContent || "";
+    if (!renderedContent.trim()) {
+      return;
+    }
+
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (msg.id !== assistantMsgId) {
+          return msg;
+        }
+
+        const currentText = (msg.contentParts || [])
+          .filter((part): part is Extract<typeof part, { type: "text" }> => {
+            return part.type === "text";
+          })
+          .map((part) => part.text)
+          .join("");
+        if (currentText === renderedContent) {
+          return msg;
+        }
+        if (currentText && renderedContent.startsWith(currentText)) {
+          const pendingText = renderedContent.slice(currentText.length);
+          if (!pendingText.trim()) {
+            return msg;
+          }
+          return {
+            ...msg,
+            content: renderedContent,
+            contentParts: appendTextToParts(
+              surfaceThinkingDeltas
+                ? msg.contentParts || []
+                : (msg.contentParts || []).filter(
+                    (part) => part.type !== "thinking",
+                  ),
+              pendingText,
+            ),
+          };
+        }
+
+        return {
+          ...msg,
+          content: renderedContent,
+          contentParts: reconcileAgentStreamFinalContentParts({
+            parts: msg.contentParts,
+            finalContent: renderedContent,
+            rawContent: requestState.accumulatedContent || renderedContent,
+            surfaceThinkingDeltas:
+              surfaceThinkingDeltas || isRetainedSkillProcessMessage(msg),
+          }),
+        };
+      }),
+    );
+  };
+
   const scheduleTextRenderFlush = () => {
     const renderedContent = requestState.renderedContent || "";
     const schedulePlan = buildAgentStreamTextRenderTimerSchedulePlan({
@@ -1143,6 +1199,7 @@ export function handleTurnStreamEvent({
     case "tool_start":
       activateStream();
       clearOptimisticItem();
+      commitRenderedTextBeforeProcessPart();
       upsertFallbackTextOverlayIfSilent("tool_start_fallback");
       playToolcallSound();
       handleToolStartEvent({
@@ -1173,6 +1230,7 @@ export function handleTurnStreamEvent({
     case "tool_input_delta":
       activateStream();
       clearOptimisticItem();
+      commitRenderedTextBeforeProcessPart();
       handleToolInputDeltaEvent({
         data,
         toolLogIdByToolId,
@@ -1257,6 +1315,7 @@ export function handleTurnStreamEvent({
           clearOptimisticItem();
         }
       }
+      commitRenderedTextBeforeProcessPart();
       bindAssistantMessageToRuntimeTurn(
         setMessages,
         assistantMsgId,

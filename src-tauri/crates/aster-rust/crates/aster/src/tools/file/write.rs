@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use async_trait::async_trait;
 use tracing::{debug, warn};
 
-use super::{compute_content_hash, FileReadRecord, SharedFileReadHistory};
+use super::{compute_content_hash, diff_summary, FileReadRecord, SharedFileReadHistory};
 use crate::tools::base::{PermissionCheckResult, Tool};
 use crate::tools::context::{ToolContext, ToolOptions, ToolResult};
 use crate::tools::error::ToolError;
@@ -132,6 +132,14 @@ impl WriteTool {
             }
         }
 
+        // 写入前读取旧内容，用于计算跨模型一致的 file_change 摘要。
+        // 读不到（新建或非 UTF-8）时按新建处理。
+        let previous_content = if full_path.exists() {
+            fs::read_to_string(&full_path).ok()
+        } else {
+            None
+        };
+
         // Write the file
         fs::write(&full_path, content)?;
 
@@ -156,13 +164,20 @@ impl WriteTool {
             content.len()
         );
 
+        let file_change = diff_summary::build_summary(
+            full_path.to_string_lossy().to_string(),
+            previous_content.as_deref(),
+            content,
+        );
+
         Ok(ToolResult::success(format!(
             "Successfully wrote {} bytes to {}",
             content.len(),
             full_path.display()
         ))
         .with_metadata("path", serde_json::json!(full_path.to_string_lossy()))
-        .with_metadata("size", serde_json::json!(content.len())))
+        .with_metadata("size", serde_json::json!(content.len()))
+        .with_metadata("file_change", file_change.to_metadata_value()))
     }
 
     /// Check if a file can be written (exists and has been read, or doesn't exist)
@@ -312,6 +327,64 @@ mod tests {
         assert!(result.is_success());
         assert!(file_path.exists());
         assert_eq!(fs::read_to_string(&file_path).unwrap(), "Hello, World!");
+    }
+
+    #[tokio::test]
+    async fn test_write_new_file_emits_add_file_change() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("new_file.txt");
+
+        let tool = create_write_tool();
+        let context = create_test_context(temp_dir.path());
+
+        let result = tool
+            .write_file(&file_path, "line1\nline2", &context)
+            .await
+            .unwrap();
+
+        let file_change = result
+            .metadata
+            .get("file_change")
+            .expect("write should emit file_change metadata");
+        assert_eq!(file_change["kind"], "add");
+        assert_eq!(file_change["lines_added"], 2);
+        assert_eq!(file_change["lines_removed"], 0);
+    }
+
+    #[tokio::test]
+    async fn test_write_overwrite_emits_update_file_change() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("existing.txt");
+        fs::write(&file_path, "alpha\nbeta").unwrap();
+
+        let history = super::super::create_shared_history();
+        let tool = WriteTool::new(history.clone());
+        let context = create_test_context(temp_dir.path());
+
+        // Simulate reading first so overwrite is allowed.
+        let content = fs::read(&file_path).unwrap();
+        let metadata = fs::metadata(&file_path).unwrap();
+        let hash = compute_content_hash(&content);
+        let mut record =
+            FileReadRecord::new(file_path.clone(), hash, metadata.len()).with_line_count(2);
+        if let Ok(mtime) = metadata.modified() {
+            record = record.with_mtime(mtime);
+        }
+        history.write().unwrap().record_read(record);
+
+        let result = tool
+            .write_file(&file_path, "alpha\nBETA\ngamma", &context)
+            .await
+            .unwrap();
+
+        let file_change = result
+            .metadata
+            .get("file_change")
+            .expect("overwrite should emit file_change metadata");
+        assert_eq!(file_change["kind"], "update");
+        // beta -> BETA 一删一增，gamma 一增
+        assert_eq!(file_change["lines_added"], 2);
+        assert_eq!(file_change["lines_removed"], 1);
     }
 
     #[tokio::test]

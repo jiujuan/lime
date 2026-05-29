@@ -175,16 +175,66 @@ export function reconcileAgentStreamFinalContentParts(params: {
     return visibleParts;
   }
 
-  const processParts = visibleParts.filter((part) => part.type !== "text");
-  if (processParts.length === 0) {
-    return params.finalContent
-      ? [{ type: "text", text: params.finalContent }]
-      : undefined;
+  if (!params.finalContent) {
+    const processParts = visibleParts.filter((part) => part.type !== "text");
+    return processParts.length > 0 ? processParts : undefined;
   }
 
-  return params.finalContent
-    ? [...processParts, { type: "text", text: params.finalContent }]
-    : processParts;
+  const textPartIndexes = visibleParts.flatMap((part, index) =>
+    part.type === "text" ? [index] : [],
+  );
+  if (textPartIndexes.length === 0) {
+    return [...visibleParts, { type: "text", text: params.finalContent }];
+  }
+
+  const nextParts = [...visibleParts];
+  if (params.finalContent.startsWith(textContent)) {
+    const suffix = params.finalContent.slice(textContent.length);
+    if (!suffix) {
+      return visibleParts;
+    }
+    const lastPartIndex = nextParts.length - 1;
+    const lastPart = nextParts[lastPartIndex];
+    if (lastPart?.type === "text") {
+      nextParts[lastPartIndex] = {
+        type: "text",
+        text: `${lastPart.text}${suffix}`,
+      };
+      return nextParts;
+    }
+    return [...nextParts, { type: "text", text: suffix }];
+  }
+
+  if (textPartIndexes.length === 1) {
+    nextParts[textPartIndexes[0]!] = {
+      type: "text",
+      text: params.finalContent,
+    };
+    return nextParts;
+  }
+
+  const textParts = textPartIndexes.map((index) => {
+    const part = visibleParts[index];
+    return part?.type === "text" ? part.text : "";
+  });
+  const prefixBeforeLast = textParts.slice(0, -1).join("");
+  if (params.finalContent.startsWith(prefixBeforeLast)) {
+    const lastTextIndex = textPartIndexes[textPartIndexes.length - 1]!;
+    nextParts[lastTextIndex] = {
+      type: "text",
+      text: params.finalContent.slice(prefixBeforeLast.length),
+    };
+    return nextParts;
+  }
+
+  const firstTextIndex = textPartIndexes[0]!;
+  const indexesToDrop = new Set(textPartIndexes.slice(1));
+  return nextParts.flatMap((part, index) => {
+    if (index === firstTextIndex) {
+      return [{ type: "text" as const, text: params.finalContent }];
+    }
+    return indexesToDrop.has(index) ? [] : [part];
+  });
 }
 
 function normalizeCompletionTextSignature(text: string): string {

@@ -235,7 +235,7 @@ describe("StreamingRenderer", () => {
 
     expect(container.textContent).not.toContain("只返回了元数据");
     expect(
-      container.querySelector('[data-testid="inline-tool-process-step"]'),
+      container.querySelector('[data-testid="streaming-process-group"]'),
     ).toBeTruthy();
     expect(container.textContent).toContain("已经整理出 3 个可信来源。");
   });
@@ -500,9 +500,18 @@ describe("StreamingRenderer", () => {
       onOpenSavedSiteContent,
     });
 
-    const markdownButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("在下方预览导出 Markdown"));
+    const processGroupButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+    expect(processGroupButton).toBeTruthy();
+
+    act(() => {
+      processGroupButton?.click();
+    });
+
+    const markdownButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("在下方预览导出 Markdown"),
+    );
     expect(markdownButton).toBeTruthy();
 
     act(() => {
@@ -539,7 +548,7 @@ describe("StreamingRenderer", () => {
     );
     expect(processGroupButton?.getAttribute("aria-expanded")).toBe("false");
     expect(container.textContent).not.toContain("先检查滚动触发逻辑");
-    expect(container.textContent).toContain("1 个工具调用");
+    expect(container.textContent).toContain("已运行 1 条命令");
     expect(
       container.querySelector('[data-testid="streaming-process-group"]'),
     ).toBeTruthy();
@@ -595,11 +604,12 @@ describe("StreamingRenderer", () => {
       '[data-testid="streaming-process-group"] button',
     );
     expect(processGroupButton?.getAttribute("aria-expanded")).toBe("false");
+    expect(container.textContent).toContain("已运行 1 条命令");
     expect(container.textContent).not.toContain("先检查 auto-scroll 触发条件");
-    expect(container.textContent).toContain("1 个工具调用");
     expect(
-      container.querySelector('[data-testid="streaming-process-group"]'),
-    ).toBeTruthy();
+      container.querySelector('[data-testid="inline-tool-process-step"]'),
+    ).toBeNull();
+    expect(container.textContent).toContain("已经定位到滚动没有跟随增量输出。");
 
     act(() => {
       processGroupButton?.click();
@@ -611,7 +621,197 @@ describe("StreamingRenderer", () => {
         .querySelector('[data-testid="inline-tool-process-step"]')
         ?.getAttribute("data-grouped"),
     ).toBe("yes");
-    expect(container.textContent).toContain("已经定位到滚动没有跟随增量输出。");
+  });
+
+  it("交错内容里相邻多次命令应折叠为一条过程摘要", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "thinking",
+          text: "先盘点目录",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-interleaved-1",
+            name: "Bash",
+            arguments: JSON.stringify({ command: "ls /tmp" }),
+            status: "completed",
+            result: { success: true, output: "ok" },
+            startTime: new Date("2026-05-29T10:00:00.000Z"),
+            endTime: new Date("2026-05-29T10:00:01.000Z"),
+          },
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-interleaved-2",
+            name: "Bash",
+            arguments: JSON.stringify({ command: "stat /tmp" }),
+            status: "completed",
+            result: { success: true, output: "ok" },
+            startTime: new Date("2026-05-29T10:00:02.000Z"),
+            endTime: new Date("2026-05-29T10:00:03.000Z"),
+          },
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-interleaved-3",
+            name: "Bash",
+            arguments: JSON.stringify({ command: "du -sh /tmp" }),
+            status: "completed",
+            result: { success: true, output: "ok" },
+            startTime: new Date("2026-05-29T10:00:04.000Z"),
+            endTime: new Date("2026-05-29T10:00:05.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "目录已盘点。",
+        },
+      ],
+      isStreaming: false,
+    });
+
+    const processGroupButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("false");
+    expect(container.textContent).toContain("已运行 3 条命令");
+    expect(container.textContent).not.toContain("先盘点目录");
+    expect(
+      container.querySelectorAll(
+        '[data-testid="inline-tool-process-step"]',
+      ).length,
+    ).toBe(0);
+    expect(container.textContent).toContain("目录已盘点。");
+
+    act(() => {
+      processGroupButton?.click();
+    });
+
+    const expandedToolSteps = container.querySelectorAll(
+      '[data-testid="inline-tool-process-step"]',
+    );
+    expect(expandedToolSteps.length).toBe(3);
+    expect(expandedToolSteps[0]?.getAttribute("data-grouped")).toBe("yes");
+    expect(container.textContent).toContain("先盘点目录");
+  });
+
+  it("交错内容里的工具折叠不应跨正文合并", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "text",
+          text: "先说明检查目标。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-before-text-1",
+            name: "Bash",
+            arguments: JSON.stringify({ command: "ls /tmp" }),
+            status: "completed",
+            result: { success: true, output: "ok" },
+            startTime: new Date("2026-05-29T10:00:00.000Z"),
+            endTime: new Date("2026-05-29T10:00:01.000Z"),
+          },
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-before-text-2",
+            name: "Bash",
+            arguments: JSON.stringify({ command: "pwd" }),
+            status: "completed",
+            result: { success: true, output: "ok" },
+            startTime: new Date("2026-05-29T10:00:02.000Z"),
+            endTime: new Date("2026-05-29T10:00:03.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "中间结论已经确认。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-after-text-1",
+            name: "Bash",
+            arguments: JSON.stringify({ command: "git status --short" }),
+            status: "completed",
+            result: { success: true, output: "ok" },
+            startTime: new Date("2026-05-29T10:00:04.000Z"),
+            endTime: new Date("2026-05-29T10:00:05.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "最终结论。",
+        },
+      ],
+      isStreaming: false,
+    });
+
+    expect(
+      container.querySelectorAll('[data-testid="streaming-process-group"]')
+        .length,
+    ).toBe(2);
+
+    const renderedText = container.textContent || "";
+    const firstTextIndex = renderedText.indexOf("先说明检查目标。");
+    const firstGroupIndex = renderedText.indexOf("已运行 2 条命令");
+    const middleTextIndex = renderedText.indexOf("中间结论已经确认。");
+    const secondGroupIndex = renderedText.indexOf("已运行 1 条命令");
+    const finalTextIndex = renderedText.indexOf("最终结论。");
+
+    expect(firstTextIndex).toBeGreaterThanOrEqual(0);
+    expect(firstGroupIndex).toBeGreaterThan(firstTextIndex);
+    expect(middleTextIndex).toBeGreaterThan(firstGroupIndex);
+    expect(secondGroupIndex).toBeGreaterThan(middleTextIndex);
+    expect(finalTextIndex).toBeGreaterThan(secondGroupIndex);
+  });
+
+  it("交错内容里只有思考时也应渲染为轻量折叠过程行", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "thinking",
+          text: "先理解截图里的消息顺序\n再核对历史恢复路径",
+        },
+        {
+          type: "text",
+          text: "已经确认历史恢复路径也需要穿插显示。",
+        },
+      ],
+      isStreaming: false,
+    });
+
+    const processGroupButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("false");
+    expect(container.textContent).toContain("先理解截图里的消息顺序");
+    expect(
+      container.querySelector('[data-testid="thinking-block"]'),
+    ).toBeNull();
+    expect(container.textContent).toContain(
+      "已经确认历史恢复路径也需要穿插显示。",
+    );
+
+    act(() => {
+      processGroupButton?.click();
+    });
+
+    expect(
+      container
+        .querySelector('[data-testid="thinking-block"]')
+        ?.getAttribute("data-visual-style"),
+    ).toBe("grouped-inline");
   });
 
   it("抑制过程流时，非交错模式不应重复渲染思考、工具和确认卡", () => {
@@ -1030,25 +1230,24 @@ describe("StreamingRenderer", () => {
   });
 
   it("运行中的过程组应展开，完成后自动折叠为摘要", () => {
-    const processParts: ContentPart[] = [
-      {
-        type: "thinking",
-        text: "先确认过程组行高\n再和工具行对齐",
-      },
-      {
-        type: "tool_use",
-        toolCall: {
-          id: "tool-process-group-running",
-          name: "functions.exec_command",
-          arguments: JSON.stringify({ cmd: "rg -n thinking src" }),
-          status: "running",
-          startTime: new Date("2026-03-29T08:40:00.000Z"),
-        },
-      },
-    ];
     const { container, rerender } = renderHarness({
       content: "",
-      contentParts: processParts,
+      contentParts: [
+        {
+          type: "thinking",
+          text: "先确认过程组行高\n再和工具行对齐",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-process-group-running",
+            name: "functions.exec_command",
+            arguments: JSON.stringify({ cmd: "rg -n thinking src" }),
+            status: "running",
+            startTime: new Date("2026-03-29T08:40:00.000Z"),
+          },
+        },
+      ],
       isStreaming: true,
     });
 
@@ -1065,7 +1264,10 @@ describe("StreamingRenderer", () => {
     rerender({
       content: "",
       contentParts: [
-        processParts[0]!,
+        {
+          type: "thinking",
+          text: "先确认过程组行高\n再和工具行对齐",
+        },
         {
           type: "tool_use",
           toolCall: {
@@ -1087,7 +1289,7 @@ describe("StreamingRenderer", () => {
     );
     expect(completedProcessGroup).not.toBeNull();
     expect(completedProcessGroup?.getAttribute("aria-expanded")).toBe("false");
-    expect(container.textContent).toContain("1 条思路，1 个工具调用");
+    expect(container.textContent).toContain("已运行 1 条命令");
     expect(container.textContent).not.toContain("先确认过程组行高");
   });
 
@@ -1162,7 +1364,7 @@ describe("StreamingRenderer", () => {
     );
     expect(processGroup).not.toBeNull();
     expect(processGroup?.getAttribute("aria-expanded")).toBe("false");
-    expect(container.textContent).toContain("1 条思路，1 个工具调用");
+    expect(container.textContent).toContain("已运行 1 条命令");
     expect(container.textContent).not.toContain("先确认过程组行高");
     expect(
       container.querySelector('[data-testid="thinking-block"]'),

@@ -6,6 +6,7 @@
  */
 
 import React, { memo, useMemo, useState, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ExternalLink, FileText, Loader2 } from "lucide-react";
 import { useDebouncedValue } from "@/lib/artifact/hooks/useDebouncedValue";
@@ -18,6 +19,7 @@ import { resolveThinkingDisplayParts } from "./thinkingBlockDisplay";
 import { DecisionPanel } from "./DecisionPanel";
 import { AgentPlanBlock } from "./AgentPlanBlock";
 import { RuntimePeerMessageCards } from "./RuntimePeerMessageCards";
+import { FileChangesSummaryCard } from "./FileChangesSummaryCard";
 import { parseAIResponse } from "@/lib/workspace/a2ui";
 import type {
   A2UIFormData,
@@ -51,6 +53,10 @@ import {
   summarizeStreamingToolBatch,
   type ToolBatchSummaryDescriptor,
 } from "../utils/toolBatchGrouping";
+import {
+  buildToolGroupHeadline,
+  getToolDisplayInfo,
+} from "../utils/toolDisplayInfo";
 import { resolveToolProcessNarrative } from "../utils/toolProcessSummary";
 
 const STRUCTURED_CONTENT_HINT_RE = /<a2ui|```\s*a2ui|<write_file|<document/i;
@@ -325,6 +331,7 @@ const StreamingText: React.FC<StreamingTextProps> = memo(
     markdownRenderMode = "standard",
     readOnlyA2UI = false,
   }) => {
+    const { t } = useTranslation("agent");
     const initialDisplayText = resolveInitialStreamingDisplayText(
       text,
       isStreaming,
@@ -530,7 +537,7 @@ const StreamingText: React.FC<StreamingTextProps> = memo(
                   <A2UITaskLoadingCard
                     key={`pending-${index}`}
                     preset={CHAT_A2UI_TASK_CARD_PRESET}
-                    subtitle="正在解析结构化问题，请稍等。"
+                    subtitle={t("agentChat.streamingRenderer.pendingA2ui")}
                     compact={true}
                     className="max-w-[432px]"
                   />
@@ -635,7 +642,7 @@ function buildStreamingProcessSummary(entries: StreamingProcessEntry[]): {
     (entry) => entry.kind === "thinking",
   ).length;
   const batchDescriptor =
-    toolEntries.length === entries.length
+    toolEntries.length > 1
       ? summarizeStreamingToolBatch(toolEntries.map((entry) => entry.toolCall))
       : null;
   if (batchDescriptor) {
@@ -647,18 +654,36 @@ function buildStreamingProcessSummary(entries: StreamingProcessEntry[]): {
   }
 
   const toolCount = toolEntries.length;
-  const messageCount = entries.length - toolCount;
-  const primarySummary = (() => {
-    if (thinkingCount > 0 && toolCount > 0) {
-      for (const entry of toolEntries) {
-        const narrative = resolveToolProcessNarrative(entry.toolCall);
-        if (narrative.preSummary || narrative.summary) {
-          return narrative.preSummary || narrative.summary;
-        }
-      }
-      return "正在处理过程步骤";
+  if (toolCount > 0) {
+    const toolCalls = toolEntries.map((entry) => entry.toolCall);
+    const families = new Set(
+      toolCalls.map((toolCall) =>
+        getToolDisplayInfo(toolCall.name, toolCall.status).family,
+      ),
+    );
+    if (families.size === 1) {
+      return {
+        summaryText: buildToolGroupHeadline(toolCalls),
+        descriptor: null,
+        metaText: null,
+      };
     }
 
+    const failed = toolCalls.some((toolCall) => toolCall.status === "failed");
+    const running = toolCalls.some((toolCall) => toolCall.status === "running");
+    return {
+      summaryText: failed
+        ? `失败 ${toolCount} 个步骤`
+        : running
+          ? `进行中 ${toolCount} 个步骤`
+          : `已完成 ${toolCount} 个步骤`,
+      descriptor: null,
+      metaText: null,
+    };
+  }
+
+  const messageCount = entries.length - toolCount;
+  const primarySummary = (() => {
     for (const entry of entries) {
       if (entry.kind === "thinking") {
         const preview = resolveThinkingDisplayParts(
@@ -922,6 +947,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
     readOnlyA2UI = false,
     readOnlyActionRequests = false,
   }) => {
+    const { t } = useTranslation("agent");
     const shouldRenderInlineActionRequest = React.useCallback(
       (request: ActionRequired) =>
         suppressedActionRequestId !== request.requestId,
@@ -1175,7 +1201,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
                   </span>
                   {part.filePath ? (
                     <span className="inline-flex items-center gap-1 text-xs text-slate-400 transition group-hover:text-sky-700">
-                      <span>在画布中打开</span>
+                      <span>{t("agentChat.streamingRenderer.openCanvas")}</span>
                       <ExternalLink className="h-3.5 w-3.5" />
                     </span>
                   ) : null}
@@ -1185,7 +1211,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
           </div>
         );
       },
-      [isStreaming, onFileClick],
+      [isStreaming, onFileClick, t],
     );
 
     const renderActionRequestNode = React.useCallback(
@@ -1300,7 +1326,11 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
     );
 
     const renderProcessRun = React.useCallback(
-      (entries: StreamingProcessEntry[], key: string) => {
+      (
+        entries: StreamingProcessEntry[],
+        key: string,
+        options?: { forceGroup?: boolean },
+      ) => {
         if (entries.length === 0) {
           return null;
         }
@@ -1308,7 +1338,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         const toolCount = entries.filter(
           (entry) => entry.kind === "tool",
         ).length;
-        if (toolCount > 0 && entries.length > 1) {
+        if (options?.forceGroup || (toolCount > 0 && entries.length > 1)) {
           return (
             <StreamingProcessGroup
               key={key}
@@ -1374,7 +1404,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
                 <A2UITaskLoadingCard
                   key={`${keyPrefix}-pending-${index}`}
                   preset={CHAT_A2UI_TASK_CARD_PRESET}
-                  subtitle="正在解析结构化问题，请稍等。"
+                  subtitle={t("agentChat.streamingRenderer.pendingA2ui")}
                   compact={true}
                   className="max-w-[432px]"
                 />
@@ -1432,6 +1462,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         showContentBlockActions,
         shouldCollapseCodeBlock,
         shouldShowCursor,
+        t,
       ],
     );
 
@@ -1517,6 +1548,9 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
           if (part.type === "tool_use") {
             return true;
           }
+          if (part.type === "file_changes_batch") {
+            return part.aggregate.fileCount > 0;
+          }
           return shouldRenderInlineActionRequest(part.actionRequired);
         }) ||
         (isStreaming &&
@@ -1540,6 +1574,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         const renderedRun = renderProcessRun(
           processBuffer,
           `interleaved-process-${keySuffix}`,
+          { forceGroup: true },
         );
         if (renderedRun) {
           nodes.push(renderedRun);
@@ -1585,15 +1620,34 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
           return;
         }
 
-        if (
-          !suppressProcessFlow &&
-          shouldRenderInlineActionRequest(part.actionRequired)
-        ) {
-          processBuffer.push({
-            kind: "action",
-            id: part.actionRequired.requestId,
-            actionRequired: part.actionRequired,
-          });
+        if (part.type === "file_changes_batch") {
+          if (suppressProcessFlow) {
+            return;
+          }
+          flushProcessBuffer(String(index));
+          nodes.push(
+            <FileChangesSummaryCard
+              key={`file-changes-${index}`}
+              aggregate={part.aggregate}
+              isStreaming={isStreaming}
+              onFileClick={
+                onFileClick ? (path) => onFileClick(path, "") : undefined
+              }
+            />,
+          );
+          return;
+        }
+
+        if (!suppressProcessFlow) {
+          flushProcessBuffer(String(index));
+          const actionNode = renderActionRequestNode(part.actionRequired);
+          if (actionNode) {
+            nodes.push(
+              <React.Fragment key={`action-${part.actionRequired.requestId}`}>
+                {actionNode}
+              </React.Fragment>,
+            );
+          }
         }
       });
 

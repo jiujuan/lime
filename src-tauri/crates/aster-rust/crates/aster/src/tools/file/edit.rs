@@ -15,7 +15,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use super::{compute_content_hash, FileReadRecord, SharedFileReadHistory};
+use super::{compute_content_hash, diff_summary, FileReadRecord, SharedFileReadHistory};
 use crate::tools::base::{PermissionCheckResult, Tool};
 use crate::tools::context::{ToolContext, ToolOptions, ToolResult};
 use crate::tools::error::ToolError;
@@ -281,11 +281,18 @@ impl EditTool {
             new_str.len()
         );
 
+        let file_change = diff_summary::build_summary(
+            full_path.to_string_lossy().to_string(),
+            Some(&content),
+            &new_content,
+        );
+
         Ok(
             ToolResult::success(format!("Successfully edited {}", full_path.display()))
                 .with_metadata("path", serde_json::json!(full_path.to_string_lossy()))
                 .with_metadata("old_length", serde_json::json!(old_str.len()))
-                .with_metadata("new_length", serde_json::json!(new_str.len())),
+                .with_metadata("new_length", serde_json::json!(new_str.len()))
+                .with_metadata("file_change", file_change.to_metadata_value()),
         )
     }
 
@@ -416,13 +423,20 @@ impl EditTool {
             edits.len()
         );
 
+        let file_change = diff_summary::build_summary(
+            full_path.to_string_lossy().to_string(),
+            Some(&original_content),
+            &content,
+        );
+
         Ok(ToolResult::success(format!(
             "Successfully applied {} edits to {}",
             edits.len(),
             full_path.display()
         ))
         .with_metadata("path", serde_json::json!(full_path.to_string_lossy()))
-        .with_metadata("edit_count", serde_json::json!(edits.len())))
+        .with_metadata("edit_count", serde_json::json!(edits.len()))
+        .with_metadata("file_change", file_change.to_metadata_value()))
     }
 }
 
@@ -691,6 +705,40 @@ mod tests {
 
         assert!(result.is_success());
         assert_eq!(fs::read_to_string(&file_path).unwrap(), "hello universe");
+    }
+
+    #[tokio::test]
+    async fn test_edit_file_emits_update_file_change() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("multi.txt");
+        fs::write(&file_path, "alpha\nbeta\ngamma").unwrap();
+
+        let history = super::super::create_shared_history();
+        let tool = create_edit_tool_with_history(history.clone());
+        let context = create_test_context(temp_dir.path());
+
+        let content = fs::read(&file_path).unwrap();
+        let metadata = fs::metadata(&file_path).unwrap();
+        let hash = compute_content_hash(&content);
+        let mut record = FileReadRecord::new(file_path.clone(), hash, metadata.len());
+        if let Ok(mtime) = metadata.modified() {
+            record = record.with_mtime(mtime);
+        }
+        history.write().unwrap().record_read(record);
+
+        let result = tool
+            .edit_file(&file_path, "beta", "BETA", &context)
+            .await
+            .unwrap();
+
+        let file_change = result
+            .metadata
+            .get("file_change")
+            .expect("edit should emit file_change metadata");
+        assert_eq!(file_change["kind"], "update");
+        assert_eq!(file_change["lines_added"], 1);
+        assert_eq!(file_change["lines_removed"], 1);
+        assert_eq!(file_change["path"], file_path.to_string_lossy().as_ref());
     }
 
     #[tokio::test]

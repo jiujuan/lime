@@ -123,6 +123,13 @@ describe("buildCanvasTeamWorkbenchView", () => {
       value: "3/3",
       detail: "2 项处理中，1 项排队中。",
     });
+    expect(view.preferActiveOnMount).toBe(true);
+  });
+
+  it("没有任务活动时不应展示任务工作台", () => {
+    const view = buildView();
+
+    expect(view).toBeNull();
   });
 
   it("等待摘要应提示检查任务状态", () => {
@@ -153,6 +160,7 @@ describe("buildCanvasTeamWorkbenchView", () => {
       detail: "等待结果超时，建议重新检查任务状态。",
     });
     expect(view.panelCopy?.emptyText).toBe("当前没有可展示的生成结果。");
+    expect(view.preferActiveOnMount).toBe(true);
   });
 });
 

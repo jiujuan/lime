@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
   Bot,
@@ -12,7 +13,6 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtocol";
 import type {
   ActionRequired,
   AgentThreadItem,
@@ -39,19 +39,34 @@ import { ToolCallItem } from "./ToolCallDisplay";
 import { DecisionPanel } from "./DecisionPanel";
 import { AgentThreadTimelineArtifactCard } from "./AgentThreadTimelineArtifactCard";
 import type { ArtifactTimelineOpenTarget } from "../utils/artifactTimelineNavigation";
-import { normalizeProcessDisplayText } from "../utils/processDisplayText";
 import {
-  normalizeTurnSummaryDisplayText,
   shouldHideTurnSummaryFromConversation,
 } from "../utils/turnSummaryPresentation";
 import {
-  isPendingRuntimeActionConfirmation,
-  isRuntimeActionConfirmationRequestId,
-  isRuntimeActionConfirmationThreadItem,
   isRuntimePermissionConfirmationWaitMessage,
-  isSubmittedRuntimeActionConfirmation,
 } from "../utils/runtimeActionConfirmation";
-import { resolveAgentRuntimeErrorPresentation } from "../utils/agentRuntimeErrorPresentation";
+import {
+  toActionRequired,
+  toToolCallState,
+  resolveStatusBadgeVariant,
+  resolveItemStatusLabel,
+  formatTimestamp,
+  stringifyItemForDebug,
+  resolveUserFacingErrorMessage,
+  resolveThinkingDisplayText,
+  resolveTurnSummaryDisplayText,
+  extractCompactThinkingParts,
+  isThinkingTimelineItem,
+  resolveActiveBlockIndex,
+  resolveFocusBlockIndex,
+  resolveExpandedBlockIndexes,
+  resolveBlockSummaryLines,
+  resolveProcessMixLabel,
+  isInternalThinkingPreviewLine,
+  resolveThreadInlineStatusHint,
+  resolvePendingRuntimeConfirmationPrompt,
+  hasSubmittedRuntimeActionConfirmation,
+} from "./timeline-utils";
 
 interface AgentThreadTimelineProps {
   turn: AgentThreadTurn;
@@ -76,312 +91,6 @@ interface AgentThreadTimelineProps {
   focusRequestKey?: number;
   deferCompletedSingleDetails?: boolean;
   collapseInactiveDetails?: boolean;
-}
-
-function shortenInlineText(
-  value: string | undefined | null,
-  maxLength = 72,
-): string | null {
-  const normalized = (value || "").trim().replace(/\s+/g, " ");
-  if (!normalized) {
-    return null;
-  }
-
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
-
-  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
-}
-
-function normalizeComparableThinkingText(value: string): string {
-  return value.trim().replace(/\s+/g, " ");
-}
-
-function resolveReasoningDisplayText(
-  item: Extract<AgentThreadItem, { type: "reasoning" }>,
-): {
-  summaryText: string;
-  bodyText: string;
-  combinedText: string;
-} {
-  const summaryText = normalizeProcessDisplayText(
-    (item.summary || [])
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .join("\n\n"),
-  );
-  const bodyText = normalizeProcessDisplayText(item.text.trim());
-
-  if (!summaryText) {
-    return {
-      summaryText: "",
-      bodyText,
-      combinedText: bodyText,
-    };
-  }
-
-  if (!bodyText) {
-    return {
-      summaryText,
-      bodyText: "",
-      combinedText: summaryText,
-    };
-  }
-
-  if (
-    normalizeComparableThinkingText(summaryText) ===
-    normalizeComparableThinkingText(bodyText)
-  ) {
-    return {
-      summaryText,
-      bodyText: "",
-      combinedText: summaryText,
-    };
-  }
-
-  return {
-    summaryText,
-    bodyText,
-    combinedText: normalizeProcessDisplayText(`${summaryText}\n\n${bodyText}`),
-  };
-}
-
-function resolveThinkingDisplayText(
-  item: Extract<AgentThreadItem, { type: "reasoning" }>,
-): string {
-  return resolveReasoningDisplayText(item).combinedText;
-}
-
-function resolveTurnSummaryDisplayText(
-  item: Extract<AgentThreadItem, { type: "turn_summary" }>,
-): string {
-  return normalizeTurnSummaryDisplayText(item.text);
-}
-
-function formatTimestamp(value?: string): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return date.toLocaleTimeString("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function toQuestionOptions(
-  options: Array<{ label: string; description?: string }> | undefined,
-) {
-  return options?.map((option) => ({
-    label: option.label,
-    description: option.description,
-  }));
-}
-
-function stringifyResponse(value: unknown): string | undefined {
-  if (typeof value === "string") {
-    const normalized = value.trim();
-    return normalized || undefined;
-  }
-
-  if (value === null || value === undefined) {
-    return undefined;
-  }
-
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
-
-function toActionRequired(item: AgentThreadItem): ActionRequired | null {
-  if (item.type === "approval_request") {
-    return {
-      requestId: item.request_id,
-      actionType: "tool_confirmation",
-      toolName: item.tool_name,
-      arguments:
-        item.arguments && typeof item.arguments === "object"
-          ? (item.arguments as Record<string, unknown>)
-          : undefined,
-      prompt: item.prompt,
-      status: item.status === "completed" ? "submitted" : "pending",
-      submittedResponse: stringifyResponse(item.response),
-      submittedUserData: item.response,
-    };
-  }
-
-  if (item.type === "request_user_input") {
-    return {
-      requestId: item.request_id,
-      actionType:
-        item.action_type === "elicitation" ? "elicitation" : "ask_user",
-      prompt: item.prompt,
-      questions: item.questions?.map((question) => ({
-        question: question.question,
-        header: question.header,
-        options: toQuestionOptions(question.options),
-        multiSelect: question.multi_select,
-      })),
-      status: item.status === "completed" ? "submitted" : "pending",
-      submittedResponse: stringifyResponse(item.response),
-      submittedUserData: item.response,
-    };
-  }
-
-  return null;
-}
-
-function mapItemStatus(
-  status: AgentThreadItem["status"],
-): ToolCallState["status"] {
-  if (status === "failed") {
-    return "failed";
-  }
-  return status === "completed" ? "completed" : "running";
-}
-
-function toToolCallState(item: AgentThreadItem): ToolCallState | null {
-  switch (item.type) {
-    case "tool_call":
-      return {
-        id: item.id,
-        name: item.tool_name,
-        arguments:
-          item.arguments === undefined
-            ? undefined
-            : JSON.stringify(item.arguments, null, 2),
-        status: mapItemStatus(item.status),
-        result:
-          item.output !== undefined ||
-          item.error !== undefined ||
-          item.metadata !== undefined
-            ? {
-                success:
-                  item.success ??
-                  (item.status === "completed" && item.error === undefined),
-                output: item.output || "",
-                error: item.error,
-                metadata:
-                  item.metadata && typeof item.metadata === "object"
-                    ? (item.metadata as Record<string, unknown>)
-                    : undefined,
-              }
-            : undefined,
-        startTime: new Date(item.started_at),
-        endTime: item.completed_at ? new Date(item.completed_at) : undefined,
-      };
-    case "command_execution":
-      return {
-        id: item.id,
-        name: "exec_command",
-        arguments: JSON.stringify(
-          { command: item.command, cwd: item.cwd },
-          null,
-          2,
-        ),
-        status: mapItemStatus(item.status),
-        result:
-          item.aggregated_output !== undefined ||
-          item.error !== undefined ||
-          item.exit_code !== undefined
-            ? {
-                success:
-                  item.status === "completed" && item.error === undefined,
-                output: item.aggregated_output || "",
-                error: item.error,
-                metadata:
-                  item.exit_code !== undefined
-                    ? { exit_code: item.exit_code, cwd: item.cwd }
-                    : { cwd: item.cwd },
-              }
-            : undefined,
-        startTime: new Date(item.started_at),
-        endTime: item.completed_at ? new Date(item.completed_at) : undefined,
-      };
-    case "web_search":
-      return {
-        id: item.id,
-        name: item.action || "web_search",
-        arguments:
-          item.query !== undefined
-            ? JSON.stringify({ query: item.query }, null, 2)
-            : undefined,
-        status: mapItemStatus(item.status),
-        result:
-          item.output !== undefined
-            ? {
-                success: item.status !== "failed",
-                output: item.output,
-              }
-            : undefined,
-        startTime: new Date(item.started_at),
-        endTime: item.completed_at ? new Date(item.completed_at) : undefined,
-      };
-    default:
-      return null;
-  }
-}
-
-function resolveStatusBadgeVariant(
-  status: AgentThreadItem["status"],
-): "secondary" | "outline" | "destructive" {
-  if (status === "failed") {
-    return "destructive";
-  }
-  return status === "completed" ? "outline" : "secondary";
-}
-
-function findLatestPendingAction(
-  actionRequests: ActionRequired[] | undefined,
-): ActionRequired | null {
-  if (!actionRequests?.length) {
-    return null;
-  }
-
-  for (let index = actionRequests.length - 1; index >= 0; index -= 1) {
-    const actionRequest = actionRequests[index];
-    if (actionRequest.status !== "submitted") {
-      return actionRequest;
-    }
-  }
-
-  return null;
-}
-
-function resolveItemStatusLabel(status: AgentThreadItem["status"]): string {
-  switch (status) {
-    case "in_progress":
-      return "执行中";
-    case "failed":
-      return "失败";
-    case "completed":
-    default:
-      return "已完成";
-  }
-}
-
-function stringifyItemForDebug(item: AgentThreadItem): string {
-  try {
-    return JSON.stringify(item, null, 2);
-  } catch {
-    return String(item);
-  }
-}
-
-function resolveUserFacingErrorMessage(errorMessage?: string | null): string {
-  const normalized = errorMessage?.trim();
-  if (!normalized) {
-    return "";
-  }
-  return resolveAgentRuntimeErrorPresentation(normalized).displayMessage;
 }
 
 function SurfaceCard({
@@ -423,6 +132,7 @@ function ThinkingItemCard({
 }: {
   item: Extract<AgentThreadItem, { type: "reasoning" | "turn_summary" }>;
 }) {
+  const { t } = useTranslation("agent");
   const displayText = useMemo(
     () =>
       item.type === "reasoning"
@@ -467,7 +177,7 @@ function ThinkingItemCard({
               key={`timeline-pending-a2ui-${index}`}
               compact={true}
               preset={TIMELINE_A2UI_TASK_CARD_PRESET}
-              subtitle="这一步还在整理，稍等一下。"
+              subtitle={t("agentChat.threadTimeline.pendingA2ui")}
             />
           );
         }
@@ -535,6 +245,7 @@ function ContextCompactionCard({
 }: {
   item: Extract<AgentThreadItem, { type: "context_compaction" }>;
 }) {
+  const { t } = useTranslation("agent");
   const triggerLabel =
     item.trigger === "manual"
       ? "手动压缩"
@@ -563,7 +274,7 @@ function ContextCompactionCard({
       {item.status === "in_progress" ? (
         <div className="mt-1 inline-flex items-center gap-1 text-xs text-slate-500">
           <Loader2 className="h-3 w-3 animate-spin" />
-          <span>压缩中</span>
+          <span>{t("agentChat.threadTimeline.compacting")}</span>
         </div>
       ) : null}
     </SurfaceCard>
@@ -620,97 +331,6 @@ function renderThinkingItemDetails(item: AgentThreadItem) {
 
   if (item.type === "context_compaction") {
     return <ContextCompactionCard item={item} />;
-  }
-
-  return null;
-}
-
-function isThinkingTimelineItem(
-  item: AgentThreadItem,
-): item is Extract<
-  AgentThreadItem,
-  { type: "plan" | "reasoning" | "turn_summary" | "context_compaction" }
-> {
-  return (
-    item.type === "plan" ||
-    item.type === "reasoning" ||
-    item.type === "turn_summary" ||
-    item.type === "context_compaction"
-  );
-}
-
-function isToolExecutionTimelineItem(item: AgentThreadItem): boolean {
-  return (
-    item.type === "tool_call" ||
-    item.type === "command_execution" ||
-    item.type === "web_search"
-  );
-}
-
-function extractCompactThinkingParts(
-  item: Extract<
-    AgentThreadItem,
-    { type: "plan" | "reasoning" | "turn_summary" | "context_compaction" }
-  >,
-) {
-  if (item.type === "context_compaction") {
-    const title =
-      item.stage === "completed" || item.status === "completed"
-        ? "压了上下文"
-        : "正在压上下文";
-    const detail =
-      item.detail?.trim() ||
-      (item.stage === "completed" || item.status === "completed"
-        ? "把前面的对话压成摘要了，后面接着做。"
-        : "在把前面的对话压成摘要，马上继续。");
-    return { title, detail };
-  }
-
-  if (item.type === "plan") {
-    return {
-      title: item.status === "in_progress" ? "还在排步骤" : "定了这些步骤",
-      detail: item.text.trim(),
-    };
-  }
-
-  if (item.type === "reasoning") {
-    const { summaryText, bodyText, combinedText } =
-      resolveReasoningDisplayText(item);
-    const previewSource = summaryText || combinedText;
-    const lines = previewSource
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    const [
-      title = item.status === "in_progress" ? "思考中" : "已完成思考",
-      ...rest
-    ] = lines;
-    const detail = [rest.join("\n").trim(), bodyText]
-      .filter(Boolean)
-      .join("\n\n");
-
-    const parsed = parseAIResponse(combinedText, false);
-    if (parsed.hasA2UI || parsed.hasPending) {
-      return null;
-    }
-
-    return {
-      title,
-      detail,
-    };
-  }
-
-  if (item.type === "turn_summary") {
-    const displayText = resolveTurnSummaryDisplayText(item);
-    const parsed = parseAIResponse(displayText, false);
-    if (parsed.hasA2UI || parsed.hasPending) {
-      return null;
-    }
-
-    return {
-      title: item.status === "in_progress" ? "处理中" : "当前进展",
-      detail: shouldHideTurnSummaryFromConversation(item) ? "" : displayText,
-    };
   }
 
   return null;
@@ -784,6 +404,7 @@ function renderGroupItemDetails(
   options?: {
     groupedToolCall?: boolean;
     groupMarker?: string;
+    openSubagentLabel?: string;
     sourceMessageId?: string;
     onSaveFileArtifactAsKnowledge?: (source: {
       messageId: string;
@@ -899,7 +520,7 @@ function renderGroupItemDetails(
               variant="outline"
               onClick={() => onOpenSubagentSession(subagentSessionId)}
             >
-              查看子任务详情
+              {options?.openSubagentLabel}
             </Button>
           </div>
         ) : null}
@@ -964,6 +585,7 @@ function renderTimelineItemDetails(
   options?: {
     groupedToolCall?: boolean;
     groupMarker?: string;
+    openSubagentLabel?: string;
     sourceMessageId?: string;
     onSaveFileArtifactAsKnowledge?: (source: {
       messageId: string;
@@ -990,418 +612,6 @@ function renderTimelineItemDetails(
     onOpenSubagentSession,
     onPermissionResponse,
     options,
-  );
-}
-
-function resolveCompactTechnicalSummary(
-  block: AgentThreadOrderedBlock,
-): string {
-  return `处理了 ${block.items.length} 个步骤`;
-}
-
-function resolveActiveBlockIndex(blocks: AgentThreadOrderedBlock[]): number {
-  for (let index = blocks.length - 1; index >= 0; index -= 1) {
-    if (blocks[index]?.status === "in_progress") {
-      return index;
-    }
-  }
-
-  return -1;
-}
-
-function findLastBlockIndex(
-  blocks: AgentThreadOrderedBlock[],
-  predicate: (block: AgentThreadOrderedBlock) => boolean,
-): number {
-  for (let index = blocks.length - 1; index >= 0; index -= 1) {
-    if (predicate(blocks[index])) {
-      return index;
-    }
-  }
-
-  return -1;
-}
-
-function resolveFocusBlockIndex(params: {
-  blocks: AgentThreadOrderedBlock[];
-  turn: AgentThreadTurn;
-  actionRequests?: ActionRequired[];
-  activeBlockIndex: number;
-}): number {
-  const { blocks, turn, actionRequests, activeBlockIndex } = params;
-
-  if (blocks.length === 0) {
-    return -1;
-  }
-
-  if (activeBlockIndex >= 0) {
-    return activeBlockIndex;
-  }
-
-  const pendingAction = findLatestPendingAction(actionRequests);
-
-  if (pendingAction) {
-    const pendingIndex = findLastBlockIndex(
-      blocks,
-      (block) => block.kind === "approval" || block.kind === "alert",
-    );
-    if (pendingIndex >= 0) {
-      return pendingIndex;
-    }
-  }
-
-  if (turn.status === "failed" || turn.status === "aborted") {
-    const failedIndex = findLastBlockIndex(
-      blocks,
-      (block) => block.status === "failed" || block.kind === "alert",
-    );
-    if (failedIndex >= 0) {
-      return failedIndex;
-    }
-  }
-
-  const lastMeaningfulIndex = findLastBlockIndex(
-    blocks,
-    (block) => block.kind !== "other",
-  );
-  if (lastMeaningfulIndex >= 0) {
-    return lastMeaningfulIndex;
-  }
-
-  return blocks.length - 1;
-}
-
-function resolveExpandedBlockIndexes(params: {
-  blocks: AgentThreadOrderedBlock[];
-  isCurrentTurn: boolean;
-  focusBlockIndex: number;
-  turn: AgentThreadTurn;
-  collapseInactiveDetails?: boolean;
-}): Set<number> {
-  const {
-    blocks,
-    isCurrentTurn,
-    focusBlockIndex,
-    turn,
-    collapseInactiveDetails = false,
-  } = params;
-  const expanded = new Set<number>();
-
-  blocks.forEach((block, index) => {
-    if (
-      isCurrentTurn &&
-      turn.status === "running" &&
-      block.kind === "process" &&
-      block.status === "in_progress"
-    ) {
-      expanded.add(index);
-      return;
-    }
-
-    if (
-      block.defaultExpanded &&
-      (!collapseInactiveDetails ||
-        (block.kind === "approval" && block.status !== "completed") ||
-        block.kind === "alert")
-    ) {
-      expanded.add(index);
-    }
-  });
-
-  if (focusBlockIndex >= 0) {
-    const focusBlock = blocks[focusBlockIndex];
-    const shouldExpandFocus =
-      (focusBlock?.kind === "approval" && focusBlock.status !== "completed") ||
-      focusBlock?.kind === "alert" ||
-      turn.status === "failed" ||
-      turn.status === "aborted";
-
-    if (shouldExpandFocus && !collapseInactiveDetails) {
-      expanded.add(focusBlockIndex);
-    }
-
-    if (
-      shouldExpandFocus &&
-      !collapseInactiveDetails &&
-      isCurrentTurn &&
-      focusBlockIndex > 0
-    ) {
-      const previousBlock = blocks[focusBlockIndex - 1];
-      if (previousBlock?.kind !== "other") {
-        expanded.add(focusBlockIndex - 1);
-      }
-    }
-  }
-
-  return expanded;
-}
-
-function hasAnyPrefix(value: string, prefixes: string[]): boolean {
-  return prefixes.some((prefix) => value.startsWith(prefix));
-}
-
-function normalizeBlockPreviewLine(
-  kind: AgentThreadOrderedBlock["kind"],
-  line: string,
-): string {
-  const trimmed = line.trim();
-  if (!trimmed) {
-    return line;
-  }
-
-  if (
-    kind === "artifact" &&
-    !hasAnyPrefix(trimmed, [
-      "看了 ",
-      "读了 ",
-      "写了 ",
-      "改了 ",
-      "动了 ",
-      "产出了 ",
-    ])
-  ) {
-    return `产出了 ${trimmed}`;
-  }
-
-  if (
-    kind === "approval" &&
-    !hasAnyPrefix(trimmed, [
-      "等你补充：",
-      "等你确认：",
-      "等你补充信息",
-      "等你确认这一步",
-    ])
-  ) {
-    return `等你确认：${trimmed}`;
-  }
-
-  if (
-    kind === "alert" &&
-    !hasAnyPrefix(trimmed, ["收到提醒：", "碰到错误："])
-  ) {
-    return `收到提醒：${trimmed}`;
-  }
-
-  if (
-    kind === "subagent" &&
-    !hasAnyPrefix(trimmed, ["分给子任务", "子任务", "分给协作成员", "协作成员"])
-  ) {
-    return `分给子任务处理 ${trimmed}`;
-  }
-
-  return trimmed;
-}
-
-function resolveBlockSummaryLines(block: AgentThreadOrderedBlock): string[] {
-  const isTurnSummaryOnlyBlock =
-    block.items.length > 0 &&
-    block.items.every((item) => item.type === "turn_summary");
-  const isThinkingOnlyBlock = block.items.every((item) =>
-    isThinkingTimelineItem(item),
-  );
-  const normalizedPreviewLines = block.previewLines
-    .map((line) => normalizeBlockPreviewLine(block.kind, line))
-    .filter((line) => line.trim().length > 0)
-    .map((line) => shortenInlineText(line, 92) || line);
-
-  if (isTurnSummaryOnlyBlock) {
-    const headline = block.status === "in_progress" ? "处理中" : "当前进展";
-    if (normalizedPreviewLines.length > 0) {
-      return [
-        headline,
-        ...normalizedPreviewLines.filter((line) => line !== headline),
-      ];
-    }
-
-    return [headline];
-  }
-
-  if (isThinkingOnlyBlock) {
-    const headline = block.status === "in_progress" ? "思考中" : "已完成思考";
-    if (normalizedPreviewLines.length > 0) {
-      return [
-        headline,
-        ...normalizedPreviewLines.filter((line) => line !== headline),
-      ];
-    }
-
-    return [headline];
-  }
-
-  if (block.kind === "process" && block.items.length > 1) {
-    return [block.title, ...normalizedPreviewLines];
-  }
-
-  if (normalizedPreviewLines.length > 0) {
-    return normalizedPreviewLines;
-  }
-
-  if (block.kind === "approval") {
-    return [block.status === "completed" ? "这一步已经确认" : "等你确认这一步"];
-  }
-
-  if (block.kind === "alert") {
-    return [block.status === "failed" ? "碰到错误" : "收到提醒"];
-  }
-
-  if (block.kind === "subagent") {
-    return [block.status === "completed" ? "子任务已完成" : "子任务处理中"];
-  }
-
-  if (block.kind === "other") {
-    return [resolveCompactTechnicalSummary(block)];
-  }
-
-  return [block.title];
-}
-
-function resolveProcessMixLabel(block: AgentThreadOrderedBlock): string | null {
-  if (block.kind !== "process" || block.items.length <= 1) {
-    return null;
-  }
-
-  const toolCount = block.items.filter((item) =>
-    isToolExecutionTimelineItem(item),
-  ).length;
-  const thinkingCount = block.items.filter((item) =>
-    isThinkingTimelineItem(item),
-  ).length;
-
-  const parts: string[] = [];
-  if (toolCount > 0) {
-    parts.push(`${toolCount} 个工具步骤`);
-  }
-  if (thinkingCount > 0) {
-    parts.push(`${thinkingCount} 条思路`);
-  }
-
-  return parts.length > 0 ? parts.join("，") : null;
-}
-
-function isInternalThinkingPreviewLine(line: string): boolean {
-  const normalized = line.trim();
-  if (!normalized) {
-    return false;
-  }
-
-  return (
-    /^(我们被要求|我被要求|我需要|我们需要|我们先|我们要|需要理解用户|首先，?用户|We need to|The user asks?|The user wants|The prompt asks|I need to)/i.test(
-      normalized,
-    ) ||
-    /(用户的问题|用户问的是|用户要求|这似乎是一个关于|这个问题其实是在询问|我需要用|避免展开复杂流程|the user'?s question|the user requested)/i.test(
-      normalized,
-    )
-  );
-}
-
-function resolveThreadInlineStatusHint(params: {
-  turn: AgentThreadTurn;
-  actionRequests?: ActionRequired[];
-  runtimeConfirmationPrompt?: string | null;
-  hasSubmittedRuntimeConfirmation?: boolean;
-}) {
-  const pendingAction = findLatestPendingAction(params.actionRequests);
-
-  if (pendingAction) {
-    return {
-      tone: "warning" as const,
-      label: "待处理",
-      detail:
-        pendingAction.prompt?.trim() ||
-        "当前阶段在等待你确认，完成后会继续后续处理。",
-    };
-  }
-
-  if (params.runtimeConfirmationPrompt?.trim()) {
-    return {
-      tone: "warning" as const,
-      label: "待处理",
-      detail: params.runtimeConfirmationPrompt.trim(),
-    };
-  }
-
-  if (params.turn.status === "failed") {
-    if (isRuntimePermissionConfirmationWaitMessage(params.turn.error_message)) {
-      if (params.hasSubmittedRuntimeConfirmation) {
-        return {
-          tone: "neutral" as const,
-          label: "已确认",
-          detail: "已收到运行时权限确认，正在继续处理当前任务。",
-        };
-      }
-
-      return {
-        tone: "warning" as const,
-        label: "待处理",
-        detail: "当前阶段在等待你确认运行时权限。",
-      };
-    }
-  }
-
-  if (params.turn.status === "aborted") {
-    return {
-      tone: "neutral" as const,
-      label: "已暂停",
-      detail:
-        params.turn.error_message?.trim() ||
-        "当前阶段已暂停，你可以处理后继续下一步。",
-    };
-  }
-
-  if (params.turn.status === "failed" && params.turn.error_message?.trim()) {
-    return {
-      tone: "error" as const,
-      label: "失败",
-      detail: resolveUserFacingErrorMessage(params.turn.error_message),
-    };
-  }
-
-  return null;
-}
-
-function resolvePendingRuntimeConfirmationPrompt(params: {
-  items: AgentThreadItem[];
-  actionRequests?: ActionRequired[];
-}): string | null {
-  const actionRequests = params.actionRequests || [];
-  for (let index = actionRequests.length - 1; index >= 0; index -= 1) {
-    const actionRequest = actionRequests[index];
-    if (isPendingRuntimeActionConfirmation(actionRequest)) {
-      return actionRequest.prompt?.trim() || "当前阶段在等待你确认运行时权限。";
-    }
-  }
-
-  for (let index = params.items.length - 1; index >= 0; index -= 1) {
-    const item = params.items[index];
-    if (
-      isRuntimeActionConfirmationThreadItem(item) &&
-      item.status !== "completed"
-    ) {
-      return item.prompt?.trim() || "当前阶段在等待你确认运行时权限。";
-    }
-  }
-
-  return null;
-}
-
-function hasSubmittedRuntimeActionConfirmation(params: {
-  items: AgentThreadItem[];
-  actionRequests?: ActionRequired[];
-}): boolean {
-  if (
-    (params.actionRequests || []).some((actionRequest) =>
-      isSubmittedRuntimeActionConfirmation(actionRequest),
-    )
-  ) {
-    return true;
-  }
-
-  return params.items.some(
-    (item) =>
-      (item.type === "approval_request" ||
-        item.type === "request_user_input") &&
-      item.status === "completed" &&
-      isRuntimeActionConfirmationRequestId(item.request_id),
   );
 }
 
@@ -1523,6 +733,8 @@ function TimelineBlockCard({
   focusedItemId?: string | null;
   focusRequestKey?: number;
 }) {
+  const { t } = useTranslation("agent");
+  const openSubagentLabel = t("agentChat.threadTimeline.openSubagent");
   const dataTestId = `agent-thread-block:${index + 1}:${block.kind}`;
   const isThinkingOnlyBlock = block.items.every((item) =>
     isThinkingTimelineItem(item),
@@ -1597,6 +809,7 @@ function TimelineBlockCard({
         {
           groupedToolCall: shouldRenderGroupedToolRows,
           groupMarker: block.items[0]?.id === item.id ? "└" : "·",
+          openSubagentLabel,
           sourceMessageId,
           onSaveFileArtifactAsKnowledge,
         },
@@ -1613,6 +826,7 @@ function TimelineBlockCard({
     onOpenSavedSiteContent,
     onOpenSubagentSession,
     onPermissionResponse,
+    openSubagentLabel,
     shouldMaterializeDetailEntries,
     shouldRenderGroupedToolRows,
   ]);
@@ -1650,6 +864,7 @@ function TimelineBlockCard({
         onOpenSubagentSession,
         onPermissionResponse,
         {
+          openSubagentLabel,
           sourceMessageId,
           onSaveFileArtifactAsKnowledge,
         },
