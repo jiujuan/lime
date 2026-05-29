@@ -185,6 +185,7 @@ function renderHarness(props: {
     fileName: string,
     context?: WriteArtifactContext,
   ) => void;
+  onFileClick?: (fileName: string, content: string) => void;
   onOpenSavedSiteContent?: (target: {
     projectId: string;
     contentId: string;
