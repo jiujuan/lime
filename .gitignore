@@ -119,6 +119,7 @@ openspec
 
 # Build artifacts (alternate cargo target dirs)
 src-tauri/target*/
+src-tauri/.release-runtime-libs/
 src-tauri/.codex*
 
 logo-lime.png
