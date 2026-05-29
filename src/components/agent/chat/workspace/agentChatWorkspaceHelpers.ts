@@ -42,6 +42,25 @@ export interface TaskCenterDraftTab {
   status: TaskCenterTabItem["status"];
 }
 
+interface ResolveTaskCenterHomeSurfaceStateParams {
+  agentEntry: string;
+  draftSurfaceActive: boolean;
+  shouldSuppressDraftContent: boolean;
+  sessionSwitchPending: boolean;
+  hasConversationActivity: boolean;
+  sessionId?: string | null;
+  embeddedHomeSessionIds: ReadonlySet<string>;
+  isAutoRestoringSession: boolean;
+  isSessionHydrating: boolean;
+}
+
+export interface TaskCenterHomeSurfaceState {
+  shouldRenderEmbeddedHome: boolean;
+  shouldHideCurrentSessionContent: boolean;
+  isRestoringSession: boolean;
+  sceneSessionId: string | null;
+}
+
 export type SessionRecentMetadataSyncPriority = "immediate" | "background";
 
 export interface SessionRecentMetadataSyncOptions {
@@ -167,6 +186,39 @@ export function resolveTaskCenterDraftSendTitle(text: string): string {
 
   const preview = Array.from(normalized).slice(0, 18).join("");
   return normalized.length > preview.length ? `${preview}...` : preview;
+}
+
+export function resolveTaskCenterHomeSurfaceState({
+  agentEntry,
+  draftSurfaceActive,
+  shouldSuppressDraftContent,
+  sessionSwitchPending,
+  hasConversationActivity,
+  sessionId,
+  embeddedHomeSessionIds,
+  isAutoRestoringSession,
+  isSessionHydrating,
+}: ResolveTaskCenterHomeSurfaceStateParams): TaskCenterHomeSurfaceState {
+  const hasEmbeddedHomeSession = Boolean(
+    sessionId && embeddedHomeSessionIds.has(sessionId),
+  );
+  const shouldRenderEmbeddedHome = Boolean(
+    agentEntry === "claw" &&
+      !sessionSwitchPending &&
+      !hasConversationActivity &&
+      (draftSurfaceActive || hasEmbeddedHomeSession),
+  );
+  const shouldHideCurrentSessionContent =
+    sessionSwitchPending || shouldSuppressDraftContent;
+
+  return {
+    shouldRenderEmbeddedHome,
+    shouldHideCurrentSessionContent,
+    isRestoringSession:
+      !shouldSuppressDraftContent &&
+      (isAutoRestoringSession || isSessionHydrating || sessionSwitchPending),
+    sceneSessionId: shouldHideCurrentSessionContent ? null : (sessionId ?? null),
+  };
 }
 
 export function scheduleAfterNextPaint(callback: () => void): () => void {

@@ -1,10 +1,10 @@
 use super::responsive_chat::{
     can_use_responsive_chat_provider, choose_responsive_chat_model_from_catalog,
-    collect_responsive_chat_models_from_catalog, is_responsive_chat_unsupported_model_error,
-    load_responsive_chat_auto_latency_hints, parse_responsive_chat_latency_run_metadata,
-    responsive_chat_auto_candidate_sort, responsive_chat_running_sample_is_stale,
-    responsive_chat_setting_fallback_reason, ResponsiveChatAutoCandidate,
-    ResponsiveChatAutoLatencyHint,
+    collect_responsive_chat_models_from_catalog, is_responsive_chat_provider_unavailable_error,
+    is_responsive_chat_unsupported_model_error, load_responsive_chat_auto_latency_hints,
+    parse_responsive_chat_latency_run_metadata, responsive_chat_auto_candidate_sort,
+    responsive_chat_running_sample_is_stale, responsive_chat_setting_fallback_reason,
+    ResponsiveChatAutoCandidate, ResponsiveChatAutoLatencyHint,
 };
 use super::*;
 use lime_core::database::dao::api_key_provider::{
@@ -13,6 +13,16 @@ use lime_core::database::dao::api_key_provider::{
 use lime_core::database::{schema::create_tables, DbConnection};
 use rusqlite::{params, Connection};
 use std::sync::{Arc, Mutex};
+
+const TEST_CLOUD_API_HOST: &str = "cloud-api-host";
+const TEST_OPENAI_COMPATIBLE_API_HOST: &str = "openai-compatible-api-host";
+const TEST_ANTHROPIC_COMPATIBLE_API_HOST: &str = "anthropic-compatible-api-host";
+const TEST_PROVIDER_UNAVAILABLE_API_HOST: &str = "provider-unavailable-api-host";
+const TEST_CUSTOM_MODEL_API_HOST: &str = "custom-model-api-host";
+const TEST_TEXT_CHAT_API_HOST: &str = "text-chat-api-host";
+const TEST_MEDIA_RUNTIME_HOST: &str = "media-runtime-host/fal-ai";
+const TEST_CODE_RUNTIME_HOST: &str = "code-runtime-host/coding";
+const TEST_LOCAL_OLLAMA_BASE_URL: &str = "http://127.0.0.1:11434";
 
 fn build_model(
     id: &str,
@@ -438,7 +448,7 @@ fn codex_compatibility_falls_back_to_supported_model() {
         is_custom_provider: false,
         provider_type: Some(ApiProviderType::Codex),
         provider_group: None,
-        configured_api_host: Some("https://api.openai.com/v1".to_string()),
+        configured_api_host: Some(TEST_CLOUD_API_HOST.to_string()),
         has_credentials: true,
     };
 
@@ -460,7 +470,7 @@ fn provider_custom_model_canonicalization_keeps_declared_model_ids() {
         is_custom_provider: true,
         provider_type: Some(ApiProviderType::AnthropicCompatible),
         provider_group: None,
-        configured_api_host: Some("https://provider.example.com/anthropic".to_string()),
+        configured_api_host: Some(TEST_ANTHROPIC_COMPATIBLE_API_HOST.to_string()),
         has_credentials: true,
     };
 
@@ -1269,6 +1279,122 @@ fn responsive_chat_setting_fallback_reason_reads_recent_error_without_success() 
 }
 
 #[test]
+fn responsive_chat_latency_hints_mark_latest_provider_unavailable_error() {
+    let db = setup_responsive_chat_latency_db();
+    let metadata = serde_json::json!({
+        "request_metadata": {
+            "lime_runtime": {
+                "routing_decision": {
+                    "decisionSource": "responsive_chat_auto",
+                    "selectedProvider": "deepseek",
+                    "selectedModel": "deepseek-v4-flash",
+                    "serviceModelSlot": "responsive_chat",
+                    "settingsSource": "service_models.responsive_chat:auto"
+                }
+            }
+        },
+        "turn_state": {
+            "turn_id": "turn-deepseek-402"
+        },
+        "model_first_text_delta_ms": 720
+    })
+    .to_string();
+
+    insert_agent_run_latency_sample(
+        &db,
+        "run-deepseek-success",
+        "session-deepseek-success",
+        "success",
+        Some(1_400),
+        None,
+        &metadata,
+        "2026-05-12T00:00:00Z",
+    );
+    insert_agent_run_latency_sample(
+        &db,
+        "run-deepseek-402",
+        "session-deepseek-402",
+        "error",
+        None,
+        Some("402 Payment Required: Insufficient Balance"),
+        &metadata,
+        "2026-05-12T00:01:00Z",
+    );
+
+    let hints = load_responsive_chat_auto_latency_hints(&db);
+    let hint = hints
+        .get(&("deepseek".to_string(), "deepseek-v4-flash".to_string()))
+        .expect("应读取 DeepSeek responsive_chat latency hint");
+
+    assert_eq!(hint.sample_count, 2);
+    assert_eq!(hint.durations_ms, vec![1_400]);
+    assert_eq!(hint.first_text_durations_ms, vec![720]);
+    assert_eq!(hint.error_sample_count, 1);
+    assert_eq!(hint.provider_unavailable_sample_count, 1);
+    assert!(hint.latest_provider_unavailable_error);
+    assert_eq!(
+        responsive_chat_setting_fallback_reason(&db, "deepseek", "deepseek-v4-flash"),
+        Some("provider_unavailable_recent_error".to_string())
+    );
+}
+
+#[test]
+fn responsive_chat_latency_hints_clear_latest_provider_unavailable_after_success() {
+    let db = setup_responsive_chat_latency_db();
+    let metadata = serde_json::json!({
+        "request_metadata": {
+            "lime_runtime": {
+                "routing_decision": {
+                    "decisionSource": "responsive_chat_auto",
+                    "selectedProvider": "deepseek",
+                    "selectedModel": "deepseek-v4-flash",
+                    "serviceModelSlot": "responsive_chat"
+                }
+            }
+        },
+        "turn_state": {
+            "turn_id": "turn-deepseek-recovered"
+        },
+        "model_first_text_delta_ms": 680
+    })
+    .to_string();
+
+    insert_agent_run_latency_sample(
+        &db,
+        "run-deepseek-402-old",
+        "session-deepseek-402-old",
+        "failed",
+        None,
+        Some("402 Payment Required: Insufficient Balance"),
+        &metadata,
+        "2026-05-12T00:00:00Z",
+    );
+    insert_agent_run_latency_sample(
+        &db,
+        "run-deepseek-recovered",
+        "session-deepseek-recovered",
+        "success",
+        Some(1_200),
+        None,
+        &metadata,
+        "2026-05-12T00:01:00Z",
+    );
+
+    let hints = load_responsive_chat_auto_latency_hints(&db);
+    let hint = hints
+        .get(&("deepseek".to_string(), "deepseek-v4-flash".to_string()))
+        .expect("应读取 DeepSeek recovered latency hint");
+
+    assert_eq!(hint.sample_count, 2);
+    assert_eq!(hint.provider_unavailable_sample_count, 1);
+    assert!(!hint.latest_provider_unavailable_error);
+    assert_eq!(
+        responsive_chat_setting_fallback_reason(&db, "deepseek", "deepseek-v4-flash"),
+        None
+    );
+}
+
+#[test]
 fn responsive_chat_auto_explores_trusted_unknown_before_above_target_latency() {
     let mut candidates = vec![
         ResponsiveChatAutoCandidate {
@@ -1388,6 +1514,146 @@ fn responsive_chat_auto_candidate_demotes_known_unsupported_model() {
 }
 
 #[test]
+fn responsive_chat_auto_demotes_latest_provider_unavailable_with_success_history() {
+    let mut candidates = vec![
+        ResponsiveChatAutoCandidate {
+            provider_selector: "deepseek".to_string(),
+            model_name: "deepseek-v4-flash".to_string(),
+            model: build_model(
+                "deepseek-v4-flash",
+                Some("deepseek"),
+                false,
+                false,
+                true,
+                ModelTier::Mini,
+                None,
+            ),
+            compatible_candidate_count: 1,
+            provider_order: 1,
+            provider_group: Some(ProviderGroup::Mainstream),
+            latency_hint: ResponsiveChatAutoLatencyHint {
+                sample_count: 2,
+                durations_ms: vec![900],
+                first_text_durations_ms: vec![720],
+                error_sample_count: 1,
+                provider_unavailable_sample_count: 1,
+                latest_provider_unavailable_error: true,
+                ..Default::default()
+            },
+        },
+        ResponsiveChatAutoCandidate {
+            provider_selector: "healthy-mainstream".to_string(),
+            model_name: "healthy-mini".to_string(),
+            model: build_model(
+                "healthy-mini",
+                Some("healthy"),
+                false,
+                false,
+                true,
+                ModelTier::Mini,
+                None,
+            ),
+            compatible_candidate_count: 1,
+            provider_order: 2,
+            provider_group: Some(ProviderGroup::Mainstream),
+            latency_hint: ResponsiveChatAutoLatencyHint {
+                sample_count: 1,
+                durations_ms: vec![1_500],
+                first_text_durations_ms: vec![1_100],
+                ..Default::default()
+            },
+        },
+        ResponsiveChatAutoCandidate {
+            provider_selector: "trusted-unmeasured".to_string(),
+            model_name: "trusted-flash".to_string(),
+            model: build_model(
+                "trusted-flash",
+                Some("trusted"),
+                false,
+                false,
+                true,
+                ModelTier::Mini,
+                None,
+            ),
+            compatible_candidate_count: 1,
+            provider_order: 3,
+            provider_group: Some(ProviderGroup::Mainstream),
+            latency_hint: ResponsiveChatAutoLatencyHint::default(),
+        },
+    ];
+
+    candidates.sort_by(responsive_chat_auto_candidate_sort);
+
+    assert_eq!(candidates[0].provider_selector, "healthy-mainstream");
+    assert_ne!(candidates[0].provider_selector, "deepseek");
+    assert!(is_responsive_chat_provider_unavailable_error(Some(
+        "402 Payment Required: Insufficient Balance"
+    )));
+}
+
+#[test]
+fn responsive_chat_auto_skips_latest_provider_unavailable_candidates() {
+    let healthy_model = build_model(
+        "healthy-mini",
+        Some("healthy"),
+        false,
+        false,
+        true,
+        ModelTier::Mini,
+        None,
+    );
+    let unavailable_model = build_model(
+        "deepseek-v4-flash",
+        Some("deepseek"),
+        false,
+        false,
+        true,
+        ModelTier::Mini,
+        None,
+    );
+    let mut candidates = vec![
+        ResponsiveChatAutoCandidate {
+            provider_selector: "deepseek".to_string(),
+            model_name: "deepseek-v4-flash".to_string(),
+            model: unavailable_model.clone(),
+            compatible_candidate_count: 1,
+            provider_order: 1,
+            provider_group: Some(ProviderGroup::Mainstream),
+            latency_hint: ResponsiveChatAutoLatencyHint {
+                sample_count: 2,
+                durations_ms: vec![900],
+                first_text_durations_ms: vec![720],
+                error_sample_count: 1,
+                provider_unavailable_sample_count: 1,
+                latest_provider_unavailable_error: true,
+                ..Default::default()
+            },
+        },
+        ResponsiveChatAutoCandidate {
+            provider_selector: "healthy-mainstream".to_string(),
+            model_name: "healthy-mini".to_string(),
+            model: healthy_model.clone(),
+            compatible_candidate_count: 1,
+            provider_order: 2,
+            provider_group: Some(ProviderGroup::Mainstream),
+            latency_hint: ResponsiveChatAutoLatencyHint {
+                sample_count: 1,
+                durations_ms: vec![1_500],
+                first_text_durations_ms: vec![1_100],
+                ..Default::default()
+            },
+        },
+    ];
+
+    candidates.retain(|candidate| !candidate.latency_hint.latest_provider_unavailable_error);
+    candidates.sort_by(responsive_chat_auto_candidate_sort);
+
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].provider_selector, "healthy-mainstream");
+    assert_eq!(candidates[0].model_name, "healthy-mini");
+}
+
+#[test]
 fn responsive_chat_auto_candidate_prefers_known_success_before_unproven_custom_flash() {
     let mut candidates = vec![
         ResponsiveChatAutoCandidate {
@@ -1486,28 +1752,43 @@ fn responsive_chat_auto_candidate_keeps_known_success_ahead_of_unknown_after_sta
 
 #[test]
 fn responsive_chat_provider_filter_rejects_media_only_fal_provider() {
-    let provider =
-        build_provider_with_key("fal", ApiProviderType::Openai, "https://fal.run/fal-ai");
+    let provider = build_provider_with_key("fal", ApiProviderType::Openai, TEST_MEDIA_RUNTIME_HOST);
 
     assert!(!can_use_responsive_chat_provider(&provider));
 
-    let fal_typed_provider =
-        build_provider_with_key("custom-media", ApiProviderType::Fal, "https://fal.run");
+    let fal_typed_provider = build_provider_with_key(
+        "custom-media",
+        ApiProviderType::Fal,
+        TEST_MEDIA_RUNTIME_HOST,
+    );
     assert!(!can_use_responsive_chat_provider(&fal_typed_provider));
 
     let codex_provider = build_provider_with_key(
         "custom-codex",
         ApiProviderType::Codex,
-        "https://api.example.com",
+        TEST_OPENAI_COMPATIBLE_API_HOST,
     );
     assert!(!can_use_responsive_chat_provider(&codex_provider));
 
     let coding_provider = build_provider_with_key(
         "kimi-coding",
         ApiProviderType::AnthropicCompatible,
-        "https://api.kimi.com/coding",
+        TEST_CODE_RUNTIME_HOST,
     );
     assert!(!can_use_responsive_chat_provider(&coding_provider));
+}
+
+#[test]
+fn responsive_chat_provider_filter_keeps_openai_compatible_provider_named_codex() {
+    let mut provider = build_provider_with_key(
+        "custom-openai-compatible",
+        ApiProviderType::Openai,
+        TEST_OPENAI_COMPATIBLE_API_HOST,
+    );
+    provider.provider.name = "Custom Codex Compatible".to_string();
+    provider.provider.custom_models = vec!["gpt-5.5".to_string()];
+
+    assert!(can_use_responsive_chat_provider(&provider));
 }
 
 #[test]
@@ -1528,7 +1809,7 @@ fn responsive_chat_provider_filter_keeps_text_protocols() {
         let provider = build_provider_with_key(
             &format!("text-{provider_type}"),
             provider_type,
-            "https://api.example.com/v1",
+            TEST_TEXT_CHAT_API_HOST,
         );
 
         assert!(
@@ -1843,7 +2124,7 @@ fn custom_provider_multi_candidate_reselection_is_disabled() {
         is_custom_provider: true,
         provider_type: Some(ApiProviderType::AnthropicCompatible),
         provider_group: None,
-        configured_api_host: Some("https://provider.example.com/anthropic".to_string()),
+        configured_api_host: Some(TEST_ANTHROPIC_COMPATIBLE_API_HOST.to_string()),
         has_credentials: true,
     };
 
@@ -1862,7 +2143,7 @@ fn configured_model_allowlist_disables_system_provider_auto_reselection() {
         is_custom_provider: false,
         provider_type: Some(ApiProviderType::Openai),
         provider_group: None,
-        configured_api_host: Some("https://api.deepseek.com".to_string()),
+        configured_api_host: Some(TEST_PROVIDER_UNAVAILABLE_API_HOST.to_string()),
         has_credentials: true,
     };
 
@@ -1881,7 +2162,7 @@ fn model_recovery_prefers_configured_candidate_without_model_name_hardcode() {
         is_custom_provider: true,
         provider_type: Some(ApiProviderType::AnthropicCompatible),
         provider_group: None,
-        configured_api_host: Some("https://provider.example.com/anthropic".to_string()),
+        configured_api_host: Some(TEST_ANTHROPIC_COMPATIBLE_API_HOST.to_string()),
         has_credentials: true,
     };
     let models = vec![
@@ -1924,7 +2205,7 @@ fn model_recovery_prefers_configured_model_for_system_provider() {
         is_custom_provider: false,
         provider_type: Some(ApiProviderType::Openai),
         provider_group: None,
-        configured_api_host: Some("https://api.deepseek.com".to_string()),
+        configured_api_host: Some(TEST_PROVIDER_UNAVAILABLE_API_HOST.to_string()),
         has_credentials: true,
     };
     let models = vec![
@@ -2017,7 +2298,7 @@ fn model_recovery_can_use_uncataloged_configured_model() {
         is_custom_provider: false,
         provider_type: Some(ApiProviderType::Openai),
         provider_group: None,
-        configured_api_host: Some("https://api.siliconflow.cn/v1".to_string()),
+        configured_api_host: Some(TEST_CUSTOM_MODEL_API_HOST.to_string()),
         has_credentials: true,
     };
     let models = vec![build_model(
@@ -2837,14 +3118,14 @@ fn runtime_provider_strategy_prefers_manual_mode_for_credentialless_local_provid
         is_custom_provider: false,
         provider_type: Some(ApiProviderType::Ollama),
         provider_group: Some(ProviderGroup::Local),
-        configured_api_host: Some("http://127.0.0.1:11434".to_string()),
+        configured_api_host: Some(TEST_LOCAL_OLLAMA_BASE_URL.to_string()),
         has_credentials: false,
     };
 
     assert_eq!(
         resolve_runtime_provider_configuration_strategy(&context),
         RuntimeProviderConfigurationStrategy::Manual {
-            base_url: Some("http://127.0.0.1:11434".to_string()),
+            base_url: Some(TEST_LOCAL_OLLAMA_BASE_URL.to_string()),
         }
     );
 }
@@ -2854,9 +3135,9 @@ fn normalize_runtime_provider_base_url_strips_ollama_v1_suffix() {
     assert_eq!(
         normalize_runtime_provider_base_url(
             Some(ApiProviderType::Ollama),
-            Some("http://127.0.0.1:11434/v1/".to_string()),
+            Some(format!("{TEST_LOCAL_OLLAMA_BASE_URL}/v1/")),
         ),
-        Some("http://127.0.0.1:11434".to_string())
+        Some(TEST_LOCAL_OLLAMA_BASE_URL.to_string())
     );
 }
 

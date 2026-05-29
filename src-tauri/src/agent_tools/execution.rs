@@ -13,6 +13,7 @@ use lime_core::config::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value as JsonValue};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 const DURABLE_MEMORY_PATH_PATTERN: &str = r"^/memories(?:/.*)?$";
 const SAFE_HTTPS_URL_PATTERN: &str = r"^https://[^\s]+$";
@@ -80,6 +81,7 @@ pub struct ToolExecutionPolicyResolution {
 pub struct WorkspaceExecutionPermissionInput<'a> {
     pub surface: WorkspaceToolSurface,
     pub workspace_root: &'a str,
+    pub explicit_read_only_paths: &'a [PathBuf],
     pub auto_mode: bool,
     pub bypass_restrictions: bool,
     pub execution_policy_input: ToolExecutionResolverInput<'a>,
@@ -114,7 +116,7 @@ pub fn tool_execution_policy(tool_name: &str) -> ToolExecutionPolicy {
     };
 
     match catalog_entry.name {
-        "Read" | "Write" | "Edit" | "LSP" => ToolExecutionPolicy {
+        "Read" | "Write" | "Edit" | "LSP" | "view_image" => ToolExecutionPolicy {
             restriction_profile: ToolExecutionRestrictionProfile::WorkspacePathRequired,
             ..ToolExecutionPolicy::default()
         },
@@ -180,12 +182,30 @@ pub fn build_workspace_shell_allow_pattern(
     escaped_root: &str,
     allow_extended_shell_commands: bool,
 ) -> String {
+    build_workspace_shell_allow_pattern_with_extra_paths(
+        escaped_root,
+        &[],
+        allow_extended_shell_commands,
+    )
+}
+
+fn build_workspace_shell_allow_pattern_with_extra_paths(
+    escaped_root: &str,
+    extra_path_patterns: &[String],
+    allow_extended_shell_commands: bool,
+) -> String {
     if allow_extended_shell_commands {
         return String::from(r"(?s)^\s*\S.*$");
     }
 
+    let local_roots = if extra_path_patterns.is_empty() {
+        escaped_root.to_string()
+    } else {
+        format!("{escaped_root}|{}", extra_path_patterns.join("|"))
+    };
+
     format!(
-        r"^\s*(?:cd\s+({escaped_root}|\.|\./|\.\./)|pwd|ls(?:\s+[^;&|]+)?|find\s+({escaped_root}|\.|\./|\.\./)[^;&|]*|rg\b[^;&|]*|grep\b[^;&|]*|cat\s+({escaped_root}|\.|\./|\.\./)[^;&|]*)\s*$"
+        r"^\s*(?:cd\s+({local_roots}|\.|\./|\.\./)|pwd|ls(?:\s+[^;&|]+)?|find\s+({local_roots}|\.|\./|\.\./)[^;&|]*|rg\b[^;&|]*|grep\b[^;&|]*|cat\s+({local_roots}|\.|\./|\.\./)[^;&|]*)\s*$"
     )
 }
 
@@ -205,7 +225,11 @@ pub fn build_workspace_execution_permissions(
     input: WorkspaceExecutionPermissionInput<'_>,
 ) -> Vec<ToolPermission> {
     let unrestricted = input.auto_mode || input.bypass_restrictions;
-    let patterns = build_workspace_permission_patterns(input.workspace_root, unrestricted);
+    let patterns = build_workspace_permission_patterns(
+        input.workspace_root,
+        input.explicit_read_only_paths,
+        unrestricted,
+    );
     let mut permissions = tool_catalog_entries_for_surface(input.surface)
         .into_iter()
         .filter_map(|entry| {
@@ -481,20 +505,75 @@ fn parse_sandbox_profile(value: &str) -> Option<ToolExecutionSandboxProfile> {
 
 fn build_workspace_permission_patterns(
     workspace_root: &str,
+    explicit_read_only_paths: &[PathBuf],
     auto_mode: bool,
 ) -> WorkspacePermissionPatterns {
     let escaped_root = regex::escape(workspace_root.trim());
+    let explicit_path_patterns = explicit_read_only_path_patterns(explicit_read_only_paths);
+    let workspace_or_explicit_path_pattern = if explicit_path_patterns.is_empty() {
+        format!(r"({escaped_root}|\.|\./|\.\./).*$")
+    } else {
+        format!(
+            r"(?:(?:{escaped_root}|\.|\./|\.\./).*$|{})",
+            explicit_path_patterns.join("|")
+        )
+    };
     WorkspacePermissionPatterns {
         workspace_path_pattern: format!(
-            r"^(?:({escaped_root}|\.|\./|\.\./).*$|{DURABLE_MEMORY_PATH_PATTERN})"
+            r"^(?:{workspace_or_explicit_path_pattern}|{DURABLE_MEMORY_PATH_PATTERN})"
         ),
         workspace_abs_path_pattern: format!(r"^({escaped_root}).*$"),
         analyze_image_path_pattern: format!(
-            r"^(base64:[A-Za-z0-9+/=]+|file://({escaped_root}).*|({escaped_root}|\.|\./|\.\./).*)$"
+            r"^(base64:[A-Za-z0-9+/=]+|file://({escaped_root}).*|{workspace_or_explicit_path_pattern})$"
         ),
         safe_https_url_pattern: SAFE_HTTPS_URL_PATTERN.to_string(),
-        shell_allow_pattern: build_workspace_shell_allow_pattern(&escaped_root, auto_mode),
+        shell_allow_pattern: build_workspace_shell_allow_pattern_with_extra_paths(
+            &escaped_root,
+            &explicit_path_patterns,
+            auto_mode,
+        ),
     }
+}
+
+fn explicit_read_only_path_patterns(paths: &[PathBuf]) -> Vec<String> {
+    let mut normalized_paths = paths
+        .iter()
+        .flat_map(|path| normalize_explicit_read_only_path_variants(path).into_iter())
+        .collect::<Vec<_>>();
+    normalized_paths.sort_by(
+        |(left_path, left_descendants), (right_path, right_descendants)| {
+            left_path
+                .cmp(right_path)
+                .then(left_descendants.cmp(right_descendants))
+        },
+    );
+    normalized_paths.dedup();
+
+    normalized_paths
+        .into_iter()
+        .map(|(path, allow_descendants)| {
+            let escaped = regex::escape(&path.to_string_lossy());
+            if allow_descendants {
+                format!(r"(?:{escaped})(?:[/\\].*)?")
+            } else {
+                format!(r"(?:{escaped})")
+            }
+        })
+        .collect()
+}
+
+fn normalize_explicit_read_only_path_variants(path: &Path) -> Vec<(PathBuf, bool)> {
+    if !path.is_absolute() || !path.exists() {
+        return Vec::new();
+    }
+
+    let normalized = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let allow_descendants = path.is_dir() || normalized.is_dir();
+    let mut variants = vec![(path.to_path_buf(), allow_descendants)];
+    if normalized != path {
+        variants.push((normalized, allow_descendants));
+    }
+    variants
 }
 
 fn build_parameter_restricted_permission(
@@ -738,6 +817,27 @@ mod tests {
         assert!(manager.is_allowed("Bash", &params, &context).allowed);
     }
 
+    fn permission_manager_for(
+        permissions: Vec<ToolPermission>,
+    ) -> aster::permission::ToolPermissionManager {
+        let mut manager = aster::permission::ToolPermissionManager::new(None);
+        for permission in permissions {
+            manager.add_permission(permission, PermissionScope::Session);
+        }
+        manager
+    }
+
+    fn permission_context(workspace_root: &Path) -> aster::permission::PermissionContext {
+        aster::permission::PermissionContext {
+            working_directory: workspace_root.to_path_buf(),
+            session_id: "session-explicit-local-path".to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
+            user: None,
+            environment: HashMap::new(),
+            metadata: HashMap::new(),
+        }
+    }
+
     #[test]
     fn test_tool_execution_policy_marks_bash_as_sandboxed_shell_risk() {
         let policy = tool_execution_policy("Bash");
@@ -756,11 +856,23 @@ mod tests {
     }
 
     #[test]
+    fn test_tool_execution_policy_marks_view_image_as_workspace_path_tool() {
+        let policy = tool_execution_policy("view_image");
+        assert_eq!(
+            policy.restriction_profile,
+            ToolExecutionRestrictionProfile::WorkspacePathRequired
+        );
+        assert_eq!(policy.warning_policy, ToolExecutionWarningPolicy::None);
+        assert_eq!(policy.sandbox_profile, ToolExecutionSandboxProfile::None);
+    }
+
+    #[test]
     fn test_build_workspace_execution_permissions_strict_mode_restricts_parameter_tools() {
         let permissions =
             build_workspace_execution_permissions(WorkspaceExecutionPermissionInput {
                 surface: WorkspaceToolSurface::core(),
                 workspace_root: "/tmp/workspace",
+                explicit_read_only_paths: &[],
                 auto_mode: false,
                 bypass_restrictions: false,
                 execution_policy_input: ToolExecutionResolverInput::default(),
@@ -783,6 +895,17 @@ mod tests {
             .find(|permission| permission.tool == "Bash")
             .expect("Bash permission should exist");
         assert_eq!(bash.parameter_restrictions.len(), 2);
+        let view_image = permissions
+            .iter()
+            .find(|permission| permission.tool == "view_image")
+            .expect("view_image permission should exist");
+        assert_eq!(view_image.parameter_restrictions.len(), 1);
+        assert_eq!(view_image.parameter_restrictions[0].parameter, "path");
+        assert!(view_image.parameter_restrictions[0]
+            .pattern
+            .as_deref()
+            .unwrap_or_default()
+            .contains("/tmp/workspace"));
         assert!(permissions
             .iter()
             .any(|permission| permission.tool == "*" && !permission.allowed));
@@ -792,11 +915,101 @@ mod tests {
     }
 
     #[test]
+    fn test_build_workspace_execution_permissions_allows_explicit_read_only_local_paths() {
+        let tmp = tempfile::TempDir::new().expect("create temp dir");
+        let workspace = tmp.path().join("workspace");
+        let external_dir = tmp.path().join("external");
+        let external_file = tmp.path().join("single.json");
+        let sibling_file = tmp.path().join("sibling.json");
+        std::fs::create_dir_all(&workspace).expect("create workspace");
+        std::fs::create_dir_all(&external_dir).expect("create external dir");
+        std::fs::write(external_dir.join("README.md"), "external").expect("write external file");
+        std::fs::write(&external_file, "{}").expect("write explicit file");
+        std::fs::write(&sibling_file, "{}").expect("write sibling file");
+
+        let explicit_paths = vec![
+            external_dir.clone(),
+            external_file.clone(),
+            PathBuf::from("relative-ignored"),
+            tmp.path().join("missing"),
+        ];
+        let workspace_root = workspace.to_string_lossy().to_string();
+        let permissions =
+            build_workspace_execution_permissions(WorkspaceExecutionPermissionInput {
+                surface: WorkspaceToolSurface::core(),
+                workspace_root: &workspace_root,
+                explicit_read_only_paths: &explicit_paths,
+                auto_mode: false,
+                bypass_restrictions: false,
+                execution_policy_input: ToolExecutionResolverInput::default(),
+            });
+        let manager = permission_manager_for(permissions);
+        let context = permission_context(&workspace);
+
+        let external_child_params = HashMap::from([(
+            "path".to_string(),
+            json!(external_dir.join("README.md").to_string_lossy().to_string()),
+        )]);
+        assert!(
+            manager
+                .is_allowed("Read", &external_child_params, &context)
+                .allowed
+        );
+        assert!(
+            manager
+                .is_allowed("Glob", &external_child_params, &context)
+                .allowed
+        );
+
+        let explicit_file_params = HashMap::from([(
+            "path".to_string(),
+            json!(external_file.to_string_lossy().to_string()),
+        )]);
+        assert!(
+            manager
+                .is_allowed("Read", &explicit_file_params, &context)
+                .allowed
+        );
+
+        let sibling_file_params = HashMap::from([(
+            "path".to_string(),
+            json!(sibling_file.to_string_lossy().to_string()),
+        )]);
+        assert!(
+            !manager
+                .is_allowed("Read", &sibling_file_params, &context)
+                .allowed,
+            "只显式放行单个文件时，不应顺带放开同级其它文件"
+        );
+
+        let bash_allowed_params = HashMap::from([(
+            "command".to_string(),
+            json!(format!("cat {}", external_file.to_string_lossy())),
+        )]);
+        assert!(
+            manager
+                .is_allowed("Bash", &bash_allowed_params, &context)
+                .allowed
+        );
+
+        let bash_denied_params = HashMap::from([(
+            "command".to_string(),
+            json!(format!("cat {}", sibling_file.to_string_lossy())),
+        )]);
+        assert!(
+            !manager
+                .is_allowed("Bash", &bash_denied_params, &context)
+                .allowed
+        );
+    }
+
+    #[test]
     fn test_build_workspace_execution_permissions_auto_mode_adds_wildcard_allow() {
         let permissions =
             build_workspace_execution_permissions(WorkspaceExecutionPermissionInput {
                 surface: WorkspaceToolSurface::core(),
                 workspace_root: "/tmp/workspace",
+                explicit_read_only_paths: &[],
                 auto_mode: true,
                 bypass_restrictions: false,
                 execution_policy_input: ToolExecutionResolverInput::default(),
@@ -820,6 +1033,7 @@ mod tests {
             build_workspace_execution_permissions(WorkspaceExecutionPermissionInput {
                 surface: WorkspaceToolSurface::core(),
                 workspace_root: "/tmp/workspace",
+                explicit_read_only_paths: &[],
                 auto_mode: false,
                 bypass_restrictions: true,
                 execution_policy_input: ToolExecutionResolverInput::default(),
@@ -1012,6 +1226,7 @@ mod tests {
             build_workspace_execution_permissions(WorkspaceExecutionPermissionInput {
                 surface: WorkspaceToolSurface::core(),
                 workspace_root: "/tmp/workspace",
+                explicit_read_only_paths: &[],
                 auto_mode: false,
                 bypass_restrictions: false,
                 execution_policy_input: ToolExecutionResolverInput {

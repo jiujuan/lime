@@ -53,8 +53,13 @@ export const workspaceMocks: Record<string, (args?: any) => any> = {
     warning: null,
   }),
   workspace_get_projects_root: () => "/mock/workspace/projects",
-  workspace_resolve_project_path: (args: any) =>
-    `/mock/workspace/projects/${args?.name ?? "untitled"}`,
+  workspace_resolve_project_path: (args: any) => {
+    const parentRootPath =
+      typeof args?.parentRootPath === "string" && args.parentRootPath.trim()
+        ? args.parentRootPath.trim()
+        : "/mock/workspace/projects";
+    return `${parentRootPath.replace(/[\\/]+$/, "")}/${args?.name ?? "untitled"}`;
+  },
   workspace_create: (args: any) => ({
     id: `mock-project-${Date.now()}`,
     name: args?.request?.name ?? "Mock Project",

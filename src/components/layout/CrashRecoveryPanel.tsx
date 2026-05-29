@@ -36,6 +36,9 @@ interface CrashRecoveryPanelProps {
   onRetry: () => void;
 }
 
+const VITE_CACHE_DIR = "node_modules/.vite";
+const VITE_TAURI_CACHE_DIR = "node_modules/.vite-tauri";
+
 export function CrashRecoveryPanel({
   error,
   componentStack,
@@ -176,26 +179,12 @@ export function CrashRecoveryPanel({
 
   const handleExportJson = useCallback(() => {
     void runAction(async (payload) => {
-      const result = exportCrashDiagnosticToJson(payload, { sceneTag });
-      let openedPath: string | null = null;
+      exportCrashDiagnosticToJson(payload, { sceneTag });
       try {
-        const opened = await openCrashDiagnosticDownloadDirectory();
-        openedPath = opened.openedPath;
+        await openCrashDiagnosticDownloadDirectory();
       } catch {
-        openedPath = null;
+        // 导出结果已经落盘，打开目录失败不覆盖导出成功反馈。
       }
-      setMessage({
-        type: "success",
-        text: openedPath
-          ? t("errors.crashRecovery.message.diagnosticExportedAndOpened", {
-              fileName: result.fileName,
-              path: openedPath,
-            })
-          : t("errors.crashRecovery.message.diagnosticExported", {
-              fileName: result.fileName,
-              location: result.locationHint,
-            }),
-      });
     }, t("errors.crashRecovery.message.diagnosticExportedShort"));
   }, [sceneTag, runAction, t]);
 
@@ -257,17 +246,24 @@ export function CrashRecoveryPanel({
     }
   }, [oldWorkspacePath, onRetry, t]);
 
-  const handleOpenDownloadDirectory = useCallback(() => {
-    void runAction(async () => {
-      const result = await openCrashDiagnosticDownloadDirectory();
+  const handleOpenDownloadDirectory = useCallback(async () => {
+    setBusy(true);
+    setMessage(null);
+    setShowClipboardGuide(false);
+    try {
+      await openCrashDiagnosticDownloadDirectory();
+    } catch (actionError) {
       setMessage({
-        type: "success",
-        text: t("errors.crashRecovery.message.downloadDirectoryOpened", {
-          path: result.openedPath,
-        }),
+        type: "error",
+        text:
+          actionError instanceof Error
+            ? actionError.message
+            : t("errors.crashRecovery.message.generateDiagnosticFailed"),
       });
-    }, t("errors.crashRecovery.message.downloadDirectoryOpenedShort"));
-  }, [runAction, t]);
+    } finally {
+      setBusy(false);
+    }
+  }, [t]);
 
   const handleClearDiagnosticHistory = useCallback(async () => {
     const confirmed =
@@ -359,11 +355,11 @@ export function CrashRecoveryPanel({
           <div className="mb-4 rounded-md border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
             {t("errors.crashRecovery.moduleImportFailure.prefix")}
             <code className="mx-1 rounded bg-slate-100 px-1 py-0.5 text-slate-700 dark:bg-white/10 dark:text-slate-100">
-              node_modules/.vite
+              {VITE_CACHE_DIR}
             </code>
             {t("errors.crashRecovery.moduleImportFailure.middle")}
             <code className="mx-1 rounded bg-slate-100 px-1 py-0.5 text-slate-700 dark:bg-white/10 dark:text-slate-100">
-              node_modules/.vite-tauri
+              {VITE_TAURI_CACHE_DIR}
             </code>
             {t("errors.crashRecovery.moduleImportFailure.suffix")}
           </div>

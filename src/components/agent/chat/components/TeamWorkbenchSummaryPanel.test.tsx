@@ -92,6 +92,16 @@ function renderPanel(
   return container;
 }
 
+function openTechnicalDetails(container: HTMLElement) {
+  const toggle = container.querySelector<HTMLButtonElement>(
+    '[data-testid="team-workbench-technical-details-toggle"]',
+  );
+  expect(toggle).not.toBeNull();
+  act(() => {
+    toggle?.click();
+  });
+}
+
 describe("TeamWorkbenchSummaryPanel", () => {
   it("应在主视图中展示 Team 记忆影子卡片", () => {
     const container = renderPanel({
@@ -197,7 +207,8 @@ describe("TeamWorkbenchSummaryPanel", () => {
     expect(container.textContent).toContain(
       "最近一次收尾操作收起了 2 项已完成任务。",
     );
-    expect(container.textContent).toContain("任务轨道");
+    expect(container.textContent).not.toContain("总会话");
+    expect(container.textContent).not.toContain("交互说明");
   });
 
   it("应从 Agent UI projection store 展示 v0.6 Team Workbench surfaces", () => {
@@ -403,8 +414,11 @@ describe("TeamWorkbenchSummaryPanel", () => {
       onWorkbenchAction,
     });
 
-    expect(container.textContent).toContain("Agent UI v0.6");
-    expect(container.textContent).toContain("10 条事件");
+    expect(container.textContent).toContain("工作台细节");
+    expect(container.textContent).toContain("10 条记录");
+    expect(container.textContent).not.toContain("Agent UI v0.6");
+    expect(container.textContent).not.toContain("Roster");
+    openTechnicalDetails(container);
     expect(container.textContent).toContain("Team 拓扑");
     expect(container.textContent).toContain("Worker 流");
     expect(container.textContent).toContain("Review / Handoff");
@@ -412,14 +426,14 @@ describe("TeamWorkbenchSummaryPanel", () => {
     expect(container.textContent).toContain("10 项");
     expect(container.textContent).toContain("注意 1");
     expect(container.textContent).toContain("工作区专门视图");
-    expect(container.textContent).toContain("Roster");
+    expect(container.textContent).toContain("成员");
     expect(container.textContent).toContain("成员、角色、来源与当前状态");
     expect(container.textContent).toContain("分派关系");
     expect(container.textContent).toContain("任务板");
     expect(container.textContent).toContain("执行通知");
-    expect(container.textContent).toContain("Transcript");
-    expect(container.textContent).toContain("Background");
-    expect(container.textContent).toContain("Remote");
+    expect(container.textContent).toContain("记录");
+    expect(container.textContent).toContain("后台");
+    expect(container.textContent).toContain("外部");
     expect(container.textContent).toContain("交接");
     expect(container.textContent).toContain("评审");
     expect(container.textContent).toContain("决策：pending_review");
@@ -427,7 +441,7 @@ describe("TeamWorkbenchSummaryPanel", () => {
     expect(container.textContent).toContain("清单 2");
     expect(container.textContent).toContain("修复：复核权限确认");
     expect(container.textContent).toContain("回归项：npm run test:contracts");
-    expect(container.textContent).toContain("Policy");
+    expect(container.textContent).toContain("策略");
     expect(container.textContent).toContain("Review 请求");
     expect(container.textContent).toContain("Agent 交接");
 
@@ -449,9 +463,9 @@ describe("TeamWorkbenchSummaryPanel", () => {
     expect(container.textContent).toContain("已定位工作台目标");
     expect(container.textContent).toContain("请求审核 · review-1");
     expect(container.textContent).toContain("评审");
-    expect(container.textContent).toContain("Review：review-1");
+    expect(container.textContent).toContain("审核：review-1");
     expect(container.textContent).toContain(
-      "不从文本推断状态，也不伪造远端、评审或交接运行时调用",
+      "不根据普通文本猜测状态，也不直接代替外部任务、审核或交接操作",
     );
 
     const transcriptAction = container.querySelector<HTMLButtonElement>(
@@ -479,23 +493,24 @@ describe("TeamWorkbenchSummaryPanel", () => {
     expect(container.textContent).toContain("打开详情 · child-1:turn-child-1");
     expect(container.textContent).toContain("队友记录详情");
     expect(container.textContent).toContain("记录引用：child-1:turn-child-1");
-    expect(container.textContent).toContain("子会话：child-1");
-    expect(container.textContent).toContain("最新回合：turn-child-1");
-    expect(container.textContent).toContain("子会话概览");
+    expect(container.textContent).toContain("队友任务：child-1");
+    expect(container.textContent).toContain("最新步骤：turn-child-1");
+    expect(container.textContent).toContain("队友任务概览");
     expect(container.textContent).toContain("分析助手");
     expect(container.textContent).toContain("状态：处理中");
-    expect(container.textContent).toContain("回合状态：处理中");
+    expect(container.textContent).toContain("步骤状态：处理中");
     expect(container.textContent).toContain("角色：explorer");
     expect(container.textContent).toContain("任务摘要：梳理标准差异");
-    expect(container.textContent).toContain("子会话进展");
+    expect(container.textContent).toContain("队友任务进展");
     expect(container.textContent).toContain("1 条");
-    expect(container.textContent).toContain("结构化 Drilldown");
+    expect(container.textContent).toContain("记录明细");
     expect(container.textContent).toContain("工具活动 1 条");
     expect(container.textContent).toContain("工具调用");
     expect(container.textContent).toContain("读取文件");
-    expect(container.textContent).toContain("已读取 Agent UI 标准文档");
+    expect(container.textContent).toContain("已读取工作台标准文档");
+    expect(container.textContent).not.toContain("Agent UI 标准文档");
     expect(container.textContent).toContain("相关队友链路");
-    expect(container.textContent).toContain("不合成新运行时事实");
+    expect(container.textContent).toContain("不生成新状态");
     expect(container.textContent).toContain("执行通知");
     expect(container.textContent).toContain("child-1:completed");
     expect(container.textContent).toContain("不把队友输出混进主");
@@ -530,6 +545,8 @@ describe("TeamWorkbenchSummaryPanel", () => {
       childSubagentSessions: [],
     });
 
+    expect(container.textContent).toContain("Workbench details");
+    openTechnicalDetails(container);
     expect(container.textContent).toContain("Team topology");
     expect(container.textContent).toContain(
       "Members, delegation, work board, and policy facts",
@@ -570,6 +587,7 @@ describe("TeamWorkbenchSummaryPanel", () => {
       currentSessionId: "session-team-1",
       onWorkbenchAction,
     });
+    openTechnicalDetails(container);
 
     const reviewAction = container.querySelector<HTMLButtonElement>(
       '[data-agentui-action-target="review-route-1"]',
@@ -583,9 +601,9 @@ describe("TeamWorkbenchSummaryPanel", () => {
     expect(onWorkbenchAction).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("已定位工作台目标");
     expect(container.textContent).toContain("请求审核 · review-route-1");
-    expect(container.textContent).toContain("审核未接入");
+    expect(container.textContent).toContain("审核未连接");
     expect(container.textContent).toContain(
-      "评审记录已定位；真实审核回调与重指派写回仍需后续接入。",
+      "审核记录已定位；审核回写接入前，这里只提供查看。",
     );
   });
 
@@ -624,6 +642,7 @@ describe("TeamWorkbenchSummaryPanel", () => {
       currentSessionId: "session-team-1",
       onWorkbenchAction,
     });
+    openTechnicalDetails(container);
 
     const remoteAction = container.querySelector<HTMLButtonElement>(
       '[data-agentui-action-target="gateway:telegram:default:message-1"]',
@@ -637,9 +656,9 @@ describe("TeamWorkbenchSummaryPanel", () => {
     expect(onWorkbenchAction).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("远端任务已定位");
     expect(container.textContent).toContain(
-      "已定位结构化远端任务记录；当前只展示来源、状态与结果引用，不伪造远端运行时控制。",
+      "已定位外部任务记录；当前只展示来源、状态与结果引用，不直接代替外部系统操作。",
     );
-    expect(container.textContent).not.toContain("远端未接入");
+    expect(container.textContent).not.toContain("外部任务未连接");
   });
 
   it("应把 handoff source fact 显示为已定位而不是未接入", () => {
@@ -678,6 +697,7 @@ describe("TeamWorkbenchSummaryPanel", () => {
       currentSessionId: "session-team-1",
       onWorkbenchAction,
     });
+    openTechnicalDetails(container);
 
     const handoffAction = container.querySelector<HTMLButtonElement>(
       '[data-agentui-action-target="session-team-1:handoff:child-1"]',
@@ -691,9 +711,9 @@ describe("TeamWorkbenchSummaryPanel", () => {
     expect(onWorkbenchAction).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("交接已定位");
     expect(container.textContent).toContain(
-      "已定位结构化交接记录；当前只展示交接生命周期，不从文本伪造跨 Agent 控制。",
+      "已定位交接记录；当前只展示交接过程，不直接代替其他任务操作。",
     );
-    expect(container.textContent).not.toContain("交接未接入");
+    expect(container.textContent).not.toContain("交接未连接");
   });
 
   it("应展示 requested fix 回填输入框后的发起状态", () => {
@@ -726,6 +746,7 @@ describe("TeamWorkbenchSummaryPanel", () => {
       currentSessionId: "session-team-1",
       onWorkbenchAction,
     });
+    openTechnicalDetails(container);
 
     const requestedFixAction = container.querySelector<HTMLButtonElement>(
       '[data-agentui-action-target="review-1:requested-fix:1"]',
@@ -742,7 +763,7 @@ describe("TeamWorkbenchSummaryPanel", () => {
     );
     expect(container.textContent).toContain("已回填输入");
     expect(container.textContent).toContain(
-      "requested fix 已回填到输入框；发送后才会进入真实执行，不在工作台内伪造完成态。",
+      "修复请求已回填到输入框；发送后才会进入执行，这里不会直接标记完成。",
     );
   });
 
@@ -776,6 +797,7 @@ describe("TeamWorkbenchSummaryPanel", () => {
       currentSessionId: "session-team-1",
       onWorkbenchAction,
     });
+    openTechnicalDetails(container);
 
     const requestedFixAction = container.querySelector<HTMLButtonElement>(
       '[data-agentui-action-target="review-1:requested-fix:1"]',
@@ -789,14 +811,11 @@ describe("TeamWorkbenchSummaryPanel", () => {
     expect(onWorkbenchAction).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("已提交执行");
     expect(container.textContent).toContain(
-      "requested fix 已作为主线程 runtime turn 提交",
-    );
-    expect(container.textContent).toContain(
-      "requestedFixExecutionResults metadata 回写",
+      "修复请求已提交为执行请求；结果会等后台记录回写后再更新。",
     );
   });
 
-  it("没有 live activity 时应从子会话历史正文读取 transcript preview", async () => {
+  it("没有实时活动时应从队友任务历史正文读取记录预览", async () => {
     mockGetAgentRuntimeSession.mockResolvedValue({
       id: "child-1",
       name: "分析助手",
@@ -904,6 +923,7 @@ describe("TeamWorkbenchSummaryPanel", () => {
         },
       ],
     });
+    openTechnicalDetails(container);
 
     const transcriptAction = container.querySelector<HTMLButtonElement>(
       '[data-agentui-action-target="child-1:turn-child-1"]',
@@ -923,23 +943,20 @@ describe("TeamWorkbenchSummaryPanel", () => {
     expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith("child-1", {
       historyLimit: 20,
     });
-    expect(container.textContent).toContain("结构化 Drilldown");
+    expect(container.textContent).toContain("记录明细");
     expect(container.textContent).toContain("输入队列 1 条");
     expect(container.textContent).toContain("待处理输入 1 条");
     expect(container.textContent).toContain("工具活动 1 条");
     expect(container.textContent).toContain("近期消息 1 条");
-    expect(container.textContent).toContain(
-      "这里只消费子会话详情里的输入队列与历史正文类型",
-    );
-    expect(container.textContent).toContain(
-      "继续处理 Agent UI transcript drilldown",
-    );
+    expect(container.textContent).toContain("这里只展示已有输入队列与历史正文");
+    expect(container.textContent).toContain("继续处理工作台记录明细");
+    expect(container.textContent).not.toContain("Agent UI transcript");
     expect(container.textContent).toContain("图片 1");
     expect(container.textContent).toContain("请选择修复策略");
     expect(container.textContent).toContain("等待补充");
     expect(container.textContent).toContain("工具活动");
     expect(container.textContent).toContain("工具调用");
-    expect(container.textContent).toContain("子会话进展");
+    expect(container.textContent).toContain("队友任务进展");
     expect(container.textContent).toContain("历史正文 3 条");
     expect(container.textContent).toContain("回复");
     expect(container.textContent).toContain(
@@ -983,6 +1000,7 @@ describe("TeamWorkbenchSummaryPanel", () => {
       currentSessionId: "session-team-1",
       onWorkbenchAction,
     });
+    openTechnicalDetails(container);
 
     expect(container.textContent).toContain("重新指派给 implementer");
     expect(container.textContent).toContain(
@@ -1017,7 +1035,7 @@ describe("TeamWorkbenchSummaryPanel", () => {
     expect(container.textContent).toContain("已定位工作台目标");
     expect(container.textContent).toContain("工作项已定位");
     expect(container.textContent).toContain(
-      "已定位结构化任务板记录；可通过负责人选择器回填负责人更新指令，等待运行时确认负责人变化。",
+      "已定位任务记录；可通过负责人选择器回填更新指令，等待后台确认负责人变化。",
     );
     expect(container.textContent).toContain("重新指派 · work-item-2");
     expect(container.textContent).toContain("任务板");
@@ -1082,6 +1100,7 @@ describe("TeamWorkbenchSummaryPanel", () => {
       onWorkbenchAction: vi.fn().mockReturnValue("work_item_source_located"),
       onWorkbenchReassign,
     });
+    openTechnicalDetails(container);
 
     const reassignAction = container.querySelector<HTMLButtonElement>(
       '[data-agentui-action-target="work-item-2"]',
@@ -1098,9 +1117,7 @@ describe("TeamWorkbenchSummaryPanel", () => {
     expect(selector).not.toBeNull();
     expect(container.textContent).toContain("负责人重指派");
     expect(container.textContent).toContain("负责人更新");
-    expect(container.textContent).toContain(
-      "仍以运行时返回的负责人变化作为唯一事实",
-    );
+    expect(container.textContent).toContain("以后台返回的负责人变化为准");
 
     await act(async () => {
       if (!selector) {
@@ -1131,7 +1148,7 @@ describe("TeamWorkbenchSummaryPanel", () => {
     expect(onWorkbenchReassign.mock.calls[0]?.[1]).toBe("复核员");
     expect(container.textContent).toContain("重指派已回填");
     expect(container.textContent).toContain(
-      "负责人更新指令已回填；发送并执行后，以运行时返回的负责人变化为准。",
+      "负责人更新指令已回填；发送并执行后，以后台返回的负责人变化为准。",
     );
   });
 
@@ -1199,6 +1216,7 @@ describe("TeamWorkbenchSummaryPanel", () => {
       currentSessionId: "session-team-1",
       onWorkbenchAction,
     });
+    openTechnicalDetails(container);
 
     const requestedFixAction = container.querySelector<HTMLButtonElement>(
       '[data-agentui-action-target="review-1:requested-fix:1"]',
@@ -1211,15 +1229,15 @@ describe("TeamWorkbenchSummaryPanel", () => {
 
     expect(onWorkbenchAction).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("已定位工作台目标");
-    expect(container.textContent).toContain("工作项未接入");
+    expect(container.textContent).toContain("工作项未连接");
     expect(container.textContent).toContain(
-      "真实任务板或团队 API 写回接入前不伪造工作项状态。",
+      "任务记录已定位；后台写回接入前，这里只提供查看。",
     );
     expect(container.textContent).toContain(`结果引用：${resultRef}`);
-    expect(container.textContent).toContain(`Artifact paths：${artifactPath}`);
+    expect(container.textContent).toContain(`交付物路径：${artifactPath}`);
     expect(container.textContent).toContain("相关队友链路");
-    expect(container.textContent).toContain("产物引用");
-    expect(container.textContent).toContain("产物工作区");
+    expect(container.textContent).toContain("交付物引用");
+    expect(container.textContent).toContain("交付物工作区");
     expect(container.textContent).toContain("runtime-json");
   });
 });

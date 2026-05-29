@@ -90,6 +90,42 @@ describe("项目管理 API", () => {
       );
     });
 
+    it("应该支持按用户选择的父目录解析项目目录", async () => {
+      vi.mocked(safeInvoke).mockResolvedValueOnce(
+        "/Users/test/Documents/MyProject",
+      );
+
+      const path = await resolveProjectRootPath(
+        "MyProject",
+        "/Users/test/Documents",
+      );
+
+      expect(path).toBe("/Users/test/Documents/MyProject");
+      expect(safeInvoke).toHaveBeenCalledWith(
+        "workspace_resolve_project_path",
+        {
+          name: "MyProject",
+          parentRootPath: "/Users/test/Documents",
+        },
+      );
+    });
+
+    it("应该忽略空白父目录并交给后端使用默认目录", async () => {
+      vi.mocked(safeInvoke).mockResolvedValueOnce(
+        "/Users/test/.lime/projects/MyProject",
+      );
+
+      const path = await resolveProjectRootPath("MyProject", "   ");
+
+      expect(path).toBe("/Users/test/.lime/projects/MyProject");
+      expect(safeInvoke).toHaveBeenCalledWith(
+        "workspace_resolve_project_path",
+        {
+          name: "MyProject",
+        },
+      );
+    });
+
     it("应该将空名称传给后端统一处理", async () => {
       vi.mocked(safeInvoke).mockResolvedValueOnce(
         "/Users/test/.lime/projects/未命名项目",

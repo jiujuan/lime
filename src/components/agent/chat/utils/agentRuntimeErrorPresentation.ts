@@ -6,13 +6,16 @@ const PROVIDER_AUTH_ERROR_MESSAGE =
   "当前 Provider 鉴权未通过，请前往设置 -> AI 服务商检查 API Key、Base URL 或授权配置后重试。";
 
 const PROVIDER_QUOTA_ERROR_MESSAGE =
-  "当前 AI 服务商余额或额度不足，请在服务商后台充值或开通额度，或切换到其他可用模型后重试。";
+  "当前模型通道返回了计费或额度类错误，请检查该 Provider/模型通道的计费、配额或授权状态，或切换到其他可用模型后重试。";
 
 const PROVIDER_SESSION_EXPIRED_ERROR_MESSAGE =
   "当前模型通道返回了不兼容的工具 schema，请前往设置 -> AI 服务商检查 Provider 配置或切换模型后重试。";
 
 const PROVIDER_CHANNEL_ERROR_MESSAGE =
   "当前模型通道暂不可用，请前往设置 -> AI 服务商检查 Provider 配置，必要时切换模型后重试。";
+
+const INTERNAL_RUNTIME_ERROR_MESSAGE =
+  "运行时返回内部错误，已保留详情用于排查。请稍后重试，或检查服务商与工具连接状态。";
 
 function normalizeRuntimeErrorMessage(errorMessage: string): string {
   const normalized = errorMessage.trim();
@@ -110,6 +113,18 @@ function isLikelyProviderChannelError(message: string): boolean {
   return message.includes("no available channel for model");
 }
 
+function isLikelyInternalRuntimeTransportError(message: string): boolean {
+  return (
+    includesAny(message, ["-32603", "-32002", "troubleshooting"]) ||
+    ((message.includes("json-rpc") || message.includes("jsonrpc")) &&
+      includesAny(message, [
+        "internal error",
+        "internal server error",
+        "rpc error",
+      ]))
+  );
+}
+
 export function resolveAgentRuntimeErrorPresentation(errorMessage: string): {
   displayMessage: string;
   toastMessage: string;
@@ -128,6 +143,17 @@ export function resolveAgentRuntimeErrorPresentation(errorMessage: string): {
     return {
       displayMessage: PROVIDER_CHANNEL_ERROR_MESSAGE,
       toastMessage: PROVIDER_CHANNEL_ERROR_MESSAGE,
+    };
+  }
+
+  if (isLikelyInternalRuntimeTransportError(lowerMessage)) {
+    const message = readAgentRuntimeCopy(
+      "agentChat.runtimeError.internalRuntime",
+      INTERNAL_RUNTIME_ERROR_MESSAGE,
+    );
+    return {
+      displayMessage: message,
+      toastMessage: message,
     };
   }
 

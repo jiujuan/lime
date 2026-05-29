@@ -5,8 +5,8 @@
  */
 
 import { useState, useEffect, useMemo } from "react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -34,7 +34,11 @@ import { toast } from "sonner";
 interface CreateProjectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (name: string, type: ProjectType) => Promise<void>;
+  onSubmit: (
+    name: string,
+    type: ProjectType,
+    rootPath: string,
+  ) => Promise<void>;
   defaultType?: ProjectType;
   defaultName?: string;
   allowedTypes?: ProjectType[];
@@ -54,10 +58,12 @@ export function CreateProjectDialog({
   const [name, setName] = useState("");
   const [type, setType] = useState<UserProjectType>("general");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [workspaceRootPath, setWorkspaceRootPath] = useState("");
+  const [parentRootPath, setParentRootPath] = useState("");
   const [resolvedProjectPath, setResolvedProjectPath] = useState("");
   const [pathChecking, setPathChecking] = useState(false);
   const [pathConflictMessage, setPathConflictMessage] = useState("");
+  const [pathErrorMessage, setPathErrorMessage] = useState("");
+  const [isChoosingParentPath, setIsChoosingParentPath] = useState(false);
 
   const visibleTypes = useMemo(() => {
     const candidates =
@@ -73,6 +79,7 @@ export function CreateProjectDialog({
   }, [allowedTypes]);
 
   const fallbackType = visibleTypes[0] || "general";
+  const showTypeSelector = visibleTypes.length > 1;
   const projectTypeLabels: Record<UserProjectType, string> = {
     general: t("common.createProjectDialog.projectType.general"),
   };
@@ -111,8 +118,8 @@ export function CreateProjectDialog({
 
   // 当对话框打开且 defaultName 变化时，更新项目名称
   useEffect(() => {
-    if (open && defaultName) {
-      setName(defaultName);
+    if (open) {
+      setName(defaultName || "");
     }
   }, [open, defaultName]);
 
@@ -122,17 +129,21 @@ export function CreateProjectDialog({
     }
 
     let mounted = true;
+    setResolvedProjectPath("");
+    setPathChecking(false);
+    setPathConflictMessage("");
+    setPathErrorMessage("");
 
     const loadWorkspaceRoot = async () => {
       try {
         const root = await getWorkspaceProjectsRoot();
         if (mounted) {
-          setWorkspaceRootPath(root);
+          setParentRootPath(root);
         }
       } catch (error) {
         console.error("加载 workspace 目录失败:", error);
         if (mounted) {
-          setWorkspaceRootPath("");
+          setParentRootPath("");
         }
       }
     };
@@ -150,51 +161,37 @@ export function CreateProjectDialog({
     }
 
     const projectName = name.trim();
+    const rootPath = parentRootPath.trim();
     if (!projectName) {
       setResolvedProjectPath("");
       setPathChecking(false);
       setPathConflictMessage("");
+      setPathErrorMessage("");
       return;
     }
 
-    let mounted = true;
-
-    const resolvePath = async () => {
-      try {
-        const path = await resolveProjectRootPath(projectName);
-        if (mounted) {
-          setResolvedProjectPath(path);
-          setPathConflictMessage("");
-        }
-      } catch (error) {
-        console.error("解析项目目录失败:", error);
-        if (mounted) {
-          setResolvedProjectPath("");
-          setPathConflictMessage("");
-        }
-      }
-    };
-
-    void resolvePath();
-
-    return () => {
-      mounted = false;
-    };
-  }, [open, name]);
-
-  useEffect(() => {
-    if (!open || !resolvedProjectPath) {
+    if (!rootPath) {
+      setResolvedProjectPath("");
       setPathChecking(false);
       setPathConflictMessage("");
+      setPathErrorMessage(t("common.createProjectDialog.path.parentRequired"));
       return;
     }
 
     let mounted = true;
     setPathChecking(true);
+    setPathConflictMessage("");
+    setPathErrorMessage("");
 
-    const checkPathConflict = async () => {
+    const resolveAndCheckPath = async () => {
       try {
-        const existingProject = await getProjectByRootPath(resolvedProjectPath);
+        const path = await resolveProjectRootPath(projectName, rootPath);
+        if (!mounted) {
+          return;
+        }
+
+        setResolvedProjectPath(path);
+        const existingProject = await getProjectByRootPath(path);
         if (!mounted) {
           return;
         }
@@ -209,9 +206,11 @@ export function CreateProjectDialog({
           setPathConflictMessage("");
         }
       } catch (error) {
-        console.error("检查项目路径冲突失败:", error);
+        console.error("解析或检查项目目录失败:", error);
         if (mounted) {
+          setResolvedProjectPath("");
           setPathConflictMessage("");
+          setPathErrorMessage(t("common.createProjectDialog.error.invalidPath"));
         }
       } finally {
         if (mounted) {
@@ -220,27 +219,65 @@ export function CreateProjectDialog({
       }
     };
 
-    void checkPathConflict();
+    void resolveAndCheckPath();
 
     return () => {
       mounted = false;
     };
-  }, [open, resolvedProjectPath, t]);
+  }, [open, name, parentRootPath, t]);
+
+  const resetType = () => {
+    setType(
+      defaultType &&
+        USER_PROJECT_TYPES.includes(defaultType as UserProjectType) &&
+        visibleTypes.includes(defaultType as UserProjectType)
+        ? (defaultType as UserProjectType)
+        : fallbackType,
+    );
+  };
+
+  const handleChooseParentPath = async () => {
+    setIsChoosingParentPath(true);
+    try {
+      const selectedPath = await openDialog({
+        directory: true,
+        multiple: false,
+        defaultPath: parentRootPath || undefined,
+      });
+      if (typeof selectedPath === "string" && selectedPath.trim()) {
+        setParentRootPath(selectedPath);
+      }
+    } catch (error) {
+      toast.error(
+        t("common.createProjectDialog.path.selectFailed", {
+          message: extractErrorMessage(error),
+        }),
+      );
+    } finally {
+      setIsChoosingParentPath(false);
+    }
+  };
+
+  const canSubmit =
+    Boolean(name.trim()) &&
+    Boolean(parentRootPath.trim()) &&
+    Boolean(resolvedProjectPath) &&
+    !isSubmitting &&
+    !pathChecking &&
+    !pathConflictMessage &&
+    !pathErrorMessage;
 
   const handleSubmit = async () => {
-    if (!name.trim()) return;
+    if (!canSubmit) return;
 
     setIsSubmitting(true);
     try {
-      await onSubmit(name.trim(), type);
+      await onSubmit(name.trim(), type, resolvedProjectPath);
       setName("");
-      setType(
-        defaultType &&
-          USER_PROJECT_TYPES.includes(defaultType as UserProjectType) &&
-          visibleTypes.includes(defaultType as UserProjectType)
-          ? (defaultType as UserProjectType)
-          : fallbackType,
-      );
+      setResolvedProjectPath("");
+      setPathConflictMessage("");
+      setPathErrorMessage("");
+      resetType();
       onOpenChange(false);
     } catch (error) {
       console.error("创建项目失败:", error);
@@ -258,200 +295,139 @@ export function CreateProjectDialog({
       setIsSubmitting(false);
     }
   };
-  const topBadges = [
-    getProjectTypeDisplayLabel(type),
-    workspaceRootPath
-      ? t("common.createProjectDialog.status.workspaceResolved")
-      : t("common.createProjectDialog.status.waitingWorkspace"),
-    pathConflictMessage
-      ? t("common.createProjectDialog.status.pathConflict")
-      : t("common.createProjectDialog.status.pathAvailable"),
-  ];
+
+  const pathFeedback =
+    pathErrorMessage ||
+    pathConflictMessage ||
+    (pathChecking ? t("common.createProjectDialog.path.checking") : "");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[760px] overflow-hidden border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,0.98)_38%,rgba(240,249,255,0.94)_100%)] p-0">
-        <DialogHeader className="border-b border-white/80 px-6 py-5">
-          <DialogTitle>{t("common.createProjectDialog.title")}</DialogTitle>
-          <DialogDescription>
-            {t("common.createProjectDialog.description")}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="overflow-hidden border-slate-200 bg-white p-0 sm:max-w-[480px]">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleSubmit();
+          }}
+        >
+          <DialogHeader className="border-b border-slate-100 px-6 py-5">
+            <DialogTitle>{t("common.createProjectDialog.title")}</DialogTitle>
+            <DialogDescription className="sr-only">
+              {t("common.createProjectDialog.description")}
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="grid max-h-[78vh] gap-5 overflow-auto p-5 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="space-y-5">
-            <section className="relative overflow-hidden rounded-[28px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(247,250,252,0.98)_0%,rgba(255,255,255,0.98)_48%,rgba(240,249,255,0.94)_100%)] p-5 shadow-sm shadow-slate-950/5">
-              <div className="pointer-events-none absolute -left-10 top-[-28px] h-24 w-24 rounded-full bg-sky-200/20 blur-3xl" />
-              <div className="pointer-events-none absolute right-[-14px] top-0 h-20 w-20 rounded-full bg-emerald-200/20 blur-3xl" />
-              <div className="relative space-y-4">
-                <div>
-                  <div className="text-sm font-semibold text-slate-900">
-                    {t("common.createProjectDialog.hero.title")}
-                  </div>
-                  <div className="mt-1 text-xs leading-5 text-slate-500">
-                    {t("common.createProjectDialog.hero.description")}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {topBadges.map((item) => (
-                    <span
-                      key={item}
-                      className="rounded-full border border-white/90 bg-white/85 px-3 py-1 text-[11px] font-medium text-slate-600 shadow-sm"
+          <div className="space-y-5 px-6 py-5">
+            <div className="grid gap-2">
+              <Label htmlFor="name">
+                {t("common.createProjectDialog.name.label")}
+              </Label>
+              <Input
+                id="name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder={t("common.createProjectDialog.name.placeholder")}
+                autoFocus
+              />
+            </div>
+
+            {showTypeSelector ? (
+              <div className="grid gap-2">
+                <Label>{t("common.createProjectDialog.type.title")}</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {visibleTypes.map((projectType) => (
+                    <button
+                      key={projectType}
+                      type="button"
+                      aria-pressed={type === projectType}
+                      className={cn(
+                        "flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm transition",
+                        type === projectType
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                      )}
+                      onClick={() => setType(projectType)}
                     >
-                      {item}
-                    </span>
+                      <span>{getProjectTypeIcon(projectType)}</span>
+                      <span>{getProjectTypeDisplayLabel(projectType)}</span>
+                    </button>
                   ))}
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="name">
-                    {t("common.createProjectDialog.name.label")}
-                  </Label>
-                  <Input
-                    id="name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder={t(
-                      "common.createProjectDialog.name.placeholder",
-                    )}
-                    autoFocus
-                    className="h-11 border-slate-200/80 bg-white/90"
-                  />
-                </div>
               </div>
-            </section>
+            ) : null}
 
-            <section className="rounded-[28px] border border-slate-200/80 bg-white/92 p-5 shadow-sm shadow-slate-950/5">
-              <div className="mb-4">
-                <div className="text-sm font-semibold text-slate-900">
-                  {t("common.createProjectDialog.type.title")}
-                </div>
-                <div className="mt-1 text-xs leading-5 text-slate-500">
-                  {t("common.createProjectDialog.type.description")}
-                </div>
+            <div className="grid gap-2">
+              <Label htmlFor="parent-root">
+                {t("common.createProjectDialog.path.workspaceRootLabel")}
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  id="parent-root"
+                  value={parentRootPath}
+                  placeholder={t("common.loading")}
+                  readOnly
+                  title={parentRootPath}
+                  className="min-w-0 flex-1 bg-slate-50"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="shrink-0"
+                  disabled={isChoosingParentPath || isSubmitting}
+                  onClick={() => {
+                    void handleChooseParentPath();
+                  }}
+                >
+                  {t("common.createProjectDialog.path.select")}
+                </Button>
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {visibleTypes.map((projectType) => (
-                  <button
-                    key={projectType}
-                    type="button"
-                    className={cn(
-                      "flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-[22px] border px-4 py-4 text-center transition",
-                      type === projectType
-                        ? "border-emerald-200 bg-[linear-gradient(135deg,rgba(240,253,250,0.98)_0%,rgba(236,253,245,0.96)_52%,rgba(224,242,254,0.95)_100%)] shadow-sm shadow-emerald-950/10"
-                        : "border-slate-200/80 bg-slate-50/70 hover:border-slate-300 hover:bg-white",
-                    )}
-                    onClick={() => setType(projectType)}
-                  >
-                    <span className="text-2xl">
-                      {getProjectTypeIcon(projectType)}
-                    </span>
-                    <span className="text-xs font-medium text-slate-900">
-                      {getProjectTypeDisplayLabel(projectType)}
-                    </span>
-                    {type === projectType ? (
-                      <Badge className="border border-emerald-200 bg-emerald-50 text-emerald-700">
-                        {t("common.createProjectDialog.type.selected")}
-                      </Badge>
-                    ) : null}
-                  </button>
-                ))}
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="project-path-preview">
+                {t("common.createProjectDialog.path.previewLabel")}
+              </Label>
+              <div
+                id="project-path-preview"
+                title={resolvedProjectPath}
+                className="min-h-10 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-5 text-slate-700"
+              >
+                <span className="block truncate">
+                  {resolvedProjectPath ||
+                    t("common.createProjectDialog.path.nameRequired")}
+                </span>
               </div>
-            </section>
+              {pathFeedback ? (
+                <p
+                  className={cn(
+                    "text-xs leading-5",
+                    pathErrorMessage || pathConflictMessage
+                      ? "text-destructive"
+                      : "text-slate-500",
+                  )}
+                >
+                  {pathFeedback}
+                </p>
+              ) : null}
+            </div>
           </div>
 
-          <div className="space-y-5">
-            <section className="rounded-[28px] border border-slate-200/80 bg-white/92 p-5 shadow-sm shadow-slate-950/5">
-              <div className="mb-4">
-                <div className="text-sm font-semibold text-slate-900">
-                  {t("common.createProjectDialog.path.title")}
-                </div>
-                <div className="mt-1 text-xs leading-5 text-slate-500">
-                  {t("common.createProjectDialog.path.description")}
-                </div>
-              </div>
-
-              <div className="grid gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="workspace-root">
-                    {t("common.createProjectDialog.path.workspaceRootLabel")}
-                  </Label>
-                  <Input
-                    id="workspace-root"
-                    value={workspaceRootPath}
-                    placeholder={t("common.loading")}
-                    readOnly
-                    className="bg-slate-50/80"
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="project-path-preview">
-                    {t("common.createProjectDialog.path.previewLabel")}
-                  </Label>
-                  <Input
-                    id="project-path-preview"
-                    value={resolvedProjectPath}
-                    placeholder={t(
-                      "common.createProjectDialog.path.nameRequired",
-                    )}
-                    readOnly
-                    className="bg-slate-50/80"
-                  />
-                  <p className="break-all text-xs leading-5 text-slate-500">
-                    {t("common.createProjectDialog.path.willCreateAt", {
-                      path:
-                        resolvedProjectPath ||
-                        t("common.createProjectDialog.path.nameRequired"),
-                    })}
-                  </p>
-                  {pathChecking && (
-                    <p className="text-xs text-slate-500">
-                      {t("common.createProjectDialog.path.checking")}
-                    </p>
-                  )}
-                  {!pathChecking && pathConflictMessage && (
-                    <p className="text-xs text-destructive">
-                      {pathConflictMessage}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </section>
-
-            <section className="rounded-[28px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.9)_0%,rgba(255,255,255,0.98)_100%)] p-5 shadow-sm shadow-slate-950/5">
-              <div className="text-sm font-semibold text-slate-900">
-                {t("common.createProjectDialog.tips.title")}
-              </div>
-              <div className="mt-2 space-y-2 text-xs leading-5 text-slate-500">
-                <p>{t("common.createProjectDialog.tips.name")}</p>
-                <p>{t("common.createProjectDialog.tips.path")}</p>
-                <p>{t("common.createProjectDialog.tips.type")}</p>
-              </div>
-            </section>
-          </div>
-        </div>
-        <DialogFooter className="border-t border-white/80 px-6 py-4">
-          <Button
-            variant="outline"
-            className="border-slate-200/80 bg-white"
-            onClick={() => onOpenChange(false)}
-          >
-            {t("common.cancel")}
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={
-              !name.trim() ||
-              isSubmitting ||
-              pathChecking ||
-              !!pathConflictMessage
-            }
-          >
-            {isSubmitting
-              ? t("common.createProjectDialog.action.creating")
-              : t("common.createProjectDialog.action.create")}
-          </Button>
-        </DialogFooter>
+          <DialogFooter className="border-t border-slate-100 px-6 py-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="border-slate-200 bg-white"
+              onClick={() => onOpenChange(false)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" disabled={!canSubmit}>
+              {isSubmitting
+                ? t("common.createProjectDialog.action.creating")
+                : t("common.createProjectDialog.action.create")}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

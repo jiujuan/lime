@@ -11,12 +11,18 @@ const {
   mockToastSuccess,
   mockGetProject,
   mockGetDefaultProject,
+  mockGetProjectByRootPath,
+  mockRevealPathInFinder,
+  mockOpenDialog,
 } = vi.hoisted(() => ({
   mockUseProjects: vi.fn(),
   mockToastError: vi.fn(),
   mockToastSuccess: vi.fn(),
   mockGetProject: vi.fn(),
   mockGetDefaultProject: vi.fn(),
+  mockGetProjectByRootPath: vi.fn(),
+  mockRevealPathInFinder: vi.fn(),
+  mockOpenDialog: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({
@@ -43,18 +49,21 @@ vi.mock("react-i18next", () => ({
         "common.save": "保存",
         "common.projectSelector.action.createProject": "新建项目",
         "common.projectSelector.action.createWorkspace": "新建工作区",
-        "common.projectSelector.action.deleteEntity": "删除{{entity}}",
-        "common.projectSelector.action.deleting": "删除中...",
+        "common.projectSelector.action.deleting": "移除中...",
+        "common.projectSelector.action.openExistingFolder": "打开现有文件夹",
+        "common.projectSelector.action.remove": "移除",
+        "common.projectSelector.action.removeEntity": "移除{{entity}}",
+        "common.projectSelector.action.revealPath.default": "显示位置",
+        "common.projectSelector.action.revealPath.linux": "在文件管理器中显示",
+        "common.projectSelector.action.revealPath.macos": "在 Finder 中显示",
+        "common.projectSelector.action.revealPath.unknown": "显示位置",
+        "common.projectSelector.action.revealPath.windows":
+          "在文件资源管理器中显示",
         "common.projectSelector.action.rename": "重命名",
         "common.projectSelector.action.saving": "保存中...",
+        "common.projectSelector.action.viewContents": "查看内容",
         "common.projectSelector.badge.default": "默认",
         "common.projectSelector.current.label": "当前{{entity}}：",
-        "common.projectSelector.delete.dangerDescription":
-          "仅删除项目记录，不删除本地目录和已有文件。",
-        "common.projectSelector.delete.dangerTitle": "此操作不可恢复",
-        "common.projectSelector.delete.description":
-          "确定要删除{{entity}}{{name}}吗？",
-        "common.projectSelector.delete.title": "删除{{entity}}",
         "common.projectSelector.empty": "未找到匹配项目",
         "common.projectSelector.entity.project": "项目",
         "common.projectSelector.entity.workspace": "工作区",
@@ -63,7 +72,7 @@ vi.mock("react-i18next", () => ({
           "在这里切换、搜索和管理可见{{entity}}列表。",
         "common.projectSelector.header.title": "选择{{entity}}",
         "common.projectSelector.management.defaultLocked":
-          "默认{{entity}}不可重命名或删除",
+          "默认{{entity}}不可重命名或移除",
         "common.projectSelector.management.description.project":
           "当前只管理可见项目，不影响本地目录与已有文件。",
         "common.projectSelector.management.description.workspace":
@@ -75,16 +84,27 @@ vi.mock("react-i18next", () => ({
         "common.projectSelector.path.notSet": "未设置目录",
         "common.projectSelector.placeholder.project": "选择项目",
         "common.projectSelector.placeholder.workspace": "选择工作区",
+        "common.projectSelector.remove.dangerDescription":
+          "只移除 Lime 中的记录，不删除本地目录和已有文件。",
+        "common.projectSelector.remove.dangerTitle": "本地文件会保留",
+        "common.projectSelector.remove.description":
+          "确定要移除{{entity}}{{name}}吗？",
+        "common.projectSelector.remove.title": "移除{{entity}}",
         "common.projectSelector.rename.description":
           "更新{{entity}}名称，不会修改本地目录路径。",
         "common.projectSelector.rename.placeholder": "输入新的项目名称",
         "common.projectSelector.rename.title": "重命名{{entity}}",
         "common.projectSelector.search.placeholder": "搜索{{entity}}",
         "common.projectSelector.toast.created": "{{entity}}已创建",
-        "common.projectSelector.toast.deleted":
-          "{{entity}}已删除，本地目录未删除",
-        "common.projectSelector.toast.deleteFailed": "删除失败：{{message}}",
         "common.projectSelector.toast.nameRequired": "{{entity}}名称不能为空",
+        "common.projectSelector.toast.openExistingFolderFailed":
+          "打开现有文件夹失败：{{message}}",
+        "common.projectSelector.toast.pathMissing": "当前没有可打开的本地目录",
+        "common.projectSelector.toast.removeFailed": "移除失败：{{message}}",
+        "common.projectSelector.toast.removed":
+          "{{entity}}已移除，本地目录未删除",
+        "common.projectSelector.toast.revealPathFailed":
+          "打开位置失败：{{message}}",
         "common.projectSelector.toast.renamed": "{{entity}}名称已更新",
         "common.projectSelector.toast.renameFailed": "重命名失败：{{message}}",
         "common.projectSelector.workspaceType.blog": "博客",
@@ -104,6 +124,14 @@ vi.mock("@/hooks/useProjects", () => ({
   useProjects: mockUseProjects,
 }));
 
+vi.mock("@/lib/api/fileSystem", () => ({
+  revealPathInFinder: mockRevealPathInFinder,
+}));
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  open: mockOpenDialog,
+}));
+
 vi.mock("@/lib/api/project", async () => {
   const actual =
     await vi.importActual<typeof import("@/lib/api/project")>(
@@ -114,6 +142,7 @@ vi.mock("@/lib/api/project", async () => {
     ...actual,
     getProject: mockGetProject,
     getDefaultProject: mockGetDefaultProject,
+    getProjectByRootPath: mockGetProjectByRootPath,
   };
 });
 
@@ -185,9 +214,12 @@ vi.mock("@/components/ui/popover", () => ({
 }));
 
 vi.mock("@/components/ui/scroll-area", () => ({
-  ScrollArea: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
+  ScrollArea: ({
+    children,
+    ...props
+  }: React.HTMLAttributes<HTMLDivElement> & {
+    children: React.ReactNode;
+  }) => <div {...props}>{children}</div>,
 }));
 
 vi.mock("@/components/ui/dialog", () => ({
@@ -308,6 +340,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockGetProject.mockResolvedValue(null);
   mockGetDefaultProject.mockResolvedValue(null);
+  mockGetProjectByRootPath.mockResolvedValue(null);
+  mockOpenDialog.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -323,7 +357,7 @@ afterEach(() => {
 });
 
 describe("ProjectSelector 组件", () => {
-  it("默认项目在管理模式下不可重命名或删除", () => {
+  it("默认项目在管理模式下不可重命名或移除", () => {
     const defaultProject = createProject({
       id: "default",
       name: "默认项目",
@@ -351,11 +385,11 @@ describe("ProjectSelector 组件", () => {
     });
 
     expect(findButton(container, "重命名")?.disabled).toBe(true);
-    expect(findButton(container, "删除")?.disabled).toBe(true);
-    expect(container.textContent).toContain("默认项目不可重命名或删除");
+    expect(findButton(container, "移除")?.disabled).toBe(true);
+    expect(container.textContent).toContain("默认项目不可重命名或移除");
   });
 
-  it("删除当前项目后应回退到默认项目", async () => {
+  it("移除当前项目后应回退到默认项目", async () => {
     const onChange = vi.fn();
     const remove = vi.fn(async () => true);
     const defaultProject = createProject({
@@ -387,18 +421,19 @@ describe("ProjectSelector 组件", () => {
     });
 
     act(() => {
-      findButton(container, "删除")?.click();
+      findButton(container, "移除")?.click();
     });
     await flushAsync();
 
     await act(async () => {
-      findButton(container, "删除项目")?.click();
+      findButton(container, "移除项目")?.click();
       await Promise.resolve();
     });
     await flushAsync();
 
     expect(remove).toHaveBeenCalledWith(generalProject.id);
     expect(onChange).toHaveBeenCalledWith(defaultProject.id);
+    expect(mockToastSuccess).toHaveBeenCalledWith("项目已移除，本地目录未删除");
   });
 
   it("未启用管理模式时不显示管理操作区", () => {
@@ -425,10 +460,10 @@ describe("ProjectSelector 组件", () => {
 
     expect(findButton(container, "新建项目")).toBeNull();
     expect(findButton(container, "重命名")).toBeNull();
-    expect(findButton(container, "删除")).toBeNull();
+    expect(findButton(container, "移除")).toBeNull();
   });
 
-  it("workspace-tab 模式应使用工作区文案", () => {
+  it("workspace-tab 模式应复刻轻量工作区列表", () => {
     const defaultProject = createProject({
       id: "default",
       name: "默认工作区",
@@ -452,13 +487,397 @@ describe("ProjectSelector 组件", () => {
       placeholder: "选择工作区",
     });
 
-    expect(container.textContent).toContain("选择工作区");
+    expect(container.textContent).toContain("默认工作区");
     expect(
       container.querySelector(".lucide-folder")?.getAttribute("class"),
     ).toContain("h-4");
-    expect(container.textContent).toContain("工作区管理");
+    expect(container.textContent).not.toContain("工作区管理");
+    expect(container.textContent).not.toContain("搜索工作区");
+    expect(
+      container.querySelector('[data-testid="workspace-selector-scroll"]')
+        ?.className,
+    ).toContain("max-h-[308px]");
+    expect(findButton(container, "打开现有文件夹")).not.toBeNull();
     expect(findButton(container, "新建工作区")).not.toBeNull();
     expect(findButton(container, "新建项目")).toBeNull();
+  });
+
+  it("workspace-tab 列表非默认工作区行尾应提供移除入口", async () => {
+    const remove = vi.fn(async () => true);
+    const defaultProject = createProject({
+      id: "default",
+      name: "默认工作区",
+      isDefault: true,
+      workspaceType: "general",
+    });
+    const normalProject = createProject({
+      id: "normal",
+      name: "普通工作区",
+      workspaceType: "general",
+    });
+
+    mockUseProjects.mockReturnValue(
+      createUseProjectsResult({
+        projects: [defaultProject, normalProject],
+        generalProjects: [defaultProject, normalProject],
+        defaultProject,
+        remove,
+      }),
+    );
+
+    const container = renderProjectSelector({
+      value: defaultProject.id,
+      workspaceType: "general",
+      enableManagement: true,
+      chrome: "workspace-tab",
+    });
+
+    const removeButtons = Array.from(
+      container.querySelectorAll('button[aria-label="移除工作区"]'),
+    ) as HTMLButtonElement[];
+    expect(removeButtons).toHaveLength(1);
+    expect(removeButtons[0]?.className).toContain("opacity-0");
+    expect(removeButtons[0]?.className).toContain("group-hover:opacity-100");
+
+    act(() => {
+      removeButtons[0]?.click();
+    });
+    await flushAsync();
+
+    expect(container.textContent).toContain("移除工作区");
+    expect(container.textContent).toContain("普通工作区");
+  });
+
+  it("workspace-tab 当前工作区行尾应显示对勾", () => {
+    const defaultProject = createProject({
+      id: "default",
+      name: "默认工作区",
+      isDefault: true,
+      workspaceType: "general",
+    });
+    const normalProject = createProject({
+      id: "normal",
+      name: "普通工作区",
+      workspaceType: "general",
+    });
+
+    mockUseProjects.mockReturnValue(
+      createUseProjectsResult({
+        projects: [defaultProject, normalProject],
+        generalProjects: [defaultProject, normalProject],
+        defaultProject,
+      }),
+    );
+
+    const container = renderProjectSelector({
+      value: normalProject.id,
+      workspaceType: "general",
+      enableManagement: true,
+      chrome: "workspace-tab",
+    });
+
+    const defaultRow = container.querySelector(
+      '[data-testid="workspace-selector-row-default"]',
+    );
+    const normalRow = container.querySelector(
+      '[data-testid="workspace-selector-row-normal"]',
+    );
+    const rows = Array.from(
+      container.querySelectorAll('[data-testid^="workspace-selector-row-"]'),
+    );
+
+    expect(rows[0]).toBe(normalRow);
+    expect(defaultRow?.getAttribute("data-selected")).toBe("false");
+    expect(defaultRow?.querySelector(".lucide-check")).toBeNull();
+    expect(normalRow?.getAttribute("data-selected")).toBe("true");
+    expect(normalRow?.querySelector(".lucide-check")).not.toBeNull();
+  });
+
+  it("workspace-tab 未显式选择时应把默认工作区显示为当前选中行", () => {
+    const defaultProject = createProject({
+      id: "default",
+      name: "默认工作区",
+      isDefault: true,
+      workspaceType: "general",
+    });
+    const normalProject = createProject({
+      id: "normal",
+      name: "普通工作区",
+      workspaceType: "general",
+    });
+
+    mockUseProjects.mockReturnValue(
+      createUseProjectsResult({
+        projects: [normalProject, defaultProject],
+        generalProjects: [normalProject, defaultProject],
+        defaultProject,
+      }),
+    );
+
+    const container = renderProjectSelector({
+      value: null,
+      workspaceType: "general",
+      enableManagement: true,
+      chrome: "workspace-tab",
+    });
+
+    const rows = Array.from(
+      container.querySelectorAll('[data-testid^="workspace-selector-row-"]'),
+    );
+    const defaultRow = container.querySelector(
+      '[data-testid="workspace-selector-row-default"]',
+    );
+    const normalRow = container.querySelector(
+      '[data-testid="workspace-selector-row-normal"]',
+    );
+
+    expect(rows[0]).toBe(defaultRow);
+    expect(defaultRow?.getAttribute("data-selected")).toBe("true");
+    expect(defaultRow?.querySelector(".lucide-check")).not.toBeNull();
+    expect(defaultRow?.className).toContain("bg-slate-100");
+    expect(normalRow?.getAttribute("data-selected")).toBe("false");
+  });
+
+  it("workspace-tab 当前工作区不在已加载列表时仍应置顶并显示选中态", () => {
+    const defaultProject = createProject({
+      id: "default",
+      name: "默认工作区",
+      rootPath: "/Users/coso/.newmax/workspace",
+      isDefault: true,
+      workspaceType: "general",
+    });
+    const normalProject = createProject({
+      id: "normal",
+      name: "普通工作区",
+      workspaceType: "general",
+    });
+
+    mockUseProjects.mockReturnValue(
+      createUseProjectsResult({
+        projects: [normalProject],
+        generalProjects: [normalProject],
+        defaultProject,
+      }),
+    );
+
+    const container = renderProjectSelector({
+      value: defaultProject.id,
+      workspaceType: "general",
+      enableManagement: true,
+      chrome: "workspace-tab",
+    });
+
+    const rows = Array.from(
+      container.querySelectorAll('[data-testid^="workspace-selector-row-"]'),
+    );
+    const defaultRow = container.querySelector(
+      '[data-testid="workspace-selector-row-default"]',
+    );
+    const normalRow = container.querySelector(
+      '[data-testid="workspace-selector-row-normal"]',
+    );
+
+    expect(rows[0]).toBe(defaultRow);
+    expect(defaultRow?.textContent).toContain("默认工作区");
+    expect(defaultRow?.getAttribute("data-selected")).toBe("true");
+    expect(defaultRow?.querySelector(".lucide-check")).not.toBeNull();
+    expect(normalRow?.getAttribute("data-selected")).toBe("false");
+  });
+
+  it("workspace-tab 打开现有文件夹时应复用已存在工作区", async () => {
+    const onChange = vi.fn();
+    const defaultProject = createProject({
+      id: "default",
+      name: "默认工作区",
+      isDefault: true,
+      workspaceType: "general",
+    });
+    const existingProject = createProject({
+      id: "existing",
+      name: "已有工作区",
+      rootPath: "/tmp/existing",
+      workspaceType: "general",
+    });
+
+    mockOpenDialog.mockResolvedValue("/tmp/existing");
+    mockGetProjectByRootPath.mockResolvedValue(existingProject);
+    mockUseProjects.mockReturnValue(
+      createUseProjectsResult({
+        projects: [defaultProject],
+        generalProjects: [defaultProject],
+        defaultProject,
+      }),
+    );
+
+    const container = renderProjectSelector({
+      value: defaultProject.id,
+      onChange,
+      workspaceType: "general",
+      enableManagement: true,
+      chrome: "workspace-tab",
+    });
+
+    await act(async () => {
+      findButton(container, "打开现有文件夹")?.click();
+      await Promise.resolve();
+    });
+    await flushAsync();
+
+    expect(mockOpenDialog).toHaveBeenCalledWith({
+      directory: true,
+      multiple: false,
+    });
+    expect(mockGetProjectByRootPath).toHaveBeenCalledWith("/tmp/existing");
+    expect(onChange).toHaveBeenCalledWith("existing");
+    expect(mockToastSuccess).not.toHaveBeenCalled();
+  });
+
+  it("workspace-tab 打开新目录时应创建工作区记录", async () => {
+    const onChange = vi.fn();
+    const create = vi.fn(async () =>
+      createProject({
+        id: "new-workspace",
+        name: "new-workspace",
+        rootPath: "/tmp/new-workspace",
+        workspaceType: "general",
+      }),
+    );
+    const defaultProject = createProject({
+      id: "default",
+      name: "默认工作区",
+      isDefault: true,
+      workspaceType: "general",
+    });
+
+    mockOpenDialog.mockResolvedValue("/tmp/new-workspace");
+    mockGetProjectByRootPath.mockResolvedValue(null);
+    mockUseProjects.mockReturnValue(
+      createUseProjectsResult({
+        projects: [defaultProject],
+        generalProjects: [defaultProject],
+        defaultProject,
+        create,
+      }),
+    );
+
+    const container = renderProjectSelector({
+      value: defaultProject.id,
+      onChange,
+      workspaceType: "general",
+      enableManagement: true,
+      chrome: "workspace-tab",
+    });
+
+    await act(async () => {
+      findButton(container, "打开现有文件夹")?.click();
+      await Promise.resolve();
+    });
+    await flushAsync();
+
+    expect(create).toHaveBeenCalledWith({
+      name: "new-workspace",
+      rootPath: "/tmp/new-workspace",
+      workspaceType: "general",
+    });
+    expect(onChange).toHaveBeenCalledWith("new-workspace");
+    expect(mockToastSuccess).not.toHaveBeenCalled();
+  });
+
+  it("受控打开且延后加载时应刷新完整工作区列表", async () => {
+    const refresh = vi.fn(async () => undefined);
+    const defaultProject = createProject({
+      id: "default",
+      name: "默认工作区",
+      isDefault: true,
+      workspaceType: "general",
+    });
+
+    mockUseProjects.mockReturnValue(
+      createUseProjectsResult({
+        projects: [],
+        generalProjects: [],
+        defaultProject,
+        refresh,
+      }),
+    );
+
+    renderProjectSelector({
+      value: defaultProject.id,
+      workspaceType: "general",
+      enableManagement: true,
+      chrome: "workspace-tab",
+      open: true,
+      onOpenChange: vi.fn(),
+      deferProjectListLoad: true,
+    });
+
+    await flushAsync();
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("显示本地位置时只调用系统文件管理器，不额外弹成功提示", async () => {
+    const defaultProject = createProject({
+      id: "default",
+      name: "默认项目",
+      isDefault: true,
+      workspaceType: "general",
+      rootPath: "/tmp/default-project",
+    });
+
+    mockRevealPathInFinder.mockResolvedValue(undefined);
+    mockUseProjects.mockReturnValue(
+      createUseProjectsResult({
+        projects: [defaultProject],
+        generalProjects: [defaultProject],
+        defaultProject,
+      }),
+    );
+
+    const container = renderProjectSelector({
+      value: defaultProject.id,
+      workspaceType: "general",
+      enableManagement: true,
+    });
+
+    await act(async () => {
+      findButton(container, "显示")?.click();
+      await Promise.resolve();
+    });
+    await flushAsync();
+
+    expect(mockRevealPathInFinder).toHaveBeenCalledWith("/tmp/default-project");
+    expect(mockToastSuccess).not.toHaveBeenCalled();
+  });
+
+  it("查看内容应进入当前工作区内容视图", () => {
+    const onOpenProjectContents = vi.fn();
+    const generalProject = createProject({
+      id: "general-1",
+      name: "通用项目",
+      workspaceType: "general",
+    });
+
+    mockUseProjects.mockReturnValue(
+      createUseProjectsResult({
+        projects: [generalProject],
+        generalProjects: [generalProject],
+        defaultProject: null,
+      }),
+    );
+
+    const container = renderProjectSelector({
+      value: generalProject.id,
+      workspaceType: "general",
+      enableManagement: true,
+      onOpenProjectContents,
+    });
+
+    act(() => {
+      findButton(container, "查看内容")?.click();
+    });
+
+    expect(onOpenProjectContents).toHaveBeenCalledWith(generalProject.id);
   });
 
   it("延后列表加载时应先用项目摘要渲染当前项目", async () => {

@@ -287,13 +287,13 @@ describe("i18n namespace loader", () => {
         "common.projectSelector.toast.renameFailed",
       );
       expect(resources[locale].common).toHaveProperty(
-        "common.projectSelector.delete.dangerDescription",
+        "common.projectSelector.remove.dangerDescription",
       );
       expect(resources[locale].common).toHaveProperty(
         "common.createProjectDialog.title",
       );
       expect(resources[locale].common).toHaveProperty(
-        "common.createProjectDialog.hero.title",
+        "common.createProjectDialog.path.select",
       );
       expect(resources[locale].common).toHaveProperty(
         "common.createProjectDialog.path.conflict",
@@ -1640,7 +1640,7 @@ describe("i18n namespace loader", () => {
         "errors.crashRecovery.action.retryOnly",
       );
       expect(resources[locale].errors).toHaveProperty(
-        "errors.crashRecovery.message.diagnosticExportedAndOpened",
+        "errors.crashRecovery.message.diagnosticExportedShort",
       );
       expect(resources[locale].errors).toHaveProperty(
         "errors.crashRecovery.moduleImportFailure.prefix",
@@ -2095,9 +2095,9 @@ describe("i18n namespace loader", () => {
     ).toBe("仅重试恢复");
     expect(
       loadNamespaceResource("fr-FR", "errors")[
-        "errors.crashRecovery.message.diagnosticExportedAndOpened"
+        "errors.crashRecovery.message.diagnosticExportedShort"
       ],
-    ).toBe("诊断文件已导出：{{fileName}}，并已打开目录：{{path}}");
+    ).toBe("诊断文件已导出");
     expect(
       loadNamespaceResource("fr-FR", "errors")[
         "errors.crashRecovery.moduleImportFailure.prefix"

@@ -47,7 +47,6 @@ import type {
   AgentUiTeamWorkbenchPromptMetadata,
   TeamWorkbenchSurfaceProps,
 } from "./chatSurfaceProps";
-import { hasRenderableGeneralCanvasPreview } from "./generalCanvasPreviewState";
 import { useWorkspaceInputbarSceneRuntime } from "./useWorkspaceInputbarSceneRuntime";
 import { useWorkspaceImageWorkbenchActionRuntime } from "./useWorkspaceImageWorkbenchActionRuntime";
 import type { AgentThreadItem } from "../types";
@@ -1191,7 +1190,7 @@ function useWorkspaceCanvasPreviewRuntime({
       return Boolean(
         (artifactPreview.currentCanvasArtifact &&
           artifactPreview.displayedCanvasArtifact) ||
-        hasRenderableGeneralCanvasPreview(defaultPreview.generalCanvasState),
+        defaultPreview.generalCanvasState.isOpen,
       );
     }
 
@@ -1203,7 +1202,7 @@ function useWorkspaceCanvasPreviewRuntime({
     artifactPreview.currentCanvasArtifact,
     artifactPreview.displayedCanvasArtifact,
     defaultPreview.canvasRenderTheme,
-    defaultPreview.generalCanvasState,
+    defaultPreview.generalCanvasState.isOpen,
     defaultPreview.resolvedCanvasState,
     imageWorkbench.active,
     loading.shouldShowCanvasLoadingState,

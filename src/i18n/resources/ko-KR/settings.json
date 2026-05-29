@@ -321,10 +321,8 @@
   "settings.developer.message.copyDiagnosticFailed": "진단 정보 복사 실패",
   "settings.developer.message.diagnosticJsonCopied": "순수 JSON 진단 정보가 복사되었습니다",
   "settings.developer.message.copyDiagnosticJsonFailed": "순수 JSON 복사 실패",
-  "settings.developer.message.diagnosticExportedAndOpened": "진단 파일을 내보냈습니다: {{fileName}}, 폴더를 열었습니다: {{path}}",
   "settings.developer.message.diagnosticExported": "진단 파일을 내보냈습니다: {{fileName}}(위치: {{location}})",
   "settings.developer.message.exportDiagnosticFailed": "진단 정보 내보내기 실패",
-  "settings.developer.message.downloadDirectoryOpened": "다운로드 폴더를 열었습니다: {{path}}",
   "settings.developer.message.openDownloadDirectoryFailed": "다운로드 폴더 열기 실패",
   "settings.developer.message.diagnosticHistoryCleared": "이전 진단 정보를 비웠습니다. 이후 복사에는 새 진단 데이터만 포함됩니다.",
   "settings.developer.message.clearDiagnosticHistoryFailed": "이전 진단 정보 비우기 실패",
@@ -1145,11 +1143,9 @@
   "settings.experimental.message.diagnosticCopyFailed": "진단 정보 복사 실패",
   "settings.experimental.message.diagnosticExportFailed": "진단 정보 내보내기 실패",
   "settings.experimental.message.diagnosticExported": "진단 파일을 내보냈습니다: {{fileName}} (위치: {{location}})",
-  "settings.experimental.message.diagnosticExportedAndOpened": "진단 파일을 내보냈습니다: {{fileName}}, 폴더를 열었습니다: {{path}}",
   "settings.experimental.message.diagnosticJsonCopied": "순수 JSON 진단 정보를 복사했습니다",
   "settings.experimental.message.diagnosticJsonCopyFailed": "순수 JSON 복사 실패",
   "settings.experimental.message.downloadDirectoryOpenFailed": "다운로드 폴더 열기 실패",
-  "settings.experimental.message.downloadDirectoryOpened": "다운로드 폴더를 열었습니다: {{path}}",
   "settings.experimental.message.dynamicFilteringDisabled": "동적 필터링이 비활성화되었습니다",
   "settings.experimental.message.dynamicFilteringEnabled": "동적 필터링이 활성화되었습니다",
   "settings.experimental.message.loadFailed": "설정을 불러오지 못했습니다",
@@ -2532,5 +2528,6 @@
   "settings.providers.setting.body.models.imageCommand.action.save": "명령 저장",
   "settings.providers.setting.body.models.imageCommand.action.cancel": "취소",
   "settings.providers.setting.feedback.imageCommand.created": "{{trigger}}을 만들었습니다. {{model}}을 이미지 생성 모델로 사용합니다.",
-  "settings.providers.setting.feedback.imageCommand.invalid": "올바른 @명령 이름을 입력하세요."
+  "settings.providers.setting.feedback.imageCommand.invalid": "올바른 @명령 이름을 입력하세요.",
+  "settings.experimental.crashReporting.dsn.placeholder": "https://xxx@o0.ingest.sentry.io/0"
 }

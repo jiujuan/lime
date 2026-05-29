@@ -21,7 +21,6 @@ import {
   ProjectType,
   createProject,
   isUserProjectType,
-  resolveProjectRootPath,
 } from "./lib/api/project";
 import { useDeepLink } from "./hooks/useDeepLink";
 import { useRelayRegistry } from "./hooks/useRelayRegistry";
@@ -231,12 +230,11 @@ function AppContent() {
   const handleCreateProjectFromRecommendation = async (
     name: string,
     type: ProjectType,
+    rootPath: string,
   ) => {
-    const projectPath = await resolveProjectRootPath(name);
-
     const project = await createProject({
       name,
-      rootPath: projectPath,
+      rootPath,
       workspaceType: type,
     });
 

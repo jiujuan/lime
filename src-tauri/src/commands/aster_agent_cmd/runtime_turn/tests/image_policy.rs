@@ -80,6 +80,45 @@ fn runtime_image_input_policy_should_treat_official_deepseek_as_text_only() {
 }
 
 #[test]
+fn runtime_image_input_policy_should_record_text_only_provider_without_current_images() {
+    let mut request = build_runtime_turn_test_request("继续上一轮", None);
+    request.provider_config = Some(ConfigureProviderRequest {
+        provider_id: Some("deepseek".to_string()),
+        provider_name: "deepseek".to_string(),
+        model_name: "deepseek-v4-flash".to_string(),
+        api_key: None,
+        base_url: Some("https://api.deepseek.com".to_string()),
+        model_capabilities: Some(runtime_test_model_capabilities(true)),
+        tool_call_strategy: None,
+        toolshim_model: None,
+    });
+
+    let policy = resolve_runtime_image_input_policy(&request).expect("image policy");
+
+    assert_eq!(
+        policy,
+        RuntimeImageInputPolicy {
+            submitted_image_count: 0,
+            forwarded_image_count: 0,
+            dropped_image_count: 0,
+            provider_supports_vision: false,
+        }
+    );
+
+    let metadata =
+        merge_runtime_image_input_policy_metadata(None, Some(&policy)).expect("policy metadata");
+    assert_eq!(
+        metadata.pointer("/lime_runtime/image_input_policy/providerSupportsVision"),
+        Some(&Value::Bool(false))
+    );
+    assert_eq!(
+        metadata.pointer("/lime_runtime/image_input_policy/droppedImageCount"),
+        Some(&json!(0))
+    );
+    assert!(build_runtime_image_input_unsupported_warning(&request).is_none());
+}
+
+#[test]
 fn runtime_forwarded_images_should_drop_text_only_provider_images_before_agent_turn() {
     let mut request = build_runtime_turn_test_request("看一下这张图", None);
     request.images = Some(vec![ImageInput {

@@ -19,9 +19,8 @@ import {
 import type { LayoutMode, ThemeType } from "@/lib/workspace/workbenchContract";
 import { isSpecializedWorkbenchTheme } from "@/lib/workspace/workbenchContract";
 import type { CanvasWorkbenchLayoutMode } from "../components/CanvasWorkbenchLayout";
-import { hasRenderableGeneralCanvasPreview } from "./generalCanvasPreviewState";
 
-const FALLBACK_CANVAS_CONTENT = "# 新文档\n\n在这里开始编写内容...";
+const FALLBACK_CANVAS_CONTENT = "";
 
 interface UseWorkspaceCanvasLayoutRuntimeParams {
   activeTheme: string;
@@ -149,13 +148,22 @@ export function useWorkspaceCanvasLayoutRuntime({
     }
 
     if (activeTheme === "general") {
-      setGeneralCanvasState((previous) => ({
-        ...previous,
-        isOpen: true,
-        contentType:
-          previous.contentType === "empty" ? "markdown" : previous.contentType,
-        content: previous.content || FALLBACK_CANVAS_CONTENT,
-      }));
+      if (generalCanvasState.content.trim().length === 0) {
+        return;
+      }
+
+      setGeneralCanvasState((previous) => {
+        const contentType =
+          previous.contentType === "empty" ? "markdown" : previous.contentType;
+        if (previous.isOpen && previous.contentType === contentType) {
+          return previous;
+        }
+        return {
+          ...previous,
+          isOpen: true,
+          contentType,
+        };
+      });
     } else if (!canvasState) {
       const initialState =
         createInitialCanvasState(mappedTheme, FALLBACK_CANVAS_CONTENT) ||
@@ -275,7 +283,7 @@ export function useWorkspaceCanvasLayoutRuntime({
       return;
     }
 
-    if (hasRenderableGeneralCanvasPreview(generalCanvasState)) {
+    if (generalCanvasState.isOpen) {
       return;
     }
 

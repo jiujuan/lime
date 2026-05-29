@@ -354,6 +354,7 @@ pub(crate) async fn apply_workspace_sandbox_permissions(
     request_tool_policy: &RequestToolPolicy,
     execution_strategy: AsterExecutionStrategy,
     bypass_workspace_restrictions: bool,
+    explicit_local_focus_paths: &[String],
 ) -> Result<WorkspaceSandboxApplyOutcome, String> {
     let workspace_root = workspace_root.trim();
     if workspace_root.is_empty() {
@@ -375,12 +376,17 @@ pub(crate) async fn apply_workspace_sandbox_permissions(
         workbench: runtime_chat_mode == RuntimeChatMode::Workbench,
         browser_assist: is_browser_assist_enabled(request_metadata),
     };
+    let explicit_read_only_paths = explicit_local_focus_paths
+        .iter()
+        .map(PathBuf::from)
+        .collect::<Vec<_>>();
     let mut sandboxed_bash_tool: Option<WorkspaceSandboxedBashTool> = None;
     let apply_outcome = if bypass_workspace_restrictions || !sandbox_policy.enabled {
         WorkspaceSandboxApplyOutcome::DisabledByConfig
     } else {
         match WorkspaceSandboxedBashTool::new(
             workspace_root,
+            &explicit_read_only_paths,
             auto_approve_bash_warnings,
             app_handle.clone(),
         ) {
@@ -407,6 +413,7 @@ pub(crate) async fn apply_workspace_sandbox_permissions(
         build_workspace_execution_permissions(WorkspaceExecutionPermissionInput {
             surface: tool_surface,
             workspace_root,
+            explicit_read_only_paths: &explicit_read_only_paths,
             auto_mode,
             bypass_restrictions: bypass_workspace_restrictions,
             execution_policy_input,

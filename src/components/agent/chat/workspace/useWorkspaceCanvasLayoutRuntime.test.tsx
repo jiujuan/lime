@@ -137,7 +137,7 @@ describe("useWorkspaceCanvasLayoutRuntime", () => {
     });
   });
 
-  it("general 空白画布没有真实预览目标时应回退到聊天态", async () => {
+  it("general 空白画布已显式打开时不应被自动回退到聊天态", async () => {
     const setLayoutMode = vi.fn();
     const { render } = renderHook({
       layoutMode: "chat-canvas",
@@ -153,8 +153,35 @@ describe("useWorkspaceCanvasLayoutRuntime", () => {
     await render();
 
     expect(setLayoutMode.mock.calls.some((call) => call[0] === "chat")).toBe(
-      true,
+      false,
     );
+  });
+
+  it("隐藏聊天面板且没有真实内容时不应自动创建空白 general 画布", async () => {
+    const setLayoutMode = vi.fn();
+    const setGeneralCanvasState = vi.fn();
+    const { render } = renderHook({
+      showChatPanel: false,
+      layoutMode: "chat",
+      activeTheme: "general",
+      normalizedEntryTheme: "general",
+      shouldPreserveBlankHomeSurface: false,
+      generalCanvasState: {
+        isOpen: false,
+        contentType: "empty",
+        content: "",
+        isEditing: false,
+      },
+      setLayoutMode,
+      setGeneralCanvasState,
+    });
+
+    await render();
+
+    expect(setLayoutMode.mock.calls.some((call) => call[0] === "canvas")).toBe(
+      false,
+    );
+    expect(setGeneralCanvasState).not.toHaveBeenCalled();
   });
 
   it("stacked 自动收起侧栏后，不应在同一轮 general chat-canvas 中立刻反向展开", async () => {

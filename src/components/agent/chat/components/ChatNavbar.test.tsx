@@ -15,6 +15,22 @@ vi.mock("@/components/projects/ProjectSelector", () => ({
   },
 }));
 
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    i18n: {
+      language: "zh-CN",
+    },
+    t: (key: string, options?: Record<string, unknown>) => {
+      const template =
+        typeof options?.defaultValue === "string" ? options.defaultValue : key;
+
+      return template.replace(/{{\s*([^}]+?)\s*}}/g, (_, name: string) =>
+        String(options?.[name.trim()] ?? ""),
+      );
+    },
+  }),
+}));
+
 vi.mock("@/components/ui/button", () => ({
   Button: ({
     children,
@@ -215,7 +231,6 @@ describe("ChatNavbar", () => {
       expect.objectContaining({
         chrome: "workspace-tab",
         open: false,
-        passiveTrigger: true,
       }),
     );
     const menuTrigger = container.querySelector(
@@ -238,7 +253,6 @@ describe("ChatNavbar", () => {
       expect.objectContaining({
         chrome: "workspace-tab",
         open: true,
-        passiveTrigger: true,
       }),
     );
   });

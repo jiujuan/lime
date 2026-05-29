@@ -535,24 +535,17 @@ export function ExperimentalSettings({
       const result = exportCrashDiagnosticToJson(payload, {
         sceneTag: "settings-experimental",
       });
-      let openedPath: string | null = null;
       try {
-        const opened = await openCrashDiagnosticDownloadDirectory();
-        openedPath = opened.openedPath;
+        await openCrashDiagnosticDownloadDirectory();
       } catch {
-        openedPath = null;
+        // 导出已经成功，打开目录失败不覆盖导出反馈。
       }
       setMessage({
         type: "success",
-        text: openedPath
-          ? t("settings.experimental.message.diagnosticExportedAndOpened", {
-              fileName: result.fileName,
-              path: openedPath,
-            })
-          : t("settings.experimental.message.diagnosticExported", {
-              fileName: result.fileName,
-              location: result.locationHint,
-            }),
+        text: t("settings.experimental.message.diagnosticExported", {
+          fileName: result.fileName,
+          location: result.locationHint,
+        }),
       });
       setTimeout(() => setMessage(null), 2500);
     } catch (err) {
@@ -574,14 +567,7 @@ export function ExperimentalSettings({
     setMessage(null);
     setShowClipboardGuide(false);
     try {
-      const result = await openCrashDiagnosticDownloadDirectory();
-      setMessage({
-        type: "success",
-        text: t("settings.experimental.message.downloadDirectoryOpened", {
-          path: result.openedPath,
-        }),
-      });
-      setTimeout(() => setMessage(null), 2500);
+      await openCrashDiagnosticDownloadDirectory();
     } catch (err) {
       console.error("打开下载目录失败:", err);
       setMessage({
@@ -783,7 +769,9 @@ export function ExperimentalSettings({
                       handleCrashFieldChange("dsn", event.target.value || null)
                     }
                     disabled={saving}
-                    placeholder="https://xxx@o0.ingest.sentry.io/0"
+                    placeholder={t(
+                      "settings.experimental.crashReporting.dsn.placeholder",
+                    )}
                     className={FIELD_CLASS_NAME}
                   />
                 </div>

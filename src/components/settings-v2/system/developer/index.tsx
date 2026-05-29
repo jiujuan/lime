@@ -352,24 +352,17 @@ export function DeveloperSettings({
       const result = exportCrashDiagnosticToJson(payload, {
         sceneTag: "settings-developer",
       });
-      let openedPath: string | null = null;
       try {
-        const opened = await openCrashDiagnosticDownloadDirectory();
-        openedPath = opened.openedPath;
+        await openCrashDiagnosticDownloadDirectory();
       } catch {
-        openedPath = null;
+        // 导出已经成功，打开目录失败不覆盖导出反馈。
       }
       setMessage({
         type: "success",
-        text: openedPath
-          ? t("settings.developer.message.diagnosticExportedAndOpened", {
-              fileName: result.fileName,
-              path: openedPath,
-            })
-          : t("settings.developer.message.diagnosticExported", {
-              fileName: result.fileName,
-              location: result.locationHint,
-            }),
+        text: t("settings.developer.message.diagnosticExported", {
+          fileName: result.fileName,
+          location: result.locationHint,
+        }),
       });
       setTimeout(() => setMessage(null), 2500);
     } catch (error) {
@@ -390,14 +383,7 @@ export function DeveloperSettings({
     setDiagnosticBusy(true);
     setMessage(null);
     try {
-      const result = await openCrashDiagnosticDownloadDirectory();
-      setMessage({
-        type: "success",
-        text: t("settings.developer.message.downloadDirectoryOpened", {
-          path: result.openedPath,
-        }),
-      });
-      setTimeout(() => setMessage(null), 2500);
+      await openCrashDiagnosticDownloadDirectory();
     } catch (error) {
       console.error("打开下载目录失败:", error);
       setMessage({

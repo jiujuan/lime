@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::future::Future;
+use std::panic::AssertUnwindSafe;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
@@ -146,6 +147,7 @@ const SUBAGENT_TEAMMATE_ALLOWED_TOOL_NAMES: [&str; 5] = [
 ];
 const CANCELLED_TURN_CONTEXT_MARKER: &str =
     "上一回合已被用户停止，不要继续回答被停止的请求；等待并仅处理后续用户消息。";
+const AUTO_COMPACTION_PRE_REPLY_MODEL_TIMEOUT: Duration = Duration::from_millis(500);
 const AUTO_COMPACTION_DISABLED_CONTEXT_LIMIT_TEXT: &str =
     "Automatic compaction is disabled for this turn. The conversation reached the context limit. Compact the session manually or start a new session before retrying.";
 const PROPOSED_PLAN_OPEN: &str = "<proposed_plan>";
@@ -1228,6 +1230,24 @@ pub enum ToolStreamItem<T> {
 pub type ToolStream =
     Pin<Box<dyn Stream<Item = ToolStreamItem<ToolResult<CallToolResult>>> + Send>>;
 
+fn tool_execution_panic_message(error: Box<dyn std::any::Any + Send>) -> String {
+    let detail = if let Some(message) = error.downcast_ref::<&str>() {
+        (*message).to_string()
+    } else if let Some(message) = error.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "unknown panic payload".to_string()
+    };
+
+    format!("tool execution panic: {detail}")
+}
+
+fn tool_execution_panic_result(error: Box<dyn std::any::Any + Send>) -> ToolResult<CallToolResult> {
+    let message = tool_execution_panic_message(error);
+    error!("[AsterAgent] {}", message);
+    Err(ErrorData::new(ErrorCode::INTERNAL_ERROR, message, None))
+}
+
 #[derive(Debug)]
 struct TurnItemRuntimeProjector {
     thread_id: String,
@@ -1631,6 +1651,7 @@ where
     F: Future<Output = ToolResult<CallToolResult>> + Send + 'static,
 {
     Box::pin(async_stream::stream! {
+        let done = AssertUnwindSafe(done).catch_unwind();
         tokio::pin!(done);
         let mut rx = rx;
 
@@ -1640,7 +1661,9 @@ where
                     yield ToolStreamItem::Message(msg);
                 }
                 r = &mut done => {
-                    yield ToolStreamItem::Result(r);
+                    yield ToolStreamItem::Result(
+                        r.unwrap_or_else(tool_execution_panic_result)
+                    );
                     break;
                 }
             }
@@ -2702,20 +2725,24 @@ impl Agent {
         request_to_response_map: &HashMap<String, Arc<Mutex<Message>>>,
         cancel_token: Option<tokio_util::sync::CancellationToken>,
         session: &Session,
+        pinned_provider: Option<Arc<dyn Provider>>,
     ) -> Result<Vec<(String, ToolStream)>> {
         let mut tool_futures: Vec<(String, ToolStream)> = Vec::new();
 
         for batch in partition_tool_requests_for_execution(&permission_check_result.approved) {
             if batch.is_concurrency_safe {
                 let batch_cancel_token = cancel_token.clone();
+                let batch_pinned_provider = pinned_provider.clone();
                 let batch_results = join_all(batch.requests.into_iter().filter_map(|request| {
                     let cancel_token = batch_cancel_token.clone();
+                    let pinned_provider = batch_pinned_provider.clone();
                     request.tool_call.clone().ok().map(|tool_call| async move {
-                        self.dispatch_tool_call(
+                        self.dispatch_tool_call_with_provider(
                             tool_call,
                             request.id.clone(),
                             cancel_token,
                             session,
+                            pinned_provider,
                         )
                         .await
                     })
@@ -2745,11 +2772,12 @@ impl Agent {
             for request in batch.requests {
                 if let Ok(tool_call) = request.tool_call.clone() {
                     let (req_id, tool_result) = self
-                        .dispatch_tool_call(
+                        .dispatch_tool_call_with_provider(
                             tool_call,
                             request.id.clone(),
                             cancel_token.clone(),
                             session,
+                            pinned_provider.clone(),
                         )
                         .await;
 
@@ -2881,7 +2909,19 @@ impl Agent {
         &self,
         turn_context: Option<&TurnContextOverride>,
     ) -> Option<ModelConfig> {
-        let provider = self.provider.lock().await.as_ref()?.clone();
+        self.resolve_effective_model_config_for_provider(turn_context, None)
+            .await
+    }
+
+    async fn resolve_effective_model_config_for_provider(
+        &self,
+        turn_context: Option<&TurnContextOverride>,
+        provider_override: Option<&Arc<dyn Provider>>,
+    ) -> Option<ModelConfig> {
+        let provider = match provider_override {
+            Some(provider) => provider.clone(),
+            None => self.provider.lock().await.as_ref()?.clone(),
+        };
         let mut model_config = provider.get_model_config();
         if let Some(model) = turn_context
             .and_then(|context| context.model.as_deref())
@@ -2903,12 +2943,25 @@ impl Agent {
     }
 
     async fn provider_supports_native_output_schema(&self, model_config: &ModelConfig) -> bool {
-        self.provider
-            .lock()
+        self.provider_supports_native_output_schema_for_provider(model_config, None)
             .await
-            .as_ref()
-            .map(|provider| provider.supports_native_output_schema_with_model(model_config))
-            .unwrap_or(false)
+    }
+
+    async fn provider_supports_native_output_schema_for_provider(
+        &self,
+        model_config: &ModelConfig,
+        provider_override: Option<&Arc<dyn Provider>>,
+    ) -> bool {
+        match provider_override {
+            Some(provider) => provider.supports_native_output_schema_with_model(model_config),
+            None => self
+                .provider
+                .lock()
+                .await
+                .as_ref()
+                .map(|provider| provider.supports_native_output_schema_with_model(model_config))
+                .unwrap_or(false),
+        }
     }
 
     fn merge_turn_context_output_schema(
@@ -2976,6 +3029,15 @@ impl Agent {
         &self,
         session_config: SessionConfig,
     ) -> Result<SessionConfig> {
+        self.prepare_session_config_for_reply_with_provider(session_config, None)
+            .await
+    }
+
+    async fn prepare_session_config_for_reply_with_provider(
+        &self,
+        session_config: SessionConfig,
+        provider_override: Option<Arc<dyn Provider>>,
+    ) -> Result<SessionConfig> {
         let mut session_config = session_config.with_runtime_defaults();
         let effective_output_schema = self
             .resolve_effective_output_schema(session_config.turn_context.as_ref())
@@ -2988,11 +3050,17 @@ impl Agent {
 
         if let Some(output_schema) = effective_output_schema {
             let use_native_output_schema = if let Some(model_config) = self
-                .resolve_effective_model_config(session_config.turn_context.as_ref())
+                .resolve_effective_model_config_for_provider(
+                    session_config.turn_context.as_ref(),
+                    provider_override.as_ref(),
+                )
                 .await
             {
-                self.provider_supports_native_output_schema(&model_config)
-                    .await
+                self.provider_supports_native_output_schema_for_provider(
+                    &model_config,
+                    provider_override.as_ref(),
+                )
+                .await
             } else {
                 false
             };
@@ -3044,6 +3112,24 @@ impl Agent {
         request_id: String,
         cancellation_token: Option<CancellationToken>,
         session: &Session,
+    ) -> (String, Result<ToolCallResult, ErrorData>) {
+        self.dispatch_tool_call_with_provider(
+            tool_call,
+            request_id,
+            cancellation_token,
+            session,
+            None,
+        )
+        .await
+    }
+
+    pub(crate) async fn dispatch_tool_call_with_provider(
+        &self,
+        tool_call: CallToolRequestParam,
+        request_id: String,
+        cancellation_token: Option<CancellationToken>,
+        session: &Session,
+        pinned_provider: Option<Arc<dyn Provider>>,
     ) -> (String, Result<ToolCallResult, ErrorData>) {
         if tool_call.name == FINAL_OUTPUT_TOOL_NAME {
             return if let Some(final_output_tool) = self.final_output_tool.lock().await.as_mut() {
@@ -3107,18 +3193,21 @@ impl Agent {
                 return (request_id, callback_result);
             }
 
-            let provider = match self.provider().await {
-                Ok(p) => p,
-                Err(_) => {
-                    return (
-                        request_id,
-                        Err(ErrorData::new(
-                            ErrorCode::INTERNAL_ERROR,
-                            "Provider is required".to_string(),
-                            None,
-                        )),
-                    );
-                }
+            let provider = match pinned_provider.clone() {
+                Some(provider) => provider,
+                None => match self.provider().await {
+                    Ok(provider) => provider,
+                    Err(_) => {
+                        return (
+                            request_id,
+                            Err(ErrorData::new(
+                                ErrorCode::INTERNAL_ERROR,
+                                "Provider is required".to_string(),
+                                None,
+                            )),
+                        );
+                    }
+                },
             };
 
             let extensions = self.get_extension_configs().await;
@@ -3143,15 +3232,14 @@ impl Agent {
         } else {
             // 优先检查 tool_registry 中的原生工具
             // 原生工具直接在进程内执行，不需要 MCP 子进程
-            let is_native = self
+            let native_tool_name = self
                 .tool_registry
                 .read()
                 .await
-                .contains_native(&tool_call.name);
+                .canonical_native_name(tool_call.name.as_ref());
 
-            if is_native {
+            if let Some(tool_name) = native_tool_name {
                 // 原生工具：直接通过 tool_registry 执行
-                let tool_name = tool_call.name.clone();
                 let params = tool_call
                     .arguments
                     .clone()
@@ -3160,7 +3248,11 @@ impl Agent {
                 let mut context =
                     crate::tools::context::ToolContext::new(session.working_dir.clone())
                         .with_session_id(session.id.clone());
-                if let Ok(provider) = self.provider().await {
+                let provider = match pinned_provider.clone() {
+                    Some(provider) => Some(provider),
+                    None => self.provider().await.ok(),
+                };
+                if let Some(provider) = provider {
                     context = context.with_provider(provider);
                 }
                 if let Some(token) = cancellation_token.clone() {
@@ -3484,8 +3576,24 @@ impl Agent {
         session_config: SessionConfig,
         cancel_token: Option<CancellationToken>,
     ) -> Result<BoxStream<'_, Result<AgentEvent>>> {
+        let provider = self.provider().await?;
+        self.reply_with_provider(user_message, session_config, cancel_token, provider)
+            .await
+    }
+
+    #[instrument(
+        skip(self, user_message, session_config, provider),
+        fields(user_message)
+    )]
+    pub async fn reply_with_provider(
+        &self,
+        user_message: Message,
+        session_config: SessionConfig,
+        cancel_token: Option<CancellationToken>,
+        provider: Arc<dyn Provider>,
+    ) -> Result<BoxStream<'_, Result<AgentEvent>>> {
         let session_config = self
-            .prepare_session_config_for_reply(session_config)
+            .prepare_session_config_for_reply_with_provider(session_config, Some(provider.clone()))
             .await?;
 
         for content in &user_message.content {
@@ -3630,13 +3738,8 @@ impl Agent {
             .clone()
             .ok_or_else(|| anyhow::anyhow!("Session {} has no conversation", session_config.id))?;
 
-        let needs_auto_compact = check_if_compaction_needed(
-            self.provider().await?.as_ref(),
-            &conversation,
-            None,
-            &session,
-        )
-        .await?;
+        let needs_auto_compact =
+            check_if_compaction_needed(provider.as_ref(), &conversation, None, &session).await?;
 
         let conversation_to_compact = conversation.clone();
         let scope_session_config = session_config.clone();
@@ -3695,15 +3798,33 @@ impl Agent {
                         detail: Some(ContextCompactionTrigger::Auto.started_detail().to_string()),
                     };
 
-                    match self
-                        .perform_context_compaction(
+                    match tokio::time::timeout(
+                        AUTO_COMPACTION_PRE_REPLY_MODEL_TIMEOUT,
+                        self.perform_context_compaction(
                             &stream_session_config,
                             &conversation_to_compact,
                             false,
-                        )
-                        .await
+                        ),
+                    )
+                    .await
                     {
-                        Ok(result) => {
+                        Err(_) => {
+                            warn!(
+                                session_id = %stream_session_config.id,
+                                timeout_ms = AUTO_COMPACTION_PRE_REPLY_MODEL_TIMEOUT.as_millis(),
+                                "Auto-compaction exceeded first-token budget; continuing current turn without pre-reply compaction"
+                            );
+                            yield AgentEvent::ContextCompactionCompleted {
+                                item_id: compaction_item_id,
+                                trigger: ContextCompactionTrigger::Auto.as_str().to_string(),
+                                detail: Some(
+                                    "Auto-compaction exceeded the first-token budget. Continuing this turn without blocking on compaction."
+                                        .to_string(),
+                                ),
+                            };
+                            conversation
+                        }
+                        Ok(Ok(result)) => {
                             yield AgentEvent::HistoryReplaced(
                                 result.compacted_conversation.clone(),
                             );
@@ -3729,7 +3850,15 @@ impl Agent {
 
                             result.compacted_conversation
                         }
-                        Err(e) => {
+                        Ok(Err(e)) => {
+                            yield AgentEvent::ContextCompactionCompleted {
+                                item_id: compaction_item_id,
+                                trigger: ContextCompactionTrigger::Auto.as_str().to_string(),
+                                detail: Some(
+                                    "Auto-compaction failed before this turn. The assistant could not continue from a compacted summary."
+                                        .to_string(),
+                                ),
+                            };
                             yield AgentEvent::Message(
                                 Message::assistant().with_text(
                                     format!("Ran into this error trying to compact: {e}.\n\nPlease try again or create a new session")
@@ -3758,7 +3887,13 @@ impl Agent {
                 let mut turn_error = None;
 
                 let mut reply_stream = match self
-                    .reply_internal(final_conversation, scoped_session_config.clone(), session, cancel_token.clone())
+                    .reply_internal(
+                        final_conversation,
+                        scoped_session_config.clone(),
+                        session,
+                        cancel_token.clone(),
+                        provider.clone(),
+                    )
                     .await
                 {
                     Ok(stream) => stream,
@@ -3823,6 +3958,7 @@ impl Agent {
         session_config: SessionConfig,
         session: Session,
         cancel_token: Option<CancellationToken>,
+        pinned_provider: Arc<dyn Provider>,
     ) -> Result<BoxStream<'_, Result<AgentEvent>>> {
         let emit_context_trace = session_config.include_context_trace.unwrap_or(false);
         let context = self
@@ -3846,12 +3982,12 @@ impl Agent {
         let reply_span = tracing::Span::current();
         self.reset_retry_attempts().await;
 
-        let provider = self.provider().await?;
         let session_for_name = session.clone().without_messages();
         let conversation_for_name = conversation.clone();
         let deferred_session_name_generation =
-            match provider.session_name_generation_execution_strategy() {
+            match pinned_provider.session_name_generation_execution_strategy() {
                 SessionNameGenerationExecutionStrategy::Background => {
+                    let provider = pinned_provider.clone();
                     tokio::spawn(async move {
                         if let Err(e) = SessionManager::maybe_update_name_for_session(
                             &session_for_name,
@@ -3865,9 +4001,11 @@ impl Agent {
                     });
                     None
                 }
-                SessionNameGenerationExecutionStrategy::AfterReply => {
-                    Some((session_for_name, conversation_for_name, provider))
-                }
+                SessionNameGenerationExecutionStrategy::AfterReply => Some((
+                    session_for_name,
+                    conversation_for_name,
+                    pinned_provider.clone(),
+                )),
             };
         let working_dir = session.working_dir.clone();
 
@@ -3914,7 +4052,7 @@ impl Agent {
                 let mut stream = crate::session_context::with_turn_context(
                     session_config.turn_context.clone(),
                     Self::stream_response_from_provider(
-                        self.provider().await?,
+                        pinned_provider.clone(),
                         &model_config,
                         &system_prompt,
                         conversation_with_moim.messages(),
@@ -3956,8 +4094,7 @@ impl Agent {
                             overflow_handler.reset();
 
                             // Emit model change event if provider is lead-worker
-                            let provider = self.provider().await?;
-                            if let Some(lead_worker) = provider.as_lead_worker() {
+                            if let Some(lead_worker) = pinned_provider.as_lead_worker() {
                                 if let Some(ref usage) = usage {
                                     let active_model = usage.model.clone();
                                     let (lead_model, worker_model) = lead_worker.get_model_info();
@@ -4085,6 +4222,7 @@ impl Agent {
                                         &request_to_response_map,
                                         cancel_token.clone(),
                                         &session,
+                                        Some(pinned_provider.clone()),
                                     ).await?;
 
                                     let tool_futures_arc = Arc::new(Mutex::new(tool_futures));
@@ -4096,6 +4234,7 @@ impl Agent {
                                         cancel_token.clone(),
                                         &session,
                                         &inspection_results,
+                                        Some(pinned_provider.clone()),
                                     );
 
                                     while let Some(msg) = tool_approval_stream.try_next().await? {
@@ -4726,6 +4865,63 @@ mod tests {
     struct CountingSessionStore {
         get_session_calls: AtomicUsize,
         session: Mutex<Session>,
+    }
+
+    struct DispatchAliasTool {
+        name: String,
+    }
+
+    #[async_trait]
+    impl crate::tools::Tool for DispatchAliasTool {
+        fn name(&self) -> &str {
+            &self.name
+        }
+
+        fn description(&self) -> &str {
+            "dispatch alias test tool"
+        }
+
+        fn input_schema(&self) -> Value {
+            serde_json::json!({
+                "type": "object",
+                "properties": {}
+            })
+        }
+
+        async fn execute(
+            &self,
+            _params: Value,
+            _context: &crate::tools::ToolContext,
+        ) -> std::result::Result<crate::tools::ToolResult, crate::tools::ToolError> {
+            Ok(crate::tools::ToolResult::success(format!(
+                "executed:{}",
+                self.name
+            )))
+        }
+    }
+
+    async fn panicking_tool_result_future() -> crate::mcp_utils::ToolResult<CallToolResult> {
+        panic!("index out of bounds: the len is 0 but the index is 0");
+    }
+
+    #[tokio::test]
+    async fn test_tool_stream_converts_result_future_panic_to_tool_error() {
+        let mut stream = tool_stream(futures::stream::empty(), panicking_tool_result_future());
+
+        let Some(ToolStreamItem::Result(result)) = stream.next().await else {
+            panic!("tool stream should yield a terminal result");
+        };
+        let Err(error) = result else {
+            panic!("panicking tool future should become a tool error");
+        };
+
+        assert!(
+            error
+                .message
+                .contains("tool execution panic: index out of bounds"),
+            "tool panic should stay scoped to the tool result"
+        );
+        assert!(stream.next().await.is_none());
     }
 
     impl CountingSessionStore {
@@ -5990,6 +6186,11 @@ mod tests {
             registry_guard.contains("Bash"),
             "Bash tool should be registered"
         );
+        assert_eq!(
+            registry_guard.canonical_native_name("BashTool").as_deref(),
+            Some("Bash"),
+            "BashTool should remain a lookup-only alias for Bash"
+        );
         assert!(
             registry_guard.contains("Read"),
             "Read tool should be registered"
@@ -6046,6 +6247,73 @@ mod tests {
         assert!(
             registry_guard.native_tool_count() >= 10,
             "Should have at least 10 native tools"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_dispatch_tool_call_resolves_all_default_native_aliases() -> Result<()> {
+        let agent = Agent::new();
+        {
+            let mut registry = agent.tool_registry().write().await;
+            for (canonical, _) in crate::tools::registry::DEFAULT_NATIVE_ALIAS_PAIRS {
+                registry.register(Box::new(DispatchAliasTool {
+                    name: canonical.to_string(),
+                }));
+            }
+        }
+
+        let temp_dir = tempfile::tempdir()?;
+        let session = SessionManager::create_session(
+            temp_dir.path().to_path_buf(),
+            "dispatch-default-native-aliases".to_string(),
+            SessionType::User,
+        )
+        .await?;
+
+        let mut request_count = 0usize;
+        for (canonical, aliases) in crate::tools::registry::DEFAULT_NATIVE_ALIAS_PAIRS {
+            for alias in *aliases {
+                let request_id = format!("req-alias-{request_count}");
+                let (returned_request_id, tool_result) = agent
+                    .dispatch_tool_call(
+                        CallToolRequestParam {
+                            name: (*alias).into(),
+                            arguments: Some(serde_json::Map::new()),
+                        },
+                        request_id.clone(),
+                        None,
+                        &session,
+                    )
+                    .await;
+
+                assert_eq!(returned_request_id, request_id);
+                let tool_result = tool_result.expect("alias dispatch should return a tool result");
+                let call_result = tool_result
+                    .result
+                    .await
+                    .expect("alias dispatch should resolve successfully");
+                assert_eq!(
+                    call_result.is_error,
+                    Some(false),
+                    "{alias} should execute the canonical native tool"
+                );
+                let expected_output = format!("executed:{canonical}");
+                assert_eq!(
+                    call_result.content[0]
+                        .as_text()
+                        .map(|text| text.text.as_str()),
+                    Some(expected_output.as_str()),
+                    "{alias} should execute {canonical}"
+                );
+                request_count += 1;
+            }
+        }
+
+        assert!(
+            request_count > 20,
+            "dispatch alias test should cover the broad current tool surface"
         );
 
         Ok(())
@@ -7483,6 +7751,7 @@ mod tests {
                 &HashMap::new(),
                 None,
                 &session,
+                None,
             )
             .await?;
         let elapsed = started_at.elapsed();

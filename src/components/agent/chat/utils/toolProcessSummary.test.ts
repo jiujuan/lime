@@ -322,6 +322,53 @@ describe("toolProcessSummary", () => {
     expect(narrative.summary).toBe("来源暂时无法读取");
   });
 
+  it("Bash 协议错误摘要应保留底层原因而不是只展示错误码", () => {
+    const narrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "Bash",
+        status: "failed",
+        arguments: JSON.stringify({
+          command: "set -e\np='/Users/coso/.yansu-agent'\nls \"$p\"",
+        }),
+        result: {
+          success: false,
+          error:
+            "-32603: -32002: sandbox 执行失败: Operation not permitted",
+          output: "",
+        },
+      }),
+    );
+
+    expect(narrative.postSummary).toBe(
+      "执行失败：sandbox 执行失败: Operation not permitted",
+    );
+    expect(narrative.summary).toBe(
+      "执行失败：sandbox 执行失败: Operation not permitted",
+    );
+    expect(narrative.summary).not.toContain("-32603");
+    expect(narrative.summary).not.toContain("-32002");
+  });
+
+  it("Bash 空协议错误应给出短失败说明而不是裸错误码", () => {
+    const narrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "Bash",
+        status: "failed",
+        result: {
+          success: false,
+          error: "-32603: -32002:",
+          output: "",
+        },
+      }),
+    );
+
+    expect(narrative.summary).toBe(
+      "执行失败：命令执行失败，底层错误未返回详细信息",
+    );
+    expect(narrative.summary).not.toContain("-32603");
+    expect(narrative.summary).not.toContain("-32002");
+  });
+
   it("图片生成任务失败不应把内部协议错误带进过程摘要", () => {
     const narrative = resolveToolProcessNarrative(
       createToolCall({

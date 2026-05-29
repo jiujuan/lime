@@ -13,6 +13,50 @@ pub(super) struct RuntimeTurnSubmitBootstrap {
         Option<Vec<lime_agent::tools::SkillToolSessionSkillSource>>,
 }
 
+fn resolve_runtime_provider_continuation_state(
+    _capability: ProviderContinuationCapability,
+) -> ProviderContinuationState {
+    ProviderContinuationState::history_replay_only()
+}
+
+fn non_empty_request_text(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|value| !value.is_empty())
+}
+
+fn provider_not_configured_submit_error(request: &AsterChatRequest) -> String {
+    let routing_decision = extract_runtime_resolution_payload::<
+        lime_agent::SessionExecutionRuntimeRoutingDecision,
+    >(request.metadata.as_ref(), "routing_decision");
+
+    if let Some(decision) = routing_decision {
+        if decision.routing_mode == "no_candidate" {
+            return format!(
+                "未找到可用的聊天模型，请先在模型选择器中选择已配置的 Provider 和模型后重试。{}",
+                decision.decision_reason
+            );
+        }
+
+        if decision.selected_provider.is_none() || decision.selected_model.is_none() {
+            return format!(
+                "当前聊天模型选择不完整，请先在模型选择器中选择已配置的 Provider 和模型后重试。{}",
+                decision.decision_reason
+            );
+        }
+    }
+
+    let requested_provider = non_empty_request_text(request.provider_preference.as_deref());
+    let requested_model = non_empty_request_text(request.model_preference.as_deref());
+    match (requested_provider, requested_model) {
+        (Some(provider), None) => format!(
+            "当前只选择了 Provider {provider}，还缺少模型。请在模型选择器中选择完整的 Provider 和模型后重试。"
+        ),
+        (None, Some(model)) => format!(
+            "当前只选择了模型 {model}，还缺少 Provider。请在模型选择器中选择完整的 Provider 和模型后重试。"
+        ),
+        _ => "未配置聊天模型，请先在模型选择器中选择已配置的 Provider 和模型后重试。".to_string(),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn prepare_runtime_turn_submit_bootstrap(
     app: &AppHandle,
@@ -26,7 +70,7 @@ pub(super) async fn prepare_runtime_turn_submit_bootstrap(
     request: &AsterChatRequest,
     session_id: &str,
     workspace_root: &str,
-    workspace_settings: &WorkspaceSettings,
+    _workspace_settings: &WorkspaceSettings,
     runtime_config: &lime_core::config::Config,
     runtime_chat_mode: RuntimeChatMode,
     execution_profile: TurnExecutionProfile,
@@ -35,19 +79,8 @@ pub(super) async fn prepare_runtime_turn_submit_bootstrap(
     turn_input_builder: &mut TurnInputEnvelopeBuilder,
 ) -> Result<RuntimeTurnSubmitBootstrap, String> {
     if !state.is_provider_configured().await {
-        return Err("Provider 未配置，请先调用 aster_agent_configure_provider".to_string());
+        return Err(provider_not_configured_submit_error(request));
     }
-
-    maybe_auto_compact_runtime_session_before_turn(
-        app,
-        state,
-        db,
-        config_manager,
-        session_id,
-        &request.event_name,
-        workspace_settings,
-    )
-    .await?;
 
     let effective_provider_config = state.get_provider_config().await;
     let provider_routing_snapshot =
@@ -71,29 +104,15 @@ pub(super) async fn prepare_runtime_turn_submit_bootstrap(
         .as_ref()
         .map(|config| config.provider_continuation_capability())
         .unwrap_or(ProviderContinuationCapability::HistoryReplayOnly);
-    let configured_provider_continuation_state = effective_provider_config
-        .as_ref()
-        .map(|config| config.provider_continuation_state())
-        .unwrap_or_else(ProviderContinuationState::history_replay_only);
-    let restored_provider_continuation_state = load_previous_provider_continuation_state(
-        db,
-        session_id,
-        provider_routing_snapshot.as_ref(),
-        provider_continuation_capability,
-    );
-    let provider_continuation_state = if matches!(
-        restored_provider_continuation_state,
-        ProviderContinuationState::HistoryReplayOnly
-    ) {
-        configured_provider_continuation_state
-    } else {
+    let provider_continuation_state =
+        resolve_runtime_provider_continuation_state(provider_continuation_capability);
+    if provider_continuation_capability.supports_remote_continuation() {
         tracing::info!(
-            "[AsterAgent] 恢复上一条 terminal run 的 provider continuation: session_id={}, kind={}",
+            "[AsterAgent][TTFT] 当前回合按无状态模型交接执行，不恢复上一条 terminal run 的 provider continuation: session_id={}, capability={:?}",
             session_id,
-            restored_provider_continuation_state.kind()
+            provider_continuation_capability
         );
-        restored_provider_continuation_state
-    };
+    }
     turn_input_builder
         .set_provider_continuation_capability(provider_continuation_capability)
         .set_provider_continuation(provider_continuation_state);
@@ -103,6 +122,8 @@ pub(super) async fn prepare_runtime_turn_submit_bootstrap(
         resolve_runtime_access_mode_from_request(request),
         Some(lime_agent::SessionExecutionRuntimeAccessMode::FullAccess)
     );
+    let explicit_local_focus_paths =
+        extract_explicit_local_focus_paths_from_message(&request.message);
     let sandbox_outcome = apply_workspace_sandbox_permissions(
         state,
         config_manager,
@@ -120,6 +141,7 @@ pub(super) async fn prepare_runtime_turn_submit_bootstrap(
         request_tool_policy,
         requested_strategy,
         bypass_workspace_restrictions,
+        &explicit_local_focus_paths,
     )
     .await
     .map_err(|error| format!("注入 workspace 安全策略失败: {error}"))?;
@@ -207,4 +229,73 @@ pub(super) async fn prepare_runtime_turn_submit_bootstrap(
         provider_continuation_capability,
         tracker: ExecutionTracker::new(db.clone()),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_runtime_provider_continuation_state_keeps_model_handoff_stateless() {
+        assert_eq!(
+            resolve_runtime_provider_continuation_state(
+                ProviderContinuationCapability::PreviousResponseId,
+            ),
+            ProviderContinuationState::HistoryReplayOnly
+        );
+        assert_eq!(
+            resolve_runtime_provider_continuation_state(
+                ProviderContinuationCapability::ProviderSessionToken,
+            ),
+            ProviderContinuationState::HistoryReplayOnly
+        );
+    }
+
+    #[test]
+    fn provider_not_configured_submit_error_uses_routing_resolution_reason() {
+        let request = AsterChatRequest {
+            message: "分析本地文件夹".to_string(),
+            session_id: "session-model-missing".to_string(),
+            event_name: "agent-event".to_string(),
+            images: None,
+            provider_config: None,
+            provider_preference: None,
+            model_preference: Some("gpt-5.5".to_string()),
+            thinking_enabled: None,
+            approval_policy: None,
+            sandbox_policy: None,
+            project_id: None,
+            workspace_id: "workspace-1".to_string(),
+            web_search: None,
+            search_mode: None,
+            execution_strategy: None,
+            auto_continue: None,
+            system_prompt: None,
+            metadata: Some(serde_json::json!({
+                "lime_runtime": {
+                    "routing_decision": {
+                        "routingMode": "no_candidate",
+                        "decisionSource": "request_override",
+                        "decisionReason": "当前回合传入了 provider/model 偏好，但没有找到可恢复的 provider 默认值。",
+                        "selectedProvider": null,
+                        "selectedModel": null,
+                        "requestedProvider": null,
+                        "requestedModel": "gpt-5.5",
+                        "candidateCount": 0,
+                        "fallbackChain": [],
+                        "serviceModelSlot": null
+                    }
+                }
+            })),
+            turn_id: None,
+            queue_if_busy: None,
+            queued_turn_id: None,
+        };
+
+        let message = provider_not_configured_submit_error(&request);
+
+        assert!(message.contains("未找到可用的聊天模型"));
+        assert!(message.contains("没有找到可恢复的 provider 默认值"));
+        assert!(!message.contains("aster_agent_configure_provider"));
+    }
 }

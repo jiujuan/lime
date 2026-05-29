@@ -407,9 +407,11 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     compactProviderType.toLowerCase() === "lime-hub"
       ? defaultHubProviderLabel
       : getProviderLabel(compactProviderType);
+  const hasModelWithoutProvider = !providerType.trim() && Boolean(model.trim());
   const isAutoSelection = !providerType.trim() && !model.trim();
   const showPlaceholderSelection =
-    isAutoSelection && (allowAutoProvider || suppressAutoSelection);
+    hasModelWithoutProvider ||
+    (isAutoSelection && (allowAutoProvider || suppressAutoSelection));
   const resolvedAutoProviderLabel =
     autoProviderLabel ?? t("common.modelSelector.autoSelect");
   const resolvedAutoModelLabel =

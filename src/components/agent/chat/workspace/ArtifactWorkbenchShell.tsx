@@ -94,7 +94,7 @@ function ArtifactWorkbenchShellLayout({
     <div
       data-testid="artifact-workbench-shell"
       data-layout-mode="canvas-only"
-      className="mt-5 mx-4 mb-4 flex h-[calc(100%-24px)] flex-col bg-transparent"
+      className="flex h-full min-h-0 flex-col bg-white"
     >
       <ArtifactToolbar
         artifact={artifact}
@@ -110,13 +110,13 @@ function ArtifactWorkbenchShellLayout({
         }
         actionsSlot={actionsSlot}
       />
-      <div className="mt-4 min-h-0 flex flex-1 flex-col bg-transparent">
+      <div className="min-h-0 flex flex-1 flex-col bg-transparent">
         <div
           ref={
             controller.rendererViewportRef as React.RefObject<HTMLDivElement>
           }
           className={cn(
-            "relative min-h-0 bg-white",
+            "relative h-full min-h-0 bg-white",
             controller.inspectorTab === "edit" && controller.canEditDocument
               ? "overflow-hidden"
               : "overflow-auto",

@@ -589,7 +589,9 @@ export function TeamWorkspaceDock({
         t("agentChat.teamWorkspace.dock.currentProgress"),
       ),
       surfaceTitle: String(t("agentChat.teamWorkspace.dock.surfaceTitle")),
-      idleStatus: String(t("agentChat.teamWorkspace.runtimeStatus.idle")),
+      waitingAssignmentStatus: String(
+        t("agentChat.teamWorkspace.overview.selectedSession.waitingBadge"),
+      ),
       unobstructiveBadge: String(
         t("agentChat.teamWorkspace.dock.unobstructiveBadge"),
       ),
@@ -775,7 +777,7 @@ export function TeamWorkspaceDock({
       };
     }
 
-    return { label: dockCopy.idleStatus, tone: "idle" };
+    return { label: dockCopy.waitingAssignmentStatus, tone: "idle" };
   }, [
     activeRuntimeSessionCount,
     executionSummary.totalSessionCount,

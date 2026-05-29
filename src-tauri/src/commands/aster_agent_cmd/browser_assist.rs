@@ -341,6 +341,15 @@ pub(crate) fn resolve_runtime_chat_mode(
         }
     }
 
+    if let Some(session_mode) =
+        extract_harness_string(request_metadata, &["session_mode", "sessionMode"])
+    {
+        match session_mode.as_str() {
+            "general_workbench" | "theme_workbench" => return RuntimeChatMode::Workbench,
+            _ => {}
+        }
+    }
+
     match extract_harness_string(request_metadata, &["theme", "harness_theme"]).as_deref() {
         Some("general") => RuntimeChatMode::General,
         _ => RuntimeChatMode::Agent,

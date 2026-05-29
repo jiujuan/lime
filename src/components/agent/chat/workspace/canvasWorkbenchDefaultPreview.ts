@@ -32,7 +32,7 @@ export function buildCanvasWorkbenchDefaultPreview({
   activeCanvasTaskFile,
 }: BuildCanvasWorkbenchDefaultPreviewParams): CanvasWorkbenchDefaultPreview | null {
   if (canvasRenderTheme === "general") {
-    if (!generalCanvasState.isOpen || !generalCanvasState.content.trim()) {
+    if (!generalCanvasState.isOpen) {
       return null;
     }
 

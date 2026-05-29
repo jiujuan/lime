@@ -248,4 +248,50 @@ describe("useProjects", () => {
       harness.unmount();
     }
   });
+
+  it("创建项目时应尊重调用方传入的 rootPath", async () => {
+    const defaultProject = createProject();
+    const createdProject = createProject({
+      id: "project-new",
+      name: "Research",
+      rootPath: "/Users/test/Documents/Research",
+      isDefault: false,
+    });
+    projectApiMocks.listProjects.mockResolvedValue([defaultProject]);
+    projectApiMocks.getDefaultProject.mockResolvedValue(defaultProject);
+    projectApiMocks.ensureWorkspaceReady.mockResolvedValue({
+      workspaceId: defaultProject.id,
+      rootPath: defaultProject.rootPath,
+      existed: true,
+      created: false,
+      repaired: false,
+    });
+    projectApiMocks.createProject.mockResolvedValue(createdProject);
+
+    const harness = mountHook();
+
+    try {
+      await flushMicrotasks();
+
+      let resultId: string | null = null;
+      await act(async () => {
+        const result = await harness.getValue().create({
+          name: "Research",
+          rootPath: "/Users/test/Documents/Research",
+          workspaceType: "general",
+        });
+        resultId = result.id;
+      });
+
+      expect(resultId).toBe("project-new");
+      expect(projectApiMocks.createProject).toHaveBeenCalledWith({
+        name: "Research",
+        rootPath: "/Users/test/Documents/Research",
+        workspaceType: "general",
+      });
+      expect(projectApiMocks.resolveProjectRootPath).not.toHaveBeenCalled();
+    } finally {
+      harness.unmount();
+    }
+  });
 });

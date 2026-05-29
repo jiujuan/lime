@@ -19,9 +19,9 @@ function assertI18nKeyTypes() {
     ns: "common",
     message: "name exists",
   });
-  i18n.t("common.projectSelector.delete.dangerDescription", { ns: "common" });
+  i18n.t("common.projectSelector.remove.dangerDescription", { ns: "common" });
   i18n.t("common.createProjectDialog.title", { ns: "common" });
-  i18n.t("common.createProjectDialog.hero.title", { ns: "common" });
+  i18n.t("common.createProjectDialog.path.select", { ns: "common" });
   i18n.t("common.createProjectDialog.path.conflict", {
     ns: "common",
     name: "Project Alpha",
@@ -1624,10 +1624,8 @@ function assertI18nKeyTypes() {
   i18n.t("errors.crashRecovery.title", { ns: "errors" });
   i18n.t("errors.crashRecovery.action.forceReload", { ns: "errors" });
   i18n.t("errors.crashRecovery.action.retryOnly", { ns: "errors" });
-  i18n.t("errors.crashRecovery.message.diagnosticExportedAndOpened", {
+  i18n.t("errors.crashRecovery.message.diagnosticExportedShort", {
     ns: "errors",
-    fileName: "diagnostic.json",
-    path: "/tmp",
   });
   i18n.t("errors.crashRecovery.moduleImportFailure.prefix", { ns: "errors" });
 

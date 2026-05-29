@@ -1,4 +1,7 @@
 use super::*;
+use std::future::Future;
+
+const RUNTIME_MCP_PREWARM_TTFT_BUDGET: Duration = Duration::from_millis(1500);
 
 struct RuntimeTurnSessionPreparation {
     auto_continue_config: Option<AutoContinuePayload>,
@@ -34,6 +37,38 @@ struct RuntimeTurnRequestPreparation {
 struct RuntimeTurnPolicyPreparation {
     request_tool_policy: RequestToolPolicy,
     execution_profile: TurnExecutionProfile,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct RuntimeMcpPrewarmOutcome {
+    start_ok: usize,
+    start_fail: usize,
+    inject_ok: usize,
+    inject_fail: usize,
+    timed_out: bool,
+}
+
+impl RuntimeMcpPrewarmOutcome {
+    fn timed_out() -> Self {
+        Self {
+            timed_out: true,
+            ..Self::default()
+        }
+    }
+}
+
+async fn with_runtime_mcp_prewarm_budget<F, Fut>(
+    timeout_duration: Duration,
+    operation: F,
+) -> RuntimeMcpPrewarmOutcome
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = RuntimeMcpPrewarmOutcome>,
+{
+    match tokio::time::timeout(timeout_duration, operation()).await {
+        Ok(outcome) => outcome,
+        Err(_) => RuntimeMcpPrewarmOutcome::timed_out(),
+    }
 }
 
 impl RuntimeTurnSubmitPreparation {
@@ -223,19 +258,48 @@ async fn prepare_runtime_turn_request(
         runtime_chat_mode,
         request_tool_policy,
     ) {
-        let (_start_ok, start_fail) = ensure_lime_mcp_servers_running(db, mcp_manager).await;
-        let (_mcp_ok, mcp_fail) = inject_mcp_extensions(state, mcp_manager).await;
+        let prewarm_started_at = Instant::now();
+        let outcome = with_runtime_mcp_prewarm_budget(RUNTIME_MCP_PREWARM_TTFT_BUDGET, || async {
+            let (start_ok, start_fail) = ensure_lime_mcp_servers_running(db, mcp_manager).await;
+            let (inject_ok, inject_fail) = inject_mcp_extensions(state, mcp_manager).await;
+            RuntimeMcpPrewarmOutcome {
+                start_ok,
+                start_fail,
+                inject_ok,
+                inject_fail,
+                timed_out: false,
+            }
+        })
+        .await;
 
-        if start_fail > 0 {
+        if outcome.timed_out {
             tracing::warn!(
-                "[AsterAgent] 部分 MCP server 自动启动失败 ({} 失败)，后续可用工具可能不完整",
-                start_fail
+                "[AsterAgent][TTFT] MCP runtime 预热超过首字前预算，已跳过并继续当前 turn: session={}, budget_ms={}",
+                session_id,
+                RUNTIME_MCP_PREWARM_TTFT_BUDGET.as_millis()
+            );
+        } else {
+            tracing::info!(
+                "[AsterAgent][TTFT] MCP runtime 预热完成: session={}, start_ok={}, start_fail={}, inject_ok={}, inject_fail={}, elapsed_ms={}",
+                session_id,
+                outcome.start_ok,
+                outcome.start_fail,
+                outcome.inject_ok,
+                outcome.inject_fail,
+                prewarm_started_at.elapsed().as_millis()
             );
         }
-        if mcp_fail > 0 {
+
+        if outcome.start_fail > 0 {
+            tracing::warn!(
+                "[AsterAgent] 部分 MCP server 自动启动失败 ({} 失败)，后续可用工具可能不完整",
+                outcome.start_fail
+            );
+        }
+        if outcome.inject_fail > 0 {
             tracing::warn!(
                 "[AsterAgent] 部分 MCP extension 注入失败 ({} 失败)，Agent 可能无法使用某些 MCP 工具",
-                mcp_fail
+                outcome.inject_fail
             );
         }
     } else {
@@ -300,14 +364,15 @@ async fn prepare_runtime_turn_request(
             session_recent_harness_context.content_id.as_deref(),
             true,
         );
-        let image_input_policy = resolve_runtime_image_input_policy(request);
-        request.metadata = merge_runtime_image_input_policy_metadata(
-            request.metadata.take(),
-            image_input_policy.as_ref(),
-        );
-        if let Some(metadata) = request.metadata.as_mut() {
-            hydrate_limecore_policy_hits_from_request_metadata(metadata);
-        }
+    }
+
+    let image_input_policy = resolve_runtime_image_input_policy(request);
+    request.metadata = merge_runtime_image_input_policy_metadata(
+        request.metadata.take(),
+        image_input_policy.as_ref(),
+    );
+    if let Some(metadata) = request.metadata.as_mut() {
+        hydrate_limecore_policy_hits_from_request_metadata(metadata);
     }
 
     let runtime_chat_mode = resolve_runtime_chat_mode(request.metadata.as_ref());
@@ -346,6 +411,59 @@ async fn prepare_runtime_turn_request(
         runtime_chat_mode,
         include_context_trace,
         turn_input_builder,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn runtime_mcp_prewarm_budget_should_timeout_before_first_token_path() {
+        let started_at = Instant::now();
+
+        let outcome = with_runtime_mcp_prewarm_budget(Duration::from_millis(5), || async {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            RuntimeMcpPrewarmOutcome {
+                start_ok: 1,
+                start_fail: 0,
+                inject_ok: 1,
+                inject_fail: 0,
+                timed_out: false,
+            }
+        })
+        .await;
+
+        assert_eq!(outcome, RuntimeMcpPrewarmOutcome::timed_out());
+        assert!(
+            started_at.elapsed() < Duration::from_secs(1),
+            "MCP runtime 预热超时后不应继续阻塞首字路径"
+        );
+    }
+
+    #[tokio::test]
+    async fn runtime_mcp_prewarm_budget_should_return_successful_outcome() {
+        let outcome = with_runtime_mcp_prewarm_budget(Duration::from_millis(50), || async {
+            RuntimeMcpPrewarmOutcome {
+                start_ok: 2,
+                start_fail: 1,
+                inject_ok: 3,
+                inject_fail: 0,
+                timed_out: false,
+            }
+        })
+        .await;
+
+        assert_eq!(
+            outcome,
+            RuntimeMcpPrewarmOutcome {
+                start_ok: 2,
+                start_fail: 1,
+                inject_ok: 3,
+                inject_fail: 0,
+                timed_out: false,
+            }
+        );
     }
 }
 
@@ -401,6 +519,61 @@ fn fail_pending_runtime_permission_confirmation_before_provider_bootstrap(
     }
 
     Err(error)
+}
+
+fn emit_provider_bootstrap_failure_runtime_events(
+    app: &AppHandle,
+    db: &DbConnection,
+    request: &AsterChatRequest,
+    session_id: &str,
+    workspace_root: &str,
+    resolved_turn_id: &str,
+    error: &str,
+) -> Result<(), String> {
+    let timeline_recorder = Arc::new(Mutex::new(AgentTimelineRecorder::create(
+        db.clone(),
+        session_id,
+        resolved_turn_id,
+        request.message.clone(),
+    )?));
+
+    emit_runtime_request_resolution_events(
+        app,
+        &request.event_name,
+        &timeline_recorder,
+        workspace_root,
+        request.metadata.as_ref(),
+    );
+
+    let terminal_events = {
+        let mut recorder = match timeline_recorder.lock() {
+            Ok(guard) => guard,
+            Err(error) => error.into_inner(),
+        };
+        recorder.fail_turn(error)
+    };
+    if let Err(record_error) = &terminal_events {
+        tracing::warn!(
+            "[AsterAgent] 记录 provider bootstrap 阻断 turn 时间线失败（已降级返回错误）: {}",
+            record_error
+        );
+    }
+    if let Ok(events) = terminal_events {
+        emit_runtime_events(app, &request.event_name, events);
+    }
+
+    let error_event = RuntimeAgentEvent::Error {
+        message: error.to_string(),
+    };
+    if let Err(emit_error) = app.emit(&request.event_name, &error_event) {
+        tracing::warn!(
+            "[AsterAgent] 发送 provider bootstrap 阻断错误事件失败: {}",
+            emit_error
+        );
+    }
+    emit_agent_app_runtime_event_projection(app, &request.event_name, &error_event);
+
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -516,7 +689,7 @@ pub(super) async fn prepare_runtime_turn_submit_preparation(
     apply_runtime_turn_provider_config(state, db, session_id, request.provider_config.as_ref())
         .await?;
 
-    let submit_bootstrap = prepare_runtime_turn_submit_bootstrap(
+    let submit_bootstrap = match prepare_runtime_turn_submit_bootstrap(
         app,
         state,
         db,
@@ -536,7 +709,29 @@ pub(super) async fn prepare_runtime_turn_submit_preparation(
         &request_tool_policy,
         &mut turn_input_builder,
     )
-    .await?;
+    .await
+    {
+        Ok(submit_bootstrap) => submit_bootstrap,
+        Err(error) => {
+            if !state.is_provider_configured().await {
+                if let Err(record_error) = emit_provider_bootstrap_failure_runtime_events(
+                    app,
+                    db,
+                    request,
+                    session_id,
+                    workspace_root,
+                    resolved_turn_id,
+                    &error,
+                ) {
+                    tracing::warn!(
+                        "[AsterAgent] provider bootstrap 阻断事件记录失败（已保留原始错误）: {}",
+                        record_error
+                    );
+                }
+            }
+            return Err(error);
+        }
+    };
     tracing::info!(
         "[AsterAgent][TTFT] submit preparation complete: session_id={}, event_name={}, profile={:?}, strategy={:?}, search_mode={}, auto_continue={}, elapsed_ms={}",
         session_id,

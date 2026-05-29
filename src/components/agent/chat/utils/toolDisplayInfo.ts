@@ -12,6 +12,7 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
+import { normalizeLegacyToolSurfaceName } from "@/lib/api/agentTextNormalization";
 import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtocol";
 import { extractArtifactProtocolPathsFromValue } from "@/lib/artifact-protocol";
 import {
@@ -1814,7 +1815,7 @@ const USER_FACING_TOOL_LABELS: Record<string, string> = {
 };
 
 export const normalizeToolNameKey = (value: string): string => {
-  const normalized = value
+  const normalized = (normalizeLegacyToolSurfaceName(value) || value)
     .replace(/[\s_-]+/g, "")
     .trim()
     .toLowerCase();

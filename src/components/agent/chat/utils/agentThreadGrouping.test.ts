@@ -403,7 +403,7 @@ describe("agentThreadGrouping", () => {
     const model = buildAgentThreadDisplayModel(items);
 
     expect(model.orderedBlocks[0]?.previewLines[0]).toContain(
-      "当前 AI 服务商余额或额度不足",
+      "当前模型通道返回了计费或额度类错误",
     );
     expect(model.orderedBlocks[0]?.previewLines[0]).not.toContain(
       "Payment Required",

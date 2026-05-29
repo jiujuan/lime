@@ -108,6 +108,7 @@ fn build_skill_workspace_permissions(
         build_workspace_execution_permissions(WorkspaceExecutionPermissionInput {
             surface: WorkspaceToolSurface::workbench(),
             workspace_root,
+            explicit_read_only_paths: &[],
             auto_mode: false,
             bypass_restrictions: false,
             execution_policy_input: ToolExecutionResolverInput {

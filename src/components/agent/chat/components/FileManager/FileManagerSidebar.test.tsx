@@ -23,14 +23,30 @@ const toastMock = vi.hoisted(() => ({
   info: vi.fn(),
 }));
 
-const skillPackageInstallActionPattern =
-  /安装|skills\.localPackage\.fileManager\.action/;
-const skillPackageContextActionPattern =
-  /安装 Skill|skills\.localPackage\.fileManager\.contextAction/;
+const skillPackageInstallActionPattern = /安装/;
 
 vi.mock("sonner", () => ({
   toast: toastMock,
 }));
+
+vi.mock("react-i18next", async () => {
+  const { agentZhCNResource } = await import("@/i18n/agentResources");
+  const agentZhCN = agentZhCNResource as Record<string, string>;
+
+  return {
+    useTranslation: () => ({
+      i18n: {
+        language: "zh-CN",
+      },
+      t: (key: string, options?: Record<string, unknown>) => {
+        const template = agentZhCN[key] ?? key;
+        return template.replace(/{{\s*([^}]+?)\s*}}/g, (_, name: string) =>
+          String(options?.[name.trim()] ?? ""),
+        );
+      },
+    }),
+  };
+});
 
 vi.mock("@/lib/api/fileBrowser", () => ({
   getFileIconDataUrl: vi.fn(),
@@ -256,7 +272,13 @@ describe("FileManagerSidebar", () => {
     expect(getFileManagerLocations).toHaveBeenCalled();
     expect(listDirectory).toHaveBeenCalledWith("/Users/demo");
     expect(container.textContent).toContain("个人");
+    expect(container.textContent).toContain("位置");
+    expect(container.textContent).toContain("名称");
+    expect(container.textContent).toContain("修改日期");
+    expect(container.textContent).toContain("大小");
     expect(container.textContent).toContain("Downloads");
+    expect(container.textContent).not.toContain("今天");
+    expect(container.textContent).not.toContain("本周");
 
     const downloadsEntry = Array.from(
       container.querySelectorAll('[data-testid="file-manager-entry"]'),
@@ -290,13 +312,13 @@ describe("FileManagerSidebar", () => {
     const menu = document.querySelector(
       '[data-testid="file-manager-context-menu"]',
     );
-    expect(menu?.textContent).toContain("添加到对话");
-    expect(menu?.textContent).toContain("在系统文件管理器中显示");
+    expect(menu?.textContent).toContain("加入对话");
+    expect(menu?.textContent).toContain("显示位置");
     expect(menu?.textContent).not.toContain("删除");
     expect(menu?.textContent).not.toContain("重命名");
 
     const addAction = Array.from(menu?.querySelectorAll("button") ?? []).find(
-      (button) => button.textContent?.includes("添加到对话"),
+      (button) => button.textContent?.includes("加入对话"),
     );
     expect(addAction).toBeTruthy();
 
@@ -313,6 +335,55 @@ describe("FileManagerSidebar", () => {
         source: "file_manager",
       }),
     ]);
+  });
+
+  it("右键菜单靠近侧栏右侧时应向左避让", async () => {
+    const { container } = await renderFileManagerSidebar();
+    const sidebar = container.querySelector(
+      '[data-testid="file-manager-sidebar"]',
+    ) as HTMLElement | null;
+    const fileEntry = Array.from(
+      container.querySelectorAll('[data-testid="file-manager-entry"]'),
+    ).find((entry) => entry.textContent?.includes("brief.txt"));
+
+    expect(sidebar).toBeTruthy();
+    expect(fileEntry).toBeTruthy();
+
+    if (sidebar) {
+      sidebar.getBoundingClientRect = () =>
+        ({
+          x: 20,
+          y: 0,
+          left: 20,
+          top: 0,
+          right: 420,
+          bottom: 700,
+          width: 400,
+          height: 700,
+          toJSON: () => ({}),
+        }) as DOMRect;
+    }
+
+    await act(async () => {
+      fileEntry?.dispatchEvent(
+        new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 390,
+          clientY: 80,
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    const menu = document.querySelector(
+      '[data-testid="file-manager-context-menu"]',
+    ) as HTMLElement | null;
+    expect(menu).toBeTruthy();
+    expect(menu?.className).toContain("w-52");
+    expect(menu?.style.left).toBe("204px");
+    expect(menu?.textContent).toContain("显示位置");
+    expect(menu?.textContent).not.toContain("在系统文件管理器中显示");
   });
 
   it("提供项目目录时应优先打开当前项目", async () => {
@@ -338,8 +409,8 @@ describe("FileManagerSidebar", () => {
     expect(container.textContent).toContain("本地位置");
     expect(container.textContent).not.toContain("/Users/demo");
 
-    const locationHint = Array.from(container.querySelectorAll("p")).find(
-      (element) => element.textContent?.includes("本地位置"),
+    const locationHint = Array.from(container.querySelectorAll("[title]")).find(
+      (element) => element.getAttribute("title") === "当前文件夹",
     );
     expect(locationHint?.getAttribute("title")).toBe("当前文件夹");
   });
@@ -361,7 +432,7 @@ describe("FileManagerSidebar", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("右键文本文件应可直接设为项目资料", async () => {
+  it("右键文本文件应可直接设为资料", async () => {
     const onImportAsKnowledge = vi.fn();
     const { container } = await renderFileManagerSidebar({
       onImportAsKnowledge,
@@ -386,11 +457,11 @@ describe("FileManagerSidebar", () => {
     const menu = document.querySelector(
       '[data-testid="file-manager-context-menu"]',
     );
-    expect(menu?.textContent).toContain("设为项目资料");
+    expect(menu?.textContent).toContain("设为资料");
 
     const importAction = Array.from(
       menu?.querySelectorAll("button") ?? [],
-    ).find((button) => button.textContent?.includes("设为项目资料"));
+    ).find((button) => button.textContent?.includes("设为资料"));
     expect(importAction).toBeTruthy();
 
     await act(async () => {
@@ -420,8 +491,9 @@ describe("FileManagerSidebar", () => {
     const fileEntry = Array.from(
       container.querySelectorAll('[data-testid="file-manager-entry"]'),
     ).find((entry) => entry.textContent?.includes("brief.txt"));
-    expect(fileEntry?.textContent).toContain("加入对话");
-    expect(fileEntry?.textContent).toContain("设为资料");
+    expect(fileEntry?.textContent).not.toContain("加入对话");
+    expect(fileEntry?.textContent).not.toContain("设为资料");
+    expect(fileEntry?.querySelectorAll("button")).toHaveLength(0);
 
     await act(async () => {
       fileEntry?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -452,7 +524,10 @@ describe("FileManagerSidebar", () => {
     ).find((entry) =>
       entry.textContent?.includes("article-typesetting-master.skill"),
     );
-    expect(skillEntry?.textContent).toMatch(skillPackageInstallActionPattern);
+    expect(skillEntry?.textContent).not.toMatch(
+      skillPackageInstallActionPattern,
+    );
+    expect(skillEntry?.querySelectorAll("button")).toHaveLength(0);
 
     await act(async () => {
       skillEntry?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -469,7 +544,7 @@ describe("FileManagerSidebar", () => {
     expect(onAddPathReferences).not.toHaveBeenCalled();
   });
 
-  it("右键 .skill 安装包应展示安装 Skill 入口", async () => {
+  it("右键 .skill 安装包应展示简短安装入口", async () => {
     const onInstallSkillPackage = vi.fn();
     const { container } = await renderFileManagerSidebar({
       onInstallSkillPackage,
@@ -496,12 +571,12 @@ describe("FileManagerSidebar", () => {
     const menu = document.querySelector(
       '[data-testid="file-manager-context-menu"]',
     );
-    expect(menu?.textContent).toMatch(skillPackageContextActionPattern);
+    expect(menu?.textContent).toMatch(skillPackageInstallActionPattern);
 
     const installAction = Array.from(
       menu?.querySelectorAll("button") ?? [],
     ).find((button) =>
-      skillPackageContextActionPattern.test(button.textContent ?? ""),
+      skillPackageInstallActionPattern.test(button.textContent ?? ""),
     );
     expect(installAction).toBeTruthy();
 
@@ -530,7 +605,10 @@ describe("FileManagerSidebar", () => {
     ).find((entry) =>
       entry.textContent?.includes("article-typesetting-addon.skills"),
     );
-    expect(skillEntry?.textContent).toMatch(skillPackageInstallActionPattern);
+    expect(skillEntry?.textContent).not.toMatch(
+      skillPackageInstallActionPattern,
+    );
+    expect(skillEntry?.querySelectorAll("button")).toHaveLength(0);
 
     await act(async () => {
       skillEntry?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -547,7 +625,7 @@ describe("FileManagerSidebar", () => {
     expect(onAddPathReferences).not.toHaveBeenCalled();
   });
 
-  it("文件预览按钮应打开工作台预览，不替代普通加入对话动作", async () => {
+  it("右键文件应打开工作台预览，不替代普通加入对话动作", async () => {
     const onAddPathReferences = vi.fn();
     const onOpenFileInWorkspace = vi.fn();
     const { container } = await renderFileManagerSidebar({
@@ -558,12 +636,29 @@ describe("FileManagerSidebar", () => {
     const fileEntry = Array.from(
       container.querySelectorAll('[data-testid="file-manager-entry"]'),
     ).find((entry) => entry.textContent?.includes("brief.txt"));
-    const previewButton = Array.from(
-      fileEntry?.querySelectorAll("button") ?? [],
-    ).find((button) => button.textContent?.includes("预览"));
 
     await act(async () => {
-      previewButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      fileEntry?.dispatchEvent(
+        new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 48,
+          clientY: 56,
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    const menu = document.querySelector(
+      '[data-testid="file-manager-context-menu"]',
+    );
+    const previewAction = Array.from(
+      menu?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.includes("预览"));
+    expect(previewAction).toBeTruthy();
+
+    await act(async () => {
+      previewAction?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
     });
 
@@ -578,7 +673,7 @@ describe("FileManagerSidebar", () => {
     expect(openPathWithDefaultApp).not.toHaveBeenCalled();
   });
 
-  it("文件列表里的设为资料按钮应直接进入资料整理", async () => {
+  it("右键文件里的设为资料动作应直接进入资料整理", async () => {
     const onImportAsKnowledge = vi.fn();
     const { container } = await renderFileManagerSidebar({
       onImportAsKnowledge,
@@ -587,12 +682,29 @@ describe("FileManagerSidebar", () => {
     const fileEntry = Array.from(
       container.querySelectorAll('[data-testid="file-manager-entry"]'),
     ).find((entry) => entry.textContent?.includes("brief.txt"));
-    const importButton = Array.from(
-      fileEntry?.querySelectorAll("button") ?? [],
-    ).find((button) => button.textContent?.includes("设为资料"));
 
     await act(async () => {
-      importButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      fileEntry?.dispatchEvent(
+        new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 48,
+          clientY: 56,
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    const menu = document.querySelector(
+      '[data-testid="file-manager-context-menu"]',
+    );
+    const importAction = Array.from(
+      menu?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.includes("设为资料"));
+    expect(importAction).toBeTruthy();
+
+    await act(async () => {
+      importAction?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
     });
 
@@ -632,12 +744,12 @@ describe("FileManagerSidebar", () => {
     const menu = document.querySelector(
       '[data-testid="file-manager-context-menu"]',
     );
-    expect(menu?.textContent).toContain("暂不支持整理为资料");
+    expect(menu?.textContent).toContain("设为资料");
     expect(menu?.textContent).not.toContain("设为项目资料");
 
     const importAction = Array.from(
       menu?.querySelectorAll("button") ?? [],
-    ).find((button) => button.textContent?.includes("暂不支持整理为资料"));
+    ).find((button) => button.textContent?.includes("设为资料"));
     expect(importAction).toBeTruthy();
     expect((importAction as HTMLButtonElement | undefined)?.disabled).toBe(
       true,
@@ -652,7 +764,7 @@ describe("FileManagerSidebar", () => {
     expect(onImportAsKnowledge).not.toHaveBeenCalled();
   });
 
-  it("应用程序位置应渲染原生应用图标，侧栏保持窄轨", async () => {
+  it("应用程序位置应渲染原生应用图标，侧栏使用桌面文件管理器式位置列表", async () => {
     const { container } = await renderFileManagerSidebar();
     const sidebar = container.querySelector(
       '[data-testid="file-manager-sidebar"]',
@@ -664,8 +776,12 @@ describe("FileManagerSidebar", () => {
       container.querySelectorAll("button"),
     ).find((button) => button.getAttribute("aria-label") === "应用程序");
 
-    expect(sidebar?.className).toContain("w-[312px]");
-    expect(rail?.className).toContain("w-[48px]");
+    expect(sidebar?.className).toContain("w-[34vw]");
+    expect(sidebar?.className).toContain("min-w-[460px]");
+    expect(sidebar?.className).toContain("max-w-[720px]");
+    expect(rail?.className).toContain("w-[148px]");
+    expect(rail?.textContent).toContain("个人");
+    expect(rail?.textContent).toContain("下载");
     expect(applicationsButton).toBeTruthy();
 
     await act(async () => {

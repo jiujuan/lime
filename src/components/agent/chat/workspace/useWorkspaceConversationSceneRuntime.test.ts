@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useWorkspaceConversationSceneRuntime } from "./useWorkspaceConversationSceneRuntime";
 
 vi.mock("react-i18next", async () => {
-  const agentZhCN = (await import("@/i18n/resources/zh-CN/agent.json"))
-    .default as Record<string, string>;
+  const { agentZhCNResource } = await import("@/i18n/agentResources");
+  const agentZhCN = agentZhCNResource as Record<string, string>;
 
   return {
     useTranslation: () => ({
@@ -40,31 +40,6 @@ vi.mock("react-syntax-highlighter/dist/esm/styles/prism", () => ({
 type HookProps = Parameters<typeof useWorkspaceConversationSceneRuntime>[0];
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
-
-function createEmptyHarnessState(): NonNullable<HookProps["harnessState"]> {
-  return {
-    runtimeStatus: null,
-    pendingApprovals: [],
-    latestContextTrace: [],
-    plan: {
-      phase: "idle",
-      items: [],
-    },
-    activity: {
-      planning: 0,
-      filesystem: 0,
-      execution: 0,
-      web: 0,
-      skills: 0,
-      delegation: 0,
-    },
-    delegatedTasks: [],
-    outputSignals: [],
-    activeFileWrites: [],
-    recentFileEvents: [],
-    hasSignals: false,
-  };
-}
 
 function createBaseParams(overrides: Record<string, unknown> = {}) {
   const noop = vi.fn();
@@ -176,6 +151,7 @@ function createBaseParams(overrides: Record<string, unknown> = {}) {
     harnessPendingCount: 0,
     harnessAttentionLevel: "idle",
     harnessToggleLabel: undefined,
+    isRestoringSession: false,
     sessionId: null,
     syncStatus: "idle",
     pendingA2UIForm: undefined,
@@ -232,8 +208,6 @@ function createBaseParams(overrides: Record<string, unknown> = {}) {
     workspaceHealthError: false,
     focusedTimelineItemId: null,
     timelineFocusRequestKey: 0,
-    harnessState: createEmptyHarnessState(),
-    onSubmitCodeFixPrompt: undefined,
     ...overrides,
   } as any;
 }
@@ -407,7 +381,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     expect(sceneProps.onSelectServiceSkill).toBe(onSelectServiceSkill);
   });
 
-  it("应向画布壳透传解耦后的 sessionView 过程面板", () => {
+  it("需要用户关注时才向画布壳透传会话进展面板", () => {
     const params = createBaseParams({
       turns: [
         {
@@ -461,22 +435,27 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     const sceneProps = getRenderedSceneProps(params);
     const sessionView = sceneProps.canvasWorkbenchLayoutProps.sessionView;
 
-    expect(sessionView?.title).toBe("Session · Main");
-    expect(sessionView?.tabLabel).toBe("Session · Main");
-    expect(sessionView?.tabBadge).toBe("进行中 1");
+    expect(sessionView?.title).toBe("任务进展");
+    expect(sessionView?.tabLabel).toBe("进展");
+    expect(sessionView?.tabBadge).toBe("处理中 1");
     expect(sessionView?.tabBadgeTone).toBe("sky");
-    expect(sessionView?.subtitle).toContain("请抓取文章并整理成 markdown");
+    expect(sessionView?.subtitle).toBe("正在处理：请抓取文章并整理成 markdown");
     expect(sessionView?.summaryStats).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           key: "session-status",
-          label: "会话状态",
+          label: "当前状态",
           value: "执行中",
         }),
         expect.objectContaining({
+          key: "session-generated-files",
+          label: "生成内容",
+          value: "处理中 1",
+        }),
+        expect.objectContaining({
           key: "session-follow-up",
-          label: "待补信息",
-          value: "待补信息 1",
+          label: "需要你处理",
+          value: "待补充 1",
         }),
       ]),
     );
@@ -488,7 +467,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
         }),
         expect.objectContaining({
           key: "session-pending-actions",
-          label: "待补信息 1",
+          label: "待补充 1",
         }),
       ]),
     );
@@ -522,7 +501,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
           position: 1,
         },
       ],
-      isAutoRestoringSession: true,
+      isRestoringSession: true,
     });
 
     const harness = renderHook(params);
@@ -534,16 +513,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     expect(sceneProps.messageListProps.currentTurnId).toBeNull();
     expect(sceneProps.messageListProps.pendingActions).toEqual([]);
     expect(sceneProps.messageListProps.queuedTurns).toEqual([]);
-    expect(
-      sceneProps.canvasWorkbenchLayoutProps.sessionView.summaryStats,
-    ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          key: "session-runtime-items",
-          value: "轨迹 0",
-        }),
-      ]),
-    );
+    expect(sceneProps.canvasWorkbenchLayoutProps.sessionView).toBeNull();
 
     act(() => {
       vi.advanceTimersByTime(700);
@@ -566,7 +536,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
       turns,
       currentTurnId: "history-window-turn-5",
       effectiveThreadItems: threadItems,
-      isAutoRestoringSession: false,
+      isRestoringSession: false,
       sessionHistoryWindow: {
         loadedMessages: 40,
         totalMessages: 320,
@@ -595,7 +565,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
       turns,
       currentTurnId: "sending-turn-5",
       effectiveThreadItems: threadItems,
-      isAutoRestoringSession: true,
+      isRestoringSession: true,
       isSending: true,
     });
 
@@ -615,7 +585,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
         turns,
         currentTurnId: "interactive-turn-5",
         effectiveThreadItems: threadItems,
-        isAutoRestoringSession: true,
+        isRestoringSession: true,
         focusedTimelineItemId: "interactive-item-1",
       }),
     );
@@ -628,7 +598,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
         turns,
         currentTurnId: "interactive-turn-5",
         effectiveThreadItems: threadItems,
-        isAutoRestoringSession: true,
+        isRestoringSession: true,
         pendingA2UIForm: {
           id: "form-1",
           title: "补充信息",
@@ -687,7 +657,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
         turns: session.turns,
         currentTurnId: session.turns.at(-1)?.id ?? null,
         effectiveThreadItems: session.threadItems,
-        isAutoRestoringSession: true,
+        isRestoringSession: true,
       });
 
     const harness = renderHook(buildParams("session-a", sessionA));
@@ -785,44 +755,6 @@ describe("useWorkspaceConversationSceneRuntime", () => {
         ...createBaseParams().canvasScene,
         handleOpenCanvasWorkbenchPath: openChangedFile,
       },
-      harnessState: {
-        ...createEmptyHarnessState(),
-        outputSignals: [
-          {
-            id: "signal-command",
-            toolCallId: "item-command",
-            toolName: "bash",
-            title: "npm test",
-            summary: "exit code 1",
-            preview: "FAIL src/App.test.tsx\nExpected title",
-            content: "FAIL src/App.test.tsx\nExpected title",
-            exitCode: 1,
-          },
-        ],
-        recentFileEvents: [
-          {
-            id: "file-index",
-            toolCallId: "item-file-index",
-            path: "index.html",
-            displayName: "index.html",
-            kind: "code",
-            action: "write",
-            sourceToolName: "write_file",
-            clickable: true,
-          },
-          {
-            id: "file-app",
-            toolCallId: "item-file-app",
-            path: "src/App.tsx",
-            displayName: "App.tsx",
-            kind: "code",
-            action: "edit",
-            sourceToolName: "edit_file",
-            clickable: true,
-          },
-        ],
-        hasSignals: true,
-      },
       threadRead: {
         thread_id: "thread-1",
         file_checkpoint_summary: {
@@ -916,7 +848,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     expect(canvasProps.outputView?.tabBadge).toBe("2");
     expect(canvasProps.outputView?.tabBadgeTone).toBe("rose");
     expect(typeof canvasProps.outputView?.renderPanel).toBe("function");
-    expect(canvasProps.outputView?.leadContent).toBeTruthy();
+    expect(canvasProps.outputView?.leadContent).toBeUndefined();
     expect(canvasProps.logView).toBe(canvasProps.sessionView);
     expect(canvasProps.changeView?.checkpointCount).toBe(2);
     expect(canvasProps.changeView?.latestCheckpointPath).toBe(
@@ -929,7 +861,6 @@ describe("useWorkspaceConversationSceneRuntime", () => {
           path: "index.html",
           displayName: "index.html",
           status: "completed",
-          reviewStatus: "pending_review",
           checkpointPath: "index.html",
           checkpointLabel: "v2",
         }),
@@ -944,57 +875,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     canvasProps.changeView?.onOpenFile?.("/tmp/demo/index.html");
     expect(openChangedFile).toHaveBeenCalledWith("/tmp/demo/index.html");
 
-    const lead = canvasProps.outputView?.leadContent;
-    const openTab = vi.fn();
-    const resolvedLead =
-      typeof lead === "function" ? lead({ openTab }) : lead;
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    act(() => {
-      root.render(resolvedLead);
-    });
-
-    expect(container.textContent).toContain("代码审阅摘要");
-    expect(container.textContent).toContain("先处理失败输出");
-    expect(container.textContent).toContain("npm test");
-    expect(container.textContent).toContain("文件变更 2");
-    expect(container.textContent).toContain("待处理 2");
-    const primaryButton = container.querySelector(
-      '[data-testid="code-review-summary-primary-action"]',
-    ) as HTMLButtonElement | null;
-    const fixButton = container.querySelector(
-      '[data-testid="code-review-summary-fix-action"]',
-    ) as HTMLButtonElement | null;
-    expect(fixButton).not.toBeNull();
-    act(() => {
-      primaryButton?.click();
-    });
-    expect(openTab).toHaveBeenCalledWith("outputs");
-    await act(async () => {
-      fixButton?.click();
-      await Promise.resolve();
-    });
-    expect(handleSendFromEmptyState).toHaveBeenCalledWith(
-      expect.stringContaining("请继续修复"),
-      "code_orchestrated",
-      undefined,
-      expect.objectContaining({
-        displayContent: expect.stringContaining("请继续修复"),
-        skipSceneCommandRouting: true,
-        requestMetadata: {
-          harness: {
-            code_fix: {
-              source: "failed_output",
-            },
-          },
-        },
-      }),
-    );
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+    expect(handleSendFromEmptyState).not.toHaveBeenCalled();
   });
 
   it("非 code_orchestrated 会话应保持默认画布工作台模式", () => {
@@ -1006,6 +887,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     const canvasProps = sceneProps.canvasWorkbenchLayoutProps;
 
     expect(canvasProps.workbenchMode).toBe("default");
+    expect(canvasProps.sessionView).toBeNull();
     expect(canvasProps.outputView).toBeNull();
     expect(canvasProps.logView).toBeNull();
     expect(canvasProps.changeView).toBeNull();

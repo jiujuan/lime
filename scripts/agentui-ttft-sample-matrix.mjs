@@ -327,6 +327,9 @@ function parseRouting(metadata) {
     settingsSource: stringValue(
       firstDefined(routingDecision?.settingsSource, routingDecision?.settings_source),
     ),
+    routingMode: stringValue(
+      firstDefined(routingDecision?.routingMode, routingDecision?.routing_mode),
+    ),
     selectedModel,
     selectedProvider,
     serviceModelSlot: stringValue(
@@ -341,6 +344,10 @@ function isResponsiveChatLatencyRun(routing) {
     normalizeRoutingToken(routing.serviceModelSlot) === "responsive_chat" ||
     normalizeRoutingToken(routing.settingsSource) === "service_models.responsive_chat"
   );
+}
+
+function hasResolvedProviderModel(routing) {
+  return Boolean(routing.selectedProvider && routing.selectedModel);
 }
 
 function parseRun(row) {
@@ -377,7 +384,8 @@ function parseRun(row) {
     model,
     provider,
     routing,
-    responsiveLatencyEligible: isResponsiveChatLatencyRun(routing),
+    responsiveLatencyEligible:
+      hasResolvedProviderModel(routing) && isResponsiveChatLatencyRun(routing),
     status: row.status || "(unknown)",
   };
 }

@@ -1022,8 +1022,8 @@ mod tests {
             ],
         });
 
-        assert_eq!(inventory.counts.catalog_total, 40);
-        assert_eq!(inventory.counts.catalog_current_total, 40);
+        assert_eq!(inventory.counts.catalog_total, 41);
+        assert_eq!(inventory.counts.catalog_current_total, 41);
         assert_eq!(inventory.counts.catalog_compat_total, 0);
         assert_eq!(inventory.counts.registry_total, 4);
         assert_eq!(inventory.counts.registry_visible_total, 3);

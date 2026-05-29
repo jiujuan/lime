@@ -9,7 +9,6 @@ import {
   AlertTriangle,
   AppWindow,
   ChevronLeft,
-  ChevronRight,
   Copy,
   Download,
   ExternalLink,
@@ -48,12 +47,20 @@ import {
   rememberPathReferencesForDrag,
   serializePathReferencesForDrag,
 } from "../../utils/pathReferences";
+import {
+  compareFileManagerEntries,
+  formatEntryModifiedTime,
+  formatFileSize,
+} from "./fileManagerDisplay";
 
 const PINNED_LOCATIONS_STORAGE_KEY = "lime.file-manager.pinned-locations";
 const APPLICATION_ENTRY_PATTERN = /\.(app|appref-ms|exe|lnk)$/i;
 const SKILL_PACKAGE_ENTRY_PATTERN = /\.(?:skill|skills)$/i;
 const MAX_ICON_PREFETCH_ENTRIES = 72;
 const ICON_PREFETCH_CONCURRENCY = 2;
+const CONTEXT_MENU_WIDTH_PX = 208;
+const CONTEXT_MENU_HEIGHT_PX = 320;
+const CONTEXT_MENU_GAP_PX = 8;
 
 type ViewMode = "list" | "grid";
 
@@ -72,18 +79,27 @@ interface ContextMenuState {
   entry: FileEntry;
 }
 
-interface EntryGroup {
-  key: string;
-  label: string;
-  entries: FileEntry[];
-}
-
 interface ContextMenuAction {
   action: string;
   label: string;
   icon: LucideIcon;
   disabled?: boolean;
   title?: string;
+}
+
+interface FileManagerActionLabels {
+  open: string;
+  reveal: string;
+  addToChat: string;
+  preview: string;
+  importKnowledge: string;
+  importKnowledgeTitle: string;
+  copyPath: string;
+  copyName: string;
+  pin: string;
+  refresh: string;
+  installPackage: string;
+  installPackageTitle: string;
 }
 
 function asPinnedLocation(value: unknown): FileManagerLocation | null {
@@ -166,6 +182,54 @@ function isSkillPackageEntry(entry: FileEntry): boolean {
   return !entry.isDir && SKILL_PACKAGE_ENTRY_PATTERN.test(entry.name);
 }
 
+function resolveContextMenuPosition(
+  clientX: number,
+  clientY: number,
+  sidebarRect: DOMRect | null,
+): { x: number; y: number } {
+  if (typeof window === "undefined") {
+    return { x: clientX, y: clientY };
+  }
+
+  const usableSidebarRect =
+    sidebarRect && sidebarRect.width > 0 ? sidebarRect : null;
+  const leftBoundary = Math.max(
+    CONTEXT_MENU_GAP_PX,
+    usableSidebarRect
+      ? usableSidebarRect.left + CONTEXT_MENU_GAP_PX
+      : CONTEXT_MENU_GAP_PX,
+  );
+  const rightBoundary = Math.min(
+    window.innerWidth - CONTEXT_MENU_GAP_PX,
+    usableSidebarRect
+      ? usableSidebarRect.right - CONTEXT_MENU_GAP_PX
+      : window.innerWidth - CONTEXT_MENU_GAP_PX,
+  );
+  const topBoundary = Math.max(
+    CONTEXT_MENU_GAP_PX,
+    usableSidebarRect
+      ? usableSidebarRect.top + CONTEXT_MENU_GAP_PX
+      : CONTEXT_MENU_GAP_PX,
+  );
+  const bottomBoundary = Math.min(
+    window.innerHeight - CONTEXT_MENU_GAP_PX,
+    usableSidebarRect
+      ? usableSidebarRect.bottom - CONTEXT_MENU_GAP_PX
+      : window.innerHeight - CONTEXT_MENU_GAP_PX,
+  );
+
+  return {
+    x: Math.max(
+      leftBoundary,
+      Math.min(clientX, rightBoundary - CONTEXT_MENU_WIDTH_PX),
+    ),
+    y: Math.max(
+      topBoundary,
+      Math.min(clientY, bottomBoundary - CONTEXT_MENU_HEIGHT_PX),
+    ),
+  };
+}
+
 function EntryIcon({
   icon: Icon,
   className,
@@ -174,75 +238,6 @@ function EntryIcon({
   className: string;
 }) {
   return <Icon className={className} aria-hidden strokeWidth={2.2} />;
-}
-
-function formatFileSize(size: number): string {
-  if (!Number.isFinite(size) || size <= 0) {
-    return "";
-  }
-  if (size < 1024) {
-    return `${size} B`;
-  }
-  const units = ["KB", "MB", "GB", "TB"];
-  let value = size / 1024;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`;
-}
-
-function formatEntryTime(modifiedAt: number): string {
-  if (!modifiedAt) {
-    return "未知时间";
-  }
-  return new Date(modifiedAt).toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function resolveEntryGroup(entry: FileEntry): string {
-  const modifiedAt = entry.modifiedAt || 0;
-  if (!modifiedAt) {
-    return "更早";
-  }
-  const now = new Date();
-  const value = new Date(modifiedAt);
-  const dayMs = 24 * 60 * 60 * 1000;
-  const diff = now.getTime() - value.getTime();
-
-  if (value.toDateString() === now.toDateString()) {
-    return "今天";
-  }
-  if (diff < 7 * dayMs) {
-    return "本周";
-  }
-  if (
-    value.getFullYear() === now.getFullYear() &&
-    value.getMonth() === now.getMonth()
-  ) {
-    return "本月";
-  }
-  if (value.getFullYear() === now.getFullYear()) {
-    return "今年";
-  }
-  return "更早";
-}
-
-function groupEntries(entries: FileEntry[]): EntryGroup[] {
-  const order = ["今天", "本周", "本月", "今年", "更早"];
-  const map = new Map<string, FileEntry[]>();
-  for (const entry of entries) {
-    const key = resolveEntryGroup(entry);
-    map.set(key, [...(map.get(key) || []), entry]);
-  }
-  return order
-    .map((key) => ({ key, label: key, entries: map.get(key) || [] }))
-    .filter((group) => group.entries.length > 0);
 }
 
 function createReferenceFromEntry(
@@ -258,12 +253,16 @@ function createReferenceFromEntry(
   });
 }
 
-async function copyText(value: string, successMessage: string): Promise<void> {
+async function copyText(
+  value: string,
+  successMessage: string,
+  errorMessage: string,
+): Promise<void> {
   try {
     await navigator.clipboard.writeText(value);
     toast.success(successMessage);
   } catch {
-    toast.error("复制失败，请检查剪贴板权限");
+    toast.error(errorMessage);
   }
 }
 
@@ -272,28 +271,29 @@ function buildContextMenuActions(
   knowledgeImportEnabled: boolean,
   workspacePreviewEnabled: boolean,
   skillPackageInstallEnabled: boolean,
-  skillPackageInstallLabel: string,
+  labels: FileManagerActionLabels,
 ): ContextMenuAction[] {
   const isSkillPackage = isSkillPackageEntry(entry);
   const actions: ContextMenuAction[] = [
-    { action: "open", label: "打开", icon: ExternalLink },
-    { action: "reveal", label: "在系统文件管理器中显示", icon: Folder },
+    { action: "open", label: labels.open, icon: ExternalLink },
+    { action: "reveal", label: labels.reveal, icon: Folder },
   ];
 
   if (skillPackageInstallEnabled && isSkillPackage) {
     actions.push({
       action: "install-skill-package",
-      label: skillPackageInstallLabel,
+      label: labels.installPackage,
       icon: Package,
+      title: labels.installPackageTitle,
     });
   } else {
-    actions.push({ action: "add", label: "添加到对话", icon: PlusCircle });
+    actions.push({ action: "add", label: labels.addToChat, icon: PlusCircle });
   }
 
   if (workspacePreviewEnabled && !entry.isDir && !isSkillPackage) {
     actions.push({
       action: "preview-workspace",
-      label: "在工作台预览",
+      label: labels.preview,
       icon: AppWindow,
     });
   }
@@ -302,18 +302,18 @@ function buildContextMenuActions(
     const unsupportedMessage = getKnowledgeUnsupportedSourceMessage(entry);
     actions.push({
       action: "import-knowledge",
-      label: unsupportedMessage ? "暂不支持整理为资料" : "设为项目资料",
+      label: labels.importKnowledge,
       icon: FileText,
       disabled: Boolean(unsupportedMessage),
-      title: unsupportedMessage || "整理后可在当前项目里复用。",
+      title: unsupportedMessage || labels.importKnowledgeTitle,
     });
   }
 
   actions.push(
-    { action: "copy-path", label: "复制路径", icon: Copy },
-    { action: "copy-name", label: "复制文件名", icon: FileText },
-    { action: "pin", label: "固定到侧栏", icon: Pin },
-    { action: "refresh", label: "刷新", icon: RefreshCw },
+    { action: "copy-path", label: labels.copyPath, icon: Copy },
+    { action: "copy-name", label: labels.copyName, icon: FileText },
+    { action: "pin", label: labels.pin, icon: Pin },
+    { action: "refresh", label: labels.refresh, icon: RefreshCw },
   );
 
   return actions;
@@ -327,8 +327,10 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
   onInstallSkillPackage,
   initialDirectory,
 }) => {
-  const { t } = useTranslation("agent");
+  const { i18n, t } = useTranslation("agent");
+  const locale = i18n.language || "zh-CN";
   const normalizedInitialDirectory = initialDirectory?.trim() ?? "";
+  const currentProjectLabel = t("agentChat.fileManager.currentProject");
   const [locations, setLocations] = useState<FileManagerLocation[]>([]);
   const [pinnedLocations, setPinnedLocations] = useState<FileManagerLocation[]>(
     () => loadPinnedLocations(),
@@ -344,6 +346,27 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const iconDataUrlCacheRef = useRef<Map<string, string>>(new Map());
   const entriesRef = useRef<FileEntry[]>([]);
+  const actionLabels = useMemo<FileManagerActionLabels>(
+    () => ({
+      open: t("agentChat.fileManager.action.open"),
+      reveal: t("agentChat.fileManager.action.reveal"),
+      addToChat: t("agentChat.fileManager.action.addToChat"),
+      preview: t("agentChat.fileManager.action.preview"),
+      importKnowledge: t("agentChat.fileManager.action.importKnowledge"),
+      importKnowledgeTitle: t(
+        "agentChat.fileManager.action.importKnowledgeTitle",
+      ),
+      copyPath: t("agentChat.fileManager.action.copyPath"),
+      copyName: t("agentChat.fileManager.action.copyName"),
+      pin: t("agentChat.fileManager.action.pin"),
+      refresh: t("agentChat.fileManager.refresh"),
+      installPackage: t("agentChat.fileManager.action.installPackage"),
+      installPackageTitle: t(
+        "agentChat.fileManager.action.installPackageTitle",
+      ),
+    }),
+    [t],
+  );
 
   useEffect(() => {
     entriesRef.current = entries;
@@ -365,7 +388,7 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
         const first = normalizedInitialDirectory
           ? {
               id: "project-root",
-              label: "当前项目",
+              label: currentProjectLabel,
               path: normalizedInitialDirectory,
               kind: "project",
             }
@@ -387,7 +410,7 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [normalizedInitialDirectory]);
+  }, [currentProjectLabel, normalizedInitialDirectory]);
 
   const loadActiveDirectory = useCallback(async () => {
     if (!activePath.trim()) {
@@ -529,7 +552,7 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
     if (normalizedInitialDirectory) {
       byPath.set(normalizedInitialDirectory, {
         id: "project-root",
-        label: "当前项目",
+        label: currentProjectLabel,
         path: normalizedInitialDirectory,
         kind: "project",
       });
@@ -541,17 +564,28 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
       byPath.set(location.path, location);
     }
     return Array.from(byPath.values());
-  }, [locations, normalizedInitialDirectory, pinnedLocations]);
+  }, [
+    currentProjectLabel,
+    locations,
+    normalizedInitialDirectory,
+    pinnedLocations,
+  ]);
 
   const activeTitle = useMemo(() => {
     return (
       allLocations.find((location) => location.path === activePath)?.label ||
       activePath.split(/[\\/]/).filter(Boolean).at(-1) ||
-      "文件"
+      t("agentChat.fileManager.title")
     );
-  }, [activePath, allLocations]);
+  }, [activePath, allLocations, t]);
 
-  const entryGroups = useMemo(() => groupEntries(entries), [entries]);
+  const sortedEntries = useMemo(
+    () =>
+      entries
+        .slice()
+        .sort((left, right) => compareFileManagerEntries(left, right, locale)),
+    [entries, locale],
+  );
 
   const handleSelectLocation = useCallback((location: FileManagerLocation) => {
     setActivePath(location.path);
@@ -569,11 +603,16 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
       }
       void openPathWithDefaultApp(entry.path).catch((openError) => {
         toast.error(
-          `打开失败：${openError instanceof Error ? openError.message : String(openError)}`,
+          t("agentChat.fileManager.toast.openFailed", {
+            message:
+              openError instanceof Error
+                ? openError.message
+                : String(openError),
+          }),
         );
       });
     },
-    [activeLocationKind],
+    [activeLocationKind, t],
   );
 
   const handleAddEntry = useCallback(
@@ -583,9 +622,13 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
         return;
       }
       onAddPathReferences([reference]);
-      toast.success(`已添加到对话：${reference.name}`);
+      toast.success(
+        t("agentChat.fileManager.toast.addedToChat", {
+          name: reference.name,
+        }),
+      );
     },
-    [onAddPathReferences],
+    [onAddPathReferences, t],
   );
 
   const handleEntryPrimaryAction = useCallback(
@@ -640,27 +683,32 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
     [activeLocationKind, handleOpenEntry, onOpenFileInWorkspace],
   );
 
-  const handlePinEntry = useCallback((entry: FileEntry) => {
-    if (!entry.isDir) {
-      toast.info("只有文件夹可以固定到侧栏");
-      return;
-    }
-    const nextLocation: FileManagerLocation = {
-      id: `pinned:${entry.path}`,
-      label: entry.name,
-      path: entry.path,
-      kind: "pinned",
-    };
-    setPinnedLocations((current) => {
-      const next = [
-        ...current.filter((location) => location.path !== nextLocation.path),
-        nextLocation,
-      ];
-      savePinnedLocations(next);
-      return next;
-    });
-    toast.success(`已固定：${entry.name}`);
-  }, []);
+  const handlePinEntry = useCallback(
+    (entry: FileEntry) => {
+      if (!entry.isDir) {
+        toast.info(t("agentChat.fileManager.toast.folderOnlyPin"));
+        return;
+      }
+      const nextLocation: FileManagerLocation = {
+        id: `pinned:${entry.path}`,
+        label: entry.name,
+        path: entry.path,
+        kind: "pinned",
+      };
+      setPinnedLocations((current) => {
+        const next = [
+          ...current.filter((location) => location.path !== nextLocation.path),
+          nextLocation,
+        ];
+        savePinnedLocations(next);
+        return next;
+      });
+      toast.success(
+        t("agentChat.fileManager.toast.pinned", { name: entry.name }),
+      );
+    },
+    [t],
+  );
 
   const handleContextAction = useCallback(
     (action: string, entry: FileEntry) => {
@@ -672,15 +720,28 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
         case "reveal":
           void revealPathInFinder(entry.path).catch((revealError) => {
             toast.error(
-              `显示失败：${revealError instanceof Error ? revealError.message : String(revealError)}`,
+              t("agentChat.fileManager.toast.revealFailed", {
+                message:
+                  revealError instanceof Error
+                    ? revealError.message
+                    : String(revealError),
+              }),
             );
           });
           break;
         case "copy-path":
-          void copyText(entry.path, "已复制路径");
+          void copyText(
+            entry.path,
+            t("agentChat.fileManager.toast.copiedPath"),
+            t("agentChat.fileManager.toast.copyFailed"),
+          );
           break;
         case "copy-name":
-          void copyText(entry.name, "已复制文件名");
+          void copyText(
+            entry.name,
+            t("agentChat.fileManager.toast.copiedName"),
+            t("agentChat.fileManager.toast.copyFailed"),
+          );
           break;
         case "add":
           handleAddEntry(entry);
@@ -710,6 +771,7 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
       handlePinEntry,
       loadActiveDirectory,
       onInstallSkillPackage,
+      t,
     ],
   );
 
@@ -752,24 +814,8 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
           ? "folder"
           : "file";
     const hasNativeIcon = Boolean(entry.iconDataUrl);
-    const knowledgeUnsupportedMessage =
-      !entry.isDir && onImportAsKnowledge
-        ? getKnowledgeUnsupportedSourceMessage(entry)
-        : "";
-    const canPreviewInWorkspace = Boolean(
-      onOpenFileInWorkspace &&
-      !entry.isDir &&
-      !isApplication &&
-      !isSkillPackage,
-    );
     const canInstallSkillPackage = Boolean(
       onInstallSkillPackage && isSkillPackage,
-    );
-    const canImportAsKnowledge = Boolean(
-      onImportAsKnowledge &&
-      !entry.isDir &&
-      !isSkillPackage &&
-      !knowledgeUnsupportedMessage,
     );
     const handleEntryKeyDown = (event: React.KeyboardEvent) => {
       if (event.key !== "Enter" && event.key !== " ") {
@@ -797,120 +843,108 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
         onDragEnd={handleDragEnd}
         onContextMenu={(event) => {
           event.preventDefault();
-          setContextMenu({ x: event.clientX, y: event.clientY, entry });
+          const sidebar = event.currentTarget.closest(
+            '[data-testid="file-manager-sidebar"]',
+          );
+          const position = resolveContextMenuPosition(
+            event.clientX,
+            event.clientY,
+            sidebar instanceof HTMLElement
+              ? sidebar.getBoundingClientRect()
+              : null,
+          );
+          setContextMenu({ ...position, entry });
         }}
         className={cn(
-          "group w-full rounded-[14px] border border-transparent text-left transition hover:border-amber-200 hover:bg-amber-50/72 focus:outline-none focus:ring-2 focus:ring-amber-200",
+          "group w-full border border-transparent text-left transition focus:outline-none focus:ring-2 focus:ring-sky-200",
           viewMode === "grid"
-            ? "flex min-h-[104px] flex-col items-center justify-center gap-2 px-3 py-3 text-center"
-            : "flex items-center gap-3 px-3 py-2.5",
+            ? "flex min-h-[104px] flex-col items-center justify-center gap-2 rounded-[10px] px-3 py-3 text-center hover:border-slate-200 hover:bg-slate-50"
+            : "grid min-h-[34px] grid-cols-[minmax(0,1fr)_94px_66px] items-center gap-3 border-b-slate-100 px-3 py-1.5 hover:bg-sky-50/70",
         )}
         title={
           entry.isDir
-            ? "打开文件夹"
+            ? t("agentChat.fileManager.entryTitle.openFolder")
             : isApplication
-              ? "打开应用"
+              ? t("agentChat.fileManager.entryTitle.openApplication")
               : isSkillPackage && canInstallSkillPackage
-                ? t("skills.localPackage.fileManager.title")
-                : "单击加入对话，可右键查看更多操作"
+                ? t("agentChat.fileManager.action.installPackageTitle")
+                : t("agentChat.fileManager.entryTitle.addToChat")
         }
       >
         <span
-          data-testid="file-manager-entry-icon"
-          data-icon-kind={iconKind}
-          data-icon-source={hasNativeIcon ? "native" : "fallback"}
           className={cn(
-            "inline-flex shrink-0 items-center justify-center rounded-[12px] border shadow-sm shadow-slate-950/5",
-            viewMode === "grid" ? "h-11 w-11" : "h-8 w-8",
-            hasNativeIcon
-              ? "border-transparent bg-transparent text-slate-700 shadow-none"
-              : isApplication
-                ? "border-sky-100 bg-sky-50 text-sky-700"
-                : entry.isDir
-                  ? "border-amber-100 bg-amber-50 text-amber-700"
-                  : "border-slate-200 bg-slate-50 text-slate-600",
+            "flex min-w-0",
+            viewMode === "grid"
+              ? "w-full flex-col items-center gap-2"
+              : "items-center gap-2.5",
           )}
         >
-          {entry.iconDataUrl ? (
-            <img
-              data-testid="file-manager-entry-native-icon"
-              src={entry.iconDataUrl}
-              alt=""
-              draggable={false}
-              className="h-full w-full rounded-[12px] object-contain"
-            />
-          ) : (
-            <EntryIcon
-              icon={Icon}
-              className={viewMode === "grid" ? "h-5 w-5" : "h-4 w-4"}
-            />
-          )}
-        </span>
-        <span
-          className={cn("min-w-0", viewMode === "grid" ? "w-full" : "flex-1")}
-        >
-          <span className="block truncate text-[13px] font-semibold text-slate-800">
-            {entry.name}
-          </span>
-          <span className="mt-0.5 block truncate text-[11px] text-slate-500">
-            {entry.isDir
-              ? formatEntryTime(entry.modifiedAt)
-              : [formatEntryTime(entry.modifiedAt), formatFileSize(entry.size)]
-                  .filter(Boolean)
-                  .join(" · ")}
-          </span>
-        </span>
-        {!entry.isDir && !isApplication && viewMode === "list" ? (
-          <span className="flex shrink-0 items-center gap-1 opacity-100 transition group-hover:opacity-100">
-            {canInstallSkillPackage ? (
-              <button
-                type="button"
-                className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800 transition hover:border-amber-300 hover:bg-amber-100"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onInstallSkillPackage?.(entry);
-                }}
-              >
-                {t("skills.localPackage.fileManager.action")}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-800"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleAddEntry(entry);
-                }}
-              >
-                加入对话
-              </button>
+          <span
+            data-testid="file-manager-entry-icon"
+            data-icon-kind={iconKind}
+            data-icon-source={hasNativeIcon ? "native" : "fallback"}
+            className={cn(
+              "inline-flex shrink-0 items-center justify-center",
+              viewMode === "grid"
+                ? "h-11 w-11 rounded-[10px] border shadow-sm shadow-slate-950/5"
+                : "h-5 w-5",
+              hasNativeIcon
+                ? "border-transparent bg-transparent text-slate-700 shadow-none"
+                : isApplication
+                  ? "border-sky-100 bg-sky-50 text-sky-700"
+                  : entry.isDir
+                    ? "border-amber-100 bg-amber-50 text-amber-700"
+                    : "border-slate-200 bg-slate-50 text-slate-600",
             )}
-            {canPreviewInWorkspace ? (
-              <button
-                type="button"
-                className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleOpenEntryInWorkspace(entry);
-                }}
-              >
-                预览
-              </button>
-            ) : null}
-            {canImportAsKnowledge ? (
-              <button
-                type="button"
-                aria-label={`设为项目资料 ${entry.name}`}
-                className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleImportEntryAsKnowledge(entry);
-                }}
-              >
-                设为资料
-              </button>
+          >
+            {entry.iconDataUrl ? (
+              <img
+                data-testid="file-manager-entry-native-icon"
+                src={entry.iconDataUrl}
+                alt=""
+                draggable={false}
+                className={cn(
+                  "h-full w-full object-contain",
+                  viewMode === "grid" ? "rounded-[10px]" : "rounded-[4px]",
+                )}
+              />
+            ) : (
+              <EntryIcon
+                icon={Icon}
+                className={viewMode === "grid" ? "h-5 w-5" : "h-4 w-4"}
+              />
+            )}
+          </span>
+          <span
+            data-testid="file-manager-entry-label"
+            className={cn("min-w-0", viewMode === "grid" ? "w-full" : "flex-1")}
+          >
+            <span className="block truncate text-[13px] font-medium text-slate-800">
+              {entry.name}
+            </span>
+            {viewMode === "grid" ? (
+              <span className="mt-0.5 block truncate text-[11px] text-slate-500">
+                {entry.isDir
+                  ? formatEntryModifiedTime(entry.modifiedAt, locale)
+                  : [
+                      formatEntryModifiedTime(entry.modifiedAt, locale),
+                      formatFileSize(entry.size),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+              </span>
             ) : null}
           </span>
+        </span>
+        {viewMode === "list" ? (
+          <>
+            <span className="truncate text-[12px] text-slate-500">
+              {formatEntryModifiedTime(entry.modifiedAt, locale)}
+            </span>
+            <span className="truncate text-right text-[12px] text-slate-500">
+              {entry.isDir ? "-" : formatFileSize(entry.size, "-")}
+            </span>
+          </>
         ) : null}
       </div>
     );
@@ -918,15 +952,18 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
 
   return (
     <aside
-      className="flex h-full w-[312px] shrink-0 overflow-hidden rounded-[20px] border border-[color:var(--lime-surface-border)] bg-white shadow-sm shadow-slate-950/5"
+      className="flex h-full w-[34vw] min-w-[460px] max-w-[720px] shrink-0 overflow-hidden rounded-[12px] border border-[color:var(--lime-surface-border)] bg-white shadow-sm shadow-slate-950/5"
       data-testid="file-manager-sidebar"
       data-tauri-no-drag
       data-lime-no-window-drag
     >
       <div
-        className="flex w-[48px] shrink-0 flex-col items-center gap-1.5 border-r border-slate-100 bg-slate-50/90 py-2"
+        className="flex w-[148px] shrink-0 flex-col gap-1 border-r border-slate-200 bg-slate-50 px-2 py-2"
         data-testid="file-manager-location-rail"
       >
+        <div className="px-2 py-1 text-[11px] font-medium text-slate-500">
+          {t("agentChat.fileManager.locations")}
+        </div>
         {allLocations.map((location) => {
           const Icon = getLocationIcon(location.kind);
           const active = location.path === activePath;
@@ -935,45 +972,30 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
               key={`${location.id}:${location.path}`}
               type="button"
               className={cn(
-                "flex h-8 w-8 items-center justify-center rounded-[11px] border text-slate-500 transition",
+                "flex h-8 w-full min-w-0 items-center gap-2 rounded-[7px] px-2 text-left text-[13px] text-slate-600 transition",
                 active
-                  ? "border-amber-200 bg-amber-100 text-amber-800 shadow-sm shadow-amber-950/10"
-                  : "border-transparent bg-transparent hover:border-slate-200 hover:bg-white hover:text-slate-800",
+                  ? "bg-sky-100 text-sky-900"
+                  : "bg-transparent hover:bg-white hover:text-slate-900",
               )}
               title={location.label}
               aria-label={location.label}
               onClick={() => handleSelectLocation(location)}
             >
-              <EntryIcon icon={Icon} className="h-[17px] w-[17px]" />
+              <EntryIcon icon={Icon} className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 truncate">{location.label}</span>
             </button>
           );
         })}
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-start gap-2 border-b border-slate-100 px-3 py-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h2 className="truncate text-sm font-semibold text-slate-900">
-                {activeTitle}
-              </h2>
-              {loading ? (
-                <span className="text-[11px] text-amber-700">加载中</span>
-              ) : null}
-            </div>
-            <p
-              className="mt-0.5 truncate text-[11px] text-slate-500"
-              title={activePath ? "当前文件夹" : undefined}
-            >
-              {activePath ? "本地位置" : "正在准备文件位置"}
-            </p>
-          </div>
+        <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-slate-200 bg-slate-50 px-2">
           <div className="flex items-center gap-1">
             <button
               type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-[12px] text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40"
-              aria-label="返回上级"
-              title="返回上级"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[7px] text-slate-500 transition hover:bg-white hover:text-slate-900 disabled:opacity-40"
+              aria-label={t("agentChat.fileManager.goParent")}
+              title={t("agentChat.fileManager.goParent")}
               disabled={!parentPath}
               onClick={() => parentPath && setActivePath(parentPath)}
             >
@@ -981,18 +1003,38 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
             </button>
             <button
               type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-[12px] text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-              aria-label="刷新"
-              title="刷新"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[7px] text-slate-500 transition hover:bg-white hover:text-slate-900"
+              aria-label={t("agentChat.fileManager.refresh")}
+              title={t("agentChat.fileManager.refresh")}
               onClick={() => void loadActiveDirectory()}
             >
               <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
             </button>
+          </div>
+          <div
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-[7px] border border-slate-200 bg-white px-2.5 py-1.5"
+            title={activePath ? t("agentChat.fileManager.currentFolder") : ""}
+          >
+            <Folder className="h-4 w-4 shrink-0 text-slate-400" />
+            <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-slate-800">
+              {activePath
+                ? activeTitle
+                : t("agentChat.fileManager.preparingLocation")}
+            </span>
+            <span className="shrink-0 text-[11px] text-slate-500">
+              {activePath ? t("agentChat.fileManager.localLocation") : ""}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
             <button
               type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-[12px] text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-              aria-label="切换视图"
-              title={viewMode === "list" ? "网格视图" : "列表视图"}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[7px] text-slate-500 transition hover:bg-white hover:text-slate-900"
+              aria-label={t("agentChat.fileManager.toggleView")}
+              title={
+                viewMode === "list"
+                  ? t("agentChat.fileManager.gridView")
+                  : t("agentChat.fileManager.listView")
+              }
               onClick={() =>
                 setViewMode((current) => (current === "list" ? "grid" : "list"))
               }
@@ -1001,9 +1043,9 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
             </button>
             <button
               type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-[12px] text-slate-500 transition hover:bg-rose-50 hover:text-rose-600"
-              aria-label="关闭文件管理器"
-              title="关闭文件管理器"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[7px] text-slate-500 transition hover:bg-rose-50 hover:text-rose-600"
+              aria-label={t("agentChat.fileManager.close")}
+              title={t("agentChat.fileManager.close")}
               onClick={onClose}
             >
               <X className="h-4 w-4" />
@@ -1018,32 +1060,33 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
           </div>
         ) : null}
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2">
+        {viewMode === "list" ? (
+          <div
+            data-testid="file-manager-list-header"
+            className="grid h-8 shrink-0 grid-cols-[minmax(0,1fr)_94px_66px] items-center gap-3 border-b border-slate-200 bg-white px-3 text-[11px] font-medium text-slate-500"
+          >
+            <span>{t("agentChat.fileManager.column.name")}</span>
+            <span>{t("agentChat.fileManager.column.modified")}</span>
+            <span className="text-right">
+              {t("agentChat.fileManager.column.size")}
+            </span>
+          </div>
+        ) : null}
+
+        <div className="min-h-0 flex-1 overflow-y-auto bg-white">
           {!loading && entries.length === 0 ? (
-            <div className="flex h-full min-h-[220px] flex-col items-center justify-center rounded-[18px] border border-dashed border-slate-200 bg-slate-50/70 px-4 text-center text-sm text-slate-500">
+            <div className="m-3 flex h-full min-h-[220px] flex-col items-center justify-center rounded-[10px] border border-dashed border-slate-200 bg-slate-50 px-4 text-center text-sm text-slate-500">
               <Folder className="mb-2 h-8 w-8 text-slate-300" />
-              当前目录没有可显示项目
+              {t("agentChat.fileManager.emptyDirectory")}
             </div>
           ) : null}
 
-          <div className="space-y-3">
-            {entryGroups.map((group) => (
-              <section key={group.key}>
-                <div className="mb-1.5 flex items-center gap-1 px-1 text-[11px] font-semibold text-slate-500">
-                  <ChevronRight className="h-3 w-3" />
-                  {group.label}
-                </div>
-                <div
-                  className={cn(
-                    viewMode === "grid"
-                      ? "grid grid-cols-2 gap-2"
-                      : "space-y-1",
-                  )}
-                >
-                  {group.entries.map(renderEntry)}
-                </div>
-              </section>
-            ))}
+          <div
+            className={cn(
+              viewMode === "grid" ? "grid grid-cols-2 gap-2 p-3" : "",
+            )}
+          >
+            {sortedEntries.map(renderEntry)}
           </div>
         </div>
       </div>
@@ -1051,7 +1094,7 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
       {contextMenu ? (
         <div
           data-testid="file-manager-context-menu"
-          className="fixed z-[120] w-56 overflow-hidden rounded-[16px] border border-slate-200 bg-white p-1.5 text-sm text-slate-700 shadow-xl shadow-slate-950/12"
+          className="fixed z-[120] w-52 max-w-[calc(100vw-16px)] overflow-hidden rounded-[16px] border border-slate-200 bg-white p-1.5 text-sm text-slate-700 shadow-xl shadow-slate-950/12"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onMouseDown={(event) => event.stopPropagation()}
         >
@@ -1060,7 +1103,7 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
             Boolean(onImportAsKnowledge),
             Boolean(onOpenFileInWorkspace),
             Boolean(onInstallSkillPackage),
-            t("skills.localPackage.fileManager.contextAction"),
+            actionLabels,
           ).map(({ action, label, icon: MenuIcon, disabled, title }) => {
             return (
               <button
@@ -1078,8 +1121,8 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
                   !disabled && handleContextAction(action, contextMenu.entry)
                 }
               >
-                <MenuIcon className="h-4 w-4" />
-                <span>{label}</span>
+                <MenuIcon className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 truncate">{label}</span>
               </button>
             );
           })}

@@ -333,6 +333,21 @@ mod tests {
     }
 
     #[test]
+    fn test_resolve_runtime_chat_mode_uses_general_workbench_session_mode() {
+        let metadata = serde_json::json!({
+            "harness": {
+                "theme": "general",
+                "session_mode": "general_workbench"
+            }
+        });
+
+        assert_eq!(
+            resolve_runtime_chat_mode(Some(&metadata)),
+            RuntimeChatMode::Workbench
+        );
+    }
+
+    #[test]
     fn test_resolve_runtime_chat_mode_falls_back_to_general_theme_group() {
         let metadata = serde_json::json!({
             "harness": {
@@ -4872,28 +4887,6 @@ mod tests {
     }
 
     #[test]
-    fn test_provider_routing_matches_current_allows_missing_selector_on_historical_run() {
-        let previous = TurnProviderRoutingSnapshot {
-            provider_name: "OpenAI".to_string(),
-            provider_selector: None,
-            model_name: "o3-mini".to_string(),
-            credential_uuid: None,
-            configured_from_request: false,
-            used_inline_api_key: false,
-        };
-        let current = TurnProviderRoutingSnapshot {
-            provider_name: "openai".to_string(),
-            provider_selector: Some("openai".to_string()),
-            model_name: "o3-mini".to_string(),
-            credential_uuid: Some("cred-1".to_string()),
-            configured_from_request: true,
-            used_inline_api_key: true,
-        };
-
-        assert!(provider_routing_matches_current(&previous, &current));
-    }
-
-    #[test]
     fn test_aster_execution_strategy_default_is_auto() {
         assert_eq!(
             AsterExecutionStrategy::default(),
@@ -8594,6 +8587,89 @@ mod tests {
                 .get("command")
                 .and_then(serde_json::Value::as_str),
             Some("pwd")
+        );
+    }
+
+    #[test]
+    fn test_normalize_shell_command_params_accepts_command_array() {
+        let input = serde_json::json!({
+            "command": ["cargo", "test"]
+        });
+
+        let normalized: serde_json::Value = normalize_shell_command_params(&input);
+        assert_eq!(
+            normalized
+                .get("command")
+                .and_then(serde_json::Value::as_str),
+            Some("cargo test")
+        );
+    }
+
+    #[test]
+    fn test_normalize_shell_command_params_accepts_shell_wrapped_command_array() {
+        let input = serde_json::json!({
+            "command": ["/bin/bash", "-lc", "echo hello"]
+        });
+
+        let normalized: serde_json::Value = normalize_shell_command_params(&input);
+        assert_eq!(
+            normalized
+                .get("command")
+                .and_then(serde_json::Value::as_str),
+            Some("echo hello")
+        );
+    }
+
+    #[test]
+    fn test_normalize_shell_command_params_preserves_multiline_shell_script() {
+        let script = "set -e\np='/Users/coso/.yansu-agent'\nif [ -e \"$p\" ]; then\n  echo ok\nfi";
+        let input = serde_json::json!({
+            "command": ["bash", "-lc", script]
+        });
+
+        let normalized: serde_json::Value = normalize_shell_command_params(&input);
+        assert_eq!(
+            normalized
+                .get("command")
+                .and_then(serde_json::Value::as_str),
+            Some(script)
+        );
+    }
+
+    #[test]
+    fn test_normalize_shell_command_params_accepts_local_shell_action_command() {
+        let input = serde_json::json!({
+            "type": "local_shell_call",
+            "action": {
+                "type": "exec",
+                "command": ["zsh", "-lc", "pwd"]
+            }
+        });
+
+        let normalized: serde_json::Value = normalize_shell_command_params(&input);
+        assert_eq!(
+            normalized
+                .get("command")
+                .and_then(serde_json::Value::as_str),
+            Some("pwd")
+        );
+    }
+
+    #[test]
+    fn test_normalize_shell_command_params_quotes_local_shell_argv() {
+        let input = serde_json::json!({
+            "action": {
+                "type": "exec",
+                "command": ["python3", "-c", "print('hello world')"]
+            }
+        });
+
+        let normalized: serde_json::Value = normalize_shell_command_params(&input);
+        assert_eq!(
+            normalized
+                .get("command")
+                .and_then(serde_json::Value::as_str),
+            Some("python3 -c 'print('\"'\"'hello world'\"'\"')'")
         );
     }
 

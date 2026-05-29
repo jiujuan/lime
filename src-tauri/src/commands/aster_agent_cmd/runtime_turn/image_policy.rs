@@ -58,7 +58,7 @@ pub(super) fn resolve_runtime_image_input_policy(
     request: &AsterChatRequest,
 ) -> Option<RuntimeImageInputPolicy> {
     let submitted_image_count = count_valid_runtime_images(request.images.as_deref());
-    if submitted_image_count == 0 {
+    if submitted_image_count == 0 && request.provider_config.is_none() {
         return None;
     }
 

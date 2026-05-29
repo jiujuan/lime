@@ -9,6 +9,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
+import i18next from "i18next";
 import { useTranslation } from "react-i18next";
 import { open as openExternal } from "@tauri-apps/plugin-shell";
 import {
@@ -153,6 +154,8 @@ import {
 import { buildThreadReliabilityView } from "../utils/threadReliabilityView";
 import { resolveTeamWorkspaceStableProcessingLabel } from "../utils/teamWorkspaceCopy";
 import { isRuntimeStatusDiagnosticsOnly } from "../utils/turnSummaryPresentation";
+import { resolveAgentRuntimeErrorPresentation } from "../utils/agentRuntimeErrorPresentation";
+import { isFailedHarnessOutputSignal } from "../utils/harnessOutputSignals";
 import type { TeamRoleDefinition } from "../utils/teamDefinitions";
 import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 import { AgentThreadReliabilityPanel } from "./AgentThreadReliabilityPanel";
@@ -160,6 +163,36 @@ import { HarnessVerificationSummarySection } from "./HarnessVerificationSummaryS
 import { HarnessTaskIndexSection } from "./HarnessTaskIndexSection";
 import { ManagedObjectivePanel } from "./ManagedObjectivePanel";
 import { RuntimeReviewDecisionDialog } from "./RuntimeReviewDecisionDialog";
+
+function interpolateDefaultText(
+  defaultValue: string,
+  options?: Record<string, unknown>,
+): string {
+  if (!options) {
+    return defaultValue;
+  }
+  return defaultValue.replace(/\{\{\s*([^}\s]+)\s*\}\}/g, (_, key) => {
+    const value = options[key];
+    return value === undefined || value === null ? "" : String(value);
+  });
+}
+
+function agentText(
+  key: string,
+  defaultValue: string,
+  options?: Record<string, unknown>,
+): string {
+  if (!i18next.isInitialized) {
+    return interpolateDefaultText(defaultValue, options);
+  }
+  return String(
+    i18next.t(key, {
+      defaultValue,
+      ns: "agent",
+      ...options,
+    }),
+  );
+}
 
 interface HarnessEnvironmentSummary {
   skillsCount: number;
@@ -1329,7 +1362,8 @@ function buildFileChangeReviewEntries(params: {
       ),
       preview: event.preview || existing.preview,
       content: event.content || existing.content,
-      timestamp: eventTime >= existingTime ? event.timestamp : existing.timestamp,
+      timestamp:
+        eventTime >= existingTime ? event.timestamp : existing.timestamp,
       status: params.decisions[key] || "pending",
     });
   }
@@ -1341,10 +1375,9 @@ function buildFileChangeReviewEntries(params: {
   });
 }
 
-function countFileChangeStatuses(entries: FileChangeReviewEntry[]): Record<
-  FileChangeDecisionStatus,
-  number
-> {
+function countFileChangeStatuses(
+  entries: FileChangeReviewEntry[],
+): Record<FileChangeDecisionStatus, number> {
   return entries.reduce(
     (result, entry) => ({
       ...result,
@@ -1733,6 +1766,41 @@ function buildOutputStatusDescriptors(signal: HarnessOutputSignal): Array<{
   return descriptors;
 }
 
+function isNoisyRuntimeOutputText(value: string): boolean {
+  const normalized = value.toLowerCase();
+  return /(?:-32603|-32002|troubleshooting|json-?rpc)/i.test(normalized);
+}
+
+function resolveOutputCardPresentation(
+  signal: HarnessOutputSignal,
+  translate: AgentTranslation,
+): {
+  summary: string;
+  preview: string | undefined;
+  collapsedHint: string | null;
+  rawDetailsCollapsed: boolean;
+  tone: "failed" | "default";
+} {
+  const rawText = [signal.summary, signal.preview, signal.content]
+    .filter(Boolean)
+    .join("\n");
+  const failed = isFailedHarnessOutputSignal(signal);
+  const rawDetailsCollapsed = failed && isNoisyRuntimeOutputText(rawText);
+  const summary = rawDetailsCollapsed
+    ? resolveAgentRuntimeErrorPresentation(rawText).displayMessage
+    : signal.summary;
+
+  return {
+    summary,
+    preview: rawDetailsCollapsed ? undefined : signal.preview,
+    collapsedHint: rawDetailsCollapsed
+      ? translate("agentChat.harness.outputs.rawDetailsCollapsed")
+      : null,
+    rawDetailsCollapsed,
+    tone: failed ? "failed" : "default",
+  };
+}
+
 function getOutputSignalPaths(signal: HarnessOutputSignal): Array<{
   key: OutputPathKind;
   path: string;
@@ -1747,8 +1815,8 @@ function getOutputSignalPaths(signal: HarnessOutputSignal): Array<{
     signal.artifactPath
       ? { key: "artifact" as const, path: signal.artifactPath }
       : null,
-  ].filter(
-    (item): item is { key: OutputPathKind; path: string } => Boolean(item),
+  ].filter((item): item is { key: OutputPathKind; path: string } =>
+    Boolean(item),
   );
 }
 
@@ -2301,7 +2369,9 @@ function SearchOutputCard({
           <div className="flex items-center gap-2 text-xs font-medium text-orange-600">
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
             <Search className="h-3.5 w-3.5" />
-            <span>已搜索</span>
+            <span>
+              {agentText("agentChat.harness.generated.3fd8a99317", "已搜索")}
+            </span>
           </div>
           <div className="mt-2 truncate text-sm font-semibold text-foreground">
             {signal.summary}
@@ -2399,13 +2469,22 @@ function SearchOutputBatchCard({
           <div className="flex items-center gap-2 text-xs font-medium text-orange-600">
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
             <Search className="h-3.5 w-3.5" />
-            <span>已搜索 {signals.length} 组查询</span>
+            <span>
+              {agentText("agentChat.harness.generated.3fd8a99317", "已搜索")}{" "}
+              {signals.length}{" "}
+              {agentText("agentChat.harness.generated.eea45025c0", "组查询")}
+            </span>
           </div>
           <div className="mt-2 truncate text-sm font-semibold text-foreground">
             {preview}
             {hiddenCount > 0 ? ` 等 ${hiddenCount} 组` : ""}
           </div>
-          <div className="mt-1 text-xs text-muted-foreground">联网检索批次</div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {agentText(
+              "agentChat.harness.generated.2ecb34de2f",
+              "联网检索批次",
+            )}
+          </div>
         </div>
         <span
           className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground"
@@ -2549,11 +2628,18 @@ function BrowserActionIndexSummarySection({
     <div className="rounded-xl border border-sky-200 bg-sky-50/80 p-3">
       <div className="flex items-center gap-2 text-sm font-medium text-sky-950">
         <Eye className="h-4 w-4 text-sky-700" />
-        <span>Browser Assist 索引</span>
+        <span>
+          {agentText(
+            "agentChat.harness.generated.a8d571b990",
+            "Browser Assist 索引",
+          )}
+        </span>
       </div>
       <p className="mt-1 text-xs text-sky-800">
-        来自 modalityRuntimeContracts.snapshotIndex.browserActionIndex，复盘
-        browser_session / browser_snapshot 的执行证据。
+        {agentText(
+          "agentChat.harness.generated.47e2036a10",
+          "来自 modalityRuntimeContracts.snapshotIndex.browserActionIndex，复盘 browser_session / browser_snapshot 的执行证据。",
+        )}
       </p>
 
       {onOpenReplay ? (
@@ -2564,22 +2650,28 @@ function BrowserActionIndexSummarySection({
             variant="outline"
             className="gap-2 bg-background"
             onClick={onOpenReplay}
-            aria-label="打开 Browser Assist 复盘"
+            aria-label={agentText(
+              "agentChat.harness.generated.38ccfba4fd",
+              "打开 Browser Assist 复盘",
+            )}
           >
             <Eye className="h-4 w-4" />
-            打开复盘
+            {agentText("agentChat.harness.generated.e0dfe06ac9", "打开复盘")}
           </Button>
         </div>
       ) : null}
 
       <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <InventoryStatCard
-          title="浏览器动作"
+          title={agentText(
+            "agentChat.harness.generated.e5d6795411",
+            "浏览器动作",
+          )}
           value={`${index.action_count}`}
           hint="browser_control action"
         />
         <InventoryStatCard
-          title="会话"
+          title={agentText("agentChat.harness.generated.836ffe0e10", "会话")}
           value={`${index.session_count}`}
           hint={
             index.profile_keys.length > 0
@@ -2588,12 +2680,18 @@ function BrowserActionIndexSummarySection({
           }
         />
         <InventoryStatCard
-          title="观察 / 截图"
+          title={agentText(
+            "agentChat.harness.generated.17e12280d3",
+            "观察 / 截图",
+          )}
           value={`${index.observation_count} / ${index.screenshot_count}`}
           hint="observation / screenshot"
         />
         <InventoryStatCard
-          title="最近 URL"
+          title={agentText(
+            "agentChat.harness.generated.bf662d18eb",
+            "最近 URL",
+          )}
           value={latestUrl === "暂无 URL" ? latestUrl : "已记录"}
           hint={latestUrl}
         />
@@ -2636,7 +2734,10 @@ function BrowserActionIndexSummarySection({
                 <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                   {item.last_url ? (
                     <div className="break-all">
-                      URL：
+                      {agentText(
+                        "agentChat.harness.generated.6e1359115e",
+                        "URL：",
+                      )}
                       <span className="ml-1 font-mono text-foreground">
                         {item.last_url}
                       </span>
@@ -2645,7 +2746,10 @@ function BrowserActionIndexSummarySection({
                   <div className="flex flex-wrap gap-x-3 gap-y-1">
                     {item.session_id ? (
                       <span>
-                        session：
+                        {agentText(
+                          "agentChat.harness.generated.d0d6758917",
+                          "session：",
+                        )}
                         <span className="ml-1 font-mono text-foreground">
                           {item.session_id}
                         </span>
@@ -2653,7 +2757,10 @@ function BrowserActionIndexSummarySection({
                     ) : null}
                     {item.target_id ? (
                       <span>
-                        target：
+                        {agentText(
+                          "agentChat.harness.generated.2b252e0cfe",
+                          "target：",
+                        )}
                         <span className="ml-1 font-mono text-foreground">
                           {item.target_id}
                         </span>
@@ -2661,7 +2768,10 @@ function BrowserActionIndexSummarySection({
                     ) : null}
                     {item.entry_source ? (
                       <span>
-                        entry：
+                        {agentText(
+                          "agentChat.harness.generated.dd1909c1cb",
+                          "entry：",
+                        )}
                         <span className="ml-1 font-mono text-foreground">
                           {item.entry_source}
                         </span>
@@ -2712,7 +2822,7 @@ function LimeCorePolicyItemCard({
         <div className="flex flex-wrap gap-x-3 gap-y-1">
           {item.execution_profile_key ? (
             <span>
-              profile：
+              {agentText("agentChat.harness.generated.6a0ea95fa7", "profile：")}
               <span className="ml-1 font-mono text-foreground">
                 {item.execution_profile_key}
               </span>
@@ -2720,7 +2830,7 @@ function LimeCorePolicyItemCard({
           ) : null}
           {item.executor_adapter_key ? (
             <span>
-              adapter：
+              {agentText("agentChat.harness.generated.adc8d92098", "adapter：")}
               <span className="ml-1 font-mono text-foreground">
                 {item.executor_adapter_key}
               </span>
@@ -2728,7 +2838,7 @@ function LimeCorePolicyItemCard({
           ) : null}
           {item.decision_scope ? (
             <span>
-              scope：
+              {agentText("agentChat.harness.generated.09819d76d1", "scope：")}
               <span className="ml-1 font-mono text-foreground">
                 {item.decision_scope}
               </span>
@@ -2737,19 +2847,19 @@ function LimeCorePolicyItemCard({
         </div>
         {item.decision_reason ? (
           <div>
-            原因：
+            {agentText("agentChat.harness.generated.0f93c2bb0a", "原因：")}
             <span className="ml-1 text-foreground">{item.decision_reason}</span>
           </div>
         ) : null}
         <div>
-          refs：
+          {agentText("agentChat.harness.generated.5a00a7de0d", "refs：")}
           <span className="ml-1 font-mono text-foreground">
             {item.refs.length > 0 ? item.refs.join(" / ") : "暂无"}
           </span>
         </div>
         {missingInputs.length > 0 ? (
           <div>
-            missing：
+            {agentText("agentChat.harness.generated.dcd0ea07f2", "missing：")}
             <span className="ml-1 font-mono text-foreground">
               {missingInputs.join(" / ")}
             </span>
@@ -2798,31 +2908,50 @@ function LimeCorePolicyIndexSummarySection({
     <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3">
       <div className="flex items-center gap-2 text-sm font-medium text-amber-950">
         <ShieldAlert className="h-4 w-4 text-amber-700" />
-        <span>LimeCore 策略缺口</span>
+        <span>
+          {agentText(
+            "agentChat.harness.generated.5ff0237c2a",
+            "LimeCore 策略缺口",
+          )}
+        </span>
       </div>
       <p className="mt-1 text-xs text-amber-800">
-        来自 modalityRuntimeContracts.snapshotIndex.limecorePolicyIndex；当前
-        allow 仅代表本地默认未阻断，missing inputs 仍等待 LimeCore 控制面命中。
+        {agentText(
+          "agentChat.harness.generated.dd61dfc98f",
+          "来自 modalityRuntimeContracts.snapshotIndex.limecorePolicyIndex；当前 allow 仅代表本地默认未阻断，missing inputs 仍等待 LimeCore 控制面命中。",
+        )}
       </p>
 
       <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <InventoryStatCard
-          title="策略快照"
+          title={agentText(
+            "agentChat.harness.generated.9862eec754",
+            "策略快照",
+          )}
           value={`${index.snapshot_count}`}
           hint="runtime contract snapshots"
         />
         <InventoryStatCard
-          title="控制面引用"
+          title={agentText(
+            "agentChat.harness.generated.1bdaad7e35",
+            "控制面引用",
+          )}
           value={`${refKeys.length}`}
           hint={refKeys.slice(0, 3).join(" / ") || "暂无 refs"}
         />
         <InventoryStatCard
-          title="缺失输入"
+          title={agentText(
+            "agentChat.harness.generated.f60047f6ac",
+            "缺失输入",
+          )}
           value={`${missingInputs.length}`}
           hint={missingInputs.slice(0, 3).join(" / ") || "暂无缺口"}
         />
         <InventoryStatCard
-          title="策略决策"
+          title={agentText(
+            "agentChat.harness.generated.6b803cba6a",
+            "策略决策",
+          )}
           value={summarizeLimeCorePolicyDecision(index)}
           hint="allow / ask / deny"
         />
@@ -4543,7 +4672,10 @@ export function HarnessStatusPanel({
               {realTeamSummary.active > 0 ? (
                 <Badge variant="secondary" className="gap-1">
                   <Loader2 className="h-3 w-3 animate-spin" />
-                  任务进行中
+                  {agentText(
+                    "agentChat.harness.generated.8e5dbad1d1",
+                    "任务进行中",
+                  )}
                 </Badge>
               ) : null}
             </div>
@@ -4655,7 +4787,10 @@ export function HarnessStatusPanel({
               {hasSelectedTeamConfig ? (
                 <Section
                   sectionKey="team_config"
-                  title="当前任务分工"
+                  title={agentText(
+                    "agentChat.harness.generated.618a4c825b",
+                    "当前任务分工",
+                  )}
                   badge={
                     selectedTeamRoles && selectedTeamRoles.length > 0
                       ? `${selectedTeamRoles.length} 个角色`
@@ -4675,7 +4810,10 @@ export function HarnessStatusPanel({
                         </div>
                       ) : (
                         <div className="mt-2 text-sm text-muted-foreground">
-                          本次会优先参考所选分工方案，按需拆出子任务继续处理。
+                          {agentText(
+                            "agentChat.harness.generated.1c66e4e8ac",
+                            "本次会优先参考所选分工方案，按需拆出子任务继续处理。",
+                          )}
                         </div>
                       )}
                     </div>
@@ -4693,12 +4831,20 @@ export function HarnessStatusPanel({
                               </div>
                               {role.profileId ? (
                                 <Badge variant="outline">
-                                  模板 {role.profileId}
+                                  {agentText(
+                                    "agentChat.harness.generated.06d0f38dd2",
+                                    "模板",
+                                  )}{" "}
+                                  {role.profileId}
                                 </Badge>
                               ) : null}
                               {role.roleKey ? (
                                 <Badge variant="outline">
-                                  职责 {role.roleKey}
+                                  {agentText(
+                                    "agentChat.harness.generated.db181821a1",
+                                    "职责",
+                                  )}{" "}
+                                  {role.roleKey}
                                 </Badge>
                               ) : null}
                             </div>
@@ -4727,7 +4873,10 @@ export function HarnessStatusPanel({
               {runtimeTaskPresentation ? (
                 <Section
                   sectionKey="runtime"
-                  title="任务进行时"
+                  title={agentText(
+                    "agentChat.harness.generated.f7fc8b8014",
+                    "任务进行时",
+                  )}
                   badge={
                     runtimeTaskPresentation.checkpoints.length > 0
                       ? `${runtimeTaskPresentation.checkpoints.length} 个节点`
@@ -4760,7 +4909,10 @@ export function HarnessStatusPanel({
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="text-xs font-semibold text-muted-foreground">
-                            当前任务
+                            {agentText(
+                              "agentChat.harness.generated.e94d425276",
+                              "当前任务",
+                            )}
                           </div>
                           <div className="mt-1 text-sm font-semibold leading-6 text-foreground">
                             {runtimeTaskPresentation.title}
@@ -4795,7 +4947,10 @@ export function HarnessStatusPanel({
                       <div className="space-y-2">
                         <div className="flex items-center justify-between gap-3">
                           <div className="text-xs font-semibold text-muted-foreground">
-                            任务节点
+                            {agentText(
+                              "agentChat.harness.generated.67c022795d",
+                              "任务节点",
+                            )}
                           </div>
                           <div className="text-xs text-muted-foreground">
                             {runtimeTaskPresentation.progressLabel}
@@ -4895,7 +5050,10 @@ export function HarnessStatusPanel({
               {hasHandoffSection ? (
                 <Section
                   sectionKey="handoff"
-                  title="交接制品"
+                  title={agentText(
+                    "agentChat.harness.generated.8d0323ba12",
+                    "交接制品",
+                  )}
                   badge={
                     handoffBundle
                       ? `已导出 ${handoffBundle.artifacts.length} 个文件`
@@ -4909,15 +5067,25 @@ export function HarnessStatusPanel({
                         <div>
                           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                             <HardDriveDownload className="h-4 w-4 text-sky-600" />
-                            <span>会话交接四件套</span>
+                            <span>
+                              {agentText(
+                                "agentChat.harness.generated.eaca4f7907",
+                                "会话交接四件套",
+                              )}
+                            </span>
                           </div>
                           <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                            把当前 session 的 plan / progress / handoff / review
-                            摘要落到工作区 `.lime/harness/sessions`
-                            下，便于下一次恢复和审查。
+                            {agentText(
+                              "agentChat.harness.generated.6e95623055",
+                              "把当前 session 的 plan / progress / handoff / review 摘要落到工作区 `.lime/harness/sessions` 下，便于下一次恢复和审查。",
+                            )}
                           </div>
                           <div className="mt-2 text-xs text-muted-foreground">
-                            当前会话：{currentSessionId}
+                            {agentText(
+                              "agentChat.harness.generated.ce46eb8c00",
+                              "当前会话：",
+                            )}
+                            {currentSessionId}
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -4926,7 +5094,10 @@ export function HarnessStatusPanel({
                             size="sm"
                             variant={handoffBundle ? "outline" : "default"}
                             className="gap-2"
-                            aria-label="导出交接制品"
+                            aria-label={agentText(
+                              "agentChat.harness.generated.aa38b7342e",
+                              "导出交接制品",
+                            )}
                             disabled={handoffExporting}
                             onClick={() => void handleExportHandoffBundle()}
                           >
@@ -4943,7 +5114,10 @@ export function HarnessStatusPanel({
                               size="sm"
                               variant="outline"
                               className="gap-2"
-                              aria-label="打开交接目录"
+                              aria-label={agentText(
+                                "agentChat.harness.generated.f3571bab00",
+                                "打开交接目录",
+                              )}
                               onClick={() =>
                                 void handleOpenPathValue(
                                   handoffBundle.bundle_absolute_root,
@@ -4951,7 +5125,10 @@ export function HarnessStatusPanel({
                               }
                             >
                               <FolderOpen className="h-4 w-4" />
-                              打开目录
+                              {agentText(
+                                "agentChat.harness.generated.031c105578",
+                                "打开目录",
+                              )}
                             </Button>
                           ) : null}
                         </div>
@@ -4968,26 +5145,38 @@ export function HarnessStatusPanel({
                       <>
                         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                           <InventoryStatCard
-                            title="线程状态"
+                            title={agentText(
+                              "agentChat.harness.generated.2a36de35aa",
+                              "线程状态",
+                            )}
                             value={formatHandoffStatusLabel(
                               handoffBundle.thread_status,
                             )}
                             hint={`最近导出 ${formatIsoDateTime(handoffBundle.exported_at)}`}
                           />
                           <InventoryStatCard
-                            title="最新 Turn"
+                            title={agentText(
+                              "agentChat.harness.generated.90cc62f7c2",
+                              "最新 Turn",
+                            )}
                             value={formatHandoffStatusLabel(
                               handoffBundle.latest_turn_status,
                             )}
                             hint={`待处理请求 ${handoffBundle.pending_request_count} · 排队 ${handoffBundle.queued_turn_count}`}
                           />
                           <InventoryStatCard
-                            title="Todo"
+                            title={agentText(
+                              "agentChat.harness.generated.fdebf66721",
+                              "Todo",
+                            )}
                             value={`${handoffBundle.todo_completed}/${handoffBundle.todo_total}`}
                             hint={`待开始 ${handoffBundle.todo_pending} · 进行中 ${handoffBundle.todo_in_progress}`}
                           />
                           <InventoryStatCard
-                            title="子任务"
+                            title={agentText(
+                              "agentChat.harness.generated.2a8ce33ff0",
+                              "子任务",
+                            )}
                             value={`${handoffBundle.active_subagent_count}`}
                             hint={`workspace ${handoffBundle.workspace_id || "未绑定"}`}
                           />
@@ -4996,17 +5185,28 @@ export function HarnessStatusPanel({
                         <div className="rounded-xl border border-border bg-background p-3">
                           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                             <FolderOpen className="h-4 w-4 text-muted-foreground" />
-                            <span>导出目录</span>
+                            <span>
+                              {agentText(
+                                "agentChat.harness.generated.f2d022980f",
+                                "导出目录",
+                              )}
+                            </span>
                           </div>
                           <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                             <div>
-                              相对路径：
+                              {agentText(
+                                "agentChat.harness.generated.2ee19fe8b0",
+                                "相对路径：",
+                              )}
                               <span className="ml-1 break-all font-mono text-foreground">
                                 {handoffBundle.bundle_relative_root}
                               </span>
                             </div>
                             <div>
-                              绝对路径：
+                              {agentText(
+                                "agentChat.harness.generated.f9c616413f",
+                                "绝对路径：",
+                              )}
                               <PathTextLink
                                 path={handoffBundle.bundle_absolute_root}
                                 className="ml-1"
@@ -5044,13 +5244,19 @@ export function HarnessStatusPanel({
                                     </div>
                                     <div className="mt-2 text-xs text-muted-foreground">
                                       <div>
-                                        相对路径：
+                                        {agentText(
+                                          "agentChat.harness.generated.2ee19fe8b0",
+                                          "相对路径：",
+                                        )}
                                         <span className="ml-1 break-all font-mono text-foreground">
                                           {artifact.relative_path}
                                         </span>
                                       </div>
                                       <div className="mt-1">
-                                        绝对路径：
+                                        {agentText(
+                                          "agentChat.harness.generated.f9c616413f",
+                                          "绝对路径：",
+                                        )}
                                         <PathTextLink
                                           path={artifact.absolute_path}
                                           className="ml-1"
@@ -5077,7 +5283,10 @@ export function HarnessStatusPanel({
                                       }
                                     >
                                       <Eye className="h-4 w-4" />
-                                      预览
+                                      {agentText(
+                                        "agentChat.harness.generated.de61aa8e1c",
+                                        "预览",
+                                      )}
                                     </Button>
                                     <Button
                                       type="button"
@@ -5092,7 +5301,10 @@ export function HarnessStatusPanel({
                                       }
                                     >
                                       <FolderOpen className="h-4 w-4" />
-                                      打开
+                                      {agentText(
+                                        "agentChat.harness.generated.65fc81e161",
+                                        "打开",
+                                      )}
                                     </Button>
                                   </div>
                                 </div>
@@ -5103,7 +5315,10 @@ export function HarnessStatusPanel({
                       </>
                     ) : (
                       <div className="rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
-                        尚未导出交接制品。建议在需要跨会话接手、准备审查或切换执行人前先导出一次。
+                        {agentText(
+                          "agentChat.harness.generated.8b54ad21d4",
+                          "尚未导出交接制品。建议在需要跨会话接手、准备审查或切换执行人前先导出一次。",
+                        )}
                       </div>
                     )}
 
@@ -5112,12 +5327,18 @@ export function HarnessStatusPanel({
                         <div>
                           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                             <ShieldAlert className="h-4 w-4 text-amber-600" />
-                            <span>问题证据包</span>
+                            <span>
+                              {agentText(
+                                "agentChat.harness.generated.153b1d0f0a",
+                                "问题证据包",
+                              )}
+                            </span>
                           </div>
                           <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                            把当前
-                            runtime、timeline、最近产物和已知缺口导出为最小证据包，为后续
-                            replay、eval 和故障复盘提供输入。
+                            {agentText(
+                              "agentChat.harness.generated.1a81e7e23f",
+                              "把当前 runtime、timeline、最近产物和已知缺口导出为最小证据包，为后续 replay、eval 和故障复盘提供输入。",
+                            )}
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -5126,7 +5347,10 @@ export function HarnessStatusPanel({
                             size="sm"
                             variant={evidencePack ? "outline" : "default"}
                             className="gap-2"
-                            aria-label="导出问题证据包"
+                            aria-label={agentText(
+                              "agentChat.harness.generated.f1e4d07649",
+                              "导出问题证据包",
+                            )}
                             disabled={evidenceExporting}
                             onClick={() => void handleExportEvidencePack()}
                           >
@@ -5143,7 +5367,10 @@ export function HarnessStatusPanel({
                               size="sm"
                               variant="outline"
                               className="gap-2"
-                              aria-label="打开问题证据目录"
+                              aria-label={agentText(
+                                "agentChat.harness.generated.d6913f073d",
+                                "打开问题证据目录",
+                              )}
                               onClick={() =>
                                 void handleOpenPathValue(
                                   evidencePack.pack_absolute_root,
@@ -5151,7 +5378,10 @@ export function HarnessStatusPanel({
                               }
                             >
                               <FolderOpen className="h-4 w-4" />
-                              打开目录
+                              {agentText(
+                                "agentChat.harness.generated.031c105578",
+                                "打开目录",
+                              )}
                             </Button>
                           ) : null}
                         </div>
@@ -5180,24 +5410,36 @@ export function HarnessStatusPanel({
                             return (
                               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                                 <InventoryStatCard
-                                  title="线程状态"
+                                  title={agentText(
+                                    "agentChat.harness.generated.2a36de35aa",
+                                    "线程状态",
+                                  )}
                                   value={formatHandoffStatusLabel(
                                     evidencePack.thread_status,
                                   )}
                                   hint={`最近导出 ${formatIsoDateTime(evidencePack.exported_at)}`}
                                 />
                                 <InventoryStatCard
-                                  title="时间线"
+                                  title={agentText(
+                                    "agentChat.harness.generated.4f8ef92599",
+                                    "时间线",
+                                  )}
                                   value={`${evidencePack.turn_count} / ${evidencePack.item_count}`}
                                   hint="turns / items"
                                 />
                                 <InventoryStatCard
-                                  title="阻塞线索"
+                                  title={agentText(
+                                    "agentChat.harness.generated.df85462148",
+                                    "阻塞线索",
+                                  )}
                                   value={`${evidencePack.pending_request_count} / ${evidencePack.queued_turn_count}`}
                                   hint="pending request / queued turn"
                                 />
                                 <InventoryStatCard
-                                  title="已知缺口"
+                                  title={agentText(
+                                    "agentChat.harness.generated.0c7b23bb31",
+                                    "已知缺口",
+                                  )}
                                   value={`${evidencePack.known_gaps.length}`}
                                   hint={
                                     verificationSummary
@@ -5215,12 +5457,18 @@ export function HarnessStatusPanel({
                                 <div>
                                   <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                                     <ShieldAlert className="h-4 w-4 text-emerald-600" />
-                                    <span>Completion Audit</span>
+                                    <span>
+                                      {agentText(
+                                        "agentChat.harness.generated.1c3af0bdc1",
+                                        "Completion Audit",
+                                      )}
+                                    </span>
                                   </div>
                                   <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                                    基于 automation owner、Workspace Skill
-                                    ToolCall 与 artifact / timeline evidence
-                                    的完成判定，不读取模型自报。
+                                    {agentText(
+                                      "agentChat.harness.generated.3bd3ec2245",
+                                      "基于 automation owner、Workspace Skill ToolCall 与 artifact / timeline evidence 的完成判定，不读取模型自报。",
+                                    )}
                                   </div>
                                 </div>
                                 <Badge variant="outline">
@@ -5232,7 +5480,10 @@ export function HarnessStatusPanel({
                               </div>
                               <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
                                 <div>
-                                  Owner success：
+                                  {agentText(
+                                    "agentChat.harness.generated.feb6327847",
+                                    "Owner success：",
+                                  )}
                                   <span className="ml-1 font-mono text-foreground">
                                     {
                                       evidencePack.completion_audit_summary
@@ -5246,7 +5497,10 @@ export function HarnessStatusPanel({
                                   </span>
                                 </div>
                                 <div>
-                                  Skill ToolCall：
+                                  {agentText(
+                                    "agentChat.harness.generated.085f91c13e",
+                                    "Skill ToolCall：",
+                                  )}
                                   <span className="ml-1 font-mono text-foreground">
                                     {
                                       evidencePack.completion_audit_summary
@@ -5255,7 +5509,10 @@ export function HarnessStatusPanel({
                                   </span>
                                 </div>
                                 <div>
-                                  Artifact evidence：
+                                  {agentText(
+                                    "agentChat.harness.generated.6245faf559",
+                                    "Artifact evidence：",
+                                  )}
                                   <span className="ml-1 font-mono text-foreground">
                                     {
                                       evidencePack.completion_audit_summary
@@ -5264,7 +5521,10 @@ export function HarnessStatusPanel({
                                   </span>
                                 </div>
                                 <div>
-                                  Blocking：
+                                  {agentText(
+                                    "agentChat.harness.generated.aa4af1af73",
+                                    "Blocking：",
+                                  )}
                                   <span className="ml-1 text-foreground">
                                     {evidencePack.completion_audit_summary
                                       .blocking_reasons.length > 0
@@ -5281,17 +5541,28 @@ export function HarnessStatusPanel({
                           <div className="rounded-xl border border-border bg-background p-3">
                             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                               <FolderOpen className="h-4 w-4 text-muted-foreground" />
-                              <span>证据目录</span>
+                              <span>
+                                {agentText(
+                                  "agentChat.harness.generated.101e014f74",
+                                  "证据目录",
+                                )}
+                              </span>
                             </div>
                             <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                               <div>
-                                相对路径：
+                                {agentText(
+                                  "agentChat.harness.generated.2ee19fe8b0",
+                                  "相对路径：",
+                                )}
                                 <span className="ml-1 break-all font-mono text-foreground">
                                   {evidencePack.pack_relative_root}
                                 </span>
                               </div>
                               <div>
-                                绝对路径：
+                                {agentText(
+                                  "agentChat.harness.generated.f9c616413f",
+                                  "绝对路径：",
+                                )}
                                 <PathTextLink
                                   path={evidencePack.pack_absolute_root}
                                   className="ml-1"
@@ -5360,7 +5631,10 @@ export function HarnessStatusPanel({
                           {evidencePack.known_gaps.length > 0 ? (
                             <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3">
                               <div className="text-sm font-medium text-amber-900">
-                                当前已知缺口
+                                {agentText(
+                                  "agentChat.harness.generated.1d2aef0cb3",
+                                  "当前已知缺口",
+                                )}
                               </div>
                               <div className="mt-2 space-y-1 text-xs text-amber-800">
                                 {evidencePack.known_gaps.map((gap, index) => (
@@ -5398,13 +5672,19 @@ export function HarnessStatusPanel({
                                       </div>
                                       <div className="mt-2 text-xs text-muted-foreground">
                                         <div>
-                                          相对路径：
+                                          {agentText(
+                                            "agentChat.harness.generated.2ee19fe8b0",
+                                            "相对路径：",
+                                          )}
                                           <span className="ml-1 break-all font-mono text-foreground">
                                             {artifact.relative_path}
                                           </span>
                                         </div>
                                         <div className="mt-1">
-                                          绝对路径：
+                                          {agentText(
+                                            "agentChat.harness.generated.f9c616413f",
+                                            "绝对路径：",
+                                          )}
                                           <PathTextLink
                                             path={artifact.absolute_path}
                                             className="ml-1"
@@ -5431,7 +5711,10 @@ export function HarnessStatusPanel({
                                         }
                                       >
                                         <Eye className="h-4 w-4" />
-                                        预览
+                                        {agentText(
+                                          "agentChat.harness.generated.de61aa8e1c",
+                                          "预览",
+                                        )}
                                       </Button>
                                       <Button
                                         type="button"
@@ -5446,7 +5729,10 @@ export function HarnessStatusPanel({
                                         }
                                       >
                                         <FolderOpen className="h-4 w-4" />
-                                        打开
+                                        {agentText(
+                                          "agentChat.harness.generated.65fc81e161",
+                                          "打开",
+                                        )}
                                       </Button>
                                     </div>
                                   </div>
@@ -5457,8 +5743,10 @@ export function HarnessStatusPanel({
                         </div>
                       ) : (
                         <div className="mt-3 rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
-                          尚未导出问题证据包。建议在出现阻塞、需要复盘失败链路，或准备把真实案例沉淀成
-                          replay / eval 样本前导出一次。
+                          {agentText(
+                            "agentChat.harness.generated.913ad2f0a2",
+                            "尚未导出问题证据包。建议在出现阻塞、需要复盘失败链路，或准备把真实案例沉淀成 replay / eval 样本前导出一次。",
+                          )}
                         </div>
                       )}
                     </div>
@@ -5468,13 +5756,18 @@ export function HarnessStatusPanel({
                         <div>
                           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                             <FileCode2 className="h-4 w-4 text-emerald-600" />
-                            <span>Replay 样本</span>
+                            <span>
+                              {agentText(
+                                "agentChat.harness.generated.55d5260546",
+                                "Replay 样本",
+                              )}
+                            </span>
                           </div>
                           <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                            基于当前 session 复用 handoff bundle 与 evidence
-                            pack，导出 `input / expected / grader /
-                            evidence-links`
-                            四件套，把真实失败转成可回放、可评分、可回归的最小样本。
+                            {agentText(
+                              "agentChat.harness.generated.4222677beb",
+                              "基于当前 session 复用 handoff bundle 与 evidence pack，导出 `input / expected / grader / evidence-links` 四件套，把真实失败转成可回放、可评分、可回归的最小样本。",
+                            )}
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -5483,7 +5776,10 @@ export function HarnessStatusPanel({
                             size="sm"
                             variant={replayCase ? "outline" : "default"}
                             className="gap-2"
-                            aria-label="导出 Replay 样本"
+                            aria-label={agentText(
+                              "agentChat.harness.generated.0a671912df",
+                              "导出 Replay 样本",
+                            )}
                             disabled={replayExporting}
                             onClick={() => void handleExportReplayCase()}
                           >
@@ -5501,7 +5797,10 @@ export function HarnessStatusPanel({
                             size="sm"
                             variant="outline"
                             className="gap-2"
-                            aria-label="复制回归沉淀与验证命令"
+                            aria-label={agentText(
+                              "agentChat.harness.generated.0532c40ed4",
+                              "复制回归沉淀与验证命令",
+                            )}
                             disabled={replayExporting}
                             onClick={() =>
                               void handleCopyReplayPromotionCommand()
@@ -5512,7 +5811,10 @@ export function HarnessStatusPanel({
                             ) : (
                               <Copy className="h-4 w-4" />
                             )}
-                            复制回归命令
+                            {agentText(
+                              "agentChat.harness.generated.d79b117468",
+                              "复制回归命令",
+                            )}
                           </Button>
                           {replayCase ? (
                             <Button
@@ -5520,7 +5822,10 @@ export function HarnessStatusPanel({
                               size="sm"
                               variant="outline"
                               className="gap-2"
-                              aria-label="打开 Replay 样本目录"
+                              aria-label={agentText(
+                                "agentChat.harness.generated.30fbb13bf7",
+                                "打开 Replay 样本目录",
+                              )}
                               onClick={() =>
                                 void handleOpenPathValue(
                                   replayCase.replay_absolute_root,
@@ -5528,7 +5833,10 @@ export function HarnessStatusPanel({
                               }
                             >
                               <FolderOpen className="h-4 w-4" />
-                              打开目录
+                              {agentText(
+                                "agentChat.harness.generated.031c105578",
+                                "打开目录",
+                              )}
                             </Button>
                           ) : null}
                         </div>
@@ -5544,24 +5852,36 @@ export function HarnessStatusPanel({
                         <div className="mt-3 space-y-3">
                           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                             <InventoryStatCard
-                              title="线程状态"
+                              title={agentText(
+                                "agentChat.harness.generated.2a36de35aa",
+                                "线程状态",
+                              )}
                               value={formatHandoffStatusLabel(
                                 replayCase.thread_status,
                               )}
                               hint={`最近导出 ${formatIsoDateTime(replayCase.exported_at)}`}
                             />
                             <InventoryStatCard
-                              title="阻塞线索"
+                              title={agentText(
+                                "agentChat.harness.generated.df85462148",
+                                "阻塞线索",
+                              )}
                               value={`${replayCase.pending_request_count} / ${replayCase.queued_turn_count}`}
                               hint="pending request / queued turn"
                             />
                             <InventoryStatCard
-                              title="关联证据"
+                              title={agentText(
+                                "agentChat.harness.generated.6d61c09b06",
+                                "关联证据",
+                              )}
                               value={`${replayCase.linked_handoff_artifact_count} / ${replayCase.linked_evidence_artifact_count}`}
                               hint="handoff / evidence"
                             />
                             <InventoryStatCard
-                              title="最近产物"
+                              title={agentText(
+                                "agentChat.harness.generated.818507effc",
+                                "最近产物",
+                              )}
                               value={`${replayCase.recent_artifact_count}`}
                               hint={`workspace ${replayCase.workspace_id || "未绑定"}`}
                             />
@@ -5570,17 +5890,28 @@ export function HarnessStatusPanel({
                           <div className="rounded-xl border border-border bg-background p-3">
                             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                               <FolderOpen className="h-4 w-4 text-muted-foreground" />
-                              <span>Replay 目录</span>
+                              <span>
+                                {agentText(
+                                  "agentChat.harness.generated.3c1180e2c6",
+                                  "Replay 目录",
+                                )}
+                              </span>
                             </div>
                             <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                               <div>
-                                相对路径：
+                                {agentText(
+                                  "agentChat.harness.generated.2ee19fe8b0",
+                                  "相对路径：",
+                                )}
                                 <span className="ml-1 break-all font-mono text-foreground">
                                   {replayCase.replay_relative_root}
                                 </span>
                               </div>
                               <div>
-                                绝对路径：
+                                {agentText(
+                                  "agentChat.harness.generated.f9c616413f",
+                                  "绝对路径：",
+                                )}
                                 <PathTextLink
                                   path={replayCase.replay_absolute_root}
                                   className="ml-1"
@@ -5592,17 +5923,26 @@ export function HarnessStatusPanel({
 
                           <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
                             <div className="text-sm font-medium text-emerald-900">
-                              关联证据主链
+                              {agentText(
+                                "agentChat.harness.generated.16429e5f71",
+                                "关联证据主链",
+                              )}
                             </div>
                             <div className="mt-2 space-y-1 text-xs text-emerald-800">
                               <div>
-                                handoff：
+                                {agentText(
+                                  "agentChat.harness.generated.0788808854",
+                                  "handoff：",
+                                )}
                                 <span className="ml-1 break-all font-mono text-emerald-950">
                                   {replayCase.handoff_bundle_relative_root}
                                 </span>
                               </div>
                               <div>
-                                evidence：
+                                {agentText(
+                                  "agentChat.harness.generated.d50a6b5d6c",
+                                  "evidence：",
+                                )}
                                 <span className="ml-1 break-all font-mono text-emerald-950">
                                   {replayCase.evidence_pack_relative_root}
                                 </span>
@@ -5613,18 +5953,25 @@ export function HarnessStatusPanel({
                           <div className="rounded-xl border border-sky-200 bg-sky-50/80 p-3">
                             <div className="flex items-center gap-2 text-sm font-medium text-sky-950">
                               <Workflow className="h-4 w-4 text-sky-700" />
-                              <span>回归资产沉淀</span>
+                              <span>
+                                {agentText(
+                                  "agentChat.harness.generated.349f37479e",
+                                  "回归资产沉淀",
+                                )}
+                              </span>
                             </div>
                             <div className="mt-2 text-xs leading-5 text-sky-900">
-                              这一步直接复用仓库已有的 `harness:eval:promote` 与
-                              `harness:eval` 主命令，把当前 replay case
-                              提升为仓库 current
-                              样本，并立即跑一次统一摘要验证；
-                              点击“复制回归命令”后不需要你再手写参数。
+                              {agentText(
+                                "agentChat.harness.generated.75c0a945e1",
+                                "这一步直接复用仓库已有的 `harness:eval:promote` 与 `harness:eval` 主命令，把当前 replay case 提升为仓库 current 样本，并立即跑一次统一摘要验证； 点击“复制回归命令”后不需要你再手写参数。",
+                              )}
                             </div>
                             <div className="mt-3 grid gap-2 sm:grid-cols-3">
                               <InventoryStatCard
-                                title="目标 Suite"
+                                title={agentText(
+                                  "agentChat.harness.generated.b14686a384",
+                                  "目标 Suite",
+                                )}
                                 value={
                                   buildReplayPromotionContext({
                                     replayCase,
@@ -5635,7 +5982,10 @@ export function HarnessStatusPanel({
                                 hint="仓库 current 样本集"
                               />
                               <InventoryStatCard
-                                title="建议 Slug"
+                                title={agentText(
+                                  "agentChat.harness.generated.7d69461cc6",
+                                  "建议 Slug",
+                                )}
                                 value={
                                   buildReplayPromotionContext({
                                     replayCase,
@@ -5646,7 +5996,10 @@ export function HarnessStatusPanel({
                                 hint="promotion 目录名"
                               />
                               <InventoryStatCard
-                                title="后续验证"
+                                title={agentText(
+                                  "agentChat.harness.generated.1781d59f60",
+                                  "后续验证",
+                                )}
                                 value="eval + trend"
                                 hint="统一摘要与趋势入口"
                               />
@@ -5681,13 +6034,19 @@ export function HarnessStatusPanel({
                                       </div>
                                       <div className="mt-2 text-xs text-muted-foreground">
                                         <div>
-                                          相对路径：
+                                          {agentText(
+                                            "agentChat.harness.generated.2ee19fe8b0",
+                                            "相对路径：",
+                                          )}
                                           <span className="ml-1 break-all font-mono text-foreground">
                                             {artifact.relative_path}
                                           </span>
                                         </div>
                                         <div className="mt-1">
-                                          绝对路径：
+                                          {agentText(
+                                            "agentChat.harness.generated.f9c616413f",
+                                            "绝对路径：",
+                                          )}
                                           <PathTextLink
                                             path={artifact.absolute_path}
                                             className="ml-1"
@@ -5714,7 +6073,10 @@ export function HarnessStatusPanel({
                                         }
                                       >
                                         <Eye className="h-4 w-4" />
-                                        预览
+                                        {agentText(
+                                          "agentChat.harness.generated.de61aa8e1c",
+                                          "预览",
+                                        )}
                                       </Button>
                                       <Button
                                         type="button"
@@ -5729,7 +6091,10 @@ export function HarnessStatusPanel({
                                         }
                                       >
                                         <FolderOpen className="h-4 w-4" />
-                                        打开
+                                        {agentText(
+                                          "agentChat.harness.generated.65fc81e161",
+                                          "打开",
+                                        )}
                                       </Button>
                                     </div>
                                   </div>
@@ -5740,9 +6105,10 @@ export function HarnessStatusPanel({
                         </div>
                       ) : (
                         <div className="mt-3 rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
-                          尚未导出 Replay 样本。建议在 handoff 和 evidence
-                          都稳定后，再把真实失败沉淀成 `input / expected /
-                          grader / evidence-links` 四件套。
+                          {agentText(
+                            "agentChat.harness.generated.dc204bc209",
+                            "尚未导出 Replay 样本。建议在 handoff 和 evidence 都稳定后，再把真实失败沉淀成 `input / expected / grader / evidence-links` 四件套。",
+                          )}
                         </div>
                       )}
                     </div>
@@ -5752,12 +6118,18 @@ export function HarnessStatusPanel({
                         <div>
                           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                             <Sparkles className="h-4 w-4 text-violet-600" />
-                            <span>外部分析交接</span>
+                            <span>
+                              {agentText(
+                                "agentChat.harness.generated.d182d6ca5e",
+                                "外部分析交接",
+                              )}
+                            </span>
                           </div>
                           <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                            把 handoff / evidence / replay 主链重新包装成外部 AI
-                            可直接消费的分析交接；复制后可直接粘贴给 AI，
-                            不需要你再手写补充 prompt。
+                            {agentText(
+                              "agentChat.harness.generated.d3e119bf04",
+                              "把 handoff / evidence / replay 主链重新包装成外部 AI 可直接消费的分析交接；复制后可直接粘贴给 AI， 不需要你再手写补充 prompt。",
+                            )}
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -5766,7 +6138,10 @@ export function HarnessStatusPanel({
                             size="sm"
                             variant={analysisHandoff ? "outline" : "default"}
                             className="gap-2"
-                            aria-label="导出外部分析交接"
+                            aria-label={agentText(
+                              "agentChat.harness.generated.6ee9d41fc9",
+                              "导出外部分析交接",
+                            )}
                             disabled={analysisExporting}
                             onClick={() => void handleExportAnalysisHandoff()}
                           >
@@ -5782,7 +6157,10 @@ export function HarnessStatusPanel({
                             size="sm"
                             variant="outline"
                             className="gap-2"
-                            aria-label="一键复制给 AI"
+                            aria-label={agentText(
+                              "agentChat.harness.generated.29ae25dba3",
+                              "一键复制给 AI",
+                            )}
                             disabled={analysisExporting}
                             onClick={() => void handleCopyAnalysisPrompt()}
                           >
@@ -5791,7 +6169,10 @@ export function HarnessStatusPanel({
                             ) : (
                               <Copy className="h-4 w-4" />
                             )}
-                            一键复制给 AI
+                            {agentText(
+                              "agentChat.harness.generated.29ae25dba3",
+                              "一键复制给 AI",
+                            )}
                           </Button>
                           {analysisHandoff ? (
                             <Button
@@ -5799,7 +6180,10 @@ export function HarnessStatusPanel({
                               size="sm"
                               variant="outline"
                               className="gap-2"
-                              aria-label="打开外部分析目录"
+                              aria-label={agentText(
+                                "agentChat.harness.generated.dbf50b71fe",
+                                "打开外部分析目录",
+                              )}
                               onClick={() =>
                                 void handleOpenPathValue(
                                   analysisHandoff.analysis_absolute_root,
@@ -5807,7 +6191,10 @@ export function HarnessStatusPanel({
                               }
                             >
                               <FolderOpen className="h-4 w-4" />
-                              打开目录
+                              {agentText(
+                                "agentChat.harness.generated.031c105578",
+                                "打开目录",
+                              )}
                             </Button>
                           ) : null}
                         </div>
@@ -5823,26 +6210,38 @@ export function HarnessStatusPanel({
                         <div className="mt-3 space-y-3">
                           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                             <InventoryStatCard
-                              title="线程状态"
+                              title={agentText(
+                                "agentChat.harness.generated.2a36de35aa",
+                                "线程状态",
+                              )}
                               value={formatHandoffStatusLabel(
                                 analysisHandoff.thread_status,
                               )}
                               hint={`最近导出 ${formatIsoDateTime(analysisHandoff.exported_at)}`}
                             />
                             <InventoryStatCard
-                              title="最新 Turn"
+                              title={agentText(
+                                "agentChat.harness.generated.90cc62f7c2",
+                                "最新 Turn",
+                              )}
                               value={formatHandoffStatusLabel(
                                 analysisHandoff.latest_turn_status,
                               )}
                               hint={`待处理请求 ${analysisHandoff.pending_request_count} · 排队 ${analysisHandoff.queued_turn_count}`}
                             />
                             <InventoryStatCard
-                              title="分析标题"
+                              title={agentText(
+                                "agentChat.harness.generated.9f052ffbf5",
+                                "分析标题",
+                              )}
                               value={analysisHandoff.title || "未命名"}
                               hint={`工作区 ${analysisHandoff.workspace_id || "未绑定"}`}
                             />
                             <InventoryStatCard
-                              title="分析文件"
+                              title={agentText(
+                                "agentChat.harness.generated.f8bd8bc1e8",
+                                "分析文件",
+                              )}
                               value={`${analysisHandoff.artifacts.length}`}
                               hint="analysis brief / context"
                             />
@@ -5851,30 +6250,46 @@ export function HarnessStatusPanel({
                           <div className="rounded-xl border border-violet-200 bg-violet-50/80 p-3">
                             <div className="flex items-center gap-2 text-sm font-medium text-violet-950">
                               <Copy className="h-4 w-4 text-violet-700" />
-                              <span>复制说明</span>
+                              <span>
+                                {agentText(
+                                  "agentChat.harness.generated.fb7e40eb5b",
+                                  "复制说明",
+                                )}
+                              </span>
                             </div>
                             <div className="mt-2 text-xs leading-5 text-violet-900">
-                              复制内容来自后端导出的
-                              `copy_prompt`，已经包含分析入口文件、关联目录和输出要求；
-                              外部 AI
-                              可直接开始诊断，证据足够明确时也可直接实施最小修复。
+                              {agentText(
+                                "agentChat.harness.generated.00423f2e35",
+                                "复制内容来自后端导出的 `copy_prompt`，已经包含分析入口文件、关联目录和输出要求； 外部 AI 可直接开始诊断，证据足够明确时也可直接实施最小修复。",
+                              )}
                             </div>
                           </div>
 
                           <div className="rounded-xl border border-border bg-background p-3">
                             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                               <FolderOpen className="h-4 w-4 text-muted-foreground" />
-                              <span>分析目录</span>
+                              <span>
+                                {agentText(
+                                  "agentChat.harness.generated.0da0f10ea9",
+                                  "分析目录",
+                                )}
+                              </span>
                             </div>
                             <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                               <div>
-                                相对路径：
+                                {agentText(
+                                  "agentChat.harness.generated.2ee19fe8b0",
+                                  "相对路径：",
+                                )}
                                 <span className="ml-1 break-all font-mono text-foreground">
                                   {analysisHandoff.analysis_relative_root}
                                 </span>
                               </div>
                               <div>
-                                绝对路径：
+                                {agentText(
+                                  "agentChat.harness.generated.f9c616413f",
+                                  "绝对路径：",
+                                )}
                                 <PathTextLink
                                   path={analysisHandoff.analysis_absolute_root}
                                   className="ml-1"
@@ -5886,29 +6301,44 @@ export function HarnessStatusPanel({
 
                           <div className="rounded-xl border border-border bg-background p-3">
                             <div className="text-sm font-medium text-foreground">
-                              关联主链目录
+                              {agentText(
+                                "agentChat.harness.generated.3d4597d82b",
+                                "关联主链目录",
+                              )}
                             </div>
                             <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                               <div>
-                                handoff：
+                                {agentText(
+                                  "agentChat.harness.generated.0788808854",
+                                  "handoff：",
+                                )}
                                 <span className="ml-1 break-all font-mono text-foreground">
                                   {analysisHandoff.handoff_bundle_relative_root}
                                 </span>
                               </div>
                               <div>
-                                evidence：
+                                {agentText(
+                                  "agentChat.harness.generated.d50a6b5d6c",
+                                  "evidence：",
+                                )}
                                 <span className="ml-1 break-all font-mono text-foreground">
                                   {analysisHandoff.evidence_pack_relative_root}
                                 </span>
                               </div>
                               <div>
-                                replay：
+                                {agentText(
+                                  "agentChat.harness.generated.498f3b30f7",
+                                  "replay：",
+                                )}
                                 <span className="ml-1 break-all font-mono text-foreground">
                                   {analysisHandoff.replay_case_relative_root}
                                 </span>
                               </div>
                               <div>
-                                路径占位根：
+                                {agentText(
+                                  "agentChat.harness.generated.b140ad22fb",
+                                  "路径占位根：",
+                                )}
                                 <span className="ml-1 break-all font-mono text-foreground">
                                   {analysisHandoff.sanitized_workspace_root}
                                 </span>
@@ -5944,13 +6374,19 @@ export function HarnessStatusPanel({
                                       </div>
                                       <div className="mt-2 text-xs text-muted-foreground">
                                         <div>
-                                          相对路径：
+                                          {agentText(
+                                            "agentChat.harness.generated.2ee19fe8b0",
+                                            "相对路径：",
+                                          )}
                                           <span className="ml-1 break-all font-mono text-foreground">
                                             {artifact.relative_path}
                                           </span>
                                         </div>
                                         <div className="mt-1">
-                                          绝对路径：
+                                          {agentText(
+                                            "agentChat.harness.generated.f9c616413f",
+                                            "绝对路径：",
+                                          )}
                                           <PathTextLink
                                             path={artifact.absolute_path}
                                             className="ml-1"
@@ -5977,7 +6413,10 @@ export function HarnessStatusPanel({
                                         }
                                       >
                                         <Eye className="h-4 w-4" />
-                                        预览
+                                        {agentText(
+                                          "agentChat.harness.generated.de61aa8e1c",
+                                          "预览",
+                                        )}
                                       </Button>
                                       <Button
                                         type="button"
@@ -5992,7 +6431,10 @@ export function HarnessStatusPanel({
                                         }
                                       >
                                         <FolderOpen className="h-4 w-4" />
-                                        打开
+                                        {agentText(
+                                          "agentChat.harness.generated.65fc81e161",
+                                          "打开",
+                                        )}
                                       </Button>
                                     </div>
                                   </div>
@@ -6003,9 +6445,10 @@ export function HarnessStatusPanel({
                         </div>
                       ) : (
                         <div className="mt-3 rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
-                          尚未导出外部分析交接。点击“一键复制给
-                          AI”时会自动先导出再复制， 用于把当前 Lime
-                          证据链直接交给外部 AI 做诊断与最小修复。
+                          {agentText(
+                            "agentChat.harness.generated.f48629deea",
+                            "尚未导出外部分析交接。点击“一键复制给 AI”时会自动先导出再复制， 用于把当前 Lime 证据链直接交给外部 AI 做诊断与最小修复。",
+                          )}
                         </div>
                       )}
                     </div>
@@ -6015,12 +6458,18 @@ export function HarnessStatusPanel({
                         <div>
                           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                             <ListChecks className="h-4 w-4 text-emerald-600" />
-                            <span>人工审核记录</span>
+                            <span>
+                              {agentText(
+                                "agentChat.harness.generated.4a50d21f62",
+                                "人工审核记录",
+                              )}
+                            </span>
                           </div>
                           <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                            把外部 AI 的分析结论回挂为 `review-decision.md/json`
-                            模板，固定接受、延后、拒绝与回归要求；最终决策仍由开发者审核，不是
-                            Lime 自动闭环。
+                            {agentText(
+                              "agentChat.harness.generated.97b53a81c7",
+                              "把外部 AI 的分析结论回挂为 `review-decision.md/json` 模板，固定接受、延后、拒绝与回归要求；最终决策仍由开发者审核，不是 Lime 自动闭环。",
+                            )}
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -6031,7 +6480,10 @@ export function HarnessStatusPanel({
                               reviewDecisionTemplate ? "outline" : "default"
                             }
                             className="gap-2"
-                            aria-label="导出人工审核记录"
+                            aria-label={agentText(
+                              "agentChat.harness.generated.955a9d2951",
+                              "导出人工审核记录",
+                            )}
                             disabled={reviewDecisionExporting}
                             onClick={() =>
                               void handleExportReviewDecisionTemplate()
@@ -6051,7 +6503,10 @@ export function HarnessStatusPanel({
                             size="sm"
                             variant="outline"
                             className="gap-2"
-                            aria-label="填写人工审核结果"
+                            aria-label={agentText(
+                              "agentChat.harness.generated.1ced04d169",
+                              "填写人工审核结果",
+                            )}
                             disabled={
                               reviewDecisionExporting || reviewDecisionSaving
                             }
@@ -6060,7 +6515,10 @@ export function HarnessStatusPanel({
                             }
                           >
                             <ShieldAlert className="h-4 w-4" />
-                            填写人工审核结果
+                            {agentText(
+                              "agentChat.harness.generated.1ced04d169",
+                              "填写人工审核结果",
+                            )}
                           </Button>
                           {reviewDecisionTemplate ? (
                             <Button
@@ -6068,7 +6526,10 @@ export function HarnessStatusPanel({
                               size="sm"
                               variant="outline"
                               className="gap-2"
-                              aria-label="打开人工审核目录"
+                              aria-label={agentText(
+                                "agentChat.harness.generated.265890359d",
+                                "打开人工审核目录",
+                              )}
                               onClick={() =>
                                 void handleOpenPathValue(
                                   reviewDecisionTemplate.review_absolute_root,
@@ -6076,7 +6537,10 @@ export function HarnessStatusPanel({
                               }
                             >
                               <FolderOpen className="h-4 w-4" />
-                              打开目录
+                              {agentText(
+                                "agentChat.harness.generated.031c105578",
+                                "打开目录",
+                              )}
                             </Button>
                           ) : null}
                         </div>
@@ -6092,7 +6556,10 @@ export function HarnessStatusPanel({
                         <div className="mt-3 space-y-3">
                           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
                             <InventoryStatCard
-                              title="当前状态"
+                              title={agentText(
+                                "agentChat.harness.generated.045859e792",
+                                "当前状态",
+                              )}
                               value={formatReviewDecisionStatusLabel(
                                 reviewDecisionTemplate.decision
                                   .decision_status ||
@@ -6101,14 +6568,20 @@ export function HarnessStatusPanel({
                               hint={`最近写入 ${formatIsoDateTime(reviewDecisionTemplate.exported_at)}`}
                             />
                             <InventoryStatCard
-                              title="线程状态"
+                              title={agentText(
+                                "agentChat.harness.generated.2a36de35aa",
+                                "线程状态",
+                              )}
                               value={formatHandoffStatusLabel(
                                 reviewDecisionTemplate.thread_status,
                               )}
                               hint={`待处理请求 ${reviewDecisionTemplate.pending_request_count} · 排队 ${reviewDecisionTemplate.queued_turn_count}`}
                             />
                             <InventoryStatCard
-                              title="风险等级"
+                              title={agentText(
+                                "agentChat.harness.generated.a90f1e5591",
+                                "风险等级",
+                              )}
                               value={formatReviewDecisionRiskLevelLabel(
                                 reviewDecisionTemplate.decision.risk_level,
                               )}
@@ -6122,7 +6595,10 @@ export function HarnessStatusPanel({
                               }
                             />
                             <InventoryStatCard
-                              title="权限确认"
+                              title={agentText(
+                                "agentChat.harness.generated.302eda3ced",
+                                "权限确认",
+                              )}
                               value={formatPermissionConfirmationStatusLabel(
                                 reviewDecisionTemplate.permission_confirmation_status,
                               )}
@@ -6133,7 +6609,10 @@ export function HarnessStatusPanel({
                               }
                             />
                             <InventoryStatCard
-                              title="模型锁定"
+                              title={agentText(
+                                "agentChat.harness.generated.0c5a6323af",
+                                "模型锁定",
+                              )}
                               value={formatReviewLimitStatusLabel(
                                 reviewDecisionTemplate.limit_status,
                               )}
@@ -6144,12 +6623,18 @@ export function HarnessStatusPanel({
                               }
                             />
                             <InventoryStatCard
-                              title="分析文件"
+                              title={agentText(
+                                "agentChat.harness.generated.f8bd8bc1e8",
+                                "分析文件",
+                              )}
                               value={`${reviewDecisionTemplate.analysis_artifacts.length}`}
                               hint="沿用 analysis handoff 主链"
                             />
                             <InventoryStatCard
-                              title="审核文件"
+                              title={agentText(
+                                "agentChat.harness.generated.7d5028f2c7",
+                                "审核文件",
+                              )}
                               value={`${reviewDecisionTemplate.artifacts.length}`}
                               hint="review-decision.md / json"
                             />
@@ -6158,13 +6643,18 @@ export function HarnessStatusPanel({
                           <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3">
                             <div className="flex items-center gap-2 text-sm font-medium text-emerald-950">
                               <ShieldAlert className="h-4 w-4 text-emerald-700" />
-                              <span>职责边界</span>
+                              <span>
+                                {agentText(
+                                  "agentChat.harness.generated.99b1a346a7",
+                                  "职责边界",
+                                )}
+                              </span>
                             </div>
                             <div className="mt-2 text-xs leading-5 text-emerald-900">
-                              运行时事实继续以 aster-rust 的 session / thread /
-                              turn 为准，外部分析形状对齐 Codex
-                              的交接习惯，但最终是否接受修复、补哪些回归，必须由开发者写入
-                              review decision。
+                              {agentText(
+                                "agentChat.harness.generated.be6144aa41",
+                                "运行时事实继续以 aster-rust 的 session / thread / turn 为准，外部分析形状对齐 Codex 的交接习惯，但最终是否接受修复、补哪些回归，必须由开发者写入 review decision。",
+                              )}
                             </div>
                           </div>
 
@@ -6173,7 +6663,12 @@ export function HarnessStatusPanel({
                             <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3">
                               <div className="flex items-center gap-2 text-sm font-medium text-destructive">
                                 <AlertCircle className="h-4 w-4" />
-                                <span>权限确认已拒绝</span>
+                                <span>
+                                  {agentText(
+                                    "agentChat.harness.generated.3908997f9f",
+                                    "权限确认已拒绝",
+                                  )}
+                                </span>
                               </div>
                               <div className="mt-2 text-xs leading-5 text-destructive/90">
                                 {reviewDecisionTemplate.permission_confirmation_summary ||
@@ -6187,7 +6682,12 @@ export function HarnessStatusPanel({
                             <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3">
                               <div className="flex items-center gap-2 text-sm font-medium text-destructive">
                                 <AlertCircle className="h-4 w-4" />
-                                <span>模型锁定能力缺口</span>
+                                <span>
+                                  {agentText(
+                                    "agentChat.harness.generated.41e558488a",
+                                    "模型锁定能力缺口",
+                                  )}
+                                </span>
                               </div>
                               <div className="mt-2 text-xs leading-5 text-destructive/90">
                                 {reviewDecisionTemplate.user_locked_capability_summary ||
@@ -6195,7 +6695,10 @@ export function HarnessStatusPanel({
                               </div>
                               {reviewDecisionTemplate.capability_gap ? (
                                 <div className="mt-1 font-mono text-[11px] text-destructive/80">
-                                  capabilityGap=
+                                  {agentText(
+                                    "agentChat.harness.generated.43400bb0f7",
+                                    "capabilityGap=",
+                                  )}
                                   {reviewDecisionTemplate.capability_gap}
                                 </div>
                               ) : null}
@@ -6213,7 +6716,10 @@ export function HarnessStatusPanel({
                           <div className="rounded-xl border border-border bg-background p-3">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div className="text-sm font-medium text-foreground">
-                                当前人工审核结论
+                                {agentText(
+                                  "agentChat.harness.generated.bbb8d9b533",
+                                  "当前人工审核结论",
+                                )}
                               </div>
                               <Badge variant="outline">
                                 {formatReviewDecisionStatusLabel(
@@ -6225,14 +6731,20 @@ export function HarnessStatusPanel({
                             </div>
                             <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-3">
                               <div>
-                                审核人：
+                                {agentText(
+                                  "agentChat.harness.generated.8132b4b996",
+                                  "审核人：",
+                                )}
                                 <span className="ml-1 text-foreground">
                                   {reviewDecisionTemplate.decision
                                     .human_reviewer || "待填写"}
                                 </span>
                               </div>
                               <div>
-                                审核时间：
+                                {agentText(
+                                  "agentChat.harness.generated.0c0f6228df",
+                                  "审核时间：",
+                                )}
                                 <span className="ml-1 text-foreground">
                                   {reviewDecisionTemplate.decision.reviewed_at
                                     ? formatIsoDateTime(
@@ -6243,7 +6755,10 @@ export function HarnessStatusPanel({
                                 </span>
                               </div>
                               <div>
-                                风险等级：
+                                {agentText(
+                                  "agentChat.harness.generated.7b48e37522",
+                                  "风险等级：",
+                                )}
                                 <span className="ml-1 text-foreground">
                                   {formatReviewDecisionRiskLevelLabel(
                                     reviewDecisionTemplate.decision.risk_level,
@@ -6254,7 +6769,10 @@ export function HarnessStatusPanel({
                             <div className="mt-3 space-y-3 text-xs leading-5 text-muted-foreground">
                               <div>
                                 <div className="font-medium text-foreground">
-                                  决策摘要
+                                  {agentText(
+                                    "agentChat.harness.generated.8480d012ec",
+                                    "决策摘要",
+                                  )}
                                 </div>
                                 <div className="mt-1 whitespace-pre-wrap">
                                   {reviewDecisionTemplate.decision
@@ -6263,7 +6781,10 @@ export function HarnessStatusPanel({
                               </div>
                               <div>
                                 <div className="font-medium text-foreground">
-                                  采用的修复策略
+                                  {agentText(
+                                    "agentChat.harness.generated.b0be2cde74",
+                                    "采用的修复策略",
+                                  )}
                                 </div>
                                 <div className="mt-1 whitespace-pre-wrap">
                                   {reviewDecisionTemplate.decision
@@ -6274,7 +6795,10 @@ export function HarnessStatusPanel({
                               <div className="grid gap-3 sm:grid-cols-2">
                                 <div>
                                   <div className="font-medium text-foreground">
-                                    回归要求
+                                    {agentText(
+                                      "agentChat.harness.generated.30861463a7",
+                                      "回归要求",
+                                    )}
                                   </div>
                                   <div className="mt-1 space-y-1">
                                     {reviewDecisionTemplate.decision
@@ -6285,13 +6809,21 @@ export function HarnessStatusPanel({
                                         ),
                                       )
                                     ) : (
-                                      <div>尚未填写回归要求。</div>
+                                      <div>
+                                        {agentText(
+                                          "agentChat.harness.generated.5702b85071",
+                                          "尚未填写回归要求。",
+                                        )}
+                                      </div>
                                     )}
                                   </div>
                                 </div>
                                 <div>
                                   <div className="font-medium text-foreground">
-                                    后续动作
+                                    {agentText(
+                                      "agentChat.harness.generated.db26286d9f",
+                                      "后续动作",
+                                    )}
                                   </div>
                                   <div className="mt-1 space-y-1">
                                     {reviewDecisionTemplate.decision
@@ -6302,7 +6834,12 @@ export function HarnessStatusPanel({
                                         ),
                                       )
                                     ) : (
-                                      <div>尚未填写后续动作。</div>
+                                      <div>
+                                        {agentText(
+                                          "agentChat.harness.generated.84cf3cd090",
+                                          "尚未填写后续动作。",
+                                        )}
+                                      </div>
                                     )}
                                   </div>
                                 </div>
@@ -6310,7 +6847,10 @@ export function HarnessStatusPanel({
                               {reviewDecisionTemplate.decision.notes ? (
                                 <div>
                                   <div className="font-medium text-foreground">
-                                    审核备注
+                                    {agentText(
+                                      "agentChat.harness.generated.d7343a628d",
+                                      "审核备注",
+                                    )}
                                   </div>
                                   <div className="mt-1 whitespace-pre-wrap">
                                     {reviewDecisionTemplate.decision.notes}
@@ -6323,17 +6863,28 @@ export function HarnessStatusPanel({
                           <div className="rounded-xl border border-border bg-background p-3">
                             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                               <FolderOpen className="h-4 w-4 text-muted-foreground" />
-                              <span>审核目录</span>
+                              <span>
+                                {agentText(
+                                  "agentChat.harness.generated.b74ba0f7e8",
+                                  "审核目录",
+                                )}
+                              </span>
                             </div>
                             <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                               <div>
-                                相对路径：
+                                {agentText(
+                                  "agentChat.harness.generated.2ee19fe8b0",
+                                  "相对路径：",
+                                )}
                                 <span className="ml-1 break-all font-mono text-foreground">
                                   {reviewDecisionTemplate.review_relative_root}
                                 </span>
                               </div>
                               <div>
-                                绝对路径：
+                                {agentText(
+                                  "agentChat.harness.generated.f9c616413f",
+                                  "绝对路径：",
+                                )}
                                 <PathTextLink
                                   path={
                                     reviewDecisionTemplate.review_absolute_root
@@ -6343,7 +6894,10 @@ export function HarnessStatusPanel({
                                 />
                               </div>
                               <div>
-                                关联 analysis：
+                                {agentText(
+                                  "agentChat.harness.generated.0c51e2d5aa",
+                                  "关联 analysis：",
+                                )}
                                 <span className="ml-1 break-all font-mono text-foreground">
                                   {
                                     reviewDecisionTemplate.analysis_relative_root
@@ -6355,7 +6909,10 @@ export function HarnessStatusPanel({
 
                           <div className="rounded-xl border border-border bg-background p-3">
                             <div className="text-sm font-medium text-foreground">
-                              人工审核清单
+                              {agentText(
+                                "agentChat.harness.generated.9a6c8cf2e8",
+                                "人工审核清单",
+                              )}
                             </div>
                             <div className="mt-2 space-y-2 text-xs text-muted-foreground">
                               {reviewDecisionTemplate.review_checklist.map(
@@ -6373,7 +6930,10 @@ export function HarnessStatusPanel({
 
                           <div className="space-y-3">
                             <div className="text-sm font-medium text-foreground">
-                              关联分析文件
+                              {agentText(
+                                "agentChat.harness.generated.b7ba9e9504",
+                                "关联分析文件",
+                              )}
                             </div>
                             {reviewDecisionTemplate.analysis_artifacts.map(
                               (artifact) => {
@@ -6403,13 +6963,19 @@ export function HarnessStatusPanel({
                                         </div>
                                         <div className="mt-2 text-xs text-muted-foreground">
                                           <div>
-                                            相对路径：
+                                            {agentText(
+                                              "agentChat.harness.generated.2ee19fe8b0",
+                                              "相对路径：",
+                                            )}
                                             <span className="ml-1 break-all font-mono text-foreground">
                                               {artifact.relative_path}
                                             </span>
                                           </div>
                                           <div className="mt-1">
-                                            绝对路径：
+                                            {agentText(
+                                              "agentChat.harness.generated.f9c616413f",
+                                              "绝对路径：",
+                                            )}
                                             <PathTextLink
                                               path={artifact.absolute_path}
                                               className="ml-1"
@@ -6436,7 +7002,10 @@ export function HarnessStatusPanel({
                                           }
                                         >
                                           <Eye className="h-4 w-4" />
-                                          预览
+                                          {agentText(
+                                            "agentChat.harness.generated.de61aa8e1c",
+                                            "预览",
+                                          )}
                                         </Button>
                                         <Button
                                           type="button"
@@ -6451,7 +7020,10 @@ export function HarnessStatusPanel({
                                           }
                                         >
                                           <FolderOpen className="h-4 w-4" />
-                                          打开
+                                          {agentText(
+                                            "agentChat.harness.generated.65fc81e161",
+                                            "打开",
+                                          )}
                                         </Button>
                                       </div>
                                     </div>
@@ -6463,7 +7035,10 @@ export function HarnessStatusPanel({
 
                           <div className="space-y-3">
                             <div className="text-sm font-medium text-foreground">
-                              审核记录模板文件
+                              {agentText(
+                                "agentChat.harness.generated.d19ad31eb3",
+                                "审核记录模板文件",
+                              )}
                             </div>
                             {reviewDecisionTemplate.artifacts.map(
                               (artifact) => {
@@ -6493,13 +7068,19 @@ export function HarnessStatusPanel({
                                         </div>
                                         <div className="mt-2 text-xs text-muted-foreground">
                                           <div>
-                                            相对路径：
+                                            {agentText(
+                                              "agentChat.harness.generated.2ee19fe8b0",
+                                              "相对路径：",
+                                            )}
                                             <span className="ml-1 break-all font-mono text-foreground">
                                               {artifact.relative_path}
                                             </span>
                                           </div>
                                           <div className="mt-1">
-                                            绝对路径：
+                                            {agentText(
+                                              "agentChat.harness.generated.f9c616413f",
+                                              "绝对路径：",
+                                            )}
                                             <PathTextLink
                                               path={artifact.absolute_path}
                                               className="ml-1"
@@ -6526,7 +7107,10 @@ export function HarnessStatusPanel({
                                           }
                                         >
                                           <Eye className="h-4 w-4" />
-                                          预览
+                                          {agentText(
+                                            "agentChat.harness.generated.de61aa8e1c",
+                                            "预览",
+                                          )}
                                         </Button>
                                         <Button
                                           type="button"
@@ -6541,7 +7125,10 @@ export function HarnessStatusPanel({
                                           }
                                         >
                                           <FolderOpen className="h-4 w-4" />
-                                          打开
+                                          {agentText(
+                                            "agentChat.harness.generated.65fc81e161",
+                                            "打开",
+                                          )}
                                         </Button>
                                       </div>
                                     </div>
@@ -6553,9 +7140,10 @@ export function HarnessStatusPanel({
                         </div>
                       ) : (
                         <div className="mt-3 rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
-                          尚未导出人工审核记录。建议在外部 AI 完成诊断后立刻导出
-                          `review-decision.md/json`，把接受、延后、拒绝和回归要求回挂到工作区，
-                          而不是散落在聊天窗口或临时笔记里。
+                          {agentText(
+                            "agentChat.harness.generated.fb2456e37b",
+                            "尚未导出人工审核记录。建议在外部 AI 完成诊断后立刻导出 `review-decision.md/json`，把接受、延后、拒绝和回归要求回挂到工作区， 而不是散落在聊天窗口或临时笔记里。",
+                          )}
                         </div>
                       )}
                     </div>
@@ -6595,7 +7183,10 @@ export function HarnessStatusPanel({
               {threadReliabilityView.shouldRender ? (
                 <Section
                   sectionKey="reliability"
-                  title="线程可靠性"
+                  title={agentText(
+                    "agentChat.harness.generated.8f2d0db713",
+                    "线程可靠性",
+                  )}
                   badge={threadReliabilityView.statusLabel}
                   registerRef={registerSectionRef}
                 >
@@ -7038,7 +7629,10 @@ export function HarnessStatusPanel({
               {hasAgentUiProjectionSection ? (
                 <Section
                   sectionKey="agentui"
-                  title="AgentUI 标准投影"
+                  title={agentText(
+                    "agentChat.harness.generated.bca7a0c006",
+                    "AgentUI 标准投影",
+                  )}
                   badge={`${agentUiProjectionSummary.total} 条`}
                   registerRef={registerSectionRef}
                 >
@@ -7048,37 +7642,57 @@ export function HarnessStatusPanel({
                         variant="outline"
                         className="border-sky-300 bg-background text-sky-800"
                       >
-                        current projection
+                        {agentText(
+                          "agentChat.harness.generated.7d96e65980",
+                          "current projection",
+                        )}
                       </Badge>
                       <span className="text-xs text-sky-900">
-                        只读取 conversationProjectionStore.agentUi；不从
-                        assistant 文本反推工具、证据或审批状态。
+                        {agentText(
+                          "agentChat.harness.generated.f931108be0",
+                          "只读取 conversationProjectionStore.agentUi；不从 assistant 文本反推工具、证据或审批状态。",
+                        )}
                       </span>
                     </div>
 
                     <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                       <InventoryStatCard
-                        title="Action / HITL"
+                        title={agentText(
+                          "agentChat.harness.generated.bf38ab4875",
+                          "Action / HITL",
+                        )}
                         value={`${agentUiProjectionSummary.actionCount}`}
                         hint="action.required / permission.changed"
                       />
                       <InventoryStatCard
-                        title="Task / Agent"
+                        title={agentText(
+                          "agentChat.harness.generated.7be19a3bbe",
+                          "Task / Agent",
+                        )}
                         value={`${agentUiProjectionSummary.taskCount}`}
                         hint="queue.changed / task.changed / agent.changed"
                       />
                       <InventoryStatCard
-                        title="Artifact"
+                        title={agentText(
+                          "agentChat.harness.generated.aa778b50a1",
+                          "Artifact",
+                        )}
                         value={`${agentUiProjectionSummary.artifactCount}`}
                         hint="artifact.* typed events"
                       />
                       <InventoryStatCard
-                        title="Evidence"
+                        title={agentText(
+                          "agentChat.harness.generated.7ea014de7b",
+                          "Evidence",
+                        )}
                         value={`${agentUiProjectionSummary.evidenceCount}`}
                         hint="evidence.changed"
                       />
                       <InventoryStatCard
-                        title="Diagnostics"
+                        title={agentText(
+                          "agentChat.harness.generated.3af2279f9e",
+                          "Diagnostics",
+                        )}
                         value={`${agentUiProjectionSummary.diagnosticsCount}`}
                         hint="context / metric / diagnostic"
                       />
@@ -7087,7 +7701,10 @@ export function HarnessStatusPanel({
                     {agentUiProjectionSummary.latestNotableEvents.length > 0 ? (
                       <div className="space-y-2">
                         <div className="text-xs font-medium text-sky-950">
-                          最近标准事件
+                          {agentText(
+                            "agentChat.harness.generated.1a89b7738c",
+                            "最近标准事件",
+                          )}
                         </div>
                         {agentUiProjectionSummary.latestNotableEvents.map(
                           (event, index) => (
@@ -7115,7 +7732,10 @@ export function HarnessStatusPanel({
                                 </Badge>
                                 {event.control ? (
                                   <Badge variant="outline">
-                                    control ·{" "}
+                                    {agentText(
+                                      "agentChat.harness.generated.74f4646cb4",
+                                      "control ·",
+                                    )}{" "}
                                     {formatAgentUiProjectionControl(
                                       event.control,
                                       translateProjection,
@@ -7150,7 +7770,10 @@ export function HarnessStatusPanel({
               {runtimeFactSummary ? (
                 <Section
                   sectionKey="runtime-facts"
-                  title="运行时事实"
+                  title={agentText(
+                    "agentChat.harness.generated.33926941a3",
+                    "运行时事实",
+                  )}
                   badge="current"
                   registerRef={registerSectionRef}
                 >
@@ -7158,7 +7781,10 @@ export function HarnessStatusPanel({
                     {runtimeFactSummary.decisionReason ? (
                       <div className="text-sm text-slate-700">
                         <span className="font-medium text-foreground">
-                          决策原因：
+                          {agentText(
+                            "agentChat.harness.generated.6418acb28a",
+                            "决策原因：",
+                          )}
                         </span>
                         {runtimeFactSummary.decisionReason}
                       </div>
@@ -7167,7 +7793,10 @@ export function HarnessStatusPanel({
                     {runtimeFactSummary.fallbackChain.length > 0 ? (
                       <div className="text-sm text-slate-700">
                         <span className="font-medium text-foreground">
-                          回退链：
+                          {agentText(
+                            "agentChat.harness.generated.7dda9f12bc",
+                            "回退链：",
+                          )}
                         </span>
                         {runtimeFactSummary.fallbackChain.join(" → ")}
                       </div>
@@ -7181,7 +7810,10 @@ export function HarnessStatusPanel({
                               variant="outline"
                               className="border-amber-300 bg-white text-amber-700"
                             >
-                              品牌云端托管锁定
+                              {agentText(
+                                "agentChat.harness.generated.8bda487786",
+                                "品牌云端托管锁定",
+                              )}
                             </Badge>
                           ) : null}
                           {runtimeFactSummary.oemPolicy.quotaLow ? (
@@ -7189,7 +7821,10 @@ export function HarnessStatusPanel({
                               variant="outline"
                               className="border-orange-300 bg-white text-orange-700"
                             >
-                              品牌云端额度偏低
+                              {agentText(
+                                "agentChat.harness.generated.f90b84fdd1",
+                                "品牌云端额度偏低",
+                              )}
                             </Badge>
                           ) : null}
                           {runtimeFactSummary.oemPolicy.canInvoke === false ? (
@@ -7197,7 +7832,10 @@ export function HarnessStatusPanel({
                               variant="outline"
                               className="border-rose-300 bg-white text-rose-700"
                             >
-                              品牌云端当前不可调用
+                              {agentText(
+                                "agentChat.harness.generated.b5034aede8",
+                                "品牌云端当前不可调用",
+                              )}
                             </Badge>
                           ) : null}
                           {runtimeFactSummary.oemPolicy
@@ -7206,7 +7844,10 @@ export function HarnessStatusPanel({
                               variant="outline"
                               className="border-emerald-300 bg-white text-emerald-700"
                             >
-                              允许回退本地
+                              {agentText(
+                                "agentChat.harness.generated.b9044a46f4",
+                                "允许回退本地",
+                              )}
                             </Badge>
                           ) : null}
                         </div>
@@ -7214,36 +7855,57 @@ export function HarnessStatusPanel({
                           {runtimeFactSummary.oemPolicy.defaultModel ||
                           runtimeFactSummary.oemPolicy.selectedModel ? (
                             <span>
-                              品牌云端模型{" "}
+                              {agentText(
+                                "agentChat.harness.generated.ba5a177dbc",
+                                "品牌云端模型",
+                              )}{" "}
                               {runtimeFactSummary.oemPolicy.defaultModel ||
                                 runtimeFactSummary.oemPolicy.selectedModel}
                             </span>
                           ) : null}
                           {runtimeFactSummary.oemPolicy.quotaStatus ? (
                             <span>
-                              额度状态{" "}
+                              {agentText(
+                                "agentChat.harness.generated.9689f96384",
+                                "额度状态",
+                              )}{" "}
                               {runtimeFactSummary.oemPolicy.quotaStatus}
                             </span>
                           ) : null}
                           {runtimeFactSummary.oemPolicy.offerState ? (
                             <span>
-                              策略状态 {runtimeFactSummary.oemPolicy.offerState}
+                              {agentText(
+                                "agentChat.harness.generated.eb4e63ff82",
+                                "策略状态",
+                              )}
+                              {runtimeFactSummary.oemPolicy.offerState}
                             </span>
                           ) : null}
                           {runtimeFactSummary.oemPolicy.providerSource ? (
                             <span>
-                              来源 {runtimeFactSummary.oemPolicy.providerSource}
+                              {agentText(
+                                "agentChat.harness.generated.c63f79e636",
+                                "来源",
+                              )}
+                              {runtimeFactSummary.oemPolicy.providerSource}
                             </span>
                           ) : null}
                           {runtimeFactSummary.oemPolicy.providerKey ? (
                             <span>
-                              Provider Key{" "}
+                              {agentText(
+                                "agentChat.harness.generated.2684f75e20",
+                                "Provider Key",
+                              )}{" "}
                               {runtimeFactSummary.oemPolicy.providerKey}
                             </span>
                           ) : null}
                           {runtimeFactSummary.oemPolicy.tenantId ? (
                             <span>
-                              租户 {runtimeFactSummary.oemPolicy.tenantId}
+                              {agentText(
+                                "agentChat.harness.generated.cc04fa896e",
+                                "租户",
+                              )}
+                              {runtimeFactSummary.oemPolicy.tenantId}
                             </span>
                           ) : null}
                         </div>
@@ -7256,7 +7918,10 @@ export function HarnessStatusPanel({
               {harnessState.activeFileWrites.length > 0 ? (
                 <Section
                   sectionKey="writes"
-                  title="当前文件写入"
+                  title={agentText(
+                    "agentChat.harness.generated.e36ba9e753",
+                    "当前文件写入",
+                  )}
                   badge={`${harnessState.activeFileWrites.length} 条`}
                   registerRef={registerSectionRef}
                 >
@@ -7310,7 +7975,10 @@ export function HarnessStatusPanel({
                           </div>
                         ) : (
                           <div className="mt-2 text-xs text-muted-foreground">
-                            正在准备文件内容...
+                            {agentText(
+                              "agentChat.harness.generated.54f5c230c9",
+                              "正在准备文件内容...",
+                            )}
                           </div>
                         )}
                       </button>
@@ -7322,7 +7990,10 @@ export function HarnessStatusPanel({
               {harnessState.outputSignals.length > 0 ? (
                 <Section
                   sectionKey="outputs"
-                  title="工具输出"
+                  title={agentText(
+                    "agentChat.harness.generated.fb7edd231f",
+                    "工具输出",
+                  )}
                   badge={
                     filteredOutputSignals.length ===
                     harnessState.outputSignals.length
@@ -7422,17 +8093,26 @@ export function HarnessStatusPanel({
                         const outputPaths = getOutputSignalPaths(signal);
                         const diffSummary =
                           buildOutputSignalDiffSummary(signal);
+                        const outputPresentation =
+                          resolveOutputCardPresentation(signal, translateAgent);
 
                         return (
                           <button
                             key={signal.id}
                             type="button"
                             className={cn(
-                              "w-full rounded-xl border border-border bg-background p-3 text-left transition-colors hover:bg-muted/60",
+                              "w-full rounded-[10px] border bg-background p-3 text-left transition-colors hover:bg-muted/60",
+                              outputPresentation.tone === "failed" &&
+                                "border-amber-200 bg-amber-50/70 hover:bg-amber-50",
                               !canOpenPreview &&
                                 !canOpenUrl &&
                                 "cursor-default",
                             )}
+                            data-output-raw-details-collapsed={
+                              outputPresentation.rawDetailsCollapsed
+                                ? "true"
+                                : undefined
+                            }
                             onClick={() =>
                               canOpenPreview
                                 ? void openPreview({
@@ -7457,7 +8137,7 @@ export function HarnessStatusPanel({
                                   </span>
                                 </div>
                                 <InteractiveText
-                                  text={signal.summary}
+                                  text={outputPresentation.summary}
                                   className="mt-1 text-xs text-muted-foreground"
                                   stopPropagation={true}
                                   onOpenUrl={handleOpenExternalLink}
@@ -7526,14 +8206,18 @@ export function HarnessStatusPanel({
                                 onOpenPath={handleOpenPathValue}
                                 stopPropagation={true}
                               />
-                            ) : signal.preview ? (
+                            ) : outputPresentation.preview ? (
                               <div className="mt-2 rounded-lg bg-muted/50 p-2 text-xs text-muted-foreground">
                                 <InteractiveText
-                                  text={signal.preview}
+                                  text={outputPresentation.preview}
                                   mono={true}
                                   stopPropagation={true}
                                   onOpenUrl={handleOpenExternalLink}
                                 />
+                              </div>
+                            ) : outputPresentation.collapsedHint ? (
+                              <div className="mt-2 rounded-[8px] border border-amber-200 bg-white/75 px-2.5 py-2 text-xs text-amber-800">
+                                {outputPresentation.collapsedHint}
                               </div>
                             ) : null}
                           </button>
@@ -7541,7 +8225,10 @@ export function HarnessStatusPanel({
                       })
                     ) : (
                       <div className="rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
-                        当前筛选条件下暂无记录。
+                        {agentText(
+                          "agentChat.harness.generated.1146635328",
+                          "当前筛选条件下暂无记录。",
+                        )}
                       </div>
                     )}
                   </div>
@@ -7551,7 +8238,10 @@ export function HarnessStatusPanel({
               {hasToolInventorySection ? (
                 <Section
                   sectionKey="inventory"
-                  title="工具与权限"
+                  title={agentText(
+                    "agentChat.harness.generated.0ddd6d9a60",
+                    "工具与权限",
+                  )}
                   badge={
                     toolInventoryLoading
                       ? "读取中"
@@ -7569,27 +8259,45 @@ export function HarnessStatusPanel({
                         {toolInventory ? (
                           <>
                             <Badge variant="secondary">
-                              caller：{toolInventory.request?.caller || "未知"}
+                              {agentText(
+                                "agentChat.harness.generated.82aec0037c",
+                                "caller：",
+                              )}
+                              {toolInventory.request?.caller || "未知"}
                             </Badge>
                             <Badge variant="outline">
-                              工作台：
+                              {agentText(
+                                "agentChat.harness.generated.9d523f85db",
+                                "工作台：",
+                              )}
                               {toolInventory.request?.surface?.workbench
                                 ? "开启"
                                 : "关闭"}
                             </Badge>
                             <Badge variant="outline">
-                              Browser Assist：
+                              {agentText(
+                                "agentChat.harness.generated.4a68d070e6",
+                                "Browser Assist：",
+                              )}
                               {toolInventory.request?.surface?.browser_assist
                                 ? "开启"
                                 : "关闭"}
                             </Badge>
                             <Badge variant="outline">
-                              默认允许：
+                              {agentText(
+                                "agentChat.harness.generated.e96cdaadb1",
+                                "默认允许：",
+                              )}
                               {toolInventory.counts.default_allowed_total}
                             </Badge>
                           </>
                         ) : (
-                          <Badge variant="outline">等待工具库存</Badge>
+                          <Badge variant="outline">
+                            {agentText(
+                              "agentChat.harness.generated.0f4d7157ea",
+                              "等待工具库存",
+                            )}
+                          </Badge>
                         )}
                       </div>
                       {onRefreshToolInventory ? (
@@ -7598,7 +8306,10 @@ export function HarnessStatusPanel({
                           size="sm"
                           variant="outline"
                           className="gap-2"
-                          aria-label="刷新工具库存"
+                          aria-label={agentText(
+                            "agentChat.harness.generated.908fe49fe3",
+                            "刷新工具库存",
+                          )}
                           onClick={onRefreshToolInventory}
                         >
                           {toolInventoryLoading ? (
@@ -7606,7 +8317,10 @@ export function HarnessStatusPanel({
                           ) : (
                             <Wrench className="h-4 w-4" />
                           )}
-                          刷新库存
+                          {agentText(
+                            "agentChat.harness.generated.f79c583e24",
+                            "刷新库存",
+                          )}
                         </Button>
                       ) : null}
                     </div>
@@ -7614,7 +8328,10 @@ export function HarnessStatusPanel({
                     {toolInventoryLoading ? (
                       <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-3 text-sm text-muted-foreground">
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        正在读取当前工具库存与权限策略...
+                        {agentText(
+                          "agentChat.harness.generated.713fb7c6d1",
+                          "正在读取当前工具库存与权限策略...",
+                        )}
                       </div>
                     ) : null}
 
@@ -7628,27 +8345,42 @@ export function HarnessStatusPanel({
                       <>
                         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                           <InventoryStatCard
-                            title="Runtime"
+                            title={agentText(
+                              "agentChat.harness.generated.c4740e4ca2",
+                              "Runtime",
+                            )}
                             value={`${runtimeToolVisibleTotal}`}
                             hint={`可见 / 总数 ${runtimeToolVisibleTotal} / ${runtimeToolTotal}`}
                           />
                           <InventoryStatCard
-                            title="Catalog"
+                            title={agentText(
+                              "agentChat.harness.generated.4a88d27bba",
+                              "Catalog",
+                            )}
                             value={`${toolInventory.counts.catalog_total}`}
                             hint={`现役 ${toolInventory.counts.catalog_current_total} · 兼容 ${toolInventory.counts.catalog_compat_total}`}
                           />
                           <InventoryStatCard
-                            title="Registry"
+                            title={agentText(
+                              "agentChat.harness.generated.1fd6a805da",
+                              "Registry",
+                            )}
                             value={`${toolInventory.counts.registry_visible_total}`}
                             hint={`可见 / 总数 ${toolInventory.counts.registry_visible_total} / ${toolInventory.counts.registry_total}`}
                           />
                           <InventoryStatCard
-                            title="Extension"
+                            title={agentText(
+                              "agentChat.harness.generated.659087d3ca",
+                              "Extension",
+                            )}
                             value={`${toolInventory.counts.extension_tool_visible_total}`}
                             hint={`可见 / 总数 ${toolInventory.counts.extension_tool_visible_total} / ${toolInventory.counts.extension_tool_total}`}
                           />
                           <InventoryStatCard
-                            title="MCP"
+                            title={agentText(
+                              "agentChat.harness.generated.21593b807a",
+                              "MCP",
+                            )}
                             value={`${toolInventory.counts.mcp_tool_visible_total}`}
                             hint={`服务 ${toolInventory.counts.mcp_server_total} · 工具 ${toolInventory.counts.mcp_tool_total}`}
                           />
@@ -7674,7 +8406,10 @@ export function HarnessStatusPanel({
                         {toolInventoryWarnings.length > 0 ? (
                           <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3">
                             <div className="text-sm font-medium text-amber-900">
-                              库存告警
+                              {agentText(
+                                "agentChat.harness.generated.9dd4dc2098",
+                                "库存告警",
+                              )}
                             </div>
                             <div className="mt-2 space-y-1 text-xs text-amber-800">
                               {toolInventoryWarnings.map((warning, index) => (
@@ -7691,7 +8426,10 @@ export function HarnessStatusPanel({
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div className="text-sm font-medium text-foreground">
-                                Runtime 能力摘要
+                                {agentText(
+                                  "agentChat.harness.generated.b8f1306458",
+                                  "Runtime 能力摘要",
+                                )}
                               </div>
                               <Badge
                                 variant={
@@ -7762,7 +8500,10 @@ export function HarnessStatusPanel({
                               runtimeToolCapabilityGaps.length > 0 ? (
                                 <div className="rounded-xl border border-dashed border-border bg-muted/30 p-3 text-sm text-muted-foreground">
                                   <div className="font-medium text-foreground">
-                                    当前 runtime current surface 仍有缺口
+                                    {agentText(
+                                      "agentChat.harness.generated.ab8deade1a",
+                                      "当前 runtime current surface 仍有缺口",
+                                    )}
                                   </div>
                                   <div className="mt-2 space-y-2">
                                     {runtimeToolCapabilityGaps.map((gap) => (
@@ -7778,14 +8519,18 @@ export function HarnessStatusPanel({
                                 </div>
                               ) : (
                                 <div className="rounded-xl border border-emerald-200/70 bg-emerald-50/60 p-3 text-sm text-emerald-900">
-                                  当前 runtime current surface 已覆盖
-                                  WebSearch、子任务、Team 与 Task 主链。
+                                  {agentText(
+                                    "agentChat.harness.generated.ff5e6ffa0a",
+                                    "当前 runtime current surface 已覆盖 WebSearch、子任务、Team 与 Task 主链。",
+                                  )}
                                 </div>
                               )
                             ) : (
                               <div className="rounded-xl border border-dashed border-border bg-muted/30 p-3 text-sm text-muted-foreground">
-                                当前 inventory 尚未提供可用 runtime tool
-                                surface，暂时只能回看 registry/raw inventory。
+                                {agentText(
+                                  "agentChat.harness.generated.9ef6c1f213",
+                                  "当前 inventory 尚未提供可用 runtime tool surface，暂时只能回看 registry/raw inventory。",
+                                )}
                               </div>
                             )}
                           </div>
@@ -7794,7 +8539,10 @@ export function HarnessStatusPanel({
                         <div className="space-y-3">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="text-sm font-medium text-foreground">
-                              实际 Runtime 工具面
+                              {agentText(
+                                "agentChat.harness.generated.37e40f8034",
+                                "实际 Runtime 工具面",
+                              )}
                             </div>
                             <Badge variant="secondary">
                               {runtimeToolVisibleTotal} / {runtimeToolTotal}
@@ -7827,20 +8575,35 @@ export function HarnessStatusPanel({
                                   ) : null}
                                   {entry.visible_in_context ? (
                                     <Badge variant="secondary">
-                                      上下文可见
+                                      {agentText(
+                                        "agentChat.harness.generated.87dfd0b2c8",
+                                        "上下文可见",
+                                      )}
                                     </Badge>
                                   ) : null}
                                   {entry.deferred_loading ? (
-                                    <Badge variant="outline">Deferred</Badge>
+                                    <Badge variant="outline">
+                                      {agentText(
+                                        "agentChat.harness.generated.714ae55e88",
+                                        "Deferred",
+                                      )}
+                                    </Badge>
                                   ) : null}
                                   {!entry.caller_allowed ? (
                                     <Badge variant="destructive">
-                                      Caller 拒绝
+                                      {agentText(
+                                        "agentChat.harness.generated.8a1c797eb2",
+                                        "Caller 拒绝",
+                                      )}
                                     </Badge>
                                   ) : null}
                                   {entry.catalog_entry_name ? (
                                     <Badge variant="outline">
-                                      映射 {entry.catalog_entry_name}
+                                      {agentText(
+                                        "agentChat.harness.generated.43353e0245",
+                                        "映射",
+                                      )}
+                                      {entry.catalog_entry_name}
                                     </Badge>
                                   ) : null}
                                 </div>
@@ -7850,21 +8613,33 @@ export function HarnessStatusPanel({
                                 <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
                                   {entry.allowed_callers.length > 0 ? (
                                     <Badge variant="outline">
-                                      callers：
+                                      {agentText(
+                                        "agentChat.harness.generated.e8835d1775",
+                                        "callers：",
+                                      )}
                                       {entry.allowed_callers.join(", ")}
                                     </Badge>
                                   ) : (
                                     <Badge variant="outline">
-                                      callers：全部
+                                      {agentText(
+                                        "agentChat.harness.generated.1ba5809394",
+                                        "callers：全部",
+                                      )}
                                     </Badge>
                                   )}
                                   {entry.always_visible ? (
                                     <Badge variant="outline">
-                                      Always Visible
+                                      {agentText(
+                                        "agentChat.harness.generated.6aec99f141",
+                                        "Always Visible",
+                                      )}
                                     </Badge>
                                   ) : null}
                                   <Badge variant="outline">
-                                    input_examples：
+                                    {agentText(
+                                      "agentChat.harness.generated.d434319af0",
+                                      "input_examples：",
+                                    )}
                                     {entry.input_examples_count}
                                   </Badge>
                                   {entry.tags.map((tag) => (
@@ -7880,7 +8655,10 @@ export function HarnessStatusPanel({
                             ))
                           ) : (
                             <div className="rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
-                              当前尚未构建统一 runtime 工具面。
+                              {agentText(
+                                "agentChat.harness.generated.27cc47a711",
+                                "当前尚未构建统一 runtime 工具面。",
+                              )}
                             </div>
                           )}
                         </div>
@@ -7888,7 +8666,10 @@ export function HarnessStatusPanel({
                         <div className="space-y-3">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="text-sm font-medium text-foreground">
-                              Catalog 工具
+                              {agentText(
+                                "agentChat.harness.generated.c6670bdd88",
+                                "Catalog 工具",
+                              )}
                             </div>
                             <Badge variant="secondary">
                               {filteredCatalogTools.length} /{" "}
@@ -7966,7 +8747,10 @@ export function HarnessStatusPanel({
                                       </Badge>
                                       {entry.workspace_default_allow ? (
                                         <Badge variant="secondary">
-                                          默认允许
+                                          {agentText(
+                                            "agentChat.harness.generated.e58fb44bb8",
+                                            "默认允许",
+                                          )}
                                         </Badge>
                                       ) : null}
                                     </div>
@@ -7994,7 +8778,10 @@ export function HarnessStatusPanel({
                                 <div className="mt-3 grid gap-2 xl:grid-cols-3">
                                   <div className="rounded-lg bg-muted/50 p-2">
                                     <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                                      Warning
+                                      {agentText(
+                                        "agentChat.harness.generated.e9c4556335",
+                                        "Warning",
+                                      )}
                                     </div>
                                     <div className="mt-1 text-sm text-foreground">
                                       {formatExecutionWarningPolicyLabel(
@@ -8015,7 +8802,10 @@ export function HarnessStatusPanel({
                                   </div>
                                   <div className="rounded-lg bg-muted/50 p-2">
                                     <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                                      Restriction
+                                      {agentText(
+                                        "agentChat.harness.generated.5de5861112",
+                                        "Restriction",
+                                      )}
                                     </div>
                                     <div className="mt-1 text-sm text-foreground">
                                       {formatExecutionRestrictionProfileLabel(
@@ -8036,7 +8826,10 @@ export function HarnessStatusPanel({
                                   </div>
                                   <div className="rounded-lg bg-muted/50 p-2">
                                     <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                                      Sandbox
+                                      {agentText(
+                                        "agentChat.harness.generated.0a771c36be",
+                                        "Sandbox",
+                                      )}
                                     </div>
                                     <div className="mt-1 text-sm text-foreground">
                                       {formatExecutionSandboxProfileLabel(
@@ -8060,14 +8853,20 @@ export function HarnessStatusPanel({
                             ))
                           ) : (
                             <div className="rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
-                              当前筛选条件下暂无 catalog 工具。
+                              {agentText(
+                                "agentChat.harness.generated.e3271612de",
+                                "当前筛选条件下暂无 catalog 工具。",
+                              )}
                             </div>
                           )}
                         </div>
 
                         <div className="space-y-3">
                           <div className="text-sm font-medium text-foreground">
-                            Runtime Registry
+                            {agentText(
+                              "agentChat.harness.generated.bf99f1197c",
+                              "Runtime Registry",
+                            )}
                           </div>
                           {toolInventoryRegistryTools.length > 0 ? (
                             toolInventoryRegistryTools.map((entry) => (
@@ -8083,26 +8882,42 @@ export function HarnessStatusPanel({
                                       </span>
                                       {entry.catalog_entry_name ? (
                                         <Badge variant="outline">
-                                          映射 {entry.catalog_entry_name}
+                                          {agentText(
+                                            "agentChat.harness.generated.43353e0245",
+                                            "映射",
+                                          )}
+                                          {entry.catalog_entry_name}
                                         </Badge>
                                       ) : (
                                         <Badge variant="destructive">
-                                          未映射 catalog
+                                          {agentText(
+                                            "agentChat.harness.generated.8ff2d94cfe",
+                                            "未映射 catalog",
+                                          )}
                                         </Badge>
                                       )}
                                       {entry.visible_in_context ? (
                                         <Badge variant="secondary">
-                                          上下文可见
+                                          {agentText(
+                                            "agentChat.harness.generated.87dfd0b2c8",
+                                            "上下文可见",
+                                          )}
                                         </Badge>
                                       ) : null}
                                       {entry.deferred_loading ? (
                                         <Badge variant="outline">
-                                          Deferred
+                                          {agentText(
+                                            "agentChat.harness.generated.714ae55e88",
+                                            "Deferred",
+                                          )}
                                         </Badge>
                                       ) : null}
                                       {!entry.caller_allowed ? (
                                         <Badge variant="destructive">
-                                          Caller 拒绝
+                                          {agentText(
+                                            "agentChat.harness.generated.8a1c797eb2",
+                                            "Caller 拒绝",
+                                          )}
                                         </Badge>
                                       ) : null}
                                     </div>
@@ -8112,12 +8927,18 @@ export function HarnessStatusPanel({
                                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
                                       {entry.allowed_callers.length > 0 ? (
                                         <Badge variant="outline">
-                                          callers：
+                                          {agentText(
+                                            "agentChat.harness.generated.e8835d1775",
+                                            "callers：",
+                                          )}
                                           {entry.allowed_callers.join(", ")}
                                         </Badge>
                                       ) : (
                                         <Badge variant="outline">
-                                          callers：全部
+                                          {agentText(
+                                            "agentChat.harness.generated.1ba5809394",
+                                            "callers：全部",
+                                          )}
                                         </Badge>
                                       )}
                                       {entry.tags.map((tag) => (
@@ -8129,7 +8950,10 @@ export function HarnessStatusPanel({
                                         </Badge>
                                       ))}
                                       <Badge variant="outline">
-                                        input_examples：
+                                        {agentText(
+                                          "agentChat.harness.generated.d434319af0",
+                                          "input_examples：",
+                                        )}
                                         {entry.input_examples_count}
                                       </Badge>
                                     </div>
@@ -8146,7 +8970,10 @@ export function HarnessStatusPanel({
                                           entry.catalog_execution_warning_policy_source,
                                         )}
                                       >
-                                        Warning：
+                                        {agentText(
+                                          "agentChat.harness.generated.3ec66d862b",
+                                          "Warning：",
+                                        )}
                                         {formatExecutionSourceLabel(
                                           entry.catalog_execution_warning_policy_source,
                                         )}
@@ -8159,7 +8986,10 @@ export function HarnessStatusPanel({
                                           entry.catalog_execution_restriction_profile_source,
                                         )}
                                       >
-                                        Restriction：
+                                        {agentText(
+                                          "agentChat.harness.generated.8624f470d1",
+                                          "Restriction：",
+                                        )}
                                         {formatExecutionSourceLabel(
                                           entry.catalog_execution_restriction_profile_source,
                                         )}
@@ -8172,7 +9002,10 @@ export function HarnessStatusPanel({
                                           entry.catalog_execution_sandbox_profile_source,
                                         )}
                                       >
-                                        Sandbox：
+                                        {agentText(
+                                          "agentChat.harness.generated.9a6d423d73",
+                                          "Sandbox：",
+                                        )}
                                         {formatExecutionSourceLabel(
                                           entry.catalog_execution_sandbox_profile_source,
                                         )}
@@ -8184,7 +9017,10 @@ export function HarnessStatusPanel({
                             ))
                           ) : (
                             <div className="rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
-                              当前 runtime registry 为空。
+                              {agentText(
+                                "agentChat.harness.generated.421a99f0ff",
+                                "当前 runtime registry 为空。",
+                              )}
                             </div>
                           )}
                         </div>
@@ -8192,7 +9028,10 @@ export function HarnessStatusPanel({
                         {toolInventoryExtensionSurfaces.length > 0 ? (
                           <div className="space-y-3">
                             <div className="text-sm font-medium text-foreground">
-                              Extension Surfaces
+                              {agentText(
+                                "agentChat.harness.generated.0fec57f640",
+                                "Extension Surfaces",
+                              )}
                             </div>
                             {toolInventoryExtensionSurfaces.map((entry) => (
                               <div
@@ -8209,11 +9048,20 @@ export function HarnessStatusPanel({
                                     )}
                                   </Badge>
                                   {entry.deferred_loading ? (
-                                    <Badge variant="outline">Deferred</Badge>
+                                    <Badge variant="outline">
+                                      {agentText(
+                                        "agentChat.harness.generated.714ae55e88",
+                                        "Deferred",
+                                      )}
+                                    </Badge>
                                   ) : null}
                                   {entry.allowed_caller ? (
                                     <Badge variant="secondary">
-                                      caller：{entry.allowed_caller}
+                                      {agentText(
+                                        "agentChat.harness.generated.82aec0037c",
+                                        "caller：",
+                                      )}
+                                      {entry.allowed_caller}
                                     </Badge>
                                   ) : null}
                                 </div>
@@ -8222,14 +9070,32 @@ export function HarnessStatusPanel({
                                 </div>
                                 <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
                                   <div>
-                                    可用工具：{entry.available_tools.length}
+                                    {agentText(
+                                      "agentChat.harness.generated.9f11b02c89",
+                                      "可用工具：",
+                                    )}
+                                    {entry.available_tools.length}
                                   </div>
                                   <div>
-                                    常驻工具：{entry.always_expose_tools.length}
+                                    {agentText(
+                                      "agentChat.harness.generated.6dc2d6edaa",
+                                      "常驻工具：",
+                                    )}
+                                    {entry.always_expose_tools.length}
                                   </div>
-                                  <div>已加载：{entry.loaded_tools.length}</div>
                                   <div>
-                                    可搜索：{entry.searchable_tools.length}
+                                    {agentText(
+                                      "agentChat.harness.generated.809f7ca51e",
+                                      "已加载：",
+                                    )}
+                                    {entry.loaded_tools.length}
+                                  </div>
+                                  <div>
+                                    {agentText(
+                                      "agentChat.harness.generated.baf59a0b05",
+                                      "可搜索：",
+                                    )}
+                                    {entry.searchable_tools.length}
                                   </div>
                                 </div>
                               </div>
@@ -8240,7 +9106,10 @@ export function HarnessStatusPanel({
                         {toolInventoryExtensionTools.length > 0 ? (
                           <div className="space-y-3">
                             <div className="text-sm font-medium text-foreground">
-                              Extension Tools
+                              {agentText(
+                                "agentChat.harness.generated.d2f47a899a",
+                                "Extension Tools",
+                              )}
                             </div>
                             {toolInventoryExtensionTools.map((entry) => (
                               <div
@@ -8261,28 +9130,47 @@ export function HarnessStatusPanel({
                                   </Badge>
                                   {entry.visible_in_context ? (
                                     <Badge variant="secondary">
-                                      上下文可见
+                                      {agentText(
+                                        "agentChat.harness.generated.87dfd0b2c8",
+                                        "上下文可见",
+                                      )}
                                     </Badge>
                                   ) : null}
                                   {!entry.caller_allowed ? (
                                     <Badge variant="destructive">
-                                      Caller 拒绝
+                                      {agentText(
+                                        "agentChat.harness.generated.8a1c797eb2",
+                                        "Caller 拒绝",
+                                      )}
                                     </Badge>
                                   ) : null}
                                 </div>
                                 <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
                                   {entry.extension_name ? (
                                     <Badge variant="outline">
-                                      extension：{entry.extension_name}
+                                      {agentText(
+                                        "agentChat.harness.generated.81ca3b433b",
+                                        "extension：",
+                                      )}
+                                      {entry.extension_name}
                                     </Badge>
                                   ) : null}
                                   {entry.allowed_caller ? (
                                     <Badge variant="outline">
-                                      caller：{entry.allowed_caller}
+                                      {agentText(
+                                        "agentChat.harness.generated.82aec0037c",
+                                        "caller：",
+                                      )}
+                                      {entry.allowed_caller}
                                     </Badge>
                                   ) : null}
                                   {entry.deferred_loading ? (
-                                    <Badge variant="outline">Deferred</Badge>
+                                    <Badge variant="outline">
+                                      {agentText(
+                                        "agentChat.harness.generated.714ae55e88",
+                                        "Deferred",
+                                      )}
+                                    </Badge>
                                   ) : null}
                                 </div>
                                 <div className="mt-1 text-xs text-muted-foreground">
@@ -8296,7 +9184,10 @@ export function HarnessStatusPanel({
                         {toolInventoryMcpTools.length > 0 ? (
                           <div className="space-y-3">
                             <div className="text-sm font-medium text-foreground">
-                              MCP Tools
+                              {agentText(
+                                "agentChat.harness.generated.1fa4eaed37",
+                                "MCP Tools",
+                              )}
                             </div>
                             {toolInventoryMcpTools.map((entry) => (
                               <div
@@ -8315,20 +9206,34 @@ export function HarnessStatusPanel({
                                   </Badge>
                                   {entry.visible_in_context ? (
                                     <Badge variant="secondary">
-                                      上下文可见
+                                      {agentText(
+                                        "agentChat.harness.generated.87dfd0b2c8",
+                                        "上下文可见",
+                                      )}
                                     </Badge>
                                   ) : null}
                                   {entry.always_visible ? (
                                     <Badge variant="outline">
-                                      Always Visible
+                                      {agentText(
+                                        "agentChat.harness.generated.6aec99f141",
+                                        "Always Visible",
+                                      )}
                                     </Badge>
                                   ) : null}
                                   {entry.deferred_loading ? (
-                                    <Badge variant="outline">Deferred</Badge>
+                                    <Badge variant="outline">
+                                      {agentText(
+                                        "agentChat.harness.generated.714ae55e88",
+                                        "Deferred",
+                                      )}
+                                    </Badge>
                                   ) : null}
                                   {!entry.caller_allowed ? (
                                     <Badge variant="destructive">
-                                      Caller 拒绝
+                                      {agentText(
+                                        "agentChat.harness.generated.8a1c797eb2",
+                                        "Caller 拒绝",
+                                      )}
                                     </Badge>
                                   ) : null}
                                 </div>
@@ -8338,12 +9243,18 @@ export function HarnessStatusPanel({
                                 <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
                                   {entry.allowed_callers.length > 0 ? (
                                     <Badge variant="outline">
-                                      callers：
+                                      {agentText(
+                                        "agentChat.harness.generated.e8835d1775",
+                                        "callers：",
+                                      )}
                                       {entry.allowed_callers.join(", ")}
                                     </Badge>
                                   ) : (
                                     <Badge variant="outline">
-                                      callers：全部
+                                      {agentText(
+                                        "agentChat.harness.generated.1ba5809394",
+                                        "callers：全部",
+                                      )}
                                     </Badge>
                                   )}
                                   {entry.tags.map((tag) => (
@@ -8355,7 +9266,10 @@ export function HarnessStatusPanel({
                                     </Badge>
                                   ))}
                                   <Badge variant="outline">
-                                    input_examples：
+                                    {agentText(
+                                      "agentChat.harness.generated.d434319af0",
+                                      "input_examples：",
+                                    )}
                                     {entry.input_examples_count}
                                   </Badge>
                                 </div>
@@ -8366,7 +9280,10 @@ export function HarnessStatusPanel({
                       </>
                     ) : !toolInventoryLoading && !toolInventoryError ? (
                       <div className="rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
-                        当前尚未拿到工具库存快照。
+                        {agentText(
+                          "agentChat.harness.generated.1f864fb681",
+                          "当前尚未拿到工具库存快照。",
+                        )}
                       </div>
                     ) : null}
                   </div>
@@ -8376,7 +9293,10 @@ export function HarnessStatusPanel({
               {harnessState.pendingApprovals.length > 0 ? (
                 <Section
                   sectionKey="approvals"
-                  title="待处理审批"
+                  title={agentText(
+                    "agentChat.harness.generated.e862f8292d",
+                    "待处理审批",
+                  )}
                   badge={`${harnessState.pendingApprovals.length} 条`}
                   registerRef={registerSectionRef}
                 >
@@ -8436,9 +9356,7 @@ export function HarnessStatusPanel({
                             </div>
                             <Badge variant="secondary">
                               {String(
-                                t(
-                                  resolveApprovalActionLabelKey(item) as never,
-                                ),
+                                t(resolveApprovalActionLabelKey(item) as never),
                               )}
                             </Badge>
                           </div>
@@ -8594,7 +9512,10 @@ export function HarnessStatusPanel({
               {harnessState.recentFileEvents.length > 0 ? (
                 <Section
                   sectionKey="files"
-                  title="最近文件活动"
+                  title={agentText(
+                    "agentChat.harness.generated.45a433f860",
+                    "最近文件活动",
+                  )}
                   badge={
                     fileDisplayMode === "grouped"
                       ? `${groupedFileEvents.length} 个文件 / ${filteredFileEvents.length} 条`
@@ -8706,7 +9627,11 @@ export function HarnessStatusPanel({
                                 </div>
                                 <div className="flex shrink-0 items-center gap-2">
                                   <Badge variant="outline">
-                                    {group.count} 次活动
+                                    {group.count}{" "}
+                                    {agentText(
+                                      "agentChat.harness.generated.38c39c83cd",
+                                      "次活动",
+                                    )}
                                   </Badge>
                                   <Badge variant="secondary">
                                     {describeKind(group.kind)}
@@ -8718,7 +9643,11 @@ export function HarnessStatusPanel({
                                 <span>{formatTime(latestEvent.timestamp)}</span>
                                 <span>·</span>
                                 <span>
-                                  最近 {describeAction(latestEvent.action)}
+                                  {agentText(
+                                    "agentChat.harness.generated.8c73d90eca",
+                                    "最近",
+                                  )}
+                                  {describeAction(latestEvent.action)}
                                 </span>
                                 <span>·</span>
                                 <span>{group.actionSummary}</span>
@@ -8811,7 +9740,10 @@ export function HarnessStatusPanel({
                       )
                     ) : (
                       <div className="rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
-                        当前筛选条件下暂无记录。
+                        {agentText(
+                          "agentChat.harness.generated.1146635328",
+                          "当前筛选条件下暂无记录。",
+                        )}
                       </div>
                     )}
                   </div>
@@ -8822,7 +9754,10 @@ export function HarnessStatusPanel({
               harnessState.plan.items.length > 0 ? (
                 <Section
                   sectionKey="plan"
-                  title="规划状态"
+                  title={agentText(
+                    "agentChat.harness.generated.3d801c3537",
+                    "规划状态",
+                  )}
                   badge={
                     harnessState.plan.phase === "planning"
                       ? "规划中"
@@ -8875,7 +9810,10 @@ export function HarnessStatusPanel({
               harnessState.delegatedTasks.length > 0 ? (
                 <Section
                   sectionKey="delegation"
-                  title="子任务"
+                  title={agentText(
+                    "agentChat.harness.generated.2a8ce33ff0",
+                    "子任务",
+                  )}
                   badge={
                     realTeamSummary.active > 0
                       ? `处理中 ${realTeamSummary.active}`
@@ -8892,17 +9830,48 @@ export function HarnessStatusPanel({
                       <div className="rounded-xl border border-border bg-background p-3">
                         <div className="flex items-center justify-between gap-3">
                           <div className="text-sm font-medium text-foreground">
-                            当前子任务
+                            {agentText(
+                              "agentChat.harness.generated.2e18241824",
+                              "当前子任务",
+                            )}
                           </div>
                           <Badge variant="outline">
-                            {realTeamSummary.total} 个
+                            {realTeamSummary.total}{" "}
+                            {agentText(
+                              "agentChat.harness.generated.f7b2a6ee68",
+                              "个",
+                            )}
                           </Badge>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                          <span>处理中 {realTeamSummary.running}</span>
-                          <span>等待中 {realTeamSummary.queued}</span>
-                          <span>已完成 {realTeamSummary.settled}</span>
-                          <span>需处理 {realTeamSummary.failed}</span>
+                          <span>
+                            {agentText(
+                              "agentChat.harness.generated.fcb979ef0b",
+                              "处理中",
+                            )}
+                            {realTeamSummary.running}
+                          </span>
+                          <span>
+                            {agentText(
+                              "agentChat.harness.generated.bd3488d0a9",
+                              "等待中",
+                            )}
+                            {realTeamSummary.queued}
+                          </span>
+                          <span>
+                            {agentText(
+                              "agentChat.harness.generated.e99b48a29b",
+                              "已完成",
+                            )}
+                            {realTeamSummary.settled}
+                          </span>
+                          <span>
+                            {agentText(
+                              "agentChat.harness.generated.ed5909bac1",
+                              "需处理",
+                            )}
+                            {realTeamSummary.failed}
+                          </span>
                         </div>
                       </div>
                     ) : null}
@@ -8922,13 +9891,31 @@ export function HarnessStatusPanel({
                             </div>
                             <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
                               {task.role ? (
-                                <span>角色：{task.role}</span>
+                                <span>
+                                  {agentText(
+                                    "agentChat.harness.generated.908a9f1d6a",
+                                    "角色：",
+                                  )}
+                                  {task.role}
+                                </span>
                               ) : null}
                               {task.taskType ? (
-                                <span>类型：{task.taskType}</span>
+                                <span>
+                                  {agentText(
+                                    "agentChat.harness.generated.8f3e9e1fe7",
+                                    "类型：",
+                                  )}
+                                  {task.taskType}
+                                </span>
                               ) : null}
                               {task.model ? (
-                                <span>模型：{task.model}</span>
+                                <span>
+                                  {agentText(
+                                    "agentChat.harness.generated.7ac64a2b44",
+                                    "模型：",
+                                  )}
+                                  {task.model}
+                                </span>
                               ) : null}
                             </div>
                             {task.summary ? (
@@ -8961,7 +9948,10 @@ export function HarnessStatusPanel({
                     {childSubagentSessions.length > 0 ? (
                       <div className="space-y-3">
                         <div className="text-xs font-medium text-muted-foreground">
-                          实时子任务
+                          {agentText(
+                            "agentChat.harness.generated.f4b507ed0d",
+                            "实时子任务",
+                          )}
                         </div>
                         {childSubagentSessions.map((session) => (
                           <div
@@ -8987,24 +9977,48 @@ export function HarnessStatusPanel({
                                 </div>
                                 <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
                                   <span>
-                                    类型：
+                                    {agentText(
+                                      "agentChat.harness.generated.8f3e9e1fe7",
+                                      "类型：",
+                                    )}
                                     {resolveSubagentSessionTypeLabel(
                                       session.session_type,
                                     )}
                                   </span>
                                   {session.role_hint ? (
-                                    <span>角色：{session.role_hint}</span>
+                                    <span>
+                                      {agentText(
+                                        "agentChat.harness.generated.908a9f1d6a",
+                                        "角色：",
+                                      )}
+                                      {session.role_hint}
+                                    </span>
                                   ) : null}
                                   {session.model ? (
-                                    <span>模型：{session.model}</span>
+                                    <span>
+                                      {agentText(
+                                        "agentChat.harness.generated.7ac64a2b44",
+                                        "模型：",
+                                      )}
+                                      {session.model}
+                                    </span>
                                   ) : null}
                                   {session.provider_name ? (
-                                    <span>提供方：{session.provider_name}</span>
+                                    <span>
+                                      {agentText(
+                                        "agentChat.harness.generated.74dd99b7b0",
+                                        "提供方：",
+                                      )}
+                                      {session.provider_name}
+                                    </span>
                                   ) : null}
                                   {session.team_parallel_budget !== undefined &&
                                   session.team_active_count !== undefined ? (
                                     <span>
-                                      处理窗口：
+                                      {agentText(
+                                        "agentChat.harness.generated.9375445b14",
+                                        "处理窗口：",
+                                      )}
                                       {session.team_active_count}/
                                       {session.team_parallel_budget}
                                     </span>
@@ -9013,19 +10027,28 @@ export function HarnessStatusPanel({
                                   session.provider_concurrency_group ? (
                                     <span>
                                       {resolveTeamWorkspaceStableProcessingLabel()}
-                                      ： 当前服务按顺序处理
+                                      {agentText(
+                                        "agentChat.harness.generated.d057313512",
+                                        "： 当前服务按顺序处理",
+                                      )}
                                     </span>
                                   ) : null}
                                   {session.origin_tool ? (
                                     <span>
-                                      来源：
+                                      {agentText(
+                                        "agentChat.harness.generated.64b3b59a15",
+                                        "来源：",
+                                      )}
                                       {resolveFriendlyToolLabel(
                                         session.origin_tool,
                                       ) || session.origin_tool}
                                     </span>
                                   ) : null}
                                   <span>
-                                    更新：
+                                    {agentText(
+                                      "agentChat.harness.generated.943f4e3ee6",
+                                      "更新：",
+                                    )}
                                     {formatUnixTimestamp(session.updated_at)}
                                   </span>
                                 </div>
@@ -9051,7 +10074,10 @@ export function HarnessStatusPanel({
                                     onOpenSubagentSession(session.id)
                                   }
                                 >
-                                  查看详情
+                                  {agentText(
+                                    "agentChat.harness.generated.faea8c1db9",
+                                    "查看详情",
+                                  )}
                                 </Button>
                               ) : null}
                             </div>
@@ -9066,7 +10092,10 @@ export function HarnessStatusPanel({
               {harnessState.latestContextTrace.length > 0 ? (
                 <Section
                   sectionKey="context"
-                  title="最新上下文轨迹"
+                  title={agentText(
+                    "agentChat.harness.generated.674960a8f7",
+                    "最新上下文轨迹",
+                  )}
                   badge={`${harnessState.latestContextTrace.length} 步`}
                   registerRef={registerSectionRef}
                 >
@@ -9094,7 +10123,10 @@ export function HarnessStatusPanel({
               {environment.skillsCount > 0 ? (
                 <Section
                   sectionKey="capabilities"
-                  title="已激活技能"
+                  title={agentText(
+                    "agentChat.harness.generated.bc407ad9b5",
+                    "已激活技能",
+                  )}
                   badge={`${environment.skillsCount} 个技能`}
                   registerRef={registerSectionRef}
                 >
@@ -9124,19 +10156,31 @@ export function HarnessStatusPanel({
                         ))
                       ) : (
                         <span className="text-xs text-muted-foreground">
-                          当前未识别到持久记忆信号
+                          {agentText(
+                            "agentChat.harness.generated.570b39776f",
+                            "当前未识别到持久记忆信号",
+                          )}
                         </span>
                       )}
                     </div>
 
                     <div className="space-y-1 text-xs text-muted-foreground">
                       <div>
-                        上下文条目：{environment.activeContextCount}/
+                        {agentText(
+                          "agentChat.harness.generated.680f509d88",
+                          "上下文条目：",
+                        )}
+                        {environment.activeContextCount}/
                         {environment.contextItemsCount}
                       </div>
                       {environment.contextItemNames.length > 0 ? (
                         <div className="space-y-1">
-                          <div>活跃上下文：</div>
+                          <div>
+                            {agentText(
+                              "agentChat.harness.generated.10460a6f9c",
+                              "活跃上下文：",
+                            )}
+                          </div>
                           <div className="flex flex-wrap gap-2">
                             {environment.contextItemNames.map((item) => (
                               <ActionableBadge
@@ -9154,22 +10198,46 @@ export function HarnessStatusPanel({
 
                     <div className="flex flex-wrap gap-2">
                       <Badge variant="outline">
-                        规划 {harnessState.activity.planning}
+                        {agentText(
+                          "agentChat.harness.generated.6c09b4e917",
+                          "规划",
+                        )}
+                        {harnessState.activity.planning}
                       </Badge>
                       <Badge variant="outline">
-                        文件 {harnessState.activity.filesystem}
+                        {agentText(
+                          "agentChat.harness.generated.49deaf7da2",
+                          "文件",
+                        )}
+                        {harnessState.activity.filesystem}
                       </Badge>
                       <Badge variant="outline">
-                        执行 {harnessState.activity.execution}
+                        {agentText(
+                          "agentChat.harness.generated.28febba225",
+                          "执行",
+                        )}
+                        {harnessState.activity.execution}
                       </Badge>
                       <Badge variant="outline">
-                        网页 {harnessState.activity.web}
+                        {agentText(
+                          "agentChat.harness.generated.06caf5dc95",
+                          "网页",
+                        )}
+                        {harnessState.activity.web}
                       </Badge>
                       <Badge variant="outline">
-                        技能 {harnessState.activity.skills}
+                        {agentText(
+                          "agentChat.harness.generated.53da139b6a",
+                          "技能",
+                        )}
+                        {harnessState.activity.skills}
                       </Badge>
                       <Badge variant="outline">
-                        委派 {harnessState.activity.delegation}
+                        {agentText(
+                          "agentChat.harness.generated.b78f388086",
+                          "委派",
+                        )}
+                        {harnessState.activity.delegation}
                       </Badge>
                     </div>
                   </div>
@@ -9230,13 +10298,21 @@ export function HarnessStatusPanel({
               {previewDialog.loading ? (
                 <Badge variant="outline" className="gap-1">
                   <Loader2 className="h-3 w-3 animate-spin" />
-                  正在加载完整内容
+                  {agentText(
+                    "agentChat.harness.generated.995ffb79c5",
+                    "正在加载完整内容",
+                  )}
                 </Badge>
               ) : null}
               {previewDialog.preview &&
               previewDialog.content === previewDialog.preview &&
               !previewDialog.loading ? (
-                <Badge variant="outline">当前展示为摘要预览</Badge>
+                <Badge variant="outline">
+                  {agentText(
+                    "agentChat.harness.generated.4d7905b93d",
+                    "当前展示为摘要预览",
+                  )}
+                </Badge>
               ) : null}
             </div>
 
@@ -9252,7 +10328,10 @@ export function HarnessStatusPanel({
               ) : previewDialog.isBinary ? (
                 <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
                   <HardDriveDownload className="h-4 w-4" />
-                  该文件为二进制内容，暂不支持文本预览。
+                  {agentText(
+                    "agentChat.harness.generated.bdc2620ca1",
+                    "该文件为二进制内容，暂不支持文本预览。",
+                  )}
                 </div>
               ) : previewDialog.error ? (
                 <div className="flex items-center gap-2 px-4 py-6 text-sm text-destructive">
@@ -9270,7 +10349,10 @@ export function HarnessStatusPanel({
               ) : (
                 <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
                   <Eye className="h-4 w-4" />
-                  暂无可展示内容
+                  {agentText(
+                    "agentChat.harness.generated.4579c8c918",
+                    "暂无可展示内容",
+                  )}
                 </div>
               )}
             </ScrollArea>
@@ -9283,7 +10365,10 @@ export function HarnessStatusPanel({
                 variant="outline"
                 onClick={() => void handleCopyPath()}
               >
-                复制路径
+                {agentText(
+                  "agentChat.harness.generated.e0c29eaeb3",
+                  "复制路径",
+                )}
               </Button>
             ) : null}
             {previewDialog.content?.trim() ? (
@@ -9292,7 +10377,10 @@ export function HarnessStatusPanel({
                 variant="outline"
                 onClick={() => void handleCopyContent()}
               >
-                复制内容
+                {agentText(
+                  "agentChat.harness.generated.3aeb16d4b1",
+                  "复制内容",
+                )}
               </Button>
             ) : null}
             {previewDialog.path ? (
@@ -9301,7 +10389,10 @@ export function HarnessStatusPanel({
                 variant="outline"
                 onClick={() => void handleRevealPath()}
               >
-                定位文件
+                {agentText(
+                  "agentChat.harness.generated.6cd39eba27",
+                  "定位文件",
+                )}
               </Button>
             ) : null}
             {previewDialog.path ? (
@@ -9310,7 +10401,10 @@ export function HarnessStatusPanel({
                 variant="outline"
                 onClick={() => void handleOpenPath()}
               >
-                系统打开
+                {agentText(
+                  "agentChat.harness.generated.e252faadbf",
+                  "系统打开",
+                )}
               </Button>
             ) : null}
             <Button
@@ -9320,13 +10414,16 @@ export function HarnessStatusPanel({
                 setPreviewDialog((current) => ({ ...current, open: false }))
               }
             >
-              关闭
+              {agentText("agentChat.harness.generated.6c14bd7f6f", "关闭")}
             </Button>
             {onOpenFile &&
             !previewDialog.isBinary &&
             previewDialog.content?.trim() ? (
               <Button type="button" onClick={handleOpenFile}>
-                在会话中打开
+                {agentText(
+                  "agentChat.harness.generated.1ac483c406",
+                  "在会话中打开",
+                )}
               </Button>
             ) : null}
           </DialogFooter>

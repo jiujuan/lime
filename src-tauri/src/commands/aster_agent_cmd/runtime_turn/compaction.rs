@@ -1,13 +1,10 @@
 use super::*;
 
-#[path = "compaction/auto.rs"]
-mod auto;
 #[path = "compaction/trigger.rs"]
 mod trigger;
 #[path = "compaction/usage.rs"]
 mod usage;
 
-pub(super) use self::auto::maybe_auto_compact_runtime_session_before_turn;
 pub(super) use self::trigger::{
     build_history_compaction_runtime_metadata, build_runtime_compaction_session_config,
     RuntimeSessionCompactionTrigger,
@@ -30,6 +27,154 @@ pub(super) async fn compact_runtime_session_with_trigger(
     session_id: String,
     event_name: String,
     trigger: RuntimeSessionCompactionTrigger,
+) -> Result<(), String> {
+    compact_runtime_session_with_trigger_and_model_timeout(
+        app,
+        state,
+        db,
+        config_manager,
+        session_id,
+        event_name,
+        trigger,
+        None,
+    )
+    .await
+}
+
+async fn compact_messages_with_optional_timeout(
+    provider: &dyn aster::providers::base::Provider,
+    conversation: &aster::conversation::Conversation,
+    manual_compact: bool,
+    model_timeout: Option<Duration>,
+) -> Result<
+    (
+        aster::conversation::Conversation,
+        aster::providers::base::ProviderUsage,
+    ),
+    String,
+> {
+    let compact_future =
+        aster::context_mgmt::compact_messages(provider, conversation, manual_compact);
+    match model_timeout {
+        Some(timeout_duration) => {
+            match tokio::time::timeout(timeout_duration, compact_future).await {
+                Ok(result) => result.map_err(|error| format!("压缩上下文失败: {error}")),
+                Err(_) => Err(format!(
+                    "压缩上下文超过首字前预算 {}ms，已跳过本次自动压缩",
+                    timeout_duration.as_millis()
+                )),
+            }
+        }
+        None => compact_future
+            .await
+            .map_err(|error| format!("压缩上下文失败: {error}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aster::conversation::message::Message;
+    use aster::model::ModelConfig;
+    use aster::providers::base::{Provider, ProviderMetadata, ProviderUsage, Usage};
+    use aster::providers::errors::ProviderError;
+    use async_trait::async_trait;
+    use rmcp::model::Tool;
+
+    struct DelayedCompactionProvider {
+        delay: Duration,
+    }
+
+    #[async_trait]
+    impl Provider for DelayedCompactionProvider {
+        fn metadata() -> ProviderMetadata {
+            ProviderMetadata::new(
+                "delayed-compaction-test",
+                "Delayed Compaction Test",
+                "用于测试首字前自动压缩超时",
+                "delayed-compaction-test-model",
+                vec!["delayed-compaction-test-model"],
+                "",
+                vec![],
+            )
+        }
+
+        fn get_name(&self) -> &str {
+            "delayed-compaction-test"
+        }
+
+        async fn complete_with_model(
+            &self,
+            model_config: &ModelConfig,
+            _system: &str,
+            _messages: &[Message],
+            _tools: &[Tool],
+        ) -> Result<(Message, ProviderUsage), ProviderError> {
+            tokio::time::sleep(self.delay).await;
+            Ok((
+                Message::assistant().with_text("已压缩的测试摘要"),
+                ProviderUsage::new(
+                    model_config.model_name.clone(),
+                    Usage::new(Some(1), Some(1), Some(2)),
+                ),
+            ))
+        }
+
+        fn get_model_config(&self) -> ModelConfig {
+            ModelConfig {
+                model_name: "delayed-compaction-test-model".to_string(),
+                context_limit: Some(8_000),
+                temperature: None,
+                max_tokens: None,
+                toolshim: false,
+                toolshim_model: None,
+                fast_model: None,
+            }
+        }
+    }
+
+    fn build_compaction_test_conversation() -> aster::conversation::Conversation {
+        aster::conversation::Conversation::new_unvalidated(vec![
+            Message::user().with_text("第一条用户消息"),
+            Message::assistant().with_text("第一条助手回复"),
+        ])
+    }
+
+    #[tokio::test]
+    async fn compact_messages_with_optional_timeout_should_fail_fast_before_turn() {
+        let provider = DelayedCompactionProvider {
+            delay: Duration::from_millis(50),
+        };
+        let conversation = build_compaction_test_conversation();
+        let started_at = Instant::now();
+
+        let error = compact_messages_with_optional_timeout(
+            &provider,
+            &conversation,
+            true,
+            Some(Duration::from_millis(5)),
+        )
+        .await
+        .expect_err("首字前自动压缩超时应降级为错误");
+
+        assert!(error.contains("超过首字前预算 5ms"));
+        assert!(
+            started_at.elapsed() < Duration::from_secs(1),
+            "自动压缩超时不应继续等待慢模型完成"
+        );
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn compact_runtime_session_with_trigger_and_model_timeout(
+    app: &AppHandle,
+    state: &AsterAgentState,
+    db: &DbConnection,
+    config_manager: &GlobalConfigManagerState,
+    session_id: String,
+    event_name: String,
+    trigger: RuntimeSessionCompactionTrigger,
+    model_timeout: Option<Duration>,
 ) -> Result<(), String> {
     ensure_compaction_agent_initialized(state, db).await?;
 
@@ -175,10 +320,41 @@ pub(super) async fn compact_runtime_session_with_trigger(
             .provider()
             .await
             .map_err(|error| format!("读取 provider 失败: {error}"))?;
-        let (compacted_conversation, usage) =
-            aster::context_mgmt::compact_messages(provider.as_ref(), conversation, true)
-                .await
-                .map_err(|error| format!("压缩上下文失败: {error}"))?;
+        let compact_result = compact_messages_with_optional_timeout(
+            provider.as_ref(),
+            conversation,
+            true,
+            model_timeout,
+        )
+        .await;
+        let (compacted_conversation, usage) = match compact_result {
+            Ok(result) => result,
+            Err(error) => {
+                let completed_event = RuntimeAgentEvent::ContextCompactionCompleted {
+                    item_id: compaction_item_id,
+                    trigger: trigger.as_str().to_string(),
+                    detail: Some(format!("压缩未完成：{error}")),
+                };
+                {
+                    let mut recorder = match timeline_recorder.lock() {
+                        Ok(guard) => guard,
+                        Err(error) => error.into_inner(),
+                    };
+                    if let Err(record_error) =
+                        recorder.record_runtime_event(app, &event_name, &completed_event, "")
+                    {
+                        tracing::warn!(
+                            "[AsterAgent] 记录压缩结束时间线失败（已降级继续）: {}",
+                            record_error
+                        );
+                    }
+                }
+                if let Err(emit_error) = app.emit(&event_name, &completed_event) {
+                    tracing::error!("[AsterAgent] 发送压缩结束事件失败: {}", emit_error);
+                }
+                return Err(error);
+            }
+        };
         replace_session_conversation(&session_id, &compacted_conversation, "写回压缩后的会话")
             .await?;
         update_compaction_session_metrics(&session_config, &usage).await?;
@@ -241,7 +417,6 @@ pub(super) async fn compact_runtime_session_with_trigger(
             if let Err(error) = app.emit(&event_name, &done_event) {
                 tracing::error!("[AsterAgent] 发送压缩完成事件失败: {}", error);
             }
-            reset_auto_compaction_failure(&session_id);
         }
         Err(error) => {
             let terminal_events = {

@@ -131,6 +131,16 @@ describe("CrashRecoveryPanel", () => {
       ),
     ).toBe(true);
     expect(
+      isReactFastRefreshHookFailureErrorMessage(
+        "Rendered fewer hooks than expected. This may be caused by an accidental early return statement.",
+      ),
+    ).toBe(true);
+    expect(
+      isReactFastRefreshHookFailureErrorMessage(
+        "Rendered more hooks than during the previous render.",
+      ),
+    ).toBe(true);
+    expect(
       isReactFastRefreshHookFailureErrorMessage("Random render error"),
     ).toBe(false);
   });

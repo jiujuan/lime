@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanupMountedRoots,
+  clickElement,
   fillTextInput,
   findButtonByText,
   findInputById,
@@ -17,6 +18,7 @@ const {
   mockGetCreateProjectErrorMessage,
   mockGetProjectByRootPath,
   mockGetWorkspaceProjectsRoot,
+  mockOpenDialog,
   mockResolveProjectRootPath,
 } = vi.hoisted(() => ({
   mockExtractErrorMessage: vi.fn((error: unknown) =>
@@ -25,6 +27,7 @@ const {
   mockGetCreateProjectErrorMessage: vi.fn((message: string) => message),
   mockGetProjectByRootPath: vi.fn(),
   mockGetWorkspaceProjectsRoot: vi.fn(),
+  mockOpenDialog: vi.fn(),
   mockResolveProjectRootPath: vi.fn(),
 }));
 
@@ -33,6 +36,10 @@ vi.mock("sonner", () => ({
     success: vi.fn(),
     error: vi.fn(),
   },
+}));
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  open: mockOpenDialog,
 }));
 
 vi.mock("@/lib/api/project", () => ({
@@ -54,7 +61,8 @@ describe("CreateProjectDialog", () => {
     await changeLimeLocale("en-US");
     mockGetWorkspaceProjectsRoot.mockResolvedValue("/tmp/workspace");
     mockResolveProjectRootPath.mockImplementation(
-      async (name: string) => `/tmp/workspace/${name}`,
+      async (name: string, parentRootPath = "/tmp/workspace") =>
+        `${parentRootPath}/${name}`,
     );
     mockGetProjectByRootPath.mockResolvedValue(null);
   });
@@ -65,7 +73,7 @@ describe("CreateProjectDialog", () => {
     await changeLimeLocale("zh-CN");
   });
 
-  it("uses common namespace resources for the project creation workspace", async () => {
+  it("uses a compact project creation form", async () => {
     mountHarness(
       CreateProjectDialog,
       {
@@ -81,14 +89,16 @@ describe("CreateProjectDialog", () => {
     await flushEffects(3);
 
     const text = document.body.textContent ?? "";
-    expect(text).toContain("Create a new project workspace");
-    expect(text).toContain("Choose project type");
-    expect(text).toContain("Folder and path");
-    expect(text).toContain("General chat");
+    expect(text).toContain("New project");
+    expect(text).toContain("Project name");
+    expect(text).toContain("Location");
+    expect(text).toContain("Project folder");
+    expect(text).toContain("Browse…");
     expect(text).toContain("/tmp/workspace/Research Notes");
-    expect(text).not.toContain("创建新的项目工作台");
-    expect(text).not.toContain("选择项目类型");
-    expect(text).not.toContain("目录与路径");
+    expect(text).not.toContain("Create a new project workspace");
+    expect(text).not.toContain("Choose project type");
+    expect(text).not.toContain("Creation tips");
+    expect(text).not.toContain("General chat");
   });
 
   it("localizes path conflict feedback and disables creation", async () => {
@@ -125,5 +135,58 @@ describe("CreateProjectDialog", () => {
     });
     expect(createButton).toBeDefined();
     expect(createButton?.disabled).toBe(true);
+  });
+
+  it("lets the user choose a parent folder and submits the resolved project path", async () => {
+    mockOpenDialog.mockResolvedValueOnce("/Users/test/Documents");
+    const onSubmit = vi.fn(async () => undefined);
+
+    mountHarness(
+      CreateProjectDialog,
+      {
+        open: true,
+        onOpenChange: vi.fn(),
+        onSubmit,
+        defaultType: "general",
+        defaultName: "Research Notes",
+      },
+      mountedRoots,
+    );
+
+    await flushEffects(3);
+
+    const browseButton = findButtonByText(document.body, "Browse…", {
+      exact: true,
+    });
+    clickElement(browseButton ?? null);
+
+    await flushEffects(4);
+
+    expect(mockOpenDialog).toHaveBeenCalledWith({
+      directory: true,
+      multiple: false,
+      defaultPath: "/tmp/workspace",
+    });
+    expect(mockResolveProjectRootPath).toHaveBeenLastCalledWith(
+      "Research Notes",
+      "/Users/test/Documents",
+    );
+    expect(document.body.textContent ?? "").toContain(
+      "/Users/test/Documents/Research Notes",
+    );
+
+    const createButton = findButtonByText(document.body, "Create", {
+      exact: true,
+    });
+    expect(createButton?.disabled).toBe(false);
+    clickElement(createButton ?? null);
+
+    await flushEffects(2);
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      "Research Notes",
+      "general",
+      "/Users/test/Documents/Research Notes",
+    );
   });
 });

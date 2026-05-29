@@ -3,8 +3,8 @@ use crate::model::ModelConfig;
 use crate::providers::base::{ProviderUsage, Usage};
 use crate::providers::formats::tool_description_with_examples;
 use crate::providers::utils::{
-    convert_image, detect_image_path, is_valid_function_name, load_image_file,
-    parse_tool_arguments_json_object, safely_parse_json, sanitize_function_name, ImageFormat,
+    convert_image, detect_image_path, load_image_file, parse_tool_arguments_json_object,
+    safely_parse_json, sanitize_function_name, ImageFormat,
 };
 use anyhow::{anyhow, Error};
 use async_stream::try_stream;
@@ -22,13 +22,17 @@ use std::ops::Deref;
 #[derive(Serialize, Deserialize, Debug)]
 struct DeltaToolCallFunction {
     name: Option<String>,
-    arguments: String, // chunk of encoded JSON,
+    namespace: Option<String>,
+    arguments: Option<Value>, // chunk of encoded JSON,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct DeltaToolCall {
     id: Option<String>,
-    function: DeltaToolCallFunction,
+    function: Option<DeltaToolCallFunction>,
+    name: Option<String>,
+    namespace: Option<String>,
+    arguments: Option<Value>,
     index: Option<i32>,
     r#type: Option<String>,
 }
@@ -112,6 +116,86 @@ fn tool_input_delta_message(
             Some(provider.to_string()),
         )
         .with_metadata(MessageMetadata::invisible())
+}
+
+fn json_value_as_tool_arguments(value: &Value) -> Option<String> {
+    match value {
+        Value::String(text) => Some(text.clone()),
+        Value::Object(_) => Some(value.to_string()),
+        _ => None,
+    }
+}
+
+fn trim_non_empty(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn join_provider_tool_name(namespace: Option<&str>, name: Option<&str>) -> Option<String> {
+    let name = trim_non_empty(name)?;
+    let Some(namespace) = trim_non_empty(namespace) else {
+        return Some(name);
+    };
+    if name.contains('.') || name.contains("__") {
+        return Some(name);
+    }
+    if namespace.ends_with('.') || namespace.ends_with('_') || namespace.ends_with('/') {
+        Some(format!("{namespace}{name}"))
+    } else {
+        Some(format!("{namespace}.{name}"))
+    }
+}
+
+fn is_valid_received_tool_name(name: &str) -> bool {
+    let name = name.trim();
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.' | '/'))
+}
+
+fn tool_call_name_from_value(tool_call: &Value) -> Option<String> {
+    let function = tool_call.get("function");
+    let name = function
+        .and_then(|value| value.get("name"))
+        .and_then(Value::as_str)
+        .or_else(|| tool_call.get("name").and_then(Value::as_str));
+    let namespace = function
+        .and_then(|value| value.get("namespace"))
+        .and_then(Value::as_str)
+        .or_else(|| tool_call.get("namespace").and_then(Value::as_str));
+
+    join_provider_tool_name(namespace, name)
+}
+
+fn tool_call_arguments_from_value(tool_call: &Value) -> String {
+    tool_call
+        .get("function")
+        .and_then(|value| value.get("arguments"))
+        .or_else(|| tool_call.get("arguments"))
+        .and_then(json_value_as_tool_arguments)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "{}".to_string())
+}
+
+impl DeltaToolCall {
+    fn tool_name(&self) -> Option<String> {
+        let function_name = self.function.as_ref().and_then(|function| {
+            join_provider_tool_name(function.namespace.as_deref(), function.name.as_deref())
+        });
+        function_name
+            .or_else(|| join_provider_tool_name(self.namespace.as_deref(), self.name.as_deref()))
+    }
+
+    fn arguments_delta(&self) -> Option<String> {
+        self.function
+            .as_ref()
+            .and_then(|function| function.arguments.as_ref())
+            .or(self.arguments.as_ref())
+            .and_then(json_value_as_tool_arguments)
+    }
 }
 
 pub fn format_messages(messages: &[Message], image_format: &ImageFormat) -> Vec<Value> {
@@ -418,29 +502,14 @@ pub fn response_to_message(response: &Value) -> anyhow::Result<Message> {
         if let Some(tool_calls_array) = tool_calls.as_array() {
             for tool_call in tool_calls_array {
                 let id = tool_call["id"].as_str().unwrap_or_default().to_string();
-                let function_name = tool_call["function"]["name"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .to_string();
+                let function_name = tool_call_name_from_value(tool_call).unwrap_or_default();
+                let arguments_str = tool_call_arguments_from_value(tool_call);
 
-                // Get the raw arguments string from the LLM.
-                let arguments_str = tool_call["function"]["arguments"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .to_string();
-
-                // If arguments_str is empty, default to an empty JSON object string.
-                let arguments_str = if arguments_str.is_empty() {
-                    "{}".to_string()
-                } else {
-                    arguments_str
-                };
-
-                if !is_valid_function_name(&function_name) {
+                if !is_valid_received_tool_name(&function_name) {
                     let error = ErrorData {
                         code: ErrorCode::INVALID_REQUEST,
                         message: Cow::from(format!(
-                            "The provided function name '{}' had invalid characters, it must match this regex [a-zA-Z0-9_-]+",
+                            "The provided function name '{}' was empty or had invalid characters",
                             function_name
                         )),
                         data: None,
@@ -608,6 +677,15 @@ fn extract_openai_stream_reasoning_delta(delta: &Delta) -> Option<&str> {
     )
 }
 
+fn streaming_chunk_usage(chunk: &StreamingChunk) -> Option<ProviderUsage> {
+    chunk.usage.as_ref().and_then(|usage| {
+        chunk.model.as_ref().map(|model| ProviderUsage {
+            usage: get_usage(usage),
+            model: model.clone(),
+        })
+    })
+}
+
 pub fn response_to_streaming_message<S>(
     mut stream: S,
 ) -> impl Stream<Item = anyhow::Result<(Option<Message>, Option<ProviderUsage>)>> + 'static
@@ -632,39 +710,39 @@ where
                 .ok_or_else(|| anyhow!("unexpected stream format"))?)
                 .map_err(|e| anyhow!("Failed to parse streaming chunk: {}: {:?}", e, &line))?;
 
-            let usage = chunk.usage.as_ref().and_then(|u| {
-                chunk.model.as_ref().map(|model| {
-                    ProviderUsage {
-                        usage: get_usage(u),
-                        model: model.clone(),
-                    }
-                })
-            });
+            let usage = streaming_chunk_usage(&chunk);
 
-            if chunk.choices.is_empty() {
-                yield (None, usage)
-            } else if chunk.choices[0].delta.tool_calls.as_ref().is_some_and(|tc| !tc.is_empty()) {
+            let Some(choice) = chunk.choices.first() else {
+                yield (None, usage);
+                continue;
+            };
+
+            if choice.delta.tool_calls.as_ref().is_some_and(|tc| !tc.is_empty()) {
                 let mut tool_call_data: std::collections::HashMap<i32, StreamingToolCallAccumulator> =
                     std::collections::HashMap::new();
+                let mut final_usage = usage;
 
-                if let Some(tool_calls) = &chunk.choices[0].delta.tool_calls {
+                if let Some(tool_calls) = &choice.delta.tool_calls {
                     for tool_call in tool_calls {
                         if let Some(index) = tool_call.index {
                             let entry = tool_call_data.entry(index).or_default();
                             if let Some(id) = &tool_call.id {
                                 entry.id = Some(id.clone());
                             }
-                            if let Some(name) = &tool_call.function.name {
+                            if let Some(name) = tool_call.tool_name() {
                                 entry.name = Some(name.clone());
                             }
-                            if !tool_call.function.arguments.is_empty() {
-                                entry.arguments.push_str(&tool_call.function.arguments);
+                            if let Some(arguments_delta) = tool_call.arguments_delta() {
+                                if arguments_delta.is_empty() {
+                                    continue;
+                                }
+                                entry.arguments.push_str(&arguments_delta);
                                 if let Some(id) = entry.id.clone() {
                                     yield (
                                         Some(tool_input_delta_message(
                                             id,
                                             entry.name.clone(),
-                                            tool_call.function.arguments.clone(),
+                                            arguments_delta,
                                             entry.arguments.clone(),
                                             "openai_compatible",
                                         )),
@@ -677,7 +755,7 @@ where
                 }
 
                 // Check if this chunk already has finish_reason "tool_calls"
-                let is_complete = chunk.choices[0].finish_reason == Some("tool_calls".to_string());
+                let is_complete = choice.finish_reason == Some("tool_calls".to_string());
 
                 if !is_complete {
                     let mut done = false;
@@ -688,42 +766,54 @@ where
                             }
                             let response_str = response_chunk?;
                             if let Some(line) = strip_data_prefix(&response_str) {
+                                if line.is_empty() {
+                                    continue;
+                                }
+
                                 let tool_chunk: StreamingChunk = serde_json::from_str(line)
                                     .map_err(|e| anyhow!("Failed to parse streaming chunk: {}: {:?}", e, &line))?;
 
-                                if !tool_chunk.choices.is_empty() {
-                                    if let Some(delta_tool_calls) = &tool_chunk.choices[0].delta.tool_calls {
-                                        for delta_call in delta_tool_calls {
-                                            if let Some(index) = delta_call.index {
-                                                let entry = tool_call_data.entry(index).or_default();
-                                                if let Some(id) = &delta_call.id {
-                                                    entry.id = Some(id.clone());
+                                let tool_usage = streaming_chunk_usage(&tool_chunk);
+                                if tool_usage.is_some() {
+                                    final_usage = tool_usage;
+                                }
+
+                                let Some(tool_choice) = tool_chunk.choices.first() else {
+                                    continue;
+                                };
+
+                                if let Some(delta_tool_calls) = &tool_choice.delta.tool_calls {
+                                    for delta_call in delta_tool_calls {
+                                        if let Some(index) = delta_call.index {
+                                            let entry = tool_call_data.entry(index).or_default();
+                                            if let Some(id) = &delta_call.id {
+                                                entry.id = Some(id.clone());
+                                            }
+                                            if let Some(name) = delta_call.tool_name() {
+                                                entry.name = Some(name.clone());
+                                            }
+                                            if let Some(arguments_delta) = delta_call.arguments_delta() {
+                                                if arguments_delta.is_empty() {
+                                                    continue;
                                                 }
-                                                if let Some(name) = &delta_call.function.name {
-                                                    entry.name = Some(name.clone());
-                                                }
-                                                if !delta_call.function.arguments.is_empty() {
-                                                    entry.arguments.push_str(&delta_call.function.arguments);
-                                                    if let Some(id) = entry.id.clone() {
-                                                        yield (
-                                                            Some(tool_input_delta_message(
-                                                                id,
-                                                                entry.name.clone(),
-                                                                delta_call.function.arguments.clone(),
-                                                                entry.arguments.clone(),
-                                                                "openai_compatible",
-                                                            )),
-                                                            None,
-                                                        );
-                                                    }
+                                                entry.arguments.push_str(&arguments_delta);
+                                                if let Some(id) = entry.id.clone() {
+                                                    yield (
+                                                        Some(tool_input_delta_message(
+                                                            id,
+                                                            entry.name.clone(),
+                                                            arguments_delta,
+                                                            entry.arguments.clone(),
+                                                            "openai_compatible",
+                                                        )),
+                                                        None,
+                                                    );
                                                 }
                                             }
                                         }
                                     }
-                                    if tool_chunk.choices[0].finish_reason.is_some() {
-                                        done = true;
-                                    }
-                                } else {
+                                }
+                                if tool_choice.finish_reason.is_some() {
                                     done = true;
                                 }
                             }
@@ -776,7 +866,7 @@ where
 
                 // 如果有推理内容，添加为 Thinking 内容
                 if let Some(reasoning) =
-                    extract_openai_stream_reasoning_delta(&chunk.choices[0].delta)
+                    extract_openai_stream_reasoning_delta(&choice.delta)
                 {
                     contents.insert(0, MessageContent::thinking(reasoning.to_string(), ""));
                 }
@@ -794,28 +884,31 @@ where
 
                 yield (
                     Some(msg),
-                    usage,
+                    final_usage,
                 )
-            } else if chunk.choices[0].delta.content.is_some()
-                || extract_openai_stream_reasoning_delta(&chunk.choices[0].delta).is_some()
+            } else if choice.delta.content.is_some()
+                || extract_openai_stream_reasoning_delta(&choice.delta).is_some()
             {
                 let mut contents = Vec::new();
 
                 // 处理推理内容（兼容 reasoning_content / reasoning）
                 if let Some(reasoning) =
-                    extract_openai_stream_reasoning_delta(&chunk.choices[0].delta)
+                    extract_openai_stream_reasoning_delta(&choice.delta)
                 {
                     contents.push(MessageContent::thinking(reasoning.to_string(), ""));
                 }
 
                 // 处理普通文本内容
-                if let Some(text) = &chunk.choices[0].delta.content {
+                if let Some(text) = &choice.delta.content {
                     if !text.is_empty() {
                         contents.push(MessageContent::text(text));
                     }
                 }
 
                 if contents.is_empty() {
+                    if usage.is_some() {
+                        yield (None, usage);
+                    }
                     continue;
                 }
 
@@ -832,7 +925,7 @@ where
 
                 yield (
                     Some(msg),
-                    if chunk.choices[0].finish_reason.is_some() {
+                    if choice.finish_reason.is_some() {
                         usage
                     } else {
                         None
@@ -1983,6 +2076,210 @@ data: [DONE]
                 .and_then(|args| args.get("path").cloned()),
             Some(json!("README.md"))
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_streaming_tool_call_ignores_empty_choices_usage_chunks_until_finish(
+    ) -> anyhow::Result<()> {
+        let response_lines = [
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call-1","type":"function","function":{"name":"read_file","arguments":""}}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[],"usage":{"prompt_tokens":12,"completion_tokens":2,"total_tokens":14},"id":"chatcmpl-1"}"#,
+            "data: ",
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"path\""}}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":":\"README.md\"}"}}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"content":""},"index":0,"finish_reason":"tool_calls"}],"id":"chatcmpl-1"}"#,
+            "data: [DONE]",
+        ];
+
+        let response_stream =
+            tokio_stream::iter(response_lines.into_iter().map(|line| Ok(line.to_string())));
+        let messages = response_to_streaming_message(response_stream);
+        pin!(messages);
+
+        let mut deltas = Vec::new();
+        let mut final_path = None;
+        let mut final_usage = None;
+
+        while let Some(item) = messages.next().await {
+            let (message, usage) = item?;
+            if usage.is_some() {
+                final_usage = usage;
+            }
+            let Some(message) = message else {
+                continue;
+            };
+            for content in message.content {
+                match content {
+                    MessageContent::ToolInputDelta(delta) => {
+                        deltas.push(delta.accumulated_arguments.unwrap_or_default());
+                    }
+                    MessageContent::ToolRequest(request) => {
+                        let call = request.tool_call.expect("tool call should parse");
+                        final_path = call.arguments.and_then(|args| args.get("path").cloned());
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        assert_eq!(deltas, vec!["{\"path\"", "{\"path\":\"README.md\"}"]);
+        assert_eq!(final_path, Some(json!("README.md")));
+        let usage = final_usage.expect("usage from empty choices chunk should be preserved");
+        assert_eq!(usage.model, "gpt-4o");
+        assert_eq!(usage.usage.input_tokens, Some(12));
+        assert_eq!(usage.usage.output_tokens, Some(2));
+        assert_eq!(usage.usage.total_tokens, Some(14));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_response_to_message_accepts_top_level_and_namespaced_tool_names() {
+        let response = json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": "call-bash",
+                            "type": "function",
+                            "namespace": "functions",
+                            "name": "Bash",
+                            "arguments": { "command": "pwd" }
+                        },
+                        {
+                            "id": "call-read",
+                            "type": "function",
+                            "function": {
+                                "namespace": "functions.",
+                                "name": "Read",
+                                "arguments": "{\"path\":\"README.md\"}"
+                            }
+                        }
+                    ]
+                }
+            }]
+        });
+
+        let message = response_to_message(&response).expect("response should parse");
+        assert_eq!(message.content.len(), 2);
+
+        let MessageContent::ToolRequest(bash_request) = &message.content[0] else {
+            panic!("expected bash tool request");
+        };
+        let bash_call = bash_request
+            .tool_call
+            .as_ref()
+            .expect("bash tool call should parse");
+        assert_eq!(bash_request.id, "call-bash");
+        assert_eq!(bash_call.name.as_ref(), "functions.Bash");
+        assert_eq!(
+            bash_call
+                .arguments
+                .as_ref()
+                .and_then(|args| args.get("command"))
+                .cloned(),
+            Some(json!("pwd"))
+        );
+
+        let MessageContent::ToolRequest(read_request) = &message.content[1] else {
+            panic!("expected read tool request");
+        };
+        let read_call = read_request
+            .tool_call
+            .as_ref()
+            .expect("read tool call should parse");
+        assert_eq!(read_request.id, "call-read");
+        assert_eq!(read_call.name.as_ref(), "functions.Read");
+        assert_eq!(
+            read_call
+                .arguments
+                .as_ref()
+                .and_then(|args| args.get("path"))
+                .cloned(),
+            Some(json!("README.md"))
+        );
+    }
+
+    #[test]
+    fn test_response_to_message_rejects_empty_tool_name_without_guessing_from_arguments() {
+        let response = json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [{
+                        "id": "call-empty-name",
+                        "type": "function",
+                        "function": {
+                            "arguments": "{\"command\":\"pwd\"}"
+                        }
+                    }]
+                }
+            }]
+        });
+
+        let message = response_to_message(&response).expect("response should parse");
+        let MessageContent::ToolRequest(request) = &message.content[0] else {
+            panic!("expected tool request error");
+        };
+        assert_eq!(request.id, "call-empty-name");
+        assert!(
+            request.tool_call.is_err(),
+            "empty tool names must not become executable tool calls"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_streaming_tool_call_accepts_top_level_namespace_and_name() -> anyhow::Result<()> {
+        let response_lines = [
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call-bash","type":"function","namespace":"functions","name":"Bash","arguments":""}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"tool_calls":[{"index":0,"arguments":"{\"command\""}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"tool_calls":[{"index":0,"arguments":":\"pwd\"}"}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"content":""},"index":0,"finish_reason":"tool_calls"}],"id":"chatcmpl-1"}"#,
+            "data: [DONE]",
+        ];
+
+        let response_stream =
+            tokio_stream::iter(response_lines.into_iter().map(|line| Ok(line.to_string())));
+        let messages = response_to_streaming_message(response_stream);
+        pin!(messages);
+
+        let mut delta_tool_names = Vec::new();
+        let mut final_tool_name = None;
+        let mut final_command = None;
+
+        while let Some(Ok((message, _usage))) = messages.next().await {
+            let Some(message) = message else {
+                continue;
+            };
+            for content in message.content {
+                match content {
+                    MessageContent::ToolInputDelta(delta) => {
+                        delta_tool_names.push(delta.tool_name);
+                    }
+                    MessageContent::ToolRequest(request) => {
+                        let call = request.tool_call.expect("tool call should parse");
+                        final_tool_name = Some(call.name.to_string());
+                        final_command =
+                            call.arguments.and_then(|args| args.get("command").cloned());
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        assert_eq!(
+            delta_tool_names,
+            vec![
+                Some("functions.Bash".to_string()),
+                Some("functions.Bash".to_string())
+            ]
+        );
+        assert_eq!(final_tool_name.as_deref(), Some("functions.Bash"));
+        assert_eq!(final_command, Some(json!("pwd")));
 
         Ok(())
     }

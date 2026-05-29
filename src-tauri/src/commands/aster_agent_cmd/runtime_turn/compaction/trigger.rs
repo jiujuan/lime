@@ -3,6 +3,7 @@ use super::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(in crate::commands::aster_agent_cmd::runtime_turn) enum RuntimeSessionCompactionTrigger {
     Manual,
+    #[cfg(test)]
     Auto,
 }
 
@@ -10,6 +11,7 @@ impl RuntimeSessionCompactionTrigger {
     pub(super) fn as_str(self) -> &'static str {
         match self {
             Self::Manual => "manual",
+            #[cfg(test)]
             Self::Auto => "auto",
         }
     }
@@ -17,6 +19,7 @@ impl RuntimeSessionCompactionTrigger {
     pub(super) fn start_detail(self) -> &'static str {
         match self {
             Self::Manual => "系统正在将较早消息整理为摘要，以释放上下文窗口。",
+            #[cfg(test)]
             Self::Auto => "检测到会话历史已接近上限，系统正在自动整理较早消息以释放上下文窗口。",
         }
     }
@@ -24,6 +27,7 @@ impl RuntimeSessionCompactionTrigger {
     pub(super) fn completed_detail(self) -> &'static str {
         match self {
             Self::Manual => "较早消息已替换为摘要，后续回复会基于压缩后的上下文继续。",
+            #[cfg(test)]
             Self::Auto => "较早消息已自动替换为摘要，本轮回复会基于压缩后的上下文继续。",
         }
     }
@@ -34,6 +38,7 @@ pub(super) fn resolve_pre_compact_hook_trigger(
 ) -> CompactTrigger {
     match trigger {
         RuntimeSessionCompactionTrigger::Manual => CompactTrigger::Manual,
+        #[cfg(test)]
         RuntimeSessionCompactionTrigger::Auto => CompactTrigger::Auto,
     }
 }

@@ -196,6 +196,16 @@ afterEach(async () => {
 });
 
 describe("ModelSelector", () => {
+  it("只有模型没有 provider 时不应展示成 Lime Hub 的已选模型", () => {
+    const { container } = renderModelSelector({
+      providerType: "",
+      model: "gpt-5.5",
+    });
+
+    expect(container.textContent).toContain("选择模型");
+    expect(container.textContent).not.toContain("gpt-5.5");
+  });
+
   it("后端回填原始 providerId 时，应解析到真实受管 Provider 读取模型", () => {
     mockUseConfiguredProviders.mockReturnValue({
       providers: [

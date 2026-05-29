@@ -4,6 +4,9 @@ const MODULE_IMPORT_FAILURE_PATTERNS = [
 ] as const;
 const REACT_FAST_REFRESH_HOOK_FAILURE_PATTERNS = [
   "Should have a queue. This is likely a bug in React.",
+  "Rendered fewer hooks than expected.",
+  "Rendered more hooks than during the previous render.",
+  "React has detected a change in the order of Hooks called by",
 ] as const;
 const RESOURCE_RELOAD_PARAM = "__lime_resource_reload";
 const MODULE_IMPORT_AUTO_RELOAD_SESSION_KEY =

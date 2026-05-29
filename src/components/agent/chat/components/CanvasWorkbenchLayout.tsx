@@ -23,6 +23,8 @@ import {
   GitCompare,
   ListChecks,
   Loader2,
+  Maximize2,
+  Minimize2,
   Monitor,
   RefreshCw,
   TerminalSquare,
@@ -60,6 +62,10 @@ import {
   ArtifactWorkbenchDocumentInspector,
   type ArtifactWorkbenchDocumentController,
 } from "../workspace/artifactWorkbenchDocument";
+import {
+  formatEntryModifiedTime,
+  formatFileSize,
+} from "./FileManager/fileManagerDisplay";
 
 export type CanvasWorkbenchTab =
   | "preview"
@@ -70,12 +76,6 @@ export type CanvasWorkbenchTab =
   | "logs"
   | "team"
   | `document:${string}`;
-export interface CanvasWorkbenchUtilityLeadContext {
-  openTab: (tab: CanvasWorkbenchTab) => void;
-}
-export type CanvasWorkbenchUtilityLeadContent =
-  | ReactNode
-  | ((context: CanvasWorkbenchUtilityLeadContext) => ReactNode);
 type CanvasWorkbenchDocumentViewMode = "preview" | "changes";
 export type CanvasWorkbenchLayoutMode = "split" | "stacked";
 export type CanvasWorkbenchMode = "default" | "coding";
@@ -253,7 +253,7 @@ export interface CanvasWorkbenchSessionView extends CanvasWorkbenchHeaderView {
 
 export interface CanvasWorkbenchUtilityView extends CanvasWorkbenchHeaderView {
   enabled?: boolean;
-  leadContent?: CanvasWorkbenchUtilityLeadContent;
+  leadContent?: ReactNode;
   renderPanel: () => ReactNode;
 }
 
@@ -264,7 +264,6 @@ export interface CanvasWorkbenchChangeItem {
   displayName?: string;
   source?: string;
   status?: "in_progress" | "completed" | "failed";
-  reviewStatus?: "pending_review" | "applied" | "rejected";
   preview?: string;
   currentContent?: string | null;
   previousContent?: string | null;
@@ -337,19 +336,19 @@ export interface CanvasWorkbenchLayoutProps {
 }
 
 const WORKBENCH_SHELL_CLASSNAME =
-  "rounded-[28px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] shadow-sm shadow-slate-950/5";
+  "rounded-[12px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)]";
 
 const WORKBENCH_PANEL_CLASSNAME =
-  "rounded-[24px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] shadow-sm shadow-slate-950/5";
+  "rounded-[10px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)]";
 
 const WORKBENCH_MUTED_PANEL_CLASSNAME =
-  "rounded-[24px] border border-dashed border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] px-4 py-6 text-sm text-[color:var(--lime-text-muted)]";
+  "rounded-[10px] border border-dashed border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] px-4 py-5 text-sm text-[color:var(--lime-text-muted)]";
 
 const WORKBENCH_BUTTON_CLASSNAME =
   "border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] text-[color:var(--lime-text)] hover:border-[color:var(--lime-surface-border-strong)] hover:bg-[color:var(--lime-surface)] hover:text-[color:var(--lime-text-strong)]";
 
 const WORKBENCH_ACTIVE_BUTTON_CLASSNAME =
-  "border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-surface)] text-[color:var(--lime-text-strong)] shadow-sm shadow-slate-950/5";
+  "border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-surface)] text-[color:var(--lime-text-strong)]";
 
 const WORKBENCH_GHOST_BUTTON_CLASSNAME =
   "border-[color:var(--lime-surface-border)] text-[color:var(--lime-text-muted)] hover:bg-[color:var(--lime-surface-soft)] hover:text-[color:var(--lime-text-strong)]";
@@ -885,15 +884,6 @@ function findChangeItemForSelection(
 }
 
 function resolveChangeStatusCopyKey(item: CanvasWorkbenchChangeItem): string {
-  if (item.reviewStatus === "pending_review") {
-    return "agentChat.canvasWorkbench.coding.changes.status.pendingReview";
-  }
-  if (item.reviewStatus === "applied") {
-    return "agentChat.canvasWorkbench.coding.changes.status.applied";
-  }
-  if (item.reviewStatus === "rejected") {
-    return "agentChat.canvasWorkbench.coding.changes.status.rejected";
-  }
   if (item.status === "failed") {
     return "agentChat.canvasWorkbench.coding.changes.status.failed";
   }
@@ -904,15 +894,6 @@ function resolveChangeStatusCopyKey(item: CanvasWorkbenchChangeItem): string {
 }
 
 function resolveChangeStatusClassName(item: CanvasWorkbenchChangeItem): string {
-  if (item.reviewStatus === "pending_review") {
-    return "border-sky-200 bg-sky-50 text-sky-700";
-  }
-  if (item.reviewStatus === "applied") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  }
-  if (item.reviewStatus === "rejected") {
-    return "border-amber-200 bg-amber-50 text-amber-700";
-  }
   if (item.status === "failed") {
     return "border-rose-200 bg-rose-50 text-rose-700";
   }
@@ -926,15 +907,6 @@ function resolveChangeStatusClassName(item: CanvasWorkbenchChangeItem): string {
 }
 
 function resolveChangeStatusIcon(item: CanvasWorkbenchChangeItem): ReactNode {
-  if (item.reviewStatus === "pending_review") {
-    return <GitCompare className="h-3.5 w-3.5" />;
-  }
-  if (item.reviewStatus === "applied") {
-    return <CheckCircle2 className="h-3.5 w-3.5" />;
-  }
-  if (item.reviewStatus === "rejected") {
-    return <AlertTriangle className="h-3.5 w-3.5" />;
-  }
   if (item.status === "failed") {
     return <AlertTriangle className="h-3.5 w-3.5" />;
   }
@@ -1216,7 +1188,8 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   logView = null,
   changeView = null,
 }: CanvasWorkbenchLayoutProps) {
-  const { t } = useTranslation("agent");
+  const { i18n, t } = useTranslation("agent");
+  const locale = i18n.language || "zh-CN";
   const canvasT = t as unknown as CanvasWorkbenchTranslation;
   const canvasTRef = useRef(canvasT);
   canvasTRef.current = canvasT;
@@ -1274,12 +1247,15 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   const isCodingWorkbench = workbenchMode === "coding";
   const shouldPreferTeamTabByDefault =
     !isCodingWorkbench && teamView?.enabled === true && !defaultPreview;
+  const hasDefaultPreviewContent = Boolean(defaultPreview?.content.trim());
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [isStackedLayout, setIsStackedLayout] = useState(false);
   const [documentPreviewMode, setDocumentPreviewMode] =
     useState<CanvasWorkbenchDocumentViewMode>("preview");
   const [documentInspectorCollapsed, setDocumentInspectorCollapsed] =
     useState(true);
+  const [previewRefreshNonce, setPreviewRefreshNonce] = useState(0);
+  const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   const [artifactDocumentController, setArtifactDocumentController] =
     useState<ArtifactWorkbenchDocumentController | null>(null);
   const [directoryCache, setDirectoryCache] = useState<
@@ -1334,7 +1310,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     defaultPreview?.selectionKey || fallbackSelectionKey;
   const shouldPreferSessionTabOnMount = Boolean(
     !isCodingWorkbench &&
-    sessionView?.renderPanel &&
+    (sessionView?.renderPanel || hasDefaultPreviewContent) &&
     !initialDocumentSelectionKey,
   );
 
@@ -1358,7 +1334,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     if (initialDocumentSelectionKey) {
       return buildDocumentTabKey(initialDocumentSelectionKey);
     }
-    return shouldPreferTeamTabByDefault ? "team" : "session";
+    return shouldPreferTeamTabByDefault ? "team" : "workspace";
   });
   const hasAutoFocusedInitialDocumentTabRef = useRef(
     isCodingWorkbench || Boolean(initialDocumentSelectionKey),
@@ -1426,8 +1402,20 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     if (activeTab !== "team" || teamView?.enabled) {
       return;
     }
-    setActiveTab(openDocumentTabs[0] || "session");
-  }, [activeTab, isCodingWorkbench, openDocumentTabs, teamView?.enabled]);
+    setActiveTab(
+      openDocumentTabs[0] ||
+        (sessionView?.renderPanel || hasDefaultPreviewContent
+          ? "session"
+          : "workspace"),
+    );
+  }, [
+    activeTab,
+    hasDefaultPreviewContent,
+    isCodingWorkbench,
+    openDocumentTabs,
+    sessionView?.renderPanel,
+    teamView?.enabled,
+  ]);
 
   useEffect(() => {
     if (isCodingWorkbench) {
@@ -1438,7 +1426,12 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     }
     const selectionKey = parseDocumentTabKey(activeTab);
     if (!isKnownSelectionKey(selectionKey)) {
-      setActiveTab(openDocumentTabs[0] || "session");
+      setActiveTab(
+        openDocumentTabs[0] ||
+          (sessionView?.renderPanel || hasDefaultPreviewContent
+            ? "session"
+            : "workspace"),
+      );
       return;
     }
     if (selectedKey !== selectionKey) {
@@ -1447,8 +1440,10 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   }, [
     activeTab,
     isCodingWorkbench,
+    hasDefaultPreviewContent,
     isKnownSelectionKey,
     openDocumentTabs,
+    sessionView?.renderPanel,
     selectedKey,
   ]);
 
@@ -1786,6 +1781,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   }, [teamView, workbenchCopy.tab.generated]);
 
   const hasCustomSessionView = Boolean(sessionView?.renderPanel);
+  const shouldShowSessionTab = Boolean(sessionContext || hasCustomSessionView);
 
   const activePreviewContext =
     activeTab === "preview"
@@ -1798,11 +1794,31 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
           ? documentContext
           : null;
 
+  useEffect(() => {
+    if (isCodingWorkbench || activeTab !== "session" || shouldShowSessionTab) {
+      return;
+    }
+    setActiveTab(
+      openDocumentTabs[0] || (teamView?.enabled ? "team" : "workspace"),
+    );
+  }, [
+    activeTab,
+    isCodingWorkbench,
+    openDocumentTabs,
+    shouldShowSessionTab,
+    teamView?.enabled,
+  ]);
+
   const activeSelectionPath = activePreviewContext?.selectionPath;
   const activeContent = activePreviewContext?.content || "";
   const closeWorkbenchLabel = canvasWorkbenchText(
     canvasT,
     "agentChat.canvasWorkbench.close",
+  );
+  const headerActionsVisible = Boolean(
+    activeTab !== "team" &&
+    activePreviewContext &&
+    (activeSelectionPath || activeContent.trim()),
   );
 
   const documentDiffLines = useMemo(
@@ -1834,6 +1850,12 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   useEffect(() => {
     setDocumentPreviewMode("preview");
   }, [documentSelectionKey]);
+
+  useEffect(() => {
+    if (activeTab !== "preview") {
+      setIsPreviewFullscreen(false);
+    }
+  }, [activeTab]);
 
   const handleArtifactDocumentControllerChange = useCallback(
     (controller: ArtifactWorkbenchDocumentController | null) => {
@@ -2005,12 +2027,21 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     }
 
     return [
-      {
-        key: "session" as const,
-        label: sessionView?.tabLabel?.trim() || workbenchCopy.tab.sessionMain,
-        badge: sessionView?.tabBadge?.trim() || undefined,
-        badgeTone: sessionView?.tabBadgeTone,
-      },
+      ...(shouldShowSessionTab
+        ? [
+            {
+              key: "session" as const,
+              label: sessionContext
+                ? workbenchCopy.tab.sessionMain
+                : sessionView?.tabLabel?.trim() ||
+                  workbenchCopy.tab.sessionMain,
+              badge: sessionContext
+                ? undefined
+                : sessionView?.tabBadge?.trim() || undefined,
+              badgeTone: sessionContext ? undefined : sessionView?.tabBadgeTone,
+            },
+          ]
+        : []),
       {
         key: "workspace" as const,
         label: workspaceView?.tabLabel?.trim() || workbenchCopy.tab.files,
@@ -2054,6 +2085,8 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     sessionView?.tabBadge,
     sessionView?.tabBadgeTone,
     sessionView?.tabLabel,
+    sessionContext,
+    shouldShowSessionTab,
     teamView,
     canvasT,
     workbenchCopy.tab.files,
@@ -2126,9 +2159,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
       : null;
 
     return (
-      <section
-        className={cn(WORKBENCH_PANEL_CLASSNAME, "overflow-hidden bg-slate-50")}
-      >
+      <section className="border-b border-[color:var(--lime-surface-border)] bg-slate-50">
         <button
           type="button"
           aria-label={
@@ -2145,10 +2176,13 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
           aria-expanded={!documentInspectorCollapsed}
           aria-controls="canvas-workbench-document-inspector-panel"
           onClick={() => setDocumentInspectorCollapsed((current) => !current)}
-          className="flex w-full items-start justify-between gap-3 border-b border-slate-200/80 bg-white px-4 py-3 text-left transition-colors hover:bg-slate-50"
+          className={cn(
+            "flex w-full items-start justify-between gap-3 bg-white px-4 py-2.5 text-left transition-colors hover:bg-slate-50",
+            !documentInspectorCollapsed && "border-b border-slate-200/80",
+          )}
         >
           <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+            <div className="text-xs font-medium text-slate-500">
               {canvasWorkbenchText(
                 canvasT,
                 "agentChat.canvasWorkbench.documentInspector.title",
@@ -2159,12 +2193,12 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
                 {documentTitle}
               </div>
               {currentVersionLabel ? (
-                <span className="rounded-full border border-emerald-200 bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 shadow-sm shadow-emerald-950/10">
+                <span className="rounded-[8px] border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
                   {currentVersionLabel}
                 </span>
               ) : null}
             </div>
-            <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+            <p className="mt-1 line-clamp-1 text-xs leading-5 text-slate-500">
               {documentSummary}
             </p>
             <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
@@ -2211,19 +2245,12 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
           </div>
         </button>
 
-        {documentInspectorCollapsed ? (
-          <div className="px-4 py-3 text-xs leading-5 text-slate-500">
-            {canvasWorkbenchText(
-              canvasT,
-              "agentChat.canvasWorkbench.documentInspector.collapsedHint",
-            )}
-          </div>
-        ) : (
+        {documentInspectorCollapsed ? null : (
           <ArtifactWorkbenchDocumentInspector
             controller={artifactDocumentController}
             testId="canvas-workbench-document-inspector"
             containerClassName="min-h-0 overflow-hidden bg-slate-50"
-            tabsClassName="flex h-full min-h-0 flex-col p-4"
+            tabsClassName="flex h-full min-h-0 flex-col p-3"
           />
         )}
       </section>
@@ -2272,39 +2299,52 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
               void handleSelectWorkspaceFile(entry.path);
             }}
             className={cn(
-              "flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition-colors",
+              "grid min-h-[34px] w-full grid-cols-[minmax(0,1fr)_94px_66px] items-center gap-3 border-b border-slate-100 px-3 py-1.5 text-left text-[13px] transition-colors",
               isSelected
-                ? "bg-slate-100 text-slate-900"
-                : "text-slate-500 hover:bg-white hover:text-slate-900",
+                ? "bg-sky-50 text-slate-950"
+                : "text-slate-600 hover:bg-sky-50/70 hover:text-slate-900",
             )}
-            style={{ paddingLeft: `${depth * 14 + 8}px` }}
+            title={entry.name}
           >
-            {isDirectory ? (
-              isExpanded ? (
-                <ChevronDown className="h-4 w-4 shrink-0" />
+            <span
+              className="flex min-w-0 items-center gap-2"
+              style={{ paddingLeft: `${depth * 14}px` }}
+            >
+              {isDirectory ? (
+                isExpanded ? (
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                )
               ) : (
-                <ChevronRight className="h-4 w-4 shrink-0" />
-              )
-            ) : (
-              <span className="w-4 shrink-0" />
-            )}
-            {isDirectory ? (
-              isExpanded ? (
-                <FolderOpen className="h-4 w-4 shrink-0 text-amber-600" />
+                <span className="w-3.5 shrink-0" />
+              )}
+              {isDirectory ? (
+                isExpanded ? (
+                  <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                ) : (
+                  <Folder className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                )
+              ) : entry.name.match(
+                  /\.(ts|tsx|js|jsx|rs|json|yml|yaml|toml)$/i,
+                ) ? (
+                <FileCode2 className="h-3.5 w-3.5 shrink-0 text-sky-600" />
               ) : (
-                <Folder className="h-4 w-4 shrink-0 text-amber-600" />
-              )
-            ) : entry.name.match(
-                /\.(ts|tsx|js|jsx|rs|json|yml|yaml|toml)$/i,
-              ) ? (
-              <FileCode2 className="h-4 w-4 shrink-0 text-sky-600" />
-            ) : (
-              <FileText className="h-4 w-4 shrink-0 text-slate-500" />
-            )}
-            <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-            {loadingDirectories[entry.path] ? (
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-            ) : null}
+                <FileText className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+              )}
+              <span className="min-w-0 flex-1 truncate font-medium">
+                {entry.name}
+              </span>
+              {loadingDirectories[entry.path] ? (
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+              ) : null}
+            </span>
+            <span className="truncate text-[12px] text-slate-500">
+              {formatEntryModifiedTime(entry.modifiedAt, locale)}
+            </span>
+            <span className="truncate text-right text-[12px] text-slate-500">
+              {entry.isDir ? "-" : formatFileSize(entry.size, "-")}
+            </span>
           </button>
           {isDirectory && isExpanded
             ? renderDirectoryNode(entry.path, depth + 1)
@@ -2324,19 +2364,45 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     onClick: () => void;
     disabled?: boolean;
     icon: ReactNode;
+  }) =>
+    disabled ? null : (
+      <button
+        type="button"
+        aria-label={label}
+        title={label}
+        onClick={onClick}
+        className={cn(
+          "inline-flex h-8 w-8 items-center justify-center rounded-[10px] border text-[color:var(--lime-text-muted)] transition-colors",
+          WORKBENCH_GHOST_BUTTON_CLASSNAME,
+        )}
+      >
+        {icon}
+      </button>
+    );
+
+  const renderPreviewToolbarButton = ({
+    label,
+    onClick,
+    disabled,
+    icon,
+  }: {
+    label: string;
+    onClick: () => void;
+    disabled?: boolean;
+    icon: ReactNode;
   }) => (
     <button
       type="button"
       aria-label={label}
+      title={label}
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "inline-flex h-10 items-center gap-2 rounded-xl border px-3.5 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] border text-slate-500 transition-colors disabled:cursor-not-allowed disabled:opacity-45",
         WORKBENCH_GHOST_BUTTON_CLASSNAME,
       )}
     >
       {icon}
-      <span className="whitespace-nowrap">{label}</span>
     </button>
   );
 
@@ -2354,6 +2420,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     closable?: boolean;
   }) => {
     const active = activeTab === key;
+    const visibleBadge = key === "workspace" ? undefined : badge;
     const badgeClassName =
       badgeTone === "rose"
         ? "bg-rose-50 text-rose-700"
@@ -2390,26 +2457,28 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
           { label },
         )}
         data-canvas-tab-key={key}
+        role="tab"
+        aria-selected={active}
         onClick={() => setActiveTab(key)}
         className={cn(
-          "inline-flex shrink-0 items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition-colors",
+          "inline-flex h-9 shrink-0 items-center gap-1.5 border-b-2 px-2.5 text-[13px] font-medium transition-colors",
           active
-            ? "border-slate-200 bg-white text-slate-950 shadow-sm shadow-slate-950/5"
-            : "border-transparent bg-transparent text-slate-600 hover:border-slate-200/80 hover:bg-white hover:text-slate-900",
+            ? "border-[color:var(--lime-brand)] bg-transparent text-slate-950"
+            : "border-transparent bg-transparent text-slate-600 hover:bg-[color:var(--lime-surface-soft)] hover:text-slate-900",
         )}
       >
         <span className={cn(active ? "text-slate-500" : "text-slate-400")}>
           {leading}
         </span>
         <span className="truncate">{label}</span>
-        {badge ? (
+        {visibleBadge ? (
           <span
             className={cn(
-              "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+              "rounded-[5px] px-1.5 py-0.5 text-[10px] font-semibold",
               badgeClassName,
             )}
           >
-            {badge}
+            {visibleBadge}
           </span>
         ) : null}
         {closable && isDocumentTabKey(key) ? (
@@ -2435,7 +2504,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   const renderWorkspacePanel = () => {
     if (workspaceUnavailable) {
       return (
-        <div data-testid="canvas-workbench-panel-workspace" className="p-5">
+        <div data-testid="canvas-workbench-panel-workspace" className="p-3">
           <div className={WORKBENCH_MUTED_PANEL_CLASSNAME}>
             {workspaceView?.panelCopy?.unavailableText ||
               translateWorkbench(
@@ -2448,7 +2517,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
 
     if (!workspacePanelRootPath?.trim()) {
       return (
-        <div data-testid="canvas-workbench-panel-workspace" className="p-5">
+        <div data-testid="canvas-workbench-panel-workspace" className="p-3">
           <div className={WORKBENCH_MUTED_PANEL_CLASSNAME}>
             {workspaceView?.panelCopy?.emptyText ||
               translateWorkbench("agentChat.canvasWorkbench.workspace.empty")}
@@ -2466,24 +2535,25 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     return (
       <section
         data-testid="canvas-workbench-panel-workspace"
-        className="flex h-full min-h-0 flex-col p-5"
+        className="flex h-full min-h-0 flex-col bg-white"
       >
-        <div
-          className={cn(
-            WORKBENCH_PANEL_CLASSNAME,
-            "min-h-0 flex-1 overflow-hidden",
-          )}
-        >
-          <div className="flex items-center justify-between border-b border-slate-200/80 px-4 py-3">
-            <div className="min-w-0">
-              <div className="text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
-                {workspaceView?.panelCopy?.sectionEyebrow ||
-                  workspacePanelEyebrow ||
-                  translateWorkbench(
-                    "agentChat.canvasWorkbench.workspace.projectDir",
-                  )}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="flex h-11 items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-[7px] border border-slate-200 bg-white px-2.5 py-1.5">
+              <FolderOpen className="h-4 w-4 shrink-0 text-slate-400" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-medium text-slate-900">
+                  {workspaceView?.panelCopy?.sectionEyebrow ||
+                    workspacePanelEyebrow ||
+                    translateWorkbench(
+                      "agentChat.canvasWorkbench.workspace.projectDir",
+                    )}
+                </div>
               </div>
-              <div className="mt-1 truncate text-sm font-medium text-slate-900">
+              <div
+                className="min-w-0 flex-1 truncate text-right text-[12px] text-slate-500"
+                title={workspacePanelDisplayPath || workspacePanelRootPath}
+              >
                 {workspacePanelDisplayPath || workspacePanelRootPath}
               </div>
             </div>
@@ -2497,14 +2567,36 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
                 void refreshDirectorySubtree(workspacePanelRootPath)
               }
               className={cn(
-                "inline-flex h-9 w-9 items-center justify-center rounded-xl border transition-colors",
+                "inline-flex h-8 w-8 items-center justify-center rounded-[8px] border transition-colors",
                 WORKBENCH_GHOST_BUTTON_CLASSNAME,
               )}
             >
               <RefreshCw className="h-4 w-4" />
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-auto px-3 py-3">
+          {rootListing ? (
+            <div className="grid h-8 grid-cols-[minmax(0,1fr)_94px_66px] items-center gap-3 border-b border-slate-200 bg-white px-3 text-[11px] font-medium text-slate-500">
+              <span>
+                {canvasWorkbenchText(
+                  canvasT,
+                  "agentChat.fileManager.column.name",
+                )}
+              </span>
+              <span>
+                {canvasWorkbenchText(
+                  canvasT,
+                  "agentChat.fileManager.column.modified",
+                )}
+              </span>
+              <span className="text-right">
+                {canvasWorkbenchText(
+                  canvasT,
+                  "agentChat.fileManager.column.size",
+                )}
+              </span>
+            </div>
+          ) : null}
+          <div className="min-h-0 flex-1 overflow-auto">
             {loadingDirectories[workspacePanelRootPath] && !rootListing ? (
               <div className="flex items-center gap-2 px-2 py-4 text-sm text-slate-500">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -2534,11 +2626,11 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
       return (
         <div
           data-testid="canvas-workbench-panel-session"
-          className="h-full min-h-0 p-4"
+          className="h-full min-h-0 bg-white"
         >
           <div
             data-testid="canvas-workbench-preview-region"
-            className="h-full min-h-0 overflow-hidden rounded-[24px] border border-slate-200 bg-white"
+            className="h-full min-h-0 overflow-hidden bg-white"
           >
             {renderPreview(sessionContext.target)}
           </div>
@@ -2550,7 +2642,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
       return (
         <div
           data-testid="canvas-workbench-panel-session"
-          className="h-full min-h-0 overflow-auto p-5"
+          className="h-full min-h-0 overflow-auto bg-white p-3"
         >
           {sessionView.renderPanel()}
         </div>
@@ -2558,7 +2650,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     }
 
     return (
-      <div data-testid="canvas-workbench-panel-session" className="p-5">
+      <div data-testid="canvas-workbench-panel-session" className="p-3">
         <div className={WORKBENCH_MUTED_PANEL_CLASSNAME}>
           {canvasWorkbenchText(
             canvasT,
@@ -2584,11 +2676,11 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     return (
       <section
         data-testid="canvas-workbench-panel-team"
-        className="flex h-full min-h-0 flex-col gap-4 p-4"
+        className="flex h-full min-h-0 flex-col gap-3 bg-white p-3"
       >
         <div
           data-testid="canvas-workbench-preview-region"
-          className="min-h-0 flex-1 overflow-hidden rounded-[24px] border border-slate-200 bg-white"
+          className="min-h-0 flex-1 overflow-hidden bg-white"
         >
           {renderPreview(teamTarget)}
         </div>
@@ -2603,7 +2695,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
           </div>
         ) : null}
         {teamView.renderFooter ? (
-          <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="rounded-[10px] border border-slate-200 bg-slate-50 px-4 py-3">
             {teamView.renderFooter()}
           </div>
         ) : null}
@@ -2625,31 +2717,108 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
       );
     }
 
+    const previewAddress =
+      documentContext.selectionPath ||
+      documentContext.subtitle ||
+      resolvePreviewPath(documentContext.target) ||
+      documentContext.title;
+    const isStaticHtmlPreview = isHtmlPreviewContext(documentContext);
+    const fullscreenLabel = canvasWorkbenchText(
+      canvasT,
+      isPreviewFullscreen
+        ? "agentChat.canvasWorkbench.coding.preview.toolbar.exitFullscreen"
+        : "agentChat.canvasWorkbench.coding.preview.toolbar.enterFullscreen",
+    );
+
     return (
       <section
         data-testid="canvas-workbench-panel-preview"
-        className="flex h-full min-h-0 flex-col gap-3 p-4"
+        data-preview-fullscreen={isPreviewFullscreen ? "true" : "false"}
+        className={cn(
+          "flex h-full min-h-0 flex-col bg-white",
+          isPreviewFullscreen
+            ? "fixed inset-3 z-[70] rounded-[12px] border border-slate-200 bg-white shadow-lg shadow-slate-950/15"
+            : null,
+        )}
       >
         <div
+          data-testid="canvas-workbench-preview-toolbar"
+          className="flex h-11 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3"
+        >
+          <div className="flex shrink-0 items-center gap-1">
+            {renderPreviewToolbarButton({
+              label: canvasWorkbenchText(
+                canvasT,
+                "agentChat.canvasWorkbench.coding.preview.toolbar.refresh",
+              ),
+              onClick: () => setPreviewRefreshNonce((value) => value + 1),
+              icon: <RefreshCw className="h-4 w-4" />,
+            })}
+          </div>
+          <div
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-[9px] border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600"
+            aria-label={canvasWorkbenchText(
+              canvasT,
+              "agentChat.canvasWorkbench.coding.preview.toolbar.address",
+            )}
+            title={previewAddress}
+          >
+            <Monitor className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            <span className="min-w-0 flex-1 truncate font-mono">
+              {previewAddress}
+            </span>
+          </div>
+          <span
+            className={cn(
+              "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[9px] border px-2.5 text-xs font-medium",
+              isStaticHtmlPreview
+                ? "border-sky-200 bg-sky-50 text-sky-700"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700",
+            )}
+            title={
+              isStaticHtmlPreview
+                ? canvasWorkbenchText(
+                    canvasT,
+                    "agentChat.canvasWorkbench.coding.preview.staticHtmlHint",
+                  )
+                : undefined
+            }
+          >
+            <span
+              className={cn(
+                "h-2 w-2 rounded-full",
+                isStaticHtmlPreview ? "bg-sky-500" : "bg-emerald-500",
+              )}
+            />
+            {canvasWorkbenchText(
+              canvasT,
+              isStaticHtmlPreview
+                ? "agentChat.canvasWorkbench.coding.preview.toolbar.staticHtml"
+                : "agentChat.canvasWorkbench.coding.preview.toolbar.ready",
+            )}
+          </span>
+          <div className="flex shrink-0 items-center gap-1">
+            {renderPreviewToolbarButton({
+              label: fullscreenLabel,
+              onClick: () => setIsPreviewFullscreen((value) => !value),
+              icon: isPreviewFullscreen ? (
+                <Minimize2 className="h-4 w-4" />
+              ) : (
+                <Maximize2 className="h-4 w-4" />
+              ),
+            })}
+          </div>
+        </div>
+        <div
+          key={`preview:${documentSelectionKey || previewAddress}:${previewRefreshNonce}`}
           data-testid="canvas-workbench-preview-region"
-          className="min-h-0 flex-1 overflow-hidden rounded-[24px] border border-slate-200 bg-white"
+          className="min-h-0 flex-1 overflow-hidden bg-white"
         >
           {renderPreview(documentContext.target, {
             onArtifactDocumentControllerChange:
               handleArtifactDocumentControllerChange,
           })}
         </div>
-        {isHtmlPreviewContext(documentContext) ? (
-          <div className="flex items-center gap-2 rounded-[18px] border border-sky-100 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-700">
-            <Monitor className="h-3.5 w-3.5 shrink-0" />
-            <span className="min-w-0 flex-1 truncate">
-              {canvasWorkbenchText(
-                canvasT,
-                "agentChat.canvasWorkbench.coding.preview.staticHtmlHint",
-              )}
-            </span>
-          </div>
-        ) : null}
       </section>
     );
   };
@@ -2729,9 +2898,9 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
                       key={item.id}
                       type="button"
                       className={cn(
-                        "w-full rounded-2xl border px-3 py-3 text-left transition-colors",
+                        "w-full rounded-[10px] border px-3 py-2.5 text-left transition-colors",
                         active
-                          ? "border-slate-300 bg-white shadow-sm shadow-slate-950/5"
+                          ? "border-slate-300 bg-white"
                           : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white",
                       )}
                       onClick={() => {
@@ -2940,22 +3109,22 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     },
   ) => {
     if (view?.enabled !== false && view?.renderPanel) {
-      const resolvedLeadContent =
-        typeof view.leadContent === "function"
-          ? view.leadContent({ openTab: (tab) => setActiveTab(tab) })
-          : view.leadContent;
-
       return (
         <div
           data-testid={fallback.testId}
-          className="flex h-full min-h-0 flex-col gap-4 p-4"
+          className="flex h-full min-h-0 flex-col overflow-hidden bg-white"
         >
-          {resolvedLeadContent ? (
-            <div data-testid={`${fallback.testId}-lead`}>
-              {resolvedLeadContent}
+          {view.leadContent ? (
+            <div
+              data-testid={`${fallback.testId}-lead`}
+              className="border-b border-slate-200 px-3 py-2"
+            >
+              {view.leadContent}
             </div>
           ) : null}
-          <div className="min-h-0 flex-1">{view.renderPanel()}</div>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            {view.renderPanel()}
+          </div>
         </div>
       );
     }
@@ -2989,33 +3158,33 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     return (
       <section
         data-testid="canvas-workbench-panel-document"
-        className="flex h-full min-h-0 flex-col gap-4 p-4"
+        className="flex h-full min-h-0 flex-col bg-white"
       >
-        <div className={cn(WORKBENCH_PANEL_CLASSNAME, "px-4 py-3")}>
-          <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex h-11 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[color:var(--lime-surface-border)] px-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                  {documentContext.kindLabel}
-                </span>
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="truncate text-[13px] font-semibold text-slate-950">
+                  {documentContext.title}
+                </div>
                 {documentContext.badgeLabel ? (
                   <Badge variant="outline">{documentContext.badgeLabel}</Badge>
                 ) : null}
-              </div>
-              <div className="mt-2 truncate text-sm font-semibold text-slate-900">
-                {documentContext.title}
+                <span className="shrink-0 rounded-[6px] border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                  {documentContext.kindLabel}
+                </span>
               </div>
               {documentContext.subtitle ? (
-                <div className="mt-1 truncate text-xs text-slate-500">
+                <div className="truncate text-[11px] text-slate-500">
                   {documentContext.subtitle}
                 </div>
               ) : documentContext.selectionPath ? (
-                <div className="mt-1 truncate text-xs text-slate-500">
+                <div className="truncate text-[11px] text-slate-500">
                   {documentContext.selectionPath}
                 </div>
               ) : null}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1">
               <button
                 type="button"
                 aria-label={canvasWorkbenchText(
@@ -3024,7 +3193,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
                 )}
                 onClick={() => setDocumentPreviewMode("preview")}
                 className={cn(
-                  "rounded-xl border px-3 py-1.5 text-xs transition-colors",
+                  "h-8 rounded-[10px] border px-3 text-xs transition-colors",
                   documentPreviewMode === "preview"
                     ? WORKBENCH_ACTIVE_BUTTON_CLASSNAME
                     : WORKBENCH_BUTTON_CLASSNAME,
@@ -3044,7 +3213,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
                   )}
                   onClick={() => setDocumentPreviewMode("changes")}
                   className={cn(
-                    "rounded-xl border px-3 py-1.5 text-xs transition-colors",
+                    "h-8 rounded-[10px] border px-3 text-xs transition-colors",
                     documentPreviewMode === "changes"
                       ? WORKBENCH_ACTIVE_BUTTON_CLASSNAME
                       : WORKBENCH_BUTTON_CLASSNAME,
@@ -3058,15 +3227,6 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
               ) : null}
             </div>
           </div>
-          {canShowDiff ? (
-            <div className="mt-3 flex items-center gap-2 text-[11px] text-slate-500">
-              <GitCompare className="h-3.5 w-3.5" />
-              {canvasWorkbenchText(
-                canvasT,
-                "agentChat.canvasWorkbench.document.diffHint",
-              )}
-            </div>
-          ) : null}
         </div>
 
         {renderDocumentInspector()}
@@ -3077,7 +3237,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
           ) : (
             <div
               data-testid="canvas-workbench-preview-region"
-              className="h-full min-h-0 overflow-hidden rounded-[24px] border border-slate-200 bg-white"
+              className="h-full min-h-0 overflow-hidden bg-white"
             >
               {renderPreview(documentContext.target, {
                 onArtifactDocumentControllerChange:
@@ -3102,15 +3262,16 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
         "relative flex h-full min-h-0 flex-col overflow-hidden",
       )}
     >
-      <header className="border-b border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-4 py-3">
+      <header className="border-b border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2">
         <div
-          className={cn(
-            "flex items-center justify-between gap-3",
-            isStackedLayout && "flex-col items-stretch",
-          )}
+          data-testid="canvas-workbench-header-row"
+          className="flex min-w-0 items-center justify-between gap-2"
         >
-          <div className="min-w-0 flex-1 rounded-[24px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] p-1.5">
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="min-w-0 flex-1 overflow-hidden pr-1">
+            <div
+              role="tablist"
+              className="flex items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
               {primaryTabs.map((tab) =>
                 renderTopTab({
                   key: tab.key,
@@ -3137,66 +3298,73 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
             </div>
           </div>
 
-          {activeTab !== "team" && activePreviewContext ? (
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-              {renderHeaderActionButton({
-                label: translateWorkbench(
-                  "agentChat.canvasWorkbench.actions.copyPath",
-                ),
-                disabled: !activeSelectionPath,
-                onClick: () => {
-                  void handleCopyPath();
-                },
-                icon: <Copy className="h-4 w-4" />,
-              })}
-              {renderHeaderActionButton({
-                label: translateWorkbench(
-                  "agentChat.canvasWorkbench.actions.revealPath",
-                ),
-                disabled: !activeSelectionPath,
-                onClick: () => {
-                  if (activeSelectionPath) {
-                    void onRevealPath(activeSelectionPath);
-                  }
-                },
-                icon: <FolderOpen className="h-4 w-4" />,
-              })}
-              {renderHeaderActionButton({
-                label: translateWorkbench(
-                  "agentChat.canvasWorkbench.actions.openPath",
-                ),
-                disabled: !activeSelectionPath,
-                onClick: () => {
-                  if (activeSelectionPath) {
-                    void onOpenPath(activeSelectionPath);
-                  }
-                },
-                icon: <ExternalLink className="h-4 w-4" />,
-              })}
-              {renderHeaderActionButton({
-                label: translateWorkbench(
-                  "agentChat.canvasWorkbench.actions.download",
-                ),
-                disabled: !activeContent.trim(),
-                onClick: handleDownload,
-                icon: <Download className="h-4 w-4" />,
-              })}
-            </div>
-          ) : null}
+          {headerActionsVisible || onClose ? (
+            <div className="flex shrink-0 items-center justify-end gap-1">
+              {headerActionsVisible ? (
+                <div
+                  className="flex shrink-0 items-center justify-end gap-1"
+                  data-testid="canvas-workbench-header-actions"
+                >
+                  {renderHeaderActionButton({
+                    label: translateWorkbench(
+                      "agentChat.canvasWorkbench.actions.copyPath",
+                    ),
+                    disabled: !activeSelectionPath,
+                    onClick: () => {
+                      void handleCopyPath();
+                    },
+                    icon: <Copy className="h-4 w-4" />,
+                  })}
+                  {renderHeaderActionButton({
+                    label: translateWorkbench(
+                      "agentChat.canvasWorkbench.actions.revealPath",
+                    ),
+                    disabled: !activeSelectionPath,
+                    onClick: () => {
+                      if (activeSelectionPath) {
+                        void onRevealPath(activeSelectionPath);
+                      }
+                    },
+                    icon: <FolderOpen className="h-4 w-4" />,
+                  })}
+                  {renderHeaderActionButton({
+                    label: translateWorkbench(
+                      "agentChat.canvasWorkbench.actions.openPath",
+                    ),
+                    disabled: !activeSelectionPath,
+                    onClick: () => {
+                      if (activeSelectionPath) {
+                        void onOpenPath(activeSelectionPath);
+                      }
+                    },
+                    icon: <ExternalLink className="h-4 w-4" />,
+                  })}
+                  {renderHeaderActionButton({
+                    label: translateWorkbench(
+                      "agentChat.canvasWorkbench.actions.download",
+                    ),
+                    disabled: !activeContent.trim(),
+                    onClick: handleDownload,
+                    icon: <Download className="h-4 w-4" />,
+                  })}
+                </div>
+              ) : null}
 
-          {onClose ? (
-            <button
-              type="button"
-              aria-label={closeWorkbenchLabel}
-              title={closeWorkbenchLabel}
-              onClick={onClose}
-              className={cn(
-                "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-colors",
-                WORKBENCH_GHOST_BUTTON_CLASSNAME,
-              )}
-            >
-              <X className="h-4 w-4" />
-            </button>
+              {onClose ? (
+                <button
+                  type="button"
+                  aria-label={closeWorkbenchLabel}
+                  title={closeWorkbenchLabel}
+                  onClick={onClose}
+                  className={cn(
+                    "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border transition-colors",
+                    WORKBENCH_GHOST_BUTTON_CLASSNAME,
+                  )}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </header>

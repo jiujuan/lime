@@ -12,9 +12,6 @@ use provider_continuation::{
 };
 use request_metadata::with_string_field;
 
-pub(super) use provider_continuation::load_previous_provider_continuation_state;
-#[cfg(test)]
-pub(super) use provider_continuation::provider_routing_matches_current;
 pub(super) use request_metadata::{
     build_chat_run_metadata_base, extract_harness_array, extract_harness_bool,
     extract_harness_nested_object, extract_harness_string,

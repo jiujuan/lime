@@ -321,10 +321,8 @@
   "settings.developer.message.copyDiagnosticFailed": "複製診斷資訊失敗",
   "settings.developer.message.diagnosticJsonCopied": "純 JSON 診斷資訊已複製",
   "settings.developer.message.copyDiagnosticJsonFailed": "複製純 JSON 失敗",
-  "settings.developer.message.diagnosticExportedAndOpened": "診斷檔案已匯出：{{fileName}}，並已開啟目錄：{{path}}",
   "settings.developer.message.diagnosticExported": "診斷檔案已匯出：{{fileName}}（位置：{{location}}）",
   "settings.developer.message.exportDiagnosticFailed": "匯出診斷資訊失敗",
-  "settings.developer.message.downloadDirectoryOpened": "已開啟下載目錄：{{path}}",
   "settings.developer.message.openDownloadDirectoryFailed": "開啟下載目錄失敗",
   "settings.developer.message.diagnosticHistoryCleared": "已清空舊診斷資訊，後續複製將只包含新的診斷資料",
   "settings.developer.message.clearDiagnosticHistoryFailed": "清空舊診斷資訊失敗",
@@ -1145,11 +1143,9 @@
   "settings.experimental.message.diagnosticCopyFailed": "複製診斷資訊失敗",
   "settings.experimental.message.diagnosticExportFailed": "匯出診斷資訊失敗",
   "settings.experimental.message.diagnosticExported": "診斷檔已匯出：{{fileName}}（位置：{{location}}）",
-  "settings.experimental.message.diagnosticExportedAndOpened": "診斷檔已匯出：{{fileName}}，並已開啟目錄：{{path}}",
   "settings.experimental.message.diagnosticJsonCopied": "純 JSON 診斷資訊已複製",
   "settings.experimental.message.diagnosticJsonCopyFailed": "複製純 JSON 失敗",
   "settings.experimental.message.downloadDirectoryOpenFailed": "開啟下載目錄失敗",
-  "settings.experimental.message.downloadDirectoryOpened": "已開啟下載目錄：{{path}}",
   "settings.experimental.message.dynamicFilteringDisabled": "動態過濾已停用",
   "settings.experimental.message.dynamicFilteringEnabled": "動態過濾已啟用",
   "settings.experimental.message.loadFailed": "載入設定失敗",
@@ -2532,5 +2528,6 @@
   "settings.providers.setting.body.models.imageCommand.action.save": "儲存命令",
   "settings.providers.setting.body.models.imageCommand.action.cancel": "取消",
   "settings.providers.setting.feedback.imageCommand.created": "已建立 {{trigger}}，將使用 {{model}} 作為圖片生成模型。",
-  "settings.providers.setting.feedback.imageCommand.invalid": "請填寫有效的 @命令名稱。"
+  "settings.providers.setting.feedback.imageCommand.invalid": "請填寫有效的 @命令名稱。",
+  "settings.experimental.crashReporting.dsn.placeholder": "https://xxx@o0.ingest.sentry.io/0"
 }

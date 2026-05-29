@@ -5,17 +5,20 @@
  * @requirements 4.1, 4.2, 4.3, 4.5
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Check,
   ChevronDown,
+  Eye,
   FolderIcon,
+  FolderOpen,
   Pencil,
   Plus,
   Search,
   Trash2,
 } from "lucide-react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,10 +38,12 @@ import {
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useProjects } from "@/hooks/useProjects";
+import { revealPathInFinder } from "@/lib/api/fileSystem";
 import type { ProjectType } from "@/lib/api/project";
 import {
   getDefaultProject,
   getProject,
+  getProjectByRootPath,
   USER_PROJECT_TYPES,
 } from "@/lib/api/project";
 import { toProjectView } from "@/lib/projectView";
@@ -91,6 +96,21 @@ export interface ProjectSelectorProps {
   deferProjectListLoad?: boolean;
   /** 是否在未选择时自动回落到默认项目 */
   autoSelectFallback?: boolean;
+  /** 打开当前项目/工作区内容视图 */
+  onOpenProjectContents?: (projectId: string) => void;
+}
+
+function detectDesktopPlatform(): "macos" | "windows" | "linux" | "unknown" {
+  const platform =
+    typeof navigator !== "undefined" ? navigator.platform.toLowerCase() : "";
+  const userAgent =
+    typeof navigator !== "undefined" ? navigator.userAgent.toLowerCase() : "";
+  const source = `${platform} ${userAgent}`;
+
+  if (source.includes("mac")) return "macos";
+  if (source.includes("win")) return "windows";
+  if (source.includes("linux")) return "linux";
+  return "unknown";
 }
 
 function isProjectSelectableForWorkspace(
@@ -146,6 +166,15 @@ function formatProjectPathPreview(
   }
 
   return `…/${segments.slice(-2).join("/")}`;
+}
+
+function getDirectoryName(path: string): string {
+  return (
+    path
+      .split(/[\\/]+/)
+      .filter(Boolean)
+      .pop() || path
+  );
 }
 
 function getWorkspaceTypeLabel(
@@ -207,6 +236,7 @@ export function ProjectSelector({
   skipDefaultWorkspaceReadyCheck = false,
   deferProjectListLoad = false,
   autoSelectFallback = true,
+  onOpenProjectContents,
 }: ProjectSelectorProps) {
   const { t } = useTranslation("common");
   const {
@@ -233,6 +263,8 @@ export function ProjectSelector({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isRevealingPath, setIsRevealingPath] = useState(false);
+  const [isOpeningExistingFolder, setIsOpeningExistingFolder] = useState(false);
   const [summaryProject, setSummaryProject] = useState<Project | null>(null);
   const [projectListHydrating, setProjectListHydrating] = useState(false);
   const [hasLoadedProjectList, setHasLoadedProjectList] =
@@ -259,6 +291,12 @@ export function ProjectSelector({
   const managementDescription = workspaceTab
     ? t("common.projectSelector.management.description.workspace", {})
     : t("common.projectSelector.management.description.project", {});
+  const revealPathLabel = t(
+    `common.projectSelector.action.revealPath.${detectDesktopPlatform()}`,
+    {
+      defaultValue: t("common.projectSelector.action.revealPath.default", {}),
+    },
+  );
   const resolvedPlaceholder =
     placeholder ??
     (workspaceTab
@@ -343,6 +381,32 @@ export function ProjectSelector({
     [workspaceType],
   );
 
+  const loadDeferredProjectList = useCallback(() => {
+    if (
+      !deferProjectListLoad ||
+      hasLoadedProjectList ||
+      loading ||
+      projectListHydrating
+    ) {
+      return;
+    }
+
+    setProjectListHydrating(true);
+    void refresh()
+      .then(() => {
+        setHasLoadedProjectList(true);
+      })
+      .finally(() => {
+        setProjectListHydrating(false);
+      });
+  }, [
+    deferProjectListLoad,
+    hasLoadedProjectList,
+    loading,
+    projectListHydrating,
+    refresh,
+  ]);
+
   useEffect(() => {
     if (open) {
       return;
@@ -350,6 +414,14 @@ export function ProjectSelector({
 
     setSearchQuery("");
   }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    loadDeferredProjectList();
+  }, [loadDeferredProjectList, open]);
 
   useEffect(() => {
     if (!deferProjectListLoad) {
@@ -503,18 +575,9 @@ export function ProjectSelector({
     }
     onOpenChange?.(nextOpen);
 
-    if (!nextOpen || !deferProjectListLoad || hasLoadedProjectList || loading) {
-      return;
+    if (nextOpen) {
+      loadDeferredProjectList();
     }
-
-    setProjectListHydrating(true);
-    void refresh()
-      .then(() => {
-        setHasLoadedProjectList(true);
-      })
-      .finally(() => {
-        setProjectListHydrating(false);
-      });
   };
 
   const handleSelect = (projectId: string) => {
@@ -524,9 +587,51 @@ export function ProjectSelector({
     handleOpenChange(false);
   };
 
-  const handleCreateProject = async (name: string, type: ProjectType) => {
+  const handleOpenExistingFolder = async () => {
+    setIsOpeningExistingFolder(true);
+    try {
+      const selectedPath = await openDialog({
+        directory: true,
+        multiple: false,
+      });
+      if (typeof selectedPath !== "string" || !selectedPath.trim()) {
+        return;
+      }
+
+      const rootPath = selectedPath.trim();
+      const existingProject = await getProjectByRootPath(rootPath);
+      if (existingProject) {
+        onChange(existingProject.id);
+        handleOpenChange(false);
+        return;
+      }
+
+      const project = await create({
+        name: getDirectoryName(rootPath),
+        rootPath,
+        workspaceType: defaultProjectType,
+      });
+      onChange(project.id);
+      handleOpenChange(false);
+    } catch (error) {
+      toast.error(
+        t("common.projectSelector.toast.openExistingFolderFailed", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    } finally {
+      setIsOpeningExistingFolder(false);
+    }
+  };
+
+  const handleCreateProject = async (
+    name: string,
+    type: ProjectType,
+    rootPath: string,
+  ) => {
     const project = await create({
       name,
+      rootPath,
       workspaceType: type,
     });
     onChange(project.id);
@@ -586,8 +691,8 @@ export function ProjectSelector({
     }
   };
 
-  const handleOpenDelete = () => {
-    const currentSelectedProject = selectedProject;
+  const handleOpenDelete = (projectOverride?: Project) => {
+    const currentSelectedProject = projectOverride ?? selectedProject;
     if (!currentSelectedProject || !canDeleteProject(currentSelectedProject)) {
       return;
     }
@@ -595,6 +700,39 @@ export function ProjectSelector({
     setDeleteTargetId(currentSelectedProject.id);
     handleOpenChange(false);
     setDeleteDialogOpen(true);
+  };
+
+  const handleOpenSelectedContents = () => {
+    if (!selectedProject || !onOpenProjectContents) {
+      return;
+    }
+
+    if (selectedProject.id !== value) {
+      onChange(selectedProject.id);
+    }
+    handleOpenChange(false);
+    onOpenProjectContents(selectedProject.id);
+  };
+
+  const handleRevealSelectedPath = async () => {
+    const rootPath = selectedProject?.rootPath?.trim();
+    if (!rootPath) {
+      toast.error(t("common.projectSelector.toast.pathMissing", {}));
+      return;
+    }
+
+    setIsRevealingPath(true);
+    try {
+      await revealPathInFinder(rootPath);
+    } catch (error) {
+      toast.error(
+        t("common.projectSelector.toast.revealPathFailed", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    } finally {
+      setIsRevealingPath(false);
+    }
   };
 
   const handleConfirmDelete = async () => {
@@ -623,13 +761,13 @@ export function ProjectSelector({
       setDeleteDialogOpen(false);
       setDeleteTargetId(null);
       toast.success(
-        t("common.projectSelector.toast.deleted", {
+        t("common.projectSelector.toast.removed", {
           entity: entityLabel,
         }),
       );
     } catch (error) {
       toast.error(
-        t("common.projectSelector.toast.deleteFailed", {
+        t("common.projectSelector.toast.removeFailed", {
           message: error instanceof Error ? error.message : String(error),
         }),
       );
@@ -644,11 +782,41 @@ export function ProjectSelector({
           entity: entityLabel,
         })
       : null;
+  const canRevealSelectedProjectPath = Boolean(
+    selectedProject?.rootPath?.trim(),
+  );
   const projectSummaryText = getProjectSummaryText(
     selectedProject,
     projectSelectorCopy,
   );
-  const popoverWidthClass = compactPanel ? "w-[392px]" : "w-[420px]";
+  const workspaceCurrentProject =
+    workspaceTab && value
+      ? filteredProjects.find((project) => project.id === value) ??
+        (summaryProject?.id === value ? summaryProject : null) ??
+        (defaultProject?.id === value ? defaultProject : null)
+      : null;
+  const visualSelectedProject = workspaceTab
+    ? workspaceCurrentProject ??
+      selectedProject ??
+      (autoSelectFallback ? defaultProject : null) ??
+      filteredProjects[0] ??
+      null
+    : selectedProject;
+  const selectedProjectId = visualSelectedProject?.id ?? value ?? null;
+  const workspaceMenuProjects =
+    workspaceTab && visualSelectedProject
+      ? [
+          visualSelectedProject,
+          ...filteredProjects.filter(
+            (project) => project.id !== visualSelectedProject.id,
+          ),
+        ]
+      : filteredProjects;
+  const popoverWidthClass = workspaceTab
+    ? "w-[360px]"
+    : compactPanel
+      ? "w-[392px]"
+      : "w-[420px]";
   const headerPaddingClass = compactPanel ? "px-4 py-3" : "px-4 py-4";
   const bodyPaddingClass = compactPanel ? "px-4 py-3" : "px-4 py-4";
   const managementPaddingClass = compactPanel ? "px-4 py-3" : "px-4 py-4";
@@ -676,8 +844,8 @@ export function ProjectSelector({
             disabled={disabled || displayLoading}
             tabIndex={passiveTrigger ? -1 : undefined}
             title={
-              selectedProject
-                ? `${selectedProject.name}\n${selectedProject.rootPath}`
+              visualSelectedProject
+                ? `${visualSelectedProject.name}\n${visualSelectedProject.rootPath}`
                 : resolvedPlaceholder
             }
           >
@@ -694,7 +862,7 @@ export function ProjectSelector({
                   </span>
                   <span className="min-w-0 flex flex-1 items-center gap-1.5">
                     <span className="truncate text-[12px] font-semibold leading-none text-[color:var(--lime-chrome-text)] dark:text-slate-100">
-                      {selectedProject?.name || resolvedPlaceholder}
+                      {visualSelectedProject?.name || resolvedPlaceholder}
                     </span>
                   </span>
                 </>
@@ -761,275 +929,422 @@ export function ProjectSelector({
           align={dropdownAlign}
           className={cn(
             popoverWidthClass,
-            "overflow-hidden rounded-[28px] border border-[color:var(--lime-surface-border)] bg-[image:var(--lime-home-card-surface-strong)] p-0 shadow-lg shadow-slate-950/10",
+            workspaceTab
+              ? "overflow-hidden rounded-[28px] border border-slate-200 bg-white p-0 shadow-2xl shadow-slate-950/12"
+              : "overflow-hidden rounded-[28px] border border-[color:var(--lime-surface-border)] bg-[image:var(--lime-home-card-surface-strong)] p-0 shadow-lg shadow-slate-950/10",
           )}
         >
-          <div className="flex flex-col">
-            <div
-              className={cn(
-                "relative border-b border-white/80",
-                headerPaddingClass,
-              )}
-            >
-              <div className="pointer-events-none absolute -left-10 top-[-24px] h-24 w-24 rounded-full bg-[color:var(--lime-home-glow-secondary)] blur-3xl" />
-              <div className="pointer-events-none absolute right-[-20px] top-0 h-20 w-20 rounded-full bg-[color:var(--lime-home-glow-primary)] blur-3xl" />
-              <div
-                className={cn(
-                  "relative",
-                  compact ? "space-y-2.5" : "space-y-3",
-                )}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">
-                      {t("common.projectSelector.header.title", {
-                        entity: entityLabel,
-                      })}
-                    </div>
-                    <div className="mt-1 text-xs leading-5 text-slate-500">
-                      {t("common.projectSelector.header.description", {
-                        entity: entityLabel,
-                      })}
-                    </div>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className="border-slate-200/80 bg-white/85 text-slate-600"
-                  >
-                    {t("common.projectSelector.header.count", {
-                      count: filteredProjects.length,
-                      entity: entityLabel,
-                    })}
-                  </Badge>
-                </div>
-
-                {!compactPanel && projectSummaryText ? (
-                  <div className="rounded-[18px] border border-white/90 bg-white/85 px-3 py-2 text-[11px] leading-5 text-slate-600 shadow-sm">
-                    <span className="font-medium text-slate-800">
-                      {t("common.projectSelector.current.label", {
-                        entity: entityLabel,
-                      })}
-                    </span>
-                    <span>{projectSummaryText}</span>
-                  </div>
-                ) : null}
-
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder={t(
-                      "common.projectSelector.search.placeholder",
-                      {
-                        entity: entityLabel,
-                      },
-                    )}
-                    className={cn(
-                      compactPanel ? "h-9" : "h-10",
-                      "border-slate-200/80 bg-white/85 pl-9 focus-visible:border-slate-300 focus-visible:ring-1 focus-visible:ring-slate-300 focus-visible:ring-offset-0",
-                    )}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className={bodyPaddingClass}>
+          {workspaceTab ? (
+            <div className="p-3">
               <ScrollArea
-                className={cn(compactPanel ? "max-h-[280px]" : "max-h-[320px]")}
+                className="max-h-[308px] overflow-y-auto pr-1"
+                data-testid="workspace-selector-scroll"
               >
-                <div
-                  className={cn(
-                    "pr-2",
-                    compactPanel ? "space-y-2" : "space-y-3",
-                  )}
-                >
+                <div className="space-y-1">
                   {displayLoading ? (
-                    <div className="rounded-[22px] border border-dashed border-slate-300/80 bg-white/80 px-4 py-8 text-center text-sm text-slate-500">
+                    <div className="rounded-[22px] px-4 py-8 text-center text-sm text-slate-500">
                       {t("common.loading", {})}
                     </div>
-                  ) : filteredProjects.length === 0 ? (
-                    <div className="rounded-[22px] border border-dashed border-slate-300/80 bg-white/80 px-4 py-8 text-center text-sm text-slate-500">
+                  ) : workspaceMenuProjects.length === 0 ? (
+                    <div className="rounded-[22px] px-4 py-8 text-center text-sm text-slate-500">
                       {t("common.projectSelector.empty", {})}
                     </div>
                   ) : (
-                    filteredProjects.map((project) => {
-                      const isSelected = project.id === selectedProject?.id;
+                    workspaceMenuProjects.map((project) => {
+                      const isSelected = project.id === selectedProjectId;
                       return (
-                        <button
+                        <div
                           key={project.id}
-                          type="button"
-                          onClick={() => handleSelect(project.id)}
+                          data-testid={`workspace-selector-row-${project.id}`}
+                          data-selected={isSelected ? "true" : "false"}
                           className={cn(
-                            compact
-                              ? "flex w-full items-center gap-2.5 rounded-[18px] border px-3 py-2.5 text-left transition"
-                              : "flex w-full items-center gap-3 rounded-[22px] border px-4 py-3 text-left transition",
+                            "group flex w-full items-center gap-3 rounded-[18px] px-3 py-3 text-left transition-colors",
                             isSelected
-                              ? "border-slate-300 bg-slate-50/85"
-                              : "border-slate-200/80 bg-white/85 hover:border-slate-300 hover:bg-white",
+                              ? "bg-slate-100 text-slate-900"
+                              : "text-slate-800 hover:bg-slate-50",
                           )}
                         >
-                          <div
-                            className={cn(
-                              "shrink-0 items-center justify-center border border-slate-200/80 bg-slate-50 text-slate-600",
-                              compact
-                                ? "flex h-9 w-9 rounded-[14px]"
-                                : "flex h-11 w-11 rounded-[16px]",
-                            )}
+                          <button
+                            type="button"
+                            onClick={() => handleSelect(project.id)}
+                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                            aria-current={isSelected ? "page" : undefined}
                           >
-                            {project.icon ? (
-                              <span
-                                className={compact ? "text-sm" : "text-base"}
-                              >
-                                {project.icon}
-                              </span>
-                            ) : (
-                              <FolderIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={cn(
-                                  "truncate text-slate-900",
-                                  compact
-                                    ? "text-sm font-semibold"
-                                    : "font-medium",
-                                )}
-                              >
+                            <FolderIcon className="h-5 w-5 shrink-0 text-slate-500" />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[15px] font-semibold leading-5">
                                 {project.name}
                               </span>
-                              {project.isDefault ? (
-                                <Badge
-                                  variant="outline"
-                                  className="border-amber-200/80 bg-amber-50 text-[10px] font-medium text-amber-700"
-                                >
-                                  {t(
-                                    "common.projectSelector.badge.default",
-                                    {},
-                                  )}
-                                </Badge>
-                              ) : null}
-                              <Badge
-                                variant="outline"
-                                className="border-slate-200/80 bg-white/80 text-[10px] text-slate-600"
+                              <span
+                                className="mt-1 block truncate text-[13px] leading-5 text-slate-500"
+                                title={project.rootPath}
                               >
-                                {getWorkspaceTypeLabel(
-                                  projectSelectorCopy.workspaceTypeLabels,
-                                  project.workspaceType,
+                                {project.rootPath ||
+                                  projectSelectorCopy.noDirectory}
+                              </span>
+                            </span>
+                          </button>
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+                            {isSelected ? (
+                              <Check className="h-4 w-4 text-slate-500" />
+                            ) : enableManagement &&
+                              canDeleteProject(project) ? (
+                              <button
+                                type="button"
+                                className="flex h-8 w-8 items-center justify-center rounded-full text-slate-500 opacity-0 transition-[background-color,color,opacity] hover:bg-white hover:text-rose-600 focus-visible:opacity-100 group-hover:opacity-100"
+                                aria-label={t(
+                                  "common.projectSelector.action.removeEntity",
+                                  {
+                                    entity: entityLabel,
+                                  },
                                 )}
-                              </Badge>
-                            </div>
-                            <div
-                              className="mt-1 truncate text-xs text-muted-foreground"
-                              title={project.rootPath}
-                            >
-                              {compact
-                                ? formatProjectPathPreview(
-                                    project.rootPath,
-                                    projectSelectorCopy.noDirectory,
-                                  )
-                                : project.rootPath}
-                            </div>
-                            {project.tags.length > 0 ? (
-                              <div
-                                className={cn(
-                                  "flex flex-wrap gap-1.5",
-                                  compact ? "mt-1.5" : "mt-2",
-                                )}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleOpenDelete(project);
+                                }}
                               >
-                                {project.tags.slice(0, 2).map((tag) => (
-                                  <Badge
-                                    key={tag}
-                                    variant="outline"
-                                    className="border-slate-200/80 bg-white/70 text-[10px] text-slate-500"
-                                  >
-                                    {tag}
-                                  </Badge>
-                                ))}
-                              </div>
+                                <Trash2 className="h-4 w-4" />
+                              </button>
                             ) : null}
-                          </div>
-                          {isSelected ? (
-                            <Check className="h-4 w-4 shrink-0 text-slate-700" />
-                          ) : null}
-                        </button>
+                          </span>
+                        </div>
                       );
                     })
                   )}
                 </div>
               </ScrollArea>
-            </div>
-
-            {enableManagement ? (
-              <div
-                className={cn(
-                  "border-t border-white/80",
-                  managementPaddingClass,
-                )}
-              >
-                <div className={cn(compact ? "mb-2.5" : "mb-3")}>
-                  <div className="text-sm font-semibold text-slate-900">
-                    {managementTitle}
-                  </div>
-                  <div className="mt-1 text-xs leading-5 text-slate-500">
-                    {managementDescription}
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
+              {enableManagement ? (
+                <div className="mt-3 border-t border-slate-100 pt-3">
+                  <button
                     type="button"
-                    variant="secondary"
-                    size="sm"
-                    className={cn(
-                      compact ? "h-8 px-3 text-xs" : "h-9",
-                      "gap-1.5 rounded-full border border-[color:var(--lime-surface-border-strong)] bg-[image:var(--lime-primary-gradient)] text-white shadow-sm shadow-slate-950/10 hover:opacity-95",
-                    )}
+                    className="flex h-11 w-full items-center gap-3 rounded-[16px] px-3 text-left text-[14px] font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={() => void handleOpenExistingFolder()}
+                    disabled={isOpeningExistingFolder}
+                  >
+                    <FolderOpen className="h-5 w-5 shrink-0 text-slate-500" />
+                    <span>
+                      {t(
+                        "common.projectSelector.action.openExistingFolder",
+                        {},
+                      )}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="flex h-11 w-full items-center gap-3 rounded-[16px] px-3 text-left text-[14px] font-medium text-slate-700 transition-colors hover:bg-slate-50"
                     onClick={() => {
                       handleOpenChange(false);
                       setCreateDialogOpen(true);
                     }}
                   >
-                    <Plus className="h-3.5 w-3.5" />
-                    {createEntityLabel}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      compact ? "h-8 px-3 text-xs" : "h-9",
-                      "gap-1.5 rounded-full border-slate-200/80 bg-white",
-                    )}
-                    onClick={handleOpenRename}
-                    disabled={!canRenameProject(selectedProject)}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                    {t("common.projectSelector.action.rename", {})}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      compact ? "h-8 px-3 text-xs" : "h-9",
-                      "gap-1.5 rounded-full border-rose-200/80 bg-rose-50/80 text-destructive hover:text-destructive",
-                    )}
-                    onClick={handleOpenDelete}
-                    disabled={!canDeleteProject(selectedProject)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    {t("common.delete", {})}
-                  </Button>
+                    <Plus className="h-5 w-5 shrink-0 text-slate-500" />
+                    <span>{createEntityLabel}</span>
+                  </button>
                 </div>
-                {managementHint ? (
-                  <p className="mt-3 text-xs text-slate-500">
-                    {managementHint}
-                  </p>
-                ) : null}
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex flex-col">
+              <div
+                className={cn(
+                  "relative border-b border-white/80",
+                  headerPaddingClass,
+                )}
+              >
+                <div className="pointer-events-none absolute -left-10 top-[-24px] h-24 w-24 rounded-full bg-[color:var(--lime-home-glow-secondary)] blur-3xl" />
+                <div className="pointer-events-none absolute right-[-20px] top-0 h-20 w-20 rounded-full bg-[color:var(--lime-home-glow-primary)] blur-3xl" />
+                <div
+                  className={cn(
+                    "relative",
+                    compact ? "space-y-2.5" : "space-y-3",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">
+                        {t("common.projectSelector.header.title", {
+                          entity: entityLabel,
+                        })}
+                      </div>
+                      <div className="mt-1 text-xs leading-5 text-slate-500">
+                        {t("common.projectSelector.header.description", {
+                          entity: entityLabel,
+                        })}
+                      </div>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className="border-slate-200/80 bg-white/85 text-slate-600"
+                    >
+                      {t("common.projectSelector.header.count", {
+                        count: filteredProjects.length,
+                        entity: entityLabel,
+                      })}
+                    </Badge>
+                  </div>
+
+                  {!compactPanel && projectSummaryText ? (
+                    <div className="rounded-[18px] border border-white/90 bg-white/85 px-3 py-2 text-[11px] leading-5 text-slate-600 shadow-sm">
+                      <span className="font-medium text-slate-800">
+                        {t("common.projectSelector.current.label", {
+                          entity: entityLabel,
+                        })}
+                      </span>
+                      <span>{projectSummaryText}</span>
+                    </div>
+                  ) : null}
+
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder={t(
+                        "common.projectSelector.search.placeholder",
+                        {
+                          entity: entityLabel,
+                        },
+                      )}
+                      className={cn(
+                        compactPanel ? "h-9" : "h-10",
+                        "border-slate-200/80 bg-white/85 pl-9 focus-visible:border-slate-300 focus-visible:ring-1 focus-visible:ring-slate-300 focus-visible:ring-offset-0",
+                      )}
+                    />
+                  </div>
+                </div>
               </div>
-            ) : null}
-          </div>
+
+              <div className={bodyPaddingClass}>
+                <ScrollArea
+                  className={cn(
+                    compactPanel ? "max-h-[280px]" : "max-h-[320px]",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "pr-2",
+                      compactPanel ? "space-y-2" : "space-y-3",
+                    )}
+                  >
+                    {displayLoading ? (
+                      <div className="rounded-[22px] border border-dashed border-slate-300/80 bg-white/80 px-4 py-8 text-center text-sm text-slate-500">
+                        {t("common.loading", {})}
+                      </div>
+                    ) : filteredProjects.length === 0 ? (
+                      <div className="rounded-[22px] border border-dashed border-slate-300/80 bg-white/80 px-4 py-8 text-center text-sm text-slate-500">
+                        {t("common.projectSelector.empty", {})}
+                      </div>
+                    ) : (
+                      filteredProjects.map((project) => {
+                        const isSelected = project.id === selectedProject?.id;
+                        return (
+                          <button
+                            key={project.id}
+                            type="button"
+                            onClick={() => handleSelect(project.id)}
+                            className={cn(
+                              compact
+                                ? "flex w-full items-center gap-2.5 rounded-[18px] border px-3 py-2.5 text-left transition"
+                                : "flex w-full items-center gap-3 rounded-[22px] border px-4 py-3 text-left transition",
+                              isSelected
+                                ? "border-slate-300 bg-slate-50/85"
+                                : "border-slate-200/80 bg-white/85 hover:border-slate-300 hover:bg-white",
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                "shrink-0 items-center justify-center border border-slate-200/80 bg-slate-50 text-slate-600",
+                                compact
+                                  ? "flex h-9 w-9 rounded-[14px]"
+                                  : "flex h-11 w-11 rounded-[16px]",
+                              )}
+                            >
+                              {project.icon ? (
+                                <span
+                                  className={compact ? "text-sm" : "text-base"}
+                                >
+                                  {project.icon}
+                                </span>
+                              ) : (
+                                <FolderIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={cn(
+                                    "truncate text-slate-900",
+                                    compact
+                                      ? "text-sm font-semibold"
+                                      : "font-medium",
+                                  )}
+                                >
+                                  {project.name}
+                                </span>
+                                {project.isDefault ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="border-amber-200/80 bg-amber-50 text-[10px] font-medium text-amber-700"
+                                  >
+                                    {t(
+                                      "common.projectSelector.badge.default",
+                                      {},
+                                    )}
+                                  </Badge>
+                                ) : null}
+                                <Badge
+                                  variant="outline"
+                                  className="border-slate-200/80 bg-white/80 text-[10px] text-slate-600"
+                                >
+                                  {getWorkspaceTypeLabel(
+                                    projectSelectorCopy.workspaceTypeLabels,
+                                    project.workspaceType,
+                                  )}
+                                </Badge>
+                              </div>
+                              <div
+                                className="mt-1 truncate text-xs text-muted-foreground"
+                                title={project.rootPath}
+                              >
+                                {compact
+                                  ? formatProjectPathPreview(
+                                      project.rootPath,
+                                      projectSelectorCopy.noDirectory,
+                                    )
+                                  : project.rootPath}
+                              </div>
+                              {project.tags.length > 0 ? (
+                                <div
+                                  className={cn(
+                                    "flex flex-wrap gap-1.5",
+                                    compact ? "mt-1.5" : "mt-2",
+                                  )}
+                                >
+                                  {project.tags.slice(0, 2).map((tag) => (
+                                    <Badge
+                                      key={tag}
+                                      variant="outline"
+                                      className="border-slate-200/80 bg-white/70 text-[10px] text-slate-500"
+                                    >
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                            {isSelected ? (
+                              <Check className="h-4 w-4 shrink-0 text-slate-700" />
+                            ) : null}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
+
+              {enableManagement ? (
+                <div
+                  className={cn(
+                    "border-t border-white/80",
+                    managementPaddingClass,
+                  )}
+                >
+                  <div className={cn(compact ? "mb-2.5" : "mb-3")}>
+                    <div className="text-sm font-semibold text-slate-900">
+                      {managementTitle}
+                    </div>
+                    <div className="mt-1 text-xs leading-5 text-slate-500">
+                      {managementDescription}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className={cn(
+                        compact ? "h-8 px-3 text-xs" : "h-9",
+                        "gap-1.5 rounded-full border border-[color:var(--lime-surface-border-strong)] bg-[image:var(--lime-primary-gradient)] text-white shadow-sm shadow-slate-950/10 hover:opacity-95",
+                      )}
+                      onClick={() => {
+                        handleOpenChange(false);
+                        setCreateDialogOpen(true);
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      {createEntityLabel}
+                    </Button>
+                    {onOpenProjectContents ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          compact ? "h-8 px-3 text-xs" : "h-9",
+                          "gap-1.5 rounded-full border-slate-200/80 bg-white",
+                        )}
+                        onClick={handleOpenSelectedContents}
+                        disabled={!selectedProject}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        {t("common.projectSelector.action.viewContents", {})}
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        compact ? "h-8 px-3 text-xs" : "h-9",
+                        "gap-1.5 rounded-full border-slate-200/80 bg-white",
+                      )}
+                      onClick={() => void handleRevealSelectedPath()}
+                      disabled={
+                        !canRevealSelectedProjectPath || isRevealingPath
+                      }
+                    >
+                      <FolderOpen className="h-3.5 w-3.5" />
+                      {revealPathLabel}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        compact ? "h-8 px-3 text-xs" : "h-9",
+                        "gap-1.5 rounded-full border-slate-200/80 bg-white",
+                      )}
+                      onClick={handleOpenRename}
+                      disabled={!canRenameProject(selectedProject)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      {t("common.projectSelector.action.rename", {})}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        compact ? "h-8 px-3 text-xs" : "h-9",
+                        "gap-1.5 rounded-full border-rose-200/80 bg-rose-50/80 text-destructive hover:text-destructive",
+                      )}
+                      onClick={() => handleOpenDelete()}
+                      disabled={!canDeleteProject(selectedProject)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {t("common.projectSelector.action.remove", {})}
+                    </Button>
+                  </div>
+                  {managementHint ? (
+                    <p className="mt-3 text-xs text-slate-500">
+                      {managementHint}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          )}
         </PopoverContent>
       </Popover>
 
@@ -1115,12 +1430,12 @@ export function ProjectSelector({
         <DialogContent className="sm:max-w-[480px] overflow-hidden border-rose-200/80 bg-[linear-gradient(180deg,rgba(255,241,242,0.96)_0%,rgba(255,255,255,0.98)_100%)] p-0">
           <DialogHeader className="border-b border-white/80 px-6 py-5">
             <DialogTitle className="text-destructive">
-              {t("common.projectSelector.delete.title", {
+              {t("common.projectSelector.remove.title", {
                 entity: entityLabel,
               })}
             </DialogTitle>
             <DialogDescription>
-              {t("common.projectSelector.delete.description", {
+              {t("common.projectSelector.remove.description", {
                 entity: entityLabel,
                 name: deleteTarget ? `「${deleteTarget.name}」` : "",
               })}
@@ -1129,10 +1444,10 @@ export function ProjectSelector({
           <div className="px-6 py-5">
             <div className="rounded-[22px] border border-destructive/20 bg-destructive/5 px-4 py-4 text-sm">
               <p className="font-medium text-destructive">
-                {t("common.projectSelector.delete.dangerTitle", {})}
+                {t("common.projectSelector.remove.dangerTitle", {})}
               </p>
               <p className="mt-1 text-muted-foreground">
-                {t("common.projectSelector.delete.dangerDescription", {})}
+                {t("common.projectSelector.remove.dangerDescription", {})}
               </p>
             </div>
           </div>
@@ -1159,7 +1474,7 @@ export function ProjectSelector({
             >
               {isDeleting
                 ? t("common.projectSelector.action.deleting", {})
-                : t("common.projectSelector.action.deleteEntity", {
+                : t("common.projectSelector.action.removeEntity", {
                     entity: entityLabel,
                   })}
             </Button>

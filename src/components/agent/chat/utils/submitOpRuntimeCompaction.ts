@@ -594,6 +594,8 @@ export function buildSubmitOpRuntimeCompaction(
     effectiveProviderType,
   );
   const normalizedEffectiveModel = normalizeRuntimeIdentifier(effectiveModel);
+  const hasEffectiveProviderType = Boolean(normalizedEffectiveProviderType);
+  const hasEffectiveModel = Boolean(normalizedEffectiveModel);
   const knownProviderChanged = Boolean(
     knownProviderSelector &&
     normalizedEffectiveProviderType &&
@@ -624,18 +626,21 @@ export function buildSubmitOpRuntimeCompaction(
         }
       : undefined;
   const shouldSubmitProviderPreference =
+    hasEffectiveProviderType &&
+    hasEffectiveModel &&
     !shouldDeferModelRoutingToBackend &&
     (!knownProviderSelector ||
       normalizeRuntimeIdentifier(knownProviderSelector) !==
         normalizedEffectiveProviderType);
-  const shouldSubmitModelPreference = hasImageGenerationRouting
-    ? false
-    : shouldDeferModelRoutingToBackend && !hasExplicitModelOverride
-      ? false
-      : hasExplicitModelOverride ||
-        shouldSubmitProviderPreference ||
-        !knownModelName ||
-        normalizeRuntimeIdentifier(knownModelName) !== normalizedEffectiveModel;
+  const shouldSubmitModelPreference =
+    hasEffectiveProviderType &&
+    hasEffectiveModel &&
+    !hasImageGenerationRouting &&
+    !(shouldDeferModelRoutingToBackend && !hasExplicitModelOverride) &&
+    (hasExplicitModelOverride ||
+      shouldSubmitProviderPreference ||
+      !knownModelName ||
+      normalizeRuntimeIdentifier(knownModelName) !== normalizedEffectiveModel);
 
   const knownExecutionStrategy =
     syncedExecutionStrategy?.trim() ||

@@ -11,6 +11,7 @@ pub(super) struct WorkspaceSandboxedBashTool {
 impl WorkspaceSandboxedBashTool {
     pub(super) fn new(
         workspace_root: &str,
+        extra_read_only_paths: &[PathBuf],
         auto_approve_warnings: bool,
         app_handle: AppHandle,
     ) -> Result<Self, String> {
@@ -29,17 +30,8 @@ impl WorkspaceSandboxedBashTool {
         }
 
         let workspace_path = PathBuf::from(workspace_root);
-        let mut read_only_paths = vec![
-            PathBuf::from("/usr"),
-            PathBuf::from("/bin"),
-            PathBuf::from("/sbin"),
-            PathBuf::from("/etc"),
-            PathBuf::from("/System"),
-            PathBuf::from("/Library"),
-            workspace_path.clone(),
-        ];
-        read_only_paths.sort();
-        read_only_paths.dedup();
+        let read_only_paths =
+            workspace_sandbox_read_only_paths(&workspace_path, extra_read_only_paths);
 
         let mut writable_paths = vec![workspace_path.clone(), PathBuf::from("/tmp")];
         if cfg!(target_os = "macos") {
@@ -188,25 +180,175 @@ impl WorkspaceSandboxedBashTool {
     }
 }
 
+fn workspace_sandbox_read_only_paths(
+    workspace_path: &Path,
+    extra_read_only_paths: &[PathBuf],
+) -> Vec<PathBuf> {
+    let mut read_only_paths = vec![
+        PathBuf::from("/usr"),
+        PathBuf::from("/bin"),
+        PathBuf::from("/sbin"),
+        PathBuf::from("/etc"),
+        PathBuf::from("/System"),
+        PathBuf::from("/Library"),
+        workspace_path.to_path_buf(),
+    ];
+
+    for path in extra_read_only_paths {
+        if !path.is_absolute() || !path.exists() {
+            continue;
+        }
+
+        read_only_paths.push(path.clone());
+        let normalized = path.canonicalize().unwrap_or_else(|_| path.clone());
+        if normalized != *path {
+            read_only_paths.push(normalized.clone());
+        }
+        if path.is_file() {
+            if let Some(parent) = path.parent() {
+                read_only_paths.push(parent.to_path_buf());
+            }
+        }
+        if normalized.is_file() && normalized != *path {
+            if let Some(parent) = normalized.parent() {
+                read_only_paths.push(parent.to_path_buf());
+            }
+        }
+    }
+
+    read_only_paths.sort();
+    read_only_paths.dedup();
+    read_only_paths
+}
+
+#[cfg(test)]
+mod workspace_sandbox_path_tests {
+    use super::*;
+
+    #[test]
+    fn workspace_sandbox_read_only_paths_include_explicit_local_focus_paths() {
+        let tmp = tempfile::TempDir::new().expect("create temp dir");
+        let workspace = tmp.path().join("workspace");
+        let external_dir = tmp.path().join("external");
+        let external_file = tmp.path().join("config.json");
+        let missing_path = tmp.path().join("missing");
+        std::fs::create_dir_all(&workspace).expect("create workspace");
+        std::fs::create_dir_all(&external_dir).expect("create external dir");
+        std::fs::write(&external_file, "{}").expect("write explicit file");
+
+        let paths = workspace_sandbox_read_only_paths(
+            &workspace,
+            &[
+                external_dir.clone(),
+                external_file.clone(),
+                PathBuf::from("relative-ignored"),
+                missing_path.clone(),
+            ],
+        );
+
+        let canonical_external_dir = external_dir.canonicalize().unwrap_or(external_dir);
+        let canonical_external_file = external_file.canonicalize().unwrap_or(external_file);
+        let external_file_parent = canonical_external_file
+            .parent()
+            .expect("explicit file should have parent")
+            .to_path_buf();
+
+        assert!(paths.contains(&workspace));
+        assert!(paths.contains(&canonical_external_dir));
+        assert!(paths.contains(&canonical_external_file));
+        assert!(paths.contains(&external_file_parent));
+        assert!(!paths.contains(&PathBuf::from("relative-ignored")));
+        assert!(!paths.contains(&missing_path));
+    }
+}
+
+fn shell_command_string(value: &serde_json::Value) -> Option<String> {
+    if let Some(command) = value
+        .as_str()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return Some(command.to_string());
+    }
+
+    let args = value.as_array()?;
+    if args.is_empty() {
+        return None;
+    }
+
+    let args = args
+        .iter()
+        .map(|value| value.as_str())
+        .collect::<Option<Vec<_>>>()?;
+    shell_script_from_argv(&args).or_else(|| Some(shell_join_argv(&args)))
+}
+
+fn shell_script_from_argv(args: &[&str]) -> Option<String> {
+    if args.len() < 3 {
+        return None;
+    }
+
+    let program = args[0]
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(args[0])
+        .trim_end_matches(".exe")
+        .to_ascii_lowercase();
+    let flag = args[1].to_ascii_lowercase();
+
+    if matches!(program.as_str(), "bash" | "sh" | "zsh") && matches!(flag.as_str(), "-lc" | "-c") {
+        return Some(args[2].to_string());
+    }
+
+    if matches!(program.as_str(), "powershell" | "pwsh")
+        && matches!(flag.as_str(), "-command" | "-c")
+    {
+        return Some(args[2].to_string());
+    }
+
+    if program == "cmd" && flag == "/c" {
+        return Some(args[2].to_string());
+    }
+
+    None
+}
+
+fn shell_join_argv(args: &[&str]) -> String {
+    args.iter()
+        .map(|arg| shell_quote_arg(arg))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn shell_quote_arg(arg: &str) -> String {
+    if !arg.is_empty()
+        && arg.chars().all(|ch| {
+            ch.is_ascii_alphanumeric()
+                || matches!(ch, '_' | '-' | '.' | '/' | ':' | '=' | '@' | '%' | '+')
+        })
+    {
+        return arg.to_string();
+    }
+
+    format!("'{}'", arg.replace('\'', "'\"'\"'"))
+}
+
 pub(crate) fn normalize_shell_command_params(params: &serde_json::Value) -> serde_json::Value {
     let mut normalized = params.clone();
     if let Some(object) = normalized.as_object_mut() {
-        let has_command = object
+        let command = object
             .get("command")
-            .and_then(|value| value.as_str())
-            .map(|value| !value.trim().is_empty())
-            .unwrap_or(false);
+            .and_then(shell_command_string)
+            .or_else(|| object.get("cmd").and_then(shell_command_string))
+            .or_else(|| {
+                object
+                    .get("action")
+                    .and_then(|action| action.get("command"))
+                    .and_then(shell_command_string)
+            });
 
-        if !has_command {
-            if let Some(cmd_value) = object.get("cmd").cloned() {
-                if cmd_value
-                    .as_str()
-                    .map(|value| !value.trim().is_empty())
-                    .unwrap_or(false)
-                {
-                    object.insert("command".to_string(), cmd_value);
-                }
-            }
+        if let Some(command) = command {
+            object.insert("command".to_string(), serde_json::Value::String(command));
         }
     }
     normalized

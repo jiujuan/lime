@@ -1,43 +1,49 @@
-## Lime v1.53.0
+## Lime v1.54.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
 
-- Aligned the coding workbench with the OpenVibeCoding main path, adding central Preview / Files / Changes / Output / Logs tabs and a stable right-side conversation column.
-- Made coding mode prefer visual HTML previews by default, with multi-file changes and output moved out of the first-screen diagnostics stack.
-- Added a “fix failed output” loop that builds a structured repair request from existing Harness output, file changes, and checkpoints, then submits it back to the same `code_orchestrated` session.
-- Added i18n P4 readiness reports for release docs, Chrome extension, app metadata, RTL, and whole-roadmap aggregation.
+- Upgraded the Agent Chat workspace into a clearer task workbench, tightening the relationship between session overview, team tasks, artifact preview, file management, and the right-side conversation.
+- Added project selector flows for opening an existing folder, choosing the project root, revealing the local path, and opening the current project's content view.
+- Added the `view_image` workspace-restricted tool to the Rust runtime surface and expanded alias normalization for `Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`, and web tools.
+- Added plaintext `<tool_use>` extraction in Aster reply parsing so non-standard model tool-call output can continue through the runtime.
+- Improved OpenAI-compatible / Responses tool-call parsing for top-level tool names, namespaces, object arguments, and streaming tool deltas, reducing provider-format interruptions.
+- Scoped Agent runtime warmup by workspace and ensured sends wait for the current workspace runtime readiness and model preference resolution.
 
 ### Fixes
 
-- Fixed runtime queue active-turn isolation across independent sessions so one session no longer blocks another.
-- Fixed fallback handling and gate release when the runtime-turn thread or Tokio runtime cannot start, reducing stuck queue risk.
-- Fixed queued-turn projection for empty persisted threads and first history pages so restored sessions can still expose real queue state.
-- Fixed hydrated Agent Chat runtime queues not auto-resuming after session restore.
+- Added a before-first-token timeout guard for automatic context compaction so slow compaction models degrade instead of blocking later runtime turns.
+- Collapsed noisy JSON-RPC / troubleshooting runtime output behind readable error summaries in failure cards.
+- Fixed deferred project-list loading, existing-folder reuse, project-path conflict checks, and default workspace readiness edges.
+- Fixed several projection boundaries around image input policy, Browser Assist evidence indexing, and workspace query mocks.
+- Made responsive-chat automatic model selection recognize recent quota, authentication, and provider-unavailable failures, then skip unavailable candidates.
 
 ### Improvements And Refactors
 
-- Tightened the `CanvasWorkbenchLayout` coding mode, utility tab, change view, and i18n copy boundaries.
-- Expanded the code review summary with failed-output previews, current review focus, related-file ordering, and output/file pairing.
-- Further aligned the Harness status panel, task-center tabs, workspace scene runtime, and sidebar with the coding workbench information architecture.
-- Removed stale RTL evidence screenshots and outdated readiness artifacts in favor of the new P4 / roadmap readiness evidence.
+- Reworked team workbench copy around tasks, owners, artifacts, and handling status, with technical details collapsed by default.
+- Split display logic across the Harness status panel, Team workbench, Canvas workbench, File Manager, and conversation restore paths.
+- Filled current five-locale resources for Agent Chat, project management, settings, and error presentation.
+- Removed the old provider-continuation export dependency and cleaned up the stale home screenshot asset.
+- Allowed workspace tool permissions to include explicit read-only local paths while preserving workspace restrictions.
+- Extracted tool-process summaries, tool display info, and Agent text normalization into focused helpers to reduce UI duplication.
 
 ### Tests And Quality
 
-- Added frontend and Rust regressions for coding workbench layout, failed-output repair, change queues, conversation restore, and runtime queue behavior.
-- Added tests for i18n docs locale manifests, app metadata locale manifests, P4 readiness, and roadmap readiness reports.
-- Updated the quality task planner to recommend refreshing P4 / roadmap readiness reports when i18n evidence changes.
-- Extended RTL smoke evidence to the Workspace surface and included required surface coverage in the readiness inventory.
+- Added Rust regressions for plaintext tool-call parsing, tool alias normalization, `view_image` permissions, compaction timeout, and image policy.
+- Added frontend regressions for project selection / creation, file management, team workbench, canvas layout, conversation restore, Crash Recovery, and error presentation.
+- Added regressions for OpenAI / Responses tool-call formats, responsive-chat provider-unavailable handling, explicit read-only path permissions, runtime warmup, and tool-process summaries.
+- Updated the GUI smoke knowledge-workspace check to cover the new workspace path and readiness state.
+- Updated the Agent UI TTFT sample matrix to cover the runtime MCP prewarm before-first-token budget path.
+- Release gates cover `cargo fmt`, `cargo test`, `cargo clippy`, `npm run lint`, `npm test`, and `npm run verify:gui-smoke`.
 
 ### Documentation
 
-- Added the OpenVibeCoding coding workbench alignment plan.
-- Updated the Agent UI roadmap, i18n P0-P4 progress, release docs workflow, app metadata workflow, and RTL readiness evaluation.
-- Synchronized release notes and version fact sources to `1.53.0`.
+- Updated the Agent Chat workspace and component READMEs with the current workbench structure and component boundaries.
+- Synchronized release notes and version fact sources to `1.54.0`.
 
 ### Other
 
-- Updated the root app, Tauri workspace, Tauri config, CLI npm package, and lockfile versions to `1.53.0`.
+- Updated the root app, Tauri workspace, Tauri config, CLI npm package, and lockfile versions to `1.54.0`.
 
-**Full changes**: `v1.52.0` -> `v1.53.0`
+**Full changes**: `v1.53.0` -> `v1.54.0`

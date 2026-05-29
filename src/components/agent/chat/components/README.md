@@ -8,7 +8,7 @@ Agent 聊天界面的 UI 组件集合。
 | -------------------------------- | -------------------------------------------------------------------------------------- |
 | `ChatNavbar.tsx`                 | 聊天顶部导航栏                                                                         |
 | `ChatSidebar.tsx`                | 聊天侧边栏（会话列表）                                                                 |
-| `CanvasWorkbenchLayout.tsx`      | 画布顶部标签壳，统一承载 `Session · Main`、`workspace`、Team 与动态文件标签 |
+| `CanvasWorkbenchLayout.tsx`      | 画布顶部标签壳，统一承载结果、文件、Team 与动态文件标签 |
 | `CanvasSessionOverviewPanel.tsx` | 解耦后的会话过程面板，用于从运行时注入 turn、tool、A2UI、queue 等过程视图              |
 | `EmptyState.tsx`                 | 空状态占位组件                                                                         |
 | `MarkdownRenderer.tsx`           | Markdown 渲染组件                                                                      |
@@ -61,7 +61,7 @@ Agent 聊天界面的 UI 组件集合。
 
 - 只负责单画布壳、头部标签、文件标签与顶部操作，不直接依赖具体 slash / skill 业务
 - 顶部收敛为紧凑标签栏 + 文件操作区，去掉大块摘要头，避免与正文和对话信息重复
-- 当存在 `sessionView` 且同时有默认主稿时，默认焦点仍应落在 `Session · Main`，但面板内容优先展示当前主稿/产物预览，避免与对话里的过程区重复
+- 当存在默认主稿时，默认焦点落在结果预览；只有存在待处理事项或正在生成时才显示进展入口
 - `workspaceView` 可以由运行时显式注入顶部标签文案和面板文案，工作区文件区是画布里真实文件的唯一事实源
 - `workspace` 文件树默认隐藏 `.lime`、`exports`、`output`、`.DS_Store` 和 `output_image.*` 这类内部运行或导出产物入口，避免与真实编辑入口混淆
 - `panelCopy` 允许运行时覆盖 workspace / team 面板里的引导文案、空态文案与目录区标题，避免布局壳继续承载场景描述
@@ -70,9 +70,9 @@ Agent 聊天界面的 UI 组件集合。
 
 ### CanvasSessionOverviewPanel
 
-- 统一展示当前 turn 状态、最近执行轨迹、待处理交互与排队消息
-- 顶部改为“执行总览”摘要卡，优先展示当前状态、聚焦事件和 turn 信息，而不是技术性提示文案
-- 让 `Session · Main` 成为真实过程页，而不是拿主稿预览兜底
+- 只在需要时展示当前任务状态、最近关键进展与需要用户处理的事项
+- 辅助说明收进 help 图标，避免默认占据主画布
+- 技术运行细节默认收进诊断面板，不在普通工作台铺开
 
 ### ToolCallDisplay
 

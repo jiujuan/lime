@@ -428,6 +428,41 @@ describe("InlineToolProcessStep", () => {
     );
   });
 
+  it("Bash 协议错误折叠态应展示底层原因而不是内部错误码", () => {
+    const { container } = renderTool({
+      id: "tool-bash-failed-1",
+      name: "Bash",
+      arguments: JSON.stringify({
+        command: "set -e\np='/Users/coso/.yansu-agent'\nls \"$p\"",
+      }),
+      status: "failed",
+      result: {
+        success: false,
+        error: "-32603: -32002: sandbox 执行失败: Operation not permitted",
+        output: "",
+      },
+      startTime: new Date("2026-04-13T10:22:00.000Z"),
+      endTime: new Date("2026-04-13T10:22:01.000Z"),
+    });
+
+    expect(container.textContent).toContain(
+      "执行失败：sandbox 执行失败: Operation not permitted",
+    );
+    expect(container.textContent).not.toContain("-32603");
+    expect(container.textContent).not.toContain("-32002");
+
+    act(() => {
+      const toggle = container.querySelector(
+        'button[title="展开过程详情"]',
+      ) as HTMLButtonElement | null;
+      toggle?.click();
+    });
+
+    expect(container.textContent).toContain(
+      "原始错误：-32603: -32002: sandbox 执行失败: Operation not permitted",
+    );
+  });
+
   it("WebFetch 获取失败应使用弱提示而不是执行失败", () => {
     const { container } = renderTool({
       id: "tool-fetch-failed-1",

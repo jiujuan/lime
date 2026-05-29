@@ -1,35 +1,41 @@
-## Lime v1.53.0
+## Lime v1.54.0
 
 ### 新功能
-- 编程工作台对齐 OpenVibeCoding 主路径，新增中央预览 / 文件 / 变更 / 输出 / 日志标签与右侧对话结构
-- 编程模式默认优先展示 HTML 可视预览，多文件变更队列与输出面板从首屏诊断卡中拆出
-- 失败输出新增“继续修复”入口，基于现有 Harness 输出、文件变更和 checkpoint 生成结构化修复请求并回到同一 `code_orchestrated` session
-- i18n P4 readiness 新增发布文档、Chrome extension、app metadata、RTL 与全路线图聚合报告
+- Agent Chat 工作区升级为更清晰的任务工作台，强化会话总览、团队任务、交付物预览、文件管理和右侧对话的协同关系
+- 项目选择器支持直接打开已有文件夹、选择项目根目录、定位本地路径，并可从当前项目进入内容视图
+- Rust runtime 工具面新增 `view_image` 工作区受限工具，并增强 `Bash` / `Read` / `Write` / `Edit` / `Glob` / `Grep` / Web 工具别名归一化
+- Aster 回复解析支持纯文本 `<tool_use>` 工具调用提取，提升模型输出非标准工具调用时的继续执行能力
+- OpenAI compatible / Responses 格式增强顶层工具名、namespace、对象参数和流式 tool delta 解析，减少不同 Provider 工具调用格式差异带来的中断
+- Agent runtime 预热按 workspace 隔离，并在发送前确保当前 workspace 的 runtime ready 与模型偏好已解析
 
 ### 修复
-- 修正运行时队列在独立 session 间的 active turn 隔离，避免一个 session 的执行阻塞其它 session
-- 修正 runtime turn 专用线程或 Tokio runtime 启动失败时的兜底与 gate 释放，降低队列卡死风险
-- 修正空持久化线程与首屏 history page 的 queued turn 投影，让恢复态能继续暴露真实队列
-- 修正 Agent Chat 会话恢复后未自动续跑 hydrated runtime queue 的问题
+- 自动上下文压缩新增首字前超时保护，慢模型压缩超时会降级退出，避免阻塞后续 runtime turn
+- 运行时错误卡片会折叠噪声较高的 JSON-RPC / troubleshooting 原始输出，并展示更可读的错误摘要
+- 修正项目列表延迟加载、已有目录复用、项目路径冲突检测和默认 workspace ready 态的边界
+- 修正图片输入策略、Browser Assist 证据索引和 workspace 查询 mock 的若干投影边界
+- responsive chat 自动模型选择会识别最近的额度、鉴权或 Provider 不可用错误，并跳过不可用候选
 
 ### 优化与重构
-- 收敛 `CanvasWorkbenchLayout` 的 coding mode、utility tab、change view 与 i18n 文案边界
-- 代码审阅摘要补齐失败输出短预览、当前审阅焦点、相关文件排序与输出 / 文件 pair 展示
-- Harness 状态面板、任务中心 tab、workspace scene runtime 与 sidebar 进一步对齐编程工作台信息架构
-- 删除旧的 RTL evidence 截图与过期 readiness 产物，改由新的 P4 / roadmap readiness evidence 记录当前状态
+- 团队工作台文案从内部运行时术语收敛到任务、负责人、交付物和处理状态，并把技术细节默认折叠
+- Harness 状态面板、Team workbench、Canvas workbench、File Manager 与对话恢复场景进一步拆分展示逻辑
+- Agent Chat、项目管理、设置页和错误提示补齐 current 五语言本地化资源
+- 移除旧的 provider continuation 导出依赖，并清理旧首页截图资源
+- 工作区工具权限支持显式只读本地路径，便于在保持 workspace 限制的同时读取用户授权的外部文件
+- 工具过程摘要、工具展示信息和 Agent 文本归一化抽出独立 helper，降低 UI 组件重复逻辑
 
 ### 测试与质量
-- 新增编程工作台布局、输出修复、变更队列、对话恢复和 runtime queue 的前端 / Rust 回归
-- 新增 i18n docs locale manifest、app metadata locale manifest、P4 readiness 与 roadmap readiness 报告测试
-- 质量任务规划器会在 i18n P4 / roadmap evidence 变化后推荐刷新对应 readiness 报告
-- RTL smoke 证据扩展到 Workspace surface，并把 required surface coverage 纳入 readiness inventory
+- 新增纯文本工具调用解析、工具别名归一化、`view_image` 权限、自动压缩超时和图片策略的 Rust 回归
+- 新增项目选择 / 创建、文件管理、团队工作台、画布布局、对话恢复、Crash Recovery 和错误展示的前端回归
+- 新增 OpenAI / Responses 工具调用格式、responsive chat Provider 不可用、显式只读路径权限、runtime 预热和工具过程摘要回归
+- 更新 GUI smoke 的知识工作区检查，以覆盖新的工作区路径和 ready 状态
+- 更新 Agent UI TTFT sample matrix，覆盖 runtime MCP prewarm 首字前预算路径
+- 发布门禁将覆盖 `cargo fmt`、`cargo test`、`cargo clippy`、`npm run lint`、`npm test` 和 `npm run verify:gui-smoke`
 
 ### 文档
-- 新增 OpenVibeCoding 编程工作台对齐计划
-- 更新 Agent UI roadmap、i18n P0-P4 执行进度、release docs workflow、app metadata workflow 与 RTL readiness 评估
-- 发布说明与版本事实源同步到 `1.53.0`
+- 更新 Agent Chat 工作区与组件 README，记录当前工作台结构和组件边界
+- 发布说明与版本事实源同步到 `1.54.0`
 
 ### 其他
-- 根应用、Tauri workspace、Tauri 配置、CLI npm package 与锁文件版本统一更新到 `1.53.0`
+- 根应用、Tauri workspace、Tauri 配置、CLI npm package 与锁文件版本统一更新到 `1.54.0`
 
-**完整变更**: `v1.52.0` -> `v1.53.0`
+**完整变更**: `v1.53.0` -> `v1.54.0`

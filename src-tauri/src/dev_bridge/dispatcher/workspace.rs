@@ -26,6 +26,13 @@ fn get_optional_bool_arg(args: &JsonValue, primary: &str, secondary: &str) -> Op
         .and_then(|value| value.as_bool())
 }
 
+fn get_optional_string_arg(args: &JsonValue, primary: &str, secondary: &str) -> Option<String> {
+    args.get(primary)
+        .or_else(|| args.get(secondary))
+        .and_then(|value| value.as_str())
+        .map(ToOwned::to_owned)
+}
+
 fn to_workspace_list_item_json<T>(workspace: T) -> Result<JsonValue, DynError>
 where
     WorkspaceListItem: From<T>,

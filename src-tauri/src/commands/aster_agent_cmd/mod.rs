@@ -355,7 +355,6 @@ mod request_model_resolution;
 mod research_skill_launch;
 mod resource_search_skill_launch;
 mod run_metadata;
-mod runtime_auto_compaction;
 mod runtime_plugin_agents;
 mod runtime_project_hooks;
 mod runtime_task_profile;
@@ -539,13 +538,10 @@ pub(crate) use resource_search_skill_launch::{
 use run_metadata::{
     build_chat_run_finish_metadata, build_chat_run_metadata_base, extract_harness_array,
     extract_harness_bool, extract_harness_nested_object, extract_harness_string,
-    load_previous_provider_continuation_state, ChatRunObservation,
+    ChatRunObservation,
 };
 #[cfg(test)]
-use run_metadata::{
-    extract_artifact_path_from_tool_start, provider_routing_matches_current,
-    resolve_social_run_artifact_descriptor,
-};
+use run_metadata::{extract_artifact_path_from_tool_start, resolve_social_run_artifact_descriptor};
 pub(crate) use runtime_plugin_agents::{
     merge_system_prompt_with_runtime_plugin_agents,
     resolve_requested_runtime_plugin_agent_definition, RuntimePluginAgentDefinition,

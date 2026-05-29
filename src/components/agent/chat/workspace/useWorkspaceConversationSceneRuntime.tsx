@@ -4,7 +4,10 @@ import type {
   ReactNode,
   SetStateAction,
 } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
+import { formatNumber } from "@/i18n/format";
 import { StepProgress } from "@/lib/workspace/workbenchUi";
 import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime";
 import type { AgentThreadItem } from "@/lib/api/agentProtocol";
@@ -15,16 +18,12 @@ import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayId
 import { CanvasSessionOverviewPanel } from "../components/CanvasSessionOverviewPanel";
 import { MessageList } from "../components/MessageList";
 import { TeamWorkspaceDock } from "../components/TeamWorkspaceDock";
-import { CodeReviewSummaryPanel } from "../components/CodeReviewSummaryPanel";
-import type { CodeWorkbenchGuideTarget } from "../components/CodeWorkbenchGuide";
-import type { HarnessFileChangeReviewSummary } from "../components/HarnessStatusPanel";
 import type {
   CanvasWorkbenchChangeItem,
   CanvasWorkbenchChangeView,
   CanvasWorkbenchHeaderView,
   CanvasWorkbenchSessionView,
   CanvasWorkbenchSummaryStat,
-  CanvasWorkbenchTab,
   CanvasWorkbenchUtilityView,
 } from "../components/CanvasWorkbenchLayout";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
@@ -41,7 +40,6 @@ import type { SyncStatus } from "../hooks/useContentSync";
 import type { ArtifactTimelineOpenTarget } from "../utils/artifactTimelineNavigation";
 import { buildAgentTaskRuntimeCardModel } from "../utils/agentTaskRuntime";
 import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface";
-import type { HarnessSessionState } from "../utils/harnessState";
 import {
   buildStepProgressProps,
   buildTeamWorkspaceDockProps,
@@ -64,6 +62,7 @@ type InputbarScene = Pick<
   | "onStartKnowledgeOrganize"
   | "onManageKnowledgePacks"
 >;
+type AgentTranslate = TFunction<"agent", undefined>;
 type CanvasScene = Pick<
   ReturnType<typeof useWorkspaceCanvasSceneRuntime>,
   | "hasLiveCanvasPreviewContent"
@@ -205,23 +204,39 @@ function shortenSessionText(value?: string | null, maxLength = 120): string {
 
 function resolveSessionStatusBadge(
   status?: "running" | "completed" | "failed" | "aborted" | null,
+  t?: AgentTranslate,
 ): {
   label: string;
   tone: "default" | "accent" | "success";
 } {
   if (status === "running") {
-    return { label: "执行中", tone: "accent" };
+    return {
+      label: t?.("agentChat.sessionOverview.status.turn.running") ?? "执行中",
+      tone: "accent",
+    };
   }
   if (status === "completed") {
-    return { label: "已完成", tone: "success" };
+    return {
+      label: t?.("agentChat.sessionOverview.status.turn.completed") ?? "已完成",
+      tone: "success",
+    };
   }
   if (status === "failed") {
-    return { label: "失败", tone: "default" };
+    return {
+      label: t?.("agentChat.sessionOverview.status.turn.failed") ?? "失败",
+      tone: "default",
+    };
   }
   if (status === "aborted") {
-    return { label: "已中断", tone: "default" };
+    return {
+      label: t?.("agentChat.sessionOverview.status.turn.aborted") ?? "已中断",
+      tone: "default",
+    };
   }
-  return { label: "空闲", tone: "default" };
+  return {
+    label: t?.("agentChat.sessionOverview.status.turn.idle") ?? "空闲",
+    tone: "default",
+  };
 }
 
 function resolvePathLeaf(value?: string | null): string {
@@ -365,11 +380,9 @@ function buildFileArtifactChangeItem(
         "title",
         "fileName",
         "filename",
-    ]) || extractFileNameFromPath(path),
+      ]) || extractFileNameFromPath(path),
     source: item.source,
     status: item.status,
-    reviewStatus:
-      item.status === "completed" ? "pending_review" : undefined,
     preview,
     currentContent: item.content || preview || null,
     previousContent: null,
@@ -412,49 +425,9 @@ function upsertChangeItem(
         : previous.status === "failed" || item.status === "failed"
           ? "failed"
           : item.status || previous.status,
-    reviewStatus: item.reviewStatus || previous.reviewStatus,
     checkpointPath: item.checkpointPath || previous.checkpointPath,
     checkpointLabel: item.checkpointLabel || previous.checkpointLabel,
   });
-}
-
-function buildHarnessFileChangeReviewSummary(
-  items: readonly CanvasWorkbenchChangeItem[],
-): HarnessFileChangeReviewSummary | null {
-  if (items.length === 0) {
-    return null;
-  }
-
-  return items.reduce<HarnessFileChangeReviewSummary>(
-    (summary, item) => {
-      if (item.reviewStatus === "applied") {
-        summary.applied += 1;
-      } else if (item.reviewStatus === "rejected") {
-        summary.rejected += 1;
-      } else {
-        summary.pending += 1;
-      }
-      return summary;
-    },
-    {
-      total: items.length,
-      pending: 0,
-      applied: 0,
-      rejected: 0,
-    },
-  );
-}
-
-function mapCodeReviewTargetToWorkbenchTab(
-  target: CodeWorkbenchGuideTarget,
-): CanvasWorkbenchTab {
-  if (target === "outputs") {
-    return "outputs";
-  }
-  if (target === "file_review") {
-    return "changes";
-  }
-  return "logs";
 }
 
 function buildCanvasWorkbenchChangeView({
@@ -619,7 +592,7 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   harnessPendingCount: ConversationScenePresentationParams["scene"]["harnessPendingCount"];
   harnessAttentionLevel: ConversationScenePresentationParams["scene"]["harnessAttentionLevel"];
   harnessToggleLabel: ConversationScenePresentationParams["scene"]["harnessToggleLabel"];
-  isAutoRestoringSession: boolean;
+  isRestoringSession: boolean;
   sessionId: string | null | undefined;
   syncStatus: SyncStatus;
   pendingA2UIForm: ConversationScenePresentationParams["scene"]["pendingA2UIForm"];
@@ -689,8 +662,6 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   workspaceHealthError: boolean;
   focusedTimelineItemId: string | null;
   timelineFocusRequestKey: number;
-  harnessState?: HarnessSessionState | null;
-  onSubmitCodeFixPrompt?: (prompt: string) => void | Promise<void>;
 }
 
 export function useWorkspaceConversationSceneRuntime({
@@ -779,7 +750,7 @@ export function useWorkspaceConversationSceneRuntime({
   harnessPendingCount,
   harnessAttentionLevel,
   harnessToggleLabel,
-  isAutoRestoringSession,
+  isRestoringSession,
   sessionId,
   syncStatus,
   pendingA2UIForm,
@@ -843,9 +814,9 @@ export function useWorkspaceConversationSceneRuntime({
   workspaceHealthError,
   focusedTimelineItemId,
   timelineFocusRequestKey,
-  harnessState,
-  onSubmitCodeFixPrompt,
 }: UseWorkspaceConversationSceneRuntimeParams) {
+  const { i18n, t } = useTranslation("agent");
+  const locale = i18n.language;
   const sessionRuntimeProjectionSessionId = sessionId ?? "no-session";
   const sessionRuntimeProjectionFirstMessageId =
     displayMessages[0]?.id ?? "no-first-message";
@@ -862,7 +833,7 @@ export function useWorkspaceConversationSceneRuntime({
     sessionRuntimeProjectionLastTurnId,
     sessionRuntimeProjectionLastItemId,
   ].join("|");
-  const shouldTreatAsRestoredHistoryWindow = isAutoRestoringSession;
+  const shouldTreatAsRestoredHistoryWindow = isRestoringSession;
   const hasHeavySessionRuntimeProjection =
     displayMessages.length >=
       SESSION_RUNTIME_PROJECTION_DEFER_MESSAGE_THRESHOLD ||
@@ -1028,6 +999,7 @@ export function useWorkspaceConversationSceneRuntime({
     null;
   const currentSessionStatus = resolveSessionStatusBadge(
     isSending ? "running" : currentSessionTurn?.status,
+    t,
   );
   const runtimeTaskCard = useMemo(
     () =>
@@ -1056,9 +1028,6 @@ export function useWorkspaceConversationSceneRuntime({
       projectedTurns,
     ],
   );
-  const runtimeItemCount = projectedThreadItems.filter(
-    (item) => item.type !== "user_message" && item.type !== "agent_message",
-  ).length;
   const outputItemCount = projectedThreadItems.filter((item) =>
     CODE_OUTPUT_ITEM_TYPES.has(item.type),
   ).length;
@@ -1068,6 +1037,19 @@ export function useWorkspaceConversationSceneRuntime({
   const inProgressItemCount = projectedThreadItems.filter(
     (item) => item.status === "in_progress",
   ).length;
+  const generatedFileCount = projectedThreadItems.filter(
+    (item) => item.type === "file_artifact",
+  ).length;
+  const inProgressItemCountLabel = formatNumber(inProgressItemCount, {
+    locale,
+  });
+  const generatedFileCountLabel = formatNumber(generatedFileCount, { locale });
+  const pendingActionCountLabel = formatNumber(projectedPendingActions.length, {
+    locale,
+  });
+  const queuedTurnCountLabel = formatNumber(projectedQueuedTurns.length, {
+    locale,
+  });
   const fileCheckpointSummary =
     projectedThreadRead?.file_checkpoint_summary || null;
   const changeView = useMemo(() => {
@@ -1082,73 +1064,61 @@ export function useWorkspaceConversationSceneRuntime({
     isCodeOrchestratedWorkbench,
     projectedThreadItems,
   ]);
-  const fileChangeReviewSummary = useMemo(
-    () => buildHarnessFileChangeReviewSummary(changeView?.items ?? []),
-    [changeView?.items],
-  );
-  const submitCodeFixPrompt = useCallback(
-    (prompt: string) => {
-      const normalizedPrompt = prompt.trim();
-      if (!normalizedPrompt) {
-        return;
-      }
-
-      if (onSubmitCodeFixPrompt) {
-        return onSubmitCodeFixPrompt(normalizedPrompt);
-      }
-
-      handleSendFromEmptyState(
-        normalizedPrompt,
-        "code_orchestrated",
-        undefined,
-        {
-          displayContent: normalizedPrompt,
-          skipSceneCommandRouting: true,
-          requestMetadata: {
-            harness: {
-              code_fix: {
-                source: "failed_output",
-              },
-            },
-          },
-        },
-      );
-    },
-    [handleSendFromEmptyState, onSubmitCodeFixPrompt],
-  );
   const sessionSummaryStats: CanvasWorkbenchSummaryStat[] = [
     {
       key: "session-status",
-      label: "会话状态",
+      label: t("agentChat.workspaceSession.summary.status.label"),
       value: currentSessionStatus.label,
-      detail: "当前回合的整体推进状态。",
+      detail: t("agentChat.workspaceSession.summary.status.detail"),
       tone: currentSessionStatus.tone,
     },
     {
-      key: "session-runtime-items",
-      label: "运行轨迹",
+      key: "session-generated-files",
+      label: t("agentChat.workspaceSession.summary.outputs.label"),
       value:
         inProgressItemCount > 0
-          ? `进行中 ${inProgressItemCount}`
-          : `轨迹 ${runtimeItemCount}`,
-      detail: "技能、工具与运行事件的实时轨迹。",
+          ? t("agentChat.workspaceSession.summary.outputs.value.inProgress", {
+              countLabel: inProgressItemCountLabel,
+            })
+          : generatedFileCount > 0
+            ? t("agentChat.workspaceSession.summary.outputs.value.files", {
+                countLabel: generatedFileCountLabel,
+              })
+            : t("agentChat.workspaceSession.summary.outputs.value.empty"),
+      detail:
+        inProgressItemCount > 0
+          ? t("agentChat.workspaceSession.summary.outputs.detail.inProgress")
+          : generatedFileCount > 0
+            ? t("agentChat.workspaceSession.summary.outputs.detail.files")
+            : t("agentChat.workspaceSession.summary.outputs.detail.empty"),
       tone: inProgressItemCount > 0 ? "accent" : "default",
     },
     {
       key: "session-follow-up",
-      label: projectedPendingActions.length > 0 ? "待补信息" : "排队消息",
+      label:
+        projectedPendingActions.length > 0
+          ? t("agentChat.workspaceSession.summary.next.label.pending")
+          : projectedQueuedTurns.length > 0
+            ? t("agentChat.workspaceSession.summary.next.label.queued")
+            : t("agentChat.workspaceSession.summary.next.label.idle"),
       value:
         projectedPendingActions.length > 0
-          ? `待补信息 ${projectedPendingActions.length}`
+          ? t("agentChat.workspaceSession.summary.next.value.pending", {
+              countLabel: pendingActionCountLabel,
+            })
           : projectedQueuedTurns.length > 0
-            ? `排队 ${projectedQueuedTurns.length}`
-            : "无需跟进",
+            ? t("agentChat.workspaceSession.summary.next.value.queued", {
+                countLabel: queuedTurnCountLabel,
+              })
+            : t("agentChat.workspaceSession.summary.next.value.idle"),
       detail:
         projectedPendingActions.length > 0
-          ? "仍在等待用户补充或确认的信息。"
+          ? t("agentChat.workspaceSession.summary.next.detail.pending")
           : projectedQueuedTurns.length > 0
-            ? `另有 ${projectedQueuedTurns.length} 条消息正在排队。`
-            : "当前没有待处理的补充或排队消息。",
+            ? t("agentChat.workspaceSession.summary.next.detail.queued", {
+                countLabel: queuedTurnCountLabel,
+              })
+            : t("agentChat.workspaceSession.summary.next.detail.idle"),
       tone:
         projectedPendingActions.length > 0
           ? "accent"
@@ -1157,66 +1127,90 @@ export function useWorkspaceConversationSceneRuntime({
             : "default",
     },
   ];
-  const sessionView: CanvasWorkbenchSessionView = {
-    eyebrow: "Session Runtime",
-    title: "Session · Main",
-    tabLabel: "Session · Main",
-    tabBadge:
-      inProgressItemCount > 0
-        ? `进行中 ${inProgressItemCount}`
-        : projectedQueuedTurns.length > 0
-          ? `排队 ${projectedQueuedTurns.length}`
-          : undefined,
-    tabBadgeTone: inProgressItemCount > 0 ? "sky" : "slate",
-    subtitle: currentSessionTurn
-      ? `当前 turn：${shortenSessionText(currentSessionTurn.prompt_text, 160) || "暂无提示词"}`
-      : "展示当前会话的 turn、skills、工具轨迹、A2UI 与排队状态。",
-    summaryStats: sessionSummaryStats,
-    badges: [
-      {
-        key: "session-status",
-        label: currentSessionStatus.label,
-        tone: currentSessionStatus.tone,
-      },
-      {
-        key: "session-runtime-items",
-        label:
-          inProgressItemCount > 0
-            ? `进行中 ${inProgressItemCount}`
-            : `轨迹 ${runtimeItemCount}`,
-        tone: inProgressItemCount > 0 ? "accent" : "default",
-      },
-      ...(projectedPendingActions.length > 0
-        ? [
+  const shouldExposeSessionProgress =
+    isCodeOrchestratedWorkbench ||
+    inProgressItemCount > 0 ||
+    projectedPendingActions.length > 0 ||
+    projectedQueuedTurns.length > 0;
+  const sessionView: CanvasWorkbenchSessionView | null =
+    shouldExposeSessionProgress
+      ? {
+          eyebrow: t("agentChat.workspaceSession.eyebrow"),
+          title: t("agentChat.workspaceSession.title"),
+          tabLabel: t("agentChat.workspaceSession.tabLabel"),
+          tabBadge:
+            inProgressItemCount > 0
+              ? t("agentChat.workspaceSession.badge.inProgress", {
+                  countLabel: inProgressItemCountLabel,
+                })
+              : projectedQueuedTurns.length > 0
+                ? t("agentChat.workspaceSession.badge.queued", {
+                    countLabel: queuedTurnCountLabel,
+                  })
+                : undefined,
+          tabBadgeTone: inProgressItemCount > 0 ? "sky" : "slate",
+          subtitle: currentSessionTurn
+            ? t("agentChat.workspaceSession.subtitle.current", {
+                prompt:
+                  shortenSessionText(currentSessionTurn.prompt_text, 160) ||
+                  t("agentChat.sessionOverview.latestPromptFallback"),
+              })
+            : t("agentChat.workspaceSession.subtitle.empty"),
+          summaryStats: sessionSummaryStats,
+          badges: [
             {
-              key: "session-pending-actions",
-              label: `待补信息 ${projectedPendingActions.length}`,
-              tone: "accent" as const,
+              key: "session-status",
+              label: currentSessionStatus.label,
+              tone: currentSessionStatus.tone,
             },
-          ]
-        : []),
-      ...(projectedQueuedTurns.length > 0
-        ? [
             {
-              key: "session-queued-turns",
-              label: `排队 ${projectedQueuedTurns.length}`,
-              tone: "default" as const,
+              key: "session-generated-files",
+              label:
+                inProgressItemCount > 0
+                  ? t("agentChat.workspaceSession.badge.inProgress", {
+                      countLabel: inProgressItemCountLabel,
+                    })
+                  : t("agentChat.workspaceSession.badge.files", {
+                      countLabel: generatedFileCountLabel,
+                    }),
+              tone: inProgressItemCount > 0 ? "accent" : "default",
             },
-          ]
-        : []),
-    ],
-    renderPanel: () => (
-      <CanvasSessionOverviewPanel
-        turns={projectedTurns}
-        threadItems={projectedThreadItems}
-        currentTurnId={projectedCurrentTurnId}
-        pendingActions={projectedPendingActions}
-        queuedTurns={projectedQueuedTurns}
-        isSending={isSending}
-        focusedItemId={focusedTimelineItemId}
-      />
-    ),
-  };
+            ...(projectedPendingActions.length > 0
+              ? [
+                  {
+                    key: "session-pending-actions",
+                    label: t("agentChat.workspaceSession.badge.pending", {
+                      countLabel: pendingActionCountLabel,
+                    }),
+                    tone: "accent" as const,
+                  },
+                ]
+              : []),
+            ...(projectedQueuedTurns.length > 0
+              ? [
+                  {
+                    key: "session-queued-turns",
+                    label: t("agentChat.workspaceSession.badge.queued", {
+                      countLabel: queuedTurnCountLabel,
+                    }),
+                    tone: "default" as const,
+                  },
+                ]
+              : []),
+          ],
+          renderPanel: () => (
+            <CanvasSessionOverviewPanel
+              turns={projectedTurns}
+              threadItems={projectedThreadItems}
+              currentTurnId={projectedCurrentTurnId}
+              pendingActions={projectedPendingActions}
+              queuedTurns={projectedQueuedTurns}
+              isSending={isSending}
+              focusedItemId={focusedTimelineItemId}
+            />
+          ),
+        }
+      : null;
   const outputView: CanvasWorkbenchUtilityView = {
     enabled: isCodeOrchestratedWorkbench,
     tabBadge:
@@ -1231,21 +1225,6 @@ export function useWorkspaceConversationSceneRuntime({
         : outputItemCount > 0
           ? "sky"
           : "slate",
-    leadContent:
-      isCodeOrchestratedWorkbench && harnessState
-        ? ({ openTab }) => (
-            <CodeReviewSummaryPanel
-              harnessState={harnessState}
-              fileCheckpointSummary={fileCheckpointSummary}
-              fileChangeReviewSummary={fileChangeReviewSummary}
-              onOpenSection={(target) =>
-                openTab(mapCodeReviewTargetToWorkbenchTab(target))
-              }
-              onOpenFileCheckpoints={() => openTab("changes")}
-              onSubmitCodeFixPrompt={submitCodeFixPrompt}
-            />
-          )
-        : undefined,
     renderPanel: () => (
       <CanvasSessionOverviewPanel
         turns={projectedTurns}
@@ -1543,7 +1522,7 @@ export function useWorkspaceConversationSceneRuntime({
       childSubagentSessions: projectedChildSubagentSessions,
       sessionHistoryWindow,
       onLoadFullHistory: loadFullSessionHistory,
-      isRestoringSession: isAutoRestoringSession,
+      isRestoringSession,
       isSending,
       onInterruptCurrentTurn: stopSending,
       onResumeThread: resumeThread,

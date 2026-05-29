@@ -136,12 +136,10 @@ function rewriteKnowledgeCompileInvokePayload(rawPostData) {
     return null;
   }
 
-  const args = payload.args && typeof payload.args === "object"
-    ? { ...payload.args }
-    : {};
-  const request = args.request && typeof args.request === "object"
-    ? { ...args.request }
-    : {};
+  const args =
+    payload.args && typeof payload.args === "object" ? { ...payload.args } : {};
+  const request =
+    args.request && typeof args.request === "object" ? { ...args.request } : {};
   const builderRuntime =
     request.builderRuntime && typeof request.builderRuntime === "object"
       ? { ...request.builderRuntime }
@@ -598,7 +596,22 @@ async function waitForInputbarKnowledgeHub(page, label, timeoutMs) {
   }
 }
 
+async function waitForNotificationToastsToSettle(page) {
+  const toast = page
+    .locator('[aria-label="Notifications alt+T"] [data-sonner-toast]')
+    .first();
+  if (!(await toast.isVisible({ timeout: 500 }).catch(() => false))) {
+    return;
+  }
+
+  await toast
+    .waitFor({ state: "detached", timeout: 7_000 })
+    .catch(() => undefined);
+}
+
 async function closeFileManagerIfOpen(page) {
+  await waitForNotificationToastsToSettle(page);
+
   const closeButton = page
     .getByRole("button", { name: "关闭文件管理器" })
     .first();
@@ -1172,14 +1185,27 @@ async function runPlaywrightGuiFlow(options) {
     await waitForPageText(
       page,
       "文件管理器加载",
-      ["default-source.md", "加入对话", "设为资料", "本地位置"],
+      ["default-source.md", "本地位置"],
+      options.timeoutMs,
+    );
+
+    logStage("open-file-manager-context-menu");
+    await page
+      .locator('[data-testid="file-manager-entry"]')
+      .filter({ hasText: DEFAULT_PACK.sourceFileName })
+      .first()
+      .click({ button: "right", timeout: DEFAULT_ACTION_TIMEOUT_MS });
+    await waitForPageText(
+      page,
+      "文件管理器右键菜单加载",
+      ["加入对话", "设为资料"],
       options.timeoutMs,
     );
 
     logStage("import-file-manager-source");
     await clickScopedButton(page, {
-      scope: '[data-testid="file-manager-sidebar"]',
-      ariaLabel: "设为项目资料 default-source.md",
+      scope: '[data-testid="file-manager-context-menu"]',
+      text: "设为资料",
     });
 
     logStage("wait-file-manager-source-imported");

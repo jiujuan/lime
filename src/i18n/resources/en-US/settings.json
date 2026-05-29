@@ -321,10 +321,8 @@
   "settings.developer.message.copyDiagnosticFailed": "Failed to copy diagnostics",
   "settings.developer.message.diagnosticJsonCopied": "Raw JSON diagnostics copied",
   "settings.developer.message.copyDiagnosticJsonFailed": "Failed to copy raw JSON",
-  "settings.developer.message.diagnosticExportedAndOpened": "Diagnostics exported: {{fileName}}, and the folder is open: {{path}}",
   "settings.developer.message.diagnosticExported": "Diagnostics exported: {{fileName}} (location: {{location}})",
   "settings.developer.message.exportDiagnosticFailed": "Failed to export diagnostics",
-  "settings.developer.message.downloadDirectoryOpened": "Opened download folder: {{path}}",
   "settings.developer.message.openDownloadDirectoryFailed": "Failed to open download folder",
   "settings.developer.message.diagnosticHistoryCleared": "Old diagnostics cleared. Future copies will only include new diagnostic data.",
   "settings.developer.message.clearDiagnosticHistoryFailed": "Failed to clear old diagnostics",
@@ -1145,11 +1143,9 @@
   "settings.experimental.message.diagnosticCopyFailed": "Failed to copy diagnostics",
   "settings.experimental.message.diagnosticExportFailed": "Failed to export diagnostics",
   "settings.experimental.message.diagnosticExported": "Diagnostic file exported: {{fileName}} (location: {{location}})",
-  "settings.experimental.message.diagnosticExportedAndOpened": "Diagnostic file exported: {{fileName}}, and the folder has been opened: {{path}}",
   "settings.experimental.message.diagnosticJsonCopied": "Raw JSON diagnostics copied",
   "settings.experimental.message.diagnosticJsonCopyFailed": "Failed to copy raw JSON",
   "settings.experimental.message.downloadDirectoryOpenFailed": "Failed to open downloads folder",
-  "settings.experimental.message.downloadDirectoryOpened": "Opened downloads folder: {{path}}",
   "settings.experimental.message.dynamicFilteringDisabled": "Dynamic filtering disabled",
   "settings.experimental.message.dynamicFilteringEnabled": "Dynamic filtering enabled",
   "settings.experimental.message.loadFailed": "Failed to load settings",
@@ -2532,5 +2528,6 @@
   "settings.providers.setting.body.models.imageCommand.action.save": "Save Command",
   "settings.providers.setting.body.models.imageCommand.action.cancel": "Cancel",
   "settings.providers.setting.feedback.imageCommand.created": "Created {{trigger}}. It will use {{model}} as the image generation model.",
-  "settings.providers.setting.feedback.imageCommand.invalid": "Enter a valid @command name."
+  "settings.providers.setting.feedback.imageCommand.invalid": "Enter a valid @command name.",
+  "settings.experimental.crashReporting.dsn.placeholder": "https://xxx@o0.ingest.sentry.io/0"
 }

@@ -2706,7 +2706,9 @@ describe("HarnessStatusPanel", () => {
     expect(fileReviewSection?.textContent).toContain("确认本轮文件应用状态");
     expect(fileReviewSection?.textContent).toContain("待处理 1");
     expect(fileReviewSection?.textContent).toContain("ImageCard.test.tsx");
-    expect(fileReviewSection?.textContent).toContain("新增图片卡片历史切换回归测试");
+    expect(fileReviewSection?.textContent).toContain(
+      "新增图片卡片历史切换回归测试",
+    );
     expect(filesSection?.textContent).toContain("ImageCard.test.tsx");
     expect(filesSection?.textContent).toContain("新增图片卡片历史切换回归测试");
 
@@ -2741,8 +2743,8 @@ describe("HarnessStatusPanel", () => {
       "--- a/src/components/ImageCard.tsx",
       "+++ b/src/components/ImageCard.tsx",
       "@@ -1,2 +1,3 @@",
-      "-const title = \"oldTitle\";",
-      "+const title = \"newTitle\";",
+      '-const title = "oldTitle";',
+      '+const title = "newTitle";',
       "+const keepsHistory = true;",
     ].join("\n");
     const applyPatch = [
@@ -2914,7 +2916,9 @@ describe("HarnessStatusPanel", () => {
     ).find((button) => button.textContent?.includes("全选变更"));
 
     act(() => {
-      selectAllButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      selectAllButton?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
     });
 
     const markAppliedButton = Array.from(
@@ -3400,6 +3404,42 @@ describe("HarnessStatusPanel", () => {
     expect(outputSection?.textContent).toContain(
       "/tmp/workspace/.lime/runtime/full-output.txt",
     );
+  });
+
+  it("内部错误型工具输出应展示短摘要并收起原始排障文本", () => {
+    renderPanel({
+      harnessState: createHarnessState({
+        outputSignals: [
+          {
+            id: "signal-runtime-internal-error",
+            toolCallId: "tool-runtime-internal-error",
+            toolName: "ToolSearch",
+            title: "工具调用失败",
+            summary: "-32603: -32002: runtime request failed",
+            preview:
+              "Troubleshooting: inspect provider logs and raw JSON-RPC response",
+            exitCode: 1,
+          },
+        ],
+      }),
+    });
+
+    const outputSection = document.body.querySelector(
+      '[data-harness-section="outputs"]',
+    ) as HTMLElement | null;
+    const collapsedCard = document.body.querySelector(
+      '[data-output-raw-details-collapsed="true"]',
+    );
+
+    expect(collapsedCard).not.toBeNull();
+    expect(outputSection?.textContent).toContain(
+      "运行时返回内部错误，已保留详情用于排查。",
+    );
+    expect(outputSection?.textContent).toContain(
+      "原始排障内容已收起，点击卡片可查看完整输出。",
+    );
+    expect(outputSection?.textContent).not.toContain("-32603");
+    expect(outputSection?.textContent).not.toContain("Troubleshooting");
   });
 
   it("搜索输出应展示结果列表并支持悬浮预览", async () => {

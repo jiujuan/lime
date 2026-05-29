@@ -7,6 +7,7 @@ use async_stream::try_stream;
 use futures::stream::StreamExt;
 use serde_json::Value;
 use tracing::debug;
+use uuid::Uuid;
 
 use super::super::agents::Agent;
 use crate::conversation::message::{Message, MessageContent, ToolRequest};
@@ -20,15 +21,15 @@ use crate::providers::toolshim::{
     modify_system_prompt_for_tool_json, OllamaInterpreter,
 };
 use crate::session_context::current_turn_context;
-use crate::tools::VIEW_IMAGE_TOOL_NAME;
+use crate::tools::{ToolRegistry, VIEW_IMAGE_TOOL_NAME};
 
 use crate::agents::code_execution_extension::EXTENSION_NAME as CODE_EXECUTION_EXTENSION;
 use crate::agents::subagent_tool::AGENT_TOOL_NAME;
 use crate::agents::tool_argument_coercion::coerce_tool_arguments;
 use crate::session::{apply_session_update, query_session, SessionStore, TokenStatsUpdate};
 #[cfg(test)]
-use crate::session::{SessionManager, SessionType, TurnContextOverride};
-use rmcp::model::{Content, Tool};
+use crate::session::{SessionManager, SessionType};
+use rmcp::model::{CallToolRequestParam, Content, Tool};
 
 const LIME_RUNTIME_METADATA_KEY: &str = "lime_runtime";
 const LIME_RUNTIME_TOOL_SURFACE_KEY: &str = "tool_surface";
@@ -36,6 +37,8 @@ const LIME_RUNTIME_IMAGE_INPUT_POLICY_KEY: &str = "image_input_policy";
 const TURN_TOOL_SURFACE_DIRECT_ANSWER: &str = "direct_answer";
 const TURN_TOOL_SURFACE_LOCAL_WORKSPACE: &str = "local_workspace";
 const TURN_TOOL_SURFACE_COMPACT_TOOLS: &str = "compact_tools";
+const PLAINTEXT_TOOL_USE_OPEN_MARKER: &str = "<tool_use";
+const PLAINTEXT_TOOL_USE_CLOSE_MARKER: &str = "</tool_use>";
 const LOCAL_WORKSPACE_TOOL_NAMES: &[&str] = &[
     "Bash",
     "Read",
@@ -326,6 +329,414 @@ fn normalize_response_tool_requests(response: &Message, tool_requests: &[ToolReq
     normalized_response
 }
 
+fn current_surface_tool_name(tools: &[Tool], name: &str) -> Option<String> {
+    tools
+        .iter()
+        .find(|tool| tool.name.as_ref() == name)
+        .or_else(|| {
+            tools
+                .iter()
+                .find(|tool| tool.name.as_ref().eq_ignore_ascii_case(name))
+        })
+        .map(|tool| tool.name.to_string())
+}
+
+fn normalize_current_surface_tool_call(
+    tool_call: &mut rmcp::model::CallToolRequestParam,
+    tools: &[Tool],
+    registry: &ToolRegistry,
+) {
+    let requested_name = tool_call.name.as_ref().trim();
+    if requested_name.is_empty() {
+        return;
+    }
+
+    if let Some(surface_name) = current_surface_tool_name(tools, requested_name) {
+        tool_call.name = surface_name.into();
+        return;
+    }
+
+    let Some(canonical_name) = registry.canonical_name(requested_name) else {
+        return;
+    };
+    if let Some(surface_name) = current_surface_tool_name(tools, &canonical_name) {
+        tool_call.name = surface_name.into();
+    }
+}
+
+fn integer_argument(arguments: &serde_json::Map<String, Value>, key: &str) -> Option<i64> {
+    arguments
+        .get(key)
+        .and_then(|value| match value {
+            Value::Number(number) => number.as_i64(),
+            Value::String(text) => text.trim().parse::<i64>().ok(),
+            _ => None,
+        })
+        .filter(|value| *value > 0)
+}
+
+fn copy_string_argument_if_missing(
+    arguments: &mut serde_json::Map<String, Value>,
+    from: &str,
+    to: &str,
+) {
+    if arguments.contains_key(to) {
+        return;
+    }
+    let Some(value) = arguments
+        .get(from)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+    else {
+        return;
+    };
+    arguments.insert(to.to_string(), Value::String(value));
+}
+
+fn normalize_current_surface_tool_arguments(tool_call: &mut CallToolRequestParam) {
+    let Some(arguments) = tool_call.arguments.as_mut() else {
+        return;
+    };
+
+    match tool_call.name.as_ref() {
+        "Read" => {
+            copy_string_argument_if_missing(arguments, "file_path", "path");
+            copy_string_argument_if_missing(arguments, "filePath", "path");
+            if !arguments.contains_key("end_line") {
+                if let Some(head) = integer_argument(arguments, "head") {
+                    arguments.insert("end_line".to_string(), Value::Number(head.into()));
+                    arguments
+                        .entry("start_line".to_string())
+                        .or_insert_with(|| Value::Number(1.into()));
+                }
+            }
+        }
+        "Write" | "Edit" => {
+            copy_string_argument_if_missing(arguments, "file_path", "path");
+            copy_string_argument_if_missing(arguments, "filePath", "path");
+        }
+        "Glob" | "Grep" => {
+            copy_string_argument_if_missing(arguments, "query", "pattern");
+        }
+        _ => {}
+    }
+}
+
+fn extract_plaintext_tool_use_name(open_tag: &str) -> Option<String> {
+    let normalized = open_tag.replace("\\\"", "\"").replace("\\'", "'");
+    let name_pos = normalized.find("name=")?;
+    let after_name = normalized.get(name_pos + "name=".len()..)?.trim_start();
+    let quote = after_name.chars().next()?;
+    if quote != '"' && quote != '\'' {
+        return None;
+    }
+    let value_start = quote.len_utf8();
+    let value_end = after_name.get(value_start..)?.find(quote)?;
+    let value = after_name.get(value_start..value_start + value_end)?.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn strip_json_code_fence(raw: &str) -> &str {
+    let trimmed = raw.trim();
+    if !trimmed.starts_with("```") {
+        return trimmed;
+    }
+
+    let Some(first_line_end) = trimmed.find('\n') else {
+        return trimmed;
+    };
+    let without_opening = &trimmed[first_line_end + 1..];
+    without_opening
+        .strip_suffix("```")
+        .map(str::trim)
+        .unwrap_or(without_opening.trim())
+}
+
+fn parse_plaintext_tool_use_arguments(raw: &str) -> Option<serde_json::Map<String, Value>> {
+    let candidate = strip_json_code_fence(raw);
+    let parsed = match serde_json::from_str::<Value>(candidate) {
+        Ok(value) => value,
+        Err(_) => {
+            let start = candidate.find('{')?;
+            let end = candidate.rfind('}')?;
+            serde_json::from_str::<Value>(&candidate[start..=end]).ok()?
+        }
+    };
+    match parsed {
+        Value::Object(arguments) => Some(arguments),
+        _ => None,
+    }
+}
+
+fn extract_plaintext_tool_uses(text: &str) -> Option<(String, Vec<CallToolRequestParam>)> {
+    let mut cursor = 0usize;
+    let mut prefix = String::new();
+    let mut tool_calls = Vec::new();
+    let mut saw_tool_use = false;
+
+    while let Some(start_offset) = text.get(cursor..)?.find(PLAINTEXT_TOOL_USE_OPEN_MARKER) {
+        let start = cursor + start_offset;
+        if !saw_tool_use {
+            prefix.push_str(text.get(cursor..start).unwrap_or_default());
+        }
+
+        let open_end = start + text.get(start..)?.find('>')?;
+        let open_tag = text.get(start..=open_end)?;
+        let body_start = open_end + 1;
+        let close_start = body_start
+            + text
+                .get(body_start..)?
+                .find(PLAINTEXT_TOOL_USE_CLOSE_MARKER)?;
+        let body = text.get(body_start..close_start)?;
+
+        if let (Some(name), Some(arguments)) = (
+            extract_plaintext_tool_use_name(open_tag),
+            parse_plaintext_tool_use_arguments(body),
+        ) {
+            tool_calls.push(CallToolRequestParam {
+                name: name.into(),
+                arguments: Some(arguments),
+            });
+        }
+
+        saw_tool_use = true;
+        cursor = close_start + PLAINTEXT_TOOL_USE_CLOSE_MARKER.len();
+    }
+
+    if tool_calls.is_empty() {
+        None
+    } else {
+        Some((prefix, tool_calls))
+    }
+}
+
+fn assistant_single_text_content(message: &Message) -> Option<&str> {
+    if message.role != rmcp::model::Role::Assistant || message.content.len() != 1 {
+        return None;
+    }
+
+    message.content.first()?.as_text()
+}
+
+fn message_with_single_text(message: &Message, text: String) -> Message {
+    let mut next = message.clone();
+    next.content = vec![MessageContent::text(text)];
+    next
+}
+
+fn plaintext_tool_use_is_complete(text: &str) -> bool {
+    let Some(open_pos) = text.find(PLAINTEXT_TOOL_USE_OPEN_MARKER) else {
+        return false;
+    };
+    text.get(open_pos..)
+        .is_some_and(|tail| tail.contains(PLAINTEXT_TOOL_USE_CLOSE_MARKER))
+}
+
+fn normalize_plaintext_tool_use_message(message: Message) -> Message {
+    normalize_plaintext_tool_use_message_with_ids(message, &[])
+}
+
+fn normalize_plaintext_tool_use_message_with_ids(
+    message: Message,
+    preallocated_tool_ids: &[String],
+) -> Message {
+    if message.role != rmcp::model::Role::Assistant
+        || message
+            .content
+            .iter()
+            .any(|content| matches!(content, MessageContent::ToolRequest(_)))
+    {
+        return message;
+    }
+
+    let mut normalized_message = message;
+    let original_content = std::mem::take(&mut normalized_message.content);
+    let mut normalized_content = Vec::with_capacity(original_content.len());
+    let mut converted_any = false;
+
+    for content in original_content {
+        match content {
+            MessageContent::Text(text) if !converted_any => {
+                if let Some((prefix, tool_calls)) = extract_plaintext_tool_uses(&text.text) {
+                    converted_any = true;
+                    let visible_prefix = prefix.trim();
+                    if !visible_prefix.is_empty() {
+                        normalized_content.push(MessageContent::text(visible_prefix.to_string()));
+                    }
+                    for (idx, tool_call) in tool_calls.into_iter().enumerate() {
+                        let tool_request_id = preallocated_tool_ids
+                            .get(idx)
+                            .cloned()
+                            .unwrap_or_else(|| Uuid::new_v4().to_string());
+                        normalized_content
+                            .push(MessageContent::tool_request(tool_request_id, Ok(tool_call)));
+                    }
+                } else {
+                    normalized_content.push(MessageContent::Text(text));
+                }
+            }
+            MessageContent::Text(_) if converted_any => {
+                // 模型在 XML tool_use 后追加的自然语言通常是“未暴露工具”的误判结论；
+                // 工具已被提升为结构化调用后，后续结论应由下一轮基于工具结果生成。
+            }
+            other => normalized_content.push(other),
+        }
+    }
+
+    if converted_any {
+        normalized_message.content = normalized_content;
+        normalized_message
+    } else {
+        normalized_message.content = normalized_content;
+        normalized_message
+    }
+}
+
+#[derive(Default)]
+struct PlaintextToolUseStreamNormalizer {
+    pending_message: Option<Message>,
+    pending_text: String,
+    pending_tool_ids: Vec<String>,
+}
+
+impl PlaintextToolUseStreamNormalizer {
+    fn finish(&mut self) -> Option<Message> {
+        let pending_message = self.pending_message.take()?;
+        let pending_text = std::mem::take(&mut self.pending_text);
+        self.pending_tool_ids.clear();
+        Some(message_with_single_text(&pending_message, pending_text))
+    }
+
+    fn finish_normalized(&mut self) -> Option<Message> {
+        let pending_message = self.pending_message.take()?;
+        let pending_text = std::mem::take(&mut self.pending_text);
+        let pending_tool_ids = std::mem::take(&mut self.pending_tool_ids);
+        Some(normalize_plaintext_tool_use_message_with_ids(
+            message_with_single_text(&pending_message, pending_text),
+            &pending_tool_ids,
+        ))
+    }
+
+    fn pending_tool_input_delta(&self, base: &Message, delta_text: &str) -> Option<Message> {
+        let tool_id = self.pending_tool_ids.first()?;
+        let progress = extract_plaintext_tool_use_progress(self.pending_text.as_str(), delta_text)?;
+        let mut message = base.clone();
+        message.content = vec![MessageContent::tool_input_delta(
+            tool_id.clone(),
+            progress.tool_name,
+            progress.delta,
+            progress.accumulated_arguments,
+            Some("plaintext_tool_use".to_string()),
+        )];
+        Some(message)
+    }
+
+    fn process(&mut self, response: Message) -> Vec<Message> {
+        if self.pending_message.is_some() {
+            if let Some(text) = assistant_single_text_content(&response) {
+                self.pending_text.push_str(text);
+                if plaintext_tool_use_is_complete(&self.pending_text) {
+                    if let Some(message) = self.finish_normalized() {
+                        return vec![message];
+                    }
+                }
+                return self
+                    .pending_tool_input_delta(&response, text)
+                    .into_iter()
+                    .collect();
+            }
+
+            let mut output = Vec::new();
+            if let Some(pending) = self.finish() {
+                output.push(normalize_plaintext_tool_use_message(pending));
+            }
+            output.extend(self.process(response));
+            return output;
+        }
+
+        let Some(text) = assistant_single_text_content(&response) else {
+            return vec![normalize_plaintext_tool_use_message(response)];
+        };
+        let Some(tool_start) = text.find(PLAINTEXT_TOOL_USE_OPEN_MARKER) else {
+            return vec![normalize_plaintext_tool_use_message(response)];
+        };
+        if plaintext_tool_use_is_complete(text) {
+            return vec![normalize_plaintext_tool_use_message(response)];
+        }
+
+        let prefix = text[..tool_start].trim().to_string();
+        let pending = text[tool_start..].to_string();
+        let mut output = Vec::new();
+        if !prefix.trim().is_empty() {
+            output.push(message_with_single_text(&response, prefix));
+        }
+
+        let mut pending_message = response;
+        pending_message.content.clear();
+        let tool_id = Uuid::new_v4().to_string();
+        self.pending_message = Some(pending_message);
+        self.pending_tool_ids = vec![tool_id];
+        self.pending_text.push_str(&pending);
+        if let Some(pending_message) = self.pending_message.as_ref() {
+            if let Some(delta_message) =
+                self.pending_tool_input_delta(pending_message, self.pending_text.as_str())
+            {
+                output.push(delta_message);
+            }
+        }
+        output
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PlaintextToolUseProgress {
+    tool_name: Option<String>,
+    delta: String,
+    accumulated_arguments: Option<String>,
+}
+
+fn strip_plaintext_tool_use_markup(raw: &str) -> String {
+    let mut value = raw;
+    if let Some(open_start) = value.find(PLAINTEXT_TOOL_USE_OPEN_MARKER) {
+        let tail = &value[open_start..];
+        let Some(open_end) = tail.find('>') else {
+            return String::new();
+        };
+        value = &tail[open_end + 1..];
+    }
+    if let Some(close_start) = value.find(PLAINTEXT_TOOL_USE_CLOSE_MARKER) {
+        value = &value[..close_start];
+    }
+    value.to_string()
+}
+
+fn extract_plaintext_tool_use_progress(
+    accumulated_text: &str,
+    delta_text: &str,
+) -> Option<PlaintextToolUseProgress> {
+    let start = accumulated_text.find(PLAINTEXT_TOOL_USE_OPEN_MARKER)?;
+    let tail = accumulated_text.get(start..)?;
+    let open_end = tail.find('>');
+    let tool_name = open_end.and_then(|idx| extract_plaintext_tool_use_name(&tail[..=idx]));
+    let accumulated_arguments = open_end
+        .map(|idx| strip_plaintext_tool_use_markup(&tail[idx + 1..]))
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let delta = strip_plaintext_tool_use_markup(delta_text);
+
+    Some(PlaintextToolUseProgress {
+        tool_name,
+        delta,
+        accumulated_arguments,
+    })
+}
+
 async fn toolshim_postprocess(
     response: Message,
     toolshim_tools: &[Tool],
@@ -420,7 +831,6 @@ impl Agent {
             system_prompt.push_str("\n\n");
             system_prompt.push_str(guidance);
         }
-
         // Handle toolshim if enabled
         let mut toolshim_tools = vec![];
         if model_config.toolshim {
@@ -571,6 +981,7 @@ impl Agent {
 
         Ok(Box::pin(try_stream! {
             let mut first_provider_content_seen = false;
+            let mut plaintext_tool_use_normalizer = PlaintextToolUseStreamNormalizer::default();
             while let Some(next) = stream.next().await {
                 let (mut message, usage) = match next {
                     Ok(next) => next,
@@ -624,8 +1035,33 @@ impl Agent {
                         .await?,
                     );
                 }
+                if let Some(response) = message.take() {
+                    let mut usage_to_emit = usage;
+                    let normalized_messages = plaintext_tool_use_normalizer.process(response);
+                    let mut emitted_message = false;
+                    for normalized_message in normalized_messages {
+                        emitted_message = true;
+                        yield (Some(normalized_message), usage_to_emit.take());
+                    }
+                    if usage_to_emit.is_some() {
+                        if let Some(pending_message) = plaintext_tool_use_normalizer.finish() {
+                            emitted_message = true;
+                            yield (
+                                Some(normalize_plaintext_tool_use_message(pending_message)),
+                                usage_to_emit.take(),
+                            );
+                        }
+                    }
+                    if !emitted_message && usage_to_emit.is_some() {
+                        yield (None, usage_to_emit);
+                    }
+                    continue;
+                }
 
                 yield (message, usage);
+            }
+            if let Some(pending_message) = plaintext_tool_use_normalizer.finish() {
+                yield (Some(normalize_plaintext_tool_use_message(pending_message)), None);
             }
         }))
     }
@@ -641,31 +1077,43 @@ impl Agent {
         tools: &[Tool],
     ) -> (Vec<ToolRequest>, Vec<ToolRequest>, Message, Message) {
         // First collect all tool requests with coercion applied
-        let tool_requests: Vec<ToolRequest> = response
-            .content
-            .iter()
-            .filter_map(|content| {
-                if let MessageContent::ToolRequest(req) = content {
-                    let mut coerced_req = req.clone();
+        let tool_requests: Vec<ToolRequest> = {
+            let registry = self.tool_registry.read().await;
+            response
+                .content
+                .iter()
+                .filter_map(|content| {
+                    if let MessageContent::ToolRequest(req) = content {
+                        let mut coerced_req = req.clone();
 
-                    if let Ok(ref mut tool_call) = coerced_req.tool_call {
-                        if let Some(tool) = tools.iter().find(|t| t.name == tool_call.name) {
-                            let schema_value = Value::Object(tool.input_schema.as_ref().clone());
-                            tool_call.arguments =
-                                coerce_tool_arguments(tool_call.arguments.clone(), &schema_value);
+                        if let Ok(ref mut tool_call) = coerced_req.tool_call {
+                            normalize_current_surface_tool_call(tool_call, tools, &registry);
+                            normalize_current_surface_tool_arguments(tool_call);
 
-                            if let Some(ref meta) = tool.meta {
-                                coerced_req.tool_meta = serde_json::to_value(meta).ok();
+                            if let Some(tool) = tools
+                                .iter()
+                                .find(|t| t.name.as_ref() == tool_call.name.as_ref())
+                            {
+                                let schema_value =
+                                    Value::Object(tool.input_schema.as_ref().clone());
+                                tool_call.arguments = coerce_tool_arguments(
+                                    tool_call.arguments.clone(),
+                                    &schema_value,
+                                );
+
+                                if let Some(ref meta) = tool.meta {
+                                    coerced_req.tool_meta = serde_json::to_value(meta).ok();
+                                }
                             }
                         }
-                    }
 
-                    Some(coerced_req)
-                } else {
-                    None
-                }
-            })
-            .collect();
+                        Some(coerced_req)
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        };
 
         // Create a filtered message with frontend tool requests removed
         let mut filtered_content = Vec::new();
@@ -843,6 +1291,185 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     const MCP_CONTEXT_SENTINEL: &str = "MCP_CONTEXT_SENTINEL_SHOULD_STAY";
+
+    #[test]
+    fn normalize_plaintext_tool_use_message_extracts_claude_code_xml_blocks() {
+        let message = Message::assistant().with_text(
+            "我先做只读验证。\n\
+            <tool_use name=\"mcp__system__shell\">{\"command\":\"pwd\"}</tool_use>\n\
+            <tool_use name=\"mcp__system__read_file\">```json\n{\"path\":\"package.json\",\"head\":20}\n```</tool_use>\n\
+            抱歉，当前环境没有暴露工具接口。",
+        );
+
+        let normalized = normalize_plaintext_tool_use_message(message);
+        let text = normalized.as_concat_text();
+        let requests = normalized
+            .content
+            .iter()
+            .filter_map(|content| content.as_tool_request())
+            .collect::<Vec<_>>();
+
+        assert_eq!(text, "我先做只读验证。");
+        assert_eq!(requests.len(), 2);
+        assert_eq!(
+            requests[0].tool_call.as_ref().expect("shell call").name,
+            "mcp__system__shell"
+        );
+        assert_eq!(
+            requests[0]
+                .tool_call
+                .as_ref()
+                .expect("shell call")
+                .arguments
+                .as_ref()
+                .and_then(|arguments| arguments.get("command"))
+                .and_then(Value::as_str),
+            Some("pwd")
+        );
+        assert_eq!(
+            requests[1].tool_call.as_ref().expect("read call").name,
+            "mcp__system__read_file"
+        );
+        assert_eq!(
+            requests[1]
+                .tool_call
+                .as_ref()
+                .expect("read call")
+                .arguments
+                .as_ref()
+                .and_then(|arguments| arguments.get("head"))
+                .and_then(Value::as_i64),
+            Some(20)
+        );
+        assert!(
+            !normalized.as_concat_text().contains("<tool_use"),
+            "XML tool_use 不应继续作为正文展示"
+        );
+    }
+
+    #[test]
+    fn plaintext_tool_use_stream_normalizer_buffers_split_xml_blocks() {
+        let mut normalizer = PlaintextToolUseStreamNormalizer::default();
+
+        let first_output = normalizer
+            .process(Message::assistant().with_text("<tool_use name=\"mcp__system__shell\">"));
+        assert_eq!(first_output.len(), 1);
+        let MessageContent::ToolInputDelta(first_delta) = &first_output[0].content[0] else {
+            panic!("首个分片应立即转成工具输入占位");
+        };
+        assert_eq!(first_delta.tool_name.as_deref(), Some("mcp__system__shell"));
+        let pending_tool_id = first_delta.id.clone();
+
+        let second_output =
+            normalizer.process(Message::assistant().with_text("{\"command\":\"pwd\"}"));
+        assert_eq!(second_output.len(), 1);
+        let MessageContent::ToolInputDelta(second_delta) = &second_output[0].content[0] else {
+            panic!("参数分片应继续更新同一个工具输入占位");
+        };
+        assert_eq!(second_delta.id, pending_tool_id);
+        assert_eq!(
+            second_delta.accumulated_arguments.as_deref(),
+            Some("{\"command\":\"pwd\"}")
+        );
+        let output = normalizer.process(Message::assistant().with_text("</tool_use>"));
+
+        assert_eq!(output.len(), 1);
+        let requests = output[0]
+            .content
+            .iter()
+            .filter_map(|content| content.as_tool_request())
+            .collect::<Vec<_>>();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].id, pending_tool_id);
+        assert_eq!(
+            requests[0].tool_call.as_ref().expect("tool call").name,
+            "mcp__system__shell"
+        );
+        assert!(
+            !output[0].as_concat_text().contains("<tool_use"),
+            "分片 XML tool_use 不应作为正文透出"
+        );
+    }
+
+    #[test]
+    fn plaintext_tool_use_stream_normalizer_emits_prefix_before_buffering_tool_block() {
+        let mut normalizer = PlaintextToolUseStreamNormalizer::default();
+        let output = normalizer.process(
+            Message::assistant().with_text("我先确认。\n<tool_use name=\"mcp__system__shell\">"),
+        );
+
+        assert_eq!(output.len(), 2);
+        assert_eq!(output[0].as_concat_text(), "我先确认。");
+        assert!(
+            matches!(
+                output[1].content.first(),
+                Some(MessageContent::ToolInputDelta(_))
+            ),
+            "前缀输出后应立即补一个工具输入占位"
+        );
+
+        let output =
+            normalizer.process(Message::assistant().with_text("{\"command\":\"pwd\"}</tool_use>"));
+        assert_eq!(output.len(), 1);
+        assert_eq!(
+            output[0]
+                .content
+                .iter()
+                .filter_map(|c| c.as_tool_request())
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn normalize_current_surface_tool_arguments_accepts_reference_alias_params() {
+        let mut read_call = CallToolRequestParam {
+            name: "Read".into(),
+            arguments: Some(object!({
+                "file_path": "package.json",
+                "head": "20"
+            })),
+        };
+
+        normalize_current_surface_tool_arguments(&mut read_call);
+        let read_args = read_call.arguments.expect("read args");
+        assert_eq!(
+            read_args.get("path").and_then(Value::as_str),
+            Some("package.json")
+        );
+        assert_eq!(read_args.get("start_line").and_then(Value::as_i64), Some(1));
+        assert_eq!(read_args.get("end_line").and_then(Value::as_i64), Some(20));
+
+        let mut write_call = CallToolRequestParam {
+            name: "Write".into(),
+            arguments: Some(object!({
+                "filePath": "notes.txt",
+                "content": "ok"
+            })),
+        };
+
+        normalize_current_surface_tool_arguments(&mut write_call);
+        let write_args = write_call.arguments.expect("write args");
+        assert_eq!(
+            write_args.get("path").and_then(Value::as_str),
+            Some("notes.txt")
+        );
+
+        let mut grep_call = CallToolRequestParam {
+            name: "Grep".into(),
+            arguments: Some(object!({
+                "query": "normalize_shell_command_params",
+                "path": "src-tauri"
+            })),
+        };
+
+        normalize_current_surface_tool_arguments(&mut grep_call);
+        let grep_args = grep_call.arguments.expect("grep args");
+        assert_eq!(
+            grep_args.get("pattern").and_then(Value::as_str),
+            Some("normalize_shell_command_params")
+        );
+    }
 
     #[derive(Clone)]
     struct MockProvider {
@@ -1830,6 +2457,486 @@ mod tests {
             ProviderError::RequestFailed("stream exploded".to_string())
         );
         Ok(())
+    }
+
+    fn bash_tool() -> Tool {
+        Tool::new(
+            "Bash",
+            "Bash test tool",
+            object!({
+                "type": "object",
+                "properties": {
+                    "command": { "type": "string" },
+                    "timeout": { "type": "integer" }
+                },
+                "required": ["command"]
+            }),
+        )
+    }
+
+    fn read_tool() -> Tool {
+        Tool::new(
+            "Read",
+            "Read test tool",
+            object!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string" },
+                    "start_line": { "type": "integer" }
+                },
+                "required": ["path"]
+            }),
+        )
+    }
+
+    fn web_search_tool() -> Tool {
+        Tool::new(
+            "WebSearch",
+            "WebSearch test tool",
+            object!({
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string" },
+                    "allowed_domains": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    }
+                },
+                "required": ["query"]
+            }),
+        )
+    }
+
+    struct AliasMatrixRegistryTool {
+        name: String,
+    }
+
+    #[async_trait]
+    impl crate::tools::Tool for AliasMatrixRegistryTool {
+        fn name(&self) -> &str {
+            &self.name
+        }
+
+        fn description(&self) -> &str {
+            "alias matrix registry tool"
+        }
+
+        fn input_schema(&self) -> Value {
+            json!({
+                "type": "object",
+                "properties": {}
+            })
+        }
+
+        async fn execute(
+            &self,
+            _params: Value,
+            _context: &crate::tools::ToolContext,
+        ) -> std::result::Result<crate::tools::ToolResult, crate::tools::ToolError> {
+            Ok(crate::tools::ToolResult::success(format!(
+                "executed:{}",
+                self.name
+            )))
+        }
+    }
+
+    async fn register_alias_matrix_tools(agent: &Agent) {
+        let mut registry = agent.tool_registry().write().await;
+        for (canonical, _) in crate::tools::registry::DEFAULT_NATIVE_ALIAS_PAIRS {
+            registry.register(Box::new(AliasMatrixRegistryTool {
+                name: canonical.to_string(),
+            }));
+        }
+    }
+
+    fn alias_matrix_surface_tools() -> Vec<Tool> {
+        crate::tools::registry::DEFAULT_NATIVE_ALIAS_PAIRS
+            .iter()
+            .map(|(canonical, _)| {
+                Tool::new(
+                    *canonical,
+                    format!("{canonical} visible test tool"),
+                    object!({
+                        "type": "object",
+                        "properties": {}
+                    }),
+                )
+            })
+            .collect()
+    }
+
+    fn call_tool_request(
+        id: &str,
+        name: &str,
+        arguments: Option<serde_json::Map<String, Value>>,
+    ) -> ToolRequest {
+        ToolRequest {
+            id: id.to_string(),
+            tool_call: Ok(rmcp::model::CallToolRequestParam {
+                name: name.to_string().into(),
+                arguments,
+            }),
+            metadata: None,
+            tool_meta: None,
+        }
+    }
+
+    fn tool_call(request: &ToolRequest) -> &rmcp::model::CallToolRequestParam {
+        request
+            .tool_call
+            .as_ref()
+            .expect("tool request should contain a successful tool call")
+    }
+
+    fn message_tool_requests(message: &Message) -> Vec<&ToolRequest> {
+        message
+            .content
+            .iter()
+            .filter_map(|content| match content {
+                MessageContent::ToolRequest(request) => Some(request),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn message_tool_request_names(message: &Message) -> Vec<String> {
+        message_tool_requests(message)
+            .iter()
+            .map(|request| tool_call(request).name.to_string())
+            .collect()
+    }
+
+    fn assert_tool_call_summary(
+        request: &ToolRequest,
+        expected_id: &str,
+        expected_name: &str,
+        expected_arguments: Value,
+    ) {
+        assert_eq!(request.id, expected_id);
+        let tool_call = tool_call(request);
+        assert_eq!(tool_call.name.as_ref(), expected_name);
+        assert_eq!(
+            Value::Object(tool_call.arguments.clone().unwrap_or_default()),
+            expected_arguments,
+        );
+    }
+
+    #[tokio::test]
+    async fn categorize_tool_requests_normalizes_native_aliases_before_dispatch() {
+        let agent = crate::agents::Agent::new();
+        let response = Message::assistant()
+            .with_content(MessageContent::ToolRequest(call_tool_request(
+                "shell-alias-call",
+                "BashTool",
+                Some(object!({
+                    "command": "pwd",
+                    "timeout": "60"
+                })),
+            )))
+            .with_content(MessageContent::ToolRequest(call_tool_request(
+                "read-alias-call",
+                "FileReadTool",
+                Some(object!({
+                    "path": "src/main.rs",
+                    "start_line": "3"
+                })),
+            )))
+            .with_content(MessageContent::ToolRequest(call_tool_request(
+                "search-alias-call",
+                "WebSearchTool",
+                Some(object!({
+                    "query": "OpenAI GPT-5",
+                    "allowed_domains": ["openai.com"]
+                })),
+            )))
+            .with_content(MessageContent::ToolRequest(call_tool_request(
+                "namespaced-shell-call",
+                "functions.Bash",
+                Some(object!({
+                    "command": "pwd"
+                })),
+            )));
+        let tools = vec![bash_tool(), read_tool(), web_search_tool()];
+
+        let (frontend_requests, other_requests, filtered_message, normalized_response) =
+            agent.categorize_tool_requests(&response, &tools).await;
+
+        assert!(frontend_requests.is_empty());
+        assert_eq!(other_requests.len(), 4);
+        assert_tool_call_summary(
+            &other_requests[0],
+            "shell-alias-call",
+            "Bash",
+            json!({
+                "command": "pwd",
+                "timeout": 60
+            }),
+        );
+        assert_tool_call_summary(
+            &other_requests[1],
+            "read-alias-call",
+            "Read",
+            json!({
+                "path": "src/main.rs",
+                "start_line": 3
+            }),
+        );
+        assert_tool_call_summary(
+            &other_requests[2],
+            "search-alias-call",
+            "WebSearch",
+            json!({
+                "query": "OpenAI GPT-5",
+                "allowed_domains": ["openai.com"]
+            }),
+        );
+        assert_tool_call_summary(
+            &other_requests[3],
+            "namespaced-shell-call",
+            "Bash",
+            json!({
+                "command": "pwd"
+            }),
+        );
+        let expected_names = vec![
+            "Bash".to_string(),
+            "Read".to_string(),
+            "WebSearch".to_string(),
+            "Bash".to_string(),
+        ];
+        assert_eq!(
+            message_tool_request_names(&filtered_message),
+            expected_names
+        );
+        assert_eq!(
+            message_tool_request_names(&normalized_response),
+            expected_names
+        );
+    }
+
+    #[tokio::test]
+    async fn categorize_tool_requests_normalizes_all_default_native_aliases_before_dispatch() {
+        let agent = crate::agents::Agent::new();
+        register_alias_matrix_tools(&agent).await;
+
+        let mut response = Message::assistant();
+        let mut expected_names = Vec::new();
+        let mut request_count = 0usize;
+        for (canonical, aliases) in crate::tools::registry::DEFAULT_NATIVE_ALIAS_PAIRS {
+            for alias in *aliases {
+                response = response.with_content(MessageContent::ToolRequest(call_tool_request(
+                    &format!("alias-call-{request_count}"),
+                    alias,
+                    Some(object!({})),
+                )));
+                expected_names.push(canonical.to_string());
+                request_count += 1;
+            }
+        }
+        let tools = alias_matrix_surface_tools();
+
+        let (frontend_requests, other_requests, filtered_message, normalized_response) =
+            agent.categorize_tool_requests(&response, &tools).await;
+
+        assert!(frontend_requests.is_empty());
+        assert_eq!(
+            other_requests.len(),
+            request_count,
+            "every default alias should stay dispatchable through the current visible surface"
+        );
+        assert_eq!(
+            other_requests
+                .iter()
+                .map(|request| tool_call(request).name.to_string())
+                .collect::<Vec<_>>(),
+            expected_names
+        );
+        assert_eq!(
+            message_tool_request_names(&filtered_message),
+            expected_names
+        );
+        assert_eq!(
+            message_tool_request_names(&normalized_response),
+            expected_names
+        );
+    }
+
+    #[tokio::test]
+    async fn categorize_tool_requests_keeps_exact_current_surface_name_before_alias_lookup() {
+        let agent = crate::agents::Agent::new();
+        let response = Message::assistant().with_content(MessageContent::ToolRequest(
+            call_tool_request("exact-call", "PowerShellTool", Some(object!({}))),
+        ));
+        let tools = vec![Tool::new(
+            "PowerShellTool",
+            "Visible MCP-style tool",
+            object!({ "type": "object", "properties": {} }),
+        )];
+
+        let (frontend_requests, other_requests, filtered_message, normalized_response) =
+            agent.categorize_tool_requests(&response, &tools).await;
+
+        assert!(frontend_requests.is_empty());
+        assert_eq!(other_requests.len(), 1);
+        assert_tool_call_summary(
+            &other_requests[0],
+            "exact-call",
+            "PowerShellTool",
+            json!({}),
+        );
+        let expected_names = vec!["PowerShellTool".to_string()];
+        assert_eq!(
+            message_tool_request_names(&filtered_message),
+            expected_names
+        );
+        assert_eq!(
+            message_tool_request_names(&normalized_response),
+            expected_names
+        );
+    }
+
+    #[tokio::test]
+    async fn categorize_tool_requests_keeps_unknown_tool_names_unknown() {
+        let agent = crate::agents::Agent::new();
+        let response =
+            Message::assistant().with_content(MessageContent::ToolRequest(call_tool_request(
+                "unknown-call",
+                "web search news",
+                Some(object!({ "q": "news" })),
+            )));
+        let tools = vec![bash_tool()];
+
+        let (frontend_requests, other_requests, filtered_message, normalized_response) =
+            agent.categorize_tool_requests(&response, &tools).await;
+
+        assert!(frontend_requests.is_empty());
+        assert_eq!(other_requests.len(), 1);
+        assert_tool_call_summary(
+            &other_requests[0],
+            "unknown-call",
+            "web search news",
+            json!({ "q": "news" }),
+        );
+        assert_eq!(
+            message_tool_request_names(&filtered_message),
+            vec!["web search news".to_string()],
+        );
+        assert_eq!(
+            message_tool_request_names(&normalized_response),
+            vec!["web search news".to_string()],
+        );
+    }
+
+    #[tokio::test]
+    async fn categorize_tool_requests_does_not_enable_hidden_native_aliases() {
+        let agent = crate::agents::Agent::new();
+        let response = Message::assistant()
+            .with_content(MessageContent::ToolRequest(call_tool_request(
+                "bash-alias-call",
+                "BashTool",
+                Some(object!({ "command": "pwd" })),
+            )))
+            .with_content(MessageContent::ToolRequest(call_tool_request(
+                "bash-namespace-call",
+                "functions.Bash",
+                Some(object!({ "command": "pwd" })),
+            )));
+        let tools = vec![web_search_tool()];
+
+        let (frontend_requests, other_requests, filtered_message, normalized_response) =
+            agent.categorize_tool_requests(&response, &tools).await;
+
+        assert!(frontend_requests.is_empty());
+        assert_eq!(other_requests.len(), 2);
+        assert_tool_call_summary(
+            &other_requests[0],
+            "bash-alias-call",
+            "BashTool",
+            json!({ "command": "pwd" }),
+        );
+        assert_tool_call_summary(
+            &other_requests[1],
+            "bash-namespace-call",
+            "functions.Bash",
+            json!({ "command": "pwd" }),
+        );
+        assert_eq!(
+            message_tool_request_names(&filtered_message),
+            vec!["BashTool".to_string(), "functions.Bash".to_string()],
+        );
+        assert_eq!(
+            message_tool_request_names(&normalized_response),
+            vec!["BashTool".to_string(), "functions.Bash".to_string()],
+        );
+    }
+
+    #[tokio::test]
+    async fn categorize_tool_requests_does_not_enable_hidden_default_native_aliases() {
+        let agent = crate::agents::Agent::new();
+        register_alias_matrix_tools(&agent).await;
+
+        let mut response = Message::assistant();
+        let mut expected_alias_names = Vec::new();
+        let mut request_count = 0usize;
+        for (_, aliases) in crate::tools::registry::DEFAULT_NATIVE_ALIAS_PAIRS {
+            for alias in *aliases {
+                response = response.with_content(MessageContent::ToolRequest(call_tool_request(
+                    &format!("hidden-alias-call-{request_count}"),
+                    alias,
+                    Some(object!({})),
+                )));
+                expected_alias_names.push(alias.to_string());
+                request_count += 1;
+            }
+        }
+        let tools = vec![Tool::new(
+            "VisibleOnly",
+            "Only this non-native tool is visible",
+            object!({ "type": "object", "properties": {} }),
+        )];
+
+        let (frontend_requests, other_requests, filtered_message, normalized_response) =
+            agent.categorize_tool_requests(&response, &tools).await;
+
+        assert!(frontend_requests.is_empty());
+        assert_eq!(other_requests.len(), request_count);
+        assert_eq!(
+            message_tool_request_names(&filtered_message),
+            expected_alias_names
+        );
+        assert_eq!(
+            message_tool_request_names(&normalized_response),
+            expected_alias_names
+        );
+    }
+
+    #[tokio::test]
+    async fn categorize_tool_requests_does_not_infer_empty_tool_names_from_arguments() {
+        let agent = crate::agents::Agent::new();
+        let response = Message::assistant().with_content(MessageContent::ToolRequest(
+            call_tool_request("empty-name-call", "", Some(object!({ "command": "pwd" }))),
+        ));
+        let tools = vec![bash_tool()];
+
+        let (frontend_requests, other_requests, filtered_message, normalized_response) =
+            agent.categorize_tool_requests(&response, &tools).await;
+
+        assert!(frontend_requests.is_empty());
+        assert_eq!(other_requests.len(), 1);
+        assert_tool_call_summary(
+            &other_requests[0],
+            "empty-name-call",
+            "",
+            json!({ "command": "pwd" }),
+        );
+        assert_eq!(
+            message_tool_request_names(&filtered_message),
+            vec!["".to_string()],
+        );
+        assert_eq!(
+            message_tool_request_names(&normalized_response),
+            vec!["".to_string()],
+        );
     }
 
     #[test]

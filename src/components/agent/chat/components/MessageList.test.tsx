@@ -1523,6 +1523,14 @@ describe("MessageList", () => {
     expect(
       container.querySelector('[data-testid="message-list-empty-task-center"]'),
     ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="message-list-empty-task-center"]')
+        ?.className,
+    ).toContain("max-w-[560px]");
+    expect(
+      container.querySelector('[data-testid="message-list-empty-task-center"]')
+        ?.className,
+    ).not.toContain("rounded-[30px]");
     expect(container.textContent).toContain("Chat");
     expect(container.textContent).toContain("Recent chats");
     expect(container.textContent).toContain(
@@ -7287,7 +7295,7 @@ describe("MessageList", () => {
 
   it("失败回复已有时间线错误卡时不应在正文和底部重复长错误", async () => {
     const detail =
-      "当前 AI 服务商余额或额度不足，请在服务商后台充值或开通额度，或切换到其他可用模型后重试。";
+      "当前模型通道返回了计费或额度类错误，请检查该 Provider/模型通道的计费、配额或授权状态，或切换到其他可用模型后重试。";
     const messages: Message[] = [
       {
         id: "msg-user-provider-failed",
@@ -7352,5 +7360,4 @@ describe("MessageList", () => {
     expect(statusLine?.textContent).toContain("00:09");
     expect(statusLine?.textContent).not.toContain(detail);
   });
-
 });

@@ -20,7 +20,6 @@ import {
   getDefaultProject as getDefaultApiProject,
   getOrCreateDefaultProject,
   listProjects,
-  resolveProjectRootPath,
   updateProject,
   type ProjectType,
 } from "@/lib/api/project";
@@ -89,6 +88,9 @@ export function useProjects(
   const { autoLoad = true, skipDefaultWorkspaceReadyCheck = false } = options;
   const { t } = useTranslation("common");
   const renameNameRequiredMessage = t("common.projects.rename.nameRequired");
+  const createRootPathRequiredMessage = t(
+    "common.createProjectDialog.path.parentRequired",
+  );
   const [projects, setProjects] = useState<Project[]>([]);
   const [defaultProject, setDefaultProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(autoLoad);
@@ -190,7 +192,10 @@ export function useProjects(
   /** 创建项目 */
   const create = useCallback(
     async (request: CreateProjectRequest): Promise<Project> => {
-      const rootPath = await resolveProjectRootPath(request.name);
+      const rootPath = request.rootPath.trim();
+      if (!rootPath) {
+        throw new Error(createRootPathRequiredMessage);
+      }
 
       const project = await createProject({
         name: request.name,
@@ -200,7 +205,7 @@ export function useProjects(
       await refresh();
       return toProjectView(project);
     },
-    [refresh],
+    [createRootPathRequiredMessage, refresh],
   );
 
   /** 更新项目 */

@@ -50,6 +50,7 @@ export interface ProjectStats {
  */
 export interface CreateProjectRequest {
   name: string;
+  rootPath: string;
   workspaceType: WorkspaceType;
   icon?: string;
   color?: string;
@@ -60,6 +61,7 @@ export interface CreateProjectRequest {
  */
 export interface ProjectUpdate {
   name?: string;
+  rootPath?: string;
   settings?: WorkspaceSettings;
   icon?: string;
   color?: string;

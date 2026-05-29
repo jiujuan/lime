@@ -1019,7 +1019,9 @@ describe("AgentThreadTimeline", () => {
     });
 
     expect(container.textContent).toContain("碰到错误");
-    expect(container.textContent).toContain("当前 AI 服务商余额或额度不足");
+    expect(container.textContent).toContain(
+      "当前模型通道返回了计费或额度类错误",
+    );
     expect(container.textContent).not.toContain(
       "Agent provider execution failed",
     );

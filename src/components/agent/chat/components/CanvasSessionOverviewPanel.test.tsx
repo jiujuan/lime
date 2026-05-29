@@ -121,21 +121,26 @@ describe("CanvasSessionOverviewPanel", () => {
 
     const text = container.textContent ?? "";
 
-    expect(text).toContain("Session Process Index");
+    expect(text).toContain("Task progress");
     expect(text).toContain("Running");
-    expect(text).toContain("Focused on exec_command");
-    expect(text).toContain("Current turn: turn-1");
+    expect(text).toContain("Working on Preparing the result");
     expect(text).toContain("In progress 1");
     expect(text).toContain("Needs input 1");
     expect(text).toContain("Last updated");
     expect(text).toContain(expectedTime);
-    expect(text).toContain("Execution timeline");
-    expect(text).toContain("Command is running");
-    expect(text).toContain("Pending interactions");
+    expect(text).toContain("Recent progress");
+    expect(text).toContain("Checking or preparing the result.");
+    expect(text).toContain("Next step");
     expect(text).toContain("Waiting for confirmation");
-    expect(text).toContain("Queued messages");
-    expect(text).toContain("Queued 1");
-    expect(text).toContain("2 image(s)");
+    expect(text).toContain("Approve shell command?");
+    expect(text).not.toContain("Session Process Index");
+    expect(text).not.toContain("Current turn");
+    expect(text).not.toContain("Execution timeline");
+    expect(text).not.toContain("Queued messages");
+    expect(text).not.toContain("exec_command");
+    expect(text).not.toContain("turn-1");
+    expect(text).not.toContain("request-1");
+    expect(text).not.toContain("queue-1");
     expect(text).not.toContain("会话过程索引");
     expect(text).not.toContain("执行时间线");
     expect(text).not.toContain("排队消息");
@@ -169,7 +174,9 @@ describe("CanvasSessionOverviewPanel", () => {
 
     const text = container.textContent ?? "";
 
-    expect(text).toContain("provider balance or quota is insufficient");
+    expect(text).toContain(
+      "The current model channel returned a billing or quota error",
+    );
     expect(text).not.toContain("Agent provider execution failed");
     expect(text).not.toContain("Payment Required");
     expect(text).not.toContain("Insufficient Balance");

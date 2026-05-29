@@ -359,3 +359,6 @@ LayoutTransitionRenderGate.displayName = "LayoutTransitionRenderGate";
 export const TEAM_PRIMARY_CHAT_PANEL_WIDTH =
   "min(100%, clamp(420px, 34%, 560px))";
 export const TEAM_PRIMARY_CHAT_PANEL_MIN_WIDTH = "400px";
+export const CODE_WORKBENCH_CHAT_PANEL_WIDTH =
+  "min(100%, clamp(360px, 28%, 460px))";
+export const CODE_WORKBENCH_CHAT_PANEL_MIN_WIDTH = "340px";

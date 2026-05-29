@@ -8750,6 +8750,70 @@ describe("useAsterAgentChat 兼容接口", () => {
     }
   });
 
+  it("发送前应等待 runtime warmup 修复只有模型没有 provider 的工作区缓存", async () => {
+    const workspaceId = "ws-guide-heal-model-only-cache";
+    const selectedProvider = "openai";
+    const selectedModel = "gpt-5.5";
+    const scheduledTasks: Array<() => void> = [];
+    localStorage.setItem(
+      `agent_pref_model_${workspaceId}`,
+      JSON.stringify(selectedModel),
+    );
+    mockScheduleMinimumDelayIdleTask.mockImplementation((task: () => void) => {
+      scheduledTasks.push(task);
+      return () => undefined;
+    });
+    mockInitAsterAgent.mockResolvedValue({
+      initialized: true,
+      provider_configured: false,
+    });
+    mockGetDefaultProvider.mockResolvedValue(selectedProvider);
+    mockResolveClawWorkspaceProviderSelection.mockResolvedValue({
+      providerType: selectedProvider,
+      model: selectedModel,
+    });
+
+    const harness = mountHook(workspaceId, {
+      initialRuntimeWarmupLoadMode: "deferred",
+      initialRuntimeWarmupDeferredDelayMs: 60_000,
+    });
+
+    try {
+      await flushEffects();
+      expect(scheduledTasks).toHaveLength(1);
+      expect(mockInitAsterAgent).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await harness.getValue().triggerAIGuide("分析这个文件夹");
+      });
+
+      expect(mockInitAsterAgent).toHaveBeenCalledTimes(1);
+      expect(mockResolveClawWorkspaceProviderSelection).toHaveBeenCalledWith({
+        currentProviderType: selectedProvider,
+        currentModel: selectedModel,
+        theme: "general",
+      });
+      expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
+          ?.provider_preference,
+      ).toBe(selectedProvider);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
+          ?.model_preference,
+      ).toBe(selectedModel);
+
+      await act(async () => {
+        scheduledTasks.forEach((task) => task());
+        await Promise.resolve();
+      });
+
+      expect(mockInitAsterAgent).toHaveBeenCalledTimes(1);
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("Agent 初始化未恢复 provider 配置时应自愈已缓存的失效 provider 选择", async () => {
     const workspaceId = "ws-init-heal-stale-provider";
     localStorage.setItem(

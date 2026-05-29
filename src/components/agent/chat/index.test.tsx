@@ -1,13 +1,6 @@
 import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fileBrowserModule from "@/lib/api/fileBrowser";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
 import * as webviewApiModule from "@/lib/webview-api";
@@ -28,6 +21,17 @@ const WORKSPACE_HARNESS_DESCRIPTION =
   agentEnUSResource["agentChat.workspaceHarnessDialog.description"];
 const GENERAL_ASSISTANT_TITLE =
   agentEnUSResource["agentChat.runtimeStrip.title.general"];
+
+type MockEmptyStateProps = {
+  input?: string;
+  activeTheme?: string;
+  sessionId?: string | null;
+  setInput?: (value: string) => void;
+  onSend?: (
+    value: string,
+    executionStrategy?: "react" | "code_orchestrated" | "auto",
+  ) => void;
+};
 
 const {
   mockUseDeveloperFeatureFlags,
@@ -110,8 +114,17 @@ const {
   mockSetSelectedArtifactIdAtom: vi.fn(),
   mockGenerateGeneralWorkbenchPrompt: vi.fn(() => "mock-system-prompt"),
   mockIsSpecializedWorkbenchTheme: vi.fn(() => false),
-  mockEmptyState: vi.fn((props?: { input?: string }) => (
-    <div data-testid="empty-state">{props?.input || ""}</div>
+  mockEmptyState: vi.fn((props?: MockEmptyStateProps) => (
+    <div
+      data-testid="empty-state"
+      data-active-theme={props?.activeTheme || ""}
+      data-session-id={props?.sessionId ?? ""}
+    >
+      {props?.activeTheme === "general" ? (
+        <div data-testid="home-start-surface" />
+      ) : null}
+      {props?.input || ""}
+    </div>
   )),
   mockInputbar: vi.fn(
     (props?: { overlayAccessory?: ReactNode; input?: string }) => (
@@ -1329,8 +1342,17 @@ beforeEach(() => {
   ]);
   mockGenerateGeneralWorkbenchPrompt.mockReturnValue("mock-system-prompt");
   mockIsSpecializedWorkbenchTheme.mockReturnValue(false);
-  mockEmptyState.mockImplementation((props?: { input?: string }) => (
-    <div data-testid="empty-state">{props?.input || ""}</div>
+  mockEmptyState.mockImplementation((props?: MockEmptyStateProps) => (
+    <div
+      data-testid="empty-state"
+      data-active-theme={props?.activeTheme || ""}
+      data-session-id={props?.sessionId ?? ""}
+    >
+      {props?.activeTheme === "general" ? (
+        <div data-testid="home-start-surface" />
+      ) : null}
+      {props?.input || ""}
+    </div>
   ));
   mockUseThemeContextWorkspace.mockReturnValue(
     createMockThemeContextWorkspaceState(),
@@ -1832,12 +1854,16 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
   });
 
   it("打开旧会话后草稿预热创建新对话时不应继承旧消息快照", async () => {
-    type MockEmptyStateProps = {
-      input?: string;
-      setInput?: (value: string) => void;
-    };
     mockEmptyState.mockImplementation((props?: MockEmptyStateProps) => (
-      <div data-testid="empty-state" data-input={props?.input || ""}>
+      <div
+        data-testid="empty-state"
+        data-active-theme={props?.activeTheme || ""}
+        data-input={props?.input || ""}
+        data-session-id={props?.sessionId ?? ""}
+      >
+        {props?.activeTheme === "general" ? (
+          <div data-testid="home-start-surface" />
+        ) : null}
         <button
           type="button"
           data-testid="mock-empty-type"
@@ -1892,6 +1918,7 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
         '[data-testid="task-center-tab-create-button"]',
       ),
     ).not.toBeNull();
+    mockMessageList.mockClear();
     clickButton(mounted.container, "task-center-tab-create-button");
     await flushEffects();
     mounted.rerender();
@@ -1903,6 +1930,14 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     expect(
       mounted.container.querySelector('[data-testid="empty-state"]'),
     ).not.toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="home-start-surface"]'),
+    ).not.toBeNull();
+    const latestEmptyStateProps = mockEmptyState.mock.calls.at(-1)?.[0] as
+      | MockEmptyStateProps
+      | undefined;
+    expect(latestEmptyStateProps?.activeTheme).toBe("general");
+    expect(latestEmptyStateProps?.sessionId).toBeNull();
 
     clickButton(mounted.container, "mock-empty-type");
     await flushEffects(8);
@@ -1959,6 +1994,7 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
         '[data-testid="task-center-tab-create-button"]',
       ),
     ).not.toBeNull();
+    mockMessageList.mockClear();
     clickButton(mounted.container, "task-center-tab-create-button");
     await flushEffects();
     mounted.rerender();
@@ -1974,6 +2010,34 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
         '[data-testid^="task-center-tab-task-draft-"][data-active="true"]',
       ),
     ).not.toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="empty-state"]'),
+    ).not.toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="home-start-surface"]'),
+    ).not.toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="message-list"]'),
+    ).toBeNull();
+    const latestEmptyStateProps = mockEmptyState.mock.calls.at(-1)?.[0] as
+      | MockEmptyStateProps
+      | undefined;
+    expect(latestEmptyStateProps?.activeTheme).toBe("general");
+    expect(latestEmptyStateProps?.sessionId).toBeNull();
+    const latestDraftMessageListProps = mockMessageList.mock.calls.at(
+      -1,
+    )?.[0] as
+      | {
+          emptyStateVariant?: string;
+          messages?: unknown[];
+          sessionId?: string | null;
+        }
+      | undefined;
+    if (latestDraftMessageListProps) {
+      expect(latestDraftMessageListProps.emptyStateVariant).toBe("default");
+      expect(latestDraftMessageListProps.messages).toEqual([]);
+      expect(latestDraftMessageListProps.sessionId).toBeNull();
+    }
   });
 
   it("连续新建两个草稿对话时也不应串入上一条图片生成会话", async () => {
@@ -2058,16 +2122,16 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
   it("草稿标签输入后应预热创建会话，发送时复用同一次创建", async () => {
     const onNavigate = vi.fn();
     vi.mocked(buildHomeAgentParams).mockClear();
-    type MockEmptyStateProps = {
-      input?: string;
-      setInput?: (value: string) => void;
-      onSend?: (
-        value: string,
-        executionStrategy?: "react" | "code_orchestrated" | "auto",
-      ) => void;
-    };
     mockEmptyState.mockImplementation((props?: MockEmptyStateProps) => (
-      <div data-testid="empty-state" data-input={props?.input || ""}>
+      <div
+        data-testid="empty-state"
+        data-active-theme={props?.activeTheme || ""}
+        data-input={props?.input || ""}
+        data-session-id={props?.sessionId ?? ""}
+      >
+        {props?.activeTheme === "general" ? (
+          <div data-testid="home-start-surface" />
+        ) : null}
         <button
           type="button"
           data-testid="mock-empty-type"
@@ -2088,6 +2152,7 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     const creationController: { resolve?: () => void } = {};
     const state: Record<string, unknown> = createMockAgentChatUnifiedState({
       sessionId: "topic-current",
+      isAutoRestoringSession: true,
       topics: [
         {
           id: "topic-current",
@@ -2132,10 +2197,40 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
         '[data-testid="task-center-tab-create-button"]',
       ),
     ).not.toBeNull();
+    mockMessageList.mockClear();
     clickButton(mounted.container, "task-center-tab-create-button");
     await flushEffects();
     mounted.rerender();
     await flushEffects();
+
+    expect(
+      mounted.container.querySelector('[data-testid="empty-state"]'),
+    ).not.toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="home-start-surface"]'),
+    ).not.toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="message-list"]'),
+    ).toBeNull();
+    const latestEmptyStateProps = mockEmptyState.mock.calls.at(-1)?.[0] as
+      | MockEmptyStateProps
+      | undefined;
+    expect(latestEmptyStateProps?.activeTheme).toBe("general");
+    expect(latestEmptyStateProps?.sessionId).toBeNull();
+    const latestDraftMessageListProps = mockMessageList.mock.calls.at(
+      -1,
+    )?.[0] as
+      | {
+          emptyStateVariant?: string;
+          messages?: unknown[];
+          sessionId?: string | null;
+        }
+      | undefined;
+    if (latestDraftMessageListProps) {
+      expect(latestDraftMessageListProps.emptyStateVariant).toBe("default");
+      expect(latestDraftMessageListProps.messages).toEqual([]);
+      expect(latestDraftMessageListProps.sessionId).toBeNull();
+    }
 
     clickButton(mounted.container, "mock-empty-type");
     await flushEffects(8);
@@ -3122,6 +3217,7 @@ describe("AgentChatPage 侧栏显示控制", () => {
   });
 
   it("showChatPanel=false 时应保持侧栏隐藏", async () => {
+    const consoleErrorSpy = vi.mocked(console.error);
     const container = renderPage({ showChatPanel: false });
     await flushEffects();
 
@@ -3130,6 +3226,11 @@ describe("AgentChatPage 侧栏显示控制", () => {
     clickButton(container, "toggle-history");
     await flushEffects();
     expect(container.querySelector('[data-testid="chat-sidebar"]')).toBeNull();
+    expect(
+      consoleErrorSpy.mock.calls.some((call) =>
+        String(call[0] ?? "").includes("Maximum update depth exceeded"),
+      ),
+    ).toBe(false);
   });
 
   it("new-task 执行态即使初始 showChatPanel=false 也应允许从顶栏展开对话侧栏", async () => {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Activity, Bot, Clock3, Sparkles, Workflow } from "lucide-react";
+import { Activity, Bot, CircleHelp, Workflow } from "lucide-react";
 import {
   getAgentRuntimeSession,
   type AsterSubagentParentContext,
@@ -133,105 +133,101 @@ function buildWorkbenchActionRouteStatus(
     case "closed":
       return {
         label: "已收起",
-        detail: "已路由到本地 Team session close / stop handler。",
+        detail: "已完成本地收尾处理。",
         className: "border-emerald-200 bg-emerald-50 text-emerald-700",
       };
     case "continued":
       return {
         label: "已继续",
-        detail: "已路由到本地 Team session resume handler。",
+        detail: "已继续推进对应任务。",
         className: "border-emerald-200 bg-emerald-50 text-emerald-700",
       };
     case "opened":
       return {
         label: "已打开",
-        detail: "已聚焦本地 child session。",
+        detail: "已打开对应任务。",
         className: "border-emerald-200 bg-emerald-50 text-emerald-700",
       };
     case "waited":
       return {
         label: "已等待",
-        detail: "已路由到本地 Team session wait handler。",
+        detail: "已等待对应任务返回结果。",
         className: "border-emerald-200 bg-emerald-50 text-emerald-700",
       };
     case "located_only":
       return {
         label: "只定位",
-        detail:
-          "该目标已在 Agent UI 标准工作区中定位，当前没有可执行的本地子任务处理器。",
+        detail: "已定位这条工作台记录，当前只能查看，不能直接处理。",
         className: "border-sky-200 bg-sky-50 text-sky-700",
       };
     case "seeded_work_item":
       return {
         label: "已回填输入",
         detail:
-          "requested fix 已回填到输入框；发送后才会进入真实执行，不在工作台内伪造完成态。",
+          "修复请求已回填到输入框；发送后才会进入执行，这里不会直接标记完成。",
         className: "border-emerald-200 bg-emerald-50 text-emerald-700",
       };
     case "submitted_work_item":
       return {
         label: "已提交执行",
-        detail:
-          "requested fix 已作为主线程 runtime turn 提交；执行结果仍以 requestedFixExecutionResults metadata 回写，不伪造完成态。",
+        detail: "修复请求已提交为执行请求；结果会等后台记录回写后再更新。",
         className: "border-emerald-200 bg-emerald-50 text-emerald-700",
       };
     case "seeded_reassignment":
       return {
         label: "重指派已回填",
         detail:
-          "负责人更新指令已回填；发送并执行后，以运行时返回的负责人变化为准。",
+          "负责人更新指令已回填；发送并执行后，以后台返回的负责人变化为准。",
         className: "border-emerald-200 bg-emerald-50 text-emerald-700",
       };
     case "work_item_source_located":
       return {
         label: "工作项已定位",
         detail:
-          "已定位结构化任务板记录；可通过负责人选择器回填负责人更新指令，等待运行时确认负责人变化。",
+          "已定位任务记录；可通过负责人选择器回填更新指令，等待后台确认负责人变化。",
         className: "border-sky-200 bg-sky-50 text-sky-700",
       };
     case "remote_task_source_located":
       return {
         label: "远端任务已定位",
         detail:
-          "已定位结构化远端任务记录；当前只展示来源、状态与结果引用，不伪造远端运行时控制。",
+          "已定位外部任务记录；当前只展示来源、状态与结果引用，不直接代替外部系统操作。",
         className: "border-sky-200 bg-sky-50 text-sky-700",
       };
     case "handoff_source_located":
       return {
         label: "交接已定位",
-        detail:
-          "已定位结构化交接记录；当前只展示交接生命周期，不从文本伪造跨 Agent 控制。",
+        detail: "已定位交接记录；当前只展示交接过程，不直接代替其他任务操作。",
         className: "border-sky-200 bg-sky-50 text-sky-700",
       };
     case "unsupported_remote":
       return {
-        label: "远端未接入",
-        detail: "远端队友需要接入真实远端入口或 A2A 任务记录后才能运行时控制。",
+        label: "外部任务未连接",
+        detail: "需要连接外部任务入口后，才能在这里直接处理。",
         className: "border-amber-200 bg-amber-50 text-amber-700",
       };
     case "unsupported_review":
       return {
-        label: "审核未接入",
-        detail: "评审记录已定位；真实审核回调与重指派写回仍需后续接入。",
+        label: "审核未连接",
+        detail: "审核记录已定位；审核回写接入前，这里只提供查看。",
         className: "border-amber-200 bg-amber-50 text-amber-700",
       };
     case "unsupported_handoff":
       return {
-        label: "交接未接入",
-        detail: "交接记录已定位；真实接收、退回、恢复记录接入前不伪造状态。",
+        label: "交接未连接",
+        detail: "交接记录已定位；接收、退回、恢复能力接入前，这里只提供查看。",
         className: "border-amber-200 bg-amber-50 text-amber-700",
       };
     case "unsupported_work_item":
       return {
-        label: "工作项未接入",
-        detail:
-          "任务板目标已定位；真实任务板或团队 API 写回接入前不伪造工作项状态。",
+        label: "工作项未连接",
+        detail: "任务记录已定位；后台写回接入前，这里只提供查看。",
         className: "border-amber-200 bg-amber-50 text-amber-700",
       };
     case "unsupported":
       return {
-        label: "暂不支持",
-        detail: "该 Agent UI 目标暂无可执行的本地运行时处理器。",
+        label: "当前仅可查看",
+        detail: "这条工作台记录暂无可执行的本地处理方式。",
         className: "border-slate-200 bg-slate-50 text-slate-600",
       };
     default:
@@ -245,24 +241,24 @@ function buildWorkbenchActionTargetRows(
   const artifactIds = item.target.artifactIds?.join(" / ");
   const artifactPaths = item.target.artifactPaths?.join(" / ");
   const rows: Array<[string, string | undefined]> = [
-    ["会话", item.target.sessionId],
+    ["任务记录", item.target.sessionId],
     ["线程", item.target.threadId],
     ["运行", item.target.runId],
-    ["回合", item.target.turnId],
-    ["Evidence", item.target.evidenceId],
-    ["Artifact", item.target.artifactId],
-    ["Agent", item.target.agentId],
+    ["步骤", item.target.turnId],
+    ["证据", item.target.evidenceId],
+    ["交付物", item.target.artifactId],
+    ["负责人", item.target.agentId],
     ["任务", item.target.taskId],
     ["工作项", item.target.workItemId],
-    ["Review", item.target.reviewId],
-    ["Handoff", item.target.handoffId],
-    ["Worker", item.target.workerNotificationId],
+    ["审核", item.target.reviewId],
+    ["交接", item.target.handoffId],
+    ["通知", item.target.workerNotificationId],
     ["远端任务", item.target.remoteTaskId],
-    ["Transcript", item.target.transcriptRef],
+    ["记录", item.target.transcriptRef],
     ["结果引用", item.target.resultRef],
-    ["Raw event", item.target.rawEventRef],
-    ["Artifact IDs", artifactIds],
-    ["Artifact paths", artifactPaths],
+    ["原始记录", item.target.rawEventRef],
+    ["交付物 ID", artifactIds],
+    ["交付物路径", artifactPaths],
   ];
 
   return rows
@@ -711,7 +707,7 @@ const RECENT_MESSAGE_SOURCE_TYPES = new Set([
 ]);
 
 const TRANSCRIPT_ENTRY_SOURCE_LABELS: Record<string, string> = {
-  agent_message: "Agent 回复",
+  agent_message: "回复",
   approval_request: "等待确认",
   command_execution: "命令执行",
   message_fallback: "消息",
@@ -719,13 +715,13 @@ const TRANSCRIPT_ENTRY_SOURCE_LABELS: Record<string, string> = {
   reasoning: "推理",
   request_user_input: "等待补充",
   tool_call: "工具调用",
-  turn_summary: "回合摘要",
+  turn_summary: "步骤摘要",
   user_message: "用户消息",
   web_search: "联网搜索",
 };
 
 const AGENT_UI_SURFACE_LABELS: Record<string, string> = {
-  artifact_workspace: "产物工作区",
+  artifact_workspace: "交付物工作区",
   background_teammate: "后台队友",
   conversation: "对话",
   delegation_graph: "分派关系",
@@ -735,8 +731,8 @@ const AGENT_UI_SURFACE_LABELS: Record<string, string> = {
   inline_process: "过程",
   remote_teammate: "远程队友",
   review_lane: "评审",
-  runtime_status: "运行状态",
-  session_tabs: "会话",
+  runtime_status: "进度",
+  session_tabs: "任务记录",
   task_capsule: "任务",
   team_policy: "团队策略",
   team_roster: "成员",
@@ -770,6 +766,29 @@ function formatAgentUiSurfaceLabel(
   );
 }
 
+function sanitizeWorkbenchEventText(value: string): string {
+  return value
+    .replace(/Agent UI/g, "工作台")
+    .replace(/AgentRuntime/g, "后台运行")
+    .replace(/\btranscript drilldown\b/gi, "记录明细")
+    .replace(/\btranscript\b/gi, "记录")
+    .replace(/([\u4e00-\u9fff])\s+(工作台|后台运行|记录明细|记录)/g, "$1$2")
+    .replace(/(工作台|后台运行|记录明细|记录)\s+([\u4e00-\u9fff])/g, "$1$2");
+}
+
+function formatWorkbenchProjectionEventDetail(
+  event: AgentUiProjectionEvent,
+): string {
+  return sanitizeWorkbenchEventText(formatAgentUiProjectionEventDetail(event));
+}
+
+function formatWorkbenchProjectionEventAuxiliaryDetail(
+  event: AgentUiProjectionEvent,
+): string | null {
+  const detail = formatAgentUiProjectionEventAuxiliaryDetail(event);
+  return detail ? sanitizeWorkbenchEventText(detail) : null;
+}
+
 function matchesTranscriptEntrySource(
   entry: TeamWorkspaceActivityEntry,
   sourceTypes: Set<string>,
@@ -800,7 +819,7 @@ function buildTranscriptEntryGroups(
     {
       kind: "recent_messages",
       label: "近期消息",
-      description: "用户消息、Agent 回复、推理和计划的有界预览。",
+      description: "用户消息、回复、推理和计划的有界预览。",
       entries: entries.filter((entry) =>
         matchesTranscriptEntrySource(entry, RECENT_MESSAGE_SOURCE_TYPES),
       ),
@@ -850,6 +869,19 @@ export function TeamWorkbenchSummaryPanel({
     (key, options) => String(t(key as never, options as never)),
     [t],
   );
+  const teamText = useCallback(
+    (key: string, defaultValue: string, options?: Record<string, unknown>) =>
+      String(
+        t(
+          key as never,
+          {
+            defaultValue,
+            ...options,
+          } as never,
+        ),
+      ),
+    [t],
+  );
   const formationCopy = useMemo(
     () =>
       buildTeamWorkspaceFormationCopy({
@@ -879,6 +911,8 @@ export function TeamWorkbenchSummaryPanel({
   );
   const [selectedTranscriptHistoryState, setSelectedTranscriptHistoryState] =
     useState<WorkbenchTranscriptHistoryState | null>(null);
+  const [showWorkbenchTechnicalDetails, setShowWorkbenchTechnicalDetails] =
+    useState(false);
   useRemoteTaskExecutionRunProjection({
     enabled: Boolean(currentSessionId),
     sessionId: currentSessionId,
@@ -1185,6 +1219,7 @@ export function TeamWorkbenchSummaryPanel({
     setSelectedWorkbenchActionRouteResult(null);
     setSelectedReassignmentAssignee("");
     setReassignmentError(null);
+    setShowWorkbenchTechnicalDetails(false);
   }, [currentSessionId]);
   const selectedRoleCount = (selectedTeamRoles ?? []).filter((role) =>
     role.label.trim(),
@@ -1221,103 +1256,294 @@ export function TeamWorkbenchSummaryPanel({
         skillIds: role.skillIds ?? [],
         statusMeta: null,
       }));
-  const summaryCards = [
-    {
+  const summaryCards: Array<{ label: string; value: string; hint: string }> =
+    [];
+  if (executionSummary.activeSessionCount > 0) {
+    summaryCards.push({
       label: "活跃任务",
       value: String(executionSummary.activeSessionCount),
-      hint: executionSummary.hasActiveRuntime ? "任务进行中" : "尚未运行",
-    },
-    {
+      hint: "任务进行中",
+    });
+  }
+  if (executionSummary.runningSessionCount > 0) {
+    summaryCards.push({
       label: "处理中",
       value: String(executionSummary.runningSessionCount),
-      hint: executionSummary.runningSessionCount > 0 ? "正在推进" : "暂无",
-    },
-    {
+      hint: "正在推进",
+    });
+  }
+  if (executionSummary.queuedSessionCount > 0) {
+    summaryCards.push({
       label: "稍后开始",
       value: String(executionSummary.queuedSessionCount),
-      hint: executionSummary.queuedSessionCount > 0 ? "按顺序继续" : "暂无",
-    },
-    {
-      label: hasRuntimeSessions
-        ? "总会话"
-        : dispatchPreviewState
-          ? "当前任务"
-          : selectedRoleCount > 0
-            ? "计划分工"
-            : "总会话",
-      value: String(
-        hasRuntimeSessions
-          ? executionSummary.totalSessionCount
-          : displayRoleCount,
-      ),
-      hint: hasRuntimeSessions
-        ? "已进入任务轨道"
-        : dispatchPreviewState
-          ? "当前分工"
-          : selectedRoleCount > 0
-            ? "已选方案"
-            : "等待创建",
-    },
-  ];
+      hint: "按顺序继续",
+    });
+  }
+  if (!hasRuntimeSessions && dispatchPreviewState) {
+    summaryCards.push({
+      label: "当前任务",
+      value: String(displayRoleCount),
+      hint: "当前分工",
+    });
+  } else if (!hasRuntimeSessions && selectedRoleCount > 0) {
+    summaryCards.push({
+      label: "计划分工",
+      value: String(displayRoleCount),
+      hint: "已选方案",
+    });
+  }
   const agentUiSurfaceCards = [
     {
-      label: "Roster",
+      label: "成员",
       value: teamWorkbenchProjectionSummary.rosterCount,
       hint: "team_roster",
     },
     {
-      label: "Delegation",
+      label: "分派",
       value: teamWorkbenchProjectionSummary.delegationCount,
       hint: "delegation_graph",
     },
     {
-      label: "Board",
+      label: "任务板",
       value: teamWorkbenchProjectionSummary.workBoardCount,
       hint: "work_board",
     },
     {
-      label: "Worker",
+      label: "通知",
       value: teamWorkbenchProjectionSummary.workerNotificationCount,
       hint: "worker_notifications",
     },
     {
-      label: "Handoff",
+      label: "交接",
       value: teamWorkbenchProjectionSummary.handoffCount,
       hint: "handoff_lane",
     },
     {
-      label: "Review",
+      label: "审核",
       value: teamWorkbenchProjectionSummary.reviewCount,
       hint: "review_lane",
     },
     {
-      label: "Transcript",
+      label: "记录",
       value: teamWorkbenchProjectionSummary.transcriptCount,
       hint: "teammate_transcript",
     },
     {
-      label: "Background",
+      label: "后台",
       value: teamWorkbenchProjectionSummary.backgroundCount,
       hint: "background_teammate",
     },
     {
-      label: "Remote",
+      label: "外部",
       value: teamWorkbenchProjectionSummary.remoteCount,
       hint: "remote_teammate",
     },
     {
-      label: "Policy",
+      label: "策略",
       value: teamWorkbenchProjectionSummary.policyCount,
       hint: "team_policy",
     },
   ];
+  const technicalDetailsTitle = teamText(
+    "agentChat.teamWorkbench.details.title",
+    "工作台细节",
+  );
+  const technicalDetailsCount = teamText(
+    "agentChat.teamWorkbench.details.count",
+    "{{count}} 条记录",
+    {
+      count: teamWorkbenchProjectionSummary.total,
+    },
+  );
+  const technicalDetailsToggleLabel = showWorkbenchTechnicalDetails
+    ? teamText("agentChat.teamWorkbench.details.hideAria", "隐藏工作台细节")
+    : teamText("agentChat.teamWorkbench.details.showAria", "查看工作台细节");
+  const technicalDetailsHelp = teamText(
+    "agentChat.teamWorkbench.details.help",
+    "查看调度、评审、交接等细节",
+  );
+  const countUnitText = teamText("agentChat.teamWorkbench.countUnit", "条");
+  const selectedTargetTitle = teamText(
+    "agentChat.teamWorkbench.selectedTarget.title",
+    "已定位工作台目标",
+  );
+  const selectedTargetDescription = teamText(
+    "agentChat.teamWorkbench.selectedTarget.description",
+    "这里只定位工作台里的目标，不根据普通文本猜测状态，也不直接代替外部任务、审核或交接操作。",
+  );
+  const actionViewFallback = teamText(
+    "agentChat.teamWorkbench.action.view",
+    "查看",
+  );
+  const reassignmentTitle = teamText(
+    "agentChat.teamWorkbench.reassignment.title",
+    "负责人重指派",
+  );
+  const reassignmentBadge = teamText(
+    "agentChat.teamWorkbench.reassignment.badge",
+    "负责人更新",
+  );
+  const reassignmentDescription = teamText(
+    "agentChat.teamWorkbench.reassignment.description",
+    "选择目标负责人后只回填负责人更新指令；发送并执行后，以后台返回的负责人变化为准。",
+  );
+  const reassignmentAssigneeAria = teamText(
+    "agentChat.teamWorkbench.reassignment.assigneeAria",
+    "选择重指派负责人",
+  );
+  const reassignmentSubmitText = reassignmentPending
+    ? teamText("agentChat.teamWorkbench.reassignment.pending", "回填中...")
+    : teamText("agentChat.teamWorkbench.reassignment.submit", "回填重指派指令");
+  const relatedTitle = teamText(
+    "agentChat.teamWorkbench.related.title",
+    "相关队友链路",
+  );
+  const relatedCountText = teamText(
+    "agentChat.teamWorkbench.related.count",
+    "{{count}} 条事件",
+    { count: selectedWorkbenchRelatedEvents.length },
+  );
+  const relatedDescription = teamText(
+    "agentChat.teamWorkbench.related.description",
+    "按成员、任务、工作项、队友记录与产物引用匹配同一目标；这里只串联已有状态，不生成新状态。",
+  );
+  const transcriptTitle = teamText(
+    "agentChat.teamWorkbench.transcript.title",
+    "队友记录详情",
+  );
+  const transcriptBadge = teamText(
+    "agentChat.teamWorkbench.transcript.badge",
+    "队友记录",
+  );
+  const transcriptDescription = teamText(
+    "agentChat.teamWorkbench.transcript.description",
+    "正文来自选中成员的活动预览；这里仅展示引用与焦点，不把队友输出混进主回复。",
+  );
+  const transcriptRefLabel = teamText(
+    "agentChat.teamWorkbench.transcript.refLabel",
+    "记录引用：",
+  );
+  const transcriptParentLabel = teamText(
+    "agentChat.teamWorkbench.transcript.parentLabel",
+    "父级任务：",
+  );
+  const transcriptChildLabel = teamText(
+    "agentChat.teamWorkbench.transcript.childLabel",
+    "队友任务：",
+  );
+  const transcriptTurnLabel = teamText(
+    "agentChat.teamWorkbench.transcript.turnLabel",
+    "最新步骤：",
+  );
+  const childOverviewTitle = teamText(
+    "agentChat.teamWorkbench.transcript.childOverview",
+    "队友任务概览",
+  );
+  const childStatusText = teamText(
+    "agentChat.teamWorkbench.transcript.status",
+    "状态：{{status}}",
+    { status: selectedTranscriptRuntimeStatusLabel },
+  );
+  const childTurnStatusText = teamText(
+    "agentChat.teamWorkbench.transcript.turnStatus",
+    "步骤状态：{{status}}",
+    { status: selectedTranscriptLatestTurnStatusLabel },
+  );
+  const transcriptRoleText = selectedTranscriptChildSession?.role_hint
+    ? teamText("agentChat.teamWorkbench.transcript.role", "角色：{{role}}", {
+        role: selectedTranscriptChildSession.role_hint,
+      })
+    : "";
+  const transcriptSummaryText = selectedTranscriptChildSession?.task_summary
+    ? teamText(
+        "agentChat.teamWorkbench.transcript.taskSummary",
+        "任务摘要：{{summary}}",
+        { summary: selectedTranscriptChildSession.task_summary },
+      )
+    : "";
+  const drilldownTitle = teamText(
+    "agentChat.teamWorkbench.transcript.drilldown",
+    "记录明细",
+  );
+  const queuedTurnsChipText = teamText(
+    "agentChat.teamWorkbench.transcript.queuedTurns",
+    "输入队列 {{count}} 条",
+    { count: selectedTranscriptQueuedTurns.length },
+  );
+  const drilldownDescription = teamText(
+    "agentChat.teamWorkbench.transcript.drilldownDescription",
+    "这里只展示已有输入队列与历史正文；没有记录时不合成等待、工具或消息状态。",
+  );
+  const queuedTurnsTitle = teamText(
+    "agentChat.teamWorkbench.transcript.queuedTurnsTitle",
+    "输入队列",
+  );
+  const imageCountText = (count: number) =>
+    teamText(
+      "agentChat.teamWorkbench.transcript.imageCount",
+      "· 图片 {{count}}",
+      {
+        count,
+      },
+    );
+  const childProgressTitle = teamText(
+    "agentChat.teamWorkbench.transcript.progress",
+    "队友任务进展",
+  );
+  const childProgressCountText = teamText(
+    "agentChat.teamWorkbench.transcript.progressCount",
+    "{{count}} 条",
+    { count: selectedTranscriptActivityEntries.length },
+  );
+  const childLiveCountText = teamText(
+    "agentChat.teamWorkbench.transcript.liveCount",
+    "实时 {{count}} 条",
+    { count: selectedTranscriptLiveActivityEntries.length },
+  );
+  const childHistoryCountText = teamText(
+    "agentChat.teamWorkbench.transcript.historyCount",
+    "历史正文 {{count}} 条",
+    { count: selectedTranscriptHistoryEntries.length },
+  );
+  const historyLoadingText = teamText(
+    "agentChat.teamWorkbench.transcript.historyLoading",
+    "正在读取历史正文",
+  );
+  const historyLoadingDescription = teamText(
+    "agentChat.teamWorkbench.transcript.historyLoadingDescription",
+    "正在读取历史正文；读取结果只作为队友记录预览，不进入主回复。",
+  );
+  const historyErrorText = teamText(
+    "agentChat.teamWorkbench.transcript.historyError",
+    "读取历史正文失败：{{message}}",
+    { message: selectedTranscriptHistoryState?.errorMessage ?? "未知错误" },
+  );
+  const noTranscriptActivityText = teamText(
+    "agentChat.teamWorkbench.transcript.noActivity",
+    "还没有收到这项任务的实时活动，历史正文也暂无可展示过程；如需完整上下文，请继续聚焦对应任务读取。",
+  );
+  const surfaceSummaryTitle = teamText(
+    "agentChat.teamWorkbench.surfaceSummary.title",
+    "工作区专门视图",
+  );
+  const referenceLabelText = runtimeFormationDisplay.referenceLabel
+    ? teamText("agentChat.teamWorkbench.reference", "参考方案：{{label}}", {
+        label: runtimeFormationDisplay.referenceLabel,
+      })
+    : "";
+  const recentActivityTitle = teamText(
+    "agentChat.teamWorkbench.recentActivity.title",
+    "最近动态",
+  );
 
   return (
     <div className="space-y-4">
       <section className="rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-950/5">
         <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
           <Workflow className="h-3.5 w-3.5" />
-          <span>生成</span>
+          <span>
+            {teamText("agentChat.teamWorkbench.header.generate", "生成")}
+          </span>
           {runtimeTeamLabel ? (
             <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-medium tracking-normal text-sky-700 normal-case">
               {runtimeTeamLabel}
@@ -1337,7 +1563,10 @@ export function TeamWorkbenchSummaryPanel({
         <div className="mt-2 text-sm font-semibold text-slate-900">
           {executionSummary.statusTitle ||
             runtimeFormationDisplay.panelHeadline ||
-            "生成已就绪，等待主线程开始编排"}
+            teamText(
+              "agentChat.teamWorkbench.header.readyFallback",
+              "生成已就绪，等待主线程开始编排",
+            )}
         </div>
         <p className="mt-2 text-xs leading-5 text-slate-500">
           {runtimeFormationDisplay.panelDescription}
@@ -1353,637 +1582,658 @@ export function TeamWorkbenchSummaryPanel({
             {runtimeFormationDisplay.noticeText}
           </div>
         ) : null}
-        {!hasRuntimeSessions && !dispatchPreviewState ? (
-          <div className="mt-3 rounded-2xl border border-sky-100 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-700">
-            尚未接入任务。发送后这里会先展示分工，再过渡到当前进展。
-          </div>
-        ) : null}
       </section>
 
       {teamMemorySnapshot ? (
         <TeamMemoryShadowCard snapshot={teamMemorySnapshot} />
       ) : null}
 
-      <section className="grid gap-3 sm:grid-cols-2">
-        {summaryCards.map((card) => (
-          <div
-            key={card.label}
-            className="rounded-[20px] border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-950/5"
-          >
-            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-              {card.label}
+      {summaryCards.length > 0 ? (
+        <section className="grid gap-3 sm:grid-cols-2">
+          {summaryCards.map((card) => (
+            <div
+              key={card.label}
+              className="rounded-[20px] border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-950/5"
+            >
+              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                {card.label}
+              </div>
+              <div className="mt-2 text-2xl font-semibold text-slate-900">
+                {card.value}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">{card.hint}</div>
             </div>
-            <div className="mt-2 text-2xl font-semibold text-slate-900">
-              {card.value}
-            </div>
-            <div className="mt-1 text-xs text-slate-500">{card.hint}</div>
-          </div>
-        ))}
-      </section>
+          ))}
+        </section>
+      ) : null}
 
       {teamWorkbenchProjectionSummary.total > 0 ? (
         <section className="rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-950/5">
-          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-            <Workflow className="h-3.5 w-3.5" />
-            <span>Agent UI v0.6</span>
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium tracking-normal text-emerald-700 normal-case">
-              {teamWorkbenchProjectionSummary.total} 条事件
-            </span>
-          </div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            {agentUiSurfaceCards.map((card) => (
-              <div
-                key={`team-workbench-agentui-surface-${card.hint}`}
-                className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2"
-              >
-                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  {card.label}
-                </div>
-                <div className="mt-1 text-lg font-semibold text-slate-900">
-                  {card.value}
-                </div>
-                <div className="text-[10px] text-slate-500">
-                  {formatAgentUiSurfaceLabel(card.hint, translateProjection)}
-                </div>
-              </div>
-            ))}
-          </div>
-          {agentUiSurfaceLanes.length > 0 ? (
-            <div className="mt-3 grid gap-2 lg:grid-cols-3">
-              {agentUiSurfaceLanes.map((lane) => (
-                <div
-                  key={`team-workbench-agentui-lane-${lane.id}`}
-                  className="rounded-2xl border border-slate-200 bg-white px-3 py-3"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <div className="text-xs font-semibold text-slate-900">
-                        {lane.label}
-                      </div>
-                      <div className="mt-1 text-[10px] leading-4 text-slate-500">
-                        {lane.description}
-                      </div>
-                    </div>
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
-                      {lane.total}
-                    </span>
-                  </div>
-                  <div className="mt-2 space-y-1.5">
-                    {lane.latestEvents.map((event) => (
-                      <div
-                        key={`team-workbench-agentui-lane-event-${lane.id}-${event.sequence ?? event.type}-${event.agentId ?? event.taskId ?? event.reviewId ?? event.handoffId ?? event.surface}`}
-                        className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5"
-                      >
-                        <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
-                          <span className="font-semibold text-slate-700">
-                            {formatAgentUiProjectionEventType(
-                              event.type,
-                              translateProjection,
-                            )}
-                          </span>
-                          {event.surface ? (
-                            <span>
-                              {formatAgentUiSurfaceLabel(
-                                event.surface,
-                                translateProjection,
-                              )}
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="mt-0.5 truncate text-[10px] text-slate-500">
-                          {formatAgentUiProjectionEventDetail(event)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              <Workflow className="h-3.5 w-3.5 shrink-0" />
+              <span>{technicalDetailsTitle}</span>
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium tracking-normal text-emerald-700 normal-case">
+                {technicalDetailsCount}
+              </span>
             </div>
-          ) : null}
-          <AgentUiTeamWorkbenchSurfaceView
-            events={agentUiProjectionEvents}
-            latestLimit={2}
-            onAction={handleWorkbenchAction}
-          />
-          {selectedWorkbenchItem ? (
-            <div
-              className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3"
-              data-agentui-selected-workbench-action
-              aria-live="polite"
+            <button
+              type="button"
+              aria-label={technicalDetailsToggleLabel}
+              title={technicalDetailsHelp}
+              data-testid="team-workbench-technical-details-toggle"
+              onClick={() =>
+                setShowWorkbenchTechnicalDetails((current) => !current)
+              }
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
             >
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="font-semibold text-slate-900">
-                  已定位工作台目标
-                </span>
-                <span className="rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[10px] font-medium text-sky-700">
-                  {selectedWorkbenchItem.action?.label ?? "查看"} ·{" "}
-                  {selectedWorkbenchItem.action?.targetId ??
-                    selectedWorkbenchItem.id}
-                </span>
-                {selectedWorkbenchItem.event.surface ? (
-                  <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-500">
-                    {formatAgentUiSurfaceLabel(
-                      selectedWorkbenchItem.event.surface,
-                      translateProjection,
-                    )}
-                  </span>
-                ) : null}
-              </div>
-              <p className="mt-1 text-[10px] leading-4 text-slate-600">
-                这里只定位 Agent UI
-                标准工作区中的目标，不从文本推断状态，也不伪造远端、评审或交接运行时调用。
-              </p>
-              {selectedWorkbenchActionRouteStatus ? (
-                <div
-                  className={cn(
-                    "mt-2 rounded-xl border px-3 py-2 text-[10px] leading-4",
-                    selectedWorkbenchActionRouteStatus.className,
-                  )}
-                  data-agentui-workbench-route-result
-                >
-                  <span className="font-semibold">
-                    {selectedWorkbenchActionRouteStatus.label}
-                  </span>
-                  <span className="ml-1">
-                    {selectedWorkbenchActionRouteStatus.detail}
-                  </span>
-                </div>
-              ) : null}
-              <div className="mt-2 text-xs font-medium text-slate-900">
-                {selectedWorkbenchItem.title}
-              </div>
-              <div className="mt-0.5 text-[10px] leading-4 text-slate-600">
-                {selectedWorkbenchItem.subtitle}
-              </div>
-              {selectedWorkbenchTargetRows.length > 0 ? (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {selectedWorkbenchTargetRows.map((target) => (
-                    <span
-                      key={`${target.label}-${target.value}`}
-                      className="rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[10px] text-sky-700"
-                    >
-                      {target.label}：{target.value}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-              {selectedWorkbenchCanReassign ? (
-                <div
-                  className="mt-3 rounded-2xl border border-slate-200 bg-white px-3 py-3"
-                  data-agentui-reassignment-selector
-                >
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="font-semibold text-slate-900">
-                      负责人重指派
-                    </span>
-                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
-                      负责人更新
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[10px] leading-4 text-slate-600">
-                    选择目标负责人后只回填负责人更新指令；发送并执行后，Agent UI
-                    仍以运行时返回的负责人变化作为唯一事实。
-                  </p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <select
-                      value={selectedReassignmentAssignee}
-                      onChange={(event) =>
-                        setSelectedReassignmentAssignee(event.target.value)
-                      }
-                      className="h-8 min-w-[180px] rounded-xl border border-slate-200 bg-white px-2.5 text-xs text-slate-700 shadow-sm shadow-slate-950/5 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100"
-                      data-agentui-reassignment-select
-                      aria-label="选择重指派负责人"
-                    >
-                      {selectedWorkbenchReassignmentCandidates.map(
-                        (candidate) => (
-                          <option
-                            key={`agentui-reassignment-candidate-${candidate.value}`}
-                            value={candidate.value}
-                          >
-                            {candidate.label}
-                            {candidate.detail ? `（${candidate.detail}）` : ""}
-                          </option>
-                        ),
+              <CircleHelp className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {showWorkbenchTechnicalDetails ? (
+            <>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                {agentUiSurfaceCards.map((card) => (
+                  <div
+                    key={`team-workbench-agentui-surface-${card.hint}`}
+                    className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2"
+                  >
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      {card.label}
+                    </div>
+                    <div className="mt-1 text-lg font-semibold text-slate-900">
+                      {card.value}
+                    </div>
+                    <div className="text-[10px] text-slate-500">
+                      {formatAgentUiSurfaceLabel(
+                        card.hint,
+                        translateProjection,
                       )}
-                    </select>
-                    <button
-                      type="button"
-                      className="inline-flex h-8 items-center rounded-xl bg-slate-900 px-3 text-xs font-medium text-white shadow-sm shadow-slate-950/10 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-                      disabled={
-                        reassignmentPending || !selectedReassignmentAssignee
-                      }
-                      onClick={() => void handleWorkbenchReassign()}
-                      data-agentui-reassignment-submit
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {agentUiSurfaceLanes.length > 0 ? (
+                <div className="mt-3 grid gap-2 lg:grid-cols-3">
+                  {agentUiSurfaceLanes.map((lane) => (
+                    <div
+                      key={`team-workbench-agentui-lane-${lane.id}`}
+                      className="rounded-2xl border border-slate-200 bg-white px-3 py-3"
                     >
-                      {reassignmentPending ? "回填中..." : "回填重指派指令"}
-                    </button>
-                  </div>
-                  {reassignmentError ? (
-                    <p className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[10px] leading-4 text-rose-700">
-                      {reassignmentError}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-              {selectedWorkbenchRelatedEvents.length > 1 ? (
-                <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-3 py-3">
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="font-semibold text-slate-900">
-                      相关队友链路
-                    </span>
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
-                      {selectedWorkbenchRelatedEvents.length} 条事件
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[10px] leading-4 text-slate-600">
-                    按成员、任务、工作项、队友记录与产物引用精确匹配同一目标的事件；这里只串联队友状态，不合成新运行时事实。
-                  </p>
-                  <div className="mt-2 space-y-1.5">
-                    {selectedWorkbenchRelatedEvents.map((event) => {
-                      const auxiliaryDetail =
-                        formatAgentUiProjectionEventAuxiliaryDetail(event);
-                      return (
-                        <div
-                          key={`selected-workbench-related-${event.sequence ?? event.type}-${event.surface ?? event.sourceType}-${event.agentId ?? event.taskId ?? event.reviewId ?? event.handoffId ?? event.workerNotificationId ?? event.rawEventRef}`}
-                          className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5"
-                        >
-                          <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
-                            <span className="font-semibold text-slate-700">
-                              {formatAgentUiProjectionEventType(
-                                event.type,
-                                translateProjection,
-                              )}
-                            </span>
-                            <span>
-                              {formatAgentUiProjectionPhase(
-                                event.phase,
-                                translateProjection,
-                              )}
-                            </span>
-                            {event.surface ? (
-                              <span>
-                                {formatAgentUiSurfaceLabel(
-                                  event.surface,
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <div className="text-xs font-semibold text-slate-900">
+                            {lane.label}
+                          </div>
+                          <div className="mt-1 text-[10px] leading-4 text-slate-500">
+                            {lane.description}
+                          </div>
+                        </div>
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
+                          {lane.total}
+                        </span>
+                      </div>
+                      <div className="mt-2 space-y-1.5">
+                        {lane.latestEvents.map((event) => (
+                          <div
+                            key={`team-workbench-agentui-lane-event-${lane.id}-${event.sequence ?? event.type}-${event.agentId ?? event.taskId ?? event.reviewId ?? event.handoffId ?? event.surface}`}
+                            className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5"
+                          >
+                            <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
+                              <span className="font-semibold text-slate-700">
+                                {formatAgentUiProjectionEventType(
+                                  event.type,
                                   translateProjection,
                                 )}
                               </span>
-                            ) : null}
-                          </div>
-                          <div className="mt-0.5 truncate text-[10px] text-slate-500">
-                            {formatAgentUiProjectionEventDetail(event)}
-                          </div>
-                          {auxiliaryDetail ? (
-                            <div className="mt-0.5 truncate text-[10px] text-slate-400">
-                              {auxiliaryDetail}
+                              {event.surface ? (
+                                <span>
+                                  {formatAgentUiSurfaceLabel(
+                                    event.surface,
+                                    translateProjection,
+                                  )}
+                                </span>
+                              ) : null}
                             </div>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
+                            <div className="mt-0.5 truncate text-[10px] text-slate-500">
+                              {formatWorkbenchProjectionEventDetail(event)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : null}
-              {selectedWorkbenchTranscriptZoom ? (
-                <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-3 py-3">
+              <AgentUiTeamWorkbenchSurfaceView
+                events={agentUiProjectionEvents}
+                latestLimit={2}
+                onAction={handleWorkbenchAction}
+              />
+              {selectedWorkbenchItem ? (
+                <div
+                  className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3"
+                  data-agentui-selected-workbench-action
+                  aria-live="polite"
+                >
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className="font-semibold text-slate-900">
-                      队友记录详情
+                      {selectedTargetTitle}
                     </span>
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
-                      队友记录
+                    <span className="rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[10px] font-medium text-sky-700">
+                      {selectedWorkbenchItem.action?.label ??
+                        actionViewFallback}{" "}
+                      ·{" "}
+                      {selectedWorkbenchItem.action?.targetId ??
+                        selectedWorkbenchItem.id}
                     </span>
+                    {selectedWorkbenchItem.event.surface ? (
+                      <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-500">
+                        {formatAgentUiSurfaceLabel(
+                          selectedWorkbenchItem.event.surface,
+                          translateProjection,
+                        )}
+                      </span>
+                    ) : null}
                   </div>
                   <p className="mt-1 text-[10px] leading-4 text-slate-600">
-                    正文由子会话 /
-                    团队任务板选中成员活动预览读取；这里仅展示标准引用与焦点，不把队友输出混进主回复。
+                    {selectedTargetDescription}
                   </p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
-                      记录引用：
-                      {selectedWorkbenchTranscriptZoom.transcriptRef}
-                    </span>
-                    {selectedWorkbenchTranscriptZoom.parentSessionId ? (
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
-                        父会话：
-                        {selectedWorkbenchTranscriptZoom.parentSessionId}
+                  {selectedWorkbenchActionRouteStatus ? (
+                    <div
+                      className={cn(
+                        "mt-2 rounded-xl border px-3 py-2 text-[10px] leading-4",
+                        selectedWorkbenchActionRouteStatus.className,
+                      )}
+                      data-agentui-workbench-route-result
+                    >
+                      <span className="font-semibold">
+                        {selectedWorkbenchActionRouteStatus.label}
                       </span>
-                    ) : null}
-                    {selectedWorkbenchTranscriptZoom.childSessionId ? (
-                      <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] text-sky-700">
-                        子会话：
-                        {selectedWorkbenchTranscriptZoom.childSessionId}
+                      <span className="ml-1">
+                        {selectedWorkbenchActionRouteStatus.detail}
                       </span>
-                    ) : null}
-                    {selectedWorkbenchTranscriptZoom.latestTurnId ? (
-                      <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] text-sky-700">
-                        最新回合：
-                        {selectedWorkbenchTranscriptZoom.latestTurnId}
-                      </span>
-                    ) : null}
+                    </div>
+                  ) : null}
+                  <div className="mt-2 text-xs font-medium text-slate-900">
+                    {selectedWorkbenchItem.title}
                   </div>
-                  {selectedTranscriptChildSession ? (
-                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                      <div className="flex flex-wrap items-center gap-2 text-[10px]">
-                        <span className="font-semibold text-slate-800">
-                          子会话概览
+                  <div className="mt-0.5 text-[10px] leading-4 text-slate-600">
+                    {selectedWorkbenchItem.subtitle}
+                  </div>
+                  {selectedWorkbenchTargetRows.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {selectedWorkbenchTargetRows.map((target) => (
+                        <span
+                          key={`${target.label}-${target.value}`}
+                          className="rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[10px] text-sky-700"
+                        >
+                          {target.label}：{target.value}
                         </span>
-                        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-600">
-                          {selectedTranscriptChildSession.name ??
-                            selectedTranscriptChildSession.id}
+                      ))}
+                    </div>
+                  ) : null}
+                  {selectedWorkbenchCanReassign ? (
+                    <div
+                      className="mt-3 rounded-2xl border border-slate-200 bg-white px-3 py-3"
+                      data-agentui-reassignment-selector
+                    >
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="font-semibold text-slate-900">
+                          {reassignmentTitle}
                         </span>
-                        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-600">
-                          状态：{selectedTranscriptRuntimeStatusLabel}
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
+                          {reassignmentBadge}
                         </span>
-                        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-600">
-                          回合状态：{selectedTranscriptLatestTurnStatusLabel}
-                        </span>
-                        {selectedTranscriptChildSession.role_hint ? (
-                          <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-600">
-                            角色：{selectedTranscriptChildSession.role_hint}
-                          </span>
-                        ) : null}
                       </div>
-                      {selectedTranscriptChildSession.task_summary ? (
-                        <p className="mt-2 text-[10px] leading-4 text-slate-600">
-                          任务摘要：
-                          {selectedTranscriptChildSession.task_summary}
+                      <p className="mt-1 text-[10px] leading-4 text-slate-600">
+                        {reassignmentDescription}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <select
+                          value={selectedReassignmentAssignee}
+                          onChange={(event) =>
+                            setSelectedReassignmentAssignee(event.target.value)
+                          }
+                          className="h-8 min-w-[180px] rounded-xl border border-slate-200 bg-white px-2.5 text-xs text-slate-700 shadow-sm shadow-slate-950/5 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100"
+                          data-agentui-reassignment-select
+                          aria-label={reassignmentAssigneeAria}
+                        >
+                          {selectedWorkbenchReassignmentCandidates.map(
+                            (candidate) => (
+                              <option
+                                key={`agentui-reassignment-candidate-${candidate.value}`}
+                                value={candidate.value}
+                              >
+                                {candidate.label}
+                                {candidate.detail
+                                  ? `（${sanitizeWorkbenchEventText(candidate.detail)}）`
+                                  : ""}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                        <button
+                          type="button"
+                          className="inline-flex h-8 items-center rounded-xl bg-slate-900 px-3 text-xs font-medium text-white shadow-sm shadow-slate-950/10 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                          disabled={
+                            reassignmentPending || !selectedReassignmentAssignee
+                          }
+                          onClick={() => void handleWorkbenchReassign()}
+                          data-agentui-reassignment-submit
+                        >
+                          {reassignmentSubmitText}
+                        </button>
+                      </div>
+                      {reassignmentError ? (
+                        <p className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[10px] leading-4 text-rose-700">
+                          {reassignmentError}
                         </p>
                       ) : null}
                     </div>
                   ) : null}
-                  {selectedTranscriptQueuedTurns.length > 0 ||
-                  selectedTranscriptEntryGroups.length > 0 ? (
-                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                      <div className="flex flex-wrap items-center gap-2 text-[10px]">
-                        <span className="font-semibold text-slate-800">
-                          结构化 Drilldown
+                  {selectedWorkbenchRelatedEvents.length > 1 ? (
+                    <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-3 py-3">
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="font-semibold text-slate-900">
+                          {relatedTitle}
                         </span>
-                        {selectedTranscriptQueuedTurns.length > 0 ? (
-                          <span className="rounded-full border border-amber-200 bg-white px-2 py-0.5 text-amber-700">
-                            输入队列 {selectedTranscriptQueuedTurns.length} 条
-                          </span>
-                        ) : null}
-                        {selectedTranscriptEntryGroups.map((group) => (
-                          <span
-                            key={`transcript-zoom-group-chip-${group.kind}`}
-                            className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-600"
-                          >
-                            {group.label} {group.entries.length} 条
-                          </span>
-                        ))}
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
+                          {relatedCountText}
+                        </span>
                       </div>
                       <p className="mt-1 text-[10px] leading-4 text-slate-600">
-                        这里只消费子会话详情里的输入队列与历史正文类型；没有结构化记录时不合成等待、工具或消息状态。
+                        {relatedDescription}
                       </p>
-                      {selectedTranscriptQueuedTurns.length > 0 ? (
-                        <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-2 py-2">
-                          <div className="text-[10px] font-semibold text-amber-800">
-                            输入队列
-                          </div>
-                          <div className="mt-1 space-y-1">
-                            {selectedTranscriptQueuedTurns.map((turn) => (
-                              <div
-                                key={`transcript-zoom-queued-turn-${turn.queued_turn_id}`}
-                                className="rounded-lg border border-amber-200 bg-white px-2 py-1 text-[10px] leading-4 text-amber-800"
-                              >
-                                <span className="font-semibold">
-                                  #{turn.position + 1}
+                      <div className="mt-2 space-y-1.5">
+                        {selectedWorkbenchRelatedEvents.map((event) => {
+                          const auxiliaryDetail =
+                            formatWorkbenchProjectionEventAuxiliaryDetail(
+                              event,
+                            );
+                          return (
+                            <div
+                              key={`selected-workbench-related-${event.sequence ?? event.type}-${event.surface ?? event.sourceType}-${event.agentId ?? event.taskId ?? event.reviewId ?? event.handoffId ?? event.workerNotificationId ?? event.rawEventRef}`}
+                              className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5"
+                            >
+                              <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
+                                <span className="font-semibold text-slate-700">
+                                  {formatAgentUiProjectionEventType(
+                                    event.type,
+                                    translateProjection,
+                                  )}
                                 </span>
-                                <span className="ml-1">
-                                  {turn.message_preview}
+                                <span>
+                                  {formatAgentUiProjectionPhase(
+                                    event.phase,
+                                    translateProjection,
+                                  )}
                                 </span>
-                                {turn.image_count > 0 ? (
-                                  <span className="ml-1 text-amber-600">
-                                    · 图片 {turn.image_count}
+                                {event.surface ? (
+                                  <span>
+                                    {formatAgentUiSurfaceLabel(
+                                      event.surface,
+                                      translateProjection,
+                                    )}
                                   </span>
                                 ) : null}
                               </div>
-                            ))}
+                              <div className="mt-0.5 truncate text-[10px] text-slate-500">
+                                {formatWorkbenchProjectionEventDetail(event)}
+                              </div>
+                              {auxiliaryDetail ? (
+                                <div className="mt-0.5 truncate text-[10px] text-slate-400">
+                                  {auxiliaryDetail}
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                  {selectedWorkbenchTranscriptZoom ? (
+                    <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-3 py-3">
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="font-semibold text-slate-900">
+                          {transcriptTitle}
+                        </span>
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
+                          {transcriptBadge}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[10px] leading-4 text-slate-600">
+                        {transcriptDescription}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
+                          {transcriptRefLabel}
+                          {selectedWorkbenchTranscriptZoom.transcriptRef}
+                        </span>
+                        {selectedWorkbenchTranscriptZoom.parentSessionId ? (
+                          <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
+                            {transcriptParentLabel}
+                            {selectedWorkbenchTranscriptZoom.parentSessionId}
+                          </span>
+                        ) : null}
+                        {selectedWorkbenchTranscriptZoom.childSessionId ? (
+                          <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] text-sky-700">
+                            {transcriptChildLabel}
+                            {selectedWorkbenchTranscriptZoom.childSessionId}
+                          </span>
+                        ) : null}
+                        {selectedWorkbenchTranscriptZoom.latestTurnId ? (
+                          <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] text-sky-700">
+                            {transcriptTurnLabel}
+                            {selectedWorkbenchTranscriptZoom.latestTurnId}
+                          </span>
+                        ) : null}
+                      </div>
+                      {selectedTranscriptChildSession ? (
+                        <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                          <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                            <span className="font-semibold text-slate-800">
+                              {childOverviewTitle}
+                            </span>
+                            <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-600">
+                              {selectedTranscriptChildSession.name ??
+                                selectedTranscriptChildSession.id}
+                            </span>
+                            <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-600">
+                              {childStatusText}
+                            </span>
+                            <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-600">
+                              {childTurnStatusText}
+                            </span>
+                            {selectedTranscriptChildSession.role_hint ? (
+                              <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-600">
+                                {transcriptRoleText}
+                              </span>
+                            ) : null}
                           </div>
+                          {selectedTranscriptChildSession.task_summary ? (
+                            <p className="mt-2 text-[10px] leading-4 text-slate-600">
+                              {transcriptSummaryText}
+                            </p>
+                          ) : null}
                         </div>
                       ) : null}
-                      {selectedTranscriptEntryGroups.length > 0 ? (
-                        <div className="mt-2 grid gap-2 lg:grid-cols-3">
-                          {selectedTranscriptEntryGroups.map((group) => (
-                            <div
-                              key={`transcript-zoom-group-${group.kind}`}
-                              className="rounded-xl border border-slate-200 bg-white px-2 py-2"
-                            >
-                              <div className="text-[10px] font-semibold text-slate-800">
-                                {group.label}
+                      {selectedTranscriptQueuedTurns.length > 0 ||
+                      selectedTranscriptEntryGroups.length > 0 ? (
+                        <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                          <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                            <span className="font-semibold text-slate-800">
+                              {drilldownTitle}
+                            </span>
+                            {selectedTranscriptQueuedTurns.length > 0 ? (
+                              <span className="rounded-full border border-amber-200 bg-white px-2 py-0.5 text-amber-700">
+                                {queuedTurnsChipText}
+                              </span>
+                            ) : null}
+                            {selectedTranscriptEntryGroups.map((group) => (
+                              <span
+                                key={`transcript-zoom-group-chip-${group.kind}`}
+                                className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-600"
+                              >
+                                {group.label} {group.entries.length}{" "}
+                                {countUnitText}
+                              </span>
+                            ))}
+                          </div>
+                          <p className="mt-1 text-[10px] leading-4 text-slate-600">
+                            {drilldownDescription}
+                          </p>
+                          {selectedTranscriptQueuedTurns.length > 0 ? (
+                            <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-2 py-2">
+                              <div className="text-[10px] font-semibold text-amber-800">
+                                {queuedTurnsTitle}
                               </div>
-                              <div className="mt-0.5 text-[10px] leading-4 text-slate-500">
-                                {group.description}
-                              </div>
-                              <div className="mt-1.5 space-y-1.5">
-                                {group.entries.map((entry) => (
+                              <div className="mt-1 space-y-1">
+                                {selectedTranscriptQueuedTurns.map((turn) => (
                                   <div
-                                    key={`transcript-zoom-group-${group.kind}-${entry.id}`}
-                                    className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5"
+                                    key={`transcript-zoom-queued-turn-${turn.queued_turn_id}`}
+                                    className="rounded-lg border border-amber-200 bg-white px-2 py-1 text-[10px] leading-4 text-amber-800"
                                   >
-                                    <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
-                                      <span className="font-semibold text-slate-800">
-                                        {entry.title}
+                                    <span className="font-semibold">
+                                      #{turn.position + 1}
+                                    </span>
+                                    <span className="ml-1">
+                                      {sanitizeWorkbenchEventText(
+                                        turn.message_preview,
+                                      )}
+                                    </span>
+                                    {turn.image_count > 0 ? (
+                                      <span className="ml-1 text-amber-600">
+                                        {imageCountText(turn.image_count)}
                                       </span>
-                                      {entry.sourceType ? (
-                                        <span className="rounded-full border border-slate-200 bg-white px-1.5 py-0.5 text-slate-500">
-                                          {formatTranscriptEntrySourceLabel(
-                                            entry.sourceType,
-                                          )}
-                                        </span>
-                                      ) : null}
-                                    </div>
-                                    <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words text-[10px] leading-4 text-slate-600">
-                                      {entry.detail}
-                                    </p>
+                                    ) : null}
                                   </div>
                                 ))}
                               </div>
                             </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  {selectedTranscriptActivityEntries.length > 0 ? (
-                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                      <div className="flex flex-wrap items-center gap-2 text-[10px]">
-                        <span className="font-semibold text-slate-800">
-                          子会话进展
-                        </span>
-                        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-600">
-                          {selectedTranscriptActivityEntries.length} 条
-                        </span>
-                        {selectedTranscriptLiveActivityEntries.length > 0 ? (
-                          <span className="rounded-full border border-sky-200 bg-white px-2 py-0.5 text-sky-700">
-                            live {selectedTranscriptLiveActivityEntries.length}{" "}
-                            条
-                          </span>
-                        ) : null}
-                        {selectedTranscriptHistoryEntries.length > 0 ? (
-                          <span className="rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-emerald-700">
-                            历史正文 {selectedTranscriptHistoryEntries.length}{" "}
-                            条
-                          </span>
-                        ) : null}
-                        {selectedTranscriptHistoryStatus === "loading" ? (
-                          <span className="rounded-full border border-amber-200 bg-white px-2 py-0.5 text-amber-700">
-                            正在读取历史正文
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="mt-2 space-y-2">
-                        {selectedTranscriptActivityEntries.map((entry) => (
-                          <div
-                            key={`transcript-zoom-activity-${entry.id}`}
-                            className="rounded-xl border border-slate-200 bg-white px-2 py-2"
-                          >
-                            <div className="flex flex-wrap items-center gap-2 text-[10px]">
-                              <span className="font-semibold text-slate-800">
-                                {entry.title}
-                              </span>
-                              <span
-                                className={cn(
-                                  "rounded-full px-2 py-0.5 font-medium",
-                                  entry.badgeClassName,
-                                )}
-                              >
-                                {entry.statusLabel}
-                              </span>
-                            </div>
-                            <p className="mt-1 whitespace-pre-wrap break-words text-[10px] leading-4 text-slate-600">
-                              {entry.detail}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : selectedTranscriptHistoryStatus === "loading" ? (
-                    <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] leading-4 text-amber-700">
-                      正在从子会话读取历史正文；读取结果仍只作为
-                      队友记录预览，不进入主回复。
-                    </p>
-                  ) : selectedTranscriptHistoryStatus === "error" ? (
-                    <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[10px] leading-4 text-rose-700">
-                      读取子会话历史正文失败：
-                      {selectedTranscriptHistoryState?.errorMessage ??
-                        "未知错误"}
-                    </p>
-                  ) : selectedTranscriptChildSessionId ? (
-                    <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] leading-4 text-slate-500">
-                      还没有收到这项子会话的 live
-                      activity，历史正文也暂无可展示过程；
-                      如需完整上下文，继续通过 Team board 聚焦对应子任务读取。
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          {agentUiSurfaceSummaries.length > 0 ? (
-            <div className="mt-3 space-y-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                工作区专门视图
-              </div>
-              {agentUiSurfaceSummaries.map((surface, index) => (
-                <details
-                  key={`team-workbench-agentui-surface-detail-${surface.surface}`}
-                  className="group rounded-2xl border border-slate-200 bg-white px-3 py-2"
-                  open={index === 0}
-                >
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs">
-                    <span>
-                      <span className="font-semibold text-slate-900">
-                        {surface.label}
-                      </span>
-                      <span className="ml-2 text-[10px] text-slate-500">
-                        {formatAgentUiSurfaceLabel(
-                          surface.surface,
-                          translateProjection,
-                        )}
-                      </span>
-                    </span>
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
-                      {surface.total}
-                    </span>
-                  </summary>
-                  <p className="mt-1 text-[10px] leading-4 text-slate-500">
-                    {surface.description}
-                  </p>
-                  <div className="mt-2 space-y-1.5">
-                    {surface.latestEvents.map((event) => {
-                      const auxiliaryDetail =
-                        formatAgentUiProjectionEventAuxiliaryDetail(event);
-                      return (
-                        <div
-                          key={`team-workbench-agentui-surface-detail-event-${surface.surface}-${event.sequence ?? event.type}-${event.agentId ?? event.taskId ?? event.reviewId ?? event.handoffId ?? event.sourceType}`}
-                          className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5"
-                        >
-                          <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
-                            <span className="font-semibold text-slate-700">
-                              {formatAgentUiProjectionEventType(
-                                event.type,
-                                translateProjection,
-                              )}
-                            </span>
-                            <span>
-                              {formatAgentUiProjectionPhase(
-                                event.phase,
-                                translateProjection,
-                              )}
-                            </span>
-                          </div>
-                          <div className="mt-0.5 truncate text-[10px] text-slate-500">
-                            {formatAgentUiProjectionEventDetail(event)}
-                          </div>
-                          {auxiliaryDetail ? (
-                            <div className="mt-0.5 truncate text-[10px] text-slate-400">
-                              {auxiliaryDetail}
+                          ) : null}
+                          {selectedTranscriptEntryGroups.length > 0 ? (
+                            <div className="mt-2 grid gap-2 lg:grid-cols-3">
+                              {selectedTranscriptEntryGroups.map((group) => (
+                                <div
+                                  key={`transcript-zoom-group-${group.kind}`}
+                                  className="rounded-xl border border-slate-200 bg-white px-2 py-2"
+                                >
+                                  <div className="text-[10px] font-semibold text-slate-800">
+                                    {group.label}
+                                  </div>
+                                  <div className="mt-0.5 text-[10px] leading-4 text-slate-500">
+                                    {group.description}
+                                  </div>
+                                  <div className="mt-1.5 space-y-1.5">
+                                    {group.entries.map((entry) => (
+                                      <div
+                                        key={`transcript-zoom-group-${group.kind}-${entry.id}`}
+                                        className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5"
+                                      >
+                                        <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                                          <span className="font-semibold text-slate-800">
+                                            {entry.title}
+                                          </span>
+                                          {entry.sourceType ? (
+                                            <span className="rounded-full border border-slate-200 bg-white px-1.5 py-0.5 text-slate-500">
+                                              {formatTranscriptEntrySourceLabel(
+                                                entry.sourceType,
+                                              )}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                        <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words text-[10px] leading-4 text-slate-600">
+                                          {sanitizeWorkbenchEventText(
+                                            entry.detail,
+                                          )}
+                                        </p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           ) : null}
                         </div>
-                      );
-                    })}
-                  </div>
-                </details>
-              ))}
-            </div>
-          ) : null}
-          {teamWorkbenchProjectionSummary.latestEvents.length > 0 ? (
-            <div className="mt-3 space-y-2">
-              {teamWorkbenchProjectionSummary.latestEvents.map((event) => (
-                <div
-                  key={`team-workbench-agentui-event-${event.sequence ?? event.type}-${event.agentId ?? event.taskId ?? event.evidenceId ?? event.reviewId ?? event.handoffId ?? event.sourceType}`}
-                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2"
-                >
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="font-semibold text-slate-900">
-                      {formatAgentUiProjectionEventType(
-                        event.type,
-                        translateProjection,
-                      )}
-                    </span>
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
-                      {formatAgentUiProjectionPhase(
-                        event.phase,
-                        translateProjection,
-                      )}
-                    </span>
-                    {event.surface ? (
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
-                        {formatAgentUiSurfaceLabel(
-                          event.surface,
-                          translateProjection,
-                        )}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="mt-1 text-xs leading-5 text-slate-600">
-                    {formatAgentUiProjectionEventDetail(event)}
-                  </div>
+                      ) : null}
+                      {selectedTranscriptActivityEntries.length > 0 ? (
+                        <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                          <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                            <span className="font-semibold text-slate-800">
+                              {childProgressTitle}
+                            </span>
+                            <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-600">
+                              {childProgressCountText}
+                            </span>
+                            {selectedTranscriptLiveActivityEntries.length >
+                            0 ? (
+                              <span className="rounded-full border border-sky-200 bg-white px-2 py-0.5 text-sky-700">
+                                {childLiveCountText}
+                              </span>
+                            ) : null}
+                            {selectedTranscriptHistoryEntries.length > 0 ? (
+                              <span className="rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-emerald-700">
+                                {childHistoryCountText}
+                              </span>
+                            ) : null}
+                            {selectedTranscriptHistoryStatus === "loading" ? (
+                              <span className="rounded-full border border-amber-200 bg-white px-2 py-0.5 text-amber-700">
+                                {historyLoadingText}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="mt-2 space-y-2">
+                            {selectedTranscriptActivityEntries.map((entry) => (
+                              <div
+                                key={`transcript-zoom-activity-${entry.id}`}
+                                className="rounded-xl border border-slate-200 bg-white px-2 py-2"
+                              >
+                                <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                                  <span className="font-semibold text-slate-800">
+                                    {entry.title}
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      "rounded-full px-2 py-0.5 font-medium",
+                                      entry.badgeClassName,
+                                    )}
+                                  >
+                                    {entry.statusLabel}
+                                  </span>
+                                </div>
+                                <p className="mt-1 whitespace-pre-wrap break-words text-[10px] leading-4 text-slate-600">
+                                  {sanitizeWorkbenchEventText(entry.detail)}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : selectedTranscriptHistoryStatus === "loading" ? (
+                        <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] leading-4 text-amber-700">
+                          {historyLoadingDescription}
+                        </p>
+                      ) : selectedTranscriptHistoryStatus === "error" ? (
+                        <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[10px] leading-4 text-rose-700">
+                          {historyErrorText}
+                        </p>
+                      ) : selectedTranscriptChildSessionId ? (
+                        <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] leading-4 text-slate-500">
+                          {noTranscriptActivityText}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
-              ))}
-            </div>
+              ) : null}
+              {agentUiSurfaceSummaries.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    {surfaceSummaryTitle}
+                  </div>
+                  {agentUiSurfaceSummaries.map((surface, index) => (
+                    <details
+                      key={`team-workbench-agentui-surface-detail-${surface.surface}`}
+                      className="group rounded-2xl border border-slate-200 bg-white px-3 py-2"
+                      open={index === 0}
+                    >
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs">
+                        <span>
+                          <span className="font-semibold text-slate-900">
+                            {surface.label}
+                          </span>
+                          <span className="ml-2 text-[10px] text-slate-500">
+                            {formatAgentUiSurfaceLabel(
+                              surface.surface,
+                              translateProjection,
+                            )}
+                          </span>
+                        </span>
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
+                          {surface.total}
+                        </span>
+                      </summary>
+                      <p className="mt-1 text-[10px] leading-4 text-slate-500">
+                        {surface.description}
+                      </p>
+                      <div className="mt-2 space-y-1.5">
+                        {surface.latestEvents.map((event) => {
+                          const auxiliaryDetail =
+                            formatWorkbenchProjectionEventAuxiliaryDetail(
+                              event,
+                            );
+                          return (
+                            <div
+                              key={`team-workbench-agentui-surface-detail-event-${surface.surface}-${event.sequence ?? event.type}-${event.agentId ?? event.taskId ?? event.reviewId ?? event.handoffId ?? event.sourceType}`}
+                              className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5"
+                            >
+                              <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
+                                <span className="font-semibold text-slate-700">
+                                  {formatAgentUiProjectionEventType(
+                                    event.type,
+                                    translateProjection,
+                                  )}
+                                </span>
+                                <span>
+                                  {formatAgentUiProjectionPhase(
+                                    event.phase,
+                                    translateProjection,
+                                  )}
+                                </span>
+                              </div>
+                              <div className="mt-0.5 truncate text-[10px] text-slate-500">
+                                {formatWorkbenchProjectionEventDetail(event)}
+                              </div>
+                              {auxiliaryDetail ? (
+                                <div className="mt-0.5 truncate text-[10px] text-slate-400">
+                                  {auxiliaryDetail}
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              ) : null}
+              {teamWorkbenchProjectionSummary.latestEvents.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  {teamWorkbenchProjectionSummary.latestEvents.map((event) => (
+                    <div
+                      key={`team-workbench-agentui-event-${event.sequence ?? event.type}-${event.agentId ?? event.taskId ?? event.evidenceId ?? event.reviewId ?? event.handoffId ?? event.sourceType}`}
+                      className="rounded-2xl border border-slate-200 bg-white px-3 py-2"
+                    >
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="font-semibold text-slate-900">
+                          {formatAgentUiProjectionEventType(
+                            event.type,
+                            translateProjection,
+                          )}
+                        </span>
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
+                          {formatAgentUiProjectionPhase(
+                            event.phase,
+                            translateProjection,
+                          )}
+                        </span>
+                        {event.surface ? (
+                          <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
+                            {formatAgentUiSurfaceLabel(
+                              event.surface,
+                              translateProjection,
+                            )}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-1 text-xs leading-5 text-slate-600">
+                        {formatWorkbenchProjectionEventDetail(event)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </>
           ) : null}
         </section>
       ) : null}
@@ -2049,7 +2299,7 @@ export function TeamWorkbenchSummaryPanel({
           </div>
           {runtimeFormationDisplay.referenceLabel ? (
             <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
-              参考方案：{runtimeFormationDisplay.referenceLabel}
+              {referenceLabelText}
             </div>
           ) : null}
         </section>
@@ -2059,7 +2309,7 @@ export function TeamWorkbenchSummaryPanel({
         <section className="rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-950/5">
           <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
             <Activity className="h-3.5 w-3.5" />
-            <span>最近动态</span>
+            <span>{recentActivityTitle}</span>
           </div>
           {operationSummary ? (
             <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">
@@ -2087,7 +2337,7 @@ export function TeamWorkbenchSummaryPanel({
                     </span>
                   </div>
                   <div className="mt-1.5 text-xs leading-5 text-slate-600">
-                    {entry.detail}
+                    {sanitizeWorkbenchEventText(entry.detail)}
                   </div>
                 </div>
               ))}
@@ -2095,20 +2345,6 @@ export function TeamWorkbenchSummaryPanel({
           ) : null}
         </section>
       )}
-
-      <div className="rounded-[24px] border border-slate-200/80 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-500">
-        <div className="flex items-center gap-2 font-semibold uppercase tracking-[0.12em] text-slate-500">
-          <Clock3 className="h-3.5 w-3.5" />
-          <span>交互说明</span>
-        </div>
-        <div className="mt-2">
-          左侧主画布负责展示任务轨道、实时过程与细节；右侧用于总览、任务结构与快速理解当前进展状态。
-        </div>
-        <div className="mt-2 flex items-center gap-2 text-sky-700">
-          <Sparkles className="h-3.5 w-3.5" />
-          <span>这套布局会复用到图片、多文件和其他专用画布。</span>
-        </div>
-      </div>
     </div>
   );
 }

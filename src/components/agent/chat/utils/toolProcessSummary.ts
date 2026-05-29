@@ -185,6 +185,41 @@ function isLikelyWebSearchRuntimeUnavailable(
   );
 }
 
+function stripRuntimeProtocolErrorPrefix(value: string): string | null {
+  const stripped = value
+    .replace(/^\s*(?:执行失败[:：]\s*)?(?:-32603\s*:\s*)?(?:-32002\s*:?\s*)?/i, "")
+    .replace(/^\s*(?:json-?rpc|runtime|tool)\s+error[:：]\s*/i, "")
+    .trim();
+
+  if (!stripped || stripped === value.trim()) {
+    return null;
+  }
+
+  return stripped;
+}
+
+function isLikelyRuntimeProtocolError(value: string): boolean {
+  return /(?:-32603|-32002|json-?rpc|tool failed|runtime error)/i.test(value);
+}
+
+function resolveRuntimeProtocolErrorSummaryText(
+  toolName: string,
+  value: string,
+  maxLength: number,
+): string | null {
+  if (!isLikelyRuntimeProtocolError(value)) {
+    return null;
+  }
+
+  const stripped = stripRuntimeProtocolErrorPrefix(value);
+  if (stripped) {
+    return normalizePlainResultLine(stripped, maxLength);
+  }
+
+  const display = getToolDisplayInfo(toolName, "failed");
+  return shorten(`${display.label}失败，底层错误未返回详细信息`, maxLength);
+}
+
 export function resolveToolErrorSummaryText(
   toolName: string,
   value: string | null | undefined,
@@ -203,6 +238,15 @@ export function resolveToolErrorSummaryText(
     return shorten(resolveImageGenerationFailureDisplayText(), maxLength);
   }
 
+  const protocolSummary = resolveRuntimeProtocolErrorSummaryText(
+    toolName,
+    normalized,
+    maxLength,
+  );
+  if (protocolSummary) {
+    return protocolSummary;
+  }
+
   return normalizePlainResultLine(value, maxLength);
 }
 
@@ -218,6 +262,11 @@ export function resolveToolErrorDetailText(
   if (!isLikelyWebSearchRuntimeUnavailable(toolName, normalized)) {
     if (isImageGenerationProtocolFailure({ toolName, text: normalized })) {
       return resolveImageGenerationFailureDisplayText();
+    }
+
+    const stripped = stripRuntimeProtocolErrorPrefix(normalized);
+    if (stripped) {
+      return `${stripped}\n\n原始错误：${normalized}`;
     }
 
     return normalized;

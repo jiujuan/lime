@@ -1,5 +1,6 @@
 use super::{
-    args_or_default, get_string_arg, workspace_manager, DynError, PathBuf, WorkspaceListItem,
+    args_or_default, get_optional_string_arg, get_string_arg, workspace_manager, DynError, PathBuf,
+    WorkspaceListItem,
 };
 use crate::dev_bridge::DevBridgeState;
 use crate::workspace_support::{
@@ -51,8 +52,16 @@ pub(super) fn try_handle(
         "workspace_resolve_project_path" => {
             let args = args_or_default(args);
             let name = get_string_arg(&args, "name", "name")?;
-            let project_path =
-                get_workspace_projects_root_dir()?.join(sanitize_project_dir_name(&name));
+            let root_dir =
+                match get_optional_string_arg(&args, "parentRootPath", "parent_root_path")
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|path| !path.is_empty())
+                {
+                    Some(path) => PathBuf::from(path),
+                    None => get_workspace_projects_root_dir()?,
+                };
+            let project_path = root_dir.join(sanitize_project_dir_name(&name));
             serde_json::json!(project_path.to_string_lossy().to_string())
         }
         _ => return Ok(None),

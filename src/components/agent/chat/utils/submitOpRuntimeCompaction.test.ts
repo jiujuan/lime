@@ -241,6 +241,40 @@ describe("submitOpRuntimeCompaction", () => {
     expect(result.shouldSubmitModelPreference).toBe(true);
   });
 
+  it("只有模型没有 provider 时不应提交半截模型偏好", () => {
+    const result = buildSubmitOpRuntimeCompaction({
+      executionRuntime: null,
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "",
+      effectiveModel: "gpt-5.5",
+      webSearch: false,
+      thinking: false,
+    });
+
+    expect(result.shouldSubmitProviderPreference).toBe(false);
+    expect(result.shouldSubmitModelPreference).toBe(false);
+  });
+
+  it("只有 provider 没有模型时不应提交半截 provider/model 偏好", () => {
+    const result = buildSubmitOpRuntimeCompaction({
+      executionRuntime: null,
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "openai",
+      effectiveModel: "",
+      webSearch: false,
+      thinking: false,
+    });
+
+    expect(result.shouldSubmitProviderPreference).toBe(false);
+    expect(result.shouldSubmitModelPreference).toBe(false);
+  });
+
   it("图片生成命令新会话应提交编排聊天模型 provider_config，但不锁定图片模型偏好", () => {
     const requestMetadata = {
       harness: {

@@ -32,6 +32,76 @@ use crate::permission::{
 pub type PermissionRequestCallback =
     Box<dyn Fn(String, String) -> Pin<Box<dyn Future<Output = bool> + Send>> + Send + Sync>;
 
+pub(crate) const DEFAULT_NATIVE_ALIAS_PAIRS: &[(&str, &[&str])] = &[
+    ("Agent", &["AgentTool"]),
+    ("AskUserQuestion", &["AskUserQuestionTool"]),
+    (
+        "Bash",
+        &[
+            "BashTool",
+            "Shell",
+            "developer__shell",
+            "mcp__system__shell",
+            "shell_command",
+            "exec_command",
+            "local_shell_call",
+        ],
+    ),
+    ("Config", &["ConfigTool"]),
+    (
+        "Edit",
+        &[
+            "FileEditTool",
+            "edit_file",
+            "developer__text_editor",
+            "mcp__system__edit_file",
+        ],
+    ),
+    (
+        "Read",
+        &[
+            "FileReadTool",
+            "read_file",
+            "developer__read",
+            "mcp__system__read_file",
+        ],
+    ),
+    (
+        "Write",
+        &[
+            "FileWriteTool",
+            "write_file",
+            "create_file",
+            "mcp__system__write_file",
+        ],
+    ),
+    ("EnterPlanMode", &["EnterPlanModeTool"]),
+    ("ExitPlanMode", &["ExitPlanModeTool"]),
+    ("EnterWorktree", &["EnterWorktreeTool"]),
+    ("ExitWorktree", &["ExitWorktreeTool"]),
+    ("Glob", &["GlobTool", "mcp__system__glob"]),
+    ("Grep", &["GrepTool", "mcp__system__grep"]),
+    ("LSP", &["LSPTool"]),
+    ("NotebookEdit", &["NotebookEditTool"]),
+    ("PowerShell", &["PowerShellTool"]),
+    ("RemoteTrigger", &["RemoteTriggerTool"]),
+    ("SendUserMessage", &["BriefTool"]),
+    ("Skill", &["SkillTool"]),
+    ("Sleep", &["SleepTool"]),
+    (
+        "ToolSearch",
+        &["ToolSearchTool", "tool_search", "mcp__system__tool_search"],
+    ),
+    (
+        "WebFetch",
+        &["WebFetchTool", "web_fetch", "mcp__system__web_fetch"],
+    ),
+    (
+        "WebSearch",
+        &["WebSearchTool", "web_search", "mcp__system__web_search"],
+    ),
+];
+
 /// MCP Tool Wrapper
 ///
 /// Wraps an MCP tool to implement the `Tool` trait, allowing MCP tools
@@ -178,32 +248,12 @@ impl ToolRegistry {
 
 impl ToolRegistry {
     fn default_native_aliases(name: &str) -> &'static [&'static str] {
-        match name {
-            "Agent" => &["AgentTool"],
-            "AskUserQuestion" => &["AskUserQuestionTool"],
-            "Bash" => &["BashTool"],
-            "Config" => &["ConfigTool"],
-            "Edit" => &["FileEditTool"],
-            "Read" => &["FileReadTool"],
-            "Write" => &["FileWriteTool"],
-            "EnterPlanMode" => &["EnterPlanModeTool"],
-            "ExitPlanMode" => &["ExitPlanModeTool"],
-            "EnterWorktree" => &["EnterWorktreeTool"],
-            "ExitWorktree" => &["ExitWorktreeTool"],
-            "Glob" => &["GlobTool"],
-            "Grep" => &["GrepTool"],
-            "LSP" => &["LSPTool"],
-            "NotebookEdit" => &["NotebookEditTool"],
-            "PowerShell" => &["PowerShellTool"],
-            "RemoteTrigger" => &["RemoteTriggerTool"],
-            "SendUserMessage" => &["BriefTool"],
-            "Skill" => &["SkillTool"],
-            "Sleep" => &["SleepTool"],
-            "ToolSearch" => &["ToolSearchTool"],
-            "WebFetch" => &["WebFetchTool"],
-            "WebSearch" => &["WebSearchTool"],
-            _ => &[],
-        }
+        DEFAULT_NATIVE_ALIAS_PAIRS
+            .iter()
+            .find_map(|(canonical, aliases)| {
+                canonical.eq_ignore_ascii_case(name).then_some(*aliases)
+            })
+            .unwrap_or(&[])
     }
 
     fn find_native_key(&self, name: &str) -> Option<&String> {
@@ -218,7 +268,36 @@ impl ToolRegistry {
             .find(|registered| registered.eq_ignore_ascii_case(name))
     }
 
-    fn resolve_native_key(&self, name: &str) -> Option<&String> {
+    fn model_visible_namespace_tail(name: &str) -> Option<&str> {
+        let trimmed = name.trim();
+        for prefix in [
+            "functions.",
+            "functions__",
+            "function.",
+            "function__",
+            "tools.",
+            "tools__",
+            "tool.",
+            "tool__",
+            "native.",
+            "native__",
+            "builtin.",
+            "builtin__",
+        ] {
+            if trimmed
+                .get(..prefix.len())
+                .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
+            {
+                let tail = trimmed[prefix.len()..].trim();
+                if !tail.is_empty() {
+                    return Some(tail);
+                }
+            }
+        }
+        None
+    }
+
+    fn resolve_native_key_direct(&self, name: &str) -> Option<&String> {
         if let Some(registered) = self.find_native_key(name) {
             return Some(registered);
         }
@@ -227,6 +306,28 @@ impl ToolRegistry {
             .find_native_alias_key(name)
             .and_then(|alias| self.native_aliases.get(alias))?;
         self.find_native_key(canonical_name)
+    }
+
+    fn resolve_native_key(&self, name: &str) -> Option<&String> {
+        let name = name.trim();
+        self.resolve_native_key_direct(name).or_else(|| {
+            Self::model_visible_namespace_tail(name)
+                .and_then(|tail| self.resolve_native_key_direct(tail))
+        })
+    }
+
+    /// Resolve a native tool name or compatibility alias to its canonical native name.
+    pub fn canonical_native_name(&self, name: &str) -> Option<String> {
+        self.resolve_native_key(name).cloned()
+    }
+
+    /// Resolve a tool name to the canonical registered name.
+    ///
+    /// Native tools and their aliases take priority over MCP tools, matching
+    /// normal registry lookup and execution semantics.
+    pub fn canonical_name(&self, name: &str) -> Option<String> {
+        self.canonical_native_name(name)
+            .or_else(|| self.find_mcp_key(name).cloned())
     }
 
     fn remove_native_aliases_for(&mut self, canonical_name: &str) {
@@ -850,6 +951,14 @@ mod tests {
         assert!(registry.contains_native("killshell"));
         assert!(registry.is_native("KillShell"));
         assert!(registry.get("TaskStopTool").is_some());
+        assert_eq!(
+            registry.canonical_native_name("killshell").as_deref(),
+            Some("TaskStop"),
+        );
+        assert_eq!(
+            registry.canonical_name("TaskStopTool").as_deref(),
+            Some("TaskStop"),
+        );
 
         let definitions = registry.get_definitions();
         assert_eq!(definitions.len(), 1);
@@ -866,6 +975,206 @@ mod tests {
             .await
             .expect("alias should resolve to native tool");
         assert_eq!(result.output.as_deref(), Some("Processed: hello"));
+    }
+
+    #[test]
+    fn test_registry_default_aliases_are_lookup_only() {
+        let mut registry = ToolRegistry::new();
+        registry.register(Box::new(TestTool::new("Bash")));
+
+        for alias in [
+            "BashTool",
+            "bashtool",
+            "Shell",
+            "developer__shell",
+            "mcp__system__shell",
+            "shell_command",
+            "exec_command",
+            "local_shell_call",
+        ] {
+            assert_eq!(
+                registry.canonical_native_name(alias).as_deref(),
+                Some("Bash"),
+                "{alias} should resolve to Bash",
+            );
+        }
+
+        let names = registry
+            .get_definitions()
+            .into_iter()
+            .map(|definition| definition.name)
+            .collect::<Vec<_>>();
+        assert_eq!(names, vec!["Bash".to_string()]);
+    }
+
+    #[test]
+    fn test_registry_model_visible_namespace_aliases_resolve_to_canonical_native_tool() {
+        let mut registry = ToolRegistry::new();
+        registry.register(Box::new(TestTool::new("Bash")));
+        registry.register(Box::new(TestTool::new("Read")));
+
+        for alias in [
+            "functions.Bash",
+            "functions__Bash",
+            "function.Bash",
+            "tools.Bash",
+            "native.Bash",
+            "builtin.Bash",
+        ] {
+            assert_eq!(
+                registry.canonical_native_name(alias).as_deref(),
+                Some("Bash"),
+                "{alias} should resolve to Bash",
+            );
+            assert!(
+                registry.get(alias).is_some(),
+                "{alias} should find the canonical Bash tool"
+            );
+        }
+
+        assert_eq!(
+            registry.canonical_name("functions.Read").as_deref(),
+            Some("Read")
+        );
+        assert!(
+            !registry
+                .tool_names()
+                .iter()
+                .any(|name| name.eq_ignore_ascii_case("functions.Bash")),
+            "namespace aliases must not become visible registry tool names"
+        );
+    }
+
+    #[test]
+    fn test_registry_default_alias_matrix_is_lookup_only_for_all_current_tools() {
+        let mut registry = ToolRegistry::new();
+        for (canonical, aliases) in DEFAULT_NATIVE_ALIAS_PAIRS {
+            assert!(
+                !aliases.is_empty(),
+                "{canonical} should declare at least one alias"
+            );
+            registry.register(Box::new(TestTool::new(canonical)));
+        }
+
+        assert!(
+            DEFAULT_NATIVE_ALIAS_PAIRS.len() > 20,
+            "default alias matrix should cover the broad current tool surface"
+        );
+
+        let definition_names = registry
+            .get_definitions()
+            .into_iter()
+            .map(|definition| definition.name)
+            .collect::<std::collections::HashSet<_>>();
+        let tool_names = registry
+            .tool_names()
+            .into_iter()
+            .map(str::to_string)
+            .collect::<std::collections::HashSet<_>>();
+
+        for (canonical, aliases) in DEFAULT_NATIVE_ALIAS_PAIRS {
+            assert!(
+                definition_names.contains(*canonical),
+                "{canonical} should remain model-visible under its canonical name"
+            );
+            assert!(
+                tool_names.contains(*canonical),
+                "{canonical} should remain the registered tool name"
+            );
+
+            for alias in *aliases {
+                assert_eq!(
+                    registry.canonical_native_name(alias).as_deref(),
+                    Some(*canonical),
+                    "{alias} should resolve to {canonical}"
+                );
+                assert_eq!(
+                    registry
+                        .canonical_native_name(&alias.to_ascii_lowercase())
+                        .as_deref(),
+                    Some(*canonical),
+                    "{alias} lookup should be case-insensitive"
+                );
+                assert!(
+                    registry.get(alias).is_some(),
+                    "{alias} should find the canonical native tool"
+                );
+                assert!(
+                    !definition_names.contains(*alias),
+                    "{alias} must not be exposed as a separate tool definition"
+                );
+                assert!(
+                    !tool_names.contains(*alias),
+                    "{alias} must not be exposed as a separate registry tool name"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_registry_register_all_tools_aliases_are_lookup_only_for_registered_surface() {
+        let mut registry = ToolRegistry::new();
+        crate::tools::register_all_tools(
+            &mut registry,
+            crate::tools::ToolRegistrationConfig::new(),
+        );
+
+        let aliases = registry.native_aliases.clone();
+        assert!(
+            aliases.len() > 20,
+            "registered alias map should cover the broad native tool surface"
+        );
+
+        let definition_names = registry
+            .get_definitions()
+            .into_iter()
+            .map(|definition| definition.name)
+            .collect::<std::collections::HashSet<_>>();
+        let tool_names = registry
+            .tool_names()
+            .into_iter()
+            .map(|name| name.to_string())
+            .collect::<std::collections::HashSet<_>>();
+
+        for (alias, canonical) in aliases {
+            assert_eq!(
+                registry.canonical_native_name(&alias).as_deref(),
+                Some(canonical.as_str()),
+                "{alias} should resolve to {canonical}"
+            );
+            assert_eq!(
+                registry
+                    .canonical_native_name(&alias.to_ascii_lowercase())
+                    .as_deref(),
+                Some(canonical.as_str()),
+                "{alias} lookup should be case-insensitive"
+            );
+            assert!(
+                registry.get(&alias).is_some(),
+                "{alias} should find its canonical native tool"
+            );
+            assert!(
+                !definition_names.contains(alias.as_str()),
+                "{alias} must not be exposed as a separate tool definition"
+            );
+            assert!(
+                !tool_names.contains(alias.as_str()),
+                "{alias} must not be exposed as a separate registry tool name"
+            );
+        }
+    }
+
+    #[test]
+    fn test_registry_alias_does_not_override_real_native_tool_name() {
+        let mut registry = ToolRegistry::new();
+        registry.register(Box::new(TestTool::new("Bash")));
+        registry.register(Box::new(TestTool::new("BashTool")));
+
+        assert_eq!(
+            registry.canonical_native_name("BashTool").as_deref(),
+            Some("BashTool"),
+        );
+        assert_eq!(registry.native_tool_count(), 2);
     }
 
     #[test]

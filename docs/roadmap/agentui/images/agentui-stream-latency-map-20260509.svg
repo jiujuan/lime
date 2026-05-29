@@ -43,96 +43,96 @@
   <circle cx="165" cy="948" r="260" fill="#bbf7d0" opacity="0.28"/>
   <circle cx="1480" cy="965" r="185" fill="#fed7aa" opacity="0.26"/>
 
-  <text x="86" y="78" class="title">Lime AgentUI 流式延迟复测图 v6</text>
-  <text x="88" y="118" class="subtitle">2026-05-12 收口：runtime status 百毫秒级；多 provider TTFT 矩阵 gate pass，剩余优化是 fallback 解释。</text>
+  <text x="86" y="78" class="title">Lime AgentUI 流式延迟复测图 v7</text>
+  <text x="88" y="118" class="subtitle">2026-05-29 复测：空 choices 工具流 panic 已修复；TTFT 矩阵 gate pass；GUI tool surface / MCP 无 panic。</text>
 
   <rect x="1148" y="67" width="335" height="52" rx="26" fill="#ecfdf5" stroke="#86efac"/>
-  <text x="1178" y="100" class="pill" fill="#166534">已完成：TTFT 落库 + 路由 + GUI 证据 + 样本矩阵</text>
+  <text x="1178" y="100" class="pill" fill="#166534">已完成：parser guard + tool stream tests + contracts + MCP 复核</text>
 
   <rect x="86" y="156" width="1428" height="318" class="card"/>
   <text x="122" y="207" class="section">点击发送到用户可见反馈的实测链路</text>
 
   <rect x="122" y="247" width="220" height="150" class="mini green"/>
-  <text x="148" y="286" class="num-ok">0.09-0.12s</text>
-  <text x="148" y="322" class="label">runtime status</text>
-  <text x="148" y="352" class="small">Playwright submit / status</text>
-  <text x="148" y="377" class="tiny">不是当前主瓶颈</text>
+  <text x="148" y="286" class="num-ok">32-46ms</text>
+  <text x="148" y="322" class="label">App / Bridge ready</text>
+  <text x="148" y="352" class="small">reuse-running smoke 前置</text>
+  <text x="148" y="377" class="tiny">3030 / 1420 健康</text>
 
   <line x1="355" y1="322" x2="420" y2="322" class="line"/>
 
   <rect x="435" y="247" width="248" height="150" class="mini blue"/>
-  <text x="461" y="286" class="num-ok">1.53-1.94s</text>
-  <text x="461" y="322" class="label">GUI 最新 TTFT</text>
-  <text x="461" y="352" class="small">metadata -> read model</text>
-  <text x="461" y="377" class="tiny">visible / thinking / text 可复核</text>
+  <text x="461" y="286" class="num-ok">1.46s</text>
+  <text x="461" y="322" class="label">GUI fixture TTFT</text>
+  <text x="461" y="352" class="small">reliability panel metadata</text>
+  <text x="461" y="377" class="tiny">first visible / text 均可见</text>
 
   <line x1="696" y1="322" x2="761" y2="322" class="line"/>
 
   <rect x="776" y="231" width="292" height="184" class="mini amber"/>
-  <text x="804" y="273" class="num-ok">p50 2.30s</text>
-  <text x="804" y="310" class="label">deepseek 快基线</text>
-  <text x="804" y="340" class="small">17 条 first-text 样本</text>
-  <text x="804" y="365" class="small">跨 provider 已有可对照矩阵</text>
-  <text x="804" y="390" class="tiny">completion gate 已通过</text>
+  <text x="804" y="273" class="num-ok">p50 2.03s</text>
+  <text x="804" y="310" class="label">responsive 快基线</text>
+  <text x="804" y="340" class="small">deepseek-v4-flash 117 条</text>
+  <text x="804" y="365" class="small">11 组 provider/model 已对照</text>
+  <text x="804" y="390" class="tiny">matrix gate pass，need=0</text>
 
   <line x1="1082" y1="322" x2="1147" y2="322" class="line"/>
 
   <rect x="1162" y="231" width="300" height="184" class="mini rose"/>
-  <text x="1190" y="273" class="num-hot">已分类</text>
-  <text x="1190" y="310" class="label">provider / model 波动</text>
-  <text x="1190" y="340" class="small">慢候选降权，不可用候选 fallback-only</text>
-  <text x="1190" y="365" class="small">不再误判为 UI paint 问题</text>
-  <text x="1190" y="390" class="tiny">后续只补脱敏 reason code</text>
+  <text x="1190" y="273" class="num-hot">已阻断</text>
+  <text x="1190" y="310" class="label">tool stream panic</text>
+  <text x="1190" y="340" class="small">choices: [] / 空 data 不再结束工具流</text>
+  <text x="1190" y="365" class="small">usage 保留到最终 ToolRequest</text>
+  <text x="1190" y="390" class="tiny">无 DeepSeek 兜底文本泄漏</text>
 
-  <text x="122" y="444" class="tiny">矩阵：9 个 responsive_chat latency group；6 个 first-text baseline，3 个 fallback-only evidence；totalNeededFirstTextSamples=0。</text>
-  <text x="122" y="466" class="tiny">GUI 复核：latestModelDeltaTiming firstText 1.94s，Harness routing evidence 可见，console error=0。</text>
+  <text x="122" y="444" class="tiny">矩阵：11 个 responsive_chat latency group；8 个 first-text baseline，3 个 fallback-only evidence；additionalFirstTextNeeded=0。</text>
+  <text x="122" y="466" class="tiny">GUI/MCP：Harness routing evidence firstText 1.46s；工具输出 6 条；console error=0；页面无 panic / -32603 / -32002。</text>
 
   <rect x="86" y="510" width="690" height="360" class="card"/>
-  <text x="122" y="561" class="section">已经收口的 current 事实源</text>
+  <text x="122" y="561" class="section">本轮收口的 current 事实源</text>
 
   <rect x="122" y="594" width="610" height="68" class="mini green"/>
-  <text x="150" y="624" class="label">TTFT telemetry 进入 agent_runs.metadata</text>
-  <text x="150" y="648" class="small">model_first_visible / thinking / text_delta_ms 成为首字事实源。</text>
+  <text x="150" y="624" class="label">OpenAI-compatible stream parser</text>
+  <text x="150" y="648" class="small">只在 Aster current provider format 层处理空 choices / heartbeat。</text>
 
   <rect x="122" y="680" width="610" height="68" class="mini green"/>
-  <text x="150" y="710" class="label">responsive_chat_auto 消费真实历史样本</text>
-  <text x="150" y="734" class="small">优先 first text；慢首字 / reasoning / unsupported / recent error 会回退。</text>
+  <text x="150" y="710" class="label">ToolRequest / ToolInputDelta 分型不变</text>
+  <text x="150" y="734" class="small">不从正文猜工具，不新增 Aster 之外的平行工具层。</text>
 
   <rect x="122" y="766" width="610" height="68" class="mini green"/>
-  <text x="150" y="796" class="label">AgentUI 可靠性面板可见 routing evidence</text>
-  <text x="150" y="820" class="small">selected model、TTFT、decisionReason、fallbackChain 可展示和复制。</text>
+  <text x="150" y="796" class="label">responsive_chat TTFT 样本矩阵</text>
+  <text x="150" y="820" class="small">继续以 agent_runs.metadata / timeline fallback 为唯一证据。</text>
 
   <rect x="824" y="510" width="690" height="360" class="card"/>
-  <text x="860" y="561" class="section">完成后的治理打法</text>
+  <text x="860" y="561" class="section">本轮测试矩阵</text>
 
   <rect x="860" y="594" width="610" height="68" class="mini amber"/>
-  <text x="888" y="624" class="label">真实多 provider 样本矩阵已补齐</text>
-  <text x="888" y="648" class="small">6 个 first-text baseline；3 个 fallback-only 只作路由证据。</text>
+  <text x="888" y="624" class="label">Aster parser / registry / reply parts</text>
+  <text x="888" y="648" class="small">streaming_tool_call 4；response_to_message 22；namespace 9；categorize 7。</text>
 
   <rect x="860" y="680" width="610" height="68" class="mini amber"/>
-  <text x="888" y="710" class="label">避免慢 service setting 锁死响应模型</text>
-  <text x="888" y="734" class="small">慢候选自动降权；fallback-only 候选继续避开。</text>
+  <text x="888" y="710" class="label">Lime contracts / request model fixture</text>
+  <text x="888" y="734" class="small">test:contracts pass；OpenAI-compatible provider 测试不写死真实 URL。</text>
 
   <rect x="860" y="766" width="610" height="68" class="mini amber"/>
-  <text x="888" y="796" class="label">可靠性面板作为 GUI 回归门</text>
-  <text x="888" y="820" class="small">每次路由变化都要看到 selected、TTFT、fallback reason。</text>
+  <text x="888" y="796" class="label">GUI / Playwright MCP tool surface</text>
+  <text x="888" y="820" class="small">runtime tool surface + page pass；MCP 复核命令/写入/读取/文件活动。</text>
 
   <rect x="86" y="908" width="452" height="122" class="card"/>
   <text x="122" y="954" class="section">当前证据</text>
-  <text x="122" y="986" class="small">Matrix gate：pass，need=0。</text>
-  <text x="122" y="1012" class="small">GUI：firstText 1.94s，console error=0。</text>
+  <text x="122" y="986" class="small">Matrix gate：pass，11 groups，need=0。</text>
+  <text x="122" y="1012" class="small">GUI：firstText 1.46s，console error=0。</text>
 
   <rect x="574" y="908" width="452" height="122" class="card"/>
   <text x="610" y="954" class="section">治理口径</text>
-  <text x="610" y="986" class="small">current：metadata -> latestModelDeltaTiming。</text>
+  <text x="610" y="986" class="small">current：Aster provider format + agent_runtime_*。</text>
   <text x="610" y="1012" class="small">compat：fallback-only 仅作降权证据。</text>
 
   <rect x="1062" y="908" width="452" height="122" class="card"/>
-  <text x="1098" y="954" class="section">下一刀（可选）</text>
-  <text x="1098" y="986" class="small">补 fallback-only 脱敏 reason code。</text>
-  <text x="1098" y="1012" class="small">UI 显示低延迟 / 慢 / fallback-only 三段。</text>
+  <text x="1098" y="954" class="section">剩余缺口</text>
+  <text x="1098" y="986" class="small">verify:gui-smoke 聚合在 skill_tool_gate 超时。</text>
+  <text x="1098" y="1012" class="small">需释放 Cargo target/磁盘后复跑全量 smoke。</text>
 
   <rect x="86" y="1050" width="1428" height="42" rx="21" fill="#f8fafc" stroke="#dbe5ee"/>
-  <text x="122" y="1068" class="tiny">更新口径：UI / runtime status 百毫秒级已经成立；answer 首字由 provider/model TTFT 决定。</text>
-  <text x="122" y="1087" class="tiny">完整目标已完成；后续只做解释性体验与脱敏 reason code 增强。</text>
+  <text x="122" y="1068" class="tiny">更新口径：本轮主修“首字前卡死/工具流 panic”，不是新增工具层；Warp 参考落实为请求流健壮性与过期流治理方向。</text>
+  <text x="122" y="1087" class="tiny">完成判定：底层 panic 已有回归测试；全量 GUI smoke 受本机 Cargo target/磁盘限制仍需补跑。</text>
 </svg>

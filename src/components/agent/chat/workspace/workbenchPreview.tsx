@@ -153,7 +153,7 @@ export function ArtifactWorkbenchPreview({
 
   if (isBrowserAssistArtifact) {
     return wrapPreviewWithWorkbenchTrigger(
-      <div className="relative h-full min-h-0 overflow-hidden rounded-[24px] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(248,250,252,0.92)_100%)]">
+      <div className="relative h-full min-h-0 overflow-hidden bg-white">
         <ArtifactRenderer
           artifact={previewArtifact}
           isStreaming={isArtifactStreaming}
@@ -193,7 +193,7 @@ export function ArtifactWorkbenchPreview({
   }
 
   return (
-    <div className="flex h-full flex-col rounded-[24px] border border-slate-200 bg-white shadow-sm shadow-slate-950/5">
+    <div className="flex h-full min-h-0 flex-col bg-white">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <ArtifactToolbar
           artifact={toolbarArtifact}
@@ -214,7 +214,7 @@ export function ArtifactWorkbenchPreview({
           }
           actionsSlot={combinedActionsSlot}
         />
-        <div className="relative flex-1 overflow-auto bg-white">
+        <div className="relative min-h-0 flex-1 overflow-auto bg-white">
           <ArtifactRenderer
             artifact={previewArtifact}
             isStreaming={isArtifactStreaming}
@@ -314,7 +314,7 @@ export function WorkspaceLiveCanvasPreview({
     return wrapPreviewWithWorkbenchTrigger(
       <div
         data-testid="canvas-loading-state"
-        className="flex h-full items-center justify-center rounded-[24px] border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500"
+        className="flex h-full items-center justify-center rounded-[10px] border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500"
       >
         {canvasLoadingLabel}
       </div>,

@@ -430,6 +430,23 @@ describe("TeamWorkspaceDock", () => {
     ).toBeNull();
   });
 
+  it("launcherOnly 空态应显示等待接手，而不是运行时待开始", async () => {
+    const onActivateWorkbench = vi.fn();
+    const { container } = await renderDock({
+      placement: "inline",
+      onActivateWorkbench,
+    });
+
+    const toggleButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="team-workspace-dock-toggle"]',
+    );
+
+    expect(toggleButton).toBeTruthy();
+    expect(toggleButton?.textContent).toContain("当前进展");
+    expect(toggleButton?.textContent).toContain("等待接手");
+    expect(toggleButton?.textContent).not.toContain("待开始");
+  });
+
   it("Dock current progress chrome 应读取英文资源", async () => {
     await changeLimeLocale("en-US");
 

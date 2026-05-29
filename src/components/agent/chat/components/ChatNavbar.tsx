@@ -10,6 +10,7 @@ import {
   Settings,
   Sparkles,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { ProjectSelector } from "@/components/projects/ProjectSelector";
 import { cn } from "@/lib/utils";
@@ -120,6 +121,21 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
   contextCompactionRunning = false,
   onCompactContext,
 }) => {
+  const { t } = useTranslation("agent");
+  const navText = (
+    key: string,
+    defaultValue: string,
+    options?: Record<string, unknown>,
+  ) =>
+    String(
+      t(
+        key as never,
+        {
+          defaultValue,
+          ...options,
+        } as never,
+      ),
+    );
   const [workspaceSelectorOpen, setWorkspaceSelectorOpen] =
     React.useState(false);
   const isTaskCenterChrome = contextVariant === "task-center";
@@ -209,9 +225,14 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
                 onChange={(nextProjectId) => onProjectChange?.(nextProjectId)}
                 open={workspaceSelectorOpen}
                 onOpenChange={setWorkspaceSelectorOpen}
-                passiveTrigger
+                onOpenProjectContents={
+                  onBackToResources ? () => onBackToResources() : undefined
+                }
                 workspaceType={workspaceType}
-                placeholder="选择工作区"
+                placeholder={navText(
+                  "agentChat.navbar.workspacePlaceholder",
+                  "选择工作区",
+                )}
                 dropdownSide="bottom"
                 dropdownAlign="start"
                 enableManagement={workspaceType === "general"}
@@ -233,7 +254,10 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
                   <button
                     type="button"
                     className="rounded-full px-1 text-[color:var(--lime-text-muted)] transition hover:bg-[color:var(--lime-surface-hover)] hover:text-[color:var(--lime-text)] dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                    aria-label="关闭工作区提示"
+                    aria-label={navText(
+                      "agentChat.navbar.dismissWorkspaceHint",
+                      "关闭工作区提示",
+                    )}
                     onClick={onDismissWorkspaceHint}
                   >
                     ×
@@ -254,11 +278,27 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
                   setWorkspaceSelectorOpen((current) => !current);
                 }}
                 aria-label={
-                  workspaceSelectorOpen ? "收起工作区菜单" : "展开工作区菜单"
+                  workspaceSelectorOpen
+                    ? navText(
+                        "agentChat.navbar.collapseWorkspaceMenu",
+                        "收起工作区菜单",
+                      )
+                    : navText(
+                        "agentChat.navbar.expandWorkspaceMenu",
+                        "展开工作区菜单",
+                      )
                 }
                 aria-expanded={workspaceSelectorOpen}
                 title={
-                  workspaceSelectorOpen ? "收起工作区菜单" : "展开工作区菜单"
+                  workspaceSelectorOpen
+                    ? navText(
+                        "agentChat.navbar.collapseWorkspaceMenu",
+                        "收起工作区菜单",
+                      )
+                    : navText(
+                        "agentChat.navbar.expandWorkspaceMenu",
+                        "展开工作区菜单",
+                      )
                 }
                 data-testid="task-center-workspace-menu-trigger"
               >
@@ -277,10 +317,20 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
                 onClick={onCompactContext}
                 disabled={contextCompactionRunning}
                 aria-label={
-                  contextCompactionRunning ? "正在压缩上下文" : "压缩上下文"
+                  contextCompactionRunning
+                    ? navText(
+                        "agentChat.navbar.compactContextRunning",
+                        "正在压缩上下文",
+                      )
+                    : navText("agentChat.navbar.compactContext", "压缩上下文")
                 }
                 title={
-                  contextCompactionRunning ? "正在压缩上下文" : "压缩上下文"
+                  contextCompactionRunning
+                    ? navText(
+                        "agentChat.navbar.compactContextRunning",
+                        "正在压缩上下文",
+                      )
+                    : navText("agentChat.navbar.compactContext", "压缩上下文")
                 }
               >
                 <Box size={15} />
@@ -304,8 +354,14 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
                 onClick={onToggleHarnessPanel}
                 aria-label={
                   harnessPanelVisible
-                    ? `关闭${harnessToggleLabel}`
-                    : `打开${harnessToggleLabel}`
+                    ? navText(
+                        "agentChat.navbar.closeHarness",
+                        "关闭{{label}}",
+                        { label: harnessToggleLabel },
+                      )
+                    : navText("agentChat.navbar.openHarness", "打开{{label}}", {
+                        label: harnessToggleLabel,
+                      })
                 }
                 aria-expanded={harnessPanelVisible}
                 title={harnessToggleLabel}
@@ -332,8 +388,11 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
                 size="icon"
                 className={taskCenterIconButtonClassName}
                 onClick={onToggleSettings}
-                aria-label="打开设置"
-                title="打开设置"
+                aria-label={navText(
+                  "agentChat.navbar.openSettings",
+                  "打开设置",
+                )}
+                title={navText("agentChat.navbar.openSettings", "打开设置")}
               >
                 <Settings size={16} />
               </Button>
@@ -355,8 +414,11 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
                 size="icon"
                 className={ghostIconButtonClassName}
                 onClick={onBackHome}
-                title="返回新建任务"
-                aria-label="返回新建任务"
+                title={navText("agentChat.navbar.backHome", "返回新建任务")}
+                aria-label={navText(
+                  "agentChat.navbar.backHome",
+                  "返回新建任务",
+                )}
               >
                 <Home size={18} />
               </Button>
@@ -375,7 +437,7 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
                 onClick={onBackToResources}
               >
                 <FolderOpen size={16} className="mr-0.5" />
-                返回资源
+                {navText("agentChat.navbar.backResources", "返回资源")}
               </Button>
             )}
             {onBackToResources && onBackToProjectManagement ? (
@@ -391,7 +453,7 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
                 )}
                 onClick={onBackToProjectManagement}
               >
-                项目管理
+                {navText("agentChat.navbar.projectManagement", "项目管理")}
               </Button>
             )}
           </div>
@@ -407,8 +469,11 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
                 onClick={onToggleHistory}
                 onFocus={onPrefetchHistory}
                 onMouseEnter={onPrefetchHistory}
-                aria-label="切换历史"
-                title="切换历史"
+                aria-label={navText(
+                  "agentChat.navbar.toggleHistory",
+                  "切换历史",
+                )}
+                title={navText("agentChat.navbar.toggleHistory", "切换历史")}
               >
                 <Box size={18} />
               </Button>
@@ -422,8 +487,16 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
                 size="icon"
                 className={ghostIconButtonClassName}
                 onClick={onToggleCanvas}
-                aria-label={isCanvasOpen ? "折叠画布" : "展开画布"}
-                title={isCanvasOpen ? "折叠画布" : "展开画布"}
+                aria-label={
+                  isCanvasOpen
+                    ? navText("agentChat.navbar.collapseCanvas", "折叠画布")
+                    : navText("agentChat.navbar.expandCanvas", "展开画布")
+                }
+                title={
+                  isCanvasOpen
+                    ? navText("agentChat.navbar.collapseCanvas", "折叠画布")
+                    : navText("agentChat.navbar.expandCanvas", "展开画布")
+                }
               >
                 {isCanvasOpen ? (
                   <PanelRightClose size={18} />
@@ -464,8 +537,14 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
             <ProjectSelector
               value={projectId}
               onChange={(nextProjectId) => onProjectChange?.(nextProjectId)}
+              onOpenProjectContents={
+                onBackToResources ? () => onBackToResources() : undefined
+              }
               workspaceType={workspaceType}
-              placeholder="选择项目"
+              placeholder={navText(
+                "agentChat.navbar.projectPlaceholder",
+                "选择项目",
+              )}
               dropdownSide="bottom"
               dropdownAlign="end"
               enableManagement={workspaceType === "general"}
@@ -483,8 +562,11 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
                   size="icon"
                   className={ghostIconButtonClassName}
                   onClick={onToggleSettings}
-                  aria-label="打开设置"
-                  title="打开设置"
+                  aria-label={navText(
+                    "agentChat.navbar.openSettings",
+                    "打开设置",
+                  )}
+                  title={navText("agentChat.navbar.openSettings", "打开设置")}
                 >
                   <Settings size={18} />
                 </Button>
@@ -500,8 +582,8 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
               size="icon"
               className={ghostIconButtonClassName}
               onClick={onToggleSettings}
-              aria-label="打开设置"
-              title="打开设置"
+              aria-label={navText("agentChat.navbar.openSettings", "打开设置")}
+              title={navText("agentChat.navbar.openSettings", "打开设置")}
             >
               <Settings size={18} />
             </Button>
@@ -521,12 +603,20 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
                 )}
                 onClick={onCompactContext}
                 disabled={contextCompactionRunning}
-                aria-label="压缩上下文"
-                title="压缩上下文"
+                aria-label={navText(
+                  "agentChat.navbar.compactContext",
+                  "压缩上下文",
+                )}
+                title={navText("agentChat.navbar.compactContext", "压缩上下文")}
               >
                 <Box size={14} />
                 <span>
-                  {contextCompactionRunning ? "压缩中..." : "压缩上下文"}
+                  {contextCompactionRunning
+                    ? navText(
+                        "agentChat.navbar.compactContextShortRunning",
+                        "压缩中...",
+                      )
+                    : navText("agentChat.navbar.compactContext", "压缩上下文")}
                 </span>
               </Button>
             ) : null}
@@ -552,8 +642,14 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
                 onClick={onToggleHarnessPanel}
                 aria-label={
                   harnessPanelVisible
-                    ? `关闭${harnessToggleLabel}`
-                    : `打开${harnessToggleLabel}`
+                    ? navText(
+                        "agentChat.navbar.closeHarness",
+                        "关闭{{label}}",
+                        { label: harnessToggleLabel },
+                      )
+                    : navText("agentChat.navbar.openHarness", "打开{{label}}", {
+                        label: harnessToggleLabel,
+                      })
                 }
                 aria-expanded={harnessPanelVisible}
                 title={harnessToggleLabel}

@@ -46,9 +46,24 @@ describe("agentRuntimeErrorPresentation", () => {
       ),
     ).toEqual({
       displayMessage:
-        "当前 AI 服务商余额或额度不足，请在服务商后台充值或开通额度，或切换到其他可用模型后重试。",
+        "当前模型通道返回了计费或额度类错误，请检查该 Provider/模型通道的计费、配额或授权状态，或切换到其他可用模型后重试。",
       toastMessage:
-        "当前 AI 服务商余额或额度不足，请在服务商后台充值或开通额度，或切换到其他可用模型后重试。",
+        "当前模型通道返回了计费或额度类错误，请检查该 Provider/模型通道的计费、配额或授权状态，或切换到其他可用模型后重试。",
+    });
+  });
+
+  it("JSON-RPC 内部错误应转换为短提示", async () => {
+    await changeLimeLocale("zh-CN");
+
+    expect(
+      resolveAgentRuntimeErrorPresentation(
+        "-32603: -32002: runtime error\n\nTroubleshooting: inspect provider logs",
+      ),
+    ).toEqual({
+      displayMessage:
+        "运行时返回内部错误，已保留详情用于排查。请稍后重试，或检查服务商与工具连接状态。",
+      toastMessage:
+        "运行时返回内部错误，已保留详情用于排查。请稍后重试，或检查服务商与工具连接状态。",
     });
   });
 
@@ -59,7 +74,8 @@ describe("agentRuntimeErrorPresentation", () => {
       ),
     ).toEqual({
       displayMessage: "requestKey 2026042402 failed: 模型通道暂时不可用",
-      toastMessage: "响应错误: requestKey 2026042402 failed: 模型通道暂时不可用",
+      toastMessage:
+        "响应错误: requestKey 2026042402 failed: 模型通道暂时不可用",
     });
   });
 });

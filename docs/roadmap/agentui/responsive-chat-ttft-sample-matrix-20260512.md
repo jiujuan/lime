@@ -1,7 +1,7 @@
 # AgentUI responsive_chat TTFT 样本矩阵
 
-> 状态：completion gate 已通过
-> 更新时间：2026-05-12 18:45 CST
+> 状态：completion gate 已通过；2026-05-29 已追加工具流 panic 复测
+> 更新时间：2026-05-29 13:01 CST
 > 范围：`agentui-stream-latency-map-20260509.svg` 所指的“真实 answer 首字慢”主线；只记录 provider/model 路由、状态聚合与 TTFT 证据，不记录用户 prompt、assistant 正文、密钥、`error_message` 或 run id。
 
 ## 目标审计
@@ -14,10 +14,43 @@
 | 真实 TTFT 进入唯一事实源 | `agent_runs.metadata.model_first_visible_delta_ms / model_first_thinking_delta_ms / model_first_text_delta_ms`；样本矩阵也按 Rust 逻辑支持 `agent_thread_items` timeline fallback | 已闭环 |
 | `responsive_chat` 消费历史样本 | Rust `load_responsive_chat_auto_latency_hints` 的口径为 `responsive_chat_auto` / `serviceModelSlot=responsive_chat` / `settingsSource=service_models.responsive_chat`；矩阵脚本已对齐该事实源 | 已闭环 |
 | AgentUI 可见 routing / TTFT / fallback reason | Playwright 复核打开 Harness：`agent-thread-reliability-panel` 与 `agent-thread-reliability-routing-evidence` 均存在；面板显示 selected provider/model、首个可见 / 思考 / 正文、decision reason 与 fallback chain | 已闭环 |
-| 路线图图像同步最新结论 | `agentui-stream-latency-map-20260509.svg` v6 指向 provider/model TTFT 波动已完成分类，真实样本矩阵 gate pass，后续仅剩 fallback 解释优化 | 已闭环 |
-| 多 provider 真实样本矩阵 | `--preset agentui-responsive-chat-ttft` 退出码 `0`；`totalNeededFirstTextSamples=0`；`6 / 9` 个 latency group 有 first-text 基线，`3` 个 error-only group 保留为 fallback evidence | 已达标 |
+| 路线图图像同步最新结论 | `agentui-stream-latency-map-20260509.svg` v7 指向 provider/model TTFT 波动已完成分类，并追加 OpenAI-compatible 工具流空 `choices` panic 修复与 GUI / MCP 复测证据 | 已闭环 |
+| 多 provider 真实样本矩阵 | `--preset agentui-responsive-chat-ttft` 退出码 `0`；`additional first-text samples needed=0`；`8 / 11` 个 latency group 有 first-text 基线，`3` 个 error-only group 保留为 fallback evidence | 已达标 |
+| 工具流 panic 防回归 | Aster OpenAI-compatible stream parser 已覆盖 `choices: []` usage chunk 与空 `data:` heartbeat；namespace tool / native alias / contracts / GUI tool surface / Playwright MCP 均已复测 | 已达标 |
 
 结论：工程主链与产品证据链都已闭环。剩余瓶颈不是 React paint / DevBridge / runtime status，而是 provider/model 本身的首字差异；当前 routing 已有足够样本把快模型作为基线，并把不可用 group 作为 fallback evidence 让后续自动路由避开。
+
+## 2026-05-29 追加复测
+
+本轮复测源于模型切换后真实 GUI 报错：`runtime turn 后台任务 panic: index out of bounds: the len is 0 but the index is 0`。定位到 OpenAI-compatible stream 兼容网关会在工具参数流中发送 `choices: []` 的 usage / heartbeat / 尾包；Aster 旧 parser 在工具流内直接读取 `choices[0]`，导致正在生成工具输入时 panic。
+
+处理结果：
+
+- `src-tauri/crates/aster-rust/crates/aster/src/providers/formats/openai.rs`：生产路径不再直接 `choices[0]`；空 `choices` 只保留 usage 并继续等待 tool chunk；空 `data:` heartbeat 跳过；空 content 的结束包带 usage 时继续向上产出 usage。
+- `src-tauri/src/commands/aster_agent_cmd/request_model_resolution/tests.rs`：OpenAI-compatible provider fixture 改为中性 provider/model/host，移除真实外部 URL 与固定第三方 provider 名。
+- `agentui-stream-latency-map-20260509.svg`：更新到 v7，图上同时标注工具流 panic 修复、TTFT 矩阵、contracts、GUI / Playwright MCP 复测和剩余全量 GUI smoke 阻塞。
+
+追加验证：
+
+| 检查 | 结果 |
+| --- | --- |
+| `responsive_chat_provider_filter_keeps_openai_compatible_provider_named_codex` | 通过 |
+| Aster `test_streaming_tool_call_ignores_empty_choices_usage_chunks_until_finish` | 通过 |
+| Aster `streaming_tool_call` 过滤 | 4 passed |
+| Aster `response_to_message` 过滤 | 22 passed |
+| Aster `namespace` 过滤 | 9 passed |
+| Aster `categorize_tool_requests` 过滤 | 7 passed |
+| `npm run test:contracts` | 通过 |
+| `node scripts/agentui-ttft-sample-matrix.mjs --preset agentui-responsive-chat-ttft --format markdown --limit-groups 12` | pass；11 groups；8 first-text baseline；3 fallback-only；need=0 |
+| `npm run bridge:health -- --timeout-ms 120000` | 通过 |
+| `npm run smoke:agent-runtime-tool-surface` | 通过 |
+| `npm run smoke:agent-runtime-tool-surface-page -- --app-url http://127.0.0.1:1420/ --health-url http://127.0.0.1:3030/health --invoke-url http://127.0.0.1:3030/invoke --timeout-ms 300000 --interval-ms 1000` | 通过 |
+| Playwright MCP | Code runtime fixture / Harness 可见工具输出 6 条、命令执行、文件写入、文件读取、文件活动、routing evidence；console error=0；页面不含 `panic` / `index out of bounds` / `-32603` / `-32002` |
+
+剩余缺口：
+
+- `npm run verify:gui-smoke -- --reuse-running --timeout-ms 300000 --interval-ms 1000` 未全绿：前置 workspace / browser runtime / site adapters / Skill Forge 前端与多段 Rust 定向通过，但聚合流程在 `smoke:agent-service-skill-entry` 的 `tools::skill_tool_gate::tests::` 段超过 330s 后被脚本清理。
+- 本机磁盘剩余约 2.9GiB，`/tmp/lime-aster-target` 约 11GiB，`src-tauri/target` 约 121GiB，且当时存在其它 Cargo / Clippy 构建进程。全量 GUI smoke 需要释放 target/磁盘或等待构建结束后复跑。
 
 ## 可复跑导出工具
 

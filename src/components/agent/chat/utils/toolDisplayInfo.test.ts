@@ -15,6 +15,11 @@ const REFERENCE_JS_TOOL_NAME_MAPPINGS = [
   ["AgentTool", "agent"],
   ["AskUserQuestionTool", "askuserquestion"],
   ["BashTool", "bash"],
+  ["developer__shell", "bash"],
+  ["mcp__system__shell", "bash"],
+  ["shell_command", "bash"],
+  ["exec_command", "bash"],
+  ["local_shell_call", "bash"],
   ["BriefTool", "sendusermessage"],
   ["ConfigTool", "config"],
   ["EnterPlanModeTool", "enterplanmode"],
@@ -24,8 +29,19 @@ const REFERENCE_JS_TOOL_NAME_MAPPINGS = [
   ["FileEditTool", "edit"],
   ["FileReadTool", "read"],
   ["FileWriteTool", "write"],
+  ["read_file", "read"],
+  ["developer__read", "read"],
+  ["mcp__system__read_file", "read"],
+  ["write_file", "write"],
+  ["create_file", "write"],
+  ["mcp__system__write_file", "write"],
+  ["edit_file", "edit"],
+  ["developer__text_editor", "edit"],
+  ["mcp__system__edit_file", "edit"],
   ["GlobTool", "glob"],
+  ["mcp__system__glob", "glob"],
   ["GrepTool", "grep"],
+  ["mcp__system__grep", "grep"],
   ["LSPTool", "lsp"],
   ["ListMcpResourcesTool", "listmcpresources"],
   ["MCPTool", "mcp"],
@@ -45,12 +61,21 @@ const REFERENCE_JS_TOOL_NAME_MAPPINGS = [
   ["TaskListTool", "tasklist"],
   ["TaskOutputTool", "taskoutput"],
   ["TaskStopTool", "taskstop"],
+  ["KillShell", "taskstop"],
   ["TaskUpdateTool", "taskupdate"],
   ["TeamCreateTool", "teamcreate"],
   ["TeamDeleteTool", "teamdelete"],
+  ["ListPeersTool", "listpeers"],
   ["ToolSearchTool", "toolsearch"],
+  ["tool_search", "toolsearch"],
+  ["mcp__system__tool_search", "toolsearch"],
   ["WebFetchTool", "webfetch"],
+  ["web_fetch", "webfetch"],
+  ["mcp__system__web_fetch", "webfetch"],
   ["WebSearchTool", "websearch"],
+  ["web_search", "websearch"],
+  ["mcp__system__web_search", "websearch"],
+  ["ViewImageTool", "viewimage"],
 ] as const;
 
 describe("toolDisplayInfo", () => {
@@ -69,7 +94,10 @@ describe("toolDisplayInfo", () => {
   it("应为参考 JS 工具目录名解析出当前展示文案", () => {
     expect(resolveToolDisplayLabel("AskUserQuestionTool")).toBe("用户确认");
     expect(resolveToolDisplayLabel("BriefTool")).toBe("用户消息");
+    expect(resolveToolDisplayLabel("developer__shell")).toBe("命令执行");
+    expect(resolveToolDisplayLabel("exec_command")).toBe("命令执行");
     expect(resolveToolDisplayLabel("FileReadTool")).toBe("文件读取");
+    expect(resolveToolDisplayLabel("mcp__system__read_file")).toBe("文件读取");
     expect(resolveToolDisplayLabel("ConfigTool")).toBe("运行配置");
     expect(resolveToolDisplayLabel("PowerShellTool")).toBe("PowerShell");
     expect(resolveToolDisplayLabel("WorkflowTool")).toBe("工作流执行");
@@ -81,6 +109,7 @@ describe("toolDisplayInfo", () => {
     expect(resolveToolDisplayLabel("lime_search_web_images")).toBe("联网搜图");
     expect(resolveToolDisplayLabel("AgentTool")).toBe("创建子任务");
     expect(resolveToolDisplayLabel("SendMessageTool")).toBe("补充说明");
+    expect(resolveToolDisplayLabel("ListPeersTool")).toBe("子任务");
     expect(resolveToolDisplayLabel("TeamCreateTool")).toBe("创建团队");
     expect(resolveToolDisplayLabel("TeamDeleteTool")).toBe("删除团队");
     expect(resolveToolDisplayLabel("ScheduleCronTool")).toBe("定时触发器");

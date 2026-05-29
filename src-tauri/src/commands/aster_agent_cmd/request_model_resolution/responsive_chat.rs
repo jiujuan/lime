@@ -47,11 +47,14 @@ pub(super) struct ResponsiveChatAutoRunMetadata {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(super) struct ResponsiveChatAutoLatencyHint {
+    pub(super) sample_count: u32,
     pub(super) durations_ms: Vec<u64>,
     pub(super) first_text_durations_ms: Vec<u64>,
     pub(super) reasoning_sample_count: u32,
     pub(super) error_sample_count: u32,
     pub(super) unsupported_model_sample_count: u32,
+    pub(super) provider_unavailable_sample_count: u32,
+    pub(super) latest_provider_unavailable_error: bool,
 }
 
 impl ResponsiveChatAutoLatencyHint {
@@ -243,6 +246,9 @@ fn responsive_chat_latency_rank(candidate: &ResponsiveChatAutoCandidate) -> (u8,
     let hint = &candidate.latency_hint;
     let provider_trust = responsive_chat_provider_trust_rank(candidate);
     let Some(p50_duration_ms) = hint.p50_duration_ms() else {
+        if hint.latest_provider_unavailable_error {
+            return (8, u64::MAX);
+        }
         if hint.unsupported_model_sample_count > 0 {
             return (7, u64::MAX);
         }
@@ -258,6 +264,9 @@ fn responsive_chat_latency_rank(candidate: &ResponsiveChatAutoCandidate) -> (u8,
         return (4, u64::MAX);
     };
 
+    if hint.latest_provider_unavailable_error {
+        return (8, p50_duration_ms);
+    }
     if hint.unsupported_model_sample_count > 0 {
         return (7, p50_duration_ms);
     }
@@ -317,6 +326,9 @@ pub(super) fn responsive_chat_auto_candidate_sort(
 }
 
 fn responsive_chat_latency_fallback_reason(hint: &ResponsiveChatAutoLatencyHint) -> Option<String> {
+    if hint.latest_provider_unavailable_error {
+        return Some("provider_unavailable_recent_error".to_string());
+    }
     if hint.unsupported_model_sample_count > 0 {
         return Some("unsupported_model".to_string());
     }
@@ -386,9 +398,6 @@ fn responsive_chat_provider_looks_non_chat_runtime(provider: &ProviderWithKeys) 
         || name == "fal"
         || api_host.contains("fal.run")
         || api_host.contains("/fal-ai")
-        || id.contains("codex")
-        || name.contains("codex")
-        || api_host.contains("codex")
         || id.contains("coding")
         || name.contains("coding")
         || api_host.contains("/coding")
@@ -464,6 +473,16 @@ pub(super) async fn resolve_responsive_chat_auto_preference(
                 .get(&(context.provider_selector.clone(), model_name.clone()))
                 .cloned()
                 .unwrap_or_default();
+            if latency_hint.latest_provider_unavailable_error {
+                tracing::warn!(
+                    "[AsterAgent] responsive_chat 自动候选跳过最近不可用 Provider: provider={}, model={}, provider_unavailable_samples={}, error_samples={}",
+                    context.provider_selector,
+                    model_name,
+                    latency_hint.provider_unavailable_sample_count,
+                    latency_hint.error_sample_count
+                );
+                continue;
+            }
 
             candidates.push(ResponsiveChatAutoCandidate {
                 provider_selector: context.provider_selector.clone(),
@@ -643,6 +662,43 @@ pub(super) fn is_responsive_chat_unsupported_model_error(message: Option<&str>) 
     )
 }
 
+pub(super) fn is_responsive_chat_provider_unavailable_error(message: Option<&str>) -> bool {
+    let Some(message) = message else {
+        return false;
+    };
+    let normalized = normalize_identifier(message);
+    text_contains_any(
+        &normalized,
+        &[
+            "402",
+            "401",
+            "403",
+            "payment required",
+            "insufficient balance",
+            "insufficient_balance",
+            "insufficient quota",
+            "insufficient_quota",
+            "quota exceeded",
+            "quota_exceeded",
+            "billing",
+            "credit balance",
+            "out of credit",
+            "out of credits",
+            "credits exhausted",
+            "balance is not enough",
+            "invalid api key",
+            "invalid_api_key",
+            "api key expired",
+            "no api key",
+            "unauthorized",
+            "forbidden",
+            "permission denied",
+            "account disabled",
+            "account deactivated",
+        ],
+    )
+}
+
 pub(super) fn responsive_chat_running_sample_is_stale(
     status: &str,
     started_at: Option<&str>,
@@ -701,9 +757,15 @@ pub(super) fn load_responsive_chat_auto_latency_hints(
             continue;
         };
 
+        let provider_unavailable_error =
+            is_responsive_chat_provider_unavailable_error(error_message.as_deref());
         let entry = hints
             .entry((run_metadata.provider_selector, run_metadata.model_name))
             .or_default();
+        if entry.sample_count == 0 {
+            entry.latest_provider_unavailable_error = provider_unavailable_error;
+        }
+        entry.sample_count += 1;
         if status == "success" {
             if let Some(duration_ms) = duration_ms.and_then(|value| u64::try_from(value).ok()) {
                 entry.durations_ms.push(duration_ms);
@@ -727,6 +789,9 @@ pub(super) fn load_responsive_chat_auto_latency_hints(
         }
         if is_responsive_chat_unsupported_model_error(error_message.as_deref()) {
             entry.unsupported_model_sample_count += 1;
+        }
+        if provider_unavailable_error {
+            entry.provider_unavailable_sample_count += 1;
         }
         if session_has_reasoning_item(&conn, &session_id, run_metadata.turn_id.as_deref()) {
             entry.reasoning_sample_count += 1;

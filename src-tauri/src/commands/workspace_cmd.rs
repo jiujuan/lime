@@ -341,10 +341,20 @@ pub async fn workspace_get_projects_root() -> Result<String, String> {
     Ok(root_dir.to_string_lossy().to_string())
 }
 
-/// 根据项目名称解析最终项目目录（固定在 workspace 根目录下）
+/// 根据项目名称解析最终项目目录
 #[tauri::command]
-pub async fn workspace_resolve_project_path(name: String) -> Result<String, String> {
-    let root_dir = get_workspace_projects_root_dir()?;
+pub async fn workspace_resolve_project_path(
+    name: String,
+    parent_root_path: Option<String>,
+) -> Result<String, String> {
+    let root_dir = match parent_root_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+    {
+        Some(path) => PathBuf::from(path),
+        None => get_workspace_projects_root_dir()?,
+    };
     let dir_name = sanitize_project_dir_name(&name);
     let project_path = root_dir.join(dir_name);
     Ok(project_path.to_string_lossy().to_string())

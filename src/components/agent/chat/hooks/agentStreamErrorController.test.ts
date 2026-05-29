@@ -56,9 +56,9 @@ describe("agentStreamErrorController", () => {
       previousContent: "",
     });
 
-    expect(patch.content).toContain("当前 AI 服务商余额或额度不足");
+    expect(patch.content).toContain("当前模型通道返回了计费或额度类错误");
     expect(patch.runtimeStatus?.detail).toContain(
-      "当前 AI 服务商余额或额度不足",
+      "当前模型通道返回了计费或额度类错误",
     );
     expect(patch.content).not.toContain("Payment Required");
     expect(patch.content).not.toContain("Insufficient Balance");
@@ -92,7 +92,7 @@ describe("agentStreamErrorController", () => {
     if (item?.type !== "turn_summary") {
       throw new Error("expected turn_summary item");
     }
-    expect(item.text).toContain("当前 AI 服务商余额或额度不足");
+    expect(item.text).toContain("当前模型通道返回了计费或额度类错误");
     expect(item.text).not.toContain("Payment Required");
     expect(item.text).not.toContain("Insufficient Balance");
   });

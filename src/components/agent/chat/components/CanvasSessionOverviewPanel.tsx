@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   Bot,
+  CircleHelp,
   Clock3,
   FileText,
   ListChecks,
@@ -47,6 +48,18 @@ interface SessionActivityView {
   tone: SessionStatusTone;
   icon: typeof Sparkles;
   iconClassName: string;
+}
+
+function InlineHelp({ label }: { label: string }) {
+  return (
+    <span
+      title={label}
+      aria-label={label}
+      className="inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+    >
+      <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />
+    </span>
+  );
 }
 
 function shortenText(value?: string | null, maxLength = 120): string {
@@ -180,17 +193,10 @@ function buildActivityView(
     case "tool_call":
       return {
         id: item.id,
-        title:
-          item.tool_name ||
-          t("agentChat.sessionOverview.activity.toolCall.title"),
+        title: t("agentChat.sessionOverview.activity.toolCall.title"),
         summary:
-          shortenText(item.error, 100) ||
-          shortenText(
-            typeof item.arguments === "string"
-              ? item.arguments
-              : JSON.stringify(item.arguments ?? {}, null, 2),
-            100,
-          ) ||
+          shortenText(resolveUserFacingErrorSummary(item.error), 100) ||
+          shortenText(item.output, 100) ||
           t("agentChat.sessionOverview.activity.toolCall.summaryFallback"),
         timeLabel,
         statusLabel,
@@ -201,9 +207,10 @@ function buildActivityView(
     case "command_execution":
       return {
         id: item.id,
-        title: "exec_command",
+        title: t("agentChat.sessionOverview.activity.command.title"),
         summary:
-          shortenText(item.command, 100) ||
+          shortenText(resolveUserFacingErrorSummary(item.error), 100) ||
+          shortenText(item.aggregated_output, 100) ||
           t("agentChat.sessionOverview.activity.command.summaryFallback"),
         timeLabel,
         statusLabel,
@@ -214,7 +221,7 @@ function buildActivityView(
     case "web_search":
       return {
         id: item.id,
-        title: item.action?.trim() || "Web Search",
+        title: t("agentChat.sessionOverview.activity.webSearch.title"),
         summary:
           shortenText(item.query, 100) ||
           shortenText(item.output, 100) ||
@@ -415,7 +422,9 @@ export function CanvasSessionOverviewPanel({
     null;
   const summaryMetrics = useMemo(() => {
     const formattedInProgressCount = formatNumber(inProgressCount, { locale });
-    const formattedTraceCount = formatNumber(sortedItems.length, { locale });
+    const formattedProgressCount = formatNumber(recentActivity.length, {
+      locale,
+    });
     const formattedPendingCount = formatNumber(pendingActions.length, {
       locale,
     });
@@ -432,13 +441,13 @@ export function CanvasSessionOverviewPanel({
                 countLabel: formattedQueuedCount,
               })
             : t("agentChat.sessionOverview.metrics.noFollowUp"),
-      trace:
+      progress:
         inProgressCount > 0
           ? t("agentChat.sessionOverview.metrics.inProgress", {
               countLabel: formattedInProgressCount,
             })
           : t("agentChat.sessionOverview.metrics.traces", {
-              countLabel: formattedTraceCount,
+              countLabel: formattedProgressCount,
             }),
     };
   }, [
@@ -446,7 +455,7 @@ export function CanvasSessionOverviewPanel({
     locale,
     pendingActions.length,
     queuedTurns.length,
-    sortedItems.length,
+    recentActivity.length,
     t,
   ]);
 
@@ -462,6 +471,9 @@ export function CanvasSessionOverviewPanel({
               <div className="text-sm font-semibold text-slate-950">
                 {t("agentChat.sessionOverview.panel.title")}
               </div>
+              <InlineHelp
+                label={t("agentChat.sessionOverview.panel.description")}
+              />
               <Badge
                 variant="outline"
                 className={cn(
@@ -486,19 +498,9 @@ export function CanvasSessionOverviewPanel({
                 </Badge>
               ) : null}
             </div>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              {t("agentChat.sessionOverview.panel.description")}
-            </p>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-                {t("agentChat.sessionOverview.metrics.currentTurn", {
-                  id:
-                    currentTurn?.id ||
-                    t("agentChat.sessionOverview.metrics.currentTurnMissing"),
-                })}
-              </span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-                {summaryMetrics.trace}
+                {summaryMetrics.progress}
               </span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
                 {summaryMetrics.followUp}
@@ -535,11 +537,11 @@ export function CanvasSessionOverviewPanel({
       <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1.45fr),minmax(320px,0.9fr)]">
         <section className="rounded-[24px] border border-slate-200 bg-white">
           <div className="border-b border-slate-200/80 px-5 py-4">
-            <div className="text-sm font-semibold text-slate-900">
-              {t("agentChat.sessionOverview.timeline.title")}
-            </div>
-            <div className="mt-1 text-xs leading-5 text-slate-500">
-              {t("agentChat.sessionOverview.timeline.description")}
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+              <span>{t("agentChat.sessionOverview.timeline.title")}</span>
+              <InlineHelp
+                label={t("agentChat.sessionOverview.timeline.description")}
+              />
             </div>
           </div>
 
@@ -607,11 +609,11 @@ export function CanvasSessionOverviewPanel({
         <div className="flex min-h-0 flex-col gap-4">
           <section className="rounded-[24px] border border-slate-200 bg-white">
             <div className="border-b border-slate-200/80 px-5 py-4">
-              <div className="text-sm font-semibold text-slate-900">
-                {t("agentChat.sessionOverview.pending.title")}
-              </div>
-              <div className="mt-1 text-xs leading-5 text-slate-500">
-                {t("agentChat.sessionOverview.pending.description")}
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <span>{t("agentChat.sessionOverview.pending.title")}</span>
+                <InlineHelp
+                  label={t("agentChat.sessionOverview.pending.description")}
+                />
               </div>
             </div>
 
@@ -628,35 +630,13 @@ export function CanvasSessionOverviewPanel({
                           ? t("agentChat.sessionOverview.pending.confirm")
                           : t("agentChat.sessionOverview.pending.input")}
                       </span>
-                      <span className="text-[11px] text-amber-700/80">
-                        {action.requestId}
-                      </span>
                     </div>
                     <div className="mt-2 text-sm leading-6 text-amber-950">
                       {resolvePendingActionPreview(action)}
                     </div>
                   </div>
                 ))
-              ) : (
-                <div className="rounded-[20px] border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm leading-6 text-slate-500">
-                  {t("agentChat.sessionOverview.pending.empty")}
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className="rounded-[24px] border border-slate-200 bg-white">
-            <div className="border-b border-slate-200/80 px-5 py-4">
-              <div className="text-sm font-semibold text-slate-900">
-                {t("agentChat.sessionOverview.queue.title")}
-              </div>
-              <div className="mt-1 text-xs leading-5 text-slate-500">
-                {t("agentChat.sessionOverview.queue.description")}
-              </div>
-            </div>
-
-            <div className="space-y-3 px-5 py-4">
-              {queuedTurns.length > 0 ? (
+              ) : queuedTurns.length > 0 ? (
                 queuedTurns.slice(0, 4).map((item, index) => (
                   <div
                     key={item.queued_turn_id}
@@ -688,7 +668,7 @@ export function CanvasSessionOverviewPanel({
                 ))
               ) : (
                 <div className="rounded-[20px] border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm leading-6 text-slate-500">
-                  {t("agentChat.sessionOverview.queue.empty")}
+                  {t("agentChat.sessionOverview.pending.empty")}
                 </div>
               )}
             </div>

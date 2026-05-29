@@ -207,8 +207,9 @@ fn spawn_runtime_turn_task<C>(
                 &fallback_emitter,
                 &fallback_event_name,
                 RuntimeAgentEvent::Error {
-                    message: "启动 runtime turn 专用线程失败，且当前线程没有可用 Tokio runtime 兜底"
-                        .to_string(),
+                    message:
+                        "启动 runtime turn 专用线程失败，且当前线程没有可用 Tokio runtime 兜底"
+                            .to_string(),
                 },
             );
             let release_result = if let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
@@ -677,13 +678,11 @@ mod tests {
                 .len(),
             1
         );
-        assert!(
-            store
-                .list_queued_turns("session-b")
-                .await
-                .expect("list session-b queue")
-                .is_empty()
-        );
+        assert!(store
+            .list_queued_turns("session-b")
+            .await
+            .expect("list session-b queue")
+            .is_empty());
     }
 
     #[tokio::test]

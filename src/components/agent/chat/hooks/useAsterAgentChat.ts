@@ -99,7 +99,13 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
   const runtime = runtimeAdapter ?? defaultAgentRuntimeAdapter;
 
   const [isInitialized, setIsInitialized] = useState(false);
-  const runtimeWarmupPromiseRef = useRef<Promise<void> | null>(null);
+  const activeWorkspaceIdRef = useRef(workspaceId.trim());
+  activeWorkspaceIdRef.current = workspaceId.trim();
+  const runtimeWarmupPromiseRef = useRef<{
+    workspaceId: string;
+    promise: Promise<void>;
+  } | null>(null);
+  const runtimeReadyWorkspaceRef = useRef<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const currentAssistantMsgIdRef = useRef<string | null>(null);
   const currentStreamingSessionIdRef = useRef<string | null>(null);
@@ -156,6 +162,140 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     setAccessModeState: context.setAccessModeState,
   });
   const applyWorkspaceModelPreference = context.applyWorkspaceModelPreference;
+
+  const resolveWarmupWorkspaceModelPreference = useCallback(
+    async (
+      status?: {
+        provider_configured?: boolean;
+        provider_name?: string;
+        provider_selector?: string;
+        model_name?: string;
+      },
+      targetWorkspaceId?: string,
+    ) => {
+      const isCurrentWorkspace = () =>
+        !targetWorkspaceId ||
+        activeWorkspaceIdRef.current === targetWorkspaceId;
+      if (!isCurrentWorkspace() || sessionIdRef.current) {
+        return;
+      }
+
+      const currentProviderType = context.providerTypeRef.current.trim();
+      const currentModel = context.modelRef.current.trim();
+      const hasPersistedWorkspacePreference = Boolean(
+        currentProviderType && currentModel,
+      );
+
+      if (
+        !hasPersistedWorkspacePreference &&
+        status?.provider_configured &&
+        (status.provider_selector?.trim() || status.provider_name?.trim()) &&
+        status.model_name?.trim()
+      ) {
+        if (!isCurrentWorkspace()) {
+          return;
+        }
+        applyWorkspaceModelPreference({
+          providerType:
+            status.provider_selector?.trim() || status.provider_name!.trim(),
+          model: status.model_name.trim(),
+        });
+        return;
+      }
+
+      if (status?.provider_configured && hasPersistedWorkspacePreference) {
+        return;
+      }
+
+      try {
+        const defaultProvider = !hasPersistedWorkspacePreference
+          ? (await getDefaultProvider()).trim()
+          : "";
+        if (!isCurrentWorkspace()) {
+          return;
+        }
+        const fallbackProviderType = currentProviderType || defaultProvider;
+        const resolvedSelection = await resolveClawWorkspaceProviderSelection({
+          currentProviderType: fallbackProviderType || undefined,
+          currentModel: currentModel || null,
+          theme: "general",
+        });
+
+        if (!resolvedSelection || !isCurrentWorkspace()) {
+          return;
+        }
+
+        applyWorkspaceModelPreference({
+          providerType: resolvedSelection.providerType,
+          model: resolvedSelection.model,
+        });
+      } catch (error) {
+        console.warn("[AsterChat] 预热阶段解析工作区模型失败:", error);
+      }
+    },
+    [applyWorkspaceModelPreference, context.modelRef, context.providerTypeRef],
+  );
+
+  const warmupRuntime = useCallback(async () => {
+    const resolvedWorkspaceId = workspaceId.trim();
+    if (!resolvedWorkspaceId) {
+      runtimeReadyWorkspaceRef.current = null;
+      runtimeWarmupPromiseRef.current = null;
+      setIsInitialized(false);
+      return;
+    }
+
+    if (runtimeReadyWorkspaceRef.current === resolvedWorkspaceId) {
+      return;
+    }
+
+    const activeWarmup = runtimeWarmupPromiseRef.current;
+    if (activeWarmup?.workspaceId === resolvedWorkspaceId) {
+      await activeWarmup.promise;
+      return;
+    }
+
+    const warmupPromise = runtime
+      .init()
+      .then(async (status) => {
+        if (activeWorkspaceIdRef.current !== resolvedWorkspaceId) {
+          return;
+        }
+        await resolveWarmupWorkspaceModelPreference(
+          status,
+          resolvedWorkspaceId,
+        );
+        if (activeWorkspaceIdRef.current !== resolvedWorkspaceId) {
+          return;
+        }
+        runtimeReadyWorkspaceRef.current = resolvedWorkspaceId;
+        setIsInitialized(true);
+        console.log("[AsterChat] Agent 初始化成功");
+      })
+      .catch((err) => {
+        if (runtimeReadyWorkspaceRef.current === resolvedWorkspaceId) {
+          runtimeReadyWorkspaceRef.current = null;
+        }
+        setIsInitialized(false);
+        console.error("[AsterChat] 初始化失败:", err);
+        throw err;
+      })
+      .finally(() => {
+        const active = runtimeWarmupPromiseRef.current;
+        if (
+          active?.workspaceId === resolvedWorkspaceId &&
+          active.promise === warmupPromise
+        ) {
+          runtimeWarmupPromiseRef.current = null;
+        }
+      });
+
+    runtimeWarmupPromiseRef.current = {
+      workspaceId: resolvedWorkspaceId,
+      promise: warmupPromise,
+    };
+    await warmupPromise;
+  }, [resolveWarmupWorkspaceModelPreference, runtime, workspaceId]);
 
   const tools = useAgentTools({
     runtime,
@@ -232,9 +372,10 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     [setChatMessages],
   );
 
-  const sendMessage = useMemo<SendMessageFn>(
-    () =>
-      createAgentChatSendMessage({
+  const sendMessage = useCallback<SendMessageFn>(
+    async (...args) => {
+      await warmupRuntime();
+      const send = createAgentChatSendMessage({
         baseStatusSnapshot: {
           sessionId: activeSessionId,
           currentTurnId,
@@ -251,7 +392,9 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
         appendAssistantMessage: appendLocalAssistantMessage,
         notifyInfo: (message) => toast.info(message),
         notifySuccess: (message) => toast.success(message),
-      }),
+      });
+      await send(...args);
+    },
     [
       appendLocalAssistantMessage,
       activeSessionId,
@@ -265,6 +408,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
       isStreamSending,
       queuedTurnsCount,
       rawSendMessage,
+      warmupRuntime,
     ],
   );
 
@@ -465,95 +609,14 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     tools.warnedKeysRef.current.clear();
   }, [tools.warnedKeysRef, workspaceId]);
 
-  const resolveWarmupWorkspaceModelPreference = useCallback(
-    async (status?: {
-      provider_configured?: boolean;
-      provider_name?: string;
-      provider_selector?: string;
-      model_name?: string;
-    }) => {
-      if (sessionIdRef.current) {
-        return;
-      }
-
-      const currentProviderType = context.providerTypeRef.current.trim();
-      const currentModel = context.modelRef.current.trim();
-      const hasPersistedWorkspacePreference = Boolean(
-        currentProviderType && currentModel,
-      );
-
-      if (
-        !hasPersistedWorkspacePreference &&
-        status?.provider_configured &&
-        (status.provider_selector?.trim() || status.provider_name?.trim()) &&
-        status.model_name?.trim()
-      ) {
-        applyWorkspaceModelPreference({
-          providerType:
-            status.provider_selector?.trim() || status.provider_name!.trim(),
-          model: status.model_name.trim(),
-        });
-        return;
-      }
-
-      if (status?.provider_configured && hasPersistedWorkspacePreference) {
-        return;
-      }
-
-      try {
-        const defaultProvider = !hasPersistedWorkspacePreference
-          ? (await getDefaultProvider()).trim()
-          : "";
-        const fallbackProviderType = currentProviderType || defaultProvider;
-        const resolvedSelection = await resolveClawWorkspaceProviderSelection({
-          currentProviderType: fallbackProviderType || undefined,
-          currentModel: currentModel || null,
-          theme: "general",
-        });
-
-        if (!resolvedSelection) {
-          return;
-        }
-
-        applyWorkspaceModelPreference({
-          providerType: resolvedSelection.providerType,
-          model: resolvedSelection.model,
-        });
-      } catch (error) {
-        console.warn("[AsterChat] 预热阶段解析工作区模型失败:", error);
-      }
-    },
-    [applyWorkspaceModelPreference, context.modelRef, context.providerTypeRef],
-  );
-
-  const warmupRuntime = useCallback(async () => {
-    if (runtimeWarmupPromiseRef.current) {
-      await runtimeWarmupPromiseRef.current;
-      return;
-    }
-
-    const warmupPromise = runtime
-      .init()
-      .then(async (status) => {
-        await resolveWarmupWorkspaceModelPreference(status);
-        setIsInitialized(true);
-        console.log("[AsterChat] Agent 初始化成功");
-      })
-      .catch((err) => {
-        setIsInitialized(false);
-        console.error("[AsterChat] 初始化失败:", err);
-        throw err;
-      })
-      .finally(() => {
-        runtimeWarmupPromiseRef.current = null;
-      });
-
-    runtimeWarmupPromiseRef.current = warmupPromise;
-    await warmupPromise;
-  }, [resolveWarmupWorkspaceModelPreference, runtime]);
-
   useEffect(() => {
-    if (!workspaceId.trim()) {
+    const resolvedWorkspaceId = workspaceId.trim();
+    if (runtimeReadyWorkspaceRef.current !== resolvedWorkspaceId) {
+      setIsInitialized(false);
+    }
+    if (!resolvedWorkspaceId) {
+      runtimeReadyWorkspaceRef.current = null;
+      runtimeWarmupPromiseRef.current = null;
       setIsInitialized(false);
       return;
     }

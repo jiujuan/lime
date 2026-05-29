@@ -294,6 +294,24 @@ describe("buildUserInputSubmitOp", () => {
     });
   });
 
+  it("模型状态不完整时不应提交空 provider 或孤立 model 偏好", () => {
+    const op = buildUserInputSubmitOp({
+      content: "分析这个文件夹",
+      images: [],
+      sessionId: "session-partial-model",
+      eventName: "aster_stream_partial_model",
+      effectiveExecutionStrategy: "react",
+      effectiveAccessMode: "current",
+      effectiveProviderType: "",
+      effectiveModel: "gpt-5.5",
+      webSearch: false,
+      thinking: false,
+    });
+
+    expect(op.preferences?.providerPreference).toBeUndefined();
+    expect(op.preferences?.modelPreference).toBeUndefined();
+  });
+
   it("图片生成首发应把聊天编排模型放进 provider_config，避免误锁图片模型槽位", () => {
     const op = buildUserInputSubmitOp({
       content: "@Nanobanana Pro 生成一张广州塔春天照片",

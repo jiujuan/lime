@@ -280,9 +280,18 @@ export async function getWorkspaceProjectsRoot(): Promise<string> {
   return safeInvoke<string>("workspace_get_projects_root");
 }
 
-/** 按项目名称解析固定项目目录 */
-export async function resolveProjectRootPath(name: string): Promise<string> {
-  return safeInvoke<string>("workspace_resolve_project_path", { name });
+/** 按项目名称和父目录解析最终项目目录 */
+export async function resolveProjectRootPath(
+  name: string,
+  parentRootPath?: string,
+): Promise<string> {
+  const request: { name: string; parentRootPath?: string } = { name };
+  const normalizedParentRootPath = parentRootPath?.trim();
+  if (normalizedParentRootPath) {
+    request.parentRootPath = normalizedParentRootPath;
+  }
+
+  return safeInvoke<string>("workspace_resolve_project_path", request);
 }
 
 /** 获取项目列表 */

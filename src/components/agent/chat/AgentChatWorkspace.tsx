@@ -232,6 +232,8 @@ import {
 import type { GeneralWorkbenchFollowUpActionPayload } from "./components/generalWorkbenchSidebarContract";
 import { RuntimeReviewDecisionDialog } from "./components/RuntimeReviewDecisionDialog";
 import {
+  CODE_WORKBENCH_CHAT_PANEL_MIN_WIDTH,
+  CODE_WORKBENCH_CHAT_PANEL_WIDTH,
   TEAM_PRIMARY_CHAT_PANEL_MIN_WIDTH,
   TEAM_PRIMARY_CHAT_PANEL_WIDTH,
 } from "./workspace/WorkspaceStyles";
@@ -353,6 +355,7 @@ import {
   normalizeVideoResolution,
   resolveDefaultSelectedArtifact,
   resolveTaskCenterDraftSendTitle,
+  resolveTaskCenterHomeSurfaceState,
   resolveTaskPreviewArtifact,
   resolveVideoCanvasStatusFromPreview,
   saveFileManagerSidebarOpen,
@@ -4073,13 +4076,19 @@ export function AgentChatWorkspace({
   const isTaskCenterDraftTabActive = Boolean(
     agentEntry === "claw" && activeTaskCenterDraftTab,
   );
+  const isTaskCenterDraftSurfaceActive = Boolean(
+    agentEntry === "claw" &&
+    (activeTaskCenterDraftTab || taskCenterDraftSurfaceActiveRef.current),
+  );
   const isTaskCenterDraftSendInFlight = Boolean(
     agentEntry === "claw" &&
-    activeTaskCenterDraftTab &&
-    taskCenterDraftSendRequest?.draftTabId === activeTaskCenterDraftTab.id,
+    taskCenterDraftSendRequest?.materializeDraft &&
+    (activeTaskCenterDraftTab
+      ? taskCenterDraftSendRequest.draftTabId === activeTaskCenterDraftTab.id
+      : taskCenterDraftSurfaceActiveRef.current),
   );
   const shouldSuppressTaskCenterDraftContent =
-    isTaskCenterDraftTabActive && !isTaskCenterDraftSendInFlight;
+    isTaskCenterDraftSurfaceActive && !isTaskCenterDraftSendInFlight;
   const { homePendingPreviewMessages, isHomePendingPreviewActive } =
     useTaskCenterHomePendingPreviewRuntime({
       homePendingPreviewRequest,
@@ -4492,13 +4501,19 @@ export function AgentChatWorkspace({
       Boolean(taskCenterDraftSendRequest) ||
       isHomePendingPreviewActive ||
       queuedTurns.length > 0);
-  const shouldRenderTaskCenterEmbeddedHome = Boolean(
-    agentEntry === "claw" &&
-    !taskCenterSessionSwitchPending &&
-    !hasHomeConversationActivity &&
-    (isTaskCenterDraftTabActive ||
-      (sessionId && taskCenterEmbeddedHomeSessionIds.has(sessionId))),
-  );
+  const taskCenterHomeSurfaceState = resolveTaskCenterHomeSurfaceState({
+    agentEntry,
+    draftSurfaceActive: isTaskCenterDraftSurfaceActive,
+    shouldSuppressDraftContent: shouldSuppressTaskCenterDraftContent,
+    sessionSwitchPending: taskCenterSessionSwitchPending,
+    hasConversationActivity: hasHomeConversationActivity,
+    sessionId,
+    embeddedHomeSessionIds: taskCenterEmbeddedHomeSessionIds,
+    isAutoRestoringSession,
+    isSessionHydrating,
+  });
+  const shouldRenderTaskCenterEmbeddedHome =
+    taskCenterHomeSurfaceState.shouldRenderEmbeddedHome;
   useEffect(() => {
     if (!sessionId || !taskCenterEmbeddedHomeSessionIds.has(sessionId)) {
       return;
@@ -5919,9 +5934,12 @@ export function AgentChatWorkspace({
   const shellChromeRuntime = useMemo(() => {
     const hasUnconsumedInitialDispatch =
       !shouldUseCompactGeneralWorkbench && isBootstrapDispatchPending;
+    const shouldRenderTaskCenterHomeSurface =
+      shouldRenderTaskCenterEmbeddedHome ||
+      shouldSuppressTaskCenterDraftContent;
     const hasConversationSessionForLayout =
       Boolean(sessionId) &&
-      !shouldRenderTaskCenterEmbeddedHome &&
+      !shouldRenderTaskCenterHomeSurface &&
       !(
         agentEntry === "new-task" &&
         shouldUseBrowserWorkspaceHomeChrome &&
@@ -5929,19 +5947,23 @@ export function AgentChatWorkspace({
         !normalizedInitialSessionId
       );
 
-    const showChatLayout = shouldShowChatLayout({
-      agentEntry,
-      preferEmptyStateForFreshTaskCenterTab: shouldRenderTaskCenterEmbeddedHome,
-      hasSession: hasConversationSessionForLayout,
-      hasDisplayMessages,
-      hasPendingA2UIForm,
-      hasCanvasContent: hasCanvasWorkbenchContent,
-      isThemeWorkbench,
-      hasUnconsumedInitialDispatch,
-      isPreparingSend: isPreparingSend || Boolean(taskCenterDraftSendRequest),
-      isSending,
-      queuedTurnCount: queuedTurns.length,
-    });
+    const showChatLayout = shouldRenderTaskCenterHomeSurface
+      ? false
+      : shouldShowChatLayout({
+          agentEntry,
+          preferEmptyStateForFreshTaskCenterTab:
+            shouldRenderTaskCenterHomeSurface,
+          hasSession: hasConversationSessionForLayout,
+          hasDisplayMessages,
+          hasPendingA2UIForm,
+          hasCanvasContent: hasCanvasWorkbenchContent,
+          isThemeWorkbench,
+          hasUnconsumedInitialDispatch,
+          isPreparingSend:
+            isPreparingSend || Boolean(taskCenterDraftSendRequest),
+          isSending,
+          queuedTurnCount: queuedTurns.length,
+        });
 
     const shouldHideGeneralWorkbenchInputForTheme =
       shouldUseCompactGeneralWorkbench;
@@ -5951,7 +5973,7 @@ export function AgentChatWorkspace({
       !shouldHideGeneralWorkbenchInputForTheme;
     const isWorkspaceCompactChrome = topBarChrome === "workspace-compact";
     const shouldRenderBrandedEmptyState =
-      !showChatLayout && !shouldRenderTaskCenterEmbeddedHome;
+      !showChatLayout && !shouldRenderTaskCenterHomeSurface;
     const shouldRenderTopBar =
       !hideTopBar &&
       (!shouldRenderBrandedEmptyState || shouldUseBrowserWorkspaceHomeChrome);
@@ -5962,6 +5984,8 @@ export function AgentChatWorkspace({
       teamSessionRuntime.teamWorkspaceEnabled &&
       (teamSessionRuntime.hasRuntimeSessions ||
         Boolean(teamDispatchPreviewState));
+    const shouldUseCodeWorkbenchChatPanelWidth =
+      layoutMode === "chat-canvas" && executionStrategy === "code_orchestrated";
 
     return {
       showChatLayout,
@@ -5978,10 +6002,14 @@ export function AgentChatWorkspace({
       shouldRenderTopBar,
       layoutTransitionChatPanelWidth: shouldUseTeamPrimaryChatPanelWidth
         ? TEAM_PRIMARY_CHAT_PANEL_WIDTH
-        : undefined,
+        : shouldUseCodeWorkbenchChatPanelWidth
+          ? CODE_WORKBENCH_CHAT_PANEL_WIDTH
+          : undefined,
       layoutTransitionChatPanelMinWidth: shouldUseTeamPrimaryChatPanelWidth
         ? TEAM_PRIMARY_CHAT_PANEL_MIN_WIDTH
-        : undefined,
+        : shouldUseCodeWorkbenchChatPanelWidth
+          ? CODE_WORKBENCH_CHAT_PANEL_MIN_WIDTH
+          : undefined,
       shouldShowGeneralWorkbenchFloatingInputOverlay,
       shouldRenderInlineA2UI,
     };
@@ -5989,6 +6017,7 @@ export function AgentChatWorkspace({
     agentEntry,
     contextWorkspace.generalWorkbenchEnabled,
     currentGate.status,
+    executionStrategy,
     hasDisplayMessages,
     hasHomeConversationActivity,
     hasCanvasWorkbenchContent,
@@ -6004,6 +6033,7 @@ export function AgentChatWorkspace({
     taskCenterDraftSendRequest,
     queuedTurns.length,
     shouldRenderTaskCenterEmbeddedHome,
+    shouldSuppressTaskCenterDraftContent,
     shouldUseBrowserWorkspaceHomeChrome,
     shouldUseCompactGeneralWorkbench,
     teamDispatchPreviewState,
@@ -6784,52 +6814,46 @@ export function AgentChatWorkspace({
     workspaceId: taskCenterWorkspaceId,
   });
 
-  const sceneDisplayMessages =
-    taskCenterSessionSwitchPending || shouldSuppressTaskCenterDraftContent
-      ? []
-      : displayMessages.length > 0
-        ? displayMessages
-        : homePendingPreviewMessages;
-  const sceneTurns =
-    taskCenterSessionSwitchPending || shouldSuppressTaskCenterDraftContent
-      ? []
-      : turns;
-  const sceneThreadItems =
-    taskCenterSessionSwitchPending || shouldSuppressTaskCenterDraftContent
-      ? []
-      : effectiveThreadItems;
-  const sceneCurrentTurnId =
-    taskCenterSessionSwitchPending || shouldSuppressTaskCenterDraftContent
-      ? null
-      : currentTurnId;
-  const sceneThreadRead =
-    taskCenterSessionSwitchPending || shouldSuppressTaskCenterDraftContent
-      ? null
-      : threadRead;
-  const scenePendingActions =
-    taskCenterSessionSwitchPending || shouldSuppressTaskCenterDraftContent
-      ? []
-      : pendingActions;
-  const sceneSubmittedActionsInFlight =
-    taskCenterSessionSwitchPending || shouldSuppressTaskCenterDraftContent
-      ? []
-      : submittedActionsInFlight;
-  const sceneQueuedTurns =
-    taskCenterSessionSwitchPending || shouldSuppressTaskCenterDraftContent
-      ? []
-      : queuedTurns;
-  const sceneIsPreparingSend =
-    taskCenterSessionSwitchPending || shouldSuppressTaskCenterDraftContent
-      ? false
-      : isPreparingSend || Boolean(taskCenterDraftSendRequest);
-  const sceneIsSending =
-    taskCenterSessionSwitchPending || shouldSuppressTaskCenterDraftContent
-      ? false
-      : isSending;
+  const shouldHideCurrentSessionContent =
+    taskCenterHomeSurfaceState.shouldHideCurrentSessionContent;
+  const sceneIsRestoringSession = taskCenterHomeSurfaceState.isRestoringSession;
+  const sceneDisplayMessages = shouldHideCurrentSessionContent
+    ? []
+    : displayMessages.length > 0
+      ? displayMessages
+      : homePendingPreviewMessages;
+  const sceneTurns = shouldHideCurrentSessionContent ? [] : turns;
+  const sceneThreadItems = shouldHideCurrentSessionContent
+    ? []
+    : effectiveThreadItems;
+  const sceneCurrentTurnId = shouldHideCurrentSessionContent
+    ? null
+    : currentTurnId;
+  const sceneThreadRead = shouldHideCurrentSessionContent ? null : threadRead;
+  const scenePendingActions = shouldHideCurrentSessionContent
+    ? []
+    : pendingActions;
+  const sceneSubmittedActionsInFlight = shouldHideCurrentSessionContent
+    ? []
+    : submittedActionsInFlight;
+  const sceneQueuedTurns = shouldHideCurrentSessionContent ? [] : queuedTurns;
+  const sceneIsPreparingSend = shouldHideCurrentSessionContent
+    ? false
+    : isPreparingSend || Boolean(taskCenterDraftSendRequest);
+  const sceneIsSending = shouldHideCurrentSessionContent ? false : isSending;
+  const sceneSessionId = taskCenterHomeSurfaceState.sceneSessionId;
+  const sceneMessageListEmptyStateVariant =
+    agentEntry === "claw" &&
+    !shouldRenderTaskCenterEmbeddedHome &&
+    !shouldSuppressTaskCenterDraftContent
+      ? "task-center"
+      : "default";
+  const sceneLayoutMode = shouldRenderTaskCenterEmbeddedHome
+    ? "chat"
+    : layoutMode;
 
   const conversationSceneRuntime = useWorkspaceConversationSceneRuntime({
-    messageListEmptyStateVariant:
-      agentEntry === "claw" ? "task-center" : "default",
+    messageListEmptyStateVariant: sceneMessageListEmptyStateVariant,
     navbarContextVariant:
       agentEntry === "claw" || shouldUseBrowserWorkspaceHomeChrome
         ? "task-center"
@@ -6838,8 +6862,6 @@ export function AgentChatWorkspace({
     inputbarScene,
     canvasScene,
     handleSendFromEmptyState,
-    harnessState,
-    onSubmitCodeFixPrompt: handleSubmitCodeFixPrompt,
     shellChromeRuntime,
     generalWorkbenchHarnessDialog,
     teamWorkspaceEnabled: teamSessionRuntime.teamWorkspaceEnabled,
@@ -6940,11 +6962,8 @@ export function AgentChatWorkspace({
     harnessToggleLabel: suppressHomeNavbarUtilityActions
       ? undefined
       : harnessToggleLabel,
-    isAutoRestoringSession:
-      isAutoRestoringSession ||
-      isSessionHydrating ||
-      taskCenterSessionSwitchPending,
-    sessionId: shouldSuppressTaskCenterDraftContent ? null : sessionId,
+    isRestoringSession: sceneIsRestoringSession,
+    sessionId: sceneSessionId,
     syncStatus,
     pendingA2UIForm: effectivePendingA2UIForm,
     pendingA2UISource: effectivePendingA2UISource,
@@ -6993,7 +7012,7 @@ export function AgentChatWorkspace({
     shouldCollapseCodeBlocks,
     shouldCollapseCodeBlockInChat,
     handleCodeBlockClick,
-    layoutMode,
+    layoutMode: sceneLayoutMode,
     handleActivateTeamWorkbench,
     isThemeWorkbench,
     settledWorkbenchArtifacts,

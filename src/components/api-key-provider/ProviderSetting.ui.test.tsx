@@ -1113,7 +1113,7 @@ describe("ProviderSetting", () => {
       }),
     );
     expect(container.textContent ?? "").toContain(
-      "当前 AI 服务商余额或额度不足，请在服务商后台充值或开通额度，或切换到其他可用模型后重试。",
+      "当前模型通道返回了计费或额度类错误，请检查该 Provider/模型通道的计费、配额或授权状态，或切换到其他可用模型后重试。",
     );
     expect(container.textContent ?? "").not.toContain("Insufficient Balance");
   });

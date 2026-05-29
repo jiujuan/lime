@@ -1,5 +1,8 @@
 use super::trigger::RuntimeSessionCompactionTrigger;
 use super::*;
+use std::time::Duration;
+
+const AUTO_COMPACTION_PRE_TURN_MODEL_TIMEOUT: Duration = Duration::from_secs(2);
 
 fn build_auto_context_compaction_event_name(session_id: &str) -> String {
     format!(
@@ -79,13 +82,14 @@ pub(in crate::commands::aster_agent_cmd::runtime_turn) async fn maybe_auto_compa
     }
 
     tracing::info!(
-        "[AsterAgent][TTFT] 自动压缩开始阻塞当前 turn: session_id={}, check_elapsed_ms={}",
+        "[AsterAgent][TTFT] 首字前限时自动压缩开始: session_id={}, check_elapsed_ms={}, model_timeout_ms={}",
         session_id,
-        check_started_at.elapsed().as_millis()
+        check_started_at.elapsed().as_millis(),
+        AUTO_COMPACTION_PRE_TURN_MODEL_TIMEOUT.as_millis()
     );
     let compact_started_at = Instant::now();
     let auto_event_name = build_auto_context_compaction_event_name(session_id);
-    match compact_runtime_session_with_trigger(
+    match compact_runtime_session_with_trigger_and_model_timeout(
         app,
         state,
         db,
@@ -93,6 +97,7 @@ pub(in crate::commands::aster_agent_cmd::runtime_turn) async fn maybe_auto_compa
         session_id.to_string(),
         auto_event_name,
         RuntimeSessionCompactionTrigger::Auto,
+        Some(AUTO_COMPACTION_PRE_TURN_MODEL_TIMEOUT),
     )
     .await
     {

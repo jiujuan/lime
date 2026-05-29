@@ -321,10 +321,8 @@
   "settings.developer.message.copyDiagnosticFailed": "复制诊断信息失败",
   "settings.developer.message.diagnosticJsonCopied": "纯 JSON 诊断信息已复制",
   "settings.developer.message.copyDiagnosticJsonFailed": "复制纯 JSON 失败",
-  "settings.developer.message.diagnosticExportedAndOpened": "诊断文件已导出：{{fileName}}，并已打开目录：{{path}}",
   "settings.developer.message.diagnosticExported": "诊断文件已导出：{{fileName}}（位置：{{location}}）",
   "settings.developer.message.exportDiagnosticFailed": "导出诊断信息失败",
-  "settings.developer.message.downloadDirectoryOpened": "已打开下载目录：{{path}}",
   "settings.developer.message.openDownloadDirectoryFailed": "打开下载目录失败",
   "settings.developer.message.diagnosticHistoryCleared": "已清空旧诊断信息，后续复制将只包含新的诊断数据",
   "settings.developer.message.clearDiagnosticHistoryFailed": "清空旧诊断信息失败",
@@ -1145,11 +1143,9 @@
   "settings.experimental.message.diagnosticCopyFailed": "复制诊断信息失败",
   "settings.experimental.message.diagnosticExportFailed": "导出诊断信息失败",
   "settings.experimental.message.diagnosticExported": "诊断文件已导出：{{fileName}}（位置：{{location}}）",
-  "settings.experimental.message.diagnosticExportedAndOpened": "诊断文件已导出：{{fileName}}，并已打开目录：{{path}}",
   "settings.experimental.message.diagnosticJsonCopied": "纯 JSON 诊断信息已复制",
   "settings.experimental.message.diagnosticJsonCopyFailed": "复制纯 JSON 失败",
   "settings.experimental.message.downloadDirectoryOpenFailed": "打开下载目录失败",
-  "settings.experimental.message.downloadDirectoryOpened": "已打开下载目录：{{path}}",
   "settings.experimental.message.dynamicFilteringDisabled": "动态过滤已禁用",
   "settings.experimental.message.dynamicFilteringEnabled": "动态过滤已启用",
   "settings.experimental.message.loadFailed": "加载配置失败",
@@ -2532,5 +2528,6 @@
   "settings.providers.setting.body.models.imageCommand.action.save": "保存命令",
   "settings.providers.setting.body.models.imageCommand.action.cancel": "取消",
   "settings.providers.setting.feedback.imageCommand.created": "已创建 {{trigger}}，将使用 {{model}} 作为图片生成模型。",
-  "settings.providers.setting.feedback.imageCommand.invalid": "请填写有效的 @命令名称。"
+  "settings.providers.setting.feedback.imageCommand.invalid": "请填写有效的 @命令名称。",
+  "settings.experimental.crashReporting.dsn.placeholder": "https://xxx@o0.ingest.sentry.io/0"
 }

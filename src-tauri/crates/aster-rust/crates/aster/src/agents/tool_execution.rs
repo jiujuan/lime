@@ -37,6 +37,7 @@ impl From<ToolResult<rmcp::model::CallToolResult>> for ToolCallResult {
 use super::agent::{tool_stream, ToolStream};
 use crate::agents::{Agent, PermissionRequestHookContext, PermissionRequestHookDecision};
 use crate::conversation::message::{Message, ToolRequest};
+use crate::providers::base::Provider;
 use crate::session::Session;
 use crate::tool_inspection::get_security_finding_id_from_results;
 
@@ -125,6 +126,7 @@ impl Agent {
         cancellation_token: Option<CancellationToken>,
         session: &'a Session,
         inspection_results: &'a [crate::tool_inspection::InspectionResult],
+        pinned_provider: Option<Arc<dyn Provider>>,
     ) -> BoxStream<'a, anyhow::Result<Message>> {
         try_stream! {
         for request in tool_requests.iter() {
@@ -138,11 +140,12 @@ impl Agent {
                             let rewritten_tool_call =
                                 apply_permission_request_updated_input(&tool_call, updated_input);
                             let (req_id, tool_result) = self
-                                .dispatch_tool_call(
+                                .dispatch_tool_call_with_provider(
                                     rewritten_tool_call,
                                     request.id.clone(),
                                     cancellation_token.clone(),
                                     session,
+                                    pinned_provider.clone(),
                                 )
                                 .await;
                             let mut futures = tool_futures.lock().await;
@@ -220,7 +223,15 @@ impl Agent {
                         }
 
                         if confirmation.permission == Permission::AllowOnce || confirmation.permission == Permission::AlwaysAllow {
-                            let (req_id, tool_result) = self.dispatch_tool_call(tool_call.clone(), request.id.clone(), cancellation_token.clone(), session).await;
+                            let (req_id, tool_result) = self
+                                .dispatch_tool_call_with_provider(
+                                    tool_call.clone(),
+                                    request.id.clone(),
+                                    cancellation_token.clone(),
+                                    session,
+                                    pinned_provider.clone(),
+                                )
+                                .await;
                             let mut futures = tool_futures.lock().await;
 
                             futures.push((req_id, match tool_result {
@@ -819,6 +830,7 @@ mod tests {
             None,
             &session,
             &[],
+            None,
         );
 
         let messages = stream
@@ -897,6 +909,7 @@ mod tests {
             None,
             &session,
             &[],
+            None,
         );
 
         let messages = stream
@@ -981,6 +994,7 @@ mod tests {
             None,
             &session,
             &[],
+            None,
         );
 
         let messages = stream

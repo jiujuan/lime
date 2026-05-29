@@ -620,6 +620,10 @@ describe("ArtifactWorkbenchShell", () => {
         .querySelector('[data-testid="artifact-workbench-shell"]')
         ?.getAttribute("data-layout-mode"),
     ).toBe("canvas-only");
+    expect(
+      container.querySelector('[data-testid="artifact-workbench-shell"]')
+        ?.className,
+    ).not.toContain("mt-5");
     const buttons = Array.from(container.querySelectorAll("button"));
     const tabLabels = ["概览", "来源", "版本", "差异", "编辑"];
     for (const label of tabLabels) {

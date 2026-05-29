@@ -85,7 +85,11 @@ pub enum ResponseOutputItem {
         status: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         call_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        namespace: Option<String>,
+        #[serde(default)]
         name: String,
+        #[serde(default)]
         arguments: String,
     },
 }
@@ -101,6 +105,8 @@ pub enum ResponseContentBlock {
     },
     ToolCall {
         id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        namespace: Option<String>,
         name: String,
         input: Value,
     },
@@ -245,7 +251,11 @@ pub enum ResponseOutputItemInfo {
         id: String,
         status: String,
         call_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        namespace: Option<String>,
+        #[serde(default)]
         name: String,
+        #[serde(default)]
         arguments: String,
     },
 }
@@ -263,6 +273,8 @@ pub enum ContentPart {
     },
     ToolCall {
         id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        namespace: Option<String>,
         name: String,
         arguments: String,
     },
@@ -273,6 +285,101 @@ struct ResponsesStreamingToolCall {
     tool_id: String,
     tool_name: Option<String>,
     accumulated_arguments: String,
+}
+
+fn response_function_call_request_id(id: &str, call_id: Option<&str>) -> String {
+    call_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(id)
+        .to_string()
+}
+
+fn trim_non_empty(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn join_provider_tool_name(namespace: Option<&str>, name: Option<&str>) -> Option<String> {
+    let name = trim_non_empty(name)?;
+    let Some(namespace) = trim_non_empty(namespace) else {
+        return Some(name);
+    };
+    if name.contains('.') || name.contains("__") {
+        return Some(name);
+    }
+    if namespace.ends_with('.') || namespace.ends_with('_') || namespace.ends_with('/') {
+        Some(format!("{namespace}{name}"))
+    } else {
+        Some(format!("{namespace}.{name}"))
+    }
+}
+
+fn is_valid_received_tool_name(name: &str) -> bool {
+    let name = name.trim();
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.' | '/'))
+}
+
+fn tool_request_content_from_name_and_arguments(
+    id: String,
+    namespace: Option<&str>,
+    name: &str,
+    arguments: &str,
+) -> MessageContent {
+    let Some(tool_name) = join_provider_tool_name(namespace, Some(name)) else {
+        return MessageContent::tool_request(
+            id,
+            Err(ErrorData {
+                code: ErrorCode::INVALID_REQUEST,
+                message: Cow::from("The provided function name was empty"),
+                data: None,
+            }),
+        );
+    };
+    if !is_valid_received_tool_name(&tool_name) {
+        return MessageContent::tool_request(
+            id,
+            Err(ErrorData {
+                code: ErrorCode::INVALID_REQUEST,
+                message: Cow::from(format!(
+                    "The provided function name '{}' was empty or had invalid characters",
+                    tool_name
+                )),
+                data: None,
+            }),
+        );
+    }
+
+    let parsed_args = if arguments.is_empty() {
+        Ok(json!({}))
+    } else {
+        parse_tool_arguments_json_object(arguments)
+    };
+    match parsed_args {
+        Ok(parsed_args) => MessageContent::tool_request(
+            id,
+            Ok(CallToolRequestParam {
+                name: tool_name.into(),
+                arguments: Some(object(parsed_args)),
+            }),
+        ),
+        Err(error) => MessageContent::tool_request(
+            id.clone(),
+            Err(ErrorData {
+                code: ErrorCode::INVALID_PARAMS,
+                message: Cow::from(format!(
+                    "Could not interpret tool use parameters for id {}: {}. Raw arguments: '{}'",
+                    id, error, arguments
+                )),
+                data: None,
+            }),
+        ),
+    }
 }
 
 fn responses_tool_input_delta_message(
@@ -564,13 +671,17 @@ pub fn responses_api_to_message(response: &ResponsesApiResponse) -> anyhow::Resu
                                 content.push(MessageContent::text(text));
                             }
                         }
-                        ResponseContentBlock::ToolCall { id, name, input } => {
-                            content.push(MessageContent::tool_request(
+                        ResponseContentBlock::ToolCall {
+                            id,
+                            namespace,
+                            name,
+                            input,
+                        } => {
+                            content.push(tool_request_content_from_name_and_arguments(
                                 id.clone(),
-                                Ok(CallToolRequestParam {
-                                    name: name.clone().into(),
-                                    arguments: Some(object(input.clone())),
-                                }),
+                                namespace.as_deref(),
+                                name,
+                                &input.to_string(),
                             ));
                         }
                     }
@@ -578,40 +689,25 @@ pub fn responses_api_to_message(response: &ResponsesApiResponse) -> anyhow::Resu
             }
             ResponseOutputItem::FunctionCall {
                 id,
+                call_id,
+                namespace,
                 name,
                 arguments,
                 ..
             } => {
-                tracing::debug!("Received FunctionCall with id: {}, name: {}", id, name);
-                let parsed_args = if arguments.is_empty() {
-                    Ok(json!({}))
-                } else {
-                    parse_tool_arguments_json_object(arguments)
-                };
-                match parsed_args {
-                    Ok(parsed_args) => {
-                        content.push(MessageContent::tool_request(
-                            id.clone(),
-                            Ok(CallToolRequestParam {
-                                name: name.clone().into(),
-                                arguments: Some(object(parsed_args)),
-                            }),
-                        ));
-                    }
-                    Err(error) => {
-                        content.push(MessageContent::tool_request(
-                            id.clone(),
-                            Err(ErrorData {
-                                code: ErrorCode::INVALID_PARAMS,
-                                message: Cow::from(format!(
-                                    "Could not interpret tool use parameters for id {}: {}. Raw arguments: '{}'",
-                                    id, error, arguments
-                                )),
-                                data: None,
-                            }),
-                        ));
-                    }
-                }
+                let request_id = response_function_call_request_id(id, call_id.as_deref());
+                tracing::debug!(
+                    "Received FunctionCall with id: {}, call_id: {}, name: {}",
+                    id,
+                    request_id,
+                    name
+                );
+                content.push(tool_request_content_from_name_and_arguments(
+                    request_id,
+                    namespace.as_deref(),
+                    name,
+                    arguments,
+                ));
             }
         }
     }
@@ -661,77 +757,33 @@ fn process_streaming_output_items(
                         }
                         ContentPart::ToolCall {
                             id,
+                            namespace,
                             name,
                             arguments,
                         } => {
-                            let parsed_args = if arguments.is_empty() {
-                                Ok(json!({}))
-                            } else {
-                                parse_tool_arguments_json_object(&arguments)
-                            };
-                            match parsed_args {
-                                Ok(parsed_args) => {
-                                    content.push(MessageContent::tool_request(
-                                        id,
-                                        Ok(CallToolRequestParam {
-                                            name: name.into(),
-                                            arguments: Some(object(parsed_args)),
-                                        }),
-                                    ));
-                                }
-                                Err(error) => {
-                                    content.push(MessageContent::tool_request(
-                                        id.clone(),
-                                        Err(ErrorData {
-                                            code: ErrorCode::INVALID_PARAMS,
-                                            message: Cow::from(format!(
-                                                "Could not interpret tool use parameters for id {}: {}. Raw arguments: '{}'",
-                                                id, error, arguments
-                                            )),
-                                            data: None,
-                                        }),
-                                    ));
-                                }
-                            }
+                            content.push(tool_request_content_from_name_and_arguments(
+                                id,
+                                namespace.as_deref(),
+                                &name,
+                                &arguments,
+                            ));
                         }
                     }
                 }
             }
             ResponseOutputItemInfo::FunctionCall {
                 call_id,
+                namespace,
                 name,
                 arguments,
                 ..
             } => {
-                let parsed_args = if arguments.is_empty() {
-                    Ok(json!({}))
-                } else {
-                    parse_tool_arguments_json_object(&arguments)
-                };
-                match parsed_args {
-                    Ok(parsed_args) => {
-                        content.push(MessageContent::tool_request(
-                            call_id,
-                            Ok(CallToolRequestParam {
-                                name: name.into(),
-                                arguments: Some(object(parsed_args)),
-                            }),
-                        ));
-                    }
-                    Err(error) => {
-                        content.push(MessageContent::tool_request(
-                            call_id.clone(),
-                            Err(ErrorData {
-                                code: ErrorCode::INVALID_PARAMS,
-                                message: Cow::from(format!(
-                                    "Could not interpret tool use parameters for id {}: {}. Raw arguments: '{}'",
-                                    call_id, error, arguments
-                                )),
-                                data: None,
-                            }),
-                        ));
-                    }
-                }
+                content.push(tool_request_content_from_name_and_arguments(
+                    call_id,
+                    namespace.as_deref(),
+                    &name,
+                    &arguments,
+                ));
             }
         }
     }
@@ -813,19 +865,28 @@ where
                     if let ResponseOutputItemInfo::FunctionCall {
                         id,
                         call_id,
+                        namespace,
                         name,
                         arguments,
                         ..
                     } = item
                     {
+                        let existing = streaming_tool_calls.remove(&id).unwrap_or_default();
+                        let accumulated_arguments = if existing.accumulated_arguments.is_empty() {
+                            arguments
+                        } else {
+                            existing.accumulated_arguments
+                        };
+                        let tool_call = ResponsesStreamingToolCall {
+                            tool_id: call_id.clone(),
+                            tool_name: join_provider_tool_name(namespace.as_deref(), Some(&name)),
+                            accumulated_arguments,
+                        };
                         streaming_tool_calls.insert(
                             id,
-                            ResponsesStreamingToolCall {
-                                tool_id: call_id,
-                                tool_name: Some(name),
-                                accumulated_arguments: arguments,
-                            },
+                            tool_call.clone(),
                         );
+                        streaming_tool_calls.insert(call_id, tool_call);
                     }
                 }
 
@@ -873,12 +934,15 @@ where
                     if !delta.is_empty() {
                         let entry = streaming_tool_calls.entry(item_id.clone()).or_insert_with(|| {
                             ResponsesStreamingToolCall {
-                                tool_id: item_id,
+                                tool_id: String::new(),
                                 tool_name: None,
                                 accumulated_arguments: String::new(),
                             }
                         });
                         entry.accumulated_arguments.push_str(&delta);
+                        if entry.tool_id.trim().is_empty() {
+                            continue;
+                        }
                         yield (
                             Some(responses_tool_input_delta_message(
                                 entry.tool_id.clone(),
@@ -898,7 +962,7 @@ where
                 } => {
                     let entry = streaming_tool_calls.entry(item_id.clone()).or_insert_with(|| {
                         ResponsesStreamingToolCall {
-                            tool_id: item_id,
+                            tool_id: String::new(),
                             tool_name: None,
                             accumulated_arguments: String::new(),
                         }
@@ -1111,6 +1175,152 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_responses_api_to_message_uses_call_id_for_function_call_requests() {
+        let tool_cases = [
+            ("Bash", json!({ "cmd": "ls -la" })),
+            ("Read", json!({ "path": "README.md" })),
+            ("WebSearch", json!({ "query": "Lime tools" })),
+            ("WebFetch", json!({ "url": "https://example.com" })),
+            ("ToolSearch", json!({ "query": "filesystem tools" })),
+            ("Agent", json!({ "prompt": "Review this folder" })),
+        ];
+        let output = tool_cases
+            .iter()
+            .enumerate()
+            .map(
+                |(index, (name, arguments))| ResponseOutputItem::FunctionCall {
+                    id: format!("fc-{index}"),
+                    status: "completed".to_string(),
+                    call_id: Some(format!("call-{index}")),
+                    namespace: None,
+                    name: (*name).to_string(),
+                    arguments: serde_json::to_string(arguments).unwrap(),
+                },
+            )
+            .collect();
+        let response = ResponsesApiResponse {
+            id: "resp-tools".to_string(),
+            object: "response".to_string(),
+            created_at: 1778300000,
+            status: "completed".to_string(),
+            model: "gpt-5-codex".to_string(),
+            output,
+            reasoning: None,
+            usage: None,
+        };
+
+        let message = responses_api_to_message(&response).unwrap();
+        assert_eq!(message.content.len(), tool_cases.len());
+
+        for (index, (expected_name, expected_arguments)) in tool_cases.iter().enumerate() {
+            let MessageContent::ToolRequest(request) = &message.content[index] else {
+                panic!("expected tool request at index {index}");
+            };
+            assert_eq!(request.id, format!("call-{index}"));
+            let call = request.tool_call.as_ref().expect("tool call should parse");
+            assert_eq!(call.name.as_ref(), *expected_name);
+            assert_eq!(
+                call.arguments.as_ref(),
+                Some(&object(expected_arguments.clone()))
+            );
+        }
+    }
+
+    #[test]
+    fn test_responses_api_to_message_falls_back_to_function_item_id_without_call_id() {
+        let response = ResponsesApiResponse {
+            id: "resp-fallback".to_string(),
+            object: "response".to_string(),
+            created_at: 1778300000,
+            status: "completed".to_string(),
+            model: "gpt-5-codex".to_string(),
+            output: vec![ResponseOutputItem::FunctionCall {
+                id: "fc-without-call-id".to_string(),
+                status: "completed".to_string(),
+                call_id: None,
+                namespace: None,
+                name: "Read".to_string(),
+                arguments: r#"{"path":"README.md"}"#.to_string(),
+            }],
+            reasoning: None,
+            usage: None,
+        };
+
+        let message = responses_api_to_message(&response).unwrap();
+        let MessageContent::ToolRequest(request) = &message.content[0] else {
+            panic!("expected tool request");
+        };
+        assert_eq!(request.id, "fc-without-call-id");
+        let call = request.tool_call.as_ref().expect("tool call should parse");
+        assert_eq!(call.name.as_ref(), "Read");
+    }
+
+    #[test]
+    fn test_responses_api_to_message_accepts_namespaced_function_call() {
+        let response: ResponsesApiResponse = serde_json::from_value(json!({
+            "id": "resp-namespaced",
+            "object": "response",
+            "created_at": 1778300000,
+            "status": "completed",
+            "model": "gpt-5-codex",
+            "output": [{
+                "type": "function_call",
+                "id": "fc-bash",
+                "status": "completed",
+                "call_id": "call-bash",
+                "namespace": "functions",
+                "name": "Bash",
+                "arguments": "{\"cmd\":\"pwd\"}"
+            }]
+        }))
+        .expect("namespaced response should deserialize");
+
+        let message = responses_api_to_message(&response).unwrap();
+        let MessageContent::ToolRequest(request) = &message.content[0] else {
+            panic!("expected tool request");
+        };
+        assert_eq!(request.id, "call-bash");
+        let call = request.tool_call.as_ref().expect("tool call should parse");
+        assert_eq!(call.name.as_ref(), "functions.Bash");
+        assert_eq!(
+            call.arguments
+                .as_ref()
+                .and_then(|args| args.get("cmd"))
+                .cloned(),
+            Some(json!("pwd"))
+        );
+    }
+
+    #[test]
+    fn test_responses_api_to_message_rejects_empty_function_name() {
+        let response: ResponsesApiResponse = serde_json::from_value(json!({
+            "id": "resp-empty-name",
+            "object": "response",
+            "created_at": 1778300000,
+            "status": "completed",
+            "model": "gpt-5-codex",
+            "output": [{
+                "type": "function_call",
+                "id": "fc-empty",
+                "status": "completed",
+                "call_id": "call-empty",
+                "arguments": "{\"cmd\":\"pwd\"}"
+            }]
+        }))
+        .expect("empty-name response should deserialize");
+
+        let message = responses_api_to_message(&response).unwrap();
+        let MessageContent::ToolRequest(request) = &message.content[0] else {
+            panic!("expected tool request error");
+        };
+        assert_eq!(request.id, "call-empty");
+        assert!(
+            request.tool_call.is_err(),
+            "empty tool names must not become executable tool calls"
+        );
+    }
+
     #[tokio::test]
     async fn test_responses_streaming_tool_arguments_emit_input_delta_signal() -> anyhow::Result<()>
     {
@@ -1130,6 +1340,8 @@ mod tests {
         futures::pin_mut!(messages);
 
         let mut deltas = Vec::new();
+        let mut final_tool_id = None;
+        let mut final_tool_name = None;
         let mut final_tool_arguments = None;
 
         while let Some(Ok((message, _usage))) = messages.next().await {
@@ -1146,6 +1358,8 @@ mod tests {
                     }
                     MessageContent::ToolRequest(request) => {
                         let call = request.tool_call.expect("tool call should parse");
+                        final_tool_id = Some(request.id);
+                        final_tool_name = Some(call.name.to_string());
                         final_tool_arguments = Some(call.arguments);
                     }
                     _ => {}
@@ -1154,12 +1368,110 @@ mod tests {
         }
 
         assert_eq!(deltas, vec!["{\"path\"", "{\"path\":\"README.md\"}"]);
+        assert_eq!(final_tool_id.as_deref(), Some("call-1"));
+        assert_eq!(final_tool_name.as_deref(), Some("read_file"));
         assert_eq!(
             final_tool_arguments
                 .flatten()
                 .and_then(|args| args.get("path").cloned()),
             Some(json!("README.md"))
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_responses_streaming_tool_arguments_preserve_namespace() -> anyhow::Result<()> {
+        let lines = [
+            r#"data: {"type":"response.created","sequence_number":0,"response":{"id":"resp-1","object":"response","created_at":1778300000,"status":"in_progress","model":"gpt-5-codex","output":[]}}"#,
+            r#"data: {"type":"response.output_item.added","sequence_number":1,"output_index":0,"item":{"type":"function_call","id":"fc-bash","status":"in_progress","call_id":"call-bash","namespace":"functions","name":"Bash","arguments":""}}"#,
+            r#"data: {"type":"response.function_call_arguments.delta","sequence_number":2,"item_id":"fc-bash","output_index":0,"delta":"{\"cmd\"" }"#,
+            r#"data: {"type":"response.function_call_arguments.delta","sequence_number":3,"item_id":"fc-bash","output_index":0,"delta":":\"pwd\"}" }"#,
+            r#"data: {"type":"response.output_item.done","sequence_number":4,"output_index":0,"item":{"type":"function_call","id":"fc-bash","status":"completed","call_id":"call-bash","namespace":"functions","name":"Bash","arguments":"{\"cmd\":\"pwd\"}"}}"#,
+            r#"data: {"type":"response.completed","sequence_number":5,"response":{"id":"resp-1","object":"response","created_at":1778300001,"status":"completed","model":"gpt-5-codex","output":[],"usage":{"input_tokens":10,"output_tokens":4,"total_tokens":14}}}"#,
+            "data: [DONE]",
+        ];
+
+        let stream = tokio_stream::iter(lines.into_iter().map(|line| Ok(line.to_string())));
+        let messages = responses_api_to_streaming_message(stream);
+        futures::pin_mut!(messages);
+
+        let mut delta_tool_names = Vec::new();
+        let mut final_tool_name = None;
+
+        while let Some(Ok((message, _usage))) = messages.next().await {
+            let Some(message) = message else {
+                continue;
+            };
+            for content in message.content {
+                match content {
+                    MessageContent::ToolInputDelta(delta) => {
+                        delta_tool_names.push(delta.tool_name);
+                    }
+                    MessageContent::ToolRequest(request) => {
+                        let call = request.tool_call.expect("tool call should parse");
+                        final_tool_name = Some(call.name.to_string());
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        assert_eq!(
+            delta_tool_names,
+            vec![
+                Some("functions.Bash".to_string()),
+                Some("functions.Bash".to_string())
+            ]
+        );
+        assert_eq!(final_tool_name.as_deref(), Some("functions.Bash"));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_responses_streaming_tool_argument_delta_does_not_use_item_id_as_call_id(
+    ) -> anyhow::Result<()> {
+        let lines = [
+            r#"data: {"type":"response.created","sequence_number":0,"response":{"id":"resp-1","object":"response","created_at":1778300000,"status":"in_progress","model":"gpt-5-codex","output":[]}}"#,
+            r#"data: {"type":"response.function_call_arguments.delta","sequence_number":1,"item_id":"fc-before-added","output_index":0,"delta":"{\"cmd\"" }"#,
+            r#"data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"type":"function_call","id":"fc-before-added","status":"in_progress","call_id":"call-real-bash","name":"Bash","arguments":""}}"#,
+            r#"data: {"type":"response.function_call_arguments.delta","sequence_number":3,"item_id":"fc-before-added","output_index":0,"delta":":\"pwd\"}" }"#,
+            r#"data: {"type":"response.output_item.done","sequence_number":4,"output_index":0,"item":{"type":"function_call","id":"fc-before-added","status":"completed","call_id":"call-real-bash","name":"Bash","arguments":"{\"cmd\":\"pwd\"}"}}"#,
+            r#"data: {"type":"response.completed","sequence_number":5,"response":{"id":"resp-1","object":"response","created_at":1778300001,"status":"completed","model":"gpt-5-codex","output":[],"usage":{"input_tokens":10,"output_tokens":4,"total_tokens":14}}}"#,
+            "data: [DONE]",
+        ];
+
+        let stream = tokio_stream::iter(lines.into_iter().map(|line| Ok(line.to_string())));
+        let messages = responses_api_to_streaming_message(stream);
+        futures::pin_mut!(messages);
+
+        let mut emitted_delta_ids = Vec::new();
+        let mut final_tool_id = None;
+        let mut final_tool_name = None;
+
+        while let Some(Ok((message, _usage))) = messages.next().await {
+            let Some(message) = message else {
+                continue;
+            };
+            for content in message.content {
+                match content {
+                    MessageContent::ToolInputDelta(delta) => {
+                        emitted_delta_ids.push(delta.id);
+                    }
+                    MessageContent::ToolRequest(request) => {
+                        let call = request.tool_call.expect("tool call should parse");
+                        final_tool_id = Some(request.id);
+                        final_tool_name = Some(call.name.to_string());
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        assert_eq!(emitted_delta_ids, vec!["call-real-bash"]);
+        assert_eq!(final_tool_id.as_deref(), Some("call-real-bash"));
+        assert_eq!(final_tool_name.as_deref(), Some("Bash"));
 
         Ok(())
     }

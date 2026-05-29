@@ -321,10 +321,8 @@
   "settings.developer.message.copyDiagnosticFailed": "診断情報のコピーに失敗しました",
   "settings.developer.message.diagnosticJsonCopied": "純 JSON 診断情報をコピーしました",
   "settings.developer.message.copyDiagnosticJsonFailed": "純 JSON のコピーに失敗しました",
-  "settings.developer.message.diagnosticExportedAndOpened": "診断ファイルをエクスポートしました：{{fileName}}。フォルダーを開きました：{{path}}",
   "settings.developer.message.diagnosticExported": "診断ファイルをエクスポートしました：{{fileName}}（場所：{{location}}）",
   "settings.developer.message.exportDiagnosticFailed": "診断情報のエクスポートに失敗しました",
-  "settings.developer.message.downloadDirectoryOpened": "ダウンロードフォルダーを開きました：{{path}}",
   "settings.developer.message.openDownloadDirectoryFailed": "ダウンロードフォルダーを開けませんでした",
   "settings.developer.message.diagnosticHistoryCleared": "古い診断情報を消去しました。今後のコピーには新しい診断データのみが含まれます。",
   "settings.developer.message.clearDiagnosticHistoryFailed": "古い診断情報の消去に失敗しました",
@@ -1145,11 +1143,9 @@
   "settings.experimental.message.diagnosticCopyFailed": "診断情報のコピーに失敗しました",
   "settings.experimental.message.diagnosticExportFailed": "診断情報のエクスポートに失敗しました",
   "settings.experimental.message.diagnosticExported": "診断ファイルをエクスポートしました：{{fileName}}（場所：{{location}}）",
-  "settings.experimental.message.diagnosticExportedAndOpened": "診断ファイルをエクスポートしました：{{fileName}}。フォルダーを開きました：{{path}}",
   "settings.experimental.message.diagnosticJsonCopied": "生 JSON 診断情報をコピーしました",
   "settings.experimental.message.diagnosticJsonCopyFailed": "生 JSON のコピーに失敗しました",
   "settings.experimental.message.downloadDirectoryOpenFailed": "ダウンロードフォルダーを開けませんでした",
-  "settings.experimental.message.downloadDirectoryOpened": "ダウンロードフォルダーを開きました：{{path}}",
   "settings.experimental.message.dynamicFilteringDisabled": "動的フィルタリングを無効にしました",
   "settings.experimental.message.dynamicFilteringEnabled": "動的フィルタリングを有効にしました",
   "settings.experimental.message.loadFailed": "設定の読み込みに失敗しました",
@@ -2532,5 +2528,6 @@
   "settings.providers.setting.body.models.imageCommand.action.save": "コマンドを保存",
   "settings.providers.setting.body.models.imageCommand.action.cancel": "キャンセル",
   "settings.providers.setting.feedback.imageCommand.created": "{{trigger}} を作成しました。{{model}} を画像生成モデルとして使用します。",
-  "settings.providers.setting.feedback.imageCommand.invalid": "有効な @コマンド名を入力してください。"
+  "settings.providers.setting.feedback.imageCommand.invalid": "有効な @コマンド名を入力してください。",
+  "settings.experimental.crashReporting.dsn.placeholder": "https://xxx@o0.ingest.sentry.io/0"
 }

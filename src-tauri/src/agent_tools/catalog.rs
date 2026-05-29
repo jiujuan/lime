@@ -23,6 +23,7 @@ pub const LIME_SITE_SEARCH_TOOL_NAME: &str = "lime_site_search";
 pub const LIME_SITE_INFO_TOOL_NAME: &str = "lime_site_info";
 pub const LIME_SITE_RUN_TOOL_NAME: &str = "lime_site_run";
 pub const BROWSER_RUNTIME_TOOL_PREFIX: &str = "mcp__lime-browser__";
+pub const VIEW_IMAGE_TOOL_NAME: &str = "view_image";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -281,6 +282,15 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
     },
     ToolCatalogEntry {
         name: "NotebookEdit",
+        profiles: CORE_PROFILES,
+        capabilities: WORKSPACE_IO_CAP,
+        lifecycle: ToolLifecycle::Current,
+        source: ToolSourceKind::AsterBuiltin,
+        permission_plane: ToolPermissionPlane::ParameterRestricted,
+        workspace_default_allow: false,
+    },
+    ToolCatalogEntry {
+        name: VIEW_IMAGE_TOOL_NAME,
         profiles: CORE_PROFILES,
         capabilities: WORKSPACE_IO_CAP,
         lifecycle: ToolLifecycle::Current,
@@ -678,17 +688,21 @@ fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
         "brief" | "brieftool" | "sendusermessagetool" => "SendUserMessage",
         "spawnagent" | "subagenttask" | "agenttool" => "Agent",
         "sendinput" | "sendmessagetool" => "SendMessage",
-        "bashtool" => "Bash",
+        "bashtool" | "shell" | "developershell" | "mcpsystemshell" | "shellcommand"
+        | "execcommand" | "localshellcall" => "Bash",
         "configtool" => "Config",
         "enterplanmodetool" => "EnterPlanMode",
         "exitplanmodetool" => "ExitPlanMode",
         "enterworktreetool" => "EnterWorktree",
         "exitworktreetool" => "ExitWorktree",
-        "filereadtool" | "readfiletool" => "Read",
-        "filewritetool" | "writefiletool" | "createfiletool" => "Write",
-        "fileedittool" => "Edit",
-        "globtool" => "Glob",
-        "greptool" => "Grep",
+        "filereadtool" | "readfiletool" | "readfile" | "developerread" | "mcpsystemreadfile" => {
+            "Read"
+        }
+        "filewritetool" | "writefiletool" | "createfiletool" | "writefile" | "createfile"
+        | "mcpsystemwritefile" => "Write",
+        "fileedittool" | "editfile" | "developertexteditor" | "mcpsystemeditfile" => "Edit",
+        "globtool" | "mcpsystemglob" => "Glob",
+        "greptool" | "mcpsystemgrep" => "Grep",
         "lsptool" => "LSP",
         "listmcpresourcestool" => "ListMcpResourcesTool",
         "readmcpresourcetool" => "ReadMcpResourceTool",
@@ -710,9 +724,10 @@ fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
         "teamcreatetool" => "TeamCreate",
         "teamdeletetool" => "TeamDelete",
         "listpeerstool" => "ListPeers",
-        "toolsearchtool" => "ToolSearch",
-        "webfetchtool" => "WebFetch",
-        "websearchtool" => "WebSearch",
+        "toolsearchtool" | "toolsearch" | "mcpsystemtoolsearch" => "ToolSearch",
+        "webfetchtool" | "webfetch" | "mcpsystemwebfetch" => "WebFetch",
+        "websearchtool" | "websearch" | "mcpsystemwebsearch" => "WebSearch",
+        "viewimage" | "viewimagetool" => VIEW_IMAGE_TOOL_NAME,
         _ => tool_name.trim(),
     }
 }
@@ -940,6 +955,7 @@ mod tests {
         assert!(names.contains(&"Workflow"));
         assert!(names.contains(&"WebSearch"));
         assert!(!names.contains(&"Read"));
+        assert!(!names.contains(&VIEW_IMAGE_TOOL_NAME));
         assert!(!names.contains(&"Bash"));
         assert!(!names.contains(&SOCIAL_IMAGE_TOOL_NAME));
     }
@@ -984,6 +1000,11 @@ mod tests {
             ("AgentTool", "Agent"),
             ("AskUserQuestionTool", "AskUserQuestion"),
             ("BashTool", "Bash"),
+            ("developer__shell", "Bash"),
+            ("mcp__system__shell", "Bash"),
+            ("shell_command", "Bash"),
+            ("exec_command", "Bash"),
+            ("local_shell_call", "Bash"),
             ("BriefTool", "SendUserMessage"),
             ("ConfigTool", "Config"),
             ("EnterPlanModeTool", "EnterPlanMode"),
@@ -993,8 +1014,19 @@ mod tests {
             ("FileEditTool", "Edit"),
             ("FileReadTool", "Read"),
             ("FileWriteTool", "Write"),
+            ("read_file", "Read"),
+            ("developer__read", "Read"),
+            ("mcp__system__read_file", "Read"),
+            ("write_file", "Write"),
+            ("create_file", "Write"),
+            ("mcp__system__write_file", "Write"),
+            ("edit_file", "Edit"),
+            ("developer__text_editor", "Edit"),
+            ("mcp__system__edit_file", "Edit"),
             ("GlobTool", "Glob"),
+            ("mcp__system__glob", "Glob"),
             ("GrepTool", "Grep"),
+            ("mcp__system__grep", "Grep"),
             ("LSPTool", "LSP"),
             ("ListMcpResourcesTool", "ListMcpResourcesTool"),
             ("NotebookEditTool", "NotebookEdit"),
@@ -1019,8 +1051,15 @@ mod tests {
             ("TeamDeleteTool", "TeamDelete"),
             ("ListPeersTool", "ListPeers"),
             ("ToolSearchTool", "ToolSearch"),
+            ("tool_search", "ToolSearch"),
+            ("mcp__system__tool_search", "ToolSearch"),
             ("WebFetchTool", "WebFetch"),
+            ("web_fetch", "WebFetch"),
+            ("mcp__system__web_fetch", "WebFetch"),
             ("WebSearchTool", "WebSearch"),
+            ("web_search", "WebSearch"),
+            ("mcp__system__web_search", "WebSearch"),
+            ("ViewImageTool", VIEW_IMAGE_TOOL_NAME),
         ];
 
         for (input, expected) in cases {
@@ -1063,13 +1102,14 @@ mod tests {
             .iter()
             .filter(|entry| entry.profiles.contains(&ToolSurfaceProfile::BrowserAssist))
             .count();
-        assert_eq!(core.len(), 40);
+        assert_eq!(core.len(), 41);
         assert_eq!(
             core.iter()
                 .filter(|entry| entry.lifecycle == ToolLifecycle::Current)
                 .count(),
-            40
+            41
         );
+        assert!(core.iter().any(|entry| entry.name == VIEW_IMAGE_TOOL_NAME));
         assert_eq!(
             core.iter()
                 .filter(|entry| entry.lifecycle == ToolLifecycle::Compat)

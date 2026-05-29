@@ -2,12 +2,6 @@ use super::agentruntime_profile::{
     profile_failure_category, AgentRuntimeProfileEvent, AgentRuntimeProfileStream,
 };
 use super::request_model_resolution::resolve_runtime_provider_model_recovery_config;
-use super::runtime_auto_compaction::{
-    auto_compaction_failure_count, record_auto_compaction_failure, reset_auto_compaction_failure,
-    resolve_auto_compact_threshold_override, resolve_auto_compaction_threshold_budget,
-    should_auto_compact_runtime_session, should_skip_auto_compaction_for_failures,
-    MAX_AUTO_COMPACTION_FAILURES,
-};
 #[cfg(test)]
 use super::runtime_project_hooks::enforce_runtime_turn_user_prompt_submit_hooks;
 use super::runtime_project_hooks::{
@@ -97,8 +91,7 @@ use runtime_turn_bootstrap::{
 };
 pub(crate) use runtime_turn_compaction::compact_runtime_session_internal;
 use runtime_turn_compaction::{
-    maybe_auto_compact_runtime_session_before_turn, persist_latest_assistant_message_usage,
-    resolve_runtime_final_done_event,
+    persist_latest_assistant_message_usage, resolve_runtime_final_done_event,
 };
 #[cfg(test)]
 use runtime_turn_compaction::{update_compaction_session_metrics, RuntimeSessionCompactionTrigger};
@@ -196,8 +189,6 @@ use runtime_turn_status::{
 const ARTIFACT_DOCUMENT_REPAIRED_WARNING_CODE: &str = "artifact_document_repaired";
 const ARTIFACT_DOCUMENT_FAILED_WARNING_CODE: &str = "artifact_document_failed";
 const ARTIFACT_DOCUMENT_PERSIST_FAILED_WARNING_CODE: &str = "artifact_document_persist_failed";
-const AUTO_CONTEXT_COMPACTION_EVENT_PREFIX: &str = "agent_context_compaction_auto_internal";
-const AUTO_CONTEXT_COMPACTION_FAILED_WARNING_CODE: &str = "context_compaction_auto_failed";
 const CONTEXT_COMPACTION_NOT_NEEDED_WARNING_CODE: &str = "context_compaction_not_needed";
 const RUNTIME_MODEL_PERMISSION_FALLBACK_WARNING_CODE: &str = "runtime_model_permission_fallback";
 const RUNTIME_MODEL_PERMISSION_FALLBACK_FAILED_WARNING_CODE: &str =

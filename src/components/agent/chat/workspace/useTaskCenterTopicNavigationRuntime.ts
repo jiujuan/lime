@@ -352,6 +352,7 @@ export function useTaskCenterTopicNavigationRuntime({
             return;
           }
 
+          taskCenterDraftSurfaceActiveRef.current = false;
           setActiveTaskCenterDraftTabId(null);
           setInput("");
           const fallbackTopicId = taskCenterOpenTabIdsRef.current[0] ?? null;
@@ -411,6 +412,7 @@ export function useTaskCenterTopicNavigationRuntime({
       setTaskCenterOpenTabMap,
       setTaskCenterTransitionTopicId,
       taskCenterDetachedTopicId,
+      taskCenterDraftSurfaceActiveRef,
       taskCenterDraftTabsRef,
       taskCenterOpenTabIdsRef,
       taskCenterTransitionTopicId,
