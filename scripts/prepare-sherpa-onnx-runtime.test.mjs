@@ -38,6 +38,10 @@ version = "1.13.0"
     expect(plan.releaseDir).toBe(
       "/repo/src-tauri/target/aarch64-apple-darwin/release",
     );
+    expect(plan.debugDirs).toEqual([
+      "/repo/src-tauri/target/debug",
+      "/repo/src-tauri/target/aarch64-apple-darwin/debug",
+    ]);
   });
 
   it("为 Windows 解析预置运行时归档和库文件", () => {

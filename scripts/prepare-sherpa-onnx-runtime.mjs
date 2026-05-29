@@ -96,6 +96,10 @@ export function resolveSherpaRuntimePlan({
   const extractedDir = path.join(prebuiltRoot, archiveStem);
   const libDir = path.join(extractedDir, "lib");
   const releaseDir = path.join(srcTauriRoot, "target", targetTriple, "release");
+  const debugDirs = [
+    path.join(srcTauriRoot, "target", "debug"),
+    path.join(srcTauriRoot, "target", targetTriple, "debug"),
+  ];
   const runtimeLibDir = path.join(
     srcTauriRoot,
     ".release-runtime-libs",
@@ -106,6 +110,7 @@ export function resolveSherpaRuntimePlan({
   return {
     archiveName,
     archivePath,
+    debugDirs,
     extractedDir,
     libDir,
     libs,
@@ -151,6 +156,27 @@ function findExistingLib(root, libName) {
   return null;
 }
 
+function resolveRuntimeLibrarySource(plan, lib) {
+  const extractedPath = path.join(plan.libDir, lib);
+  if (fs.existsSync(extractedPath)) {
+    return extractedPath;
+  }
+
+  const prebuiltPath = findExistingLib(plan.prebuiltRoot, lib);
+  if (prebuiltPath && fs.existsSync(prebuiltPath)) {
+    return prebuiltPath;
+  }
+
+  for (const dir of [plan.releaseDir, plan.runtimeLibDir, ...plan.debugDirs]) {
+    const existingPath = path.join(dir, lib);
+    if (fs.existsSync(existingPath)) {
+      return existingPath;
+    }
+  }
+
+  return null;
+}
+
 function ensureArchiveExtracted(plan) {
   fs.mkdirSync(plan.prebuiltRoot, { recursive: true });
 
@@ -185,36 +211,34 @@ function ensureArchiveExtracted(plan) {
 }
 
 function copyRuntimeLibraries(plan) {
-  fs.mkdirSync(plan.releaseDir, { recursive: true });
-  fs.mkdirSync(plan.runtimeLibDir, { recursive: true });
+  const destinationDirs = [
+    plan.releaseDir,
+    plan.runtimeLibDir,
+    ...plan.debugDirs,
+  ];
+
+  for (const dir of destinationDirs) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
 
   for (const lib of plan.libs) {
-    const releasePath = path.join(plan.releaseDir, lib);
-    const runtimePath = path.join(plan.runtimeLibDir, lib);
-
-    let sourcePath = path.join(plan.libDir, lib);
-    if (!fs.existsSync(sourcePath)) {
-      sourcePath = findExistingLib(plan.prebuiltRoot, lib);
-    }
-
-    if (sourcePath && fs.existsSync(sourcePath)) {
-      if (!fs.existsSync(releasePath)) {
-        fs.copyFileSync(sourcePath, releasePath);
-      }
-      if (!fs.existsSync(runtimePath)) {
-        fs.copyFileSync(sourcePath, runtimePath);
-      }
-    } else if (fs.existsSync(releasePath) && !fs.existsSync(runtimePath)) {
-      fs.copyFileSync(releasePath, runtimePath);
-    }
-
-    if (!fs.existsSync(releasePath)) {
-      fail(`Expected ONNX runtime shared library missing: ${releasePath}`);
-    }
-    if (!fs.existsSync(runtimePath)) {
+    const sourcePath = resolveRuntimeLibrarySource(plan, lib);
+    if (!sourcePath) {
       fail(
-        `Expected staged ONNX runtime shared library missing: ${runtimePath}`,
+        `Expected ONNX runtime shared library missing: ${path.join(plan.libDir, lib)}`,
       );
+    }
+
+    for (const destinationDir of destinationDirs) {
+      const destinationPath = path.join(destinationDir, lib);
+      if (path.resolve(sourcePath) !== path.resolve(destinationPath)) {
+        fs.copyFileSync(sourcePath, destinationPath);
+      }
+      if (!fs.existsSync(destinationPath)) {
+        fail(
+          `Expected ONNX runtime shared library missing: ${destinationPath}`,
+        );
+      }
     }
   }
 }
@@ -241,6 +265,9 @@ export function prepareSherpaOnnxRuntime({
   console.log(`Prepared sherpa-onnx shared libraries for ${plan.targetTriple}`);
   console.log(`Prebuilt lib dir: ${plan.libDir}`);
   console.log(`Release lib dir: ${plan.releaseDir}`);
+  for (const debugDir of plan.debugDirs) {
+    console.log(`Debug lib dir: ${debugDir}`);
+  }
   for (const lib of plan.libs) {
     console.log(` - ${lib}`);
   }
