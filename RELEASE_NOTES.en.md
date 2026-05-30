@@ -21,6 +21,7 @@
 - Fixed Bash / PowerShell path permission parsing so pure variable-assignment segments no longer panic.
 - Fixed native tool panics so they collapse into a single tool error result instead of interrupting the tool stream.
 - Fixed provider / model preferences so new sessions and sessions missing runtime metadata still submit the selected preference with the turn.
+- Fixed web-search preflight so empty search payloads no longer count as successful results, and required news / time-sensitive requests now expand into dated search queries.
 
 ### Improvements And Refactors
 
@@ -40,6 +41,7 @@
 - Added frontend regressions for project selection / creation, file management, team workbench, canvas layout, conversation restore, Crash Recovery, and error presentation.
 - Added regressions for OpenAI / Responses tool-call formats, responsive-chat provider-unavailable handling, explicit read-only path permissions, runtime warmup, and tool-process summaries.
 - Added regressions for file-change summaries, tool panic containment, shell path parsing panic protection, and model preferences submitted with turns.
+- Added Rust regressions for web-search preflight required / allowed mode boundaries, news-query expansion, and empty-result downgrades.
 - Updated the GUI smoke knowledge-workspace check to cover the new workspace path and readiness state.
 - Updated the Agent UI TTFT sample matrix to cover the runtime MCP prewarm before-first-token budget path.
 - Release gates cover `cargo fmt`, `cargo test`, `cargo clippy`, `npm run lint`, `npm test`, and `npm run verify:gui-smoke`.

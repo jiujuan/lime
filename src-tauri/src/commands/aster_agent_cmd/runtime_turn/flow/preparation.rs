@@ -197,6 +197,11 @@ fn prepare_runtime_turn_policy(
             request_web_search,
             request_search_mode,
         );
+    let (request_web_search, request_search_mode) = upgrade_time_sensitive_web_search_policy(
+        &request.message,
+        request_web_search,
+        request_search_mode,
+    );
 
     let request_tool_policy = resolve_request_tool_policy_with_mode(
         request_web_search,
@@ -227,6 +232,29 @@ fn prepare_runtime_turn_policy(
     RuntimeTurnPolicyPreparation {
         request_tool_policy,
         execution_profile,
+    }
+}
+
+fn upgrade_time_sensitive_web_search_policy(
+    message_text: &str,
+    request_web_search: Option<bool>,
+    request_search_mode: Option<RequestToolPolicyMode>,
+) -> (Option<bool>, Option<RequestToolPolicyMode>) {
+    if request_web_search != Some(true) {
+        return (request_web_search, request_search_mode);
+    }
+
+    match request_search_mode {
+        Some(RequestToolPolicyMode::Disabled | RequestToolPolicyMode::Required) => {
+            (request_web_search, request_search_mode)
+        }
+        Some(RequestToolPolicyMode::Allowed) | None => {
+            if lime_agent::message_requires_fresh_web_search(message_text) {
+                (Some(true), Some(RequestToolPolicyMode::Required))
+            } else {
+                (request_web_search, request_search_mode)
+            }
+        }
     }
 }
 
@@ -417,6 +445,155 @@ async fn prepare_runtime_turn_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn runtime_policy_test_request(
+        message: &str,
+        web_search: Option<bool>,
+        search_mode: Option<RequestToolPolicyMode>,
+        metadata: Option<serde_json::Value>,
+    ) -> AsterChatRequest {
+        AsterChatRequest {
+            message: message.to_string(),
+            session_id: "session-policy-test".to_string(),
+            event_name: "agent_stream_policy_test".to_string(),
+            images: None,
+            provider_config: None,
+            provider_preference: None,
+            model_preference: None,
+            thinking_enabled: None,
+            approval_policy: None,
+            sandbox_policy: None,
+            project_id: None,
+            workspace_id: "workspace-policy-test".to_string(),
+            web_search,
+            search_mode,
+            execution_strategy: None,
+            auto_continue: None,
+            system_prompt: None,
+            metadata,
+            turn_id: None,
+            queue_if_busy: None,
+            queued_turn_id: None,
+        }
+    }
+
+    #[test]
+    fn time_sensitive_web_search_should_upgrade_allowed_policy_to_required() {
+        let request = runtime_policy_test_request(
+            "请整理今日国际新闻",
+            Some(true),
+            Some(RequestToolPolicyMode::Allowed),
+            None,
+        );
+
+        let RuntimeTurnPolicyPreparation {
+            request_tool_policy,
+            ..
+        } = prepare_runtime_turn_policy(
+            &request,
+            "session-policy-test",
+            None,
+            false,
+            AsterExecutionStrategy::CodeOrchestrated,
+        );
+
+        assert_eq!(
+            request_tool_policy.search_mode,
+            RequestToolPolicyMode::Required
+        );
+        assert!(request_tool_policy.requires_web_search());
+    }
+
+    #[test]
+    fn time_sensitive_web_search_should_upgrade_missing_mode_to_required() {
+        let request =
+            runtime_policy_test_request("latest OpenAI API changes", Some(true), None, None);
+
+        let RuntimeTurnPolicyPreparation {
+            request_tool_policy,
+            ..
+        } = prepare_runtime_turn_policy(
+            &request,
+            "session-policy-test",
+            None,
+            false,
+            AsterExecutionStrategy::CodeOrchestrated,
+        );
+
+        assert_eq!(
+            request_tool_policy.search_mode,
+            RequestToolPolicyMode::Required
+        );
+    }
+
+    #[test]
+    fn browser_required_policy_should_not_be_reopened_by_time_sensitive_search() {
+        let request = runtime_policy_test_request(
+            "请打开网页并检查今天的新闻",
+            Some(true),
+            Some(RequestToolPolicyMode::Allowed),
+            Some(serde_json::json!({
+                "harness": {
+                    "browser_requirement": "required_with_user_step"
+                }
+            })),
+        );
+
+        let RuntimeTurnPolicyPreparation {
+            request_tool_policy,
+            ..
+        } = prepare_runtime_turn_policy(
+            &request,
+            "session-policy-test",
+            None,
+            false,
+            AsterExecutionStrategy::CodeOrchestrated,
+        );
+
+        assert_eq!(
+            request_tool_policy.search_mode,
+            RequestToolPolicyMode::Disabled
+        );
+        assert!(!request_tool_policy.allows_web_search());
+    }
+
+    #[test]
+    fn site_search_skill_launch_policy_should_not_be_reopened_by_time_sensitive_search() {
+        let request = runtime_policy_test_request(
+            "请查一下今天这个站点的新闻",
+            Some(true),
+            Some(RequestToolPolicyMode::Allowed),
+            Some(serde_json::json!({
+                "harness": {
+                    "site_search_skill_launch": {
+                        "skill_name": "site_search",
+                        "kind": "site_search_request",
+                        "site_search_request": {
+                            "site": "GitHub",
+                            "query": "latest news"
+                        }
+                    }
+                }
+            })),
+        );
+
+        let RuntimeTurnPolicyPreparation {
+            request_tool_policy,
+            ..
+        } = prepare_runtime_turn_policy(
+            &request,
+            "session-policy-test",
+            None,
+            false,
+            AsterExecutionStrategy::CodeOrchestrated,
+        );
+
+        assert_eq!(
+            request_tool_policy.search_mode,
+            RequestToolPolicyMode::Disabled
+        );
+        assert!(!request_tool_policy.allows_web_search());
+    }
 
     #[tokio::test]
     async fn runtime_mcp_prewarm_budget_should_timeout_before_first_token_path() {

@@ -924,8 +924,87 @@ fn should_run_web_search_preflight(policy: &RequestToolPolicy, _message_text: &s
     policy.requires_web_search()
 }
 
-fn build_preflight_queries(message_text: &str, _policy: &RequestToolPolicy) -> Vec<String> {
-    vec![derive_preflight_query(message_text)]
+fn build_preflight_queries(message_text: &str, policy: &RequestToolPolicy) -> Vec<String> {
+    let base_query = derive_preflight_query(message_text);
+    if !policy.requires_web_search() || !message_requires_fresh_web_search(message_text) {
+        return vec![base_query];
+    }
+
+    let current_date = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let mut queries = Vec::new();
+    push_unique_query(&mut queries, base_query.clone());
+    push_unique_query(&mut queries, format!("{base_query} {current_date}"));
+    push_unique_query(
+        &mut queries,
+        format!("{base_query} latest headlines {current_date}"),
+    );
+    push_unique_query(
+        &mut queries,
+        format!("{base_query} international news roundup {current_date}"),
+    );
+    queries.truncate(NEWS_PREFLIGHT_QUERY_PARALLELISM);
+    queries
+}
+
+fn push_unique_query(queries: &mut Vec<String>, query: String) {
+    let normalized = query.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.is_empty() {
+        return;
+    }
+    if !queries
+        .iter()
+        .any(|existing| existing.eq_ignore_ascii_case(&normalized))
+    {
+        queries.push(normalized);
+    }
+}
+
+pub fn message_requires_fresh_web_search(message_text: &str) -> bool {
+    let normalized = message_text.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return false;
+    }
+
+    [
+        "今天",
+        "今日",
+        "最新",
+        "实时",
+        "新闻",
+        "热点",
+        "头条",
+        "快讯",
+        "搜索",
+        "搜一下",
+        "查一下",
+        "联网",
+        "网上",
+        "价格",
+        "行情",
+        "政策",
+        "法规",
+        "规则",
+        "版本",
+        "发布",
+        "today",
+        "latest",
+        "recent",
+        "current",
+        "breaking",
+        "news",
+        "headlines",
+        "roundup",
+        "price",
+        "policy",
+        "release",
+        "search",
+        "lookup",
+        "look up",
+        "browse",
+        "verify",
+    ]
+    .iter()
+    .any(|marker| normalized.contains(marker))
 }
 
 fn normalize_url_candidate(raw_url: &str) -> String {
@@ -947,6 +1026,34 @@ fn extract_urls_from_output(output: &str) -> Vec<String> {
         }
     }
     urls
+}
+
+fn output_contains_web_search_result_block(output: &str) -> bool {
+    let Ok(value) = serde_json::from_str::<Value>(output) else {
+        return false;
+    };
+    let Some(results) = value.get("results").and_then(Value::as_array) else {
+        return false;
+    };
+
+    results.iter().any(|entry| {
+        entry
+            .get("content")
+            .and_then(Value::as_array)
+            .is_some_and(|content| {
+                content.iter().any(|item| {
+                    item.get("url").and_then(Value::as_str).is_some_and(|url| {
+                        url.starts_with("http://") || url.starts_with("https://")
+                    })
+                })
+            })
+    })
+}
+
+fn preflight_search_outcome_has_usable_result(outcome: &PreflightSearchOutcome) -> bool {
+    outcome.success
+        && (output_contains_web_search_result_block(&outcome.output)
+            || !extract_urls_from_output(&outcome.output).is_empty())
 }
 
 fn extract_domain(url: &str) -> String {
@@ -987,7 +1094,10 @@ fn build_coverage_summary(
         return None;
     }
 
-    let successful = outcomes.iter().filter(|item| item.success).count();
+    let successful = outcomes
+        .iter()
+        .filter(|item| preflight_search_outcome_has_usable_result(item))
+        .count();
     let mut unique_urls = HashSet::new();
     let mut unique_domains = HashSet::new();
     for outcome in outcomes {
@@ -1012,7 +1122,7 @@ fn build_preflight_prompt_appendix(
 ) -> Option<String> {
     let successful = outcomes
         .iter()
-        .filter(|item| item.success && !item.output.trim().is_empty())
+        .filter(|item| preflight_search_outcome_has_usable_result(item))
         .collect::<Vec<_>>();
     if successful.is_empty() {
         return None;
@@ -1621,14 +1731,22 @@ pub async fn execute_web_search_preflight_if_needed(
             })
             .await;
             match result {
-                Ok(tool_result) => PreflightSearchOutcome {
-                    index: planned.index,
-                    query: planned.query,
-                    tool_id: planned.tool_id,
-                    success: tool_result.success,
-                    output: tool_result.output.unwrap_or_default(),
-                    error: tool_result.error,
-                },
+                Ok(tool_result) => {
+                    let output = tool_result.output.unwrap_or_default();
+                    let mut outcome = PreflightSearchOutcome {
+                        index: planned.index,
+                        query: planned.query,
+                        tool_id: planned.tool_id,
+                        success: tool_result.success,
+                        output,
+                        error: tool_result.error,
+                    };
+                    if outcome.success && !preflight_search_outcome_has_usable_result(&outcome) {
+                        outcome.success = false;
+                        outcome.error = Some("WebSearch 未返回可用搜索结果链接".to_string());
+                    }
+                    outcome
+                }
                 Err(error) => PreflightSearchOutcome {
                     index: planned.index,
                     query: planned.query,
@@ -1668,7 +1786,9 @@ pub async fn execute_web_search_preflight_if_needed(
         .iter()
         .map(|item| item.query.clone())
         .collect::<Vec<_>>();
-    let successful_required = outcomes.iter().any(|item| item.success);
+    let successful_required = outcomes
+        .iter()
+        .any(preflight_search_outcome_has_usable_result);
     let coverage_summary = build_coverage_summary(&planned_query_texts, &outcomes);
     let system_prompt_appendix = build_preflight_prompt_appendix(&planned_query_texts, &outcomes);
 
@@ -2887,6 +3007,85 @@ mod tests {
             build_preflight_queries("继续", &policy),
             vec!["继续".to_string()]
         );
+    }
+
+    #[test]
+    fn required_news_web_search_should_expand_preflight_queries() {
+        let policy = resolve_request_tool_policy_with_mode(
+            Some(true),
+            Some(RequestToolPolicyMode::Required),
+            false,
+        );
+
+        let queries = build_preflight_queries("请搜索今天最新 AI 新闻", &policy);
+        assert_eq!(queries.len(), NEWS_PREFLIGHT_QUERY_PARALLELISM);
+        assert_eq!(queries[0], "请搜索今天最新 AI 新闻");
+        assert!(queries
+            .iter()
+            .any(|query| query.contains("latest headlines")));
+        assert!(queries
+            .iter()
+            .any(|query| query.contains("international news roundup")));
+    }
+
+    #[test]
+    fn preflight_search_outcome_should_require_usable_link() {
+        let no_link = PreflightSearchOutcome {
+            index: 0,
+            query: "新闻".to_string(),
+            tool_id: "tool-no-link".to_string(),
+            success: true,
+            output: "WebSearch 工具可用于联网搜索。".to_string(),
+            error: None,
+        };
+        assert!(!preflight_search_outcome_has_usable_result(&no_link));
+
+        let markdown_link = PreflightSearchOutcome {
+            index: 0,
+            query: "新闻".to_string(),
+            tool_id: "tool-markdown-link".to_string(),
+            success: true,
+            output: "1. [Example](https://example.com/news)".to_string(),
+            error: None,
+        };
+        assert!(preflight_search_outcome_has_usable_result(&markdown_link));
+
+        let structured_link = PreflightSearchOutcome {
+            index: 0,
+            query: "新闻".to_string(),
+            tool_id: "tool-structured-link".to_string(),
+            success: true,
+            output: serde_json::json!({
+                "query": "新闻",
+                "results": [
+                    {
+                        "toolUseId": "web_search",
+                        "content": [
+                            {
+                                "title": "Example",
+                                "url": "https://example.com/news"
+                            }
+                        ]
+                    }
+                ],
+                "durationSeconds": 0.1
+            })
+            .to_string(),
+            error: None,
+        };
+        assert!(preflight_search_outcome_has_usable_result(&structured_link));
+
+        let failed_with_link = PreflightSearchOutcome {
+            index: 0,
+            query: "新闻".to_string(),
+            tool_id: "tool-failed-link".to_string(),
+            success: false,
+            output: "https://example.com/news".to_string(),
+            error: Some("failed".to_string()),
+        };
+        assert!(!preflight_search_outcome_has_usable_result(
+            &failed_with_link
+        ));
     }
 
     #[tokio::test]

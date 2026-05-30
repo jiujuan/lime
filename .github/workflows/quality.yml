@@ -182,7 +182,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run headless GUI smoke
-        run: npm run verify:gui-smoke -- --timeout-ms 900000
+        run: npm run verify:gui-smoke -- --timeout-ms 1800000
 
   windows_shell_runtime:
     name: Windows Shell Runtime

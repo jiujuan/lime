@@ -17,6 +17,7 @@
 - 修正 Bash / PowerShell 路径权限解析在纯变量赋值片段上可能 panic 的问题
 - 修正 native tool panic 会中断工具流的问题，现在会收敛为单个工具错误结果
 - 修正新会话或 runtime metadata 缺失时 provider / model 偏好可能没有随 turn 提交的问题
+- 修正联网预检索把空结果误判为成功的问题，并让必须联网的新闻 / 时效性请求自动扩展带日期的搜索 query
 
 ### 优化与重构
 - 团队工作台文案从内部运行时术语收敛到任务、负责人、交付物和处理状态，并把技术细节默认折叠
@@ -34,6 +35,7 @@
 - 新增项目选择 / 创建、文件管理、团队工作台、画布布局、对话恢复、Crash Recovery 和错误展示的前端回归
 - 新增 OpenAI / Responses 工具调用格式、responsive chat Provider 不可用、显式只读路径权限、runtime 预热和工具过程摘要回归
 - 新增文件改动摘要、工具 panic 防护、shell 路径解析 panic 防护和模型偏好随 turn 提交的回归
+- 新增联网预检索 required / allowed 模式边界、新闻类 query 扩展和空结果降级的 Rust 回归
 - 更新 GUI smoke 的知识工作区检查，以覆盖新的工作区路径和 ready 状态
 - 更新 Agent UI TTFT sample matrix，覆盖 runtime MCP prewarm 首字前预算路径
 - 发布门禁将覆盖 `cargo fmt`、`cargo test`、`cargo clippy`、`npm run lint`、`npm test` 和 `npm run verify:gui-smoke`
