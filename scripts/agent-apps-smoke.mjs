@@ -33,6 +33,13 @@ const AGENT_APPS_NAV_SELECTOR =
   'button[aria-label="Agent Apps"], button[title="Agent Apps"]';
 const AGENT_APP_LAB_NAV_SELECTOR =
   'button[aria-label="Agent App Lab"], button[title="Agent App Lab"]';
+const CONTENT_FACTORY_APP_ID = "content-factory-app";
+const CONTENT_FACTORY_RUNTIME_FIXTURE_ROOT = path.join(
+  process.cwd(),
+  ".lime",
+  "qc",
+  "agent-apps-runtime-fixtures",
+);
 const CONTENT_FACTORY_SAMPLE_PROJECT_ID = "sample_content_factory_spring";
 const CONTENT_FACTORY_ACTIONS = {
   "build-store": {
@@ -236,6 +243,220 @@ function sanitizeDiagnosticJson(value, depth = 0) {
     );
   }
   return sanitizeDiagnosticText(String(value));
+}
+
+function contentFactoryRuntimeHtml() {
+  return `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>内容工厂</title>
+    <style>
+      body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f8fafc; color: #0f172a; }
+      main { padding: 24px; }
+      nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+      button { border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; padding: 8px 12px; cursor: pointer; }
+      button:hover { background: #f1f5f9; }
+      .panel { border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; padding: 16px; }
+      .muted { color: #64748b; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>内容工厂</h1>
+      <p class="muted">项目作战室 · 工作台状态 · 当前进度</p>
+      <nav>
+        <button data-page="start">资料</button>
+        <button data-page="scenes">场景</button>
+        <button data-page="produce">生产</button>
+        <button data-page="deliver">交付</button>
+        <button data-page="review">复盘</button>
+        <button data-page="projects">项目</button>
+      </nav>
+      <section class="panel" id="content"></section>
+    </main>
+    <script>
+      const callLog = [];
+      const hostTaskRecords = {};
+      const pages = {
+        start: "资料 资料原文或摘要 确认资料版本 当前进度 工作台状态",
+        scenes: "场景整理 场景概览 优先场景 当前进度 工作台状态",
+        produce: "本轮内容画布 整理本轮内容 脚本和图片需求 当前进度 工作台状态",
+        deliver: "交付出口 交付包工作台 交付物清单 当前进度 工作台状态",
+        review: "复盘出口 复盘决策室 生成下一轮判断 当前进度 工作台状态",
+        projects: "项目列表 春季新品内容项目 当前进度 工作台状态",
+      };
+
+      function recordCapability(capability, method) {
+        callLog.push({ capability, method, calledAt: new Date().toISOString() });
+      }
+
+      function buildTaskRecord(action) {
+        return {
+          taskId: "agent-app-task-smoke",
+          sessionId: "agent-app-runtime-smoke",
+          taskStatus: "completed",
+          hasRuntimeFacts: true,
+          runtimeFacts: {
+            modelRouting: { model: "smoke-model", routes: ["smoke"] },
+            tokenUsage: { totals: { input: 1, output: 1 } },
+            costSummary: { cost: 0 },
+            skills: { skills: ["knowledge-builder", "content-reviewer", "article-writer"] },
+          },
+          runtimeProcess: {
+            routingCount: 1,
+            executionCount: 1,
+            artifactCount: 1,
+            timeline: [{ type: "task.completed", message: action }],
+            usage: { totalTokens: 2 },
+            cost: { total: 0 },
+            model: { label: "smoke-model" },
+            skillNames: ["knowledge-builder", "content-reviewer", "article-writer"],
+            invokedSkillNames: ["knowledge-builder", "content-reviewer", "article-writer"],
+            terminal: true,
+          },
+          completion: {
+            modelReady: true,
+            usageReady: true,
+            costReady: true,
+            skillInvocationReady: true,
+            artifactReady: true,
+            evidenceReady: true,
+            workspacePatchReady: true,
+            terminalReady: true,
+          },
+          events: [
+            { type: "skill.invoked", message: "knowledge-builder" },
+            { type: "artifact.created", message: "content_factory.workspace_patch" },
+            { type: "evidence.recorded", message: "skillEvidence" },
+          ],
+        };
+      }
+
+      function runAction(action) {
+        [
+          ["lime.agent", "startTask"],
+          ["lime.models", "getRouting"],
+          ["lime.usage", "getTokenUsage"],
+          ["lime.usage", "getCostSummary"],
+          ["lime.skills", "list"],
+          ["lime.agent", "streamTask"],
+        ].forEach(([capability, method]) => recordCapability(capability, method));
+        const record = buildTaskRecord(action);
+        hostTaskRecords.contentFactoryProduction = record;
+        hostTaskRecords[record.taskId] = record;
+        document.querySelector("#status").textContent =
+          "正在连接 Lime AI 同事 · 正在整理当前项目内容 · 当前进度已记录";
+      }
+
+      function renderPage(page) {
+        const content = document.querySelector("#content");
+        const campaignControls = page === "produce"
+          ? '<button data-campaign-step="setup">整理本轮内容</button><button data-campaign-step="copy">整理草稿</button><button data-campaign-step="derivatives">生成脚本</button>'
+          : "";
+        const projectControls = page === "projects"
+          ? '<button data-open-project="sample_content_factory_spring">春季新品内容项目</button>'
+          : "";
+        content.innerHTML =
+          '<h2>' + pages[page] + '</h2>' +
+          '<p id="status">Lime AI 运行现场 · 当前进度等待启动</p>' +
+          campaignControls +
+          projectControls +
+          '<div><button data-action="build-store">整理资料</button>' +
+          '<button data-action="run-scenarios">生成/更新场景包</button>' +
+          '<button data-action="run-production">生成本轮内容包</button>' +
+          '<button data-action="only-copy">只重写文案批次</button>' +
+          '<button data-action="run-scripts">生成脚本批次</button>' +
+          '<button data-action="run-strategy">更新交付结论</button>' +
+          '<button data-action="run-review">生成判断</button></div>';
+        content.querySelectorAll("[data-action]").forEach((button) => {
+          button.addEventListener("click", () => runAction(button.dataset.action));
+        });
+      }
+
+      window.limeAgentAppBridge = {
+        protocol: "lime.agentApp.bridge",
+        refreshHostCapabilityProfile() {
+          return { available: true };
+        },
+        getSdkCallLog() {
+          return callLog;
+        },
+        getHostTaskRunRecord(id) {
+          return hostTaskRecords[id] || hostTaskRecords.contentFactoryProduction || null;
+        },
+      };
+      window.addEventListener("message", () => undefined);
+      document.querySelectorAll("[data-page]").forEach((button) => {
+        button.addEventListener("click", () => renderPage(button.dataset.page));
+      });
+      renderPage("start");
+    </script>
+  </body>
+</html>`;
+}
+
+function createContentFactoryRuntimeFixture(rootDir) {
+  const appDir = path.join(rootDir, CONTENT_FACTORY_APP_ID);
+  fs.mkdirSync(appDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(appDir, "APP.md"),
+    `---
+manifestVersion: 0.3.0
+name: ${CONTENT_FACTORY_APP_ID}
+displayName: 内容工厂
+version: 0.3.0
+entries:
+  - key: dashboard
+    kind: page
+    title: 项目首页
+    route: /dashboard
+---
+# 内容工厂
+`,
+  );
+  fs.writeFileSync(
+    path.join(appDir, "package.json"),
+    `${JSON.stringify(
+      {
+        private: true,
+        type: "module",
+        scripts: {
+          dev: "node server.mjs",
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  fs.writeFileSync(
+    path.join(appDir, "server.mjs"),
+    `import http from "node:http";
+
+const html = ${JSON.stringify(contentFactoryRuntimeHtml())};
+const port = Number(process.env.PORT || 4173);
+
+const server = http.createServer((request, response) => {
+  const url = new URL(request.url || "/", "http://127.0.0.1");
+  if (url.pathname === "/api/bootstrap") {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ ok: true, appId: "${CONTENT_FACTORY_APP_ID}" }));
+    return;
+  }
+  if (url.pathname === "/api/sample/load") {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ ok: true }));
+    return;
+  }
+  response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+  response.end(html);
+});
+
+server.listen(port, "127.0.0.1");
+`,
+  );
+  return appDir;
 }
 
 async function execFileText(command, args, options = {}) {
@@ -1075,6 +1296,19 @@ async function collectFailureDiagnostics(page, options, error, consoleErrors, fa
     ),
     collectExternalDevProcessSnapshot(),
   ]);
+  let installedStates = null;
+  try {
+    installedStates = (await listInstalledAgentAppsForSmoke(options)).map(
+      summarizeInstalledAgentAppState,
+    );
+  } catch (diagnosticError) {
+    installedStates = {
+      error:
+        diagnosticError instanceof Error
+          ? diagnosticError.message
+          : String(diagnosticError),
+    };
+  }
 
   const summary = {
     scenarioId: "agent-apps-smoke-failure",
@@ -1085,6 +1319,7 @@ async function collectFailureDiagnostics(page, options, error, consoleErrors, fa
     runtimeFrameState,
     bridgeHealth,
     runtimeStatus,
+    installedStates,
     processSnapshot,
     consoleErrors,
     failedRequests,
@@ -1148,6 +1383,46 @@ async function getContentFactoryRuntimeFrame(page, timeoutMs) {
   const frame = await frameHandle.contentFrame();
   assert(frame, "Content Factory runtime frame should be attached");
   return frame;
+}
+
+async function waitForContentFactoryRuntimeSurface(page, timeoutMs) {
+  const deadline = Date.now() + Math.min(timeoutMs, 60_000);
+  let lastState = null;
+  while (Date.now() < deadline) {
+    lastState = await page.evaluate(() => {
+      const text = document.body.innerText.slice(0, 1_200);
+      return {
+        runtimeSurfaceVisible: Boolean(
+          document.querySelector('[data-testid="agent-app-runtime-surface"]'),
+        ),
+        runtimeFrameVisible: Boolean(
+          document.querySelector('[data-testid="agent-app-runtime-frame"]'),
+        ),
+        runtimeErrorVisible:
+          text.includes("App 打开失败") ||
+          text.includes("App open failed") ||
+          text.includes("Agent App UI runtime"),
+        agentAppsPageVisible: Boolean(
+          document.querySelector('[data-testid="agent-apps-page"]'),
+        ),
+        bodyText: text,
+      };
+    });
+    if (lastState.runtimeSurfaceVisible && lastState.runtimeFrameVisible) {
+      return lastState;
+    }
+    if (lastState.runtimeErrorVisible) {
+      throw new Error(
+        `Content Factory runtime entered error state: ${lastState.bodyText}`,
+      );
+    }
+    await sleep(500);
+  }
+  throw new Error(
+    `Content Factory runtime surface did not appear: ${JSON.stringify(
+      sanitizeDiagnosticJson(lastState),
+    )}`,
+  );
 }
 
 async function readContentFactorySdkCallLog(frame) {
@@ -1898,14 +2173,61 @@ async function runFlagOffRegression(options) {
   }
 }
 
-async function ensureContentFactoryInstalled(page, options, reason) {
+function summarizeInstalledAgentAppState(state) {
+  if (!state || typeof state !== "object") {
+    return null;
+  }
+  return {
+    appId: state.appId ?? "",
+    installMode: state.installMode ?? "",
+    disabled: Boolean(state.disabled),
+    sourceKind: state.identity?.sourceKind ?? "",
+    sourceUri: sanitizeDiagnosticText(state.identity?.sourceUri ?? ""),
+    appVersion: state.identity?.appVersion ?? "",
+  };
+}
+
+function isExpectedContentFactorySmokeState(state, runtimeDir) {
+  return (
+    state?.appId === CONTENT_FACTORY_APP_ID &&
+    state?.installMode === "in_lime" &&
+    state?.disabled === false &&
+    state?.identity?.sourceKind === "local_folder" &&
+    path.resolve(String(state?.identity?.sourceUri ?? "")) === path.resolve(runtimeDir)
+  );
+}
+
+async function listInstalledAgentAppsForSmoke(options) {
+  const list = await invokeDevBridgeCommand(
+    options,
+    "agent_app_list_installed",
+    {},
+    30_000,
+  );
+  return Array.isArray(list?.states) ? list.states : [];
+}
+
+async function ensureContentFactoryInstalled(page, options, reason, runtimeDir) {
   const installedSelector = '[data-testid="agent-apps-installed-content-factory-app"]';
-  if ((await page.locator(installedSelector).count()) > 0) {
-    return { status: "already_installed", reason };
+  const installedStates = await listInstalledAgentAppsForSmoke(options);
+  const existingState = installedStates.find(
+    (state) => state?.appId === CONTENT_FACTORY_APP_ID,
+  );
+  if (isExpectedContentFactorySmokeState(existingState, runtimeDir)) {
+    if ((await page.locator(installedSelector).count()) === 0) {
+      await page.click('[data-testid="agent-apps-refresh"]');
+      await page.waitForSelector(installedSelector, {
+        timeout: options.timeoutMs,
+      });
+    }
+    return {
+      status: "already_installed",
+      reason,
+      state: summarizeInstalledAgentAppState(existingState),
+    };
   }
 
-  const state = await page.evaluate(async () => {
-    const api = await import("/src/lib/api/agentApps.ts");
+  const state = await page.evaluate(async (appDir) => {
     const fixtureResponse = await fetch(
       "/src/features/agent-app/fixtures/content-factory-app.json",
     );
@@ -1914,20 +2236,51 @@ async function ensureContentFactoryInstalled(page, options, reason) {
         `Failed to load Content Factory fixture: HTTP ${fixtureResponse.status}`,
       );
     }
-    const packageManifest = await fixtureResponse.json();
-    const payload = window.__LIME_AGENT_APPS_SMOKE_BOOTSTRAP__;
-    const app = payload?.apps?.find?.(
-      (item) => item?.appId === "content-factory-app",
+    const manifest = await fixtureResponse.json();
+    const identityModule = await import(
+      "/src/features/agent-app/install/packageIdentity.ts"
     );
-    if (!app) {
-      throw new Error("Content Factory cloud bootstrap fixture is missing.");
-    }
-    const review = await api.reviewCloudAgentAppRelease({
-      app,
-      packageManifest,
+    const previewModule = await import(
+      "/src/features/agent-app/install/installedAppPreview.ts"
+    );
+    const setupModule = await import(
+      "/src/features/agent-app/install/labInstallFlow.ts"
+    );
+    const stateModule = await import(
+      "/src/features/agent-app/install/installedAppState.ts"
+    );
+    const now = new Date().toISOString();
+    const identity = identityModule.buildPackageIdentity({
+      manifest,
+      sourceKind: "local_folder",
+      sourceUri: appDir,
+      loadedAt: now,
     });
-    return review.state;
-  });
+    const setupPreview = previewModule.buildInstalledAppPreview({
+      fixture: manifest,
+      identity,
+      loadedAt: now,
+      checkedAt: now,
+      generatedAt: now,
+    });
+    const setup = setupModule.buildAgentAppLabResolvedSetupState(
+      setupPreview.projection,
+    );
+    const preview = previewModule.buildInstalledAppPreview({
+      fixture: manifest,
+      identity,
+      setup,
+      loadedAt: now,
+      checkedAt: now,
+      generatedAt: now,
+    });
+    return stateModule.buildInstalledAgentAppState({
+      preview,
+      setup,
+      installedAt: now,
+      updatedAt: now,
+    });
+  }, runtimeDir);
   await invokeDevBridgeCommand(
     options,
     "agent_app_save_installed_state",
@@ -1942,7 +2295,9 @@ async function ensureContentFactoryInstalled(page, options, reason) {
   return {
     status: "seeded_from_fixture",
     reason,
-    appId: state?.appId ?? "content-factory-app",
+    appId: state?.appId ?? CONTENT_FACTORY_APP_ID,
+    previousState: summarizeInstalledAgentAppState(existingState),
+    state: summarizeInstalledAgentAppState(state),
   };
 }
 
@@ -1960,6 +2315,9 @@ async function main() {
   await waitForHealth(options);
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "lime-agent-apps-smoke-"));
+  const contentFactoryRuntimeDir = createContentFactoryRuntimeFixture(
+    CONTENT_FACTORY_RUNTIME_FIXTURE_ROOT,
+  );
   const context = await launchSmokeContext(userDataDir);
   const consoleErrors = [];
   const failedRequests = [];
@@ -2020,6 +2378,7 @@ async function main() {
       page,
       options,
       "initial_smoke_state",
+      contentFactoryRuntimeDir,
     );
     await page.waitForSelector('[data-testid="agent-apps-installed-content-factory-app"]', {
       timeout: options.timeoutMs,
@@ -2125,12 +2484,7 @@ async function main() {
 
     logStage("launch-runtime-surface");
     await page.click('[data-testid="agent-apps-launch-entry-dashboard"]');
-    await page.waitForSelector('[data-testid="agent-app-runtime-surface"]', {
-      timeout: options.timeoutMs,
-    });
-    await page.waitForSelector('[data-testid="agent-app-runtime-frame"]', {
-      timeout: options.timeoutMs,
-    });
+    await waitForContentFactoryRuntimeSurface(page, options.timeoutMs);
     const runtimeFrameSrc = await page.getAttribute(
       '[data-testid="agent-app-runtime-frame"]',
       "src",
@@ -2264,6 +2618,7 @@ async function main() {
       page,
       options,
       "post_delete_data_restore",
+      contentFactoryRuntimeDir,
     );
 
     const flagOff = await runFlagOffRegression(options);
