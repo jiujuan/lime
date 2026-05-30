@@ -1,7 +1,10 @@
 import type { AgentThreadItem } from "../../types";
 import { normalizeProcessDisplayText } from "../../utils/processDisplayText";
 import { normalizeTurnSummaryDisplayText } from "../../utils/turnSummaryPresentation";
-import { normalizeComparableThinkingText } from "./textFormatting";
+import {
+  normalizeComparableThinkingText,
+  sanitizeThinkingDisplayText,
+} from "./textFormatting";
 
 export function resolveReasoningDisplayText(
   item: Extract<AgentThreadItem, { type: "reasoning" }>,
@@ -10,13 +13,17 @@ export function resolveReasoningDisplayText(
   bodyText: string;
   combinedText: string;
 } {
-  const summaryText = normalizeProcessDisplayText(
-    (item.summary || [])
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .join("\n\n"),
+  const summaryText = sanitizeThinkingDisplayText(
+    normalizeProcessDisplayText(
+      (item.summary || [])
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .join("\n\n"),
+    ),
   );
-  const bodyText = normalizeProcessDisplayText(item.text.trim());
+  const bodyText = sanitizeThinkingDisplayText(
+    normalizeProcessDisplayText(item.text.trim()),
+  );
 
   if (!summaryText) {
     return {

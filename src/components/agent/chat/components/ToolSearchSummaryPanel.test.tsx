@@ -96,13 +96,20 @@ describe("ToolSearchSummaryPanel", () => {
     const { container } = renderPanel({
       query: "select:Read,Write",
       count: 2,
-      notes: [],
+      notes: [
+        "已找到可直接调用的工具。下一步请直接调用 tools[*].call_name；不要继续用 ToolSearch 排查同一能力。",
+      ],
       tools: [{ name: "Read" }, { name: "Write" }],
     });
 
     expect(container.textContent).toContain("找到工具：2 个");
+    expect(container.textContent).toContain(
+      "已确认工具入口，接下来可直接执行对应工具",
+    );
     expect(container.textContent).not.toContain("查询：");
     expect(container.textContent).not.toContain("select:Read,Write");
+    expect(container.textContent).not.toContain("tools[*].call_name");
+    expect(container.textContent).not.toContain("ToolSearch");
   });
 
   it("应展示仍在连接中的 MCP 服务", () => {

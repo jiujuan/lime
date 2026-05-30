@@ -45,6 +45,47 @@ function resolveInterruptTurnId(activeStream: ActiveStreamState | null) {
   return undefined;
 }
 
+const INTERRUPTED_TOOL_RESULT_TEXT = "本轮已中止";
+
+function settleInterruptedToolCall<
+  T extends { status: string; result?: unknown; endTime?: Date },
+>(toolCall: T): T {
+  if (toolCall.status !== "running") {
+    return toolCall;
+  }
+
+  return {
+    ...toolCall,
+    status: "failed",
+    endTime: new Date(),
+    result: {
+      success: false,
+      output: "",
+      error: INTERRUPTED_TOOL_RESULT_TEXT,
+    },
+  };
+}
+
+export function settleInterruptedMessageProcess(message: Message): Message {
+  const nextToolCalls = message.toolCalls?.map(settleInterruptedToolCall);
+  const nextContentParts = message.contentParts?.map((part) => {
+    if (part.type !== "tool_use") {
+      return part;
+    }
+
+    return {
+      ...part,
+      toolCall: settleInterruptedToolCall(part.toolCall),
+    };
+  });
+
+  return {
+    ...message,
+    toolCalls: nextToolCalls,
+    contentParts: nextContentParts,
+  };
+}
+
 interface QueueActionOptions {
   sessionIdRef: MutableRefObject<string | null>;
   refreshSessionReadModel: (targetSessionId?: string) => Promise<boolean>;
@@ -144,7 +185,10 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
       prev.map((msg) =>
         msg.id === activeStream.assistantMsgId
           ? {
-              ...updateMessageArtifactsStatus(msg, "complete"),
+              ...updateMessageArtifactsStatus(
+                settleInterruptedMessageProcess(msg),
+                "complete",
+              ),
               isThinking: false,
               content: msg.content || "(已停止)",
               runtimeStatus: undefined,

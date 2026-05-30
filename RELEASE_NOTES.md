@@ -27,6 +27,7 @@
 - 工具过程摘要、工具展示信息和 Agent 文本归一化抽出独立 helper，降低 UI 组件重复逻辑
 - 文件写入 / 编辑工具会产出结构化 `file_change` metadata，前端聚合展示文件改动摘要，避免多个文件工具调用刷屏
 - Tauri patch 依赖更新到 `2.11.2` / `2.6.2`，同步 global shortcut patch 版本
+- 默认发布构建不再内置本地 SenseVoice 的 `sherpa-onnx` native runtime；语音模型仍按需下载，后续本地 SenseVoice 运行库将通过显式组件或 feature 启用，避免安装包发布被可选运行库下载阻塞
 
 ### 测试与质量
 - 新增纯文本工具调用解析、工具别名归一化、`view_image` 权限、自动压缩超时和图片策略的 Rust 回归

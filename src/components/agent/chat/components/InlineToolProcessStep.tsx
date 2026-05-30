@@ -39,6 +39,7 @@ import {
 import {
   resolveToolErrorDetailText,
   resolveToolProcessNarrative,
+  isLikelyWebRetrievalDiagnosticNoise,
 } from "../utils/toolProcessSummary";
 import { isImageGenerationProtocolFailure } from "../utils/limeTaskProtocolNoise";
 
@@ -367,6 +368,10 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
           }),
     [isImageGenerationFailureProcess, subject, t, toolCall.name, toolDisplay],
   );
+  const processNarrative = useMemo(
+    () => resolveToolProcessNarrative(toolCall),
+    [toolCall],
+  );
   const resultText = useMemo(() => {
     if (toolCall.status !== "failed") {
       return normalizeToolResultDetailText(rawResultText);
@@ -376,6 +381,14 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       resolveToolErrorDetailText(toolCall.name, rawResultText) || rawResultText
     );
   }, [rawResultText, toolCall.name, toolCall.status]);
+  const shouldHideRawDiagnosticDetail = useMemo(
+    () =>
+      toolCall.status !== "failed" &&
+      processNarrative.postSource === "error" &&
+      Boolean(rawResultText) &&
+      isLikelyWebRetrievalDiagnosticNoise(rawResultText),
+    [processNarrative.postSource, rawResultText, toolCall.status],
+  );
   const resultDetailMarkdown = useMemo(
     () => sanitizeToolResultDetailMarkdown(resultText),
     [resultText],
@@ -414,10 +427,6 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     }
     return resultPreview;
   }, [resultPreview, searchResultItems.length, toolSearchSummary]);
-  const processNarrative = useMemo(
-    () => resolveToolProcessNarrative(toolCall),
-    [toolCall],
-  );
   const savedSiteContentTarget = useMemo(
     () => resolveSiteSavedContentTargetFromMetadata(toolCall.result?.metadata),
     [toolCall.result?.metadata],
@@ -508,7 +517,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     toolCall.status,
   ]);
   const hasDetails =
-    Boolean(resultText) ||
+    (Boolean(resultText) && !shouldHideRawDiagnosticDetail) ||
     resultImages.length > 0 ||
     searchResultItems.length > 0 ||
     Boolean(toolSearchSummary) ||
@@ -863,7 +872,8 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
 
               {!toolSearchSummary &&
               searchResultItems.length === 0 &&
-              resultText ? (
+              resultText &&
+              !shouldHideRawDiagnosticDetail ? (
                 <div className="text-sm leading-6 text-slate-700">
                   <MarkdownRenderer content={resultDetailMarkdown} />
                 </div>

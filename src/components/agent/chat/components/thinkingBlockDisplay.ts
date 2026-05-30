@@ -1,5 +1,6 @@
 import { parseAIResponse } from "@/lib/workspace/a2ui";
 import { normalizeProcessDisplayText } from "../utils/processDisplayText";
+import { sanitizeThinkingDisplayText } from "./timeline-utils/textFormatting";
 
 export interface ThinkingDisplayParts {
   statusLabel: string;
@@ -11,7 +12,9 @@ export function resolveThinkingDisplayParts(
   content: string,
   isStreaming: boolean,
 ): ThinkingDisplayParts {
-  const trimmed = normalizeProcessDisplayText(content).trim();
+  const trimmed = sanitizeThinkingDisplayText(
+    normalizeProcessDisplayText(content),
+  ).trim();
   const statusLabel = isStreaming ? "思考中" : "已完成思考";
 
   if (!trimmed) {

@@ -322,6 +322,35 @@ describe("toolProcessSummary", () => {
     expect(narrative.summary).toBe("来源暂时无法读取");
   });
 
+  it("WebFetch 返回 RSS/XML 或超时诊断时应降级成弱提示", () => {
+    const rssNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "WebFetch",
+        status: "completed",
+        result: {
+          success: true,
+          output:
+            '<?xml version="1.0"?><rss><channel><title>News</title></channel></rss>',
+        },
+      }),
+    );
+    const timeoutNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "WebSearch",
+        status: "completed",
+        result: {
+          success: true,
+          output: "Timeout while reading https://example.com/rss.xml",
+        },
+      }),
+    );
+
+    expect(rssNarrative.postSummary).toBe("来源暂时无法读取");
+    expect(rssNarrative.summary).toBe("来源暂时无法读取");
+    expect(timeoutNarrative.postSummary).toBe("搜索结果暂时无法读取");
+    expect(timeoutNarrative.summary).toBe("搜索结果暂时无法读取");
+  });
+
   it("Bash 协议错误摘要应保留底层原因而不是只展示错误码", () => {
     const narrative = resolveToolProcessNarrative(
       createToolCall({

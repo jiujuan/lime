@@ -937,15 +937,7 @@ fn prepare_callback_backed_agent_spawn(
         ));
     }
 
-    let should_use_callback = !team_subagent
-        && (request.run_in_background
-            || name.is_some()
-            || team_name.is_some()
-            || mode.is_some()
-            || isolation.is_some()
-            || cwd.is_some()
-            || !allowed_tools.is_empty()
-            || !disallowed_tools.is_empty());
+    let should_use_callback = !team_subagent;
     if !should_use_callback {
         return Ok(None);
     }
@@ -1915,6 +1907,14 @@ impl Agent {
                 })
                 .map_err(|error| ErrorData::new(ErrorCode::INTERNAL_ERROR, error, None)),
         )
+    }
+
+    /// Replace the callback-backed agent control surface used by the current runtime.
+    ///
+    /// Lime can refresh runtime tools per turn after the Agent has already been
+    /// initialized, so this must not be limited to `Agent::with_tool_config`.
+    pub fn set_agent_control_tools(&mut self, config: Option<AgentControlToolConfig>) {
+        self.agent_control_tools = config;
     }
 
     /// Get a reference to the tool registry
@@ -3479,19 +3479,31 @@ impl Agent {
             .await;
         let resources_supported = self.extension_manager.supports_resources().await;
         let tool_gates = current_surface_tool_gates();
+        let callback_backed_agent_enabled = self
+            .agent_control_tools
+            .as_ref()
+            .is_some_and(|config| config.spawn_agent.is_some());
+        let registry_has_agent_tool = {
+            let registry = self.tool_registry.read().await;
+            registry.contains_native(AGENT_TOOL_NAME)
+        };
 
         if extension_name.is_none() {
             if let Some(final_output_tool) = self.final_output_tool.lock().await.as_ref() {
                 prefixed_tools.push(final_output_tool.tool());
             }
 
-            if subagents_enabled {
+            if subagents_enabled && !callback_backed_agent_enabled && !registry_has_agent_tool {
                 let sub_recipes = self.sub_recipes.lock().await;
                 let sub_recipes_vec: Vec<_> = sub_recipes.values().cloned().collect();
                 prefixed_tools.push(create_subagent_tool(&sub_recipes_vec));
             }
 
             // 添加 tool_registry 中的原生工具（包括 SkillTool）
+            let mut listed_tool_names: std::collections::HashSet<String> = prefixed_tools
+                .iter()
+                .map(|tool| tool.name.as_ref().to_string())
+                .collect();
             let registry = self.tool_registry.read().await;
             for tool_def in registry.get_definitions() {
                 if !should_expose_registered_tool_with_gates(
@@ -3499,6 +3511,9 @@ impl Agent {
                     resources_supported,
                     tool_gates,
                 ) {
+                    continue;
+                }
+                if !listed_tool_names.insert(tool_def.name.clone()) {
                     continue;
                 }
 
@@ -6572,6 +6587,139 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_list_tools_deduplicates_callback_backed_agent_surface() -> Result<()> {
+        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
+
+        let spawn_agent_callback = Arc::new(move |request: SpawnAgentRequest| {
+            Box::pin(async move {
+                Ok(SpawnAgentResponse {
+                    agent_id: request.parent_session_id,
+                    nickname: None,
+                    extra: std::collections::BTreeMap::new(),
+                })
+            })
+                as Pin<Box<dyn Future<Output = Result<SpawnAgentResponse, String>> + Send>>
+        });
+        let agent_control_tools =
+            AgentControlToolConfig::new().with_spawn_agent_callback(spawn_agent_callback);
+        let mut agent = Agent::new();
+        agent.set_agent_control_tools(Some(agent_control_tools.clone()));
+        {
+            let registry_arc = agent.tool_registry().clone();
+            let mut registry = registry_arc.write().await;
+            crate::tools::register_agent_control_tools(&mut registry, &agent_control_tools);
+        }
+        let session = SessionManager::create_session(
+            PathBuf::from("."),
+            "agent-tool-callback-dedupe".to_string(),
+            SessionType::User,
+        )
+        .await?;
+        agent
+            .update_provider(Arc::new(NativeOutputSchemaProvider), &session.id)
+            .await?;
+
+        let tools = agent.list_tools(None).await;
+        let agent_tools = tools
+            .iter()
+            .filter(|tool| tool.name == AGENT_TOOL_NAME)
+            .collect::<Vec<_>>();
+
+        assert_eq!(agent_tools.len(), 1);
+        assert_eq!(
+            agent_tools[0].input_schema["properties"]["run_in_background"]["description"].as_str(),
+            Some("是否在后台启动子代理。")
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_dynamic_agent_control_routes_mode_and_isolation_through_callbacks() -> Result<()>
+    {
+        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
+
+        let captured = Arc::new(std::sync::Mutex::new(None::<SpawnAgentRequest>));
+        let captured_clone = captured.clone();
+        let spawn_agent_callback = Arc::new(move |request: SpawnAgentRequest| {
+            *captured_clone.lock().expect("capture lock") = Some(request.clone());
+            Box::pin(async move {
+                Ok(SpawnAgentResponse {
+                    agent_id: "dynamic-agent-control".to_string(),
+                    nickname: Some("dynamic-agent".to_string()),
+                    extra: std::collections::BTreeMap::new(),
+                })
+            })
+                as Pin<Box<dyn Future<Output = Result<SpawnAgentResponse, String>> + Send>>
+        });
+        let agent_control_tools =
+            AgentControlToolConfig::new().with_spawn_agent_callback(spawn_agent_callback);
+        let mut agent = Agent::new();
+        agent.set_agent_control_tools(Some(agent_control_tools.clone()));
+        {
+            let registry_arc = agent.tool_registry().clone();
+            let mut registry = registry_arc.write().await;
+            crate::tools::register_agent_control_tools(&mut registry, &agent_control_tools);
+        }
+        let session = SessionManager::create_session(
+            PathBuf::from("."),
+            "agent-dynamic-callback-surface".to_string(),
+            SessionType::User,
+        )
+        .await?;
+        agent
+            .update_provider(Arc::new(NativeOutputSchemaProvider), &session.id)
+            .await?;
+
+        let tool_call = CallToolRequestParam {
+            name: AGENT_TOOL_NAME.into(),
+            arguments: Some(
+                serde_json::json!({
+                    "description": "权限隔离",
+                    "prompt": "把权限与隔离字段交给宿主 runtime",
+                    "mode": "acceptEdits",
+                    "isolation": "worktree"
+                })
+                .as_object()
+                .cloned()
+                .expect("agent tool arguments should be an object"),
+            ),
+        };
+
+        let (_request_id, tool_result) = agent
+            .dispatch_tool_call(
+                tool_call,
+                "req-agent-dynamic-callback".to_string(),
+                None,
+                &session,
+            )
+            .await;
+        let call_result = tool_result
+            .expect("agent dispatch should succeed")
+            .result
+            .await
+            .expect("dynamic callback-backed agent result");
+
+        assert_eq!(
+            call_result
+                .structured_content
+                .as_ref()
+                .and_then(|value| value.get("status"))
+                .and_then(Value::as_str),
+            Some("async_launched")
+        );
+        let captured_request = captured
+            .lock()
+            .expect("capture lock")
+            .clone()
+            .expect("spawn callback should capture request");
+        assert_eq!(captured_request.mode.as_deref(), Some("acceptEdits"));
+        assert_eq!(captured_request.isolation.as_deref(), Some("worktree"));
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_list_tools_excludes_legacy_agent_control_surface() -> Result<()> {
         initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
 
@@ -7338,6 +7486,81 @@ mod tests {
         assert_eq!(captured_request.name.as_deref(), Some("verifier"));
         assert!(captured_request.allowed_tools.is_empty());
         assert!(captured_request.disallowed_tools.is_empty());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_agent_tool_routes_basic_top_level_spawn_through_callbacks() -> Result<()> {
+        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
+
+        let captured = Arc::new(std::sync::Mutex::new(None::<SpawnAgentRequest>));
+        let captured_clone = captured.clone();
+        let spawn_agent_callback = Arc::new(move |request: SpawnAgentRequest| {
+            *captured_clone.lock().expect("capture lock") = Some(request.clone());
+            Box::pin(async move {
+                Ok(SpawnAgentResponse {
+                    agent_id: "agent-basic".to_string(),
+                    nickname: Some("basic-agent".to_string()),
+                    extra: std::collections::BTreeMap::new(),
+                })
+            })
+                as Pin<Box<dyn Future<Output = Result<SpawnAgentResponse, String>> + Send>>
+        });
+
+        let agent =
+            Agent::with_tool_config(ToolRegistrationConfig::new().with_agent_control_tools(
+                AgentControlToolConfig::new().with_spawn_agent_callback(spawn_agent_callback),
+            ));
+        let session = SessionManager::create_session(
+            PathBuf::from("."),
+            "agent-basic-callback-surface".to_string(),
+            SessionType::User,
+        )
+        .await?;
+        agent
+            .update_provider(Arc::new(NativeOutputSchemaProvider), &session.id)
+            .await?;
+
+        let tool_call = CallToolRequestParam {
+            name: AGENT_TOOL_NAME.into(),
+            arguments: Some(
+                serde_json::json!({
+                    "description": "基础委派",
+                    "prompt": "整理今天的国际新闻"
+                })
+                .as_object()
+                .cloned()
+                .expect("agent tool arguments should be an object"),
+            ),
+        };
+
+        let (_request_id, tool_result) = agent
+            .dispatch_tool_call(tool_call, "req-agent-basic".to_string(), None, &session)
+            .await;
+        let call_result = tool_result
+            .expect("agent dispatch should succeed")
+            .result
+            .await
+            .expect("callback-backed agent result");
+
+        assert_eq!(
+            call_result
+                .structured_content
+                .as_ref()
+                .and_then(|value| value.get("status"))
+                .and_then(Value::as_str),
+            Some("async_launched")
+        );
+        let captured_request = captured
+            .lock()
+            .expect("capture lock")
+            .clone()
+            .expect("spawn callback should capture request");
+        assert_eq!(captured_request.message, "整理今天的国际新闻");
+        assert!(!captured_request.run_in_background);
+        assert!(captured_request.mode.is_none());
+        assert!(captured_request.isolation.is_none());
 
         Ok(())
     }

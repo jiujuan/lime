@@ -1113,6 +1113,13 @@ async function clickAgentAppsNav(page, timeoutMs) {
   await page.locator(AGENT_APPS_NAV_SELECTOR).first().click();
 }
 
+async function waitForMainAppStable(page, timeoutMs) {
+  await page.waitForLoadState("domcontentloaded", { timeout: timeoutMs }).catch(() => {});
+  await page.waitForSelector('[data-testid="app-sidebar-main-nav"]', {
+    timeout: timeoutMs,
+  });
+}
+
 async function openContentFactoryDetails(page, timeoutMs) {
   await page.click('[data-testid="agent-apps-open-detail-content-factory-app"]', {
     timeout: timeoutMs,
@@ -2260,8 +2267,18 @@ async function main() {
     );
 
     const flagOff = await runFlagOffRegression(options);
+    await waitForMainAppStable(page, options.timeoutMs);
+    await clickAgentAppsNav(page, options.timeoutMs);
+    await page.waitForSelector('[data-testid="agent-apps-page"]', {
+      timeout: options.timeoutMs,
+    });
+    await page.waitForSelector('[data-testid="agent-apps-installed-content-factory-app"]', {
+      timeout: options.timeoutMs,
+    });
+
     const assertions = {
-      formalPageVisible: Boolean(await page.$('[data-testid="agent-apps-page"]')),
+      formalPageVisible:
+        (await page.locator('[data-testid="agent-apps-page"]').count()) > 0,
       deleteDataRemovedInstalledState: !stillInstalledAfterDeleteData,
       postDeleteInstalledStateRestored:
         (await page.locator('[data-testid="agent-apps-installed-content-factory-app"]').count()) >

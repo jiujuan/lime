@@ -641,6 +641,46 @@ describe("AgentThreadTimeline", () => {
     );
   });
 
+  it("ToolSearch 历史项应只在主流程展示工具入口摘要，不泄露结果 JSON", () => {
+    const container = renderTimeline(
+      [
+        {
+          ...createBaseItem("tool-search-1", 1),
+          type: "tool_call",
+          tool_name: "ToolSearch",
+          arguments: { query: "select:WebSearch" },
+          output: JSON.stringify({
+            query: "select:WebSearch",
+            caller: "assistant",
+            count: 1,
+            notes: [
+              "已找到可直接调用的工具。下一步请直接调用 tools[*].call_name；不要继续用 ToolSearch 排查同一能力。",
+            ],
+            tools: [
+              {
+                name: "WebSearch",
+                source: "native_registry",
+                description: "Search the web",
+                callable: true,
+                call_name: "WebSearch",
+                activation: null,
+              },
+            ],
+          }),
+        },
+      ],
+      { deferCompletedSingleDetails: true },
+    );
+
+    expect(container.textContent).toContain("已确认可用工具 1 个 · 搜索网页");
+    expect(container.textContent).not.toContain('"caller"');
+    expect(container.textContent).not.toContain('"tools"');
+    expect(container.textContent).not.toContain('"call_name"');
+    expect(container.textContent).not.toContain("Search the web");
+    expect(container.textContent).not.toContain("已搜索 可用工具");
+    expect(mockToolCallItem).not.toHaveBeenCalled();
+  });
+
   it("审批项与技术项都应直接落在消息流中", () => {
     const items: AgentThreadItem[] = [
       {

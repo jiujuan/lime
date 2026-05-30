@@ -8950,6 +8950,179 @@ mod tests {
         assert!(exact > partial);
     }
 
+    #[tokio::test]
+    async fn test_tool_search_bridge_resolves_space_separated_basic_web_tools() {
+        let registry = Arc::new(tokio::sync::RwLock::new(aster::tools::ToolRegistry::new()));
+        {
+            let mut guard = registry.write().await;
+            guard.register(Box::new(DummyTool::new(
+                "WebSearch",
+                "Search the web for current information",
+                serde_json::json!({"type": "object"}),
+            )));
+            guard.register(Box::new(DummyTool::new(
+                "WebFetch",
+                "Fetch and read a specific URL",
+                serde_json::json!({"type": "object"}),
+            )));
+        }
+
+        let tool = ToolSearchBridgeTool::new(registry, None);
+        let result = tool
+            .execute(
+                serde_json::json!({
+                    "query": "WebSearch WebFetch",
+                    "caller": "assistant",
+                    "include_deferred": false,
+                    "include_schema": false
+                }),
+                &ToolContext::new(PathBuf::from(".")),
+            )
+            .await
+            .expect("ToolSearch should resolve basic web tools");
+        let output = result.output.expect("ToolSearch output");
+        let payload: serde_json::Value =
+            serde_json::from_str(&output).expect("parse ToolSearch output");
+        let tools = payload["tools"]
+            .as_array()
+            .expect("tools should be array");
+        let names = tools
+            .iter()
+            .filter_map(|tool| tool["name"].as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(payload["count"], serde_json::json!(2));
+        assert_eq!(names, vec!["WebSearch", "WebFetch"]);
+        assert!(tools.iter().all(|tool| tool["callable"] == serde_json::json!(true)));
+        assert!(tools
+            .iter()
+            .all(|tool| tool["call_name"].as_str() == tool["name"].as_str()));
+        assert!(tools
+            .iter()
+            .all(|tool| tool["activation"] == serde_json::Value::Null));
+        let notes = payload["notes"]
+            .as_array()
+            .expect("notes should be array")
+            .iter()
+            .filter_map(|note| note.as_str())
+            .collect::<Vec<_>>();
+        assert!(notes.iter().any(|note| note.contains("tools[*].call_name")));
+        assert!(notes.iter().any(|note| note.contains("不要继续用 ToolSearch")));
+    }
+
+    #[tokio::test]
+    async fn test_tool_search_bridge_resolves_news_intent_to_web_search() {
+        let registry = Arc::new(tokio::sync::RwLock::new(aster::tools::ToolRegistry::new()));
+        {
+            let mut guard = registry.write().await;
+            guard.register(Box::new(DummyTool::new(
+                "WebSearch",
+                "允许当前代理搜索网络并使用结果来提供响应。",
+                serde_json::json!({"type": "object"}),
+            )));
+            guard.register(Box::new(DummyTool::new(
+                "WebFetch",
+                "获取指定 URL 的内容并使用 AI 模型处理。",
+                serde_json::json!({"type": "object"}),
+            )));
+        }
+
+        let tool = ToolSearchBridgeTool::new(registry, None);
+        let result = tool
+            .execute(
+                serde_json::json!({
+                    "query": "May 30 2026 world news headlines",
+                    "caller": "assistant",
+                    "include_deferred": false,
+                    "include_schema": false
+                }),
+                &ToolContext::new(PathBuf::from(".")),
+            )
+            .await
+            .expect("ToolSearch should resolve news search intent");
+        let output = result.output.expect("ToolSearch output");
+        let payload: serde_json::Value =
+            serde_json::from_str(&output).expect("parse ToolSearch output");
+        let tools = payload["tools"]
+            .as_array()
+            .expect("tools should be array");
+        let names = tools
+            .iter()
+            .filter_map(|tool| tool["name"].as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(payload["count"], serde_json::json!(1));
+        assert_eq!(names, vec!["WebSearch"]);
+        assert_eq!(tools[0]["callable"], serde_json::json!(true));
+        assert_eq!(tools[0]["call_name"], serde_json::json!("WebSearch"));
+        assert_eq!(tools[0]["activation"], serde_json::Value::Null);
+        let notes = payload["notes"]
+            .as_array()
+            .expect("notes should be array")
+            .iter()
+            .filter_map(|note| note.as_str())
+            .collect::<Vec<_>>();
+        assert!(notes.iter().any(|note| note.contains("tools[*].call_name")));
+        assert!(notes.iter().any(|note| note.contains("不要继续用 ToolSearch")));
+    }
+
+    #[tokio::test]
+    async fn test_tool_search_bridge_resolves_basic_tools_as_callable() {
+        let registry = Arc::new(tokio::sync::RwLock::new(aster::tools::ToolRegistry::new()));
+        {
+            let mut guard = registry.write().await;
+            for (name, description) in [
+                ("Read", "Read file contents"),
+                ("Bash", "Run shell commands"),
+                ("TaskOutput", "Read output from a background task"),
+                ("StructuredOutput", "Return the final JSON answer"),
+                ("AskUserQuestion", "Ask the user for missing input"),
+            ] {
+                guard.register(Box::new(DummyTool::new(
+                    name,
+                    description,
+                    serde_json::json!({"type": "object"}),
+                )));
+            }
+        }
+
+        let tool = ToolSearchBridgeTool::new(registry, None);
+        for (query, expected_name) in [
+            ("read_file", "Read"),
+            ("shell", "Bash"),
+            ("task logs", "TaskOutput"),
+            ("structured final output", "StructuredOutput"),
+            ("ask user", "AskUserQuestion"),
+        ] {
+            let result = tool
+                .execute(
+                    serde_json::json!({
+                        "query": query,
+                        "caller": "assistant",
+                        "include_deferred": false,
+                        "include_schema": false,
+                        "limit": 1
+                    }),
+                    &ToolContext::new(PathBuf::from(".")),
+                )
+                .await
+                .expect("ToolSearch should resolve basic native tool");
+            let output = result.output.expect("ToolSearch output");
+            let payload: serde_json::Value =
+                serde_json::from_str(&output).expect("parse ToolSearch output");
+            let first = payload["tools"]
+                .as_array()
+                .and_then(|tools| tools.first())
+                .expect("expected first tool");
+
+            assert_eq!(first["name"], serde_json::json!(expected_name));
+            assert_eq!(first["callable"], serde_json::json!(true));
+            assert_eq!(first["call_name"], serde_json::json!(expected_name));
+            assert_eq!(first["deferred_loading"], serde_json::json!(false));
+            assert_eq!(first["activation"], serde_json::Value::Null);
+        }
+    }
+
     #[test]
     fn test_tool_search_parse_select_query_supports_multiple_names() {
         let parsed = ToolSearchBridgeTool::parse_select_query("select:Read, mcp__docs__search");

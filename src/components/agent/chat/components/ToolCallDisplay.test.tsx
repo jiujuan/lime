@@ -1,4 +1,4 @@
-import { act } from "react";
+import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToolCallDisplay, ToolCallList } from "./ToolCallDisplay";
@@ -18,7 +18,7 @@ const mountedRoots: RenderResult[] = [];
 
 function renderTool(
   toolCall: ToolCallState,
-  props: { onFileClick?: (fileName: string, content: string) => void } = {},
+  props: Partial<Omit<ComponentProps<typeof ToolCallDisplay>, "toolCall">> = {},
 ): RenderResult {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -1206,12 +1206,18 @@ describe("ToolCallDisplay", () => {
               name: "Read",
               source: "native_registry",
               description: "Read a file from disk",
+              callable: true,
+              call_name: "Read",
+              activation: null,
               always_visible: true,
             },
             {
               name: "Write",
               source: "native_registry",
               description: "Write content to a file",
+              callable: true,
+              call_name: "Write",
+              activation: null,
               always_visible: true,
             },
           ],
@@ -1234,6 +1240,9 @@ describe("ToolCallDisplay", () => {
     expect(container.textContent).toContain("找到工具：2 个");
     expect(container.textContent).toContain("查看文件");
     expect(container.textContent).toContain("保存文件");
+    expect(container.textContent).not.toContain('"caller"');
+    expect(container.textContent).not.toContain('"tools"');
+    expect(container.textContent).not.toContain('"call_name"');
     expect(container.textContent).not.toContain("Read a file from disk");
     expect(container.textContent).not.toContain('"always_visible":true');
     expect(container.textContent).not.toContain("查询：select:Read,Write");
@@ -1281,6 +1290,43 @@ describe("ToolCallDisplay", () => {
     ).toBeNull();
     expect(container.textContent).not.toContain("找到工具：2 个");
     expect(container.textContent).not.toContain("Read a file from disk");
+  });
+
+  it("ToolSearch 分组子行应使用过程摘要，不应展示已搜索可用工具", () => {
+    const { container } = renderTool(
+      {
+        id: "tool-search-grouped-1",
+        name: "ToolSearch",
+        arguments: JSON.stringify({ query: "select:WebSearch" }),
+        status: "completed",
+        result: {
+          success: true,
+          output: JSON.stringify({
+            query: "select:WebSearch",
+            caller: "assistant",
+            count: 1,
+            notes: [],
+            tools: [
+              {
+                name: "WebSearch",
+                source: "native_registry",
+                callable: true,
+                call_name: "WebSearch",
+                activation: null,
+              },
+            ],
+          }),
+        },
+        startTime: new Date("2026-04-10T04:06:00.000Z"),
+        endTime: new Date("2026-04-10T04:06:01.000Z"),
+      },
+      { grouped: true },
+    );
+
+    expect(container.textContent).toContain("已确认可用工具 1 个 · 搜索网页");
+    expect(container.textContent).not.toContain("已搜索 可用工具");
+    expect(container.textContent).not.toContain("确认 工具入口");
+    expect(container.textContent).not.toContain("WebSearch");
   });
 
   it("站点能力工具失败时应展示未保存原因", () => {

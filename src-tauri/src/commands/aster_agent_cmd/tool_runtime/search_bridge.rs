@@ -131,7 +131,10 @@ impl ToolSearchBridgeTool {
 
     fn build_tool_search_notes(query: &str, hit_count: usize) -> Vec<String> {
         if hit_count > 0 {
-            return Vec::new();
+            return vec![
+                "已找到可直接调用的工具。下一步请直接调用 tools[*].call_name；不要继续用 ToolSearch 排查同一能力。"
+                    .to_string(),
+            ];
         }
 
         let trimmed = query.trim();
@@ -272,6 +275,8 @@ impl Tool for ToolSearchBridgeTool {
                     return None;
                 }
 
+                let tool_name = definition.name;
+                let description = definition.description;
                 let item = if include_schema {
                     let enriched_schema = Self::with_input_examples_in_schema(
                         &definition.input_schema,
@@ -279,8 +284,11 @@ impl Tool for ToolSearchBridgeTool {
                     );
                     serde_json::json!({
                         "source": "native_registry",
-                        "name": definition.name,
-                        "description": definition.description,
+                        "name": tool_name,
+                        "description": description,
+                        "callable": true,
+                        "call_name": tool_name,
+                        "activation": serde_json::Value::Null,
                         "input_schema": enriched_schema,
                         "deferred_loading": deferred_loading,
                         "always_visible": always_visible,
@@ -291,8 +299,11 @@ impl Tool for ToolSearchBridgeTool {
                 } else {
                     serde_json::json!({
                         "source": "native_registry",
-                        "name": definition.name,
-                        "description": definition.description,
+                        "name": tool_name,
+                        "description": description,
+                        "callable": true,
+                        "call_name": tool_name,
+                        "activation": serde_json::Value::Null,
                         "deferred_loading": deferred_loading,
                         "always_visible": always_visible,
                         "allowed_callers": allowed_callers,
@@ -350,6 +361,12 @@ impl Tool for ToolSearchBridgeTool {
                 } else {
                     serde_json::Value::Null
                 };
+                let callable = !deferred_loading;
+                let call_name = if callable {
+                    serde_json::Value::String(tool_name.clone())
+                } else {
+                    serde_json::Value::Null
+                };
 
                 let item = if include_schema {
                     serde_json::json!({
@@ -357,6 +374,8 @@ impl Tool for ToolSearchBridgeTool {
                         "name": tool_name,
                         "description": description,
                         "extension_name": extension_name,
+                        "callable": callable,
+                        "call_name": call_name,
                         "input_schema": input_schema,
                         "deferred_loading": deferred_loading,
                         "status": status,
@@ -368,6 +387,8 @@ impl Tool for ToolSearchBridgeTool {
                         "name": tool_name,
                         "description": description,
                         "extension_name": extension_name,
+                        "callable": callable,
+                        "call_name": call_name,
                         "deferred_loading": deferred_loading,
                         "status": status,
                         "activation": activation

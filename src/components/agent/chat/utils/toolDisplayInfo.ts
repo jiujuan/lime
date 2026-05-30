@@ -473,10 +473,10 @@ const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
     "toolsearch",
     {
       family: "search",
-      label: "工具搜索",
-      verb: "搜索",
+      label: "工具入口确认",
+      verb: "确认",
       icon: Search,
-      groupTitle: "搜索",
+      groupTitle: "工具入口",
       actionKey: "search",
     },
   ],
@@ -1776,7 +1776,7 @@ const USER_FACING_TOOL_LABELS: Record<string, string> = {
   资源列表: "查看资源",
   资源模板列表: "查看资源模板",
   内容检索: "查找内容",
-  工具搜索: "查找工具",
+  工具入口确认: "确认工具入口",
   文档搜索: "查找文档",
   文档查询: "查看文档",
   网络搜索: "搜索网页",
@@ -2187,13 +2187,7 @@ export const resolveToolPrimarySubject = (
   }
 
   if (normalizedName === "toolsearch") {
-    if (
-      searchQueryPreview &&
-      !/^(?:select|tool|tools|name|tag):/i.test(searchQueryPreview)
-    ) {
-      return searchQueryPreview;
-    }
-    return "可用工具";
+    return "工具入口";
   }
 
   if (normalizedName === "askuserquestion") {
@@ -2243,6 +2237,10 @@ export const resolveToolPrimarySubject = (
 };
 
 export const extractSearchQueryLabel = (toolCall: ToolCallState): string => {
+  if (normalizeToolNameKey(toolCall.name) === "toolsearch") {
+    return "工具入口";
+  }
+
   const record = parseToolCallArguments(toolCall.arguments) as Record<
     string,
     unknown

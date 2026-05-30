@@ -181,11 +181,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Prepare sherpa-onnx shared libraries
-        run: |
-          TARGET_TRIPLE="$(rustc -vV | awk '/host:/ {print $2}')"
-          node scripts/prepare-sherpa-onnx-runtime.mjs --target "$TARGET_TRIPLE"
-
       - name: Run headless GUI smoke
         run: npm run verify:gui-smoke -- --timeout-ms 900000
 

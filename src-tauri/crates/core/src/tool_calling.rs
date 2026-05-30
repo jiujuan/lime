@@ -164,6 +164,13 @@ struct ParsedToolSearchName {
     inner_name: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ToolDiscoveryProfile {
+    pub canonical_name: &'static str,
+    pub aliases: &'static [&'static str],
+    pub intent_terms: &'static [&'static str],
+}
+
 fn tool_search_lookup_key(value: &str) -> String {
     value
         .chars()
@@ -172,61 +179,421 @@ fn tool_search_lookup_key(value: &str) -> String {
         .collect()
 }
 
-fn native_tool_search_aliases(name: &str) -> &'static [&'static str] {
-    match tool_search_lookup_key(name).as_str() {
-        "read" | "readtool" => &[
+static TOOL_DISCOVERY_PROFILES: &[ToolDiscoveryProfile] = &[
+    ToolDiscoveryProfile {
+        canonical_name: "Read",
+        aliases: &[
+            "ReadTool",
+            "FileReadTool",
             "read_file",
             "read file",
             "open file",
+            "developer__read",
+            "mcp__system__read_file",
+        ],
+        intent_terms: &[
             "workspace file",
             "project file",
+            "view file",
+            "查看文件",
+            "读取文件",
         ],
-        "write" | "writetool" => &[
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "Write",
+        aliases: &[
+            "WriteTool",
+            "FileWriteTool",
             "write_file",
             "write file",
             "create_file",
             "create file",
-            "save file",
-            "workspace file",
-            "project file",
+            "mcp__system__write_file",
         ],
-        "edit" | "edittool" => &[
+        intent_terms: &["save file", "new file", "创建文件", "写入文件", "保存文件"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "Edit",
+        aliases: &[
+            "EditTool",
+            "FileEditTool",
             "edit_file",
             "edit file",
+            "developer__text_editor",
+            "mcp__system__edit_file",
+        ],
+        intent_terms: &[
             "modify file",
             "patch file",
-            "workspace file",
-            "project file",
+            "update file",
+            "修改文件",
+            "编辑文件",
+            "补丁",
         ],
-        "glob" | "globtool" => &[
-            "find_files",
-            "find files",
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "Glob",
+        aliases: &["GlobTool", "find_files", "find files", "mcp__system__glob"],
+        intent_terms: &[
             "file_search",
             "list files",
             "path search",
+            "查找文件",
+            "列文件",
         ],
-        "grep" | "greptool" => &[
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "Grep",
+        aliases: &[
+            "GrepTool",
             "search_files",
             "search files",
+            "mcp__system__grep",
+        ],
+        intent_terms: &[
             "search in files",
             "content search",
             "text search",
+            "查找文本",
+            "搜索代码",
+            "全文搜索",
         ],
-        "bash" | "bashtool" => &[
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "Bash",
+        aliases: &[
+            "BashTool",
+            "Shell",
             "system",
             "shell",
+            "developer__shell",
+            "mcp__system__shell",
+            "shell_command",
+            "exec_command",
+            "local_shell_call",
+        ],
+        intent_terms: &[
+            "system",
             "terminal",
             "run command",
             "command execution",
+            "执行命令",
+            "终端",
+            "shell",
         ],
-        "webfetch" | "webfetchtool" => &["fetch url", "fetch page", "read url", "web reader"],
-        "websearch" | "websearchtool" => &["search web", "internet search", "web search"],
-        "askuserquestion" | "askuserquestiontool" => {
-            &["request_user_input", "ask user", "user input"]
-        }
-        "toolsearch" | "toolsearchtool" => &["tool lookup", "search tools", "find tool"],
-        _ => &[],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "WebSearch",
+        aliases: &["WebSearchTool", "web_search", "mcp__system__web_search"],
+        intent_terms: &[
+            "search web",
+            "internet search",
+            "web search",
+            "current information",
+            "current events",
+            "recent data",
+            "latest information",
+            "latest news",
+            "breaking news",
+            "global news",
+            "world news",
+            "international news",
+            "news headlines",
+            "today news",
+            "roundup",
+            "联网搜索",
+            "网络搜索",
+            "网页搜索",
+            "搜索网页",
+            "最新信息",
+            "实时信息",
+            "新闻",
+            "要闻",
+            "头条",
+            "热点",
+            "国际新闻",
+            "今日新闻",
+        ],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "WebFetch",
+        aliases: &["WebFetchTool", "web_fetch", "mcp__system__web_fetch"],
+        intent_terms: &[
+            "fetch url",
+            "fetch page",
+            "read url",
+            "open url",
+            "read webpage",
+            "web reader",
+            "web content",
+            "article url",
+            "网页抓取",
+            "网页读取",
+            "读取网页",
+            "抓取网页",
+            "链接内容",
+        ],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "Agent",
+        aliases: &["AgentTool", "Task"],
+        intent_terms: &[
+            "subagent",
+            "delegate",
+            "parallel agent",
+            "子代理",
+            "委派",
+            "并行任务",
+        ],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "SendMessage",
+        aliases: &["SendMessageTool"],
+        intent_terms: &["send message", "team message", "发消息", "团队消息"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "AskUserQuestion",
+        aliases: &["AskUserQuestionTool", "request_user_input"],
+        intent_terms: &["ask user", "user input", "clarify", "询问用户", "补充信息"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "ToolSearch",
+        aliases: &["ToolSearchTool", "tool_search", "mcp__system__tool_search"],
+        intent_terms: &[
+            "tool lookup",
+            "search tools",
+            "find tool",
+            "工具搜索",
+            "工具发现",
+        ],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "StructuredOutput",
+        aliases: &["SyntheticOutputTool", "FinalOutputTool"],
+        intent_terms: &[
+            "structured output",
+            "final output",
+            "final response",
+            "结构化输出",
+            "最终答案",
+        ],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "Skill",
+        aliases: &["SkillTool"],
+        intent_terms: &["run skill", "service skill", "执行技能", "技能"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "TaskCreate",
+        aliases: &["TaskCreateTool"],
+        intent_terms: &["create task", "new task", "task board", "创建任务"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "TaskList",
+        aliases: &["TaskListTool"],
+        intent_terms: &["list tasks", "task list", "todo list", "任务列表"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "TaskGet",
+        aliases: &["TaskGetTool"],
+        intent_terms: &["get task", "task details", "read task", "任务详情"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "TaskUpdate",
+        aliases: &["TaskUpdateTool"],
+        intent_terms: &[
+            "update task",
+            "complete task",
+            "mark task",
+            "任务状态",
+            "完成任务",
+        ],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "TaskOutput",
+        aliases: &["TaskOutputTool", "AgentOutputTool", "BashOutputTool"],
+        intent_terms: &[
+            "agent output",
+            "bash output",
+            "task output",
+            "task logs",
+            "任务输出",
+        ],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "TaskStop",
+        aliases: &["TaskStopTool", "KillShell"],
+        intent_terms: &[
+            "kill shell",
+            "stop task",
+            "cancel task",
+            "terminate task",
+            "停止任务",
+        ],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "TeamCreate",
+        aliases: &["TeamCreateTool"],
+        intent_terms: &["create team", "create swarm", "swarm team", "创建团队"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "TeamDelete",
+        aliases: &["TeamDeleteTool"],
+        intent_terms: &["delete team", "cleanup team", "disband swarm", "解散团队"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "ListPeers",
+        aliases: &["ListPeersTool"],
+        intent_terms: &[
+            "list peers",
+            "peer discovery",
+            "swarm peers",
+            "message peers",
+            "成员列表",
+        ],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "ListMcpResourcesTool",
+        aliases: &["ListMcpResources"],
+        intent_terms: &["list mcp resources", "mcp resources", "列出 mcp 资源"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "ReadMcpResourceTool",
+        aliases: &["ReadMcpResource"],
+        intent_terms: &["read mcp resource", "mcp resource", "读取 mcp 资源"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "ViewImage",
+        aliases: &["ViewImageTool", "view_image"],
+        intent_terms: &[
+            "view image",
+            "inspect image",
+            "看图",
+            "查看图片",
+            "分析图片",
+        ],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "LSP",
+        aliases: &["LSPTool"],
+        intent_terms: &[
+            "language server",
+            "symbol",
+            "diagnostics",
+            "代码符号",
+            "诊断",
+        ],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "NotebookEdit",
+        aliases: &["NotebookEditTool"],
+        intent_terms: &["notebook edit", "jupyter", "编辑 notebook"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "PowerShell",
+        aliases: &["PowerShellTool"],
+        intent_terms: &["powershell", "windows shell", "windows 命令"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "RemoteTrigger",
+        aliases: &["RemoteTriggerTool"],
+        intent_terms: &["remote trigger", "trigger remote", "远程触发"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "Sleep",
+        aliases: &["SleepTool"],
+        intent_terms: &["sleep", "wait", "delay", "等待"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "CronCreate",
+        aliases: &["ScheduleCronTool", "CronCreateTool"],
+        intent_terms: &["create cron", "schedule", "定时任务"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "CronList",
+        aliases: &["CronListTool"],
+        intent_terms: &["list cron", "list schedule", "查看定时任务"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "CronDelete",
+        aliases: &["CronDeleteTool"],
+        intent_terms: &["delete cron", "cancel schedule", "删除定时任务"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "EnterPlanMode",
+        aliases: &["EnterPlanModeTool"],
+        intent_terms: &["plan mode", "enter plan", "进入计划模式"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "ExitPlanMode",
+        aliases: &["ExitPlanModeTool"],
+        intent_terms: &["exit plan", "leave plan mode", "退出计划模式"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "EnterWorktree",
+        aliases: &["EnterWorktreeTool"],
+        intent_terms: &["enter worktree", "worktree", "进入工作树"],
+    },
+    ToolDiscoveryProfile {
+        canonical_name: "ExitWorktree",
+        aliases: &["ExitWorktreeTool"],
+        intent_terms: &["exit worktree", "leave worktree", "退出工作树"],
+    },
+];
+
+pub fn tool_discovery_profiles() -> &'static [ToolDiscoveryProfile] {
+    TOOL_DISCOVERY_PROFILES
+}
+
+pub fn tool_discovery_profile(name: &str) -> Option<&'static ToolDiscoveryProfile> {
+    let key = tool_search_lookup_key(name);
+    if key.is_empty() {
+        return None;
     }
+
+    TOOL_DISCOVERY_PROFILES.iter().find(|profile| {
+        tool_search_lookup_key(profile.canonical_name) == key
+            || profile
+                .aliases
+                .iter()
+                .any(|alias| tool_search_lookup_key(alias) == key)
+    })
+}
+
+pub fn canonical_tool_discovery_name(name: &str) -> Option<&'static str> {
+    tool_discovery_profile(name).map(|profile| profile.canonical_name)
+}
+
+pub fn tool_discovery_aliases(name: &str) -> &'static [&'static str] {
+    tool_discovery_profile(name)
+        .map(|profile| profile.aliases)
+        .unwrap_or(&[])
+}
+
+pub fn tool_discovery_search_hints(name: &str) -> Vec<&'static str> {
+    let Some(profile) = tool_discovery_profile(name) else {
+        return Vec::new();
+    };
+    std::iter::once(profile.canonical_name)
+        .chain(profile.aliases.iter().copied())
+        .chain(profile.intent_terms.iter().copied())
+        .collect()
+}
+
+fn tool_discovery_exact_names(name: &str) -> Vec<&'static str> {
+    let Some(profile) = tool_discovery_profile(name) else {
+        return Vec::new();
+    };
+    std::iter::once(profile.canonical_name)
+        .chain(profile.aliases.iter().copied())
+        .collect()
+}
+
+fn lower_tool_discovery_hints(name: &str) -> Vec<String> {
+    tool_discovery_search_hints(name)
+        .into_iter()
+        .map(|hint| hint.to_ascii_lowercase())
+        .collect()
 }
 
 fn split_tool_search_identifier(value: &str) -> Vec<String> {
@@ -305,6 +672,17 @@ fn compile_tool_search_term_patterns(terms: &[&str]) -> HashMap<String, Regex> {
     patterns
 }
 
+fn tool_search_term_matches_text(text: &str, term: &str, pattern: &Regex) -> bool {
+    if term
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric())
+    {
+        pattern.is_match(text)
+    } else {
+        text.contains(term)
+    }
+}
+
 fn suffix_identifier_match(parts: &[String], suffix: &[String]) -> bool {
     !suffix.is_empty()
         && suffix.len() <= parts.len()
@@ -312,6 +690,23 @@ fn suffix_identifier_match(parts: &[String], suffix: &[String]) -> bool {
             .iter()
             .zip(suffix.iter())
             .all(|(left, right)| left == right)
+}
+
+fn split_tool_search_query_terms(value: &str) -> impl Iterator<Item = &str> {
+    value
+        .split(|character: char| {
+            character.is_whitespace() || matches!(character, ',' | ';' | '|' | '/' | '\\')
+        })
+        .map(str::trim)
+        .filter(|term| !term.is_empty())
+}
+
+fn exact_query_term_rank(name: &str, query: &str) -> Option<i32> {
+    split_tool_search_query_terms(query)
+        .enumerate()
+        .find_map(|(index, term)| {
+            tool_search_exact_match(name, term).then(|| 190 - index.min(90) as i32)
+        })
 }
 
 pub fn tool_search_exact_match(name: &str, query: &str) -> bool {
@@ -325,7 +720,15 @@ pub fn tool_search_exact_match(name: &str, query: &str) -> bool {
     }
 
     let query_key = tool_search_lookup_key(&query_lower);
-    if !query_key.is_empty() && tool_search_lookup_key(name) == query_key {
+    let name_key = tool_search_lookup_key(name);
+    if !query_key.is_empty() && name_key == query_key {
+        return true;
+    }
+
+    if query_key
+        .strip_suffix("tool")
+        .is_some_and(|stripped| !stripped.is_empty() && stripped == name_key)
+    {
         return true;
     }
 
@@ -346,20 +749,24 @@ pub fn tool_search_exact_match(name: &str, query: &str) -> bool {
         return true;
     }
 
-    native_tool_search_aliases(name).iter().any(|alias| {
+    tool_discovery_exact_names(name).iter().any(|alias| {
         alias.eq_ignore_ascii_case(&query_lower)
             || (!query_key.is_empty() && tool_search_lookup_key(alias) == query_key)
     })
 }
 
 pub fn score_tool_match(name: &str, description: &str, tags: &[String], query: &str) -> i32 {
-    let query = query.trim().to_ascii_lowercase();
+    let raw_query = query.trim();
+    let query = raw_query.to_ascii_lowercase();
     if query.is_empty() {
         return 1;
     }
 
     if tool_search_exact_match(name, &query) {
         return 200;
+    }
+    if let Some(rank) = exact_query_term_rank(name, raw_query) {
+        return rank;
     }
 
     let name_lc = name.to_ascii_lowercase();
@@ -417,13 +824,10 @@ pub fn score_tool_match(name: &str, description: &str, tags: &[String], query: &
     let term_patterns = compile_tool_search_term_patterns(&scoring_term_refs);
     let parsed = parse_tool_search_name(name);
     let description_lc = description.to_ascii_lowercase();
-    let aliases = native_tool_search_aliases(name)
+    let search_hints = lower_tool_discovery_hints(name);
+    let search_hint_parts = search_hints
         .iter()
-        .map(|alias| alias.to_ascii_lowercase())
-        .collect::<Vec<_>>();
-    let alias_parts = aliases
-        .iter()
-        .map(|alias| split_tool_search_identifier(alias))
+        .map(|hint| split_tool_search_identifier(hint))
         .collect::<Vec<_>>();
     let normalized_tags = tags
         .iter()
@@ -440,14 +844,17 @@ pub fn score_tool_match(name: &str, description: &str, tags: &[String], query: &
             .iter()
             .any(|part| part == term || part.contains(term))
             || parsed.full.contains(term)
-            || alias_parts
+            || search_hint_parts
                 .iter()
                 .flatten()
                 .any(|part| part == term || part.contains(term))
+            || search_hints
+                .iter()
+                .any(|hint| tool_search_term_matches_text(hint, term, pattern))
             || normalized_tags
                 .iter()
-                .any(|tag| tag == term || tag.contains(term))
-            || pattern.is_match(&description_lc)
+                .any(|tag| tag == term || tool_search_term_matches_text(tag, term, pattern))
+            || tool_search_term_matches_text(&description_lc, term, pattern)
     });
     if !required_matches {
         return 0;
@@ -468,16 +875,22 @@ pub fn score_tool_match(name: &str, description: &str, tags: &[String], query: &
             term_score += if parsed.is_prefixed { 6 } else { 5 };
         }
 
-        if alias_parts
+        if search_hint_parts
             .iter()
             .any(|parts| parts.iter().any(|part| part == term))
         {
             term_score += 9;
-        } else if alias_parts
+        } else if search_hint_parts
             .iter()
             .any(|parts| parts.iter().any(|part| part.contains(term)))
         {
             term_score += 4;
+        }
+        if search_hints
+            .iter()
+            .any(|hint| tool_search_term_matches_text(hint, term, pattern))
+        {
+            term_score += 3;
         }
 
         if term_score == 0 && parsed.full.contains(term) {
@@ -490,7 +903,7 @@ pub fn score_tool_match(name: &str, description: &str, tags: &[String], query: &
             term_score += 2;
         }
 
-        if pattern.is_match(&description_lc) {
+        if tool_search_term_matches_text(&description_lc, term, pattern) {
             term_score += 2;
         }
 
@@ -810,6 +1223,87 @@ mod tests {
     }
 
     #[test]
+    fn test_score_tool_match_resolves_space_separated_native_tool_names() {
+        let web_search = score_tool_match(
+            "WebSearch",
+            "Search the web for current information",
+            &[],
+            "WebSearch WebFetch",
+        );
+        let web_fetch = score_tool_match(
+            "WebFetch",
+            "Fetch and read a specific URL",
+            &[],
+            "WebSearch WebFetch",
+        );
+        let read = score_tool_match("Read", "Read file contents", &[], "WebSearch WebFetch");
+
+        assert!(web_search > 0);
+        assert!(web_fetch > 0);
+        assert!(web_search > web_fetch);
+        assert_eq!(read, 0);
+    }
+
+    #[test]
+    fn test_score_tool_match_resolves_news_intent_to_web_search() {
+        let web_search = score_tool_match(
+            "WebSearch",
+            "允许当前代理搜索网络并使用结果来提供响应。",
+            &[],
+            "May 30 2026 world news headlines",
+        );
+        let web_fetch = score_tool_match(
+            "WebFetch",
+            "获取指定 URL 的内容并使用 AI 模型处理。",
+            &[],
+            "May 30 2026 world news headlines",
+        );
+
+        assert!(web_search > 0);
+        assert_eq!(web_fetch, 0);
+    }
+
+    #[test]
+    fn test_score_tool_match_resolves_chinese_news_intent_to_web_search() {
+        let web_search = score_tool_match(
+            "WebSearch",
+            "允许当前代理搜索网络并使用结果来提供响应。",
+            &[],
+            "今日全球要闻 5月30日 国际",
+        );
+
+        assert!(web_search > 0);
+    }
+
+    #[test]
+    fn test_score_tool_match_resolves_basic_tool_discovery_profiles() {
+        let cases = [
+            ("Read", "Read file contents", "read_file"),
+            ("Bash", "Run shell commands", "run command"),
+            ("Bash", "Run shell commands", "shell"),
+            (
+                "TaskOutput",
+                "Read output from a background task",
+                "task logs",
+            ),
+            (
+                "StructuredOutput",
+                "Return the final JSON answer",
+                "structured final output",
+            ),
+            ("AskUserQuestion", "Ask the user for input", "ask user"),
+        ];
+
+        for (name, description, query) in cases {
+            let score = score_tool_match(name, description, &[], query);
+            assert!(
+                score > 0,
+                "{name} should match query {query:?}, got {score}"
+            );
+        }
+    }
+
+    #[test]
     fn test_score_tool_match_supports_required_terms() {
         let matched = score_tool_match(
             "mcp__slack__send_message",
@@ -830,6 +1324,7 @@ mod tests {
     #[test]
     fn test_tool_search_exact_match_supports_native_alias() {
         assert!(tool_search_exact_match("Read", "read_file"));
+        assert!(tool_search_exact_match("WebSearch", "WebSearchTool"));
         assert!(tool_search_exact_match(
             "mcp__playwright__browser_click",
             "browser_click"

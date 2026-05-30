@@ -277,71 +277,6 @@ jobs:
           echo "tauri.conf.headless.json version is now: $(node -e "console.log(JSON.parse(require('fs').readFileSync('tauri.conf.headless.json','utf8')).version)")"
           echo "createUpdaterArtifacts: $(node -e "console.log(JSON.parse(require('fs').readFileSync('tauri.conf.json','utf8')).bundle.createUpdaterArtifacts)")"
 
-      - name: Configure ONNX runtime bundling
-        shell: bash
-        env:
-          TARGET_TRIPLE: ${{ matrix.target }}
-        run: |
-          set -euo pipefail
-          node - <<'NODE'
-          const fs = require('fs');
-          const path = require('path');
-
-          const target = process.env.TARGET_TRIPLE;
-          const srcTauri = path.resolve('src-tauri');
-          const portablePath = (value) => value.replace(/\\/g, '/');
-          const windowsPath = (value) => value.replace(/\//g, '\\');
-          const unique = (values) => [...new Set(values.filter(Boolean))];
-
-          if (target === 'x86_64-pc-windows-msvc') {
-            const runtimeDir = path.join(srcTauri, '.release-runtime-libs', target);
-            const dlls = ['onnxruntime.dll', 'sherpa-onnx-c-api.dll'];
-            const hookPath = path.join(runtimeDir, 'windows-runtime-libs.nsh');
-            fs.mkdirSync(path.dirname(hookPath), { recursive: true });
-            fs.writeFileSync(
-              hookPath,
-              [
-                '!macro NSIS_HOOK_POSTINSTALL',
-                '  SetOutPath "$INSTDIR"',
-                ...dlls.map(
-                  (name) =>
-                    `  File /a /oname=${name} "${windowsPath(path.join(runtimeDir, name))}"`,
-                ),
-                '!macroend',
-                '',
-              ].join('\n'),
-            );
-
-            const configPath = path.join(srcTauri, 'tauri.windows.conf.json');
-            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-            config.bundle = config.bundle || {};
-            config.bundle.windows = config.bundle.windows || {};
-            config.bundle.windows.nsis = config.bundle.windows.nsis || {};
-            config.bundle.windows.nsis.installerHooks = hookPath;
-            fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
-            console.log(`Configured Windows ONNX runtime NSIS hook: ${hookPath}`);
-          } else if (target.endsWith('apple-darwin')) {
-            const configPath = path.join(srcTauri, 'tauri.conf.json');
-            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-            const frameworks = [
-              'libonnxruntime.1.24.4.dylib',
-              'libonnxruntime.dylib',
-              'libsherpa-onnx-c-api.dylib',
-            ].map((name) => portablePath(path.join(srcTauri, 'target', target, 'release', name)));
-
-            config.bundle = config.bundle || {};
-            config.bundle.macOS = config.bundle.macOS || {};
-            config.bundle.macOS.frameworks = unique([
-              ...(config.bundle.macOS.frameworks || []),
-              ...frameworks,
-            ]);
-            fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
-            console.log(`Configured macOS ONNX runtime frameworks for ${target}`);
-          } else {
-            console.log(`No ONNX runtime bundling override needed for ${target}`);
-          }
-          NODE
-
       - name: Resolve updater endpoint
         shell: bash
         run: |
@@ -524,33 +459,6 @@ jobs:
             exit 1
           fi
 
-      - name: Prepare ONNX runtime shared libraries
-        if: matrix.platform == 'windows-2022' || startsWith(matrix.platform, 'macos')
-        run: node scripts/prepare-sherpa-onnx-runtime.mjs --target ${{ matrix.target }}
-
-      - name: Verify Windows ONNX runtime bundle inputs
-        if: matrix.platform == 'windows-2022'
-        shell: bash
-        run: |
-          set -euo pipefail
-          RUNTIME_LIB_DIR="src-tauri/.release-runtime-libs/${{ matrix.target }}"
-          HOOK_FILE="$RUNTIME_LIB_DIR/windows-runtime-libs.nsh"
-
-          if [ ! -f "$HOOK_FILE" ]; then
-            echo "::error::Expected NSIS runtime hook missing before Tauri build: $HOOK_FILE"
-            exit 1
-          fi
-
-          for dll in onnxruntime.dll sherpa-onnx-c-api.dll; do
-            dll_path="$RUNTIME_LIB_DIR/$dll"
-            if [ ! -f "$dll_path" ]; then
-              echo "::error::Expected staged ONNX runtime DLL missing before Tauri build: $dll_path"
-              exit 1
-            fi
-            powershell -NoProfile -Command "if (-not (Test-Path -LiteralPath '$dll_path')) { throw 'PowerShell cannot see staged ONNX runtime DLL: $dll_path' }"
-            grep -F "$dll" "$HOOK_FILE"
-          done
-
       - name: Build Tauri app (Windows installer, stage only)
         id: build_windows_stage
         if: matrix.platform == 'windows-2022'
@@ -572,29 +480,6 @@ jobs:
           assetNamePattern: "[name]_[version]_[arch][setup][ext]"
           # 默认不启用 voice feature（包含 whisper-rs，编译很慢）
           args: --target ${{ matrix.target }} --config tauri.windows.conf.json
-
-      - name: Verify packaged ONNX runtime libraries (Windows)
-        if: matrix.platform == 'windows-2022'
-        shell: bash
-        run: |
-          set -euo pipefail
-          RELEASE_DIR="src-tauri/target/${{ matrix.target }}/release"
-          RUNTIME_LIB_DIR="src-tauri/.release-runtime-libs/${{ matrix.target }}"
-          for dll in onnxruntime.dll sherpa-onnx-c-api.dll; do
-            if [ ! -f "$RUNTIME_LIB_DIR/$dll" ]; then
-              echo "::error::Expected staged ONNX runtime DLL missing: $RUNTIME_LIB_DIR/$dll"
-              exit 1
-            fi
-            powershell -NoProfile -Command "if (-not (Test-Path -LiteralPath '$RUNTIME_LIB_DIR/$dll')) { throw 'PowerShell cannot see staged ONNX runtime DLL: $RUNTIME_LIB_DIR/$dll' }"
-          done
-
-          HOOK_FILE="$RUNTIME_LIB_DIR/windows-runtime-libs.nsh"
-          if [ ! -f "$HOOK_FILE" ]; then
-            echo "::error::Expected NSIS runtime hook missing: $HOOK_FILE"
-            exit 1
-          fi
-          grep -F 'onnxruntime.dll' "$HOOK_FILE"
-          grep -F 'sherpa-onnx-c-api.dll' "$HOOK_FILE"
 
       - name: Stage Windows release assets
         if: matrix.platform == 'windows-2022'
@@ -803,14 +688,6 @@ jobs:
           fi
 
           echo "Validating notarized app bundle: $app_bundle"
-          FRAMEWORKS_DIR="$app_bundle/Contents/Frameworks"
-          for dylib in libonnxruntime.1.24.4.dylib libonnxruntime.dylib libsherpa-onnx-c-api.dylib; do
-            if [ ! -f "$FRAMEWORKS_DIR/$dylib" ]; then
-              echo "::error::Expected ONNX runtime dylib missing: $FRAMEWORKS_DIR/$dylib"
-              exit 1
-            fi
-          done
-
           MAIN_BINARY="$app_bundle/Contents/MacOS/Lime"
           if [ ! -f "$MAIN_BINARY" ]; then
             MAIN_BINARY="$(find "$app_bundle/Contents/MacOS" -maxdepth 1 -type f | sort | head -n 1)"
@@ -819,11 +696,6 @@ jobs:
             echo "::error::Unable to resolve macOS app main binary under $app_bundle/Contents/MacOS"
             exit 1
           fi
-          if ! otool -l "$MAIN_BINARY" | grep -F '@executable_path/../Frameworks' >/dev/null; then
-            echo "::error::macOS app binary is missing ONNX runtime Frameworks rpath: $MAIN_BINARY"
-            exit 1
-          fi
-
           spctl -a -vv "$app_bundle"
           xcrun stapler validate "$app_bundle"
 

@@ -517,6 +517,24 @@ pub(crate) async fn apply_workspace_sandbox_permissions(
     append_webpage_skill_launch_session_permissions(&mut permissions, session_id, request_metadata);
     append_service_skill_launch_session_permissions(&mut permissions, session_id, request_metadata);
 
+    let subagent_runtime = SubagentControlRuntime::new(
+        app_handle.clone(),
+        state,
+        db,
+        api_key_provider_service,
+        logs,
+        config_manager,
+        mcp_manager,
+        automation_state,
+    );
+    let agent_control_tools = subagent_tools::build_agent_control_tool_config(subagent_runtime);
+    state
+        .with_agent_mut({
+            let agent_control_tools = agent_control_tools.clone();
+            move |agent| agent.set_agent_control_tools(Some(agent_control_tools))
+        })
+        .await?;
+
     let (registry_arc, _) = resolve_agent_registry(state).await?;
     let mut registry = registry_arc.write().await;
     let mut permission_manager = ToolPermissionManager::new(None);
@@ -535,17 +553,7 @@ pub(crate) async fn apply_workspace_sandbox_permissions(
     );
     connector_tools::register_agent_app_connector_preview_tools(&mut registry, request_metadata);
 
-    let subagent_runtime = SubagentControlRuntime::new(
-        app_handle.clone(),
-        state,
-        db,
-        api_key_provider_service,
-        logs,
-        config_manager,
-        mcp_manager,
-        automation_state,
-    );
-    subagent_tools::register_subagent_runtime_tools(&mut registry, subagent_runtime);
+    subagent_tools::register_subagent_runtime_tools(&mut registry, &agent_control_tools);
 
     sync_workspace_mode_native_tool_surface(
         &mut registry,

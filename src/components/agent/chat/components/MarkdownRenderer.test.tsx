@@ -584,6 +584,27 @@ describe("MarkdownRenderer", () => {
     );
   });
 
+  it("压成单段的编号建议与 Markdown 模板应恢复为列表和标题", () => {
+    const content =
+      "抱歉，我这边尝试调用联网检索，但当前工具面只返回了 WebSearch/WebFetch 的注册信息，没有实际返回新闻搜索结果。为了避免编造“今日新闻”，我不能直接给出未经核实的国际新闻摘要。你可以任选一种方式继续： 1. 你发我几个新闻链接或截图，我帮你整理成： - 今日国际要闻摘要 - 按地区/主题分类 - 每条一句话版 - 适合朋友圈/日报/会议简报的版本 2. 你复制一段新闻列表过来，我可以快速压缩成一页简报。 3. 如果联网工具恢复，我可以按这个结构帮你整理： ## 今日国际新闻简报模板### 一、地缘政治与冲突-事件：-关键进展：-影响：### 二、国际外交-事件：-相关国家/组织：-后续看点：### 三、经济与市场-事件：-对全球市场/能源/贸易的影响：### 四、科技与产业-事件：-影响范围：";
+
+    const container = render(content);
+    const orderedItems = container.querySelectorAll("ol > li");
+    const headings = container.querySelectorAll("[data-markdown-heading-level]");
+    const bulletItems = container.querySelectorAll("ul > li");
+
+    expect(orderedItems).toHaveLength(3);
+    expect(orderedItems[0]?.textContent).toContain("你发我几个新闻链接或截图");
+    expect(orderedItems[1]?.textContent).toContain("你复制一段新闻列表过来");
+    expect(orderedItems[2]?.textContent).toContain("如果联网工具恢复");
+    expect(headings).toHaveLength(5);
+    expect(headings[0]?.textContent).toContain("今日国际新闻简报模板");
+    expect(headings[1]?.textContent).toContain("地缘政治与冲突");
+    expect(bulletItems.length).toBeGreaterThanOrEqual(8);
+    expect(container.textContent).not.toContain("模板### 一");
+    expect(container.textContent).not.toContain("继续： 1.");
+  });
+
   it("不应改写代码块里的紧凑竖线文本", () => {
     const content = [
       "```text",

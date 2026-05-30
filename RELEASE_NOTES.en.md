@@ -32,6 +32,7 @@
 - Extracted tool-process summaries, tool display info, and Agent text normalization into focused helpers to reduce UI duplication.
 - File write / edit tools now emit structured `file_change` metadata, and the frontend aggregates it into a concise file-change summary card.
 - Updated Tauri patch dependencies to `2.11.2` / `2.6.2` and aligned the global shortcut patch version.
+- Default release builds no longer bundle the local SenseVoice `sherpa-onnx` native runtime. Voice models still download on demand, and the local SenseVoice runtime will be enabled through an explicit component or feature path so optional runtime downloads cannot block installer releases.
 
 ### Tests And Quality
 

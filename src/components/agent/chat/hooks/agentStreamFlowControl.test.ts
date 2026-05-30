@@ -8,6 +8,7 @@ import {
   removeQueuedAgentTurn,
   removeQueuedTurnFromState,
   resumeAgentStreamThread,
+  settleInterruptedMessageProcess,
   stopActiveAgentStream,
 } from "./agentStreamFlowControl";
 
@@ -98,6 +99,27 @@ describe("agentStreamFlowControl", () => {
         content: "",
         timestamp: new Date("2026-03-29T00:00:00.000Z"),
         isThinking: true,
+        toolCalls: [
+          {
+            id: "tool-running-1",
+            name: "Bash",
+            arguments: JSON.stringify({ command: "python3 news.py" }),
+            status: "running",
+            startTime: new Date("2026-03-29T00:00:01.000Z"),
+          },
+        ],
+        contentParts: [
+          {
+            type: "tool_use",
+            toolCall: {
+              id: "tool-running-1",
+              name: "Bash",
+              arguments: JSON.stringify({ command: "python3 news.py" }),
+              status: "running",
+              startTime: new Date("2026-03-29T00:00:01.000Z"),
+            },
+          },
+        ],
       },
     ];
     let activeStream = {
@@ -169,8 +191,94 @@ describe("agentStreamFlowControl", () => {
     expect(currentTurnId).toBeNull();
     expect(messages[0]?.content).toBe("(已停止)");
     expect(messages[0]?.isThinking).toBe(false);
+    expect(messages[0]?.toolCalls?.[0]).toMatchObject({
+      status: "failed",
+      result: {
+        success: false,
+        output: "",
+        error: "本轮已中止",
+      },
+    });
+    const interruptedToolPart = messages[0]?.contentParts?.[0];
+    expect(interruptedToolPart?.type).toBe("tool_use");
+    if (interruptedToolPart?.type === "tool_use") {
+      expect(interruptedToolPart.toolCall.status).toBe("failed");
+      expect(interruptedToolPart.toolCall.result?.error).toBe("本轮已中止");
+    }
     expect(activeStream).toBeNull();
     expect(notify.info).toHaveBeenCalledWith("已停止生成");
+  });
+
+  it("settleInterruptedMessageProcess 应把运行中工具标记为本轮已中止", () => {
+    const message = settleInterruptedMessageProcess({
+      id: "assistant-with-running-tool",
+      role: "assistant",
+      content: "已完成部分整理",
+      timestamp: new Date("2026-03-29T00:00:00.000Z"),
+      toolCalls: [
+        {
+          id: "tool-running-1",
+          name: "Bash",
+          arguments: JSON.stringify({ command: "python3 news.py" }),
+          status: "running",
+          startTime: new Date("2026-03-29T00:00:01.000Z"),
+        },
+        {
+          id: "tool-completed-1",
+          name: "WebSearch",
+          arguments: JSON.stringify({ query: "world news" }),
+          status: "completed",
+          result: {
+            success: true,
+            output: "已找到 3 条来源",
+          },
+          startTime: new Date("2026-03-29T00:00:02.000Z"),
+          endTime: new Date("2026-03-29T00:00:03.000Z"),
+        },
+      ],
+      contentParts: [
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-running-1",
+            name: "Bash",
+            arguments: JSON.stringify({ command: "python3 news.py" }),
+            status: "running",
+            startTime: new Date("2026-03-29T00:00:01.000Z"),
+          },
+        },
+      ],
+    });
+
+    expect(message.toolCalls?.[0]).toMatchObject({
+      id: "tool-running-1",
+      status: "failed",
+      result: {
+        success: false,
+        output: "",
+        error: "本轮已中止",
+      },
+    });
+    expect(message.toolCalls?.[0]?.endTime).toBeInstanceOf(Date);
+    expect(message.toolCalls?.[1]).toMatchObject({
+      id: "tool-completed-1",
+      status: "completed",
+      result: {
+        success: true,
+        output: "已找到 3 条来源",
+      },
+    });
+    const toolPart = message.contentParts?.[0];
+    expect(toolPart?.type).toBe("tool_use");
+    if (toolPart?.type === "tool_use") {
+      expect(toolPart.toolCall).toMatchObject({
+        id: "tool-running-1",
+        status: "failed",
+        result: {
+          error: "本轮已中止",
+        },
+      });
+    }
   });
 
   it("promoteQueuedAgentTurn 应先收口当前前台流，再切换到新的排队任务", async () => {

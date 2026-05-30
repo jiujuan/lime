@@ -208,7 +208,11 @@ describe("toolDisplayInfo", () => {
         status: "completed",
         startTime: new Date("2026-04-09T00:00:00.000Z"),
       }),
-    ).toBe("内部流程");
+    ).toBe("工具入口");
+    expect(resolveToolPrimarySubject("ToolSearch", {}, null)).toBe("工具入口");
+    expect(resolveUserFacingToolDisplayLabel("ToolSearch")).toBe(
+      "确认工具入口",
+    );
   });
 
   it("无主体对象时应直接展示动作句，避免重复拼接工具类别", () => {

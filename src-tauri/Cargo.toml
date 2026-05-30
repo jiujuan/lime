@@ -361,11 +361,11 @@ proptest.workspace = true
 tempfile.workspace = true
 
 [features]
-default = ["custom-protocol", "local-sensevoice", "local-onnx-embedding"]
+default = ["custom-protocol", "local-onnx-embedding"]
 custom-protocol = ["tauri/custom-protocol"]
 # 本地 Whisper 语音识别（编译很慢，CI 默认不启用）
 local-whisper = ["lime-services/local-whisper"]
-# 本地 SenseVoice Small 语音识别（模型按需下载，不进入安装包）
+# 本地 SenseVoice Small 语音识别（可选；默认安装包不启用 sherpa-onnx native runtime）
 local-sensevoice = ["lime-services/local-sensevoice"]
 # 本地 ONNX 记忆嵌入（模型按需下载，不进入安装包）
 local-onnx-embedding = ["lime-embedding/local-onnx"]

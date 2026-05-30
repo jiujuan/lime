@@ -485,6 +485,54 @@ describe("InlineToolProcessStep", () => {
     expect(container.textContent).not.toContain("执行失败");
   });
 
+  it("WebFetch 返回 RSS/XML 时应默认只展示弱摘要，不铺开原始 XML", () => {
+    const { container } = renderTool({
+      id: "tool-fetch-rss-1",
+      name: "WebFetch",
+      arguments: JSON.stringify({
+        url: "https://example.com/rss.xml",
+      }),
+      status: "completed",
+      result: {
+        success: true,
+        output:
+          '<?xml version="1.0"?><rss><channel><title>News</title></channel><item><title>World</title></item></rss>',
+      },
+      startTime: new Date("2026-04-13T10:23:00.000Z"),
+      endTime: new Date("2026-04-13T10:23:01.000Z"),
+    });
+
+    expect(container.textContent).toContain("来源暂时无法读取");
+    expect(container.textContent).not.toContain("<?xml");
+    expect(container.textContent).not.toContain("<rss>");
+    expect(
+      container.querySelector('[data-testid="markdown-renderer"]'),
+    ).toBeNull();
+  });
+
+  it("WebSearch 超时诊断应默认只展示弱摘要，不铺开原始错误", () => {
+    const { container } = renderTool({
+      id: "tool-search-timeout-1",
+      name: "WebSearch",
+      arguments: JSON.stringify({
+        query: "今日国际新闻",
+      }),
+      status: "completed",
+      result: {
+        success: true,
+        output: "Timeout while reading https://example.com/rss.xml",
+      },
+      startTime: new Date("2026-04-13T10:23:00.000Z"),
+      endTime: new Date("2026-04-13T10:23:01.000Z"),
+    });
+
+    expect(container.textContent).toContain("搜索结果暂时无法读取");
+    expect(container.textContent).not.toContain("Timeout while reading");
+    expect(
+      container.querySelector('[data-testid="markdown-renderer"]'),
+    ).toBeNull();
+  });
+
   it("WebFetch 成功返回结构化 JSON 时应渲染正文而不是原始 JSON", () => {
     const { container } = renderTool({
       id: "tool-fetch-json-1",

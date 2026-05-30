@@ -124,6 +124,29 @@ function looksLikeOpaqueAck(value: string): boolean {
   );
 }
 
+function looksLikeXmlOrHtmlDocument(value: string): boolean {
+  const normalized = value.trim().slice(0, 600);
+  return (
+    /^<\?xml\b/i.test(normalized) ||
+    /^<!doctype\s+html\b/i.test(normalized) ||
+    /^<html\b/i.test(normalized) ||
+    /^<rss\b/i.test(normalized) ||
+    /^<feed\b/i.test(normalized) ||
+    /<(rss|feed|channel|item|entry|html|body)\b/i.test(normalized)
+  );
+}
+
+function looksLikeWebRetrievalNoise(value: string): boolean {
+  const normalized = collapseWhitespace(value).toLowerCase();
+  return (
+    looksLikeXmlOrHtmlDocument(value) ||
+    /\b(?:timed?\s*out|timeout|deadline exceeded|network error|fetch failed|connection refused|connection reset|dns|ssl|tls|invalid url|unsupported url|404 not found|403 forbidden|429 too many requests|502 bad gateway|503 service unavailable)\b/i.test(
+      normalized,
+    ) ||
+    /^(?:error|failed|request failed)[:：]/i.test(normalized)
+  );
+}
+
 function normalizePlainResultLine(
   value: string | null | undefined,
   maxLength = 96,
@@ -143,7 +166,12 @@ function normalizePlainResultLine(
       .split(/\r?\n/)
       .map((entry) => collapseWhitespace(entry))
       .find(Boolean) || "";
-  if (!line || looksLikeCodeOrJson(line) || looksLikeOpaqueAck(line)) {
+  if (
+    !line ||
+    looksLikeCodeOrJson(line) ||
+    looksLikeOpaqueAck(line) ||
+    looksLikeXmlOrHtmlDocument(line)
+  ) {
     return null;
   }
 
@@ -160,6 +188,10 @@ function extractToolResultText(
 
   const normalized = extractLimeToolMetadataBlock(raw).text.trim();
   return normalized || null;
+}
+
+export function isLikelyWebRetrievalDiagnosticNoise(value: string): boolean {
+  return looksLikeWebRetrievalNoise(value);
 }
 
 function isLikelyWebSearchRuntimeUnavailable(
@@ -1067,6 +1099,16 @@ function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
       }
       postSource = "error";
     }
+  }
+
+  if (
+    !postSummary &&
+    (display.family === "fetch" || display.family === "search") &&
+    resultOutput &&
+    looksLikeWebRetrievalNoise(resultOutput)
+  ) {
+    postSummary = buildFetchSearchFailureSummary(display.family);
+    postSource = "error";
   }
 
   if (!postSummary) {

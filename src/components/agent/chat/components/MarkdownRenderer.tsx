@@ -522,6 +522,13 @@ const INLINE_COLLAPSED_FENCE_PATTERN =
   /```([A-Za-z0-9_+.#-]+)(?![ \t]*\n)([\s\S]*?)```/g;
 const COLLAPSED_MARKDOWN_TRAILING_TABLE_TEXT_PATTERN =
   /\|(?=[\u3400-\u9fffA-Za-z][^|\n]{0,24}[：:])/g;
+const COLLAPSED_SPACED_HEADING_PATTERN = /[^\n#]#{2,6}\s+\S/g;
+const COLLAPSED_ORDERED_LIST_PATTERN =
+  /(?:[：:]\s*|\s)[1-9]\d{0,1}\.\s+\S/g;
+const COLLAPSED_BULLET_LIST_PATTERN = /(?:[：:]\s*|\s)[-*+]\s+\S/g;
+const MARKDOWN_HEADING_LINE_PATTERN = /^#{1,6}\s+\S/;
+const MARKDOWN_ORDERED_LIST_LINE_PATTERN = /^[1-9]\d{0,1}\.\s+\S/;
+const MARKDOWN_UNORDERED_LIST_LINE_PATTERN = /^[-*+]\s+\S/;
 
 interface MarkdownRendererProps {
   content: string;
@@ -669,6 +676,10 @@ function normalizeCompactPipeTableLine(line: string): string {
     .join("\n");
 }
 
+function countPatternMatches(value: string, pattern: RegExp): number {
+  return value.match(pattern)?.length ?? 0;
+}
+
 function shouldNormalizeCollapsedMarkdownBlocks(markdown: string): boolean {
   const trimmed = markdown.trim();
   if (!trimmed) {
@@ -682,16 +693,37 @@ function shouldNormalizeCollapsedMarkdownBlocks(markdown: string): boolean {
     return false;
   }
 
+  const collapsedSpacedHeadingCount = countPatternMatches(
+    trimmed,
+    COLLAPSED_SPACED_HEADING_PATTERN,
+  );
+  const collapsedOrderedListCount = countPatternMatches(
+    trimmed,
+    COLLAPSED_ORDERED_LIST_PATTERN,
+  );
+  const collapsedBulletListCount = countPatternMatches(
+    trimmed,
+    COLLAPSED_BULLET_LIST_PATTERN,
+  );
   const markerCount = [
     /(^|[^#])#{1,6}(?!#)\S/.test(trimmed),
+    collapsedSpacedHeadingCount > 0,
     /---#{1,6}(?!#)\S/.test(trimmed),
-    /[：:]-\s*\S|`-\s*\S/.test(trimmed),
+    /[：:]\s*[-*+]\s+\S|`-\s*\S/.test(trimmed),
+    /[：:]\s*[1-9]\d{0,1}\.\s+\S/.test(trimmed),
+    collapsedOrderedListCount >= 2,
+    collapsedBulletListCount >= 2,
     COMPACT_PIPE_TABLE_SEPARATOR_PATTERN.test(trimmed),
     INLINE_COLLAPSED_FENCE_PATTERN.test(trimmed),
   ].filter(Boolean).length;
 
   INLINE_COLLAPSED_FENCE_PATTERN.lastIndex = 0;
-  return markerCount >= 2;
+  return (
+    markerCount >= 2 ||
+    collapsedSpacedHeadingCount >= 2 ||
+    collapsedOrderedListCount >= 2 ||
+    collapsedBulletListCount >= 2
+  );
 }
 
 function normalizeCollapsedFenceBody(body: string): string {
@@ -769,17 +801,63 @@ function transformOutsideMarkdownFences(
 }
 
 function normalizeCollapsedMarkdownTextBlocks(markdown: string): string {
-  return markdown
+  const normalized = markdown
     .replace(/---(?=#{1,6}(?!#)\S)/g, "\n\n---\n\n")
+    .replace(/([^\n#])(?=#{2,6}\s+\S)/g, "$1\n\n")
     .replace(/(^|[^A-Za-z0-9#\n])(?=#{1,6}(?!#)\S)/g, "$1\n\n")
-    .replace(/(^|\n)(#{1,6})(?=\S)/g, "$1$2 ")
+    .replace(/(^|\n)(#{1,6})(?!#)(?=\S)/g, "$1$2 ")
     .replace(/([：:])(\|[^\n]*?\|\|[ \t:|-]{3,}\|\|)/g, "$1\n\n$2")
     .replace(COLLAPSED_MARKDOWN_TRAILING_TABLE_TEXT_PATTERN, "|\n\n")
-    .replace(/([：:])-\s*/g, "$1\n- ")
+    .replace(/([：:])\s*([1-9]\d{0,1}\.\s+)/g, "$1\n\n$2")
+    .replace(
+      /(?<=[\u3400-\u9fffA-Za-z0-9，。！？；：,.!?;:）】》”’)\]])\s+([1-9]\d{0,1}\.\s+\S)/gu,
+      "\n$1",
+    )
+    .replace(/([：:])\s*([-*+])\s*/g, "$1\n$2 ")
+    .replace(
+      /(?<=[\u3400-\u9fffA-Za-z0-9）】》”’)\]])([-*+])(?=[\u3400-\u9fffA-Za-z][^，。！？；：,.!?;:\n]{0,24}[：:])/gu,
+      "\n$1 ",
+    )
+    .replace(
+      /(?<=[\u3400-\u9fffA-Za-z0-9）】》”’)\]])\s+([-*+]\s+\S)/gu,
+      "\n$1",
+    )
     .replace(/`-\s*/g, "`\n- ")
     .replace(/([：:])```/g, "$1\n\n```")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+    .replace(/\n{3,}/g, "\n\n");
+
+  return normalizeRecoveredListNesting(normalized).trim();
+}
+
+function normalizeRecoveredListNesting(markdown: string): string {
+  const outputLines: string[] = [];
+  let activeOrderedItem = false;
+
+  for (const line of markdown.split("\n")) {
+    const trimmed = line.trim();
+
+    if (!trimmed || MARKDOWN_HEADING_LINE_PATTERN.test(trimmed)) {
+      activeOrderedItem = false;
+      outputLines.push(line);
+      continue;
+    }
+
+    if (MARKDOWN_ORDERED_LIST_LINE_PATTERN.test(trimmed)) {
+      activeOrderedItem = true;
+      outputLines.push(trimmed);
+      continue;
+    }
+
+    if (activeOrderedItem && MARKDOWN_UNORDERED_LIST_LINE_PATTERN.test(trimmed)) {
+      outputLines.push(`   ${trimmed}`);
+      continue;
+    }
+
+    activeOrderedItem = false;
+    outputLines.push(line);
+  }
+
+  return outputLines.join("\n");
 }
 
 function normalizeCollapsedMarkdownBlocks(markdown: string): string {

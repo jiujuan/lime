@@ -27,6 +27,10 @@ function resolveUserFacingToolSearchNote(note: string): string | null {
     return "没有找到更多匹配工具";
   }
 
+  if (/tools\[\*\]\.call_name|不要继续用\s*ToolSearch/i.test(trimmed)) {
+    return "已确认工具入口，接下来可直接执行对应工具";
+  }
+
   if (
     /(?:always[_\s-]?visible|native[_\s-]?registry|extension[_\s-]?name|total[_\s-]?deferred|caller)/i.test(
       trimmed,

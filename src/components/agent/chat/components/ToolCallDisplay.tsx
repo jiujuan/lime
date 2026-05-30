@@ -63,7 +63,10 @@ import {
   resolveToolFilePath as resolveToolFilePathFromInfo,
   resolveToolPrimarySubject as resolveToolPrimarySubjectFromInfo,
 } from "../utils/toolDisplayInfo";
-import { resolveToolErrorDetailText } from "../utils/toolProcessSummary";
+import {
+  resolveToolErrorDetailText,
+  resolveToolProcessNarrative,
+} from "../utils/toolProcessSummary";
 import { isImageGenerationProtocolFailure } from "../utils/limeTaskProtocolNoise";
 
 const inferCodeLanguageFromPath = (path?: string | null): string | null => {
@@ -1188,8 +1191,8 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
           }),
     [fileName, isImageGenerationFailureResult, t, toolCall.name, toolDisplay],
   );
-  const groupedChildLine = useMemo(
-    () => buildGroupedChildLineFromInfo(toolCall),
+  const processNarrative = useMemo(
+    () => resolveToolProcessNarrative(toolCall),
     [toolCall],
   );
   const searchResultItems = useMemo(() => {
@@ -1210,6 +1213,12 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     [isToolSearch, resultText],
   );
   const hasToolSearchSummary = Boolean(toolSearchSummary);
+  const groupedChildLine = useMemo(() => {
+    if (isToolSearch && processNarrative.postSource === "tool_search") {
+      return processNarrative.summary;
+    }
+    return buildGroupedChildLineFromInfo(toolCall);
+  }, [isToolSearch, processNarrative.postSource, processNarrative.summary, toolCall]);
   const shouldShowRawSearchResultToggle =
     hasSearchResults && resultText !== emptyOutputLabel;
   const shouldRenderResultPanel =

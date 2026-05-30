@@ -18,6 +18,12 @@ export function normalizeComparableThinkingText(value: string): string {
   return value.trim().replace(/\s+/g, " ");
 }
 
+function hasMostlyAsciiLetters(value: string): boolean {
+  const letters = value.match(/[A-Za-z]/g)?.length || 0;
+  const cjk = value.match(/[\u4e00-\u9fff]/g)?.length || 0;
+  return letters > 0 && letters >= cjk * 2;
+}
+
 export function formatTimestamp(value?: string): string | null {
   if (!value) {
     return null;
@@ -75,6 +81,33 @@ export function isInternalThinkingPreviewLine(line: string): boolean {
     ) ||
     /(用户的问题|用户问的是|用户要求|这似乎是一个关于|这个问题其实是在询问|我需要用|避免展开复杂流程|the user'?s question|the user requested)/i.test(
       normalized,
-    )
+    ) ||
+    (hasMostlyAsciiLetters(normalized) &&
+      (/^(?:finding|looking for|searching for|gathering|checking|investigating)\s+(?:the\s+)?(?:latest|recent|current|today'?s|available|tool|tools|tool calls?|websearch|webfetch|news|sources?|headlines?|results?)\b/i.test(
+        normalized,
+      ) ||
+        /^(?:i'?m|i am|we'?re|we are)\s+(?:thinking|checking|investigating|looking|searching|trying|figuring)\b/i.test(
+          normalized,
+        ) ||
+        /^(?:i|we)\s+(?:need|should|will|can|must|want)\s+(?:to\s+)?(?:use|search|find|check|look|inspect|investigate|call|verify)\b/i.test(
+          normalized,
+        ) ||
+        /^let'?s\s+(?:search|find|check|look|inspect|use|try|verify)\b/i.test(
+          normalized,
+        ) ||
+        /^(?:tool|tools|toolsearch|websearch|webfetch)\b.*\b(?:available|namespace|callable|registry|not available|not found|tool call|tool calls)\b/i.test(
+          normalized,
+        ) ||
+        /\b(?:namespace|registry|callable)\b.*\b(?:tool|tools|websearch|webfetch)\b/i.test(
+          normalized,
+        )))
   );
+}
+
+export function sanitizeThinkingDisplayText(value: string): string {
+  const lines = value.split(/\r?\n/);
+  const visibleLines = lines.filter(
+    (line) => !isInternalThinkingPreviewLine(line),
+  );
+  return visibleLines.join("\n").trim();
 }
