@@ -1954,11 +1954,6 @@ export const resolveToolPrimarySubject = (
   filePath?: string | null,
 ): string | null => {
   const normalizedName = normalizeToolNameKey(toolName);
-  const searchQueryPreview = resolveToolArgumentPreview(args, [
-    "query",
-    "q",
-    "search_query",
-  ]);
 
   if (filePath) return getFileName(filePath);
 
