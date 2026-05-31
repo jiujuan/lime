@@ -463,7 +463,13 @@ function isWorkflowChange(file) {
 }
 
 function isDocsChange(file) {
-  return file.startsWith("docs/") || isMarkdownLike(file);
+  return (
+    file.startsWith("docs/") ||
+    file.startsWith("internal/tests/") ||
+    file.startsWith("internal/test/agent-qc-") ||
+    file.startsWith("internal/roadmap/i18n/") ||
+    isMarkdownLike(file)
+  );
 }
 
 function isDocsOnlyChange(files) {

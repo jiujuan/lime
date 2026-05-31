@@ -1,7 +1,7 @@
 export const LIVE_PROVIDER_SMOKE_ENV = "LIME_ALLOW_LIVE_PROVIDER_SMOKE";
 export const REAL_API_TEST_ENV = "LIME_REAL_API_TEST";
 const LIVE_PROVIDER_TEST_PATH_PATTERN =
-  /(^|\/)[^/]+\.live\.test\.(?:[cm]?[jt]sx?)$/i;
+  /(^|\/)[^/]+[._-]live[._-](?:test|spec)\.(?:[cm]?[jt]sx?)$/i;
 
 export function isTruthyEnv(value) {
   return /^(1|true|yes|on)$/i.test(String(value || "").trim());

@@ -12,7 +12,7 @@ import {
 const vitestEntrypoint = fileURLToPath(
   new URL("../node_modules/vitest/vitest.mjs", import.meta.url),
 );
-const cliArgs = process.argv.slice(2);
+const cliArgs = process.argv.slice(2).filter((arg) => arg !== "--run");
 const defaultBatchSize = Number.parseInt(
   process.env.LIME_VITEST_BATCH_SIZE || "16",
   10,

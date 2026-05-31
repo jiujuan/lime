@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { AgentChatWorkspaceProps } from "./agentChatWorkspaceContract";
+import { resolveAgentChatPageShellViewModel } from "./agentChatPageShellViewModel";
 import { AgentChatWorkspace } from "./AgentChatWorkspace";
 
 export type {
@@ -9,16 +10,6 @@ export type {
 
 export function AgentChatPage(props: AgentChatWorkspaceProps) {
   const {
-    agentEntry = "claw",
-    initialInputCapability,
-    preferHomeForInitialInputCapability = false,
-    initialPendingServiceSkillLaunch,
-    initialProjectFileOpenTarget,
-    initialSiteSkillLaunch,
-    initialKnowledgePackSelection,
-    initialUserImages,
-    initialUserPrompt,
-    openBrowserAssistOnMount = false,
     onHasMessagesChange,
     onSessionChange,
     onWorkflowProgressChange,
@@ -32,23 +23,11 @@ export function AgentChatPage(props: AgentChatWorkspaceProps) {
     );
   }, []);
 
-  const hasDirectWorkspaceIntent =
-    Boolean(initialUserPrompt?.trim()) ||
-    Boolean(initialUserImages?.length) ||
-    Boolean(initialSiteSkillLaunch) ||
-    Boolean(initialPendingServiceSkillLaunch?.skillId?.trim()) ||
-    Boolean(initialKnowledgePackSelection?.packName?.trim()) ||
-    (preferHomeForInitialInputCapability
-      ? false
-      : Boolean(initialInputCapability?.capabilityRoute)) ||
-    Boolean(initialProjectFileOpenTarget?.relativePath?.trim()) ||
-    openBrowserAssistOnMount;
-  const shouldForceClawWorkspace =
-    agentEntry === "new-task" && hasDirectWorkspaceIntent;
-  const effectiveAgentEntry = shouldForceClawWorkspace ? "claw" : agentEntry;
-  const effectiveShowChatPanel = shouldForceClawWorkspace
-    ? true
-    : props.showChatPanel;
+  const {
+    effectiveAgentEntry,
+    effectiveShowChatPanel,
+    shouldForceClawWorkspace,
+  } = resolveAgentChatPageShellViewModel(props);
 
   // 用首次渲染时的时间戳作为强制重挂载的 key，避免复用旧工作区实例导致旧状态闪烁
   const forcedMountKey = useRef<number | null>(

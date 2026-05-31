@@ -28,6 +28,12 @@ import {
 import type { AsterSessionExecutionRuntime } from "@/lib/api/agentRuntime";
 import { useAgentTopicSnapshot } from "./useAgentTopicSnapshot";
 import { resolveClawWorkspaceProviderSelection } from "../utils/clawWorkspaceProviderSelection";
+import {
+  buildAutoTitleConversationText,
+  hasUserTextMessage,
+  isAutoTitlePlaceholder,
+  shouldGenerateAutoTitle,
+} from "./agentChatAutoTitleViewModel";
 
 export type { Topic } from "./agentChatShared";
 
@@ -38,49 +44,6 @@ type UseAsterAgentChatRuntimeOptions = UseAsterAgentChatOptions & {
 
 const AUTO_TITLE_DEFERRED_LOAD_MS = 30_000;
 const AUTO_TITLE_IDLE_TIMEOUT_MS = 2_000;
-const AUTO_TITLE_PLACEHOLDER_TITLES = new Set([
-  "",
-  "新任务",
-  "新话题",
-  "新对话",
-]);
-
-function isAutoTitlePlaceholder(title: string | null | undefined): boolean {
-  return AUTO_TITLE_PLACEHOLDER_TITLES.has(title?.trim() ?? "");
-}
-
-function isPreviewDerivedTitle(
-  title: string | null | undefined,
-  messages: Array<{ role: string; content: unknown }>,
-): boolean {
-  const normalizedTitle = title?.trim();
-  if (!normalizedTitle) {
-    return false;
-  }
-
-  const firstAssistantMessage = messages.find(
-    (message) =>
-      message.role === "assistant" &&
-      typeof message.content === "string" &&
-      message.content.trim().length > 0,
-  );
-  if (
-    !firstAssistantMessage ||
-    typeof firstAssistantMessage.content !== "string"
-  ) {
-    return false;
-  }
-
-  const normalizedMessage = firstAssistantMessage.content.trim();
-  const messagePrefix = normalizedMessage.slice(
-    0,
-    Math.max(16, normalizedTitle.length),
-  );
-  return (
-    normalizedMessage.startsWith(normalizedTitle) ||
-    normalizedTitle.startsWith(messagePrefix)
-  );
-}
 
 export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
   const {
@@ -488,21 +451,16 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     if (activeSessionTitle === null) {
       return;
     }
-    const shouldAutoGenerateTitle =
-      isAutoTitlePlaceholder(activeSessionTitle) ||
-      isPreviewDerivedTitle(activeSessionTitle, sessionMessages);
+    const shouldAutoGenerateTitle = shouldGenerateAutoTitle({
+      activeSessionTitle,
+      messages: sessionMessages,
+    });
     if (!shouldAutoGenerateTitle) {
       autoTitleCompletedSessionIdsRef.current.add(activeSessionId);
       return;
     }
 
-    const hasUserMessage = sessionMessages.some(
-      (message) =>
-        message.role === "user" &&
-        typeof message.content === "string" &&
-        message.content.trim().length > 0,
-    );
-    if (!hasUserMessage) {
+    if (!hasUserTextMessage(sessionMessages)) {
       return;
     }
 
@@ -521,16 +479,8 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
       () => {
         void (async () => {
           try {
-            const conversationText = sessionMessages
-              .filter(
-                (msg) =>
-                  (msg.role === "user" || msg.role === "assistant") &&
-                  typeof msg.content === "string" &&
-                  msg.content.trim().length > 0,
-              )
-              .map((msg) => `${msg.role}：${msg.content}`)
-              .join("\n")
-              .slice(-1000);
+            const conversationText =
+              buildAutoTitleConversationText(sessionMessages);
 
             const generatedTitle = (
               await runtime.generateSessionTitle?.(

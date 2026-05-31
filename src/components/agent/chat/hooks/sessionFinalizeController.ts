@@ -12,6 +12,11 @@ export interface SessionWorkspaceRestorePlan {
   shouldReject: boolean;
 }
 
+export interface SessionFinalizeSuccessStatePlan {
+  shouldClearAutoRestoringSession: boolean;
+  shouldResetSessionHydrating: boolean;
+}
+
 export function resolveSessionKnownWorkspaceId(params: {
   runtimeWorkspaceId?: string | null;
   shadowWorkspaceId?: string | null;
@@ -99,4 +104,11 @@ export function resolveSessionExecutionStrategyOverride(params: {
     params.defaultExecutionStrategy ||
     "auto"
   );
+}
+
+export function buildSessionFinalizeSuccessStatePlan(): SessionFinalizeSuccessStatePlan {
+  return {
+    shouldClearAutoRestoringSession: true,
+    shouldResetSessionHydrating: true,
+  };
 }

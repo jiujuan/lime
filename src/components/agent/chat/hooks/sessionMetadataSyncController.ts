@@ -30,6 +30,28 @@ export interface SessionMetadataSyncPlan {
   shouldPersistAccessMode: boolean;
 }
 
+export interface SessionFinalizeLocalStatePlan {
+  accessModeToApply: AgentAccessMode;
+  accessModeToPersist: AgentAccessMode | null;
+  runtimeExecutionStrategyToMarkSynced: AsterExecutionStrategy | null;
+  switchSuccessMetricContext: Record<string, unknown>;
+}
+
+export interface SessionMetadataSyncSuccessApplyPlan {
+  executionStrategyToApplyToTopic: AsterExecutionStrategy | null;
+  executionStrategyToMarkSynced: AsterExecutionStrategy | null;
+  providerPreferenceToMarkSynced: SessionModelPreference | null;
+}
+
+export interface SessionMetadataSyncInputPlan {
+  runtimeAccessMode: AgentAccessMode | null;
+  runtimePreference: SessionModelPreference | null;
+  shadowAccessMode: AgentAccessMode | null;
+  shadowExecutionStrategyFallback: AsterExecutionStrategy | null;
+  topicPreference: SessionModelPreference | null;
+  workspaceDefaultAccessMode: AgentAccessMode;
+}
+
 export interface SessionMetadataSyncRuntime {
   setSessionAccessMode?: (
     sessionId: string,
@@ -65,6 +87,25 @@ export function resolveSessionExecutionStrategySource(params: {
     return "shadow_cache";
   }
   return "default";
+}
+
+export function buildSessionMetadataSyncInputPlan(params: {
+  runtimeAccessMode?: AgentAccessMode | null;
+  runtimePreference?: SessionModelPreference | null;
+  shadowAccessMode?: AgentAccessMode | null;
+  shadowExecutionStrategyFallback?: AsterExecutionStrategy | null;
+  storedPreference?: SessionModelPreference | null;
+  workspaceDefaultAccessMode: AgentAccessMode;
+}): SessionMetadataSyncInputPlan {
+  return {
+    runtimeAccessMode: params.runtimeAccessMode ?? null,
+    runtimePreference: params.runtimePreference ?? null,
+    shadowAccessMode: params.shadowAccessMode ?? null,
+    shadowExecutionStrategyFallback:
+      params.shadowExecutionStrategyFallback ?? null,
+    topicPreference: params.runtimePreference ?? params.storedPreference ?? null,
+    workspaceDefaultAccessMode: params.workspaceDefaultAccessMode,
+  };
 }
 
 export function buildSessionMetadataSyncPlan(params: {
@@ -158,6 +199,85 @@ export function buildSessionSwitchSuccessMetricContext(params: {
     turnsCount: params.turnsCount,
     workspaceId: params.workspaceId,
   };
+}
+
+export function buildSessionFinalizeLocalStatePlan(params: {
+  durationMs: number;
+  itemsCount: number;
+  messagesCount: number;
+  metadataSyncPlan: Pick<
+    SessionMetadataSyncPlan,
+    | "accessMode"
+    | "accessModeSource"
+    | "modelPreferenceSource"
+    | "shouldPersistAccessMode"
+  >;
+  queuedTurnsCount: number;
+  runtimeExecutionStrategy?: AsterExecutionStrategy | null;
+  shadowExecutionStrategyFallback?: AsterExecutionStrategy | null;
+  topicExecutionStrategy?: AsterExecutionStrategy | null;
+  topicId: string;
+  turnsCount: number;
+  workspaceId?: string | null;
+}): SessionFinalizeLocalStatePlan {
+  return {
+    accessModeToApply: params.metadataSyncPlan.accessMode,
+    accessModeToPersist: params.metadataSyncPlan.shouldPersistAccessMode
+      ? params.metadataSyncPlan.accessMode
+      : null,
+    runtimeExecutionStrategyToMarkSynced:
+      params.runtimeExecutionStrategy ?? null,
+    switchSuccessMetricContext: buildSessionSwitchSuccessMetricContext({
+      accessModeSource: params.metadataSyncPlan.accessModeSource,
+      durationMs: params.durationMs,
+      executionStrategySource: resolveSessionExecutionStrategySource({
+        runtimeExecutionStrategy: params.runtimeExecutionStrategy,
+        topicExecutionStrategy: params.topicExecutionStrategy,
+        shadowExecutionStrategyFallback: params.shadowExecutionStrategyFallback,
+      }),
+      itemsCount: params.itemsCount,
+      messagesCount: params.messagesCount,
+      modelPreferenceSource: params.metadataSyncPlan.modelPreferenceSource,
+      queuedTurnsCount: params.queuedTurnsCount,
+      topicId: params.topicId,
+      turnsCount: params.turnsCount,
+      workspaceId: params.workspaceId,
+    }),
+  };
+}
+
+export function buildSessionMetadataSyncSuccessApplyPlan(params: {
+  fallbackExecutionStrategy?: AsterExecutionStrategy | null;
+  fallbackProviderPreference?: SessionModelPreference | null;
+}): SessionMetadataSyncSuccessApplyPlan {
+  return {
+    executionStrategyToApplyToTopic: params.fallbackExecutionStrategy ?? null,
+    executionStrategyToMarkSynced: params.fallbackExecutionStrategy ?? null,
+    providerPreferenceToMarkSynced: params.fallbackProviderPreference ?? null,
+  };
+}
+
+export function applyFallbackExecutionStrategyToTopics<
+  TTopic extends { id: string },
+>(
+  topics: TTopic[],
+  params: {
+    executionStrategyToApplyToTopic?: AsterExecutionStrategy | null;
+    topicId: string;
+  },
+): TTopic[] {
+  if (!params.executionStrategyToApplyToTopic) {
+    return topics;
+  }
+
+  return topics.map((topic) =>
+    topic.id === params.topicId
+      ? {
+          ...topic,
+          executionStrategy: params.executionStrategyToApplyToTopic,
+        } as TTopic
+      : topic,
+  );
 }
 
 export async function executeSessionMetadataSync(params: {

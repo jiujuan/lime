@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import type { AgentThreadItem, AgentThreadTurn } from "../types";
 import {
   applyAgentStreamErrorToastPlan,
@@ -12,6 +13,10 @@ import {
 } from "./agentStreamErrorController";
 
 describe("agentStreamErrorController", () => {
+  beforeEach(async () => {
+    await changeLimeLocale("zh-CN");
+  });
+
   it("应把 rate limit 错误展示为 warning toast", () => {
     expect(buildAgentStreamErrorToastPlan("HTTP 429 rate limit")).toEqual({
       level: "warning",

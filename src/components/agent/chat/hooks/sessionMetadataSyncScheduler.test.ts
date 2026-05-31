@@ -10,9 +10,7 @@ import {
 const flushPromises = async () => {
   await Promise.resolve();
   await Promise.resolve();
-  await new Promise((resolve) => {
-    setTimeout(resolve, 0);
-  });
+  await Promise.resolve();
 };
 
 function metadataPlan(

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCrossWorkspaceSessionRestoreContext,
+  buildSessionFinalizeSuccessStatePlan,
   buildSessionWorkspaceRestorePlan,
   isCrossWorkspaceSessionDetail,
   resolveSessionExecutionStrategyOverride,
@@ -148,5 +149,12 @@ describe("sessionFinalizeController", () => {
         shadowExecutionStrategyFallback: null,
       }),
     ).toBe("auto");
+  });
+
+  it("应构造 finalize 成功后的状态收尾计划", () => {
+    expect(buildSessionFinalizeSuccessStatePlan()).toEqual({
+      shouldClearAutoRestoringSession: true,
+      shouldResetSessionHydrating: true,
+    });
   });
 });

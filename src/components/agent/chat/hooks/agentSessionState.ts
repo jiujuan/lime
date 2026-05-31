@@ -27,6 +27,7 @@ import {
 import { createExecutionRuntimeFromSessionDetail } from "../utils/sessionExecutionRuntime";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
+import { isAuxiliaryAgentSessionId } from "@/lib/api/agentRuntime/sessionIdentity";
 
 export interface AgentSessionSnapshot {
   sessionId: string | null;
@@ -192,6 +193,64 @@ export function shouldDeferSessionDetailHydration(options: {
       queuedTurnsCount: 0,
     })
   );
+}
+
+export type MissingSessionFromTopicsAction =
+  | {
+      kind: "none";
+    }
+  | {
+      kind: "skip_detached";
+    }
+  | {
+      kind: "clear_auxiliary";
+    }
+  | {
+      kind: "clear_inactive";
+    }
+  | {
+      kind: "verify_remote";
+    };
+
+export function resolveMissingSessionFromTopicsAction(options: {
+  currentTurnId: string | null;
+  detachedSessionId: string | null | undefined;
+  queuedTurnsCount: number;
+  sessionId: string | null | undefined;
+  threadItemsCount: number;
+  threadTurnsCount: number;
+  topicsCount: number;
+  topicsReady: boolean;
+  topicExists: boolean;
+}): MissingSessionFromTopicsAction {
+  const sessionId = options.sessionId?.trim();
+  if (
+    !options.topicsReady ||
+    !sessionId ||
+    options.topicsCount === 0 ||
+    options.topicExists
+  ) {
+    return { kind: "none" };
+  }
+
+  if (options.detachedSessionId === sessionId) {
+    return { kind: "skip_detached" };
+  }
+
+  if (isAuxiliaryAgentSessionId(sessionId)) {
+    return { kind: "clear_auxiliary" };
+  }
+
+  const shouldVerifyMissingSession = hasSessionHydrationActivity({
+    currentTurnId: options.currentTurnId,
+    threadTurnsCount: options.threadTurnsCount,
+    threadItemsCount: options.threadItemsCount,
+    queuedTurnsCount: options.queuedTurnsCount,
+  });
+
+  return shouldVerifyMissingSession
+    ? { kind: "verify_remote" }
+    : { kind: "clear_inactive" };
 }
 
 export function resolveRestorableTopicSessionId(

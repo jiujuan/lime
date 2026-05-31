@@ -7,6 +7,12 @@ export interface SessionPostFinalizePersistencePlan {
   topicWorkspaceId: string | null;
 }
 
+export interface SessionPostFinalizePersistenceApplyPlan {
+  providerPreferenceToApply: SessionModelPreference | null;
+  runtimeTopicWorkspaceIdToApply: string | null;
+  sessionWorkspaceIdToPersist: string | null;
+}
+
 export function resolveSessionDetailTopicWorkspaceId(params: {
   knownWorkspaceId?: string | null;
   resolvedWorkspaceId?: string | null;
@@ -39,4 +45,37 @@ export function buildSessionPostFinalizePersistencePlan(params: {
     runtimeTopicWorkspaceIdToApply: params.runtimeWorkspaceId || null,
     topicWorkspaceId: resolveSessionDetailTopicWorkspaceId(params),
   };
+}
+
+export function buildSessionPostFinalizePersistenceApplyPlan(
+  plan: SessionPostFinalizePersistencePlan,
+): SessionPostFinalizePersistenceApplyPlan {
+  return {
+    providerPreferenceToApply: plan.providerPreferenceToApply,
+    runtimeTopicWorkspaceIdToApply: plan.runtimeTopicWorkspaceIdToApply,
+    sessionWorkspaceIdToPersist: plan.persistedWorkspaceId,
+  };
+}
+
+export function applyRuntimeTopicWorkspaceIdToTopics<
+  TTopic extends { id: string; workspaceId?: string | null },
+>(
+  topics: TTopic[],
+  params: {
+    runtimeTopicWorkspaceIdToApply?: string | null;
+    topicId: string;
+  },
+): TTopic[] {
+  if (!params.runtimeTopicWorkspaceIdToApply) {
+    return topics;
+  }
+
+  return topics.map((topic) =>
+    topic.id === params.topicId
+      ? {
+          ...topic,
+          workspaceId: params.runtimeTopicWorkspaceIdToApply,
+        }
+      : topic,
+  );
 }

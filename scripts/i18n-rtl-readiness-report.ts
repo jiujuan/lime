@@ -206,7 +206,7 @@ function readJsonObject(filePath: string): Record<string, unknown> | null {
 function collectEvidenceFiles(repoRoot: string): string[] {
   const evidenceDir = path.join(
     repoRoot,
-    "docs",
+    "internal",
     "roadmap",
     "i18n",
     "evidence",
@@ -316,7 +316,7 @@ function buildFoundationReport(repoRoot: string) {
 function buildSmokeCoverageReport(repoRoot: string): I18nRtlReadinessReport["smokeCoverage"] {
   const evidencePath = path.join(
     repoRoot,
-    "docs",
+    "internal",
     "roadmap",
     "i18n",
     "evidence",

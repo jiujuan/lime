@@ -1,12 +1,68 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  applyFallbackExecutionStrategyToTopics,
+  buildSessionFinalizeLocalStatePlan,
+  buildSessionMetadataSyncInputPlan,
   buildSessionMetadataSyncPlan,
+  buildSessionMetadataSyncSuccessApplyPlan,
   buildSessionSwitchSuccessMetricContext,
   executeSessionMetadataSync,
   resolveSessionExecutionStrategySource,
 } from "./sessionMetadataSyncController";
 
 describe("sessionMetadataSyncController", () => {
+  it("应在 metadata sync 输入阶段优先使用 runtime provider preference", () => {
+    expect(
+      buildSessionMetadataSyncInputPlan({
+        runtimeAccessMode: "current",
+        runtimePreference: {
+          providerType: "deepseek",
+          model: "deepseek-chat",
+        },
+        shadowAccessMode: "full-access",
+        shadowExecutionStrategyFallback: "react",
+        storedPreference: {
+          providerType: "openai",
+          model: "gpt-5",
+        },
+        workspaceDefaultAccessMode: "read-only",
+      }),
+    ).toEqual({
+      runtimeAccessMode: "current",
+      runtimePreference: {
+        providerType: "deepseek",
+        model: "deepseek-chat",
+      },
+      shadowAccessMode: "full-access",
+      shadowExecutionStrategyFallback: "react",
+      topicPreference: {
+        providerType: "deepseek",
+        model: "deepseek-chat",
+      },
+      workspaceDefaultAccessMode: "read-only",
+    });
+  });
+
+  it("runtime provider preference 缺失时应使用 session storage preference", () => {
+    expect(
+      buildSessionMetadataSyncInputPlan({
+        runtimeAccessMode: null,
+        runtimePreference: null,
+        storedPreference: {
+          providerType: "openai",
+          model: "gpt-5",
+        },
+        workspaceDefaultAccessMode: "full-access",
+      }),
+    ).toMatchObject({
+      runtimePreference: null,
+      topicPreference: {
+        providerType: "openai",
+        model: "gpt-5",
+      },
+    });
+  });
+
   it("runtime accessMode 与 runtime preference 不应生成回填 patch", () => {
     const plan = buildSessionMetadataSyncPlan({
       runtimeAccessMode: "current",
@@ -125,6 +181,129 @@ describe("sessionMetadataSyncController", () => {
       turnsCount: 2,
       workspaceId: "workspace-a",
     });
+  });
+
+  it("应构造 finalize 成功后的本地状态应用计划", () => {
+    expect(
+      buildSessionFinalizeLocalStatePlan({
+        durationMs: 250,
+        itemsCount: 5,
+        messagesCount: 6,
+        metadataSyncPlan: {
+          accessMode: "current",
+          accessModeSource: "execution_runtime",
+          modelPreferenceSource: "execution_runtime",
+          shouldPersistAccessMode: true,
+        },
+        queuedTurnsCount: 1,
+        runtimeExecutionStrategy: "code_orchestrated",
+        shadowExecutionStrategyFallback: "react",
+        topicExecutionStrategy: "auto",
+        topicId: "topic-a",
+        turnsCount: 2,
+        workspaceId: "workspace-a",
+      }),
+    ).toEqual({
+      accessModeToApply: "current",
+      accessModeToPersist: "current",
+      runtimeExecutionStrategyToMarkSynced: "code_orchestrated",
+      switchSuccessMetricContext: {
+        accessModeSource: "execution_runtime",
+        durationMs: 250,
+        executionStrategySource: "session_detail",
+        itemsCount: 5,
+        messagesCount: 6,
+        modelPreferenceSource: "execution_runtime",
+        queuedTurnsCount: 1,
+        sessionId: "topic-a",
+        topicId: "topic-a",
+        turnsCount: 2,
+        workspaceId: "workspace-a",
+      },
+    });
+  });
+
+  it("未从 runtime 恢复执行策略且 accessMode 来自 storage 时不持久化本地副本", () => {
+    expect(
+      buildSessionFinalizeLocalStatePlan({
+        durationMs: 80,
+        itemsCount: 0,
+        messagesCount: 1,
+        metadataSyncPlan: {
+          accessMode: "full-access",
+          accessModeSource: "session_storage",
+          modelPreferenceSource: "session_storage",
+          shouldPersistAccessMode: false,
+        },
+        queuedTurnsCount: 0,
+        runtimeExecutionStrategy: null,
+        shadowExecutionStrategyFallback: "react",
+        topicExecutionStrategy: null,
+        topicId: "topic-b",
+        turnsCount: 1,
+      }),
+    ).toMatchObject({
+      accessModeToApply: "full-access",
+      accessModeToPersist: null,
+      runtimeExecutionStrategyToMarkSynced: null,
+      switchSuccessMetricContext: {
+        executionStrategySource: "shadow_cache",
+        topicId: "topic-b",
+      },
+    });
+  });
+
+  it("应构造 metadata sync 成功后的本地同步标记计划", () => {
+    expect(
+      buildSessionMetadataSyncSuccessApplyPlan({
+        fallbackExecutionStrategy: "react",
+        fallbackProviderPreference: {
+          providerType: "openai",
+          model: "gpt-5",
+        },
+      }),
+    ).toEqual({
+      executionStrategyToApplyToTopic: "react",
+      executionStrategyToMarkSynced: "react",
+      providerPreferenceToMarkSynced: {
+        providerType: "openai",
+        model: "gpt-5",
+      },
+    });
+
+    expect(buildSessionMetadataSyncSuccessApplyPlan({})).toEqual({
+      executionStrategyToApplyToTopic: null,
+      executionStrategyToMarkSynced: null,
+      providerPreferenceToMarkSynced: null,
+    });
+  });
+
+  it("应把 fallback execution strategy 回填到目标 topic", () => {
+    const topics = [
+      { id: "topic-a", executionStrategy: "auto" as const, name: "A" },
+      { id: "topic-b", executionStrategy: "react" as const, name: "B" },
+    ];
+
+    expect(
+      applyFallbackExecutionStrategyToTopics(topics, {
+        topicId: "topic-b",
+        executionStrategyToApplyToTopic: "code_orchestrated",
+      }),
+    ).toEqual([
+      { id: "topic-a", executionStrategy: "auto", name: "A" },
+      {
+        id: "topic-b",
+        executionStrategy: "code_orchestrated",
+        name: "B",
+      },
+    ]);
+
+    expect(
+      applyFallbackExecutionStrategyToTopics(topics, {
+        topicId: "topic-b",
+        executionStrategyToApplyToTopic: null,
+      }),
+    ).toBe(topics);
   });
 
   it("优先使用批量 updateSessionMetadata", async () => {

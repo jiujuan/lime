@@ -6,6 +6,7 @@ import {
   buildHydratedAgentSessionSnapshot,
   createEmptyAgentSessionSnapshot,
   hasSessionHydrationActivity,
+  resolveMissingSessionFromTopicsAction,
   resolveRestorableTopicSessionId,
   shouldDeferSessionDetailHydration,
 } from "./agentSessionState";
@@ -182,6 +183,81 @@ describe("agentSessionState", () => {
         },
       }),
     ).toBe(false);
+  });
+
+  it("会话未出现在 topics 时应按状态决定清空、跳过或远程校验", () => {
+    const base = {
+      currentTurnId: null,
+      detachedSessionId: null,
+      queuedTurnsCount: 0,
+      sessionId: "session-1",
+      threadItemsCount: 0,
+      threadTurnsCount: 0,
+      topicsCount: 1,
+      topicsReady: true,
+      topicExists: false,
+    };
+
+    expect(resolveMissingSessionFromTopicsAction(base)).toEqual({
+      kind: "clear_inactive",
+    });
+    expect(
+      resolveMissingSessionFromTopicsAction({
+        ...base,
+        currentTurnId: "turn-1",
+      }),
+    ).toEqual({ kind: "verify_remote" });
+    expect(
+      resolveMissingSessionFromTopicsAction({
+        ...base,
+        detachedSessionId: "session-1",
+      }),
+    ).toEqual({ kind: "skip_detached" });
+    expect(
+      resolveMissingSessionFromTopicsAction({
+        ...base,
+        sessionId: "title-gen-session-1",
+      }),
+    ).toEqual({ kind: "clear_auxiliary" });
+  });
+
+  it("topics 未就绪、无 session 或 topic 已存在时不应处理缺失会话", () => {
+    const base = {
+      currentTurnId: "turn-1",
+      detachedSessionId: null,
+      queuedTurnsCount: 1,
+      sessionId: "session-1",
+      threadItemsCount: 1,
+      threadTurnsCount: 1,
+      topicsCount: 1,
+      topicsReady: true,
+      topicExists: false,
+    };
+
+    expect(
+      resolveMissingSessionFromTopicsAction({
+        ...base,
+        topicsReady: false,
+      }),
+    ).toEqual({ kind: "none" });
+    expect(
+      resolveMissingSessionFromTopicsAction({
+        ...base,
+        sessionId: null,
+      }),
+    ).toEqual({ kind: "none" });
+    expect(
+      resolveMissingSessionFromTopicsAction({
+        ...base,
+        topicsCount: 0,
+      }),
+    ).toEqual({ kind: "none" });
+    expect(
+      resolveMissingSessionFromTopicsAction({
+        ...base,
+        topicExists: true,
+      }),
+    ).toEqual({ kind: "none" });
   });
 
   it("同会话 hydrate 且后端缺失 execution_runtime 时应保留本地运行态", () => {

@@ -16,7 +16,6 @@ import type {
   AsterSubagentParentContext,
   AsterSubagentSessionInfo,
   AgentRuntimeThreadReadModel,
-  AsterSessionDetail,
   AsterTodoItem,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
@@ -36,7 +35,6 @@ import {
   savePersistedSessionWorkspaceId,
 } from "./agentProjectStorage";
 import {
-  mergeHydratedMessagesWithLocalState,
   normalizeHistoryMessages,
 } from "./agentChatHistory";
 import {
@@ -70,33 +68,42 @@ import {
 import {
   buildHydratedAgentSessionSnapshot,
   createEmptyAgentSessionSnapshot,
-  hasSessionHydrationActivity,
+  resolveMissingSessionFromTopicsAction,
   resolveRestorableTopicSessionId,
   shouldDeferSessionDetailHydration,
   type AgentSessionSnapshot,
 } from "./agentSessionState";
 import {
   buildPendingSessionShellMetricContext,
+  buildSessionSwitchCachedSnapshotPlan,
+  buildSessionSwitchDeferHydrationPlan,
   buildSessionSwitchDeferHydrationMetricContext,
   buildSessionSwitchLocalSnapshotOverride,
+  buildSessionSwitchPendingShellPlan,
+  buildSessionSwitchStartStatePlan,
   buildSessionSwitchStartMetricContext,
-  shouldApplyCachedTopicSnapshot,
   shouldApplyPendingSessionShell,
-  shouldLoadCachedTopicSnapshot,
-  shouldRefreshCachedSnapshotImmediately as resolveShouldRefreshCachedSnapshotImmediately,
+  shouldReuseActiveSessionSwitch,
 } from "./sessionSwitchSnapshotController";
 import {
+  applyFallbackExecutionStrategyToTopics,
+  buildSessionFinalizeLocalStatePlan,
+  buildSessionMetadataSyncInputPlan,
   buildSessionMetadataSyncPlan,
-  buildSessionSwitchSuccessMetricContext,
-  resolveSessionExecutionStrategySource,
+  buildSessionMetadataSyncSuccessApplyPlan,
 } from "./sessionMetadataSyncController";
 import { scheduleSessionMetadataSync } from "./sessionMetadataSyncScheduler";
 import {
+  buildSessionFinalizeSuccessStatePlan,
   buildSessionWorkspaceRestorePlan,
   resolveSessionExecutionStrategyOverride,
   resolveShadowSessionExecutionStrategyFallback,
 } from "./sessionFinalizeController";
-import { buildSessionPostFinalizePersistencePlan } from "./sessionPostFinalizePersistenceController";
+import {
+  applyRuntimeTopicWorkspaceIdToTopics,
+  buildSessionPostFinalizePersistenceApplyPlan,
+  buildSessionPostFinalizePersistencePlan,
+} from "./sessionPostFinalizePersistenceController";
 import {
   refreshAgentSessionDetailState,
   refreshAgentSessionReadModelState,
@@ -123,13 +130,28 @@ import {
 } from "./sessionDetailFetchController";
 import { resolveDeferredSessionHydrationErrorAction } from "./sessionHydrationRetryController";
 import { resolveSessionSwitchErrorAction } from "./sessionSwitchErrorController";
+import {
+  applyTopicExecutionStrategyToTopics,
+  applyTopicSnapshotToTopics,
+  mapSessionDetailToTopic,
+  prependVerifiedSessionTopicFromDetail,
+  resolveRestoreCandidateSanitizationPlan,
+  selectActiveSessionTransientItems,
+  selectActiveSessionTransientMessages,
+  selectActiveSessionTransientTurns,
+  shouldAutoResumeHydratedRuntimeThread,
+  type TopicSnapshotPatch,
+  upsertFreshSessionDraftTopic,
+  upsertTopicFromSessionDetail,
+} from "./agentSessionTopicViewModel";
+import {
+  buildAgentSessionRestoreViewModel,
+  buildCachedTopicSnapshotViewModel,
+} from "./agentSessionRestoreViewModel";
 
 const INITIAL_TOPICS_IDLE_TIMEOUT_MS = 1_500;
 const INITIAL_TOPICS_SESSION_REQUEST_LIMIT = 21;
 const SESSION_HISTORY_LOAD_PAGE_SIZE = 50;
-const ACTIVE_SESSION_TRANSIENT_MESSAGES_LIMIT = 48;
-const ACTIVE_SESSION_TRANSIENT_TURNS_LIMIT = 48;
-const ACTIVE_SESSION_TRANSIENT_ITEMS_LIMIT = 160;
 const ACTIVE_SESSION_TRANSIENT_SAVE_DELAY_MS = 180;
 const ACTIVE_SESSION_TRANSIENT_SAVE_IDLE_TIMEOUT_MS = 1_800;
 const SESSION_METADATA_SYNC_DELAY_MS = 8_000;
@@ -138,179 +160,7 @@ const FRESH_SESSION_POST_CREATE_PERSISTENCE_IDLE_TIMEOUT_MS = 1_000;
 const SESSION_DETAIL_DEFERRED_HYDRATION_RETRY_DELAY_MS = 15_000;
 const SESSION_DETAIL_DEFERRED_HYDRATION_MAX_RETRY = 1;
 
-function shouldAutoResumeHydratedRuntimeThread(
-  threadRead: AgentRuntimeThreadReadModel | null | undefined,
-): boolean {
-  const status = threadRead?.status?.trim().toLowerCase();
-  return (
-    status === "queued" ||
-    status === "running" ||
-    (threadRead?.queued_turns?.length ?? 0) > 0
-  );
-}
-
-function resolveRuntimeThreadStatusFromSessionDetail(
-  detail: AsterSessionDetail,
-): Topic["status"] | null {
-  const status = detail.thread_read?.status?.trim().toLowerCase();
-  if (status === "running" || status === "queued") {
-    return "running";
-  }
-
-  if ((detail.thread_read?.queued_turns?.length ?? 0) > 0) {
-    return "running";
-  }
-
-  if ((detail.queued_turns?.length ?? 0) > 0) {
-    return "running";
-  }
-
-  if (
-    status === "waiting_request" ||
-    (detail.thread_read?.pending_requests?.length ?? 0) > 0
-  ) {
-    return "waiting";
-  }
-
-  if (status === "failed") {
-    return "failed";
-  }
-
-  return null;
-}
-
-function resolveRuntimePreviewFromSessionDetail(
-  detail: AsterSessionDetail,
-): string | null {
-  const queuedPreview =
-    detail.queued_turns?.[0]?.message_preview ||
-    detail.thread_read?.queued_turns?.[0]?.message_preview;
-  if (queuedPreview?.trim()) {
-    return queuedPreview.trim();
-  }
-
-  return null;
-}
-
-function mapSessionDetailToTopic(
-  sessionId: string,
-  detail: Awaited<ReturnType<AgentRuntimeAdapter["getSession"]>>,
-  fallbackWorkspaceId: string | null,
-): Topic {
-  const topic = mapSessionToTopic({
-    id: sessionId,
-    name: detail.name,
-    created_at: detail.created_at,
-    updated_at: detail.updated_at,
-    model: detail.model,
-    messages_count: detail.messages_count ?? detail.messages.length,
-    execution_strategy: detail.execution_strategy,
-    workspace_id: detail.workspace_id ?? fallbackWorkspaceId ?? undefined,
-    working_dir: detail.working_dir,
-  });
-  const runtimeStatus = resolveRuntimeThreadStatusFromSessionDetail(detail);
-  if (!runtimeStatus) {
-    return topic;
-  }
-
-  return {
-    ...topic,
-    status: runtimeStatus,
-    statusReason: "default",
-    lastPreview:
-      resolveRuntimePreviewFromSessionDetail(detail) ?? topic.lastPreview,
-  };
-}
-
-function upsertTopicFromSessionDetail(
-  topics: Topic[],
-  detailTopic: Topic,
-): Topic[] {
-  const existingTopic = topics.find((topic) => topic.id === detailTopic.id);
-  const mergedTopic = existingTopic
-    ? {
-        ...detailTopic,
-        isPinned: existingTopic.isPinned,
-        hasUnread: existingTopic.hasUnread,
-        tag: existingTopic.tag,
-      }
-    : detailTopic;
-  const nextTopics = existingTopic
-    ? topics.map((topic) => (topic.id === detailTopic.id ? mergedTopic : topic))
-    : [mergedTopic, ...topics];
-
-  return nextTopics.sort((left, right) => {
-    const updatedDiff = right.updatedAt.getTime() - left.updatedAt.getTime();
-    if (updatedDiff !== 0) {
-      return updatedDiff;
-    }
-
-    const createdDiff = right.createdAt.getTime() - left.createdAt.getTime();
-    if (createdDiff !== 0) {
-      return createdDiff;
-    }
-
-    return left.id.localeCompare(right.id);
-  });
-}
-
 export type AgentSessionHistoryWindow = SessionHistoryWindowState;
-
-function takeTail<T>(items: T[], limit: number): T[] {
-  if (items.length <= limit) {
-    return items;
-  }
-
-  return items.slice(-limit);
-}
-
-function selectActiveSessionTransientTurns(
-  turns: AgentThreadTurn[],
-): AgentThreadTurn[] {
-  return takeTail(turns, ACTIVE_SESSION_TRANSIENT_TURNS_LIMIT);
-}
-
-function selectActiveSessionTransientMessages(messages: Message[]): Message[] {
-  return takeTail(messages, ACTIVE_SESSION_TRANSIENT_MESSAGES_LIMIT);
-}
-
-function selectActiveSessionTransientItems(
-  items: AgentThreadItem[],
-  turns: AgentThreadTurn[],
-): AgentThreadItem[] {
-  const retainedTurnIds = new Set(
-    selectActiveSessionTransientTurns(turns)
-      .map((turn) => (typeof turn.id === "string" ? turn.id.trim() : ""))
-      .filter(Boolean),
-  );
-  if (retainedTurnIds.size === 0) {
-    return filterConversationThreadItems(
-      normalizeLegacyThreadItems(
-        takeTail(items, ACTIVE_SESSION_TRANSIENT_ITEMS_LIMIT),
-      ),
-    );
-  }
-
-  const scopedItems: AgentThreadItem[] = [];
-  for (
-    let index = items.length - 1;
-    index >= 0 && scopedItems.length < ACTIVE_SESSION_TRANSIENT_ITEMS_LIMIT;
-    index -= 1
-  ) {
-    const item = items[index];
-    if (!item) {
-      continue;
-    }
-
-    const turnId = typeof item.turn_id === "string" ? item.turn_id.trim() : "";
-    if (!turnId || retainedTurnIds.has(turnId)) {
-      scopedItems.push(item);
-    }
-  }
-  scopedItems.reverse();
-
-  return filterConversationThreadItems(normalizeLegacyThreadItems(scopedItems));
-}
 
 function scheduleActiveSessionTransientSave(task: () => void): () => void {
   if (typeof window === "undefined") {
@@ -442,53 +292,31 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   );
   const sanitizeRestoreCandidateSessionId = useCallback(
     (candidateSessionId: string | null | undefined): string | null => {
-      const normalizedCandidate = candidateSessionId?.trim();
-      if (!normalizedCandidate) {
-        return null;
+      const plan = resolveRestoreCandidateSanitizationPlan({
+        candidateSessionId,
+        mappedWorkspaceId: candidateSessionId?.trim()
+          ? loadStoredSessionWorkspaceIdRaw(candidateSessionId.trim())
+          : null,
+        workspaceId,
+      });
+      if (plan.kind === "accept") {
+        return plan.sessionId;
       }
-
-      if (isAuxiliaryAgentSessionId(normalizedCandidate)) {
+      if (plan.kind === "skip_auxiliary") {
         logAgentDebug("useAgentSession", "restoreCandidate.skipAuxiliary", {
-          candidateSessionId: normalizedCandidate,
-          workspaceId: normalizeProjectId(workspaceId),
+          candidateSessionId: plan.candidateSessionId,
+          workspaceId: plan.workspaceId,
         });
         return null;
       }
-
-      const resolvedWorkspaceId = normalizeProjectId(workspaceId);
-      const mappedWorkspaceId =
-        loadStoredSessionWorkspaceIdRaw(normalizedCandidate);
-      if (!mappedWorkspaceId) {
-        return normalizedCandidate;
-      }
-
-      if (isLegacyDefaultProjectId(mappedWorkspaceId)) {
+      if (plan.kind === "reject_workspace") {
         logAgentDebug("useAgentSession", "restoreCandidate.rejected", {
-          candidateSessionId: normalizedCandidate,
-          mappedWorkspaceId,
-          workspaceId: resolvedWorkspaceId,
+          candidateSessionId: plan.candidateSessionId,
+          mappedWorkspaceId: plan.mappedWorkspaceId,
+          workspaceId: plan.workspaceId,
         });
-        return null;
       }
-
-      const normalizedMappedWorkspaceId = normalizeProjectId(mappedWorkspaceId);
-      if (!normalizedMappedWorkspaceId) {
-        return normalizedCandidate;
-      }
-
-      if (
-        resolvedWorkspaceId &&
-        normalizedMappedWorkspaceId !== resolvedWorkspaceId
-      ) {
-        logAgentDebug("useAgentSession", "restoreCandidate.rejected", {
-          candidateSessionId: normalizedCandidate,
-          mappedWorkspaceId,
-          workspaceId: resolvedWorkspaceId,
-        });
-        return null;
-      }
-
-      return normalizedCandidate;
+      return null;
     },
     [workspaceId],
   );
@@ -1051,62 +879,25 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           scopedSessionCandidate,
         )
       : null;
-    const shouldUseCachedSnapshot =
-      scopedMessages.length === 0 && Boolean(cachedScopedSnapshot);
-    const shouldMergeCachedSnapshot =
-      scopedMessages.length > 0 && Boolean(cachedScopedSnapshot);
-    const mergedScopedMessages =
-      shouldMergeCachedSnapshot && cachedScopedSnapshot
-        ? mergeHydratedMessagesWithLocalState(
-            cachedScopedSnapshot.messages,
-            scopedMessages,
-          )
-        : scopedMessages;
-    const restoreMessages = shouldUseCachedSnapshot
-      ? cachedScopedSnapshot?.messages || []
-      : mergedScopedMessages;
-    const restoreThreadTurns = shouldUseCachedSnapshot
-      ? cachedScopedSnapshot?.threadTurns || []
-      : scopedTurns.length > 0
-        ? scopedTurns
-        : cachedScopedSnapshot?.threadTurns || [];
-    const restoreThreadItems = shouldUseCachedSnapshot
-      ? cachedScopedSnapshot?.threadItems || []
-      : scopedItems.length > 0
-        ? filterConversationThreadItems(normalizeLegacyThreadItems(scopedItems))
-        : cachedScopedSnapshot?.threadItems || [];
-    const restoreCurrentTurnId = shouldUseCachedSnapshot
-      ? cachedScopedSnapshot?.currentTurnId || null
-      : scopedCurrentTurnId || cachedScopedSnapshot?.currentTurnId || null;
-    const cachedTotalMessages =
-      cachedScopedSnapshot?.cacheMetadata?.messagesCount ??
-      cachedScopedSnapshot?.messages.length ??
-      0;
+    const restoreViewModel = buildAgentSessionRestoreViewModel({
+      cachedSnapshot: cachedScopedSnapshot,
+      scopedCurrentTurnId,
+      scopedItems,
+      scopedMessages,
+      scopedSessionCandidate,
+      scopedTurns,
+    });
 
     restoreCandidateSessionIdRef.current = scopedSessionCandidate;
     applySessionSnapshot({
       ...createEmptyAgentSessionSnapshot(),
-      sessionId: scopedSessionCandidate,
-      messages: restoreMessages,
-      threadTurns: restoreThreadTurns,
-      threadItems: restoreThreadItems,
-      currentTurnId: restoreCurrentTurnId,
+      sessionId: restoreViewModel.sessionId,
+      messages: restoreViewModel.messages,
+      threadTurns: restoreViewModel.threadTurns,
+      threadItems: restoreViewModel.threadItems,
+      currentTurnId: restoreViewModel.currentTurnId,
     });
-    setSessionHistoryWindow(
-      shouldUseCachedSnapshot &&
-        (cachedScopedSnapshot?.cacheMetadata?.historyTruncated === true ||
-          cachedTotalMessages > restoreMessages.length)
-        ? {
-            loadedMessages: restoreMessages.length,
-            totalMessages: Math.max(
-              cachedTotalMessages,
-              restoreMessages.length,
-            ),
-            isLoadingFull: false,
-            error: null,
-          }
-        : null,
-    );
+    setSessionHistoryWindow(restoreViewModel.historyWindow);
     resetPendingActions();
     resetStreamingRefs();
     restoredWorkspaceRef.current = null;
@@ -1311,24 +1102,15 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           setSessionHistoryWindow(null);
           setIsAutoRestoringSession(false);
           setIsSessionHydrating(false);
-          setTopics((prev) => [
-            {
-              id: newSessionId,
-              title: sessionName?.trim() || "新任务",
+          setTopics((prev) =>
+            upsertFreshSessionDraftTopic(prev, {
               createdAt: now,
-              updatedAt: now,
-              workspaceId: resolvedWorkspaceId,
-              messagesCount: 0,
               executionStrategy,
-              status: "draft",
-              lastPreview: "等待你补充任务需求后开始执行。",
-              isPinned: false,
-              hasUnread: false,
-              tag: null,
-              sourceSessionId: newSessionId,
-            },
-            ...prev.filter((topic) => topic.id !== newSessionId),
-          ]);
+              sessionId: newSessionId,
+              sessionName,
+              workspaceId: resolvedWorkspaceId,
+            }),
+          );
           resetPendingActions();
           resetStreamingRefs();
           hydratedSessionRef.current = newSessionId;
@@ -1520,45 +1302,28 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       }
 
       const selectedTopic = topics.find((topic) => topic.id === topicId);
-      const metadata = cachedSnapshot.cacheMetadata;
-      const totalMessages =
-        metadata?.messagesCount ??
-        selectedTopic?.messagesCount ??
-        cachedSnapshot.messages.length;
+      const cachedTopicViewModel = buildCachedTopicSnapshotViewModel({
+        cachedSnapshot,
+        selectedTopic,
+        topicId,
+      });
       hydratedSessionRef.current = topicId;
       applySessionSnapshot({
         ...createEmptyAgentSessionSnapshot(),
-        sessionId: topicId,
-        messages: cachedSnapshot.messages,
-        threadTurns: cachedSnapshot.threadTurns,
-        threadItems: cachedSnapshot.threadItems,
-        currentTurnId: cachedSnapshot.currentTurnId,
+        sessionId: cachedTopicViewModel.sessionId,
+        messages: cachedTopicViewModel.messages,
+        threadTurns: cachedTopicViewModel.threadTurns,
+        threadItems: cachedTopicViewModel.threadItems,
+        currentTurnId: cachedTopicViewModel.currentTurnId,
       });
       setExecutionStrategyState(
         normalizeExecutionStrategy(
           selectedTopic?.executionStrategy || executionStrategy,
         ),
       );
-      setSessionHistoryWindow(
-        metadata?.historyTruncated === true ||
-          totalMessages > cachedSnapshot.messages.length
-          ? {
-              loadedMessages: cachedSnapshot.messages.length,
-              totalMessages: Math.max(
-                totalMessages,
-                cachedSnapshot.messages.length,
-              ),
-              isLoadingFull: false,
-              error: null,
-            }
-          : null,
-      );
+      setSessionHistoryWindow(cachedTopicViewModel.historyWindow);
       const cachedSnapshotMetricContext = {
-        cacheFreshness: metadata?.freshness ?? null,
-        cacheStorageKind: metadata?.storageKind ?? null,
-        cachedMessagesCount: cachedSnapshot.messages.length,
-        cachedThreadItemsCount: cachedSnapshot.threadItems.length,
-        cachedTurnsCount: cachedSnapshot.threadTurns.length,
+        ...cachedTopicViewModel.metricContext,
         topicId,
         workspaceId,
       };
@@ -1755,8 +1520,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
             ? resolvePersistedExecutionStrategy(workspaceId)
             : null,
         });
-      const topicPreference =
-        runtimePreference || loadSessionModelPreference(topicId);
+      const storedPreference = loadSessionModelPreference(topicId);
       const shadowAccessMode = loadSessionAccessMode(topicId);
 
       persistSessionRestoreCandidate(topicId);
@@ -1781,14 +1545,17 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       setSessionHistoryWindow(resolveSessionHistoryWindow(detail));
       const workspaceDefaultAccessMode =
         resolvePersistedAccessMode(workspaceId);
-      const metadataSyncPlan = buildSessionMetadataSyncPlan({
+      const metadataSyncInputPlan = buildSessionMetadataSyncInputPlan({
         runtimeAccessMode,
         runtimePreference,
         shadowAccessMode,
         shadowExecutionStrategyFallback,
-        topicPreference,
+        storedPreference,
         workspaceDefaultAccessMode,
       });
+      const metadataSyncPlan = buildSessionMetadataSyncPlan(
+        metadataSyncInputPlan,
+      );
       const postFinalizePersistencePlan =
         buildSessionPostFinalizePersistencePlan({
           knownWorkspaceId: workspaceRestorePlan.knownWorkspaceId,
@@ -1796,6 +1563,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           resolvedWorkspaceId,
           runtimeWorkspaceId,
         });
+      const postFinalizePersistenceApplyPlan =
+        buildSessionPostFinalizePersistenceApplyPlan(
+          postFinalizePersistencePlan,
+        );
       setTopics((prev) =>
         upsertTopicFromSessionDetail(
           prev,
@@ -1807,70 +1578,68 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         ),
       );
 
-      if (runtimeExecutionStrategy) {
-        markSessionExecutionStrategySynced(topicId, runtimeExecutionStrategy);
-      }
+      const finalizeLocalStatePlan = buildSessionFinalizeLocalStatePlan({
+        durationMs: Date.now() - startedAt,
+        itemsCount: detail.items?.length ?? 0,
+        messagesCount: detail.messages.length,
+        metadataSyncPlan,
+        queuedTurnsCount: detail.queued_turns?.length ?? 0,
+        runtimeExecutionStrategy,
+        shadowExecutionStrategyFallback,
+        topicExecutionStrategy,
+        topicId,
+        turnsCount: detail.turns?.length ?? 0,
+        workspaceId,
+      });
 
-      setAccessModeState(metadataSyncPlan.accessMode);
-      if (metadataSyncPlan.shouldPersistAccessMode) {
-        persistSessionAccessMode(topicId, metadataSyncPlan.accessMode);
-      }
-
-      const switchSuccessMetricContext = buildSessionSwitchSuccessMetricContext(
-        {
-          accessModeSource: metadataSyncPlan.accessModeSource,
-          durationMs: Date.now() - startedAt,
-          executionStrategySource: resolveSessionExecutionStrategySource({
-            runtimeExecutionStrategy,
-            topicExecutionStrategy,
-            shadowExecutionStrategyFallback,
-          }),
-          itemsCount: detail.items?.length ?? 0,
-          messagesCount: detail.messages.length,
-          modelPreferenceSource: metadataSyncPlan.modelPreferenceSource,
-          queuedTurnsCount: detail.queued_turns?.length ?? 0,
+      if (finalizeLocalStatePlan.runtimeExecutionStrategyToMarkSynced) {
+        markSessionExecutionStrategySynced(
           topicId,
-          turnsCount: detail.turns?.length ?? 0,
-          workspaceId,
-        },
-      );
+          finalizeLocalStatePlan.runtimeExecutionStrategyToMarkSynced,
+        );
+      }
+
+      setAccessModeState(finalizeLocalStatePlan.accessModeToApply);
+      if (finalizeLocalStatePlan.accessModeToPersist) {
+        persistSessionAccessMode(
+          topicId,
+          finalizeLocalStatePlan.accessModeToPersist,
+        );
+      }
+
       recordAgentUiPerformanceMetric(
         "session.switch.success",
-        switchSuccessMetricContext,
+        finalizeLocalStatePlan.switchSuccessMetricContext,
       );
       logAgentDebug(
         "useAgentSession",
         "switchTopic.success",
-        switchSuccessMetricContext,
+        finalizeLocalStatePlan.switchSuccessMetricContext,
       );
 
       maybeAutoResumeSessionDetail(topicId, detail);
 
-      if (postFinalizePersistencePlan.persistedWorkspaceId) {
+      if (postFinalizePersistenceApplyPlan.sessionWorkspaceIdToPersist) {
         savePersistedSessionWorkspaceId(
           topicId,
-          postFinalizePersistencePlan.persistedWorkspaceId,
+          postFinalizePersistenceApplyPlan.sessionWorkspaceIdToPersist,
         );
       }
 
-      if (postFinalizePersistencePlan.runtimeTopicWorkspaceIdToApply) {
+      if (postFinalizePersistenceApplyPlan.runtimeTopicWorkspaceIdToApply) {
         setTopics((prev) =>
-          prev.map((topic) =>
-            topic.id === topicId
-              ? {
-                  ...topic,
-                  workspaceId:
-                    postFinalizePersistencePlan.runtimeTopicWorkspaceIdToApply,
-                }
-              : topic,
-          ),
+          applyRuntimeTopicWorkspaceIdToTopics(prev, {
+            runtimeTopicWorkspaceIdToApply:
+              postFinalizePersistenceApplyPlan.runtimeTopicWorkspaceIdToApply,
+            topicId,
+          }),
         );
       }
 
-      if (postFinalizePersistencePlan.providerPreferenceToApply) {
+      if (postFinalizePersistenceApplyPlan.providerPreferenceToApply) {
         applySessionModelPreference(
           topicId,
-          postFinalizePersistencePlan.providerPreferenceToApply,
+          postFinalizePersistenceApplyPlan.providerPreferenceToApply,
           {
             markSynced:
               metadataSyncPlan.modelPreferenceSource === "execution_runtime",
@@ -1898,29 +1667,31 @@ export function useAgentSession(options: UseAgentSessionOptions) {
             );
           },
           onSynced: (syncedPlan) => {
-            if (syncedPlan.fallbackProviderPreference) {
+            const syncSuccessApplyPlan =
+              buildSessionMetadataSyncSuccessApplyPlan(syncedPlan);
+            if (syncSuccessApplyPlan.providerPreferenceToMarkSynced) {
               markSessionModelPreferenceSynced(
                 topicId,
-                syncedPlan.fallbackProviderPreference.providerType,
-                syncedPlan.fallbackProviderPreference.model,
+                syncSuccessApplyPlan.providerPreferenceToMarkSynced
+                  .providerType,
+                syncSuccessApplyPlan.providerPreferenceToMarkSynced.model,
               );
             }
-            if (syncedPlan.fallbackExecutionStrategy) {
+            if (syncSuccessApplyPlan.executionStrategyToMarkSynced) {
               const fallbackExecutionStrategy =
-                syncedPlan.fallbackExecutionStrategy;
+                syncSuccessApplyPlan.executionStrategyToMarkSynced;
               markSessionExecutionStrategySynced(
                 topicId,
                 fallbackExecutionStrategy,
               );
+            }
+            if (syncSuccessApplyPlan.executionStrategyToApplyToTopic) {
               setTopics((prev) =>
-                prev.map((topic) =>
-                  topic.id === topicId
-                    ? {
-                        ...topic,
-                        executionStrategy: fallbackExecutionStrategy,
-                      }
-                    : topic,
-                ),
+                applyFallbackExecutionStrategyToTopics(prev, {
+                  executionStrategyToApplyToTopic:
+                    syncSuccessApplyPlan.executionStrategyToApplyToTopic,
+                  topicId,
+                }),
               );
             }
           },
@@ -1937,8 +1708,13 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         });
       }
 
-      setIsAutoRestoringSession(false);
-      setIsSessionHydrating(false);
+      const finalizeSuccessStatePlan = buildSessionFinalizeSuccessStatePlan();
+      if (finalizeSuccessStatePlan.shouldClearAutoRestoringSession) {
+        setIsAutoRestoringSession(false);
+      }
+      if (finalizeSuccessStatePlan.shouldResetSessionHydrating) {
+        setIsSessionHydrating(false);
+      }
       return true;
     },
     [
@@ -2026,13 +1802,16 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         return;
       }
 
-      const canReuseActiveSwitch =
-        !options?.forceRefresh &&
-        !options?.resumeSessionStartHooks &&
-        !options?.allowDetachedSession &&
-        options?.restoreSource !== "auto";
       const activeSwitch = activeSessionSwitchRef.current;
-      if (canReuseActiveSwitch && activeSwitch?.topicId === topicId) {
+      const canReuseActiveSwitch = shouldReuseActiveSessionSwitch({
+        activeTopicId: activeSwitch?.topicId,
+        allowDetachedSession: options?.allowDetachedSession,
+        forceRefresh: options?.forceRefresh,
+        restoreSource: options?.restoreSource,
+        resumeSessionStartHooks: options?.resumeSessionStartHooks,
+        topicId,
+      });
+      if (canReuseActiveSwitch && activeSwitch) {
         logAgentDebug("useAgentSession", "switchTopic.reuseInFlight", {
           topicId,
           workspaceId,
@@ -2052,51 +1831,58 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       }
 
       const currentSessionId = sessionIdRef.current;
-      if (currentSessionId) {
+      const switchStartStatePlan = buildSessionSwitchStartStatePlan({
+        allowDetachedSession: options?.allowDetachedSession,
+        currentSessionId,
+        restoreSource: options?.restoreSource,
+        topicId,
+      });
+      if (switchStartStatePlan.currentSessionIdToPersist) {
         persistSessionModelPreference(
-          currentSessionId,
+          switchStartStatePlan.currentSessionIdToPersist,
           providerTypeRef.current,
           modelRef.current,
         );
       }
 
       skipAutoRestoreRef.current = false;
-      if (options?.allowDetachedSession === true) {
-        detachedSessionIdRef.current = topicId;
-      } else {
-        detachedSessionIdRef.current = null;
+      detachedSessionIdRef.current = switchStartStatePlan.detachedSessionId;
+      if (switchStartStatePlan.shouldResetSessionHydrating) {
+        setIsSessionHydrating(false);
       }
       const switchRequestVersion = invalidatePendingSessionSwitches();
-      setIsSessionHydrating(false);
-      if (options?.restoreSource !== "auto") {
+      if (switchStartStatePlan.shouldClearAutoRestoringSession) {
         setIsAutoRestoringSession(false);
       }
       try {
         const startedAt = Date.now();
         const selectedTopic = topics.find((topic) => topic.id === topicId);
+        const cachedSnapshotLoadPlan = buildSessionSwitchCachedSnapshotPlan({
+          currentSessionId,
+          forceRefresh: options?.forceRefresh,
+          topicId,
+          topicStatus: selectedTopic?.status,
+        });
         const cachedTargetSnapshot =
-          options?.forceRefresh === true ||
-          !shouldLoadCachedTopicSnapshot({
-            currentSessionId,
-            topicId,
-          })
+          !cachedSnapshotLoadPlan.shouldLoadCachedSnapshot
             ? null
             : loadAgentSessionCachedSnapshot(workspaceId, topicId, {
                 topicUpdatedAt: selectedTopic?.updatedAt ?? null,
                 messagesCount: selectedTopic?.messagesCount ?? null,
               });
-        const cachedSnapshotMetadata = cachedTargetSnapshot?.cacheMetadata;
-        const shouldRefreshCachedSnapshotImmediately =
-          resolveShouldRefreshCachedSnapshotImmediately({
-            cacheFreshness: cachedSnapshotMetadata?.freshness,
-            topicStatus: selectedTopic?.status,
-          });
+        const cachedSnapshotPlan = buildSessionSwitchCachedSnapshotPlan({
+          cachedSnapshot: cachedTargetSnapshot,
+          currentSessionId,
+          forceRefresh: options?.forceRefresh,
+          topicId,
+          topicStatus: selectedTopic?.status,
+        });
         const switchStartMetricContext = buildSessionSwitchStartMetricContext({
           cachedSnapshot: cachedTargetSnapshot,
           currentSessionId,
           messagesCount: messages.length,
           refreshCachedSnapshotImmediately:
-            shouldRefreshCachedSnapshotImmediately,
+            cachedSnapshotPlan.shouldRefreshCachedSnapshotImmediately,
           topicId,
           workspaceId,
         });
@@ -2109,7 +1895,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           "switchTopic.start",
           switchStartMetricContext,
         );
-        if (shouldApplyCachedTopicSnapshot({ currentSessionId, topicId })) {
+        if (cachedSnapshotPlan.shouldApplyCachedSnapshot) {
           applyCachedTopicSnapshot(topicId, cachedTargetSnapshot);
         }
         const shouldDeferDetailHydration = shouldDeferSessionDetailHydration({
@@ -2121,15 +1907,29 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         });
 
         if (shouldDeferDetailHydration) {
-          applyCachedTopicChromeState(topicId);
-          persistSessionRestoreCandidate(topicId);
-          setIsAutoRestoringSession(false);
-          setIsSessionHydrating(false);
+          const deferHydrationPlan = buildSessionSwitchDeferHydrationPlan({
+            refreshCachedSnapshotImmediately:
+              cachedSnapshotPlan.shouldRefreshCachedSnapshotImmediately,
+            topicId,
+          });
+          if (deferHydrationPlan.shouldApplyCachedTopicChromeState) {
+            applyCachedTopicChromeState(topicId);
+          }
+          persistSessionRestoreCandidate(
+            deferHydrationPlan.restoreCandidateSessionId,
+          );
+          if (deferHydrationPlan.shouldClearAutoRestoringSession) {
+            setIsAutoRestoringSession(false);
+          }
+          if (deferHydrationPlan.shouldResetSessionHydrating) {
+            setIsSessionHydrating(false);
+          }
           const deferHydrationMetricContext =
             buildSessionSwitchDeferHydrationMetricContext({
               cachedSnapshot: cachedTargetSnapshot,
               currentSessionId,
-              refreshImmediately: shouldRefreshCachedSnapshotImmediately,
+              refreshImmediately:
+                cachedSnapshotPlan.shouldRefreshCachedSnapshotImmediately,
               topicId,
               workspaceId,
             });
@@ -2150,9 +1950,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
                 const detail = await loadRuntimeSessionDetail({
                   topicId,
                   startedAt,
-                  mode: shouldRefreshCachedSnapshotImmediately
-                    ? "direct"
-                    : "deferred",
+                  mode: deferHydrationPlan.detailLoadMode,
                 });
                 finalizeResolvedTopicDetail({
                   topicId,
@@ -2239,20 +2037,33 @@ export function useAgentSession(options: UseAgentSessionOptions) {
             cachedSnapshot: cachedTargetSnapshot,
           })
         ) {
-          hydratedSessionRef.current = topicId;
-          applySessionSnapshot({
-            ...createEmptyAgentSessionSnapshot(),
-            sessionId: topicId,
+          const pendingShellPlan = buildSessionSwitchPendingShellPlan({
+            topicId,
           });
+          hydratedSessionRef.current = pendingShellPlan.sessionId;
+          if (pendingShellPlan.shouldApplyEmptySessionSnapshot) {
+            applySessionSnapshot({
+              ...createEmptyAgentSessionSnapshot(),
+              sessionId: pendingShellPlan.sessionId,
+            });
+          }
           setExecutionStrategyState(
             normalizeExecutionStrategy(
               selectedTopic?.executionStrategy || executionStrategy,
             ),
           );
-          setSessionHistoryWindow(null);
-          applyCachedTopicChromeState(topicId);
-          persistSessionRestoreCandidate(topicId);
-          setIsSessionHydrating(true);
+          if (pendingShellPlan.shouldResetHistoryWindow) {
+            setSessionHistoryWindow(null);
+          }
+          if (pendingShellPlan.shouldApplyCachedTopicChromeState) {
+            applyCachedTopicChromeState(topicId);
+          }
+          persistSessionRestoreCandidate(
+            pendingShellPlan.restoreCandidateSessionId,
+          );
+          if (pendingShellPlan.shouldSetSessionHydrating) {
+            setIsSessionHydrating(true);
+          }
           const pendingShellMetricContext =
             buildPendingSessionShellMetricContext({
               currentSessionId,
@@ -2719,40 +2530,41 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const sessionMissingFromTopics =
       topics.length > 0 && !topics.some((topic) => topic.id === sessionId);
 
-    if (
-      sessionMissingFromTopics &&
-      detachedSessionIdRef.current === sessionId
-    ) {
+    const missingSessionAction = resolveMissingSessionFromTopicsAction({
+      currentTurnId,
+      detachedSessionId: detachedSessionIdRef.current,
+      queuedTurnsCount: queuedTurns.length,
+      sessionId,
+      threadItemsCount: threadItems.length,
+      threadTurnsCount: threadTurns.length,
+      topicsCount: topics.length,
+      topicsReady,
+      topicExists: !sessionMissingFromTopics,
+    });
+
+    if (missingSessionAction.kind === "skip_detached") {
       missingSessionVerificationRef.current = null;
       return;
     }
 
-    if (sessionMissingFromTopics) {
-      if (isAuxiliaryAgentSessionId(sessionId)) {
-        persistSessionRestoreCandidate(null);
-        missingSessionVerificationRef.current = null;
-        return;
-      }
-
-      const shouldVerifyMissingSession = hasSessionHydrationActivity({
-        currentTurnId,
-        threadTurnsCount: threadTurns.length,
-        threadItemsCount: threadItems.length,
-        queuedTurnsCount: queuedTurns.length,
-      });
-
-      if (!shouldVerifyMissingSession) {
+    if (
+      missingSessionAction.kind === "clear_auxiliary" ||
+      missingSessionAction.kind === "clear_inactive"
+    ) {
+      if (missingSessionAction.kind === "clear_inactive") {
         applySessionSnapshot(
           createEmptyAgentSessionSnapshot({
             executionRuntime: executionRuntimeRef.current,
           }),
         );
-        persistSessionRestoreCandidate(null);
         hydratedSessionRef.current = null;
-        missingSessionVerificationRef.current = null;
-        return;
       }
+      persistSessionRestoreCandidate(null);
+      missingSessionVerificationRef.current = null;
+      return;
+    }
 
+    if (missingSessionAction.kind === "verify_remote") {
       if (missingSessionVerificationRef.current === sessionId) {
         return;
       }
@@ -2781,26 +2593,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
             return;
           }
 
-          setTopics((prev) => {
-            if (prev.some((topic) => topic.id === sessionId)) {
-              return prev;
-            }
-
-            return [
-              mapSessionToTopic({
-                id: sessionId,
-                name: detail.name,
-                created_at: detail.created_at,
-                updated_at: detail.updated_at,
-                model: detail.model,
-                messages_count: detail.messages.length,
-                execution_strategy: detail.execution_strategy,
-                workspace_id: detail.workspace_id,
-                working_dir: detail.working_dir,
-              }),
-              ...prev,
-            ];
-          });
+          setTopics((prev) =>
+            prependVerifiedSessionTopicFromDetail(prev, sessionId, detail),
+          );
         })
         .catch((error) => {
           if (!isAsterSessionNotFoundError(error)) {
@@ -3010,10 +2805,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       nextExecutionStrategy: AsterExecutionStrategy,
     ) => {
       setTopics((prev) =>
-        prev.map((topic) =>
-          topic.id === targetSessionId
-            ? { ...topic, executionStrategy: nextExecutionStrategy }
-            : topic,
+        applyTopicExecutionStrategyToTopics(
+          prev,
+          targetSessionId,
+          nextExecutionStrategy,
         ),
       );
     },
@@ -3021,52 +2816,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   );
 
   const updateTopicSnapshot = useCallback(
-    (
-      targetSessionId: string,
-      snapshot: Partial<
-        Pick<
-          Topic,
-          | "updatedAt"
-          | "messagesCount"
-          | "status"
-          | "statusReason"
-          | "lastPreview"
-          | "hasUnread"
-        >
-      >,
-    ) => {
-      setTopics((prev) => {
-        let changed = false;
-        const nextTopics = prev.map((topic) => {
-          if (topic.id !== targetSessionId) {
-            return topic;
-          }
-
-          const { updatedAt, ...restSnapshot } = snapshot;
-          const nextTopic = {
-            ...topic,
-            ...restSnapshot,
-            ...(updatedAt ? { updatedAt } : {}),
-          };
-
-          const unchanged =
-            nextTopic.messagesCount === topic.messagesCount &&
-            nextTopic.status === topic.status &&
-            nextTopic.statusReason === topic.statusReason &&
-            nextTopic.lastPreview === topic.lastPreview &&
-            nextTopic.hasUnread === topic.hasUnread &&
-            nextTopic.updatedAt?.getTime() === topic.updatedAt?.getTime();
-
-          if (unchanged) {
-            return topic;
-          }
-
-          changed = true;
-          return nextTopic;
-        });
-
-        return changed ? nextTopics : prev;
-      });
+    (targetSessionId: string, snapshot: TopicSnapshotPatch) => {
+      setTopics((prev) =>
+        applyTopicSnapshotToTopics(prev, targetSessionId, snapshot),
+      );
     },
     [],
   );

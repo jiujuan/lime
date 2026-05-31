@@ -330,6 +330,7 @@ import {
 } from "./utils/saveSceneAppExecutionAsInspiration";
 import { buildSkillsPageParamsFromSceneAppExecution } from "./utils/sceneAppSkillScaffoldDraft";
 import { buildSkillsPageParamsFromMessage } from "./utils/skillScaffoldDraft";
+import { resolveAgentChatWorkspaceShellViewModel } from "./agentChatWorkspaceShellViewModel";
 import { AutomationJobDialog } from "@/components/settings-v2/system/automation/AutomationJobDialog";
 import {
   APP_SIDEBAR_COLLAPSE_EVENT,
@@ -4098,33 +4099,28 @@ export function AgentChatWorkspace({
       workspaceId: taskCenterWorkspaceId,
     });
 
-  // 布局层按实际展示内容判断，避免 bootstrap 预览等临时消息仍被视为空白态。
-  const hasDisplayMessages =
-    !shouldSuppressTaskCenterDraftContent &&
-    (displayMessages.length > 0 || isHomePendingPreviewActive);
-  const hasMessages = hasDisplayMessages;
   const hasCanvasWorkbenchContent = layoutMode !== "chat";
-  const effectiveShowChatPanel =
-    showChatPanel ||
-    hasCanvasWorkbenchContent ||
-    (agentEntry === "new-task" &&
-      (hasDisplayMessages ||
-        isThemeWorkbench ||
-        (!shouldUseCompactGeneralWorkbench && isBootstrapDispatchPending) ||
-        isSessionHydrating ||
-        isHomePendingPreviewActive ||
-        isSending ||
-        queuedTurns.length > 0));
-  const allowTopicSidebarToggle =
-    showChatPanel || (agentEntry === "new-task" && effectiveShowChatPanel);
-  const shouldRestoreImageTasksFromWorkspace = !(
-    agentEntry === "new-task" &&
-    !contentId &&
-    !hasDisplayMessages &&
-    !isSending &&
-    queuedTurns.length === 0 &&
-    !isBootstrapDispatchPending
-  );
+  const {
+    hasDisplayMessages,
+    hasMessages,
+    effectiveShowChatPanel,
+    allowTopicSidebarToggle,
+    shouldRestoreImageTasksFromWorkspace,
+  } = resolveAgentChatWorkspaceShellViewModel({
+    agentEntry,
+    showChatPanel,
+    contentId,
+    displayMessageCount: displayMessages.length,
+    isHomePendingPreviewActive,
+    shouldSuppressTaskCenterDraftContent,
+    hasCanvasWorkbenchContent,
+    isThemeWorkbench,
+    shouldUseCompactGeneralWorkbench,
+    isBootstrapDispatchPending,
+    isSessionHydrating,
+    isSending,
+    queuedTurnCount: queuedTurns.length,
+  });
 
   const handleCanvasSelectionTextChange = useCallback((text: string) => {
     const normalized = text.trim().replace(/\s+/g, " ");

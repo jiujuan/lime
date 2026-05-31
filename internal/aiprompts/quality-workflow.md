@@ -182,6 +182,36 @@
 
 - **不替代** 编译、测试、契约检查、GUI smoke
 
+### Layer 0.5：TDD 快速测试分层
+
+入口：
+
+```bash
+npm run test:unit
+npm run test:component
+npm run test:contract
+npm run test:integration
+npm run test:e2e
+npm run test:layers:stats
+npm run test:frontend:all
+```
+
+作用：
+
+- `test:unit` 是本地和 AI TDD 的默认第一轮信号，优先覆盖 View Model / projection / selector / parser / formatter 等纯逻辑边界
+- `test:component` 覆盖 React/jsdom 组件接线和关键 UI 回归
+- `test:contract` 覆盖 DevBridge / Tauri mock / command catalog 一类轻量契约测试
+- `test:integration` 覆盖文件系统、子进程、本地 fixture server 和多模块脚本流程
+- `test:e2e` 覆盖 Vitest 内显式 E2E / smoke / live-gated 测试；真实产品主路径仍以 `verify:gui-smoke` / Playwright 为准
+- `test:layers:stats` 按同一分类事实源输出分层统计、默认可运行数和 live-gated 数
+- `test:frontend:all` 保留现有前端 Vitest 全量兼容入口
+
+边界：
+
+- `test:unit` 只证明快速逻辑回归，不等于可交付
+- GUI 壳、Workspace、主页面路径、Tauri 命令和 Bridge 改动仍必须按后续 Layer 1-3 跑对应校验
+- 前端复杂 UI 逻辑应优先抽到 View Model / projection / selector 中做单元测试；组件测试只保留必要渲染和事件接线，核心用户流程交给 GUI smoke / E2E
+
 ### Layer 1：本地统一入口
 
 入口：
@@ -693,6 +723,13 @@ npm run smoke:site-adapters
 npm run smoke:agent-service-skill-entry
 
 # 前端 / 桥接 / 契约
+npm run test:unit
+npm run test:component
+npm run test:contract
+npm run test:integration
+npm run test:e2e
+npm run test:layers:stats
+npm run test:frontend:all
 npm test
 npm run test:bridge
 npm run test:contracts

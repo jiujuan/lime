@@ -8,6 +8,36 @@ export interface SessionSwitchLocalSnapshotOverride {
   threadItems: AgentThreadItem[];
 }
 
+export interface SessionSwitchStartStatePlan {
+  currentSessionIdToPersist: string | null;
+  detachedSessionId: string | null;
+  shouldClearAutoRestoringSession: boolean;
+  shouldResetSessionHydrating: boolean;
+}
+
+export interface SessionSwitchCachedSnapshotPlan {
+  shouldApplyCachedSnapshot: boolean;
+  shouldLoadCachedSnapshot: boolean;
+  shouldRefreshCachedSnapshotImmediately: boolean;
+}
+
+export interface SessionSwitchDeferHydrationPlan {
+  detailLoadMode: "direct" | "deferred";
+  restoreCandidateSessionId: string;
+  shouldApplyCachedTopicChromeState: boolean;
+  shouldClearAutoRestoringSession: boolean;
+  shouldResetSessionHydrating: boolean;
+}
+
+export interface SessionSwitchPendingShellPlan {
+  restoreCandidateSessionId: string;
+  sessionId: string;
+  shouldApplyCachedTopicChromeState: boolean;
+  shouldApplyEmptySessionSnapshot: boolean;
+  shouldResetHistoryWindow: boolean;
+  shouldSetSessionHydrating: boolean;
+}
+
 export function shouldLoadCachedTopicSnapshot(params: {
   currentSessionId?: string | null;
   topicId: string;
@@ -39,6 +69,100 @@ export function shouldApplyPendingSessionShell(params: {
   cachedSnapshot?: AgentSessionCachedSnapshot | null;
 }): boolean {
   return params.currentSessionId !== params.topicId && !params.cachedSnapshot;
+}
+
+export function shouldReuseActiveSessionSwitch(params: {
+  activeTopicId?: string | null;
+  allowDetachedSession?: boolean;
+  forceRefresh?: boolean;
+  restoreSource?: "auto" | string;
+  resumeSessionStartHooks?: boolean;
+  topicId: string;
+}): boolean {
+  if (
+    params.forceRefresh ||
+    params.resumeSessionStartHooks ||
+    params.allowDetachedSession ||
+    params.restoreSource === "auto"
+  ) {
+    return false;
+  }
+
+  return params.activeTopicId === params.topicId;
+}
+
+export function buildSessionSwitchStartStatePlan(params: {
+  allowDetachedSession?: boolean;
+  currentSessionId?: string | null;
+  restoreSource?: "auto" | string;
+  topicId: string;
+}): SessionSwitchStartStatePlan {
+  return {
+    currentSessionIdToPersist: params.currentSessionId?.trim()
+      ? params.currentSessionId
+      : null,
+    detachedSessionId:
+      params.allowDetachedSession === true ? params.topicId : null,
+    shouldClearAutoRestoringSession: params.restoreSource !== "auto",
+    shouldResetSessionHydrating: true,
+  };
+}
+
+export function buildSessionSwitchCachedSnapshotPlan(params: {
+  cachedSnapshot?: AgentSessionCachedSnapshot | null;
+  currentSessionId?: string | null;
+  forceRefresh?: boolean;
+  topicId: string;
+  topicStatus?: string | null;
+}): SessionSwitchCachedSnapshotPlan {
+  const shouldLoad = Boolean(
+    params.forceRefresh !== true &&
+      shouldLoadCachedTopicSnapshot({
+        currentSessionId: params.currentSessionId,
+        topicId: params.topicId,
+      }),
+  );
+
+  return {
+    shouldApplyCachedSnapshot: shouldApplyCachedTopicSnapshot({
+      currentSessionId: params.currentSessionId,
+      topicId: params.topicId,
+    }),
+    shouldLoadCachedSnapshot: shouldLoad,
+    shouldRefreshCachedSnapshotImmediately:
+      shouldRefreshCachedSnapshotImmediately({
+        cacheFreshness: params.cachedSnapshot?.cacheMetadata?.freshness,
+        topicStatus: params.topicStatus,
+      }),
+  };
+}
+
+export function buildSessionSwitchDeferHydrationPlan(params: {
+  refreshCachedSnapshotImmediately: boolean;
+  topicId: string;
+}): SessionSwitchDeferHydrationPlan {
+  return {
+    detailLoadMode: params.refreshCachedSnapshotImmediately
+      ? "direct"
+      : "deferred",
+    restoreCandidateSessionId: params.topicId,
+    shouldApplyCachedTopicChromeState: true,
+    shouldClearAutoRestoringSession: true,
+    shouldResetSessionHydrating: true,
+  };
+}
+
+export function buildSessionSwitchPendingShellPlan(params: {
+  topicId: string;
+}): SessionSwitchPendingShellPlan {
+  return {
+    restoreCandidateSessionId: params.topicId,
+    sessionId: params.topicId,
+    shouldApplyCachedTopicChromeState: true,
+    shouldApplyEmptySessionSnapshot: true,
+    shouldResetHistoryWindow: true,
+    shouldSetSessionHydrating: true,
+  };
 }
 
 export function buildSessionSwitchStartMetricContext(params: {

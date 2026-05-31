@@ -488,14 +488,14 @@ export function analyzeReleaseDocsWorkflowReport(
   const docsOemDir = path.join(docsDir, "oem");
   const releaseDocsTranslationScopePath = path.join(
     repoRoot,
-    "docs",
+    "internal",
     "roadmap",
     "i18n",
     "release-docs-translation-scope.json",
   );
   const docsLocaleBuildManifestPath = path.join(
     repoRoot,
-    "docs",
+    "internal",
     "roadmap",
     "i18n",
     "evidence",
@@ -503,7 +503,7 @@ export function analyzeReleaseDocsWorkflowReport(
   );
   const releaseDocsCompanionsDir = path.join(
     repoRoot,
-    "docs",
+    "internal",
     "roadmap",
     "i18n",
     "companions",

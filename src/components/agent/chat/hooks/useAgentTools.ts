@@ -15,15 +15,22 @@ import type {
   ActionRequired,
   AgentThreadItem,
 } from "../types";
-import {
-  normalizeActionQuestions,
-  resolveActionPromptKey,
-} from "./agentChatCoreUtils";
+import { resolveActionPromptKey } from "./agentChatCoreUtils";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
-import { upsertAssistantActionRequest } from "./agentChatActionState";
+import {
+  applyAcknowledgedActionRequests,
+  mapReplayedActionRequiredToAction,
+  markQueuedFallbackActionInMessages,
+  markQueuedFallbackActionInPendingActions,
+  removeActionsByRequestIds,
+  resolveFallbackActionResponsePlan,
+  shouldPersistSubmittedActionForType,
+  type QueuedFallbackActionResponse,
+  upsertAssistantActionRequest,
+  upsertSubmittedAction,
+} from "./agentChatActionState";
 import { markThreadActionItemSubmitted } from "./agentThreadState";
 import { buildActionRequestSubmissionContext } from "../utils/actionRequestA2UI";
-import { buildActionResumeRuntimeStatus } from "../utils/agentRuntimeStatus";
 import { governActionRequest } from "../utils/actionRequestGovernance";
 import {
   filterActionsForCurrentAssistantTail,
@@ -39,17 +46,6 @@ interface UseAgentToolsOptions {
   setMessages: Dispatch<SetStateAction<Message[]>>;
   setThreadItems: Dispatch<SetStateAction<AgentThreadItem[]>>;
   refreshSessionReadModel: (targetSessionId?: string) => Promise<boolean>;
-}
-
-function upsertSubmittedAction(
-  actions: ActionRequired[],
-  nextAction: ActionRequired,
-): ActionRequired[] {
-  const next = actions.filter(
-    (item) => item.requestId !== nextAction.requestId,
-  );
-  next.push(nextAction);
-  return next;
 }
 
 function findActionRequestInMessages(
@@ -109,13 +105,7 @@ export function useAgentTools(options: UseAgentToolsOptions) {
   >([]);
   const warnedKeysRef = useRef<Set<string>>(new Set());
   const queuedFallbackResponsesRef = useRef<
-    Map<
-      string,
-      Omit<ConfirmResponse, "requestId"> & {
-        requestId: string;
-        sourceMessageId?: string;
-      }
-    >
+    Map<string, QueuedFallbackActionResponse>
   >(new Map());
 
   const confirmAction = useCallback(
@@ -173,84 +163,44 @@ export function useAgentTools(options: UseAgentToolsOptions) {
 
           submittedUserData = userData;
 
-          if (persistedAction?.isFallback) {
-            const fallbackPromptKey = resolveActionPromptKey(persistedAction);
-            if (fallbackPromptKey) {
-              const fallbackSourceMessageId = persistedAction.sourceMessageId;
-              const resolvedAction = pendingActions.find((item) => {
-                if (item.requestId === persistedAction.requestId) return false;
-                if (item.isFallback) return false;
-                if (item.actionType !== persistedAction.actionType)
-                  return false;
-                if (
-                  fallbackSourceMessageId &&
-                  item.sourceMessageId !== fallbackSourceMessageId
-                ) {
-                  return false;
-                }
-                return resolveActionPromptKey(item) === fallbackPromptKey;
-              });
+          const fallbackPlan = resolveFallbackActionResponsePlan({
+            actionType,
+            pendingActions,
+            persistedAction,
+            response,
+            userData,
+          });
 
-              if (!resolvedAction) {
-                queuedFallbackResponsesRef.current.set(fallbackPromptKey, {
-                  ...response,
-                  actionType,
-                  requestId: persistedAction.requestId,
-                  userData,
-                  sourceMessageId: fallbackSourceMessageId,
-                });
-                setPendingActions((prev) =>
-                  prev.map((item) =>
-                    item.requestId === persistedAction.requestId
-                      ? {
-                          ...item,
-                          status: "queued",
-                          submittedResponse: normalizedResponse || undefined,
-                          submittedUserData,
-                        }
-                      : item,
-                  ),
-                );
-                setMessages((prev) =>
-                  prev.map((msg) => ({
-                    ...msg,
-                    actionRequests: msg.actionRequests?.map((item) =>
-                      item.requestId === persistedAction.requestId
-                        ? {
-                            ...item,
-                            status: "queued" as const,
-                            submittedResponse: normalizedResponse || undefined,
-                            submittedUserData,
-                          }
-                        : item,
-                    ),
-                    contentParts: msg.contentParts?.map((part) =>
-                      part.type === "action_required" &&
-                      part.actionRequired.requestId ===
-                        persistedAction.requestId
-                        ? {
-                            ...part,
-                            actionRequired: {
-                              ...part.actionRequired,
-                              status: "queued" as const,
-                              submittedResponse:
-                                normalizedResponse || undefined,
-                              submittedUserData,
-                            },
-                          }
-                        : part,
-                    ),
-                  })),
-                );
-                await refreshSessionReadModel(activeSessionId);
-                toast.info("已记录你的回答，等待系统请求就绪后自动提交");
-                return;
-              }
+          if (fallbackPlan.kind === "queue") {
+            queuedFallbackResponsesRef.current.set(
+              fallbackPlan.promptKey,
+              fallbackPlan.queuedResponse,
+            );
+            setPendingActions((prev) =>
+              markQueuedFallbackActionInPendingActions(
+                prev,
+                fallbackPlan.queuedResponse.requestId,
+                normalizedResponse || undefined,
+                submittedUserData,
+              ),
+            );
+            setMessages((prev) =>
+              markQueuedFallbackActionInMessages({
+                messages: prev,
+                requestId: fallbackPlan.queuedResponse.requestId,
+                submittedResponse: normalizedResponse || undefined,
+                submittedUserData,
+              }),
+            );
+            await refreshSessionReadModel(activeSessionId);
+            toast.info("已记录你的回答，等待系统请求就绪后自动提交");
+            return;
+          }
 
-              effectiveRequestId = resolvedAction.requestId;
-              metadataAction = governActionRequest(resolvedAction);
-              acknowledgedRequestIds.add(resolvedAction.requestId);
-            }
+          if (fallbackPlan.kind === "submit_resolved") {
+            effectiveRequestId = fallbackPlan.resolvedAction.requestId;
+            metadataAction = governActionRequest(fallbackPlan.resolvedAction);
+            acknowledgedRequestIds.add(fallbackPlan.resolvedAction.requestId);
           }
 
           setSubmittedActionsInFlight((prev) =>
@@ -315,55 +265,18 @@ export function useAgentTools(options: UseAgentToolsOptions) {
         }
 
         setPendingActions((prev) =>
-          prev.filter((a) => !acknowledgedRequestIds.has(a.requestId)),
+          removeActionsByRequestIds(prev, acknowledgedRequestIds),
         );
         const shouldPersistSubmittedAction =
-          actionType === "elicitation" || actionType === "ask_user";
+          shouldPersistSubmittedActionForType(actionType);
         setMessages((prev) =>
-          prev.map((msg) => ({
-            ...msg,
-            actionRequests: shouldPersistSubmittedAction
-              ? msg.actionRequests?.map((item) =>
-                  acknowledgedRequestIds.has(item.requestId)
-                    ? {
-                        ...item,
-                        status: "submitted" as const,
-                        submittedResponse: normalizedResponse || undefined,
-                        submittedUserData,
-                      }
-                    : item,
-                )
-              : msg.actionRequests?.filter(
-                  (item) => !acknowledgedRequestIds.has(item.requestId),
-                ),
-            contentParts: shouldPersistSubmittedAction
-              ? msg.contentParts?.map((part) =>
-                  part.type === "action_required" &&
-                  acknowledgedRequestIds.has(part.actionRequired.requestId)
-                    ? {
-                        ...part,
-                        actionRequired: {
-                          ...part.actionRequired,
-                          status: "submitted" as const,
-                          submittedResponse: normalizedResponse || undefined,
-                          submittedUserData,
-                        },
-                      }
-                    : part,
-                )
-              : msg.contentParts?.filter(
-                  (part) =>
-                    part.type !== "action_required" ||
-                    !acknowledgedRequestIds.has(part.actionRequired.requestId),
-                ),
-            runtimeStatus:
-              shouldPersistSubmittedAction &&
-              msg.actionRequests?.some((item) =>
-                acknowledgedRequestIds.has(item.requestId),
-              )
-                ? buildActionResumeRuntimeStatus()
-                : msg.runtimeStatus,
-          })),
+          applyAcknowledgedActionRequests({
+            messages: prev,
+            requestIds: acknowledgedRequestIds,
+            shouldPersistSubmittedAction,
+            submittedResponse: normalizedResponse || undefined,
+            submittedUserData,
+          }),
         );
         setThreadItems((prev) =>
           markThreadActionItemSubmitted(
@@ -377,11 +290,11 @@ export function useAgentTools(options: UseAgentToolsOptions) {
           await refreshSessionReadModel(refreshSessionId);
         }
         setSubmittedActionsInFlight((prev) =>
-          prev.filter((item) => !acknowledgedRequestIds.has(item.requestId)),
+          removeActionsByRequestIds(prev, acknowledgedRequestIds),
         );
       } catch (error) {
         setSubmittedActionsInFlight((prev) =>
-          prev.filter((item) => !acknowledgedRequestIds.has(item.requestId)),
+          removeActionsByRequestIds(prev, acknowledgedRequestIds),
         );
         console.error("[AsterChat] 确认失败:", error);
         toast.error(
@@ -480,32 +393,7 @@ export function useAgentTools(options: UseAgentToolsOptions) {
           return false;
         }
 
-        const actionData: ActionRequired = {
-          requestId: replayedAction.request_id,
-          actionType: replayedAction.action_type,
-          toolName: replayedAction.tool_name,
-          arguments:
-            replayedAction.arguments &&
-            typeof replayedAction.arguments === "object" &&
-            !Array.isArray(replayedAction.arguments)
-              ? replayedAction.arguments
-              : undefined,
-          prompt: replayedAction.prompt,
-          questions: normalizeActionQuestions(
-            replayedAction.questions,
-            replayedAction.prompt,
-          ),
-          requestedSchema: replayedAction.requested_schema,
-          scope: replayedAction.scope
-            ? {
-                sessionId: replayedAction.scope.session_id,
-                threadId: replayedAction.scope.thread_id,
-                turnId: replayedAction.scope.turn_id,
-              }
-            : undefined,
-          status: "pending",
-          isFallback: false,
-        };
+        const actionData = mapReplayedActionRequiredToAction(replayedAction);
 
         upsertAssistantActionRequest({
           assistantMsgId: assistantMessageId,

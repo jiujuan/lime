@@ -1,0 +1,148 @@
+import { describe, expect, it } from "vitest";
+
+import { resolveAgentChatPageShellViewModel } from "./agentChatPageShellViewModel";
+
+type ShellInput = Parameters<typeof resolveAgentChatPageShellViewModel>[0];
+
+function resolve(input: ShellInput = {}) {
+  return resolveAgentChatPageShellViewModel(input);
+}
+
+function expectForced(input: ShellInput) {
+  expect(resolve({ agentEntry: "new-task", showChatPanel: false, ...input })).toMatchObject({
+    hasDirectWorkspaceIntent: true,
+    shouldForceClawWorkspace: true,
+    effectiveAgentEntry: "claw",
+    effectiveShowChatPanel: true,
+  });
+}
+
+describe("agentChatPageShellViewModel", () => {
+  it("默认入口应保持 claw 工作区", () => {
+    expect(resolve()).toEqual({
+      hasDirectWorkspaceIntent: false,
+      shouldForceClawWorkspace: false,
+      effectiveAgentEntry: "claw",
+      effectiveShowChatPanel: undefined,
+    });
+  });
+
+  it("new-task 没有直达意图时应保留首页和聊天面板入参", () => {
+    expect(
+      resolve({
+        agentEntry: "new-task",
+        showChatPanel: false,
+      }),
+    ).toEqual({
+      hasDirectWorkspaceIntent: false,
+      shouldForceClawWorkspace: false,
+      effectiveAgentEntry: "new-task",
+      effectiveShowChatPanel: false,
+    });
+  });
+
+  it("空白文本不应触发直达工作区", () => {
+    expect(
+      resolve({
+        agentEntry: "new-task",
+        initialUserPrompt: "   ",
+        initialPendingServiceSkillLaunch: {
+          skillId: "   ",
+        },
+        initialSiteSkillLaunch: {
+          adapterName: "   ",
+        },
+        initialProjectFileOpenTarget: {
+          relativePath: "   ",
+        },
+      }),
+    ).toMatchObject({
+      hasDirectWorkspaceIntent: false,
+      shouldForceClawWorkspace: false,
+      effectiveAgentEntry: "new-task",
+    });
+  });
+
+  it("new-task 携带首条文本或图片时应强制进入 claw 工作区", () => {
+    expectForced({
+      initialUserPrompt: "请直接开始处理任务",
+    });
+    expectForced({
+      initialUserImages: [{ data: "image-data", mediaType: "image/png" }],
+    });
+  });
+
+  it("new-task 携带技能、资料或文件直达意图时应强制进入 claw 工作区", () => {
+    expectForced({
+      initialSiteSkillLaunch: {
+        adapterName: "browser-automation",
+      },
+    });
+    expectForced({
+      initialPendingServiceSkillLaunch: {
+        skillId: "service-skill-1",
+      },
+    });
+    expectForced({
+      initialKnowledgePackSelection: {
+        enabled: true,
+        packName: "project-pack",
+        workingDir: "/workspace/project",
+      },
+    });
+    expectForced({
+      initialProjectFileOpenTarget: {
+        relativePath: "exports/report.md",
+      },
+    });
+  });
+
+  it("new-task 携带输入能力时默认直达工作区，但首页偏好会保留首页", () => {
+    const initialInputCapability: ShellInput["initialInputCapability"] = {
+      capabilityRoute: {
+        kind: "installed_skill",
+        skillKey: "writer",
+        skillName: "写作助手",
+      },
+    };
+
+    expectForced({
+      initialInputCapability,
+    });
+
+    expect(
+      resolve({
+        agentEntry: "new-task",
+        showChatPanel: false,
+        initialInputCapability,
+        preferHomeForInitialInputCapability: true,
+      }),
+    ).toMatchObject({
+      hasDirectWorkspaceIntent: false,
+      shouldForceClawWorkspace: false,
+      effectiveAgentEntry: "new-task",
+      effectiveShowChatPanel: false,
+    });
+  });
+
+  it("new-task 打开浏览器协助时应强制进入 claw 工作区", () => {
+    expectForced({
+      openBrowserAssistOnMount: true,
+    });
+  });
+
+  it("claw 入口即使携带直达意图也不需要强制切换", () => {
+    expect(
+      resolve({
+        agentEntry: "claw",
+        showChatPanel: false,
+        initialUserPrompt: "继续执行",
+      }),
+    ).toEqual({
+      hasDirectWorkspaceIntent: true,
+      shouldForceClawWorkspace: false,
+      effectiveAgentEntry: "claw",
+      effectiveShowChatPanel: false,
+    });
+  });
+});

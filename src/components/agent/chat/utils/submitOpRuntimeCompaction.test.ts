@@ -170,6 +170,95 @@ describe("submitOpRuntimeCompaction", () => {
     });
   });
 
+  it("execution_runtime 缺失但 synced preferences 已同步时应裁掉重复偏好", () => {
+    const result = buildSubmitOpRuntimeCompaction({
+      requestMetadata: {
+        harness: {
+          preferences: {
+            web_search: false,
+            thinking: true,
+            task: true,
+            subagent: false,
+          },
+        },
+      },
+      executionRuntime: null,
+      syncedRecentPreferences: {
+        webSearch: false,
+        thinking: true,
+        task: true,
+        subagent: false,
+      },
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.4",
+      webSearch: false,
+      thinking: true,
+    });
+
+    expect(result.shouldSubmitWebSearch).toBe(false);
+    expect(result.shouldSubmitThinking).toBe(false);
+    expect(result.metadata).toBeUndefined();
+  });
+
+  it("access_mode 已同步时应从 metadata 裁掉，未同步时应保留", () => {
+    const syncedResult = buildSubmitOpRuntimeCompaction({
+      requestMetadata: {
+        harness: {
+          access_mode: "read-only",
+          theme: "general",
+        },
+      },
+      executionRuntime: {
+        session_id: "session-access-synced",
+        source: "runtime_snapshot",
+        recent_access_mode: "read-only",
+        recent_theme: "general",
+      },
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.4",
+      webSearch: false,
+      thinking: false,
+    });
+
+    expect(syncedResult.metadata).toBeUndefined();
+
+    const pendingResult = buildSubmitOpRuntimeCompaction({
+      requestMetadata: {
+        harness: {
+          access_mode: "read-only",
+          theme: "general",
+        },
+      },
+      executionRuntime: {
+        session_id: "session-access-pending",
+        source: "runtime_snapshot",
+        recent_access_mode: "full-access",
+        recent_theme: "general",
+      },
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.4",
+      webSearch: false,
+      thinking: false,
+    });
+
+    expect(pendingResult.metadata).toEqual({
+      harness: {
+        access_mode: "read-only",
+      },
+    });
+  });
+
   it("快速响应路由应让后端解析服务模型，不应把前端当前模型作为本轮 request preference", () => {
     const result = buildSubmitOpRuntimeCompaction({
       requestMetadata: {

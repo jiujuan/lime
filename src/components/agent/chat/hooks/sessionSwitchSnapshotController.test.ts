@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   buildPendingSessionShellMetricContext,
+  buildSessionSwitchCachedSnapshotPlan,
+  buildSessionSwitchDeferHydrationPlan,
+  buildSessionSwitchPendingShellPlan,
+  buildSessionSwitchStartStatePlan,
   buildSessionSwitchDeferHydrationMetricContext,
   buildSessionSwitchLocalSnapshotOverride,
   buildSessionSwitchStartMetricContext,
@@ -8,6 +12,7 @@ import {
   shouldApplyPendingSessionShell,
   shouldLoadCachedTopicSnapshot,
   shouldRefreshCachedSnapshotImmediately,
+  shouldReuseActiveSessionSwitch,
 } from "./sessionSwitchSnapshotController";
 import type { AgentSessionCachedSnapshot } from "./agentSessionScopedStorage";
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
@@ -95,6 +100,150 @@ describe("sessionSwitchSnapshotController", () => {
         cachedSnapshot: snapshot(),
       }),
     ).toBe(false);
+  });
+
+  it("仅普通同 topic 切换请求才应复用 in-flight switch", () => {
+    expect(
+      shouldReuseActiveSessionSwitch({
+        activeTopicId: "topic-a",
+        topicId: "topic-a",
+      }),
+    ).toBe(true);
+    expect(
+      shouldReuseActiveSessionSwitch({
+        activeTopicId: "topic-b",
+        topicId: "topic-a",
+      }),
+    ).toBe(false);
+    expect(
+      shouldReuseActiveSessionSwitch({
+        activeTopicId: "topic-a",
+        forceRefresh: true,
+        topicId: "topic-a",
+      }),
+    ).toBe(false);
+    expect(
+      shouldReuseActiveSessionSwitch({
+        activeTopicId: "topic-a",
+        restoreSource: "auto",
+        topicId: "topic-a",
+      }),
+    ).toBe(false);
+    expect(
+      shouldReuseActiveSessionSwitch({
+        activeTopicId: "topic-a",
+        resumeSessionStartHooks: true,
+        topicId: "topic-a",
+      }),
+    ).toBe(false);
+    expect(
+      shouldReuseActiveSessionSwitch({
+        activeTopicId: "topic-a",
+        allowDetachedSession: true,
+        topicId: "topic-a",
+      }),
+    ).toBe(false);
+  });
+
+  it("应把 switchTopic 开始阶段状态重置计划收敛为纯决策", () => {
+    expect(
+      buildSessionSwitchStartStatePlan({
+        currentSessionId: "topic-a",
+        topicId: "topic-b",
+      }),
+    ).toEqual({
+      currentSessionIdToPersist: "topic-a",
+      detachedSessionId: null,
+      shouldClearAutoRestoringSession: true,
+      shouldResetSessionHydrating: true,
+    });
+    expect(
+      buildSessionSwitchStartStatePlan({
+        allowDetachedSession: true,
+        currentSessionId: null,
+        restoreSource: "auto",
+        topicId: "topic-b",
+      }),
+    ).toEqual({
+      currentSessionIdToPersist: null,
+      detachedSessionId: "topic-b",
+      shouldClearAutoRestoringSession: false,
+      shouldResetSessionHydrating: true,
+    });
+  });
+
+  it("应构造 switchTopic cached snapshot 策略计划", () => {
+    expect(
+      buildSessionSwitchCachedSnapshotPlan({
+        cachedSnapshot: snapshot(),
+        currentSessionId: "topic-a",
+        topicId: "topic-b",
+        topicStatus: "running",
+      }),
+    ).toEqual({
+      shouldApplyCachedSnapshot: true,
+      shouldLoadCachedSnapshot: true,
+      shouldRefreshCachedSnapshotImmediately: true,
+    });
+    expect(
+      buildSessionSwitchCachedSnapshotPlan({
+        cachedSnapshot: snapshot(),
+        currentSessionId: "topic-a",
+        forceRefresh: true,
+        topicId: "topic-b",
+        topicStatus: "completed",
+      }),
+    ).toEqual({
+      shouldApplyCachedSnapshot: true,
+      shouldLoadCachedSnapshot: false,
+      shouldRefreshCachedSnapshotImmediately: false,
+    });
+    expect(
+      buildSessionSwitchCachedSnapshotPlan({
+        currentSessionId: "topic-a",
+        topicId: "topic-a",
+      }),
+    ).toEqual({
+      shouldApplyCachedSnapshot: false,
+      shouldLoadCachedSnapshot: false,
+      shouldRefreshCachedSnapshotImmediately: false,
+    });
+  });
+
+  it("应构造 switchTopic defer hydration 状态计划", () => {
+    expect(
+      buildSessionSwitchDeferHydrationPlan({
+        refreshCachedSnapshotImmediately: true,
+        topicId: "topic-a",
+      }),
+    ).toEqual({
+      detailLoadMode: "direct",
+      restoreCandidateSessionId: "topic-a",
+      shouldApplyCachedTopicChromeState: true,
+      shouldClearAutoRestoringSession: true,
+      shouldResetSessionHydrating: true,
+    });
+    expect(
+      buildSessionSwitchDeferHydrationPlan({
+        refreshCachedSnapshotImmediately: false,
+        topicId: "topic-a",
+      }).detailLoadMode,
+    ).toBe("deferred");
+  });
+
+  it("应构造 switchTopic pending shell 状态计划", () => {
+    expect(
+      buildSessionSwitchPendingShellPlan({
+        topicId: "topic-a",
+      }),
+    ).toEqual({
+      restoreCandidateSessionId: "topic-a",
+      sessionId: "topic-a",
+      shouldApplyCachedTopicChromeState: true,
+      shouldApplyEmptySessionSnapshot: true,
+      shouldResetHistoryWindow: true,
+      shouldSetSessionHydrating: true,
+    });
   });
 
   it("应构造 switch start / defer / pending shell 指标上下文", () => {

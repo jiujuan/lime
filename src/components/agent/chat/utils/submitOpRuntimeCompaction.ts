@@ -122,7 +122,12 @@ function omitHarnessPreferenceFromRequestMetadata(
   }
 
   if (!usesNestedHarness) {
-    return nextHarness;
+    return Object.keys(nextHarness).length > 0 ? nextHarness : undefined;
+  }
+
+  if (Object.keys(nextHarness).length === 0) {
+    const { harness: _removedHarness, ...rest } = requestMetadata;
+    return Object.keys(rest).length > 0 ? rest : undefined;
   }
 
   return {

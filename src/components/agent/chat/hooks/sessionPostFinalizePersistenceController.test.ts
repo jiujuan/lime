@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyRuntimeTopicWorkspaceIdToTopics,
+  buildSessionPostFinalizePersistenceApplyPlan,
   buildSessionPostFinalizePersistencePlan,
   resolvePersistedSessionWorkspaceId,
   resolveSessionDetailTopicWorkspaceId,
@@ -75,5 +77,48 @@ describe("sessionPostFinalizePersistenceController", () => {
       runtimeTopicWorkspaceIdToApply: "runtime-workspace",
       topicWorkspaceId: "runtime-workspace",
     });
+  });
+
+  it("应构造 finalize 后副作用应用计划", () => {
+    const providerPreferenceToApply = {
+      providerType: "deepseek",
+      model: "deepseek-chat",
+    };
+    expect(
+      buildSessionPostFinalizePersistenceApplyPlan({
+        persistedWorkspaceId: "runtime-workspace",
+        providerPreferenceToApply,
+        runtimeTopicWorkspaceIdToApply: "runtime-workspace",
+        topicWorkspaceId: "runtime-workspace",
+      }),
+    ).toEqual({
+      providerPreferenceToApply,
+      runtimeTopicWorkspaceIdToApply: "runtime-workspace",
+      sessionWorkspaceIdToPersist: "runtime-workspace",
+    });
+  });
+
+  it("应把 runtime workspace 回填到目标 topic", () => {
+    const topics = [
+      { id: "topic-a", workspaceId: "workspace-a", name: "A" },
+      { id: "topic-b", workspaceId: "workspace-b", name: "B" },
+    ];
+
+    expect(
+      applyRuntimeTopicWorkspaceIdToTopics(topics, {
+        topicId: "topic-b",
+        runtimeTopicWorkspaceIdToApply: "runtime-workspace",
+      }),
+    ).toEqual([
+      { id: "topic-a", workspaceId: "workspace-a", name: "A" },
+      { id: "topic-b", workspaceId: "runtime-workspace", name: "B" },
+    ]);
+
+    expect(
+      applyRuntimeTopicWorkspaceIdToTopics(topics, {
+        topicId: "topic-b",
+        runtimeTopicWorkspaceIdToApply: null,
+      }),
+    ).toBe(topics);
   });
 });

@@ -48,6 +48,9 @@ internal/roadmap/**
 !internal/roadmap/task/
 internal/roadmap/task/**
 !internal/roadmap/task/*.md
+!internal/roadmap/test/
+internal/roadmap/test/**
+!internal/roadmap/test/*.md
 !internal/roadmap/artifacts/
 internal/roadmap/artifacts/**
 !internal/roadmap/artifacts/roadmap.md

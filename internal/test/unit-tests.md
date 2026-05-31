@@ -79,15 +79,23 @@ mod tests {
 ### 运行命令
 
 ```bash
-# 运行所有测试
-npm test
+# TDD 默认快速单元入口
+npm run test:unit
+
+# 列出当前被归为单元层的测试
+npm run test:unit -- --list
 
 # 运行特定文件
-npm test -- src/lib/utils.test.ts
+npm run test:unit -- src/lib/utils.test.ts
 
-# 监听模式
-npm test -- --watch
+# 查看前端 Vitest 分层治理统计
+npm run test:layers:stats
+
+# 前端全量兼容入口，交付前或 CI 使用
+npm run test:frontend:all
 ```
+
+`npm test` / `npm run test:frontend:all` 仍保留为前端全量 Vitest 入口，不作为本地 TDD 默认第一轮信号。
 
 ### 测试文件位置
 
@@ -102,6 +110,21 @@ src/
 └── components/
     └── __tests__/        # 组件测试
 ```
+
+新增或迁移测试时优先使用显式后缀：
+
+```
+*.unit.test.ts        # 纯单元：View Model / projection / selector / parser / formatter
+*.component.test.tsx  # React/jsdom 组件接线
+*.contract.test.ts    # DevBridge / Tauri mock / command catalog 契约
+*.integration.test.ts # 文件系统、子进程、本地 server、多模块流程
+*.e2e.test.ts         # Vitest 内显式 E2E / smoke 测试
+*.live.test.ts        # 真实 Provider / 真实联网，默认跳过
+```
+
+`*.live.test.ts` 归入 E2E 层，但默认不运行。确需运行时必须显式设置 `LIME_ALLOW_LIVE_PROVIDER_SMOKE=1` 或 `LIME_REAL_API_TEST=1`。
+
+复杂前端页面不要把业务状态机压进组件测试。应先把可纯化逻辑抽到 View Model / projection / selector，再由 `test:unit` 覆盖；组件测试只验证 VM 输出被正确渲染、关键事件能触发正确 action。
 
 ### 测试模板
 

@@ -132,6 +132,11 @@ function listFilesRecursively(directoryPath) {
 }
 
 function shouldScanFile(relativePath) {
+  const absolutePath = path.join(repoRoot, relativePath);
+  if (!fs.existsSync(absolutePath)) {
+    return false;
+  }
+
   if (relativePath === "node_modules" || relativePath.startsWith("node_modules/")) {
     return false;
   }
@@ -149,7 +154,7 @@ function shouldScanFile(relativePath) {
     return false;
   }
 
-  const stat = fs.statSync(path.join(repoRoot, relativePath));
+  const stat = fs.statSync(absolutePath);
   return stat.size <= 2 * 1024 * 1024;
 }
 

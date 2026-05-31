@@ -403,14 +403,14 @@ export function analyzeAppMetadataWorkflowReport(
   );
   const appMetadataTranslationScopePath = path.join(
     repoRoot,
-    "docs",
+    "internal",
     "roadmap",
     "i18n",
     "app-metadata-translation-scope.json",
   );
   const appMetadataLocaleBuildManifestPath = path.join(
     repoRoot,
-    "docs",
+    "internal",
     "roadmap",
     "i18n",
     "evidence",
@@ -437,8 +437,8 @@ export function analyzeAppMetadataWorkflowReport(
 
   const localeAwareMetadataSources = [
     path.join(repoRoot, "README.en.md"),
-    path.join(repoRoot, "docs", "roadmap", "i18n", "glossary.md"),
-    path.join(repoRoot, "docs", "roadmap", "i18n", "release-docs-workflow-evaluation.md"),
+    path.join(repoRoot, "internal", "roadmap", "i18n", "glossary.md"),
+    path.join(repoRoot, "internal", "roadmap", "i18n", "release-docs-workflow-evaluation.md"),
     appMetadataTranslationScopePath,
   ].filter(fileExists);
 
