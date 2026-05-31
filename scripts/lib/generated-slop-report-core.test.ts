@@ -1420,12 +1420,12 @@ describe("generated-slop-report-core", () => {
         issues: [
           {
             kind: "missing-required-reference",
-            documentPath: "docs/tech/harness/entropy-governance-workflow.md",
+            documentPath: "internal/tech/harness/entropy-governance-workflow.md",
             detail: "harness-evals.md",
           },
           {
             kind: "broken-code-path-reference",
-            documentPath: "docs/tech/harness/tooling-roadmap.md",
+            documentPath: "internal/tech/harness/tooling-roadmap.md",
             detail: "scripts/missing-tool.mjs",
           },
         ],

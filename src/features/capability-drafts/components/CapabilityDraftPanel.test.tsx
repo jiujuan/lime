@@ -75,7 +75,7 @@ describe("CapabilityDraftPanel", () => {
         description: "每天汇总竞品价格和上新变化。",
         userGoal: "持续监控竞品爆款并产出待复核清单。",
         sourceKind: "manual",
-        sourceRefs: ["docs/research/skill-forge"],
+        sourceRefs: ["internal/research/skill-forge"],
         permissionSummary: ["Level 0 只读发现"],
         generatedFiles: [
           { relativePath: "SKILL.md", byteLength: 32, sha256: "abc" },

@@ -287,7 +287,7 @@ async function runSmoke(options) {
       userGoal:
         "每天 9 点读取只读 CLI 或 fixture 输出，生成 Markdown 趋势摘要，失败时提示我检查配置。",
       sourceKind: "cli",
-      sourceRefs: ["docs/exec-plans/skill-forge-prompt-to-artifact-p5-plan.md"],
+      sourceRefs: ["internal/exec-plans/skill-forge-prompt-to-artifact-p5-plan.md"],
       permissionSummary: ["Level 0 只读发现", "Level 1 draft-scoped write"],
       generatedFiles: buildGeneratedFiles(),
     };

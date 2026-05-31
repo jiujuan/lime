@@ -14,7 +14,7 @@
 
 ### 术语确认
 
-- [ ] 已对照 `docs/roadmap/i18n/glossary.md`
+- [ ] 已对照 `internal/roadmap/i18n/glossary.md`
 - [ ] 专名、产品名、Agent 术语、Browser Runtime 术语已保持一致
 
 ## 验证

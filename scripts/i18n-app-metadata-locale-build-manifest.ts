@@ -82,7 +82,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DEFAULT_REPO_ROOT = path.resolve(__dirname, "..");
 const DEFAULT_SCOPE_PATH =
-  "docs/roadmap/i18n/app-metadata-translation-scope.json";
+  "internal/roadmap/i18n/app-metadata-translation-scope.json";
 
 function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join("/");

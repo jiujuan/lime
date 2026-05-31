@@ -28,7 +28,7 @@ function writeFile(root: string, relativePath: string, content: string): void {
 function writeScope(root: string, items: unknown[]): void {
   writeFile(
     root,
-    "docs/roadmap/i18n/app-metadata-translation-scope.json",
+    "internal/roadmap/i18n/app-metadata-translation-scope.json",
     JSON.stringify(
       {
         generatedMetadataAllowed: false,

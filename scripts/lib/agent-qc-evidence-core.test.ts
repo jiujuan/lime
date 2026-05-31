@@ -175,7 +175,7 @@ describe("agent-qc-evidence-core", () => {
       options: {
         generatedAt: "2026-05-10T00:00:00.000Z",
         ref: "test-ref",
-        changedFiles: ["docs/tests/agent-ops-qc.md"],
+        changedFiles: ["internal/tests/agent-ops-qc.md"],
       },
     });
 

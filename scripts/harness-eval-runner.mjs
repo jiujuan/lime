@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-const DEFAULT_MANIFEST_PATH = "docs/test/harness-evals.manifest.json";
+const DEFAULT_MANIFEST_PATH = "internal/test/harness-evals.manifest.json";
 const REVIEW_DECISION_JSON_CANDIDATES = [
   "review-decision.json",
   "../review/review-decision.json",
@@ -103,7 +103,7 @@ Lime Harness Eval Runner
   node scripts/harness-eval-runner.mjs --output-json "./tmp/harness-eval-summary.json" --output-markdown "./tmp/harness-eval-summary.md"
 
 选项:
-  --manifest PATH        指定 manifest，默认 docs/test/harness-evals.manifest.json
+  --manifest PATH        指定 manifest，默认 internal/test/harness-evals.manifest.json
   --workspace-root PATH  指定工作区根目录，默认当前目录
   --format FMT           控制标准输出格式：text | json | markdown
   --output-json PATH     将 JSON 摘要写入指定路径

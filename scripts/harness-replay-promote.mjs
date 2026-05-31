@@ -4,8 +4,8 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-const DEFAULT_MANIFEST_PATH = "docs/test/harness-evals.manifest.json";
-const DEFAULT_FIXTURES_ROOT = "docs/test/harness-fixtures/replay";
+const DEFAULT_MANIFEST_PATH = "internal/test/harness-evals.manifest.json";
+const DEFAULT_FIXTURES_ROOT = "internal/test/harness-fixtures/replay";
 const DEFAULT_SUITE_ID = "repo-promoted-replays";
 const DEFAULT_SANITIZED_WORKSPACE_ROOT = "/workspace/lime";
 const REVIEW_DECISION_JSON_FILE_NAME = "review-decision.json";
@@ -147,8 +147,8 @@ Lime Harness Replay Promote
   --session-id ID                  从 <workspace>/.lime/harness/sessions/<id>/replay 提升
   --replay-dir PATH                直接指定 replay 目录；与 --session-id 二选一
   --workspace-root PATH            工作区根目录，默认当前目录
-  --manifest PATH                  manifest 路径，默认 docs/test/harness-evals.manifest.json
-  --fixtures-root PATH             目标 fixture 根目录，默认 docs/test/harness-fixtures/replay
+  --manifest PATH                  manifest 路径，默认 internal/test/harness-evals.manifest.json
+  --fixtures-root PATH             目标 fixture 根目录，默认 internal/test/harness-fixtures/replay
   --suite-id ID                    目标 suite，默认 repo-promoted-replays
   --slug NAME                      目标目录名；未提供时会从 sessionId 推导
   --case-id ID                     manifest 中的 case id；默认 repo-promoted-<slug>

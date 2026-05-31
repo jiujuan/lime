@@ -104,7 +104,7 @@ describe("i18n rtl readiness report", () => {
     );
     writeFile(
       root,
-      "docs/roadmap/i18n/evidence/rtl-playwright-smoke-report.json",
+      "internal/roadmap/i18n/evidence/rtl-playwright-smoke-report.json",
       JSON.stringify(
         {
           schemaVersion: "lime.i18n.rtlPlaywrightSmokeReport.v1",
@@ -178,7 +178,7 @@ describe("i18n rtl readiness report", () => {
 
     writeFile(
       root,
-      "docs/roadmap/i18n/evidence/rtl-playwright-smoke-report.json",
+      "internal/roadmap/i18n/evidence/rtl-playwright-smoke-report.json",
       JSON.stringify(
         {
           schemaVersion: "lime.i18n.rtlPlaywrightSmokeReport.v1",

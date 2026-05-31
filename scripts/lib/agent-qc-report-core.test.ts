@@ -43,7 +43,7 @@ const evidenceSchema = {
 const validManifest = {
   manifestVersion: "v1",
   title: "Lime Agent QC",
-  evidenceSchema: "docs/test/agent-qc-evidence.schema.json",
+  evidenceSchema: "internal/test/agent-qc-evidence.schema.json",
   qcloop: {
     workerPromptTemplate:
       "worker {{item}} evidence_required failure_modes QCLOOP_WORKER_RESULT=BLOCKED QCLOOP_EVIDENCE_SUMMARY_JSON",

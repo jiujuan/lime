@@ -194,7 +194,7 @@ boundary inventory:
 ```bash
 npm run i18n:language-boundary-report
 npm run i18n:language-boundary-report:json
-npm run i18n:language-boundary-report:json -- --category contentTargetLanguage --output "docs/roadmap/i18n/evidence/content-target-language-boundary-report.json"
+npm run i18n:language-boundary-report:json -- --category contentTargetLanguage --output "internal/roadmap/i18n/evidence/content-target-language-boundary-report.json"
 ```
 
 For bundle footprint and chunk strategy review:

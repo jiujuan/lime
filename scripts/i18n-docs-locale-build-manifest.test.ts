@@ -26,7 +26,7 @@ function writeFile(root: string, relativePath: string, content: string): void {
 function writeScope(root: string, items: unknown[]): void {
   writeFile(
     root,
-    "docs/roadmap/i18n/release-docs-translation-scope.json",
+    "internal/roadmap/i18n/release-docs-translation-scope.json",
     JSON.stringify(
       {
         items,
@@ -55,7 +55,7 @@ describe("i18n docs locale build manifest", () => {
     writeFile(root, "docs/content/index.md", "# Docs\n");
     writeFile(
       root,
-      "docs/roadmap/i18n/companions/docs-content-index.en.md",
+      "internal/roadmap/i18n/companions/docs-content-index.en.md",
       "# Docs\n",
     );
     writeFile(root, "docs/content/02.user-guide/a.md", "# Guide\n");
@@ -67,7 +67,7 @@ describe("i18n docs locale build manifest", () => {
         priority: "required",
       },
       {
-        enUSPath: "docs/roadmap/i18n/companions/docs-content-index.en.md",
+        enUSPath: "internal/roadmap/i18n/companions/docs-content-index.en.md",
         kind: "docs-home",
         path: "docs/content/index.md",
         priority: "pilot",

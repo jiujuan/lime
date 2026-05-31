@@ -59,15 +59,15 @@ const I18N_CHECK_PREFIXES = [
 ];
 
 const I18N_TRANSLATION_REVIEW_PACK_RECOMMENDED_COMMANDS = [
-  "npm run i18n:translation-pr-pack:json -- --output docs/roadmap/i18n/evidence/translation-pr-pack.json",
+  "npm run i18n:translation-pr-pack:json -- --output internal/roadmap/i18n/evidence/translation-pr-pack.json",
 ];
 
 const I18N_BUNDLE_STRATEGY_RECOMMENDED_COMMANDS = [
-  "npm run i18n:bundle-report:json -- --output docs/roadmap/i18n/evidence/bundle-strategy-report.json",
+  "npm run i18n:bundle-report:json -- --output internal/roadmap/i18n/evidence/bundle-strategy-report.json",
 ];
 
 const I18N_BUNDLE_STRATEGY_FILES = new Set([
-  "docs/roadmap/i18n/evidence/bundle-strategy-report.json",
+  "internal/roadmap/i18n/evidence/bundle-strategy-report.json",
   "scripts/i18n-bundle-report.test.ts",
   "scripts/i18n-bundle-report.ts",
   "src/i18n/bundledNamespaceParts.ts",
@@ -79,31 +79,31 @@ const I18N_PATCH_RETIREMENT_RECOMMENDED_COMMANDS = [
 ];
 
 const I18N_RELEASE_DOCS_WORKFLOW_RECOMMENDED_COMMANDS = [
-  "npm run i18n:docs-locale-manifest:json -- --output docs/roadmap/i18n/evidence/docs-locale-build-manifest.json",
-  "npm run i18n:release-docs-report:json -- --output docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
+  "npm run i18n:docs-locale-manifest:json -- --output internal/roadmap/i18n/evidence/docs-locale-build-manifest.json",
+  "npm run i18n:release-docs-report:json -- --output internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
 ];
 
 const I18N_CHROME_EXTENSION_WORKFLOW_RECOMMENDED_COMMANDS = [
-  "npm run i18n:chrome-extension-report:json -- --output docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json",
+  "npm run i18n:chrome-extension-report:json -- --output internal/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json",
 ];
 
 const I18N_APP_METADATA_WORKFLOW_RECOMMENDED_COMMANDS = [
-  "npm run i18n:app-metadata-locale-manifest:json -- --output docs/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json",
-  "npm run i18n:app-metadata-report:json -- --output docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
+  "npm run i18n:app-metadata-locale-manifest:json -- --output internal/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json",
+  "npm run i18n:app-metadata-report:json -- --output internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
 ];
 
 const I18N_RTL_READINESS_RECOMMENDED_COMMANDS = [
-  "npm run i18n:rtl-readiness-report:json -- --output docs/roadmap/i18n/evidence/rtl-readiness-inventory.json",
+  "npm run i18n:rtl-readiness-report:json -- --output internal/roadmap/i18n/evidence/rtl-readiness-inventory.json",
 ];
 
 const I18N_RTL_SMOKE_RECOMMENDED_COMMANDS = ["npm run i18n:rtl-smoke"];
 
 const I18N_P4_READINESS_RECOMMENDED_COMMANDS = [
-  "npm run i18n:p4-readiness-report:json -- --output docs/roadmap/i18n/evidence/p4-readiness-report.json",
+  "npm run i18n:p4-readiness-report:json -- --output internal/roadmap/i18n/evidence/p4-readiness-report.json",
 ];
 
 const I18N_ROADMAP_READINESS_RECOMMENDED_COMMANDS = [
-  "npm run i18n:roadmap-readiness-report:json -- --output docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
+  "npm run i18n:roadmap-readiness-report:json -- --output internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
 ];
 
 const I18N_PATCH_RETIREMENT_FILES = new Set([
@@ -123,10 +123,10 @@ const I18N_RELEASE_DOCS_WORKFLOW_FILES = new Set([
   "docs/README.md",
   "docs/nuxt.config.ts",
   "docs/package.json",
-  "docs/roadmap/i18n/evidence/docs-locale-build-manifest.json",
-  "docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
-  "docs/roadmap/i18n/release-docs-translation-scope.json",
-  "docs/roadmap/i18n/release-docs-workflow-evaluation.md",
+  "internal/roadmap/i18n/evidence/docs-locale-build-manifest.json",
+  "internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
+  "internal/roadmap/i18n/release-docs-translation-scope.json",
+  "internal/roadmap/i18n/release-docs-workflow-evaluation.md",
   "scripts/i18n-docs-locale-build-manifest.test.ts",
   "scripts/i18n-docs-locale-build-manifest.ts",
   "scripts/i18n-release-docs-workflow-report.test.ts",
@@ -134,16 +134,16 @@ const I18N_RELEASE_DOCS_WORKFLOW_FILES = new Set([
 ]);
 
 const I18N_RELEASE_DOCS_WORKFLOW_PREFIXES = [
-  "docs/bussniss/",
+  "internal/bussniss/",
   "docs/content/",
-  "docs/develop/",
-  "docs/oem/",
-  "docs/roadmap/i18n/companions/",
+  "internal/develop/",
+  "internal/oem/",
+  "internal/roadmap/i18n/companions/",
 ];
 
 const I18N_CHROME_EXTENSION_WORKFLOW_FILES = new Set([
-  "docs/roadmap/i18n/chrome-extension-evaluation.md",
-  "docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json",
+  "internal/roadmap/i18n/chrome-extension-evaluation.md",
+  "internal/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json",
   "extensions/lime-chrome/CHROME_WEB_STORE_SUBMISSION.md",
   "extensions/lime-chrome/README.md",
   "extensions/lime-chrome/manifest.json",
@@ -158,10 +158,10 @@ const I18N_CHROME_EXTENSION_WORKFLOW_PREFIXES = [
 ];
 
 const I18N_APP_METADATA_WORKFLOW_FILES = new Set([
-  "docs/roadmap/i18n/app-metadata-translation-scope.json",
-  "docs/roadmap/i18n/app-metadata-workflow-evaluation.md",
-  "docs/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json",
-  "docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
+  "internal/roadmap/i18n/app-metadata-translation-scope.json",
+  "internal/roadmap/i18n/app-metadata-workflow-evaluation.md",
+  "internal/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json",
+  "internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
   "package.json",
   "scripts/i18n-app-metadata-locale-build-manifest.test.ts",
   "scripts/i18n-app-metadata-locale-build-manifest.ts",
@@ -174,8 +174,8 @@ const I18N_APP_METADATA_WORKFLOW_FILES = new Set([
 ]);
 
 const I18N_RTL_READINESS_FILES = new Set([
-  "docs/roadmap/i18n/evidence/rtl-readiness-inventory.json",
-  "docs/roadmap/i18n/rtl-readiness-evaluation.md",
+  "internal/roadmap/i18n/evidence/rtl-readiness-inventory.json",
+  "internal/roadmap/i18n/rtl-readiness-evaluation.md",
   "scripts/i18n-rtl-readiness-report.test.ts",
   "scripts/i18n-rtl-readiness-report.ts",
   "src/i18n/createI18n.ts",
@@ -185,15 +185,15 @@ const I18N_RTL_READINESS_FILES = new Set([
 const I18N_RTL_SMOKE_FILES = new Set(["scripts/i18n-rtl-playwright-smoke.mjs"]);
 
 const I18N_P4_READINESS_FILES = new Set([
-  "docs/roadmap/i18n/evidence/p4-readiness-report.json",
-  "docs/roadmap/i18n/prd.md",
+  "internal/roadmap/i18n/evidence/p4-readiness-report.json",
+  "internal/roadmap/i18n/prd.md",
   "scripts/i18n-p4-readiness-report.test.ts",
   "scripts/i18n-p4-readiness-report.ts",
 ]);
 
 const I18N_ROADMAP_READINESS_FILES = new Set([
-  "docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
-  "docs/roadmap/i18n/prd.md",
+  "internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
+  "internal/roadmap/i18n/prd.md",
   "scripts/i18n-roadmap-readiness-report.test.ts",
   "scripts/i18n-roadmap-readiness-report.ts",
 ]);
@@ -256,7 +256,7 @@ const BRIDGE_FILES = new Set([
   "scripts/verify-gui-smoke.mjs",
   "scripts/lib/generated-slop-report-core.mjs",
   "scripts/lib/harness-dashboard-core.mjs",
-  "docs/aiprompts/playwright-e2e.md",
+  "internal/aiprompts/playwright-e2e.md",
 ]);
 
 const HARNESS_CLEANUP_CONTRACT_FILES = new Set([
@@ -556,18 +556,18 @@ function isI18nRoadmapReadinessChange(file) {
     isI18nBundleStrategyChange(file) ||
     isI18nPatchRetirementChange(file) ||
     isI18nP4ReadinessChange(file) ||
-    file === "docs/roadmap/i18n/evidence/translation-coverage-report.json" ||
-    file === "docs/roadmap/i18n/evidence/source-locale-export.json" ||
-    file === "docs/roadmap/i18n/evidence/language-boundary-report.json" ||
+    file === "internal/roadmap/i18n/evidence/translation-coverage-report.json" ||
+    file === "internal/roadmap/i18n/evidence/source-locale-export.json" ||
+    file === "internal/roadmap/i18n/evidence/language-boundary-report.json" ||
     file ===
-      "docs/roadmap/i18n/evidence/content-target-language-boundary-report.json" ||
+      "internal/roadmap/i18n/evidence/content-target-language-boundary-report.json" ||
     file ===
-      "docs/roadmap/i18n/evidence/i18next-cli-parity-benchmark.json" ||
-    file === "docs/roadmap/i18n/glossary.md" ||
-    file === "docs/roadmap/i18n/implementation-progress.md" ||
-    file === "docs/roadmap/i18n/language-boundary-evaluation.md" ||
-    file === "docs/roadmap/i18n/response-language-injection-evaluation.md" ||
-    file === "docs/roadmap/i18n/toolchain-evaluation.md"
+      "internal/roadmap/i18n/evidence/i18next-cli-parity-benchmark.json" ||
+    file === "internal/roadmap/i18n/glossary.md" ||
+    file === "internal/roadmap/i18n/implementation-progress.md" ||
+    file === "internal/roadmap/i18n/language-boundary-evaluation.md" ||
+    file === "internal/roadmap/i18n/response-language-injection-evaluation.md" ||
+    file === "internal/roadmap/i18n/toolchain-evaluation.md"
   );
 }
 

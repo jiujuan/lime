@@ -1,0 +1,472 @@
+{
+  "manifestVersion": "v1",
+  "title": "Lime Agent QC Operating Scenarios",
+  "evidenceSchema": "internal/test/agent-qc-evidence.schema.json",
+  "qcloop": {
+    "purpose": "把 Agent 测试拆成可批量执行、独立质检、只读取证的场景项；发布证据批次不得在 qcloop repair 轮中修改工作区。",
+    "recommendedMaxQcRounds": 1,
+    "workerPromptTemplate": "在 Lime 仓库中执行 Agent QC 场景 {{item}}。只做该场景要求的最小验证，收集命令、GUI、runtime 和证据路径，不要顺手修复无关问题。\n\n执行场景命令前先运行 qcloop worker preflight：`npm run agent-qc:qcloop-preflight -- --expected-cwd \"$(pwd)\" --check`。如果该场景命令需要 DevBridge / GUI / browser runtime，再运行：`npm run agent-qc:qcloop-preflight -- --expected-cwd \"$(pwd)\" --require-devbridge --timeout-ms 15000 --check`。\n\n如果 preflight 失败，停止后续高成本命令，输出 `QCLOOP_WORKER_RESULT=BLOCKED`，并在 stdout 中列出失败 check、health URL、cwd、stdout/stderr 证据路径；不要把环境阻断误判为产品 pass。\n\n最终 stdout 必须逐项列出 `evidence_required` 的证据是否满足，并逐项说明 `failure_modes` 如何被覆盖、排除或命中；不能只写“命令通过”或只给日志路径。\n\n如果 item 中包含 evidence_layers，最终 stdout 必须声明本次覆盖到哪些层级；只跑到 deterministic-smoke 时不得伪装成 gui-trace、runtime-transcript 或 release-artifact。\n\n只读约束：Agent QC worker 只允许执行场景命令、收集证据和输出 PASS/FAIL/BLOCKED；不得修改源码、配置、文档、锁文件或 git 状态。若 verifier 证据不足，输出缺口并让外层生成新 payload，不要在 qcloop repair 轮里修代码。\n\n结构化证据输出硬约束：最终 stdout 必须包含单行 `QCLOOP_WORKER_RESULT=PASS|FAIL|BLOCKED`；还必须包含单行 `QCLOOP_EVIDENCE_SUMMARY_JSON=<json>`，其中 `<json>` 是单个 JSON object，不要 Markdown / code fence。该 JSON 至少包含 scenario_id、result、commands[]、evidence_required[]、evidence_layers_covered[]、failure_modes[]、artifacts[]、blockers[]、gui_session_owner、release_scope。evidence_required[] 每项包含 name、status(pass|fail|blocked|missing)、evidence、artifact_path；failure_modes[] 每项包含 name、status(covered|excluded|hit|unknown)、evidence。不得输出密钥、token、用户私密内容或未经脱敏的请求 / 响应正文。\n\nGUI session owner / isolation 口径：`npm run agent-qc:gui-owner-check -- --check` 只用于外层启动新 GUI P0 批次前，不要在 qcloop worker 内用它判定当前正在执行的同批次 GUI item；worker 需要在 `gui_session_owner` 字段声明当前隔离方式，例如 `single-worker isolated qcloop job on dedicated port/db`、是否复用已有 DevBridge，以及是否观察到其他非本 job 的 GUI owner。只有发现非本 job 的 active/stale GUI owner 时，才把 `parallel GUI smoke interference` 记为 hit/blocker。",
+    "verifierPromptTemplate": "审查 worker 输出是否满足场景 {{item}} 的 verifier、evidenceRequired 和 failureModes。只输出一个合法 JSON object，不要 Markdown、不要代码块、不要前后缀文本。JSON 必须至少包含 {\"pass\": true|false, \"feedback\": \"...\"}；可选字段 missingEvidence、nextAction、evidenceStatus、scenarioId 必须仍在同一个 JSON object 内。\n\nqcloop worker 执行证据：\n- attempt_status: {{attempt_status}}\n- attempt_type: {{attempt_type}}\n- exit_code: {{exit_code}}\n\nworker stdout:\n{{stdout}}\n\nqcloop issue ledger:\n{{issue_ledger}}\n\n判定要求：stdout 必须包含 `QCLOOP_WORKER_RESULT=PASS|FAIL|BLOCKED` 和 `QCLOOP_EVIDENCE_SUMMARY_JSON=<json>`。如果 stdout 缺少 `QCLOOP_EVIDENCE_SUMMARY_JSON`，或该 JSON 无法逐项证明 scenario verifier / evidenceRequired / failureModes，必须输出 {\"pass\": false, \"feedback\": \"...\"}；不能因为命令名、退出码或 worker 自评 PASS 就通过。",
+    "recommendedMaxExecutorRetries": 0
+  },
+  "lanes": [
+    {
+      "id": "L0-static-unit",
+      "title": "快速卫生与确定性单测",
+      "objective": "用最快入口发现 lint、type、unit、Rust 定向测试中的确定性错误。",
+      "gatePolicy": "普通代码改动默认执行；docs-only 可跳过。",
+      "defaultCommands": [
+        "npm run verify:local"
+      ]
+    },
+    {
+      "id": "L1-contract-bridge",
+      "title": "契约、Bridge 与治理护栏",
+      "objective": "验证前端调用、Rust 注册、DevBridge、mock、治理目录册和 harness 合同保持一致。",
+      "gatePolicy": "命令、Bridge、runtime gateway、mock 或 QC manifest/schema 改动必须执行。",
+      "defaultCommands": [
+        "npm run test:contracts",
+        "npm run test:bridge"
+      ]
+    },
+    {
+      "id": "L2-agent-runtime",
+      "title": "Agent Runtime 与工具面",
+      "objective": "验证 turn、streaming、中断、工具调用、approval、sandbox、memory、team runtime 等 Agent 内核路径。",
+      "gatePolicy": "Agent runtime、tool surface、Skill Forge、team 或 memory 改动必须执行定向 runtime 场景。",
+      "defaultCommands": [
+        "npm run smoke:agent-runtime-tool-surface",
+        "npm run smoke:agent-runtime-tool-surface-page"
+      ]
+    },
+    {
+      "id": "L3-product-surface",
+      "title": "GUI / WebUI / 桌面产品表面",
+      "objective": "验证 Lime 真实 GUI 主路径、DevBridge 健康、workspace ready、浏览器运行时和产品页面可用。",
+      "gatePolicy": "GUI 壳、Workspace、页面主路径、浏览器能力或用户可见 UI 改动必须执行。",
+      "defaultCommands": [
+        "npm run verify:gui-smoke",
+        "npm run bridge:health -- --timeout-ms 120000"
+      ]
+    },
+    {
+      "id": "L4-behavior-eval",
+      "title": "Agent 行为评测与回归样本",
+      "objective": "用 replay、grader、语义评测和趋势报告发现 Agent 行为退化。",
+      "gatePolicy": "Agent 行为、prompt、Skill、工具选择策略或长期运营回归默认进入 nightly；高风险改动需本地抽跑。",
+      "defaultCommands": [
+        "npm run harness:eval",
+        "npm run harness:eval:trend"
+      ]
+    },
+    {
+      "id": "L5-release-ops",
+      "title": "发布与运营门禁",
+      "objective": "验证版本、发布包、安装启动、release artifact 和发布证据完整性。",
+      "gatePolicy": "版本、打包、发布、安装器、工作流或运营门禁改动必须执行。",
+      "defaultCommands": [
+        "npm run verify:app-version",
+        "npm run agent-qc:check"
+      ]
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "command-bridge-contract",
+      "title": "命令桥接四侧一致",
+      "risk": "P0",
+      "executor": "npm_command",
+      "lanes": [
+        "L1-contract-bridge"
+      ],
+      "commands": [
+        "npm run test:contracts"
+      ],
+      "goal": "验证 safeInvoke/invoke、Rust generate_handler、agentCommandCatalog、mockPriorityCommands/defaultMocks 不漂移。",
+      "verifier": "test:contracts 成功；失败时能指出具体缺失侧；不得出现新增 compat/dead 回流；若本轮没有命令面变更，checked surface counts + contract diff empty 可满足 surface evidence。",
+      "evidenceRequired": [
+        "contract command log",
+        "checked command surfaces summary or changed command surfaces",
+        "failure side summary or no-failure side summary"
+      ],
+      "evidenceLayers": [
+        "deterministic-smoke"
+      ],
+      "failureModes": [
+        "frontend-only command",
+        "missing rust handler",
+        "mock fallback drift",
+        "governance catalog missing",
+        "no-change surface evidence rejected"
+      ]
+    },
+    {
+      "id": "claw-chat-ready-streaming",
+      "title": "Claw 首屏、聊天、流式与中断",
+      "risk": "P0",
+      "executor": "mixed",
+      "lanes": [
+        "L2-agent-runtime",
+        "L3-product-surface"
+      ],
+      "commands": [
+        "npm run verify:gui-smoke"
+      ],
+      "goal": "启动 Lime 后验证 workspace ready、发起一次聊天、看到流式增量、可中断并能继续下一轮。",
+      "verifier": "GUI 状态、DevBridge、runtime transcript、console/network 都有证据；不能只以截图或单测通过判定。",
+      "evidenceRequired": [
+        "gui screenshot or trace",
+        "DevBridge health",
+        "runtime transcript",
+        "console/network summary",
+        "GUI session owner / isolation statement"
+      ],
+      "evidenceLayers": [
+        "deterministic-smoke",
+        "gui-trace",
+        "runtime-transcript"
+      ],
+      "failureModes": [
+        "workspace not ready",
+        "stream stuck",
+        "interrupt ignored",
+        "mock fallback mistaken as real path",
+        "parallel GUI smoke interference"
+      ]
+    },
+    {
+      "id": "tool-approval-sandbox-boundary",
+      "title": "工具调用、Approval 与 Sandbox 边界",
+      "risk": "P0",
+      "executor": "runtime_harness",
+      "lanes": [
+        "L2-agent-runtime",
+        "L4-behavior-eval"
+      ],
+      "commands": [
+        "npm run smoke:agent-runtime-tool-surface",
+        "npm run smoke:agent-runtime-approval-sandbox"
+      ],
+      "goal": "覆盖允许工具、拒绝工具、超时工具和需要授权的工具，确认 runtime 不绕过 approval 或 sandbox。",
+      "verifier": "transcript 中必须有 tool request、decision、result/error、恢复动作；拒绝或超时不能把用户卡死。",
+      "evidenceRequired": [
+        "tool timeline",
+        "approval decision",
+        "sandbox policy",
+        "error recovery transcript"
+      ],
+      "evidenceLayers": [
+        "deterministic-smoke",
+        "runtime-transcript"
+      ],
+      "failureModes": [
+        "approval bypass",
+        "tool result missing",
+        "timeout without recovery",
+        "unsafe tool exposed"
+      ]
+    },
+    {
+      "id": "skill-forge-register-bind-enable",
+      "title": "Skill Forge 生成、校验、注册、绑定与显式启用",
+      "risk": "P0",
+      "executor": "mixed",
+      "lanes": [
+        "L1-contract-bridge",
+        "L2-agent-runtime",
+        "L4-behavior-eval"
+      ],
+      "commands": [
+        "npm run test:contracts",
+        "npm run smoke:agent-service-skill-entry"
+      ],
+      "goal": "从 capability draft 到 verify/register，再到 runtime binding readiness 与 session scope 显式 enable。",
+      "verifier": "不能把已注册误判为已自动进入 tool surface；必须看到 readiness、metadata、enable 和 SkillTool gate 证据。runtime-transcript 以 smoke 脚本生成的 .lime/qc/skill-forge-runtime-transcript-current.json 为准，必须包含 SkillTool request/decision/result 与 source metadata；本场景不要求 live model provider stream。",
+      "evidenceRequired": [
+        "capability draft evidence",
+        "registration result",
+        "runtime binding projection",
+        "SkillTool gate transcript request/decision/result/source metadata"
+      ],
+      "evidenceLayers": [
+        "deterministic-smoke",
+        "runtime-transcript"
+      ],
+      "failureModes": [
+        "registered equals executable",
+        "metadata auto-enables skill",
+        "missing provenance",
+        "unsafe endpoint leaked"
+      ]
+    },
+    {
+      "id": "browser-runtime-site-adapter",
+      "title": "浏览器运行时与站点适配器",
+      "risk": "P0",
+      "executor": "mixed",
+      "lanes": [
+        "L2-agent-runtime",
+        "L3-product-surface"
+      ],
+      "commands": [
+        "npm run smoke:browser-runtime",
+        "npm run smoke:site-adapters"
+      ],
+      "goal": "验证 browser runtime attach/status、site adapter catalog、页面读取和清理路径。",
+      "verifier": "必须检查浏览器 session、adapter 状态、console/network 和 cleanup；不能只验证目录可读。",
+      "evidenceRequired": [
+        "browser runtime report",
+        "site adapter catalog",
+        "console/network summary",
+        "cleanup status",
+        "cleanup warning classified",
+        "GUI session owner / isolation statement"
+      ],
+      "evidenceLayers": [
+        "deterministic-smoke",
+        "gui-trace"
+      ],
+      "failureModes": [
+        "session leak",
+        "adapter catalog drift",
+        "browser permission denied",
+        "cleanup skipped",
+        "cleanup warning hidden by zero exit",
+        "parallel GUI smoke interference"
+      ]
+    },
+    {
+      "id": "knowledge-ingest-retrieve-summarize",
+      "title": "Knowledge 导入、检索与引用总结",
+      "risk": "P1",
+      "executor": "mixed",
+      "lanes": [
+        "L3-product-surface",
+        "L4-behavior-eval"
+      ],
+      "commands": [
+        "npm run smoke:knowledge-gui",
+        "npm run knowledge:product-e2e"
+      ],
+      "goal": "验证项目资料从选择、保存、整理到检索总结的产品闭环。",
+      "verifier": "回答必须带来源或空结果说明；GUI 状态、数据落盘和产品 E2E 证据要一致。",
+      "evidenceRequired": [
+        "knowledge gui smoke",
+        "product e2e log",
+        "source citation or empty-state evidence"
+      ],
+      "failureModes": [
+        "source lost",
+        "empty state hidden",
+        "legacy fallback used",
+        "provider e2e not explicit"
+      ]
+    },
+    {
+      "id": "workspace-ready-session-restore",
+      "title": "Workspace ready 与会话恢复",
+      "risk": "P0",
+      "executor": "npm_command",
+      "lanes": [
+        "L3-product-surface"
+      ],
+      "commands": [
+        "npm run smoke:workspace-ready",
+        "npm run verify:gui-smoke"
+      ],
+      "goal": "验证默认 workspace 准备态、会话恢复、关键面板基础可用。",
+      "verifier": "workspace-ready smoke 和 GUI smoke 都通过；失败时能定位到 Bridge、文件系统、状态恢复或 UI 层。",
+      "evidenceRequired": [
+        "workspace smoke log",
+        "gui smoke log",
+        "DevBridge status",
+        "design canvas project roundtrip save/open evidence",
+        "GUI session owner / isolation statement"
+      ],
+      "evidenceLayers": [
+        "deterministic-smoke",
+        "gui-trace"
+      ],
+      "failureModes": [
+        "workspace init failed",
+        "session restore stale",
+        "bridge unavailable",
+        "ui ready false positive",
+        "design canvas export no save status",
+        "parallel GUI smoke interference"
+      ]
+    },
+    {
+      "id": "team-runtime-message-peers",
+      "title": "Team Runtime 创建、通信与清理",
+      "risk": "P1",
+      "executor": "runtime_harness",
+      "lanes": [
+        "L1-contract-bridge",
+        "L2-agent-runtime"
+      ],
+      "commands": [
+        "npm run test:contracts",
+        "npm run smoke:agent-runtime-tool-surface-page"
+      ],
+      "goal": "验证 Agent/TeamCreate/TeamDelete/SendMessage/ListPeers/SendUserMessage current surface。",
+      "verifier": "tool inventory、runtime 注册、mock fallback、前端 tool display 同步；不得复活 SubAgentTask compat 工具。",
+      "evidenceRequired": [
+        "tool inventory",
+        "runtime transcript",
+        "frontend display snapshot",
+        "mock fallback summary"
+      ],
+      "failureModes": [
+        "tool inventory mismatch",
+        "peer list stale",
+        "compat tool resurrected",
+        "message not displayed"
+      ]
+    },
+    {
+      "id": "automation-scheduler-retry-cancel",
+      "title": "自动化任务触发、重试、取消与状态回放",
+      "risk": "P1",
+      "executor": "mixed",
+      "lanes": [
+        "L2-agent-runtime",
+        "L4-behavior-eval"
+      ],
+      "commands": [
+        "npm run verify:local"
+      ],
+      "goal": "验证调度任务不会静默失败，连续失败、冷却恢复、取消和状态回放都有证据。",
+      "verifier": "必须看到任务状态机、失败计数、重试/取消动作和用户可见状态；不能只看后台日志。",
+      "evidenceRequired": [
+        "scheduler state",
+        "retry/cancel log",
+        "user-visible status",
+        "replay state"
+      ],
+      "failureModes": [
+        "silent retry loop",
+        "cancel ignored",
+        "state replay missing",
+        "background failure hidden"
+      ]
+    },
+    {
+      "id": "harness-replay-regression",
+      "title": "Harness Replay 样本与趋势回归",
+      "risk": "P0",
+      "executor": "npm_command",
+      "lanes": [
+        "L4-behavior-eval"
+      ],
+      "commands": [
+        "npm run harness:eval",
+        "npm run harness:eval:trend"
+      ],
+      "goal": "验证固定 replay 样本、工作区发现、grader 合同和 trend 摘要不退化。",
+      "verifier": "summary/trend 产物存在且 current/degraded observability gap 角色清晰。",
+      "evidenceRequired": [
+        "harness eval summary",
+        "trend report",
+        "invalid case list",
+        "observability outcome summary"
+      ],
+      "evidenceLayers": [
+        "deterministic-smoke",
+        "runtime-transcript"
+      ],
+      "failureModes": [
+        "fixture invalid",
+        "grader contract drift",
+        "trend history broken",
+        "observability gap mixed"
+      ]
+    },
+    {
+      "id": "qcloop-batch-verifier-repair",
+      "title": "qcloop 批量执行、独立质检与返修闭环",
+      "risk": "P1",
+      "executor": "qcloop",
+      "lanes": [
+        "L4-behavior-eval",
+        "L5-release-ops"
+      ],
+      "commands": [
+        "npm run agent-qc:report",
+        "npm run agent-qc:export-evidence -- --job-json ./tmp/qcloop-job.json --items-json ./tmp/qcloop-items.json --check"
+      ],
+      "goal": "把一组 Agent QC 场景提交给 qcloop，验证 worker/verifier/repair/max_qc_rounds 和 evidence store。",
+      "verifier": "每个 item 有独立状态、attempt、qc_round、feedback；耗尽项不会被误报为通过。",
+      "evidenceRequired": [
+        "qcloop job id",
+        "item status table",
+        "verifier verdict json",
+        "repair round summary",
+        "agent qc evidence pack",
+        "stale item sidecar",
+        "worker stdout/stderr length summary",
+        "worker CLI environment sidecar",
+        "inner Codex MCP startup policy",
+        "MCP command override sidecar",
+        "inner worker rules/skill isolation policy",
+        "read-only worker policy",
+        "max_qc_rounds policy",
+        "active GUI qcloop sidecar check",
+        "GUI single-owner policy"
+      ],
+      "failureModes": [
+        "missing item",
+        "self-review only",
+        "exhausted marked success",
+        "feedback not used",
+        "running no-output stale",
+        "worker lease heartbeat without stdout",
+        "worker codex binary unavailable",
+        "worker auth or sandbox misconfiguration",
+        "worker user-config MCP startup no-output hang",
+        "mcp_servers root override does not disable nested servers",
+        "inner worker project rules cause nonessential tool startup",
+        "repair prompt mutates workspace",
+        "worker modifies source during QC",
+        "parallel GUI smoke interference"
+      ]
+    },
+    {
+      "id": "release-package-startup-smoke",
+      "title": "发布包安装、启动与首屏冒烟",
+      "risk": "P0",
+      "executor": "release_workflow",
+      "lanes": [
+        "L3-product-surface",
+        "L5-release-ops"
+      ],
+      "commands": [
+        "npm run verify:app-version",
+        "npm run verify:gui-smoke"
+      ],
+      "goal": "发布前验证版本一致、启动冒烟、首屏 ready、Bridge health 和发布阻断条件可被 release gate 复核。",
+      "verifier": "verify:app-version 与 GUI startup smoke 成功；如无真实安装包 artifact，应明确记录为 source-tree startup smoke，不能把它伪装成 installer 验证；在明确声明 source-tree startup scope 且未伪装 installer 时，artifact missing 应判 excluded；release Evidence Pack 覆盖由 release-summary gate 单独强制。",
+      "evidenceRequired": [
+        "version check",
+        "startup smoke",
+        "artifact or source-tree startup scope",
+        "waiver list",
+        "GUI smoke natural exit and design canvas roundtrip result",
+        "GUI session owner / isolation statement"
+      ],
+      "evidenceLayers": [
+        "deterministic-smoke",
+        "release-artifact"
+      ],
+      "failureModes": [
+        "version mismatch",
+        "artifact missing",
+        "startup crash",
+        "manual-only release",
+        "unowned waiver",
+        "GUI smoke hangs before design canvas export status",
+        "parallel GUI smoke interference"
+      ]
+    }
+  ]
+}

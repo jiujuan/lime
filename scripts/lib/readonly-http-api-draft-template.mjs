@@ -232,7 +232,7 @@ export function buildReadonlyHttpApiCreateRequest(
     description: "把公开只读 HTTP API 响应整理成 Markdown 趋势摘要。",
     userGoal: "每天 9 点读取公开只读 API 或 fixture，生成 Markdown 趋势摘要。",
     sourceKind: "api",
-    sourceRefs: ["docs/exec-plans/skill-forge-readonly-http-api-p7-plan.md"],
+    sourceRefs: ["internal/exec-plans/skill-forge-readonly-http-api-p7-plan.md"],
     permissionSummary,
     generatedFiles: buildReadonlyHttpApiGeneratedFiles(options),
   };

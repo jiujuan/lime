@@ -2,118 +2,35 @@
 
 ## 目录定位
 
-`docs/` 是 Lime 文档中心，分为两类受众：
+`docs/` 是 Lime 的文档站包，只承载对外文档站页面、站点配置和站点资源。
 
-- 普通创作者：`content/` 当前处于 LimeNext V2 重建期，只保留少量进阶页与法律说明
-- 开发者与维护者：阅读 `aiprompts/`、`develop/`、`tech/`、`tests/` 等工程文档
-- 仓库级 Agent 协作方式与硬约束：以根目录 `../AGENTS.md` 为入口
+内部工程事实源已经迁移到 `../internal/`。Agent 协作规则、执行计划、路线图、测试策略、研究资料、PRD、技术专题和私有运营材料都不再放在本目录。
 
-文档站基于 Nuxt Content 构建。
+## 当前边界
 
-## 目录索引
+`docs/` 只允许保留以下类型内容：
 
-- `content/`：Nuxt Content 对外文档站入口，当前已删除过时入门/旧导航/旧开发文档，只保留少量仍与实现对齐的进阶页和法律说明
-- `aiprompts/`：模块级工程文档（前后端组件、服务、命令、数据层）
-- `research/`：外部产品、竞品与技术参考研究文档
-- `exec-plans/`：执行计划、进度日志、技术债追踪
-- `tech/`：跨模块技术蓝图与专题工程文档（当前已包含 Harness Engineering 指导文档）
-- `bussniss/`：商务合作与代理运营方案
-- `oem/`：品牌、slogan、Logo 替换与 OEM 物料
-- `develop/`：开发流程与协作规范
-- `tests/`：测试策略与用例文档
-- `iteration-notes/`：迭代备忘与下版本建议（暂不进入当前发布范围的问题）
-- `images/`：文档图片资源
-- `TECH_SPEC.md`：技术规格文档
-- `exec-plans/README.md`：执行计划目录说明
-- `exec-plans/upstream-runtime-alignment-plan.md`：参考运行时主链对齐总计划与排期事实源
-- `exec-plans/upstream-runtime-alignment-progress.md`：参考运行时主链对齐进度日志
-- `exec-plans/tech-debt-tracker.md`：技术债持续追踪表
-- `bussniss/README.md`：商业与 OEM 文档导航，定义 current/compat 业务文档边界
-- `oem/README.md`：OEM 品牌文档导航，统一品牌、slogan 与替换口径
-- `develop/execution-tracker-technical-plan.md`：统一执行追踪（Execution Tracker）专项技术规划
-- `develop/execution-tracker-deprecation-plan.md`：统一执行追踪旧路径退场计划（P0 收口）
-- `develop/execution-tracker-p0-acceptance-report.md`：统一执行追踪 P0 验收报告
-- `develop/execution-tracker-p1-p2-roadmap.md`：统一执行追踪后续路线（P1/P2）
-- `tech/harness/README.md`：Lime Harness Engineering 总入口
-- `tech/harness/implementation-blueprint.md`：Lime Harness 分阶段实施蓝图
-- `tests/agent-ops-qc.md`：Agent 运营级测试体系，定义 qcloop 场景、Evidence Pack 与发布门禁
-- `tests/agent-qc-p0-scenarios.md`：Agent QC P0 场景执行手册，定义核心场景证据与失败沉淀规则
-- `tests/lime-agent-qc-rollout-plan.md`：Lime 样本产品的 Agent 运营级测试分阶段落地计划
-- `../scripts/agent-qc-report.mjs`：Agent QC 场景 manifest 报告与合同检查入口
-- `../scripts/agent-qc-gui-flow-report.mjs`：Agent QC GUI / Playwright MCP flow manifest 报告与合同检查入口
-- `../scripts/agent-qc-qcloop-job.mjs`：从 Agent QC manifest 生成 qcloop job payload 的入口
-- `../scripts/agent-qc-export-evidence.mjs`：qcloop job 到 Agent QC Evidence Pack 的导出入口
-- `../scripts/agent-qc-release-summary.mjs`：将 Agent QC Evidence Pack 与 Harness 报告汇总为 release note 质量证据
-- `../scripts/agent-qc-completion-audit.mjs`：Agent QC 整体目标完成度审计入口
-- `aiprompts/query-loop.md`：运行时 Query Loop current 主链与提交边界
-- `aiprompts/prompt-foundation.md`：基础 Prompt current 主链、system prompt 组装顺序与 current/compat 边界
-- `aiprompts/task-agent-taxonomy.md`：Task / Agent / Coordinator current taxonomy 与边界归属
-- `aiprompts/remote-runtime.md`：Remote runtime current 主链、current/compat 分类与远程入口归属
-- `aiprompts/memory-compaction.md`：Memory / Compaction current 主链、来源链/持久记忆/压缩边界与 current/compat 分类
-- `aiprompts/persistence-map.md`：Runtime 文件快照持久化主链、FileArtifact/sidecar/version/checkpoint 边界
-- `aiprompts/state-history-telemetry.md`：State / History / Telemetry current 主链、session/thread/request/evidence/history 边界与 current/compat 分类
-- `develop/scheduler-task-governance-p1.md`：调度任务治理 P1（连续失败、自动停用、冷却恢复）
-- `aiprompts/skill-standard.md`：Skills 包标准、运行时投影与 current/compat 边界总文档
-- `roadmap/lime-skills-standardization-roadmap.md`：Skills 标准化 supporting 收口计划，主要保留迁移边界与剩余差距
-- `research/skill-forge/README.md`：Skill Forge / Tool-Maker Agent 研究入口，拆解能力生成、验证、注册与长期运行业务的外部范式
-- `research/pi-mono-coding-agent/README.md`：pi-mono Coding Agent 本地调研，提炼 `AgentSession` 分层、工具 allowlist、可插拔工具后端、事件与测试 harness 对 Lime Capability Authoring Agent 的参考边界
-- `research/codex-goal/README.md`：Codex `/goal` 研究入口，独立记录 persistent objective / idle continuation turn / completion audit 模式
-- `research/codex-goal/diagrams.md`：Codex `/goal` Thread Goal Loop 图纸，包含架构图、流程图、时序图、状态机和最小心智原型
-- `research/ribbi/README.md`：Ribbi 研究总入口，作为后续 LimeNext V2 的外部对照事实源
-- `research/ai-layered-design/README.md`：AI 图层化设计研究入口，拆解 Lovart 类可编辑图层、分割、抠图、背景修补与 Canvas 工程范式
-- `roadmap/skill-forge/README.md`：外部 Agent 访谈启发下的 Skill Forge / workspace-local generated skill 路线图
-- `roadmap/skill-forge/prototype.md`：Skill Forge / generated capability / verification gate / workspace-local skill 的产品原型图
-- `roadmap/skill-forge/architecture-review.md`：Skill Forge / Coding Agent 方案实现前 review gate，列出 draft store、verification、registration、evidence、安全边界缺口
-- `roadmap/knowledge/prd-v2.md`：Agent Knowledge v2 PRD，定义 Skills-first Builder Skill、document-first KnowledgePack、persona / data 双族与 Resolver 主链
-- `roadmap/knowledge/completion-audit-20260508.md`：Knowledge v2 完成度审计，按 prompt-to-artifact 映射真实 Provider E2E、legacy fallback、发布状态与剩余缺口
-- `roadmap/knowledge/evidence/provider-e2e-quality-review-20260508.md`：真实 Provider 短资料输出质量评测，对照个人 IP Builder Skill checklist 标记 PASS / PARTIAL
-- `../scripts/knowledge-provider-e2e.mjs`：真实 Provider E2E 可复用脚本，默认必须显式 `--allow-external-provider` 才会外发资料
-- `../scripts/knowledge-product-e2e.mjs`：项目资料 PRD v3 产品 E2E，可通过 `npm run knowledge:product-e2e` 验收首页、状态说明、确认、选择、保存、整理闭环；也可通过 `npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running` 串入 GUI smoke
-- `../scripts/knowledge-release-scope-report.mjs`：Knowledge-only 发布范围只读审计脚本，分类 dirty worktree 中的 Knowledge / non-Knowledge / unknown 路径
-- `roadmap/knowledge/prd-v2-diagrams.md`：Agent Knowledge v2 可视化设计，包含总体架构、核心流程、时序图、UI 原型和用户故事走查
-- `roadmap/managed-objective/README.md`：Managed Objective 路线图，把 thread goal loop 启发收敛为 Lime 的跨 turn 目标推进控制层
-- `roadmap/managed-objective/prototype.md`：Managed Objective 在 Workspace、Task Center、Audit Drawer 和创建流程中的产品原型图
-- `roadmap/ai-layered-design/README.md`：AI 图层化设计路线图，把图片生成升级为可编辑的多图层设计工程输出
-- `roadmap/limenextv2/README.md`：LimeNext V2 当前主规划入口，固定前台对象、skill-first 主线与运行时骨架
-- `roadmap/limenext/README.md`：LimeNext 旧总纲入口，当前降级为 `legacy current reference`，主要保留实现锚点与阶段性收口记录
-- `roadmap/limenext/sceneapp-capability-model.md`：SceneApp 底层能力模型，定义本地、浏览器、云端、混合场景需要的能力模块范围
-- `roadmap/limenext/sceneapp-blueprints.md`：用 `x-article-export`、`@配音`、`每日趋势摘要 / 账号增长跟踪` 三条样板把 SceneApp 分类翻译成业务语言
-- `roadmap/limenext/artifact-evidence-scorecards.md`：把样板场景继续翻译成“交付物、失败证据、经营评分”三层，方便业务与产品判断该继续做还是收缩
-- `roadmap/limenext/base-setup-decoupling.md`：定义主 App 宿主能力与通用基础设置包的解耦边界，减少“每加一个场景就要升级客户端”的耦合
-- `roadmap/limenext/base-setup-package-schema.md`：把基础设置包顶层对象、目录投影、profile、兼容性与校验规则写成统一 schema，方便判断“改包还是改宿主”
-- `roadmap/limenext/base-setup-projection-lifecycle.md`：把基础设置包如何校验、投影、灰度、离线兜底与快速回滚讲成一条发布链
-- `roadmap/limenext/base-setup-implementation.md`：把 validator、projection compiler、rollout gate 第一版如何挂到现有 `ServiceSkillCatalog` 与 launch/runtime 锚点上写成代码级设计
-- `roadmap/limenext/composition-blueprint-schema.md`：把组合蓝图最小 schema、步骤类型和 `project pack` 交付合同写清楚
-- `roadmap/limenext/agent-skills-profile.md`：LimeNext 对齐 Agent Skills 与 Google ADK 的技能包 / 运行时分层说明
-- `roadmap/limenext/flowcharts.md`：LimeNext 的业务图与技术主链流程图合集
-- `roadmap/limenext/sequences.md`：LimeNext 的业务时序与技术时序合集
-- `roadmap/task/README.md`：任务层 / 模型层 / 经济调度专题路线图总入口，统一说明单模型退化、多模型优化、`service_models` 接入与自动/设置平衡
-- `roadmap/task/diagrams.md`：任务层 / 模型层 / OEM / 成本限额的架构图、流程图与时序图合集
-- `prd/gongneng/x-article-export/prd.md`：`Browser-grounded SceneApp` 样板功能包，定义 `/x文章转存` 如何把真实网页沉淀成项目内 Markdown bundle
-- `roadmap/lime-service-skill-cloud-config-prd.md`：服务型技能“目录云同步、本地执行”PRD，固定 `limecore` 目录控制面与 `lime` 本地执行面边界
-- `aiprompts/site-adapter-standard.md`：站点适配器标准与 `managed_cdp / existing_session` 当前执行边界
-- `ops.md`：运维与发布说明
-- `app.config.ts` / `nuxt.config.ts` / `package.json`：文档站配置
+- `content/`：Nuxt Content / Docus 文档站页面
+- `images/`：文档站图片资源
+- `index.md`、`specification.md`、`ops.md`：文档站顶层页面
+- `app.config.ts`、`nuxt.config.ts`、`package.json`、`package-lock.json`：文档站配置与依赖锁定
+- `README.md`：本文档站包说明
 
-## 当前叙事基线
+不要在 `docs/` 新增内部工程目录。需要记录工程事实源时，使用 `../internal/README.md` 和对应子目录。
 
-对外文档（`content/`）以及商业/品牌文档（`bussniss/`、`oem/`）默认采用以下口径：
+## 内部入口
 
-1. 普通用户入口统一使用“给中文创作者用的 AI 内容工作台”，不再把技术化系统定位放在首屏或标题层
-2. 先讲创作者故事与真实任务：写文章、做脚本、整理资料、改版本、保存结果、复盘下一轮
-3. 再讲产品工作方式：资料、灵感、生成、修改和复盘放在同一个创作空间里持续推进
-4. 模型连接、协议兼容、渠道入口、工具接入和开发者能力只作为进阶说明，不能盖过创作主线
-5. `README.md` 是普通创作者向表达基线；官网、下载页和对外文案应优先复用它的措辞
+- 仓库级 Agent 规则：`../AGENTS.md`
+- 内部事实源总入口：`../internal/README.md`
+- 模块级工程导航：`../internal/aiprompts/README.md`
+- 执行计划：`../internal/exec-plans/`
+- 路线图：`../internal/roadmap/`
+- 测试与质量资料：`../internal/test/`、`../internal/tests/`、`../internal/testing/`
+- 研究、PRD、技术专题：`../internal/research/`、`../internal/prd/`、`../internal/tech/`
 
-涉及商务合作、官网定位、品牌与 OEM 时，优先阅读：
+## 维护规则
 
-1. `../README.md`
-2. `bussniss/lime-readme-website-positioning-copy.md`
-3. `oem/README.md`
-
-## 维护原则
-
-1. 先读后写：更新章节前先核对真实功能实现
-2. 用户优先：首屏文案避免工程术语堆叠
-3. 分层清晰：用户文档与工程文档分开表达
-4. 同步更新：功能改动后同步修正文档入口页与对应章节
+1. 更新文档站页面时，优先改 `content/` 或顶层站点页面。
+2. 更新工程规则、执行计划、路线图、测试策略或私有材料时，必须落到 `../internal/`。
+3. 新增内部事实源目录前，先同步更新 `../internal/README.md`。
+4. 文档站边界由根仓库 `npm run docs:boundary` 检查。

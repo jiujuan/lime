@@ -10,8 +10,8 @@ import {
   renderAgentQcMarkdownReport,
 } from "./lib/agent-qc-report-core.mjs";
 
-const DEFAULT_MANIFEST_PATH = "docs/test/agent-qc-scenarios.manifest.json";
-const DEFAULT_SCHEMA_PATH = "docs/test/agent-qc-evidence.schema.json";
+const DEFAULT_MANIFEST_PATH = "internal/test/agent-qc-scenarios.manifest.json";
+const DEFAULT_SCHEMA_PATH = "internal/test/agent-qc-evidence.schema.json";
 
 function parseArgs(argv) {
   const result = {
@@ -65,7 +65,7 @@ Lime Agent QC 场景报告
   npm run agent-qc:report
   npm run agent-qc:report:json
   npm run agent-qc:check
-  node scripts/agent-qc-report.mjs --manifest docs/test/agent-qc-scenarios.manifest.json
+  node scripts/agent-qc-report.mjs --manifest internal/test/agent-qc-scenarios.manifest.json
 
 选项:
   --check          如果 manifest 或 evidence schema 不合法，以非 0 退出

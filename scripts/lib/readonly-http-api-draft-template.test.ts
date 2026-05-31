@@ -79,7 +79,7 @@ describe("readonly-http-api-draft-template", () => {
     expect(request).toMatchObject({
       workspaceRoot: "/tmp/work",
       sourceKind: "api",
-      sourceRefs: ["docs/exec-plans/skill-forge-readonly-http-api-p7-plan.md"],
+      sourceRefs: ["internal/exec-plans/skill-forge-readonly-http-api-p7-plan.md"],
       permissionSummary: [
         "Level 0 只读发现",
         "允许只读 HTTP API GET 请求，不做外部写操作",

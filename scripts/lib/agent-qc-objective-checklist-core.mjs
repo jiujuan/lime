@@ -53,12 +53,12 @@ function buildAgentQcObjectiveChecklist({
   ];
   const checklist = [
     {
-      requirement: "在 docs/tests 下增加并维护 Agent/AI 测试标准文档",
+      requirement: "在 internal/tests 下增加并维护 Agent/AI 测试标准文档",
       artifacts: [
-        "docs/tests/README.md",
-        "docs/tests/agent-ops-qc.md",
-        "docs/tests/ai-agent-testing-guide.md",
-        "docs/tests/lime-agent-autonomous-testing-plan.md",
+        "internal/tests/README.md",
+        "internal/tests/agent-ops-qc.md",
+        "internal/tests/ai-agent-testing-guide.md",
+        "internal/tests/lime-agent-autonomous-testing-plan.md",
       ],
       evidence: items.get("docs-tests-standard")?.evidence || "",
       status: items.get("docs-tests-standard")?.passed ? "pass" : "fail",
@@ -67,9 +67,9 @@ function buildAgentQcObjectiveChecklist({
     {
       requirement: "提供 P0 scenario manifest、GUI flow manifest、Evidence Pack schema",
       artifacts: [
-        "docs/test/agent-qc-scenarios.manifest.json",
-        "docs/test/agent-qc-gui-flows.manifest.json",
-        "docs/test/agent-qc-evidence.schema.json",
+        "internal/test/agent-qc-scenarios.manifest.json",
+        "internal/test/agent-qc-gui-flows.manifest.json",
+        "internal/test/agent-qc-evidence.schema.json",
       ],
       evidence: manifestIds.map((id) => items.get(id)?.evidence).filter(Boolean).join("; "),
       status: allPassed(items, manifestIds) ? "pass" : "fail",
@@ -82,7 +82,7 @@ function buildAgentQcObjectiveChecklist({
         "scripts/agent-qc-payload-coverage.mjs",
         "scripts/agent-qc-export-evidence.mjs",
         "scripts/agent-qc-release-summary.mjs",
-        "docs/tests/lime-agent-qc-evidence-contract.md",
+        "internal/tests/lime-agent-qc-evidence-contract.md",
       ],
       evidence: evidenceFor(items, qcloopToolingIds),
       status: allPassed(items, qcloopToolingIds) ? "pass" : "fail",
@@ -95,7 +95,7 @@ function buildAgentQcObjectiveChecklist({
         "scripts/agent-qc-gui-owner-check.mjs",
         "scripts/agent-qc-process-owner-check.mjs",
         "scripts/lib/agent-qc-process-owner-core.mjs",
-        "docs/tests/lime-agent-qc-qcloop-operations.md",
+        "internal/tests/lime-agent-qc-qcloop-operations.md",
         ".lime/qc/stale-raw-gui-owner-intervention-request.json",
       ],
       evidence: `guiOwner=${guiOwner?.verdict?.status}; processOwner=${processOwner?.verdict?.status}; ${processOwner?.verdict?.summary || ""}; ownerIntervention=${processOwner?.ownerIntervention?.status}`,
@@ -107,7 +107,7 @@ function buildAgentQcObjectiveChecklist({
     },
     {
       requirement: "官方 .lime/qc/agent-qc-evidence.json 必须是真实 8/8 P0 pass Evidence Pack",
-      artifacts: [".lime/qc/agent-qc-evidence.json", "docs/test/agent-qc-scenarios.manifest.json"],
+      artifacts: [".lime/qc/agent-qc-evidence.json", "internal/test/agent-qc-scenarios.manifest.json"],
       evidence: items.get("real-qcloop-evidence")?.evidence || "",
       status: items.get("real-qcloop-evidence")?.passed ? "pass" : "fail",
       gap: items.get("real-qcloop-evidence")?.gap || "",

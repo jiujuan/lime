@@ -4046,7 +4046,7 @@ mod tests {
             description: "每天汇总竞品价格和上新变化。".to_string(),
             user_goal: "持续监控竞品爆款并产出待复核清单。".to_string(),
             source_kind: "manual".to_string(),
-            source_refs: vec!["docs/research/skill-forge".to_string()],
+            source_refs: vec!["internal/research/skill-forge".to_string()],
             permission_summary: vec!["Level 0 只读发现".to_string()],
             generated_files: vec![CapabilityDraftFileInput {
                 relative_path: "SKILL.md".to_string(),

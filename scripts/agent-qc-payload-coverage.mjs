@@ -14,7 +14,7 @@ function parseArgs(argv) {
     check: false,
     format: "markdown",
     help: false,
-    manifestPath: "docs/test/agent-qc-scenarios.manifest.json",
+    manifestPath: "internal/test/agent-qc-scenarios.manifest.json",
     outputPath: "",
     payloadPath: "",
     processOwnerPath: ".lime/qc/gui-process-owner-current.json",
@@ -71,7 +71,7 @@ Lime Agent QC Payload Coverage
   node scripts/agent-qc-payload-coverage.mjs --payload ./.lime/qc/qcloop-p0.json --format json --check
 
 选项:
-  --manifest PATH          Agent QC scenario manifest，默认 docs/test/agent-qc-scenarios.manifest.json
+  --manifest PATH          Agent QC scenario manifest，默认 internal/test/agent-qc-scenarios.manifest.json
   --payload PATH           qcloop job payload JSON
   --process-owner PATH     raw process owner JSON，默认 .lime/qc/gui-process-owner-current.json
   --output PATH            写入文件；默认 stdout

@@ -2148,7 +2148,7 @@
         "src-tauri/src/plugin/mod.rs",
         "src-tauri/src/plugin/ui_events.rs",
         "src-tauri/src/plugin/README.md",
-        "docs/aiprompts/plugins.md",
+        "internal/aiprompts/plugins.md",
         "docs/content/02.user-guide/13.plugins.md",
         "docs/plugins/README.md",
         "plugins/README.md",

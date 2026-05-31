@@ -1,7 +1,7 @@
 {
   "version": 1,
   "status": "current",
-  "owner": "docs/roadmap/warp/execution-profile.md",
+  "owner": "internal/roadmap/warp/execution-profile.md",
   "profiles": [
     {
       "profile_key": "image_generation_profile",

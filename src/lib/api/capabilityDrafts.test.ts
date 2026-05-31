@@ -18,7 +18,7 @@ describe("capabilityDraftsApi", () => {
       description: "每天采集竞品变化。",
       user_goal: "持续监控爆款。",
       source_kind: "manual",
-      source_refs: [" docs/research/skill-forge "],
+      source_refs: [" internal/research/skill-forge "],
       permission_summary: ["Level 0 只读发现"],
       generated_files: [
         {
@@ -42,7 +42,7 @@ describe("capabilityDraftsApi", () => {
         description: "每天采集竞品变化。",
         userGoal: "持续监控爆款。",
         sourceKind: "manual",
-        sourceRefs: ["docs/research/skill-forge"],
+        sourceRefs: ["internal/research/skill-forge"],
         permissionSummary: ["Level 0 只读发现"],
         generatedFiles: [
           {
@@ -54,7 +54,7 @@ describe("capabilityDraftsApi", () => {
     ).resolves.toMatchObject({
       draftId: "capdraft-1",
       userGoal: "持续监控爆款。",
-      sourceRefs: ["docs/research/skill-forge"],
+      sourceRefs: ["internal/research/skill-forge"],
       generatedFiles: [
         {
           relativePath: "SKILL.md",

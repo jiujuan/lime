@@ -1,7 +1,7 @@
 {
   "version": 1,
   "status": "current",
-  "owner": "docs/roadmap/warp/capability-matrix.md",
+  "owner": "internal/roadmap/warp/capability-matrix.md",
   "capabilities": [
     {
       "key": "text_generation",

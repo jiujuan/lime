@@ -8,7 +8,7 @@ describe("doc-freshness-core", () => {
       repoRoot: "/tmp/lime",
       specs: [
         {
-          path: "docs/tech/harness/entropy-governance-workflow.md",
+          path: "internal/tech/harness/entropy-governance-workflow.md",
           requiredMentions: [
             "iteration-roadmap.md",
             "tooling-roadmap.md",
@@ -20,7 +20,7 @@ describe("doc-freshness-core", () => {
       ],
       documents: [
         {
-          path: "docs/tech/harness/entropy-governance-workflow.md",
+          path: "internal/tech/harness/entropy-governance-workflow.md",
           content: `
 [Roadmap](iteration-roadmap.md)
 [Tooling](tooling-roadmap.md)
@@ -33,9 +33,9 @@ describe("doc-freshness-core", () => {
       deletedSurfaceTargets: ["src/lib/api/agentCompat.ts"],
       pathExists: (_absolutePath, repoRelativePath) =>
         [
-          "docs/tech/harness/iteration-roadmap.md",
-          "docs/tech/harness/tooling-roadmap.md",
-          "docs/test/harness-evals.md",
+          "internal/tech/harness/iteration-roadmap.md",
+          "internal/tech/harness/tooling-roadmap.md",
+          "internal/test/harness-evals.md",
           "scripts/report-generated-slop.mjs",
           "scripts/check-doc-freshness.mjs",
         ].includes(repoRelativePath),
@@ -52,7 +52,7 @@ describe("doc-freshness-core", () => {
       repoRoot: "/tmp/lime",
       specs: [
         {
-          path: "docs/tech/harness/review-decision-workflow.md",
+          path: "internal/tech/harness/review-decision-workflow.md",
           requiredMentions: [
             "external-analysis-handoff.md",
             "iteration-roadmap.md",
@@ -61,7 +61,7 @@ describe("doc-freshness-core", () => {
       ],
       documents: [
         {
-          path: "docs/tech/harness/review-decision-workflow.md",
+          path: "internal/tech/harness/review-decision-workflow.md",
           content: `
 [Bad Link](missing-doc.md)
 \`scripts/missing-tool.mjs\`

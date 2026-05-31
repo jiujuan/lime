@@ -15,7 +15,7 @@
 
 ## 相关文档
 
-- 架构设计：`docs/prd/chat-architecture-redesign.md`
+- 架构设计：`internal/prd/chat-architecture-redesign.md`
 
 ## useSkillExecution
 

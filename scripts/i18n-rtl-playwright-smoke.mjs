@@ -28,7 +28,7 @@ Lime RTL Playwright Smoke
 
 选项:
   --app-url <url>       前端地址，默认 http://127.0.0.1:1420/
-  --evidence-dir <dir>  证据目录，默认 docs/roadmap/i18n/evidence
+  --evidence-dir <dir>  证据目录，默认 internal/roadmap/i18n/evidence
   --timeout-ms <ms>     总超时，默认 120000
   --headed              使用 headed 浏览器
   -h, --help            显示帮助

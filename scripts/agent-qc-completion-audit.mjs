@@ -164,9 +164,9 @@ function containsAgentQcAction(value) {
 }
 
 function loadFacts() {
-  const scenarioManifest = readJson("docs/test/agent-qc-scenarios.manifest.json");
-  const guiFlowManifest = readJson("docs/test/agent-qc-gui-flows.manifest.json");
-  const evidenceSchema = readJson("docs/test/agent-qc-evidence.schema.json");
+  const scenarioManifest = readJson("internal/test/agent-qc-scenarios.manifest.json");
+  const guiFlowManifest = readJson("internal/test/agent-qc-gui-flows.manifest.json");
+  const evidenceSchema = readJson("internal/test/agent-qc-evidence.schema.json");
   const packageJson = readJson("package.json");
   const scenarioReport = createAgentQcReport({ manifest: scenarioManifest, packageJson, evidenceSchema });
   scenarioReport.p0ScenarioIds = Array.isArray(scenarioManifest?.scenarios)
@@ -187,27 +187,27 @@ function loadFacts() {
   const guiOwnerCore = exists("scripts/lib/agent-qc-gui-owner-core.mjs")
     ? readText("scripts/lib/agent-qc-gui-owner-core.mjs")
     : "";
-  const staleOwnerInterventionDoc = exists("docs/tests/lime-agent-qc-stale-owner-intervention.md")
-    ? readText("docs/tests/lime-agent-qc-stale-owner-intervention.md")
+  const staleOwnerInterventionDoc = exists("internal/tests/lime-agent-qc-stale-owner-intervention.md")
+    ? readText("internal/tests/lime-agent-qc-stale-owner-intervention.md")
     : "";
   const nightly = exists(".github/workflows/harness-nightly.yml") ? readText(".github/workflows/harness-nightly.yml") : "";
   const release = exists(".github/workflows/release.yml") ? readText(".github/workflows/release.yml") : "";
 
   return {
     files: {
-      agentOpsQc: exists("docs/tests/agent-ops-qc.md"),
-      p0Scenarios: exists("docs/tests/agent-qc-p0-scenarios.md"),
-      limeRolloutPlan: exists("docs/tests/lime-agent-qc-rollout-plan.md"),
-      testsReadme: exists("docs/tests/README.md"),
-      evidenceSchema: exists("docs/test/agent-qc-evidence.schema.json"),
+      agentOpsQc: exists("internal/tests/agent-ops-qc.md"),
+      p0Scenarios: exists("internal/tests/agent-qc-p0-scenarios.md"),
+      limeRolloutPlan: exists("internal/tests/lime-agent-qc-rollout-plan.md"),
+      testsReadme: exists("internal/tests/README.md"),
+      evidenceSchema: exists("internal/test/agent-qc-evidence.schema.json"),
       qcloopJobScript: exists("scripts/agent-qc-qcloop-job.mjs"),
       payloadCoverageScript: exists("scripts/agent-qc-payload-coverage.mjs"),
       guiOwnerCheckScript: exists("scripts/agent-qc-gui-owner-check.mjs"),
       qcloopStatusScript: exists("scripts/agent-qc-qcloop-status.mjs"),
       qcloopPreflightScript: exists("scripts/agent-qc-qcloop-preflight.mjs"),
-      qcloopOperationsDoc: exists("docs/tests/lime-agent-qc-qcloop-operations.md"),
-      evidenceContractDoc: exists("docs/tests/lime-agent-qc-evidence-contract.md"),
-      staleOwnerInterventionDoc: exists("docs/tests/lime-agent-qc-stale-owner-intervention.md"),
+      qcloopOperationsDoc: exists("internal/tests/lime-agent-qc-qcloop-operations.md"),
+      evidenceContractDoc: exists("internal/tests/lime-agent-qc-evidence-contract.md"),
+      staleOwnerInterventionDoc: exists("internal/tests/lime-agent-qc-stale-owner-intervention.md"),
       exportEvidenceScript: exists("scripts/agent-qc-export-evidence.mjs"),
       releaseSummaryScript: exists("scripts/agent-qc-release-summary.mjs"),
       realGuiEvidence: exists(".lime/qc/gui-evidence"),

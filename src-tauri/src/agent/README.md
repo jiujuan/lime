@@ -62,8 +62,8 @@ AsterAgentState::reload_lime_skills();
 
 如果你在实现产品逻辑、自动化任务、工作区提交或工具确认恢复：
 
-- 先看 `docs/aiprompts/query-loop.md`
-- 再看 `docs/aiprompts/prompt-foundation.md`
+- 先看 `internal/aiprompts/query-loop.md`
+- 再看 `internal/aiprompts/prompt-foundation.md`
 - 不要从本页示例反推新的 Tauri 主路径
 
 ### 从 API Key Provider 配置（推荐）
@@ -134,4 +134,4 @@ let stream = agent.reply(user_message, session_config, Some(cancel_token)).await
 - 自动刷新过期的 OAuth Token
 - 记录凭证使用和健康状态
 
-详见 [aster-integration.md](../../../docs/aiprompts/aster-integration.md)
+详见 [aster-integration.md](../../../internal/aiprompts/aster-integration.md)

@@ -3,8 +3,8 @@
   "datasetId": "lime-internal-agent-runtime-tasks",
   "datasetVersion": "2026-05-harbor-mvp",
   "purpose": "Use Harbor as the trial runner for Lime runtime hill-climbing while Agent QC remains the release gate owner.",
-  "agentQcManifest": "docs/test/agent-qc-scenarios.manifest.json",
-  "harnessManifest": "docs/test/harness-evals.manifest.json",
+  "agentQcManifest": "internal/test/agent-qc-scenarios.manifest.json",
+  "harnessManifest": "internal/test/harness-evals.manifest.json",
   "harbor": {
     "localPath": "benchmarks/lime-agent-runtime",
     "baselineCommand": "harbor run -p benchmarks/lime-agent-runtime -a <agent> -m <model> --job-name lime-runtime-baseline-current",
@@ -52,12 +52,12 @@
   "backlog": [
     {
       "id": "harness-replay-regression",
-      "source": "docs/test/harness-evals.manifest.json",
+      "source": "internal/test/harness-evals.manifest.json",
       "reason": "High reuse value, but should be added after the first Harbor task proves the artifact contract."
     },
     {
       "id": "browser-runtime-site-adapter",
-      "source": "docs/test/agent-qc-scenarios.manifest.json",
+      "source": "internal/test/agent-qc-scenarios.manifest.json",
       "reason": "Needs DevBridge/browser evidence and should stay separated from deterministic runtime tasks."
     }
   ]

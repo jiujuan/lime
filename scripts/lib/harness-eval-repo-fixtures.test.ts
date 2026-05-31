@@ -44,7 +44,7 @@ describe("Harness repo fixtures", () => {
       "--format",
       "json",
       "--manifest",
-      "docs/test/harness-evals.manifest.json",
+      "internal/test/harness-evals.manifest.json",
       "--workspace-root",
       workspaceRoot,
       "--no-strict",

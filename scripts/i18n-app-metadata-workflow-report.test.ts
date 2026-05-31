@@ -111,7 +111,7 @@ describe("i18n app metadata workflow report", () => {
     );
     writeFile(
       root,
-      "docs/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json",
+      "internal/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json",
       JSON.stringify(
         {
           schemaVersion: "lime.i18n.appMetadataLocaleBuildManifest.v1",
@@ -131,7 +131,7 @@ describe("i18n app metadata workflow report", () => {
     );
     writeFile(
       root,
-      "docs/roadmap/i18n/app-metadata-translation-scope.json",
+      "internal/roadmap/i18n/app-metadata-translation-scope.json",
       JSON.stringify(
         {
           schemaVersion: "lime.i18n.appMetadataTranslationScope.v1",
@@ -316,7 +316,7 @@ describe("i18n app metadata workflow report", () => {
     );
     writeFile(
       root,
-      "docs/roadmap/i18n/app-metadata-translation-scope.json",
+      "internal/roadmap/i18n/app-metadata-translation-scope.json",
       JSON.stringify(
         {
           schemaVersion: "lime.i18n.appMetadataTranslationScope.v1",

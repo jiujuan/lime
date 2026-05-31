@@ -1,0 +1,629 @@
+# Agent App P18.7 并行验证记录
+
+更新时间：2026-05-19 06:06
+
+## 主目标
+
+推进 `internal/roadmap/agentapp/p18-7-full-lime-capability-surface.md` 中的 P18.7：先完成 P18.7-B 的 Agent App `manifestVersion: 0.6.0` 标准兼容、layered manifest 和 reference cross-check 复绿，再完成 P18.7-C `lime.capabilities` Host discovery surface、P18.7-D AgentRuntime resource projection，并继续进入 P18.7-E Tool / Integration 受控 intent 与只读运行投影。
+
+## 并行写集
+
+| 归属 | 写集 | 当前处理 |
+| --- | --- | --- |
+| 隔壁进程 | 外部 `content-factory-app`、前端 Agent App runtime/UI 写集、Agent Apps smoke | 只读审阅和验证；不接管外部 App / default skills / 正在运行的 GUI smoke 写集。 |
+| 前序本进程 | `AGENTS.md`、`internal/aiprompts/README.md`、`internal/aiprompts/parallel-agent-collaboration.md`、`src/features/agent-app/**`、本文档 | 已记录并行协作规则、P18.7-B/C/D/E first-cut 和 GUI 主路径验证证据。 |
+| 2026-05-16 23:35 follow-up | `scripts/agent-apps-smoke.mjs`、`internal/roadmap/agentapp/p18-7-parallel-validation.md`、`internal/roadmap/agentapp/p18-7-full-lime-capability-surface.md` | 只修可选内容工厂真实按钮 E2E gate 的等待 / 断言与对应证据记录。 |
+| 2026-05-18 07:26 audit | 当前隔壁 dirty 写集：`scripts/agent-apps-content-factory-flow.mjs`、`src/features/agent-app/runtime/agentRuntimeCapabilityHost.ts`、`hostBridge.ts`、`capabilityDispatcher.ts`、SDK Host 接口与相关测试 | 本进程只读审阅并跑贴边界测试；不夹写这些文件，避免覆盖正在跑的 content-factory GUI flow。 |
+| 2026-05-18 07:50 P18.7-F focused validation | `internal/roadmap/agentapp/p18-7-parallel-validation.md` 与只读/运行证据；不修改隔壁源码 dirty 写集 | DevBridge 恢复 healthy 后仅跑 `run-production` focused flow；运行中又检测到隔壁启动 `run-scenarios,run-production`，因此本轮结果只作为 P18.7-F run-production 复绿证据，不扩大为全量完成结论。 |
+
+## Completion audit（2026-05-18 07:26）
+
+| 成功标准 | 现有证据 | 判定 |
+| --- | --- | --- |
+| P18.7-B 标准兼容：`manifestVersion: 0.6.0`、layered manifest、reference cross-check 复绿 | `parseManifest` / `referenceCliCrossCheck` / readiness / SDK surface 定向测试已通过并记录在本文件早期验证表 | 已覆盖 |
+| P18.7-C Host capability discovery：`lime.capabilities` catalog/profile/readiness 可由 App 读取 | `capabilityDispatcher`、Host Bridge、Runtime Page、SDK adapter 定向测试与 2026-05-16 GUI smoke 已通过 | 已覆盖 |
+| P18.7-D AgentRuntime resource projection：models/usage/skills/memory/context/task facts 来自 Host / AgentRuntime | Agent App 定向套件、typecheck 与多轮 GUI smoke 已记录通过 | 已覆盖 |
+| P18.7-E Tool / Integration execution gate：App 只能发 intent，执行、policy、progress、evidence 归 Host / ToolRuntime | `capabilityDispatcher.test.ts`、`agent_app_connector` Rust tests、focused connector outbox smoke、bounded/trusted JSON evidence projection、secret lease visibility gate、custom provider delivery receipt live summary 均已有证据 | current gate、local worker receipt projection 与 Host-managed local webhook external delivery first-cut 已覆盖；真实 OAuth / raw secret material adapter / 生产 external delivery 未覆盖 |
+| P18.7-F 内容工厂真实闭环：业务 App 页面内完成 action，生成过程、Skills、模型、Token、artifact、evidence 都在 App 内可见且来自 Host projection | 早期 completion gates 多动作通过；但 2026-05-18 最新 GUI evidence 仍有 `run-production` 按钮不可见、workspace patch materialization 未稳定、DevBridge 当前不可连接 | 未完成 |
+| 当前并行写集是否可作为完成证据 | 2026-05-18 07:22 `npm test -- "src/features/agent-app/runtime/agentRuntimeCapabilityHost.test.ts" "src/features/agent-app/runtime/hostBridge.test.ts" "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` 39 tests passed；`npm run typecheck` 通过 | 只证明隔壁 API fallback / task lookup 改动的静态与单测边界，不替代 GUI 产品完成证据 |
+
+结论：不能标记整体目标完成。下一刀必须等正在运行的 content-factory GUI flow 产出结果，或在不抢 GUI 的前提下继续缩小 P18.7-F 的 materialization / task lookup 缺口；不能用单测、typecheck 或旧成功 smoke 代替最新 GUI 失败证据。
+
+## Focused validation update（2026-05-18 07:50）
+
+| 项目 | 证据 | 判定 |
+| --- | --- | --- |
+| 并行状态 | 07:27 headless Tauri 正在重编译期间 DevBridge 一度不可连接；07:38 后 `curl http://127.0.0.1:3030/health` 返回 `{"service":"DevBridge","status":"ok","version":"1.0.0"}`。本进程启动 focused flow 后，隔壁又启动 `content-factory-short-scenarios-production-current-after-sample-round-fix-20260518`。 | 不再启动新 GUI flow，不杀任何既有 flow；本轮只记录 focused 证据。 |
+| 静态/定向边界 | `npm test -- "src/features/agent-app/runtime/agentRuntimeCapabilityHost.test.ts" "src/features/agent-app/runtime/hostBridge.test.ts" "src/features/agent-app/runtime/capabilityDispatcher.test.ts"`：3 files / 39 tests passed；`npm run typecheck` passed；`CARGO_TARGET_DIR="/tmp/lime-codex-target-p18f" cargo check --manifest-path "src-tauri/Cargo.toml" -p lime --lib --message-format short` passed；`node --check "scripts/agent-apps-content-factory-flow.mjs"` passed；`git diff --check` passed。 | 隔壁 task lookup / Host Bridge / dispatcher 写集当前基础健康；仍不替代 GUI 产品证据。 |
+| P18.7-F run-production focused flow | `node "scripts/agent-apps-content-factory-flow.mjs" --actions run-production --timeout-ms 300000 --completion-timeout-ms 900000 --prefix content-factory-run-production-p18f-session-replay-20260518-codex` passed，summary：`.lime/qc/gui-evidence/agent-apps/content-factory-run-production-p18f-session-replay-20260518-codex-summary.json`。 | `sameIframeContext / allActionsCompleted / allActionsUsedExpectedSkills / allActionsHaveModelUsageCost / allActionsHaveWorkspacePatch / allActionsFullRuntimeReady / processVisibleAfterEachAction / noHostFallback / noConsoleErrors` 均为 true。 |
+| 业务物化 | summary 中 `taskId=agent-app-task-83dac6fe-d534-4f8f-8116-41dd9e6fefe8`、`sessionId=agent-app-runtime-2e96f2c0-aceb-4521-9961-94e42d291dde`；`invokedSkillNames=["article-writer","content-reviewer"]`；页面物化 `已更新20条内容、8条脚本、7条图片需求`、`第4轮内容20/20 条`，无 Host fallback。 | 最新 focused run-production 已复绿，覆盖此前 `run-production` materialization 失败的一条主缺口。 |
+| 剩余口径 | 仍有隔壁 `run-scenarios,run-production` flow 未收口；真实 Connector OAuth / external delivery 仍未覆盖；本轮没有重跑 full-flow。 | 整体目标仍不能标记完成；下一刀等隔壁 flow 结果，或在其结束后跑不并发的 run-scenarios + run-production / full-flow 复核。 |
+
+## Follow-up materialization audit（2026-05-18 09:03）
+
+| 项目 | 证据 | 判定 |
+| --- | --- | --- |
+| `run-scenarios,run-production` retry 失败口径 | `.lime/qc/gui-evidence/agent-apps/content-factory-short-scenarios-production-current-after-sample-round-fix-20260518-failure.json`：业务页面已物化 `120/120` 场景与 `20/20` 内容，但旧脚本仍把 `same iframe JS context` 当硬 gate，导致 false negative。当前工作树的 `scripts/agent-apps-content-factory-flow.mjs` 已把 `sameIframeContext` 降级为诊断项。 | 不是业务闭环失败，但该失败文件本身不能作为 green 证据。 |
+| 并发/环境失败口径 | 08:26 两条并发 combined flow 失败：`content-factory-short-scenarios-production-current-same-context-relaxed-20260518-codex-failure.json` 与 `content-factory-short-scenarios-production-current-after-sample-round-fix-retry-20260518-failure.json` 均显示 `directRecord.status=0 / This operation was aborted`，同时页面请求 `http://127.0.0.1:1420/` 出现 `ERR_CONNECTION_REFUSED`。 | 主要是 Tauri/Vite 被重启导致的环境噪音；不能当成产品 green，也不应扩大修复范围。 |
+| `run-scenarios` 真实缺口 | `.lime/qc/gui-evidence/agent-apps/content-factory-run-scenarios-p18f-current-recheck-20260518-codex-failure.json`：direct runtime 已 `completed`，`artifactCount=1`、`toolCallCount=2`、`hasWorkspacePatch=true`，`workspacePatch.artifactKind=scene_table`、`actualCount=126`、Skills 为 `knowledge-builder/content-reviewer`；但页面未观察到 materialization，`frameTextSources=[]`，`hostRecord=null`。 | 缺口收敛为 Host/App task replay 到 iframe 页面物化不稳定，而不是模型执行或 workspace patch 生成失败。 |
+| 本轮最小代码修复 | `src/features/agent-app/types.ts` 与 `src/features/agent-app/runtime/agentRuntimeCapabilityHost.ts` 现在把 Host 已知的 `sessionId / turnId / workspaceId` 投影到 `AgentAppTaskRecord` 顶层；`agentRuntimeCapabilityHost.test.ts` 增加 startTask / direct replay 断言。 | 业务 App 可从 `lime.agent.startTask/getTask` 结果直接拿到 replay lookup 所需 session/thread facts，减少 iframe 重载或 Host record 丢失时只剩 `taskId` 的情况。 |
+| 本轮验证 | `npm test -- "src/features/agent-app/runtime/agentRuntimeCapabilityHost.test.ts" "src/features/agent-app/runtime/hostBridge.test.ts" "src/features/agent-app/runtime/capabilityDispatcher.test.ts"`：3 files / 39 tests passed；`git diff --check` passed；`node --check "scripts/agent-apps-content-factory-flow.mjs"` passed。`npm run typecheck` 在本地连续被系统终止为 code `-1` 且无 TypeScript diagnostic，未得到可用结论。 | TS/Rust/GUI 全量可交付门槛仍未达成；需在 DevBridge/App 稳定后重跑 typecheck 与 focused `run-scenarios`。 |
+
+## Follow-up validation update（2026-05-18 09:17）
+
+| 项目 | 证据 | 判定 |
+| --- | --- | --- |
+| UI / Host replay 回归 | `npm test -- "src/features/agent-app/ui/AgentAppRuntimePage.test.tsx" "src/features/agent-app/runtime/agentRuntimeCapabilityHost.test.ts" "src/features/agent-app/runtime/hostBridge.test.ts" "src/features/agent-app/runtime/capabilityDispatcher.test.ts"`：4 files / 52 tests passed。 | 覆盖 Host Runtime Page、task replay、Host Bridge subscription 与 dispatcher 当前边界。 |
+| Contract 回归 | `npm run test:contracts` passed：command contracts、Harness contracts、modality runtime contracts 与 cleanup report contract 均通过。 | 当前写集没有破坏命令 / bridge / harness 契约。 |
+| `run-scenarios` 复测环境 | 09:13 后隔壁/后台启动 `content-factory-run-scenarios-current-direct-materialize-fallback-wait2-20260518-codex`，但最终只留下 `.pid/.log`，没有 summary 或 failure JSON；随后 DevBridge 断开，`curl http://127.0.0.1:3030/health` 返回 connection refused。 | 没有新的 GUI green evidence；不能据此推进完成判定。 |
+| TypeScript 全量校验 | `npm run typecheck` 仍在无 diagnostic 情况下被终止为 code `-1`。 | 当前环境下无法证明全量 typecheck；保留为阻塞项。 |
+
+## 已验证
+
+| 命令 | 结果 | 说明 |
+| --- | --- | --- |
+| `git diff --check` / `git diff --no-index --check`（scoped） | passed | 当前本进程写集无空白 diff 问题。 |
+| `npm test -- "src/features/agent-app/manifest/parseManifest.test.ts" "src/features/agent-app/schema/referenceCliCrossCheck.test.ts"` | passed | 覆盖 v0.6 manifest normalization、layered manifest、reference projection/readiness cross-check。 |
+| `npm test -- "src/features/agent-app/readiness/checkReadiness.test.ts" "src/features/agent-app/sdk/capabilityContract.test.ts" "src/features/agent-app/sdk/capabilityAdapters.test.ts" "src/features/agent-app/sdk/publicSdkSurface.test.ts"` | passed | 覆盖 readiness、capability catalog、typed SDK adapter 和公开 SDK surface。 |
+| `npm test -- "src/features/agent-app"` | passed | 36 files / 182 tests passed，覆盖 Agent App 定向套件。 |
+| `npm run typecheck` | passed | 前端 TypeScript 边界通过。 |
+| `npm run test:contracts` | passed | 命令契约、Harness 契约、modality runtime contract、cleanup report contract 均通过。 |
+| `npm run governance:legacy-report` | passed | 边界违规 0；报告仍有既有分类漂移候选，但不阻塞本轮 P18.7-B。 |
+| `npm run verify:gui-smoke` | passed | 2026-05-16 19:55 在 `AgentAppRuntimePage.tsx` 接入 `lime.capabilities` 后重跑完成；Headless Tauri、DevBridge、workspace ready、browser runtime、site adapters、Agent Apps、Claw streaming、Knowledge GUI、Design Canvas 等最小 GUI smoke 通过。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts" "src/features/agent-app/runtime/hostBridge.test.ts" "src/features/agent-app/sdk/capabilityAdapters.test.ts"` | passed | 覆盖 P18.7-C `lime.capabilities.list/get/getProfile` Host discovery、Host Bridge 分发和 SDK adapter。 |
+| `npm test -- "src/features/agent-app/ui/AgentAppRuntimePage.test.tsx" "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` | passed | 2 files / 16 tests passed；覆盖 Agent App Runtime Page 在 snapshot 中声明 `lime.capabilities`，并允许 iframe 通过 `lime.capabilities.getProfile` 读取 Host capability profile。 |
+| `npm test -- "src/features/agent-app"` | passed | 36 files / 184 tests passed，新增 Runtime Page `lime.capabilities.getProfile` 回归后 Agent App 定向套件通过。 |
+| `npm run typecheck` | passed | P18.7-C discovery 类型边界通过。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts" "src/features/agent-app/ui/AgentAppRuntimePage.test.tsx" "src/features/agent-app/sdk/capabilityContract.test.ts" "src/features/agent-app/sdk/capabilityAdapters.test.ts"` | passed | 4 files / 26 tests passed；覆盖 `lime.models.list/getRouting`、`lime.usage.getTokenUsage/getCostSummary`、manifest 声明边界、catalog/profile/adapter 同步。 |
+| `npm test -- "src/features/agent-app"` | passed | 36 files / 186 tests passed，新增 P18.7-D runtime resource projection 回归后 Agent App 定向套件通过。 |
+| `npm run typecheck` | passed | P18.7-D `lime.models` / `lime.usage` runtime projection 类型边界通过。 |
+| `npm run test:contracts` | passed | 命令契约、Harness 契约、modality runtime contract、cleanup report contract 复核通过；本轮未新增 Tauri 命令。 |
+| `npm run verify:gui-smoke` | passed | 2026-05-16 20:23 在 `lime.models` / `lime.usage` Host Bridge 接入后重跑完成；Headless Tauri、DevBridge、workspace ready、browser runtime、site adapters、Agent Apps、Claw streaming、Knowledge GUI、Design Canvas 等最小 GUI smoke 通过。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts" "src/features/agent-app/ui/AgentAppRuntimePage.test.tsx" "src/features/agent-app/sdk/capabilityContract.test.ts" "src/features/agent-app/sdk/capabilityAdapters.test.ts"` | passed | 4 files / 27 tests passed；覆盖 `lime.skills.list/resolve/getInvocation` 从 `runtimeProcess.skillNames/invokedSkillNames` 投影，并确认 `bind` 不伪造成功。 |
+| `npm test -- "src/features/agent-app"` | passed | 36 files / 187 tests passed，新增 P18.7-D `lime.skills` runtime projection 回归后 Agent App 定向套件通过。 |
+| `npm run typecheck` | passed | P18.7-D `lime.skills` runtime projection 类型边界通过。 |
+| `npm run test:contracts` | passed | 命令契约、Harness 契约、modality runtime contract、cleanup report contract 复核通过；本轮仍未新增 Tauri 命令。 |
+| `npm run verify:gui-smoke` | passed | 2026-05-16 20:45 在 `lime.skills` Host Bridge 接入后重跑完成；Headless Tauri、DevBridge、workspace ready、browser runtime、site adapters、Agent Apps、Claw streaming、Knowledge GUI、Design Canvas 等最小 GUI smoke 通过。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts" "src/features/agent-app/ui/AgentAppRuntimePage.test.tsx" "src/features/agent-app/sdk/capabilityContract.test.ts" "src/features/agent-app/sdk/capabilityAdapters.test.ts"` | passed | 4 files / 28 tests passed；覆盖 `lime.memory.getStatus/query`、`lime.context.getSnapshot` 的只读 projection，并确认 `write/compact/attach/detach` 不伪造成功。 |
+| `npm test -- "src/features/agent-app"` | passed | 36 files / 188 tests passed，新增 P18.7-D `lime.memory` / `lime.context` runtime projection 回归后 Agent App 定向套件通过。 |
+| `npm run typecheck` | passed | P18.7-D `lime.memory` / `lime.context` runtime projection 类型边界通过。 |
+| `npm run test:contracts` | passed | 命令契约、Harness 契约、modality runtime contract、cleanup report contract 复核通过；本轮仍未新增 Tauri 命令。 |
+| `npm run verify:gui-smoke` | passed | 2026-05-16 21:01 在 `lime.memory` / `lime.context` Host Bridge 接入后重跑完成；Headless Tauri、DevBridge、workspace ready、browser runtime、site adapters、Agent Apps、Claw streaming、Knowledge GUI、Design Canvas 等最小 GUI smoke 通过。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts" "src/features/agent-app/ui/AgentAppRuntimePage.test.tsx" "src/features/agent-app/sdk/capabilityContract.test.ts" "src/features/agent-app/sdk/capabilityAdapters.test.ts"` | passed | 4 files / 29 tests passed；覆盖 P18.7-E `lime.search.query/getRun`、`lime.browser.open`、`lime.documents.parse`、`lime.media.generateImage` 的 Host 侧受控 intent 与 runtime tool projection。 |
+| `npm test -- "src/features/agent-app"` | passed | 36 files / 189 tests passed，新增 P18.7-E search/browser/documents first-cut 回归后 Agent App 定向套件通过。 |
+| `npm run typecheck` | passed | P18.7-E `lime.search` / `lime.browser` / `lime.documents` Host Bridge 类型边界通过。 |
+| `npm run test:contracts` | passed | 命令契约、Harness 契约、modality runtime contract、cleanup report contract 复核通过；本轮未新增 Tauri 命令。 |
+| `npm run verify:gui-smoke` | passed | 2026-05-16 21:26 在 `lime.search` / `lime.browser` / `lime.documents` Host Bridge 接入后重跑完成；Headless Tauri、DevBridge、workspace ready、browser runtime、site adapters、Agent Apps、Claw streaming、Knowledge GUI、Design Canvas 等最小 GUI smoke 通过。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts" "src/features/agent-app/ui/AgentAppRuntimePage.test.tsx" "src/features/agent-app/sdk/capabilityContract.test.ts" "src/features/agent-app/sdk/capabilityAdapters.test.ts"` | passed | 4 files / 29 tests passed；复核 P18.7-E `lime.media` first-cut：`generateImage` 返回受控 `requires_agent_task` intent，profile / Runtime Page 均暴露 `lime.media` adapter。 |
+| `npm test -- "src/features/agent-app"` | passed | 36 files / 189 tests passed，新增 P18.7-E `lime.media` Host first-cut 后 Agent App 定向套件通过。 |
+| `npm run typecheck` | passed | P18.7-E `lime.media` Host Bridge 类型边界通过。 |
+| `npm run test:contracts` | passed | 命令契约、Harness 契约、modality runtime contract、cleanup report contract 复核通过；本轮未新增 Tauri 命令。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts" "src/features/agent-app/ui/AgentAppRuntimePage.test.tsx" "src/features/agent-app/sdk/capabilityContract.test.ts" "src/features/agent-app/sdk/capabilityAdapters.test.ts"` | passed | 4 files / 29 tests passed；覆盖 P18.7-E `lime.mcp.listServers/invoke`、`lime.terminal.run/getRun/cancel`，确认二者只返回受控 intent / 只读投影 / not_available cancellation。 |
+| `npm test -- "src/features/agent-app"` | passed | 37 files / 193 tests passed；在隔壁新增 `agentRuntimeProcess.test.ts` 与 v0.6 manifest 测试后，Agent App 定向套件整体通过。 |
+| `npm run typecheck` | passed | P18.7-E `lime.mcp` / `lime.terminal` Host Bridge 类型边界通过。 |
+| `npm run test:contracts` | passed | 命令契约、Harness 契约、modality runtime contract、cleanup report contract 复核通过；本轮仍未新增 Tauri 命令。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts" "src/features/agent-app/ui/AgentAppRuntimePage.test.tsx" "src/features/agent-app/sdk/capabilityContract.test.ts" "src/features/agent-app/sdk/capabilityAdapters.test.ts"` | passed | 4 files / 29 tests passed；覆盖 P18.7-E `lime.connectors.list/getStatus/requestAuth/invoke`，确认外部连接器只返回只读投影、Host 授权需求或受控 intent。 |
+| `npm test -- "src/features/agent-app"` | passed | 37 files / 193 tests passed；新增 `lime.connectors` Host first-cut 后 Agent App 定向套件整体通过。 |
+| `npm run lint` | passed | ESLint `src --max-warnings 0` 通过。 |
+| `npm run typecheck` | passed | P18.7-E `lime.connectors` Host Bridge 类型边界通过。 |
+| `npm run test:contracts` | passed | 命令契约、Harness 契约、modality runtime contract、cleanup report contract 复核通过；本轮仍未新增 Tauri 命令。 |
+| `node --check "scripts/agent-apps-smoke.mjs"` | passed | `smoke:agent-apps` failure diagnostics 脚本语法通过；后续失败会写 `*-failure.json` / `*-failure.png`，便于定位 Runtime 打开链路。 |
+| `npm run smoke:agent-apps -- --app-url http://127.0.0.1:9/ --health-url http://127.0.0.1:3030/health --timeout-ms 1000 --interval-ms 100 --prefix agent-apps-smoke-diagnostics-selftest` | expected failure with diagnostics | 使用无效 app URL 触发早期失败，确认已落 `.lime/qc/gui-evidence/agent-apps/agent-apps-smoke-diagnostics-selftest-failure.json` 与 `*-failure.png`；JSON 覆盖 pageState、bridgeHealth、runtimeStatus、consoleErrors、failedRequests。 |
+| `npm run smoke:agent-apps -- --app-url http://127.0.0.1:9/ --health-url http://127.0.0.1:3039/health --timeout-ms 1000 --interval-ms 100 --prefix agent-apps-smoke-diagnostics-process-selftest` | expected failure with diagnostics | 使用本命令内临时 fake DevBridge 和无效 app URL 触发早期失败，不触碰外部 `content-factory-app` dev server；确认 failure JSON 新增 `processSnapshot`，包含平台、进程总数、cwd 探测数量、匹配进程和 match reason。 |
+| `npm run bridge:health -- --timeout-ms 15000` | passed | 2026-05-16 23:00 DevBridge 恢复 ready，`http://127.0.0.1:3030/health` 返回 `status=ok`。 |
+| `npm run smoke:agent-apps -- --timeout-ms 180000 --prefix agent-apps-smoke-p18-7-refocus` | passed | focused Agent Apps smoke 通过；`agent_app_start_ui_runtime` 可打开 Runtime surface，summary 证明 install / disable-enable / launch / uninstall dry-run / flag-off regression 均为 true。 |
+| `npm run verify:gui-smoke` | passed | 2026-05-16 23:05 完整 GUI smoke 通过；覆盖 workspace ready、browser runtime、site adapters、Skill Forge entry、runtime tool surface、runtime surface page、`@` command registry、Agent Apps、Claw streaming、Knowledge GUI、Design Canvas。 |
+| `npm run smoke:agent-apps -- --timeout-ms 180000 --prefix agent-apps-smoke-p18-7-runtime-frame-profile` | passed | 增强后的 Agent Apps smoke 通过；除 Runtime frame 可见外，还断言 iframe 内内容工厂已加载并展示 Host capability profile/运行事实提示，summary 中 `runtimeFrameContentFactoryLoaded=true`、`runtimeFrameHostProfileVisible=true`。 |
+| `npm run smoke:agent-apps -- --timeout-ms 180000 --prefix agent-apps-smoke-p18-7-content-action-e2e --include-content-factory-action-e2e` | failed at deep gate | 新增可选深水位 E2E：iframe 内点击“知识库底座 -> 整理知识库”，已观察到 App 发出 `lime.agent.startTask` 并展示运行现场；failure JSON 后续复盘证明 task id 已出现在 SDK call log，但 host task record 顶层未携带 task id。 |
+| `node --check "scripts/agent-apps-smoke.mjs"` | passed | 修正可选 gate 等待逻辑后，脚本语法通过。 |
+| `npm run smoke:agent-apps -- --timeout-ms 180000 --prefix agent-apps-smoke-p18-7-content-action-e2e-fixed5 --include-content-factory-action-e2e` | passed | 最小真实按钮 E2E 通过；iframe 内“知识库底座 -> 整理知识库”发出 `lime.agent.startTask`，从 task-scoped host run record 确认 Host task id / runtimeFacts container / required Skills 投影，且已触发 `lime.models.getRouting`、`lime.usage.getTokenUsage/getCostSummary`、`lime.skills.list`、`lime.agent.streamTask`，无 Host fallback。 |
+| `npm run smoke:agent-apps -- --timeout-ms 180000 --prefix agent-apps-smoke-p18-7-completion-gate-current --include-content-factory-completion-e2e --completion-timeout-ms 30000` | expected failure | 新增完成态可选 gate；30s 内未达到完成态，failure JSON 显示 `modelReady=false / usageReady=false / costReady=false / skillInvocationReady=false / artifactReady=false / evidenceReady=false`，但 `workspacePatchReady=true`。 |
+| `agent_runtime_get_thread_read` / `agent_runtime_get_session` for `agent-app-runtime-1afdd73f-7bb9-4bfb-9204-3268fa08930d` | diagnostic | DevBridge 返回 idle、queued_turns=0、turns=0、messages=0；证明 completion gate 失败不是页面单纯没等够。 |
+| `git diff --check -- "scripts/agent-apps-smoke.mjs"` | passed | 本轮脚本补丁无空白 diff 问题。 |
+| `npm run smoke:agent-apps -- --timeout-ms 180000 --prefix agent-apps-smoke-p18-7-default-after-action-gate-fixed4` | passed | 复核默认 Agent Apps smoke 未被可选深水位 gate 影响；默认 install / launch / iframe profile / uninstall dry-run / flag-off 仍通过。 |
+| `node --check "scripts/agent-apps-smoke.mjs"` / `git diff --check -- "scripts/agent-apps-smoke.mjs"` | passed | 2026-05-17 completion gate 新增 DevBridge `agent_app_runtime_get_task` 直查、最强 Host record 合并和 focused summary 后，脚本语法与空白 diff 通过。 |
+| `npm test -- "src/features/agent-app/runtime/agentRuntimeProcess.test.ts" "src/features/agent-app/runtime/agentRuntimeCapabilityHost.test.ts"` | passed | 2 files / 8 tests passed；复核 runtime process / Host runtime capability 投影未被 smoke completion reader 调整破坏。 |
+| `npm run smoke:agent-apps -- --timeout-ms 540000 --prefix agent-apps-smoke-p18-7-completion-focused-direct --include-content-factory-completion-e2e --completion-timeout-ms 420000` | passed | completion-focused gate 通过；summary `.lime/qc/gui-evidence/agent-apps/agent-apps-smoke-p18-7-completion-focused-direct-summary.json` 断言 `contentFactoryCompletionReady=true`，Host task `agent-app-task-29323f7a-54f3-4419-b2f3-d3ccc0734503` / session `agent-app-runtime-9d52d59b-84aa-4780-80dd-c5af942f53fd` 完成，`modelReady / usageReady / costReady / skillInvocationReady / artifactReady / evidenceReady / workspacePatchReady` 全为 true。 |
+| `npm run smoke:agent-apps -- --timeout-ms 720000 --prefix agent-apps-smoke-p18-7-completion-run-scenarios-success --include-content-factory-completion-e2e --content-factory-action run-scenarios --completion-timeout-ms 600000` | passed | 场景包 completion gate 通过；summary `.lime/qc/gui-evidence/agent-apps/agent-apps-smoke-p18-7-completion-run-scenarios-success-summary.json` 断言 `contentFactoryActionMatches=true`、`contentFactoryCompletionReady=true`，Host task `agent-app-task-c1f33fef-56bb-4082-98d7-0618677f0ebc` / session `agent-app-runtime-15f59fb7-2af8-4ae8-b77a-626e0cad9c88` 成功完成，`modelReady / usageReady / costReady / skillInvocationReady / artifactReady / evidenceReady / workspacePatchReady / terminalReady` 全为 true。 |
+| `node --check "scripts/agent-apps-smoke.mjs"` | passed | 2026-05-17 03:59-04:08 扩展 `--content-factory-action` selector，脚本已识别 `run-production / only-copy / run-scripts / run-strategy / run-review`，并支持内容战役内部 `campaignStep` 与 action-specific required Skills；这只表示后续真实按钮可被同一 completion gate 调度，不作为完成态通过证据。 |
+| `npm run smoke:agent-apps -- --timeout-ms 720000 --prefix agent-apps-smoke-p18-7-completion-run-production --include-content-factory-completion-e2e --content-factory-action run-production --completion-timeout-ms 600000` | passed | 生成内容 completion gate 通过；summary `.lime/qc/gui-evidence/agent-apps/agent-apps-smoke-p18-7-completion-run-production-summary.json` 断言 `contentFactoryActionMatches=true`、`contentFactoryCompletionReady=true`，Host task `agent-app-task-4a72880b-2892-4215-b5f0-96880be802b4` / session `agent-app-runtime-773fb2a9-f91b-4bd7-92b3-e1c153b548fb` 成功完成，required Skills 为 `article-writer / content-reviewer`，`modelReady / usageReady / costReady / skillInvocationReady / artifactReady / evidenceReady / workspacePatchReady / terminalReady` 全为 true。 |
+| `npm run smoke:agent-apps -- --timeout-ms 720000 --prefix agent-apps-smoke-p18-7-completion-only-copy --include-content-factory-completion-e2e --content-factory-action only-copy --completion-timeout-ms 600000` | passed | 只重写文案 completion gate 通过；summary `.lime/qc/gui-evidence/agent-apps/agent-apps-smoke-p18-7-completion-only-copy-summary.json` 断言 `contentFactoryActionMatches=true`、`contentFactoryCompletionReady=true`，Host task `agent-app-task-7d1fa5ef-c6c8-4064-ba99-bb052dab9cc0` / session `agent-app-runtime-9ee5737b-28a1-4819-b43e-370b2416547d` 成功完成，required Skills 为 `article-writer / content-reviewer`，completion 八项全 true。 |
+| `npm run smoke:agent-apps -- --timeout-ms 720000 --prefix agent-apps-smoke-p18-7-completion-run-scripts --include-content-factory-completion-e2e --content-factory-action run-scripts --completion-timeout-ms 600000` | passed | 生成脚本 completion gate 通过；summary `.lime/qc/gui-evidence/agent-apps/agent-apps-smoke-p18-7-completion-run-scripts-summary.json` 断言 `contentFactoryActionMatches=true`、`contentFactoryCompletionReady=true`，Host task `agent-app-task-f004ba38-cae1-498b-b793-d457db21bf1a` / session `agent-app-runtime-ff73121d-f5f9-4c15-bcac-93dd380008bc` 成功完成，required Skills 为 `article-writer / content-reviewer`，completion 八项全 true。 |
+| `npm run smoke:agent-apps -- --timeout-ms 720000 --prefix agent-apps-smoke-p18-7-completion-run-strategy --include-content-factory-completion-e2e --content-factory-action run-strategy --completion-timeout-ms 600000` | passed | 交付结论 completion gate 通过；summary `.lime/qc/gui-evidence/agent-apps/agent-apps-smoke-p18-7-completion-run-strategy-summary.json` 断言 `contentFactoryActionMatches=true`、`contentFactoryCompletionReady=true`，Host task `agent-app-task-3e8d8ba7-070a-47ce-b5c9-fa0338a5e91b` / session `agent-app-runtime-5342296e-f980-4170-a02a-beab59720da3` 成功完成，required Skills 为 `article-writer / content-reviewer`，completion 八项全 true。 |
+| `npm run smoke:agent-apps -- --timeout-ms 720000 --prefix agent-apps-smoke-p18-7-completion-run-review --include-content-factory-completion-e2e --content-factory-action run-review --completion-timeout-ms 600000` | passed | 复盘判断 completion gate 通过；summary `.lime/qc/gui-evidence/agent-apps/agent-apps-smoke-p18-7-completion-run-review-summary.json` 断言 `contentFactoryActionMatches=true`、`contentFactoryCompletionReady=true`，Host task `agent-app-task-01957be0-0f4d-40b1-b735-e7098b3f6905` / session `agent-app-runtime-464c50d0-e759-45ca-b48d-027747af3d1c` 成功完成，required Skill 为 `content-reviewer`，completion 八项全 true。 |
+| `/Users/coso/Documents/dev/ai/limecloud/content-factory-app`: `npm test` | passed | 外部内容工厂 56 tests passed；覆盖 Host Bridge 调用 `lime.capabilities.getProfile`、`lime.models.getRouting`、`lime.usage.getTokenUsage/getCostSummary`、`lime.skills.list`，以及主生产按钮 Host connected 时只走 `lime.agent.startTask`、运行过程/Skill/Token/费用展示和 workspace patch 写回。 |
+| `/Users/coso/Documents/dev/ai/limecloud/content-factory-app`: `npm run validate:app` | passed | reference CLI validate 返回 `ok=true / status=passed`，manifest hash `sha256:22d23772240c038ffe27b58ee3da298fac412d2e6b82f0a9c6659d98fecad9d1`。 |
+| `/Users/coso/Documents/dev/ai/limecloud/content-factory-app`: `npm run readiness:app` | expected needs-setup | reference CLI readiness 返回 `ok=true / status=needs-setup`；剩余 warnings 是 host 运行前必须满足的 skills / knowledge / tool / artifact / eval / service 绑定，不是 manifest schema failure。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" agent_app_runtime --lib` | passed | 2026-05-17 05:28 在 `agent_app_runtime_cmd` command facade 拆分后通过，22 tests passed，覆盖 Agent App Runtime metadata、task event projection、runtime profile / runtime event projection 和 capability catalog 相关回归。 |
+| `npm run test:contracts` | passed | 2026-05-17 05:29 在 Rust command handler 路径更新后复跑通过；前端命令、Rust 注册命令、mock priority、default mock、Harness 与 modality contract 未漂移。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` | passed | 2026-05-17 05:43 在 P18.7-D `lime.usage.getBudget` 接入 AgentRuntime `threadRead.limit_state / cost_state` 后通过，13 tests passed；覆盖 `getBudget` 从真实 runtime limit / cost facts 返回 `status=observed`，不再把已有预算事实误报为 `no_agent_runtime_budget_facts`。 |
+| `npm run typecheck` | passed | 2026-05-17 05:44 前端 TypeScript 边界通过。 |
+| `npm test -- "src/features/agent-app"` | passed | 2026-05-17 05:45，37 files / 203 tests passed；复核 P18.7-D budget projection 未破坏 Agent App manifest、Host Bridge、Runtime Page、SDK、install 和 runtime process 回归。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` | passed | 2026-05-17 05:49 在 P18.7-D `lime.skills.list/resolve` 接入 `workspace_skill_bindings` readiness projection 后通过，13 tests passed；覆盖 `ready_for_manual_enable` binding 不被误判为已注入 tool surface / 可自动执行。 |
+| `npm run typecheck` | passed | 2026-05-17 05:51 前端 TypeScript 边界通过。 |
+| `npm test -- "src/features/agent-app"` | passed | 2026-05-17 05:51，37 files / 203 tests passed；复核 workspace skill binding readiness 投影未破坏 Agent App 定向套件。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` | passed | 2026-05-17 05:57 在 P18.7-D `lime.memory` / `lime.context` 接入 AgentRuntime `context_summary` gate 后通过，13 tests passed；覆盖 `memory_budget`、retrieval refs、missing context、team memory refs 和 query 命中 context refs。 |
+| `npm run typecheck` | passed | 2026-05-17 05:58 前端 TypeScript 边界通过。 |
+| `npm test -- "src/features/agent-app"` | passed | 2026-05-17 05:59，37 files / 203 tests passed；复核 memory/context gate 投影未破坏 Agent App 定向套件。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` | passed | 2026-05-17 06:03 在 P18.7-D `lime.models` 接入 `model_routing / limit_state / cost_state` 模型约束事实后通过，13 tests passed；覆盖 selected/requested model、routing mode、decision source/reason、candidate count、fallback chain、limit/cost status 和 pricing snapshot。 |
+| `npm run typecheck` | passed | 2026-05-17 06:05 前端 TypeScript 边界通过。 |
+| `npm test -- "src/features/agent-app"` | passed | 2026-05-17 06:06，37 files / 203 tests passed；复核模型约束事实源投影未破坏 Agent App 定向套件。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` | passed | 2026-05-17 06:19 在 P18.7-E 接入 AgentRuntime `threadRead.tool_calls / turns[].tool_calls` 工具运行证据后通过，13 tests passed；覆盖 `web_search` 真实工具调用的 `matchingRuns/getRun`、`input/output`，以及 `connector__notion__createPage` 连接器运行证据可被 `list/getStatus/invoke` 读取。 |
+| `npm run typecheck` | passed | 2026-05-17 06:21 前端 TypeScript 边界通过。 |
+| `npm test -- "src/features/agent-app"` | passed | 2026-05-17 06:21，37 files / 203 tests passed；复核 P18.7-E threadRead tool call / connector evidence projection 未破坏 Agent App 定向套件。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` | passed | 2026-05-17 06:27 在 P18.7-E 补齐 generic `lime.tools.invoke/getProgress` Host first-cut 后通过，13 tests passed；覆盖 `invoke` 返回受控 `requires_agent_task` intent 并复用已有 tool runs，`getProgress` 可读取 threadRead invocation。 |
+| `npm run typecheck` | passed | 2026-05-17 06:29 前端 TypeScript 边界通过。 |
+| `npm test -- "src/features/agent-app"` | passed | 2026-05-17 06:29，37 files / 203 tests passed；复核 generic `lime.tools` Host first-cut 未破坏 Agent App 定向套件。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` | passed | 2026-05-17 06:34 在补齐 `lime.tasks.list/get/cancel/subscribe` Host first-cut 后通过，14 tests passed；覆盖 App-scoped task 只读 list/get，并确认 cancel/subscribe 不打开第二套队列而指向 `lime.agent.cancelTask/streamTask`。 |
+| `npm run typecheck` | passed | 2026-05-17 06:35 前端 TypeScript 边界通过。 |
+| `npm test -- "src/features/agent-app"` | passed | 2026-05-17 06:36，37 files / 204 tests passed；复核 `lime.tasks` Host first-cut 未破坏 Agent App 定向套件。 |
+| `/Users/coso/Documents/dev/ai/limecloud/content-factory-app` `npm test` | passed | 2026-05-17 06:39，63 tests passed；覆盖 `lime.capabilities.getProfile` 调用、0.5/0.6 能力包展示、Host profile 缺少 `lime.agent` 时阻止本地模型兜底、Host connected 时生产按钮不触发本地生成 API。 |
+| `/Users/coso/Documents/dev/ai/limecloud/content-factory-app` `npm run validate:app` / `npm run readiness:app` | passed / needs-setup | 2026-05-17 06:39，reference CLI validate `ok=true/status=passed`；readiness `ok=true/status=needs-setup`，剩余 warning 为 Host 运行前必须满足的 skills / knowledge / tool / artifact / eval / service 绑定。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` | passed | 2026-05-17 06:42 在 P18.7-E 补齐 `executionGate` / `authorizationGate` 合同投影后通过，14 tests passed；覆盖 tool intent 明确 `mutationExposed=false`、connector requestAuth 明确 `secretBinding=host_managed/tokenExposed=false/sessionScoped=true`。 |
+| `npm run typecheck` | passed | 2026-05-17 06:45 前端 TypeScript 边界通过。 |
+| `npm test -- "src/features/agent-app"` | passed | 2026-05-17 06:45，37 files / 204 tests passed；复核 P18.7-E gate contract first-cut 未破坏 Agent App 定向套件。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` | passed | 2026-05-17 07:05 在 P18.7-E1 补齐 `executionGate.request` envelope 后通过，14 tests passed；覆盖 `lime.search.query`、generic `lime.tools.invoke`、`lime.connectors.invoke` 的 machine-readable request envelope，含 policy owner/scope/approval/sandbox/secret binding，并断言 secret、raw OAuth token、absolute local path、App 自造 evidence id 不进入 envelope。 |
+| `npm run typecheck` | passed | 2026-05-17 07:07 前端 TypeScript 边界通过。 |
+| `npm test -- "src/features/agent-app"` | passed | 2026-05-17 07:07，37 files / 204 tests passed；复核 P18.7-E1 request envelope 未破坏 Agent App 定向套件。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` | passed | 2026-05-17 07:20 在 P18.7-E2 接入 AgentRuntime handoff first-cut 后通过，15 tests passed；覆盖 `executionGate.request` 通过 `lime.agent.startTask` 创建 `agent_app.tool_execution` task，并将 redacted envelope 写入 `agent_app_runtime_start_task` input/metadata。 |
+| `npm run typecheck` | passed | 2026-05-17 07:21 前端 TypeScript 边界通过。 |
+| `npm test -- "src/features/agent-app"` | passed | 2026-05-17 07:22，37 files / 205 tests passed；复核 P18.7-E2 handoff 未破坏 Agent App 定向套件。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" agent_app_tool_execution --lib` | passed | 2026-05-17 07:45，2 tests passed；覆盖 ToolRuntime owner binding 会从 `agent_app_tool_execution` request 生成 session-scoped 默认拒绝 + canonical `WebSearch` / exact connector allowlist，并确认 connector secret 只保留 `host_managed` metadata。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" agent_app_runtime_tool_execution --lib` | passed | 2026-05-17 07:45，1 test passed；覆盖 `agent_app.tool_execution` metadata 写入 full-runtime task mode、`agent_app_tool_execution` tool surface、Browser Assist hint 和 Tool Execution Owner Contract prompt。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" agent_app_runtime --lib` | passed | 2026-05-17 07:45，23 tests passed；复核 Agent App Runtime 拆分、task events、output contract 和新增 tool execution metadata 未回归。 |
+| `npm run test:contracts` | passed | 2026-05-17 07:45，命令契约、Harness contract、modality runtime contracts 和 cleanup report contract 均通过；复核 Rust command facade / ToolRuntime owner binding 未造成命令边界漂移。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` | passed | 2026-05-17 07:53，在 P18.7-E4 cancellation first-cut 后通过，15 tests passed；覆盖工具类 `cancel` 传入 Agent task id 时调用 `lime.agent.cancelTask`，runId-only 场景返回 canonical `requires_agent_task_cancellation` next action。 |
+| `npm run typecheck` | passed | 2026-05-17 07:53 前端 TypeScript 边界通过。 |
+| `npm test -- "src/features/agent-app"` | passed | 2026-05-17 07:53，37 files / 205 tests passed；复核 E4 cancellation first-cut 未破坏 Agent App 定向套件。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" thread_read_should_project_tool_calls_for_profile_consumers --lib` | passed | 2026-05-17 08:12，1 test passed；覆盖 `AgentRuntimeThreadToolCallView` 从 timeline tool call 投影 arguments、output/output_preview、started/finished/updated 时间和 metadata evidence refs。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" agent_app_runtime --lib` | passed | 2026-05-17 08:12，23 tests passed；复核 Agent App Runtime task events 会把 tool call 的首个 evidence ref、outputPreview 和 occurredAt 带给 App runtime snapshot。 |
+| `npm run typecheck` | passed | 2026-05-17 08:11，前端 TypeScript 边界通过；同步 `AgentRuntimeThreadToolCallView` TS 类型的新增只读字段。 |
+| `npm test -- "src/features/agent-app/runtime/agentRuntimeProcess.test.ts"` | passed | 2026-05-17 08:11，5 tests passed；复核 runtimeProcess 对 task events / snapshot facts 的现有消费未回归。 |
+| `rustfmt --check "src-tauri/src/commands/aster_agent_cmd/dto.rs" "src-tauri/src/commands/agent_app_runtime_cmd/events.rs" "src-tauri/src/commands/agent_app_runtime_cmd/tests.rs" "src-tauri/src/services/runtime_evidence_pack_service_tests.rs"` | passed | 2026-05-17 08:12，scoped Rust 格式检查通过，未触碰隔壁大写集。 |
+| `git diff --check -- <P18.7-E4 scoped files>` | passed | 2026-05-17 08:16，scoped whitespace 检查通过。 |
+| `npm run test:contracts` | passed | 2026-05-17 08:16，命令契约、Harness contract、modality runtime contracts 和 cleanup report contract 均通过；复核 tool call projection / TS 类型更新未造成命令边界漂移。 |
+| `npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` | passed | 2026-05-17 08:31，在 connector authorization request handoff first-cut 后通过，16 tests passed；覆盖 `lime.connectors.requestAuth` 创建 `agent_app.connector_authorization` Host-managed task，authorization envelope 进入 `agent_app_connector_authorization.request`，并断言 raw OAuth token 不出 Host。 |
+| `npm run typecheck` | passed | 2026-05-17 08:31，前端 TypeScript 边界通过；复核 connector authorization request envelope / handoff 类型边界。 |
+| `npm test -- "src/features/agent-app"` | passed | 2026-05-17 08:37，37 files / 206 tests passed；复核 connector authorization request handoff 未破坏 Agent App 定向套件。 |
+| `npm run test:contracts` | passed | 2026-05-17 08:37，命令契约、Harness contract、modality runtime contracts 和 cleanup report contract 均通过；本刀未新增 Tauri 命令，复核 Host Bridge connector auth handoff 未造成命令边界漂移。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" connector_authorization --lib` | passed | 2026-05-17 08:46，2 tests passed；覆盖 connector authorization metadata 安全进入 `lime_runtime.runtime_summary`，并由 task snapshot 投影 `task:blocked` authorization gate。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" agent_app_runtime --lib` | passed | 2026-05-17 08:46，25 tests passed；复核 Agent App Runtime 事件投影、metadata、拆分模块和 output contract 未回归。 |
+| `rustfmt --edition 2021 --check "src-tauri/src/commands/agent_app_runtime_cmd/events.rs" "src-tauri/src/commands/agent_app_runtime_cmd/metadata.rs" "src-tauri/src/commands/agent_app_runtime_cmd/tests.rs"` | passed | 2026-05-17 08:46，scoped Rust 格式检查通过。 |
+| `npm run test:contracts` | passed | 2026-05-17 08:49，命令契约、Harness contract、modality runtime contracts 和 cleanup report contract 均通过；复核 connector authorization snapshot projection 未造成命令边界漂移。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" test_agent_app_runtime_connector_authorization_metadata_stays_host_managed --lib` | passed | 2026-05-17 09:35，复核 connector authorization metadata 会裁剪 raw OAuth token 与 nested authorization 子树，同时保留 `secretBinding=host_managed / tokenExposed=false`。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" evidence_pack_should_redact_agent_app_connector_authorization_secret --lib` | passed | 2026-05-17 09:35，复核 evidence pack 导出的 `runtimeFacts.runtimeSummary.agent_app_connector_authorization` 二次脱敏，不把 raw OAuth / refresh token / nested authorization secret 写入 runtime 或 artifacts。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" agent_app_runtime --lib` | passed | 2026-05-17 09:35，26 tests passed；复核 Agent App Runtime metadata、task events、tool evidence refs 与 connector authorization gate 未回归。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" runtime_evidence_pack_service --lib` | passed | 2026-05-17 09:35，42 tests passed；复核 evidence pack、permission state、controlled GET、runtime contract snapshots 与 connector authorization redaction 未回归。 |
+| `npm run test:contracts` | passed | 2026-05-17 09:35，命令契约、Harness contract、modality runtime contracts 和 cleanup report contract 均通过；本刀未新增 Tauri 命令，复核 evidence pack 二次脱敏未造成命令边界漂移。 |
+| `node "scripts/agent-apps-content-factory-flow.mjs" --timeout-ms 720000 --completion-timeout-ms 600000 --prefix content-factory-run-scripts-post-redaction-20260517 --actions run-scripts` | passed | 2026-05-17 09:40，独立 flow runner 的 `run-scripts` 单动作通过；summary 显示 `allActionsCompleted=true`、`allActionsHaveModelUsageCost=true`、`allActionsHaveArtifactsAndWorkspacePatch=true`、`consoleErrorCount=0`，direct snapshot 为 completed，`artifactCount=1`、`toolCallCount=2`、`hasWorkspacePatch=true`，Skill 为 `article-writer / content-reviewer`。该证据只证明脚本生成单动作恢复，不代表连续全流程已闭环。 |
+| `node "scripts/agent-apps-content-factory-flow.mjs" --timeout-ms 720000 --completion-timeout-ms 600000 --prefix content-factory-default-flow-post-redaction-20260517` | failed | 2026-05-17 09:50，默认连续 flow 仍红；failure 显示 `run-scenarios` 已进入 Host runtime 并展示完成态运行现场，但 runner 读取 iframe `body` 超时，缺口收敛为 iframe/hot reload 恢复或 flow runner 稳定性，而不是 `run-scripts` 单动作缺失。 |
+| `node --check "scripts/agent-apps-content-factory-flow.mjs"` / `git diff --check -- "scripts/agent-apps-content-factory-flow.mjs"` | passed | 2026-05-17 11:55，独立 flow runner 修正当前内容工厂页面入口：`data-page` 与 `data-go-page` 都可导航，页面 ready 不再等待旧“内容战役 / 场景地图 / 交付包 / 复盘与下一轮”文案，并用 parent page 的 AI 同事运行现场兜底 iframe 热更新期间的 body 读取。 |
+| `node "scripts/agent-apps-content-factory-flow.mjs" --timeout-ms 720000 --completion-timeout-ms 600000 --prefix content-factory-run-scripts-strict-usage-3-20260517 --actions run-scripts` | passed | 2026-05-17 12:26，`run-scripts` 在更严格 usage source gate 下通过；summary 显示 `usageEvidenceSource=host_runtime_process`、`costEvidenceSource=direct_runtime_snapshot`、direct snapshot `taskStatus=completed / artifactCount=1 / toolCallCount=2 / hasWorkspacePatch=true / hasUsage=false / hasCost=true`，Host runtimeProcess `hasUsage=true / hasCost=true`，Skill 为 `article-writer / content-reviewer`。 |
+| `node "scripts/agent-apps-content-factory-flow.mjs" --timeout-ms 720000 --completion-timeout-ms 600000 --prefix content-factory-short-flow-strict-usage-20260517 --actions run-scenarios,run-production` | failed/current-finding | 2026-05-17 12:43，短链路在第一步 `run-scenarios` 暴露真实缺口：AgentRuntime 成功完成并调用 `knowledge-builder / content-reviewer`，但 direct snapshot 缺 `workspacePatchReady` 和真实 usage；根因是模型只产出 `analysis` artifact，没有物化 `scene_table` workspace patch。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" -p lime test_agent_app_runtime_scene_table_contract_requires_workspace_patch --lib` | passed | 2026-05-17 12:51，新增 scene_table contract 回归，要求 prompt 明确 `contentFactoryWorkspacePatch.sceneTable`、`sceneTable.actualCount`、`imagePrompts`，并把“只返回 analysis artifact”判为未完成。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_runtime --lib` | passed | 2026-05-17 12:53，27 tests passed；复核 Agent App Runtime 拆分模块、metadata、scene_table output contract、tool evidence refs 与 connector authorization gate 未回归。 |
+| `node "scripts/agent-apps-content-factory-flow.mjs" --timeout-ms 720000 --completion-timeout-ms 600000 --prefix content-factory-run-scenarios-scene-contract-20260517 --actions run-scenarios` | failed/current-finding | 2026-05-17 13:01，scene_table prompt 加强后 `run-scenarios` direct snapshot 已有 `hasWorkspacePatch=true / artifactCount=1 / toolCallCount=2 / costState=estimated`，但严格 gate 仍缺真实 token usage。说明 workspace patch 缺口已收敛，usage 口径需区分真实 provider usage 与 runtime estimate。 |
+| `node "scripts/agent-apps-content-factory-flow.mjs" --timeout-ms 720000 --completion-timeout-ms 600000 --prefix content-factory-run-scenarios-estimated-usage-20260517 --actions run-scenarios` | passed/current-estimate | 2026-05-17 13:08，`run-scenarios` 在显式 `direct_runtime_estimate` usage source 下通过；summary 显示 `usageEvidenceSource=direct_runtime_estimate`、`costEvidenceSource=direct_runtime_snapshot`、direct snapshot `taskStatus=completed / hasWorkspacePatch=true / hasUsage=false / hasEstimatedUsage=true / estimatedUsageTokens=79919`。该证据证明场景 workspace patch 已恢复，但真实 provider token usage 仍未进入 direct snapshot，不能替代连续全流程绿色。 |
+| `npm test -- "src/hooks/useAppNavigation.test.tsx"` | passed | 2026-05-17 13:36，10 tests passed；覆盖 `agent-app` 导航写入 session-scoped restore state、reload / remount 后恢复 `appId / entryKey / launchRequestKey` 白名单参数、非法 restore JSON / 非 `agent-app` 页面回退首页并清理，以及离开 `agent-app` 后清理恢复状态。 |
+| `npx eslint "src/hooks/useAppNavigation.ts" "src/hooks/useAppNavigation.test.tsx" --max-warnings 0` | passed | 2026-05-17 13:36，Agent App Runtime surface reload restore 改动通过定向 lint。 |
+| `npm run typecheck` | passed | 2026-05-17 13:29，前端 TypeScript 边界通过；复核 `useAppNavigation` 的 sessionStorage restore / params 白名单未破坏页面参数联合类型。 |
+| `CARGO_INCREMENTAL=0 CARGO_TARGET_DIR="/tmp/lime-agent-app-runtime-split-target" cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_runtime --lib` | passed | 2026-05-17 13:45，28 tests passed；复核 `agent_app_runtime_cmd` command facade 拆分后的 start/cancel/get/host response 子模块、metadata、task event projection、tool execution owner binding、connector authorization gate、workspace patch extraction 与 runtime event/evidence projection 未回归。 |
+
+## 验证备注
+
+- 2026-05-16 21:50 前后，旧 `npm run verify:local` 进程停在 `verify:gui-smoke` 的 `smoke:agent-apps` 子流程，未产生新的 GUI evidence；为避免占用并行 GUI / DevBridge 环境，已终止该验证链，不计为通过证据。
+- 2026-05-16 21:57 重新执行 `npm run verify:gui-smoke`，workspace / browser runtime / site adapters / agent-service-skill-entry / runtime tool surface / `@` command registry 已通过；随后 `smoke:agent-apps` 在打开 Agent App Runtime 时触发 `agent_app_start_ui_runtime` DevBridge `/invoke` 5s timeout。该命令面位于隔壁持有的 `src-tauri/**` 写集，本进程不接管；本轮 GUI smoke 因并行 Tauri runtime 命令阻塞未计入通过证据。
+- 2026-05-16 22:30 前后，focused `npm run smoke:agent-apps -- --timeout-ms 180000 --prefix agent-apps-smoke-p18-7-refocus` 复测仍停在 `stage=launch-runtime-surface`；复测期间 `http://127.0.0.1:3030/health` 曾从最初 ready 变为 connection refused，随后 `npm run bridge:health -- --timeout-ms 30000` 又恢复 ready，但直接 POST `agent_app_start_ui_runtime` 到 `/invoke` 仍 10s timeout。该 smoke 已终止，不计为通过证据。
+- 2026-05-16 22:40 前后，`agent_app_get_ui_runtime_status` 返回 `status=stopped / message=Agent App UI runtime 未启动`，但系统进程表仍有多条 cwd 为 `/Users/coso/Documents/dev/ai/limecloud/content-factory-app` 的 `npm run dev`。这说明 Tauri runtime registry 与外部 App dev server 进程状态已经不一致；清理这些外部进程属于外部 App / Tauri runtime 写集，本进程不直接 kill。
+- 已补 `scripts/agent-apps-smoke.mjs` failure diagnostics：`try/catch` 会在 GUI smoke 失败时保存页面状态、DevBridge health、`agent_app_get_ui_runtime_status`、console errors、failed requests、failure screenshot 和外部 dev process snapshot；已用无效 app URL 自测确认 failure JSON / screenshot 会落盘，避免后续 Agent 再次人工复现才能定位 `launch-runtime-surface` 卡点。
+- 2026-05-16 22:58 复查 `npm run bridge:health -- --timeout-ms 30000` 仍超时，当前本机没有可用 `http://127.0.0.1:3030/health` DevBridge；为避免与隔壁 Tauri runtime 写集抢占，本进程未继续启动完整 `npm run verify:gui-smoke`。
+- 2026-05-16 23:00 后 DevBridge 恢复，focused Agent Apps smoke 与完整 `npm run verify:gui-smoke` 均已通过；此前 `agent_app_start_ui_runtime` timeout / registry stopped 的 GUI blocker 当前解除。
+- 2026-05-16 23:08 增强 `smoke:agent-apps`，新增 iframe 内内容工厂断言：Runtime frame 必须加载业务 App，并在“内容战役”页展示 Host capability profile / 模型、Token、费用和 Skills 统一回写提示。focused 复跑已通过。
+- 2026-05-16 23:20 前后继续补可选 `--include-content-factory-action-e2e` gate，用来验证真实业务按钮是否能进入 Host AgentRuntime。首轮失败后读取 failure JSON，确认 task id 实际已出现在 `lime.models/getRouting`、`lime.usage/*`、`lime.skills.list`、`lime.agent.streamTask/getTask` 等 SDK 后续调用中，只是 host task record 顶层未携带 task id。
+- 2026-05-16 23:35 修正 `scripts/agent-apps-smoke.mjs` 等待逻辑：task id 同时从 host task record 和 SDK call log 提取，并新增 runtime facts / stream-or-getTask 断言。
+- 2026-05-16 23:48 继续修正 smoke 诊断：读取 task-scoped host run record，而不只读 bridgeAction record；`agent-apps-smoke-p18-7-content-action-e2e-fixed5` 通过，默认 smoke `agent-apps-smoke-p18-7-default-after-action-gate-fixed4` 也通过。该证据把 P18.7-F 从“按钮只发出 startTask”推进到“最小真实按钮 E2E 已进入 Host AgentRuntime、可读取 runtimeFacts container，并能投影 required Skills”。
+- 2026-05-16 23:55 新增 `--include-content-factory-completion-e2e` 可选完成态 gate；当前运行 `agent-apps-smoke-p18-7-completion-gate-current` 预期失败，缺口明确为模型路由、Token、费用、Skill invocation、artifact、evidence 未完成，task record 仍显示 `active_turn_id=null / profile_status=idle`。
+- 2026-05-17 00:02 对同一 task 做只读根因探针：`agent_runtime_get_thread_read` 与 `agent_runtime_get_session` 均返回 `profile_status=idle / queued_turns_len=0 / turns_len=0 / messages_len=0`；SQLite `agent_sessions` 有 session 行，但 `agent_thread_turns`、`agent_messages`、`agent_runs` 均无对应记录；尝试 `agent_runtime_promote_queued_turn` 使用 `agent-app-queued-{taskId}` 返回 `false`。当前更像 accepted 后 runtime turn 未落库 / 未执行，而不是内容工厂 UI 未读取。
+- 2026-05-17 03:12 修正 completion gate：等待过程中不再用较弱 iframe 记录覆盖较强记录，并在拿到 `taskId/sessionId` 后通过 DevBridge `agent_app_runtime_get_task` 直查 AgentRuntime snapshot；completion-focused gate 通过。该证据说明“整理知识库”按钮不止进入 runtime，还能在完成态读取模型路由、usage estimate、费用等级、Skill 调用、artifact、evidence replay 和 workspace patch。completion gate 为 focused 模式，拿到完成态证据后直接写 summary，不再继续跑默认 uninstall rehearsal / flag-off；默认 smoke 仍由已有 `agent-apps-smoke-p18-7-default-after-action-gate-fixed4` 覆盖。
+- 2026-05-17 03:52 将 completion gate 参数化到 `--content-factory-action run-scenarios`，覆盖“生成/更新场景包”。中间发现两类假绿风险：一是运行现场断言只认“整理知识库”文案，二是 iframe runtimeProcess 先出现 artifact 时 direct snapshot 仍可能是 `running` 或后续 `failed`。当前 gate 已收紧为 `terminalReady` 必须来自 direct `agent_app_runtime_get_task` 的成功终态；`agent-apps-smoke-p18-7-completion-run-scenarios-success` 为通过证据。
+- 2026-05-17 03:59-05:09 继续扩展同一个 smoke harness 的 action selector，补齐 `run-production / only-copy / run-scripts / run-strategy / run-review` 的页面、按钮、运行现场断言，并修正三个脚本级前置问题：`run-production` 在内容战役默认进入“场景包”步骤时需要显式切到 `campaignStep=setup`；不同 taskKind 的 required Skills 不能固定为 `knowledge-builder / content-reviewer`，必须跟随 Agent task contract；`only-copy / run-scripts / run-strategy` 这类有业务前置条件的按钮需要先载入内容工厂样例项目作为可审核业务状态。当前七个真实业务按钮已全部跑出 completion-focused 通过证据。
+- 2026-05-17 13:36 修正 Runtime surface reload 后回首页的主因之一：`useAppNavigation` 只对 `agent-app` 写入 sessionStorage restore state，并只恢复 `appId / entryKey / launchRequestKey`，避免把 Agent 页面的大型一次性 params 变成持久状态。当前 DevBridge `http://127.0.0.1:3030/health` 未就绪，未启动新的 content factory flow；该改动先以 hook 单测、lint 和 typecheck 作为前端生命周期 first-cut 证据，后续需在 DevBridge ready 后重跑短链路验证。
+- 2026-05-17 13:55 已补 P18.7-E4 connector authorization task projection first-cut：`capabilityDispatcher` 会把 `agent_app.connector_authorization` Host-managed task 投影到 `lime.connectors.list().authorizationRequests`，并在 `lime.connectors.getStatus(connectorId)` 对“还没有 connector run、但已有授权 task”的 connector 返回 `requires_host_authorization`。本轮验证：`npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` 16 tests passed，`npx eslint "src/features/agent-app/runtime/capabilityDispatcher.ts" "src/features/agent-app/runtime/capabilityDispatcher.test.ts" --max-warnings 0` 通过，`npm run typecheck` 通过，`npm test -- "src/features/agent-app"` 41 files / 233 tests passed；当前虽已恢复 DevBridge health，但隔壁仍有 isolated Tauri / headless Tauri 进程，本轮未抢 GUI flow。
+- 2026-05-17 14:03 只读摸底 P18.7-E connector mutation 深水位：仓库内 `connector__<id>__<action>` 当前只作为 Agent App tool execution session allowlist 名称出现，尚未发现对应 current ToolRuntime connector adapter / tool registration；`browser_connector_service.rs` 是浏览器 / 系统连接器设置链，不是外部平台 connector mutation 执行器。因此下一刀必须先补 current Connector ToolRuntime adapter / Cloud Overlay seam，不能把 allowlist 或 authorization projection 当作真实执行证据。
+- 2026-05-17 14:08 已补 `lime.connectors.invoke` 授权前置 guard：当目标 connector 没有 runtime facts，且对应 `agent_app.connector_authorization` task 未完成时，Host Bridge 不再创建 `agent_app.tool_execution` handoff，而是返回 `requires_host_authorization`，并指向 `lime.connectors.requestAuth` / 等待 Host-managed authorization task。该 guard 防止把 exact allowlist 名称误当作真实 connector 可执行状态。本轮验证：`npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` 16 tests passed，`npx eslint "src/features/agent-app/runtime/capabilityDispatcher.ts" "src/features/agent-app/runtime/capabilityDispatcher.test.ts" --max-warnings 0` 通过，`npm run typecheck` 通过，`npm test -- "src/features/agent-app"` 41 files / 233 tests passed。
+- 2026-05-17 14:32 已补 P18.7-E Connector ToolRuntime preview seam：Rust Runtime 会从 `agent_app.tool_execution` request allowlist 注册 exact `connector__<id>__<action>` preview tool；该 tool 执行时返回受控 `not_available / connector_toolruntime_adapter_not_configured`，并保留 `secretBinding=host_managed / tokenExposed=false`，避免 unknown tool 或假成功。该证据只证明 connector intent 可进入 ToolRuntime 受控失败/evidence 路径，不代表真实 Connector OAuth / Cloud Overlay mutation adapter 已完成。定向验证：`cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_connector_preview --lib` 1 test passed，`cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_tool_execution --lib` 2 tests passed，`cargo check --manifest-path "src-tauri/Cargo.toml" -p lime --lib` 通过，`npm run test:contracts` 通过，scoped `rustfmt --check` / `git diff --check` 通过。
+- 2026-05-17 17:03 已补 P18.7-E Connector adapter readiness seam：`connector_tools.rs` 在保持受控 `not_available` 的前提下，为 preview tool 结果增加 `adapterKind / adapterReadiness / next.required`，可区分 desktop system connector action surface 与 Cloud Overlay authorized runtime fact；测试覆盖 `desktop_system_connector / desktop_action_surface_known`、`cloud_overlay / authorized_runtime_fact_observed`，并断言 refresh token 不进入 result metadata。验证：`CARGO_INCREMENTAL=0 CARGO_TARGET_DIR="/tmp/lime-agent-app-connector-preview-target-1779009544" cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_connector_preview --lib` 3 tests passed；`npm run test:contracts` 通过；scoped `rustfmt --check` / `git diff --check` / untracked `git diff --no-index --check` 通过。因隔壁和历史 cargo test 进程占用 `/tmp/lime-agent-app-connector-preview-target` artifact lock，本轮使用唯一 target 目录，未中止隔壁进程。
+- 2026-05-17 17:50 已补 Host connector runtime facts envelope：`lime.connectors.invoke` 在已观测 connector run 或 Host-managed authorization task 已完成时，会把安全的 `connectorRuntimeFacts` 写入 `executionGate.request.input`，并随 `agent_app.tool_execution` metadata 交给 Rust ToolRuntime seam；sanitizer 只放行枚举型 `authorizationStatus/secretBinding/tokenExposed` facts，继续裁剪 refresh token、absolute path 和 App 自造 evidence id。验证：`npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` 17 tests passed；`npm test -- "src/features/agent-app"` 41 files / 235 tests passed；`npx eslint "src/features/agent-app/runtime/capabilityDispatcher.ts" "src/features/agent-app/runtime/capabilityDispatcher.test.ts" --max-warnings 0` 通过；`npm run typecheck` 通过；`npm run test:contracts` 通过；`cargo check --manifest-path "src-tauri/Cargo.toml" -p lime --lib` 通过；`cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_runtime --lib` 28 tests passed；`cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_connector_preview --lib` 3 tests passed；scoped `git diff --check` 通过。
+
+- 2026-05-17 18:40 已补 Connector readiness 二次校验：Rust `connector_tools.rs` 只有同时观测到 `capability=lime.connectors`、授权状态、`secretBinding=host_managed` 和 `tokenExposed=false`，才把 Cloud Overlay 标为 `authorized_runtime_fact_observed`；单独伪造 `authorizationStatus=authorized` 或通过 generic `lime.tools.invoke` 伪造 connector facts，都会继续返回 `adapter_not_configured`。验证：`cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_connector_preview --lib` 5 tests passed；`cargo check --manifest-path "src-tauri/Cargo.toml" -p lime --lib` 通过；`npm run test:contracts` 通过；scoped `git diff --check` 通过。
+- 2026-05-17 18:55 已定位内容工厂 run-scenarios materialization 假绿风险：`content-factory-run-scenarios-strict-full-runtime-20260517-failure.json` 显示 direct runtime 已完成且有 120 条 `sceneTable` workspace patch，但 patch `projectId=sample_content_factory_spring`，与当前页面项目不一致，App 侧按 projectId 过滤后拒绝物化。已在 Rust output contract metadata 中记录请求 `projectId`，并在 `agent_app_output_contract` 自动物化时用 Host 请求项目覆盖模型 / Skill 返回的样例项目 ID，防止写回历史项目。验证：`cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_runtime --lib` 28 tests passed；`cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_output_contract --lib` 5 tests passed；scoped `rustfmt --check` / `git diff --check` 通过。因隔壁仍在跑 `content-factory-run-scenarios-local-current-split-20260517` 与 `content-factory-run-scenarios-after-frame-text-read-fix-20260517`，本轮未抢 GUI 复测。
+- 2026-05-17 20:49 隔壁 `content-factory-run-scenarios-local-current-after-watch-fix-20260517` GUI flow 自然结束并通过：summary `.lime/qc/gui-evidence/agent-apps/content-factory-run-scenarios-local-current-after-watch-fix-20260517-summary.json` 的断言 `sameIframeContext / actionCount / allActionsCompleted / allActionsUsedExpectedSkills / allActionsHaveModelUsageCost / allActionsHaveWorkspacePatch / allActionsFullRuntimeReady / processVisibleAfterEachAction / noHostFallback / consoleErrorCount=0` 全为通过；direct runtime snapshot 为 `taskStatus=completed / profileStatus=completed / artifactCount=1 / toolCallCount=3 / hasWorkspacePatch=true / modelRunStatus=success`，completion `ready/fullRuntimeReady/businessReady=true`，页面 materialization 来自 `content_factory_page`，iframe 可见 `场景概览120 个` 与 `场景数量120目标 120+`。随后只读调用 `agent_app_runtime_get_task` 复核 task `agent-app-task-1dcff493-bc35-45a9-b58c-9f143ebcde5d` / session `agent-app-runtime-3c58211c-11b7-4100-8163-3b1b85b4ee22`，确认 `incidents=[]`、`lastOutcome.outcome_type=completed`、`model_routing.latestModelDeltaTiming.runStatus=success`。该证据解除 18:55 materialization 假绿风险；剩余缺口回到 P18.7-E 真实 Connector OAuth/secret execution adapter 与非 fixture 产品级真实 ToolRuntime mutation smoke。
+- 2026-05-17 22:13 隔壁 `content-factory-run-strategy-local-current-after-cross-project-fix-20260517` GUI flow 自然结束并通过：summary `.lime/qc/gui-evidence/agent-apps/content-factory-run-strategy-local-current-after-cross-project-fix-20260517-summary.json` 的断言 `sameIframeContext / actionCount / allActionsCompleted / allActionsUsedExpectedSkills / allActionsHaveModelUsageCost / allActionsHaveWorkspacePatch / allActionsFullRuntimeReady / processVisibleAfterEachAction / noHostFallback / consoleErrorCount=0` 全为通过；direct runtime snapshot 为 `taskStatus=completed / profileStatus=completed / artifactCount=1 / toolCallCount=2 / hasWorkspacePatch=true / evidenceReady=true`，模型为 `deepseek-v4-flash`，required Skills 为 `article-writer / content-reviewer`。该证据修复 21:59 run-strategy 页面物化失败；summary 中仍有收尾阶段 `net::ERR_ABORTED` failedRequests，因此本轮只把它作为 P18.7-F 业务闭环通过证据，不扩大为全局 GUI 运行面完全无噪声。
+- 2026-05-17 22:19 隔壁 `content-factory-run-review-local-current-20260517` GUI flow 自然结束并通过：summary `.lime/qc/gui-evidence/agent-apps/content-factory-run-review-local-current-20260517-summary.json` 的同一组断言全为通过；direct runtime snapshot 为 `taskStatus=completed / profileStatus=completed / artifactCount=1 / toolCallCount=1 / hasWorkspacePatch=true / evidenceReady=true`，模型为 `deepseek-v4-flash`，required Skill 为 `content-reviewer`。summary 仍有收尾阶段 `net::ERR_ABORTED` failedRequests，因此同样只作为 P18.7-F 业务闭环通过证据，不扩大为全局 GUI 运行面完全无噪声。
+- 2026-05-17 22:33 隔壁 `content-factory-full-flow-after-runtime-package-cross-project-fix-20260517` 自然结束并产出 summary：五个动作 `run-scenarios / run-production / run-scripts / run-strategy / run-review` 的 action gates 均通过，五个 direct runtime snapshot 均为 completed、`artifactCount=1`、`hasWorkspacePatch=true`、`evidenceReady=true`，tool call 数为 `3 / 2 / 2 / 2 / 1`。但该 summary 同时记录 `consoleErrorCount=1` 与 17 条 `net::ERR_ABORTED` failedRequests，因此只能作为五动作业务 action gate 通过证据，不能作为完全干净 GUI smoke 证据。
+- 2026-05-17 22:54 已补 P18.7-E Cloud Overlay outbox adapter first-cut：`connector__notion__createPage` 这类非 fixture cloud connector 在满足 Host-managed 授权 facts 后，会写入 workspace-local `.lime/agent-app-connectors/cloud-overlay/outbox.jsonl`，返回 `status=queued_for_cloud_overlay / externalStatus=not_delivered` 与 structured `evidenceRefs`；token、absolute path、App 自造 evidence id 继续被裁剪。2026-05-17 23:17 追加 outbox evidence projection first-cut：实际 ToolResult metadata 中的 structured `evidenceRefs` 会进入 `threadRead.tool_calls.evidence_refs`、`threadRead.evidence_summary` 与 Agent App task events，且 `[redacted:*]` placeholder 不被误收集。2026-05-18 00:00 再补 live output metadata projection（read-only replay summary：`.lime/qc/gui-evidence/agent-apps/p18-7-e-runtime-outbox-output-metadata-projection-20260518-summary.json`）：当 ToolRuntime 只把 structured metadata 写入 `[Lime 工具元数据开始]...` bounded output block 时，`runtime_evidence_projection_service` 也会提取其中 evidence refs 并合并到 `threadRead` evidence summary。验证：`cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_connector --lib` 8 tests passed、`agent_app_runtime` 29 tests passed、outbox projection 定向测试、`collects_evidence_refs_from_bounded_tool_output_metadata` 与 `cargo check --manifest-path "src-tauri/Cargo.toml" -p lime --lib --message-format short` 通过；因本地 `tauri dev` 持有默认 cargo artifact lock，本轮 Rust 命令使用 `CARGO_TARGET_DIR=/tmp/lime-codex-target-p18e`。该证据证明 non-fixture ToolRuntime outbox/evidence 可观测管线，不代表外部 OAuth / Cloud Overlay delivery 已完成。2026-05-18 00:08 新增 `scripts/agent-app-connector-outbox-smoke.mjs`，`node --check` 通过，并用 `--mode replay` 生成 `.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-replay-20260518-summary.json`，断言同一个 `outbox://...` ref 已进入 tool call、thread evidence summary 与 Agent App task events。2026-05-18 00:13 继续增强 live 模式自动 provider/model 选择，并用 `--mode replay` 生成 `.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-replay-auto-provider-20260518-summary.json`；2026-05-18 00:22 跑通 focused live runtime smoke `.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-live-auto-provider-final-20260518-summary.json`，自动 provider/model 为 `deepseek/deepseek-v4-flash`，`threadReadCompleted / connectorToolCallProjected / outputHadBoundedMetadata / toolCallEvidenceProjected / threadEvidenceProjected / taskEventEvidenceProjected` 全为 true，`toolCallCount=1`。2026-05-18 00:37 补 Host-managed secret delivery fact seam 并跑通 `.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-live-secret-delivery-20260518-summary.json`，显示 readiness 进入 `host_managed_secret_delivery_adapter_ready`，同时 raw credential material/token 仍未暴露且 external status 仍是 `not_delivered`。2026-05-18 00:42 追加 secret-delivery assertion gate，`node --check "scripts/agent-app-connector-outbox-smoke.mjs"` 通过，replay `.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-secret-delivery-assertions-replay-20260518-summary.json` 的基础 evidence assertions 与新增 secret-delivery assertions 均为 true。2026-05-18 00:58 追加 Host-managed secret lease fact seam：Rust readiness 现在要求 `secretDelivery.binding/source/target/leaseRef` 与 material/token 不暴露同时成立，`cloud_overlay_outbox` 会把 `secret-lease://connector/...` 句柄写入 workspace-local outbox internal metadata；验证 `agent_app_connector` 11 tests、标准 `cargo check` 与 `node --check` 通过。2026-05-18 01:00 Host Bridge 也会在已完成 `agent_app.connector_authorization` 后注入同一 `secretDelivery` lease fact，`capabilityDispatcher.test.ts` 18 tests 与 `npm run typecheck` 通过。2026-05-18 01:11 继续把同一 lease readiness 投影到 `lime.connectors.getStatus/list`：授权 task 成功时返回 `status=authorized`、App-safe `authorizationRequest.secretDelivery` 与 App-safe `connectorRuntimeFacts.secretDelivery`，未完成授权仍是 `requires_host_authorization`；同一组 TS 回归与 typecheck 通过。2026-05-18 02:06 继续收紧 lease handle 可见性：TS Host Bridge 分出 public/internal request，Rust readiness 优先消费 `agent_app_tool_execution.internalRequest`，Cloud Overlay outbox 文件保留 internal `leaseRef`，但 ToolResult metadata/output、threadRead、Agent App task events 与 focused smoke summary 只暴露 `leaseObserved=true / leaseRefExposed=false / leaseHandleStatus=host_managed`，并新增 `secretDeliveryConcreteLeaseRefNotExposed` smoke assertion；`npm test -- "src/features/agent-app/runtime/capabilityDispatcher.test.ts"` 18 tests、`npm run typecheck`、`CARGO_TARGET_DIR=/tmp/lime-codex-target-p18e cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_connector --lib` 11 tests、同 target `cargo check --manifest-path "src-tauri/Cargo.toml" -p lime --lib --message-format short`、`node --check` 与 `rustfmt --check` 均通过。该证据证明 non-fixture ToolRuntime outbox/evidence 可观测管线、Cloud worker 后续可消费的 internal lease contract，以及 App/model/public evidence 不暴露 concrete lease handle；不代表外部 OAuth / Cloud Overlay delivery 已完成。
+
+## Prompt-to-artifact 完成审计
+
+| 显式要求 / gate | 对应 artifact / evidence | 覆盖结论 |
+| --- | --- | --- |
+| 多 Agent 并行时先切写集、避免夹写 | `AGENTS.md` 新增并行协作规则；`internal/aiprompts/parallel-agent-collaboration.md`；本文“并行写集”表 | 已覆盖；后续 Agent 应先读并声明写集 |
+| 固定全量 `lime.*` capability surface 单一事实源 | `src/features/agent-app/sdk/capabilityCatalog.ts`；`capabilityContract.test.ts`；`capabilityAdapters.test.ts`；`publicSdkSurface.test.ts` | 已覆盖；catalog / adapter / profile 从同一事实源派生 |
+| Agent App `manifestVersion: 0.6.0` 标准兼容 | `normalizeManifest.ts`、`checkReadiness.ts`、`parseManifest.test.ts`、`referenceCliCrossCheck.test.ts` | 已覆盖；v0.6 新字段和 runtime policy 深投影仍按 accepted divergence 退出条件跟踪 |
+| `lime.capabilities` Host discovery | `capabilityDispatcher.test.ts`、`AgentAppRuntimePage.test.tsx` 覆盖 `list/get/getProfile` 与 iframe profile；外部 `content-factory-app` `npm test` 覆盖 `lime.capabilities.getProfile`、0.5/0.6 能力包展示和 Host profile 缺失时禁用本地模型兜底 | Host 侧与业务 App profile 降级消费均已覆盖 first-cut |
+| P18.7-D AgentRuntime resources | `capabilityDispatcher.test.ts` 覆盖 `models/usage/skills/memory/context` 只读投影与 mutation 拦截；2026-05-17 新增 `lime.usage.getBudget` 从 `threadRead.limit_state / cost_state` 投影 runtime budget facts，新增 `lime.skills.list/resolve` 从 `workspace_skill_bindings` 投影 readiness，新增 `lime.memory/query` 与 `lime.context.getSnapshot` 从 `context_summary` 投影 memory/context gate，并新增 `lime.models` 从 `model_routing / limit_state / cost_state` 投影模型约束事实源 | P18.7-D Host resource first-cut 已覆盖；真实 mutation / runtime enable 仍不开放 |
+| P18.7-E Tool / Integration | `capabilityDispatcher.test.ts` 覆盖 `tools/search/browser/documents/media/mcp/terminal/connectors` 受控 intent / 只读投影 / not_available；2026-05-17 新增从 AgentRuntime `threadRead.tool_calls / turns[].tool_calls` 投影真实 `web_search` 和 `connector__notion__createPage` 运行证据，补齐 generic `lime.tools.invoke/getProgress` facade，并新增 `executionGate / authorizationGate` 合同投影；2026-05-17 07:05 补齐 P18.7-E1 `executionGate.request` envelope 与敏感字段裁剪回归；2026-05-17 07:20 补齐 P18.7-E2 `lime.agent.startTask` handoff first-cut；2026-05-17 08:12 补齐 Rust `threadRead.tool_calls` 的 arguments、output preview、时间戳和 metadata evidence refs 投影；2026-05-17 08:31 补齐 `lime.connectors.requestAuth -> agent_app.connector_authorization` Host-managed authorization request handoff，raw OAuth token 不进入 App response 或 startTask payload；2026-05-17 08:46 补齐 Rust `task:blocked` connector authorization gate 投影；2026-05-17 14:32 补齐 exact `connector__<id>__<action>` ToolRuntime preview seam，未接真实 adapter 时返回受控 `not_available`；2026-05-17 17:03 补齐 Connector adapter readiness seam，返回 `adapterKind / adapterReadiness / next.required` 区分 desktop system action surface 与 Cloud Overlay 授权事实；2026-05-17 17:50 补齐 Host connector runtime facts envelope，把已观测 run / 已完成 authorization facts 安全传给 Rust seam；2026-05-17 21:15 新增 `connector__lime_fixture__recordMutation` Host-managed fixture connector mutation proof，写入 workspace-local evidence log 并脱敏 ToolResult metadata；2026-05-17 21:31 补齐 Host Bridge `lime_fixture / recordMutation` facts handoff，`lime.connectors.invoke` 会创建 `agent_app.tool_execution` startTask | Host first-cut、threadRead execution evidence、gate contract first-cut、E1 request envelope、E2 AgentRuntime handoff、E4 tool output/progress/evidence refs 回写 first-cut、connector authorization request handoff、snapshot projection first-cut、Connector ToolRuntime preview seam、adapter readiness seam、Host connector runtime facts envelope、fixture mutation/evidence proof、Cloud Overlay outbox adapter first-cut、metadata/output 双路径 outbox evidence projection first-cut、focused live runtime smoke harness 与 Host Bridge handoff 已覆盖；真实 Connector OAuth/raw secret material delivery 和产品级 non-fixture mutation GUI smoke 仍未覆盖 |
+| Agent Apps GUI 主路径可交付 | 2026-05-16 23:05 `npm run verify:gui-smoke` 通过；2026-05-16 23:08 focused `smoke:agent-apps` 新增 iframe 内 Host profile 断言后通过 | 已覆盖最新工作树；GUI 主路径当前复绿 |
+| P18.7-F 内容工厂产品闭环 | 外部 `content-factory-app` tests / Host iframe profile smoke 已覆盖 typed Agent task、Host runtime facts、运行过程展示和写回路径；可选真实按钮 E2E 已证明 `lime.agent.startTask`、Host task accepted / runtimeFacts observed、models/usage/skills runtime facts 拉取和 stream 订阅启动；2026-05-17 completion-focused gate 已证明“整理知识库 / 生成场景 / 生成内容 / 只重写 / 生成脚本 / 交付 / 复盘”七个真实按钮完成态包含 model / usage estimate / cost / Skill invocation / artifact / evidence / workspace patch，并要求 direct successful terminal；2026-05-17 20:49 `content-factory-run-scenarios-local-current-after-watch-fix-20260517-summary.json` 证明 run-scenarios 连续 GUI materialization 已复绿，页面内可见 `场景概览120 个 / 场景数量120目标 120+`；2026-05-17 22:13 `content-factory-run-strategy-local-current-after-cross-project-fix-20260517-summary.json`、22:19 `content-factory-run-review-local-current-20260517-summary.json` 与 22:33 `content-factory-full-flow-after-runtime-package-cross-project-fix-20260517-summary.json` 证明 run-strategy / run-review / 五动作 full-flow 当前 action gates 均完成 runtime、Skill、成本、workspace patch 和 no Host fallback gate；full-flow 仍有 1 条 console error 噪声 | P18.7-F 内容工厂按钮完成态、run-scenarios 页面物化、run-strategy cross-project fix 与 run-review 当前 flow 已覆盖；不要把该结论扩展为 P18.7-D/E 深水位已完成 |
+| 验证失败可诊断 | `scripts/agent-apps-smoke.mjs` failure diagnostics；`agent-apps-smoke-diagnostics-selftest-failure.json/png` 与 `agent-apps-smoke-diagnostics-process-selftest-failure.json/png` 自测证据 | 已覆盖；后续失败应直接读取 failure JSON / screenshot，其中 `processSnapshot` 可直接确认是否存在 cwd 为 `content-factory-app` 的残留 dev server |
+
+## P18.7-F 完成度审计（2026-05-17 22:33）
+
+| 完成标准 | 当前证据 | 审计结论 |
+| --- | --- | --- |
+| 1. “整理知识库 / 生成场景 / 生成内容 / 只重写 / 生成脚本 / 交付 / 复盘”真实通过 `lime.agent` 进入 AgentRuntime | `agent-apps-smoke-p18-7-content-action-e2e-fixed5-summary.json`、`agent-apps-smoke-p18-7-completion-run-scenarios-success-summary.json`、`agent-apps-smoke-p18-7-completion-run-production-summary.json`、`agent-apps-smoke-p18-7-completion-only-copy-summary.json`、`agent-apps-smoke-p18-7-completion-run-scripts-summary.json`、`agent-apps-smoke-p18-7-completion-run-strategy-summary.json`、`agent-apps-smoke-p18-7-completion-run-review-summary.json`：均断言 `contentFactoryActionStarted=true`、`contentFactoryActionTaskAccepted=true`，并完成 focused completion | 七个真实按钮已覆盖 |
+| 2. 运行过程展示来自 Host `runtimeProcess`，过程不消失 | 七个 completion-focused summary 均从 Host iframe 触发，并要求 `contentFactoryActionProcessVisible=true`、Host task record 可读；direct `agent_app_runtime_get_task` 成功终态保留 task events、tool calls、artifact 和 evidence facts；2026-05-17 20:49 run-scenarios、22:13 run-strategy、22:19 run-review 与 22:33 full-flow 均要求 `processVisibleAfterEachAction=true`，且留在同一 iframe / no Host fallback | 已覆盖数据层不消失；默认折叠只是展示形态，不作为完成必要条件 |
+| 3. 模型、Token、费用、Skill、工具、引用、artifact、evidence 均可见 | 七个 completion-focused summary 均 `contentFactoryCompletionReady=true`，且 completion 八项均为 true：`modelReady / usageReady / costReady / skillInvocationReady / artifactReady / evidenceReady / workspacePatchReady / terminalReady`；各 gate 的 direct snapshot 均为 `taskStatus=completed`，`selectedModel=deepseek-v4-flash`，工具调用覆盖对应 required Skills（review 为 `content-reviewer`，其他内容/脚本/交付为 `article-writer / content-reviewer`） | P18.7-F 完成态事实已覆盖 |
+| 4. 最终业务结果写回 App storage / artifacts / evidence | 七个 completion-focused summary 均记录 Host task / session 完成，并断言 `artifactReady/evidenceReady/workspacePatchReady=true`；对 `only-copy / run-scripts / run-strategy` 使用样例项目作为业务前置状态，只验证对应真实按钮的 Host Runtime 完成态，不把前置样例 seed 当作 AI 产物证据；2026-05-17 20:49 run-scenarios flow 直接物化 `场景概览120 个 / 场景数量120目标 120+`，direct snapshot `artifactCount=1 / hasWorkspacePatch=true`；2026-05-17 22:13 run-strategy flow direct snapshot 为 `artifactCount=1 / toolCallCount=2 / hasWorkspacePatch=true / evidenceReady=true`，22:19 run-review flow direct snapshot 为 `artifactCount=1 / toolCallCount=1 / hasWorkspacePatch=true / evidenceReady=true`，22:33 full-flow 的五个 direct snapshots 也均为 `artifactCount=1 / hasWorkspacePatch=true / evidenceReady=true` | P18.7-F 按按钮完成态已覆盖；样例 seed 口径已显式记录；run-scenarios、run-strategy 与 run-review 当前 flow evidence 均已复绿 |
+| 5. 不跳回 Lime 通用 Chat，不直接调用模型 API | 七个 E2E 均留在内容工厂 iframe，未出现 Host fallback；外部 App tests 覆盖 Host connected 时禁止本地生成 API | P18.7-F 七个真实 AI 业务按钮已覆盖；非 AI 导航/配置页面不纳入该 gate |
+| 6. standalone 页面不可替代 Host iframe 证据 | 现有 passing gate 均从 Lime Host iframe 触发；standalone 只作为外部 App 单测 / validate 辅证 | 已按口径执行 |
+
+
+## 当前结论
+
+- `current`：`lime.* capability catalog`、typed SDK、profile 派生、Agent App v0.6 reference cross-check、`lime.capabilities` Host discovery first-cut、`lime.models`（含模型约束事实源）/ `lime.usage`（含 `getBudget` runtime limit / cost facts）/ `lime.skills`（含 workspace binding readiness projection）/ `lime.memory` / `lime.context`（含 `context_summary` memory/context gate projection）/ `lime.tasks`（App-scoped task 只读 list/get）AgentRuntime 只读资源投影 first-cut、P18.7-E `lime.tools` / `lime.search` / `lime.browser` / `lime.documents` / `lime.media` / `lime.mcp` / `lime.terminal` / `lime.connectors` 受控工具 intent、E1/E2/E3/E4 first-cut、`runtimeProcess` 运行投影与 AgentRuntime `threadRead.tool_calls` arguments/output/evidence refs 执行证据 first-cut、connector authorization request handoff 与 snapshot projection first-cut，以及内容工厂 Host iframe profile / runtime facts 消费 first-cut。
+- `compat`：mock / adapter profile 和当前 Host Bridge preview 接线，仍服务测试与渐进接入。
+- `deprecated`：手写 capability 数组、App 自己解析 runtime 事件、复制底层工具执行逻辑。
+- `dead`：内容工厂专用后端命令、App 裸调模型 API、复制 Claw Skill launch。
+
+## 完成度审计
+
+| 目标 / 要求 | 当前证据 | 结论 |
+| --- | --- | --- |
+| P18.7-A：全量 `lime.*` catalog、typed SDK、profile 派生为单一事实源 | `capabilityCatalog.ts`、`capabilityContract.test.ts`、`capabilityAdapters.test.ts`、`publicSdkSurface.test.ts`；定向与 Agent App 全套通过 | 已完成 |
+| P18.7-B：`manifestVersion: 0.6.0` 标准兼容、layered manifest 和 reference cross-check 复绿 | `normalizeManifest.ts`、`checkReadiness.ts`、`parseManifest.test.ts`、`referenceCliCrossCheck.test.ts`；v0.6 reference 相关定向通过 | 已完成 |
+| P18.7-C：`lime.capabilities.list/get/getProfile` Host discovery，不泄露 internal path | `capabilityDispatcher.test.ts` 覆盖 list/get/getProfile、unknown capability、无 `path/sourceFile/internal`；Runtime Page test 覆盖 iframe 调用 `getProfile` | Host 侧 first-cut 已完成 |
+| P18.7-C：业务 App UI 根据 profile 降级 | 外部 `content-factory-app/src/ui/app.js` 已通过 `state.hostCapabilityProfile` 判断 capability 可用性；`tests/ui.test.mjs` 覆盖 `lime.capabilities.getProfile`、Host profile 缺少 AI 任务能力时阻止本地模型兜底；2026-05-17 06:39 外部 `npm test` 63 tests passed | first-cut 已完成；外部写集仍由隔壁持有，本进程只记录验证证据 |
+| P18.7-D：`lime.usage` 投影 model、token、cost、budget | `capabilityDispatcher.test.ts` 覆盖 `getTokenUsage/getCostSummary` 从 `runtimeProcess` 投影 Token 与成本；2026-05-17 新增 `getBudget` 从 AgentRuntime `threadRead.limit_state / cost_state` 投影 `limitStatus / costStatus / estimatedCost / candidateCount / notes`，存在 runtime facts 时返回 `status=observed` | Token / cost / budget first-cut 已完成 |
+| P18.7-D：`lime.models` 读取模型事实源、路由结果和约束 | `capabilityDispatcher.test.ts` 覆盖 `list/getRouting` 从 `runtimeProcess.model` 投影；2026-05-17 新增从 `model_routing / limit_state / cost_state` 投影 `selected/requested model / routingMode / decisionSource / candidateCount / fallbackChain / capabilityGap / pricing`；`select/estimateCost` 为 runtime projection first-cut | 模型事实源与约束 first-cut 已完成 |
+| P18.7-D：`lime.skills` | `capabilityDispatcher.test.ts` 覆盖 `list/resolve/getInvocation` 从 `runtimeProcess.skillNames/invokedSkillNames` 投影；2026-05-17 新增从 `workspace_skill_bindings` 投影 `ready_for_manual_enable / nextGate / runtimeGate / permissionSummary`；`bind/invoke` 返回 `not_available`，不打开 mutation | workspace binding readiness first-cut 已完成；Skill runtime enable / tool surface 注入仍未打开 |
+| P18.7-D：`lime.memory`、`lime.context` | `capabilityDispatcher.test.ts` 覆盖 `getStatus/query/getSnapshot` 从 App-scoped task、knowledge bindings、threadRead diagnostics、thread/turn ids 投影；2026-05-17 新增从 AgentRuntime `context_summary` 投影 `memory_budget / retrieval_refs / missing_context / team_memory_refs`，`query` 可命中 context refs；`write/compact/attach/detach` 返回 `not_available`，不打开 mutation | memory/context gate first-cut 已完成；真实写入 / attach mutation 仍不开放 |
+| P18.7-D：`lime.tasks` App-scoped task observability | `capabilityDispatcher.test.ts` 覆盖 `list/get/cancel/subscribe`；`list/get` 从 Host task store 投影 taskId、traceId、taskKind、status、runtimeStatus、result/tool/event 摘要，`cancel/subscribe` 返回 `not_available` 并指向 `lime.agent.cancelTask/streamTask` | task observability first-cut 已完成；不打开第二套队列或平行订阅运行时 |
+| P18.7-E：`lime.tools/search/browser/documents/media/mcp/terminal/connectors` 工具集成 | `capabilityDispatcher.test.ts` 覆盖 `lime.tools.invoke/getProgress`、`lime.search.query/getRun`、`lime.browser.open`、`lime.documents.parse`、`lime.media.generateImage`、`lime.mcp.listServers/invoke`、`lime.terminal.run/getRun/cancel`、`lime.connectors.list/getStatus/requestAuth/invoke`；2026-05-17 新增从 AgentRuntime `threadRead.tool_calls / turns[].tool_calls` 投影 `web_search` 与 `connector__notion__createPage` 的真实运行证据，包含 source / input / output，并在 generic `lime.tools` 与 connector list/getStatus/invoke 中暴露；Host Bridge 对工具执行只返回受控 `requires_agent_task` intent、只读投影、Host 授权需求或明确 `not_available`，并通过 `executionGate / authorizationGate` 明确 mutation/token/secret 不暴露；P18.7-E1 已在 `executionGate.request` 固定 machine-readable envelope 并裁剪 secret、raw OAuth token、absolute local path、App 自造 evidence id；P18.7-E2 已把 envelope 交给 `lime.agent.startTask` / `agent_app_runtime_start_task` 创建 `agent_app.tool_execution` handoff task；P18.7-E3 已在 Rust 侧把 `agent_app.tool_execution` 绑定到 full runtime / ToolRuntime session allowlist，并补 exact `connector__<id>__<action>` preview tool 作为受控 `not_available` seam；2026-05-17 17:03 已让 connector preview result 增加 adapter readiness projection，区分 desktop system action surface 与 Cloud Overlay authorized runtime fact；2026-05-17 17:50 已让 Host Bridge 把 connector runtime facts 写入 `executionGate.request.input.connectorRuntimeFacts` 并随 handoff metadata 交给 Rust seam；2026-05-17 21:15 已补 `connector__lime_fixture__recordMutation` Host-managed fixture adapter，满足 Host-managed 授权 fact 时执行 workspace-local mutation、写 `.lime/agent-app-connectors/fixture/mutations.jsonl` 并返回脱敏 evidence refs；P18.7-E4 已让工具 cancellation 通过 Agent task id 回到 `lime.agent.cancelTask`，并已把 Rust `threadRead.tool_calls` 扩展到 arguments、output preview、时间戳和 metadata evidence refs 回写；2026-05-17 08:31 已让 `requestAuth` 创建 `agent_app.connector_authorization` Host-managed task，authorization envelope 进入 `agent_app_connector_authorization.request`，并断言 raw OAuth token 不出 Host；2026-05-17 08:46 已让 Rust task snapshot 投影 `task:blocked` connector authorization gate | Host 侧 first-cut、generic `lime.tools` facade、threadRead execution evidence、gate contract first-cut、E1 request envelope、E2 handoff、E3 owner binding first-cut、Connector ToolRuntime preview/readiness seam、Host connector runtime facts envelope、fixture mutation/evidence proof 与 Host Bridge handoff、E4 cancellation first-cut、tool output/progress/evidence refs 回写 first-cut、connector authorization request handoff 与 snapshot projection first-cut 已完成；Connector OAuth/secret 完整执行和非 fixture 产品级真实 ToolRuntime mutation smoke 仍未完成 |
+| P18.7-F：内容工厂产品闭环复核 | Lime Host 侧已有 `lime.agent`、runtimeProcess、models/usage first-cut；外部 App `npm test` 覆盖 profile/usage/skills runtime facts、运行过程展示、workspace patch 写回、Host connected 时禁止本地生成 API；focused Agent Apps smoke 断言 iframe 内 Host profile 可见；七个 completion-focused gate 已确认“整理知识库 / 生成场景 / 生成内容 / 只重写 / 生成脚本 / 交付 / 复盘”均进入 Host AgentRuntime，并完成 model / usage / cost / Skill invocation / artifact / evidence / workspace patch；20:49 run-scenarios、22:13 run-strategy、22:19 run-review 独立 GUI flow 通过，22:33 五动作 full-flow action gates 通过但仍有 console 噪声 | P18.7-F 内容工厂按钮完成态与当前关键 flow evidence 已覆盖；不要把该结论扩展为 P18.7-D/E 深水位完成 |
+| GUI 主路径可交付 | 2026-05-16 23:05 完整 `npm run verify:gui-smoke` 通过；2026-05-16 23:08 增强后 focused Agent Apps smoke 通过 `runtimeFrameContentFactoryLoaded/runtimeFrameHostProfileVisible` 断言 | 当前工作树已复绿 |
+
+## 剩余缺口
+
+1. `internal/roadmap/agentapp/lime-capability-surface.md` 已是受版本控制的历史摘要；当前唯一 P18.7 主入口是 `internal/roadmap/agentapp/p18-7-full-lime-capability-surface.md`，不再按未跟踪冲突处理。
+2. P18.7-C first-cut 已可通过 Host Bridge 投影 catalog 摘要、stage、owner、enabled、implementation 和 unavailable reason；Agent App Runtime Page 已把 `lime.capabilities` 暴露给 iframe，并补了 `getProfile` 回归。外部 `content-factory-app` 当前已调用 `lime.capabilities.getProfile` 做 0.5/0.6 能力包展示和 AI 任务能力缺失降级，外部测试 63 项通过；该外部仓库写集仍由隔壁持有，本进程只记录验证证据。
+3. P18.7-D first-cut 已可通过 Host Bridge 为声明了 `lime.models` / `lime.usage` / `lime.skills` / `lime.memory` / `lime.context` / `lime.tasks` 的 App 投影 `runtimeProcess`、App-scoped task、threadRead diagnostics、thread/turn ids 中的模型、模型约束、Token、成本、预算 limit/cost facts、Skill 调用、workspace binding readiness、memory/context gate 和记忆/上下文状态；`lime.skills.bind/invoke`、`lime.memory.write/compact`、`lime.context.attach/detach` 仍明确返回 `not_available`，不伪造可变更或执行成功。
+4. P18.7-E 已完成 `tools/search/browser/documents/media/mcp/terminal/connectors` Host first-cut，并补到 AgentRuntime `threadRead.tool_calls / turns[].tool_calls` 的只读执行证据 first-cut、`executionGate / authorizationGate` 合同 first-cut、P18.7-E1 `executionGate.request` envelope、P18.7-E2 AgentRuntime handoff first-cut、P18.7-E3 owner binding first-cut、Connector ToolRuntime preview/readiness seam、Host connector runtime facts envelope、Host-managed fixture mutation/evidence proof、Cloud Overlay outbox adapter first-cut、metadata/output 双路径 outbox evidence projection first-cut、focused live runtime smoke harness、Host Bridge handoff、P18.7-E4 cancellation first-cut、Rust `threadRead.tool_calls` arguments/output preview/时间戳/evidence refs 回写 first-cut，以及 connector authorization request handoff / snapshot projection first-cut；真实 Connector OAuth/raw secret material delivery、生产 external delivery 和产品级 non-fixture mutation GUI smoke 仍未完成。
+5. P18.7-F 内容工厂按钮完成态已覆盖，且 20:49 run-scenarios / 22:13 run-strategy / 22:19 run-review 当前 GUI flow 均已有通过证据，22:33 五动作 full-flow action gates 也通过但仍有 console 噪声；剩余工作应回到 P18.7-D/E 的全局能力深水位，尤其是真实 ToolRuntime mutation / Connector auth execution gate，而不是继续围绕内容工厂按钮重复跑同类 completion gate。
+
+## 下一刀归属
+
+- 外部 `content-factory-app` profile 降级展示已由隔壁写集实现并经本进程只读验证；本进程不接管外部文件，只在 Lime 文档记录证据。
+- P18.7 全局 completion audit 已确认：A/B/C 完成 first-cut，D/F first-cut 或 completion gate 已覆盖，E 已补 threadRead execution evidence、gate contract first-cut、E1 request envelope、E2 AgentRuntime handoff first-cut、E3 ToolRuntime owner binding first-cut、E4 cancellation first-cut、tool output/progress/evidence refs 回写 first-cut、connector authorization request handoff / snapshot projection first-cut、Host-managed fixture mutation/evidence proof 与 Host Bridge handoff；P18.7-E 深水位执行计划已落到 `internal/roadmap/agentapp/p18-7-e-toolruntime-execution-gate-plan.md`，下一刀进入 Connector OAuth/secret 完整执行与非 fixture 产品级真实 ToolRuntime mutation smoke，而不是继续重复内容工厂按钮 smoke。
+
+## 2026-05-18 P18.7-F runtime idle 根因与修复
+
+- `content-factory-run-scenarios-agent-runtime-0-1-0-recheck-20260518-codex-failure.json` 仍复现 `agent_app_runtime_start_task` accepted 后 `directRecord.taskStatus=idle`，task `agent-app-task-7ab6c2e6-85fb-4a31-a8a1-8ddb3cfad31f` / session `agent-app-runtime-2330643e-3b1c-4756-b6d7-50f4d62a8c0c` 没有 `terminalReady/modelReady`。
+- 随后用带 SSE 监听的最小 `agent_app_runtime_start_task` probe 复现后台错误：先收到 `runtime_status preparing`，随后收到 `RuntimeAgentEvent::Error`，payload 为 `runtime turn 后台任务 panic: failed printing to stderr: Broken pipe (os error 32)`。这说明 idle 不是内容工厂页面点击或 Host task 记录问题，而是 detached Tauri 进程 stderr 已断开时，runtime turn 第一批 tracing 输出触发 panic，导致没有落 `agent_runs / agent_thread_turns / runtime.db`。
+- 已在 `src-tauri/src/profiling.rs` 把 tracing fmt writer 切到 `NonPanickingStderr`，对 `BrokenPipe` 写入/flush 返回成功，同时保留其他 IO error；`Profiling` 初始化失败兜底输出也复用同一 writer，避免 detached GUI / headless 进程因 stderr broken pipe 中断后台 runtime turn。
+- 验证：`CARGO_TARGET_DIR="/tmp/lime-codex-target-p18f" cargo test --manifest-path "src-tauri/Cargo.toml" -p lime profiling::tests --lib` 通过，`CARGO_TARGET_DIR="/tmp/lime-codex-target-p18f" cargo check --manifest-path "src-tauri/Cargo.toml" -p lime --lib --message-format short` 通过，`git diff --check -- "src-tauri/src/profiling.rs"` 通过。
+- 尚未宣称 P18.7-F combined green：当前 `127.0.0.1:3030` 仍由修复前启动的 `target/debug/lime` 提供，按并行协作约束未强杀长期 GUI / DevBridge 进程；下一刀需要在确认可重启后，用新 binary 复跑 focused runtime probe，再复跑 `run-scenarios,run-production` combined evidence。
+
+## 2026-05-18 P18.7-F combined rerun 收口
+
+- 新 binary 已由并行会话重启并复跑 focused probe / focused action 后继续做 combined GUI 证据；本进程只读监控并避免双跑。前几轮 combined failure 均与并行前端写入触发 Vite reload / DevBridge transient timeout 相关，不再作为 runtime 业务失败归因：`content-factory-scenarios-production-final-after-stderr-fix-20260518-codex-failure.json` 已显示 `run-production` 页面实际有 `内容20/20` 与脚本图片需求；后续 `after-runtime-surface-recover` / `after-server-scene-preserve-and-surface-recover` 也均已物化业务结果，但分别卡在 runtime surface reload 或 transient console warning。
+- 最终 combined summary：`.lime/qc/gui-evidence/agent-apps/content-factory-scenarios-production-after-sidebar-nav-warning-20260518-codex-summary.json`，动作 `run-scenarios / run-production`，生成时间 `2026-05-18T05:26:00.306Z`。断言 `actionCount / allActionsCompleted / allActionsUsedExpectedSkills / allActionsHaveModelUsageCost / allActionsHaveWorkspacePatch / allActionsFullRuntimeReady / processVisibleAfterEachAction / noHostFallback / noConsoleErrors` 均为 true，`consoleErrorCount=0`。
+- `run-scenarios` task `agent-app-task-941ec95e-5a44-439e-a879-12e31a0c9153` / session `agent-app-runtime-9108b30c-7118-4ab7-b22b-d2e9aca9383c`：`taskStatus=completed`、`profileStatus=completed`、`artifactCount=1`、`toolCallCount=2`、model `deepseek-v4-flash`，required Skills `knowledge-builder / content-reviewer` 均命中，workspace patch kind `scene_table`，usage 证据来自 `direct_runtime_estimate`，cost 证据来自 `direct_runtime_snapshot`。
+- `run-production` task `agent-app-task-f2837498-3e0f-4822-87bd-c4f8be148692` / session `agent-app-runtime-a3375dc3-c5f2-4919-82aa-6d7a0bc913da`：`taskStatus=completed`、`profileStatus=completed`、`artifactCount=1`、`toolCallCount=2`、model `deepseek-v4-flash`，required Skills `article-writer / content-reviewer` 均命中，workspace patch kind `content_batch`，页面 materialization 来源为 `content_factory_page`。
+- 该 combined summary 仍记录收尾阶段 `net::ERR_ABORTED` failedRequests，因此本证据只声明 P18.7-F `run-scenarios,run-production` 产品闭环、runtime / Skill / usage / cost / workspace patch / no Host fallback / no console errors gate 已通过；不把它扩展为“所有开发态网络请求零噪声”。
+
+## 2026-05-18 P18.7-E delivery receipt live audit
+
+- `p18-7-e-connector-outbox-runtime-smoke-replay-delivery-receipt-projection-fixed-20260518-summary.json` 已证明旧 live session 的 `outbox://...` 与 `delivery://...` 同时投影到 tool call、thread evidence summary 和 Agent App task events；该 replay 不调用 provider。
+- 21:35 复跑当前 runtime live：`.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-live-delivery-receipt-projection-current-20260518-summary.json`。DevBridge healthy，但自动 provider 选择 `deepseek/deepseek-v4-flash` 后返回 `402 Payment Required: Insufficient Balance`，`threadRead.status=failed`、`toolCallCount=0`，所以没有形成新的 delivery receipt live green。
+- 23:20 custom provider live 复跑通过：`.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-live-delivery-receipt-projection-custom-provider-20260518-codex-summary.json` 使用显式 `custom-da3283c4-8405-45e9-81cd-12991ffdf41c / claude-sonnet-4-6`，task `agent-app-connector-outbox-runtime-1779117534688-37651` / session `38eb0886-1c4e-4fe4-a5b0-aba73bcefa89`，`threadReadCompleted / connectorToolCallProjected / outputEvidenceSourceObserved / outboxEvidenceRefObserved / toolCallEvidenceProjected / threadEvidenceProjected / taskEventEvidenceProjected / deliveryReceiptRefObserved / deliveryToolCallEvidenceProjected / deliveryThreadEvidenceProjected / deliveryTaskEventEvidenceProjected` 全为 true；`threadRead` 显示 `nextRequired=external_platform_delivery`、`deliveryStatus=accepted_by_local_cloud_overlay_worker`、`deliveryExternalPlatformDelivered=false`。
+- 结论：P18.7-E delivery receipt projection 已有当前 binary + custom provider focused live green；下一刀不再是复跑同一 focused smoke，而是补真实 Connector OAuth / raw secret material adapter / 外部平台真实 delivery，并用产品级 GUI evidence 证明外部送达。
+
+## 2026-05-19 P18.7-E webhook external delivery first-cut
+
+- 本轮没有接管隔壁 v2 / standalone / content-factory flow，也没有抢 default `src-tauri/target`；代码写集只限 connector ToolRuntime seam、focused smoke harness 和 P18.7-E 文档。
+- Rust seam 新增 Host-managed webhook external delivery：internal request 提供 `secretDelivery.externalDelivery` 时，Cloud Overlay adapter 可把脱敏 connector mutation payload POST 到 Host-managed webhook，并把 delivery receipt 从 `accepted_by_local_cloud_overlay_worker` 推进到 `delivered_to_external_platform`。
+- 公开 evidence 只允许 target hash / label / HTTP status / deliveredAt / delivered boolean；webhook URL、raw token、raw credential、concrete lease ref 不进入 ToolResult output、threadRead 或 Agent App task events。
+- local webhook 直连修复：本地 `http://127.0.0.1:` / `http://localhost:` 目标改为直接 TCP HTTP POST，绕过系统代理；远端 `https://...` 仍走 `reqwest`。该修复直接服务 P18.7-E focused live local-webhook evidence，避免本机 proxy 把 localhost POST 变成 502。
+- Rust 定向验证已完成：`rustfmt --edition 2021 --check ...connector_tools...` 与 `git diff --check -- ...P18.7-E 写集...` 通过；`CARGO_TARGET_DIR="$HOME/Library/Caches/lime-codex-target-p18e" cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_connector_cloud_overlay_can_deliver_to_host_managed_webhook --lib` 通过；`... agent_app_connector --lib` 12 tests passed；`... cargo check --manifest-path "src-tauri/Cargo.toml" -p lime --lib --message-format short` 通过；`node --check "scripts/agent-app-connector-outbox-smoke.mjs"` 通过。独立 target 复用现有 `sherpa-onnx` prebuilt，避免与隔壁 default target / Tauri dev 构建产物打架。
+- live evidence 当前是 diagnostic 而非 green：`.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-live-local-webhook-20260519-codex-summary.json` 与 `...-v2-summary.json` 均在旧 runtime binary 上失败，`externalDelivery.httpStatus=502`、local webhook `receivedRequestCount=0`；但两份 summary 仍显示 DevBridge healthy、connector tool call / outbox / delivery evidence projection 可读，且 target URL、raw token、concrete lease ref 未外露。下一刀应在确认可重启运行面后，用新 binary 复跑 live local-webhook smoke；不应继续在旧 binary 上重复 provider 调用。
+- completion 口径保持不变：local webhook first-cut 不是生产外部平台 delivery；P18.7-E 深水位仍缺真实 Connector OAuth、secret store raw material adapter、生产平台 delivery 和产品级 GUI evidence。
+
+## 2026-05-19 06:06 latest P18.7-E/F evidence
+
+- P18.7-E focused live local-webhook smoke 已在新 runtime binary 下通过：`.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-live-local-webhook-20260519-codex-v3-summary.json`。该 summary 显示 `externalStatus=delivered`、`nextRequired=external_platform_delivery_complete`、`deliveryStatus=delivered_to_external_platform`、`deliveryExternalPlatformDelivered=true`、`externalDeliveryHttpStatus=200`、local webhook `receivedRequestCount=1`；target URL、raw token、credential material 和 concrete lease ref 均未进入 public ToolResult / threadRead / Agent App task events。
+- P18.7-F focused run-review clean retry 已通过：`.lime/qc/gui-evidence/agent-apps/content-factory-review-yunwu-clean-retry-20260519-codex-summary.json`。`run-review` 的 direct runtime 为 `completed`，required Skills 命中，model / usage / cost / artifact / evidence / workspace patch / process visible / no Host fallback / no console errors gate 全部通过。
+- 五动作 full-flow 仍没有最新 green：`content-factory-full-flow-kimi-20260519-codex-failure.json` 失败在 `run-review` 的 terminal status，`content-factory-full-flow-round-materialize-fix-20260519-codex-failure.json` 失败在 `run-scenarios` runtime failed，`...retry...` 是 SIGTERM。当前可用的产品证据组合是 two-action green + run-review focused clean green + Agent Apps smoke green，而不是一份新的五动作 full-flow green。
+- completion 口径保持：整体目标仍不能标记 complete；下一刀优先真实 Connector OAuth / raw secret material adapter / production external platform delivery 与产品级 GUI 外部送达证明。
+
+## 2026-05-19 06:23 P18.7-E remote webhook secret-source validation
+
+| 验证项 | 状态 | 说明 |
+| --- | --- | --- |
+| `npm run bridge:health -- --timeout-ms 120000` | passed | 只读确认当前 DevBridge healthy，未启动新的 GUI/runtime/provider flow。 |
+| `node --check "scripts/agent-app-connector-outbox-smoke.mjs"` | passed | 隔壁 `agent-apps-content-factory-flow` 仍在跑，本轮只运行不碰 GUI/runtime/provider 的语法检查。 |
+| `git diff --check -- "scripts/agent-app-connector-outbox-smoke.mjs" "internal/roadmap/agentapp/p18-7-e-toolruntime-execution-gate-plan.md" "internal/roadmap/agentapp/p18-completion-audit.md" "internal/roadmap/agentapp/p18-7-parallel-validation.md"` | passed | 本轮窄写集无空白错误。 |
+
+本轮不重跑 live connector smoke：隔壁 full-flow 仍占用 GUI/runtime/provider；新增能力只是远端 webhook URL 的安全输入来源，为后续真实平台 delivery proof 做前置加固。
+
+## 2026-05-19 06:32 P18.7-F five-action full-flow result
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-final-20260519-codex-summary.json` | passed with caveat | 五动作 `run-scenarios / run-production / run-scripts / run-strategy / run-review` 全部 direct runtime completed，expected Skills 命中，model/usage/cost/workspace patch/fullRuntimeReady/process visible/no Host fallback/no console errors gate 全绿。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-final-20260519-codex.png` | captured | 对应 GUI 截图已保存。 |
+
+Caveat：`sameIframeContext=false`，summary 记录 18 个 `net::ERR_ABORTED` failedRequests；当前只把它作为 P18.7-F 五动作业务闭环证据，不把它升级为全运行面零噪声或 P18.7-E production connector delivery 完成证据。
+
+## 2026-05-19 06:34 P18.7-E replay after secret-source hardening
+
+| 验证项 | 状态 | 说明 |
+| --- | --- | --- |
+| `node "scripts/agent-app-connector-outbox-smoke.mjs" --mode replay --session-id "45062313-ce98-458a-bc17-b2931e3faed1" --task-id "agent-app-connector-outbox-runtime-1779141951965-66767" ...` | passed | 不调用模型 provider；复核 local-webhook delivered evidence projection、delivery receipt projection、secret delivery 不暴露 concrete lease/raw token/material。输出 `.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-replay-local-webhook-source-hardening-20260519-codex-summary.json`。 |
+
+## 2026-05-19 06:54 P18.7-F metrics full-flow result
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-metrics-20260519-codex-summary.json` | passed with caveat | 五动作 direct runtime completed；expected Skills、model/usage/cost、workspace patch、fullRuntimeReady、process visible、scene count preservation、no Host fallback、no console errors 均通过；failedRequests 降至 13。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-metrics-20260519-codex.png` | captured | 对应 GUI 截图已保存。 |
+
+Caveat：`sameIframeContext=false`，failedRequests 仍存在；该证据只加强 P18.7-F metrics/full-flow 产品闭环，不替代 P18.7-E 真实 OAuth / raw secret material adapter / production external delivery 证明。
+
+## 2026-05-19 07:03 P18.7-E inline raw secret guard validation
+
+| 验证项 | 状态 | 说明 |
+| --- | --- | --- |
+| `rustfmt --edition 2021 --check "src-tauri/src/commands/aster_agent_cmd/tool_runtime/connector_tools/readiness.rs" "src-tauri/src/commands/aster_agent_cmd/tool_runtime/connector_tools/tests.rs"` | passed | Connector readiness / tests 格式检查通过。 |
+| `CARGO_TARGET_DIR="$HOME/Library/Caches/lime-codex-target-p18e" cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_connector_external_delivery_rejects_inline_secret_material --lib` | passed | 新增 raw secret guard 定向测试 1 passed。 |
+| `CARGO_TARGET_DIR="$HOME/Library/Caches/lime-codex-target-p18e" cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_connector --lib` | passed | Connector 定向套件 13 tests passed，复核 local webhook、delivery receipt、authorization redaction 未回归。 |
+| `CARGO_TARGET_DIR="$HOME/Library/Caches/lime-codex-target-p18e" cargo check --manifest-path "src-tauri/Cargo.toml" -p lime --lib --message-format short` | passed | 独立 target 下 Rust lib check 通过，未抢 default `src-tauri/target`。 |
+
+该 guard 只封住 inline raw secret 假路径；它不等同于真实 raw secret material adapter 或 production external platform delivery 完成。
+
+## 2026-05-19 07:44 normalized metrics full-flow failure
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-metrics-normalized-20260519-codex-failure.json` | failed | `run-review` missing `terminalReady`；task `agent-app-task-7ac2611f-c0e4-44a8-ab30-b6110eebb4e6` / session `agent-app-runtime-8366177b-708a-4c8c-ade1-f930b2daad2b`；direct runtime `failed`，model runStatus `error`，`toolCallCount=1`，`artifactCount=0`，`hasWorkspacePatch=false`。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-metrics-normalized-20260519-codex-failure.png` | captured | 失败截图已保存。 |
+
+该失败只记录 normalized metrics 复跑不稳定性；P18.7-F 仍以 `content-factory-full-flow-yunwu-final-20260519-codex-summary.json` 与 `content-factory-full-flow-yunwu-metrics-20260519-codex-summary.json` 作为当前 green 证据组合。P18.7-E production connector delivery 仍未覆盖。
+
+## 2026-05-19 07:51 nested raw secret guard validation
+
+| 验证项 | 状态 | 说明 |
+| --- | --- | --- |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_connector_external_delivery_rejects_inline_secret_material --lib` | passed | 新增断言覆盖 `externalDelivery.auth.bearerToken` 嵌套 raw token 不外露、不触发 external delivery。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_connector --lib` | passed | Connector 定向套件 13 tests passed。 |
+| `cargo check --manifest-path "src-tauri/Cargo.toml" -p lime --lib --message-format short` | passed | 独立 `CARGO_TARGET_DIR=$HOME/Library/Caches/lime-codex-target-p18e` 下通过。 |
+
+## 2026-05-19 08:09 Agent Apps smoke / MiniMax review failures
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/agent-apps-smoke-failure.json` | failed | `installedVisible` 断言失败；cloud package 下载 `https://lime.local/.../package.zip` 报错。需由当前 v2/standalone 写集 owner 复核，不覆盖此前 `agent-apps-smoke-summary.json` green。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-minimax-normalized-20260519-codex-failure.json` | failed | MiniMax runtime completed，`terminalReady=true`、`hasWorkspacePatch=true`、artifact/evidence ready，但页面 90s 内未 materialize workspace patch；分类为 GUI materialization / normalized review page sync gap。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-minimax-normalized-20260519-codex-failure.png` | captured | 失败截图已保存。 |
+
+该组失败不改变 completion verdict：P18.7-F 仍有 Yunwu final / metrics 两份 green summary，但当前并行写集下 Agent Apps smoke 与 MiniMax normalized review 仍需复核；P18.7-E production connector delivery 仍未覆盖。
+
+## 2026-05-19 08:35 MiniMax fallback bridge-cooldown failure
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-minimax-fallback-20260519-codex-failure.json` | failed before runtime | `agent_app_inspect_local_package` DevBridge 调用失败：`Failed to fetch (bridge cooldown active)`；未进入 MiniMax review runtime 本体。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-minimax-fallback-20260519-codex-failure.png` | captured | 失败截图已保存。 |
+| `npm run bridge:health -- --timeout-ms 120000` | passed after cooldown | 约 101s 后 `127.0.0.1:3030/health` 恢复 `status=ok`。 |
+
+该失败分类为 DevBridge cooldown / 后端桥接短时不可用，不替代 P18.7-F green 证据，也不覆盖 P18.7-E production connector delivery。
+
+## 2026-05-19 08:18 MiniMax review fallback validation
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `content-factory-review-minimax-normalized-20260519-codex-failure.json` | failed/product gap found | MiniMax Runtime completed and produced workspace patch, but review report lacked metrics; page did not materialize. This led to content-factory fallback normalization. |
+| `content-factory-review-minimax-fallback-20260519-codex-failure.json` | failed/environment | Retry interrupted by DevBridge cooldown / connection refused. |
+| `content-factory-review-minimax-fallback-retry-20260519-codex-failure.json` | failed/provider runtime | Runtime stayed running without model/cost/artifact/workspace patch readiness. |
+| `content-factory-app npm test` | passed | After fallback normalization, content-factory test suite passes `103/103`. |
+
+Conclusion：MiniMax is useful to validate review fallback robustness, but not a stable final full-flow provider. Overall completion still requires a latest full-flow green summary and Playwright MCP manual user flow.
+
+## 2026-05-19 08:48 Agent App Runtime split and smoke contract validation
+
+| 验证项 / 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `src-tauri/src/commands/agent_app_runtime_cmd.rs` | split validated | 原入口已收窄为 25 LoC module facade；命令 handler 分到 `start_task.rs` / `cancel_task.rs` / `task_snapshot.rs` / `host_response.rs`，DevBridge 和 `runner.rs` 通过子模块路径注册。 |
+| `.lime/qc/gui-evidence/agent-apps/agent-apps-smoke-summary.json` | passed | 最新 Agent Apps smoke summary 所有断言为 true，`failedRequests=0`、`consoleErrors=0`；delete-data 后 installed state 可恢复，flag-off regression 也通过。 |
+| `rustfmt --edition 2021 --check ...agent_app_runtime_cmd... ...connector_tools...` | passed | Runtime split 与 connector readiness/test 文件格式检查通过。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_runtime --lib` | passed | Agent App Runtime 定向套件 32 tests passed。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_connector --lib` | passed | Connector 定向套件 13 tests passed。 |
+| `cargo check --manifest-path "src-tauri/Cargo.toml" -p lime --lib --message-format short` | passed | 独立 `CARGO_TARGET_DIR=$HOME/Library/Caches/lime-codex-target-p18e` 下通过。 |
+| `npm run test:contracts` | passed | 命令契约、Harness 契约、modality runtime contracts 与 cleanup report contract 通过。 |
+| `npm run bridge:health -- --timeout-ms 30000` | passed | DevBridge 当前 `127.0.0.1:3030/health` 31ms 返回 `status=ok`。 |
+
+该组证据证明 Agent App Runtime command facade 拆分未破坏命令契约、Rust runtime projection 或 Agent Apps smoke 主路径；它仍不覆盖真实 Connector OAuth、raw secret material adapter 或 production external platform delivery。
+
+## 2026-05-19 09:08 remote webhook public projection redaction guard
+
+| 验证项 | 状态 | 说明 |
+| --- | --- | --- |
+| `scripts/agent-app-connector-outbox-smoke.mjs` | guarded | 远端 webhook smoke 的 `externalDeliveryTargetNotExposed` 断言现在同时检查 Tool output、trusted output payload、`threadRead` 和 Agent App task 公共投影；`secretDeliveryConcreteLeaseRefNotExposed` 也扩展到公共投影，避免 delivery proof 在 task events/thread projection 中泄漏 webhook URL 或 concrete `secret-lease://...`。 |
+| `node --check "scripts/agent-app-connector-outbox-smoke.mjs"` | passed | 语法检查通过。 |
+| `git diff --check -- "scripts/agent-app-connector-outbox-smoke.mjs"` | passed | whitespace 检查通过。 |
+| `.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-replay-public-projection-redaction-20260519-codex-summary.json` | passed | 只读 replay 复核既有 local-webhook live session，新增 `secretDeliveryConcreteLeaseRefNotExposed` 公共投影检查通过，delivery / outbox / task event evidence refs 仍全绿；不调用模型 provider。 |
+| 环境变量名盘点 | no remote secret present | 当前 shell 未发现可用于真实远端 delivery 的 `WEBHOOK / NOTION / SLACK / FEISHU / OAUTH / CONNECTOR / LIME_AGENT_APP` 类环境变量名；未读取或打印任何 secret value。 |
+
+该 guard 只提高后续远端 webhook proof 的防泄漏可信度；因为没有真实远端 webhook / OAuth 凭证，本轮没有也不能声明 production platform delivery 完成。
+
+## 2026-05-19 09:15 Mimo review fallback materialization failure
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-mimo-fallback-20260519-codex-failure.json` | failed after runtime completed | Mimo `mimo-v2.5-pro` runtime completed，task `agent-app-task-979cc3eb-0ede-4080-91d3-c37310c00ce5` / session `agent-app-runtime-f8a4dab0-e6c4-4e56-b068-671dec457fdf`；`toolCallCount=1`、`artifactCount=3`、`hasWorkspacePatch=true`、`terminalReady=true`、`evidenceReady=true`、`hasCost=true`。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-mimo-fallback-20260519-codex-failure.png` | captured | 失败截图已保存。 |
+
+失败点不是 Runtime 本体，而是页面 90s 内未 materialize workspace patch；`consoleErrors=0`，但 `failedRequests=9`。分类为 GUI materialization / review page sync gap，不能作为 P18.7-F green，也不覆盖 P18.7-E production connector delivery。
+
+## 2026-05-19 09:22 Mimo data-insights bridge timeout
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-mimo-data-insights-20260519-codex-failure.json` | failed before runtime | `agent_app_inspect_local_package` 通过 DevBridge 调用 30s timeout：`Failed to fetch (timeout after 30000ms)`；未进入 run-review Runtime。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-mimo-data-insights-20260519-codex-failure.png` | captured | 失败截图已保存。 |
+| `npm run bridge:health -- --timeout-ms 60000` | passed after failure | 复核时 `127.0.0.1:3030/health` 473ms 返回 `status=ok`，说明该失败是短时 DevBridge fetch / startup race，不是 Runtime 内容质量证据。 |
+
+该失败不能推翻既有 P18.7-F green，也不能作为 Mimo runtime 质量判断；它只记录并行 GUI/DevBridge 运行面的短时不稳定。
+
+## 2026-05-19 09:34 Mimo data-insights retry materialization failure
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-mimo-data-insights-retry-20260519-codex-failure.json` | failed after runtime completed | retry 已进入 Runtime 且 Mimo runStatus success；task `agent-app-task-93e03d6c-2bfa-4d26-8c79-d70a3384705c` / session `agent-app-runtime-84b82ec3-8bb2-4a31-bdd6-ef15419dbf4b`；`toolCallCount=1`、`artifactCount=3`、`hasWorkspacePatch=true`、`terminalReady=true`、`evidenceReady=true`、`hasCost=true`。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-mimo-data-insights-retry-20260519-codex-failure.png` | captured | 失败截图已保存。 |
+
+失败仍在页面 90s 内未 materialize workspace patch；`consoleErrors=0`、`failedRequests=8`。该结果说明延长 package inspect timeout 后 Mimo 可完成 runtime，但 GUI materialization / review page sync gap 仍未消失；仍不能作为 P18.7-F green 或 P18.7-E production delivery evidence。
+
+## 2026-05-19 09:51 Mimo performance retry runtime failure
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-mimo-performance-retry-20260519-codex-failure.json` | failed before terminal runtime | Mimo performance retry 进入 Runtime 但 task/profile failed；task `agent-app-task-e1a8fb38-4511-475c-aaa7-6c9a6e029395` / session `agent-app-runtime-b1a536d5-b125-4694-8cd4-df59cc1e8983`；missing `terminalReady`，`toolCallCount=0`、`artifactCount=0`、`hasWorkspacePatch=false`、`evidenceReady=true`、`hasCost=true`。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-mimo-performance-retry-20260519-codex-failure.png` | captured | 失败截图已保存。 |
+
+该失败是 provider/runtime terminal readiness failure；不同于前两次 Mimo completed-but-not-materialized。它不能作为 P18.7-F green，也不覆盖 P18.7-E production connector delivery。
+
+## 2026-05-19 10:02 MiniMax normalized retry runtime-stall failure
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-minimax-normalized-retry-20260519-codex-failure.json` | failed / runtime still running | MiniMax retry 未达到 full runtime readiness；task `agent-app-task-0fedd173-d8af-4cfb-932b-8763ce99a621` / session `agent-app-runtime-47f67b64-776b-4fb4-95d5-773b07a111f9`；missing `terminalReady / artifactReady / workspacePatchReady`，`taskStatus=running`、`toolCallCount=1`、`artifactCount=0`、`hasWorkspacePatch=false`、`hasCost=true`。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-minimax-normalized-retry-20260519-codex-failure.png` | captured | 失败截图已保存。 |
+
+该失败是 provider/runtime stall，不是 completed-but-not-materialized；`consoleErrors=19`、`failedRequests=21`。不能作为 P18.7-F green，也不覆盖 P18.7-E production connector delivery。
+
+## 2026-05-19 10:16 Mimo host-timeout-fix materialization failure
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-mimo-host-timeout-fix-20260519-codex-failure.json` | failed after runtime completed | Mimo host-timeout-fix 进入并完成 Runtime；task `agent-app-task-0b1074b9-ebd7-4f26-ad99-7c37f005f235` / session `agent-app-runtime-793bd989-a603-4bbd-ace0-a4ba720105bf`；`toolCallCount=1`、`artifactCount=3`、`hasWorkspacePatch=true`、`terminalReady=true`、`evidenceReady=true`、`hasCost=true`。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-mimo-host-timeout-fix-20260519-codex-failure.png` | captured | 失败截图已保存。 |
+
+失败仍在页面 90s 内未 materialize workspace patch；但页面文案已经显示“复盘待确认 / 确认复盘结论”，说明 Host timeout 修复后 Runtime 与部分页面状态可推进，最终 workspace patch materialization gate 仍未达成。该失败不作为 P18.7-F green，也不覆盖 P18.7-E production delivery。
+
+## 2026-05-19 10:34 Mimo sample-size-fix materialization failure
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-mimo-sample-size-fix-20260519-codex-failure.json` | failed after runtime completed | Mimo sample-size-fix Runtime completed；task `agent-app-task-d0e8072c-cd1b-410f-9315-876ce64218a6` / session `agent-app-runtime-522d06b1-5e1e-4538-84ff-c3b1a6cbb996`；`toolCallCount=1`、`artifactCount=3`、`hasWorkspacePatch=true`、`terminalReady=true`、`evidenceReady=true`、`hasCost=true`。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-mimo-sample-size-fix-20260519-codex-failure.png` | captured | 失败截图已保存。 |
+
+失败仍是页面 90s 内未 materialize workspace patch；`consoleErrors=0`、`failedRequests=13`。Mimo 可稳定产出 review workspace patch，但当前页面 materialization gate 仍未对 Mimo patch 达成 green。
+
+## 2026-05-19 10:52 Mimo review-input-cache runtime-stall failure
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-mimo-review-input-cache-20260519-codex-failure.json` | failed / runtime still running | Mimo review-input-cache 未达到 full runtime readiness；task `agent-app-task-28ec3454-16d7-4ca4-8f1d-b6d9b3e82ceb` / session `agent-app-runtime-92f331fb-17e9-4bc2-94fd-44c22c00d183`；missing `terminalReady / modelReady`，`taskStatus=running`、`toolCallCount=0`、`artifactCount=0`、`hasWorkspacePatch=false`、`hasCost=false`。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-mimo-review-input-cache-20260519-codex-failure.png` | captured | 失败截图已保存。 |
+
+该失败是 provider/runtime stall，不是页面 materialization；`consoleErrors=0`、`failedRequests=5`。它不能作为 P18.7-F green，也不覆盖 P18.7-E production connector delivery。
+
+## 2026-05-19 11:05 Mimo full-flow current failure
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-mimo-current-20260519-codex-failure.json` | failed at `run-scenarios` | Mimo full-flow 第一动作 `run-scenarios` 未达到 full runtime readiness；task `agent-app-task-cba2cd13-0f6d-4aa4-9168-6d7bf76ca332` / session `agent-app-runtime-5b657eee-d97e-44d3-833c-4a80ac6ea3ba`；missing `terminalReady / modelReady`，`taskStatus=idle`、`toolCallCount=0`、`artifactCount=0`、`hasWorkspacePatch=false`、`hasCost=false`。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-mimo-current-20260519-codex-failure.png` | captured | 失败截图已保存。 |
+
+该 full-flow 未进入后续四动作，不能作为 P18.7-F green；当前 P18.7-F 仍以 Yunwu final / metrics 两份 green summary 为可信证据。Mimo full-flow failure 也不覆盖 P18.7-E production connector delivery。
+
+## 2026-05-19 11:17 P18.7-E local webhook live redaction retry failure
+
+| 证据 / 验证项 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-outbox-runtime-smoke-live-local-webhook-public-projection-redaction-20260519-codex-summary.json` | failed before connector tool call | Live local-webhook retry 使用 `custom-da3283c4-8405-45e9-81cd-12991ffdf41c / claude-sonnet-4-6`，但 `threadRead.status=idle`、`toolCallCount=0`、无 outbox/delivery refs，local webhook `receivedRequestCount=0`。 |
+| public projection redaction assertions | passed partial | 新增 public projection guard 有效：`secretDeliveryConcreteLeaseRefNotExposed=true`、`externalDeliveryTargetNotExposed=true`；但因为没有 connector tool call，不能证明 delivery path green。 |
+| `npm run bridge:health -- --timeout-ms 30000` | passed | 失败后 DevBridge health 31ms `status=ok`，该失败不归因于 bridge offline。 |
+
+该 retry 只验证了红线“不外露”断言仍可执行；它不是新的 P18.7-E delivery green。P18.7-E local webhook green 仍以前置 `...live-local-webhook-20260519-codex-v3-summary.json` 为准；production delivery 仍 missing。
+
+## 2026-05-19 11:39 Yunwu current full-flow startup failure
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-current-20260519-codex-failure.json` | failed at `run-scenarios` | Yunwu current full-flow 第一动作 `run-scenarios` 未达到 full runtime readiness；task `agent-app-task-75352860-b01e-4bad-ad45-7fce427109ca` / session `agent-app-runtime-ceafd2da-34ba-4680-8f71-e32e97ec2f01`；missing `terminalReady / modelReady`，`taskStatus=idle`、`toolCallCount=0`、`artifactCount=0`、`hasWorkspacePatch=false`、`hasCost=false`。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-yunwu-current-20260519-codex-failure.png` | captured | 失败截图已保存。 |
+
+该失败发生在重启前/启动态，未进入后续动作，不能替代既有 Yunwu final / metrics green，也不改变 completion verdict。
+
+## 2026-05-19 11:55 Yunwu after-restart scenarios interrupted
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-scenarios-yunwu-after-restart-20260519-codex-failure.json` | interrupted | 单动作 `run-scenarios` 在写入 success evidence 前被 SIGTERM 中断；`failedRequests=3`、`consoleErrors=0`。 |
+
+该结果是进程中断，不是 runtime/provider 质量判断，也不能作为 P18.7-F green 或 regression 失败结论。
+
+## 2026-05-19 12:12 Kimi current full-flow interrupted
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-full-flow-kimi-current-20260519-codex-failure.json` | interrupted | Kimi full-flow 在写入 success evidence 前被 SIGTERM 中断；`failedRequests=3`、`consoleErrors=0`。 |
+
+该结果是进程中断，不是 Kimi runtime/provider 质量判断；不能作为 P18.7-F green，也不改变既有 Yunwu final / metrics green 口径。
+
+## 2026-05-19 13:30 MiniMax dock-fix retry materialization audit
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-confirm-next-round-minimax-dock-fix-20260519-codex-failure.json` | failed after runtime completed | MiniMax run-review Runtime 完成，task `agent-app-task-213983e7-30a4-48e8-8f5f-b3d0436824ae` / session `agent-app-runtime-3409eedf-a07e-4d56-8e9d-8a714306fcd9`；`toolCallCount=1`、`artifactCount=3`、`hasWorkspacePatch=true`、`terminalReady=true`、`evidenceReady=true`、`hasCost=true`。 |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-confirm-next-round-minimax-dock-fix-20260519-codex-failure.png` | captured | 截图显示不再是 dock pointer interception；review 页面仍显示 `样本量0条 / 看完率0%`，但已有 `确认进入下一轮` 与 review report 摘要。 |
+| normalizer read-only probe | passed | 使用 failure 中的 `workspacePatch.reviewReport` 和 E2E review input 调用 content-factory normalizer，可得到 `totalRows=240` 与 `32/28/3.5/6` 指标，说明模型 patch 本体可归一化。 |
+
+本轮把失败从 UI dock 遮挡重新分类为 review materialization / state refresh gap：Runtime patch 已产生，确认态部分出现，但 review metrics 没有写成页面可判断状态。当前仍不能把 next-round confirm 视为 green；该结果不覆盖 P18.7-E production connector delivery。
+
+## 2026-05-19 14:11 MiniMax delivery-confirm next-round green
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/gui-evidence/agent-apps/content-factory-review-confirm-next-round-minimax-delivery-confirm-20260519-codex-summary.json` | passed | 覆盖 `run-review` 与 `run-production-next-round`；两个 action 均 completed、required Skills invoked、usage/cost ready、workspace patch ready、full runtime ready。 |
+| review materialization | passed | 第1轮复盘页面显示 `样本量240条 / 看完率32% / 搜索占比28% / 转化率3.5% / 素材复用1:6 / 确认复盘结论`，说明 13:30 的 metrics/state materialization gap 已关闭。 |
+| next-round production | passed | 第2轮内容页面显示 `第2轮内容20/20条`、`整理草稿20/20条`、`脚本和图片需求6条脚本/5条图片需求`，说明 next-round confirm 后能继续生产内容包。 |
+| content-factory package tests | passed | `/Users/coso/Documents/dev/ai/limecloud/content-factory-app: npm test -- tests/core.test.mjs tests/api.test.mjs` 走 package 测试入口，`109/109` passed，覆盖 `metricsSummary.sampleSize`、review input fallback、API materialization 与 UI write-back 回归。 |
+| caveats | tracked | `sameIframeContext=false`、`failedRequests=6`；`consoleErrorCount=0`、no Host fallback。 |
+
+该 green 关闭 P18.7-F next-round confirm / review materialization gap，但仍不覆盖 P18.7-E production connector delivery：真实 OAuth、raw secret material adapter、Notion/Slack/Feishu 等生产平台真实送达与 GUI 送达证明仍 missing。
+
+## 2026-05-19 14:28 P18.7-E production connector preflight
+
+| 证据 / 命令 | 状态 | 说明 |
+| --- | --- | --- |
+| `scripts/agent-app-connector-production-preflight.mjs` | added | 固化 Notion / Slack / Feishu / remote webhook production delivery 所需 secret 名称检查，只输出 secret 名称、connector、category 和缺失原因。 |
+| `scripts/lib/agent-app-connector-production-preflight-core.test.mjs` | passed | `npm test -- "scripts/lib/agent-app-connector-production-preflight-core.test.mjs"`，6 tests passed；断言 blocked/ready、alias、CLI `--check`、JSON 写入、不泄漏 secret value，以及 remote webhook 必须是非本地 `https://` / readable file source。 |
+| `.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-production-preflight-20260519-codex.json` | blocked | 当前环境 `checkedSecretCount=10`、`missing=10`、`productionPlatformDeliveryReady=false`；缺 Notion OAuth/workspace、Slack OAuth/bot token、Feishu app/tenant、remote webhook secret source。 |
+| `.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-production-preflight-check-20260519-codex.json` | blocked / `exit=1` | `node scripts/agent-app-connector-production-preflight.mjs --connector all --check --output ...` 按预期以非零退出阻止 release/completion gate；仍只记录 secret 名称与缺失原因，不记录任何 secret value。 |
+| `scripts/agent-app-connector-outbox-smoke.mjs` remote CLI guard | passed | `node --check "scripts/agent-app-connector-outbox-smoke.mjs"` 通过；`--mode live --external-delivery-webhook-url https://...` 现在在 parse 阶段 `exit=1`，要求改用 env/file，避免 production webhook target 进入进程参数。 |
+| `scripts/agent-app-connector-production-delivery-gate.mjs` | blocked / `exit=1` | 新 gate 要求 preflight ready + production delivery evidence ready，并拒绝 host-managed webhook / local worker proxy proofLevel；当前 `.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-production-delivery-gate-20260519-codex.json` 缺 preflight ready 与 delivery evidence。 |
+| `scripts/lib/agent-app-connector-production-delivery-gate-core.test.mjs` | passed | `npm test -- "scripts/lib/agent-app-connector-production-delivery-gate-core.test.mjs"`，4 tests passed；覆盖 missing evidence、proxy-only proofLevel、production adapter proof 和 CLI `--check`。 |
+| `package.json` npm gate entries | passed / blocked as expected | `npm run agent-app:connector-production-preflight -- --check ...` 与 `npm run agent-app:connector-production-delivery-gate -- --check ...` 均可发现并执行；当前环境下两者均按预期 `exit=1`。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_connector_accepts_host_managed_production_delivery_receipt --lib` | passed | 新增 Rust seam 只接受 Host-managed production adapter receipt，并投影 `productionPlatformDelivered=true / production_connector_delivery_complete`；raw token 与 concrete lease 不外露。 |
+| `cargo test --manifest-path "src-tauri/Cargo.toml" -p lime agent_app_connector --lib` | passed | Connector 定向套件 14 tests passed，证明 local webhook / inline secret guard 仍不被误升级为 production delivery。 |
+| `cargo check --manifest-path "src-tauri/Cargo.toml" -p lime --lib --message-format short` | passed | 独立 `CARGO_TARGET_DIR=$HOME/Library/Caches/lime-codex-target-p18e` 下通过。 |
+| `scripts/agent-app-connector-production-webhook-delivery.mjs` | dry-run blocked | 新 remote webhook production adapter CLI 默认不发网络；`npm run agent-app:connector-production-webhook-delivery -- --webhook-url-env ... --output ...` 产出 `.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-production-webhook-delivery-dry-run-20260519-codex.json`，`sendRequested=false`、`productionPlatformDelivered=false`、URL 未序列化。 |
+| webhook delivery `--send` preflight gate | blocked before network | 当前 preflight blocked 时，`npm run agent-app:connector-production-webhook-delivery -- --webhook-url-env ... --send ...` 在 POST 前 `exit=1`，错误为 `production preflight must be ready before --send`。 |
+| `scripts/lib/agent-app-connector-production-webhook-delivery-core.test.mjs` | passed | `npm test -- "scripts/lib/agent-app-connector-production-webhook-delivery-core.test.mjs"`，5 tests passed；覆盖 URL 校验、payload、evidence redaction、dry-run blocked 和 matching connector preflight。 |
+| `.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-production-preflight-webhook-current-20260519-codex.json` | blocked / `exit=1` | Webhook-only preflight 当前只检查 1 个 secret，缺 `LIME_AGENT_APP_CONNECTOR_WEBHOOK_URL`。 |
+| `.lime/qc/gui-evidence/agent-apps/p18-7-e-connector-production-delivery-gate-webhook-current-20260519-codex.json` | blocked / `exit=1` | 使用 webhook-only preflight + dry-run delivery evidence；proofLevel 已是 production adapter，但 `productionPlatformDelivered=false`，缺 `production_connector_preflight_not_ready` 与 `production_platform_delivered_false`。 |
+
+该 preflight 把“没有 production connector 凭证”从人工口头判断变成可重复 artifact；它不是 delivery adapter，也不改变 completion verdict。

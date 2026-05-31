@@ -4900,7 +4900,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
                 content: "# 需求草稿",
                 status: "complete",
                 meta: {
-                  filePath: "docs/prd.md",
+                  filePath: "internal/prd.md",
                 },
                 position: { start: 0, end: 0 },
                 createdAt: 1,

@@ -88,7 +88,7 @@ function printHelp() {
 Lime Agent QC Release Summary
 
 用法:
-  npm run agent-qc:release-summary -- --evidence ./.lime/qc/agent-qc-evidence.json --require-scenario-manifest docs/test/agent-qc-scenarios.manifest.json --require-risk P0 --tag v1.2.3
+  npm run agent-qc:release-summary -- --evidence ./.lime/qc/agent-qc-evidence.json --require-scenario-manifest internal/test/agent-qc-scenarios.manifest.json --require-risk P0 --tag v1.2.3
   node scripts/agent-qc-release-summary.mjs --evidence evidence.json --harness-summary summary.json --harness-trend trend.json --output release-qc.md --check
 
 选项:

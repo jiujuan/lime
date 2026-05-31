@@ -86,4 +86,4 @@ npm run heatmap:project -- --output "./tmp/project-heatmap"
 
 完整的 AI 操作流程、治理图生成参数、跨平台打开方式，请读：
 
-- `docs/aiprompts/project-heatmap.md`
+- `internal/aiprompts/project-heatmap.md`

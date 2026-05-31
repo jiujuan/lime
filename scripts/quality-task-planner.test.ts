@@ -5,12 +5,12 @@ import { detectTasks } from "./quality-task-planner.mjs";
 describe("quality-task-planner", () => {
   it("Agent QC 文档不应进入 GitHub Actions bridge/contracts 验证", () => {
     const tasks = detectTasks([
-      "docs/tests/agent-ops-qc.md",
-      "docs/tests/agent-qc-p0-scenarios.md",
-      "docs/tests/lime-agent-qc-rollout-plan.md",
-      "docs/test/agent-qc-scenarios.manifest.json",
-      "docs/test/agent-qc-evidence.schema.json",
-      "docs/test/agent-qc-gui-flows.manifest.json",
+      "internal/tests/agent-ops-qc.md",
+      "internal/tests/agent-qc-p0-scenarios.md",
+      "internal/tests/lime-agent-qc-rollout-plan.md",
+      "internal/test/agent-qc-scenarios.manifest.json",
+      "internal/test/agent-qc-evidence.schema.json",
+      "internal/test/agent-qc-gui-flows.manifest.json",
     ]);
 
     expect(tasks.bridge).toBe(false);
@@ -109,9 +109,9 @@ describe("quality-task-planner", () => {
     expect(tasks.frontend).toBe(true);
     expect(tasks.docsOnly).toBe(false);
     expect(tasks.recommendedCommands).toEqual([
-      "npm run i18n:translation-pr-pack:json -- --output docs/roadmap/i18n/evidence/translation-pr-pack.json",
-      "npm run i18n:bundle-report:json -- --output docs/roadmap/i18n/evidence/bundle-strategy-report.json",
-      "npm run i18n:roadmap-readiness-report:json -- --output docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
+      "npm run i18n:translation-pr-pack:json -- --output internal/roadmap/i18n/evidence/translation-pr-pack.json",
+      "npm run i18n:bundle-report:json -- --output internal/roadmap/i18n/evidence/bundle-strategy-report.json",
+      "npm run i18n:roadmap-readiness-report:json -- --output internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
     ]);
   });
 
@@ -124,8 +124,8 @@ describe("quality-task-planner", () => {
     expect(tasks.frontend).toBe(false);
     expect(tasks.docsOnly).toBe(false);
     expect(tasks.recommendedCommands).toEqual([
-      "npm run i18n:translation-pr-pack:json -- --output docs/roadmap/i18n/evidence/translation-pr-pack.json",
-      "npm run i18n:roadmap-readiness-report:json -- --output docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
+      "npm run i18n:translation-pr-pack:json -- --output internal/roadmap/i18n/evidence/translation-pr-pack.json",
+      "npm run i18n:roadmap-readiness-report:json -- --output internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
     ]);
   });
 
@@ -136,7 +136,7 @@ describe("quality-task-planner", () => {
     expect(tasks.frontend).toBe(false);
     expect(tasks.recommendedCommands).toEqual([
       "npm run i18n:patch-retirement-gate -- --check",
-      "npm run i18n:roadmap-readiness-report:json -- --output docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
+      "npm run i18n:roadmap-readiness-report:json -- --output internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
     ]);
   });
 
@@ -150,8 +150,8 @@ describe("quality-task-planner", () => {
     expect(tasks.guiSmoke).toBe(false);
     expect(tasks.docsOnly).toBe(false);
     expect(tasks.recommendedCommands).toEqual([
-      "npm run i18n:bundle-report:json -- --output docs/roadmap/i18n/evidence/bundle-strategy-report.json",
-      "npm run i18n:roadmap-readiness-report:json -- --output docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
+      "npm run i18n:bundle-report:json -- --output internal/roadmap/i18n/evidence/bundle-strategy-report.json",
+      "npm run i18n:roadmap-readiness-report:json -- --output internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
     ]);
   });
 
@@ -165,8 +165,8 @@ describe("quality-task-planner", () => {
     expect(tasks.guiSmoke).toBe(false);
     expect(tasks.docsOnly).toBe(false);
     expect(tasks.recommendedCommands).toEqual([
-      "npm run i18n:bundle-report:json -- --output docs/roadmap/i18n/evidence/bundle-strategy-report.json",
-      "npm run i18n:roadmap-readiness-report:json -- --output docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
+      "npm run i18n:bundle-report:json -- --output internal/roadmap/i18n/evidence/bundle-strategy-report.json",
+      "npm run i18n:roadmap-readiness-report:json -- --output internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
     ]);
   });
 
@@ -177,41 +177,41 @@ describe("quality-task-planner", () => {
     expect(tasks.docs).toBe(true);
     expect(tasks.frontend).toBe(false);
     expect(tasks.recommendedCommands).toEqual([
-      "npm run i18n:docs-locale-manifest:json -- --output docs/roadmap/i18n/evidence/docs-locale-build-manifest.json",
-      "npm run i18n:release-docs-report:json -- --output docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
-      "npm run i18n:p4-readiness-report:json -- --output docs/roadmap/i18n/evidence/p4-readiness-report.json",
-      "npm run i18n:roadmap-readiness-report:json -- --output docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
+      "npm run i18n:docs-locale-manifest:json -- --output internal/roadmap/i18n/evidence/docs-locale-build-manifest.json",
+      "npm run i18n:release-docs-report:json -- --output internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
+      "npm run i18n:p4-readiness-report:json -- --output internal/roadmap/i18n/evidence/p4-readiness-report.json",
+      "npm run i18n:roadmap-readiness-report:json -- --output internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
     ]);
   });
 
   it("release docs 翻译范围 manifest 改动应推荐刷新 release docs evidence", () => {
     const tasks = detectTasks([
-      "docs/roadmap/i18n/release-docs-translation-scope.json",
+      "internal/roadmap/i18n/release-docs-translation-scope.json",
     ]);
 
     expect(tasks.docsOnly).toBe(true);
     expect(tasks.docs).toBe(true);
     expect(tasks.recommendedCommands).toEqual([
-      "npm run i18n:docs-locale-manifest:json -- --output docs/roadmap/i18n/evidence/docs-locale-build-manifest.json",
-      "npm run i18n:release-docs-report:json -- --output docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
-      "npm run i18n:p4-readiness-report:json -- --output docs/roadmap/i18n/evidence/p4-readiness-report.json",
-      "npm run i18n:roadmap-readiness-report:json -- --output docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
+      "npm run i18n:docs-locale-manifest:json -- --output internal/roadmap/i18n/evidence/docs-locale-build-manifest.json",
+      "npm run i18n:release-docs-report:json -- --output internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
+      "npm run i18n:p4-readiness-report:json -- --output internal/roadmap/i18n/evidence/p4-readiness-report.json",
+      "npm run i18n:roadmap-readiness-report:json -- --output internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
     ]);
   });
 
   it("release docs companion 改动应保持 docs-only 并推荐刷新 evidence", () => {
     const tasks = detectTasks([
-      "docs/roadmap/i18n/companions/docs-content-index.en.md",
+      "internal/roadmap/i18n/companions/docs-content-index.en.md",
     ]);
 
     expect(tasks.docsOnly).toBe(true);
     expect(tasks.docs).toBe(true);
     expect(tasks.frontend).toBe(false);
     expect(tasks.recommendedCommands).toEqual([
-      "npm run i18n:docs-locale-manifest:json -- --output docs/roadmap/i18n/evidence/docs-locale-build-manifest.json",
-      "npm run i18n:release-docs-report:json -- --output docs/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
-      "npm run i18n:p4-readiness-report:json -- --output docs/roadmap/i18n/evidence/p4-readiness-report.json",
-      "npm run i18n:roadmap-readiness-report:json -- --output docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
+      "npm run i18n:docs-locale-manifest:json -- --output internal/roadmap/i18n/evidence/docs-locale-build-manifest.json",
+      "npm run i18n:release-docs-report:json -- --output internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
+      "npm run i18n:p4-readiness-report:json -- --output internal/roadmap/i18n/evidence/p4-readiness-report.json",
+      "npm run i18n:roadmap-readiness-report:json -- --output internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
     ]);
   });
 
@@ -221,9 +221,9 @@ describe("quality-task-planner", () => {
     expect(tasks.docsOnly).toBe(false);
     expect(tasks.frontend).toBe(false);
     expect(tasks.recommendedCommands).toEqual([
-      "npm run i18n:chrome-extension-report:json -- --output docs/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json",
-      "npm run i18n:p4-readiness-report:json -- --output docs/roadmap/i18n/evidence/p4-readiness-report.json",
-      "npm run i18n:roadmap-readiness-report:json -- --output docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
+      "npm run i18n:chrome-extension-report:json -- --output internal/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json",
+      "npm run i18n:p4-readiness-report:json -- --output internal/roadmap/i18n/evidence/p4-readiness-report.json",
+      "npm run i18n:roadmap-readiness-report:json -- --output internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
     ]);
   });
 
@@ -233,26 +233,26 @@ describe("quality-task-planner", () => {
     expect(tasks.integrity).toBe(true);
     expect(tasks.rust).toBe(true);
     expect(tasks.recommendedCommands).toEqual([
-      "npm run i18n:app-metadata-locale-manifest:json -- --output docs/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json",
-      "npm run i18n:app-metadata-report:json -- --output docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
-      "npm run i18n:p4-readiness-report:json -- --output docs/roadmap/i18n/evidence/p4-readiness-report.json",
-      "npm run i18n:roadmap-readiness-report:json -- --output docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
+      "npm run i18n:app-metadata-locale-manifest:json -- --output internal/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json",
+      "npm run i18n:app-metadata-report:json -- --output internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
+      "npm run i18n:p4-readiness-report:json -- --output internal/roadmap/i18n/evidence/p4-readiness-report.json",
+      "npm run i18n:roadmap-readiness-report:json -- --output internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
     ]);
   });
 
   it("app metadata 翻译范围 manifest 改动应保持 docs-only 并推荐刷新 evidence", () => {
     const tasks = detectTasks([
-      "docs/roadmap/i18n/app-metadata-translation-scope.json",
+      "internal/roadmap/i18n/app-metadata-translation-scope.json",
     ]);
 
     expect(tasks.docsOnly).toBe(true);
     expect(tasks.docs).toBe(true);
     expect(tasks.rust).toBe(false);
     expect(tasks.recommendedCommands).toEqual([
-      "npm run i18n:app-metadata-locale-manifest:json -- --output docs/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json",
-      "npm run i18n:app-metadata-report:json -- --output docs/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
-      "npm run i18n:p4-readiness-report:json -- --output docs/roadmap/i18n/evidence/p4-readiness-report.json",
-      "npm run i18n:roadmap-readiness-report:json -- --output docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
+      "npm run i18n:app-metadata-locale-manifest:json -- --output internal/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json",
+      "npm run i18n:app-metadata-report:json -- --output internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
+      "npm run i18n:p4-readiness-report:json -- --output internal/roadmap/i18n/evidence/p4-readiness-report.json",
+      "npm run i18n:roadmap-readiness-report:json -- --output internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
     ]);
   });
 
@@ -262,10 +262,10 @@ describe("quality-task-planner", () => {
     expect(tasks.frontend).toBe(true);
     expect(tasks.guiSmoke).toBe(true);
     expect(tasks.recommendedCommands).toEqual([
-      "npm run i18n:rtl-readiness-report:json -- --output docs/roadmap/i18n/evidence/rtl-readiness-inventory.json",
+      "npm run i18n:rtl-readiness-report:json -- --output internal/roadmap/i18n/evidence/rtl-readiness-inventory.json",
       "npm run i18n:rtl-smoke",
-      "npm run i18n:p4-readiness-report:json -- --output docs/roadmap/i18n/evidence/p4-readiness-report.json",
-      "npm run i18n:roadmap-readiness-report:json -- --output docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
+      "npm run i18n:p4-readiness-report:json -- --output internal/roadmap/i18n/evidence/p4-readiness-report.json",
+      "npm run i18n:roadmap-readiness-report:json -- --output internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
     ]);
   });
 
@@ -276,8 +276,8 @@ describe("quality-task-planner", () => {
     expect(tasks.frontend).toBe(false);
     expect(tasks.docsOnly).toBe(false);
     expect(tasks.recommendedCommands).toEqual([
-      "npm run i18n:p4-readiness-report:json -- --output docs/roadmap/i18n/evidence/p4-readiness-report.json",
-      "npm run i18n:roadmap-readiness-report:json -- --output docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
+      "npm run i18n:p4-readiness-report:json -- --output internal/roadmap/i18n/evidence/p4-readiness-report.json",
+      "npm run i18n:roadmap-readiness-report:json -- --output internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
     ]);
   });
 
@@ -288,7 +288,7 @@ describe("quality-task-planner", () => {
     expect(tasks.frontend).toBe(false);
     expect(tasks.docsOnly).toBe(false);
     expect(tasks.recommendedCommands).toEqual([
-      "npm run i18n:roadmap-readiness-report:json -- --output docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
+      "npm run i18n:roadmap-readiness-report:json -- --output internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
     ]);
   });
 
@@ -311,10 +311,10 @@ describe("quality-task-planner", () => {
     expect(tasks.recommendedCommands).toEqual([
       "npm run knowledge:product-e2e",
       "npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running",
-      "npm run i18n:rtl-readiness-report:json -- --output docs/roadmap/i18n/evidence/rtl-readiness-inventory.json",
+      "npm run i18n:rtl-readiness-report:json -- --output internal/roadmap/i18n/evidence/rtl-readiness-inventory.json",
       "npm run i18n:rtl-smoke",
-      "npm run i18n:p4-readiness-report:json -- --output docs/roadmap/i18n/evidence/p4-readiness-report.json",
-      "npm run i18n:roadmap-readiness-report:json -- --output docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
+      "npm run i18n:p4-readiness-report:json -- --output internal/roadmap/i18n/evidence/p4-readiness-report.json",
+      "npm run i18n:roadmap-readiness-report:json -- --output internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
     ]);
   });
 
@@ -328,15 +328,15 @@ describe("quality-task-planner", () => {
     expect(tasks.recommendedCommands).toEqual([
       "npm run knowledge:product-e2e",
       "npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running",
-      "npm run i18n:rtl-readiness-report:json -- --output docs/roadmap/i18n/evidence/rtl-readiness-inventory.json",
+      "npm run i18n:rtl-readiness-report:json -- --output internal/roadmap/i18n/evidence/rtl-readiness-inventory.json",
       "npm run i18n:rtl-smoke",
-      "npm run i18n:p4-readiness-report:json -- --output docs/roadmap/i18n/evidence/p4-readiness-report.json",
-      "npm run i18n:roadmap-readiness-report:json -- --output docs/roadmap/i18n/evidence/roadmap-readiness-report.json",
+      "npm run i18n:p4-readiness-report:json -- --output internal/roadmap/i18n/evidence/p4-readiness-report.json",
+      "npm run i18n:roadmap-readiness-report:json -- --output internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
     ]);
   });
 
   it("文档-only 项目资料改动不应强推产品 E2E", () => {
-    const tasks = detectTasks(["docs/roadmap/knowledge/prd-v3.md"]);
+    const tasks = detectTasks(["internal/roadmap/knowledge/prd-v3.md"]);
 
     expect(tasks.docsOnly).toBe(true);
     expect(tasks.recommendedCommands).toEqual([]);

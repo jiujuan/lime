@@ -1,7 +1,7 @@
 {
   "version": 1,
   "status": "current",
-  "owner": "docs/roadmap/warp/contract-schema.md",
+  "owner": "internal/roadmap/warp/contract-schema.md",
   "contracts": [
     {
       "contract_key": "image_generation",

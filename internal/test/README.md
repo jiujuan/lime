@@ -1,0 +1,240 @@
+# Lime 测试体系
+
+> 面向 Lime 当前桌面端产品形态的测试入口与索引
+
+## 概述
+
+Lime 当前是一个本地优先的 Tauri 桌面应用，而不是单一前端项目或单一 API 服务。
+
+测试体系需要同时覆盖：
+
+- 前端界面与工作台交互
+- Tauri 命令边界
+- Rust 服务层与业务逻辑
+- 数据库、文件系统与工作区状态
+- Provider、协议转换与本地 HTTP Server
+- 浏览器运行时等桌面能力
+- Agent Runtime 与真实模型行为
+- macOS / Windows 平台差异
+
+## 测试分层
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Lime 测试金字塔                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│                        ┌─────────┐                              │
+│                        │  E2E    │  端到端测试                   │
+│                        │  测试   │  (Tauri + 前端)               │
+│                       ─┴─────────┴─                             │
+│                      ┌─────────────┐                            │
+│                      │   集成测试   │  API 服务器、Provider runtime│
+│                     ─┴─────────────┴─                           │
+│                    ┌─────────────────┐                          │
+│                    │     单元测试     │  转换器、Provider、工具   │
+│                   ─┴─────────────────┴─                         │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## 目录结构
+
+```
+internal/test/
+├── README.md                    # 本文件 - 测试体系概览
+├── testing-strategy-2026.md     # 当前 Lime 主测试策略
+├── unit-tests.md               # 单元测试指南
+├── integration-tests.md        # 集成测试指南
+├── e2e-tests.md               # 浏览器续测与 E2E 总览
+├── agent-evaluation.md        # Agent 评估指南（核心文档）
+├── agent-qc-evidence.schema.json        # Agent QC Evidence Pack schema
+├── agent-qc-gui-flows.manifest.json     # Agent QC GUI / Playwright MCP flow 清单
+├── agent-qc-scenarios.manifest.json     # Agent QC 核心场景清单
+├── harness-evals.md           # Harness eval 任务集与 runner 入口
+└── test-cases/                # 测试用例模板
+    ├── converter-tests.md     # 协议转换器测试用例
+    ├── provider-tests.md      # Provider 测试用例
+    └── agent-tests.md         # Agent 测试用例
+
+internal/tests/
+├── agent-ops-qc.md            # Agent 运营级测试体系与证据门禁
+├── agent-qc-p0-scenarios.md   # Agent QC P0 场景执行手册
+├── lime-agent-qc-rollout-plan.md # Lime 样本产品落地计划
+└── lime-agent-qc-current-blockers.md # 当前 P0 qcloop 阻断记录
+```
+
+## 文档索引
+
+| 文档                                                             | 说明                         | 适用场景                              |
+| ---------------------------------------------------------------- | ---------------------------- | ------------------------------------- |
+| [testing-strategy-2026.md](testing-strategy-2026.md)             | 当前 Lime 测试体系建设建议   | 建立分层门禁、规划演进                |
+| [unit-tests.md](unit-tests.md)                                   | 单元测试指南                 | 独立模块测试                          |
+| [integration-tests.md](integration-tests.md)                     | 集成测试指南                 | 模块间协作测试                        |
+| [e2e-tests.md](e2e-tests.md)                                     | 当前浏览器续测与 E2E 入口    | Playwright MCP / DevBridge 主路径验证 |
+| [../aiprompts/playwright-e2e.md](../aiprompts/playwright-e2e.md) | 浏览器续测详细事实源         | 继续测试、复现、控制台与 Bridge 排障  |
+| [agent-evaluation.md](agent-evaluation.md)                       | Agent 评估指南               | AI Agent 行为评估                     |
+| [../tests/agent-ops-qc.md](../tests/agent-ops-qc.md)                               | Agent 运营级测试体系         | qcloop、证据包、发布门禁、运营回归    |
+| [../tests/agent-qc-p0-scenarios.md](../tests/agent-qc-p0-scenarios.md)             | Agent QC P0 场景执行手册     | 核心场景执行、证据要求、失败沉淀      |
+| [../tests/lime-agent-qc-rollout-plan.md](../tests/lime-agent-qc-rollout-plan.md)   | Lime 落地计划                | 分阶段构建 qcloop 证据链、GUI/Runtime 深测、release gate |
+| [../tests/lime-agent-qc-current-blockers.md](../tests/lime-agent-qc-current-blockers.md) | 当前 P0 阻断记录        | 真实 qcloop fail evidence、root cause、关闭条件 |
+| [agent-qc-scenarios.manifest.json](agent-qc-scenarios.manifest.json) | Agent QC 场景清单         | 机器可读场景、lane、命令、证据要求    |
+| [agent-qc-evidence.schema.json](agent-qc-evidence.schema.json)   | Evidence Pack schema         | 测试证据、场景结果、verdict 合同      |
+| [agent-qc-gui-flows.manifest.json](agent-qc-gui-flows.manifest.json) | GUI flow 清单             | Playwright MCP 步骤、断言、证据要求   |
+| [harness-evals.md](harness-evals.md)                             | Harness eval 任务集与 runner | Replay 样本、grader、nightly 摘要     |
+| [test-cases/converter-tests.md](test-cases/converter-tests.md)   | 转换器测试用例               | OpenAI ↔ Claude 转换                  |
+| [test-cases/provider-tests.md](test-cases/provider-tests.md)     | Provider 测试用例            | API Key Provider、协议转换和 API 调用 |
+| [test-cases/agent-tests.md](test-cases/agent-tests.md)           | Agent 测试用例               | Aster Agent 集成                      |
+
+## 快速开始
+
+### 运行 Rust 测试
+
+```bash
+cd src-tauri && cargo test
+```
+
+### 运行前端测试
+
+```bash
+npm test
+```
+
+### 运行本地智能校验
+
+```bash
+npm run verify:local
+```
+
+### 运行本地全量校验
+
+```bash
+npm run verify:local:full
+```
+
+### 浏览器模式桥接检查
+
+```bash
+npm run bridge:health -- --timeout-ms 120000
+```
+
+### 运行自包含 smoke
+
+```bash
+npm run smoke:workspace-ready
+npm run smoke:browser-runtime
+npm run smoke:site-adapters
+npm run smoke:agent-runtime-tool-surface
+npm run smoke:agent-runtime-tool-surface-page
+```
+
+### 运行 Harness eval 摘要
+
+```bash
+npm run harness:eval
+```
+
+### 提升工作区 Replay 为仓库样本
+
+```bash
+npm run harness:eval:promote -- --session-id "session-123" --slug "pending-request-runtime"
+```
+
+### 运行 Harness eval 趋势报告
+
+```bash
+npm run harness:eval:trend
+```
+
+### 运行 Agent QC 场景报告 / 合同检查
+
+```bash
+npm run agent-qc:report
+npm run agent-qc:report:json
+npm run agent-qc:gui-flow:report
+npm run agent-qc:gui-flow:check
+npm run agent-qc:check
+npm run agent-qc:qcloop-job -- --risk P0 --output "./.lime/qc/qcloop-p0-job.json" --check
+npm run agent-qc:export-evidence -- --job-id "<qcloop-job-id>" --output "./.lime/qc/agent-qc-evidence.json" --check
+npm run agent-qc:release-summary -- --evidence "./.lime/qc/agent-qc-evidence.json" --require-scenario-manifest "internal/test/agent-qc-scenarios.manifest.json" --require-risk P0 --tag "<release-tag>" --output "./.lime/qc/release-agent-qc.md" --check
+npm run agent-qc:audit
+```
+
+`agent-qc:check` 已进入 `npm run test:contracts`，用于防止运营级测试场景、证据 schema 和 npm script 入口漂移。
+
+### 记录 Harness eval 历史窗口
+
+```bash
+npm run harness:eval:history:record
+```
+
+默认会把完整 artifact 套件写到 `./.lime/harness/reports/`：
+
+- `harness-eval-summary.json`
+- `harness-eval-summary.md`
+- `harness-eval-trend.json`
+- `harness-eval-trend.md`
+- `harness-cleanup-report.json`
+- `harness-cleanup-report.md`
+- `harness-dashboard.html`
+
+### 运行 Harness cleanup / slop 报告
+
+```bash
+npm run harness:cleanup-report
+```
+
+### 当前浏览器续测入口
+
+当前仓库的浏览器模式 E2E / 续测文档分两层：
+
+- `internal/test/e2e-tests.md`：总览、命令矩阵、适用边界
+- `internal/aiprompts/playwright-e2e.md`：详细操作流程与 Playwright MCP 续测事实源
+
+### 运行代码检查
+
+```bash
+# Rust
+cd src-tauri && cargo clippy
+
+# 前端
+npm run lint
+```
+
+## 核心测试模块
+
+| 模块          | 测试重点                   | 文档                                                |
+| ------------- | -------------------------- | --------------------------------------------------- |
+| 协议转换      | OpenAI ↔ Claude 转换正确性 | [converter-tests.md](test-cases/converter-tests.md) |
+| Provider 系统 | API Key Provider、协议转换、API 调用 | [provider-tests.md](test-cases/provider-tests.md)   |
+| 退役凭证入口  | 旧凭证 HTTP API 保持下线   | [integration-tests.md](integration-tests.md)        |
+| Aster Agent   | 流式响应、工具调用         | [agent-tests.md](test-cases/agent-tests.md)         |
+
+## 测试原则
+
+基于 [Anthropic AI Agent 评估指南](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents) 和 Orchids Bridge 项目实践：
+
+1. **评估结果，而非路径** - Agent 可能找到更好的方法，不要过度约束执行路径
+2. **平衡问题集** - 测试"应该做"和"不应该做"两种情况
+3. **隔离测试环境** - 每个测试独立状态，避免测试间污染
+4. **从 Bug 到测试** - 每个修复的 Bug 都应该有对应测试用例
+5. **处理非确定性** - 使用 pass@k 和 pass^k 指标评估 Agent 行为
+6. **多层防护** - 结合自动评估、监控、人工审查
+
+## 评分器类型
+
+| 类型           | 适用场景   | 优点         | 缺点             |
+| -------------- | ---------- | ------------ | ---------------- |
+| **代码评分器** | 确定性验证 | 快速、可复现 | 对有效变体脆弱   |
+| **模型评分器** | 语义评估   | 灵活、可扩展 | 非确定性、需校准 |
+| **人工评分器** | 复杂判断   | 金标准质量   | 昂贵、慢         |
+
+## 评估指标
+
+```
+pass@k = P(至少 1 次成功 | k 次尝试) = 1 - (1 - p)^k
+pass^k = P(全部成功 | k 次尝试) = p^k
+```
+
+- **pass@k**：适用于"找到一个解决方案就行"的场景
+- **pass^k**：适用于"每次都必须成功"的场景

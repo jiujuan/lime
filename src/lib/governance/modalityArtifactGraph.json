@@ -1,7 +1,7 @@
 {
   "version": 1,
   "status": "current",
-  "owner": "docs/roadmap/warp/artifact-graph.md",
+  "owner": "internal/roadmap/warp/artifact-graph.md",
   "artifact_kinds": [
     {
       "kind": "image_task",

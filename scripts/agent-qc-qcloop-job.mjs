@@ -10,7 +10,7 @@ import {
   validateQCLoopJobPayload,
 } from "./lib/agent-qc-qcloop-job-core.mjs";
 
-const DEFAULT_MANIFEST_PATH = "docs/test/agent-qc-scenarios.manifest.json";
+const DEFAULT_MANIFEST_PATH = "internal/test/agent-qc-scenarios.manifest.json";
 
 function parseArgs(argv) {
   const result = {

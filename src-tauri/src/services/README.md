@@ -49,7 +49,7 @@ Aster Agent 集成位于 `src-tauri/src/agent/` 目录：
 - `aster_agent.rs` - Agent 包装器
 - `event_converter.rs` - 事件转换器
 
-详见 `docs/aiprompts/aster-integration.md`
+详见 `internal/aiprompts/aster-integration.md`
 
 ## 更新提醒
 

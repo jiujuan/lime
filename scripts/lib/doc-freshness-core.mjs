@@ -2,7 +2,7 @@ import path from "node:path";
 
 export const DOC_FRESHNESS_SPECS = [
   {
-    path: "docs/tech/harness/README.md",
+    path: "internal/tech/harness/README.md",
     requiredMentions: [
       "iteration-roadmap.md",
       "review-decision-workflow.md",
@@ -11,7 +11,7 @@ export const DOC_FRESHNESS_SPECS = [
     ],
   },
   {
-    path: "docs/tech/harness/iteration-roadmap.md",
+    path: "internal/tech/harness/iteration-roadmap.md",
     requiredMentions: [
       "review-decision-workflow.md",
       "tooling-roadmap.md",
@@ -21,7 +21,7 @@ export const DOC_FRESHNESS_SPECS = [
     ],
   },
   {
-    path: "docs/tech/harness/tooling-roadmap.md",
+    path: "internal/tech/harness/tooling-roadmap.md",
     requiredMentions: [
       "harness-evals.md",
       "scripts/report-generated-slop.mjs",
@@ -29,7 +29,7 @@ export const DOC_FRESHNESS_SPECS = [
     ],
   },
   {
-    path: "docs/tech/harness/entropy-governance-workflow.md",
+    path: "internal/tech/harness/entropy-governance-workflow.md",
     requiredMentions: [
       "iteration-roadmap.md",
       "tooling-roadmap.md",
@@ -39,14 +39,14 @@ export const DOC_FRESHNESS_SPECS = [
     ],
   },
   {
-    path: "docs/tech/harness/review-decision-workflow.md",
+    path: "internal/tech/harness/review-decision-workflow.md",
     requiredMentions: [
       "external-analysis-handoff.md",
       "iteration-roadmap.md",
     ],
   },
   {
-    path: "docs/tech/harness/external-analysis-handoff.md",
+    path: "internal/tech/harness/external-analysis-handoff.md",
     requiredMentions: [
       "iteration-roadmap.md",
       "review-decision-workflow.md",
@@ -54,14 +54,14 @@ export const DOC_FRESHNESS_SPECS = [
     ],
   },
   {
-    path: "docs/tech/harness/implementation-blueprint.md",
+    path: "internal/tech/harness/implementation-blueprint.md",
     requiredMentions: [
       "harness-evals.md",
       "scripts/report-generated-slop.mjs",
     ],
   },
   {
-    path: "docs/test/harness-evals.md",
+    path: "internal/test/harness-evals.md",
     requiredMentions: [
       "tooling-roadmap.md",
       "entropy-governance-workflow.md",
@@ -70,11 +70,11 @@ export const DOC_FRESHNESS_SPECS = [
     ],
   },
   {
-    path: "docs/aiprompts/governance.md",
+    path: "internal/aiprompts/governance.md",
     requiredMentions: [],
   },
   {
-    path: "docs/aiprompts/quality-workflow.md",
+    path: "internal/aiprompts/quality-workflow.md",
     requiredMentions: [],
   },
 ];

@@ -9,8 +9,8 @@ import {
   renderAgentQcGuiFlowMarkdown,
 } from "./lib/agent-qc-gui-flow-core.mjs";
 
-const DEFAULT_FLOW_MANIFEST_PATH = "docs/test/agent-qc-gui-flows.manifest.json";
-const DEFAULT_SCENARIO_MANIFEST_PATH = "docs/test/agent-qc-scenarios.manifest.json";
+const DEFAULT_FLOW_MANIFEST_PATH = "internal/test/agent-qc-gui-flows.manifest.json";
+const DEFAULT_SCENARIO_MANIFEST_PATH = "internal/test/agent-qc-scenarios.manifest.json";
 
 function parseArgs(argv) {
   const result = {
@@ -65,8 +65,8 @@ Lime Agent QC GUI Flow Report
   npm run agent-qc:gui-flow:check
 
 选项:
-  --flow-manifest PATH     GUI flow manifest，默认 docs/test/agent-qc-gui-flows.manifest.json
-  --scenario-manifest PATH Agent QC scenario manifest，默认 docs/test/agent-qc-scenarios.manifest.json
+  --flow-manifest PATH     GUI flow manifest，默认 internal/test/agent-qc-gui-flows.manifest.json
+  --scenario-manifest PATH Agent QC scenario manifest，默认 internal/test/agent-qc-scenarios.manifest.json
   --format FMT            markdown | json
   --output PATH           写入文件；默认 stdout
   --check                 非法时非 0 退出

@@ -20,7 +20,7 @@
 //! Agent 初始化时会自动加载 Lime 当前应用数据目录中的 Skills 到
 //! aster-rust 的 global_registry，使 AI 能够自动发现和调用这些 Skills。
 //!
-//! 参考文档：`docs/prd/chat-architecture-redesign.md`
+//! 参考文档：`internal/prd/chat-architecture-redesign.md`
 
 use aster::agents::Agent;
 use aster::conversation::message::{

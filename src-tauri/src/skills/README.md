@@ -116,7 +116,7 @@ commands/skill_cmd.rs
 
 - 设计文档: `.kiro/specs/skills-integration/design.md`
 - 需求文档: `.kiro/specs/skills-integration/requirements.md`
-- 路线图: `docs/roadmap/lime-skills-standardization-roadmap.md`
+- 路线图: `internal/roadmap/lime-skills-standardization-roadmap.md`
 
 ## 当前标准约定
 

@@ -17,14 +17,14 @@ const HARNESS_TASK_INDEX_SECTION_PATH =
 const HARNESS_STATUS_PANEL_PATH =
   "src/components/agent/chat/components/HarnessStatusPanel.tsx";
 const REQUIRED_DOCS = [
-  "docs/roadmap/warp/runtime-fact-map.md",
-  "docs/roadmap/warp/contract-schema.md",
-  "docs/roadmap/warp/capability-matrix.md",
-  "docs/roadmap/warp/execution-profile.md",
-  "docs/roadmap/warp/artifact-graph.md",
-  "docs/roadmap/warp/entry-binding-inventory.md",
-  "docs/roadmap/warp/task-index-inventory.md",
-  "docs/roadmap/warp/evolution-guide.md",
+  "internal/roadmap/warp/runtime-fact-map.md",
+  "internal/roadmap/warp/contract-schema.md",
+  "internal/roadmap/warp/capability-matrix.md",
+  "internal/roadmap/warp/execution-profile.md",
+  "internal/roadmap/warp/artifact-graph.md",
+  "internal/roadmap/warp/entry-binding-inventory.md",
+  "internal/roadmap/warp/task-index-inventory.md",
+  "internal/roadmap/warp/evolution-guide.md",
 ];
 const REQUIRED_TASK_INDEX_PRESENTATION_EXPORTS = [
   "buildModalityTaskIndexFacets",
