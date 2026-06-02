@@ -55,6 +55,7 @@ import {
 } from "./FileManager/fileManagerDisplay";
 import {
   buildEntries,
+  buildDefaultPreviewSelection,
   findChangeItemForSelection,
   isHtmlPreviewContext,
   isPendingChangeItem,
@@ -67,12 +68,10 @@ import {
   resolvePreviewPath,
   resolveSavedContentBundleRoot,
   resolveWorkspacePanelDisplayPath,
-  resolveWorkspaceRelativeDisplayPath,
   sortWorkspaceListingEntries,
   type CanvasWorkbenchCopy,
   type CanvasWorkbenchDefaultPreview,
   type CanvasWorkbenchPreviewTarget,
-  type CanvasWorkbenchResolvedSelection,
   type WorkspaceFileSelection,
 } from "./CanvasWorkbenchLayoutViewModel";
 

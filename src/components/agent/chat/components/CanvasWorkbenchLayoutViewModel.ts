@@ -8,7 +8,6 @@ import {
   normalizeManagedWorkspacePathForDisplay,
   resolveAbsoluteWorkspacePath,
 } from "../workspace/workspacePath";
-import type { TaskFile } from "./TaskFiles";
 import {
   buildArtifactFromWrite,
   formatArtifactWritePhaseLabel,
@@ -16,6 +15,18 @@ import {
   resolveArtifactWritePhase,
 } from "../utils/messageArtifacts";
 import { resolveContentPostArtifactDisplayTitle } from "../utils/contentPostSkill";
+
+export interface CanvasWorkbenchTaskFile {
+  id: string;
+  name: string;
+  type: "document" | "image" | "audio" | "video" | "other";
+  content?: string;
+  version: number;
+  createdAt: number;
+  updatedAt: number;
+  thumbnail?: string;
+  metadata?: Record<string, unknown>;
+}
 
 export interface CanvasWorkbenchEntryBase {
   key: string;
@@ -45,7 +56,7 @@ export interface CanvasWorkbenchDocumentVersionEntry
 export interface CanvasWorkbenchTaskFileEntry
   extends CanvasWorkbenchEntryBase {
   source: "task-file";
-  taskFile: TaskFile;
+  taskFile: CanvasWorkbenchTaskFile;
 }
 
 export type CanvasWorkbenchEntry =
@@ -474,7 +485,7 @@ function resolveMappedPreviousContentForPath(
 export function buildEntries(
   artifacts: Artifact[],
   canvasState: CanvasStateUnion | null,
-  taskFiles: TaskFile[],
+  taskFiles: CanvasWorkbenchTaskFile[],
   copy: CanvasWorkbenchCopy,
   workspaceRoot?: string | null,
 ): CanvasWorkbenchEntry[] {

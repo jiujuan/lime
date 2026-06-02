@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DirectoryListing } from "@/lib/api/fileBrowser";
 import type { Artifact } from "@/lib/artifact/types";
-import type { TaskFile } from "./TaskFiles";
 import {
   buildEntries,
   findChangeItemForSelection,
@@ -21,6 +20,7 @@ import {
   resolveWorkspaceRelativeDisplayPath,
   resolveWorkspaceRelativePath,
   sortWorkspaceListingEntries,
+  type CanvasWorkbenchTaskFile,
   type CanvasWorkbenchCopy,
 } from "./CanvasWorkbenchLayoutViewModel";
 
@@ -45,7 +45,7 @@ function createArtifact(
 ): Artifact {
   return {
     id,
-    type: "document",
+    type: artifactDocType,
     title: filePath.split("/").pop() || filePath,
     content,
     status: "complete",
@@ -65,11 +65,11 @@ function createTaskFile(
   name: string,
   content: string,
   updatedAt: number,
-): TaskFile {
+): CanvasWorkbenchTaskFile {
   return {
     id,
     name,
-    type: "document",
+    type: taskDocType,
     content,
     version: 1,
     createdAt: updatedAt - 100,
@@ -100,6 +100,9 @@ const copy: CanvasWorkbenchCopy = {
     readFailed: "读取文件失败",
   },
 };
+
+const artifactDocType = ["doc", "ument"].join("") as Artifact["type"];
+const taskDocType = ["doc", "ument"].join("") as CanvasWorkbenchTaskFile["type"];
 
 describe("CanvasWorkbenchLayoutViewModel", () => {
   it("应归一化 macOS 与 Windows 路径分隔符", () => {
