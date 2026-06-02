@@ -26,13 +26,25 @@ export interface WorkflowQuickAction {
   prompt: string;
 }
 
-interface UseWorkflowInputStateParams {
+export interface WorkflowInputStateParams {
   isWorkspaceVariant: boolean;
   workflowGate?: WorkflowGateState | null;
   workflowSteps?: WorkflowStep[];
   workflowRunState?: "idle" | "auto_running" | "await_user_decision";
   isSending: boolean;
   copy: WorkflowInputStateCopy;
+}
+
+export interface WorkflowInputState {
+  workflowQuickActions: WorkflowQuickAction[];
+  workflowQueueItems: WorkflowStep[];
+  workflowActiveItem: WorkflowStep | null;
+  workflowQueueTotalCount: number;
+  workflowCompletedCount: number;
+  workflowTotalCount: number;
+  workflowProgressLabel: string;
+  workflowSummaryLabel: string;
+  renderWorkflowGeneratingPanel: boolean;
 }
 
 export interface WorkflowInputStateCopy extends WorkflowPresentationCopy {
@@ -109,31 +121,25 @@ function resolveWorkflowQuickActions(
   }
 }
 
-export function useWorkflowInputState({
+export function buildWorkflowInputState({
   isWorkspaceVariant,
   workflowGate,
   workflowSteps = [],
   workflowRunState,
   isSending,
   copy,
-}: UseWorkflowInputStateParams) {
-  const workflowQuickActions = useMemo(
-    () =>
-      isWorkspaceVariant
-        ? resolveWorkflowQuickActions(workflowGate?.key, copy)
-        : [],
-    [copy, isWorkspaceVariant, workflowGate?.key],
-  );
+}: WorkflowInputStateParams): WorkflowInputState {
+  const workflowQuickActions = isWorkspaceVariant
+    ? resolveWorkflowQuickActions(workflowGate?.key, copy)
+    : [];
 
-  const workflowStepSnapshot = useMemo(
-    () =>
-      isWorkspaceVariant ? buildWorkflowStepSnapshot(workflowSteps, 3) : null,
-    [isWorkspaceVariant, workflowSteps],
-  );
+  const workflowStepSnapshot = isWorkspaceVariant
+    ? buildWorkflowStepSnapshot(workflowSteps, 3)
+    : null;
 
   const workflowActiveItem = workflowStepSnapshot?.leadingStep ?? null;
 
-  const workflowQueueTotalCount = useMemo(() => {
+  const workflowQueueTotalCount = (() => {
     if (!isWorkspaceVariant) {
       return 0;
     }
@@ -141,9 +147,9 @@ export function useWorkflowInputState({
       return workflowStepSnapshot.remainingCount;
     }
     return workflowGate ? 1 : 0;
-  }, [isWorkspaceVariant, workflowGate, workflowStepSnapshot]);
+  })();
 
-  const workflowSummaryLabel = useMemo(() => {
+  const workflowSummaryLabel = (() => {
     if (workflowActiveItem) {
       return buildWorkflowSummaryText({
         leadingStep: workflowActiveItem,
@@ -158,22 +164,18 @@ export function useWorkflowInputState({
       return copy.summary.running;
     }
     return copy.summary.arranging;
-  }, [copy, workflowGate, workflowActiveItem, workflowQueueTotalCount]);
+  })();
 
   const workflowCompletedCount = workflowStepSnapshot?.completedCount ?? 0;
   const workflowTotalCount =
     workflowStepSnapshot?.totalCount ?? workflowSteps.length;
-  const workflowProgressLabel = useMemo(
-    () =>
-      formatWorkflowProgressLabel({
-        completedCount: workflowCompletedCount,
-        totalCount: workflowTotalCount,
-        copy,
-      }),
-    [copy, workflowCompletedCount, workflowTotalCount],
-  );
+  const workflowProgressLabel = formatWorkflowProgressLabel({
+    completedCount: workflowCompletedCount,
+    totalCount: workflowTotalCount,
+    copy,
+  });
 
-  const workflowQueueItems = useMemo(() => {
+  const workflowQueueItems = (() => {
     if (!isWorkspaceVariant) {
       return [];
     }
@@ -198,7 +200,7 @@ export function useWorkflowInputState({
     }
 
     return [];
-  }, [isWorkspaceVariant, workflowGate, workflowStepSnapshot]);
+  })();
 
   const renderWorkflowGeneratingPanel = isWorkspaceVariant
     ? workflowRunState
@@ -217,4 +219,37 @@ export function useWorkflowInputState({
     workflowSummaryLabel,
     renderWorkflowGeneratingPanel,
   };
+}
+
+export function useWorkflowInputState(
+  params: WorkflowInputStateParams,
+): WorkflowInputState {
+  const {
+    isWorkspaceVariant,
+    workflowGate,
+    workflowSteps,
+    workflowRunState,
+    isSending,
+    copy,
+  } = params;
+
+  return useMemo(
+    () =>
+      buildWorkflowInputState({
+        isWorkspaceVariant,
+        workflowGate,
+        workflowSteps,
+        workflowRunState,
+        isSending,
+        copy,
+      }),
+    [
+      copy,
+      isSending,
+      isWorkspaceVariant,
+      workflowGate,
+      workflowRunState,
+      workflowSteps,
+    ],
+  );
 }

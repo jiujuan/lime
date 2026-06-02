@@ -11,27 +11,16 @@ export interface ChatToolPreferences {
 export function isPlanExecutionStrategy(
   executionStrategy?: AsterExecutionStrategy | null,
 ): boolean {
-  return executionStrategy === "code_orchestrated";
+  void executionStrategy;
+  return false;
 }
 
 export function alignChatToolPreferencesWithExecutionStrategy(
   preferences: ChatToolPreferences,
   executionStrategy?: AsterExecutionStrategy | null,
 ): ChatToolPreferences {
-  const isCodeOrchestrated = isPlanExecutionStrategy(executionStrategy);
-  const nextSubagent = isCodeOrchestrated ? true : preferences.subagent;
-  if (
-    preferences.task === isCodeOrchestrated &&
-    preferences.subagent === nextSubagent
-  ) {
-    return preferences;
-  }
-
-  return {
-    ...preferences,
-    task: isCodeOrchestrated,
-    subagent: nextSubagent,
-  };
+  void executionStrategy;
+  return preferences;
 }
 
 export const DEFAULT_CHAT_TOOL_PREFERENCES: ChatToolPreferences = {
@@ -50,11 +39,7 @@ export function shouldUseCompactGeneralPromptForPreferences(params: {
     return false;
   }
 
-  return (
-    !params.preferences.thinking &&
-    !params.preferences.task &&
-    !params.preferences.subagent
-  );
+  return !params.preferences.task && !params.preferences.subagent;
 }
 
 const LEGACY_CHAT_TOOL_PREFERENCES_KEY = "lime.chat.tool_preferences.v1";
@@ -78,8 +63,8 @@ const parseStoredPreferences = (
 ): ChatToolPreferences => {
   const parsed = JSON.parse(raw) as Partial<ChatToolPreferences>;
   return {
-    webSearch: normalizeBoolean(parsed.webSearch, fallback.webSearch),
-    thinking: normalizeBoolean(parsed.thinking, fallback.thinking),
+    webSearch: false,
+    thinking: false,
     task: normalizeBoolean(parsed.task, fallback.task),
     subagent: normalizeBoolean(parsed.subagent, fallback.subagent),
   };

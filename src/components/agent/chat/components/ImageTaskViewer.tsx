@@ -1,390 +1,35 @@
-import { useMemo } from "react";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { LoaderCircle, Sparkles, X } from "lucide-react";
 import { openResourceManager } from "@/features/resource-manager";
 import { cn } from "@/lib/utils";
 import { RenderableTaskImage } from "./RenderableTaskImage";
 import type { ImageTaskViewerProps } from "./imageWorkbenchTypes";
-import type { ImageRuntimeContractSnapshot } from "../types";
-import { buildLimeCorePolicyEvaluationMetaItem } from "../workspace/mediaTaskPolicyEvaluation";
 import { buildImageTaskResourceSourceContext } from "../workspace/imageWorkbenchResourceManager";
+import {
+  buildFollowUpCommand,
+  orderTaskOutputsByTaskOutputIds,
+  resolveEmptyStateDescription,
+  resolveFollowUpLabel,
+  resolveImageUnavailableDescription,
+  resolveImageUnavailableTitle,
+  resolveLayoutLabel,
+  resolveModeEyebrow,
+  resolveOutputGridClassName,
+  resolveOutputTileAspectClass,
+  resolveOutputDisplayIndexForLabel,
+  resolveRuntimeContractBadge,
+  resolveRuntimeContractPolicyLabel,
+  resolveRuntimeContractRegistryLabel,
+  resolveSelectedOutputLabel,
+  resolveSelectedStoryboardSlot,
+  resolveSourceLabel,
+  resolveSourcePlaceholderLabel,
+  resolveStatusLabel,
+  resolveStatusTone,
+} from "./ImageTaskViewerViewModel";
 
 const IMAGE_TASK_PRIMARY_BUTTON_CLASSNAME =
   "inline-flex items-center justify-center rounded-full border border-emerald-200 bg-[linear-gradient(135deg,#0ea5e9_0%,#14b8a6_52%,#10b981_100%)] px-4 py-2 text-sm font-medium text-white shadow-sm shadow-emerald-950/15 transition hover:opacity-95";
-
-type AgentTranslate = TFunction<"agent", undefined>;
-
-function resolveModeEyebrow(
-  mode: string | undefined,
-  t: AgentTranslate,
-): string {
-  switch ((mode || "").trim().toLowerCase()) {
-    case "edit":
-      return t("agentChat.imageWorkbenchPreview.tool.editing");
-    case "variation":
-      return t("agentChat.imageWorkbenchPreview.tool.redraw");
-    case "generate":
-    default:
-      return t("agentChat.imageWorkbenchPreview.tool.generation");
-  }
-}
-
-function resolveSourceLabel(
-  mode: string | undefined,
-  t: AgentTranslate,
-): string {
-  return (mode || "").trim().toLowerCase() === "variation"
-    ? t("agentChat.imageTaskViewer.source.reference")
-    : t("agentChat.imageTaskViewer.source.source");
-}
-
-function resolveFollowUpLabel(
-  mode: string | undefined,
-  t: AgentTranslate,
-): string {
-  const normalizedMode = (mode || "").trim().toLowerCase();
-  if (normalizedMode === "edit") {
-    return t("agentChat.imageTaskViewer.action.continueEdit");
-  }
-  if (normalizedMode === "variation") {
-    return t("agentChat.imageTaskViewer.action.continueVariation");
-  }
-  return t("agentChat.imageTaskViewer.action.redrawFromImage");
-}
-
-function resolveLayoutLabel(
-  layoutHint: string | null | undefined,
-  t: AgentTranslate,
-): string | null {
-  return layoutHint === "storyboard_3x3"
-    ? t("agentChat.imageTaskViewer.layout.storyboard3x3")
-    : null;
-}
-
-function resolveOutputGridClassName(params: {
-  layoutHint?: string | null;
-  outputCount: number;
-}): string {
-  if (params.layoutHint === "storyboard_3x3") {
-    return "grid-cols-3";
-  }
-  if (params.outputCount <= 4) {
-    return "grid-cols-2";
-  }
-  if (params.outputCount <= 9) {
-    return "grid-cols-2 sm:grid-cols-3";
-  }
-  return "grid-cols-2 sm:grid-cols-3 xl:grid-cols-4";
-}
-
-function resolveOutputTileAspectClass(layoutHint?: string | null): string {
-  return layoutHint === "storyboard_3x3" ? "aspect-square" : "aspect-[4/3]";
-}
-
-function resolveSelectedOutputLabel(params: {
-  selectedIndex: number;
-  outputCount: number;
-  layoutHint?: string | null;
-  t: AgentTranslate;
-}): string | null {
-  if (params.selectedIndex < 0 || params.outputCount <= 1) {
-    return null;
-  }
-
-  return params.layoutHint === "storyboard_3x3"
-    ? params.t("agentChat.imageTaskViewer.selected.storyboardSlot", {
-        index: params.selectedIndex + 1,
-      })
-    : params.t("agentChat.imageTaskViewer.selected.image", {
-        index: params.selectedIndex + 1,
-      });
-}
-
-function resolveOutputDisplayIndex(
-  outputIndex: number,
-  slotIndex?: number | null,
-): number {
-  return slotIndex && slotIndex > 0 ? slotIndex : outputIndex + 1;
-}
-
-function resolveStoryboardSlotLabel(params: {
-  layoutHint?: string | null;
-  outputIndex: number;
-  slotIndex?: number | null;
-  slotLabel?: string | null;
-  taskSlotLabel?: string | null;
-  t: AgentTranslate;
-}): string | null {
-  if (params.layoutHint !== "storyboard_3x3") {
-    return null;
-  }
-
-  return (
-    params.slotLabel?.trim() ||
-    params.taskSlotLabel?.trim() ||
-    params.t("agentChat.imageTaskViewer.storyboard.slotFallback", {
-      index: resolveOutputDisplayIndex(params.outputIndex, params.slotIndex),
-    })
-  );
-}
-
-function buildFollowUpCommand(params: {
-  mode?: string;
-  outputRef?: string | null;
-  prompt?: string | null;
-}): string | null {
-  const normalizedRef = params.outputRef?.trim();
-  if (!normalizedRef) {
-    return null;
-  }
-
-  const referenceToken = normalizedRef.startsWith("#")
-    ? normalizedRef
-    : `#${normalizedRef}`;
-  const normalizedPrompt = params.prompt?.trim();
-  const normalizedMode = (params.mode || "").trim().toLowerCase();
-  if (normalizedMode === "edit" && normalizedPrompt) {
-    return `@修图 ${referenceToken} ${normalizedPrompt}`;
-  }
-  if (normalizedMode === "variation" && normalizedPrompt) {
-    return `@重绘 ${referenceToken} ${normalizedPrompt}`;
-  }
-  return `@重绘 ${referenceToken} `;
-}
-
-function resolveStatusLabel(
-  status: string | undefined,
-  mode: string | undefined,
-  t: AgentTranslate,
-): string {
-  const normalizedMode = (mode || "").trim().toLowerCase();
-  switch ((status || "").trim().toLowerCase()) {
-    case "complete":
-      switch (normalizedMode) {
-        case "edit":
-          return t("agentChat.imageTaskViewer.status.complete.edit");
-        case "variation":
-          return t("agentChat.imageTaskViewer.status.complete.variation");
-        case "generate":
-        default:
-          return t("agentChat.imageTaskViewer.status.complete.generate");
-      }
-    case "partial":
-      return t("agentChat.imageTaskViewer.status.partial");
-    case "cancelled":
-      return t("agentChat.imageTaskViewer.status.cancelled");
-    case "error":
-      switch (normalizedMode) {
-        case "edit":
-          return t("agentChat.imageTaskViewer.status.error.edit");
-        case "variation":
-          return t("agentChat.imageTaskViewer.status.error.variation");
-        case "generate":
-        default:
-          return t("agentChat.imageTaskViewer.status.error.generate");
-      }
-    case "queued":
-      return t("agentChat.imageTaskViewer.status.queued");
-    case "running":
-    case "routing":
-      switch (normalizedMode) {
-        case "edit":
-          return t("agentChat.imageTaskViewer.status.running.edit");
-        case "variation":
-          return t("agentChat.imageTaskViewer.status.running.variation");
-        case "generate":
-        default:
-          return t("agentChat.imageTaskViewer.status.running.generate");
-      }
-    default:
-      return t("agentChat.imageTaskViewer.status.preparing");
-  }
-}
-
-function resolveStatusTone(status?: string): string {
-  switch ((status || "").trim().toLowerCase()) {
-    case "complete":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-    case "partial":
-      return "border-amber-200 bg-amber-50 text-amber-700";
-    case "cancelled":
-      return "border-slate-200 bg-slate-100 text-slate-600";
-    case "error":
-      return "border-rose-200 bg-rose-50 text-rose-700";
-    case "queued":
-    case "running":
-    case "routing":
-      return "border-sky-200 bg-sky-50 text-sky-700";
-    default:
-      return "border-slate-200 bg-slate-100 text-slate-600";
-  }
-}
-
-function resolveRuntimeContractBadge(
-  runtimeContract: ImageRuntimeContractSnapshot | null | undefined,
-  t: AgentTranslate,
-): { label: string; tone: string } | null {
-  if (!runtimeContract) {
-    return null;
-  }
-
-  const contractKey = runtimeContract.contractKey?.trim() || "image_generation";
-  const outcome = (runtimeContract.routingOutcome || "").trim().toLowerCase();
-  if (outcome === "blocked") {
-    return {
-      label: t("agentChat.imageTaskViewer.runtimeContract.blocked", {
-        reason: runtimeContract.failureCode?.trim() || contractKey,
-      }),
-      tone: "border-amber-200 bg-amber-50 text-amber-800",
-    };
-  }
-  if (outcome === "failed") {
-    return {
-      label: t("agentChat.imageTaskViewer.runtimeContract.failed", {
-        reason: runtimeContract.failureCode?.trim() || contractKey,
-      }),
-      tone: "border-rose-200 bg-rose-50 text-rose-700",
-    };
-  }
-
-  return {
-    label: t("agentChat.imageTaskViewer.runtimeContract.accepted", {
-      contractKey,
-    }),
-    tone: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  };
-}
-
-function resolveRuntimeContractRegistryLabel(
-  runtimeContract: ImageRuntimeContractSnapshot | null | undefined,
-  t: AgentTranslate,
-): string | null {
-  if (runtimeContract?.modelCapabilityAssessmentSource !== "model_registry") {
-    return null;
-  }
-  if (runtimeContract.modelSupportsImageGeneration === false) {
-    return t("agentChat.imageTaskViewer.runtimeContract.registry.unsupported");
-  }
-  if (runtimeContract.modelSupportsImageGeneration === true) {
-    return t("agentChat.imageTaskViewer.runtimeContract.registry.supported");
-  }
-  return t("agentChat.imageTaskViewer.runtimeContract.registry.unknown");
-}
-
-function resolveRuntimeContractPolicyLabel(
-  runtimeContract?: ImageRuntimeContractSnapshot | null,
-): string | null {
-  if (!runtimeContract) {
-    return null;
-  }
-
-  return buildLimeCorePolicyEvaluationMetaItem({
-    evaluationStatus: runtimeContract.limecorePolicyEvaluationStatus,
-    evaluationDecision: runtimeContract.limecorePolicyEvaluationDecision,
-    blockingRefs: runtimeContract.limecorePolicyEvaluationBlockingRefs,
-    askRefs: runtimeContract.limecorePolicyEvaluationAskRefs,
-    pendingRefs: runtimeContract.limecorePolicyEvaluationPendingRefs,
-    missingInputs: runtimeContract.limecorePolicyMissingInputs,
-    pendingHitRefs: runtimeContract.limecorePolicyPendingHitRefs,
-  });
-}
-
-function resolveEmptyStateDescription(
-  status: string | undefined,
-  _failureMessage: string | undefined,
-  mode: string | undefined,
-  t: AgentTranslate,
-): string {
-  switch ((status || "").trim().toLowerCase()) {
-    case "cancelled":
-      return t("agentChat.imageTaskViewer.empty.cancelled");
-    case "error":
-      return t("agentChat.imageTaskViewer.empty.error");
-    case "queued":
-      return t("agentChat.imageTaskViewer.empty.queued");
-    case "running":
-    case "routing":
-      switch ((mode || "").trim().toLowerCase()) {
-        case "edit":
-          return t("agentChat.imageTaskViewer.empty.running.edit");
-        case "variation":
-          return t("agentChat.imageTaskViewer.empty.running.variation");
-        case "generate":
-        default:
-          return t("agentChat.imageTaskViewer.empty.running.generate");
-      }
-    default:
-      return t("agentChat.imageTaskViewer.empty.preparing");
-  }
-}
-
-function resolveImageUnavailableTitle(
-  status: string | undefined,
-  mode: string | undefined,
-  t: AgentTranslate,
-): string {
-  switch ((status || "").trim().toLowerCase()) {
-    case "complete":
-    case "partial":
-      return t("agentChat.imageTaskViewer.unavailable.title");
-    default:
-      return resolveStatusLabel(status, mode, t);
-  }
-}
-
-function resolveImageUnavailableDescription(
-  mode: string | undefined,
-  t: AgentTranslate,
-): string {
-  switch ((mode || "").trim().toLowerCase()) {
-    case "edit":
-      return t("agentChat.imageTaskViewer.unavailable.edit");
-    case "variation":
-      return t("agentChat.imageTaskViewer.unavailable.variation");
-    case "generate":
-    default:
-      return t("agentChat.imageTaskViewer.unavailable.generate");
-  }
-}
-
-function resolveSourcePlaceholderLabel(
-  mode: string | undefined,
-  reason: "empty" | "error",
-  t: AgentTranslate,
-) {
-  if (reason === "error") {
-    return (mode || "").trim().toLowerCase() === "variation"
-      ? t("agentChat.imageTaskViewer.source.referenceUnavailable")
-      : t("agentChat.imageTaskViewer.source.sourceUnavailable");
-  }
-
-  return (mode || "").trim().toLowerCase() === "variation"
-    ? t("agentChat.imageTaskViewer.source.referencePending")
-    : t("agentChat.imageTaskViewer.source.sourcePending");
-}
-
-function orderTaskOutputsByTaskOutputIds(
-  task: ImageTaskViewerProps["tasks"][number] | null,
-  outputs: ImageTaskViewerProps["outputs"],
-): ImageTaskViewerProps["outputs"] {
-  if (!task?.outputIds?.length) {
-    return outputs;
-  }
-
-  const outputById = new Map(outputs.map((output) => [output.id, output]));
-  const ordered = task.outputIds
-    .map((outputId) => outputById.get(outputId))
-    .filter((output): output is ImageTaskViewerProps["outputs"][number] =>
-      Boolean(output),
-    );
-  const orderedIds = new Set(ordered.map((output) => output.id));
-
-  return [
-    ...ordered,
-    ...outputs.filter((output) => !orderedIds.has(output.id)),
-  ];
-}
 
 export function ImageTaskViewer({
   tasks,
@@ -440,37 +85,12 @@ export function ImageTaskViewer({
   const selectedOutputIndex = selectedOutput
     ? selectedTaskOutputs.findIndex((item) => item.id === selectedOutput.id)
     : -1;
-  const selectedStoryboardSlot = useMemo(() => {
-    if (!selectedTask || selectedOutputIndex < 0) {
-      return null;
-    }
-
-    const selectedSlotIndex =
-      selectedOutput?.slotIndex ?? selectedOutputIndex + 1;
-    const taskSlot = selectedTask.storyboardSlots?.find(
-      (slot) => slot.slotIndex === selectedSlotIndex,
-    );
-
-    return {
-      slotIndex: selectedSlotIndex,
-      label: resolveStoryboardSlotLabel({
-        layoutHint: selectedTask.layoutHint,
-        outputIndex: selectedOutputIndex,
-        slotIndex: selectedSlotIndex,
-        slotLabel: selectedOutput?.slotLabel,
-        taskSlotLabel: taskSlot?.label,
-        t,
-      }),
-      prompt: selectedOutput?.slotPrompt || taskSlot?.prompt || null,
-    };
-  }, [
-    selectedOutput?.slotIndex,
-    selectedOutput?.slotLabel,
-    selectedOutput?.slotPrompt,
-    selectedOutputIndex,
-    selectedTask,
+  const selectedStoryboardSlot = resolveSelectedStoryboardSlot({
+    task: selectedTask,
+    output: selectedOutput,
+    outputIndex: selectedOutputIndex,
     t,
-  ]);
+  });
   const statusLabel = resolveStatusLabel(
     selectedTask?.status,
     selectedTask?.mode,
@@ -553,19 +173,12 @@ export function ImageTaskViewer({
       }),
       initialIndex: selectedOutputIndex >= 0 ? selectedOutputIndex : 0,
       items: selectedTaskOutputs.map((output, index) => {
-        const taskSlotLabel = selectedTask?.storyboardSlots?.find(
-          (slot) =>
-            slot.slotIndex ===
-            resolveOutputDisplayIndex(index, output.slotIndex),
-        )?.label;
-        const slotLabel = resolveStoryboardSlotLabel({
-          layoutHint: selectedTask?.layoutHint,
+        const slotLabel = resolveSelectedStoryboardSlot({
+          task: selectedTask,
+          output,
           outputIndex: index,
-          slotIndex: output.slotIndex,
-          slotLabel: output.slotLabel,
-          taskSlotLabel,
           t,
-        });
+        })?.label;
 
         return {
           id: output.id,
@@ -938,19 +551,12 @@ export function ImageTaskViewer({
           >
             {outputGridSlots.map((output, index) => {
               const active = output?.id === selectedOutput?.id;
-              const taskSlotLabel = selectedTask?.storyboardSlots?.find(
-                (slot) =>
-                  slot.slotIndex ===
-                  resolveOutputDisplayIndex(index, output?.slotIndex),
-              )?.label;
-              const storyboardSlotLabel = resolveStoryboardSlotLabel({
-                layoutHint: selectedTask?.layoutHint,
+              const storyboardSlotLabel = resolveSelectedStoryboardSlot({
+                task: selectedTask,
+                output,
                 outputIndex: index,
-                slotIndex: output?.slotIndex,
-                slotLabel: output?.slotLabel,
-                taskSlotLabel,
                 t,
-              });
+              })?.label;
               return (
                 <button
                   key={output?.id || `image-output-placeholder-${index + 1}`}
@@ -1032,7 +638,10 @@ export function ImageTaskViewer({
                             : "border-slate-200 bg-slate-50/95 text-slate-600",
                         )}
                       >
-                        {resolveOutputDisplayIndex(index, output?.slotIndex)}
+                        {resolveOutputDisplayIndexForLabel(
+                          index,
+                          output?.slotIndex,
+                        )}
                       </span>
                     ) : null}
                     {storyboardSlotLabel ? (

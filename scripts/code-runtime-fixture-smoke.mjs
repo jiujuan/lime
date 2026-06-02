@@ -58,7 +58,7 @@ function printHelp() {
 Lime Code Runtime Fixture Smoke
 
 用途:
-  通过 localhost fixture 验证自然语言编程请求默认进入 Agent Runtime 编程底座，
+  通过 localhost fixture 验证自然语言工具请求默认进入 current Agent Runtime，
   并完成 Read/Write/Bash、文件落盘、checkpoint/diff/evidence pack 的离线闭环。
 
 用法:
@@ -507,12 +507,14 @@ async function runSmoke(options) {
         !firstRequestText.includes("@代码") &&
         !firstRequestText.includes("@code"),
       noHarnessCodeCommand: !fixtureBodyText.includes("code_command"),
-      sessionDefaultedToAuto:
-        finalState.sessionDetail?.execution_strategy === "auto" ||
-        finalState.sessionDetail?.executionStrategy === "auto",
-      effectiveCodeRuntimeObserved:
-        detailText.includes("code_orchestrated") ||
-        threadReadText.includes("code_orchestrated"),
+      sessionDefaultedToReact:
+        finalState.sessionDetail?.execution_strategy === "react" ||
+        finalState.sessionDetail?.executionStrategy === "react",
+      currentAgentRuntimeObserved:
+        detailText.includes('"execution_strategy":"react"') ||
+        detailText.includes('"executionStrategy":"react"') ||
+        threadReadText.includes('"execution_strategy":"react"') ||
+        threadReadText.includes('"executionStrategy":"react"'),
       readToolObserved: valueContains(finalState.sessionDetail, "Read"),
       writeToolObserved: valueContains(finalState.sessionDetail, "Write"),
       bashToolObserved: valueContains(finalState.sessionDetail, "Bash"),
@@ -538,7 +540,7 @@ async function runSmoke(options) {
       command: "smoke:code-runtime-fixture",
       coverage: {
         usesCurrentRuntimeSubmitTurn: true,
-        usesDefaultSessionExecutionStrategy: true,
+        usesDefaultReactExecutionStrategy: true,
         usesLocalhostFixtureProvider: true,
         avoidsAtCodeCommandRoute: true,
         verifiesReadWriteBashTools: true,

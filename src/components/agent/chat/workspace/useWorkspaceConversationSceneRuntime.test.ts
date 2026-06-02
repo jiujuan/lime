@@ -772,11 +772,11 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     );
   });
 
-  it("code_orchestrated 会话应启用 coding 工作台模式并透出输出/日志入口", async () => {
+  it("运行时输出和文件信号应启用工作台模式并透出输出/日志入口", async () => {
     const openChangedFile = vi.fn(async () => undefined);
     const handleSendFromEmptyState = vi.fn();
     const params = createBaseParams({
-      executionStrategy: "code_orchestrated",
+      executionStrategy: "react",
       handleSendFromEmptyState,
       canvasScene: {
         ...createBaseParams().canvasScene,
@@ -905,7 +905,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     expect(handleSendFromEmptyState).not.toHaveBeenCalled();
   });
 
-  it("非 code_orchestrated 会话应保持默认画布工作台模式", () => {
+  it("无运行时输出和文件信号时应保持默认画布工作台模式", () => {
     const sceneProps = getRenderedSceneProps(
       createBaseParams({
         executionStrategy: "react",

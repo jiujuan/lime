@@ -3,7 +3,6 @@ import {
   ChevronDown,
   ChevronUp,
   FolderOpen,
-  Globe,
   Lightbulb,
   Settings2,
   X,
@@ -20,7 +19,6 @@ import { CharacterMention } from "../skill-selection/CharacterMention";
 import { BuiltinCommandBadge } from "./Inputbar/components/BuiltinCommandBadge";
 import { InputbarAccessModeSelect } from "./Inputbar/components/InputbarAccessModeSelect";
 import { InputbarCore } from "./Inputbar/components/InputbarCore";
-import { InputbarExecutionStrategySelect } from "./Inputbar/components/InputbarExecutionStrategySelect";
 import { InputbarKnowledgeControl } from "./Inputbar/knowledge/InputbarKnowledgeControl";
 import { InputbarModelExtra } from "./Inputbar/components/InputbarModelExtra";
 import { RuntimeSceneBadge } from "./Inputbar/components/RuntimeSceneBadge";
@@ -66,7 +64,6 @@ import type {
   InputbarKnowledgePackSelection,
 } from "./Inputbar/types";
 import type { InputbarCoreCopy } from "./Inputbar/components/inputbarCoreCopy";
-import type { InputbarExecutionStrategyCopy } from "./Inputbar/inputbarWorkflowCopy";
 
 interface EmptyStateComposerPanelProps {
   input: string;
@@ -79,10 +76,6 @@ interface EmptyStateComposerPanelProps {
   setProviderType: (type: string) => void;
   model: string;
   setModel: (model: string) => void;
-  executionStrategy?: "react" | "code_orchestrated" | "auto";
-  setExecutionStrategy?: (
-    strategy: "react" | "code_orchestrated" | "auto",
-  ) => void;
   accessMode?: AgentAccessMode;
   setAccessMode?: (mode: AgentAccessMode) => void;
   onManageProviders?: () => void;
@@ -109,12 +102,9 @@ interface EmptyStateComposerPanelProps {
   onManageKnowledgePacks?: () => void;
   copy: HomeSurfaceComposerCopy;
   inputbarCopy: InputbarCoreCopy;
-  executionStrategyCopy: InputbarExecutionStrategyCopy;
   showCreationModeSelector: boolean;
   creationMode: CreationMode;
   onCreationModeChange?: (mode: CreationMode) => void;
-  thinkingEnabled: boolean;
-  onThinkingEnabledChange?: (enabled: boolean) => void;
   subagentEnabled: boolean;
   onSubagentEnabledChange?: (enabled: boolean) => void;
   selectedTeam?: TeamDefinition | null;
@@ -122,8 +112,6 @@ interface EmptyStateComposerPanelProps {
   teamWorkspaceSettings?: WorkspaceSettings | null;
   onPersistCustomTeams?: (teams: TeamDefinition[]) => void | Promise<void>;
   onEnableSuggestedTeam?: (suggestedPresetId?: string) => void;
-  webSearchEnabled: boolean;
-  onWebSearchEnabledChange?: (enabled: boolean) => void;
   pendingImages: MessageImage[];
   onFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onPaste?: (event: React.ClipboardEvent<HTMLTextAreaElement>) => void;
@@ -208,8 +196,6 @@ export function EmptyStateComposerPanel({
   setProviderType,
   model,
   setModel,
-  executionStrategy = "auto",
-  setExecutionStrategy,
   accessMode,
   setAccessMode,
   onManageProviders,
@@ -236,12 +222,9 @@ export function EmptyStateComposerPanel({
   onManageKnowledgePacks,
   copy,
   inputbarCopy,
-  executionStrategyCopy,
   showCreationModeSelector,
   creationMode,
   onCreationModeChange,
-  thinkingEnabled,
-  onThinkingEnabledChange,
   subagentEnabled,
   onSubagentEnabledChange,
   selectedTeam,
@@ -249,8 +232,6 @@ export function EmptyStateComposerPanel({
   teamWorkspaceSettings,
   onPersistCustomTeams,
   onEnableSuggestedTeam,
-  webSearchEnabled,
-  onWebSearchEnabledChange,
   pendingImages,
   onFileSelect,
   onPaste,
@@ -408,12 +389,6 @@ export function EmptyStateComposerPanel({
       case "attach":
         imageInputRef.current?.click();
         return;
-      case "thinking":
-        onThinkingEnabledChange?.(!thinkingEnabled);
-        return;
-      case "web_search":
-        onWebSearchEnabledChange?.(!webSearchEnabled);
-        return;
       case "subagent_mode":
         handleToggleSubagentMode();
         return;
@@ -525,17 +500,13 @@ export function EmptyStateComposerPanel({
       />
     ) : null;
   const hasHighlightedAdvancedPreference =
-    thinkingEnabled ||
-    webSearchEnabled ||
     subagentEnabled ||
     knowledgePackSelection?.enabled ||
-    executionStrategy === "code_orchestrated" ||
     accessMode === "read-only" ||
     accessMode === "full-access";
   const shouldShowAdvancedToggle =
     isGeneralTheme ||
     shouldShowTeamSelector ||
-    Boolean(setExecutionStrategy) ||
     shouldShowModelControls ||
     Boolean(setAccessMode) ||
     shouldShowThemeSpecificExtra ||
@@ -626,12 +597,6 @@ export function EmptyStateComposerPanel({
             />
           ) : null}
 
-          <InputbarExecutionStrategySelect
-            executionStrategy={executionStrategy}
-            setExecutionStrategy={setExecutionStrategy}
-            copy={executionStrategyCopy}
-          />
-
           <InputbarModelExtra
             providerType={providerType}
             setProviderType={setProviderType}
@@ -682,15 +647,6 @@ export function EmptyStateComposerPanel({
             </Select>
           ) : null}
 
-          {isGeneralTheme ? (
-            <Badge
-              variant="outline"
-              className={EMPTY_STATE_PASSIVE_BADGE_CLASSNAME}
-            >
-              <Globe className="mr-1 h-3.5 w-3.5" />
-              {copy.generalContext}
-            </Badge>
-          ) : null}
         </>
       ) : null}
     </>
@@ -739,8 +695,6 @@ export function EmptyStateComposerPanel({
         disabled={disabled}
         onToolClick={handleToolAction}
         activeTools={{
-          thinking: thinkingEnabled,
-          web_search: webSearchEnabled,
           subagent_mode: subagentEnabled,
         }}
         pendingImages={pendingImages}

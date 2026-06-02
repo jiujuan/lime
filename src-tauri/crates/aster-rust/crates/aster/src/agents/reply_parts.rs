@@ -62,6 +62,8 @@ const COMPACT_TOOL_SURFACE_TOOL_NAMES: &[&str] = &[
     "Edit",
     "Write",
     "Agent",
+    "WebSearch",
+    "WebFetch",
     "StructuredOutput",
 ];
 const DIRECT_ANSWER_TURN_GUIDANCE: &str = "【当前回合执行约束】本回合应优先直接回答。除非信息明显不足或用户明确要求，否则不要调用工具，也不要把简单回复扩展成多阶段流程。";
@@ -442,6 +444,59 @@ fn extract_plaintext_tool_use_name(open_tag: &str) -> Option<String> {
     }
 }
 
+fn extract_xml_attribute(open_tag: &str, attr_name: &str) -> Option<String> {
+    let normalized = open_tag.replace("\\\"", "\"").replace("\\'", "'");
+    let needle = format!("{attr_name}=");
+    let name_pos = normalized.find(&needle)?;
+    let after_name = normalized.get(name_pos + needle.len()..)?.trim_start();
+    let quote = after_name.chars().next()?;
+    if quote != '"' && quote != '\'' {
+        return None;
+    }
+    let value_start = quote.len_utf8();
+    let value_end = after_name.get(value_start..)?.find(quote)?;
+    let value = after_name.get(value_start..value_start + value_end)?.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn normalize_plaintext_tool_alias_name(raw_name: &str) -> Option<String> {
+    let normalized = raw_name.trim();
+    if normalized.is_empty() {
+        return None;
+    }
+    if normalized.eq_ignore_ascii_case("search") {
+        return Some("WebSearch".to_string());
+    }
+    Some(normalized.to_string())
+}
+
+fn extract_inline_plaintext_tool_call(open_tag: &str) -> Option<CallToolRequestParam> {
+    let tag_body = open_tag
+        .trim()
+        .strip_prefix('<')?
+        .trim()
+        .trim_end_matches('>')
+        .trim()
+        .trim_end_matches('/')
+        .trim();
+    let raw_name = tag_body.split_whitespace().next()?.trim();
+    let name = normalize_plaintext_tool_alias_name(raw_name)?;
+    if !name.eq_ignore_ascii_case("WebSearch") {
+        return None;
+    }
+    let query = extract_xml_attribute(open_tag, "query")?;
+    let mut arguments = serde_json::Map::new();
+    arguments.insert("query".to_string(), Value::String(query));
+    Some(CallToolRequestParam {
+        name: name.into(),
+        arguments: Some(arguments),
+    })
+}
+
 fn strip_json_code_fence(raw: &str) -> &str {
     let trimmed = raw.trim();
     if !trimmed.starts_with("```") {
@@ -480,7 +535,9 @@ fn extract_plaintext_tool_uses(text: &str) -> Option<(String, Vec<CallToolReques
     let mut tool_calls = Vec::new();
     let mut saw_tool_use = false;
 
-    while let Some(start_offset) = text.get(cursor..)?.find(PLAINTEXT_TOOL_USE_OPEN_MARKER) {
+    while let Some(start_offset) =
+        find_next_plaintext_tool_tag(text.get(cursor..)?).map(|(offset, _)| offset)
+    {
         let start = cursor + start_offset;
         if !saw_tool_use {
             prefix.push_str(text.get(cursor..start).unwrap_or_default());
@@ -488,6 +545,19 @@ fn extract_plaintext_tool_uses(text: &str) -> Option<(String, Vec<CallToolReques
 
         let open_end = start + text.get(start..)?.find('>')?;
         let open_tag = text.get(start..=open_end)?;
+        if let Some(tool_call) = extract_inline_plaintext_tool_call(open_tag) {
+            tool_calls.push(tool_call);
+            saw_tool_use = true;
+            cursor = open_end + 1;
+            continue;
+        }
+
+        if !open_tag.starts_with(PLAINTEXT_TOOL_USE_OPEN_MARKER) {
+            saw_tool_use = true;
+            cursor = open_end + 1;
+            continue;
+        }
+
         let body_start = open_end + 1;
         let close_start = body_start
             + text
@@ -500,7 +570,9 @@ fn extract_plaintext_tool_uses(text: &str) -> Option<(String, Vec<CallToolReques
             parse_plaintext_tool_use_arguments(body),
         ) {
             tool_calls.push(CallToolRequestParam {
-                name: name.into(),
+                name: normalize_plaintext_tool_alias_name(&name)
+                    .unwrap_or(name)
+                    .into(),
                 arguments: Some(arguments),
             });
         }
@@ -514,6 +586,19 @@ fn extract_plaintext_tool_uses(text: &str) -> Option<(String, Vec<CallToolReques
     } else {
         Some((prefix, tool_calls))
     }
+}
+
+fn find_next_plaintext_tool_tag(text: &str) -> Option<(usize, &'static str)> {
+    [
+        PLAINTEXT_TOOL_USE_OPEN_MARKER,
+        "<WebSearch",
+        "<websearch",
+        "<Search",
+        "<search",
+    ]
+    .iter()
+    .filter_map(|marker| text.find(marker).map(|offset| (offset, *marker)))
+    .min_by_key(|(offset, _)| *offset)
 }
 
 fn assistant_single_text_content(message: &Message) -> Option<&str> {
@@ -770,16 +855,16 @@ impl Agent {
             tools.push(frontend_tool.tool.clone());
         }
 
+        let turn_tool_surface_mode = resolve_turn_tool_surface_mode();
         let code_execution_active = self
             .extension_manager
             .is_extension_enabled(CODE_EXECUTION_EXTENSION)
             .await;
-        if code_execution_active {
+        if code_execution_active && turn_tool_surface_mode.is_none() {
             let code_exec_prefix = format!("{CODE_EXECUTION_EXTENSION}__");
             tools.retain(|tool| tool.name.starts_with(&code_exec_prefix));
         }
 
-        let turn_tool_surface_mode = resolve_turn_tool_surface_mode();
         tools = filter_tools_for_turn_surface(tools, turn_tool_surface_mode.as_deref());
         let (turn_allowed_tools, turn_disallowed_tools) = resolve_turn_tool_scope();
         tools = filter_tools_for_turn_scope(tools, &turn_allowed_tools, &turn_disallowed_tools);
@@ -884,16 +969,18 @@ impl Agent {
         let tools = tools.to_owned();
         let toolshim_tools = toolshim_tools.to_owned();
         let provider = provider.clone();
+        let turn_tool_surface_mode = resolve_turn_tool_surface_mode();
 
         // Capture errors during stream creation and return them as part of the stream
         // so they can be handled by the existing error handling logic in the agent
         let stream_result = if provider.supports_streaming() {
             tracing::info!(
-                "[AsterAgent][TTFT] provider stream request start: provider={}, model={}, messages={}, tools={}, system_chars={}",
+                "[AsterAgent][TTFT] provider stream request start: provider={}, model={}, messages={}, tools={}, tool_surface={:?}, system_chars={}",
                 provider.get_name(),
                 model_config.model_name,
                 messages_for_provider.messages().len(),
                 tools.len(),
+                turn_tool_surface_mode,
                 system_prompt.chars().count()
             );
             debug!("WAITING_LLM_STREAM_START");
@@ -937,11 +1024,12 @@ impl Agent {
             result
         } else {
             tracing::info!(
-                "[AsterAgent][TTFT] provider non-stream request start: provider={}, model={}, messages={}, tools={}, system_chars={}",
+                "[AsterAgent][TTFT] provider non-stream request start: provider={}, model={}, messages={}, tools={}, tool_surface={:?}, system_chars={}",
                 provider.get_name(),
                 model_config.model_name,
                 messages_for_provider.messages().len(),
                 tools.len(),
+                turn_tool_surface_mode,
                 system_prompt.chars().count()
             );
             debug!("WAITING_LLM_START");
@@ -1418,6 +1506,60 @@ mod tests {
                 .filter_map(|c| c.as_tool_request())
                 .count(),
             1
+        );
+    }
+
+    #[test]
+    fn normalize_plaintext_tool_use_message_converts_inline_web_search_tag() {
+        let message = Message::assistant().with_text(
+            "我需要检索最新信息。\n<WebSearch query=\"2026年6月1日 国际新闻 今日 要闻\" />\n如果没有结果再说明。",
+        );
+
+        let normalized = normalize_plaintext_tool_use_message(message);
+        let text = normalized.as_concat_text();
+        let requests = normalized
+            .content
+            .iter()
+            .filter_map(|content| content.as_tool_request())
+            .collect::<Vec<_>>();
+
+        assert_eq!(text, "我需要检索最新信息。");
+        assert_eq!(requests.len(), 1);
+        let tool_call = requests[0].tool_call.as_ref().expect("tool call");
+        assert_eq!(tool_call.name.as_ref(), "WebSearch");
+        assert_eq!(
+            tool_call
+                .arguments
+                .as_ref()
+                .and_then(|arguments| arguments.get("query"))
+                .and_then(Value::as_str),
+            Some("2026年6月1日 国际新闻 今日 要闻")
+        );
+        assert!(!normalized.as_concat_text().contains("<WebSearch"));
+    }
+
+    #[test]
+    fn normalize_plaintext_tool_use_message_converts_search_alias_tag() {
+        let message =
+            Message::assistant().with_text("<Search query=\"today international news\" />");
+
+        let normalized = normalize_plaintext_tool_use_message(message);
+        let requests = normalized
+            .content
+            .iter()
+            .filter_map(|content| content.as_tool_request())
+            .collect::<Vec<_>>();
+
+        assert_eq!(requests.len(), 1);
+        let tool_call = requests[0].tool_call.as_ref().expect("tool call");
+        assert_eq!(tool_call.name.as_ref(), "WebSearch");
+        assert_eq!(
+            tool_call
+                .arguments
+                .as_ref()
+                .and_then(|arguments| arguments.get("query"))
+                .and_then(Value::as_str),
+            Some("today international news")
         );
     }
 
@@ -2039,9 +2181,69 @@ mod tests {
         assert!(names.len() <= COMPACT_TOOL_SURFACE_TOOL_NAMES.len());
         assert!(names.iter().all(|name| is_compact_tool_surface_tool(name)));
         assert!(names.iter().any(|name| name == "ToolSearch"));
+        assert!(names.iter().any(|name| name == "WebSearch"));
         assert!(names.iter().any(|name| name == "Read"));
         assert!(!names.iter().any(|name| name == "TeamCreate"));
         assert!(!names.iter().any(|name| name == "TeamDelete"));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn compact_turn_surface_keeps_native_web_tools_when_code_execution_extension_exists(
+    ) -> anyhow::Result<()> {
+        let agent = crate::agents::Agent::new();
+        agent
+            .set_scheduler(std::sync::Arc::new(MockScheduler))
+            .await;
+
+        let session = SessionManager::create_session(
+            std::path::PathBuf::default(),
+            "test-compact-tool-surface-code-execution".to_string(),
+            SessionType::User,
+        )
+        .await?;
+
+        let model_config = ModelConfig::new("claude-sonnet-4-5").unwrap();
+        let provider = std::sync::Arc::new(MockProvider {
+            model_config,
+            observed_models: None,
+        });
+        agent.update_provider(provider, &session.id).await?;
+        agent
+            .add_extension(crate::agents::extension::ExtensionConfig::Platform {
+                name: CODE_EXECUTION_EXTENSION.to_string(),
+                description: "Execute JavaScript code in a sandboxed environment".to_string(),
+                bundled: Some(true),
+                available_tools: vec![],
+                deferred_loading: false,
+                always_expose_tools: Vec::new(),
+                allowed_caller: None,
+            })
+            .await?;
+
+        let working_dir = std::env::current_dir()?;
+        let (tools, _toolshim_tools, _system_prompt) = crate::session_context::with_turn_context(
+            Some(build_turn_context_with_tool_surface(
+                TURN_TOOL_SURFACE_COMPACT_TOOLS,
+            )),
+            async {
+                agent
+                    .prepare_tools_and_prompt(
+                        &working_dir,
+                        None,
+                        false,
+                        &ModelConfig::new("claude-sonnet-4-5").unwrap(),
+                    )
+                    .await
+            },
+        )
+        .await?;
+
+        let names: Vec<String> = tools.iter().map(|tool| tool.name.to_string()).collect();
+        assert!(names.iter().any(|name| name == "WebSearch"));
+        assert!(names.iter().any(|name| name == "WebFetch"));
+        assert!(names.iter().all(|name| is_compact_tool_surface_tool(name)));
 
         Ok(())
     }

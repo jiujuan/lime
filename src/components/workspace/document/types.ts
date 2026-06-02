@@ -99,10 +99,6 @@ export interface DocumentCanvasProps {
   autoContinueModel?: string;
   /** 自动续写模型切换 */
   onAutoContinueModelChange?: (model: string) => void;
-  /** 自动续写同步的思考开关 */
-  autoContinueThinkingEnabled?: boolean;
-  /** 自动续写思考开关切换 */
-  onAutoContinueThinkingEnabledChange?: (enabled: boolean) => void;
   /** 自动续写执行回调 */
   onAutoContinueRun?: (payload: AutoContinueRunPayload) => Promise<void> | void;
   /** 添加图片动作 */
@@ -141,8 +137,6 @@ export interface AutoContinueSettings {
 export interface AutoContinueRunPayload {
   /** 续写提示词 */
   prompt: string;
-  /** 是否启用思考过程 */
-  thinkingEnabled: boolean;
   /** 续写设置快照 */
   settings: AutoContinueSettings;
 }
@@ -153,8 +147,6 @@ export interface AutoContinueRunPayload {
 export interface ContentReviewRunPayload {
   /** 评审提示词 */
   prompt: string;
-  /** 是否启用思考过程 */
-  thinkingEnabled: boolean;
   /** 已选中的评审专家 */
   experts: ContentReviewExpert[];
 }
@@ -165,8 +157,6 @@ export interface ContentReviewRunPayload {
 export interface TextStylizeRunPayload {
   /** 风格化提示词 */
   prompt: string;
-  /** 是否启用思考过程 */
-  thinkingEnabled: boolean;
   /** 原始内容 */
   originalContent: string;
 }
@@ -249,10 +239,6 @@ export interface DocumentToolbarProps {
   autoContinueModelLoading?: boolean;
   /** 自动续写模型切换 */
   onAutoContinueModelChange?: (model: string) => void;
-  /** 思考过程开关（沿用通用对话设置） */
-  thinkingEnabled: boolean;
-  /** 思考过程变更 */
-  onThinkingChange?: (enabled: boolean) => void;
   /** 自动续写设置变更 */
   onAutoContinueSettingsChange?: (patch: Partial<AutoContinueSettings>) => void;
   /** 执行自动续写 */

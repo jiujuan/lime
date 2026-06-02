@@ -106,7 +106,7 @@ describe("agent-runtime-approval-sandbox-smoke-core", () => {
             sessionId: "session-denied",
             turnId: "turn-denied",
             requestId: "runtime_permission_confirmation:turn-denied",
-            submittedStrategy: "code_orchestrated",
+            submittedStrategy: "react",
             submittedPolicies: {
               approvalPolicy: "on-request",
               sandboxPolicy: "workspace-write",
@@ -134,7 +134,7 @@ describe("agent-runtime-approval-sandbox-smoke-core", () => {
           deniedDecisionClearsPendingRequest: true,
           approvalPolicySubmitted: true,
           sandboxPolicySubmitted: true,
-          codeOrchestratedSubmitted: true,
+          reactRuntimeSubmitted: true,
           providerNotRequired: true,
         },
       },

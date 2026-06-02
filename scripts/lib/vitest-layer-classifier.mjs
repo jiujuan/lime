@@ -97,6 +97,32 @@ const COMPONENT_PATTERNS = [
   },
 ];
 
+const LAYER_RISK_RANK = {
+  unit: 0,
+  component: 1,
+  contract: 2,
+  integration: 3,
+  e2e: 4,
+};
+
+const COMPONENT_MIGRATION_KEYWORDS = [
+  "filter",
+  "group",
+  "sort",
+  "formatter",
+  "format",
+  "request builder",
+  "runtime metadata",
+  "runtime parameter",
+  "execution strategy",
+  "state machine",
+  "reducer",
+  "selector",
+  "projection",
+  "view model",
+  "viewModel",
+];
+
 export function normalizeVitestPath(filePath) {
   return String(filePath || "").replaceAll("\\", "/");
 }
@@ -120,6 +146,55 @@ function matchReasons(patterns, input) {
     .map(({ reason }) => reason);
 }
 
+function countPattern(source, pattern) {
+  return source.match(pattern)?.length ?? 0;
+}
+
+function buildComponentUnitMigrationHints(source) {
+  const hints = [];
+  const testCaseCount = countPattern(source, /\b(?:it|test)\s*\(/g);
+  const lineCount = source.split(/\r?\n/).length;
+  const lowerSource = source.toLowerCase();
+  const keywordCount = COMPONENT_MIGRATION_KEYWORDS.filter((keyword) =>
+    lowerSource.includes(keyword.toLowerCase()),
+  ).length;
+
+  if (testCaseCount >= 20) {
+    hints.push("large-component-suite");
+  }
+  if (lineCount >= 800) {
+    hints.push("large-component-file");
+  }
+  if (keywordCount >= 4) {
+    hints.push("business-logic-keywords");
+  }
+
+  return hints;
+}
+
+function createLayerClassification(
+  layer,
+  explicitLayer,
+  reasons,
+  { source = "" } = {},
+) {
+  return {
+    layer,
+    explicitLayer,
+    live: false,
+    reasons,
+    unitMigrationHints:
+      layer === "component" ? buildComponentUnitMigrationHints(source) : [],
+  };
+}
+
+function shouldUseExplicitLayer(explicitLayer, detectedLayer) {
+  if (!explicitLayer || !VITEST_LAYER_NAMES.includes(explicitLayer)) {
+    return false;
+  }
+  return LAYER_RISK_RANK[explicitLayer] >= LAYER_RISK_RANK[detectedLayer];
+}
+
 export function classifyVitestTestFile({ filePath, source = "" }) {
   const normalizedPath = normalizeVitestPath(filePath);
   const text = `${normalizedPath}\n${source}`;
@@ -131,46 +206,37 @@ export function classifyVitestTestFile({ filePath, source = "" }) {
       explicitLayer,
       live: true,
       reasons: ["name:live"],
-    };
-  }
-
-  if (explicitLayer && VITEST_LAYER_NAMES.includes(explicitLayer)) {
-    return {
-      layer: explicitLayer,
-      explicitLayer,
-      live: false,
-      reasons: [`name:${explicitLayer}`],
+      unitMigrationHints: [],
     };
   }
 
   const e2eReasons = matchReasons(E2E_PATTERNS, text);
   if (e2eReasons.length > 0) {
-    return {
-      layer: "e2e",
-      explicitLayer,
-      live: false,
-      reasons: e2eReasons,
-    };
+    return createLayerClassification("e2e", explicitLayer, e2eReasons);
   }
 
   const integrationReasons = matchReasons(INTEGRATION_PATTERNS, text);
   if (integrationReasons.length > 0) {
-    return {
-      layer: "integration",
+    if (shouldUseExplicitLayer(explicitLayer, "integration")) {
+      return createLayerClassification(explicitLayer, explicitLayer, [
+        `name:${explicitLayer}`,
+      ]);
+    }
+    return createLayerClassification(
+      "integration",
       explicitLayer,
-      live: false,
-      reasons: integrationReasons,
-    };
+      integrationReasons,
+    );
   }
 
   const contractReasons = matchReasons(CONTRACT_PATTERNS, text);
   if (contractReasons.length > 0) {
-    return {
-      layer: "contract",
-      explicitLayer,
-      live: false,
-      reasons: contractReasons,
-    };
+    if (shouldUseExplicitLayer(explicitLayer, "contract")) {
+      return createLayerClassification(explicitLayer, explicitLayer, [
+        `name:${explicitLayer}`,
+      ]);
+    }
+    return createLayerClassification("contract", explicitLayer, contractReasons);
   }
 
   const networkIntegrationReasons = matchReasons(
@@ -178,31 +244,46 @@ export function classifyVitestTestFile({ filePath, source = "" }) {
     text,
   );
   if (networkIntegrationReasons.length > 0) {
-    return {
-      layer: "integration",
+    if (shouldUseExplicitLayer(explicitLayer, "integration")) {
+      return createLayerClassification(explicitLayer, explicitLayer, [
+        `name:${explicitLayer}`,
+      ]);
+    }
+    return createLayerClassification(
+      "integration",
       explicitLayer,
-      live: false,
-      reasons: networkIntegrationReasons,
-    };
+      networkIntegrationReasons,
+    );
   }
 
   const componentReasons = matchReasons(COMPONENT_PATTERNS, text);
   if (componentReasons.length > 0 || includesTsxPath(normalizedPath)) {
-    return {
-      layer: "component",
+    if (shouldUseExplicitLayer(explicitLayer, "component")) {
+      return createLayerClassification(
+        explicitLayer,
+        explicitLayer,
+        [`name:${explicitLayer}`],
+        { source },
+      );
+    }
+    return createLayerClassification(
+      "component",
       explicitLayer,
-      live: false,
-      reasons:
-        componentReasons.length > 0 ? componentReasons : ["extension:tsx"],
-    };
+      componentReasons.length > 0 ? componentReasons : ["extension:tsx"],
+      { source },
+    );
   }
 
-  return {
-    layer: "unit",
-    explicitLayer,
-    live: false,
-    reasons: explicitLayer ? [`name:${explicitLayer}`] : ["default:unit"],
-  };
+  if (explicitLayer && VITEST_LAYER_NAMES.includes(explicitLayer)) {
+    return createLayerClassification(
+      explicitLayer,
+      explicitLayer,
+      [`name:${explicitLayer}`],
+      { source },
+    );
+  }
+
+  return createLayerClassification("unit", explicitLayer, ["default:unit"]);
 }
 
 function shouldSkipDirectory(dirName) {

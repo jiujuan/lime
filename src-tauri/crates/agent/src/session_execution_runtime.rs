@@ -864,6 +864,7 @@ fn extract_execution_strategy_from_metadata(
             "executionStrategy",
         ],
     )
+    .map(|_| "react".to_string())
 }
 
 fn extract_recent_team_roles_from_values(
@@ -1669,7 +1670,7 @@ mod tests {
             context_override: Some(TurnContextOverride {
                 metadata: std::collections::HashMap::from([(
                     "effective_execution_strategy".to_string(),
-                    json!("code_orchestrated"),
+                    json!("react"),
                 )]),
                 ..TurnContextOverride::default()
             }),
@@ -1695,7 +1696,7 @@ mod tests {
         let runtime = build_session_execution_runtime(
             "session-code",
             None,
-            Some("auto".to_string()),
+            Some("react".to_string()),
             Some(&snapshot),
             None,
         )
@@ -1708,7 +1709,7 @@ mod tests {
         assert_eq!(runtime.latest_turn_id.as_deref(), Some("turn-code"));
         assert_eq!(
             runtime.execution_strategy.as_deref(),
-            Some("code_orchestrated")
+            Some("react")
         );
     }
 

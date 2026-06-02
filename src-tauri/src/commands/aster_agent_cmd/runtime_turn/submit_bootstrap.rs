@@ -74,7 +74,7 @@ pub(super) async fn prepare_runtime_turn_submit_bootstrap(
     runtime_config: &lime_core::config::Config,
     runtime_chat_mode: RuntimeChatMode,
     execution_profile: TurnExecutionProfile,
-    requested_strategy: AsterExecutionStrategy,
+    effective_strategy: AsterExecutionStrategy,
     request_tool_policy: &RequestToolPolicy,
     turn_input_builder: &mut TurnInputEnvelopeBuilder,
 ) -> Result<RuntimeTurnSubmitBootstrap, String> {
@@ -139,7 +139,7 @@ pub(super) async fn prepare_runtime_turn_submit_bootstrap(
         runtime_chat_mode,
         execution_profile,
         request_tool_policy,
-        requested_strategy,
+        effective_strategy,
         bypass_workspace_restrictions,
         &explicit_local_focus_paths,
     )

@@ -1,6 +1,6 @@
 import type { AgentTurnContextSummary } from "./agentProtocol";
 
-export type AsterExecutionStrategy = "react" | "code_orchestrated" | "auto";
+export type AsterExecutionStrategy = "react";
 export type AsterApprovalPolicy =
   | "never"
   | "on-request"

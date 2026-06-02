@@ -27,8 +27,6 @@ describe("agentStreamSubmissionLifecycle", () => {
       contentParts: [],
       runtimeStatus: buildWaitingAgentRuntimeStatus({
         executionStrategy: "react",
-        webSearch: false,
-        thinking: true,
       }),
     };
 
@@ -90,8 +88,6 @@ describe("agentStreamSubmissionLifecycle", () => {
 
     const runtimeStatus = buildWaitingAgentRuntimeStatus({
       executionStrategy: "react",
-      webSearch: true,
-      thinking: true,
     });
     lifecycle.activateStream("session-1", runtimeStatus);
 
@@ -118,8 +114,6 @@ describe("agentStreamSubmissionLifecycle", () => {
       contentParts: [],
       runtimeStatus: buildWaitingAgentRuntimeStatus({
         executionStrategy: "react",
-        webSearch: false,
-        thinking: true,
       }),
     };
 
@@ -192,8 +186,6 @@ describe("agentStreamSubmissionLifecycle", () => {
       contentParts: [],
       runtimeStatus: buildWaitingAgentRuntimeStatus({
         executionStrategy: "react",
-        webSearch: false,
-        thinking: false,
       }),
     };
 
@@ -253,8 +245,6 @@ describe("agentStreamSubmissionLifecycle", () => {
 
     const runtimeStatus = buildWaitingAgentRuntimeStatus({
       executionStrategy: "react",
-      webSearch: false,
-      thinking: false,
     });
     lifecycle.activateStream("session-fast", runtimeStatus);
 
@@ -282,8 +272,6 @@ describe("agentStreamSubmissionLifecycle", () => {
       contentParts: [],
       runtimeStatus: buildWaitingAgentRuntimeStatus({
         executionStrategy: "react",
-        webSearch: false,
-        thinking: false,
       }),
       imageWorkbenchPreview: {
         taskId: "draft-image-1",
@@ -346,8 +334,6 @@ describe("agentStreamSubmissionLifecycle", () => {
 
     const runtimeStatus = buildWaitingAgentRuntimeStatus({
       executionStrategy: "react",
-      webSearch: false,
-      thinking: false,
     });
     lifecycle.activateStream("session-image", runtimeStatus);
 

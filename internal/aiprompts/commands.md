@@ -364,7 +364,7 @@ Skill 执行链路同样遵循单一命令边界。当前前端入口为 `src/li
 
 `Claw` 的自然语言编程能力应沿同一条 current 主链收敛：
 
-- 编程底座主路径：普通自然语言代码任务在 `code_orchestrated` 会话 / 本轮策略下直接进入 `code_orchestrated -> code_execution / tools / team runtime`，发送边界保留原始用户文本，不维护“修复 / 重构 / 评审 / 解释”等正文关键词 parser，也不写入 `request_metadata.harness.code_command`。`@代码` / `@code` / `@coding` / `@开发` 只是 command catalog 中 `code_runtime` 的 mention 快捷入口，发送边界通过通用 `parseMentionCommand(...)` 与 `mentionCommandPrefixKeyMap` 识别 catalog route；命中后本次发送的 `execution_strategy` 切到 `code_orchestrated`，并复用 `resolveCodeOrchestratedRuntimeDefaults(...)` 补齐 `request_metadata.harness.preferred_team_preset_id=code-triage-team` 与 `harness.preferences.task/subagent`。当前主链不新增 prompt skill，也不新增 HTML / artifact 协议；具体是解释、评审、修复还是实现，由同一条运行时基于用户原文、上下文和工具结果判断。
+- 编程底座主路径：普通自然语言代码任务直接进入 current `react` Agent runtime，发送边界保留原始用户文本，不维护“修复 / 重构 / 评审 / 解释”等正文关键词 parser，也不写入 `request_metadata.harness.code_command`。`@代码` / `@code` / `@coding` / `@开发` 只是 command catalog 中 `code_runtime` 的 mention 快捷入口，发送边界通过通用 `parseMentionCommand(...)` 与 `mentionCommandPrefixKeyMap` 识别 catalog route；命中后仍归一到 `react` Agent runtime，不再切换本轮 `execution_strategy`，也不再通过前端 `resolveCodeOrchestratedRuntimeDefaults(...)` 自动打开 `task/subagent` 或默认代码团队。`code_orchestrated` / `auto` 只允许作为旧会话、旧 catalog 或旧请求的 compat 输入值，在 session store / runtime 边界归一为 `react`；具体是解释、评审、修复还是实现，由同一条运行时基于用户原文、上下文和工具结果判断。
 
 `Claw` 的纯文本发布命令当前应收敛到现有发布工作流，而不是新开一条平行 runtime：
 

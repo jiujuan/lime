@@ -4,6 +4,7 @@ use crate::config::paths::Paths;
 use crate::model::ModelConfig;
 use crate::providers::errors::ProviderError;
 use crate::providers::formats::openai::response_to_streaming_message;
+use crate::session_context::{current_request_correlation_context, current_turn_context};
 use anyhow::{anyhow, Result};
 use async_stream::try_stream;
 use base64::Engine;
@@ -793,14 +794,77 @@ fn summarize_request_log_input<Payload>(payload: &Payload) -> Value
 where
     Payload: Any,
 {
-    if let Some(value) = (payload as &dyn Any).downcast_ref::<Value>() {
-        return summarize_request_log_json_payload(value, type_name::<Payload>());
-    }
-
-    json!({
+    let mut summary = if let Some(value) = (payload as &dyn Any).downcast_ref::<Value>() {
+        summarize_request_log_json_payload(value, type_name::<Payload>())
+    } else {
+        json!({
         "logging_mode": "summary",
         "payload_type": type_name::<Payload>(),
-    })
+        })
+    };
+
+    if let Some(runtime_context) = summarize_current_runtime_request_context() {
+        if let Value::Object(object) = &mut summary {
+            object.insert("runtime_context".to_string(), runtime_context);
+        }
+    }
+
+    summary
+}
+
+fn summarize_current_runtime_request_context() -> Option<Value> {
+    let correlation = current_request_correlation_context();
+    let turn_context = current_turn_context();
+    let metadata = turn_context.as_ref().map(|context| &context.metadata);
+    let runtime_metadata = metadata
+        .and_then(|metadata| metadata.get("lime_runtime"))
+        .and_then(Value::as_object);
+
+    let mut context = serde_json::Map::new();
+
+    if let Some(value) = correlation.session_id {
+        context.insert("session_id".to_string(), json!(value));
+    }
+    if let Some(value) = correlation.thread_id {
+        context.insert("thread_id".to_string(), json!(value));
+    }
+    if let Some(value) = correlation.turn_id {
+        context.insert("turn_id".to_string(), json!(value));
+    }
+    if let Some(value) = correlation.pending_request_id {
+        context.insert("pending_request_id".to_string(), json!(value));
+    }
+    if let Some(value) = correlation.queued_turn_id {
+        context.insert("queued_turn_id".to_string(), json!(value));
+    }
+    if let Some(value) = correlation.subagent_session_id {
+        context.insert("subagent_session_id".to_string(), json!(value));
+    }
+    if let Some(value) = runtime_metadata
+        .and_then(|runtime| runtime.get("tool_surface"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        context.insert("tool_surface".to_string(), json!(value));
+    }
+    if let Some(value) = runtime_metadata
+        .and_then(|runtime| runtime.get("task_profile"))
+        .or_else(|| runtime_metadata.and_then(|runtime| runtime.get("taskProfile")))
+        .and_then(|task_profile| {
+            task_profile
+                .get("source")
+                .or_else(|| task_profile.get("entry_source"))
+                .or_else(|| task_profile.get("entrySource"))
+        })
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        context.insert("task_source".to_string(), json!(value));
+    }
+
+    (!context.is_empty()).then(|| Value::Object(context))
 }
 
 impl RequestLog {
@@ -1520,5 +1584,63 @@ mod tests {
             .expect("payload_type should be a string")
             .contains("ExamplePayload"));
         assert!(summary.get("value").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_summarize_request_log_input_includes_runtime_context() {
+        let mut runtime_metadata = serde_json::Map::new();
+        runtime_metadata.insert("tool_surface".to_string(), json!("direct_answer"));
+        runtime_metadata.insert(
+            "task_profile".to_string(),
+            json!({
+                "source": "auxiliary_title_generation"
+            }),
+        );
+
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("lime_runtime".to_string(), Value::Object(runtime_metadata));
+        metadata.insert("pending_request_id".to_string(), json!("pending-1"));
+
+        let turn_context = crate::session::TurnContextOverride {
+            metadata,
+            ..crate::session::TurnContextOverride::default()
+        };
+        let scope = crate::conversation::message::ActionRequiredScope {
+            session_id: Some("title-gen-1".to_string()),
+            thread_id: Some("title-gen-1".to_string()),
+            turn_id: Some("turn-title-1".to_string()),
+        };
+
+        let summary = crate::session_context::with_runtime_scope(
+            scope,
+            Some(turn_context),
+            async { summarize_request_log_input(&json!({ "model": "gpt-5.5" })) },
+        )
+        .await;
+
+        assert_eq!(
+            summary.pointer("/runtime_context/session_id"),
+            Some(&json!("title-gen-1"))
+        );
+        assert_eq!(
+            summary.pointer("/runtime_context/thread_id"),
+            Some(&json!("title-gen-1"))
+        );
+        assert_eq!(
+            summary.pointer("/runtime_context/turn_id"),
+            Some(&json!("turn-title-1"))
+        );
+        assert_eq!(
+            summary.pointer("/runtime_context/pending_request_id"),
+            Some(&json!("pending-1"))
+        );
+        assert_eq!(
+            summary.pointer("/runtime_context/tool_surface"),
+            Some(&json!("direct_answer"))
+        );
+        assert_eq!(
+            summary.pointer("/runtime_context/task_source"),
+            Some(&json!("auxiliary_title_generation"))
+        );
     }
 }

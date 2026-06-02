@@ -288,98 +288,14 @@ pub(super) fn merge_runtime_turn_default_tool_surface_metadata(
     Some(serde_json::Value::Object(root))
 }
 
-fn runtime_turn_metadata_has_team_preference(
-    harness: &serde_json::Map<String, serde_json::Value>,
-) -> bool {
-    [
-        "preferred_team_preset_id",
-        "preferredTeamPresetId",
-        "selected_team_id",
-        "selectedTeamId",
-        "selected_team_source",
-        "selectedTeamSource",
-        "selected_team_label",
-        "selectedTeamLabel",
-        "selected_team_summary",
-        "selectedTeamSummary",
-        "selected_team_roles",
-        "selectedTeamRoles",
-    ]
-    .iter()
-    .any(|key| harness.get(*key).is_some())
-}
-
-pub(super) fn apply_code_orchestrated_runtime_defaults(
-    request: &mut AsterChatRequest,
-    effective_strategy: AsterExecutionStrategy,
-) {
-    if effective_strategy != AsterExecutionStrategy::CodeOrchestrated {
-        return;
-    }
-
-    let mut root = match request.metadata.take() {
-        Some(serde_json::Value::Object(object)) => object,
-        Some(_) | None => serde_json::Map::new(),
-    };
-    let harness = if root.contains_key("harness") {
-        let harness = root
-            .entry("harness".to_string())
-            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
-        if !harness.is_object() {
-            *harness = serde_json::Value::Object(serde_json::Map::new());
-        }
-        harness
-            .as_object_mut()
-            .expect("runtime harness metadata should be an object")
-    } else {
-        &mut root
-    };
-
-    apply_code_orchestrated_harness_defaults(harness);
-
-    request.metadata = Some(serde_json::Value::Object(root));
-}
-
-fn apply_code_orchestrated_harness_defaults(
-    harness: &mut serde_json::Map<String, serde_json::Value>,
-) {
-    let preferences = harness
-        .entry("preferences".to_string())
-        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
-    if !preferences.is_object() {
-        *preferences = serde_json::Value::Object(serde_json::Map::new());
-    }
-    let preferences = preferences
-        .as_object_mut()
-        .expect("runtime preferences metadata should be an object");
-    preferences.insert("task".to_string(), serde_json::Value::Bool(true));
-    preferences.insert("subagent".to_string(), serde_json::Value::Bool(true));
-    harness.insert(
-        "task_mode_enabled".to_string(),
-        serde_json::Value::Bool(true),
-    );
-    harness.insert(
-        "subagent_mode_enabled".to_string(),
-        serde_json::Value::Bool(true),
-    );
-
-    if !runtime_turn_metadata_has_team_preference(harness) {
-        harness.insert(
-            "preferred_team_preset_id".to_string(),
-            serde_json::Value::String("code-triage-team".to_string()),
-        );
-    }
-}
-
 pub(super) fn resolve_turn_execution_profile(
     request: &AsterChatRequest,
     runtime_chat_mode: RuntimeChatMode,
     request_tool_policy: &RequestToolPolicy,
     auto_continue_enabled: bool,
-    effective_strategy: AsterExecutionStrategy,
+    _effective_strategy: AsterExecutionStrategy,
 ) -> TurnExecutionProfile {
-    if effective_strategy == AsterExecutionStrategy::CodeOrchestrated
-        || request_has_non_search_full_runtime_reason(request, runtime_chat_mode)
+    if request_has_non_search_full_runtime_reason(request, runtime_chat_mode)
         || auto_continue_enabled
         || request_tool_policy.requires_web_search()
     {
@@ -416,16 +332,10 @@ pub(super) fn resolve_runtime_turn_workspace_id(
 
 pub(crate) fn resolve_request_web_search_preference_from_sources(
     request_web_search: Option<bool>,
-    request_metadata: Option<&serde_json::Value>,
-    session_recent_preferences: Option<&lime_agent::SessionExecutionRuntimePreferences>,
+    _request_metadata: Option<&serde_json::Value>,
+    _session_recent_preferences: Option<&lime_agent::SessionExecutionRuntimePreferences>,
 ) -> Option<bool> {
-    request_web_search.or_else(|| {
-        resolve_recent_preference_from_sources(
-            request_metadata,
-            &["web_search_enabled", "webSearchEnabled"],
-            session_recent_preferences.map(|preferences| preferences.web_search),
-        )
-    })
+    request_web_search
 }
 
 pub(super) fn resolve_runtime_access_mode_from_request(

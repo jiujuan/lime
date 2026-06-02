@@ -125,14 +125,6 @@ pub(crate) async fn resolve_session_recent_runtime_context(
     Ok(build_session_recent_runtime_context(session_id, &session))
 }
 
-pub(crate) async fn resolve_session_recent_preferences(
-    session_id: &str,
-) -> Result<Option<lime_agent::SessionExecutionRuntimePreferences>, String> {
-    Ok(resolve_session_recent_runtime_context(session_id)
-        .await?
-        .preferences)
-}
-
 pub(crate) async fn resolve_session_recent_harness_context(
     session_id: &str,
 ) -> Result<SessionRecentHarnessContext, String> {
@@ -301,7 +293,7 @@ async fn create_runtime_session_internal_impl(
 
     let execution_strategy = Some(
         execution_strategy
-            .unwrap_or(AsterExecutionStrategy::Auto)
+            .unwrap_or(AsterExecutionStrategy::React)
             .as_db_value()
             .to_string(),
     );
@@ -470,7 +462,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_runtime_session_internal_without_strategy_should_default_to_auto() {
+    async fn create_runtime_session_internal_without_strategy_should_default_to_react() {
         ensure_session_runtime_test_manager().await;
 
         let conn = Connection::open_in_memory().expect("创建内存数据库失败");
@@ -501,7 +493,7 @@ mod tests {
 
         let detail =
             AsterAgentWrapper::get_session_sync(&db, &session_id).expect("读取 session 失败");
-        assert_eq!(detail.execution_strategy.as_deref(), Some("auto"));
+        assert_eq!(detail.execution_strategy.as_deref(), Some("react"));
 
         let sessions = list_runtime_sessions_internal(
             &db,
@@ -514,7 +506,7 @@ mod tests {
             .iter()
             .find(|session| session.id == session_id)
             .expect("应能在 workspace session 列表中找到新会话");
-        assert_eq!(listed.execution_strategy.as_deref(), Some("auto"));
+        assert_eq!(listed.execution_strategy.as_deref(), Some("react"));
 
         delete_managed_session(&session_id)
             .await

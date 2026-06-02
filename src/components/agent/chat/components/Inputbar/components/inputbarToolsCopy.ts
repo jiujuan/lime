@@ -1,14 +1,4 @@
 export type InputbarToolsCopyKey =
-  | "agentChat.inputbar.tools.thinking.label"
-  | "agentChat.inputbar.tools.thinking.title.enabled"
-  | "agentChat.inputbar.tools.thinking.title.disabled"
-  | "agentChat.inputbar.tools.thinking.toast.enabled"
-  | "agentChat.inputbar.tools.thinking.toast.disabled"
-  | "agentChat.inputbar.tools.webSearch.label"
-  | "agentChat.inputbar.tools.webSearch.title.enabled"
-  | "agentChat.inputbar.tools.webSearch.title.disabled"
-  | "agentChat.inputbar.tools.webSearch.toast.enabled"
-  | "agentChat.inputbar.tools.webSearch.toast.disabled"
   | "agentChat.inputbar.tools.subagent.label"
   | "agentChat.inputbar.tools.subagent.title.enabled"
   | "agentChat.inputbar.tools.subagent.title.disabled"
@@ -28,8 +18,6 @@ interface InputbarToolToggleCopy {
 }
 
 export interface InputbarToolsCopy {
-  thinking: InputbarToolToggleCopy;
-  webSearch: InputbarToolToggleCopy;
   subagent: InputbarToolToggleCopy;
   fullscreen: {
     entered: string;
@@ -48,30 +36,6 @@ function chooseToggleCopy(
 export function buildInputbarToolsCopy(
   translate: InputbarToolsCopyTranslate,
 ): InputbarToolsCopy {
-  const thinkingTitleEnabled = translate(
-    "agentChat.inputbar.tools.thinking.title.enabled",
-  );
-  const thinkingTitleDisabled = translate(
-    "agentChat.inputbar.tools.thinking.title.disabled",
-  );
-  const thinkingToastEnabled = translate(
-    "agentChat.inputbar.tools.thinking.toast.enabled",
-  );
-  const thinkingToastDisabled = translate(
-    "agentChat.inputbar.tools.thinking.toast.disabled",
-  );
-  const webSearchTitleEnabled = translate(
-    "agentChat.inputbar.tools.webSearch.title.enabled",
-  );
-  const webSearchTitleDisabled = translate(
-    "agentChat.inputbar.tools.webSearch.title.disabled",
-  );
-  const webSearchToastEnabled = translate(
-    "agentChat.inputbar.tools.webSearch.toast.enabled",
-  );
-  const webSearchToastDisabled = translate(
-    "agentChat.inputbar.tools.webSearch.toast.disabled",
-  );
   const subagentTitleEnabled = translate(
     "agentChat.inputbar.tools.subagent.title.enabled",
   );
@@ -86,28 +50,6 @@ export function buildInputbarToolsCopy(
   );
 
   return {
-    thinking: {
-      label: translate("agentChat.inputbar.tools.thinking.label"),
-      title: (enabled) =>
-        chooseToggleCopy(enabled, thinkingTitleEnabled, thinkingTitleDisabled),
-      toast: (enabled) =>
-        chooseToggleCopy(enabled, thinkingToastEnabled, thinkingToastDisabled),
-    },
-    webSearch: {
-      label: translate("agentChat.inputbar.tools.webSearch.label"),
-      title: (enabled) =>
-        chooseToggleCopy(
-          enabled,
-          webSearchTitleEnabled,
-          webSearchTitleDisabled,
-        ),
-      toast: (enabled) =>
-        chooseToggleCopy(
-          enabled,
-          webSearchToastEnabled,
-          webSearchToastDisabled,
-        ),
-    },
     subagent: {
       label: translate("agentChat.inputbar.tools.subagent.label"),
       title: (enabled) =>

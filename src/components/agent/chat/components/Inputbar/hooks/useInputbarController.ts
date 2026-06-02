@@ -31,14 +31,13 @@ import { useWorkflowInputState } from "../../../utils/workflowInputState";
 import { TeamSuggestionBar } from "@/components/agent/chat/components/TeamSuggestionBar";
 import { getTeamSuggestion } from "@/components/agent/chat/utils/teamSuggestion";
 import type { ServiceSkillHomeItem } from "@/components/agent/chat/service-skills/types";
-import type { MessageImage, MessagePathReference } from "../../../types";
+import type { MessagePathReference } from "../../../types";
 import {
   resolveInputCapabilitySelectionFromRoute,
   type InputCapabilitySelection,
 } from "../../../skill-selection/inputCapabilitySelection";
-import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime";
-import type { HandleSendOptions } from "../../../hooks/handleSendTypes";
 import type { InputbarKnowledgePackSelection } from "../types";
+import type { InputbarSendHandler } from "../inputbarSendPayload";
 import type { AgentInitialInputCapabilityParams } from "@/types/page";
 import {
   buildCuratedTaskLaunchPrompt,
@@ -63,15 +62,7 @@ import { buildInputbarWorkflowStateCopy } from "../inputbarWorkflowCopy";
 interface UseInputbarControllerParams {
   input: string;
   setInput: (value: string) => void;
-  onSend: (
-    images?: MessageImage[],
-    webSearch?: boolean,
-    thinking?: boolean,
-    textOverride?: string,
-    executionStrategy?: "react" | "code_orchestrated" | "auto",
-    autoContinuePayload?: AutoContinueRequestPayload,
-    sendOptions?: HandleSendOptions,
-  ) => void | Promise<boolean> | boolean;
+  onSend: InputbarSendHandler;
   onStop?: () => void;
   isLoading: boolean;
   disabled?: boolean;
@@ -79,7 +70,6 @@ interface UseInputbarControllerParams {
   setProviderType?: (type: string) => void;
   model?: string;
   setModel?: (model: string) => void;
-  executionStrategy?: "react" | "code_orchestrated" | "auto";
   toolStates?: Partial<InputbarToolStates>;
   onToolStatesChange?: (states: InputbarToolStates) => void;
   activeTheme?: string;
@@ -110,7 +100,6 @@ export function useInputbarController({
   setProviderType,
   model,
   setModel,
-  executionStrategy,
   toolStates,
   onToolStatesChange,
   activeTheme,
@@ -320,9 +309,7 @@ export function useInputbarController({
     handleToolClick,
     setSubagentEnabled,
     isFullscreen,
-    thinkingEnabled,
     subagentEnabled,
-    webSearchEnabled,
   } = useInputbarToolState({
     toolStates,
     onToolStatesChange,
@@ -345,9 +332,6 @@ export function useInputbarController({
     input,
     pendingImages,
     pathReferences,
-    webSearchEnabled,
-    thinkingEnabled,
-    executionStrategy,
     activeCapability,
     knowledgePackSelection,
     onSend,

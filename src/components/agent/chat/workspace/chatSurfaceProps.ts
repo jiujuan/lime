@@ -4,6 +4,7 @@ import { ChatNavbar } from "../components/ChatNavbar";
 import { ChatSidebar } from "../components/ChatSidebar";
 import { EmptyState } from "../components/EmptyState";
 import { TeamWorkspaceBoard } from "../components/TeamWorkspaceBoard";
+import type { InputbarSendHandler } from "../components/Inputbar/inputbarSendPayload";
 import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface";
 
 export type TeamWorkbenchSurfaceProps = Omit<
@@ -76,17 +77,13 @@ export function buildTeamWorkspaceDockProps(
 interface BuildWorkspaceEmptyStatePropsParams {
   input: ComponentProps<typeof EmptyState>["input"];
   setInput: ComponentProps<typeof EmptyState>["setInput"];
-  onSendMessage: ComponentProps<typeof EmptyState>["onSend"];
+  onSendMessage: InputbarSendHandler;
   isLoading: ComponentProps<typeof EmptyState>["isLoading"];
   disabled: ComponentProps<typeof EmptyState>["disabled"];
   providerType: ComponentProps<typeof EmptyState>["providerType"];
   setProviderType: ComponentProps<typeof EmptyState>["setProviderType"];
   model: ComponentProps<typeof EmptyState>["model"];
   setModel: ComponentProps<typeof EmptyState>["setModel"];
-  executionStrategy: ComponentProps<typeof EmptyState>["executionStrategy"];
-  setExecutionStrategy: ComponentProps<
-    typeof EmptyState
-  >["setExecutionStrategy"];
   accessMode: ComponentProps<typeof EmptyState>["accessMode"];
   setAccessMode: ComponentProps<typeof EmptyState>["setAccessMode"];
   onManageProviders?: ComponentProps<typeof EmptyState>["onManageProviders"];
@@ -216,8 +213,6 @@ export function buildWorkspaceEmptyStateProps({
   setProviderType,
   model,
   setModel,
-  executionStrategy,
-  setExecutionStrategy,
   accessMode,
   setAccessMode,
   onManageProviders,
@@ -275,27 +270,25 @@ export function buildWorkspaceEmptyStateProps({
   fileManagerOpen,
   onToggleFileManager,
 }: BuildWorkspaceEmptyStatePropsParams): ComponentProps<typeof EmptyState> {
+  const handleEmptyStateSend: InputbarSendHandler = (payload = {}) =>
+    onSendMessage({
+      ...payload,
+      textOverride: payload.textOverride ?? input,
+    });
+
   return {
     input,
     setInput,
-    onSend: onSendMessage,
+    onSend: handleEmptyStateSend,
     isLoading,
     disabled,
     providerType,
     setProviderType,
     model,
     setModel,
-    executionStrategy,
-    setExecutionStrategy,
     accessMode,
     setAccessMode,
     onManageProviders,
-    webSearchEnabled: toolPreferences.webSearch,
-    onWebSearchEnabledChange: (enabled) =>
-      onToolPreferenceChange("webSearch", enabled),
-    thinkingEnabled: toolPreferences.thinking,
-    onThinkingEnabledChange: (enabled) =>
-      onToolPreferenceChange("thinking", enabled),
     subagentEnabled: toolPreferences.subagent,
     onSubagentEnabledChange: (enabled) =>
       onToolPreferenceChange("subagent", enabled),

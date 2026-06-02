@@ -273,8 +273,8 @@ function main() {
 
   assertMatch(
     harnessMetadataSource,
-    /preferences:\s*\{\s*web_search:\s*preferences\.webSearch,\s*thinking:\s*preferences\.thinking,\s*task:\s*preferences\.task,\s*subagent:\s*preferences\.subagent,\s*\}/s,
-    "[harness-contracts] 前端未按约定输出 preferences.web_search/thinking/task/subagent",
+    /preferences:\s*\{\s*task:\s*preferences\.task,\s*subagent:\s*preferences\.subagent,\s*\}/s,
+    "[harness-contracts] 前端未按约定输出 current preferences.task/subagent",
     failures,
   );
 

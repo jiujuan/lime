@@ -24,10 +24,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { skillsApi } from "@/lib/api/skills";
-import type {
-  AgentToolCallState as ToolCallState,
-  AgentToolResultImage as ToolResultImage,
-} from "@/lib/api/agentProtocol";
+import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtocol";
 import type { SiteSavedContentTarget } from "../types";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { SearchResultPreviewList } from "./SearchResultPreviewList";
@@ -54,11 +51,9 @@ import {
 import type { ToolCallArgumentValue } from "../utils/toolDisplayInfo";
 import {
   buildGroupedChildLine as buildGroupedChildLineFromInfo,
-  buildToolGroupHeadline as buildToolGroupHeadlineFromInfo,
   buildToolHeadline as buildToolHeadlineFromInfo,
   extractSearchQueryLabel as extractSearchQueryLabelFromInfo,
   getToolDisplayInfo as getToolDisplayInfoFromInfo,
-  normalizeToolNameKey as normalizeToolNameKeyFromInfo,
   parseToolCallArguments as parseToolCallArgumentsFromInfo,
   resolveToolFilePath as resolveToolFilePathFromInfo,
   resolveToolPrimarySubject as resolveToolPrimarySubjectFromInfo,
@@ -68,521 +63,23 @@ import {
   resolveToolProcessNarrative,
 } from "../utils/toolProcessSummary";
 import { isImageGenerationProtocolFailure } from "../utils/limeTaskProtocolNoise";
-
-const inferCodeLanguageFromPath = (path?: string | null): string | null => {
-  if (!path) return null;
-  const ext = path.split(".").pop()?.toLowerCase();
-  switch (ext) {
-    case "ts":
-      return "ts";
-    case "tsx":
-      return "tsx";
-    case "js":
-      return "javascript";
-    case "jsx":
-      return "jsx";
-    case "rs":
-      return "rust";
-    case "py":
-      return "python";
-    case "sh":
-    case "bash":
-    case "zsh":
-      return "bash";
-    case "json":
-      return "json";
-    case "md":
-      return "markdown";
-    case "yml":
-    case "yaml":
-      return "yaml";
-    case "html":
-      return "html";
-    case "css":
-      return "css";
-    default:
-      return null;
-  }
-};
-
-const looksLikeMarkdown = (value: string): boolean =>
-  /(^|\n)(#{1,6}\s|\d+\.\s|[-*]\s|>\s|\|.+\|)|```/.test(value);
-
-const looksLikeStructuredCode = (value: string): boolean => {
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  if (
-    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-    (trimmed.startsWith("[") && trimmed.endsWith("]"))
-  ) {
-    try {
-      JSON.parse(trimmed);
-      return true;
-    } catch {
-      // ignore
-    }
-  }
-
-  return /(^|\n)\s*(import |export |const |let |var |function |class |interface |type )/.test(
-    value,
-  );
-};
-
-const shouldRenderResultAsCodeBlock = (params: {
-  toolCall: ToolCallState;
-  content: string;
-  language?: string | null;
-}): boolean => {
-  const { toolCall, content, language } = params;
-  if (language) {
-    return true;
-  }
-  if (content.includes("```")) {
-    return false;
-  }
-  if (looksLikeStructuredCode(content)) {
-    return true;
-  }
-
-  const normalizedName = normalizeToolNameKeyFromInfo(toolCall.name);
-  if (
-    normalizedName.includes("bash") ||
-    normalizedName.includes("shell") ||
-    normalizedName.includes("exec")
-  ) {
-    return true;
-  }
-
-  return content.split("\n").length >= 4 && !looksLikeMarkdown(content);
-};
-
-const buildRenderedToolResultContent = (params: {
-  toolCall: ToolCallState;
-  content: string;
-  filePath?: string | null;
-  resultPath?: string | null;
-  emptyOutputLabel: string;
-}): string => {
-  const { toolCall, content, filePath, resultPath, emptyOutputLabel } = params;
-  if (!content.trim() || content === emptyOutputLabel) {
-    return `\`\`\`text\n${emptyOutputLabel}\n\`\`\``;
-  }
-  if (content.includes("```")) {
-    return content;
-  }
-
-  const language = inferCodeLanguageFromPath(resultPath || filePath);
-  if (
-    shouldRenderResultAsCodeBlock({
-      toolCall,
-      content,
-      language,
-    })
-  ) {
-    return `\`\`\`${language ?? "text"}\n${content}\n\`\`\``;
-  }
-
-  return content;
-};
-
-function resolveUserFacingPathName(
-  path: string | null | undefined,
-): string | null {
-  const trimmed = path?.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  const normalized = trimmed.replace(/\\/g, "/");
-  const segments = normalized.split("/").filter(Boolean);
-  return segments.at(-1) || trimmed;
-}
-
-const isGroupableToolCall = (toolCall: ToolCallState): boolean => {
-  if (isUnifiedWebSearchToolName(toolCall.name)) {
-    return true;
-  }
-
-  return toolCall.status === "completed" || toolCall.status === "failed";
-};
-
-const resolveToolGroupKey = (toolCall: ToolCallState): string => {
-  if (isUnifiedWebSearchToolName(toolCall.name)) {
-    return "search";
-  }
-
-  const info = getToolDisplayInfoFromInfo(toolCall.name, toolCall.status);
-  return `${info.groupTitle}:${toolCall.status}`;
-};
-
-const buildToolGroupPreview = (
-  toolCalls: ToolCallState[],
-  formatHiddenCount: (count: number) => string,
-): string => {
-  const previews = toolCalls
-    .slice(0, 2)
-    .map((toolCall) => {
-      const args = parseToolCallArgumentsFromInfo(toolCall.arguments);
-      const filePath = resolveToolFilePathFromInfo(args);
-      return (
-        resolveToolPrimarySubjectFromInfo(toolCall.name, args, filePath) ||
-        toolCall.name
-      );
-    })
-    .filter(Boolean);
-
-  const hiddenCount = Math.max(toolCalls.length - previews.length, 0);
-  return hiddenCount > 0
-    ? `${previews.join(" · ")} ${formatHiddenCount(hiddenCount)}`
-    : previews.join(" · ");
-};
-
-const normalizeToolResultImages = (rawImages: unknown): ToolResultImage[] => {
-  if (!Array.isArray(rawImages)) return [];
-  const normalized: ToolResultImage[] = [];
-  for (const item of rawImages) {
-    if (!item || typeof item !== "object") continue;
-    const record = item as Record<string, unknown>;
-    const src = typeof record.src === "string" ? record.src.trim() : "";
-    if (!src) continue;
-    const mimeType =
-      (typeof record.mimeType === "string" && record.mimeType) ||
-      (typeof record.mime_type === "string" && record.mime_type) ||
-      undefined;
-    const origin =
-      record.origin === "data_url" ||
-      record.origin === "tool_payload" ||
-      record.origin === "file_path"
-        ? record.origin
-        : undefined;
-    normalized.push({ src, mimeType, origin });
-  }
-  return normalized;
-};
-
-const normalizeToolResultMetadata = (
-  rawMetadata: unknown,
-): Record<string, unknown> | undefined => {
-  if (
-    !rawMetadata ||
-    typeof rawMetadata !== "object" ||
-    Array.isArray(rawMetadata)
-  ) {
-    return undefined;
-  }
-  return Object.fromEntries(Object.entries(rawMetadata));
-};
-
-interface ToolResultNotice {
-  key: string;
-  text: string;
-  tone: "neutral" | "success" | "warning" | "error";
-}
-
-interface SkillInvocationContentInfo {
-  isSkillInvocation: boolean;
-  skillName: string | null;
-  displayName: string | null;
-  snapshotContent: string | null;
-  markdownContentBytes: number | null;
-  isSnapshotStandard: boolean | null;
-}
-
-interface CommandToolSummary {
-  command: string | null;
-  cwd: string | null;
-  exitCode: number | null;
-  stdoutLength: number | null;
-  stderrLength: number | null;
-  sandboxed: boolean | null;
-  sandboxType: string | null;
-  outputTruncated: boolean | null;
-  shell: string | null;
-  executionSurface: string | null;
-  encoding: string | null;
-  stderrEncoding: string | null;
-  decodedWith: string | null;
-}
-
-interface CommandOutputStream {
-  key: "stdout" | "stderr";
-  content: string;
-  tone: "neutral" | "error";
-}
-
-const readRecordString = (
-  record: Record<string, unknown> | undefined,
-  keys: string[],
-): string | null => {
-  if (!record) return null;
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim()) {
-      return value;
-    }
-  }
-  return null;
-};
-
-const readRecordNumber = (
-  record: Record<string, unknown> | undefined,
-  keys: string[],
-): number | null => {
-  if (!record) return null;
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value;
-    }
-  }
-  return null;
-};
-
-const readRecordBoolean = (
-  record: Record<string, unknown> | undefined,
-  keys: string[],
-): boolean | null => {
-  if (!record) return null;
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "boolean") {
-      return value;
-    }
-  }
-  return null;
-};
-
-const resolveCommandToolSummary = (params: {
-  toolName: string;
-  args: Record<string, ToolCallArgumentValue>;
-  metadata?: Record<string, unknown>;
-}): CommandToolSummary | null => {
-  const { toolName, args, metadata } = params;
-  const normalizedName = normalizeToolNameKeyFromInfo(toolName);
-  const command = readRecordString(args, [
-    "command",
-    "cmd",
-    "script",
-    "input",
-    "code",
-  ]);
-  const cwd =
-    readRecordString(metadata, [
-      "cwd",
-      "working_directory",
-      "workingDirectory",
-    ]) ||
-    readRecordString(args, ["cwd", "working_directory", "workingDirectory"]);
-  const exitCode = readRecordNumber(metadata, ["exit_code", "exitCode"]);
-  const stdoutLength = readRecordNumber(metadata, [
-    "stdout_length",
-    "stdoutLength",
-    "stdout_bytes",
-    "stdoutBytes",
-  ]);
-  const stderrLength = readRecordNumber(metadata, [
-    "stderr_length",
-    "stderrLength",
-    "stderr_bytes",
-    "stderrBytes",
-  ]);
-  const sandboxed = readRecordBoolean(metadata, ["sandboxed"]);
-  const sandboxType = readRecordString(metadata, [
-    "sandbox_type",
-    "sandboxType",
-  ]);
-  const outputTruncated = readRecordBoolean(metadata, [
-    "output_truncated",
-    "outputTruncated",
-  ]);
-  const shell = readRecordString(metadata, ["shell"]);
-  const executionSurface = readRecordString(metadata, [
-    "execution_surface",
-    "executionSurface",
-  ]);
-  const encoding = readRecordString(metadata, [
-    "encoding",
-    "stdout_encoding",
-    "stdoutEncoding",
-  ]);
-  const stderrEncoding = readRecordString(metadata, [
-    "stderr_encoding",
-    "stderrEncoding",
-  ]);
-  const decodedWith = readRecordString(metadata, [
-    "decoded_with",
-    "decodedWith",
-  ]);
-  const hasCommandFact =
-    command !== null ||
-    cwd !== null ||
-    exitCode !== null ||
-    stdoutLength !== null ||
-    stderrLength !== null ||
-    sandboxed !== null ||
-    sandboxType !== null ||
-    outputTruncated !== null ||
-    shell !== null ||
-    executionSurface !== null ||
-    encoding !== null ||
-    stderrEncoding !== null ||
-    decodedWith !== null;
-
-  if (!hasCommandFact) {
-    return null;
-  }
-
-  const isCommandLike =
-    normalizedName.includes("bash") ||
-    normalizedName.includes("shell") ||
-    normalizedName.includes("exec") ||
-    normalizedName.includes("powershell") ||
-    normalizedName.includes("terminal") ||
-    normalizedName.includes("command") ||
-    exitCode !== null;
-
-  if (!isCommandLike) {
-    return null;
-  }
-
-  return {
-    command,
-    cwd,
-    exitCode,
-    stdoutLength,
-    stderrLength,
-    sandboxed,
-    sandboxType,
-    outputTruncated,
-    shell,
-    executionSurface,
-    encoding,
-    stderrEncoding,
-    decodedWith,
-  };
-};
-
-const parseJsonRecord = (
-  value: string | null | undefined,
-): Record<string, unknown> | undefined => {
-  const trimmed = value?.trim();
-  if (!trimmed || !trimmed.startsWith("{") || !trimmed.endsWith("}")) {
-    return undefined;
-  }
-
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    // 结果不是 JSON 时继续走聚合输出渲染。
-  }
-
-  return undefined;
-};
-
-const formatCommandEncoding = (summary: CommandToolSummary): string | null => {
-  if (!summary.encoding && !summary.stderrEncoding) {
-    return null;
-  }
-  if (!summary.stderrEncoding || summary.stderrEncoding === summary.encoding) {
-    return summary.encoding || summary.stderrEncoding;
-  }
-  return `${summary.encoding || "-"} / ${summary.stderrEncoding}`;
-};
-
-const resolveCommandOutputStreams = (params: {
-  output?: string;
-  error?: string;
-  metadata?: Record<string, unknown>;
-}): CommandOutputStream[] => {
-  const outputRecord = parseJsonRecord(params.output);
-  const errorRecord = parseJsonRecord(params.error);
-  const stdoutKeys = [
-    "stdout",
-    "stdout_text",
-    "stdoutText",
-    "standard_output",
-    "standardOutput",
-  ];
-  const stderrKeys = [
-    "stderr",
-    "stderr_text",
-    "stderrText",
-    "standard_error",
-    "standardError",
-  ];
-
-  const stdout =
-    readRecordString(params.metadata, stdoutKeys) ||
-    readRecordString(outputRecord, stdoutKeys) ||
-    readRecordString(errorRecord, stdoutKeys);
-  const stderr =
-    readRecordString(params.metadata, stderrKeys) ||
-    readRecordString(outputRecord, stderrKeys) ||
-    readRecordString(errorRecord, stderrKeys);
-
-  const streams: CommandOutputStream[] = [];
-  if (stdout) {
-    streams.push({ key: "stdout", content: stdout, tone: "neutral" });
-  }
-  if (stderr) {
-    streams.push({ key: "stderr", content: stderr, tone: "error" });
-  }
-
-  return streams;
-};
-
-const resolveSkillInvocationContentInfo = (params: {
-  toolCall: ToolCallState;
-  args: Record<string, ToolCallArgumentValue>;
-  metadata?: Record<string, unknown>;
-}): SkillInvocationContentInfo => {
-  const { toolCall, args, metadata } = params;
-  const normalizedToolName = normalizeToolNameKeyFromInfo(toolCall.name);
-  const normalizedSource =
-    readRecordString(metadata, ["skill_source", "skillSource"]) ||
-    (typeof args.source === "string" ? args.source : null);
-  const isSkillInvocation =
-    normalizedToolName === "skill" ||
-    normalizedToolName === "loadskill" ||
-    metadata?.tool_family === "skill" ||
-    normalizedSource === "SKILL.md";
-
-  const skillName =
-    readRecordString(metadata, ["skill_name", "skillName"]) ||
-    (typeof args.skill === "string" ? args.skill : null) ||
-    (typeof args.name === "string" ? args.name : null);
-  const displayName =
-    readRecordString(metadata, ["skill_display_name", "skillDisplayName"]) ||
-    (typeof args.display_name === "string" ? args.display_name : null) ||
-    (typeof args.displayName === "string" ? args.displayName : null) ||
-    skillName;
-  const snapshotContent = readRecordString(metadata, [
-    "skill_markdown_content",
-    "skillMarkdownContent",
-    "markdown_content",
-    "markdownContent",
-  ]);
-  const markdownContentBytes = readRecordNumber(metadata, [
-    "markdown_content_bytes",
-    "markdownContentBytes",
-  ]);
-  const isSnapshotStandard = readRecordBoolean(metadata, [
-    "agent_skills_standard",
-    "agentSkillsStandard",
-  ]);
-
-  return {
-    isSkillInvocation,
-    skillName,
-    displayName,
-    snapshotContent,
-    markdownContentBytes,
-    isSnapshotStandard,
-  };
-};
+import {
+  buildRenderedToolResultContent,
+  buildToolCallDisplayGroups,
+  buildToolGroupHeadline,
+  buildToolGroupPreview,
+  buildToolResultMetaNoticeKeys,
+  formatCommandEncoding,
+  isToolSearchToolName,
+  normalizeToolResultImages,
+  normalizeToolResultMetadata,
+  readRecordString,
+  resolveCommandOutputStreams,
+  resolveCommandToolSummary,
+  resolveSkillInvocationContentInfo,
+  resolveToolResultPath,
+  type ToolResultNotice,
+} from "./ToolCallDisplayViewModel";
 
 // ============ 可展开面板组件 ============
 
@@ -971,20 +468,10 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     [t],
   );
   const resultMetaItems = useMemo(() => {
-    if (!resultMetadata) return [];
-
-    const items: string[] = [];
-    if (
-      resultMetadata.lime_offloaded === true ||
-      resultMetadata.output_truncated === true
-    ) {
-      items.push(t("agentChat.toolCall.resultNotice.truncatedPreview"));
-    }
-    if (typeof resultMetadata.exit_code === "number" && isResultFailure) {
-      items.push(t("agentChat.toolCall.resultNotice.commandFailed"));
-    }
-
-    return items;
+    return buildToolResultMetaNoticeKeys({
+      metadata: resultMetadata,
+      isResultFailure,
+    }).map((key) => t(`agentChat.toolCall.resultNotice.${key}`));
   }, [isResultFailure, resultMetadata, t]);
   const commandSummary = useMemo(
     () =>
@@ -1132,38 +619,13 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     return notices;
   }, [resolveSiteProjectTargetDisplay, siteResultSummary, t, toolCall.status]);
   const resultPath = useMemo(() => {
-    if (!resultMetadata) return undefined;
-    if (
-      typeof resultMetadata.offload_file === "string" &&
-      resultMetadata.offload_file.trim()
-    ) {
-      const fullPath = resultMetadata.offload_file.trim();
-      return {
-        label: t("agentChat.toolCall.resultFile"),
-        value: fullPath,
-        displayValue: resolveUserFacingPathName(fullPath) || fullPath,
-      };
-    }
-    if (
-      typeof resultMetadata.output_file === "string" &&
-      resultMetadata.output_file.trim()
-    ) {
-      const fullPath = resultMetadata.output_file.trim();
-      return {
-        label: t("agentChat.toolCall.resultFile"),
-        value: fullPath,
-        displayValue: resolveUserFacingPathName(fullPath) || fullPath,
-      };
-    }
-    if (typeof resultMetadata.path === "string" && resultMetadata.path.trim()) {
-      const fullPath = resultMetadata.path.trim();
-      return {
-        label: t("agentChat.toolCall.resultFile"),
-        value: fullPath,
-        displayValue: resolveUserFacingPathName(fullPath) || fullPath,
-      };
-    }
-    return undefined;
+    const presentation = resolveToolResultPath(resultMetadata);
+    return presentation
+      ? {
+          label: t("agentChat.toolCall.resultFile"),
+          ...presentation,
+        }
+      : undefined;
   }, [resultMetadata, t]);
   const openableFilePath = useMemo(
     () => resultPath?.value || filePath,
@@ -1205,7 +667,7 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
   const hasResultImages = resultImages.length > 0;
   const hasSearchResults = searchResultItems.length > 0;
   const isToolSearch = useMemo(
-    () => normalizeToolNameKeyFromInfo(toolCall.name) === "toolsearch",
+    () => isToolSearchToolName(toolCall.name),
     [toolCall.name],
   );
   const toolSearchSummary = useMemo(
@@ -2108,66 +1570,7 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
 }) => {
   if (!toolCalls || toolCalls.length === 0) return null;
 
-  const groups: Array<
-    | {
-        type: "search";
-        id: string;
-        items: ToolCallState[];
-      }
-    | {
-        type: "work";
-        id: string;
-        items: ToolCallState[];
-      }
-    | {
-        type: "single";
-        id: string;
-        item: ToolCallState;
-      }
-  > = [];
-
-  for (const toolCall of toolCalls) {
-    const isSearch = isUnifiedWebSearchToolName(toolCall.name);
-    const lastGroup = groups[groups.length - 1];
-    if (isSearch && lastGroup && lastGroup.type === "search") {
-      lastGroup.items.push(toolCall);
-      continue;
-    }
-
-    if (isSearch) {
-      groups.push({
-        type: "search",
-        id: `search-group:${toolCall.id}`,
-        items: [toolCall],
-      });
-      continue;
-    }
-
-    if (
-      isGroupableToolCall(toolCall) &&
-      lastGroup &&
-      lastGroup.type === "work" &&
-      resolveToolGroupKey(lastGroup.items[0]!) === resolveToolGroupKey(toolCall)
-    ) {
-      lastGroup.items.push(toolCall);
-      continue;
-    }
-
-    if (isGroupableToolCall(toolCall)) {
-      groups.push({
-        type: "work",
-        id: `work-group:${toolCall.id}`,
-        items: [toolCall],
-      });
-      continue;
-    }
-
-    groups.push({
-      type: "single",
-      id: toolCall.id,
-      item: toolCall,
-    });
-  }
+  const groups = buildToolCallDisplayGroups(toolCalls);
 
   return (
     <div className="flex flex-col gap-1">
@@ -2237,7 +1640,7 @@ function WorkToolCallGroup({
   const hasRunning = toolCalls.some((item) => item.status === "running");
   const hasFailed = toolCalls.some((item) => item.status === "failed");
   const [expanded, setExpanded] = useState(hasRunning || hasFailed);
-  const headline = buildToolGroupHeadlineFromInfo(toolCalls);
+  const headline = buildToolGroupHeadline(toolCalls);
   const preview = buildToolGroupPreview(toolCalls, (count) =>
     t("agentChat.toolCall.group.hiddenItems", { count }),
   );
@@ -2310,7 +1713,7 @@ function SearchToolCallGroup({
 }) {
   const { t } = useTranslation("agent");
   const [expanded, setExpanded] = useState(true);
-  const headline = buildToolGroupHeadlineFromInfo(toolCalls);
+  const headline = buildToolGroupHeadline(toolCalls);
   const queryPreview = toolCalls
     .slice(0, 2)
     .map(extractSearchQueryLabelFromInfo)

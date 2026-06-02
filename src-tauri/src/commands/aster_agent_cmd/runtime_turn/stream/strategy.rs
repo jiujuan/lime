@@ -2,21 +2,6 @@ use super::attempt::execute_runtime_stream_attempt;
 use super::finalize::is_runtime_turn_cancelled_error;
 use super::*;
 
-async fn remove_code_execution_extension_if_added(
-    agent: &Agent,
-    added_code_execution: &mut bool,
-    warning_message: &str,
-) {
-    if !*added_code_execution {
-        return;
-    }
-
-    if let Err(error) = agent.remove_extension(CODE_EXECUTION_EXTENSION_NAME).await {
-        tracing::warn!("[AsterAgent] {}: {}", warning_message, error);
-    }
-    *added_code_execution = false;
-}
-
 #[allow(clippy::too_many_arguments)]
 pub(in crate::commands::aster_agent_cmd::runtime_turn) async fn execute_runtime_stream_with_strategy<
     F,
@@ -40,17 +25,12 @@ pub(in crate::commands::aster_agent_cmd::runtime_turn) async fn execute_runtime_
     profile_stream: AgentRuntimeProfileStream,
     cancel_token: CancellationToken,
     request_tool_policy: &RequestToolPolicy,
-    effective_strategy: AsterExecutionStrategy,
+    _effective_strategy: AsterExecutionStrategy,
     build_session_config: F,
 ) -> Result<String, String>
 where
     F: Fn() -> aster::agents::types::SessionConfig,
 {
-    let mut added_code_execution = false;
-    if effective_strategy == AsterExecutionStrategy::CodeOrchestrated {
-        added_code_execution = ensure_code_execution_extension_enabled(agent).await?;
-    }
-
     let primary_attempt_started_at = Instant::now();
     let (primary_provider_selector, primary_provider_name, primary_model_name) =
         describe_provider_request_attempt(request);
@@ -100,44 +80,6 @@ where
         }
         Err(primary_error) if is_runtime_turn_cancelled_error(&primary_error.message) => {
             Err(primary_error.message)
-        }
-        Err(primary_error)
-            if effective_strategy == AsterExecutionStrategy::CodeOrchestrated
-                && should_fallback_to_react_from_code_orchestrated(&primary_error) =>
-        {
-            tracing::warn!(
-                "[AsterAgent] 编排模式执行失败，自动降级到 ReAct: {}",
-                primary_error.message
-            );
-            remove_code_execution_extension_if_added(
-                agent,
-                &mut added_code_execution,
-                "降级前移除 code_execution 扩展失败",
-            )
-            .await;
-            execute_runtime_stream_attempt(
-                agent,
-                app,
-                db,
-                request,
-                timeline_recorder,
-                run_observation,
-                runtime_memory_config,
-                session_id,
-                workspace_root,
-                workspace_id,
-                thread_id,
-                turn_id,
-                execution_profile,
-                request_metadata,
-                provider_continuation_capability,
-                profile_stream.clone(),
-                build_session_config(),
-                cancel_token,
-                request_tool_policy,
-            )
-            .await
-            .map_err(|fallback_err| fallback_err.message)
         }
         Err(primary_error) if is_runtime_model_unavailable_error(&primary_error.message) => {
             let recovery_result: Result<Option<String>, String> = async {
@@ -292,13 +234,6 @@ where
         }
         Err(primary_error) => Err(primary_error.message),
     };
-
-    remove_code_execution_extension_if_added(
-        agent,
-        &mut added_code_execution,
-        "移除 code_execution 扩展失败，后续会话可能继续保留编排模式",
-    )
-    .await;
 
     run_result
 }

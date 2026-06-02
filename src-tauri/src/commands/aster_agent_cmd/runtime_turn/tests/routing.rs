@@ -27,7 +27,7 @@ fn resolve_turn_execution_profile_should_use_fast_chat_for_plain_general_message
 }
 
 #[test]
-fn resolve_turn_execution_profile_should_use_full_runtime_for_code_orchestrated_effective_strategy()
+fn resolve_turn_execution_profile_should_not_use_full_runtime_for_plain_react_strategy()
 {
     let request = build_runtime_turn_test_request(
         "继续修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
@@ -52,55 +52,18 @@ fn resolve_turn_execution_profile_should_use_full_runtime_for_code_orchestrated_
             RuntimeChatMode::General,
             &policy,
             false,
-            AsterExecutionStrategy::CodeOrchestrated,
+            AsterExecutionStrategy::React,
         ),
-        TurnExecutionProfile::FullRuntime
+        TurnExecutionProfile::FastChat
     );
 }
 
 #[test]
-fn apply_code_orchestrated_runtime_defaults_should_enable_code_runtime_preferences() {
-    let mut request = build_runtime_turn_test_request(
-        "继续修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
-        Some(json!({
-            "harness": {
-                "theme": "general",
-                "chat_mode": "general",
-                "preferences": {
-                    "web_search": false,
-                    "thinking": false,
-                    "task": false,
-                    "subagent": false
-                }
-            }
-        })),
-    );
-
-    apply_code_orchestrated_runtime_defaults(
-        &mut request,
-        AsterExecutionStrategy::CodeOrchestrated,
-    );
-
-    let harness = request
-        .metadata
-        .as_ref()
-        .and_then(|metadata| metadata.get("harness"))
-        .and_then(serde_json::Value::as_object)
-        .expect("harness metadata");
-    let preferences = harness
-        .get("preferences")
-        .and_then(serde_json::Value::as_object)
-        .expect("preferences metadata");
-
-    assert_eq!(preferences.get("task"), Some(&json!(true)));
-    assert_eq!(preferences.get("subagent"), Some(&json!(true)));
-    assert_eq!(harness.get("task_mode_enabled"), Some(&json!(true)));
-    assert_eq!(harness.get("subagent_mode_enabled"), Some(&json!(true)));
+fn legacy_code_orchestrated_effective_strategy_should_resolve_to_react() {
     assert_eq!(
-        harness.get("preferred_team_preset_id"),
-        Some(&json!("code-triage-team"))
+        AsterExecutionStrategy::from_db_value(Some("code_orchestrated")),
+        AsterExecutionStrategy::React
     );
-    assert!(harness.get("code_command").is_none());
 }
 
 #[test]
@@ -209,6 +172,30 @@ fn resolve_turn_execution_profile_should_keep_fast_chat_for_allowed_web_search()
             AsterExecutionStrategy::React,
         ),
         TurnExecutionProfile::FastChat
+    );
+}
+
+#[test]
+fn natural_language_news_turn_should_allow_web_search_without_required_mode() {
+    let request = build_runtime_turn_test_request("整理今天的国际新闻", None);
+    let policy = lime_agent::resolve_request_tool_policy_with_mode(None, None, true);
+
+    assert_eq!(policy.search_mode, RequestToolPolicyMode::Allowed);
+    assert!(policy.allows_web_search());
+    assert!(!policy.requires_web_search());
+    assert_eq!(
+        resolve_turn_execution_profile(
+            &request,
+            RuntimeChatMode::General,
+            &policy,
+            false,
+            AsterExecutionStrategy::React,
+        ),
+        TurnExecutionProfile::FastChat
+    );
+    assert_eq!(
+        resolve_fast_chat_tool_surface_mode(&request, TurnExecutionProfile::FastChat, &policy),
+        None
     );
 }
 

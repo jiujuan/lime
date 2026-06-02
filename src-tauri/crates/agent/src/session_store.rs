@@ -127,10 +127,8 @@ fn resolve_session_working_dir(
 
 fn normalize_execution_strategy(execution_strategy: Option<String>) -> String {
     match execution_strategy.as_deref() {
-        Some("code_orchestrated") => "code_orchestrated".to_string(),
-        Some("auto") => "auto".to_string(),
         Some("react") => "react".to_string(),
-        _ => "auto".to_string(),
+        Some("code_orchestrated") | Some("auto") | _ => "react".to_string(),
     }
 }
 
@@ -563,11 +561,13 @@ pub fn update_session_execution_strategy_sync(
     session_id: &str,
     execution_strategy: &str,
 ) -> Result<(), String> {
+    let normalized_execution_strategy =
+        normalize_execution_strategy(Some(execution_strategy.to_string()));
     let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
     agent_session_repository::update_session_execution_strategy(
         &conn,
         session_id,
-        execution_strategy,
+        &normalized_execution_strategy,
     )?;
     Ok(())
 }

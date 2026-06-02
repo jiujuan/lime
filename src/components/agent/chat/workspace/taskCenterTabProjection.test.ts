@@ -15,7 +15,7 @@ function createTopic(id: string, overrides?: Partial<Topic>): Topic {
     createdAt: new Date("2026-04-20T00:00:00.000Z"),
     updatedAt: new Date("2026-04-20T01:00:00.000Z"),
     messagesCount: 1,
-    executionStrategy: "auto",
+    executionStrategy: "react",
     status: "done",
     statusReason: "default",
     lastPreview: `${id} preview`,

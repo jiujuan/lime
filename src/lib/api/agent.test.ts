@@ -53,7 +53,7 @@ describe("Agent API 治理护栏", () => {
     mockSafeInvoke.mockResolvedValueOnce("session-created");
 
     await expect(
-      createAgentRuntimeSession("workspace-2", "新会话", "auto", {
+      createAgentRuntimeSession("workspace-2", "新会话", "react", {
         runStartHooks: false,
       }),
     ).resolves.toBe("session-created");
@@ -63,7 +63,7 @@ describe("Agent API 治理护栏", () => {
       {
         workspaceId: "workspace-2",
         name: "新会话",
-        executionStrategy: "auto",
+        executionStrategy: "react",
         runStartHooks: false,
       },
     );
@@ -139,7 +139,7 @@ describe("Agent API 治理护栏", () => {
       queued_turn_id: "queued-turn-1",
       skip_pre_submit_resume: true,
       turn_config: {
-        execution_strategy: "auto",
+        execution_strategy: "react",
         web_search: true,
       },
     });
@@ -154,7 +154,7 @@ describe("Agent API 治理护栏", () => {
         queued_turn_id: "queued-turn-1",
         skip_pre_submit_resume: true,
         turn_config: {
-          execution_strategy: "auto",
+          execution_strategy: "react",
           web_search: true,
         },
       },
@@ -504,7 +504,7 @@ describe("Agent API 治理护栏", () => {
     await updateAgentRuntimeSession({
       session_id: "session-runtime",
       name: "新标题",
-      execution_strategy: "auto",
+      execution_strategy: "react",
     });
 
     expect(mockSafeInvoke).toHaveBeenNthCalledWith(
@@ -524,7 +524,7 @@ describe("Agent API 治理护栏", () => {
         request: {
           session_id: "session-runtime",
           name: "新标题",
-          execution_strategy: "auto",
+          execution_strategy: "react",
         },
       },
     );
@@ -539,7 +539,7 @@ describe("Agent API 治理护栏", () => {
         created_at: 1710000000,
         updated_at: 1710000123,
         messages_count: 3,
-        execution_strategy: "auto",
+        execution_strategy: "react",
         workspace_id: "workspace-1",
         working_dir: "/tmp/workspace-1",
       },
@@ -555,7 +555,7 @@ describe("Agent API 治理护栏", () => {
         messages_count: 3,
         workspace_id: "workspace-1",
         working_dir: "/tmp/workspace-1",
-        execution_strategy: "auto",
+        execution_strategy: "react",
       },
     ]);
     expect(mockSafeInvoke).toHaveBeenCalledWith("agent_runtime_list_sessions");

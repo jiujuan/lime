@@ -461,7 +461,7 @@ const SEEDED_COMMAND_PROJECTION_SPECS: SeededCommandProjectionSpec[] = [
     commandBinding: {
       executionKind: "agent_turn",
       requestDefaults: {
-        executionStrategy: "code_orchestrated",
+        executionStrategy: "react",
       },
     },
     commandRenderContract: COMMAND_TIMELINE_JSON_CONTRACT,

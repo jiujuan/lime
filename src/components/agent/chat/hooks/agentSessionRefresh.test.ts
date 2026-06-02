@@ -42,7 +42,7 @@ describe("agentSessionRefresh", () => {
     ]);
   });
 
-  it("刷新 detail 时应应用 detail 并同步 executionStrategy", async () => {
+  it("刷新 detail 时应应用 detail 并把 legacy executionStrategy 归一后同步", async () => {
     const applySessionDetail = vi.fn();
     const markSynced = vi.fn();
     const detail: AsterSessionDetail = {
@@ -50,7 +50,7 @@ describe("agentSessionRefresh", () => {
       messages: [],
       created_at: 1,
       updated_at: 2,
-      execution_strategy: "code_orchestrated",
+      execution_strategy: "code_orchestrated" as never,
     };
     const getSession = vi.fn(async () => detail);
 
@@ -80,7 +80,7 @@ describe("agentSessionRefresh", () => {
         preserveExecutionStrategyOnMissingDetail: true,
       },
     );
-    expect(markSynced).toHaveBeenCalledWith("session-1", "code_orchestrated");
+    expect(markSynced).toHaveBeenCalledWith("session-1", "react");
   });
 
   it("刷新 detail 时应把 recent_access_mode 同步到当前 accessMode 与 session shadow", async () => {

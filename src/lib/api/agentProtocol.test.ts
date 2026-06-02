@@ -320,7 +320,7 @@ describe("agentProtocol", () => {
       session_id: "session-ctx",
       thread_id: "thread-ctx",
       turn_id: "turn-ctx",
-      execution_strategy: "code_orchestrated",
+      execution_strategy: "react",
       output_schema_runtime: null,
       approval_policy: "on-request",
       sandbox_policy: "workspace-write",

@@ -1,9 +1,6 @@
 import type { WorkflowInputStateCopy } from "../../utils/workflowInputState";
 
 export type InputbarWorkflowCopyKey =
-  | "agentChat.inputbar.executionStrategy.label"
-  | "agentChat.inputbar.executionStrategy.enable"
-  | "agentChat.inputbar.executionStrategy.disable"
   | "agentChat.inputbar.workflow.status.error"
   | "agentChat.inputbar.workflow.status.pending"
   | "agentChat.inputbar.workflow.status.active"
@@ -56,12 +53,6 @@ export type InputbarWorkflowCopyTranslate = (
   values?: Record<string, InputbarWorkflowCopyValue>,
 ) => string;
 
-export interface InputbarExecutionStrategyCopy {
-  label: string;
-  enable: string;
-  disable: string;
-}
-
 export interface InputbarWorkflowPanelCopy {
   status: {
     error: string;
@@ -92,16 +83,6 @@ export interface InputbarWorkflowPanelCopy {
       completed: number,
       total: number,
     ) => string;
-  };
-}
-
-export function buildInputbarExecutionStrategyCopy(
-  translate: InputbarWorkflowCopyTranslate,
-): InputbarExecutionStrategyCopy {
-  return {
-    label: translate("agentChat.inputbar.executionStrategy.label"),
-    enable: translate("agentChat.inputbar.executionStrategy.enable"),
-    disable: translate("agentChat.inputbar.executionStrategy.disable"),
   };
 }
 

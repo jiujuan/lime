@@ -36,8 +36,6 @@ describe("agentStreamSubmitDraft", () => {
       assistantMsgId: "assistant-1",
       userMsgId: "user-1",
       effectiveExecutionStrategy: "react",
-      webSearch: true,
-      thinking: true,
       setMessages: createStateSetter(
         () => messages,
         (value) => {
@@ -74,8 +72,6 @@ describe("agentStreamSubmitDraft", () => {
 
     const waitingRuntimeStatus = buildWaitingAgentRuntimeStatus({
       executionStrategy: "react",
-      webSearch: false,
-      thinking: true,
     });
 
     const { assistantMsg } = prepareAgentStreamSubmitDraft({
@@ -89,9 +85,7 @@ describe("agentStreamSubmitDraft", () => {
         content: "准备执行中",
         initialRuntimeStatus: waitingRuntimeStatus,
       },
-      effectiveExecutionStrategy: "code_orchestrated",
-      webSearch: false,
-      thinking: true,
+      effectiveExecutionStrategy: "react",
       setMessages: createStateSetter(
         () => messages,
         (value) => {
@@ -135,8 +129,6 @@ describe("agentStreamSubmitDraft", () => {
       assistantMsgId: "assistant-3",
       userMsgId: "user-3",
       effectiveExecutionStrategy: "react",
-      webSearch: false,
-      thinking: false,
       setMessages: createStateSetter(
         () => messages,
         (value) => {
@@ -187,8 +179,6 @@ describe("agentStreamSubmitDraft", () => {
         },
       },
       effectiveExecutionStrategy: "react",
-      webSearch: false,
-      thinking: false,
       setMessages: createStateSetter(
         () => messages,
         (value) => {
@@ -248,8 +238,6 @@ describe("agentStreamSubmitDraft", () => {
         submittedAt: Date.now(),
       }),
       effectiveExecutionStrategy: "react",
-      webSearch: false,
-      thinking: false,
       setMessages: createStateSetter(
         () => messages,
         (value) => {

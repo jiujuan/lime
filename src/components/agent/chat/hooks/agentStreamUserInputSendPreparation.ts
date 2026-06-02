@@ -15,6 +15,7 @@ import {
   resolveAgentRuntimeStatusPresentation,
   type AgentRuntimeStatusPresentation,
 } from "../utils/fastResponseRouting";
+import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 
 export type AgentStreamUserInputSendPreparationEnv = Pick<
   AgentStreamPreparedSendEnv,
@@ -92,8 +93,9 @@ export function prepareAgentStreamUserInputSend(
     env,
   } = options;
 
-  const effectiveExecutionStrategy =
-    executionStrategyOverride || env.executionStrategy;
+  const effectiveExecutionStrategy = normalizeExecutionStrategy(
+    executionStrategyOverride || env.executionStrategy,
+  );
   const resolvedProviderOverride = sendOptions?.providerOverride?.trim();
   const resolvedModelOverride =
     sendOptions?.modelOverride?.trim() || modelOverride?.trim();
@@ -139,8 +141,6 @@ export function prepareAgentStreamUserInputSend(
     messagePurpose,
     capabilityRoute,
     effectiveExecutionStrategy,
-    webSearch,
-    thinking,
     setMessages: env.setMessages,
     setIsSending: env.setIsSending,
   });

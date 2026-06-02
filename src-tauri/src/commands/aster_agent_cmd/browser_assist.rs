@@ -364,8 +364,11 @@ pub(crate) fn runtime_chat_mode_label(mode: RuntimeChatMode) -> &'static str {
     }
 }
 
-pub(crate) fn default_web_search_enabled_for_chat_mode(_chat_mode: RuntimeChatMode) -> bool {
-    false
+pub(crate) fn default_web_search_enabled_for_chat_mode(chat_mode: RuntimeChatMode) -> bool {
+    matches!(
+        chat_mode,
+        RuntimeChatMode::Agent | RuntimeChatMode::General | RuntimeChatMode::Workbench
+    )
 }
 
 pub(crate) fn should_enable_model_skill_tool(request_metadata: Option<&serde_json::Value>) -> bool {

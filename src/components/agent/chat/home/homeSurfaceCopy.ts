@@ -20,7 +20,6 @@ export type HomeSurfaceCopyKey =
   | "agentChat.home.composer.fileManager.open"
   | "agentChat.home.composer.fileManager.close"
   | "agentChat.home.composer.creationMode.label"
-  | "agentChat.home.composer.generalContext"
   | "agentChat.home.hero.eyebrow"
   | "agentChat.home.hero.slogan"
   | "agentChat.home.hero.description"
@@ -178,7 +177,6 @@ export interface HomeSurfaceComposerCopy {
   creationMode: {
     label: string;
   };
-  generalContext: string;
 }
 
 export interface HomeSurfaceCopy {
@@ -259,7 +257,6 @@ export function buildHomeSurfaceCopy(
       creationMode: {
         label: translate("agentChat.home.composer.creationMode.label"),
       },
-      generalContext: translate("agentChat.home.composer.generalContext"),
     },
     guideHelpContextLabel: translate("agentChat.home.guideHelp.contextLabel"),
     guideHelpContextLabelWithStarter: (label) =>

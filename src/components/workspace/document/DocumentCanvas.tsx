@@ -38,11 +38,6 @@ import { DocumentRenderer } from "./DocumentRenderer";
 import { NotionEditor, type NotionEditorHandle } from "./editor/NotionEditor";
 import { PlatformTabs } from "./PlatformTabs";
 import { resolveDocumentCanvasHotkeyAction } from "./documentCanvasHotkeys";
-import {
-  loadChatToolPreferences,
-  saveChatToolPreferences,
-  type ChatToolPreferences,
-} from "@/components/agent/chat/utils/chatToolPreferences";
 import { exportDocumentContent } from "./utils/exportDocument";
 import {
   ackCanvasImageInsertRequest,
@@ -169,8 +164,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = memo(
     onAutoContinueProviderTypeChange,
     autoContinueModel,
     onAutoContinueModelChange,
-    autoContinueThinkingEnabled,
-    onAutoContinueThinkingEnabledChange,
     onAutoContinueRun,
     onAddImage,
     onImportDocument,
@@ -246,8 +239,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = memo(
 
     const [autoContinueSettings, setAutoContinueSettings] =
       useState<AutoContinueSettings>(() => loadAutoContinueSettings(projectId));
-    const [chatToolPreferences, setChatToolPreferences] =
-      useState<ChatToolPreferences>(() => loadChatToolPreferences());
     const [fallbackProviderType, setFallbackProviderType] = useState("");
     const [fallbackModel, setFallbackModel] = useState("");
     const [contentReviewOpen, setContentReviewOpen] = useState(false);
@@ -280,8 +271,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = memo(
     const resolvedAutoContinueProviderType =
       autoContinueProviderType ?? fallbackProviderType;
     const resolvedAutoContinueModel = autoContinueModel ?? fallbackModel;
-    const resolvedThinkingEnabled =
-      autoContinueThinkingEnabled ?? chatToolPreferences.thinking;
     const reviewExperts = useMemo(
       () => [...customReviewExperts, ...DEFAULT_CONTENT_REVIEW_EXPERTS],
       [customReviewExperts],
@@ -304,10 +293,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = memo(
     useEffect(() => {
       saveAutoContinueSettings(projectId, autoContinueSettings);
     }, [autoContinueSettings, projectId]);
-
-    useEffect(() => {
-      saveChatToolPreferences(chatToolPreferences);
-    }, [chatToolPreferences]);
 
     useEffect(() => {
       if (!isEditing) {
@@ -702,20 +687,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = memo(
       [onAutoContinueModelChange],
     );
 
-    const handleThinkingChange = useCallback(
-      (enabled: boolean) => {
-        if (onAutoContinueThinkingEnabledChange) {
-          onAutoContinueThinkingEnabledChange(enabled);
-          return;
-        }
-        setChatToolPreferences((prev) => ({
-          ...prev,
-          thinking: enabled,
-        }));
-      },
-      [onAutoContinueThinkingEnabledChange],
-    );
-
     const buildAutoContinuePrompt = useCallback(
       (contentOverride?: string) => {
         const baseContent = (
@@ -787,7 +758,6 @@ ${baseContent}`;
       try {
         await onAutoContinueRun({
           prompt,
-          thinkingEnabled: resolvedThinkingEnabled,
           settings: autoContinueSettings,
         });
         showMessage("🪄 已触发自动续写");
@@ -800,7 +770,6 @@ ${baseContent}`;
       buildAutoContinuePrompt,
       flushEditorDraft,
       onAutoContinueRun,
-      resolvedThinkingEnabled,
       showMessage,
     ]);
 
@@ -847,13 +816,11 @@ ${expertInstruction}
 <<<CONTENT
 ${baseContent}
 CONTENT`,
-          thinkingEnabled: resolvedThinkingEnabled,
           experts: selectedReviewExperts,
         };
       },
       [
         editingContent,
-        resolvedThinkingEnabled,
         selectedReviewExperts,
         state.platform,
       ],
@@ -883,7 +850,6 @@ CONTENT`,
 
         const result = await onTextStylizeRun({
           prompt,
-          thinkingEnabled: resolvedThinkingEnabled,
           originalContent: baseContent,
         });
 
@@ -902,7 +868,6 @@ CONTENT`,
       onTextStylizeRun,
       editingContent,
       state.platform,
-      resolvedThinkingEnabled,
       showMessage,
     ]);
 
@@ -1058,8 +1023,6 @@ CONTENT`,
             selectedAutoContinueModel={resolvedAutoContinueModel}
             autoContinueModelLoading={false}
             onAutoContinueModelChange={handleAutoContinueModelSelectionChange}
-            thinkingEnabled={resolvedThinkingEnabled}
-            onThinkingChange={handleThinkingChange}
             onAutoContinueSettingsChange={handleAutoContinueSettingsChange}
             onAutoContinueRun={handleAutoContinueRun}
             autoContinueRunDisabled={isStreaming}

@@ -6,114 +6,12 @@ import {
   buildInitialDispatchPreviewMessages,
   buildRuntimeTeamDispatchPreviewMessages,
   buildSubmissionPreviewMessages,
+  buildWorkspaceRequestMetadata,
   createSubmissionPreviewSnapshot,
-  resolveCodeOrchestratedRuntimeDefaults,
   resolveRuntimeTeamDispatchPreviewState,
 } from "./workspaceSendHelpers";
 
 describe("workspaceSendHelpers runtime team preview", () => {
-  it("code_orchestrated 普通发送应补齐编程底座工具偏好与默认代码团队", () => {
-    const result = resolveCodeOrchestratedRuntimeDefaults({
-      executionStrategy: "code_orchestrated",
-      effectiveToolPreferences: {
-        webSearch: false,
-        thinking: false,
-        task: false,
-        subagent: false,
-      },
-      mappedTheme: "general",
-    });
-
-    expect(result).toEqual({
-      effectiveToolPreferences: {
-        webSearch: false,
-        thinking: false,
-        task: true,
-        subagent: true,
-      },
-      preferredTeamPresetId: "code-triage-team",
-    });
-  });
-
-  it("code_orchestrated 不应覆盖显式工具入口或既有 Team 选择", () => {
-    const explicitLaunch = resolveCodeOrchestratedRuntimeDefaults({
-      executionStrategy: "code_orchestrated",
-      effectiveToolPreferences: {
-        webSearch: false,
-        thinking: false,
-        task: false,
-        subagent: false,
-      },
-      mappedTheme: "general",
-      hasExplicitCommandOrSkillLaunch: true,
-    });
-
-    expect(explicitLaunch).toEqual({
-      effectiveToolPreferences: {
-        webSearch: false,
-        thinking: false,
-        task: false,
-        subagent: false,
-      },
-      preferredTeamPresetId: undefined,
-    });
-
-    const explicitTeam = resolveCodeOrchestratedRuntimeDefaults({
-      executionStrategy: "code_orchestrated",
-      effectiveToolPreferences: {
-        webSearch: false,
-        thinking: false,
-        task: false,
-        subagent: false,
-      },
-      mappedTheme: "general",
-      workspaceRequestMetadataBase: {
-        harness: {
-          preferred_team_preset_id: "research-team",
-        },
-      },
-    });
-
-    expect(explicitTeam).toEqual({
-      effectiveToolPreferences: {
-        webSearch: false,
-        thinking: false,
-        task: true,
-        subagent: true,
-      },
-      preferredTeamPresetId: undefined,
-    });
-
-    const catalogRoutedScene = resolveCodeOrchestratedRuntimeDefaults({
-      executionStrategy: "code_orchestrated",
-      effectiveToolPreferences: {
-        webSearch: false,
-        thinking: false,
-        task: false,
-        subagent: false,
-      },
-      mappedTheme: "general",
-      sendOptions: {
-        capabilityRoute: {
-          kind: "runtime_scene",
-          sceneKey: "engineering-mode",
-          commandPrefix: "/engineering-mode",
-        },
-      },
-      allowCatalogRoutedRuntimeDefaults: true,
-    });
-
-    expect(catalogRoutedScene).toEqual({
-      effectiveToolPreferences: {
-        webSearch: false,
-        thinking: false,
-        task: true,
-        subagent: true,
-      },
-      preferredTeamPresetId: "code-triage-team",
-    });
-  });
-
   it("initialDispatchKey 应稳定编码首轮 prompt 与图片签名", () => {
     expect(
       buildInitialDispatchKey("写一篇文章", [
@@ -185,6 +83,90 @@ describe("workspaceSendHelpers runtime team preview", () => {
         platformLabel: "微信公众号后台",
       }),
     );
+  });
+
+  it("浏览器 requirement 应进入工作区发送 metadata，而不是依赖组件挂载验证", () => {
+    const metadata = buildWorkspaceRequestMetadata({
+      effectiveToolPreferences: {
+        webSearch: false,
+        thinking: false,
+        task: false,
+        subagent: false,
+      },
+      mappedTheme: "general",
+      isThemeWorkbench: true,
+      currentGateKey: "write_mode",
+      contentId: "content-browser-required",
+      browserRequirementMatch: {
+        requirement: "required_with_user_step",
+        reason: "需要在微信公众号后台完成发布流程。",
+        launchUrl: "https://mp.weixin.qq.com/",
+      },
+      browserAssistProfileKey: "general_browser_assist",
+    });
+
+    expect(metadata).toMatchObject({
+      harness: expect.objectContaining({
+        theme: "general",
+        session_mode: "general_workbench",
+        content_id: "content-browser-required",
+        browser_requirement: "required_with_user_step",
+        browser_requirement_reason: "需要在微信公众号后台完成发布流程。",
+        browser_launch_url: "https://mp.weixin.qq.com/",
+        browser_user_step_required: true,
+        browser_assist: expect.objectContaining({
+          enabled: true,
+          profile_key: "general_browser_assist",
+        }),
+      }),
+    });
+  });
+
+  it("自动首发 metadata 中已有浏览器协助参数时应继续保留", () => {
+    const metadata = buildWorkspaceRequestMetadata({
+      sendOptions: {
+        requestMetadata: {
+          harness: {
+            browser_assist: {
+              enabled: true,
+              profile_key: "general_browser_assist",
+              preferred_backend: "lime_extension_bridge",
+              auto_launch: false,
+            },
+          },
+        },
+      },
+      effectiveToolPreferences: {
+        webSearch: false,
+        thinking: false,
+        task: false,
+        subagent: false,
+      },
+      mappedTheme: "general",
+      isThemeWorkbench: true,
+      currentGateKey: "write_mode",
+      contentId: "content-browser-required-bootstrap",
+      browserRequirementMatch: {
+        requirement: "required_with_user_step",
+        reason: "需要在微信公众号后台完成发布流程。",
+        launchUrl: "https://mp.weixin.qq.com/",
+      },
+      browserAssistProfileKey: "general_browser_assist",
+    });
+
+    expect(metadata).toMatchObject({
+      harness: expect.objectContaining({
+        content_id: "content-browser-required-bootstrap",
+        browser_requirement: "required_with_user_step",
+        browser_user_step_required: true,
+        browser_assist: expect.objectContaining({
+          enabled: true,
+          profile_key: "general_browser_assist",
+          preferred_backend: "lime_extension_bridge",
+          auto_launch: false,
+        }),
+      }),
+    });
   });
 
   it("run-state 应生成 resume prompt", () => {
@@ -336,8 +318,6 @@ describe("workspaceSendHelpers runtime team preview", () => {
       },
       images: [],
       executionStrategy: "react",
-      webSearch: true,
-      thinking: false,
     });
 
     expect(snapshot).toMatchObject({

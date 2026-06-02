@@ -20,8 +20,6 @@ describe("buildHomePendingPreviewMessages", () => {
           skillName: "brand-product-knowledge-builder",
         },
       },
-      webSearch: false,
-      thinking: false,
       submittedAt: 1_710_000_000_000,
       materializeDraft: false,
       source: "empty-state",

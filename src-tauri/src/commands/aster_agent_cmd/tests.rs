@@ -202,7 +202,7 @@ mod tests {
     }
 
     #[test]
-    fn test_aster_chat_request_deserialize_with_execution_strategy() {
+    fn test_aster_chat_request_deserialize_legacy_execution_strategy_as_react() {
         let json = r#"{
             "message": "Hello",
             "session_id": "test-session",
@@ -214,7 +214,7 @@ mod tests {
         let request: AsterChatRequest = serde_json::from_str(json).unwrap();
         assert_eq!(
             request.execution_strategy,
-            Some(AsterExecutionStrategy::CodeOrchestrated)
+            Some(AsterExecutionStrategy::React)
         );
     }
 
@@ -362,14 +362,14 @@ mod tests {
     }
 
     #[test]
-    fn test_default_web_search_enabled_for_chat_mode_requires_explicit_opt_in() {
-        assert!(!default_web_search_enabled_for_chat_mode(
+    fn test_default_web_search_enabled_for_chat_mode_exposes_agent_tool_surface() {
+        assert!(default_web_search_enabled_for_chat_mode(
             RuntimeChatMode::Agent
         ));
-        assert!(!default_web_search_enabled_for_chat_mode(
+        assert!(default_web_search_enabled_for_chat_mode(
             RuntimeChatMode::Workbench
         ));
-        assert!(!default_web_search_enabled_for_chat_mode(
+        assert!(default_web_search_enabled_for_chat_mode(
             RuntimeChatMode::General
         ));
     }
@@ -3638,7 +3638,7 @@ mod tests {
         assert_eq!(mapped.workspace_id, "workspace-runtime");
         assert_eq!(
             mapped.execution_strategy,
-            Some(AsterExecutionStrategy::Auto)
+            Some(AsterExecutionStrategy::React)
         );
         assert_eq!(mapped.web_search, Some(true));
         assert_eq!(
@@ -3684,7 +3684,7 @@ mod tests {
         assert_eq!(mapped.workspace_id, "");
         assert_eq!(
             mapped.execution_strategy,
-            Some(AsterExecutionStrategy::Auto)
+            Some(AsterExecutionStrategy::React)
         );
         assert_eq!(mapped.web_search, Some(true));
     }
@@ -4302,7 +4302,7 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_request_web_search_preference_from_sources_reads_nested_metadata() {
+    fn test_resolve_request_web_search_preference_from_sources_ignores_nested_metadata() {
         let metadata = serde_json::json!({
             "harness": {
                 "preferences": {
@@ -4323,12 +4323,12 @@ mod tests {
                 Some(&metadata),
                 Some(&session_recent_preferences),
             ),
-            Some(true)
+            None
         );
     }
 
     #[test]
-    fn test_resolve_request_web_search_preference_from_sources_falls_back_to_session_runtime() {
+    fn test_resolve_request_web_search_preference_from_sources_ignores_session_runtime() {
         let session_recent_preferences = lime_agent::SessionExecutionRuntimePreferences {
             web_search: true,
             thinking: true,
@@ -4342,7 +4342,7 @@ mod tests {
                 None,
                 Some(&session_recent_preferences),
             ),
-            Some(true)
+            None
         );
     }
 
@@ -4887,18 +4887,18 @@ mod tests {
     }
 
     #[test]
-    fn test_aster_execution_strategy_default_is_auto() {
+    fn test_aster_execution_strategy_default_is_react() {
         assert_eq!(
             AsterExecutionStrategy::default(),
-            AsterExecutionStrategy::Auto
+            AsterExecutionStrategy::React
         );
     }
 
     #[test]
-    fn test_aster_execution_strategy_from_db_value_none_is_auto() {
+    fn test_aster_execution_strategy_from_db_value_none_is_react() {
         assert_eq!(
             AsterExecutionStrategy::from_db_value(None),
-            AsterExecutionStrategy::Auto
+            AsterExecutionStrategy::React
         );
     }
 
@@ -4911,29 +4911,29 @@ mod tests {
     }
 
     #[test]
-    fn test_aster_execution_strategy_from_db_value_unknown_is_auto() {
+    fn test_aster_execution_strategy_from_db_value_unknown_is_react() {
         assert_eq!(
             AsterExecutionStrategy::from_db_value(Some("unknown")),
-            AsterExecutionStrategy::Auto
+            AsterExecutionStrategy::React
         );
     }
 
     #[test]
-    fn test_aster_execution_strategy_auto_defaults_code_orchestrated() {
-        let strategy = AsterExecutionStrategy::Auto.effective_strategy();
-        assert_eq!(strategy, AsterExecutionStrategy::CodeOrchestrated);
-    }
-
-    #[test]
-    fn test_aster_execution_strategy_react_stays_react() {
-        let strategy = AsterExecutionStrategy::React.effective_strategy();
+    fn test_aster_execution_strategy_auto_legacy_db_value_is_react() {
+        let strategy = AsterExecutionStrategy::from_db_value(Some("auto"));
         assert_eq!(strategy, AsterExecutionStrategy::React);
     }
 
     #[test]
-    fn test_aster_execution_strategy_code_orchestrated_stays_code_orchestrated() {
-        let strategy = AsterExecutionStrategy::CodeOrchestrated.effective_strategy();
-        assert_eq!(strategy, AsterExecutionStrategy::CodeOrchestrated);
+    fn test_aster_execution_strategy_react_stays_react() {
+        let strategy = AsterExecutionStrategy::from_db_value(Some("react"));
+        assert_eq!(strategy, AsterExecutionStrategy::React);
+    }
+
+    #[test]
+    fn test_aster_execution_strategy_code_orchestrated_legacy_db_value_is_react() {
+        let strategy = AsterExecutionStrategy::from_db_value(Some("code_orchestrated"));
+        assert_eq!(strategy, AsterExecutionStrategy::React);
     }
 
     #[test]
@@ -7389,8 +7389,7 @@ mod tests {
             &[
                 "let persisted_strategy =",
                 "let requested_strategy = request.execution_strategy.unwrap_or(persisted_strategy);",
-                "let effective_strategy = requested_strategy.effective_strategy();",
-                "apply_code_orchestrated_runtime_defaults(request, effective_strategy);",
+                "let effective_strategy = requested_strategy;",
             ],
         );
 
@@ -7661,7 +7660,7 @@ mod tests {
                 "执行策略不应再通过用户消息文本或环境 hint 词表分流: {forbidden}"
             );
         }
-        assert!(preparation_source.contains("let effective_strategy = requested_strategy.effective_strategy();"));
+        assert!(preparation_source.contains("let effective_strategy = requested_strategy;"));
         assert!(
             !preparation_source.contains("effective_for_message(&request.message)"),
             "自然语言编程底座应由结构化 execution_strategy 归一化决定，而不是解析用户消息文本"
@@ -7971,34 +7970,6 @@ mod tests {
             saved_content.get("markdown_relative_path"),
             Some(&serde_json::json!("saved/x-article-export/article.md"))
         );
-    }
-
-    #[test]
-    fn test_should_fallback_to_react_from_code_orchestrated_when_no_event_emitted() {
-        let error = ReplyAttemptError {
-            message: "Stream error: timeout".to_string(),
-            emitted_any: false,
-        };
-        assert!(should_fallback_to_react_from_code_orchestrated(&error));
-    }
-
-    #[test]
-    fn test_should_fallback_to_react_from_code_orchestrated_when_unknown_subscript() {
-        let error = ReplyAttemptError {
-            message: "Agent provider execution failed: Unknown subscript 'web_scraping'"
-                .to_string(),
-            emitted_any: true,
-        };
-        assert!(should_fallback_to_react_from_code_orchestrated(&error));
-    }
-
-    #[test]
-    fn test_should_not_fallback_to_react_from_code_orchestrated_for_general_error() {
-        let error = ReplyAttemptError {
-            message: "Agent provider execution failed: quota exceeded".to_string(),
-            emitted_any: true,
-        };
-        assert!(!should_fallback_to_react_from_code_orchestrated(&error));
     }
 
     #[test]

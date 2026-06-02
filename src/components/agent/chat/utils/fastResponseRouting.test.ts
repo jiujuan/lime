@@ -90,15 +90,31 @@ describe("resolveAgentFastResponseRouting", () => {
     const decision = resolveAgentFastResponseRouting({
       ...baseOptions,
       effectiveWebSearch: true,
-      toolPreferences: {
-        ...baseOptions.toolPreferences,
-        webSearch: true,
-      },
       sourceText: "请搜索最新 AI 新闻，并用一句话回答",
     });
 
     expect(decision.enabled).toBe(true);
     expect(decision.searchMode).toBe("allowed");
+  });
+
+  it("普通时效新闻整理不应被前端快速响应改成无工具短路径", () => {
+    const decision = resolveAgentFastResponseRouting({
+      ...baseOptions,
+      sourceText: "整理今天的国际新闻",
+    });
+
+    expect(decision.enabled).toBe(false);
+    expect(decision.reason).toBe("not-lightweight-text");
+  });
+
+  it("普通代码修复请求不应靠短文本进入快速响应", () => {
+    const decision = resolveAgentFastResponseRouting({
+      ...baseOptions,
+      sourceText: "请修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
+    });
+
+    expect(decision.enabled).toBe(false);
+    expect(decision.reason).toBe("not-lightweight-text");
   });
 
   it("只有显式 required 搜索模式才应禁用快速响应", () => {
@@ -107,7 +123,7 @@ describe("resolveAgentFastResponseRouting", () => {
         ...baseOptions,
         effectiveWebSearch: true,
         searchMode: "required",
-        sourceText: "查一下今天的汇率",
+        sourceText: "查一下今天的汇率，并用一句话回答",
       }).reason,
     ).toBe("heavy-capability-enabled");
 
@@ -115,7 +131,6 @@ describe("resolveAgentFastResponseRouting", () => {
       resolveAgentFastResponseSearchMode({
         searchMode: "required",
         effectiveWebSearch: true,
-        toolPreferences: baseOptions.toolPreferences,
       }),
     ).toBe("required");
   });

@@ -1,4 +1,5 @@
 import type { Message } from "../types";
+import type { Topic } from "./agentChatShared";
 
 type AutoTitleMessage = Pick<Message, "role" | "content">;
 
@@ -77,4 +78,33 @@ export function buildAutoTitleConversationText(
     .map((message) => `${message.role}：${message.content}`)
     .join("\n")
     .slice(-1000);
+}
+
+export function applyGeneratedAutoTitleToTopics(
+  topics: Topic[],
+  sessionId: string,
+  generatedTitle: string | null | undefined,
+): Topic[] {
+  const normalizedTitle = generatedTitle?.trim();
+  if (!sessionId || !normalizedTitle) {
+    return topics;
+  }
+
+  let changed = false;
+  const nextTopics = topics.map((topic) => {
+    if (topic.id !== sessionId) {
+      return topic;
+    }
+    if (topic.title === normalizedTitle) {
+      return topic;
+    }
+
+    changed = true;
+    return {
+      ...topic,
+      title: normalizedTitle,
+    };
+  });
+
+  return changed ? nextTopics : topics;
 }

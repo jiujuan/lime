@@ -31,6 +31,8 @@ const COMPACT_PROVIDER_BROKER_TOOL_NAMES: &[&str] = &[
     "Edit",
     "Write",
     "Agent",
+    "WebSearch",
+    "WebFetch",
     "StructuredOutput",
 ];
 const PROHIBITED_PROVIDER_TOOL_NAMES: &[&str] = &["TeamCreate", "TeamDelete"];

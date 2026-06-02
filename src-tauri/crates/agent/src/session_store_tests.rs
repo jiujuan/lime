@@ -66,13 +66,13 @@ fn insert_test_workspace(db: &DbConnection, workspace_id: &str, root_path: &str)
 }
 
 #[test]
-fn create_session_record_sync_without_strategy_should_default_to_auto() {
+fn create_session_record_sync_without_strategy_should_default_to_react() {
     let db = create_test_db();
 
     let session = create_session_record_sync(
         &db,
         CreateSessionRecordInput {
-            session_id: Some("session-default-auto".to_string()),
+            session_id: Some("session-default-react".to_string()),
             title: Some("默认编程底座".to_string()),
             model: Some("agent:test".to_string()),
             ..CreateSessionRecordInput::default()
@@ -80,7 +80,7 @@ fn create_session_record_sync_without_strategy_should_default_to_auto() {
     )
     .expect("create session");
 
-    assert_eq!(session.execution_strategy.as_deref(), Some("auto"));
+    assert_eq!(session.execution_strategy.as_deref(), Some("react"));
 }
 
 fn build_detail_with_turn_status(status: AgentThreadTurnStatus) -> SessionDetail {

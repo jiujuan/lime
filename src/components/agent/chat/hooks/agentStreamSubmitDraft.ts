@@ -29,7 +29,6 @@ export function buildQueuedMessagePreview(content: string): string {
 export function buildQueuedRuntimeStatus(
   executionStrategy: AsterExecutionStrategy,
   content: string,
-  webSearch?: boolean,
 ) {
   return {
     phase: "routing" as const,
@@ -37,12 +36,8 @@ export function buildQueuedRuntimeStatus(
     detail: `当前会话仍在执行中，本条消息会在前一条完成后自动开始。待处理内容：${buildQueuedMessagePreview(content)}`,
     checkpoints: [
       "已创建待处理阶段",
-      webSearch ? "联网搜索能力待命" : "直接回答优先",
-      executionStrategy === "code_orchestrated"
-        ? "代码编排待命"
-        : executionStrategy === "react"
-          ? "对话执行待命"
-          : "自动路由待命",
+      "工具由模型按需判断",
+      "对话执行待命",
     ],
     metadata: buildDiagnosticsRuntimeStatusMetadata(),
   };
@@ -61,8 +56,6 @@ interface PrepareAgentStreamSubmitDraftOptions {
   messagePurpose?: Message["purpose"];
   capabilityRoute?: InputCapabilitySendRoute;
   effectiveExecutionStrategy: AsterExecutionStrategy;
-  webSearch?: boolean;
-  thinking?: boolean;
   setMessages: Dispatch<SetStateAction<Message[]>>;
   setIsSending: Dispatch<SetStateAction<boolean>>;
 }
@@ -83,8 +76,6 @@ export function prepareAgentStreamSubmitDraft(
     messagePurpose,
     capabilityRoute,
     effectiveExecutionStrategy,
-    webSearch,
-    thinking,
     setMessages,
     setIsSending,
   } = options;
@@ -100,13 +91,10 @@ export function prepareAgentStreamSubmitDraft(
       ? buildQueuedRuntimeStatus(
           effectiveExecutionStrategy,
           displayContent ?? content,
-          webSearch,
         )
       : assistantDraft?.initialRuntimeStatus ||
         buildInitialAgentRuntimeStatus({
           executionStrategy: effectiveExecutionStrategy,
-          webSearch,
-          thinking,
           skipUserMessage,
         }),
     purpose: messagePurpose,

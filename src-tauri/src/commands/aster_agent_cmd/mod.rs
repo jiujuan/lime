@@ -119,7 +119,7 @@ use lime_services::mcp_service::McpService;
 use lime_services::video_generation_service::{
     CreateVideoGenerationRequest, VideoGenerationService,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -130,7 +130,6 @@ use uuid::Uuid;
 
 const DEFAULT_BASH_TIMEOUT_SECS: u64 = 300;
 const MAX_BASH_TIMEOUT_SECS: u64 = 1800;
-const CODE_EXECUTION_EXTENSION_NAME: &str = "code_execution";
 const WORKSPACE_SANDBOX_ENABLED_ENV_KEYS: &[&str] = &[
     "LIME_WORKSPACE_SANDBOX_ENABLED",
     "PROXYCAST_WORKSPACE_SANDBOX_ENABLED",
@@ -515,8 +514,7 @@ pub(crate) use provider_runtime_strategy::{
 };
 use reply_runtime::{
     build_turn_runtime_statuses, complete_runtime_status_projection,
-    emit_runtime_status_with_projection, ensure_code_execution_extension_enabled,
-    should_fallback_to_react_from_code_orchestrated, should_project_runtime_status_to_timeline,
+    emit_runtime_status_with_projection, should_project_runtime_status_to_timeline,
 };
 pub(crate) use report_skill_launch::{
     append_report_skill_launch_session_permissions, merge_system_prompt_with_report_skill_launch,
@@ -565,8 +563,8 @@ pub(crate) use session_runtime::create_runtime_session_internal_with_runtime_and
 pub(crate) use session_runtime::{
     persist_session_provider_routing, resolve_recent_preference_from_sources,
     resolve_session_provider_selector, resolve_session_recent_harness_context,
-    resolve_session_recent_preferences, resolve_session_recent_runtime_context,
-    SessionRecentHarnessContext, SessionRecentRuntimeContext,
+    resolve_session_recent_runtime_context, SessionRecentHarnessContext,
+    SessionRecentRuntimeContext,
 };
 pub(crate) use site_search_skill_launch::{
     append_site_search_skill_launch_session_permissions,
@@ -812,38 +810,33 @@ pub async fn resume_persisted_runtime_queues_on_startup(
 }
 
 /// Agent 执行策略
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[derive(Default)]
 pub enum AsterExecutionStrategy {
-    React,
-    CodeOrchestrated,
     #[default]
-    Auto,
+    React,
 }
 
 impl AsterExecutionStrategy {
     fn as_db_value(self) -> &'static str {
         match self {
             Self::React => "react",
-            Self::CodeOrchestrated => "code_orchestrated",
-            Self::Auto => "auto",
         }
     }
 
     fn from_db_value(value: Option<&str>) -> Self {
-        match value {
-            Some("react") => Self::React,
-            Some("code_orchestrated") => Self::CodeOrchestrated,
-            Some("auto") => Self::Auto,
-            _ => Self::Auto,
-        }
+        let _ = value;
+        Self::React
     }
+}
 
-    fn effective_strategy(self) -> Self {
-        match self {
-            Self::Auto => Self::CodeOrchestrated,
-            _ => self,
-        }
+impl<'de> Deserialize<'de> for AsterExecutionStrategy {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::from_db_value(Some(value.as_str())))
     }
 }

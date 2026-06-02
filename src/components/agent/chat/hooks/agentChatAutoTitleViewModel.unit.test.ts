@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyGeneratedAutoTitleToTopics,
   buildAutoTitleConversationText,
   hasUserTextMessage,
   isAutoTitlePlaceholder,
   isPreviewDerivedTitle,
   shouldGenerateAutoTitle,
 } from "./agentChatAutoTitleViewModel";
+import type { Topic } from "./agentChatShared";
 
 describe("agentChatAutoTitleViewModel", () => {
   it("应识别自动标题占位标题", () => {
@@ -147,4 +149,57 @@ describe("agentChatAutoTitleViewModel", () => {
     expect(conversationText).toContain("assistant：我会继续处理。");
     expect(conversationText).not.toContain("user：   ");
   });
+
+  it("应把生成标题回填到目标 topic 且保留其他 topic 引用", () => {
+    const targetTopic = createTopic("session-1", "新任务");
+    const otherTopic = createTopic("session-2", "已有标题");
+    const topics = [targetTopic, otherTopic];
+
+    const result = applyGeneratedAutoTitleToTopics(
+      topics,
+      "session-1",
+      "  支付页错误定位  ",
+    );
+
+    expect(result).not.toBe(topics);
+    expect(result[0]).toEqual({
+      ...targetTopic,
+      title: "支付页错误定位",
+    });
+    expect(result[1]).toBe(otherTopic);
+  });
+
+  it("生成标题为空、未命中或标题未变化时应复用原 topics", () => {
+    const topics = [
+      createTopic("session-1", "支付页错误定位"),
+      createTopic("session-2", "已有标题"),
+    ];
+
+    expect(applyGeneratedAutoTitleToTopics(topics, "session-1", "   ")).toBe(
+      topics,
+    );
+    expect(
+      applyGeneratedAutoTitleToTopics(topics, "missing-session", "新标题"),
+    ).toBe(topics);
+    expect(
+      applyGeneratedAutoTitleToTopics(topics, "session-1", "支付页错误定位"),
+    ).toBe(topics);
+  });
 });
+
+function createTopic(id: string, title: string): Topic {
+  return {
+    id,
+    title,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    messagesCount: 0,
+    executionStrategy: "react",
+    status: "draft",
+    lastPreview: "",
+    isPinned: false,
+    hasUnread: false,
+    tag: null,
+    sourceSessionId: id,
+  };
+}

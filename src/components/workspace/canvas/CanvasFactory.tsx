@@ -76,10 +76,6 @@ interface CanvasFactoryProps {
   autoContinueModel?: string;
   /** 自动续写模型切换 */
   onAutoContinueModelChange?: (model: string) => void;
-  /** 自动续写同步的思考开关 */
-  autoContinueThinkingEnabled?: boolean;
-  /** 自动续写思考开关切换 */
-  onAutoContinueThinkingEnabledChange?: (enabled: boolean) => void;
   /** 自动续写执行回调 */
   onAutoContinueRun?: (payload: AutoContinueRunPayload) => Promise<void> | void;
   /** 添加图片动作 */
@@ -129,8 +125,6 @@ export const CanvasFactory: React.FC<CanvasFactoryProps> = memo(
     onAutoContinueProviderTypeChange,
     autoContinueModel,
     onAutoContinueModelChange,
-    autoContinueThinkingEnabled,
-    onAutoContinueThinkingEnabledChange,
     onAutoContinueRun,
     onAddImage,
     onImportDocument,
@@ -168,10 +162,6 @@ export const CanvasFactory: React.FC<CanvasFactoryProps> = memo(
           onAutoContinueProviderTypeChange={onAutoContinueProviderTypeChange}
           autoContinueModel={autoContinueModel}
           onAutoContinueModelChange={onAutoContinueModelChange}
-          autoContinueThinkingEnabled={autoContinueThinkingEnabled}
-          onAutoContinueThinkingEnabledChange={
-            onAutoContinueThinkingEnabledChange
-          }
           onAutoContinueRun={onAutoContinueRun}
           onAddImage={onAddImage}
           onImportDocument={onImportDocument}

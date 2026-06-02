@@ -136,10 +136,10 @@ pub(crate) use runtime_turn_queue::{build_queued_turn_task, build_runtime_queue_
 use runtime_turn_request_metadata::should_skip_artifact_document_autopersist;
 #[cfg(test)]
 use runtime_turn_request_metadata::{
-    apply_code_orchestrated_runtime_defaults, backfill_runtime_access_policies,
-    merge_runtime_turn_default_tool_surface_metadata, merge_runtime_turn_tool_surface_metadata,
-    normalize_runtime_turn_request_metadata, resolve_fast_chat_tool_surface_mode,
-    resolve_mcp_prewarm_skip_reason, resolve_turn_execution_profile, should_prewarm_mcp_runtime,
+    backfill_runtime_access_policies, merge_runtime_turn_default_tool_surface_metadata,
+    merge_runtime_turn_tool_surface_metadata, normalize_runtime_turn_request_metadata,
+    resolve_fast_chat_tool_surface_mode, resolve_mcp_prewarm_skip_reason,
+    resolve_turn_execution_profile, should_prewarm_mcp_runtime,
 };
 #[allow(unused_imports)]
 pub(crate) use runtime_turn_request_metadata::{

@@ -24,8 +24,6 @@ interface ResolveAgentStreamSubmitContextOptions {
     sessionId: string,
   ) => AsterExecutionStrategy | null;
   effectiveExecutionStrategy: AsterExecutionStrategy;
-  webSearch?: boolean;
-  thinking?: boolean;
   assistantDraft?: AssistantDraftState;
   expectingQueue: boolean;
   skipSessionRestore?: boolean;
@@ -47,8 +45,6 @@ export async function resolveAgentStreamSubmitContext(
     getSyncedSessionRecentPreferences,
     getSyncedSessionExecutionStrategy,
     effectiveExecutionStrategy,
-    webSearch,
-    thinking,
     assistantDraft,
     expectingQueue,
     skipSessionRestore,
@@ -109,8 +105,6 @@ export async function resolveAgentStreamSubmitContext(
     getSyncedSessionExecutionStrategy(activeSessionId);
   const waitingRuntimeStatus = buildWaitingAgentRuntimeStatus({
     executionStrategy: effectiveExecutionStrategy,
-    webSearch,
-    thinking,
   });
   const effectiveWaitingRuntimeStatus =
     assistantDraft?.waitingRuntimeStatus || waitingRuntimeStatus;

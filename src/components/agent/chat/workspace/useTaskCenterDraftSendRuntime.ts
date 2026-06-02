@@ -218,8 +218,8 @@ export function useTaskCenterDraftSendDispatchRuntime({
         };
         const sendPromise = sendRef.current(
           request.images,
-          request.webSearch,
-          request.thinking,
+          undefined,
+          undefined,
           request.text,
           request.sendExecutionStrategy,
           undefined,

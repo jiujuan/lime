@@ -30,7 +30,7 @@ describe("chatToolPreferences", () => {
     );
   });
 
-  it("非通用主题仍可回退 legacy 全局偏好", () => {
+  it("非通用主题回退 legacy 全局偏好时也应忽略搜索与思考旧开关", () => {
     localStorage.setItem(
       "lime.chat.tool_preferences.v1",
       JSON.stringify({
@@ -42,14 +42,14 @@ describe("chatToolPreferences", () => {
     );
 
     expect(loadChatToolPreferences("custom-theme")).toEqual({
-      webSearch: true,
-      thinking: true,
+      webSearch: false,
+      thinking: false,
       task: true,
       subagent: true,
     });
   });
 
-  it("应按主题作用域保存偏好", () => {
+  it("应按主题作用域保存偏好，但不恢复搜索与思考旧开关", () => {
     saveChatToolPreferences(
       { webSearch: true, thinking: false, task: true, subagent: false },
       "general",
@@ -60,14 +60,14 @@ describe("chatToolPreferences", () => {
     );
 
     expect(loadChatToolPreferences("general")).toEqual({
-      webSearch: true,
+      webSearch: false,
       thinking: false,
       task: true,
       subagent: false,
     });
     expect(loadChatToolPreferences("custom-theme")).toEqual({
       webSearch: false,
-      thinking: true,
+      thinking: false,
       task: false,
       subagent: true,
     });
@@ -76,7 +76,7 @@ describe("chatToolPreferences", () => {
     );
   });
 
-  it("通用首轮仅开启联网搜索时仍应使用紧凑 Prompt", () => {
+  it("通用首轮旧搜索与思考开关不应影响紧凑 Prompt", () => {
     expect(
       shouldUseCompactGeneralPromptForPreferences({
         chatMode: "general",
@@ -101,10 +101,10 @@ describe("chatToolPreferences", () => {
           subagent: false,
         },
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
-  it("code_orchestrated 应同步打开任务与子代理偏好，避免界面状态落后于编程底座", () => {
+  it("legacy code_orchestrated 不应再自动打开任务与子代理偏好", () => {
     expect(
       alignChatToolPreferencesWithExecutionStrategy(
         {
@@ -113,17 +113,17 @@ describe("chatToolPreferences", () => {
           task: false,
           subagent: false,
         },
-        "code_orchestrated",
+        "code_orchestrated" as never,
       ),
     ).toEqual({
       webSearch: false,
       thinking: false,
-      task: true,
-      subagent: true,
+      task: false,
+      subagent: false,
     });
   });
 
-  it("退出 code_orchestrated 时应关闭任务但保留用户手动子代理偏好", () => {
+  it("策略变化不应覆盖用户手动任务与子代理偏好", () => {
     expect(
       alignChatToolPreferencesWithExecutionStrategy(
         {
@@ -137,7 +137,7 @@ describe("chatToolPreferences", () => {
     ).toEqual({
       webSearch: true,
       thinking: true,
-      task: false,
+      task: true,
       subagent: true,
     });
   });

@@ -18,6 +18,7 @@ import {
   findCuratedTaskTemplateById,
   resolveCuratedTaskTemplateLaunchPrefill,
 } from "../../utils/curatedTaskTemplates";
+import type { InputbarSendPayload } from "./inputbarSendPayload";
 
 const mockCharacterMention = vi.fn<
   (props: {
@@ -55,16 +56,6 @@ const mockInputbarCore = vi.fn(
     <div data-testid="inputbar-core">
       {props.showMetaTools ? (
         <>
-          <button
-            type="button"
-            data-testid="toggle-web-search"
-            onClick={() => props.onToolClick?.("web_search")}
-          >
-            切换联网
-          </button>
-          <span data-testid="web-search-state">
-            {props.activeTools?.web_search ? "on" : "off"}
-          </span>
           <button
             type="button"
             data-testid="toggle-subagent-mode"
@@ -541,7 +532,6 @@ function renderInputbar(
     isLoading: false,
     characters: [],
     skills: [],
-    executionStrategy: "react",
   };
 
   const render = (
@@ -559,6 +549,20 @@ function renderInputbar(
     container,
     rerender: render,
   };
+}
+
+function expectInputbarSend(
+  onSend: ReturnType<typeof vi.fn>,
+  payload: Pick<
+    InputbarSendPayload,
+    "images" | "textOverride" | "sendOptions"
+  > = {},
+) {
+  expect(onSend).toHaveBeenCalledWith({
+    images: payload.images,
+    textOverride: payload.textOverride,
+    sendOptions: payload.sendOptions,
+  });
 }
 
 function expandAdvancedControls(container: HTMLDivElement) {
@@ -921,14 +925,8 @@ describe("Inputbar", () => {
     });
 
     expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      undefined,
-      "react",
-      undefined,
-      {
+    expectInputbarSend(onSend, {
+      sendOptions: {
         capabilityRoute: {
           kind: "installed_skill",
           skillKey: "writer",
@@ -936,7 +934,7 @@ describe("Inputbar", () => {
         },
         displayContent: "整理最近发布计划",
       },
-    );
+    });
   });
 
   it("选择本地安装技能发送时，应把 local:* key 归一到目录 slash key", async () => {
@@ -982,14 +980,8 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      undefined,
-      "react",
-      undefined,
-      {
+    expectInputbarSend(onSend, {
+      sendOptions: {
         capabilityRoute: {
           kind: "installed_skill",
           skillKey: "writer",
@@ -997,7 +989,7 @@ describe("Inputbar", () => {
         },
         displayContent: "整理最近发布计划",
       },
-    );
+    });
   });
 
   it("仅添加路径引用时应允许发送并写入 request metadata", async () => {
@@ -1030,14 +1022,9 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      "请查看这些文件或文件夹。",
-      "react",
-      undefined,
-      {
+    expectInputbarSend(onSend, {
+      textOverride: "请查看这些文件或文件夹。",
+      sendOptions: {
         requestMetadata: {
           path_references: [
             {
@@ -1079,7 +1066,7 @@ describe("Inputbar", () => {
           },
         },
       },
-    );
+    });
   });
 
   it("无法读取系统文件路径时应按 en-US 资源提示", async () => {
@@ -1226,14 +1213,8 @@ describe("Inputbar", () => {
     });
 
     expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      undefined,
-      "react",
-      undefined,
-      {
+    expectInputbarSend(onSend, {
+      sendOptions: {
         capabilityRoute: {
           kind: "installed_skill",
           skillKey: "writer",
@@ -1241,7 +1222,7 @@ describe("Inputbar", () => {
         },
         displayContent: "整理最近发布计划",
       },
-    );
+    });
   });
 
   it("选择结果模板发送时，应透传 curated_task capability route", async () => {
@@ -1319,14 +1300,8 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      undefined,
-      "react",
-      undefined,
-      expect.objectContaining({
+    expectInputbarSend(onSend, {
+      sendOptions: expect.objectContaining({
         capabilityRoute: {
           kind: "curated_task",
           taskId: "social-post-starter",
@@ -1345,7 +1320,7 @@ describe("Inputbar", () => {
           },
         },
       }),
-    );
+    });
   });
 
   it("Generate 内发送 curated_task 后，应把最新启动事实写回 recent usage", async () => {
@@ -1604,14 +1579,8 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      undefined,
-      "react",
-      undefined,
-      expect.objectContaining({
+    expectInputbarSend(onSend, {
+      sendOptions: expect.objectContaining({
         capabilityRoute: {
           kind: "curated_task",
           taskId: "daily-trend-briefing",
@@ -1630,7 +1599,7 @@ describe("Inputbar", () => {
           },
         },
       }),
-    );
+    });
   });
 
   it("输入条已激活结果模板时，应把 projectId/sessionId 透传给 badge 和编辑态 launcher", async () => {
@@ -1805,14 +1774,8 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      undefined,
-      "react",
-      undefined,
-      expect.objectContaining({
+    expectInputbarSend(onSend, {
+      sendOptions: expect.objectContaining({
         capabilityRoute: expect.objectContaining({
           kind: "curated_task",
           taskId: "account-project-review",
@@ -1821,7 +1784,7 @@ describe("Inputbar", () => {
         }),
         displayContent: expectedPrompt,
       }),
-    );
+    });
   });
 
   it("输入条编辑态 launcher 按最近判断切模板时，应保留参考选择并显示 en-US 提示", async () => {
@@ -2025,14 +1988,8 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      undefined,
-      "react",
-      undefined,
-      expect.objectContaining({
+    expectInputbarSend(onSend, {
+      sendOptions: expect.objectContaining({
         capabilityRoute: expect.objectContaining({
           kind: "curated_task",
           taskId: "daily-trend-briefing",
@@ -2055,7 +2012,7 @@ describe("Inputbar", () => {
           },
         },
       }),
-    );
+    });
   });
 
   it("已激活结果模板后重新编辑启动信息时，应更新输入与 curated_task route", async () => {
@@ -2182,14 +2139,8 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      undefined,
-      "react",
-      undefined,
-      expect.objectContaining({
+    expectInputbarSend(onSend, {
+      sendOptions: expect.objectContaining({
         capabilityRoute: {
           kind: "curated_task",
           taskId: "daily-trend-briefing",
@@ -2207,7 +2158,7 @@ describe("Inputbar", () => {
           },
         },
       }),
-    );
+    });
   });
 
   it("选择内建命令发送时，应透传 capability route 与原始显示文案", async () => {
@@ -2254,14 +2205,8 @@ describe("Inputbar", () => {
     });
 
     expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      undefined,
-      "react",
-      undefined,
-      {
+    expectInputbarSend(onSend, {
+      sendOptions: {
         capabilityRoute: {
           kind: "builtin_command",
           commandKey: "research",
@@ -2269,7 +2214,7 @@ describe("Inputbar", () => {
         },
         displayContent: "整理最近发布计划",
       },
-    );
+    });
   });
 
   it("选择运行时场景发送时，应透传 runtime scene route 与原始显示文案", async () => {
@@ -2319,14 +2264,8 @@ describe("Inputbar", () => {
     });
 
     expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      undefined,
-      "react",
-      undefined,
-      {
+    expectInputbarSend(onSend, {
+      sendOptions: {
         capabilityRoute: {
           kind: "runtime_scene",
           sceneKey: "campaign-launch",
@@ -2334,7 +2273,7 @@ describe("Inputbar", () => {
         },
         displayContent: "帮我做一版新品活动启动方案",
       },
-    );
+    });
   });
 
   it("先选内建命令再切到运行时场景时，不应继续残留旧命令 route", async () => {
@@ -2401,14 +2340,8 @@ describe("Inputbar", () => {
     });
 
     expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      undefined,
-      "react",
-      undefined,
-      {
+    expectInputbarSend(onSend, {
+      sendOptions: {
         capabilityRoute: {
           kind: "runtime_scene",
           sceneKey: "campaign-launch",
@@ -2416,7 +2349,7 @@ describe("Inputbar", () => {
         },
         displayContent: "帮我做一版新品活动启动方案",
       },
-    );
+    });
   });
 
   it("先选内建命令再切到服务技能入口时，不应继续残留旧命令前缀", async () => {
@@ -2486,15 +2419,7 @@ describe("Inputbar", () => {
     });
 
     expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      undefined,
-      "react",
-      undefined,
-      undefined,
-    );
+    expectInputbarSend(onSend);
   });
 
   it("应把任务文件与额外浮层控件放进同一条输入栏 overlay row", async () => {
@@ -2648,12 +2573,9 @@ describe("Inputbar", () => {
     expect(container.textContent).not.toContain("Native schema");
   });
 
-  it("应在高级设置中渲染编程执行开关与权限模式，并透传对应回调", async () => {
-    const setExecutionStrategy = vi.fn();
+  it("高级设置只保留权限模式，不再渲染编程执行前置开关", async () => {
     const setAccessMode = vi.fn();
     const { container } = renderInputbar({
-      executionStrategy: "react",
-      setExecutionStrategy,
       accessMode: "current",
       setAccessMode,
     });
@@ -2676,29 +2598,22 @@ describe("Inputbar", () => {
       'select[aria-label="权限模式"]',
     ) as HTMLSelectElement | null;
 
-    expect(planToggle).toBeTruthy();
+    expect(planToggle).toBeNull();
     expect(accessSelect).toBeTruthy();
-    expect(planToggle?.textContent).toContain("编程执行");
-    expect(planToggle?.getAttribute("aria-label")).toBe("开启编程执行");
-    expect(planToggle?.getAttribute("title")).toBe("开启编程执行");
     expect(container.querySelector('select[aria-label="执行模式"]')).toBeNull();
+    expect(container.textContent).not.toContain("编程执行");
 
     act(() => {
-      planToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       accessSelect!.value = "full-access";
       accessSelect?.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
-    expect(setExecutionStrategy).toHaveBeenCalledWith("code_orchestrated");
     expect(setAccessMode).toHaveBeenCalledWith("full-access");
   });
 
-  it("高级设置编程执行开关文案应跟随 en-US 资源", async () => {
+  it("高级设置 en-US 也不再渲染编程执行前置开关", async () => {
     await changeLimeLocale("en-US");
-    const setExecutionStrategy = vi.fn();
     const { container } = renderInputbar({
-      executionStrategy: "react",
-      setExecutionStrategy,
       accessMode: "current",
       setAccessMode: vi.fn(),
     });
@@ -2713,16 +2628,12 @@ describe("Inputbar", () => {
       '[data-testid="inputbar-plan-toggle"]',
     ) as HTMLButtonElement | null;
 
-    expect(planToggle).toBeTruthy();
-    expect(planToggle?.textContent).toContain("Code");
-    expect(planToggle?.textContent).not.toContain("编程执行");
-    expect(planToggle?.getAttribute("aria-label")).toBe(
-      "Turn on coding execution",
-    );
-    expect(planToggle?.getAttribute("title")).toBe("Turn on coding execution");
+    expect(planToggle).toBeNull();
+    expect(container.textContent).not.toContain("Code");
+    expect(container.textContent).not.toContain("coding execution");
   });
 
-  it("受控模式下点击联网搜索应透传状态变更", async () => {
+  it("受控模式下不再渲染联网搜索前置开关", async () => {
     const onToolStatesChange = vi.fn();
     const container = document.createElement("div");
     document.body.appendChild(container);
@@ -2737,7 +2648,7 @@ describe("Inputbar", () => {
           isLoading={false}
           characters={[]}
           skills={[]}
-          toolStates={{ webSearch: false, thinking: false }}
+          toolStates={{ subagent: false }}
           onToolStatesChange={onToolStatesChange}
         />,
       );
@@ -2757,26 +2668,17 @@ describe("Inputbar", () => {
     const toggleButton = container.querySelector(
       '[data-testid="toggle-web-search"]',
     ) as HTMLButtonElement | null;
-    expect(toggleButton).toBeTruthy();
-
-    act(() => {
-      toggleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(onToolStatesChange).toHaveBeenCalledWith({
-      webSearch: true,
-      thinking: false,
-      subagent: false,
-    });
-    expect(toast.info).toHaveBeenCalledWith("联网搜索已开启");
+    expect(toggleButton).toBeNull();
+    expect(onToolStatesChange).not.toHaveBeenCalled();
+    expect(toast.info).not.toHaveBeenCalledWith("联网搜索已开启");
   });
 
-  it("工具开关 toast 应跟随 en-US 资源", async () => {
+  it("en-US 下也不再渲染联网搜索前置开关", async () => {
     await changeLimeLocale("en-US");
     const onToolStatesChange = vi.fn();
     const { container } = renderInputbar({
       input: "please search the web",
-      toolStates: { webSearch: false, thinking: false, subagent: false },
+      toolStates: { subagent: false },
       onToolStatesChange,
     });
 
@@ -2789,91 +2691,34 @@ describe("Inputbar", () => {
     const toggleButton = container.querySelector(
       '[data-testid="toggle-web-search"]',
     ) as HTMLButtonElement | null;
-    expect(toggleButton).toBeTruthy();
-
-    act(() => {
-      toggleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(onToolStatesChange).toHaveBeenCalledWith({
-      webSearch: true,
-      thinking: false,
-      subagent: false,
-    });
-    expect(toast.info).toHaveBeenCalledWith("Web search is on");
+    expect(toggleButton).toBeNull();
+    expect(onToolStatesChange).not.toHaveBeenCalled();
+    expect(toast.info).not.toHaveBeenCalledWith("Web search is on");
   });
 
-  it("联网搜索不应覆盖 auto / code_orchestrated 执行策略", async () => {
-    const renderAndSendWithStrategy = async (
-      executionStrategy: "react" | "code_orchestrated" | "auto",
-      input: string,
-    ) => {
-      const onSend = vi.fn().mockResolvedValue(true);
-      const { container } = renderInputbar({
-        input,
-        onSend,
-        executionStrategy,
-        toolStates: { webSearch: true, thinking: false, subagent: false },
-      });
+  it("移除执行策略选择后普通发送不再提交 execution strategy", async () => {
+    const onSend = vi.fn().mockResolvedValue(true);
+    const { container } = renderInputbar({
+      input: "请联网检查这个依赖变更并修复编译错误",
+      onSend,
+      toolStates: { subagent: false },
+    });
 
-      await act(async () => {
-        await Promise.resolve();
-      });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
-      const sendButton = container.querySelector(
-        '[data-testid="send-btn"]',
-      ) as HTMLButtonElement | null;
-      expect(sendButton).toBeTruthy();
+    const sendButton = container.querySelector(
+      '[data-testid="send-btn"]',
+    ) as HTMLButtonElement | null;
+    expect(sendButton).toBeTruthy();
 
-      await act(async () => {
-        sendButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        await Promise.resolve();
-      });
+    await act(async () => {
+      sendButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
 
-      return onSend;
-    };
-
-    const autoSend = await renderAndSendWithStrategy(
-      "auto",
-      "请联网检查这个依赖变更并修复编译错误",
-    );
-    const codeSend = await renderAndSendWithStrategy(
-      "code_orchestrated",
-      "请联网确认 API 变更并补回归测试",
-    );
-    const reactSend = await renderAndSendWithStrategy(
-      "react",
-      "请联网找一段资料",
-    );
-
-    expect(autoSend).toHaveBeenCalledWith(
-      undefined,
-      true,
-      false,
-      undefined,
-      "auto",
-      undefined,
-      undefined,
-    );
-    expect(codeSend).toHaveBeenCalledWith(
-      undefined,
-      true,
-      false,
-      undefined,
-      "code_orchestrated",
-      undefined,
-      undefined,
-    );
-
-    expect(reactSend).toHaveBeenCalledWith(
-      undefined,
-      true,
-      false,
-      undefined,
-      "react",
-      undefined,
-      undefined,
-    );
+    expectInputbarSend(onSend);
   });
 
   it("通用聊天态复杂任务应显示任务分工建议并支持开启多代理", async () => {
@@ -2882,11 +2727,7 @@ describe("Inputbar", () => {
       input:
         "请拆分这个多代理调试任务，分别分析、实现、验证，再由主线程汇总结论。",
       activeTheme: "general",
-      toolStates: {
-        webSearch: false,
-        thinking: false,
-        subagent: false,
-      },
+      toolStates: { subagent: false },
       onToolStatesChange,
     });
 
@@ -2913,8 +2754,6 @@ describe("Inputbar", () => {
     });
 
     expect(onToolStatesChange).toHaveBeenCalledWith({
-      webSearch: false,
-      thinking: false,
       subagent: true,
     });
   });
@@ -2947,14 +2786,8 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      undefined,
-      "react",
-      undefined,
-      expect.objectContaining({
+    expectInputbarSend(onSend, {
+      sendOptions: expect.objectContaining({
         requestMetadata: {
           knowledge_pack: {
             pack_name: "brand-product-demo",
@@ -2963,7 +2796,7 @@ describe("Inputbar", () => {
           },
         },
       }),
-    );
+    });
   });
 
   it("启用运营资料后发送应携带隐式 persona 协同 pack", async () => {
@@ -3000,14 +2833,8 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      undefined,
-      "react",
-      undefined,
-      expect.objectContaining({
+    expectInputbarSend(onSend, {
+      sendOptions: expect.objectContaining({
         requestMetadata: {
           knowledge_pack: {
             pack_name: "content-calendar",
@@ -3022,7 +2849,7 @@ describe("Inputbar", () => {
           },
         },
       }),
-    );
+    });
   });
 
   it("资料中枢应支持显式追加多份 data 协同资料", async () => {
@@ -3135,14 +2962,8 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      undefined,
-      "react",
-      undefined,
-      expect.objectContaining({
+    expectInputbarSend(onSend, {
+      sendOptions: expect.objectContaining({
         requestMetadata: {
           knowledge_pack: {
             pack_name: "content-calendar",
@@ -3161,7 +2982,7 @@ describe("Inputbar", () => {
           },
         },
       }),
-    );
+    });
   });
 
   it("项目资料控件应在输入框主路径常显并使用用户语言", async () => {
@@ -3497,14 +3318,8 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      undefined,
-      "react",
-      undefined,
-      expect.objectContaining({
+    expectInputbarSend(onSend, {
+      sendOptions: expect.objectContaining({
         requestMetadata: {
           knowledge_pack: {
             pack_name: "org-knowhow-demo",
@@ -3513,7 +3328,7 @@ describe("Inputbar", () => {
           },
         },
       }),
-    );
+    });
   });
 
   it("已有可用资料时仍应提供添加新资料入口", async () => {
@@ -3625,11 +3440,7 @@ describe("Inputbar", () => {
   it("仅在 Team mode 开启时显示 TeamSelector", async () => {
     const { container } = renderInputbar({
       activeTheme: "general",
-      toolStates: {
-        webSearch: false,
-        thinking: false,
-        subagent: false,
-      },
+      toolStates: { subagent: false },
     });
 
     await act(async () => {
@@ -3642,11 +3453,7 @@ describe("Inputbar", () => {
 
     const { container: enabledContainer } = renderInputbar({
       activeTheme: "general",
-      toolStates: {
-        webSearch: false,
-        thinking: false,
-        subagent: true,
-      },
+      toolStates: { subagent: true },
     });
 
     await act(async () => {
@@ -3668,11 +3475,7 @@ describe("Inputbar", () => {
     const onToolStatesChange = vi.fn();
     const { container } = renderInputbar({
       activeTheme: "general",
-      toolStates: {
-        webSearch: false,
-        thinking: false,
-        subagent: false,
-      },
+      toolStates: { subagent: false },
       onToolStatesChange,
     });
 
@@ -3700,8 +3503,6 @@ describe("Inputbar", () => {
     });
 
     expect(onToolStatesChange).toHaveBeenCalledWith({
-      webSearch: false,
-      thinking: false,
       subagent: true,
     });
   });
@@ -3745,11 +3546,7 @@ describe("Inputbar", () => {
     const { container } = renderInputbar({
       activeTheme: "general",
       input: "请把这个跨模块问题拆分成分析、实现、验证三个并行子任务再汇总",
-      toolStates: {
-        webSearch: false,
-        thinking: false,
-        subagent: false,
-      },
+      toolStates: { subagent: false },
     });
 
     await act(async () => {
@@ -3796,15 +3593,7 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      undefined,
-      "react",
-      undefined,
-      undefined,
-    );
+    expectInputbarSend(onSend);
   });
 
   it("社媒主题输入 slash 命令时不应重复注入默认 skill", async () => {
@@ -3830,26 +3619,16 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      undefined,
-      false,
-      false,
-      undefined,
-      "react",
-      undefined,
-      undefined,
-    );
+    expectInputbarSend(onSend);
   });
 
-  it("工作区工作流模式应启用 PRD 浮层输入配置", async () => {
+  it("工作区工作流模式应使用 attach-only 浮动输入配置", async () => {
     renderInputbar({
       variant: "workspace",
       providerType: "openai",
       setProviderType: vi.fn(),
       model: "gpt-4.1",
       setModel: vi.fn(),
-      executionStrategy: "auto",
-      setExecutionStrategy: vi.fn(),
     });
 
     await act(async () => {
@@ -3865,7 +3644,7 @@ describe("Inputbar", () => {
       Object.prototype.hasOwnProperty.call(latestCall, "showTranslate"),
     ).toBe(false);
     expect(latestCall.placeholder).toContain("试着输入任何指令");
-    expect(latestCall.leftExtra).toBeDefined();
+    expect(latestCall.leftExtra).toBeUndefined();
   });
 
   it("已选择 Provider 时不应再将 prompt cache 提示组件常驻挂到输入区顶部", async () => {
@@ -3894,8 +3673,6 @@ describe("Inputbar", () => {
       setProviderType: vi.fn(),
       model: "gpt-4.1",
       setModel: vi.fn(),
-      executionStrategy: "auto",
-      setExecutionStrategy: vi.fn(),
     });
 
     await act(async () => {
@@ -3919,8 +3696,6 @@ describe("Inputbar", () => {
       setProviderType: vi.fn(),
       model: "gpt-4.1",
       setModel: vi.fn(),
-      executionStrategy: "auto",
-      setExecutionStrategy: vi.fn(),
     });
 
     await act(async () => {
@@ -3941,8 +3716,6 @@ describe("Inputbar", () => {
       setProviderType: vi.fn(),
       model: "gpt-4.1",
       setModel: vi.fn(),
-      executionStrategy: "auto",
-      setExecutionStrategy: vi.fn(),
     });
 
     await act(async () => {
@@ -3968,8 +3741,6 @@ describe("Inputbar", () => {
       setProviderType: vi.fn(),
       model: "gpt-4.1",
       setModel: vi.fn(),
-      executionStrategy: "auto",
-      setExecutionStrategy: vi.fn(),
     });
 
     await act(async () => {

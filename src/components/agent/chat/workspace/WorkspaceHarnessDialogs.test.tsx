@@ -69,7 +69,7 @@ function renderDialog(
         executionRuntime={{
           session_id: "session-code",
           source: "session",
-          execution_strategy: "code_orchestrated",
+          execution_strategy: "react",
         }}
         isExecutionRuntimeActive={true}
         runtimeStatusTitle={null}
@@ -90,7 +90,7 @@ function renderDialog(
           workingDir: "/tmp/workspace-code",
           providerType: "openai",
           model: "gpt-5.4",
-          executionStrategy: "code_orchestrated",
+          executionStrategy: "react",
           activeTheme: "default",
           selectedTeamLabel: null,
         }}
@@ -149,7 +149,7 @@ afterEach(async () => {
 });
 
 describe("WorkspaceHarnessDialogs", () => {
-  it("code_orchestrated 工作台弹窗应展示编程导轨并可跳到权限区块", () => {
+  it("运行时工作台弹窗应基于信号展示导轨并可跳到权限区块", () => {
     const scrollIntoView = vi.fn();
     HTMLElement.prototype.scrollIntoView = scrollIntoView;
 
@@ -235,7 +235,7 @@ describe("WorkspaceHarnessDialogs", () => {
     expect(scrollIntoView).toHaveBeenCalled();
   });
 
-  it("非 code_orchestrated 工作台弹窗不展示编程导轨", () => {
+  it("无运行时信号时不展示导轨", () => {
     renderDialog({
       executionRuntime: {
         session_id: "session-react",
@@ -252,6 +252,9 @@ describe("WorkspaceHarnessDialogs", () => {
         activeTheme: "default",
         selectedTeamLabel: null,
       },
+      threadRead: {
+        thread_id: "session-react",
+      },
     });
 
     expect(
@@ -262,7 +265,7 @@ describe("WorkspaceHarnessDialogs", () => {
     ).toBeNull();
   });
 
-  it("英文界面下 code_orchestrated 弹窗应展示 agent namespace 编程导轨", async () => {
+  it("英文界面下运行时信号应展示 agent namespace 导轨", async () => {
     await changeLimeLocale("en-US");
 
     renderDialog({
@@ -333,7 +336,7 @@ describe("WorkspaceHarnessDialogs", () => {
     expect(guide?.textContent).not.toContain("README.md");
   });
 
-  it("code_orchestrated 工作台弹窗应在失败输出时优先引导查看输出", async () => {
+  it("运行时工作台弹窗应在失败输出时优先引导查看输出", async () => {
     const { onSubmitCodeFixPrompt } = renderDialog({
       harnessState: createHarnessState({
         outputSignals: [

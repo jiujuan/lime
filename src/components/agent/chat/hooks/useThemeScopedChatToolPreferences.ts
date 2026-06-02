@@ -19,8 +19,6 @@ function serializePreferenceSource(
   }
 
   return JSON.stringify([
-    preferences.webSearch,
-    preferences.thinking,
     preferences.task,
     preferences.subagent,
   ]);

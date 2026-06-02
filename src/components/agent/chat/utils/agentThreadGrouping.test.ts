@@ -402,8 +402,8 @@ describe("agentThreadGrouping", () => {
 
     const model = buildAgentThreadDisplayModel(items);
 
-    expect(model.orderedBlocks[0]?.previewLines[0]).toContain(
-      "当前模型通道返回了计费或额度类错误",
+    expect(model.orderedBlocks[0]?.previewLines[0]).toMatch(
+      /计费或额度类错误|billing or quota error/,
     );
     expect(model.orderedBlocks[0]?.previewLines[0]).not.toContain(
       "Payment Required",

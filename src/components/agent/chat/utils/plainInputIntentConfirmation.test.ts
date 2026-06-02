@@ -150,4 +150,10 @@ describe("plainInputIntentConfirmation", () => {
     expect(resolved?.confirmation).toBeTruthy();
     expect(resolved?.systemPrompt).toContain(resolved?.confirmation);
   });
+
+  it("强浏览器后台任务不应被 plain input 本地确认拦截", () => {
+    expect(
+      resolvePlainInputIntentConfirmation("帮我把这篇文章发布到微信公众号后台"),
+    ).toBeNull();
+  });
 });

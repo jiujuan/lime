@@ -2,6 +2,7 @@ import type { CodexSlashStatusSnapshot } from "../commands";
 import { executeCodexSlashCommand, parseCodexSlashCommand } from "../commands";
 import { recordSlashEntryUsage } from "../skill-selection/slashEntryUsage";
 import type { ClearMessagesOptions, SendMessageFn } from "./agentChatShared";
+import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 
 interface CreateAgentChatSendMessageOptions {
   baseStatusSnapshot: CodexSlashStatusSnapshot;
@@ -44,8 +45,9 @@ export function createAgentChatSendMessage(
       if (parsedCodexCommand) {
         const effectiveModel =
           modelOverride?.trim() || baseStatusSnapshot.model;
-        const effectiveExecutionStrategy =
-          executionStrategyOverride || baseStatusSnapshot.executionStrategy;
+        const effectiveExecutionStrategy = normalizeExecutionStrategy(
+          executionStrategyOverride || baseStatusSnapshot.executionStrategy,
+        );
         const handled = await executeCodexSlashCommand({
           command: parsedCodexCommand,
           statusSnapshot: {

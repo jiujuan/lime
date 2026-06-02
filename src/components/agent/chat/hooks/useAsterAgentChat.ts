@@ -29,6 +29,7 @@ import type { AsterSessionExecutionRuntime } from "@/lib/api/agentRuntime";
 import { useAgentTopicSnapshot } from "./useAgentTopicSnapshot";
 import { resolveClawWorkspaceProviderSelection } from "../utils/clawWorkspaceProviderSelection";
 import {
+  applyGeneratedAutoTitleToTopics,
   buildAutoTitleConversationText,
   hasUserTextMessage,
   isAutoTitlePlaceholder,
@@ -498,13 +499,10 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
 
             await runtime.renameSession(activeSessionId, generatedTitle);
             sessionSetTopics((previous) =>
-              previous.map((topic) =>
-                topic.id === activeSessionId
-                  ? {
-                      ...topic,
-                      title: generatedTitle,
-                    }
-                  : topic,
+              applyGeneratedAutoTitleToTopics(
+                previous,
+                activeSessionId,
+                generatedTitle,
               ),
             );
             titleApplied = true;

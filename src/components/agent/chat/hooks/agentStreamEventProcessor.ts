@@ -1,4 +1,3 @@
-import { toast } from "sonner";
 import type { Dispatch, SetStateAction } from "react";
 import type {
   AgentEventActionRequired,
@@ -1419,30 +1418,8 @@ export function handleActionRequiredEvent({
     });
   }
 
-  if (
-    effectiveExecutionStrategy === "auto" &&
-    actionData.actionType === "tool_confirmation"
-  ) {
-    void runtime
-      .respondToAction({
-        sessionId: activeSessionId,
-        requestId: actionData.requestId,
-        actionType: "tool_confirmation",
-        confirmed: true,
-        response: "Auto 模式自动确认",
-      })
-      .catch((error) => {
-        console.error("[AsterChat] Auto 模式自动确认失败:", error);
-        upsertAssistantActionRequest({
-          assistantMsgId,
-          actionData,
-          setPendingActions,
-          setMessages,
-        });
-        toast.error("Auto 模式自动确认失败，请手动确认");
-      });
-    return;
-  }
+  void effectiveExecutionStrategy;
+  void runtime;
 
   upsertAssistantActionRequest({
     assistantMsgId,

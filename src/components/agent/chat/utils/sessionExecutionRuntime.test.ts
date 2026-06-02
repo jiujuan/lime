@@ -46,14 +46,14 @@ describe("sessionExecutionRuntime", () => {
       session_id: "session-code",
       thread_id: "thread-code",
       turn_id: "turn-code",
-      execution_strategy: "code_orchestrated",
+      execution_strategy: "code_orchestrated" as never,
       output_schema_runtime: null,
     });
 
     expect(runtime).toMatchObject({
       session_id: "session-code",
       source: "turn_context",
-      execution_strategy: "code_orchestrated",
+      execution_strategy: "react",
       latest_turn_id: "turn-code",
       latest_turn_status: "running",
     });
@@ -163,7 +163,7 @@ describe("sessionExecutionRuntime", () => {
     ).toBeNull();
   });
 
-  it("应从 execution runtime 提取最近工具偏好", () => {
+  it("应从 execution runtime 提取最近任务偏好并丢弃旧搜索/思考偏好", () => {
     expect(
       createChatToolPreferencesFromExecutionRuntime({
         recent_preferences: {
@@ -174,17 +174,17 @@ describe("sessionExecutionRuntime", () => {
         },
       }),
     ).toEqual({
-      webSearch: true,
-      thinking: true,
+      webSearch: false,
+      thinking: false,
       task: false,
       subagent: true,
     });
   });
 
-  it("code_orchestrated 会话恢复时应把任务与子代理偏好对齐到编程底座", () => {
+  it("legacy code_orchestrated 会话恢复时不再自动打开任务与子代理偏好", () => {
     expect(
       createChatToolPreferencesFromExecutionRuntime({
-        execution_strategy: "code_orchestrated",
+        execution_strategy: "code_orchestrated" as never,
         recent_preferences: {
           webSearch: false,
           thinking: false,
@@ -195,12 +195,12 @@ describe("sessionExecutionRuntime", () => {
     ).toEqual({
       webSearch: false,
       thinking: false,
-      task: true,
-      subagent: true,
+      task: false,
+      subagent: false,
     });
   });
 
-  it("应把工具偏好转换成 session recent_preferences 请求载荷", () => {
+  it("应把工具偏好转换成 session recent_preferences 请求载荷并丢弃旧搜索/思考开关", () => {
     expect(
       createSessionRecentPreferencesFromChatToolPreferences({
         webSearch: true,
@@ -209,7 +209,7 @@ describe("sessionExecutionRuntime", () => {
         subagent: false,
       }),
     ).toEqual({
-      webSearch: true,
+      webSearch: false,
       thinking: false,
       task: true,
       subagent: false,

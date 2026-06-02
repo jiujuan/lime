@@ -257,7 +257,6 @@ function assertI18nKeyTypes() {
   i18n.t("agentChat.home.composer.fileManager.open", { ns: "agent" });
   i18n.t("agentChat.home.composer.fileManager.close", { ns: "agent" });
   i18n.t("agentChat.home.composer.creationMode.label", { ns: "agent" });
-  i18n.t("agentChat.home.composer.generalContext", { ns: "agent" });
   i18n.t("agentChat.inputbar.core.dictation.recording", {
     ns: "agent",
     duration: "0:12",
@@ -380,16 +379,6 @@ function assertI18nKeyTypes() {
   i18n.t("agentChat.inputbar.composer.workspacePlaceholder.default", {
     ns: "agent",
   });
-  i18n.t("agentChat.inputbar.tools.thinking.label", { ns: "agent" });
-  i18n.t("agentChat.inputbar.tools.thinking.title.enabled", { ns: "agent" });
-  i18n.t("agentChat.inputbar.tools.thinking.title.disabled", { ns: "agent" });
-  i18n.t("agentChat.inputbar.tools.thinking.toast.enabled", { ns: "agent" });
-  i18n.t("agentChat.inputbar.tools.thinking.toast.disabled", { ns: "agent" });
-  i18n.t("agentChat.inputbar.tools.webSearch.label", { ns: "agent" });
-  i18n.t("agentChat.inputbar.tools.webSearch.title.enabled", { ns: "agent" });
-  i18n.t("agentChat.inputbar.tools.webSearch.title.disabled", { ns: "agent" });
-  i18n.t("agentChat.inputbar.tools.webSearch.toast.enabled", { ns: "agent" });
-  i18n.t("agentChat.inputbar.tools.webSearch.toast.disabled", { ns: "agent" });
   i18n.t("agentChat.inputbar.tools.subagent.label", { ns: "agent" });
   i18n.t("agentChat.inputbar.tools.subagent.title.enabled", { ns: "agent" });
   i18n.t("agentChat.inputbar.tools.subagent.title.disabled", { ns: "agent" });
@@ -451,9 +440,6 @@ function assertI18nKeyTypes() {
   });
   i18n.t("agentChat.inputbar.knowledge.action.check", { ns: "agent" });
   i18n.t("agentChat.inputbar.knowledge.meta.companion", { ns: "agent" });
-  i18n.t("agentChat.inputbar.executionStrategy.label", { ns: "agent" });
-  i18n.t("agentChat.inputbar.executionStrategy.enable", { ns: "agent" });
-  i18n.t("agentChat.inputbar.executionStrategy.disable", { ns: "agent" });
   i18n.t("agentChat.inputbar.workflow.status.active", { ns: "agent" });
   i18n.t("agentChat.inputbar.workflow.status.waitingDecision", {
     ns: "agent",

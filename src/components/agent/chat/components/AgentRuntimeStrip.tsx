@@ -68,12 +68,16 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
       t(key, values ?? {}),
     [t],
   );
-  const isCodeOrchestratedRuntime =
-    executionRuntime?.execution_strategy === "code_orchestrated";
+  const fileCheckpointCount = fileCheckpointSummary?.count ?? 0;
+  const hasRuntimeFileSignals =
+    fileCheckpointCount > 0 ||
+    harnessState.activeFileWrites.length > 0 ||
+    harnessState.recentFileEvents.length > 0;
+  const hasRuntimeOutputSignals = harnessState.outputSignals.length > 0;
+  const hasRuntimeWorkbenchSignals =
+    hasRuntimeFileSignals || hasRuntimeOutputSignals;
   const themeLabel = translate("agentChat.runtimeStrip.theme.general");
-  const stripTitle = isCodeOrchestratedRuntime
-    ? translate("agentChat.runtimeStrip.title.code")
-    : translate("agentChat.runtimeStrip.title.general");
+  const stripTitle = translate("agentChat.runtimeStrip.title.general");
   const hasSelectedTeam =
     Boolean(selectedTeamLabel?.trim()) || selectedTeamRoleCount > 0;
   const selectedTeamBadgeLabel =
@@ -88,40 +92,26 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
           count: selectedTeamRoleCount,
         })
       : translate("agentChat.runtimeStrip.team.defaultSummary"));
-  const fileCheckpointCount = fileCheckpointSummary?.count ?? 0;
   const canReviewFileCheckpoints =
-    isCodeOrchestratedRuntime &&
     fileCheckpointCount > 0 &&
     Boolean(onOpenFileCheckpoints);
 
   const capabilities = useMemo<CapabilityItem[]>(
     () => [
-      ...(isCodeOrchestratedRuntime
-        ? [
-            {
-              key: "code_tools",
-              label: translate("agentChat.runtimeStrip.capability.codeTools"),
-              enabled: runtimeToolAvailability?.taskRuntime !== false,
-            },
-          ]
-        : [
-            {
-              key: "direct",
-              label: translate("agentChat.runtimeStrip.capability.direct"),
-              enabled: true,
-            },
-          ]),
+      {
+        key: "direct",
+        label: translate("agentChat.runtimeStrip.capability.direct"),
+        enabled: true,
+      },
       {
         key: "thinking",
         label: translate("agentChat.runtimeStrip.capability.thinking"),
-        enabled: toolPreferences.thinking,
+        enabled: true,
       },
       {
         key: "web_search",
         label: translate("agentChat.runtimeStrip.capability.webSearch"),
-        enabled:
-          toolPreferences.webSearch &&
-          runtimeToolAvailability?.webSearch !== false,
+        enabled: runtimeToolAvailability?.webSearch !== false,
       },
       {
         key: "subagent",
@@ -132,8 +122,6 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
       },
     ],
     [
-      isCodeOrchestratedRuntime,
-      runtimeToolAvailability?.taskRuntime,
       runtimeToolAvailability?.subagentRuntime,
       runtimeToolAvailability?.webSearch,
       translate,
@@ -159,66 +147,22 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
         session.runtime_status === "failed" ||
         session.runtime_status === "aborted",
     ).length;
-    const codeToolGapCount = runtimeToolAvailability?.known
-      ? runtimeToolAvailability.missingTaskTools.length +
-        runtimeToolAvailability.missingSubagentCoreTools.length +
-        runtimeToolAvailability.missingSubagentTeamTools.length
-      : 0;
-    const codeOutputCount =
-      harnessState.outputSignals.length ||
-      harnessState.activeFileWrites.length ||
-      harnessState.recentFileEvents.length;
-
-    if (isCodeOrchestratedRuntime) {
+    if (hasRuntimeWorkbenchSignals) {
       nextItems.push({
-        key: "code_runtime_active",
-        label: translate("agentChat.runtimeStrip.status.codeRuntimeActive"),
-        tone: "secondary",
-      });
-
-      if (runtimeToolAvailability?.known) {
-        nextItems.push({
-          key: codeToolGapCount > 0 ? "code_tool_gap" : "code_tool_ready",
-          label:
-            codeToolGapCount > 0
-              ? translate("agentChat.runtimeStrip.status.codeToolGap", {
-                  count: codeToolGapCount,
-                })
-              : translate("agentChat.runtimeStrip.status.codeToolReady"),
-          tone: codeToolGapCount > 0 ? "secondary" : "outline",
-        });
-      }
-
-      nextItems.push({
-        key:
-          harnessState.pendingApprovals.length > 0
-            ? "code_approval_pending"
-            : "code_approval_ready",
-        label:
-          harnessState.pendingApprovals.length > 0
-            ? translate("agentChat.runtimeStrip.status.codeApprovalPending", {
-                count: harnessState.pendingApprovals.length,
-              })
-            : translate("agentChat.runtimeStrip.status.codeApprovalReady"),
-        tone:
-          harnessState.pendingApprovals.length > 0 ? "secondary" : "outline",
-      });
-
-      nextItems.push({
-        key: codeOutputCount > 0 ? "code_outputs" : "code_outputs_empty",
-        label:
-          codeOutputCount > 0
-            ? translate("agentChat.runtimeStrip.status.codeOutputs", {
-                count: codeOutputCount,
-              })
-            : translate("agentChat.runtimeStrip.status.codeOutputsEmpty"),
+        key: "runtime_outputs",
+        label: translate("agentChat.runtimeStrip.status.runtimeOutputs", {
+          count:
+            harnessState.outputSignals.length ||
+            harnessState.activeFileWrites.length ||
+            harnessState.recentFileEvents.length,
+        }),
         tone: "outline",
       });
 
       if (fileCheckpointCount > 0) {
         nextItems.push({
-          key: "code_file_changes",
-          label: translate("agentChat.runtimeStrip.status.codeFileChanges", {
+          key: "runtime_file_changes",
+          label: translate("agentChat.runtimeStrip.status.runtimeFileChanges", {
             count: fileCheckpointCount,
           }),
           tone: "outline",
@@ -265,7 +209,7 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
         });
       }
 
-      if (toolPreferences.webSearch && !runtimeToolAvailability.webSearch) {
+      if (!runtimeToolAvailability.webSearch) {
         nextItems.push({
           key: "web_search_gap",
           label: translate("agentChat.runtimeStrip.status.webSearchGap"),
@@ -382,22 +326,19 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
     executionRuntime,
     fileCheckpointCount,
     harnessState,
-    isCodeOrchestratedRuntime,
+    hasRuntimeWorkbenchSignals,
     isExecutionRuntimeActive,
     isSending,
     runtimeToolAvailability,
     runtimeStatusTitle,
     translate,
     toolPreferences.subagent,
-    toolPreferences.webSearch,
   ]);
 
   return (
     <div
       data-testid="agent-runtime-strip"
-      data-runtime-kind={
-        isCodeOrchestratedRuntime ? "code_orchestrated" : "general"
-      }
+      data-runtime-kind={hasRuntimeWorkbenchSignals ? "runtime" : "general"}
       data-execution-strategy={executionRuntime?.execution_strategy ?? ""}
       className={
         variant === "embedded"

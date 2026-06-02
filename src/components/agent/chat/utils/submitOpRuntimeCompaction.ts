@@ -7,12 +7,18 @@ import type {
 import type { SessionModelPreference } from "../hooks/agentChatShared";
 import type { ChatToolPreferences } from "./chatToolPreferences";
 import { normalizeHarnessSessionMode } from "./harnessSessionMode";
+import { normalizeExecutionStrategy } from "../hooks/agentChatCoreUtils";
 
-const HARNESS_WEB_SEARCH_PREFERENCE_KEYS = ["web_search", "webSearch"] as const;
 const HARNESS_THINKING_PREFERENCE_KEYS = [
   "thinking",
   "thinking_enabled",
   "thinkingEnabled",
+] as const;
+const HARNESS_WEB_SEARCH_PREFERENCE_KEYS = [
+  "web_search",
+  "webSearch",
+  "web_search_enabled",
+  "webSearchEnabled",
 ] as const;
 const HARNESS_TASK_PREFERENCE_KEYS = ["task", "task_mode", "taskMode"] as const;
 const HARNESS_SUBAGENT_PREFERENCE_KEYS = [
@@ -544,8 +550,6 @@ export interface BuildSubmitOpRuntimeCompactionOptions {
   effectiveProviderType: string;
   effectiveModel: string;
   modelOverride?: string;
-  webSearch?: boolean;
-  thinking?: boolean;
 }
 
 export interface SubmitOpRuntimeCompactionResult {
@@ -571,8 +575,6 @@ export function buildSubmitOpRuntimeCompaction(
     effectiveProviderType,
     effectiveModel,
     modelOverride,
-    webSearch,
-    thinking,
   } = options;
 
   const syncedProviderSelector =
@@ -645,23 +647,22 @@ export function buildSubmitOpRuntimeCompaction(
     (hasExplicitModelOverride ||
       shouldSubmitProviderPreference ||
       !knownModelName ||
-      normalizeRuntimeIdentifier(knownModelName) !== normalizedEffectiveModel);
+    normalizeRuntimeIdentifier(knownModelName) !== normalizedEffectiveModel);
+  const normalizedEffectiveExecutionStrategy = normalizeExecutionStrategy(
+    effectiveExecutionStrategy,
+  );
 
-  const knownExecutionStrategy =
-    syncedExecutionStrategy?.trim() ||
-    executionRuntime?.execution_strategy?.trim() ||
-    null;
+  const knownExecutionStrategy = syncedExecutionStrategy
+    ? normalizeExecutionStrategy(syncedExecutionStrategy)
+    : executionRuntime?.execution_strategy
+      ? normalizeExecutionStrategy(executionRuntime.execution_strategy)
+      : null;
   const shouldSubmitExecutionStrategy =
-    !knownExecutionStrategy ||
-    normalizeRuntimeIdentifier(knownExecutionStrategy) !==
-      normalizeRuntimeIdentifier(effectiveExecutionStrategy);
+    normalizedEffectiveExecutionStrategy !== "react" &&
+    (!knownExecutionStrategy ||
+      normalizeRuntimeIdentifier(knownExecutionStrategy) !==
+        normalizeRuntimeIdentifier(normalizedEffectiveExecutionStrategy));
 
-  const knownWebSearchPreference =
-    typeof syncedRecentPreferences?.webSearch === "boolean"
-      ? syncedRecentPreferences.webSearch
-      : typeof executionRuntime?.recent_preferences?.webSearch === "boolean"
-        ? executionRuntime.recent_preferences.webSearch
-        : null;
   const knownTaskPreference =
     typeof syncedRecentPreferences?.task === "boolean"
       ? syncedRecentPreferences.task
@@ -674,48 +675,24 @@ export function buildSubmitOpRuntimeCompaction(
       : typeof executionRuntime?.recent_preferences?.subagent === "boolean"
         ? executionRuntime.recent_preferences.subagent
         : null;
-  const knownThinkingPreference =
-    typeof syncedRecentPreferences?.thinking === "boolean"
-      ? syncedRecentPreferences.thinking
-      : typeof executionRuntime?.recent_preferences?.thinking === "boolean"
-        ? executionRuntime.recent_preferences.thinking
-        : null;
-  const shouldSubmitWebSearch =
-    typeof webSearch === "boolean" &&
-    (knownWebSearchPreference === null ||
-      knownWebSearchPreference !== webSearch);
-  const shouldSubmitThinking =
-    typeof thinking === "boolean" &&
-    (knownThinkingPreference === null || knownThinkingPreference !== thinking);
+  const shouldSubmitWebSearch = false;
+  const shouldSubmitThinking = false;
   const requestTaskPreference = readHarnessPreferenceFromRequestMetadata(
     requestMetadata,
     HARNESS_TASK_PREFERENCE_KEYS,
-  );
-  const requestThinkingPreference = readHarnessPreferenceFromRequestMetadata(
-    requestMetadata,
-    HARNESS_THINKING_PREFERENCE_KEYS,
   );
   const requestSubagentPreference = readHarnessPreferenceFromRequestMetadata(
     requestMetadata,
     HARNESS_SUBAGENT_PREFERENCE_KEYS,
   );
-  let metadata = shouldSubmitWebSearch
-    ? requestMetadata
-    : omitHarnessPreferenceFromRequestMetadata(
-        requestMetadata,
-        HARNESS_WEB_SEARCH_PREFERENCE_KEYS,
-      );
-
-  if (
-    requestThinkingPreference !== null &&
-    knownThinkingPreference !== null &&
-    knownThinkingPreference === requestThinkingPreference
-  ) {
-    metadata = omitHarnessPreferenceFromRequestMetadata(
-      metadata,
-      HARNESS_THINKING_PREFERENCE_KEYS,
-    );
-  }
+  let metadata = omitHarnessPreferenceFromRequestMetadata(
+    requestMetadata,
+    HARNESS_THINKING_PREFERENCE_KEYS,
+  );
+  metadata = omitHarnessPreferenceFromRequestMetadata(
+    metadata,
+    HARNESS_WEB_SEARCH_PREFERENCE_KEYS,
+  );
   if (
     requestTaskPreference !== null &&
     knownTaskPreference !== null &&

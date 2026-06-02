@@ -16,7 +16,7 @@ export const DEFAULT_AGENT_MODEL = "";
 export type AgentAccessMode = "read-only" | "current" | "full-access";
 export const DEFAULT_AGENT_ACCESS_MODE: AgentAccessMode = "full-access";
 export const DEFAULT_WORKSPACE_AGENT_EXECUTION_STRATEGY: AsterExecutionStrategy =
-  "code_orchestrated";
+  "react";
 export const DEFAULT_GLOBAL_AGENT_EXECUTION_STRATEGY: AsterExecutionStrategy =
   "react";
 export const GLOBAL_PROVIDER_PREF_KEY = "agent_pref_provider_global";

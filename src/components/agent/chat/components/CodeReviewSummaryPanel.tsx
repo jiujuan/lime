@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import type { AgentI18nKey } from "@/i18n/agentResources";
 import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime";
 import { cn } from "@/lib/utils";
 import type { HarnessSessionState } from "../utils/harnessState";
@@ -19,151 +18,32 @@ import {
 } from "../utils/harnessOutputSignals";
 import {
   buildCodeFixPromptFromHarnessSignal,
-  type CodeFixPromptFileChange,
 } from "../utils/codeFixPrompt";
 import type { CodeWorkbenchGuideTarget } from "./CodeWorkbenchGuide";
 import type { HarnessFileChangeReviewSummary } from "./HarnessStatusPanel";
+import {
+  buildOutputDetailText,
+  buildOutputPreviewText,
+  hasCodeReviewSurface,
+  normalizeReviewSummary,
+  outputMentionsFile,
+  rankFileChangesForOutput,
+  resolveConfirmedFileChangeCount,
+  resolveFocusDescriptionKey,
+  resolvePrimaryActionKey,
+  resolveReviewFocusTone,
+  resolveReviewStatusPresentation,
+  resolveReviewableFileChanges,
+  selectLatestCheckpoint,
+} from "./CodeReviewSummaryPanelViewModel";
 
-interface CodeReviewSummaryPanelProps {
+export interface CodeReviewSummaryPanelProps {
   harnessState: HarnessSessionState;
   fileCheckpointSummary?: AgentRuntimeFileCheckpointThreadSummary | null;
   fileChangeReviewSummary?: HarnessFileChangeReviewSummary | null;
   onOpenSection: (target: CodeWorkbenchGuideTarget) => void;
   onOpenFileCheckpoints?: () => void;
   onSubmitCodeFixPrompt?: (prompt: string) => void | Promise<void>;
-}
-
-interface ReviewableFileChange extends CodeFixPromptFileChange {
-  path: string;
-  displayName: string;
-}
-
-interface ReviewStatusPresentation {
-  key: "failed_output" | "file_review" | "outputs" | "snapshots";
-  labelKey: AgentI18nKey;
-  className: string;
-}
-
-type ReviewFocusTone = "danger" | "review" | "success" | "snapshot";
-
-const OUTPUT_PREVIEW_MAX_CHARS = 220;
-
-function outputMentionsFile(
-  signal: HarnessSessionState["outputSignals"][number] | null,
-  file: ReviewableFileChange | null,
-): boolean {
-  if (!signal || !file) {
-    return false;
-  }
-
-  const haystack = [
-    signal.title,
-    signal.summary,
-    signal.preview,
-    signal.content,
-  ]
-    .join("\n")
-    .toLowerCase();
-
-  return (
-    haystack.includes(file.displayName.toLowerCase()) ||
-    haystack.includes(file.path.toLowerCase())
-  );
-}
-
-function isReviewableFileEvent(
-  event: HarnessSessionState["recentFileEvents"][number],
-): boolean {
-  if (event.action === "write" || event.action === "edit") {
-    return true;
-  }
-  if (event.action !== "persist") {
-    return false;
-  }
-  return event.kind !== "log" && event.kind !== "offload";
-}
-
-function resolveReviewableFileChanges(
-  harnessState: HarnessSessionState,
-): ReviewableFileChange[] {
-  const changesByPath = new Map<string, ReviewableFileChange>();
-
-  for (const write of harnessState.activeFileWrites) {
-    const path = write.path.trim();
-    if (path) {
-      changesByPath.set(path, {
-        path,
-        displayName: write.displayName || path,
-      });
-    }
-  }
-
-  for (const event of harnessState.recentFileEvents) {
-    const path = event.path.trim();
-    if (path && isReviewableFileEvent(event)) {
-      changesByPath.set(path, {
-        path,
-        displayName: event.displayName || path,
-      });
-    }
-  }
-
-  return [...changesByPath.values()];
-}
-
-function rankFileChangesForOutput(
-  fileChanges: ReviewableFileChange[],
-  signal: HarnessSessionState["outputSignals"][number] | null,
-): ReviewableFileChange[] {
-  if (!signal || fileChanges.length < 2) {
-    return fileChanges;
-  }
-
-  return [...fileChanges].sort((left, right) => {
-    const leftMentioned = outputMentionsFile(signal, left);
-    const rightMentioned = outputMentionsFile(signal, right);
-
-    if (leftMentioned === rightMentioned) {
-      return 0;
-    }
-    return leftMentioned ? -1 : 1;
-  });
-}
-
-function buildOutputPreviewText(
-  signal: HarnessSessionState["outputSignals"][number] | null,
-): string | null {
-  const raw = signal?.content || signal?.preview || signal?.summary || "";
-  const text = raw
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter(Boolean)
-    .slice(0, 4)
-    .join("\n")
-    .trim();
-
-  if (!text) {
-    return null;
-  }
-
-  if (text.length <= OUTPUT_PREVIEW_MAX_CHARS) {
-    return text;
-  }
-
-  return `${text.slice(0, OUTPUT_PREVIEW_MAX_CHARS).trimEnd()}...`;
-}
-
-function buildOutputDetailText(
-  signal: HarnessSessionState["outputSignals"][number] | null,
-): string | null {
-  if (!signal) {
-    return null;
-  }
-
-  const parts = [signal.title, signal.summary, signal.preview]
-    .map((part) => part?.trim())
-    .filter((part): part is string => Boolean(part));
-  return [...new Set(parts)].slice(0, 2).join(" · ") || null;
 }
 
 export function CodeReviewSummaryPanel({
@@ -196,7 +76,7 @@ export function CodeReviewSummaryPanel({
   const outputDetail = buildOutputDetailText(outputSignalForDetail);
   const outputPreviewText = buildOutputPreviewText(outputSignalForDetail);
   const checkpointCount = fileCheckpointSummary?.count ?? 0;
-  const latestCheckpoint = fileCheckpointSummary?.latest_checkpoint || null;
+  const latestCheckpoint = selectLatestCheckpoint(fileCheckpointSummary);
   const focusOutputLabel =
     outputDetail || t("agentChat.harness.codeReview.focus.outputFallback");
   const visibleFileChanges = prioritizedFileChanges.slice(0, 3);
@@ -214,26 +94,24 @@ export function CodeReviewSummaryPanel({
     outputSignalForDetail,
     reviewPairFile,
   );
-  const reviewSummary = fileChangeReviewSummary?.total
-    ? fileChangeReviewSummary
-    : null;
-  const confirmedFileChangeCount = reviewSummary
-    ? reviewSummary.applied + reviewSummary.rejected
-    : 0;
-  const primaryActionKey =
-    failedOutputCount > 0 && harnessState.outputSignals.length > 0
-      ? "agentChat.harness.codeReview.action.viewFailedOutput"
-      : fileChanges.length > 0
-        ? "agentChat.harness.codeReview.action.review"
-        : harnessState.outputSignals.length > 0
-          ? "agentChat.harness.codeReview.action.viewOutput"
-          : checkpointCount > 0
-            ? "agentChat.harness.codeReview.action.viewSnapshots"
-            : "agentChat.harness.codeReview.action.review";
-  const hasReviewSurface =
-    fileChanges.length > 0 ||
-    harnessState.outputSignals.length > 0 ||
-    checkpointCount > 0;
+  const reviewSummary = normalizeReviewSummary(fileChangeReviewSummary);
+  const confirmedFileChangeCount = resolveConfirmedFileChangeCount(
+    reviewSummary,
+  );
+  const primaryActionKey = resolvePrimaryActionKey({
+    failedOutputCount,
+    fileChangeCount: fileChanges.length,
+    outputSignalCount: harnessState.outputSignals.length,
+    checkpointCount,
+    reviewSummary,
+  });
+  const hasReviewSurface = hasCodeReviewSurface({
+    failedOutputCount,
+    fileChangeCount: fileChanges.length,
+    outputSignalCount: harnessState.outputSignals.length,
+    checkpointCount,
+    reviewSummary,
+  });
   const codeFixPrompt = useMemo(() => {
     if (failedOutputCount === 0 || !outputSignalForDetail) {
       return null;
@@ -269,60 +147,27 @@ export function CodeReviewSummaryPanel({
     t,
   ]);
   const canSubmitCodeFix = Boolean(onSubmitCodeFixPrompt && codeFixPrompt);
-  const reviewStatus: ReviewStatusPresentation =
-    failedOutputCount > 0
-      ? {
-          key: "failed_output",
-          labelKey: "agentChat.harness.codeReview.status.failedOutput",
-          className: "border-rose-200 bg-rose-50 text-rose-700",
-        }
-      : reviewSummary && reviewSummary.pending === 0
-        ? {
-            key: reviewSummary.rejected > 0 ? "snapshots" : "outputs",
-            labelKey:
-              reviewSummary.rejected > 0
-                ? "agentChat.harness.codeReview.status.rollbackReviewed"
-                : "agentChat.harness.codeReview.status.reviewed",
-            className:
-              reviewSummary.rejected > 0
-                ? "border-amber-200 bg-amber-50 text-amber-700"
-                : "border-emerald-200 bg-emerald-50 text-emerald-700",
-          }
-        : fileChanges.length > 0
-        ? {
-            key: "file_review",
-            labelKey: "agentChat.harness.codeReview.status.fileReview",
-            className: "border-sky-200 bg-sky-50 text-sky-700",
-          }
-        : harnessState.outputSignals.length > 0
-          ? {
-              key: "outputs",
-              labelKey: "agentChat.harness.codeReview.status.outputsReady",
-              className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-            }
-          : {
-              key: "snapshots",
-              labelKey: "agentChat.harness.codeReview.status.snapshotsReady",
-              className: "border-amber-200 bg-amber-50 text-amber-700",
-            };
-  const focusTone: ReviewFocusTone =
-    failedOutputCount > 0
-      ? "danger"
-      : fileChanges.length > 0
-        ? "review"
-        : harnessState.outputSignals.length > 0
-          ? "success"
-          : "snapshot";
-  const focusDescriptionKey: AgentI18nKey =
-    failedOutputCount > 0 && fileChanges.length > 0
-      ? "agentChat.harness.codeReview.focus.failedWithFiles"
-      : failedOutputCount > 0
-        ? "agentChat.harness.codeReview.focus.failed"
-        : fileChanges.length > 0
-          ? "agentChat.harness.codeReview.focus.files"
-          : harnessState.outputSignals.length > 0
-            ? "agentChat.harness.codeReview.focus.outputs"
-            : "agentChat.harness.codeReview.focus.snapshots";
+  const reviewStatus = resolveReviewStatusPresentation({
+    failedOutputCount,
+    fileChangeCount: fileChanges.length,
+    outputSignalCount: harnessState.outputSignals.length,
+    checkpointCount,
+    reviewSummary,
+  });
+  const focusTone = resolveReviewFocusTone({
+    failedOutputCount,
+    fileChangeCount: fileChanges.length,
+    outputSignalCount: harnessState.outputSignals.length,
+    checkpointCount,
+    reviewSummary,
+  });
+  const focusDescriptionKey = resolveFocusDescriptionKey({
+    failedOutputCount,
+    fileChangeCount: fileChanges.length,
+    outputSignalCount: harnessState.outputSignals.length,
+    checkpointCount,
+    reviewSummary,
+  });
 
   if (!hasReviewSurface) {
     return null;

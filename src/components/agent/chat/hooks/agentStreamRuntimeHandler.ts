@@ -243,7 +243,7 @@ interface HandleTurnStreamEventOptions {
   assistantFallbackContent?: string | null;
   content: string;
   runtime: AgentRuntimeAdapter;
-  webSearch?: boolean;
+  _webSearch?: boolean;
   warnedKeysRef: MutableRefObject<Set<string>>;
   actionLoggedKeys: Set<string>;
   toolLogIdByToolId: Map<string, string>;
@@ -340,7 +340,7 @@ export function handleTurnStreamEvent({
   assistantFallbackContent,
   content,
   runtime,
-  webSearch,
+  _webSearch,
   warnedKeysRef,
   actionLoggedKeys,
   toolLogIdByToolId,
@@ -761,7 +761,6 @@ export function handleTurnStreamEvent({
       contentFallback: content,
       executionStrategy: effectiveExecutionStrategy,
       queuedMessageText,
-      webSearch,
     });
     if (queuedDraftPlan.shouldClearActiveStream) {
       clearActiveStreamIfMatch(eventName);

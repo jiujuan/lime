@@ -5,160 +5,17 @@ use lime_agent::{
 };
 
 fn execution_strategy_label(strategy: AsterExecutionStrategy) -> &'static str {
-    match strategy {
-        AsterExecutionStrategy::React => "对话执行优先",
-        AsterExecutionStrategy::CodeOrchestrated => "代码编排执行",
-        AsterExecutionStrategy::Auto => "自动路由执行",
-    }
-}
-
-fn model_supports_reasoning(model_name: Option<&str>) -> bool {
-    let Some(model_name) = model_name.map(str::trim).filter(|value| !value.is_empty()) else {
-        return false;
-    };
-    let normalized = model_name.to_ascii_lowercase();
-    normalized.contains("thinking")
-        || normalized.contains("reason")
-        || normalized.contains("r1")
-        || normalized.contains("o1")
-        || normalized.contains("o3")
-        || normalized.contains("o4")
-        || normalized.contains("gpt-5")
-        || normalized.contains("2.5")
-}
-
-fn message_suggests_planning(message: &str) -> bool {
-    let normalized = message.to_ascii_lowercase();
-    [
-        "计划",
-        "规划",
-        "roadmap",
-        "拆解",
-        "分步骤",
-        "执行方案",
-        "实施方案",
-        "阶段",
-        "里程碑",
-        "todo",
-    ]
-    .iter()
-    .any(|keyword| normalized.contains(keyword))
-}
-
-fn message_suggests_task(message: &str) -> bool {
-    let normalized = message.to_ascii_lowercase();
-    [
-        "后台",
-        "稍后",
-        "异步",
-        "排队",
-        "持续生成",
-        "长时间",
-        "继续跑",
-        "持续跑",
-    ]
-    .iter()
-    .any(|keyword| normalized.contains(keyword))
-}
-
-fn message_suggests_subagent(message: &str) -> bool {
-    let normalized = message.to_ascii_lowercase();
-    [
-        "并行",
-        "多代理",
-        "分工",
-        "分别分析",
-        "从多个角度",
-        "parallel",
-        "subagent",
-        "delegate",
-    ]
-    .iter()
-    .any(|keyword| normalized.contains(keyword))
-}
-
-fn message_suggests_content_generation(message: &str) -> bool {
-    let normalized = message.to_ascii_lowercase();
-    [
-        "生成",
-        "写一",
-        "帮我写",
-        "起草",
-        "草拟",
-        "撰写",
-        "提纲",
-        "大纲",
-        "报告",
-        "方案",
-        "文档",
-        "演示",
-        "ppt",
-        "slide",
-        "brief",
-        "draft",
-        "outline",
-        "generate",
-        "write",
-        "create a",
-    ]
-    .iter()
-    .any(|keyword| normalized.contains(keyword))
-}
-
-fn resolve_request_thinking_enabled_from_sources(
-    request: &AsterChatRequest,
-    session_recent_preferences: Option<&lime_agent::SessionExecutionRuntimePreferences>,
-) -> bool {
-    request
-        .thinking_enabled
-        .or_else(|| {
-            resolve_recent_preference_from_sources(
-                request.metadata.as_ref(),
-                &["thinking_enabled", "thinkingEnabled"],
-                session_recent_preferences.map(|preferences| preferences.thinking),
-            )
-        })
-        .unwrap_or(false)
-}
-
-fn resolve_request_task_enabled_from_sources(
-    request: &AsterChatRequest,
-    session_recent_preferences: Option<&lime_agent::SessionExecutionRuntimePreferences>,
-) -> bool {
-    resolve_recent_preference_from_sources(
-        request.metadata.as_ref(),
-        &["task_mode_enabled", "taskModeEnabled"],
-        session_recent_preferences.map(|preferences| preferences.task),
-    )
-    .unwrap_or(false)
-}
-
-fn resolve_request_subagent_enabled_from_sources(
-    request: &AsterChatRequest,
-    session_recent_preferences: Option<&lime_agent::SessionExecutionRuntimePreferences>,
-) -> bool {
-    resolve_recent_preference_from_sources(
-        request.metadata.as_ref(),
-        &["subagent_mode_enabled", "subagentModeEnabled"],
-        session_recent_preferences.map(|preferences| preferences.subagent),
-    )
-    .unwrap_or(false)
+    let _ = strategy;
+    "对话执行"
 }
 
 pub(super) async fn build_turn_runtime_statuses(
     request: &AsterChatRequest,
     effective_strategy: AsterExecutionStrategy,
     request_tool_policy: &RequestToolPolicy,
-    model_name: Option<&str>,
-    session_recent_preferences: Option<&lime_agent::SessionExecutionRuntimePreferences>,
+    _model_name: Option<&str>,
+    _session_recent_preferences: Option<&lime_agent::SessionExecutionRuntimePreferences>,
 ) -> Result<(AgentRuntimeStatus, AgentRuntimeStatus), String> {
-    let thinking_enabled =
-        resolve_request_thinking_enabled_from_sources(request, session_recent_preferences);
-    let task_enabled =
-        resolve_request_task_enabled_from_sources(request, session_recent_preferences);
-    let subagent_enabled =
-        resolve_request_subagent_enabled_from_sources(request, session_recent_preferences);
-    let reasoning_supported = model_supports_reasoning(model_name);
     let browser_task_requirement = extract_browser_task_requirement(request.metadata.as_ref());
 
     let initial_checkpoints = vec![
@@ -166,9 +23,9 @@ pub(super) async fn build_turn_runtime_statuses(
         if request_tool_policy.requires_web_search() {
             "当前任务需要先联网核实".to_string()
         } else if request_tool_policy.allows_web_search() {
-            "联网搜索仅作为候选能力待命".to_string()
+            "搜索工具已在工具面中，是否调用由模型判断".to_string()
         } else {
-            "默认直接回答优先".to_string()
+            "本轮搜索工具未启用".to_string()
         },
         if matches!(
             browser_task_requirement,
@@ -176,99 +33,27 @@ pub(super) async fn build_turn_runtime_statuses(
         ) {
             "当前任务要求真实浏览器执行，不允许退化为联网检索".to_string()
         } else {
-            "浏览器能力按需升级".to_string()
+            "浏览器能力保持候选状态".to_string()
         },
-        if thinking_enabled && reasoning_supported {
-            "模型支持深度思考，先进入推理判定".to_string()
-        } else if thinking_enabled {
-            "当前模型不支持显式 thinking，改走轻量意图理解".to_string()
-        } else {
-            "先做轻量意图理解".to_string()
-        },
-        if task_enabled {
-            "后台任务能力已待命".to_string()
-        } else {
-            "默认不升级后台任务".to_string()
-        },
-        if subagent_enabled {
-            "多代理能力已待命".to_string()
-        } else {
-            "默认由单 Agent 先判断".to_string()
-        },
+        "推理强度与工具调用由模型按任务复杂度判断".to_string(),
     ];
 
     let decided = if request_tool_policy.requires_web_search() {
         (
-            "先联网检索".to_string(),
-            "当前任务已被明确指定为先搜索后答复，会先完成联网核实再继续生成。".to_string(),
+            "正在准备联网核实".to_string(),
+            "本轮策略要求搜索工具参与，运行时会把搜索结果交给模型继续整理。".to_string(),
             vec![
-                "用户明确要求联网搜索".to_string(),
-                "搜索结果返回后再形成最终答复".to_string(),
-            ],
-        )
-    } else if subagent_enabled && message_suggests_subagent(&request.message) {
-        (
-            "优先拆分为多代理".to_string(),
-            "用户输入更适合并行分工处理，先按多代理路径组织执行。".to_string(),
-            vec![
-                "检测到并行/多角度需求".to_string(),
-                "主线程先承担协调职责".to_string(),
-            ],
-        )
-    } else if task_enabled && message_suggests_task(&request.message) {
-        (
-            "升级为后台任务".to_string(),
-            "用户输入更接近耗时或异步推进场景，优先走后台任务链路。".to_string(),
-            vec![
-                "检测到排队/持续执行诉求".to_string(),
-                "先建立任务，再回传过程与产出".to_string(),
-            ],
-        )
-    } else if thinking_enabled && reasoning_supported {
-        (
-            "先深度思考".to_string(),
-            "当前模型支持 reasoning，先做更充分的意图理解与方案判断，再决定是否调用搜索或工具。"
-                .to_string(),
-            vec![
-                "thinking 已开启".to_string(),
-                "搜索与工具保持候选状态，不默认触发".to_string(),
-            ],
-        )
-    } else if thinking_enabled {
-        (
-            "轻量理解后回答".to_string(),
-            "当前模型不支持显式 reasoning，先做轻量意图理解，再决定是否需要搜索或其他能力。"
-                .to_string(),
-            vec![
-                "thinking 已开启".to_string(),
-                "当前模型回退为轻量推理".to_string(),
-            ],
-        )
-    } else if message_suggests_planning(&request.message) {
-        (
-            "先规划再输出".to_string(),
-            "当前请求更像计划或方案拆解，会先整理执行路径和关键步骤。".to_string(),
-            vec![
-                "检测到计划/拆解需求".to_string(),
-                "优先输出结构化行动路径".to_string(),
-            ],
-        )
-    } else if message_suggests_content_generation(&request.message) {
-        (
-            "先生成草稿".to_string(),
-            "当前请求属于内容生成类，优先基于已有上下文生成一版草稿，信息不足时附带假设说明，而非反复追问。".to_string(),
-            vec![
-                "检测到内容生成需求".to_string(),
-                "先产出可用草稿，再根据反馈迭代".to_string(),
+                "搜索工具可用".to_string(),
+                "搜索结果会作为模型上下文".to_string(),
             ],
         )
     } else {
         (
-            "直接回答优先".to_string(),
-            "当前请求无需默认升级为搜索或任务，先直接给出结果，必要时再调用工具。".to_string(),
+            "正在交给模型处理".to_string(),
+            "运行时已准备当前工具面，模型会根据上下文自行判断是否需要搜索、浏览器或其他工具。".to_string(),
             vec![
-                "默认保持直接回答".to_string(),
-                "只有证据不足或时效性要求出现时才升级".to_string(),
+                "普通输入已进入 Agent 主链".to_string(),
+                "前端不再预选搜索、思考或编程策略".to_string(),
             ],
         )
     };
@@ -276,9 +61,8 @@ pub(super) async fn build_turn_runtime_statuses(
     Ok((
         AgentRuntimeStatus {
             phase: "preparing".to_string(),
-            title: "正在理解意图".to_string(),
-            detail: "正在判断当前任务应该直接回答、深度思考、规划、联网核实，还是升级为任务协作。"
-                .to_string(),
+            title: "正在准备处理".to_string(),
+            detail: "正在整理当前会话上下文和可用工具面。".to_string(),
             checkpoints: initial_checkpoints,
             metadata: Some(build_diagnostics_runtime_status_metadata()),
         },
@@ -410,44 +194,6 @@ pub(super) async fn complete_runtime_status_projection(
             tracing::warn!("[AsterAgent] 完成 runtime_status item 失败: {}", error);
         }
     }
-}
-
-pub(super) fn should_fallback_to_react_from_code_orchestrated(error: &ReplyAttemptError) -> bool {
-    if !error.emitted_any {
-        return true;
-    }
-
-    let lowered = error.message.to_lowercase();
-    let recoverable_hints = ["unknown subscript", "tool_search_analysis", "web_scraping"];
-
-    recoverable_hints.iter().any(|hint| lowered.contains(hint))
-}
-
-pub(super) async fn ensure_code_execution_extension_enabled(agent: &Agent) -> Result<bool, String> {
-    let extension_configs = agent.get_extension_configs().await;
-    if extension_configs
-        .iter()
-        .any(|cfg| cfg.name() == CODE_EXECUTION_EXTENSION_NAME)
-    {
-        return Ok(false);
-    }
-
-    let extension = ExtensionConfig::Platform {
-        name: CODE_EXECUTION_EXTENSION_NAME.to_string(),
-        description: "Execute JavaScript code in a sandboxed environment".to_string(),
-        bundled: Some(true),
-        available_tools: vec![],
-        deferred_loading: false,
-        always_expose_tools: Vec::new(),
-        allowed_caller: None,
-    };
-
-    agent
-        .add_extension(extension)
-        .await
-        .map_err(|e| format!("启用 code_execution 扩展失败: {e}"))?;
-
-    Ok(true)
 }
 
 pub(super) async fn stream_reply_once<F>(

@@ -546,7 +546,7 @@ mod tests {
                 TurnPromptAugmentationStageKind::Memory,
                 Some("base\nruntime".to_string()),
             )
-            .set_requested_execution_strategy(Some("auto".to_string()))
+            .set_requested_execution_strategy(Some("react".to_string()))
             .set_effective_execution_strategy(Some("react".to_string()))
             .set_request_tool_policy(Some(TurnRequestToolPolicySnapshot {
                 search_mode: "allowed".to_string(),
@@ -642,7 +642,7 @@ mod tests {
         );
         assert_eq!(
             turn_context.metadata.get("requested_execution_strategy"),
-            Some(&json!("auto"))
+            Some(&json!("react"))
         );
     }
 

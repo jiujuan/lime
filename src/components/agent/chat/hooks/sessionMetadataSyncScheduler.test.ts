@@ -120,10 +120,10 @@ describe("sessionMetadataSyncScheduler", () => {
       setSessionProviderSelection: vi.fn(),
     };
     const plan = metadataPlan({
-      fallbackExecutionStrategy: "code_orchestrated",
+      fallbackExecutionStrategy: "react",
       patch: {
         accessMode: "current",
-        executionStrategy: "code_orchestrated",
+        executionStrategy: "react",
       },
     });
 
@@ -161,7 +161,7 @@ describe("sessionMetadataSyncScheduler", () => {
     expect(setPendingCancel).toHaveBeenCalledWith(null);
     expect(runtime.updateSessionMetadata).toHaveBeenCalledWith("topic-a", {
       accessMode: "current",
-      executionStrategy: "code_orchestrated",
+      executionStrategy: "react",
     });
   });
 

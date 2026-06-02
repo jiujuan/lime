@@ -197,12 +197,6 @@ fn prepare_runtime_turn_policy(
             request_web_search,
             request_search_mode,
         );
-    let (request_web_search, request_search_mode) = upgrade_time_sensitive_web_search_policy(
-        &request.message,
-        request_web_search,
-        request_search_mode,
-    );
-
     let request_tool_policy = resolve_request_tool_policy_with_mode(
         request_web_search,
         request_search_mode,
@@ -232,29 +226,6 @@ fn prepare_runtime_turn_policy(
     RuntimeTurnPolicyPreparation {
         request_tool_policy,
         execution_profile,
-    }
-}
-
-fn upgrade_time_sensitive_web_search_policy(
-    message_text: &str,
-    request_web_search: Option<bool>,
-    request_search_mode: Option<RequestToolPolicyMode>,
-) -> (Option<bool>, Option<RequestToolPolicyMode>) {
-    if request_web_search != Some(true) {
-        return (request_web_search, request_search_mode);
-    }
-
-    match request_search_mode {
-        Some(RequestToolPolicyMode::Disabled | RequestToolPolicyMode::Required) => {
-            (request_web_search, request_search_mode)
-        }
-        Some(RequestToolPolicyMode::Allowed) | None => {
-            if lime_agent::message_requires_fresh_web_search(message_text) {
-                (Some(true), Some(RequestToolPolicyMode::Required))
-            } else {
-                (request_web_search, request_search_mode)
-            }
-        }
     }
 }
 
@@ -478,13 +449,8 @@ mod tests {
     }
 
     #[test]
-    fn time_sensitive_web_search_should_upgrade_allowed_policy_to_required() {
-        let request = runtime_policy_test_request(
-            "请整理今日国际新闻",
-            Some(true),
-            Some(RequestToolPolicyMode::Allowed),
-            None,
-        );
+    fn default_web_search_tool_surface_should_be_allowed_for_plain_agent_turn() {
+        let request = runtime_policy_test_request("需要时可以补充外部资料", None, None, None);
 
         let RuntimeTurnPolicyPreparation {
             request_tool_policy,
@@ -494,20 +460,21 @@ mod tests {
             "session-policy-test",
             None,
             false,
-            AsterExecutionStrategy::CodeOrchestrated,
+            AsterExecutionStrategy::React,
         );
 
         assert_eq!(
             request_tool_policy.search_mode,
-            RequestToolPolicyMode::Required
+            RequestToolPolicyMode::Allowed
         );
-        assert!(request_tool_policy.requires_web_search());
+        assert!(request_tool_policy.allows_web_search());
+        assert!(!request_tool_policy.requires_web_search());
     }
 
     #[test]
-    fn time_sensitive_web_search_should_upgrade_missing_mode_to_required() {
+    fn explicit_web_search_turn_should_stay_allowed_until_search_mode_requires_it() {
         let request =
-            runtime_policy_test_request("latest OpenAI API changes", Some(true), None, None);
+            runtime_policy_test_request("需要时可以补充外部资料", Some(true), None, None);
 
         let RuntimeTurnPolicyPreparation {
             request_tool_policy,
@@ -517,13 +484,134 @@ mod tests {
             "session-policy-test",
             None,
             false,
-            AsterExecutionStrategy::CodeOrchestrated,
+            AsterExecutionStrategy::React,
         );
 
         assert_eq!(
             request_tool_policy.search_mode,
-            RequestToolPolicyMode::Required
+            RequestToolPolicyMode::Allowed
         );
+        assert!(request_tool_policy.allows_web_search());
+        assert!(!request_tool_policy.requires_web_search());
+    }
+
+    #[test]
+    fn default_web_search_tool_surface_should_be_allowed_for_general_workbench_turn() {
+        let request = runtime_policy_test_request(
+            "需要时可以补充外部资料",
+            None,
+            None,
+            Some(serde_json::json!({
+                "harness": {
+                    "theme": "general",
+                    "session_mode": "general_workbench"
+                }
+            })),
+        );
+
+        let RuntimeTurnPolicyPreparation {
+            request_tool_policy,
+            ..
+        } = prepare_runtime_turn_policy(
+            &request,
+            "session-policy-test",
+            None,
+            false,
+            AsterExecutionStrategy::React,
+        );
+
+        assert_eq!(
+            request_tool_policy.search_mode,
+            RequestToolPolicyMode::Allowed
+        );
+        assert!(request_tool_policy.allows_web_search());
+        assert!(!request_tool_policy.requires_web_search());
+    }
+
+    #[test]
+    fn explicit_web_search_disabled_flag_should_override_default_tool_surface() {
+        let request =
+            runtime_policy_test_request("需要时可以补充外部资料", Some(false), None, None);
+
+        let RuntimeTurnPolicyPreparation {
+            request_tool_policy,
+            ..
+        } = prepare_runtime_turn_policy(
+            &request,
+            "session-policy-test",
+            None,
+            false,
+            AsterExecutionStrategy::React,
+        );
+
+        assert_eq!(
+            request_tool_policy.search_mode,
+            RequestToolPolicyMode::Disabled
+        );
+        assert!(!request_tool_policy.allows_web_search());
+    }
+
+    #[test]
+    fn metadata_web_search_disabled_flag_should_not_override_default_tool_surface() {
+        let request = runtime_policy_test_request(
+            "需要时可以补充外部资料",
+            None,
+            None,
+            Some(serde_json::json!({
+                "harness": {
+                    "preferences": {
+                        "web_search": false
+                    }
+                }
+            })),
+        );
+
+        let RuntimeTurnPolicyPreparation {
+            request_tool_policy,
+            ..
+        } = prepare_runtime_turn_policy(
+            &request,
+            "session-policy-test",
+            None,
+            false,
+            AsterExecutionStrategy::React,
+        );
+
+        assert_eq!(
+            request_tool_policy.search_mode,
+            RequestToolPolicyMode::Allowed
+        );
+        assert!(request_tool_policy.allows_web_search());
+        assert!(!request_tool_policy.requires_web_search());
+    }
+
+    #[test]
+    fn session_recent_web_search_disabled_flag_should_not_override_default_tool_surface() {
+        let request = runtime_policy_test_request("需要时可以补充外部资料", None, None, None);
+        let session_recent_preferences = lime_agent::SessionExecutionRuntimePreferences {
+            web_search: false,
+            thinking: false,
+            task: false,
+            subagent: false,
+        };
+
+        let RuntimeTurnPolicyPreparation {
+            request_tool_policy,
+            ..
+        } = prepare_runtime_turn_policy(
+            &request,
+            "session-policy-test",
+            Some(&session_recent_preferences),
+            false,
+            AsterExecutionStrategy::React,
+        );
+
+        assert_eq!(
+            request_tool_policy.search_mode,
+            RequestToolPolicyMode::Allowed
+        );
+        assert!(request_tool_policy.allows_web_search());
+        assert!(!request_tool_policy.requires_web_search());
     }
 
     #[test]
@@ -547,7 +635,7 @@ mod tests {
             "session-policy-test",
             None,
             false,
-            AsterExecutionStrategy::CodeOrchestrated,
+            AsterExecutionStrategy::React,
         );
 
         assert_eq!(
@@ -585,7 +673,7 @@ mod tests {
             "session-policy-test",
             None,
             false,
-            AsterExecutionStrategy::CodeOrchestrated,
+            AsterExecutionStrategy::React,
         );
 
         assert_eq!(
@@ -796,8 +884,7 @@ pub(super) async fn prepare_runtime_turn_submit_preparation(
     let persisted_strategy =
         AsterExecutionStrategy::from_db_value(session_state_snapshot.execution_strategy());
     let requested_strategy = request.execution_strategy.unwrap_or(persisted_strategy);
-    let effective_strategy = requested_strategy.effective_strategy();
-    apply_code_orchestrated_runtime_defaults(request, effective_strategy);
+    let effective_strategy = requested_strategy;
 
     let RuntimeTurnPolicyPreparation {
         request_tool_policy,
@@ -882,7 +969,7 @@ pub(super) async fn prepare_runtime_turn_submit_preparation(
         runtime_config,
         runtime_chat_mode,
         execution_profile,
-        requested_strategy,
+        effective_strategy,
         &request_tool_policy,
         &mut turn_input_builder,
     )

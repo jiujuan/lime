@@ -1065,6 +1065,7 @@ fn extract_turn_execution_strategy(turn_context: Option<&TurnContextOverride>) -
             "executionStrategy",
         ],
     )
+    .map(|_| "react".to_string())
 }
 
 /// 将 Aster AgentEvent 转换为 TauriAgentEvent 列表
@@ -2141,7 +2142,7 @@ mod tests {
         let mut metadata = HashMap::new();
         metadata.insert(
             "effective_execution_strategy".to_string(),
-            serde_json::Value::String("code_orchestrated".to_string()),
+            serde_json::Value::String("react".to_string()),
         );
         let turn = TurnRuntime::new(
             "turn-code",
@@ -2168,7 +2169,7 @@ mod tests {
                 assert_eq!(session_id, "session-code");
                 assert_eq!(thread_id, "thread-code");
                 assert_eq!(turn_id, "turn-code");
-                assert_eq!(execution_strategy.as_deref(), Some("code_orchestrated"));
+                assert_eq!(execution_strategy.as_deref(), Some("react"));
             }
             other => panic!("Expected TurnContext event, got {other:?}"),
         }

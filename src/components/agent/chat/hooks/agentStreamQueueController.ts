@@ -6,14 +6,12 @@ export function buildAgentStreamQueuedDraftMessagePatch(params: {
   contentFallback: string;
   executionStrategy: AsterExecutionStrategy;
   queuedMessageText?: string | null;
-  webSearch?: boolean;
 }): Pick<Message, "isThinking" | "runtimeStatus"> {
   return {
     isThinking: false,
     runtimeStatus: buildQueuedRuntimeStatus(
       params.executionStrategy,
       params.queuedMessageText?.trim() || params.contentFallback,
-      params.webSearch,
     ),
   };
 }
@@ -22,7 +20,6 @@ export function buildAgentStreamQueuedDraftStatePlan(params: {
   contentFallback: string;
   executionStrategy: AsterExecutionStrategy;
   queuedMessageText?: string | null;
-  webSearch?: boolean;
 }): {
   messagePatch: Pick<Message, "isThinking" | "runtimeStatus">;
   shouldClearActiveStream: boolean;

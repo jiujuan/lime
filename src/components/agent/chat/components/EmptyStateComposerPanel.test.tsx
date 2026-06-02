@@ -16,10 +16,7 @@ import {
   buildInputbarCoreCopy,
   type InputbarCoreCopyKey,
 } from "./Inputbar/components/inputbarCoreCopy";
-import {
-  buildInputbarExecutionStrategyCopy,
-  type InputbarWorkflowCopyKey,
-} from "./Inputbar/inputbarWorkflowCopy";
+import type { InputbarWorkflowCopyKey } from "./Inputbar/inputbarWorkflowCopy";
 import { changeLimeLocale } from "@/i18n/createI18n";
 
 vi.mock("./ChatModelSelector", () => ({
@@ -89,14 +86,6 @@ const TEST_INPUTBAR_CORE_COPY = buildInputbarCoreCopy((key, values) =>
 
 const TEST_EN_INPUTBAR_CORE_COPY = buildInputbarCoreCopy((key, values) =>
   translateResource(agentEnUSResource, key, values),
-);
-
-const TEST_EXECUTION_STRATEGY_COPY = buildInputbarExecutionStrategyCopy(
-  (key, values) => translateResource(agentZhCNResource, key, values),
-);
-
-const TEST_EN_EXECUTION_STRATEGY_COPY = buildInputbarExecutionStrategyCopy(
-  (key, values) => translateResource(agentEnUSResource, key, values),
 );
 
 const mockSelectedTeam = {
@@ -211,24 +200,17 @@ function renderPanel(
     setProviderType: vi.fn(),
     model: "gpt-4.1",
     setModel: vi.fn(),
-    executionStrategy: "react",
-    setExecutionStrategy: vi.fn(),
     onManageProviders: vi.fn(),
     isGeneralTheme: false,
     characters: [],
     skillSelection: createSkillSelection(),
     copy: TEST_COMPOSER_COPY,
     inputbarCopy: TEST_INPUTBAR_CORE_COPY,
-    executionStrategyCopy: TEST_EXECUTION_STRATEGY_COPY,
     showCreationModeSelector: false,
     creationMode: "guided",
     onCreationModeChange: vi.fn(),
-    thinkingEnabled: false,
-    onThinkingEnabledChange: vi.fn(),
     subagentEnabled: false,
     onSubagentEnabledChange: vi.fn(),
-    webSearchEnabled: false,
-    onWebSearchEnabledChange: vi.fn(),
     pendingImages: [],
     onFileSelect: vi.fn(),
     onPaste: vi.fn(),
@@ -270,24 +252,17 @@ function renderStatefulPanel(
         setProviderType={vi.fn()}
         model="gpt-4.1"
         setModel={vi.fn()}
-        executionStrategy="react"
-        setExecutionStrategy={vi.fn()}
         onManageProviders={vi.fn()}
         isGeneralTheme
         characters={[]}
         skillSelection={createSkillSelection()}
         copy={TEST_COMPOSER_COPY}
         inputbarCopy={TEST_INPUTBAR_CORE_COPY}
-        executionStrategyCopy={TEST_EXECUTION_STRATEGY_COPY}
         showCreationModeSelector={false}
         creationMode="guided"
         onCreationModeChange={vi.fn()}
-        thinkingEnabled={false}
-        onThinkingEnabledChange={vi.fn()}
         subagentEnabled={subagentEnabled}
         onSubagentEnabledChange={setSubagentEnabled}
-        webSearchEnabled={false}
-        onWebSearchEnabledChange={vi.fn()}
         pendingImages={[]}
         onFileSelect={vi.fn()}
         onPaste={vi.fn()}
@@ -340,7 +315,6 @@ describe("EmptyStateComposerPanel", () => {
   it("已开启的偏好若缺少 runtime current tools，也不应再显示页级告警", () => {
     const container = renderPanel({
       isGeneralTheme: true,
-      webSearchEnabled: true,
       subagentEnabled: true,
     });
 
@@ -425,7 +399,6 @@ describe("EmptyStateComposerPanel", () => {
     const container = renderPanel({
       copy: TEST_EN_COMPOSER_COPY,
       inputbarCopy: TEST_EN_INPUTBAR_CORE_COPY,
-      executionStrategyCopy: TEST_EN_EXECUTION_STRATEGY_COPY,
       isGeneralTheme: true,
       guideHelpActive: true,
       onClearGuideHelp: vi.fn(),
@@ -475,7 +448,7 @@ describe("EmptyStateComposerPanel", () => {
         .querySelector('[data-testid="empty-state-advanced-toggle"]')
         ?.getAttribute("aria-label"),
     ).toBe("Collapse advanced settings");
-    expect(container.textContent).toContain("General task context");
+    expect(container.textContent).not.toContain("General task context");
   });
 
   it("首页空态输入区应把项目资料作为底栏主入口", () => {
@@ -1048,12 +1021,8 @@ describe("EmptyStateComposerPanel", () => {
     ).toBeTruthy();
   });
 
-  it("应通过高级设置中的编程执行开关透传执行策略切换，不再渲染执行模式下拉", () => {
-    const setExecutionStrategy = vi.fn();
-    const container = renderPanel({
-      executionStrategy: "react",
-      setExecutionStrategy,
-    });
+  it("高级设置不再渲染编程执行前置开关", () => {
+    const container = renderPanel();
 
     expect(
       container.querySelector('[data-testid="inputbar-plan-toggle"]'),
@@ -1061,22 +1030,12 @@ describe("EmptyStateComposerPanel", () => {
 
     expandAdvancedControls(container);
 
-    const planToggle = container.querySelector(
-      '[data-testid="inputbar-plan-toggle"]',
-    ) as HTMLButtonElement | null;
-
-    expect(planToggle).toBeTruthy();
-    expect(planToggle?.textContent).toContain("编程执行");
-    expect(planToggle?.textContent).not.toContain("Plan");
-    expect(planToggle?.getAttribute("aria-label")).toBe("开启编程执行");
+    expect(
+      container.querySelector('[data-testid="inputbar-plan-toggle"]'),
+    ).toBeNull();
+    expect(container.textContent).not.toContain("编程执行");
     expect(container.textContent).not.toContain("ReAct");
     expect(container.textContent).not.toContain("Auto");
-
-    act(() => {
-      planToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(setExecutionStrategy).toHaveBeenCalledWith("code_orchestrated");
   });
 
   it("即使已经保留 Team 方案，关闭 Team mode 后也不应显示 TeamSelector", () => {

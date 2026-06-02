@@ -157,7 +157,7 @@ describe("agentStreamUserInputSendPreparation", () => {
     expect(isSending).toBe(true);
   });
 
-  it("有 active stream 时应进入 queue 模式，并允许 model override", () => {
+  it("有 active stream 时应进入 queue 模式，归一 legacy 策略并允许 model override", () => {
     vi.spyOn(crypto, "randomUUID").mockReturnValueOnce(
       "00000000-0000-0000-0000-000000000003",
     );
@@ -194,7 +194,7 @@ describe("agentStreamUserInputSendPreparation", () => {
       content: "继续生成提纲",
       images: [],
       skipUserMessage: true,
-      executionStrategyOverride: "code_orchestrated",
+      executionStrategyOverride: "react",
       modelOverride: "opus",
       options: {
         assistantDraft: {
@@ -204,7 +204,7 @@ describe("agentStreamUserInputSendPreparation", () => {
       env,
     });
 
-    expect(result.effectiveExecutionStrategy).toBe("code_orchestrated");
+    expect(result.effectiveExecutionStrategy).toBe("react");
     expect(result.effectiveProviderType).toBe("claude");
     expect(result.effectiveModel).toBe("opus");
     expect(result.syncedSessionModelPreference).toBeNull();

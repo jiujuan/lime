@@ -47,9 +47,9 @@ describe("agentChatStorage", () => {
     });
   });
 
-  it("有 workspace 但没有持久化执行策略时应默认进入编程执行底层", () => {
+  it("有 workspace 但没有持久化执行策略时应默认进入普通 Agent 主链", () => {
     expect(resolvePersistedExecutionStrategy("workspace-code-default")).toBe(
-      "code_orchestrated",
+      "react",
     );
   });
 
@@ -57,12 +57,32 @@ describe("agentChatStorage", () => {
     expect(resolvePersistedExecutionStrategy(null)).toBe("react");
   });
 
-  it("已有 workspace 执行策略偏好时应尊重用户选择", () => {
+  it("已有 current workspace 执行策略偏好时应保持普通 Agent 主链", () => {
     const storageKey = getExecutionStrategyStorageKey("workspace-user-pref");
     expect(storageKey).toBeTruthy();
     localStorage.setItem(storageKey!, JSON.stringify("react"));
 
     expect(resolvePersistedExecutionStrategy("workspace-user-pref")).toBe(
+      "react",
+    );
+  });
+
+  it("读取 legacy code_orchestrated 偏好时应归一到普通 Agent 主链", () => {
+    const storageKey = getExecutionStrategyStorageKey("workspace-legacy-code");
+    expect(storageKey).toBeTruthy();
+    localStorage.setItem(storageKey!, JSON.stringify("code_orchestrated"));
+
+    expect(resolvePersistedExecutionStrategy("workspace-legacy-code")).toBe(
+      "react",
+    );
+  });
+
+  it("读取 legacy auto 偏好时应归一到普通 Agent 主链", () => {
+    const storageKey = getExecutionStrategyStorageKey("workspace-legacy-auto");
+    expect(storageKey).toBeTruthy();
+    localStorage.setItem(storageKey!, JSON.stringify("auto"));
+
+    expect(resolvePersistedExecutionStrategy("workspace-legacy-auto")).toBe(
       "react",
     );
   });

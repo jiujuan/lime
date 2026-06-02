@@ -191,27 +191,27 @@ describe("useAgentContext", () => {
     harness.unmount();
   });
 
-  it("workspace 从空值解析完成的同一帧应投影默认编程执行策略", async () => {
+  it("workspace 从空值解析完成的同一帧应投影默认普通 Agent 主链策略", async () => {
     const harness = mountRerenderableHook("");
 
     expect(harness.getValue().executionStrategy).toBe("react");
 
     harness.rerender("workspace-code-runtime");
 
-    expect(harness.getValue().executionStrategy).toBe("code_orchestrated");
+    expect(harness.getValue().executionStrategy).toBe("react");
 
     await act(async () => {
       await Promise.resolve();
     });
 
-    expect(harness.getValue().executionStrategy).toBe("code_orchestrated");
+    expect(harness.getValue().executionStrategy).toBe("react");
     expect(
       JSON.parse(
         localStorage.getItem(
           "aster_execution_strategy_workspace-code-runtime",
         ) || "null",
       ),
-    ).toBe("code_orchestrated");
+    ).toBe("react");
 
     harness.unmount();
   });
@@ -260,12 +260,11 @@ describe("useAgentContext", () => {
     harness.unmount();
   });
 
-  it("当前会话连续切换执行策略时应批量回写 session 并同步话题快照", async () => {
+  it("当前会话收到 current 执行策略时应批量回写 session 并同步话题快照", async () => {
     const harness = mountHook("workspace-1", "session-1");
 
     await act(async () => {
-      harness.getValue().setExecutionStrategy("auto");
-      harness.getValue().setExecutionStrategy("code_orchestrated");
+      harness.getValue().setExecutionStrategy("react");
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -273,29 +272,29 @@ describe("useAgentContext", () => {
     expect(mockSetSessionExecutionStrategy).toHaveBeenCalledTimes(1);
     expect(mockSetSessionExecutionStrategy).toHaveBeenCalledWith(
       "session-1",
-      "code_orchestrated",
+      "react",
     );
     expect(mockTopicsUpdater).toHaveBeenCalledWith(
       "session-1",
-      "code_orchestrated",
+      "react",
     );
     expect(
       harness.getValue().getSyncedSessionExecutionStrategy("session-1"),
-    ).toBe("code_orchestrated");
+    ).toBe("react");
     expect(
       JSON.parse(
         localStorage.getItem("aster_execution_strategy_workspace-1") || "null",
       ),
-    ).toBe("code_orchestrated");
+    ).toBe("react");
 
     harness.unmount();
   });
 
-  it("无当前会话时切换执行策略应只更新影子缓存", async () => {
+  it("无当前会话时收到 current 执行策略应只把 current 策略写入影子缓存", async () => {
     const harness = mountHook("workspace-shadow");
 
     await act(async () => {
-      harness.getValue().setExecutionStrategy("auto");
+      harness.getValue().setExecutionStrategy("react");
       await Promise.resolve();
     });
 
@@ -305,7 +304,7 @@ describe("useAgentContext", () => {
         localStorage.getItem("aster_execution_strategy_workspace-shadow") ||
           "null",
       ),
-    ).toBe("auto");
+    ).toBe("react");
 
     harness.unmount();
   });

@@ -4,8 +4,6 @@ import { toast } from "sonner";
 import { buildInputbarToolsCopy } from "../components/inputbarToolsCopy";
 
 export interface InputbarToolStates {
-  webSearch: boolean;
-  thinking: boolean;
   subagent: boolean;
 }
 
@@ -16,8 +14,6 @@ interface UseInputbarToolStateParams {
 }
 
 const DEFAULT_INPUTBAR_TOOL_STATES: InputbarToolStates = {
-  webSearch: false,
-  thinking: false,
   subagent: false,
 };
 
@@ -36,65 +32,35 @@ export function useInputbarToolState({
   );
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const webSearchEnabled = toolStates?.webSearch ?? localToolStates.webSearch;
-  const thinkingEnabled = toolStates?.thinking ?? localToolStates.thinking;
   const subagentEnabled = toolStates?.subagent ?? localToolStates.subagent;
 
   const activeTools = useMemo<Record<string, boolean>>(
     () => ({
-      web_search: webSearchEnabled,
-      thinking: thinkingEnabled,
       subagent_mode: subagentEnabled,
     }),
-    [thinkingEnabled, webSearchEnabled, subagentEnabled],
+    [subagentEnabled],
   );
 
   const updateToolStates = useCallback(
     (next: InputbarToolStates) => {
       setLocalToolStates((prev) => ({
-        webSearch: toolStates?.webSearch ?? next.webSearch ?? prev.webSearch,
-        thinking: toolStates?.thinking ?? next.thinking ?? prev.thinking,
         subagent: toolStates?.subagent ?? next.subagent ?? prev.subagent,
       }));
-      onToolStatesChange?.(next);
-      return next;
+      const sanitizedNext = {
+        subagent: next.subagent,
+      };
+      onToolStatesChange?.(sanitizedNext);
+      return sanitizedNext;
     },
-    [
-      onToolStatesChange,
-      toolStates?.subagent,
-      toolStates?.thinking,
-      toolStates?.webSearch,
-    ],
+    [onToolStatesChange, toolStates?.subagent],
   );
 
   const handleToolClick = useCallback(
     (tool: string) => {
       switch (tool) {
-        case "thinking": {
-          const nextThinking = !thinkingEnabled;
-          updateToolStates({
-            webSearch: webSearchEnabled,
-            thinking: nextThinking,
-            subagent: subagentEnabled,
-          });
-          toast.info(copy.thinking.toast(nextThinking));
-          break;
-        }
-        case "web_search": {
-          const nextWebSearch = !webSearchEnabled;
-          updateToolStates({
-            webSearch: nextWebSearch,
-            thinking: thinkingEnabled,
-            subagent: subagentEnabled,
-          });
-          toast.info(copy.webSearch.toast(nextWebSearch));
-          break;
-        }
         case "subagent_mode": {
           const nextSubagent = !subagentEnabled;
           updateToolStates({
-            webSearch: webSearchEnabled,
-            thinking: thinkingEnabled,
             subagent: nextSubagent,
           });
           toast.info(copy.subagent.toast(nextSubagent));
@@ -117,10 +83,8 @@ export function useInputbarToolState({
       copy,
       isFullscreen,
       openFileDialog,
-      thinkingEnabled,
       subagentEnabled,
       updateToolStates,
-      webSearchEnabled,
     ],
   );
 
@@ -130,8 +94,6 @@ export function useInputbarToolState({
         return;
       }
       updateToolStates({
-        webSearch: webSearchEnabled,
-        thinking: thinkingEnabled,
         subagent: enabled,
       });
       toast.info(copy.subagent.toast(enabled));
@@ -139,9 +101,7 @@ export function useInputbarToolState({
     [
       copy,
       subagentEnabled,
-      thinkingEnabled,
       updateToolStates,
-      webSearchEnabled,
     ],
   );
 
@@ -150,8 +110,6 @@ export function useInputbarToolState({
     handleToolClick,
     setSubagentEnabled,
     isFullscreen,
-    thinkingEnabled,
     subagentEnabled,
-    webSearchEnabled,
   };
 }

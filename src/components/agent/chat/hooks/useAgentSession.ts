@@ -1065,18 +1065,21 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
       const creationPromise = (async () => {
         const startedAt = Date.now();
+        const creationExecutionStrategy = normalizeExecutionStrategy(
+          executionStrategy,
+        );
         try {
           invalidatePendingSessionSwitches();
           skipAutoRestoreRef.current = true;
           logAgentDebug("useAgentSession", "createFreshSession.start", {
-            executionStrategy,
+            executionStrategy: creationExecutionStrategy,
             sessionName: sessionName?.trim() || null,
             workspaceId: resolvedWorkspaceId,
           });
           const newSessionId = await runtime.createSession(
             resolvedWorkspaceId,
             sessionName,
-            executionStrategy,
+            creationExecutionStrategy,
             {
               runStartHooks: createOptions?.skipSessionStartHooks !== true,
             },
@@ -1105,7 +1108,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           setTopics((prev) =>
             upsertFreshSessionDraftTopic(prev, {
               createdAt: now,
-              executionStrategy,
+              executionStrategy: creationExecutionStrategy,
               sessionId: newSessionId,
               sessionName,
               workspaceId: resolvedWorkspaceId,
@@ -1116,7 +1119,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           hydratedSessionRef.current = newSessionId;
           restoredWorkspaceRef.current = resolvedWorkspaceId;
 
-          markSessionExecutionStrategySynced(newSessionId, executionStrategy);
+          markSessionExecutionStrategySynced(
+            newSessionId,
+            creationExecutionStrategy,
+          );
           const nextProviderType = providerTypeRef.current;
           const nextModel = modelRef.current;
           const nextScopedKeys = scopedKeys;

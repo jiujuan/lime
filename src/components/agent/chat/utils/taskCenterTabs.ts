@@ -8,6 +8,59 @@ export const MAX_TASK_CENTER_OPEN_TABS = 6;
 const TASK_CENTER_LEGACY_WORKSPACE_KEY = "__legacy__";
 
 export type TaskCenterWorkspaceTabMap = Record<string, string[]>;
+export interface TaskCenterLocalSessionOverride {
+  sessionId: string;
+  routeSessionId: string | null;
+}
+
+export interface TaskCenterRouteTabSyncIntent {
+  shouldSync: boolean;
+  routeChanged: boolean;
+  shouldClearActiveDraft: boolean;
+  shouldClearTransitionAndDetached: boolean;
+  nextRouteSyncSessionId: string | null;
+}
+
+export interface TaskCenterTopicSwitchOptions {
+  forceRefresh?: true;
+  resumeSessionStartHooks?: true;
+}
+
+export interface TaskCenterTopicClosePlan {
+  remainingIds: string[];
+  isActiveTab: boolean;
+  shouldClearDetachedTopic: boolean;
+  shouldClearTransitionTopic: boolean;
+  fallbackTopicId: string | null;
+}
+
+export type TaskCenterFallbackRestoreSkipReason =
+  | "not-task-center"
+  | "workspace-missing"
+  | "session-restoring"
+  | "session-hydrating"
+  | "draft-surface-active"
+  | "draft-tab-active"
+  | "service-skill-launch-pending"
+  | "initial-dispatch-pending"
+  | "detached-session"
+  | "unknown-session-with-messages"
+  | "no-fallback-topic"
+  | "recently-restored";
+
+export type TaskCenterFallbackRestorePlan =
+  | {
+      action: "skip";
+      reason: TaskCenterFallbackRestoreSkipReason;
+    }
+  | {
+      action: "restore";
+      fallbackTopicId: string;
+      nextRestore: {
+        topicId: string;
+        startedAt: number;
+      };
+    };
 
 export function shouldResumeTaskSession(
   topic?:
@@ -26,6 +79,130 @@ export function shouldResumeTaskSession(
     topic.status === "waiting" ||
     (topic.status === "failed" && topic.statusReason === "workspace_error")
   );
+}
+
+export function resolveInitialTaskSessionSwitchOptions(
+  topic?:
+    | Pick<Topic, "status" | "statusReason">
+    | {
+        status?: Topic["status"];
+        statusReason?: Topic["statusReason"];
+      }
+    | null,
+): {
+  allowDetachedSession: true;
+  forceRefresh?: true;
+  resumeSessionStartHooks?: true;
+} {
+  const shouldForceRefresh = topic?.statusReason === "workspace_error";
+  const shouldResume = shouldResumeTaskSession(topic);
+
+  return {
+    allowDetachedSession: true,
+    ...(shouldForceRefresh ? { forceRefresh: true } : {}),
+    ...(shouldResume ? { resumeSessionStartHooks: true } : {}),
+  };
+}
+
+export function resolveTaskCenterTopicSwitchOptions(params: {
+  shouldResume: boolean;
+  forceRefresh?: boolean;
+}): TaskCenterTopicSwitchOptions | undefined {
+  if (!params.shouldResume && params.forceRefresh !== true) {
+    return undefined;
+  }
+
+  return {
+    ...(params.forceRefresh === true ? { forceRefresh: true } : {}),
+    ...(params.shouldResume ? { resumeSessionStartHooks: true } : {}),
+  };
+}
+
+export function shouldSkipTaskCenterActiveTopicReopen(params: {
+  topicId: string;
+  activeSessionId?: string | null;
+  messagesLength: number;
+  activeDraftTabId?: string | null;
+  draftSurfaceActive: boolean;
+  detachedTopicId?: string | null;
+  shouldResume: boolean;
+  forceRefresh?: boolean;
+  preferResume?: boolean;
+  replaceOpenTabs?: boolean;
+}): boolean {
+  return (
+    params.topicId === (params.activeSessionId ?? null) &&
+    params.messagesLength > 0 &&
+    (params.activeDraftTabId ?? null) === null &&
+    params.draftSurfaceActive === false &&
+    (params.detachedTopicId ?? null) === null &&
+    params.shouldResume === false &&
+    params.forceRefresh !== true &&
+    params.preferResume !== true &&
+    params.replaceOpenTabs !== true
+  );
+}
+
+export function clearTaskCenterLocalSessionOverrideForTopic(
+  current: TaskCenterLocalSessionOverride | null,
+  topicId: string,
+): TaskCenterLocalSessionOverride | null {
+  return current?.sessionId === topicId ? null : current;
+}
+
+export function clearTaskCenterTransitionTopicForTopic(
+  currentTopicId: string | null,
+  topicId: string,
+): string | null {
+  return currentTopicId === topicId ? null : currentTopicId;
+}
+
+export function rollbackTaskCenterOpenTabMapForFailedSwitch(params: {
+  currentMap: TaskCenterWorkspaceTabMap;
+  workspaceId?: string | null;
+  topicId: string;
+  wasOpenInTaskCenter: boolean;
+  replaceOpenTabs?: boolean;
+}): TaskCenterWorkspaceTabMap {
+  if (params.wasOpenInTaskCenter || params.replaceOpenTabs === true) {
+    return params.currentMap;
+  }
+
+  return updateTaskCenterTabIdsForWorkspace(
+    params.currentMap,
+    params.workspaceId,
+    (currentIds) =>
+      currentIds.filter((currentId) => currentId !== params.topicId),
+  );
+}
+
+export function resolveTaskCenterTopicClosePlan(params: {
+  closingTopicId: string;
+  currentOpenTabIds: string[];
+  sessionId?: string | null;
+  detachedTopicId?: string | null;
+  transitionTopicId?: string | null;
+}): TaskCenterTopicClosePlan {
+  const currentIndex = params.currentOpenTabIds.indexOf(params.closingTopicId);
+  const remainingIds = params.currentOpenTabIds.filter(
+    (item) => item !== params.closingTopicId,
+  );
+  const isActiveTab = params.sessionId === params.closingTopicId;
+  const fallbackTopicId = isActiveTab
+    ? (remainingIds[currentIndex] ??
+      remainingIds[currentIndex - 1] ??
+      remainingIds[0] ??
+      null)
+    : null;
+
+  return {
+    remainingIds,
+    isActiveTab,
+    shouldClearDetachedTopic: params.detachedTopicId === params.closingTopicId,
+    shouldClearTransitionTopic:
+      params.transitionTopicId === params.closingTopicId,
+    fallbackTopicId,
+  };
 }
 
 function resolveTaskCenterTabPriority(
@@ -269,6 +446,155 @@ export function replaceTaskCenterTabIdsForWorkspace(
   );
 }
 
+export function initializeTaskCenterOpenTabMap(params: {
+  initialTabMap: TaskCenterWorkspaceTabMap;
+  agentEntry?: string | null;
+  workspaceId?: string | null;
+  normalizedInitialSessionId?: string | null;
+  maxCount?: number;
+}): TaskCenterWorkspaceTabMap {
+  const initialSessionId = params.normalizedInitialSessionId || null;
+  if (
+    params.agentEntry !== "claw" ||
+    !params.workspaceId ||
+    !initialSessionId
+  ) {
+    return params.initialTabMap;
+  }
+
+  return replaceTaskCenterTabIdsForWorkspace(
+    params.initialTabMap,
+    params.workspaceId,
+    initialSessionId,
+    params.maxCount,
+  );
+}
+
+export function shouldRespectTaskCenterLocalSessionOverride(params: {
+  localSessionOverride?: TaskCenterLocalSessionOverride | null;
+  normalizedInitialSessionId?: string | null;
+  sessionId?: string | null;
+}): boolean {
+  const localSessionOverride = params.localSessionOverride;
+  if (!localSessionOverride) {
+    return false;
+  }
+
+  const normalizedInitialSessionId = params.normalizedInitialSessionId ?? null;
+  const sessionId = params.sessionId ?? null;
+
+  return (
+    (localSessionOverride.routeSessionId === normalizedInitialSessionId ||
+      localSessionOverride.sessionId === normalizedInitialSessionId) &&
+    (!sessionId ||
+      localSessionOverride.sessionId === sessionId ||
+      localSessionOverride.sessionId === normalizedInitialSessionId)
+  );
+}
+
+export function resolveTaskCenterRouteTabSyncIntent(params: {
+  agentEntry?: string | null;
+  workspaceId?: string | null;
+  normalizedInitialSessionId?: string | null;
+  lastSyncedInitialSessionId?: string | null;
+  shouldRespectLocalSession: boolean;
+}): TaskCenterRouteTabSyncIntent {
+  const initialSessionId = params.normalizedInitialSessionId || null;
+  if (params.agentEntry !== "claw" || !params.workspaceId || !initialSessionId) {
+    return {
+      shouldSync: false,
+      routeChanged: false,
+      shouldClearActiveDraft: false,
+      shouldClearTransitionAndDetached: false,
+      nextRouteSyncSessionId: params.lastSyncedInitialSessionId ?? null,
+    };
+  }
+
+  const routeChanged =
+    (params.lastSyncedInitialSessionId ?? null) !== initialSessionId;
+
+  return {
+    shouldSync: true,
+    routeChanged,
+    shouldClearActiveDraft: routeChanged || params.shouldRespectLocalSession,
+    shouldClearTransitionAndDetached: params.shouldRespectLocalSession,
+    nextRouteSyncSessionId: initialSessionId,
+  };
+}
+
+export function applyTaskCenterRouteTabSyncToMap(params: {
+  currentMap: TaskCenterWorkspaceTabMap;
+  workspaceId?: string | null;
+  normalizedInitialSessionId?: string | null;
+  shouldRespectLocalSession: boolean;
+  maxCount?: number;
+}): TaskCenterWorkspaceTabMap {
+  const initialSessionId = params.normalizedInitialSessionId || null;
+  if (!params.workspaceId || !initialSessionId) {
+    return params.currentMap;
+  }
+
+  if (params.shouldRespectLocalSession) {
+    return updateTaskCenterTabIdsForWorkspace(
+      params.currentMap,
+      params.workspaceId,
+      (currentIds) =>
+        [
+          initialSessionId,
+          ...currentIds.filter((topicId) => topicId !== initialSessionId),
+        ].slice(0, params.maxCount ?? MAX_TASK_CENTER_OPEN_TABS),
+      params.maxCount,
+    );
+  }
+
+  return replaceTaskCenterTabIdsForWorkspace(
+    params.currentMap,
+    params.workspaceId,
+    initialSessionId,
+    params.maxCount,
+  );
+}
+
+export function shouldWaitForTaskCenterInitialSessionTopic(params: {
+  normalizedInitialSessionId?: string | null;
+  hasInitialSessionTopic: boolean;
+}): boolean {
+  return Boolean(
+    params.normalizedInitialSessionId && !params.hasInitialSessionTopic,
+  );
+}
+
+export function resolveTaskCenterReconcileCurrentTopicId(params: {
+  normalizedInitialSessionId?: string | null;
+  sessionId?: string | null;
+  shouldRespectLocalSession: boolean;
+  localSessionOverride?: TaskCenterLocalSessionOverride | null;
+  detachedTopicId?: string | null;
+}): string | null {
+  const initialSessionId = params.normalizedInitialSessionId ?? null;
+  const sessionId = params.sessionId ?? null;
+  const isInitialSessionRoutePending =
+    Boolean(initialSessionId) &&
+    initialSessionId !== sessionId &&
+    !params.shouldRespectLocalSession;
+
+  if (isInitialSessionRoutePending) {
+    return null;
+  }
+
+  const effectiveCurrentTopicId =
+    params.shouldRespectLocalSession &&
+    params.localSessionOverride?.sessionId === initialSessionId
+      ? initialSessionId
+      : sessionId;
+
+  if (params.detachedTopicId === effectiveCurrentTopicId) {
+    return null;
+  }
+
+  return effectiveCurrentTopicId;
+}
+
 export function buildDefaultTaskCenterTabIds(
   topics: Topic[],
   currentTopicId: string | null,
@@ -344,6 +670,109 @@ export function resolveTaskCenterFallbackTopicId(params: {
       params.maxCount ?? MAX_TASK_CENTER_OPEN_TABS,
     ).find((topicId) => topicIdSet.has(topicId)) ?? null
   );
+}
+
+export function resolveTaskCenterFallbackRestorePlan(params: {
+  agentEntry?: string | null;
+  workspaceId?: string | null;
+  isAutoRestoringSession: boolean;
+  isSessionHydrating: boolean;
+  draftSurfaceActive: boolean;
+  draftTabActive: boolean;
+  initialPendingServiceSkillLaunchSignature?: string | null;
+  initialDispatchKey?: string | null;
+  isBootstrapDispatchPending: boolean;
+  messagesLength: number;
+  isSending: boolean;
+  queuedTurnsLength: number;
+  shouldHideDetachedTaskCenterTabs: boolean;
+  normalizedInitialSessionId?: string | null;
+  sessionId?: string | null;
+  currentSessionIsKnownTopic: boolean;
+  hasDisplayMessages: boolean;
+  switchingTopicId?: string | null;
+  openTabIds: string[];
+  topics: Pick<Topic, "id">[];
+  previousRestore?: { topicId: string; startedAt: number } | null;
+  now: number;
+}): TaskCenterFallbackRestorePlan {
+  if (params.agentEntry !== "claw") {
+    return { action: "skip", reason: "not-task-center" };
+  }
+
+  if (!params.workspaceId) {
+    return { action: "skip", reason: "workspace-missing" };
+  }
+
+  if (params.isAutoRestoringSession) {
+    return { action: "skip", reason: "session-restoring" };
+  }
+
+  if (params.isSessionHydrating) {
+    return { action: "skip", reason: "session-hydrating" };
+  }
+
+  if (params.draftSurfaceActive) {
+    return { action: "skip", reason: "draft-surface-active" };
+  }
+
+  if (params.draftTabActive) {
+    return { action: "skip", reason: "draft-tab-active" };
+  }
+
+  if (params.initialPendingServiceSkillLaunchSignature) {
+    return { action: "skip", reason: "service-skill-launch-pending" };
+  }
+
+  if (
+    params.initialDispatchKey &&
+    (params.isBootstrapDispatchPending ||
+      params.messagesLength === 0 ||
+      params.isSending ||
+      params.queuedTurnsLength > 0)
+  ) {
+    return { action: "skip", reason: "initial-dispatch-pending" };
+  }
+
+  if (params.shouldHideDetachedTaskCenterTabs) {
+    return { action: "skip", reason: "detached-session" };
+  }
+
+  if (
+    !params.normalizedInitialSessionId &&
+    params.sessionId &&
+    !params.currentSessionIsKnownTopic &&
+    params.hasDisplayMessages
+  ) {
+    return { action: "skip", reason: "unknown-session-with-messages" };
+  }
+
+  const fallbackTopicId = resolveTaskCenterFallbackTopicId({
+    sessionId: params.sessionId,
+    switchingTopicId: params.switchingTopicId,
+    openTabIds: params.openTabIds,
+    topics: params.topics,
+  });
+  if (!fallbackTopicId) {
+    return { action: "skip", reason: "no-fallback-topic" };
+  }
+
+  const previousRestore = params.previousRestore ?? null;
+  if (
+    previousRestore?.topicId === fallbackTopicId &&
+    params.now - previousRestore.startedAt < 2_000
+  ) {
+    return { action: "skip", reason: "recently-restored" };
+  }
+
+  return {
+    action: "restore",
+    fallbackTopicId,
+    nextRestore: {
+      topicId: fallbackTopicId,
+      startedAt: params.now,
+    },
+  };
 }
 
 export function shouldHideTaskCenterTabsForDetachedSession(params: {

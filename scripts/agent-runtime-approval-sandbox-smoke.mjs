@@ -455,7 +455,7 @@ function buildRuntimeContractMetadata() {
 async function runPermissionDecisionFlow(options, workspaceId, providerPreference, decision) {
   const confirmed = decision === "resolved";
   const responseLabel = confirmed ? "允许本次执行" : "拒绝";
-  const submittedStrategy = "code_orchestrated";
+  const submittedStrategy = "react";
   const sessionId = await invoke(options, "agent_runtime_create_session", {
     workspaceId,
     name: `Agent QC approval ${decision} ${Date.now()}`,
@@ -590,8 +590,8 @@ async function collectDevBridgeDeniedRuntimeTranscript(options) {
       sandboxPolicySubmitted: flows.every(
         (flow) => flow.submittedPolicies.sandboxPolicy === SANDBOX_POLICY,
       ),
-      codeOrchestratedSubmitted: flows.every(
-        (flow) => flow.submittedStrategy === "code_orchestrated",
+      reactRuntimeSubmitted: flows.every(
+        (flow) => flow.submittedStrategy === "react",
       ),
       providerNotRequired: flows.every((flow) => !flow.providerPreference),
     },

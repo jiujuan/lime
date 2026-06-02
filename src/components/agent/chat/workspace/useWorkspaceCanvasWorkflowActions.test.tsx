@@ -89,12 +89,9 @@ function renderHook(props?: Partial<HookProps>) {
     null;
 
   const defaultProps: HookProps = {
-    thinkingEnabled: true,
-    setChatToolPreferences: vi.fn(),
     sendRef: {
       current: vi.fn().mockResolvedValue(true),
     },
-    webSearchPreferenceRef: { current: true },
     setCanvasState: vi.fn(),
     setTopicStatus: vi.fn(),
     projectId: "project-1",
@@ -220,8 +217,6 @@ describe("useWorkspaceCanvasWorkflowActions", () => {
       sendRef: {
         current: sendCurrent,
       },
-      webSearchPreferenceRef: { current: false },
-      thinkingEnabled: false,
     });
 
     await render();
@@ -263,8 +258,8 @@ describe("useWorkspaceCanvasWorkflowActions", () => {
     expect(sendArgs?.[3]).toContain("请压缩冗余表达，适合董事会快速阅读。");
     expect(sendCurrent).toHaveBeenCalledWith(
       [],
-      false,
-      false,
+      undefined,
+      undefined,
       expect.stringContaining("Lime Artifact Workbench 的局部改写任务"),
       undefined,
       undefined,

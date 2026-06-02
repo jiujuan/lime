@@ -860,7 +860,7 @@ describe("skillCatalog", () => {
           aliases: ["launch", "campaign"],
           executionKind: "scene",
           requestDefaults: {
-            executionStrategy: "code_orchestrated",
+            executionStrategy: "react",
           },
           renderContract: {
             resultKind: "tool_timeline",
@@ -916,7 +916,7 @@ describe("skillCatalog", () => {
         },
       ],
       requestDefaults: {
-        executionStrategy: "code_orchestrated",
+        executionStrategy: "react",
       },
     });
   });

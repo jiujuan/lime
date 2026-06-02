@@ -12,6 +12,7 @@ import type { MessageImage } from "../types";
 import type { ChatToolPreferences } from "./chatToolPreferences";
 import { createRuntimePoliciesFromAccessMode } from "./accessModeRuntime";
 import { buildSubmitOpRuntimeCompaction } from "./submitOpRuntimeCompaction";
+import { normalizeExecutionStrategy } from "../hooks/agentChatCoreUtils";
 
 function buildSubmitImages(images: MessageImage[]): ImageInput[] | undefined {
   if (images.length === 0) {
@@ -73,11 +74,12 @@ export function buildUserInputSubmitOp(
     effectiveProviderType,
     effectiveModel,
     modelOverride,
-    webSearch,
     searchMode,
-    thinking,
     autoContinue,
   } = options;
+  const normalizedEffectiveExecutionStrategy = normalizeExecutionStrategy(
+    effectiveExecutionStrategy,
+  );
 
   const compaction = buildSubmitOpRuntimeCompaction({
     requestMetadata,
@@ -85,12 +87,10 @@ export function buildUserInputSubmitOp(
     syncedRecentPreferences,
     syncedSessionModelPreference,
     syncedExecutionStrategy,
-    effectiveExecutionStrategy,
+    effectiveExecutionStrategy: normalizedEffectiveExecutionStrategy,
     effectiveProviderType,
     effectiveModel,
     modelOverride,
-    webSearch,
-    thinking,
   });
   const runtimePolicies =
     createRuntimePoliciesFromAccessMode(effectiveAccessMode);
@@ -113,13 +113,13 @@ export function buildUserInputSubmitOp(
       modelPreference: compaction.shouldSubmitModelPreference
         ? effectiveModel
         : undefined,
-      thinking: compaction.shouldSubmitThinking ? thinking : undefined,
+      thinking: undefined,
       approvalPolicy: runtimePolicies.approvalPolicy,
       sandboxPolicy: runtimePolicies.sandboxPolicy,
       executionStrategy: compaction.shouldSubmitExecutionStrategy
-        ? effectiveExecutionStrategy
+        ? normalizedEffectiveExecutionStrategy
         : undefined,
-      webSearch: compaction.shouldSubmitWebSearch ? webSearch : undefined,
+      webSearch: undefined,
       ...(searchMode ? { searchMode } : {}),
       autoContinue,
     },

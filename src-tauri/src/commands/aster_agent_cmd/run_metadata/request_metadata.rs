@@ -207,7 +207,7 @@ pub(in crate::commands::aster_agent_cmd) fn build_chat_run_metadata_base(
     );
     metadata.insert(
         "execution_strategy".to_string(),
-        serde_json::json!(format!("{:?}", effective_strategy).to_lowercase()),
+        serde_json::json!(effective_strategy.as_db_value()),
     );
     metadata.insert(
         "message_length".to_string(),

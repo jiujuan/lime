@@ -73,6 +73,7 @@ import {
   readSystemPathReferencesFromFiles,
 } from "../utils/pathReferences";
 import { buildKnowledgeRequestMetadata } from "@/features/knowledge/agent/knowledgeMetadata";
+import type { InputbarSendHandler } from "./Inputbar/inputbarSendPayload";
 import {
   resolveInputCapabilityDispatch,
   resolveInputCapabilitySelectionFromRoute,
@@ -96,7 +97,6 @@ import { buildServiceSkillHomeCopy } from "../service-skills/homeCopy";
 import { listFeaturedHomeServiceSkills } from "../service-skills/homeEntrySkills";
 import type { RuntimeToolAvailability } from "../utils/runtimeToolAvailability";
 import type { AgentTaskRuntimeCardModel } from "../utils/agentTaskRuntime";
-import type { HandleSendOptions } from "../hooks/handleSendTypes";
 import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface";
 import {
   HomeStartSurface,
@@ -113,7 +113,6 @@ import {
 } from "../home/buildHomeSkillSurface";
 import { buildHomeSurfaceCopy } from "../home/homeSurfaceCopy";
 import { buildInputbarCoreCopy } from "./Inputbar/components/inputbarCoreCopy";
-import { buildInputbarExecutionStrategyCopy } from "./Inputbar/inputbarWorkflowCopy";
 import type {
   HomeGuideCard,
   HomeSkillSurfaceItem,
@@ -314,12 +313,7 @@ const SecondScreenInner = styled.div`
 interface EmptyStateProps extends SkillSelectionSourceProps {
   input: string;
   setInput: (value: string) => void;
-  onSend: (
-    value: string,
-    executionStrategy?: "react" | "code_orchestrated" | "auto",
-    images?: MessageImage[],
-    sendOptions?: HandleSendOptions,
-  ) => void;
+  onSend: InputbarSendHandler;
   isLoading?: boolean;
   disabled?: boolean;
   /** 创作模式 */
@@ -336,17 +330,9 @@ interface EmptyStateProps extends SkillSelectionSourceProps {
   setProviderType: (type: string) => void;
   model: string;
   setModel: (model: string) => void;
-  executionStrategy?: "react" | "code_orchestrated" | "auto";
-  setExecutionStrategy?: (
-    strategy: "react" | "code_orchestrated" | "auto",
-  ) => void;
   accessMode?: AgentAccessMode;
   setAccessMode?: (mode: AgentAccessMode) => void;
   onManageProviders?: () => void;
-  webSearchEnabled?: boolean;
-  onWebSearchEnabledChange?: (enabled: boolean) => void;
-  thinkingEnabled?: boolean;
-  onThinkingEnabledChange?: (enabled: boolean) => void;
   subagentEnabled?: boolean;
   onSubagentEnabledChange?: (enabled: boolean) => void;
   selectedTeam?: TeamDefinition | null;
@@ -444,15 +430,9 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   setProviderType,
   model,
   setModel,
-  executionStrategy = "auto",
-  setExecutionStrategy,
   accessMode,
   setAccessMode,
   onManageProviders,
-  webSearchEnabled = false,
-  onWebSearchEnabledChange,
-  thinkingEnabled = false,
-  onThinkingEnabledChange,
   subagentEnabled = false,
   onSubagentEnabledChange,
   selectedTeam = null,
@@ -520,10 +500,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   );
   const inputbarCoreCopy = useMemo(
     () => buildInputbarCoreCopy(translateAgentCopyKey),
-    [translateAgentCopyKey],
-  );
-  const executionStrategyCopy = useMemo(
-    () => buildInputbarExecutionStrategyCopy(translateAgentCopyKey),
     [translateAgentCopyKey],
   );
   const pageContainerRef = useRef<HTMLDivElement | null>(null);
@@ -991,11 +967,11 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           }
         : undefined;
 
-    if (sendOptions) {
-      onSend(effectiveInput, executionStrategy, imagesToSend, sendOptions);
-    } else {
-      onSend(effectiveInput, executionStrategy, imagesToSend);
-    }
+    onSend({
+      images: imagesToSend,
+      textOverride: effectiveInput,
+      sendOptions,
+    });
     setPendingImages([]);
     onClearPathReferences?.();
     clearSelectedSkill?.();
@@ -1122,10 +1098,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       setCuratedTaskLauncherInitialReferenceEntries(null);
       setCuratedTaskLauncherPrefillHint(null);
 
-      if (template.shouldEnableWebSearch && !webSearchEnabled) {
-        onWebSearchEnabledChange?.(true);
-      }
-
       if (template.shouldEnableTeamMode && !subagentEnabled) {
         onSubagentEnabledChange?.(true);
       }
@@ -1179,11 +1151,9 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       input,
       onLaunchBrowserAssist,
       onSubagentEnabledChange,
-      onWebSearchEnabledChange,
       selectedText,
       setInput,
       subagentEnabled,
-      webSearchEnabled,
     ],
   );
 
@@ -1521,8 +1491,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         setProviderType={setProviderType}
         model={model}
         setModel={setModel}
-        executionStrategy={executionStrategy}
-        setExecutionStrategy={setExecutionStrategy}
         accessMode={accessMode}
         setAccessMode={setAccessMode}
         onManageProviders={onManageProviders}
@@ -1580,12 +1548,9 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         onManageKnowledgePacks={onManageKnowledgePacks}
         copy={homeSurfaceCopy.composer}
         inputbarCopy={inputbarCoreCopy}
-        executionStrategyCopy={executionStrategyCopy}
         showCreationModeSelector={showCreationModeSelector}
         creationMode={creationMode}
         onCreationModeChange={onCreationModeChange}
-        thinkingEnabled={thinkingEnabled}
-        onThinkingEnabledChange={onThinkingEnabledChange}
         subagentEnabled={subagentEnabled}
         onSubagentEnabledChange={onSubagentEnabledChange}
         selectedTeam={selectedTeam}
@@ -1593,8 +1558,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         teamWorkspaceSettings={teamWorkspaceSettings}
         onPersistCustomTeams={onPersistCustomTeams}
         onEnableSuggestedTeam={onEnableSuggestedTeam}
-        webSearchEnabled={webSearchEnabled}
-        onWebSearchEnabledChange={onWebSearchEnabledChange}
         pendingImages={pendingImages}
         onFileSelect={handleFileSelect}
         onPaste={handlePaste}

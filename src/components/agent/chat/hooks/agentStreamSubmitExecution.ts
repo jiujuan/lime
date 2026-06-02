@@ -191,8 +191,6 @@ export async function executeAgentStreamSubmit(
     getSyncedSessionRecentPreferences,
     getSyncedSessionExecutionStrategy,
     effectiveExecutionStrategy,
-    webSearch,
-    thinking,
     assistantDraft,
     expectingQueue,
     skipSessionRestore,

@@ -321,7 +321,7 @@ describe("agentSessionTopicViewModel", () => {
     expect(
       upsertFreshSessionDraftTopic([existing, other], {
         createdAt: now,
-        executionStrategy: "auto",
+        executionStrategy: "react",
         sessionId: "session-new",
         sessionName: "  新任务标题  ",
         workspaceId: "workspace-2",
@@ -334,7 +334,7 @@ describe("agentSessionTopicViewModel", () => {
         updatedAt: now,
         workspaceId: "workspace-2",
         messagesCount: 0,
-        executionStrategy: "auto",
+        executionStrategy: "react",
         status: "draft",
         lastPreview: "等待你补充任务需求后开始执行。",
         isPinned: false,
@@ -353,7 +353,7 @@ describe("agentSessionTopicViewModel", () => {
       updated_at: 6,
       messages_count: 20,
       messages: [{ id: "message-1" } as never, { id: "message-2" } as never],
-      execution_strategy: "code_orchestrated",
+      execution_strategy: "code_orchestrated" as never,
       workspace_id: "workspace-remote",
       working_dir: "/tmp/workspace",
     });
@@ -368,7 +368,7 @@ describe("agentSessionTopicViewModel", () => {
       id: "session-remote",
       title: "远端会话",
       messagesCount: 2,
-      executionStrategy: "code_orchestrated",
+      executionStrategy: "react",
       workspaceId: "workspace-remote",
     });
     expect(nextTopics[1]).toBe(existing);
@@ -388,19 +388,19 @@ describe("agentSessionTopicViewModel", () => {
     });
     const other = createTopic({
       id: "topic-2",
-      executionStrategy: "auto",
+      executionStrategy: "react",
     });
 
     expect(
       applyTopicExecutionStrategyToTopics(
         [target, other],
         "topic-1",
-        "code_orchestrated",
+        "react",
       ),
     ).toEqual([
       {
         ...target,
-        executionStrategy: "code_orchestrated",
+        executionStrategy: "react",
       },
       other,
     ]);

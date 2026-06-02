@@ -118,8 +118,8 @@ export function buildGeneralAgentSystemPrompt(
     .map((item, index) => `${index + 1}. ${item}`)
     .join("\n");
   const toolPreferenceLines = [
-    `- 联网搜索：${describeEnabledState(toolPreferences?.webSearch)}`,
-    `- 深度思考：${describeEnabledState(toolPreferences?.thinking)}`,
+    "- 联网搜索：由模型按任务需要自行判断是否调用，不再由输入框开关预设。",
+    "- 深度思考：由模型按复杂度自行判断是否启用，不再由输入框开关预设。",
     `- 计划执行：${describeEnabledState(toolPreferences?.task)}`,
     `- 任务拆分：${describeEnabledState(toolPreferences?.subagent)}`,
   ].join("\n");

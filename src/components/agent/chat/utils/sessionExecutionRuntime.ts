@@ -18,6 +18,7 @@ import {
   alignChatToolPreferencesWithExecutionStrategy,
   type ChatToolPreferences,
 } from "./chatToolPreferences";
+import { normalizeExecutionStrategy } from "../hooks/agentChatCoreUtils";
 import { createAccessModeFromExecutionRuntime } from "./accessModeRuntime";
 import {
   buildTeamDefinitionSummary,
@@ -38,6 +39,9 @@ function mergeExecutionRuntime(
   const modelName = updates.model_name ?? current?.model_name ?? null;
   const executionStrategy =
     updates.execution_strategy ?? current?.execution_strategy ?? null;
+  const normalizedExecutionStrategy = executionStrategy
+    ? normalizeExecutionStrategy(executionStrategy)
+    : null;
   const outputSchemaRuntime =
     updates.output_schema_runtime ?? current?.output_schema_runtime ?? null;
   const recentAccessMode =
@@ -88,7 +92,7 @@ function mergeExecutionRuntime(
     provider_selector: providerSelector,
     provider_name: providerName,
     model_name: modelName,
-    execution_strategy: executionStrategy,
+    execution_strategy: normalizedExecutionStrategy,
     output_schema_runtime: outputSchemaRuntime,
     recent_access_mode: recentAccessMode,
     recent_preferences: recentPreferences,
@@ -166,24 +170,17 @@ export function createChatToolPreferencesFromExecutionRuntime(
     return null;
   }
 
-  const webSearch = normalizeRecentPreferenceBoolean(preferences.webSearch);
-  const thinking = normalizeRecentPreferenceBoolean(preferences.thinking);
   const task = normalizeRecentPreferenceBoolean(preferences.task);
   const subagent = normalizeRecentPreferenceBoolean(preferences.subagent);
 
-  if (
-    webSearch === null &&
-    thinking === null &&
-    task === null &&
-    subagent === null
-  ) {
+  if (task === null && subagent === null) {
     return null;
   }
 
   return alignChatToolPreferencesWithExecutionStrategy(
     {
-      webSearch: webSearch ?? false,
-      thinking: thinking ?? false,
+      webSearch: false,
+      thinking: false,
       task: task ?? false,
       subagent: subagent ?? false,
     },
@@ -201,8 +198,8 @@ export function createSessionRecentPreferencesFromChatToolPreferences(
   preferences: ChatToolPreferences,
 ): AsterSessionExecutionRuntimePreferences {
   return {
-    webSearch: preferences.webSearch,
-    thinking: preferences.thinking,
+    webSearch: false,
+    thinking: false,
     task: preferences.task,
     subagent: preferences.subagent,
   };

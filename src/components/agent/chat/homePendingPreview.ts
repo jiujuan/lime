@@ -7,10 +7,8 @@ export interface TaskCenterDraftSendRequest {
   draftTabId: string;
   text: string;
   images: MessageImage[];
-  sendExecutionStrategy?: "react" | "code_orchestrated" | "auto";
+  sendExecutionStrategy?: "react";
   sendOptions?: HandleSendOptions;
-  webSearch: boolean;
-  thinking: boolean;
   submittedAt: number;
   materializeDraft: boolean;
   source: "task-center-empty-state" | "empty-state";
@@ -18,11 +16,11 @@ export interface TaskCenterDraftSendRequest {
 
 export function buildHomePendingPreviewMessages(
   request: TaskCenterDraftSendRequest,
-  executionStrategy: "react" | "code_orchestrated" | "auto",
+  executionStrategy: "react",
 ): Message[] {
   const timestamp = new Date(request.submittedAt);
-  const effectiveExecutionStrategy =
-    request.sendExecutionStrategy || executionStrategy;
+  void request.sendExecutionStrategy;
+  void executionStrategy;
   const displayContent =
     request.sendOptions?.displayContent?.trim() || request.text;
 
@@ -46,13 +44,9 @@ export function buildHomePendingPreviewMessages(
         title: "正在进入对话",
         detail: "已收到输入，正在后台准备会话和执行环境。",
         checkpoints: [
-          effectiveExecutionStrategy === "code_orchestrated"
-            ? "代码编排待命"
-            : effectiveExecutionStrategy === "react"
-              ? "对话执行待命"
-              : "自动路由待命",
-          request.webSearch ? "联网搜索候选能力待命" : "直接回答优先",
-          request.thinking ? "深度思考待命" : "轻量响应优先",
+          "对话执行待命",
+          "工具面由模型按需判断",
+          "推理强度由模型按任务复杂度判断",
         ],
         metadata: buildDiagnosticsRuntimeStatusMetadata(),
       },

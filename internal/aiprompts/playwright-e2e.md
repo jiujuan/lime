@@ -286,10 +286,10 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 ### Claw `@代码` 编排主链验证
 
 1. 在 `Claw` 对话框输入 `@代码 修复消息历史切换后图片卡片丢失的问题，并补一个回归测试`
-2. 确认聊天区先进入代码编排执行态，而不是普通聊天回答
+2. 确认聊天区直接进入 current Agent runtime，而不是弹出或依赖执行策略、联网搜索、深度思考前置选择
 3. 确认真正出现代码工具或协作步骤时间线，且不会先卡在无意义的 `ToolSearch`
-4. 确认执行策略切到 `code_orchestrated`，同时 `task/subagent` 偏好已被打开
-5. 如当前页面可查看运行时摘要或请求详情，确认 `preferred_team_preset_id=code-triage-team` 与 `code_command.kind` 已注入
+4. 确认请求仍归一到 `react`，不会切到 legacy `code_orchestrated`，也不会自动打开 `task/subagent` 偏好或默认代码团队
+5. 如当前页面可查看运行时摘要或请求详情，确认没有重新写入 `preferred_team_preset_id=code-triage-team` 与 `code_command.kind`
 6. 刷新页面或切换会话后再返回原话题，确认代码任务对话仍保留在同一条消息主链，不会裂成另一套旁路会话
 
 ### Claw `@渠道预览` 工作流验证

@@ -93,6 +93,7 @@ import type { HandleSendOptions } from "../hooks/handleSendTypes";
 import { extractAgentUiPerformanceTraceMetadata } from "../hooks/agentStreamPerformanceMetrics";
 import type { UseRuntimeTeamFormationResult } from "../hooks/useRuntimeTeamFormation";
 import type { SendMessageFn } from "../hooks/agentChatShared";
+import { normalizeExecutionStrategy } from "../hooks/agentChatCoreUtils";
 import type {
   Message,
   MessageImage,
@@ -116,7 +117,6 @@ import {
   hasModelSkillLaunchRequestMetadata,
   hasServiceSkillLaunchRequestMetadata,
   primeBrowserAssistBeforeSend,
-  resolveCodeOrchestratedRuntimeDefaults,
   type ContextWorkspaceSummary,
   type EnsureBrowserAssistCanvasOptions,
 } from "./workspaceSendHelpers";
@@ -178,7 +178,7 @@ import {
   type SkillInstallPromptInstruction,
 } from "@/lib/skills/skillInstallPrompt";
 
-type ExecutionStrategy = "react" | "code_orchestrated" | "auto";
+type CurrentExecutionStrategy = "react";
 type SetStringState = (value: string) => void;
 type ParsedImageWorkbenchCommand = NonNullable<
   ReturnType<typeof parseImageWorkbenchCommand>
@@ -2552,7 +2552,7 @@ interface UseWorkspaceSendActionsParams {
   projectId?: string | null;
   projectRootPath?: string | null;
   sessionId?: string | null;
-  executionStrategy: ExecutionStrategy;
+  executionStrategy: CurrentExecutionStrategy;
   accessMode?: AgentAccessMode;
   providerType?: string | null;
   preferredTeamPresetId?: string | null;
@@ -2618,15 +2618,13 @@ interface WorkspaceResolvedSendState {
   effectiveToolPreferences: ChatToolPreferences;
   effectiveWebSearch?: boolean;
   effectiveSearchMode?: AgentRuntimeWebSearchMode;
-  effectiveThinking?: boolean;
   submissionPreviewKey: string;
 }
 
 interface WorkspaceSendPlan extends WorkspaceResolvedSendState {
   text: string;
   images: MessageImage[];
-  sendExecutionStrategy?: ExecutionStrategy;
-  catalogRuntimeDefaultsRouteMatched?: boolean;
+  sendExecutionStrategy?: CurrentExecutionStrategy;
   autoContinuePayload?: AutoContinueRequestPayload;
   sendOptions?: HandleSendOptions;
   completedMentionCommandUsage: CompletedMentionCommandUsage | null;
@@ -2692,7 +2690,7 @@ export type WorkspaceHandleSend = (
   webSearch?: boolean,
   thinking?: boolean,
   textOverride?: string,
-  sendExecutionStrategy?: ExecutionStrategy,
+  sendExecutionStrategy?: CurrentExecutionStrategy,
   autoContinuePayload?: AutoContinueRequestPayload,
   sendOptions?: HandleSendOptions,
 ) => Promise<boolean>;
@@ -2839,10 +2837,10 @@ export function useWorkspaceSendActions({
   const resolveSendExecutionPlan = useCallback(
     async (
       images?: MessageImage[],
-      webSearch?: boolean,
-      thinking?: boolean,
+      _webSearch?: boolean,
+      _thinking?: boolean,
       textOverride?: string,
-      sendExecutionStrategy?: ExecutionStrategy,
+      sendExecutionStrategy?: CurrentExecutionStrategy,
       autoContinuePayload?: AutoContinueRequestPayload,
       sendOptions?: HandleSendOptions,
     ): Promise<WorkspaceSendResolution> => {
@@ -2852,6 +2850,9 @@ export function useWorkspaceSendActions({
         capabilityRoute: sendOptions?.capabilityRoute,
         displayContent: sendOptions?.displayContent,
       });
+      let effectiveSendExecutionStrategy = normalizeExecutionStrategy(
+        sendExecutionStrategy ?? executionStrategy,
+      );
       let sourceText = inputCapabilityDispatch.sourceText;
       logAgentDebug("WorkspaceSend", "plan.start", {
         hasAutoContinue: Boolean(autoContinuePayload?.enabled),
@@ -2954,19 +2955,16 @@ export function useWorkspaceSendActions({
       let hasBoundSkillLaunch =
         hasServiceSkillLaunchRequestMetadata(mergedLaunchRequestMetadata) ||
         hasModelSkillLaunchRequestMetadata(mergedLaunchRequestMetadata);
-      const requestedWebSearch =
-        webSearch ?? effectiveToolPreferences.webSearch;
       let effectiveWebSearch =
         browserRequirementMatch &&
         browserRequirementMatch.requirement !== "optional"
           ? false
-          : requestedWebSearch;
+          : undefined;
       const effectiveSearchMode =
         browserRequirementMatch &&
         browserRequirementMatch.requirement !== "optional"
           ? "disabled"
           : sendOptions?.searchMode;
-      const effectiveThinking = thinking ?? effectiveToolPreferences.thinking;
 
       const preparedActiveContextPrompt =
         contextWorkspace.enabled && !contextWorkspace.activeContextPrompt.trim()
@@ -2993,7 +2991,6 @@ export function useWorkspaceSendActions({
         null;
       let completedSlashUsage: WorkspaceSendPlan["completedSlashUsage"] =
         inputCapabilityDispatch.completedSlashUsage;
-      let catalogRuntimeDefaultsRouteMatched = false;
       sendOptions = inputCapabilityDispatch.capabilityRoute
         ? {
             ...(sendOptions || {}),
@@ -3014,9 +3011,7 @@ export function useWorkspaceSendActions({
             displayContent: sendOptions?.displayContent,
             inputCapabilityRoute: sendOptions?.capabilityRoute,
             images: previewImages,
-            executionStrategy: sendExecutionStrategy ?? executionStrategy,
-            webSearch: effectiveWebSearch,
-            thinking: effectiveThinking,
+            executionStrategy: effectiveSendExecutionStrategy,
           }),
         );
         return submissionPreviewKey;
@@ -3739,14 +3734,9 @@ export function useWorkspaceSendActions({
         if (!requestContext) {
           return { kind: "done", result: false };
         }
-        effectiveToolPreferences = {
-          ...effectiveToolPreferences,
-          webSearch: false,
-        };
         effectiveWebSearch = false;
         sendOptions = {
           ...(sendOptions || {}),
-          toolPreferencesOverride: effectiveToolPreferences,
           requestMetadata: buildSkillLaunchRequestMetadata(
             "siteSearch",
             sendOptions?.requestMetadata,
@@ -4425,9 +4415,10 @@ export function useWorkspaceSendActions({
           )
         : undefined;
       if (parsedAgentTurnMentionShortcut && agentTurnMentionRoute) {
-        catalogRuntimeDefaultsRouteMatched = true;
-        sendExecutionStrategy =
-          agentTurnMentionRoute.executionStrategy ?? sendExecutionStrategy;
+        effectiveSendExecutionStrategy = normalizeExecutionStrategy(
+          agentTurnMentionRoute.executionStrategy ??
+            effectiveSendExecutionStrategy,
+        );
         ensureSubmissionPreview();
         markCompletedMentionCommand(
           parsedAgentTurnMentionShortcut.commandKey,
@@ -4826,15 +4817,10 @@ export function useWorkspaceSendActions({
           ? parseBrowserWorkbenchCommand(sourceText)
           : null;
       if (parsedBrowserWorkbenchCommand) {
-        effectiveToolPreferences = {
-          ...effectiveToolPreferences,
-          webSearch: false,
-        };
         effectiveWebSearch = false;
         ensureSubmissionPreview();
         sendOptions = {
           ...(sendOptions || {}),
-          toolPreferencesOverride: effectiveToolPreferences,
           requestMetadata: buildBrowserControlLaunchRequestMetadata(
             sendOptions?.requestMetadata,
             parsedBrowserWorkbenchCommand,
@@ -4884,8 +4870,8 @@ export function useWorkspaceSendActions({
               sceneRequestDefaults.execution_strategy,
           );
           if (sceneExecutionStrategy) {
-            catalogRuntimeDefaultsRouteMatched = true;
-            sendExecutionStrategy = sceneExecutionStrategy;
+            effectiveSendExecutionStrategy =
+              normalizeExecutionStrategy(sceneExecutionStrategy);
           }
           if (sceneLaunchRequest.dispatchText) {
             dispatchText = sceneLaunchRequest.dispatchText;
@@ -5050,10 +5036,8 @@ export function useWorkspaceSendActions({
           effectiveToolPreferences,
           effectiveWebSearch,
           effectiveSearchMode,
-          effectiveThinking,
           submissionPreviewKey,
-          sendExecutionStrategy,
-          catalogRuntimeDefaultsRouteMatched,
+          sendExecutionStrategy: effectiveSendExecutionStrategy,
           autoContinuePayload,
           sendOptions,
           completedMentionCommandUsage,
@@ -5141,10 +5125,8 @@ export function useWorkspaceSendActions({
         sendBoundary,
         effectiveWebSearch,
         effectiveSearchMode,
-        effectiveThinking,
         submissionPreviewKey,
         sendExecutionStrategy,
-        catalogRuntimeDefaultsRouteMatched,
         autoContinuePayload,
         sendOptions,
         completedMentionCommandUsage,
@@ -5157,32 +5139,8 @@ export function useWorkspaceSendActions({
         messagesCount,
         sourceTextLength: sourceText.trim().length,
       });
-      const runtimeDefaultsSourceMetadata = {
-        ...(workspaceRequestMetadataBase || {}),
-        ...(sendOptions?.requestMetadata || {}),
-      };
-      const hasExplicitCommandOrSkillLaunch =
-        !catalogRuntimeDefaultsRouteMatched &&
-        (sourceText.trim().startsWith("@") ||
-          sourceText.trim().startsWith("/") ||
-          Boolean(sendBoundary.browserRequirementMatch) ||
-          hasServiceSkillLaunchRequestMetadata(runtimeDefaultsSourceMetadata) ||
-          hasModelSkillLaunchRequestMetadata(runtimeDefaultsSourceMetadata));
-      const runtimeDefaults = resolveCodeOrchestratedRuntimeDefaults({
-        executionStrategy: sendExecutionStrategy ?? executionStrategy,
-        workspaceRequestMetadataBase,
-        sendOptions,
-        effectiveToolPreferences: plan.effectiveToolPreferences,
-        mappedTheme,
-        preferredTeamPresetId,
-        selectedTeam,
-        hasExplicitCommandOrSkillLaunch,
-        allowCatalogRoutedRuntimeDefaults: catalogRuntimeDefaultsRouteMatched,
-      });
-      const effectiveToolPreferences =
-        runtimeDefaults.effectiveToolPreferences;
-      const effectivePreferredTeamPresetId =
-        runtimeDefaults.preferredTeamPresetId;
+      const effectiveToolPreferences = plan.effectiveToolPreferences;
+      const effectivePreferredTeamPresetId = preferredTeamPresetId;
       setRuntimeTeamDispatchPreview(null);
       setInput("");
       setMentionedCharacters([]);
@@ -5252,7 +5210,6 @@ export function useWorkspaceSendActions({
           toolPreferences: effectiveToolPreferences,
           searchMode: effectiveSearchMode,
           effectiveWebSearch,
-          effectiveThinking,
           hasExplicitProviderOverride: Boolean(
             sendOptions?.providerOverride?.trim(),
           ),
@@ -5316,7 +5273,7 @@ export function useWorkspaceSendActions({
           text,
           images,
           effectiveWebSearch,
-          effectiveThinking,
+          undefined,
           false,
           sendExecutionStrategy,
           undefined,
@@ -5380,7 +5337,6 @@ export function useWorkspaceSendActions({
       contextWorkspace.activeContextPrompt,
       contextWorkspace.enabled,
       currentGateKey,
-      executionStrategy,
       finalizeAfterSendSuccess,
       isThemeWorkbench,
       mappedTheme,
@@ -5474,8 +5430,8 @@ export function useWorkspaceSendActions({
       saveChatToolPreferences(nextToolPreferences, activeTheme);
       void handleSend(
         [],
-        nextToolPreferences.webSearch,
-        nextToolPreferences.thinking,
+        undefined,
+        undefined,
         fullPrompt,
         executionStrategy,
         undefined,
@@ -5495,21 +5451,15 @@ export function useWorkspaceSendActions({
   );
 
   const handleSendRef = useRef(handleSend);
-  const webSearchPreferenceRef = useRef(chatToolPreferences.webSearch);
 
   useEffect(() => {
     handleSendRef.current = handleSend;
   }, [handleSend]);
 
-  useEffect(() => {
-    webSearchPreferenceRef.current = chatToolPreferences.webSearch;
-  }, [chatToolPreferences.webSearch]);
-
   return {
     handleSend,
     handleRecommendationClick,
     handleSendRef,
-    webSearchPreferenceRef,
     isPreparingSend,
     displayMessages,
     teamDispatchPreviewState,

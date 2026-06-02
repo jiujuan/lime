@@ -16,7 +16,15 @@ import {
   TASK_CENTER_DRAFT_SESSION_WARMUP_DELAY_MS,
   type TaskCenterDraftTab,
 } from "./agentChatWorkspaceHelpers";
-import { MAX_TASK_CENTER_OPEN_TABS } from "../utils/taskCenterTabs";
+import {
+  buildTaskCenterDraftTab,
+  clearActiveTaskCenterDraftTab,
+  markTaskCenterDraftTabFailed,
+  removeTaskCenterDraftTab,
+  resolveActiveTaskCenterDraftTabId,
+  shouldWarmupTaskCenterDraftSession,
+  upsertTaskCenterDraftTab,
+} from "./taskCenterDraftTabs";
 
 type AgentEntry = "new-task" | "claw";
 
@@ -130,14 +138,9 @@ export function useTaskCenterDraftMaterializationRuntime({
   );
 
   const openTaskCenterDraftTab = useCallback(() => {
-    const now = new Date();
-    const draftTab: TaskCenterDraftTab = {
+    const draftTab = buildTaskCenterDraftTab({
       id: createTaskCenterDraftTabId(),
-      title: "新对话",
-      createdAt: now,
-      updatedAt: now,
-      status: "draft",
-    };
+    });
 
     taskCenterDraftSurfaceActiveRef.current = true;
     resetLocalImageWorkbenchSessionScope();
@@ -149,10 +152,7 @@ export function useTaskCenterDraftMaterializationRuntime({
       setTaskCenterDraftSendRequest(null);
       setHomePendingPreviewRequest(null);
       setTaskCenterDraftTabs((current) =>
-        [draftTab, ...current.filter((item) => item.id !== draftTab.id)].slice(
-          0,
-          MAX_TASK_CENTER_OPEN_TABS,
-        ),
+        upsertTaskCenterDraftTab(current, draftTab),
       );
       resetTopicLocalState();
       setInput("");
@@ -192,10 +192,10 @@ export function useTaskCenterDraftMaterializationRuntime({
       taskCenterDraftSurfaceActiveRef.current = false;
       startTransition(() => {
         setTaskCenterDraftTabs((current) =>
-          current.filter((tab) => tab.id !== draftTabId),
+          removeTaskCenterDraftTab(current, draftTabId),
         );
         setActiveTaskCenterDraftTabId((current) =>
-          current === draftTabId ? null : current,
+          clearActiveTaskCenterDraftTab(current, draftTabId),
         );
         finalizeFreshTaskCenterConversation(
           newSessionId,
@@ -268,11 +268,7 @@ export function useTaskCenterDraftMaterializationRuntime({
         });
         if (!newSessionId) {
           setTaskCenterDraftTabs((current) =>
-            current.map((tab) =>
-              tab.id === draftTabId
-                ? { ...tab, status: "failed", updatedAt: new Date() }
-                : tab,
-            ),
+            markTaskCenterDraftTabFailed(current, draftTabId),
           );
           recordAgentUiPerformanceMetric("taskCenter.draftMaterialize.error", {
             durationMs: Date.now() - startedAt,
@@ -333,17 +329,20 @@ export function useTaskCenterDraftMaterializationRuntime({
   );
 
   useEffect(() => {
-    const draftTabId = taskCenterDraftTabs.some(
-      (tab) => tab.id === activeTaskCenterDraftTabId,
-    )
-      ? activeTaskCenterDraftTabId
-      : null;
+    const draftTabId = resolveActiveTaskCenterDraftTabId({
+      draftTabs: taskCenterDraftTabs,
+      activeDraftTabId: activeTaskCenterDraftTabId,
+    });
     if (
-      agentEntry !== "claw" ||
       !draftTabId ||
-      !input.trim() ||
-      isPreparingSend ||
-      isSending
+      !shouldWarmupTaskCenterDraftSession({
+        agentEntry,
+        activeDraftTabId: draftTabId,
+        draftTabs: taskCenterDraftTabs,
+        input,
+        isPreparingSend,
+        isSending,
+      })
     ) {
       return;
     }

@@ -40,8 +40,6 @@ export interface BuildHarnessRequestMetadataOptions {
   theme: string;
   turnPurpose?: Message["purpose"] | null;
   preferences: {
-    webSearch: boolean;
-    thinking: boolean;
     task: boolean;
     subagent: boolean;
   };
@@ -224,8 +222,6 @@ export function buildHarnessRequestMetadata(
     theme,
     turn_purpose: turnPurpose || undefined,
     preferences: {
-      web_search: preferences.webSearch,
-      thinking: preferences.thinking,
       task: preferences.task,
       subagent: preferences.subagent,
     },

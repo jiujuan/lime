@@ -31,7 +31,6 @@ interface ResolveAgentFastResponseRoutingOptions {
   toolPreferences: ChatToolPreferences;
   searchMode?: AgentRuntimeWebSearchMode;
   effectiveWebSearch?: boolean;
-  effectiveThinking?: boolean;
   hasExplicitProviderOverride?: boolean;
   hasExplicitModelOverride?: boolean;
   hasServiceModelOverride?: boolean;
@@ -45,6 +44,11 @@ interface ResolveAgentFastResponseRoutingOptions {
 }
 
 const LIGHTWEIGHT_FIRST_TURN_MAX_CHARS = 800;
+const EXPLICIT_SHORT_REPLY_PATTERNS = [
+  /只(?:回复|回答|输出|说).{0,8}(?:一个字|一[句话句]|[一二三两]\s*个字|[一二三两]\s*句话)/u,
+  /(?:一个字|一[句话句]|[一二三两]\s*个字|[一二三两]\s*句话).{0,8}(?:回答|回复|输出)/u,
+  /(?:简短|简洁|简单).{0,8}(?:回答|回复|说明)/u,
+];
 
 function disabled(reason: string): AgentFastResponseRoutingDecision {
   return { enabled: false, reason };
@@ -69,7 +73,12 @@ function isLightweightFirstTurnText(text: string): boolean {
   if (normalized.startsWith("@") || normalized.startsWith("/")) {
     return false;
   }
-  return !normalized.includes("```");
+  if (normalized.includes("```")) {
+    return false;
+  }
+  return EXPLICIT_SHORT_REPLY_PATTERNS.some((pattern) =>
+    pattern.test(normalized),
+  );
 }
 
 function normalizeSearchMode(
@@ -95,27 +104,21 @@ function normalizeRuntimeStatusPresentation(
 export function resolveAgentFastResponseSearchMode(params: {
   searchMode?: AgentRuntimeWebSearchMode | null;
   effectiveWebSearch?: boolean;
-  toolPreferences: Pick<ChatToolPreferences, "webSearch">;
 }): AgentRuntimeWebSearchMode {
   const explicitMode = normalizeSearchMode(params.searchMode);
   if (explicitMode) {
     return explicitMode;
   }
 
-  return params.effectiveWebSearch || params.toolPreferences.webSearch
-    ? "allowed"
-    : "disabled";
+  return params.effectiveWebSearch ? "allowed" : "disabled";
 }
 
 function hasHeavyToolPreference(params: {
   searchMode: AgentRuntimeWebSearchMode;
   toolPreferences: ChatToolPreferences;
-  effectiveThinking?: boolean;
 }): boolean {
   return Boolean(
     params.searchMode === "required" ||
-    params.effectiveThinking ||
-    params.toolPreferences.thinking ||
     params.toolPreferences.task ||
     params.toolPreferences.subagent,
   );
@@ -167,13 +170,11 @@ export function resolveAgentFastResponseRouting(
   const searchMode = resolveAgentFastResponseSearchMode({
     searchMode: options.searchMode,
     effectiveWebSearch: options.effectiveWebSearch,
-    toolPreferences: options.toolPreferences,
   });
   if (
     hasHeavyToolPreference({
       searchMode,
       toolPreferences: options.toolPreferences,
-      effectiveThinking: options.effectiveThinking,
     })
   ) {
     return disabled("heavy-capability-enabled");

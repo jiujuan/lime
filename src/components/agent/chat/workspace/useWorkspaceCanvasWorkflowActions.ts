@@ -1,7 +1,7 @@
 import {
   useCallback,
-  type Dispatch,
   type MutableRefObject,
+  type Dispatch,
   type SetStateAction,
 } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -39,14 +39,10 @@ type WorkspaceSendHandler = (
   webSearch?: boolean,
   thinking?: boolean,
   textOverride?: string,
-  sendExecutionStrategy?: "react" | "code_orchestrated" | "auto",
+  sendExecutionStrategy?: "react",
   autoContinuePayload?: AutoContinueRequestPayload,
   sendOptions?: HandleSendOptions,
 ) => Promise<boolean>;
-
-interface ThinkingPreferenceState {
-  thinking: boolean;
-}
 
 interface RunImageWorkbenchCommandParams {
   rawText: string;
@@ -55,13 +51,8 @@ interface RunImageWorkbenchCommandParams {
   applyTarget?: ImageWorkbenchApplyTarget | null;
 }
 
-interface UseWorkspaceCanvasWorkflowActionsParams<
-  TToolPreferences extends ThinkingPreferenceState,
-> {
-  thinkingEnabled: boolean;
-  setChatToolPreferences: Dispatch<SetStateAction<TToolPreferences>>;
+interface UseWorkspaceCanvasWorkflowActionsParams {
   sendRef: MutableRefObject<WorkspaceSendHandler>;
-  webSearchPreferenceRef: MutableRefObject<boolean>;
   setCanvasState: Dispatch<SetStateAction<CanvasStateUnion | null>>;
   setTopicStatus: (topicId: string, status: TopicBranchStatus) => void;
   projectId?: string | null;
@@ -75,7 +66,6 @@ interface UseWorkspaceCanvasWorkflowActionsParams<
 }
 
 interface WorkspaceCanvasWorkflowActionsResult {
-  handleDocumentThinkingEnabledChange: (enabled: boolean) => void;
   handleDocumentAutoContinueRun: (
     payload: AutoContinueRunPayload,
   ) => Promise<void>;
@@ -95,13 +85,8 @@ interface WorkspaceCanvasWorkflowActionsResult {
   handleImportDocument: () => Promise<void>;
 }
 
-export function useWorkspaceCanvasWorkflowActions<
-  TToolPreferences extends ThinkingPreferenceState,
->({
-  thinkingEnabled,
-  setChatToolPreferences,
+export function useWorkspaceCanvasWorkflowActions({
   sendRef,
-  webSearchPreferenceRef,
   setCanvasState,
   setTopicStatus,
   projectId,
@@ -110,27 +95,13 @@ export function useWorkspaceCanvasWorkflowActions<
   contentId,
   selectedText,
   onRunImageWorkbenchCommand,
-}: UseWorkspaceCanvasWorkflowActionsParams<TToolPreferences>): WorkspaceCanvasWorkflowActionsResult {
-  const handleDocumentThinkingEnabledChange = useCallback(
-    (enabled: boolean) => {
-      setChatToolPreferences((previous) =>
-        previous.thinking === enabled
-          ? previous
-          : {
-              ...previous,
-              thinking: enabled,
-            },
-      );
-    },
-    [setChatToolPreferences],
-  );
-
+}: UseWorkspaceCanvasWorkflowActionsParams): WorkspaceCanvasWorkflowActionsResult {
   const handleDocumentAutoContinueRun = useCallback(
     async (payload: AutoContinueRunPayload) => {
       await sendRef.current(
         [],
-        webSearchPreferenceRef.current,
-        payload.thinkingEnabled,
+        undefined,
+        undefined,
         payload.prompt,
         undefined,
         {
@@ -142,7 +113,7 @@ export function useWorkspaceCanvasWorkflowActions<
         },
       );
     },
-    [sendRef, webSearchPreferenceRef],
+    [sendRef],
   );
 
   const handleDocumentContentReviewRun = useCallback(
@@ -151,8 +122,8 @@ export function useWorkspaceCanvasWorkflowActions<
         void sendRef
           .current(
             [],
-            webSearchPreferenceRef.current,
-            payload.thinkingEnabled,
+            undefined,
+            undefined,
             payload.prompt,
             undefined,
             undefined,
@@ -169,7 +140,7 @@ export function useWorkspaceCanvasWorkflowActions<
             reject(error instanceof Error ? error : new Error(String(error)));
           });
       }),
-    [sendRef, webSearchPreferenceRef],
+    [sendRef],
   );
 
   const handleArtifactBlockRewriteRun = useCallback(
@@ -181,8 +152,8 @@ export function useWorkspaceCanvasWorkflowActions<
             void sendRef
               .current(
                 [],
-                webSearchPreferenceRef.current,
-                thinkingEnabled,
+                undefined,
+                undefined,
                 request.prompt,
                 undefined,
                 undefined,
@@ -225,7 +196,7 @@ export function useWorkspaceCanvasWorkflowActions<
         throw error instanceof Error ? error : new Error(message);
       }
     },
-    [sendRef, thinkingEnabled, webSearchPreferenceRef],
+    [sendRef],
   );
 
   const handleDocumentTextStylizeRun = useCallback(
@@ -234,8 +205,8 @@ export function useWorkspaceCanvasWorkflowActions<
         void sendRef
           .current(
             [],
-            webSearchPreferenceRef.current,
-            payload.thinkingEnabled,
+            undefined,
+            undefined,
             payload.prompt,
             undefined,
             undefined,
@@ -252,7 +223,7 @@ export function useWorkspaceCanvasWorkflowActions<
             reject(error instanceof Error ? error : new Error(String(error)));
           });
       }),
-    [sendRef, webSearchPreferenceRef],
+    [sendRef],
   );
 
   const handleSwitchBranchVersion = useCallback(
@@ -421,7 +392,6 @@ export function useWorkspaceCanvasWorkflowActions<
   }, [setCanvasState]);
 
   return {
-    handleDocumentThinkingEnabledChange,
     handleDocumentAutoContinueRun,
     handleArtifactBlockRewriteRun,
     handleDocumentContentReviewRun,

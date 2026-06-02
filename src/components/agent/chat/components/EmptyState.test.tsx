@@ -8,6 +8,7 @@ import type { Skill } from "@/lib/api/skills";
 import type { UnifiedMemory } from "@/lib/api/unifiedMemory";
 import type { ServiceSkillHomeItem } from "../service-skills/types";
 import type { InputCapabilitySelection } from "../skill-selection/inputCapabilitySelection";
+import type { InputbarSendPayload } from "./Inputbar/inputbarSendPayload";
 import { recordSlashEntryUsage } from "../skill-selection/slashEntryUsage";
 import {
   buildCuratedTaskLaunchPrompt,
@@ -345,6 +346,20 @@ function renderEmptyState(
   return container;
 }
 
+function expectEmptyStateSend(
+  onSend: ReturnType<typeof vi.fn>,
+  payload: Pick<
+    InputbarSendPayload,
+    "images" | "textOverride" | "sendOptions"
+  > = {},
+) {
+  expect(onSend).toHaveBeenCalledWith({
+    images: payload.images,
+    textOverride: payload.textOverride,
+    sendOptions: payload.sendOptions,
+  });
+}
+
 function updateFieldValue(
   element: HTMLInputElement | HTMLTextAreaElement | null,
   value: string,
@@ -656,9 +671,19 @@ describe("EmptyState", () => {
       sendButton?.click();
     });
 
-    expect(onSend.mock.calls[0]?.[0]).toBe(
-      "Please review these files or folders.",
-    );
+    expectEmptyStateSend(onSend, {
+      textOverride: "Please review these files or folders.",
+      sendOptions: expect.objectContaining({
+        requestMetadata: expect.objectContaining({
+          path_references: [
+            expect.objectContaining({
+              path: "/tmp/report.md",
+              name: "report.md",
+            }),
+          ],
+        }),
+      }),
+    });
   });
 
   it("从 Skills 页带回的技能应显示在首页输入框内的 @ 标签", async () => {
@@ -705,11 +730,9 @@ describe("EmptyState", () => {
       sendButton?.click();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      "整理最近发布计划",
-      "auto",
-      undefined,
-      {
+    expectEmptyStateSend(onSend, {
+      textOverride: "整理最近发布计划",
+      sendOptions: {
         capabilityRoute: {
           kind: "installed_skill",
           skillKey: "writer",
@@ -717,7 +740,7 @@ describe("EmptyState", () => {
         },
         displayContent: "整理最近发布计划",
       },
-    );
+    });
   });
 
   it("首页添加资料入口应打开输入框资料中枢，而不是预填一段说明", async () => {
@@ -1012,7 +1035,6 @@ describe("EmptyState", () => {
   it("runtime tool surface 告警不应再透传到首页空态输入区", async () => {
     const container = renderEmptyState({
       activeTheme: "general",
-      webSearchEnabled: true,
       subagentEnabled: true,
     });
 
@@ -1408,15 +1430,13 @@ describe("EmptyState", () => {
     expect(onLaunchBrowserAssist).not.toHaveBeenCalled();
   });
 
-  it("点击每日趋势摘要应开启联网搜索并记录最近使用", async () => {
+  it("点击每日趋势摘要应打开模板确认，不再切换联网搜索前置开关", async () => {
     const setInput = vi.fn<(value: string) => void>();
-    const onWebSearchEnabledChange = vi.fn<(enabled: boolean) => void>();
     const template = findCuratedTaskTemplateById("daily-trend-briefing");
     expect(template).toBeTruthy();
     const container = renderEmptyState({
       activeTheme: "general",
       setInput,
-      onWebSearchEnabledChange,
     });
 
     await act(async () => {
@@ -1433,7 +1453,6 @@ describe("EmptyState", () => {
     });
 
     expect(container.textContent).toContain("开始这一步前，我先确认几件事。");
-    expect(onWebSearchEnabledChange).not.toHaveBeenCalled();
     expect(setInput).not.toHaveBeenCalled();
 
     const themeInput = document.body.querySelector(
@@ -1458,7 +1477,6 @@ describe("EmptyState", () => {
       await Promise.resolve();
     });
 
-    expect(onWebSearchEnabledChange).toHaveBeenCalledWith(true);
     expect(setInput).toHaveBeenCalledWith(
       buildCuratedTaskLaunchPrompt({
         task: template!,
@@ -1757,7 +1775,9 @@ describe("EmptyState", () => {
       sendButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(onSend).toHaveBeenCalledWith("@技能A", "auto", undefined);
+    expectEmptyStateSend(onSend, {
+      textOverride: "@技能A",
+    });
   });
 
   it("应把服务型技能与选择回调透传给 CharacterMention", async () => {
@@ -1818,14 +1838,7 @@ describe("EmptyState", () => {
   });
 
   it("首页安装技能选择应走统一 capability 回调，且发送后清除激活态", async () => {
-    const onSend =
-      vi.fn<
-        (
-          value: string,
-          executionStrategy?: "react" | "code_orchestrated" | "auto",
-          images?: unknown[],
-        ) => void
-      >();
+    const onSend = vi.fn();
     const skill: Skill = {
       key: "canvas-design",
       name: "canvas-design",
@@ -1872,19 +1885,24 @@ describe("EmptyState", () => {
     act(() => {
       sendButton?.click();
     });
-    expect(onSend).toHaveBeenCalledWith("帮我设计封面", "auto", undefined, {
-      capabilityRoute: {
-        kind: "installed_skill",
-        skillKey: "canvas-design",
-        skillName: "canvas-design",
+    expectEmptyStateSend(onSend, {
+      textOverride: "帮我设计封面",
+      sendOptions: {
+        capabilityRoute: {
+          kind: "installed_skill",
+          skillKey: "canvas-design",
+          skillName: "canvas-design",
+        },
+        displayContent: "帮我设计封面",
       },
-      displayContent: "帮我设计封面",
     });
 
     act(() => {
       sendButton?.click();
     });
-    expect(onSend).toHaveBeenCalledWith("帮我设计封面", "auto", undefined);
+    expectEmptyStateSend(onSend, {
+      textOverride: "帮我设计封面",
+    });
   });
 
   it("首页选择 builtin command 后发送应透传结构化 capability route", async () => {
@@ -1926,11 +1944,9 @@ describe("EmptyState", () => {
       sendButton?.click();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      "帮我整理这篇文章的配图方向",
-      "auto",
-      undefined,
-      {
+    expectEmptyStateSend(onSend, {
+      textOverride: "帮我整理这篇文章的配图方向",
+      sendOptions: {
         capabilityRoute: {
           kind: "builtin_command",
           commandKey: "image-compose",
@@ -1938,7 +1954,7 @@ describe("EmptyState", () => {
         },
         displayContent: "帮我整理这篇文章的配图方向",
       },
-    );
+    });
   });
 
   it("首页选择 @资料 兼容入口时应打开资料中枢而不是普通命令标签", async () => {
@@ -2052,11 +2068,9 @@ describe("EmptyState", () => {
       sendButton?.click();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      "按项目资料写一版介绍",
-      "auto",
-      undefined,
-      {
+    expectEmptyStateSend(onSend, {
+      textOverride: "按项目资料写一版介绍",
+      sendOptions: {
         requestMetadata: {
           knowledge_pack: {
             pack_name: "team-notes",
@@ -2065,7 +2079,7 @@ describe("EmptyState", () => {
           },
         },
       },
-    );
+    });
   });
 
   it("首页点击结果模板后发送时，应透传 curated_task capability route", async () => {
@@ -2131,11 +2145,9 @@ describe("EmptyState", () => {
       sendButton?.click();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      prompt,
-      "auto",
-      undefined,
-      expect.objectContaining({
+    expectEmptyStateSend(onSend, {
+      textOverride: prompt,
+      sendOptions: expect.objectContaining({
         capabilityRoute: {
           kind: "curated_task",
           taskId: "daily-trend-briefing",
@@ -2159,7 +2171,7 @@ describe("EmptyState", () => {
           },
         },
       }),
-    );
+    });
   });
 
   it("首页结果模板带着灵感引用发送时，应附带引用 route 与 request metadata", async () => {
@@ -2260,11 +2272,9 @@ describe("EmptyState", () => {
       sendButton?.click();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      expect.stringContaining("本轮可优先参考这些参考对象"),
-      "auto",
-      undefined,
-      expect.objectContaining({
+    expectEmptyStateSend(onSend, {
+      textOverride: expect.stringContaining("本轮可优先参考这些参考对象"),
+      sendOptions: expect.objectContaining({
         capabilityRoute: expect.objectContaining({
           kind: "curated_task",
           taskId: "daily-trend-briefing",
@@ -2287,7 +2297,7 @@ describe("EmptyState", () => {
           },
         },
       }),
-    );
+    });
   });
 
   it("首页结果模板启动时，应默认沿用当前带入的灵感引用", async () => {
@@ -2742,13 +2752,8 @@ describe("EmptyState", () => {
     expect(container.textContent).toContain("帮我整理一下会议纪要");
   });
 
-  it("点击高级设置中的地球按钮应切换联网搜索开关", async () => {
-    const onWebSearchEnabledChange = vi.fn<(enabled: boolean) => void>();
-    const container = renderEmptyState({
-      activeTheme: "general",
-      webSearchEnabled: false,
-      onWebSearchEnabledChange,
-    });
+  it("高级设置不再渲染联网搜索前置开关", async () => {
+    const container = renderEmptyState({ activeTheme: "general" });
     await act(async () => {
       await Promise.resolve();
     });
@@ -2769,33 +2774,17 @@ describe("EmptyState", () => {
     const expandedGlobeToggle = container.querySelector(
       'button[title="联网搜索已关闭"]',
     ) as HTMLButtonElement | null;
-    expect(expandedGlobeToggle).toBeTruthy();
-
-    act(() => {
-      expandedGlobeToggle?.click();
-    });
-
-    expect(onWebSearchEnabledChange).toHaveBeenCalledWith(true);
+    expect(expandedGlobeToggle).toBeNull();
   });
 
   it("通用主题默认只保留最小主路径，展开高级设置后才显示进阶控制", async () => {
-    const onThinkingEnabledChange = vi.fn<(enabled: boolean) => void>();
-    const onWebSearchEnabledChange = vi.fn<(enabled: boolean) => void>();
     const onSubagentEnabledChange = vi.fn<(enabled: boolean) => void>();
-    const setExecutionStrategy =
-      vi.fn<(strategy: "react" | "code_orchestrated" | "auto") => void>();
     const setAccessMode =
       vi.fn<(mode: "read-only" | "current" | "full-access") => void>();
     const container = renderEmptyState({
       activeTheme: "general",
-      thinkingEnabled: false,
-      onThinkingEnabledChange,
-      webSearchEnabled: false,
-      onWebSearchEnabledChange,
       subagentEnabled: false,
       onSubagentEnabledChange,
-      executionStrategy: "react",
-      setExecutionStrategy,
       accessMode: "current",
       setAccessMode,
     });
@@ -2842,18 +2831,15 @@ describe("EmptyState", () => {
     const thinkingButton = container.querySelector(
       'button[title="深度思考已关闭"]',
     ) as HTMLButtonElement | null;
-    expect(thinkingButton).toBeTruthy();
+    expect(thinkingButton).toBeNull();
     const globeButton = container.querySelector(
       'button[title="联网搜索已关闭"]',
     ) as HTMLButtonElement | null;
-    expect(globeButton).toBeTruthy();
+    expect(globeButton).toBeNull();
     const planButton = container.querySelector(
       '[data-testid="inputbar-plan-toggle"]',
     ) as HTMLButtonElement | null;
-    expect(planButton).toBeTruthy();
-    expect(planButton?.textContent).toContain("编程执行");
-    expect(planButton?.textContent).not.toContain("Plan");
-    expect(planButton?.getAttribute("aria-label")).toBe("开启编程执行");
+    expect(planButton).toBeNull();
     const subagentButton = container.querySelector(
       'button[title="任务拆分偏好已关闭"]',
     ) as HTMLButtonElement | null;
@@ -2865,17 +2851,8 @@ describe("EmptyState", () => {
     expect(
       container.querySelector('[data-testid="chat-model-selector"]'),
     ).toBeTruthy();
-    expect(container.textContent).toContain("通用任务上下文");
+    expect(container.textContent).not.toContain("通用任务上下文");
 
-    act(() => {
-      thinkingButton?.click();
-    });
-    act(() => {
-      globeButton?.click();
-    });
-    act(() => {
-      planButton?.click();
-    });
     act(() => {
       subagentButton?.click();
     });
@@ -2884,9 +2861,6 @@ describe("EmptyState", () => {
       accessModeSelect?.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
-    expect(onThinkingEnabledChange).toHaveBeenCalledWith(true);
-    expect(onWebSearchEnabledChange).toHaveBeenCalledWith(true);
-    expect(setExecutionStrategy).toHaveBeenCalledWith("code_orchestrated");
     expect(onSubagentEnabledChange).toHaveBeenCalledWith(true);
     expect(setAccessMode).toHaveBeenCalledWith("full-access");
   });
@@ -2894,8 +2868,6 @@ describe("EmptyState", () => {
   it("首页默认不再把执行模式和联网状态作为 hero 徽标暴露", async () => {
     const container = renderEmptyState({
       activeTheme: "general",
-      executionStrategy: "code_orchestrated",
-      webSearchEnabled: true,
     });
 
     await act(async () => {
@@ -2911,14 +2883,7 @@ describe("EmptyState", () => {
   });
 
   it("通用首页发送时不应自动注入任何历史默认 skill", async () => {
-    const onSend =
-      vi.fn<
-        (
-          value: string,
-          executionStrategy?: "react" | "code_orchestrated" | "auto",
-          images?: unknown[],
-        ) => void
-      >();
+    const onSend = vi.fn();
     const container = renderEmptyState({
       input: "请输出一篇新品发布文案",
       activeTheme: "general",
@@ -2937,11 +2902,9 @@ describe("EmptyState", () => {
       sendButton?.click();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      "请输出一篇新品发布文案",
-      "auto",
-      undefined,
-    );
+    expectEmptyStateSend(onSend, {
+      textOverride: "请输出一篇新品发布文案",
+    });
   });
 
   it("即使存在历史配置字段，通用首页也不再自动注入默认 skill", async () => {
@@ -2949,14 +2912,7 @@ describe("EmptyState", () => {
       chat_appearance: {},
     }));
 
-    const onSend =
-      vi.fn<
-        (
-          value: string,
-          executionStrategy?: "react" | "code_orchestrated" | "auto",
-          images?: unknown[],
-        ) => void
-      >();
+    const onSend = vi.fn();
     const container = renderEmptyState({
       input: "请输出一篇用户访谈纪要",
       activeTheme: "general",
@@ -2975,22 +2931,13 @@ describe("EmptyState", () => {
       sendButton?.click();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      "请输出一篇用户访谈纪要",
-      "auto",
-      undefined,
-    );
+    expectEmptyStateSend(onSend, {
+      textOverride: "请输出一篇用户访谈纪要",
+    });
   });
 
   it("首页手动选择安装技能后发送时仍应优先使用 capability route", async () => {
-    const onSend =
-      vi.fn<
-        (
-          value: string,
-          executionStrategy?: "react" | "code_orchestrated" | "auto",
-          images?: unknown[],
-        ) => void
-      >();
+    const onSend = vi.fn();
     const skill: Skill = {
       key: "custom-writing-skill",
       name: "custom-writing-skill",
@@ -3030,11 +2977,9 @@ describe("EmptyState", () => {
       sendButton?.click();
     });
 
-    expect(onSend).toHaveBeenCalledWith(
-      "请输出一篇品牌故事",
-      "auto",
-      undefined,
-      {
+    expectEmptyStateSend(onSend, {
+      textOverride: "请输出一篇品牌故事",
+      sendOptions: {
         capabilityRoute: {
           kind: "installed_skill",
           skillKey: "custom-writing-skill",
@@ -3042,7 +2987,7 @@ describe("EmptyState", () => {
         },
         displayContent: "请输出一篇品牌故事",
       },
-    );
+    });
   });
 
   it("首页先选 capability 再切到服务技能入口时，不应继续残留旧 capability route", async () => {
@@ -3099,7 +3044,9 @@ describe("EmptyState", () => {
       sendButton?.click();
     });
 
-    expect(onSend).toHaveBeenCalledWith("整理最近发布计划", "auto", undefined);
+    expectEmptyStateSend(onSend, {
+      textOverride: "整理最近发布计划",
+    });
   });
 
   it("通用主题不应在首屏直接展示浏览器协助入口", async () => {

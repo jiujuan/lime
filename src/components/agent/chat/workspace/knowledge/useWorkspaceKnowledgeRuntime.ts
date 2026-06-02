@@ -27,14 +27,12 @@ import type {
 import type { HandleSendOptions } from "../../hooks/handleSendTypes";
 import type { MessageImage, MessagePathReference } from "../../types";
 
-type KnowledgeExecutionStrategy = "react" | "code_orchestrated" | "auto";
-
 type WorkspaceKnowledgeHandleSend = (
   images?: MessageImage[],
   webSearch?: boolean,
   thinking?: boolean,
   textOverride?: string,
-  executionStrategy?: KnowledgeExecutionStrategy,
+  executionStrategy?: "react",
   autoContinuePayload?: AutoContinueRequestPayload,
   sendOptions?: HandleSendOptions,
 ) => void | Promise<boolean> | boolean;
@@ -62,7 +60,6 @@ interface UseWorkspaceKnowledgeRuntimeParams {
   currentSessionTitle?: string | null;
   input: string;
   setInput: (value: string) => void;
-  executionStrategy?: KnowledgeExecutionStrategy;
   handleSend: WorkspaceKnowledgeHandleSend;
   onOpenKnowledgeManagement?: (workingDir?: string | null) => void;
   initialKnowledgePackSelection?: AgentInitialKnowledgePackSelectionParams | null;
@@ -90,7 +87,6 @@ export function useWorkspaceKnowledgeRuntime({
   currentSessionTitle,
   input,
   setInput,
-  executionStrategy,
   handleSend,
   onOpenKnowledgeManagement,
   initialKnowledgePackSelection,
@@ -367,7 +363,7 @@ export function useWorkspaceKnowledgeRuntime({
       false,
       false,
       prompt,
-      executionStrategy || "auto",
+      "react",
       undefined,
       {
         requestMetadata,
@@ -377,7 +373,6 @@ export function useWorkspaceKnowledgeRuntime({
   }, [
     currentSessionTitle,
     effectiveProjectRootPath,
-    executionStrategy,
     handleSend,
     input,
     selectedKnowledgePack,

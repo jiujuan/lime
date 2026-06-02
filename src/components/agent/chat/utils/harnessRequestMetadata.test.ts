@@ -16,8 +16,6 @@ describe("harnessRequestMetadata", () => {
       },
       theme: "general",
       preferences: {
-        webSearch: true,
-        thinking: false,
         task: true,
         subagent: false,
       },
@@ -48,8 +46,6 @@ describe("harnessRequestMetadata", () => {
       legacy_flag: true,
       theme: "general",
       preferences: {
-        web_search: true,
-        thinking: false,
         task: true,
         subagent: false,
       },
@@ -109,8 +105,6 @@ describe("harnessRequestMetadata", () => {
       },
       theme: "general",
       preferences: {
-        webSearch: true,
-        thinking: true,
         task: false,
         subagent: false,
       },
@@ -120,8 +114,6 @@ describe("harnessRequestMetadata", () => {
     expect(metadata).toMatchObject({
       theme: "general",
       preferences: {
-        web_search: true,
-        thinking: true,
         task: false,
         subagent: false,
       },
@@ -150,8 +142,6 @@ describe("harnessRequestMetadata", () => {
     const metadata = buildHarnessRequestMetadata({
       theme: "general",
       preferences: {
-        webSearch: false,
-        thinking: true,
         task: false,
         subagent: false,
       },
@@ -167,8 +157,6 @@ describe("harnessRequestMetadata", () => {
       theme: "general",
       turnPurpose: "content_review",
       preferences: {
-        webSearch: false,
-        thinking: true,
         task: false,
         subagent: false,
       },
@@ -186,8 +174,6 @@ describe("harnessRequestMetadata", () => {
     const metadata = buildHarnessRequestMetadata({
       theme: "general",
       preferences: {
-        webSearch: false,
-        thinking: true,
         task: false,
         subagent: false,
       },
@@ -203,8 +189,6 @@ describe("harnessRequestMetadata", () => {
     const metadata = buildHarnessRequestMetadata({
       theme: "general",
       preferences: {
-        webSearch: false,
-        thinking: true,
         task: true,
         subagent: true,
       },
@@ -237,8 +221,6 @@ describe("harnessRequestMetadata", () => {
     const metadata = buildHarnessRequestMetadata({
       theme: "general",
       preferences: {
-        webSearch: false,
-        thinking: true,
         task: true,
         subagent: true,
       },
@@ -275,8 +257,6 @@ describe("harnessRequestMetadata", () => {
       },
       theme: "general",
       preferences: {
-        webSearch: false,
-        thinking: true,
         task: false,
         subagent: false,
       },
@@ -295,8 +275,6 @@ describe("harnessRequestMetadata", () => {
       },
       theme: "general",
       preferences: {
-        webSearch: false,
-        thinking: true,
         task: false,
         subagent: false,
       },
@@ -310,8 +288,6 @@ describe("harnessRequestMetadata", () => {
     const metadata = buildHarnessRequestMetadata({
       theme: "general",
       preferences: {
-        webSearch: false,
-        thinking: true,
         task: true,
         subagent: false,
       },
@@ -353,8 +329,6 @@ describe("harnessRequestMetadata", () => {
     const metadata = buildHarnessRequestMetadata({
       theme: "general",
       preferences: {
-        webSearch: false,
-        thinking: true,
         task: true,
         subagent: false,
       },
@@ -403,8 +377,6 @@ describe("harnessRequestMetadata", () => {
     const metadata = buildHarnessRequestMetadata({
       theme: "general",
       preferences: {
-        webSearch: false,
-        thinking: true,
         task: true,
         subagent: true,
       },
@@ -420,8 +392,6 @@ describe("harnessRequestMetadata", () => {
     const metadata = buildHarnessRequestMetadata({
       theme: "general",
       preferences: {
-        webSearch: true,
-        thinking: true,
         task: true,
         subagent: true,
       },
@@ -446,8 +416,6 @@ describe("harnessRequestMetadata", () => {
     const metadata = buildHarnessRequestMetadata({
       theme: "general",
       preferences: {
-        webSearch: true,
-        thinking: true,
         task: true,
         subagent: true,
       },
@@ -489,8 +457,6 @@ describe("harnessRequestMetadata", () => {
       },
       theme: "general",
       preferences: {
-        webSearch: false,
-        thinking: true,
         task: true,
         subagent: true,
       },
@@ -520,8 +486,6 @@ describe("harnessRequestMetadata", () => {
     const metadata = buildHarnessRequestMetadata({
       theme: "general",
       preferences: {
-        webSearch: true,
-        thinking: true,
         task: true,
         subagent: true,
       },

@@ -28,13 +28,13 @@ import type {
 } from "../components/CanvasWorkbenchLayout";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import type { CreationMode } from "../components/types";
-import type { MessageImage, WriteArtifactContext } from "../types";
+import type { WriteArtifactContext } from "../types";
 import type { PendingA2UISource } from "../types";
 import type { LayoutMode, ThemeType } from "@/lib/workspace/workbenchContract";
 import type { Artifact } from "@/lib/artifact/types";
 import type { Character } from "@/lib/api/memory";
 import type { TaskFile } from "../components/TaskFiles";
-import type { HandleSendOptions } from "../hooks/handleSendTypes";
+import type { InputbarSendHandler } from "../components/Inputbar/inputbarSendPayload";
 import type { WorkspacePathMissingState } from "../hooks/agentChatShared";
 import type { SyncStatus } from "../hooks/useContentSync";
 import type { ArtifactTimelineOpenTarget } from "../utils/artifactTimelineNavigation";
@@ -507,12 +507,7 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   navigationActions: NavigationActions;
   inputbarScene: InputbarScene;
   canvasScene: CanvasScene;
-  handleSendFromEmptyState: (
-    text: string,
-    sendExecutionStrategy?: "react" | "code_orchestrated" | "auto",
-    images?: MessageImage[],
-    sendOptions?: HandleSendOptions,
-  ) => void;
+  handleSendFromEmptyState: InputbarSendHandler;
   shellChromeRuntime: ShellChromeRuntime;
   generalWorkbenchHarnessDialog: ConversationScenePresentationParams["scene"]["generalWorkbenchHarnessDialog"];
   entryBannerVisible: ConversationScenePresentationParams["scene"]["entryBannerVisible"];
@@ -536,8 +531,6 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   setProviderType: ConversationScenePresentationParams["scene"]["setProviderType"];
   model: ConversationScenePresentationParams["scene"]["model"];
   setModel: ConversationScenePresentationParams["scene"]["setModel"];
-  executionStrategy: ConversationScenePresentationParams["scene"]["executionStrategy"];
-  setExecutionStrategy: ConversationScenePresentationParams["scene"]["setExecutionStrategy"];
   accessMode: ConversationScenePresentationParams["scene"]["accessMode"];
   setAccessMode: ConversationScenePresentationParams["scene"]["setAccessMode"];
   chatToolPreferences: ChatToolPreferences;
@@ -694,8 +687,6 @@ export function useWorkspaceConversationSceneRuntime({
   setProviderType,
   model,
   setModel,
-  executionStrategy,
-  setExecutionStrategy,
   accessMode,
   setAccessMode,
   chatToolPreferences,
@@ -992,7 +983,6 @@ export function useWorkspaceConversationSceneRuntime({
     !isThemeWorkbench &&
     activeTheme === "general" &&
     layoutMode === "chat-canvas";
-  const isCodeOrchestratedWorkbench = executionStrategy === "code_orchestrated";
   const currentSessionTurn =
     projectedTurns.find((turn) => turn.id === projectedCurrentTurnId) ||
     projectedTurns.at(-1) ||
@@ -1052,16 +1042,22 @@ export function useWorkspaceConversationSceneRuntime({
   });
   const fileCheckpointSummary =
     projectedThreadRead?.file_checkpoint_summary || null;
+  const hasRuntimeFileChanges =
+    (fileCheckpointSummary?.count ?? 0) > 0 ||
+    projectedThreadItems.some((item) => item.type === "file_artifact");
+  const hasRuntimeOutputs = outputItemCount > 0;
+  const shouldUseRuntimeWorkbench =
+    hasRuntimeFileChanges || hasRuntimeOutputs || inProgressItemCount > 0;
   const changeView = useMemo(() => {
     return buildCanvasWorkbenchChangeView({
-      threadItems: isCodeOrchestratedWorkbench ? projectedThreadItems : [],
+      threadItems: hasRuntimeFileChanges ? projectedThreadItems : [],
       fileCheckpointSummary,
       onOpenFile: canvasScene.handleOpenCanvasWorkbenchPath,
     });
   }, [
     canvasScene.handleOpenCanvasWorkbenchPath,
     fileCheckpointSummary,
-    isCodeOrchestratedWorkbench,
+    hasRuntimeFileChanges,
     projectedThreadItems,
   ]);
   const sessionSummaryStats: CanvasWorkbenchSummaryStat[] = [
@@ -1128,7 +1124,6 @@ export function useWorkspaceConversationSceneRuntime({
     },
   ];
   const shouldExposeSessionProgress =
-    isCodeOrchestratedWorkbench ||
     inProgressItemCount > 0 ||
     projectedPendingActions.length > 0 ||
     projectedQueuedTurns.length > 0;
@@ -1212,7 +1207,10 @@ export function useWorkspaceConversationSceneRuntime({
         }
       : null;
   const outputView: CanvasWorkbenchUtilityView = {
-    enabled: isCodeOrchestratedWorkbench,
+    enabled: shouldUseRuntimeWorkbench,
+    tabLabel: t("agentChat.workspaceSession.outputView.tabLabel"),
+    title: t("agentChat.workspaceSession.outputView.title"),
+    subtitle: t("agentChat.workspaceSession.outputView.subtitle"),
     tabBadge:
       outputItemCount > 0
         ? outputItemCount > 99
@@ -1363,8 +1361,6 @@ export function useWorkspaceConversationSceneRuntime({
       setProviderType,
       model,
       setModel,
-      executionStrategy,
-      setExecutionStrategy,
       accessMode,
       setAccessMode,
       onManageProviders: navigationActions.handleManageProviders,
@@ -1580,12 +1576,12 @@ export function useWorkspaceConversationSceneRuntime({
       onRevealPath: canvasScene.handleRevealCanvasWorkbenchPath,
       onClose: canvasScene.handleCloseCanvasWorkbench,
       renderPreview: canvasScene.renderCanvasWorkbenchPreview,
-      workbenchMode: isCodeOrchestratedWorkbench ? "coding" : "default",
+      workbenchMode: shouldUseRuntimeWorkbench ? "coding" : "default",
       workspaceView,
       sessionView,
-      outputView: isCodeOrchestratedWorkbench ? outputView : null,
-      logView: isCodeOrchestratedWorkbench ? sessionView : null,
-      changeView: isCodeOrchestratedWorkbench ? changeView : null,
+      outputView: shouldUseRuntimeWorkbench ? outputView : null,
+      logView: shouldUseRuntimeWorkbench ? sessionView : null,
+      changeView: shouldUseRuntimeWorkbench ? changeView : null,
       onLayoutModeChange: shouldSyncCanvasWorkbenchLayoutMode
         ? setCanvasWorkbenchLayoutMode
         : undefined,

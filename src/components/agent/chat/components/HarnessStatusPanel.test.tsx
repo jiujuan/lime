@@ -2586,7 +2586,7 @@ describe("HarnessStatusPanel", () => {
     expect(document.body.textContent).toContain("快照同步");
   });
 
-  it("code_orchestrated 编程底座应同时呈现工具输出、权限确认、文件写入和文件活动", () => {
+  it("运行时面板应同时呈现工具输出、权限确认、文件写入和文件活动", () => {
     const onRespondToAction = vi.fn();
 
     renderPanel({
@@ -2598,7 +2598,7 @@ describe("HarnessStatusPanel", () => {
         workingDir: "/tmp/workspace-code-orchestrated",
         providerType: "openai",
         model: "gpt-5.4",
-        executionStrategy: "code_orchestrated",
+        executionStrategy: "react",
         activeTheme: "default",
         selectedTeamLabel: "代码团队",
       },
@@ -2737,7 +2737,7 @@ describe("HarnessStatusPanel", () => {
     });
   });
 
-  it("code_orchestrated 编程底座应将 patch/diff 输出渲染为代码变更概览", () => {
+  it("运行时面板应将 patch/diff 输出渲染为代码变更概览", () => {
     const unifiedDiff = [
       "diff --git a/src/components/ImageCard.tsx b/src/components/ImageCard.tsx",
       "--- a/src/components/ImageCard.tsx",
@@ -2764,7 +2764,7 @@ describe("HarnessStatusPanel", () => {
         workingDir: "/tmp/workspace-code-diff",
         providerType: "openai",
         model: "gpt-5.4",
-        executionStrategy: "code_orchestrated",
+        executionStrategy: "react",
         activeTheme: "default",
         selectedTeamLabel: "代码团队",
       },

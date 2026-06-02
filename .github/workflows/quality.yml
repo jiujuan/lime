@@ -53,8 +53,7 @@ jobs:
           fi
           node scripts/quality-task-selector.mjs "${args[@]}" >> "$GITHUB_OUTPUT"
 
-  # 这里先收口前端/契约/一致性质量信号，后续再逐步补齐可稳定运行的
-  # Rust 质量矩阵。
+  # PR 侧保留快速反馈门禁；main / 手动触发继续跑全量前端与 Rust。
 
   integrity:
     name: Integrity
@@ -84,10 +83,10 @@ jobs:
         run: npm run verify:app-version
 
   frontend:
-    name: Frontend
+    name: Frontend Quick
     runs-on: ubuntu-latest
     needs: changed
-    if: ${{ needs.changed.outputs.frontend == 'true' || needs.changed.outputs.fallback == 'true' || needs.changed.outputs.workflow == 'true' }}
+    if: ${{ github.event_name == 'pull_request' && (needs.changed.outputs.frontend == 'true' || needs.changed.outputs.fallback == 'true' || needs.changed.outputs.workflow == 'true') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -113,8 +112,44 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Vitest
-        run: npm test
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Contract layer tests
+        run: npm run test:contract
+
+  frontend_full:
+    name: Frontend Full
+    runs-on: ubuntu-latest
+    needs: changed
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changed.outputs.docs_only != 'true') || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: "pnpm-lock.yaml"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Full frontend Vitest
+        run: npm run test:frontend:all
 
   bridge_contracts:
     name: Bridge & Contracts
@@ -151,7 +186,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 90
     needs: changed
-    if: ${{ needs.changed.outputs.gui_smoke == 'true' || needs.changed.outputs.fallback == 'true' || needs.changed.outputs.workflow == 'true' }}
+    if: ${{ needs.changed.outputs.gui_smoke == 'true' || needs.changed.outputs.fallback == 'true' || needs.changed.outputs.workflow == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changed.outputs.docs_only != 'true') || github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -183,6 +218,34 @@ jobs:
 
       - name: Run headless GUI smoke
         run: npm run verify:gui-smoke -- --timeout-ms 1800000
+
+  rust_full:
+    name: Rust Full
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: changed
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changed.outputs.docs_only != 'true') || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: quality-rust-full
+          cache-on-failure: true
+
+      - name: Test Rust workspace
+        run: npm run test:rust
 
   windows_shell_runtime:
     name: Windows Shell Runtime
@@ -217,8 +280,10 @@ jobs:
       - changed
       - integrity
       - frontend
+      - frontend_full
       - bridge_contracts
       - gui_smoke
+      - rust_full
       - windows_shell_runtime
     if: always()
     steps:
@@ -230,8 +295,10 @@ jobs:
           BRIDGE_REASONS='${{ needs.changed.outputs.bridge_reasons }}'
           INTEGRITY_RESULT='${{ needs.integrity.result }}'
           FRONTEND_RESULT='${{ needs.frontend.result }}'
+          FRONTEND_FULL_RESULT='${{ needs.frontend_full.result }}'
           BRIDGE_RESULT='${{ needs.bridge_contracts.result }}'
           GUI_SMOKE_RESULT='${{ needs.gui_smoke.result }}'
+          RUST_FULL_RESULT='${{ needs.rust_full.result }}'
           WINDOWS_SHELL_RESULT='${{ needs.windows_shell_runtime.result }}'
           FALLBACK='${{ needs.changed.outputs.fallback }}'
           WORKFLOW='${{ needs.changed.outputs.workflow }}'
@@ -240,6 +307,23 @@ jobs:
           BRIDGE_REQUIRED='${{ needs.changed.outputs.bridge }}'
           GUI_SMOKE_REQUIRED='${{ needs.changed.outputs.gui_smoke }}'
           RUST_REQUIRED='${{ needs.changed.outputs.rust }}'
+          IS_MAIN_PUSH="false"
+          IS_WORKFLOW_DISPATCH="false"
+          if [[ "${GITHUB_EVENT_NAME:-}" == "push" && "${GITHUB_REF:-}" == "refs/heads/main" ]]; then
+            IS_MAIN_PUSH="true"
+          fi
+          if [[ "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" ]]; then
+            IS_WORKFLOW_DISPATCH="true"
+          fi
+          FRONTEND_QUICK_REQUIRED="false"
+          MAIN_FULL_REQUIRED="false"
+          if [[ "${DOCS_ONLY}" != "true" ]]; then
+            if [[ "${IS_MAIN_PUSH}" == "true" || "${IS_WORKFLOW_DISPATCH}" == "true" ]]; then
+              MAIN_FULL_REQUIRED="true"
+            elif [[ "${FRONTEND_REQUIRED}" == "true" || "${FALLBACK}" == "true" || "${WORKFLOW}" == "true" ]]; then
+              FRONTEND_QUICK_REQUIRED="true"
+            fi
+          fi
 
           BRIDGE_REASONS_DISPLAY="${BRIDGE_REASONS//,/、}"
           if [[ -z "${BRIDGE_REASONS_DISPLAY}" ]]; then
@@ -250,9 +334,11 @@ jobs:
           echo "docs_only   : ${DOCS_ONLY}"
           echo "bridge_reasons: ${BRIDGE_REASONS}"
           echo "integrity   : ${INTEGRITY_RESULT}"
-          echo "frontend    : ${FRONTEND_RESULT}"
+          echo "frontend_quick: ${FRONTEND_RESULT}"
+          echo "frontend_full : ${FRONTEND_FULL_RESULT}"
           echo "bridge      : ${BRIDGE_RESULT}"
           echo "gui_smoke   : ${GUI_SMOKE_RESULT}"
+          echo "rust_full   : ${RUST_FULL_RESULT}"
           echo "windows_shell_runtime: ${WINDOWS_SHELL_RESULT}"
 
           FINAL_STATUS="success"
@@ -272,10 +358,10 @@ jobs:
               fi
             fi
 
-            if [[ -z "${FAILURE_REASON}" && ("${FRONTEND_REQUIRED}" == 'true' || "${FALLBACK}" == 'true' || "${WORKFLOW}" == 'true') ]]; then
+            if [[ -z "${FAILURE_REASON}" && "${FRONTEND_QUICK_REQUIRED}" == 'true' ]]; then
               if [[ "${FRONTEND_RESULT}" != 'success' ]]; then
                 FINAL_STATUS="failed"
-                FAILURE_REASON="frontend failed"
+                FAILURE_REASON="frontend quick failed"
               fi
             fi
 
@@ -293,6 +379,27 @@ jobs:
               fi
             fi
 
+            if [[ -z "${FAILURE_REASON}" && "${MAIN_FULL_REQUIRED}" == 'true' ]]; then
+              if [[ "${FRONTEND_FULL_RESULT}" != 'success' ]]; then
+                FINAL_STATUS="failed"
+                FAILURE_REASON="frontend full failed"
+              fi
+            fi
+
+            if [[ -z "${FAILURE_REASON}" && "${MAIN_FULL_REQUIRED}" == 'true' ]]; then
+              if [[ "${RUST_FULL_RESULT}" != 'success' ]]; then
+                FINAL_STATUS="failed"
+                FAILURE_REASON="rust full failed"
+              fi
+            fi
+
+            if [[ -z "${FAILURE_REASON}" && "${MAIN_FULL_REQUIRED}" == 'true' ]]; then
+              if [[ "${GUI_SMOKE_RESULT}" != 'success' ]]; then
+                FINAL_STATUS="failed"
+                FAILURE_REASON="gui smoke failed"
+              fi
+            fi
+
             if [[ -z "${FAILURE_REASON}" && ("${RUST_REQUIRED}" == 'true' || "${FALLBACK}" == 'true' || "${WORKFLOW}" == 'true') ]]; then
               if [[ "${WINDOWS_SHELL_RESULT}" != 'success' ]]; then
                 FINAL_STATUS="failed"
@@ -303,8 +410,10 @@ jobs:
             if [[ -n "${FAILURE_REASON}" ]]; then
               if [[ "${FAILURE_REASON}" == "integrity failed" ]]; then
                 NEXT_ACTION='Run `npm run verify:app-version` and sync package / Cargo / Tauri version files.'
-              elif [[ "${FAILURE_REASON}" == "frontend failed" ]]; then
-                NEXT_ACTION='Run `npm run verify:local` (or `npm run lint && npm run typecheck && npm test`) to reproduce the frontend failure locally.'
+              elif [[ "${FAILURE_REASON}" == "frontend quick failed" ]]; then
+                NEXT_ACTION='Run `npm run lint && npm run typecheck && npm run test:unit && npm run test:contract` to reproduce the frontend quick failure locally.'
+              elif [[ "${FAILURE_REASON}" == "frontend full failed" ]]; then
+                NEXT_ACTION='Run `npm run test:frontend:all` after `npm run lint && npm run typecheck` to reproduce the full frontend failure locally.'
               elif [[ "${FAILURE_REASON}" == "bridge/contracts failed" ]]; then
                 if [[ ",${BRIDGE_REASONS}," == *",harness_cleanup_contract,"* ]]; then
                   NEXT_ACTION='Run `npm run harness:cleanup-report:check` first, then `npm run test:contracts`.'
@@ -317,6 +426,8 @@ jobs:
                 NEXT_ACTION='Run `npm run verify:gui-smoke -- --timeout-ms 900000` and inspect DevBridge / headless Tauri readiness.'
               elif [[ "${FAILURE_REASON}" == "windows shell runtime failed" ]]; then
                 NEXT_ACTION='Run `cargo test --manifest-path src-tauri/Cargo.toml -p lime-agent --test windows_shell_runtime -- --test-threads=1` on Windows and inspect PowerShell PATH fallback.'
+              elif [[ "${FAILURE_REASON}" == "rust full failed" ]]; then
+                NEXT_ACTION='Run `npm run test:rust` to reproduce the Rust workspace failure locally.'
               fi
             fi
           fi
@@ -337,9 +448,11 @@ jobs:
             echo "| Gate | Required | Result |"
             echo "| --- | --- | --- |"
             echo "| integrity | ${INTEGRITY_REQUIRED} | ${INTEGRITY_RESULT} |"
-            echo "| frontend | ${FRONTEND_REQUIRED} | ${FRONTEND_RESULT} |"
+            echo "| frontend_quick | ${FRONTEND_QUICK_REQUIRED} | ${FRONTEND_RESULT} |"
+            echo "| frontend_full | ${MAIN_FULL_REQUIRED} | ${FRONTEND_FULL_RESULT} |"
             echo "| bridge_contracts | ${BRIDGE_REQUIRED} | ${BRIDGE_RESULT} |"
-            echo "| gui_smoke | ${GUI_SMOKE_REQUIRED} | ${GUI_SMOKE_RESULT} |"
+            echo "| gui_smoke | ${GUI_SMOKE_REQUIRED} / main_full=${MAIN_FULL_REQUIRED} | ${GUI_SMOKE_RESULT} |"
+            echo "| rust_full | ${MAIN_FULL_REQUIRED} | ${RUST_FULL_RESULT} |"
             echo "| windows_shell_runtime | ${RUST_REQUIRED} | ${WINDOWS_SHELL_RESULT} |"
             echo
             echo "### Notes"

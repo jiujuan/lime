@@ -70,7 +70,7 @@ pub async fn agent_app_runtime_start_task(
                 workspace_id.clone(),
                 non_empty(request.title.as_deref())
                     .or_else(|| Some(format!("Agent App · {task_kind}"))),
-                Some(AsterExecutionStrategy::Auto),
+                Some(AsterExecutionStrategy::React),
                 request.run_start_hooks.unwrap_or(true),
             )
             .await?
@@ -100,7 +100,7 @@ pub async fn agent_app_runtime_start_task(
         workspace_id,
         web_search: None,
         search_mode: None,
-        execution_strategy: Some(AsterExecutionStrategy::Auto),
+        execution_strategy: Some(AsterExecutionStrategy::React),
         auto_continue: None,
         system_prompt: None,
         metadata: Some(metadata),

@@ -362,7 +362,8 @@ pub(crate) async fn apply_workspace_sandbox_permissions(
     }
 
     let sandbox_policy = resolve_workspace_sandbox_policy(config_manager);
-    let auto_mode = execution_strategy == AsterExecutionStrategy::Auto;
+    let auto_mode = false;
+    let _ = execution_strategy;
     let current_config = config_manager.config();
     let execution_policy_input = ToolExecutionResolverInput {
         persisted_policy: Some(&current_config.agent.tool_execution),

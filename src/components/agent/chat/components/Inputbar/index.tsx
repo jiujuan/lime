@@ -1,7 +1,7 @@
 import React from "react";
 import styled from "styled-components";
 import { useTranslation } from "react-i18next";
-import type { MessageImage, MessagePathReference } from "../../types";
+import type { MessagePathReference } from "../../types";
 import type { Character } from "@/lib/api/memory";
 import type {
   AsterSessionExecutionRuntime,
@@ -22,8 +22,6 @@ import { useInputbarController } from "./hooks/useInputbarController";
 import type { TeamDefinition } from "../../utils/teamDefinitions";
 import type { WorkspaceSettings } from "@/types/workspace";
 import type { AgentAccessMode } from "../../hooks/agentChatStorage";
-import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime";
-import type { HandleSendOptions } from "../../hooks/handleSendTypes";
 import type { AgentInitialInputCapabilityParams } from "@/types/page";
 import type { CuratedTaskReferenceEntry } from "../../utils/curatedTaskReferenceSelection";
 import type {
@@ -33,9 +31,9 @@ import type {
 import { buildInputbarComposerSectionCopy } from "./components/inputbarComposerSectionCopy";
 import { buildInputbarCoreCopy } from "./components/inputbarCoreCopy";
 import {
-  buildInputbarExecutionStrategyCopy,
   buildInputbarWorkflowPanelCopy,
 } from "./inputbarWorkflowCopy";
+import type { InputbarSendHandler } from "./inputbarSendPayload";
 
 const SecondaryControlsRow = styled.div`
   position: absolute;
@@ -59,15 +57,7 @@ const SecondaryControlsRow = styled.div`
 interface InputbarProps extends SkillSelectionSourceProps {
   input: string;
   setInput: (value: string) => void;
-  onSend: (
-    images?: MessageImage[],
-    webSearch?: boolean,
-    thinking?: boolean,
-    textOverride?: string,
-    executionStrategy?: "react" | "code_orchestrated" | "auto",
-    autoContinuePayload?: AutoContinueRequestPayload,
-    sendOptions?: HandleSendOptions,
-  ) => void | Promise<boolean> | boolean;
+  onSend: InputbarSendHandler;
   /** 停止生成回调 */
   onStop?: () => void;
   isLoading: boolean;
@@ -93,10 +83,6 @@ interface InputbarProps extends SkillSelectionSourceProps {
   model?: string;
   setModel?: (model: string) => void;
   executionRuntime?: AsterSessionExecutionRuntime | null;
-  executionStrategy?: "react" | "code_orchestrated" | "auto";
-  setExecutionStrategy?: (
-    strategy: "react" | "code_orchestrated" | "auto",
-  ) => void;
   accessMode?: AgentAccessMode;
   setAccessMode?: (mode: AgentAccessMode) => void;
   toolStates?: Partial<InputbarToolStates>;
@@ -166,8 +152,6 @@ export const Inputbar: React.FC<InputbarProps> = ({
   model,
   setModel,
   executionRuntime,
-  executionStrategy,
-  setExecutionStrategy,
   accessMode,
   setAccessMode,
   toolStates,
@@ -216,13 +200,6 @@ export const Inputbar: React.FC<InputbarProps> = ({
   const inputbarComposerCopy = React.useMemo(
     () =>
       buildInputbarComposerSectionCopy((key, values) =>
-        t(key, values ?? {}),
-      ),
-    [t],
-  );
-  const executionStrategyCopy = React.useMemo(
-    () =>
-      buildInputbarExecutionStrategyCopy((key, values) =>
         t(key, values ?? {}),
       ),
     [t],
@@ -280,7 +257,6 @@ export const Inputbar: React.FC<InputbarProps> = ({
     setProviderType,
     model,
     setModel,
-    executionStrategy,
     toolStates,
     onToolStatesChange,
     activeTheme,
@@ -382,7 +358,6 @@ export const Inputbar: React.FC<InputbarProps> = ({
         onSend={handleSend}
         onToolClick={handleToolClick}
         activeTools={activeTools}
-        executionStrategy={executionStrategy}
         pendingImages={pendingImages}
         onRemoveImage={handleRemoveImage}
         pathReferences={pathReferences}
@@ -398,7 +373,6 @@ export const Inputbar: React.FC<InputbarProps> = ({
         executionRuntime={executionRuntime}
         accessMode={accessMode}
         setAccessMode={setAccessMode}
-        setExecutionStrategy={setExecutionStrategy}
         topExtra={topExtra}
         queuedTurns={queuedTurns}
         onPromoteQueuedTurn={onPromoteQueuedTurn}
@@ -407,7 +381,6 @@ export const Inputbar: React.FC<InputbarProps> = ({
         inputCompletionEnabled={inputCompletionEnabled}
         copy={inputbarComposerCopy}
         inputbarCopy={inputbarCopy}
-        executionStrategyCopy={executionStrategyCopy}
         workflowPanelCopy={workflowPanelCopy}
       />
       {dialogLayer}

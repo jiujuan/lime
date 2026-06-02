@@ -14,10 +14,17 @@ import {
   type TaskCenterDraftTab,
 } from "./agentChatWorkspaceHelpers";
 import {
+  clearTaskCenterLocalSessionOverrideForTopic,
+  clearTaskCenterTransitionTopicForTopic,
+  resolveTaskCenterTopicClosePlan,
+  resolveTaskCenterTopicSwitchOptions,
+  rollbackTaskCenterOpenTabMapForFailedSwitch,
+  shouldSkipTaskCenterActiveTopicReopen,
   shouldResumeTaskSession,
   updateTaskCenterTabIdsForWorkspace,
   type TaskCenterWorkspaceTabMap,
 } from "../utils/taskCenterTabs";
+import { resolveTaskCenterDraftClosePlan } from "./taskCenterDraftTabs";
 import { normalizeProjectId } from "../utils/topicProjectResolution";
 import { rememberInitialSessionNavigationStart } from "./useWorkspaceInitialSessionNavigation";
 import type { TaskCenterDraftSendRequest } from "../homePendingPreview";
@@ -133,43 +140,43 @@ export function useTaskCenterTopicNavigationRuntime({
       );
       const shouldResume =
         options?.preferResume === true || shouldResumeTaskSession(topic);
-      const switchOptions =
-        shouldResume || options?.forceRefresh === true
-          ? {
-              ...(options?.forceRefresh === true ? { forceRefresh: true } : {}),
-              ...(shouldResume ? { resumeSessionStartHooks: true } : {}),
-            }
-          : undefined;
+      const switchOptions = resolveTaskCenterTopicSwitchOptions({
+        shouldResume,
+        forceRefresh: options?.forceRefresh,
+      });
       const wasOpenInTaskCenter =
         taskCenterOpenTabIdsRef.current.includes(topicId);
       const shouldMaintainTaskCenterTab =
         agentEntry === "claw" || agentEntry === "new-task";
-      const shouldSkipActiveTopicReopen =
-        topicId === activeSessionIdRef.current &&
-        messagesLength > 0 &&
-        activeTaskCenterDraftTabIdRef.current === null &&
-        taskCenterDraftSurfaceActiveRef.current === false &&
-        taskCenterDetachedTopicId === null &&
-        shouldResume === false &&
-        options?.forceRefresh !== true &&
-        options?.preferResume !== true &&
-        options?.replaceOpenTabs !== true;
+      const shouldSkipActiveTopicReopen = shouldSkipTaskCenterActiveTopicReopen(
+        {
+          topicId,
+          activeSessionId: activeSessionIdRef.current,
+          messagesLength,
+          activeDraftTabId: activeTaskCenterDraftTabIdRef.current,
+          draftSurfaceActive: taskCenterDraftSurfaceActiveRef.current,
+          detachedTopicId: taskCenterDetachedTopicId,
+          shouldResume,
+          forceRefresh: options?.forceRefresh,
+          preferResume: options?.preferResume,
+          replaceOpenTabs: options?.replaceOpenTabs,
+        },
+      );
       const rollbackPendingOpen = () => {
-        if (!wasOpenInTaskCenter && options?.replaceOpenTabs !== true) {
-          setTaskCenterOpenTabMap((currentMap) =>
-            updateTaskCenterTabIdsForWorkspace(
-              currentMap,
-              topicWorkspaceId,
-              (currentIds) =>
-                currentIds.filter((currentId) => currentId !== topicId),
-            ),
-          );
-        }
+        setTaskCenterOpenTabMap((currentMap) =>
+          rollbackTaskCenterOpenTabMapForFailedSwitch({
+            currentMap,
+            workspaceId: topicWorkspaceId,
+            topicId,
+            wasOpenInTaskCenter,
+            replaceOpenTabs: options?.replaceOpenTabs,
+          }),
+        );
         setTaskCenterLocalSessionOverride((current) =>
-          current?.sessionId === topicId ? null : current,
+          clearTaskCenterLocalSessionOverrideForTopic(current, topicId),
         );
         setTaskCenterTransitionTopicId((current) =>
-          current === topicId ? null : current,
+          clearTaskCenterTransitionTopicForTopic(current, topicId),
         );
       };
 
@@ -341,37 +348,44 @@ export function useTaskCenterTopicNavigationRuntime({
   const handleCloseTaskCenterTab = useCallback(
     async (topicId: string) => {
       if (isTaskCenterDraftTabId(topicId)) {
-        const remainingDraftTabs = taskCenterDraftTabsRef.current.filter(
-          (tab) => tab.id !== topicId,
-        );
-        setTaskCenterDraftTabs(remainingDraftTabs);
-        if (activeTaskCenterDraftTabIdRef.current === topicId) {
-          const fallbackDraftId = remainingDraftTabs[0]?.id ?? null;
-          if (fallbackDraftId) {
-            handleSelectTaskCenterDraftTab(fallbackDraftId);
-            return;
-          }
-
+        const closePlan = resolveTaskCenterDraftClosePlan({
+          closingDraftTabId: topicId,
+          currentDraftTabs: taskCenterDraftTabsRef.current,
+          activeDraftTabId: activeTaskCenterDraftTabIdRef.current,
+          openTopicIds: taskCenterOpenTabIdsRef.current,
+        });
+        setTaskCenterDraftTabs(closePlan.remainingDraftTabs);
+        if (closePlan.action === "selectDraft") {
+          handleSelectTaskCenterDraftTab(closePlan.fallbackDraftTabId);
+          return;
+        }
+        if (closePlan.action === "switchTopic") {
           taskCenterDraftSurfaceActiveRef.current = false;
           setActiveTaskCenterDraftTabId(null);
           setInput("");
-          const fallbackTopicId = taskCenterOpenTabIdsRef.current[0] ?? null;
-          if (fallbackTopicId) {
-            await handleSwitchTaskTopic(fallbackTopicId);
-          }
+          await handleSwitchTaskTopic(closePlan.fallbackTopicId);
+          return;
+        }
+        if (closePlan.action === "clearActiveDraft") {
+          taskCenterDraftSurfaceActiveRef.current = false;
+          setActiveTaskCenterDraftTabId(null);
+          setInput("");
         }
         return;
       }
 
-      const currentIds = taskCenterOpenTabIdsRef.current;
-      const currentIndex = currentIds.indexOf(topicId);
-      const remainingIds = currentIds.filter((item) => item !== topicId);
-      const isActiveTab = sessionId === topicId;
+      const closePlan = resolveTaskCenterTopicClosePlan({
+        closingTopicId: topicId,
+        currentOpenTabIds: taskCenterOpenTabIdsRef.current,
+        sessionId,
+        detachedTopicId: taskCenterDetachedTopicId,
+        transitionTopicId: taskCenterTransitionTopicId,
+      });
 
-      if (taskCenterDetachedTopicId === topicId) {
+      if (closePlan.shouldClearDetachedTopic) {
         setTaskCenterDetachedTopicId(null);
       }
-      if (taskCenterTransitionTopicId === topicId) {
+      if (closePlan.shouldClearTransitionTopic) {
         setTaskCenterTransitionTopicId(null);
       }
       clearTaskCenterEmbeddedHomeSession(topicId);
@@ -380,19 +394,13 @@ export function useTaskCenterTopicNavigationRuntime({
         updateTaskCenterTabIdsForWorkspace(
           currentMap,
           taskCenterWorkspaceId,
-          remainingIds,
+          closePlan.remainingIds,
         ),
       );
 
-      if (isActiveTab) {
-        const fallbackId =
-          remainingIds[currentIndex] ??
-          remainingIds[currentIndex - 1] ??
-          remainingIds[0] ??
-          null;
-
-        if (fallbackId) {
-          await handleSwitchTaskTopic(fallbackId);
+      if (closePlan.isActiveTab) {
+        if (closePlan.fallbackTopicId) {
+          await handleSwitchTaskTopic(closePlan.fallbackTopicId);
         } else {
           openTaskCenterDraftTab();
         }

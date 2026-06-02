@@ -153,12 +153,12 @@ describe("AgentRuntimeStrip", () => {
     ).toContain("Runtime 未接通 WebSearch");
   });
 
-  it("code_orchestrated 应显示编程底座运行态，而不是依赖 @代码 专用命令", () => {
+  it("current react 应按普通运行时能力展示", () => {
     const container = renderStrip({
       executionRuntime: {
-        session_id: "session-code",
+        session_id: "session-react",
         source: "session",
-        execution_strategy: "code_orchestrated",
+        execution_strategy: "react",
       },
       runtimeToolAvailability: CODE_RUNTIME_TOOL_AVAILABILITY,
       toolPreferences: {
@@ -171,43 +171,26 @@ describe("AgentRuntimeStrip", () => {
 
     expect(
       container.querySelector(
-        '[data-testid="agent-runtime-strip"][data-runtime-kind="code_orchestrated"][data-execution-strategy="code_orchestrated"]',
+        '[data-testid="agent-runtime-strip"][data-runtime-kind="general"][data-execution-strategy="react"]',
       ),
     ).toBeTruthy();
     expect(
       container.querySelector(
-        '[data-testid="agent-runtime-strip-capability-code_tools"][data-capability-key="code_tools"][data-enabled="true"]',
+        '[data-testid="agent-runtime-strip-capability-web_search"][data-capability-key="web_search"][data-enabled="true"]',
       ),
     ).toBeTruthy();
     expect(
       container.querySelector(
-        '[data-testid="agent-runtime-strip-status-code_runtime_active"][data-status-key="code_runtime_active"]',
-      ),
-    ).toBeTruthy();
+        '[data-testid="agent-runtime-strip-status-runtime_surface"][data-status-key="runtime_surface"]',
+      )?.textContent,
+    ).toContain("Runtime 工具面 12 项");
     expect(
-      container.querySelector(
-        '[data-testid="agent-runtime-strip-status-code_tool_ready"][data-status-key="code_tool_ready"]',
-      ),
-    ).toBeTruthy();
-    expect(
-      container.querySelector(
-        '[data-testid="agent-runtime-strip-status-code_approval_ready"][data-status-key="code_approval_ready"]',
-      ),
-    ).toBeTruthy();
-    expect(
-      container.querySelector(
-        '[data-testid="agent-runtime-strip-status-code_outputs_empty"][data-status-key="code_outputs_empty"]',
-      ),
-    ).toBeTruthy();
+      container.querySelector('[data-testid*="code_"]'),
+    ).toBeNull();
   });
 
-  it("编程底座应露出待确认与产物出口状态", () => {
+  it("运行时信号应露出待确认与产物出口状态", () => {
     const container = renderStrip({
-      executionRuntime: {
-        session_id: "session-code",
-        source: "session",
-        execution_strategy: "code_orchestrated",
-      },
       runtimeToolAvailability: CODE_RUNTIME_TOOL_AVAILABILITY,
       harnessState: createHarnessState({
         pendingApprovals: [
@@ -231,24 +214,19 @@ describe("AgentRuntimeStrip", () => {
 
     expect(
       container.querySelector(
-        '[data-testid="agent-runtime-strip-status-code_approval_pending"]',
+        '[data-testid="agent-runtime-strip-status-pending"]',
       )?.textContent,
     ).toContain("等待确认 1");
     expect(
       container.querySelector(
-        '[data-testid="agent-runtime-strip-status-code_outputs"]',
+        '[data-testid="agent-runtime-strip-status-outputs"]',
       )?.textContent,
-    ).toContain("代码产物 1");
+    ).toContain("最近产物 1");
   });
 
-  it("编程底座有文件快照时应露出文件变更审阅入口", () => {
+  it("运行时文件快照应露出文件变更审阅入口", () => {
     const onOpenFileCheckpoints = vi.fn();
     const container = renderStrip({
-      executionRuntime: {
-        session_id: "session-code",
-        source: "session",
-        execution_strategy: "code_orchestrated",
-      },
       runtimeToolAvailability: CODE_RUNTIME_TOOL_AVAILABILITY,
       fileCheckpointSummary: {
         count: 2,
@@ -266,7 +244,7 @@ describe("AgentRuntimeStrip", () => {
 
     expect(
       container.querySelector(
-        '[data-testid="agent-runtime-strip-status-code_file_changes"]',
+        '[data-testid="agent-runtime-strip-status-runtime_file_changes"]',
       )?.textContent,
     ).toContain("文件变更 2");
 
@@ -279,5 +257,28 @@ describe("AgentRuntimeStrip", () => {
       reviewButton?.click();
     });
     expect(onOpenFileCheckpoints).toHaveBeenCalledTimes(1);
+  });
+
+  it("运行时输出信号应设置 runtime data kind", () => {
+    const container = renderStrip({
+      runtimeToolAvailability: CODE_RUNTIME_TOOL_AVAILABILITY,
+      harnessState: createHarnessState({
+        outputSignals: [
+          {
+            id: "output-1",
+            toolCallId: "tool-1",
+            toolName: "Edit",
+            title: "已修改文件",
+            summary: "src/main.ts",
+          },
+        ],
+      }),
+    });
+
+    expect(
+      container.querySelector(
+        '[data-testid="agent-runtime-strip"][data-runtime-kind="runtime"]',
+      ),
+    ).toBeTruthy();
   });
 });

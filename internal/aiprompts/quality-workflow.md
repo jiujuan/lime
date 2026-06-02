@@ -203,14 +203,17 @@ npm run test:frontend:all
 - `test:contract` 覆盖 DevBridge / Tauri mock / command catalog 一类轻量契约测试
 - `test:integration` 覆盖文件系统、子进程、本地 fixture server 和多模块脚本流程
 - `test:e2e` 覆盖 Vitest 内显式 E2E / smoke / live-gated 测试；真实产品主路径仍以 `verify:gui-smoke` / Playwright 为准
-- `test:layers:stats` 按同一分类事实源输出分层统计、默认可运行数和 live-gated 数
+- `test:layers:stats` 按同一分类事实源输出分层统计、默认可运行数、live-gated 数，以及 component 测试的 VM 迁移候选提示
 - `test:frontend:all` 保留现有前端 Vitest 全量兼容入口
 
 边界：
 
 - `test:unit` 只证明快速逻辑回归，不等于可交付
+- 显式后缀不能降低风险层级；`*.unit.test.*` 只在无 React/jsdom、DevBridge/Tauri、文件系统、网络、Playwright 等外部边界时进入 unit
 - GUI 壳、Workspace、主页面路径、Tauri 命令和 Bridge 改动仍必须按后续 Layer 1-3 跑对应校验
 - 前端复杂 UI 逻辑应优先抽到 View Model / projection / selector 中做单元测试；组件测试只保留必要渲染和事件接线，核心用户流程交给 GUI smoke / E2E
+- 新增或重写前端测试时先做分层判断：筛选 / 分组 / formatter / request builder / 状态机 / reducer / runtime 参数投影等可纯化逻辑必须落到 `*.unit.test.ts`；只有 React 渲染、真实 DOM 事件、hook 生命周期、DevBridge/Tauri、文件系统、网络或端到端流程才进入 component / contract / integration / e2e
+- 不允许为了“补回归”把大量业务分支继续加进 `*.test.tsx` 挂载测试。若当前逻辑暂时无法抽 VM，必须在路线图或执行计划记录原因、退出条件和后续迁移点，避免后续 Agent 把临时组件测试当作新规范
 
 ### Layer 1：本地统一入口
 
@@ -325,7 +328,7 @@ CI 里的 `.github/workflows/quality.yml` 结果摘要现在也会透出 `bridge
 - 检查纯文本 `Claw @网页` 是否已经走 `原始用户消息 -> harness.webpage_skill_launch -> Agent 首刀 Skill(webpage_generate) -> write_file HTML artifact` 主链，而不是退回普通聊天口头方案、卡在 `ToolSearch / WebSearch / Read / Glob / Grep` 这类通用工具偏航，或没有真实 `.html` 文件就宣布完成
 - 检查纯文本 `Claw @PPT` 是否已经走 `原始用户消息 -> harness.presentation_skill_launch -> Agent 首刀 Skill(presentation_generate) -> write_file Markdown artifact` 主链，而不是退回普通聊天口头提纲、卡在 `ToolSearch / WebSearch / Read / Glob / Grep` 这类通用工具偏航，或没有真实演示稿文件就宣布完成
 - 检查纯文本 `Claw @表单` 是否已经走 `原始用户消息 -> harness.form_skill_launch -> Agent 首刀 Skill(form_generate) -> ```a2ui simple form JSON` 主链，而不是退回普通聊天字段建议、卡在 `ToolSearch / WebSearch / Read / Glob / Grep` 这类通用工具偏航，或回流成单文件 HTML 表单原型；同时确认 render contract 已收敛为 `form + json`
-- 检查自然语言代码任务是否已经在 `code_orchestrated` 会话 / 本轮策略下走 `原始用户消息 -> code_orchestrated runtime defaults -> code_execution / tools / team runtime` 主链；`@代码` 只作为 `command catalog(code_runtime)` mention 快捷入口触发同一条主链，不允许前端根据“代码 / 修复 / 重构 / 评审”等正文关键词改写 prompt、重新写入 `harness.code_command`，或把代码任务改写成另一套 workflow 旁路
+- 检查自然语言代码任务是否已经走 `原始用户消息 -> react Agent runtime -> 模型按需工具 / 协作判断` 主链；`@代码` 只作为 `command catalog(code_runtime)` mention 快捷入口触发同一条主链，不允许前端根据“代码 / 修复 / 重构 / 评审”等正文关键词改写 prompt、重新写入 `harness.code_command`，不允许重新打开 `resolveCodeOrchestratedRuntimeDefaults`、前置执行策略选择或默认代码团队，也不允许把代码任务改写成另一套 workflow 旁路。旧 `code_orchestrated` / `auto` 输入只能在 compat 边界归一到 `react`
 - 检查纯文本 `Claw @渠道预览` 是否已经走 `原始用户消息 -> displayContent 保留 -> /content_post_with_cover -> artifact` 主链，而不是退回普通聊天解释、重新长出另一套 `channel_preview_task` 协议，或静默混成正式 `@发布`；同时确认 `publish_command.intent=preview`、`entry_source=at_channel_preview_command` 与预览稿意图补齐仍然成立
 - 检查纯文本 `Claw @上传` 是否已经走 `原始用户消息 -> displayContent 保留 -> /content_post_with_cover -> artifact` 主链，而不是退回普通聊天解释、重新长出另一套 `upload_task` 协议，或静默混成正式 `@发布`；同时确认 `publish_command.intent=upload`、`entry_source=at_upload_command` 与上传稿意图补齐仍然成立；若命中平台后台，也要确认浏览器门禁继续生效
 - 检查纯文本 `Claw @发布` 是否已经走 `原始用户消息 -> displayContent 保留 -> dispatch /content_post_with_cover -> content_post workflow` 主链，而不是直接把 `@发布` 文本原样当普通聊天发送，或重新造一套 `publish_task` 协议；同时确认平台后台类输入会继续触发 `browser_requirement`
@@ -376,7 +379,7 @@ CI 里的 `.github/workflows/quality.yml` 结果摘要现在也会透出 `bridge
 - 修改 `@排版` parser、`useWorkspaceSendActions`、`runtime_turn`、`typesetting_skill_launch`、`lime task create typesetting`、`typesetting` skill 或 `lime_create_typesetting_task`，尤其是调整 `Claw @排版 -> harness.typesetting_skill_launch -> Agent 首刀 Skill(typesetting) -> task file` 主链
 - 修改 `@网页` parser、`useWorkspaceSendActions`、`runtime_turn`、`webpage_skill_launch`、`webpage_generate` skill 或 HTML artifact 预览链路，尤其是调整 `Claw @网页 -> harness.webpage_skill_launch -> Agent 首刀 Skill(webpage_generate) -> write_file HTML artifact` 主链
 - 修改 `@PPT` parser、`useWorkspaceSendActions`、`runtime_turn`、`presentation_skill_launch`、`presentation_generate` skill 或演示稿 artifact 预览链路，尤其是调整 `Claw @PPT -> harness.presentation_skill_launch -> Agent 首刀 Skill(presentation_generate) -> write_file Markdown artifact` 主链
-- 修改自然语言编程底座、`code_orchestrated` 发送边界、`@代码` mention 快捷入口、`parseMentionCommand`、`useWorkspaceSendActions` 或 mention builtin command，尤其要确认普通代码请求仍走 `原始用户消息 -> code_orchestrated runtime defaults -> tools / team runtime` 主链，`@代码` 只通过 catalog route 切同一条主链
+- 修改自然语言编程底座、legacy `code_orchestrated` 兼容归一、`@代码` mention 快捷入口、`parseMentionCommand`、`useWorkspaceSendActions` 或 mention builtin command，尤其要确认普通代码请求仍走 `原始用户消息 -> react Agent runtime -> 模型按需工具 / 协作判断` 主链，`@代码` 只通过 catalog route 进入同一条主链，不恢复前置执行策略选择、搜索选择或思考选择
 - 修改 `@渠道预览` parser、`useWorkspaceSendActions`、`publish_command` metadata 或 `content_post_with_cover` 预览意图编排，尤其是调整 `Claw @渠道预览 -> publish_command.intent=preview -> /content_post_with_cover -> artifact` 主链
 - 修改 `@上传` parser、`useWorkspaceSendActions`、`publish_command` metadata、浏览器门禁推导或 `content_post_with_cover` 上传意图编排，尤其是调整 `Claw @上传 -> publish_command.intent=upload -> /content_post_with_cover -> artifact` 主链
 - 修改 `@发布` parser、`useWorkspaceSendActions`、content post workflow 入口或浏览器门禁推导，尤其是调整 `Claw @发布 -> displayContent/raw -> /content_post_with_cover -> publish workflow` 主链
@@ -695,8 +698,10 @@ npm run agent-qc:audit
 要求：
 
 - 本地 `verify:local` 与 CI 使用同一套 changed-path 分类逻辑
+- PR 前端快速门禁显式执行 `lint`、`typecheck`、`test:unit`、`test:contract`，避免把全量 Vitest 作为默认 TDD 反馈环
+- `main` push 与手动触发继续执行 `test:frontend:all`、`test:rust`、`verify:gui-smoke`，作为合并后 / 发布前的全量质量面
 - 最终由 `results` job 聚合为统一质量信号
-- 对 GUI 产品来说，PR 门禁不能只覆盖静态检查，还必须覆盖 `Bridge & Contracts` 与 `GUI Smoke`
+- 对 GUI 产品来说，PR 门禁不能只覆盖静态检查；涉及命令 / Bridge 时必须补 `Bridge & Contracts`，涉及 GUI 壳 / Workspace / 主路径时必须补 `GUI Smoke`
 
 ## PR 前最小清单
 

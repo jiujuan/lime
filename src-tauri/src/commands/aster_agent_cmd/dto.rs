@@ -96,7 +96,7 @@ pub struct AsterChatRequest {
     /// 联网搜索模式（disabled / allowed / required）
     #[serde(default, alias = "searchMode")]
     pub search_mode: Option<RequestToolPolicyMode>,
-    /// 执行策略（react / code_orchestrated / auto）
+    /// 执行策略；legacy auto / code_orchestrated 输入会在边界归一为 react。
     #[serde(default, alias = "executionStrategy")]
     pub execution_strategy: Option<AsterExecutionStrategy>,
     /// 自动续写策略（用于文稿续写等场景）

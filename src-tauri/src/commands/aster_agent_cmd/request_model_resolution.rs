@@ -1596,23 +1596,11 @@ fn resolve_provider_model_compatibility(
 }
 
 fn extract_request_thinking_enabled(request: &AsterChatRequest) -> Option<bool> {
-    request.thinking_enabled.or_else(|| {
-        extract_harness_bool(
-            request.metadata.as_ref(),
-            &["thinking_enabled", "thinkingEnabled"],
-        )
-    })
+    request.thinking_enabled
 }
 
 async fn resolve_request_thinking_enabled(request: &AsterChatRequest) -> Result<bool, String> {
-    if let Some(thinking_enabled) = extract_request_thinking_enabled(request) {
-        return Ok(thinking_enabled);
-    }
-
-    Ok(resolve_session_recent_preferences(&request.session_id)
-        .await?
-        .map(|preferences| preferences.thinking)
-        .unwrap_or(false))
+    Ok(extract_request_thinking_enabled(request).unwrap_or(false))
 }
 
 fn push_unique_profile_trait(traits: &mut Vec<String>, value: &str) {

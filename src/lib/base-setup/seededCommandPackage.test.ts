@@ -163,7 +163,7 @@ describe("seededCommandPackage", () => {
             skillId: undefined,
             executionKind: "agent_turn",
             requestDefaults: {
-              executionStrategy: "code_orchestrated",
+              executionStrategy: "react",
             },
           },
           renderContract: expect.objectContaining({

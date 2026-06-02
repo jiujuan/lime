@@ -89,14 +89,12 @@ const REQUIRED_RUNTIME_SUMMARY_FLAGS = [
   "hasTaskReady",
   "hasReadyBanner",
 ];
-const REQUIRED_CODE_RUNTIME_FLAGS = [
+const REQUIRED_AGENT_RUNTIME_TASK_FLAGS = [
   "hasPlainCodingPrompt",
-  "hasCodeRuntimeStrip",
-  "hasCodeRuntimeStrategy",
-  "hasCodeRuntimeActive",
-  "hasCodeTools",
-  "hasCodeApprovalPending",
-  "hasCodeOutputs",
+  "hasAgentRuntimeStrip",
+  "hasReactRuntimeStrategy",
+  "hasRuntimeOutputs",
+  "hasPendingApprovalStatus",
   "hasHarnessWritesSection",
   "hasHarnessOutputsSection",
   "hasHarnessApprovalsSection",
@@ -122,7 +120,7 @@ Lime Runtime Tool Surface Page Smoke
 
 用途:
   通过真实 Lime 页面验证 runtime inventory -> Harness -> Runtime 能力摘要的主链，
-  同时确认自然语言编程任务不需要 @代码，也会进入编程底座可见状态。
+  同时确认自然语言工具任务从输入框进入 current Agent runtime，不需要 @代码 或前置策略选择。
 
 用法:
   node scripts/agent-runtime-tool-surface-page-smoke.mjs [选项]
@@ -446,18 +444,18 @@ function buildCodeRuntimeSessionFixture(
   return {
     id: sessionId,
     thread_id: CODE_FIXTURE_THREAD_ID,
-    name: "自然语言编程 smoke",
+    name: "自然语言任务 runtime smoke",
     created_at: nowSeconds,
     updated_at: nowSeconds,
     model: "gpt-5-codex",
     workspace_id: workspaceId,
     working_dir: "",
-    execution_strategy: "code_orchestrated",
+    execution_strategy: "react",
     execution_runtime: {
       session_id: sessionId,
       provider_name: "codex",
       model_name: "gpt-5-codex",
-      execution_strategy: "code_orchestrated",
+      execution_strategy: "react",
       source: "session",
       mode: "runtime",
       latest_turn_id: CODE_FIXTURE_TURN_ID,
@@ -738,7 +736,7 @@ function buildCodeRuntimeTurnContextEvent() {
     session_id: CODE_FIXTURE_SESSION_ID,
     thread_id: CODE_FIXTURE_THREAD_ID,
     turn_id: CODE_FIXTURE_TURN_ID,
-    execution_strategy: "code_orchestrated",
+    execution_strategy: "react",
   };
 }
 
@@ -1705,9 +1703,9 @@ function buildOpenSubmittedCodeSessionScript() {
         const aria = button.getAttribute("aria-label") || "";
         const title = button.getAttribute("title") || "";
         return (
-          text.includes("自然语言编程 smoke") ||
-          aria.includes("自然语言编程 smoke") ||
-          title.includes("自然语言编程 smoke")
+          text.includes("自然语言任务 runtime smoke") ||
+          aria.includes("自然语言任务 runtime smoke") ||
+          title.includes("自然语言任务 runtime smoke")
         );
       });
 
@@ -1780,8 +1778,8 @@ function buildRuntimeSmokeDiagnosticsScript() {
       runtimeStripCount: document.querySelectorAll(
         '[data-testid="agent-runtime-strip"]',
       ).length,
-      codeRuntimeStripCount: document.querySelectorAll(
-        '[data-testid="agent-runtime-strip"][data-runtime-kind="code_orchestrated"]',
+      runtimeWorkbenchStripCount: document.querySelectorAll(
+        '[data-testid="agent-runtime-strip"][data-runtime-kind="runtime"]',
       ).length,
       eventSourceFixture:
         window.__limeCodeRuntimeEventSourceFixtureDiagnostics || null,
@@ -1799,9 +1797,7 @@ function buildRuntimeSmokeDiagnosticsScript() {
 function buildRuntimeSummaryCheckScript() {
   return `(() => {
     const text = document.body ? document.body.innerText : "";
-    const codeRuntimeStrip = document.querySelector(
-      '[data-testid="agent-runtime-strip"][data-runtime-kind="code_orchestrated"]',
-    );
+    const agentRuntimeStrip = document.querySelector('[data-testid="agent-runtime-strip"]');
     const writesSection = document.querySelector('[data-harness-section="writes"]');
     const outputsSection = document.querySelector('[data-harness-section="outputs"]');
     const approvalsSection = document.querySelector('[data-harness-section="approvals"]');
@@ -1821,30 +1817,20 @@ function buildRuntimeSummaryCheckScript() {
       hasWorkbench: text.includes("处理工作台"),
       hasRuntimeSummary: text.includes("Runtime 能力摘要"),
       hasPlainCodingPrompt: text.includes(${JSON.stringify(PROMPT_TEXT)}),
-      hasCodeRuntimeStrip: Boolean(codeRuntimeStrip),
-      hasCodeRuntimeStrategy: Boolean(
+      hasAgentRuntimeStrip: Boolean(agentRuntimeStrip),
+      hasReactRuntimeStrategy: Boolean(
         document.querySelector(
-          '[data-testid="agent-runtime-strip"][data-execution-strategy="code_orchestrated"]',
+          '[data-testid="agent-runtime-strip"][data-execution-strategy="react"]',
         ),
       ),
-      hasCodeRuntimeActive: Boolean(
+      hasRuntimeOutputs: Boolean(
         document.querySelector(
-          '[data-testid="agent-runtime-strip-status-code_runtime_active"][data-status-key="code_runtime_active"]',
+          '[data-testid="agent-runtime-strip-status-runtime_outputs"][data-status-key="runtime_outputs"]',
         ),
       ),
-      hasCodeTools: Boolean(
+      hasPendingApprovalStatus: Boolean(
         document.querySelector(
-          '[data-testid="agent-runtime-strip-capability-code_tools"][data-capability-key="code_tools"]',
-        ),
-      ),
-      hasCodeApprovalPending: Boolean(
-        document.querySelector(
-          '[data-testid="agent-runtime-strip-status-code_approval_pending"][data-status-key="code_approval_pending"]',
-        ),
-      ),
-      hasCodeOutputs: Boolean(
-        document.querySelector(
-          '[data-testid="agent-runtime-strip-status-code_outputs"][data-status-key="code_outputs"]',
+          '[data-testid="agent-runtime-strip-status-pending"][data-status-key="pending"]',
         ),
       ),
       hasHarnessWritesSection: Boolean(writesSection),
@@ -2216,9 +2202,7 @@ function isExpectedPlainCodeRuntimeSubmitRequest(request) {
     !String(request?.message || "").trim().startsWith("@代码") &&
     request?.session_id === CODE_FIXTURE_SESSION_ID &&
     request?.turn_config?.metadata?.harness?.code_command === undefined &&
-    harnessMetadata?.preferred_team_preset_id === "code-triage-team" &&
-    harnessMetadata?.preferences?.task === true &&
-    harnessMetadata?.preferences?.subagent === true
+    harnessMetadata?.fast_response_routing === undefined
   );
 }
 
@@ -2242,7 +2226,7 @@ function isExpectedFileCheckpointRestoreRequest(request) {
 }
 
 function isExpectedCodeRuntimeSessionCreateRequest(request) {
-  return request?.executionStrategy === "code_orchestrated";
+  return request?.executionStrategy === "react";
 }
 
 async function waitForCheck(options, label, check) {
@@ -2509,19 +2493,19 @@ async function main() {
     );
     assert(
       isExpectedCodeRuntimeSessionCreateRequest(latestCreateSessionRequest),
-      `自然语言编程新会话未默认进入 code_orchestrated: ${JSON.stringify(
+      `自然语言任务新会话未进入 current react runtime: ${JSON.stringify(
         submitDiagnostics ?? null,
       )}`,
     );
     assert(
       isExpectedPlainCodeRuntimeSubmitRequest(latestSubmitTurnRequest),
-      `自然语言编程提交 payload 未走编程底座主链: ${JSON.stringify(
+      `自然语言任务提交 payload 未走 current runtime 主链: ${JSON.stringify(
         submitDiagnostics ?? null,
       )}`,
     );
 
     logStage("open-submitted-code-session");
-    await waitForCheck(options, "进入自然语言编程会话详情", async () => {
+    await waitForCheck(options, "进入自然语言任务会话详情", async () => {
       const value = await evaluateScript(
         page,
         buildOpenSubmittedCodeSessionScript(),
@@ -2686,7 +2670,7 @@ async function main() {
       isExpectedPlainCodeRuntimeQueuedSubmitRequest(
         queuedSubmitDiagnostics?.latestRequest,
       ),
-      `自然语言续写排队 payload 未走编程底座主链: ${JSON.stringify(
+      `自然语言续写排队 payload 未走 current runtime 主链: ${JSON.stringify(
         queuedSubmitDiagnostics ?? null,
       )}`,
     );
@@ -2729,7 +2713,7 @@ async function main() {
           const hasAllRequired = REQUIRED_RUNTIME_SUMMARY_FLAGS.every(
             (key) => value?.[key] === true,
           );
-          const hasCodeRuntime = REQUIRED_CODE_RUNTIME_FLAGS.every(
+          const hasRuntimeTask = REQUIRED_AGENT_RUNTIME_TASK_FLAGS.every(
             (key) => value?.[key] === true,
           );
           const hasRuntimeGap =
@@ -2743,7 +2727,7 @@ async function main() {
           return {
             ok:
               hasAllRequired &&
-              hasCodeRuntime &&
+              hasRuntimeTask &&
               !hasRuntimeGap &&
               !hasForbiddenWarning,
             value,

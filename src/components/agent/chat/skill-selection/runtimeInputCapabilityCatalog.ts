@@ -81,10 +81,11 @@ function buildMentionCommandPrefixKeyMap(
 
 export function parseCatalogExecutionStrategy(
   value?: string,
-): AsterExecutionStrategy | undefined {
-  return value === "react" || value === "code_orchestrated" || value === "auto"
-    ? value
-    : undefined;
+): "react" | undefined {
+  if (value === "react" || value === "code_orchestrated" || value === "auto") {
+    return "react";
+  }
+  return undefined;
 }
 
 function buildAgentTurnRoute(

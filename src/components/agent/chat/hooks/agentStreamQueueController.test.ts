@@ -10,9 +10,8 @@ describe("agentStreamQueueController", () => {
   it("应构造 queued draft 消息 patch，并优先使用 queued message text", () => {
     const patch = buildAgentStreamQueuedDraftMessagePatch({
       contentFallback: "fallback",
-      executionStrategy: "auto",
+      executionStrategy: "react",
       queuedMessageText: " queued text ",
-      webSearch: true,
     });
 
     expect(patch.isThinking).toBe(false);
@@ -36,9 +35,8 @@ describe("agentStreamQueueController", () => {
   it("应构造 queued draft 状态副作用计划", () => {
     const plan = buildAgentStreamQueuedDraftStatePlan({
       contentFallback: "fallback",
-      executionStrategy: "code_orchestrated",
+      executionStrategy: "react",
       queuedMessageText: "queued draft",
-      webSearch: false,
     });
 
     expect(plan).toMatchObject({

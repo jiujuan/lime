@@ -19,6 +19,14 @@ function emptyLayerBucket() {
   };
 }
 
+function emptyComponentUnitMigrationCandidates() {
+  return {
+    total: 0,
+    byHint: {},
+    files: [],
+  };
+}
+
 function increment(map, key) {
   map[key] = (map[key] ?? 0) + 1;
 }
@@ -33,6 +41,8 @@ export function buildVitestLayerReport({
   const layers = Object.fromEntries(
     VITEST_LAYER_NAMES.map((layer) => [layer, emptyLayerBucket()]),
   );
+  const componentUnitMigrationCandidates =
+    emptyComponentUnitMigrationCandidates();
 
   for (const entry of classifiedEntries) {
     const bucket = layers[entry.layer] ?? emptyLayerBucket();
@@ -55,6 +65,18 @@ export function buildVitestLayerReport({
       increment(bucket.reasons, reason);
     }
     bucket.files.push(entry.file);
+
+    const unitMigrationHints = entry.unitMigrationHints ?? [];
+    if (entry.layer === "component" && unitMigrationHints.length > 0) {
+      componentUnitMigrationCandidates.total += 1;
+      componentUnitMigrationCandidates.files.push({
+        file: entry.file,
+        hints: unitMigrationHints,
+      });
+      for (const hint of unitMigrationHints) {
+        increment(componentUnitMigrationCandidates.byHint, hint);
+      }
+    }
   }
 
   const totals = {
@@ -74,6 +96,7 @@ export function buildVitestLayerReport({
     includeLiveProviderTests,
     totals,
     layers,
+    componentUnitMigrationCandidates,
   };
 }
 
@@ -102,6 +125,25 @@ export function renderVitestLayerReportText(report) {
     lines.push(
       `| ${layer} | ${bucket.total} | ${bucket.runnableByDefault} | ${bucket.liveGated} | ${bucket.explicit} | ${formatReasons(bucket.reasons)} |`,
     );
+  }
+
+  const candidates =
+    report.componentUnitMigrationCandidates ??
+    emptyComponentUnitMigrationCandidates();
+  lines.push(
+    "",
+    `Component unit-migration candidates: ${candidates.total}`,
+    `Top hints: ${formatReasons(candidates.byHint)}`,
+  );
+
+  if (candidates.files.length > 0) {
+    lines.push("Candidate files:");
+    for (const candidate of candidates.files.slice(0, 10)) {
+      lines.push(`- ${candidate.file} (${candidate.hints.join(", ")})`);
+    }
+    if (candidates.files.length > 10) {
+      lines.push(`- ... ${candidates.files.length - 10} more`);
+    }
   }
 
   return `${lines.join("\n")}\n`;

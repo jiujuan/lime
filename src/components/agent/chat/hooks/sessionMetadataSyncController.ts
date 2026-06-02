@@ -2,6 +2,7 @@ import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
 import type { AgentSessionMetadataPatch } from "./agentRuntimeAdapter";
 import type { AgentAccessMode } from "./agentChatStorage";
 import type { SessionModelPreference } from "./agentChatShared";
+import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 
 export type SessionAccessModeSource =
   | "execution_runtime"
@@ -146,8 +147,9 @@ export function buildSessionMetadataSyncPlan(params: {
     patch.model = fallbackProviderPreference.model;
   }
 
-  const fallbackExecutionStrategy =
-    params.shadowExecutionStrategyFallback ?? null;
+  const fallbackExecutionStrategy = params.shadowExecutionStrategyFallback
+    ? normalizeExecutionStrategy(params.shadowExecutionStrategyFallback)
+    : null;
   if (fallbackExecutionStrategy) {
     patch.executionStrategy = fallbackExecutionStrategy;
   }

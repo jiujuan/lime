@@ -16,6 +16,10 @@ const HARNESS_TASK_INDEX_SECTION_PATH =
   "src/components/agent/chat/components/HarnessTaskIndexSection.tsx";
 const HARNESS_STATUS_PANEL_PATH =
   "src/components/agent/chat/components/HarnessStatusPanel.tsx";
+const HARNESS_HANDOFF_EXPORT_SECTION_PATH =
+  "src/components/agent/chat/components/HarnessHandoffExportSection.tsx";
+const HARNESS_EVIDENCE_PACK_CARD_PATH =
+  "src/components/agent/chat/components/HarnessEvidencePackCard.tsx";
 const REQUIRED_DOCS = [
   "internal/roadmap/warp/runtime-fact-map.md",
   "internal/roadmap/warp/contract-schema.md",
@@ -1382,6 +1386,14 @@ function validateTaskIndexPresentationGuard() {
     HARNESS_TASK_INDEX_SECTION_PATH,
   );
   const panelSource = readRequiredTextFile(errors, HARNESS_STATUS_PANEL_PATH);
+  const handoffSectionSource = readRequiredTextFile(
+    errors,
+    HARNESS_HANDOFF_EXPORT_SECTION_PATH,
+  );
+  const evidencePackCardSource = readRequiredTextFile(
+    errors,
+    HARNESS_EVIDENCE_PACK_CARD_PATH,
+  );
 
   for (const exportName of REQUIRED_TASK_INDEX_PRESENTATION_EXPORTS) {
     pushIf(
@@ -1411,8 +1423,15 @@ function validateTaskIndexPresentationGuard() {
   pushIf(
     errors,
     !panelSource.includes(
-      'import { HarnessTaskIndexSection } from "./HarnessTaskIndexSection";',
-    ) || !panelSource.includes("<HarnessTaskIndexSection"),
+      'import { HarnessStatusPanelSections } from "./HarnessStatusPanelSections";',
+    ) ||
+      !handoffSectionSource.includes(
+        'import { HarnessEvidencePackCard } from "./HarnessEvidencePackCard";',
+      ) ||
+      !evidencePackCardSource.includes(
+        'import { HarnessTaskIndexSection } from "./HarnessTaskIndexSection";',
+      ) ||
+      !evidencePackCardSource.includes("<HarnessTaskIndexSection"),
     `${HARNESS_STATUS_PANEL_PATH} must delegate the taskIndex surface to HarnessTaskIndexSection`,
   );
 

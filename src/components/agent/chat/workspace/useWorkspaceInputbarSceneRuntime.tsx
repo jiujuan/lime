@@ -34,7 +34,9 @@ import type {
   AgentUiTeamWorkbenchPromptMetadata,
   TeamWorkbenchSurfaceProps,
 } from "./chatSurfaceProps";
+import type { InputbarSendHandler } from "../components/Inputbar/inputbarSendPayload";
 import type { GeneralWorkbenchEntryPromptState } from "./workspaceSendHelpers";
+import type { WorkspaceHandleSend } from "./useWorkspaceSendActions";
 import type { CuratedTaskReferenceEntry } from "../utils/curatedTaskReferenceSelection";
 import { useWorkspaceKnowledgeRuntime } from "./knowledge/useWorkspaceKnowledgeRuntime";
 
@@ -425,14 +427,9 @@ function useWorkspaceInputbarScenePresentationRuntime({
         return false;
       }
 
-      const result = await inputbarPresentation.inputbar.onSend(
-        undefined,
-        undefined,
-        undefined,
-        normalizedPrompt,
-        inputbarPresentation.inputbar.executionStrategy ?? "auto",
-        undefined,
-        {
+      const result = await inputbarPresentation.inputbar.onSend({
+        textOverride: normalizedPrompt,
+        sendOptions: {
           skipSceneCommandRouting: true,
           displayContent: normalizedPrompt,
           requestMetadata: {
@@ -444,7 +441,7 @@ function useWorkspaceInputbarScenePresentationRuntime({
             },
           },
         },
-      );
+      });
       return result !== false;
     },
     [inputbarPresentation.inputbar],
@@ -503,7 +500,7 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
   generalWorkbenchWorkflowSteps: InputbarParams["workflowSteps"];
   steps: InputbarParams["workflowSteps"];
   workflowRunState: InputbarParams["workflowRunState"];
-  handleSend: InputbarParams["onSend"];
+  handleSend: WorkspaceHandleSend;
   isPreparingSend: boolean;
   isSending: boolean;
   providerType: InputbarParams["providerType"];
@@ -513,8 +510,6 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
   sessionExecutionRuntime: InputbarParams["executionRuntime"];
   projectId: string | null | undefined;
   projectRootPath: string | null | undefined;
-  executionStrategy: InputbarParams["executionStrategy"];
-  setExecutionStrategy: InputbarParams["setExecutionStrategy"];
   accessMode: InputbarParams["accessMode"];
   setAccessMode: InputbarParams["setAccessMode"];
   activeTheme: InputbarParams["activeTheme"];
@@ -639,8 +634,6 @@ export function useWorkspaceInputbarSceneRuntime({
   sessionExecutionRuntime,
   projectId,
   projectRootPath,
-  executionStrategy,
-  setExecutionStrategy,
   accessMode,
   setAccessMode,
   activeTheme,
@@ -713,7 +706,6 @@ export function useWorkspaceInputbarSceneRuntime({
     currentSessionTitle,
     input,
     setInput,
-    executionStrategy,
     handleSend,
     onOpenKnowledgeManagement: navigationActions.handleOpenKnowledgeManagement,
     initialKnowledgePackSelection,
@@ -724,6 +716,19 @@ export function useWorkspaceInputbarSceneRuntime({
     () => deriveRuntimeToolAvailability(toolInventory),
     [toolInventory],
   );
+  const handleInputbarSend = useCallback<InputbarSendHandler>(
+    (payload = {}) =>
+      handleSend(
+        payload.images,
+        undefined,
+        undefined,
+        payload.textOverride,
+        "react",
+        payload.autoContinuePayload,
+        payload.sendOptions,
+      ),
+    [handleSend],
+  );
   const handleSubmitCodeFixPrompt = useCallback(
     async (prompt: string) => {
       const normalizedPrompt = prompt.trim();
@@ -731,14 +736,9 @@ export function useWorkspaceInputbarSceneRuntime({
         return;
       }
 
-      await handleSend(
-        undefined,
-        undefined,
-        undefined,
-        normalizedPrompt,
-        "code_orchestrated",
-        undefined,
-        {
+      await handleInputbarSend({
+        textOverride: normalizedPrompt,
+        sendOptions: {
           skipSceneCommandRouting: true,
           displayContent: normalizedPrompt,
           requestMetadata: {
@@ -749,15 +749,15 @@ export function useWorkspaceInputbarSceneRuntime({
             },
           },
         },
-      );
+      });
     },
-    [handleSend],
+    [handleInputbarSend],
   );
   const handleInputbarToolStatesChange = useCallback(
     (
       nextToolStates: Pick<
         ChatToolPreferences,
-        "webSearch" | "thinking" | "subagent"
+        "subagent"
       >,
     ) => {
       setChatToolPreferences((previous) => ({
@@ -821,7 +821,7 @@ export function useWorkspaceInputbarSceneRuntime({
         workflowGate: isThemeWorkbench ? currentGate : null,
         workflowSteps: isThemeWorkbench ? generalWorkbenchWorkflowSteps : steps,
         workflowRunState,
-        onSend: handleSend,
+        onSend: handleInputbarSend,
         onStop: handleStopSending,
         isLoading: isSending || resolvedQueuedTurns.length > 0,
         knowledgePackSelection: knowledgeRuntime.knowledgePackSelection,
@@ -837,8 +837,6 @@ export function useWorkspaceInputbarSceneRuntime({
         model,
         setModel,
         executionRuntime: sessionExecutionRuntime,
-        executionStrategy,
-        setExecutionStrategy,
         accessMode,
         setAccessMode,
         activeTheme,
@@ -856,8 +854,6 @@ export function useWorkspaceInputbarSceneRuntime({
         onSelectServiceSkill,
         initialInputCapability,
         toolStates: {
-          webSearch: resolvedChatToolPreferences.webSearch,
-          thinking: resolvedChatToolPreferences.thinking,
           subagent: resolvedChatToolPreferences.subagent,
         },
         onToolStatesChange: handleInputbarToolStatesChange,
@@ -939,7 +935,7 @@ export function useWorkspaceInputbarSceneRuntime({
           providerType:
             activeExecutionRuntime?.provider_selector || providerType || null,
           model: activeExecutionRuntime?.model_name || model || null,
-          executionStrategy: executionStrategy || null,
+          executionStrategy: "react",
           activeTheme: activeTheme || null,
           selectedTeamLabel: selectedTeamLabel || null,
         },

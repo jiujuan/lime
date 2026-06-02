@@ -58,34 +58,42 @@ describe("InputbarTools", () => {
       onToolClick,
       activeTheme: "general",
       activeTools: {
-        thinking: false,
-        web_search: true,
         subagent_mode: false,
       },
     });
 
-    expect(container.textContent).toContain("Thinking");
-    expect(container.textContent).toContain("Search");
     expect(container.textContent).toContain("Task split");
     expect(container.textContent).not.toContain("思考");
     expect(container.textContent).not.toContain("任务拆分");
 
     const buttons = Array.from(container.querySelectorAll("button"));
     expect(buttons.map((button) => button.getAttribute("title"))).toEqual([
-      "Deep thinking is off",
-      "Web search is on",
       "Task splitting preference is off",
     ]);
 
     act(() => {
       buttons[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      buttons[1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      buttons[2]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(onToolClick).toHaveBeenNthCalledWith(1, "thinking");
-    expect(onToolClick).toHaveBeenNthCalledWith(2, "web_search");
-    expect(onToolClick).toHaveBeenNthCalledWith(3, "subagent_mode");
+    expect(onToolClick).toHaveBeenNthCalledWith(1, "subagent_mode");
+  });
+
+  it("默认输入栏不再渲染搜索或思考选择开关", () => {
+    const { container } = renderInputbarTools({
+      activeTheme: "general",
+      activeTools: {
+        subagent_mode: false,
+      },
+    });
+
+    const text = container.textContent ?? "";
+    expect(
+      container.querySelector("[data-testid='toggle-web-search']"),
+    ).toBeNull();
+    expect(container.querySelector("[data-testid='toggle-thinking']")).toBeNull();
+    expect(text).not.toContain("联网");
+    expect(text).not.toContain("搜索");
+    expect(text).not.toContain("思考");
   });
 
   it("attach-only 模式不渲染工具开关", () => {
@@ -93,8 +101,6 @@ describe("InputbarTools", () => {
       toolMode: "attach-only",
       activeTheme: "general",
       activeTools: {
-        thinking: true,
-        web_search: true,
         subagent_mode: true,
       },
     });

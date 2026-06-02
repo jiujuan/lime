@@ -116,13 +116,13 @@ describe("deriveHarnessSessionState", () => {
     expect(state.activeFileWrites[0]?.preview).toContain("实时草稿");
   });
 
-  it("code_orchestrated 编程回合应形成工具输出、审批、文件写入和文件活动信号", () => {
+  it("运行时回合应形成工具输出、审批、文件写入和文件活动信号", () => {
     const messages = [
       createMessage({
         runtimeStatus: {
           phase: "routing",
-          title: "正在执行编程任务",
-          detail: "已进入 code_orchestrated 编程底座。",
+          title: "正在执行任务",
+          detail: "已进入运行时执行链路。",
           checkpoints: ["准备工具", "等待确认", "写入测试"],
         },
         artifacts: [

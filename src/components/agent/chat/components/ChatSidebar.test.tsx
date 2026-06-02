@@ -73,7 +73,7 @@ const defaultTopics: Topic[] = [
     createdAt: new Date(),
     updatedAt: new Date(),
     messagesCount: 2,
-    executionStrategy: "auto",
+    executionStrategy: "react",
     status: "done",
     lastPreview: "已记录 2 条消息，可继续补充或接着推进。",
     isPinned: false,

@@ -7,6 +7,7 @@ import { CanvasWorkbenchLayout } from "../components/CanvasWorkbenchLayout";
 import { ChatNavbar } from "../components/ChatNavbar";
 import { CreationReplaySurfaceBanner } from "../components/CreationReplaySurfaceBanner";
 import { EmptyState } from "../components/EmptyState";
+import type { InputbarSendHandler } from "../components/Inputbar/inputbarSendPayload";
 import { MessageList } from "../components/MessageList";
 import { TeamWorkspaceDock } from "../components/TeamWorkspaceDock";
 import { WorkspaceMainArea } from "./WorkspaceMainArea";
@@ -298,17 +299,13 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   shouldHideGeneralWorkbenchInputForTheme: boolean;
   input: ComponentProps<typeof EmptyState>["input"];
   setInput: ComponentProps<typeof EmptyState>["setInput"];
-  onSendMessage: ComponentProps<typeof EmptyState>["onSend"];
+  onSendMessage: InputbarSendHandler;
   emptyStateIsLoading?: ComponentProps<typeof EmptyState>["isLoading"];
   emptyStateDisabled?: ComponentProps<typeof EmptyState>["disabled"];
   providerType: ComponentProps<typeof EmptyState>["providerType"];
   setProviderType: ComponentProps<typeof EmptyState>["setProviderType"];
   model: ComponentProps<typeof EmptyState>["model"];
   setModel: ComponentProps<typeof EmptyState>["setModel"];
-  executionStrategy: ComponentProps<typeof EmptyState>["executionStrategy"];
-  setExecutionStrategy?: ComponentProps<
-    typeof EmptyState
-  >["setExecutionStrategy"];
   accessMode: ComponentProps<typeof EmptyState>["accessMode"];
   setAccessMode?: ComponentProps<typeof EmptyState>["setAccessMode"];
   onManageProviders?: ComponentProps<typeof EmptyState>["onManageProviders"];
@@ -501,8 +498,6 @@ export function WorkspaceConversationScene({
   setProviderType,
   model,
   setModel,
-  executionStrategy,
-  setExecutionStrategy,
   accessMode,
   setAccessMode,
   onManageProviders,
@@ -605,8 +600,6 @@ export function WorkspaceConversationScene({
     setProviderType,
     model,
     setModel,
-    executionStrategy,
-    setExecutionStrategy,
     accessMode,
     setAccessMode,
     onManageProviders,

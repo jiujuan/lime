@@ -87,8 +87,6 @@ describe("submitOpRuntimeCompaction", () => {
       effectiveExecutionStrategy: "react",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-4.1",
-      webSearch: false,
-      thinking: true,
     });
 
     expect(result.shouldSubmitProviderPreference).toBe(false);
@@ -103,7 +101,7 @@ describe("submitOpRuntimeCompaction", () => {
     });
   });
 
-  it("应保留尚未同步到 runtime 的显式变更", () => {
+  it("应裁掉旧 thinking preference，但保留尚未同步到 runtime 的其他显式变更", () => {
     const result = buildSubmitOpRuntimeCompaction({
       requestMetadata: {
         harness: {
@@ -146,28 +144,55 @@ describe("submitOpRuntimeCompaction", () => {
         model: "gpt-4.1",
       },
       syncedExecutionStrategy: "react",
-      effectiveExecutionStrategy: "code_orchestrated",
+      effectiveExecutionStrategy: "react",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5",
       modelOverride: "gpt-5",
-      webSearch: false,
-      thinking: true,
     });
 
     expect(result.shouldSubmitProviderPreference).toBe(false);
     expect(result.shouldSubmitModelPreference).toBe(true);
-    expect(result.shouldSubmitExecutionStrategy).toBe(true);
+    expect(result.shouldSubmitExecutionStrategy).toBe(false);
     expect(result.shouldSubmitWebSearch).toBe(false);
-    expect(result.shouldSubmitThinking).toBe(true);
+    expect(result.shouldSubmitThinking).toBe(false);
     expect(result.metadata).toEqual({
       harness: {
-        preferences: {
-          thinking: true,
-        },
         gate_key: "publish_confirm",
         run_title: "发布确认",
       },
     });
+  });
+
+  it("直接收到 legacy effective execution strategy 时也应归一后比较", () => {
+    const result = buildSubmitOpRuntimeCompaction({
+      executionRuntime: {
+        session_id: "session-legacy-strategy",
+        source: "runtime_snapshot",
+        execution_strategy: "react",
+      },
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "code_orchestrated" as never,
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.4",
+    });
+
+    expect(result.shouldSubmitExecutionStrategy).toBe(false);
+  });
+
+  it("新会话 current 默认 react 策略不应作为输入框选择提交", () => {
+    const result = buildSubmitOpRuntimeCompaction({
+      executionRuntime: null,
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.5",
+    });
+
+    expect(result.shouldSubmitExecutionStrategy).toBe(false);
   });
 
   it("execution_runtime 缺失但 synced preferences 已同步时应裁掉重复偏好", () => {
@@ -194,8 +219,30 @@ describe("submitOpRuntimeCompaction", () => {
       effectiveExecutionStrategy: "react",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5.4",
-      webSearch: false,
-      thinking: true,
+    });
+
+    expect(result.shouldSubmitWebSearch).toBe(false);
+    expect(result.shouldSubmitThinking).toBe(false);
+    expect(result.metadata).toBeUndefined();
+  });
+
+  it("新会话默认关闭搜索时不应提交显式 web_search=false", () => {
+    const result = buildSubmitOpRuntimeCompaction({
+      requestMetadata: {
+        harness: {
+          preferences: {
+            web_search: false,
+            thinking: false,
+          },
+        },
+      },
+      executionRuntime: null,
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.4",
     });
 
     expect(result.shouldSubmitWebSearch).toBe(false);
@@ -223,8 +270,6 @@ describe("submitOpRuntimeCompaction", () => {
       effectiveExecutionStrategy: "react",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5.4",
-      webSearch: false,
-      thinking: false,
     });
 
     expect(syncedResult.metadata).toBeUndefined();
@@ -248,8 +293,6 @@ describe("submitOpRuntimeCompaction", () => {
       effectiveExecutionStrategy: "react",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5.4",
-      webSearch: false,
-      thinking: false,
     });
 
     expect(pendingResult.metadata).toEqual({
@@ -281,8 +324,6 @@ describe("submitOpRuntimeCompaction", () => {
       effectiveExecutionStrategy: "react",
       effectiveProviderType: "deepseek",
       effectiveModel: "deepseek-v4-pro",
-      webSearch: false,
-      thinking: false,
     });
 
     expect(result.shouldSubmitProviderPreference).toBe(false);
@@ -322,8 +363,6 @@ describe("submitOpRuntimeCompaction", () => {
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5.4-mini",
       modelOverride: "gpt-5.4-mini",
-      webSearch: false,
-      thinking: false,
     });
 
     expect(result.shouldSubmitProviderPreference).toBe(false);
@@ -339,8 +378,6 @@ describe("submitOpRuntimeCompaction", () => {
       effectiveExecutionStrategy: "react",
       effectiveProviderType: "",
       effectiveModel: "gpt-5.5",
-      webSearch: false,
-      thinking: false,
     });
 
     expect(result.shouldSubmitProviderPreference).toBe(false);
@@ -356,8 +393,6 @@ describe("submitOpRuntimeCompaction", () => {
       effectiveExecutionStrategy: "react",
       effectiveProviderType: "openai",
       effectiveModel: "",
-      webSearch: false,
-      thinking: false,
     });
 
     expect(result.shouldSubmitProviderPreference).toBe(false);
@@ -397,8 +432,6 @@ describe("submitOpRuntimeCompaction", () => {
       effectiveExecutionStrategy: "react",
       effectiveProviderType: "deepseek",
       effectiveModel: "deepseek-v4-flash",
-      webSearch: false,
-      thinking: false,
     });
 
     expect(result.shouldSubmitProviderPreference).toBe(false);
@@ -446,8 +479,6 @@ describe("submitOpRuntimeCompaction", () => {
       effectiveExecutionStrategy: "react",
       effectiveProviderType: "deepseek",
       effectiveModel: "deepseek-v4-flash",
-      webSearch: false,
-      thinking: false,
     });
 
     expect(result.providerConfig).toBeUndefined();
@@ -476,8 +507,6 @@ describe("submitOpRuntimeCompaction", () => {
       effectiveExecutionStrategy: "react",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5.4",
-      webSearch: false,
-      thinking: false,
     });
 
     expect(result.metadata).toEqual({
@@ -557,8 +586,6 @@ describe("submitOpRuntimeCompaction", () => {
       effectiveExecutionStrategy: "react",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-4.1",
-      webSearch: false,
-      thinking: false,
     });
 
     expect(result.metadata).toEqual({

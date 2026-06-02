@@ -14,7 +14,6 @@ import { TeamSelector } from "./TeamSelector";
 import { InputbarWorkflowStatusPanel } from "./InputbarWorkflowStatusPanel";
 import { InputbarModelExtra } from "./InputbarModelExtra";
 import { InputbarVisionCapabilityNotice } from "./InputbarVisionCapabilityNotice";
-import { InputbarExecutionStrategySelect } from "./InputbarExecutionStrategySelect";
 import { InputbarAccessModeSelect } from "./InputbarAccessModeSelect";
 import { isGeneralResearchTheme } from "../../../utils/generalAgentPrompt";
 import type { TeamDefinition } from "../../../utils/teamDefinitions";
@@ -36,10 +35,7 @@ import type {
 import { InputbarKnowledgeControl } from "../knowledge/InputbarKnowledgeControl";
 import type { InputbarComposerSectionCopy } from "./inputbarComposerSectionCopy";
 import type { InputbarCoreCopy } from "./inputbarCoreCopy";
-import type {
-  InputbarExecutionStrategyCopy,
-  InputbarWorkflowPanelCopy,
-} from "../inputbarWorkflowCopy";
+import type { InputbarWorkflowPanelCopy } from "../inputbarWorkflowCopy";
 import type {
   WorkflowGateState,
   WorkflowQuickAction,
@@ -91,7 +87,6 @@ interface InputbarComposerSectionProps {
   onSend: () => void;
   onToolClick: (tool: string) => void;
   activeTools: Record<string, boolean>;
-  executionStrategy?: "react" | "code_orchestrated" | "auto";
   pendingImages: MessageImage[];
   onRemoveImage: (index: number) => void;
   pathReferences?: MessagePathReference[];
@@ -107,9 +102,6 @@ interface InputbarComposerSectionProps {
   executionRuntime?: AsterSessionExecutionRuntime | null;
   accessMode?: AgentAccessMode;
   setAccessMode?: (mode: AgentAccessMode) => void;
-  setExecutionStrategy?: (
-    strategy: "react" | "code_orchestrated" | "auto",
-  ) => void;
   topExtra?: React.ReactNode;
   queuedTurns: QueuedTurnSnapshot[];
   onPromoteQueuedTurn?: (queuedTurnId: string) => void | Promise<boolean>;
@@ -120,7 +112,6 @@ interface InputbarComposerSectionProps {
   inputCompletionEnabled?: boolean;
   copy: InputbarComposerSectionCopy;
   inputbarCopy: InputbarCoreCopy;
-  executionStrategyCopy: InputbarExecutionStrategyCopy;
   workflowPanelCopy: InputbarWorkflowPanelCopy;
 }
 
@@ -162,7 +153,6 @@ export const InputbarComposerSection: React.FC<
   onSend,
   onToolClick,
   activeTools,
-  executionStrategy,
   pendingImages,
   onRemoveImage,
   pathReferences = [],
@@ -178,7 +168,6 @@ export const InputbarComposerSection: React.FC<
   executionRuntime,
   accessMode,
   setAccessMode,
-  setExecutionStrategy,
   topExtra,
   queuedTurns,
   onPromoteQueuedTurn,
@@ -189,7 +178,6 @@ export const InputbarComposerSection: React.FC<
   inputCompletionEnabled = true,
   copy,
   inputbarCopy,
-  executionStrategyCopy,
   workflowPanelCopy,
 }) => {
   const [teamSelectorAutoOpenToken, setTeamSelectorAutoOpenToken] = useState<
@@ -260,17 +248,13 @@ export const InputbarComposerSection: React.FC<
       />
     ) : null;
   const hasHighlightedAdvancedPreference =
-    activeTools["thinking"] ||
-    activeTools["web_search"] ||
     activeTools["subagent_mode"] ||
     knowledgePackSelection?.enabled ||
-    executionStrategy === "code_orchestrated" ||
     accessMode === "read-only" ||
     accessMode === "full-access";
   const shouldShowAdvancedToggle =
     showSkillSelector ||
     shouldShowTeamSelector ||
-    Boolean(setExecutionStrategy) ||
     shouldShowModelControls ||
     Boolean(setAccessMode) ||
     Boolean(onToggleFileManager);
@@ -373,12 +357,6 @@ export const InputbarComposerSection: React.FC<
               onSelectTeam={(team) => onSelectTeam?.(team)}
             />
           ) : null}
-          <InputbarExecutionStrategySelect
-            isFullscreen={isFullscreen}
-            executionStrategy={executionStrategy}
-            setExecutionStrategy={setExecutionStrategy}
-            copy={executionStrategyCopy}
-          />
           {shouldShowModelControls ? (
             <InputbarModelExtra
               isFullscreen={isFullscreen}

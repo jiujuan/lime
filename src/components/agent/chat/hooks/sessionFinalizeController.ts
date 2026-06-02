@@ -1,4 +1,5 @@
 import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
+import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 
 export interface CrossWorkspaceSessionRestoreContext {
   currentWorkspaceId: string;
@@ -97,12 +98,12 @@ export function resolveSessionExecutionStrategyOverride(params: {
   shadowExecutionStrategyFallback?: AsterExecutionStrategy | null;
   topicExecutionStrategy?: AsterExecutionStrategy | null;
 }): AsterExecutionStrategy {
-  return (
+  return normalizeExecutionStrategy(
     params.runtimeExecutionStrategy ||
-    params.topicExecutionStrategy ||
-    params.shadowExecutionStrategyFallback ||
-    params.defaultExecutionStrategy ||
-    "auto"
+      params.topicExecutionStrategy ||
+      params.shadowExecutionStrategyFallback ||
+      params.defaultExecutionStrategy ||
+      "react",
   );
 }
 

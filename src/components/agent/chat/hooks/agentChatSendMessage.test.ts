@@ -29,7 +29,7 @@ describe("createAgentChatSendMessage", () => {
       notifySuccess: vi.fn(),
     });
 
-    await sendMessage("继续执行", [], false, false, false, "auto", "gpt-5.4");
+    await sendMessage("继续执行", [], false, false, false, "react", "gpt-5.4");
 
     expect(rawSendMessage).toHaveBeenCalledTimes(1);
     expect(rawSendMessage).toHaveBeenCalledWith(
@@ -38,7 +38,7 @@ describe("createAgentChatSendMessage", () => {
       false,
       false,
       false,
-      "auto",
+      "react",
       "gpt-5.4",
       undefined,
       undefined,
@@ -67,7 +67,7 @@ describe("createAgentChatSendMessage", () => {
       notifySuccess: vi.fn(),
     });
 
-    await sendMessage("/status", [], false, false, false, "auto", "gpt-5.4");
+    await sendMessage("/status", [], false, false, false, "react", "gpt-5.4");
 
     expect(rawSendMessage).not.toHaveBeenCalled();
     expect(appendAssistantMessage).toHaveBeenCalledWith(
@@ -77,7 +77,7 @@ describe("createAgentChatSendMessage", () => {
       expect.stringContaining("gpt-5.4"),
     );
     expect(appendAssistantMessage).toHaveBeenCalledWith(
-      expect.stringContaining("自动路由"),
+      expect.stringContaining("对话执行"),
     );
     expect(listSlashEntryUsage()).toEqual([
       expect.objectContaining({

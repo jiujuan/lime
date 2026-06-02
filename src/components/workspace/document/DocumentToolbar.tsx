@@ -8,7 +8,6 @@ import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 import {
   Bot,
-  Brain,
   ChevronDown,
   Download,
   FileText,
@@ -340,8 +339,6 @@ export const DocumentToolbar: React.FC<DocumentToolbarProps> = memo(
     selectedAutoContinueModel,
     autoContinueModelLoading = false,
     onAutoContinueModelChange,
-    thinkingEnabled,
-    onThinkingChange,
     onAutoContinueSettingsChange,
     onAutoContinueRun,
     autoContinueRunDisabled = false,
@@ -411,7 +408,6 @@ export const DocumentToolbar: React.FC<DocumentToolbarProps> = memo(
         contentReviewActive,
         hasProviderType: Boolean(autoContinueProviderType),
         hasModel: Boolean(selectedAutoContinueModel),
-        thinkingEnabled,
       });
     });
 
@@ -583,7 +579,7 @@ export const DocumentToolbar: React.FC<DocumentToolbarProps> = memo(
                     模型切换
                   </SectionTitle>
                   <SectionHint>
-                    这里沿用当前 Claw 会话的 Provider、模型与思考过程设置。
+                    这里沿用当前 Claw 会话的 Provider 与模型设置。
                   </SectionHint>
                   <ModelSelector
                     className="w-full"
@@ -600,17 +596,6 @@ export const DocumentToolbar: React.FC<DocumentToolbarProps> = memo(
                 <PanelDivider />
 
                 <PanelSection>
-                  <SettingRow>
-                    <SettingLabel>
-                      <Brain size={14} />
-                      思考过程
-                      <Info size={12} />
-                    </SettingLabel>
-                    <Switch
-                      checked={thinkingEnabled}
-                      onCheckedChange={onThinkingChange}
-                    />
-                  </SettingRow>
                   <SettingRow>
                     <SettingLabel>
                       <Zap size={14} />

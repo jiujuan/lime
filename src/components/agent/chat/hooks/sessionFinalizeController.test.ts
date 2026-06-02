@@ -102,45 +102,45 @@ describe("sessionFinalizeController", () => {
   it("runtime 或 topic 已有执行策略时不使用 shadow fallback", () => {
     expect(
       resolveShadowSessionExecutionStrategyFallback({
-        runtimeExecutionStrategy: "auto",
+        runtimeExecutionStrategy: "react",
         topicExecutionStrategy: null,
-        persistedExecutionStrategy: "code_orchestrated",
+        persistedExecutionStrategy: "react",
       }),
     ).toBeNull();
 
     expect(
       resolveShadowSessionExecutionStrategyFallback({
         runtimeExecutionStrategy: null,
-        topicExecutionStrategy: "code_orchestrated",
-        persistedExecutionStrategy: "auto",
+        topicExecutionStrategy: "react",
+        persistedExecutionStrategy: "react",
       }),
     ).toBeNull();
   });
 
-  it("应按 runtime / topic / shadow / 默认值顺序解析最终执行策略", () => {
+  it("应按 runtime / topic / shadow / 默认值顺序解析并归一最终执行策略", () => {
     expect(
       resolveSessionExecutionStrategyOverride({
-        runtimeExecutionStrategy: "auto",
-        topicExecutionStrategy: "code_orchestrated",
+        runtimeExecutionStrategy: "react",
+        topicExecutionStrategy: "react",
         shadowExecutionStrategyFallback: "react",
       }),
-    ).toBe("auto");
+    ).toBe("react");
 
     expect(
       resolveSessionExecutionStrategyOverride({
         runtimeExecutionStrategy: null,
-        topicExecutionStrategy: "code_orchestrated",
-        shadowExecutionStrategyFallback: "auto",
+        topicExecutionStrategy: "react",
+        shadowExecutionStrategyFallback: "react",
       }),
-    ).toBe("code_orchestrated");
+    ).toBe("react");
 
     expect(
       resolveSessionExecutionStrategyOverride({
         runtimeExecutionStrategy: null,
         topicExecutionStrategy: null,
-        shadowExecutionStrategyFallback: "auto",
+        shadowExecutionStrategyFallback: "react",
       }),
-    ).toBe("auto");
+    ).toBe("react");
 
     expect(
       resolveSessionExecutionStrategyOverride({
@@ -148,7 +148,7 @@ describe("sessionFinalizeController", () => {
         topicExecutionStrategy: null,
         shadowExecutionStrategyFallback: null,
       }),
-    ).toBe("auto");
+    ).toBe("react");
   });
 
   it("应构造 finalize 成功后的状态收尾计划", () => {

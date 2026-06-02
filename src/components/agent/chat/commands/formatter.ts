@@ -10,15 +10,8 @@ import type {
 function formatExecutionStrategyLabel(
   strategy: CodexSlashStatusSnapshot["executionStrategy"],
 ): string {
-  switch (strategy) {
-    case "code_orchestrated":
-      return "代码编排";
-    case "auto":
-      return "自动路由";
-    case "react":
-    default:
-      return "对话执行";
-  }
+  void strategy;
+  return "对话执行";
 }
 
 export function buildCodexSlashHelpMessage(): string {

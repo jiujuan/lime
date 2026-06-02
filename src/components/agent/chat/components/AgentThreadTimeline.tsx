@@ -43,8 +43,11 @@ import {
   shouldHideTurnSummaryFromConversation,
 } from "../utils/turnSummaryPresentation";
 import {
-  isRuntimePermissionConfirmationWaitMessage,
-} from "../utils/runtimeActionConfirmation";
+  buildTimelineBlockRenderPlan,
+  resolveTimelineBlockEmphasis,
+  resolveVisibleTimelineItems,
+  type TimelineBlockEmphasis,
+} from "./AgentThreadTimelineViewModel";
 import {
   toActionRequired,
   toToolCallState,
@@ -714,7 +717,7 @@ function TimelineBlockCard({
 }: {
   block: AgentThreadOrderedBlock;
   index: number;
-  emphasis: "active" | "default" | "quiet";
+  emphasis: TimelineBlockEmphasis;
   isExpanded: boolean;
   preferInlineDetails: boolean;
   deferCompletedSingleDetails: boolean;
@@ -736,25 +739,36 @@ function TimelineBlockCard({
   const { t } = useTranslation("agent");
   const openSubagentLabel = t("agentChat.threadTimeline.openSubagent");
   const dataTestId = `agent-thread-block:${index + 1}:${block.kind}`;
-  const isThinkingOnlyBlock = block.items.every((item) =>
-    isThinkingTimelineItem(item),
-  );
   const summaryLines = resolveBlockSummaryLines(block);
   const headline = summaryLines[0] || block.title;
   const supportingLines = summaryLines.slice(1, 3);
   const focusedEntryRef = useRef<HTMLDivElement | null>(null);
-  const hasFocusedItem = Boolean(
-    focusedItemId && block.items.some((item) => item.id === focusedItemId),
+  const initialPlan = buildTimelineBlockRenderPlan({
+    block,
+    isExpanded,
+    preferInlineDetails,
+    deferCompletedSingleDetails,
+    focusedItemId,
+    hasStructuredThinkingInlinePreview,
+  });
+  const [open, setOpen] = useState(
+    isExpanded || initialPlan.hasFocusedItem,
   );
-  const hasDetailEntries = block.items.length > 0;
-  const [open, setOpen] = useState(isExpanded || hasFocusedItem);
+  const renderPlan = buildTimelineBlockRenderPlan({
+    block,
+    isExpanded: open,
+    preferInlineDetails,
+    deferCompletedSingleDetails,
+    focusedItemId,
+    hasStructuredThinkingInlinePreview,
+  });
 
   useEffect(() => {
-    setOpen(isExpanded || hasFocusedItem);
-  }, [block.id, hasFocusedItem, isExpanded]);
+    setOpen(isExpanded || renderPlan.hasFocusedItem);
+  }, [block.id, isExpanded, renderPlan.hasFocusedItem]);
 
   useEffect(() => {
-    if (!hasFocusedItem || !focusRequestKey) {
+    if (!renderPlan.hasFocusedItem || !focusRequestKey) {
       return;
     }
 
@@ -763,38 +777,9 @@ function TimelineBlockCard({
       behavior: "smooth",
       block: "center",
     });
-  }, [focusRequestKey, hasFocusedItem]);
-
-  const shouldRenderArtifactCardsInline =
-    block.kind === "artifact" &&
-    hasDetailEntries &&
-    block.items.every((item) => item.type === "file_artifact");
-  const singleThinkingItem =
-    block.items.length === 1 && isThinkingTimelineItem(block.items[0]!)
-      ? block.items[0]!
-      : null;
-  const shouldRenderActiveSingleThinkingInline =
-    Boolean(singleThinkingItem) && block.status === "in_progress";
-  const shouldSummarizeSingleThinkingInline =
-    Boolean(singleThinkingItem) &&
-    (singleThinkingItem?.type === "reasoning" ||
-      singleThinkingItem?.type === "turn_summary") &&
-    !shouldRenderActiveSingleThinkingInline &&
-    !hasStructuredThinkingInlinePreview(singleThinkingItem);
-  const shouldRenderSingleItemInline =
-    block.items.length === 1 &&
-    !shouldSummarizeSingleThinkingInline &&
-    (!deferCompletedSingleDetails ||
-      preferInlineDetails ||
-      block.status !== "completed" ||
-      hasFocusedItem);
-  const shouldRenderGroupedToolRows =
-    block.kind === "process" && block.items.length > 1;
-  const shouldMaterializeDetailEntries =
-    shouldRenderArtifactCardsInline ||
-    (!shouldRenderSingleItemInline && hasDetailEntries && open);
+  }, [focusRequestKey, renderPlan.hasFocusedItem]);
   const detailEntries = useMemo(() => {
-    if (!shouldMaterializeDetailEntries) {
+    if (!renderPlan.shouldMaterializeDetailEntries) {
       return [];
     }
 
@@ -807,7 +792,7 @@ function TimelineBlockCard({
         onOpenSubagentSession,
         onPermissionResponse,
         {
-          groupedToolCall: shouldRenderGroupedToolRows,
+          groupedToolCall: renderPlan.shouldRenderGroupedToolRows,
           groupMarker: block.items[0]?.id === item.id ? "└" : "·",
           openSubagentLabel,
           sourceMessageId,
@@ -827,11 +812,11 @@ function TimelineBlockCard({
     onOpenSubagentSession,
     onPermissionResponse,
     openSubagentLabel,
-    shouldMaterializeDetailEntries,
-    shouldRenderGroupedToolRows,
+    renderPlan.shouldMaterializeDetailEntries,
+    renderPlan.shouldRenderGroupedToolRows,
   ]);
 
-  if (shouldRenderArtifactCardsInline) {
+  if (renderPlan.shouldRenderArtifactCardsInline) {
     return (
       <div
         className="space-y-2 py-0.5"
@@ -855,7 +840,7 @@ function TimelineBlockCard({
     );
   }
 
-  const singleItemContent = shouldRenderSingleItemInline
+  const singleItemContent = renderPlan.shouldRenderSingleItemInline
     ? renderTimelineItemDetails(
         block.items[0]!,
         onFileClick,
@@ -877,7 +862,7 @@ function TimelineBlockCard({
         className={cn(
           "py-0.5",
           emphasis === "active" &&
-            !isThinkingOnlyBlock &&
+            !renderPlan.isThinkingOnlyBlock &&
             "rounded-xl bg-sky-50/45 px-2",
           emphasis === "quiet" && "opacity-80",
         )}
@@ -899,15 +884,15 @@ function TimelineBlockCard({
   }
 
   const visibleHeadline = headline;
-  const safeThinkingSupportingLines = isThinkingOnlyBlock
+  const safeThinkingSupportingLines = renderPlan.isThinkingOnlyBlock
     ? supportingLines.filter((line) => !isInternalThinkingPreviewLine(line))
     : supportingLines;
   const visibleSupportingLines =
-    isThinkingOnlyBlock && open ? [] : safeThinkingSupportingLines;
+    renderPlan.isThinkingOnlyBlock && open ? [] : safeThinkingSupportingLines;
   const summaryCountLabel = block.items.length > 1 ? block.countLabel : null;
   const processMixLabel = resolveProcessMixLabel(block);
   const summaryDetailHint =
-    hasDetailEntries && block.items.length > 1 && !open
+    renderPlan.hasDetailEntries && block.items.length > 1 && !open
       ? processMixLabel || block.rawDetailLabel
       : null;
   const summaryToneClassName = cn(
@@ -925,19 +910,21 @@ function TimelineBlockCard({
       data-testid={`${dataTestId}:shell`}
       data-emphasis={emphasis}
     >
-      <details
+        <details
         data-testid={dataTestId}
         data-emphasis={emphasis}
-        open={hasDetailEntries ? open : true}
+        open={renderPlan.hasDetailEntries ? open : true}
       >
         <summary
           className={cn(
             "list-none rounded-md px-2 py-1.5",
-            hasDetailEntries ? "cursor-pointer" : "cursor-default",
-            emphasis === "active" && !isThinkingOnlyBlock && "bg-sky-50/45",
+            renderPlan.hasDetailEntries ? "cursor-pointer" : "cursor-default",
+            emphasis === "active" &&
+              !renderPlan.isThinkingOnlyBlock &&
+              "bg-sky-50/45",
           )}
           onClick={(event) => {
-            if (!hasDetailEntries) {
+            if (!renderPlan.hasDetailEntries) {
               event.preventDefault();
               return;
             }
@@ -987,7 +974,7 @@ function TimelineBlockCard({
               ) : null}
             </div>
 
-            {hasDetailEntries ? (
+            {renderPlan.hasDetailEntries ? (
               <ChevronDown
                 className={cn(
                   "mt-1 h-4 w-4 shrink-0 text-slate-400 transition-transform",
@@ -998,7 +985,7 @@ function TimelineBlockCard({
           </div>
         </summary>
 
-        {hasDetailEntries && open ? (
+        {renderPlan.hasDetailEntries && open ? (
           <div
             className="ml-6 space-y-2 pb-1 pl-3"
             data-testid={`${dataTestId}:details`}
@@ -1051,20 +1038,7 @@ export const AgentThreadTimeline: React.FC<AgentThreadTimelineProps> = ({
     [actionRequests, items],
   );
   const visibleItems = useMemo(
-    () =>
-      items.filter(
-        (item) =>
-          item.type !== "user_message" &&
-          item.type !== "agent_message" &&
-          !(
-            item.type === "error" &&
-            isRuntimePermissionConfirmationWaitMessage(item.message)
-          ) &&
-          !(
-            item.type === "file_artifact" &&
-            isHiddenConversationArtifactPath(item.path)
-          ),
-      ),
+    () => resolveVisibleTimelineItems(items),
     [items],
   );
 
@@ -1107,22 +1081,18 @@ export const AgentThreadTimeline: React.FC<AgentThreadTimelineProps> = ({
         <ThreadInlineStatusHint hint={inlineStatusHint} />
       ) : null}
       {displayModel.orderedBlocks.map((block, index) => {
-        const blockHasFocusedItem = Boolean(
-          focusedItemId &&
-          block.items.some((item) => item.id === focusedItemId),
-        );
-
         return (
           <TimelineBlockCard
             key={block.id}
             block={block}
             index={index}
             emphasis={
-              blockHasFocusedItem || activeBlockIndex === index
-                ? "active"
-                : block.status === "completed"
-                  ? "quiet"
-                  : "default"
+              resolveTimelineBlockEmphasis({
+                block,
+                index,
+                activeBlockIndex,
+                focusedItemId,
+              })
             }
             isExpanded={expandedBlockIndexes.has(index)}
             preferInlineDetails={isCurrentTurn}

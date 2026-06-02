@@ -1,8 +1,7 @@
 import { useCallback } from "react";
-import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime";
 import type { MessageImage, MessagePathReference } from "../../../types";
-import type { HandleSendOptions } from "../../../hooks/handleSendTypes";
 import type { InputbarKnowledgePackSelection } from "../types";
+import type { InputbarSendHandler } from "../inputbarSendPayload";
 import { buildKnowledgeRequestMetadata } from "@/features/knowledge/agent/knowledgeMetadata";
 import { recordCuratedTaskTemplateUsage } from "../../../utils/curatedTaskTemplates";
 import { buildPathReferenceRequestMetadata } from "../../../utils/pathReferences";
@@ -15,20 +14,9 @@ interface UseInputbarSendParams {
   input: string;
   pendingImages: MessageImage[];
   pathReferences: MessagePathReference[];
-  webSearchEnabled: boolean;
-  thinkingEnabled: boolean;
-  executionStrategy?: "react" | "code_orchestrated" | "auto";
   activeCapability: InputCapabilitySelection | null;
   knowledgePackSelection?: InputbarKnowledgePackSelection | null;
-  onSend: (
-    images?: MessageImage[],
-    webSearch?: boolean,
-    thinking?: boolean,
-    textOverride?: string,
-    executionStrategy?: "react" | "code_orchestrated" | "auto",
-    autoContinuePayload?: AutoContinueRequestPayload,
-    sendOptions?: HandleSendOptions,
-  ) => void | Promise<boolean> | boolean;
+  onSend: InputbarSendHandler;
   clearPendingImages: () => void;
   clearPathReferences?: () => void;
   clearActiveCapability: () => void;
@@ -38,9 +26,6 @@ export function useInputbarSend({
   input,
   pendingImages,
   pathReferences,
-  webSearchEnabled,
-  thinkingEnabled,
-  executionStrategy,
   activeCapability,
   knowledgePackSelection,
   onSend,
@@ -56,10 +41,6 @@ export function useInputbarSend({
     ) {
       return;
     }
-
-    const webSearch = webSearchEnabled;
-    const thinking = thinkingEnabled;
-    const strategy = executionStrategy || "auto";
 
     const capabilityDispatch = resolveInputCapabilityDispatch(
       activeCapability,
@@ -109,15 +90,11 @@ export function useInputbarSend({
         : undefined;
 
     try {
-      const result = await onSend(
-        pendingImages.length > 0 ? pendingImages : undefined,
-        webSearch,
-        thinking,
+      const result = await onSend({
+        images: pendingImages.length > 0 ? pendingImages : undefined,
         textOverride,
-        strategy,
-        undefined,
         sendOptions,
-      );
+      });
       if (result === false) {
         return;
       }
@@ -140,13 +117,10 @@ export function useInputbarSend({
     clearActiveCapability,
     clearPendingImages,
     clearPathReferences,
-    executionStrategy,
     input,
     knowledgePackSelection,
     onSend,
     pendingImages,
     pathReferences,
-    thinkingEnabled,
-    webSearchEnabled,
   ]);
 }

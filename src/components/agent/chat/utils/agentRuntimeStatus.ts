@@ -25,16 +25,8 @@ export function buildDiagnosticsRuntimeStatusMetadata(
 }
 
 function buildExecutionLabel(strategy: AsterExecutionStrategy): string {
-  switch (strategy) {
-    case "auto":
-      return "自动选择执行方式";
-    case "react":
-      return "对话优先执行";
-    case "code_orchestrated":
-      return "代码编排执行";
-    default:
-      return strategy;
-  }
+  void strategy;
+  return "对话执行";
 }
 
 function normalizeRuntimeErrorDetail(errorMessage: string): string {
@@ -43,14 +35,12 @@ function normalizeRuntimeErrorDetail(errorMessage: string): string {
 
 export function buildInitialAgentRuntimeStatus(options: {
   executionStrategy: AsterExecutionStrategy;
-  webSearch?: boolean;
-  thinking?: boolean;
   skipUserMessage?: boolean;
 }): AgentRuntimeStatus {
   const checkpoints = [
     buildExecutionLabel(options.executionStrategy),
-    options.webSearch ? "联网搜索仅作为候选能力待命" : "优先本地直接回答",
-    options.thinking ? "必要时启用深度思考" : "先走轻量推理",
+    "工具由模型按需判断",
+    "推理强度由模型按任务复杂度判断",
     options.skipUserMessage ? "系统引导请求" : "用户请求已入队",
   ];
 
@@ -65,14 +55,12 @@ export function buildInitialAgentRuntimeStatus(options: {
 
 export function buildWaitingAgentRuntimeStatus(options: {
   executionStrategy: AsterExecutionStrategy;
-  webSearch?: boolean;
-  thinking?: boolean;
 }): AgentRuntimeStatus {
   const checkpoints = [
     "会话已建立",
     buildExecutionLabel(options.executionStrategy),
-    options.webSearch ? "先理解意图，再决定是否联网" : "直接回答优先",
-    options.thinking ? "推理增强已待命" : "等待首个模型事件",
+    "先理解意图，再由模型决定工具使用",
+    "等待首个模型事件",
   ];
 
   return {

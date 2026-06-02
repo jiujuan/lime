@@ -30,6 +30,7 @@ describe("vitest-layer-report", () => {
           explicitLayer: null,
           live: false,
           reasons: ["extension:tsx"],
+          unitMigrationHints: ["large-component-suite"],
         },
       ],
     });
@@ -49,6 +50,18 @@ describe("vitest-layer-report", () => {
       runnableByDefault: 0,
       liveGated: 1,
     });
+    expect(report.componentUnitMigrationCandidates).toMatchObject({
+      total: 1,
+      byHint: {
+        "large-component-suite": 1,
+      },
+      files: [
+        {
+          file: "src/c.test.tsx",
+          hints: ["large-component-suite"],
+        },
+      ],
+    });
   });
 
   it("文本报告应输出可读的分层表格", () => {
@@ -65,5 +78,30 @@ describe("vitest-layer-report", () => {
     });
 
     expect(renderVitestLayerReportText(report)).toContain("| unit | 1 |");
+  });
+
+  it("文本报告应输出组件 VM 迁移候选", () => {
+    const report = buildVitestLayerReport({
+      entries: [
+        {
+          file: "src/components/Foo.test.tsx",
+          layer: "component",
+          explicitLayer: null,
+          live: false,
+          reasons: ["react-testing-library"],
+          unitMigrationHints: [
+            "large-component-suite",
+            "business-logic-keywords",
+          ],
+        },
+      ],
+    });
+
+    const text = renderVitestLayerReportText(report);
+
+    expect(text).toContain("Component unit-migration candidates: 1");
+    expect(text).toContain(
+      "- src/components/Foo.test.tsx (large-component-suite, business-logic-keywords)",
+    );
   });
 });

@@ -93,7 +93,7 @@ describe("defaultAgentRuntimeAdapter", () => {
     });
 
     await expect(
-      adapter.createSession("workspace-9", "新会话", "auto", {
+      adapter.createSession("workspace-9", "新会话", "react", {
         runStartHooks: false,
       }),
     ).resolves.toBe("session-9");
@@ -101,7 +101,7 @@ describe("defaultAgentRuntimeAdapter", () => {
     expect(client.createAgentRuntimeSession).toHaveBeenCalledWith(
       "workspace-9",
       "新会话",
-      "auto",
+      "react",
       { runStartHooks: false },
     );
   });
@@ -158,7 +158,7 @@ describe("defaultAgentRuntimeAdapter", () => {
       accessMode: "full-access",
       providerType: "openai",
       model: "gpt-5.4-mini",
-      executionStrategy: "auto",
+      executionStrategy: "react",
     });
 
     expect(client.updateAgentRuntimeSession).toHaveBeenCalledTimes(1);
@@ -167,7 +167,7 @@ describe("defaultAgentRuntimeAdapter", () => {
       recent_access_mode: "full-access",
       provider_selector: "openai",
       model_name: "gpt-5.4-mini",
-      execution_strategy: "auto",
+      execution_strategy: "react",
     });
   });
 });

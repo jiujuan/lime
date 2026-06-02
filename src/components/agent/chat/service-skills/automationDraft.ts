@@ -312,8 +312,6 @@ function buildServiceSkillAutomationRequestMetadata(input: {
     harness: buildHarnessRequestMetadata({
       theme: targetTheme || "general",
       preferences: {
-        webSearch: false,
-        thinking: false,
         task: false,
         subagent: false,
       },

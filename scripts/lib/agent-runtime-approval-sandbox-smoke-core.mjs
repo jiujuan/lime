@@ -211,7 +211,7 @@ function devBridgeDeniedRuntimeTranscriptSatisfiesGate(
       assertions?.deniedDecisionClearsPendingRequest &&
       assertions?.approvalPolicySubmitted &&
       assertions?.sandboxPolicySubmitted &&
-      assertions?.codeOrchestratedSubmitted &&
+      assertions?.reactRuntimeSubmitted &&
       assertions?.providerNotRequired,
   );
 }

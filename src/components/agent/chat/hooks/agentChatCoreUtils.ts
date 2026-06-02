@@ -1,4 +1,3 @@
-import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
 import type { ActionRequired, ContentPart, Question } from "../types";
 
 export const WORKSPACE_PATH_AUTO_CREATED_WARNING_CODE =
@@ -9,8 +8,10 @@ export const ASK_USER_QUESTIONS_SCHEMA_KEY = "x-lime-ask-user-questions";
 
 export const normalizeExecutionStrategy = (
   value?: string | null,
-): AsterExecutionStrategy =>
-  value === "code_orchestrated" || value === "auto" ? value : "react";
+): "react" => {
+  void value;
+  return "react";
+};
 
 export const normalizeActionType = (
   value?: string,

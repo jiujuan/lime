@@ -32,7 +32,7 @@ describe("agentStreamSubmitOpController", () => {
         thinking: undefined,
         approvalPolicy: "on-request",
         sandboxPolicy: "workspace-write",
-        executionStrategy: "react",
+        executionStrategy: undefined,
         webSearch: undefined,
         autoContinue: undefined,
       },

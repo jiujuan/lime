@@ -94,12 +94,12 @@ describe("sessionMetadataSyncController", () => {
     });
   });
 
-  it("session storage fallback 应生成 accessMode 与 provider patch", () => {
+  it("session storage fallback 应生成 accessMode 与 provider patch，并把 legacy 策略归一到 react", () => {
     const plan = buildSessionMetadataSyncPlan({
       runtimeAccessMode: null,
       runtimePreference: null,
       shadowAccessMode: "full-access",
-      shadowExecutionStrategyFallback: "code_orchestrated",
+      shadowExecutionStrategyFallback: "code_orchestrated" as never,
       topicPreference: {
         providerType: "openai",
         model: "gpt-5",
@@ -110,7 +110,7 @@ describe("sessionMetadataSyncController", () => {
     expect(plan).toMatchObject({
       accessMode: "full-access",
       accessModeSource: "session_storage",
-      fallbackExecutionStrategy: "code_orchestrated",
+      fallbackExecutionStrategy: "react",
       fallbackProviderPreference: {
         providerType: "openai",
         model: "gpt-5",
@@ -121,7 +121,7 @@ describe("sessionMetadataSyncController", () => {
         accessMode: "full-access",
         providerType: "openai",
         model: "gpt-5",
-        executionStrategy: "code_orchestrated",
+        executionStrategy: "react",
       },
       shouldPersistAccessMode: false,
     });
@@ -196,9 +196,9 @@ describe("sessionMetadataSyncController", () => {
           shouldPersistAccessMode: true,
         },
         queuedTurnsCount: 1,
-        runtimeExecutionStrategy: "code_orchestrated",
+        runtimeExecutionStrategy: "react",
         shadowExecutionStrategyFallback: "react",
-        topicExecutionStrategy: "auto",
+        topicExecutionStrategy: "react",
         topicId: "topic-a",
         turnsCount: 2,
         workspaceId: "workspace-a",
@@ -206,7 +206,7 @@ describe("sessionMetadataSyncController", () => {
     ).toEqual({
       accessModeToApply: "current",
       accessModeToPersist: "current",
-      runtimeExecutionStrategyToMarkSynced: "code_orchestrated",
+      runtimeExecutionStrategyToMarkSynced: "react",
       switchSuccessMetricContext: {
         accessModeSource: "execution_runtime",
         durationMs: 250,
@@ -280,20 +280,20 @@ describe("sessionMetadataSyncController", () => {
 
   it("应把 fallback execution strategy 回填到目标 topic", () => {
     const topics = [
-      { id: "topic-a", executionStrategy: "auto" as const, name: "A" },
+      { id: "topic-a", executionStrategy: "react" as const, name: "A" },
       { id: "topic-b", executionStrategy: "react" as const, name: "B" },
     ];
 
     expect(
       applyFallbackExecutionStrategyToTopics(topics, {
         topicId: "topic-b",
-        executionStrategyToApplyToTopic: "code_orchestrated",
+        executionStrategyToApplyToTopic: "react",
       }),
     ).toEqual([
-      { id: "topic-a", executionStrategy: "auto", name: "A" },
+      { id: "topic-a", executionStrategy: "react", name: "A" },
       {
         id: "topic-b",
-        executionStrategy: "code_orchestrated",
+        executionStrategy: "react",
         name: "B",
       },
     ]);
@@ -349,7 +349,7 @@ describe("sessionMetadataSyncController", () => {
     };
 
     await executeSessionMetadataSync({
-      fallbackExecutionStrategy: "code_orchestrated",
+      fallbackExecutionStrategy: "react",
       fallbackProviderPreference: {
         providerType: "deepseek",
         model: "deepseek-chat",
@@ -358,7 +358,7 @@ describe("sessionMetadataSyncController", () => {
         accessMode: "full-access",
         providerType: "deepseek",
         model: "deepseek-chat",
-        executionStrategy: "code_orchestrated",
+        executionStrategy: "react",
       },
       runtime,
       sessionId: "topic-a",
@@ -375,7 +375,7 @@ describe("sessionMetadataSyncController", () => {
     );
     expect(runtime.setSessionExecutionStrategy).toHaveBeenCalledWith(
       "topic-a",
-      "code_orchestrated",
+      "react",
     );
   });
 });

@@ -217,10 +217,6 @@ interface WorkspaceCanvasPreviewFactoryParams {
   onAutoContinueModelChange: ComponentProps<
     typeof CanvasFactory
   >["onAutoContinueModelChange"];
-  autoContinueThinkingEnabled: boolean;
-  onAutoContinueThinkingEnabledChange: NonNullable<
-    ComponentProps<typeof CanvasFactory>["onAutoContinueThinkingEnabledChange"]
-  >;
   onAutoContinueRun: NonNullable<
     ComponentProps<typeof CanvasFactory>["onAutoContinueRun"]
   >;
@@ -1173,10 +1169,6 @@ function useWorkspaceCanvasPreviewRuntime({
               canvasFactory.onAutoContinueProviderTypeChange,
             autoContinueModel: canvasFactory.autoContinueModel,
             onAutoContinueModelChange: canvasFactory.onAutoContinueModelChange,
-            autoContinueThinkingEnabled:
-              canvasFactory.autoContinueThinkingEnabled,
-            onAutoContinueThinkingEnabledChange:
-              canvasFactory.onAutoContinueThinkingEnabledChange,
             onAutoContinueRun: canvasFactory.onAutoContinueRun,
             onAddImage: canvasFactory.onAddImage,
             onImportDocument: canvasFactory.onImportDocument,
@@ -1191,7 +1183,6 @@ function useWorkspaceCanvasPreviewRuntime({
     [
       canvasFactory.autoContinueModel,
       canvasFactory.autoContinueProviderType,
-      canvasFactory.autoContinueThinkingEnabled,
       canvasFactory.autoImageTopic,
       canvasFactory.canvasRenderTheme,
       canvasFactory.contentId,
@@ -1204,7 +1195,6 @@ function useWorkspaceCanvasPreviewRuntime({
       canvasFactory.onAutoContinueModelChange,
       canvasFactory.onAutoContinueProviderTypeChange,
       canvasFactory.onAutoContinueRun,
-      canvasFactory.onAutoContinueThinkingEnabledChange,
       canvasFactory.onBackHome,
       canvasFactory.onCloseCanvas,
       canvasFactory.onContentReviewRun,
@@ -1653,8 +1643,6 @@ interface UseWorkspaceCanvasSceneRuntimeParams {
   setProviderType: CanvasFactoryParams["onAutoContinueProviderTypeChange"];
   model: CanvasFactoryParams["autoContinueModel"];
   setModel: CanvasFactoryParams["onAutoContinueModelChange"];
-  documentThinkingEnabled: CanvasFactoryParams["autoContinueThinkingEnabled"];
-  handleDocumentThinkingEnabledChange: CanvasFactoryParams["onAutoContinueThinkingEnabledChange"];
   handleDocumentAutoContinueRun: CanvasFactoryParams["onAutoContinueRun"];
   handleAddImage: CanvasFactoryParams["onAddImage"];
   handleImportDocument: CanvasFactoryParams["onImportDocument"];
@@ -1718,8 +1706,6 @@ export function useWorkspaceCanvasSceneRuntime({
   setProviderType,
   model,
   setModel,
-  documentThinkingEnabled,
-  handleDocumentThinkingEnabledChange,
   handleDocumentAutoContinueRun,
   handleAddImage,
   handleImportDocument,
@@ -1845,9 +1831,6 @@ export function useWorkspaceCanvasSceneRuntime({
         onAutoContinueProviderTypeChange: setProviderType,
         autoContinueModel: model,
         onAutoContinueModelChange: setModel,
-        autoContinueThinkingEnabled: documentThinkingEnabled,
-        onAutoContinueThinkingEnabledChange:
-          handleDocumentThinkingEnabledChange,
         onAutoContinueRun: handleDocumentAutoContinueRun,
         onAddImage: handleAddImage,
         onImportDocument: handleImportDocument,

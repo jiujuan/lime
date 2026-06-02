@@ -143,7 +143,7 @@ describe("buildUserInputSubmitOp", () => {
         model: "gpt-4.1",
       },
       syncedExecutionStrategy: "react",
-      effectiveExecutionStrategy: "code_orchestrated",
+      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "full-access",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5",
@@ -161,10 +161,10 @@ describe("buildUserInputSubmitOp", () => {
     expect(op.preferences).toEqual({
       providerPreference: undefined,
       modelPreference: "gpt-5",
-      thinking: true,
+      thinking: undefined,
       approvalPolicy: "never",
       sandboxPolicy: "danger-full-access",
-      executionStrategy: "code_orchestrated",
+      executionStrategy: undefined,
       webSearch: undefined,
       autoContinue: {
         enabled: true,
@@ -175,9 +175,6 @@ describe("buildUserInputSubmitOp", () => {
     });
     expect(op.metadata).toEqual({
       harness: {
-        preferences: {
-          thinking: true,
-        },
         gate_key: "publish_confirm",
         run_title: "发布确认",
       },
@@ -355,7 +352,7 @@ describe("buildUserInputSubmitOp", () => {
     expect(op.preferences?.modelPreference).toBeUndefined();
   });
 
-  it("应透传显式搜索模式，不从用户文本推断", () => {
+  it("应只透传显式搜索模式，不提交旧 webSearch 开关", () => {
     const op = buildUserInputSubmitOp({
       content: "请搜索最新 AI 新闻",
       images: [],
@@ -369,7 +366,29 @@ describe("buildUserInputSubmitOp", () => {
       searchMode: "required",
     });
 
-    expect(op.preferences?.webSearch).toBe(true);
+    expect(op.preferences?.webSearch).toBeUndefined();
     expect(op.preferences?.searchMode).toBe("required");
+  });
+
+  it("输入框自然语言新闻请求不应提交搜索、思考或旧执行策略选择", () => {
+    const op = buildUserInputSubmitOp({
+      content: "整理今天的国际新闻",
+      images: [],
+      sessionId: "session-news-1",
+      eventName: "aster_stream_news",
+      workspaceId: "workspace-news",
+      effectiveExecutionStrategy: "react",
+      effectiveAccessMode: "current",
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.5",
+      webSearch: false,
+      thinking: false,
+    });
+
+    expect(op.preferences?.webSearch).toBeUndefined();
+    expect(op.preferences?.thinking).toBeUndefined();
+    expect(op.preferences?.executionStrategy).toBeUndefined();
+    expect(op.preferences?.searchMode).toBeUndefined();
+    expect(op.metadata).toBeUndefined();
   });
 });

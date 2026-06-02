@@ -3737,9 +3737,6 @@ Extract it into the Agent Skills directory.`,
       );
       expect(mockSendMessage.mock.calls[0]?.[2]).toBe(false);
       expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
-        toolPreferencesOverride: {
-          webSearch: false,
-        },
         requestMetadata: {
           harness: {
             allow_model_skills: true,
@@ -5525,7 +5522,7 @@ Extract it into the Agent Skills directory.`,
     }
   });
 
-  it("@代码 应保留原始消息，并切到 code_orchestrated + 代码团队主链", async () => {
+  it("@代码 应保留原始消息，并继续走普通 Agent 主链", async () => {
     const harness = mountHook({
       input: "@代码 修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
     });
@@ -5540,14 +5537,13 @@ Extract it into the Agent Skills directory.`,
       expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
         "@代码 修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
       );
-      expect(mockSendMessage.mock.calls[0]?.[5]).toBe("code_orchestrated");
+      expect(mockSendMessage.mock.calls[0]?.[5]).toBe("react");
       expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
         requestMetadata: {
           harness: {
-            preferred_team_preset_id: "code-triage-team",
             preferences: {
-              task: true,
-              subagent: true,
+              task: false,
+              subagent: false,
             },
           },
         },
@@ -5571,7 +5567,7 @@ Extract it into the Agent Skills directory.`,
     }
   });
 
-  it("catalog 下发的 agent_turn mention 应按 requestDefaults 切到编程底座", async () => {
+  it("catalog 下发的 legacy requestDefaults 应归一到普通 Agent 主链", async () => {
     saveSkillCatalog(
       {
         version: "tenant-2026-05-26",
@@ -5598,7 +5594,7 @@ Extract it into the Agent Skills directory.`,
             binding: {
               executionKind: "agent_turn",
               requestDefaults: {
-                executionStrategy: "code_orchestrated",
+                executionStrategy: "react",
               },
             },
           },
@@ -5620,14 +5616,13 @@ Extract it into the Agent Skills directory.`,
       expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
         "@工程模式 收口 workspace 发送链的硬编码分支，并补治理 guard",
       );
-      expect(mockSendMessage.mock.calls[0]?.[5]).toBe("code_orchestrated");
+      expect(mockSendMessage.mock.calls[0]?.[5]).toBe("react");
       expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
         requestMetadata: {
           harness: {
-            preferred_team_preset_id: "code-triage-team",
             preferences: {
-              task: true,
-              subagent: true,
+              task: false,
+              subagent: false,
             },
           },
         },
@@ -5651,10 +5646,10 @@ Extract it into the Agent Skills directory.`,
     }
   });
 
-  it("普通输入在 code_orchestrated 下应走底层编程底座而不是 @代码 parser", async () => {
+  it("普通输入走 current react 时仍应走普通 Agent 主链而不是 @代码 parser", async () => {
     const harness = mountHook({
       input: "继续修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
-      executionStrategy: "code_orchestrated",
+      executionStrategy: "react",
       chatToolPreferences: {
         webSearch: false,
         thinking: false,
@@ -5676,10 +5671,9 @@ Extract it into the Agent Skills directory.`,
       expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
         requestMetadata: {
           harness: {
-            preferred_team_preset_id: "code-triage-team",
             preferences: {
-              task: true,
-              subagent: true,
+              task: false,
+              subagent: false,
             },
           },
         },
@@ -6849,7 +6843,7 @@ Extract it into the Agent Skills directory.`,
     }
   });
 
-  it("/runtime scene 应按 catalog requestDefaults 复用 code_orchestrated 编程底座", async () => {
+  it("/runtime scene 应把 legacy requestDefaults 归一到普通 Agent 主链", async () => {
     mockGetSkillCatalog.mockResolvedValueOnce({
       entries: [
         {
@@ -6868,7 +6862,7 @@ Extract it into the Agent Skills directory.`,
         linkedSkillId: "cloud-video-dubbing",
         executionKind: "agent_turn",
         requestDefaults: {
-          executionStrategy: "code_orchestrated",
+          executionStrategy: "react",
         },
       },
     ]);
@@ -6884,7 +6878,7 @@ Extract it into the Agent Skills directory.`,
       });
 
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
-      expect(mockSendMessage.mock.calls[0]?.[5]).toBe("code_orchestrated");
+      expect(mockSendMessage.mock.calls[0]?.[5]).toBe("react");
       expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
         displayContent:
           "/engineering-mode 收口 workspace 发送链的硬编码分支，并补治理 guard",
@@ -6895,10 +6889,9 @@ Extract it into the Agent Skills directory.`,
         },
         requestMetadata: {
           harness: {
-            preferred_team_preset_id: "code-triage-team",
             preferences: {
-              task: true,
-              subagent: true,
+              task: false,
+              subagent: false,
             },
             service_scene_launch: {
               kind: "local_service_skill",

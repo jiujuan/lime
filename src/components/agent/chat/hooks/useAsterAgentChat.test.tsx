@@ -3162,7 +3162,7 @@ describe("useAsterAgentChat thread timeline", () => {
 });
 
 describe("useAsterAgentChat runtime routing", () => {
-  it("开启搜索能力时应提交 web_search，但不再重复提交 search_mode", async () => {
+  it("旧搜索开关应由发送边界裁掉且不提交 search_mode", async () => {
     const workspaceId = "ws-search-mode-allowed";
     seedSession(workspaceId, "session-search-mode-allowed");
     const harness = mountHook(workspaceId);
@@ -3188,7 +3188,7 @@ describe("useAsterAgentChat runtime routing", () => {
         expect.objectContaining({
           message: "帮我看看今天的黄金价格",
           turn_config: expect.objectContaining({
-            web_search: true,
+            web_search: undefined,
           }),
           queue_if_busy: true,
         }),
@@ -4150,7 +4150,7 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
       expect(mockCreateAgentRuntimeSession).toHaveBeenCalledWith(
         workspaceId,
         "重构输入命令",
-        "code_orchestrated",
+        "react",
         { runStartHooks: true },
       );
       expect(mockSubmitAgentRuntimeTurn).not.toHaveBeenCalled();
@@ -4238,7 +4238,7 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
       expect(mockCreateAgentRuntimeSession).toHaveBeenCalledWith(
         workspaceId,
         undefined,
-        "code_orchestrated",
+        "react",
         { runStartHooks: true },
       );
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
@@ -5823,7 +5823,7 @@ describe("useAsterAgentChat action_required 渲染链路", () => {
     }
   });
 
-  it("Auto 模式下 tool_confirmation 应自动确认而不阻塞 UI", async () => {
+  it("current react 不应自动确认 tool_confirmation", async () => {
     const workspaceId = "ws-auto-confirm";
     seedSession(workspaceId, "session-auto-confirm");
     const harness = mountHook(workspaceId);
@@ -5835,7 +5835,7 @@ describe("useAsterAgentChat action_required 渲染链路", () => {
       await act(async () => {
         await harness
           .getValue()
-          .sendMessage("执行命令", [], false, false, false, "auto");
+          .sendMessage("执行命令", [], false, false, false, "react");
       });
 
       act(() => {
@@ -5851,20 +5851,12 @@ describe("useAsterAgentChat action_required 渲染链路", () => {
 
       await flushEffects();
 
-      expect(mockRespondAgentRuntimeAction).toHaveBeenCalledWith({
-        session_id: "session-auto-confirm",
-        request_id: "req-auto-1",
-        action_type: "tool_confirmation",
-        confirmed: true,
-        response: "Auto 模式自动确认",
-        user_data: undefined,
-        metadata: undefined,
-      });
+      expect(mockRespondAgentRuntimeAction).not.toHaveBeenCalled();
 
       const assistantMessage = [...harness.getValue().messages]
         .reverse()
         .find((msg) => msg.role === "assistant");
-      expect(assistantMessage?.actionRequests?.length ?? 0).toBe(0);
+      expect(assistantMessage?.actionRequests?.length ?? 0).toBe(1);
     } finally {
       harness.unmount();
     }
@@ -6931,7 +6923,7 @@ describe("useAsterAgentChat 偏好持久化", () => {
       expect(mockCreateAgentRuntimeSession).toHaveBeenCalledWith(
         workspaceId,
         undefined,
-        "code_orchestrated",
+        "react",
         { runStartHooks: true },
       );
     } finally {
@@ -7860,11 +7852,11 @@ describe("useAsterAgentChat 偏好持久化", () => {
       });
       await flushEffects();
 
-      expect(harness.getValue().executionStrategy).toBe("auto");
+      expect(harness.getValue().executionStrategy).toBe("react");
       expect(mockUpdateAgentRuntimeSession).toHaveBeenCalledWith({
         session_id: topicId,
         recent_access_mode: "full-access",
-        execution_strategy: "auto",
+        execution_strategy: "react",
       });
     } finally {
       harness.unmount();
@@ -7976,7 +7968,7 @@ describe("useAsterAgentChat 偏好持久化", () => {
         recent_access_mode: "read-only",
         provider_selector: "gemini",
         model_name: "gemini-2.5-pro",
-        execution_strategy: "auto",
+        execution_strategy: "react",
       });
     } finally {
       harness.unmount();
@@ -9986,7 +9978,7 @@ describe("useAsterAgentChat 兼容接口", () => {
     }
   });
 
-  it("thinking 已变更但 session 仍是旧值时，仍应随 turn 提交 thinking_enabled", async () => {
+  it("thinking 旧开关已变更但 session 仍是旧值时也不随 turn 提交 thinking_enabled", async () => {
     const workspaceId = "ws-runtime-thinking-pending-sync";
     const topicId = "topic-runtime-thinking-pending-sync";
     mockGetAgentRuntimeSession.mockResolvedValue({
@@ -10036,7 +10028,7 @@ describe("useAsterAgentChat 兼容接口", () => {
       expect(
         mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
           ?.thinking_enabled,
-      ).toBe(true);
+      ).toBeUndefined();
     } finally {
       harness.unmount();
     }
@@ -10113,7 +10105,7 @@ describe("useAsterAgentChat 兼容接口", () => {
     }
   });
 
-  it("thinking 已变更且 metadata 显式携带时，session 仍是旧值应保留 thinking 偏好", async () => {
+  it("thinking 已变更且 metadata 显式携带时也应裁掉旧 thinking 偏好", async () => {
     const workspaceId = "ws-runtime-thinking-metadata-pending-sync";
     const topicId = "topic-runtime-thinking-metadata-pending-sync";
     mockGetAgentRuntimeSession.mockResolvedValue({
@@ -10178,7 +10170,7 @@ describe("useAsterAgentChat 兼容接口", () => {
             harness?: { preferences?: { thinking?: boolean } };
           } | null
         )?.harness?.preferences?.thinking,
-      ).toBe(true);
+      ).toBeUndefined();
     } finally {
       harness.unmount();
     }
@@ -10312,7 +10304,7 @@ describe("useAsterAgentChat 兼容接口", () => {
     }
   });
 
-  it("webSearch 已变更但 session 仍是旧值时，仍应随 turn 提交 web_search", async () => {
+  it("webSearch 旧开关已变更但 session 仍是旧值时也不随 turn 提交 web_search", async () => {
     const workspaceId = "ws-runtime-websearch-pending-sync";
     const topicId = "topic-runtime-websearch-pending-sync";
     mockGetAgentRuntimeSession.mockResolvedValue({
@@ -10361,7 +10353,7 @@ describe("useAsterAgentChat 兼容接口", () => {
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
       expect(
         mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config?.web_search,
-      ).toBe(true);
+      ).toBeUndefined();
     } finally {
       harness.unmount();
     }
@@ -10580,7 +10572,7 @@ describe("useAsterAgentChat 兼容接口", () => {
     }
   });
 
-  it("切换 executionStrategy 但 session 同步未完成时仍应提交 execution_strategy", async () => {
+  it("切换 legacy executionStrategy 且 session 同步未完成时也不随 turn 提交 execution_strategy", async () => {
     const workspaceId = "ws-runtime-strategy-pending-sync";
     const topicId = "topic-runtime-strategy-pending-sync";
     let resolveStrategySync: (() => void) | null = null;
@@ -10611,7 +10603,7 @@ describe("useAsterAgentChat 兼容接口", () => {
       });
 
       act(() => {
-        harness.getValue().setExecutionStrategy("auto");
+        harness.getValue().setExecutionStrategy("react");
       });
       await flushEffects();
       mockSubmitAgentRuntimeTurn.mockClear();
@@ -10626,7 +10618,7 @@ describe("useAsterAgentChat 兼容接口", () => {
       expect(
         mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
           ?.execution_strategy,
-      ).toBe("auto");
+      ).toBeUndefined();
     } finally {
       (resolveStrategySync as (() => void) | null)?.();
       harness.unmount();

@@ -10,6 +10,7 @@ import {
 } from "@/lib/api/skillCatalog";
 import {
   buildRuntimeInputCapabilityCatalog,
+  parseCatalogExecutionStrategy,
   useRuntimeInputCapabilityCatalog,
   type RuntimeInputCapabilityCatalog,
 } from "./runtimeInputCapabilityCatalog";
@@ -45,7 +46,7 @@ function buildRuntimeCatalogFixture(): SkillCatalog {
         binding: {
           executionKind: "agent_turn",
           requestDefaults: {
-            executionStrategy: "code_orchestrated",
+            executionStrategy: "react",
           },
         },
       },
@@ -101,6 +102,13 @@ afterEach(() => {
 });
 
 describe("runtimeInputCapabilityCatalog", () => {
+  it("legacy execution strategy 只作为 compat 输入归一为 react", () => {
+    expect(parseCatalogExecutionStrategy("code_orchestrated")).toBe("react");
+    expect(parseCatalogExecutionStrategy("auto")).toBe("react");
+    expect(parseCatalogExecutionStrategy("react")).toBe("react");
+    expect(parseCatalogExecutionStrategy("unknown")).toBeUndefined();
+  });
+
   it("应从统一 skill catalog 生成 builtin、scene 与 mention 路由映射", () => {
     const catalog = buildRuntimeCatalogFixture();
 
@@ -133,7 +141,7 @@ describe("runtimeInputCapabilityCatalog", () => {
       runtimeCatalog.mentionAgentTurnRouteMap.get("engineering_runtime"),
     ).toEqual({
       commandKey: "engineering_runtime",
-      executionStrategy: "code_orchestrated",
+      executionStrategy: "react",
     });
     expect(
       runtimeCatalog.mentionAgentTurnRouteMap.has("tenant_research_custom"),

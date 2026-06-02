@@ -881,7 +881,7 @@ function normalizeExecutionStrategy(
   value: unknown,
 ): AsterExecutionStrategy | null {
   return value === "react" || value === "code_orchestrated" || value === "auto"
-    ? value
+    ? "react"
     : null;
 }
 

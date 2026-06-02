@@ -1,5 +1,5 @@
 import type { AgentTurnContextSummary } from "./agentProtocol";
-export type AsterExecutionStrategy = "react" | "code_orchestrated" | "auto";
+export type AsterExecutionStrategy = "react";
 export type AsterApprovalPolicy = "never" | "on-request" | "on-failure" | "untrusted";
 export type AsterSandboxPolicy = "read-only" | "workspace-write" | "danger-full-access";
 export type AsterSessionExecutionRuntimeAccessMode = "read-only" | "current" | "full-access";
