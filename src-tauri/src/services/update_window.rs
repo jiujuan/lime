@@ -33,11 +33,14 @@ pub enum UpdateWindowError {
 const UPDATE_WINDOW_LABEL: &str = "update-notification";
 
 /// 窗口尺寸
-const WINDOW_WIDTH: f64 = 620.0;
-const WINDOW_HEIGHT: f64 = 132.0;
+const WINDOW_WIDTH: f64 = 220.0;
+const WINDOW_HEIGHT: f64 = 196.0;
 
 /// 距离屏幕底部的边距
-const BOTTOM_MARGIN: f64 = 24.0;
+const BOTTOM_MARGIN: f64 = 18.0;
+const LEFT_MARGIN: f64 = 18.0;
+const MAIN_WINDOW_LEFT_MARGIN: f64 = 16.0;
+const MAIN_WINDOW_BOTTOM_MARGIN: f64 = 28.0;
 
 /// 获取鼠标所在的显示器
 fn get_monitor_at_cursor(app: &AppHandle) -> Option<tauri::Monitor> {
@@ -86,8 +89,30 @@ fn get_monitor_at_cursor(app: &AppHandle) -> Option<tauri::Monitor> {
     None
 }
 
-/// 计算窗口位置（鼠标所在屏幕的底部居中）
+/// 计算窗口位置（优先贴主窗口左下角，否则贴当前屏幕左下角）
 fn calculate_window_position(app: &AppHandle) -> (f64, f64) {
+    if let Some(main_window) = app.get_webview_window("main") {
+        if main_window.is_visible().unwrap_or(false) {
+            if let (Ok(position), Ok(size), Ok(scale_factor)) = (
+                main_window.outer_position(),
+                main_window.outer_size(),
+                main_window.scale_factor(),
+            ) {
+                let main_x = position.x as f64 / scale_factor;
+                let main_y = position.y as f64 / scale_factor;
+                let main_height = size.height as f64 / scale_factor;
+                let x = main_x + MAIN_WINDOW_LEFT_MARGIN;
+                let y = main_y + main_height - WINDOW_HEIGHT - MAIN_WINDOW_BOTTOM_MARGIN;
+
+                debug!(
+                    "更新窗口贴主窗口左下角: 主窗口({}, {}), 高度: {}, 窗口位置: ({}, {})",
+                    main_x, main_y, main_height, x, y
+                );
+                return (x, y);
+            }
+        }
+    }
+
     // 优先获取鼠标所在的显示器，否则使用主显示器
     let monitor = get_monitor_at_cursor(app).or_else(|| app.primary_monitor().ok().flatten());
 
@@ -102,8 +127,8 @@ fn calculate_window_position(app: &AppHandle) -> (f64, f64) {
         let screen_x = screen_pos.x as f64 / scale_factor;
         let screen_y = screen_pos.y as f64 / scale_factor;
 
-        // 底部居中定位
-        let x = screen_x + (screen_width - WINDOW_WIDTH) / 2.0;
+        // 左下角定位，避免占用屏幕中央。
+        let x = screen_x + LEFT_MARGIN;
         let y = screen_y + screen_height - WINDOW_HEIGHT - BOTTOM_MARGIN;
 
         debug!(
@@ -155,10 +180,6 @@ pub fn open_update_window(
             .show()
             .map_err(|e| UpdateWindowError::OperationFailed(format!("显示窗口失败: {e}")))?;
 
-        window
-            .set_focus()
-            .map_err(|e| UpdateWindowError::OperationFailed(format!("聚焦窗口失败: {e}")))?;
-
         return Ok(());
     }
 
@@ -175,7 +196,7 @@ pub fn open_update_window(
         .always_on_top(true)
         .skip_taskbar(true)
         .visible(true)
-        .focused(true)
+        .focused(false)
         .transparent(true)
         .resizable(false)
         .build()

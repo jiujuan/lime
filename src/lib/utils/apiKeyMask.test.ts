@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest";
 import { test } from "@fast-check/vitest";
 import * as fc from "fast-check";
+import { fastCheckRuns } from "../../test/fastCheckRuns";
 import { maskApiKey } from "./apiKeyMask";
 
 describe("API Key 脱敏", () => {
@@ -23,7 +24,9 @@ describe("API Key 脱敏", () => {
    * **Validates: Requirements 3.2**
    */
   describe("Property 4: API Key Masking Format", () => {
-    test.prop([fc.string({ minLength: 9, maxLength: 200 })], { numRuns: 100 })(
+    test.prop([fc.string({ minLength: 9, maxLength: 200 })], {
+      numRuns: fastCheckRuns(100),
+    })(
       "对于长度 > 8 的 Key，应显示前 4 位 + '...' + 后 4 位",
       (apiKey: string) => {
         const masked = maskApiKey(apiKey);
@@ -45,13 +48,12 @@ describe("API Key 脱敏", () => {
       },
     );
 
-    test.prop([fc.string({ minLength: 0, maxLength: 8 })], { numRuns: 100 })(
-      "对于长度 <= 8 的 Key，应返回 '****'",
-      (apiKey: string) => {
-        const masked = maskApiKey(apiKey);
-        expect(masked).toBe("****");
-      },
-    );
+    test.prop([fc.string({ minLength: 0, maxLength: 8 })], {
+      numRuns: fastCheckRuns(100),
+    })("对于长度 <= 8 的 Key，应返回 '****'", (apiKey: string) => {
+      const masked = maskApiKey(apiKey);
+      expect(masked).toBe("****");
+    });
 
     // 边界测试：长度恰好为 8 和 9
     it("长度恰好为 8 的 Key 应返回 '****'", () => {

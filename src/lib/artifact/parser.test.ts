@@ -7,6 +7,7 @@
 
 import { describe, test, expect } from "vitest";
 import * as fc from "fast-check";
+import { fastCheckRuns } from "../../test/fastCheckRuns";
 import {
   ArtifactParser,
   serializeArtifact,
@@ -139,7 +140,7 @@ describe("Property 2: 解析器正确性", () => {
           expect(result.artifacts[0].status).toBe("complete");
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -157,7 +158,7 @@ describe("Property 2: 解析器正确性", () => {
         expect(ALL_ARTIFACT_TYPES).toContain(result.artifacts[0].type);
         expect(result.artifacts[0].content).toBe(content);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -177,7 +178,7 @@ describe("Property 2: 解析器正确性", () => {
         expect(artifact.position.end).toBeGreaterThan(artifact.position.start);
         expect(artifact.position.end).toBeLessThanOrEqual(text.length + 1);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 });
@@ -216,7 +217,7 @@ describe("Property 3: 流式解析一致性", () => {
           ).toBe(true);
         }
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -246,7 +247,7 @@ describe("Property 3: 流式解析一致性", () => {
           artifactsEqual(fullResult.artifacts, streamResult.artifacts),
         ).toBe(true);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -270,7 +271,7 @@ describe("Property 3: 流式解析一致性", () => {
           artifactsEqual(fullResult.artifacts, streamResult.artifacts),
         ).toBe(true);
       }),
-      { numRuns: 50 },
+      { numRuns: fastCheckRuns(50) },
     );
   });
 });
@@ -294,7 +295,7 @@ describe("Property 4: 解析器往返一致性", () => {
         expect(parsed.artifacts.length).toBe(1);
         expect(artifactContentEqual(artifact, parsed.artifacts[0])).toBe(true);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -317,7 +318,7 @@ describe("Property 4: 解析器往返一致性", () => {
           artifactContentEqual(parsed1.artifacts[0], parsed2.artifacts[0]),
         ).toBe(true);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -346,7 +347,7 @@ describe("Property 4: 解析器往返一致性", () => {
         expect(parsed.artifacts.length).toBe(1);
         expect(parsed.artifacts[0].type).toBe(type);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -379,7 +380,7 @@ describe("Property 4: 解析器往返一致性", () => {
           expect(parsed.artifacts[0].meta.language).toBe(language);
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 });

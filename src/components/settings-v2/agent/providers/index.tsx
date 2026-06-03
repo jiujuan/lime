@@ -4,7 +4,6 @@ import {
   AlertCircle,
   Bot,
   CheckCircle2,
-  Cloud,
   ExternalLink,
   KeyRound,
   LoaderCircle,
@@ -18,6 +17,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOemCloudAccess } from "@/hooks/useOemCloudAccess";
 import { formatDate } from "@/i18n/format";
 import {
+  getConfig,
+  subscribeAppConfigChanged,
+} from "@/lib/api/appConfig";
+import {
   getCompanionPetStatus,
   launchCompanionPet,
   listenCompanionPetStatus,
@@ -30,6 +33,7 @@ import {
   loadCompanionProviderOverview,
   type CompanionProviderOverviewPayload,
 } from "@/lib/provider/companionProviderOverview";
+import { resolveEnabledSidebarNavItems } from "@/lib/navigation/sidebarNav";
 import type { SettingsProviderView } from "@/types/page";
 import { cn } from "@/lib/utils";
 import { CompanionCapabilityPreferencesCard } from "./CompanionCapabilityPreferencesCard";
@@ -40,6 +44,7 @@ const PRIMARY_ACTION_BUTTON_CLASS =
   "inline-flex items-center justify-center gap-2 rounded-[16px] border border-emerald-200 bg-[linear-gradient(135deg,#0ea5e9_0%,#14b8a6_52%,#10b981_100%)] px-4 py-2.5 text-sm font-medium text-white shadow-sm shadow-emerald-950/15 transition hover:opacity-95 disabled:opacity-60";
 const ACTIVE_WORKSPACE_TRIGGER_CLASS =
   "data-[state=active]:border-emerald-200 data-[state=active]:bg-[linear-gradient(135deg,rgba(240,253,250,0.98)_0%,rgba(236,253,245,0.96)_56%,rgba(224,242,254,0.95)_100%)] data-[state=active]:text-slate-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-950/10";
+const COMPANION_NAV_ITEM_ID = "companion";
 const DEFAULT_COMPANION_ENDPOINT = "ws://127.0.0.1:45554/companion/pet";
 const LIME_PET_RELEASES_URL =
   "https://github.com/limecloud/lime-pet/releases/latest";
@@ -1147,12 +1152,6 @@ function createProviderWorkspaceViewMeta(t: ProviderSettingsTranslate): Array<{
       icon: KeyRound,
     },
     {
-      value: "cloud",
-      label: t("settings.providers.workspaceView.cloud.label"),
-      summary: t("settings.providers.workspaceView.cloud.summary"),
-      icon: Cloud,
-    },
-    {
       value: "companion",
       label: t("settings.providers.workspaceView.companion.label"),
       summary: t("settings.providers.workspaceView.companion.summary"),
@@ -1184,6 +1183,7 @@ export function CloudProviderSettings(props: CloudProviderSettingsProps) {
   const cloudBrandLabel =
     hubProviderName?.trim() || t("settings.providers.cloud.brandFallback");
   const showProviderSettingsEntry = true;
+  const [companionEntryEnabled, setCompanionEntryEnabled] = useState(false);
   const providerWorkspaceViewMeta = useMemo(
     () => createProviderWorkspaceViewMeta(t),
     [t],
@@ -1195,18 +1195,21 @@ export function CloudProviderSettings(props: CloudProviderSettingsProps) {
       orderedViews.push("settings");
     }
 
-    if (isOemRuntime) {
-      orderedViews.push("cloud");
-    }
-
-    if (!orderedViews.includes("companion")) {
+    if (
+      companionEntryEnabled &&
+      !orderedViews.includes(COMPANION_NAV_ITEM_ID)
+    ) {
       orderedViews.push("companion");
     }
 
     return orderedViews.map(
       (view) => providerWorkspaceViewMeta.find((item) => item.value === view)!,
     );
-  }, [isOemRuntime, providerWorkspaceViewMeta, showProviderSettingsEntry]);
+  }, [
+    companionEntryEnabled,
+    providerWorkspaceViewMeta,
+    showProviderSettingsEntry,
+  ]);
   const defaultView = useMemo<ProviderWorkspaceView>(() => {
     if (
       initialView &&
@@ -1227,6 +1230,41 @@ export function CloudProviderSettings(props: CloudProviderSettingsProps) {
     useState<ProviderWorkspaceView>(defaultView);
   const [cloudOpenError, setCloudOpenError] = useState<string | null>(null);
   const [cloudOpenInfo, setCloudOpenInfo] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCompanionEntryState = async () => {
+      try {
+        const config = await getConfig();
+        if (cancelled) {
+          return;
+        }
+
+        setCompanionEntryEnabled(
+          resolveEnabledSidebarNavItems(
+            config.navigation?.enabled_items,
+          ).includes(COMPANION_NAV_ITEM_ID),
+        );
+      } catch (error) {
+        if (!cancelled) {
+          setCompanionEntryEnabled(false);
+          console.error("加载桌宠入口配置失败:", error);
+        }
+      }
+    };
+
+    void loadCompanionEntryState();
+
+    const unsubscribe = subscribeAppConfigChanged(() => {
+      void loadCompanionEntryState();
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
   const handleOpenCloudUserCenter = useCallback(
     async (path = "/welcome") => {
@@ -1290,14 +1328,11 @@ export function CloudProviderSettings(props: CloudProviderSettingsProps) {
   const handleWorkspaceViewChange = useCallback(
     (value: string) => {
       const nextView = value as ProviderWorkspaceView;
-      if (nextView === "cloud") {
-        void handleOpenCloudUserCenter("/welcome");
-        return;
+      if (workspaceViews.some((item) => item.value === nextView)) {
+        setActiveView(nextView);
       }
-
-      setActiveView(nextView);
     },
-    [handleOpenCloudUserCenter],
+    [workspaceViews],
   );
 
   useEffect(() => {

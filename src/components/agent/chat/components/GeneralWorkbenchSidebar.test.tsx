@@ -488,7 +488,7 @@ describe("GeneralWorkbenchSidebar", () => {
     expect(container.textContent).toContain("2. 生成封面提示词");
     expect(container.textContent).toContain("允许工具");
     expect(container.textContent).toContain("查看文件");
-    expect(container.textContent).toContain("图片生成");
+    expect(container.textContent).toContain("生成图片");
     expect(container.textContent).toContain("适用场景");
     expect(container.textContent).toContain(
       "适合需要主稿与封面同时产出的社媒场景。",

@@ -272,9 +272,15 @@ function main() {
   });
 
   assertMatch(
-    harnessMetadataSource,
-    /preferences:\s*\{\s*task:\s*preferences\.task,\s*subagent:\s*preferences\.subagent,\s*\}/s,
-    "[harness-contracts] 前端未按约定输出 current preferences.task/subagent",
+    metadataBuilderBlock,
+    /\btask:\s*preferences\.task\b/,
+    "[harness-contracts] 前端未按约定输出 current preferences.task",
+    failures,
+  );
+  assertMatch(
+    metadataBuilderBlock,
+    /\bsubagent:\s*preferences\.subagent\b/,
+    "[harness-contracts] 前端未按约定输出 current preferences.subagent",
     failures,
   );
 

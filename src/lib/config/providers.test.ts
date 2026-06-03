@@ -10,6 +10,7 @@
 import { describe, expect } from "vitest";
 import { test } from "@fast-check/vitest";
 import * as fc from "fast-check";
+import { fastCheckRuns } from "../../test/fastCheckRuns";
 import {
   SYSTEM_PROVIDERS,
   PROVIDER_GROUPS,
@@ -35,7 +36,9 @@ describe("System Provider 配置", () => {
     // 获取所有 System Provider ID
     const systemProviderIds = getSystemProviderIds();
 
-    test.prop([fc.constantFrom(...systemProviderIds)])(
+    test.prop([fc.constantFrom(...systemProviderIds)], {
+      numRuns: fastCheckRuns(100),
+    })(
       "每个 System Provider 应包含完整的必填字段",
       (providerId: SystemProviderId) => {
         const config = SYSTEM_PROVIDERS[providerId];
@@ -57,7 +60,9 @@ describe("System Provider 配置", () => {
       },
     );
 
-    test.prop([fc.constantFrom(...systemProviderIds)])(
+    test.prop([fc.constantFrom(...systemProviderIds)], {
+      numRuns: fastCheckRuns(100),
+    })(
       "每个 System Provider 的 group 应为有效的分组类型",
       (providerId: SystemProviderId) => {
         const config = SYSTEM_PROVIDERS[providerId];
@@ -75,7 +80,9 @@ describe("System Provider 配置", () => {
       },
     );
 
-    test.prop([fc.constantFrom(...systemProviderIds)])(
+    test.prop([fc.constantFrom(...systemProviderIds)], {
+      numRuns: fastCheckRuns(100),
+    })(
       "每个 System Provider 的 type 应为有效的 API 类型",
       (providerId: SystemProviderId) => {
         const config = SYSTEM_PROVIDERS[providerId];
@@ -96,7 +103,9 @@ describe("System Provider 配置", () => {
       },
     );
 
-    test.prop([fc.constantFrom(...systemProviderIds)])(
+    test.prop([fc.constantFrom(...systemProviderIds)], {
+      numRuns: fastCheckRuns(100),
+    })(
       "getSystemProvider 应返回与 SYSTEM_PROVIDERS 相同的配置",
       (providerId: SystemProviderId) => {
         const directConfig = SYSTEM_PROVIDERS[providerId];
@@ -106,7 +115,9 @@ describe("System Provider 配置", () => {
       },
     );
 
-    test.prop([fc.constantFrom(...systemProviderIds)])(
+    test.prop([fc.constantFrom(...systemProviderIds)], {
+      numRuns: fastCheckRuns(100),
+    })(
       "isSystemProviderId 应对所有 System Provider ID 返回 true",
       (providerId: SystemProviderId) => {
         expect(isSystemProviderId(providerId)).toBe(true);
@@ -125,20 +136,21 @@ describe("System Provider 配置", () => {
       "custom",
     ];
 
-    test.prop([fc.constantFrom(...validGroups)])(
-      "每个分组应有对应的配置",
-      (group: ProviderGroup) => {
-        const groupConfig = PROVIDER_GROUPS[group];
+    test.prop([fc.constantFrom(...validGroups)], {
+      numRuns: fastCheckRuns(100),
+    })("每个分组应有对应的配置", (group: ProviderGroup) => {
+      const groupConfig = PROVIDER_GROUPS[group];
 
-        expect(groupConfig).toBeDefined();
-        expect(typeof groupConfig.label).toBe("string");
-        expect(groupConfig.label.length).toBeGreaterThan(0);
-        expect(typeof groupConfig.order).toBe("number");
-        expect(groupConfig.order).toBeGreaterThan(0);
-      },
-    );
+      expect(groupConfig).toBeDefined();
+      expect(typeof groupConfig.label).toBe("string");
+      expect(groupConfig.label.length).toBeGreaterThan(0);
+      expect(typeof groupConfig.order).toBe("number");
+      expect(groupConfig.order).toBeGreaterThan(0);
+    });
 
-    test.prop([fc.constantFrom(...validGroups)])(
+    test.prop([fc.constantFrom(...validGroups)], {
+      numRuns: fastCheckRuns(100),
+    })(
       "getProvidersByGroup 应返回该分组的所有 Provider",
       (group: ProviderGroup) => {
         const providers = getProvidersByGroup(group);

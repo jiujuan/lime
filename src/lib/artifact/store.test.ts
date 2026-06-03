@@ -8,6 +8,7 @@
 import { describe, test, expect } from "vitest";
 import * as fc from "fast-check";
 import { createStore } from "jotai";
+import { fastCheckRuns } from "../../test/fastCheckRuns";
 import {
   artifactsAtom,
   selectedArtifactIdAtom,
@@ -256,7 +257,7 @@ describe("Property 1: Artifact ID 唯一性", () => {
         const uniqueIds = new Set(ids);
         return uniqueIds.size === ids.length;
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -274,7 +275,7 @@ describe("Property 1: Artifact ID 唯一性", () => {
           return uniqueIds.size === ids.length;
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -302,7 +303,7 @@ describe("Property 1: Artifact ID 唯一性", () => {
           return uniqueIds.size === ids.length;
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 });
@@ -335,7 +336,7 @@ describe("Property 6: 状态管理操作正确性", () => {
 
         return true;
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -374,7 +375,7 @@ describe("Property 6: 状态管理操作正确性", () => {
           return true;
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -409,7 +410,7 @@ describe("Property 6: 状态管理操作正确性", () => {
           return true;
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -444,7 +445,7 @@ describe("Property 6: 状态管理操作正确性", () => {
           return true;
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -471,7 +472,7 @@ describe("Property 6: 状态管理操作正确性", () => {
 
         return true;
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -509,7 +510,7 @@ describe("Property 6: 状态管理操作正确性", () => {
           return true;
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -555,7 +556,7 @@ describe("Property 6: 状态管理操作正确性", () => {
 
         return true;
       }),
-      { numRuns: 50 },
+      { numRuns: fastCheckRuns(50) },
     );
   });
 
@@ -588,7 +589,7 @@ describe("Property 6: 状态管理操作正确性", () => {
 
         return true;
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -616,7 +617,7 @@ describe("Property 6: 状态管理操作正确性", () => {
 
         return true;
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 });

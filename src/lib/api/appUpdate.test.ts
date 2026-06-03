@@ -1,26 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { safeInvoke } from "@/lib/dev-bridge";
+import { safeInvoke, safeListen } from "@/lib/dev-bridge";
 import {
+  UPDATE_INSTALL_SESSION_EVENT,
   checkForUpdates,
   closeUpdateWindow,
   dismissUpdateNotification,
   downloadUpdate,
+  getUpdateInstallSession,
   getUpdateCheckSettings,
   getUpdateNotificationMetrics,
+  isUpdateInstallSessionActive,
+  listenUpdateInstallSession,
   recordUpdateNotificationAction,
   remindUpdateLater,
   setUpdateCheckSettings,
   skipUpdateVersion,
+  startUpdateInstallSession,
   testUpdateWindow,
 } from "./appUpdate";
 
 vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
+  safeListen: vi.fn(),
 }));
 
 describe("appUpdate API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(safeListen).mockResolvedValue(vi.fn());
   });
 
   it("应获取版本信息并下载更新", async () => {
@@ -89,5 +96,54 @@ describe("appUpdate API", () => {
       }),
     ).resolves.toBeUndefined();
     await expect(testUpdateWindow()).resolves.toBeUndefined();
+  });
+
+  it("应代理更新安装会话命令和事件", async () => {
+    const session = {
+      sessionId: "session-1",
+      stage: "downloading",
+      currentVersion: "1.0.0",
+      latestVersion: "1.1.0",
+      downloadUrl: "https://example.com/release",
+      downloadedBytes: 50,
+      totalBytes: 100,
+      percent: 0.5,
+      message: "downloading",
+      error: null,
+      startedAt: 1,
+      updatedAt: 2,
+      completedAt: null,
+      canCloseWindow: true,
+      isActive: true,
+    } as const;
+
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce(session)
+      .mockResolvedValueOnce({ ...session, stage: "idle", isActive: false });
+
+    await expect(startUpdateInstallSession()).resolves.toEqual(session);
+    await expect(getUpdateInstallSession()).resolves.toEqual(
+      expect.objectContaining({ stage: "idle" }),
+    );
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      1,
+      "start_update_install_session",
+    );
+    expect(safeInvoke).toHaveBeenNthCalledWith(2, "get_update_install_session");
+    expect(isUpdateInstallSessionActive(session)).toBe(true);
+    expect(
+      isUpdateInstallSessionActive({ ...session, stage: "failed" }),
+    ).toBe(false);
+
+    const handler = vi.fn();
+    await listenUpdateInstallSession(handler);
+    expect(safeListen).toHaveBeenCalledWith(
+      UPDATE_INSTALL_SESSION_EVENT,
+      expect.any(Function),
+    );
+
+    const bridgeHandler = vi.mocked(safeListen).mock.calls.at(-1)?.[1];
+    bridgeHandler?.({ payload: session });
+    expect(handler).toHaveBeenCalledWith(session);
   });
 });

@@ -100,6 +100,43 @@ fn system_prompt_role_for_model(
     }
 }
 
+fn split_openai_reasoning_effort_suffix(model_name: &str) -> (String, Option<String>) {
+    let parts: Vec<&str> = model_name.split('-').collect();
+    let Some(last_part) = parts.last() else {
+        return (model_name.to_string(), None);
+    };
+
+    match *last_part {
+        "low" | "medium" | "high" if parts.len() > 1 => {
+            (parts[..parts.len() - 1].join("-"), Some(last_part.to_string()))
+        }
+        _ => (model_name.to_string(), None),
+    }
+}
+
+fn resolve_openai_reasoning_effort(
+    model_config: &ModelConfig,
+    is_reasoning_model: bool,
+) -> (String, Option<String>) {
+    let explicit_effort = model_config
+        .reasoning_effort
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string);
+
+    if is_reasoning_model {
+        let (model_name, suffix_effort) =
+            split_openai_reasoning_effort_suffix(&model_config.model_name);
+        if explicit_effort.is_some() {
+            return (model_name, explicit_effort);
+        }
+        return (model_name, Some(suffix_effort.unwrap_or_else(|| "medium".to_string())));
+    }
+
+    (model_config.model_name.to_string(), explicit_effort)
+}
+
 fn tool_input_delta_message(
     id: String,
     name: Option<String>,
@@ -974,25 +1011,8 @@ pub fn create_request_with_system_prompt_role_policy(
 
     let is_ox_model = is_openai_reasoning_chat_model(&model_config.model_name);
 
-    // Only extract reasoning effort for O-series models
-    let (model_name, reasoning_effort) = if is_ox_model {
-        let parts: Vec<&str> = model_config.model_name.split('-').collect();
-        let last_part = parts.last().unwrap();
-
-        match *last_part {
-            "low" | "medium" | "high" => {
-                let base_name = parts[..parts.len() - 1].join("-");
-                (base_name, Some(last_part.to_string()))
-            }
-            _ => (
-                model_config.model_name.to_string(),
-                Some("medium".to_string()),
-            ),
-        }
-    } else {
-        // For non-O family models, use the model name as is and no reasoning effort
-        (model_config.model_name.to_string(), None)
-    };
+    let (model_name, reasoning_effort) =
+        resolve_openai_reasoning_effort(model_config, is_ox_model);
 
     let system_message = json!({
         "role": system_prompt_role_for_model(system_prompt_role_policy, &model_config.model_name),
@@ -1791,6 +1811,7 @@ mod tests {
             context_limit: Some(4096),
             temperature: None,
             max_tokens: Some(1024),
+            reasoning_effort: None,
             toolshim: false,
             toolshim_model: None,
             fast_model: None,
@@ -1830,6 +1851,7 @@ mod tests {
             context_limit: Some(4096),
             temperature: None,
             max_tokens: Some(1024),
+            reasoning_effort: None,
             toolshim: false,
             toolshim_model: None,
             fast_model: None,
@@ -1869,6 +1891,7 @@ mod tests {
             context_limit: Some(4096),
             temperature: None,
             max_tokens: Some(1024),
+            reasoning_effort: None,
             toolshim: false,
             toolshim_model: None,
             fast_model: None,
@@ -1895,6 +1918,7 @@ mod tests {
             context_limit: Some(4096),
             temperature: None,
             max_tokens: Some(1024),
+            reasoning_effort: None,
             toolshim: false,
             toolshim_model: None,
             fast_model: None,
@@ -1920,6 +1944,7 @@ mod tests {
             context_limit: Some(4096),
             temperature: None,
             max_tokens: Some(1024),
+            reasoning_effort: None,
             toolshim: false,
             toolshim_model: None,
             fast_model: None,
@@ -1947,6 +1972,7 @@ mod tests {
             context_limit: Some(4096),
             temperature: None,
             max_tokens: Some(1024),
+            reasoning_effort: None,
             toolshim: false,
             toolshim_model: None,
             fast_model: None,
@@ -1977,6 +2003,33 @@ mod tests {
             assert_eq!(obj.get(key).unwrap(), value);
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_request_uses_explicit_reasoning_effort() -> anyhow::Result<()> {
+        let model_config = ModelConfig {
+            model_name: "o3-mini".to_string(),
+            context_limit: Some(4096),
+            temperature: None,
+            max_tokens: Some(1024),
+            reasoning_effort: Some("high".to_string()),
+            toolshim: false,
+            toolshim_model: None,
+            fast_model: None,
+        };
+
+        let request = create_request(
+            &model_config,
+            "system",
+            &[],
+            &[],
+            &ImageFormat::OpenAi,
+            false,
+        )?;
+
+        assert_eq!(request["model"], "o3-mini");
+        assert_eq!(request["reasoning_effort"], "high");
         Ok(())
     }
 

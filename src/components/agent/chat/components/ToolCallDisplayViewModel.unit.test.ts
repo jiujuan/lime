@@ -198,6 +198,19 @@ describe("ToolCallDisplayViewModel", () => {
         origin: "file_path",
       },
     ]);
+    expect(
+      normalizeToolResultImages(undefined, "", {
+        model_visible_image: true,
+        image_url: "data:image/png;base64,dmll",
+        mime_type: "image/png",
+      }),
+    ).toEqual([
+      {
+        src: "data:image/png;base64,dmll",
+        mimeType: "image/png",
+        origin: "tool_payload",
+      },
+    ]);
     expect(normalizeToolResultMetadata({ output_file: "out.md" })).toEqual({
       output_file: "out.md",
     });

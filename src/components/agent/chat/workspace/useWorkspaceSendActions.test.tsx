@@ -826,6 +826,80 @@ describe("useWorkspaceSendActions", () => {
     }
   });
 
+  it("普通视觉 brief 本地确认后，肯定回复应进入 image_skill_launch 而不是普通模型对话", async () => {
+    const brief =
+      "青柠新品发布海报，竖版 4:5，水彩插画风格，清爽绿色调，留出标题区：鲜榨灵感";
+    const harness = mountHook({ providerType: "deepseek" });
+
+    try {
+      await act(async () => {
+        const started = await harness
+          .getValue()
+          .handleSend([], false, false, brief, "react");
+        expect(started).toBe(true);
+      });
+
+      expect(mockSendMessage).not.toHaveBeenCalled();
+      expect(mockResolveImageWorkbenchSkillRequest).not.toHaveBeenCalled();
+
+      mockSendMessage.mockClear();
+      mockSetChatMessages.mockClear();
+      mockResolveImageWorkbenchSkillRequest.mockClear();
+      mockResolveImageWorkbenchSkillRequest.mockReturnValueOnce({
+        images: [],
+        requestContext: {
+          kind: "image_task",
+          image_task: {
+            mode: "generate",
+            prompt: brief,
+            raw_text: `@配图 ${brief}`,
+            count: 1,
+          },
+        },
+      });
+
+      await act(async () => {
+        const started = await harness
+          .getValue()
+          .handleSend([], false, false, "直接生成", "react");
+        expect(started).toBe(true);
+      });
+
+      expect(mockResolveImageWorkbenchSkillRequest).toHaveBeenCalledTimes(1);
+      expect(mockResolveImageWorkbenchSkillRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rawText: `@配图 ${brief}`,
+          parsedCommand: expect.objectContaining({
+            trigger: "@配图",
+            mode: "generate",
+            prompt: expect.stringContaining("青柠新品发布海报"),
+            aspectRatio: "4:5",
+          }),
+          images: [],
+        }),
+      );
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage.mock.calls[0]?.[0]).toBe(`@配图 ${brief}`);
+      expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
+        displayContent: "直接生成",
+        requestMetadata: {
+          harness: {
+            allow_model_skills: true,
+            image_skill_launch: {
+              skill_name: "image_generate",
+              kind: "image_task",
+              image_task: {
+                prompt: brief,
+              },
+            },
+          },
+        },
+      });
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("粘贴官网 Agent Skill 安装 Prompt 时应本地安装并停止发送给模型", async () => {
     const harness = mountHook();
     const prompt = `Download and install a skill. Follow these steps EXACTLY. If any step fails, STOP and report the error.

@@ -220,6 +220,7 @@ npm run test:rust:layers:stats
 - `test:unit` 只证明快速逻辑回归，不等于可交付
 - `test:rust:unit` 也只证明后端快速逻辑回归；Rust 模块交付仍需按风险补受影响 crate、integration、workspace 或全量 `test:rust`
 - 显式后缀不能降低风险层级；`*.unit.test.*` 只在无 React/jsdom、DevBridge/Tauri、文件系统、网络、Playwright 等外部边界时进入 unit
+- 新增或迁移 fast-check 属性测试时，优先用 `src/test/fastCheckRuns.ts` 的 `fastCheckRuns(100)` / `fastCheckRuns(50)` 包装 `numRuns`；本地 / AI TDD 默认降采样，CI 保持原始 runs，确需本地满量时设置 `LIME_FAST_CHECK_RUNS=100`
 - GUI 壳、Workspace、主页面路径、Tauri 命令和 Bridge 改动仍必须按后续 Layer 1-3 跑对应校验
 - 前端复杂 UI 逻辑应优先抽到 View Model / projection / selector 中做单元测试；组件测试只保留必要渲染和事件接线，核心用户流程交给 GUI smoke / E2E
 - 新增或重写前端测试时先做分层判断：筛选 / 分组 / formatter / request builder / 状态机 / reducer / runtime 参数投影等可纯化逻辑必须落到 `*.unit.test.ts`；只有 React 渲染、真实 DOM 事件、hook 生命周期、DevBridge/Tauri、文件系统、网络或端到端流程才进入 component / contract / integration / e2e

@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, vi } from "vitest";
 import { EmptyStateComposerPanel } from "./EmptyStateComposerPanel";
 import {
-  createSkillSelectionProps,
+  buildSkillSelectionProps,
   type SkillSelectionProps,
 } from "../skill-selection/skillSelectionBindings";
 import { agentEnUSResource, agentZhCNResource } from "@/i18n/agentResources";
@@ -174,7 +174,7 @@ afterEach(() => {
 export function createSkillSelection(
   overrides: Partial<SkillSelectionProps> = {},
 ): SkillSelectionProps {
-  return createSkillSelectionProps({
+  return buildSkillSelectionProps({
     skills: [],
     onSelectInputCapability: vi.fn(),
     onClearSkill: vi.fn(),
@@ -281,9 +281,9 @@ export function renderStatefulPanel(
   return container;
 }
 
-export function expandAdvancedControls(container: HTMLDivElement) {
+export function openPlusMenu(container: HTMLDivElement) {
   const toggleButton = container.querySelector(
-    '[data-testid="empty-state-advanced-toggle"]',
+    '[data-testid="inputbar-plus-trigger"]',
   ) as HTMLButtonElement | null;
 
   expect(toggleButton).toBeTruthy();
@@ -294,6 +294,29 @@ export function expandAdvancedControls(container: HTMLDivElement) {
 
   return toggleButton;
 }
+
+export function openPlusMenuPanel(
+  container: HTMLDivElement,
+  panel: "knowledge" | "objective" | "skills",
+) {
+  openPlusMenu(container);
+
+  const row = document.body.querySelector(
+    `[data-testid="inputbar-plus-${panel === "knowledge" ? "knowledge" : panel}"]`,
+  ) as HTMLButtonElement | null;
+
+  expect(row).toBeTruthy();
+
+  act(() => {
+    row?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+
+  return document.body.querySelector(
+    `[data-testid="inputbar-plus-panel-${panel}"]`,
+  );
+}
+
+export const expandAdvancedControls = openPlusMenu;
 
 export function updateTextareaValue(
   textarea: HTMLTextAreaElement | null,

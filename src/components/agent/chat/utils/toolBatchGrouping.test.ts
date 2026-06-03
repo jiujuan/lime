@@ -45,6 +45,33 @@ describe("toolBatchGrouping", () => {
     expect(summary?.supportingLines).toContain("最新线索：guide.md");
   });
 
+  it("未知动态 MCP list/read/search 工具应保持探索折叠而不是退回散列工具", () => {
+    const summary = summarizeStreamingToolBatch([
+      createToolCall("mcp__docs__list_pages", {
+        path: "docs",
+      }),
+      createToolCall("mcp__docs__read_page", {
+        path: "docs/runtime.md",
+      }),
+      createToolCall("mcp__linear__query_issues", {
+        query: "runtime empty final",
+      }),
+    ]);
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        kind: "exploration",
+        title: "已探索项目",
+        countLabel: "读 1 / 搜 1 / 列 1",
+        rawDetailLabel: "展开查看探索明细",
+      }),
+    );
+    expect(summary?.supportingLines).toContain(
+      "查看了 1 个文件，搜索 1 次，列了 1 个目录",
+    );
+    expect(summary?.supportingLines).toContain("最新线索：runtime empty final");
+  });
+
   it("应让 REPL 调用被吸收到探索批次而不打断摘要", () => {
     const summary = summarizeStreamingToolBatch([
       createToolCall("Read", {
@@ -65,6 +92,40 @@ describe("toolBatchGrouping", () => {
         countLabel: "读 1 / 搜 1",
       }),
     );
+  });
+
+  it("技能辅助 alias 应被吸收到探索批次而不打断摘要", () => {
+    const summary = summarizeStreamingToolBatch([
+      createToolCall("Read", {
+        file_path: "src/main.ts",
+      }),
+      createToolCall("ListSkills"),
+      createToolCall("LoadSkill", {
+        name: "browser",
+      }),
+      createToolCall("Grep", {
+        pattern: "tool inventory",
+        path: "src",
+      }),
+    ]);
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        kind: "exploration",
+        title: "已探索项目",
+        countLabel: "读 1 / 搜 1",
+      }),
+    );
+  });
+
+  it("子任务控制 alias 不应被错误折叠成探索或网页搜索批次", () => {
+    const summary = summarizeStreamingToolBatch([
+      createToolCall("WaitAgent", { id: "agent-1" }),
+      createToolCall("ResumeAgent", { id: "agent-1" }),
+      createToolCall("CloseAgent", { id: "agent-1" }),
+    ]);
+
+    expect(summary).toBeNull();
   });
 
   it("应把 WebSearch 工具批次展示为网页搜索轨迹", () => {
@@ -148,6 +209,83 @@ describe("toolBatchGrouping", () => {
     );
   });
 
+  it("应把 provider SearchQuery 别名展示为网页搜索轨迹", () => {
+    const summary = summarizeStreamingToolBatch([
+      {
+        ...createToolCall("SearchQuery", {
+          q: "2026-06-03 international news",
+        }),
+        result: {
+          success: true,
+          output: JSON.stringify({
+            results: [
+              {
+                title: "Reuters World News",
+                url: "https://www.reuters.com/world/",
+              },
+            ],
+          }),
+        },
+      },
+      createToolCall("search_query", {
+        q: "UN global headlines June 2026",
+      }),
+    ]);
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        kind: "web_search",
+        title: "已搜索网页 2 次",
+        countLabel: "2 次",
+        rawDetailLabel: "展开查看搜索来源",
+      }),
+    );
+    expect(summary?.supportingLines).toEqual(
+      expect.arrayContaining([
+        "2026-06-03 international news",
+        "Reuters World News",
+        "UN global headlines June 2026",
+      ]),
+    );
+  });
+
+  it("Context7 文档工具应归入探索摘要而不是网页搜索来源", () => {
+    const summary = summarizeStreamingToolBatch([
+      createToolCall("ResolveLibraryId", {
+        libraryName: "Next.js",
+      }),
+      createToolCall("QueryDocs", {
+        query: "React useEffect cleanup",
+      }),
+    ]);
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        kind: "exploration",
+        title: "已探索项目",
+        countLabel: "读 1 / 搜 1",
+        rawDetailLabel: "展开查看探索明细",
+      }),
+    );
+    expect(summary?.supportingLines.join("\n")).not.toContain("搜索来源");
+  });
+
+  it("结构化数据工具不应被折叠成网页搜索批次", () => {
+    const summary = summarizeStreamingToolBatch([
+      createToolCall("finance", {
+        ticker: "AAPL",
+      }),
+      createToolCall("weather", {
+        location: "Tokyo",
+      }),
+      createToolCall("time", {
+        utc_offset: "+09:00",
+      }),
+    ]);
+
+    expect(summary).toBeNull();
+  });
+
   it("WebSearch 后续 WebFetch 成功或失败都应吸收到网页搜索批次", () => {
     const summary = summarizeStreamingToolBatch([
       {
@@ -225,6 +363,39 @@ describe("toolBatchGrouping", () => {
         kind: "exploration",
         title: "已搜索关键线索",
         countLabel: "搜 2",
+        rawDetailLabel: "展开查看探索明细",
+      }),
+    );
+  });
+
+  it("动态 MCP mutation 不应被探索批次吸收", () => {
+    const summary = summarizeStreamingToolBatch([
+      createToolCall("mcp__github__search_code", {
+        query: "runtime policy",
+      }),
+      createToolCall("mcp__github__create_issue", {
+        title: "修复工具渲染",
+      }),
+    ]);
+
+    expect(summary).toBeNull();
+  });
+
+  it("MCP resource 列表与读取应保留探索批次摘要", () => {
+    const summary = summarizeStreamingToolBatch([
+      createToolCall("ListMcpResourcesTool", {
+        server: "docs",
+      }),
+      createToolCall("ReadMcpResourceTool", {
+        uri: "file:///guide.md",
+      }),
+    ]);
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        kind: "exploration",
+        title: "已查看关键文件",
+        countLabel: "读 1 / 列 1",
         rawDetailLabel: "展开查看探索明细",
       }),
     );

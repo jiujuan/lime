@@ -285,6 +285,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     accessMode: context.accessMode,
     providerTypeRef: context.providerTypeRef,
     modelRef: context.modelRef,
+    reasoningEffortRef: context.reasoningEffortRef,
     getSyncedSessionModelPreference: context.getSyncedSessionModelPreference,
     getSyncedSessionExecutionStrategy:
       context.getSyncedSessionExecutionStrategy,
@@ -609,6 +610,8 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     setProviderType: context.setProviderType,
     model: context.model,
     setModel: context.setModel,
+    reasoningEffort: context.reasoningEffort,
+    setReasoningEffort: context.setReasoningEffort,
     executionStrategy: context.executionStrategy,
     setExecutionStrategy: context.setExecutionStrategy,
     accessMode: context.accessMode,

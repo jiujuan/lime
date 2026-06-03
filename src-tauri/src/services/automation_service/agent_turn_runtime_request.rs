@@ -41,6 +41,7 @@ pub(super) fn build_agent_turn_runtime_request(
             provider_config,
             provider_preference,
             model_preference,
+            reasoning_effort: None,
             thinking_enabled: None,
             approval_policy: Some(access_mode.approval_policy().to_string()),
             sandbox_policy: Some(access_mode.sandbox_policy().to_string()),

@@ -403,7 +403,7 @@ pub async fn aster_agent_theme_context_search(
 
     let session_id = format!("{}-{}", CONTEXT_SEARCH_SESSION_PREFIX, Uuid::new_v4());
     state
-        .configure_provider_from_pool(&db, &provider_type, &model, &session_id)
+        .configure_provider_from_pool(&db, &provider_type, &model, &session_id, None)
         .await?;
 
     let cancel_token = state.create_cancel_token(&session_id).await;

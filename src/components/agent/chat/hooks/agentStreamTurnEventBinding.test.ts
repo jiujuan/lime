@@ -192,10 +192,12 @@ describe("agentStreamTurnEventBinding", () => {
 
     await vi.advanceTimersByTimeAsync(12_100);
 
-    expect(messages[0]?.content).toContain("执行失败：执行已中断");
+    expect(messages[0]?.content).toContain("执行失败");
+    expect(messages[0]?.content).toContain("运行时未返回任何进度事件");
     expect(messages[0]?.runtimeStatus).toMatchObject({
       phase: "failed",
       title: "当前处理失败",
+      detail: expect.stringContaining("执行已中断"),
     });
     expect(clearActiveStreamIfMatch).toHaveBeenCalledWith("event-timeout");
     expect(disposeListener).toHaveBeenCalled();
@@ -391,8 +393,10 @@ describe("agentStreamTurnEventBinding", () => {
 
     await vi.advanceTimersByTimeAsync(120_100);
 
-    expect(messages[0]?.content).toContain("执行失败：执行已中断");
+    expect(messages[0]?.content).toContain("执行失败");
     expect(messages[0]?.content).toContain("长时间没有返回新进度");
+    expect(messages[0]?.runtimeStatus?.detail).toContain("执行已中断");
+    expect(messages[0]?.runtimeStatus?.detail).toContain("长时间没有返回新进度");
     expect(clearActiveStreamIfMatch).toHaveBeenCalledWith("event-dispatched");
     expect(disposeListener).toHaveBeenCalled();
   });
@@ -507,7 +511,9 @@ describe("agentStreamTurnEventBinding", () => {
 
     await vi.advanceTimersByTimeAsync(120_100);
 
-    expect(messages[0]?.content).toContain("执行失败：执行已中断");
+    expect(messages[0]?.content).toContain("执行失败");
+    expect(messages[0]?.content).toContain("长时间没有返回新进度");
+    expect(messages[0]?.runtimeStatus?.detail).toContain("执行已中断");
     expect(clearActiveStreamIfMatch).toHaveBeenCalledWith(
       "event-unknown-heartbeat",
     );
@@ -622,10 +628,12 @@ describe("agentStreamTurnEventBinding", () => {
 
     await vi.advanceTimersByTimeAsync(120_100);
 
-    expect(messages[0]?.content).toContain("执行失败：执行已中断");
+    expect(messages[0]?.content).toContain("执行失败");
+    expect(messages[0]?.content).toContain("长时间没有返回新进度");
     expect(messages[0]?.runtimeStatus).toMatchObject({
       phase: "failed",
       title: "当前处理失败",
+      detail: expect.stringContaining("执行已中断"),
     });
     expect(clearActiveStreamIfMatch).toHaveBeenCalledWith("event-inactivity");
     expect(disposeListener).toHaveBeenCalled();

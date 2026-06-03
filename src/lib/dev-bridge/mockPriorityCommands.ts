@@ -48,6 +48,19 @@ const mockPriorityCommands = new Set<string>([
   "launch_browser_session",
   "launch_browser_profile_runtime_assist_cmd",
   "get_browser_action_audit_logs",
+  "check_for_updates",
+  "download_update",
+  "get_update_check_settings",
+  "set_update_check_settings",
+  "get_update_notification_metrics",
+  "get_update_install_session",
+  "start_update_install_session",
+  "close_update_window",
+  "dismiss_update_notification",
+  "record_update_notification_action",
+  "remind_update_later",
+  "skip_update_version",
+  "test_update_window",
 ]);
 
 /**

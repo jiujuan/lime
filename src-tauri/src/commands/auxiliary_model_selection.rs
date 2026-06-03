@@ -338,7 +338,7 @@ pub async fn prepare_auxiliary_provider_scope(
         preferred_model_id.as_deref(),
     ) {
         match agent_state
-            .configure_provider_from_pool(db, provider_id, model_id, session_id)
+            .configure_provider_from_pool(db, provider_id, model_id, session_id, None)
             .await
         {
             Ok(_) => {
@@ -418,7 +418,7 @@ pub async fn prepare_auxiliary_provider_scope(
 
     for (provider_id, model_id) in fallback_chain {
         match agent_state
-            .configure_provider_from_pool(db, provider_id, model_id, session_id)
+            .configure_provider_from_pool(db, provider_id, model_id, session_id, None)
             .await
         {
             Ok(_) => {

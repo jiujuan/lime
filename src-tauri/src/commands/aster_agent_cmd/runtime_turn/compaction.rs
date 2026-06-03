@@ -126,6 +126,7 @@ mod tests {
                 context_limit: Some(8_000),
                 temperature: None,
                 max_tokens: None,
+                reasoning_effort: None,
                 toolshim: false,
                 toolshim_model: None,
                 fast_model: None,

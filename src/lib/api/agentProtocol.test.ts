@@ -90,6 +90,22 @@ describe("agentProtocol", () => {
     });
   });
 
+  it("应把模型推理强度写入 runtime turn_config", () => {
+    expect(
+      createSubmitTurnRequestFromAgentOp({
+        type: "user_input",
+        text: "继续",
+        sessionId: "session-reasoning",
+        eventName: "aster_stream_reasoning",
+        preferences: {
+          reasoningEffort: "high",
+        },
+      }).turn_config,
+    ).toMatchObject({
+      reasoning_effort: "high",
+    });
+  });
+
   it("应把编排 provider_config 透传到 runtime turn_config", () => {
     expect(
       createSubmitTurnRequestFromAgentOp({

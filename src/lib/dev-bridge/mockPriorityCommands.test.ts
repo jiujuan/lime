@@ -42,6 +42,29 @@ describe("mockPriorityCommands", () => {
     ).toBe(true);
   });
 
+  it("更新提醒命令在浏览器模式不应阻塞默认主页面", () => {
+    const updateCommands = [
+      "check_for_updates",
+      "download_update",
+      "get_update_check_settings",
+      "set_update_check_settings",
+      "get_update_notification_metrics",
+      "get_update_install_session",
+      "start_update_install_session",
+      "close_update_window",
+      "dismiss_update_notification",
+      "record_update_notification_action",
+      "remind_update_later",
+      "skip_update_version",
+      "test_update_window",
+    ];
+
+    for (const command of updateCommands) {
+      expect(shouldPreferMockInBrowser(command)).toBe(true);
+      expect(shouldDisallowMockFallbackInBrowser(command)).toBe(false);
+    }
+  });
+
   it("图层设计工程目录命令在浏览器模式必须走真实桥接", () => {
     expect(
       shouldPreferMockInBrowser("save_layered_design_project_export"),
@@ -85,9 +108,9 @@ describe("mockPriorityCommands", () => {
     expect(
       shouldDisallowMockFallbackInBrowser("agent_app_save_installed_state"),
     ).toBe(true);
-    expect(shouldDisallowMockFallbackInBrowser("agent_app_list_installed")).toBe(
-      true,
-    );
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_app_list_installed"),
+    ).toBe(true);
     expect(
       shouldDisallowMockFallbackInBrowser("agent_app_start_ui_runtime"),
     ).toBe(true);

@@ -75,14 +75,11 @@ export function buildAgentStreamFailedAssistantMessagePatch(params: {
   const processParts = (params.previousContentParts || []).filter(
     (part) => part.type !== "text",
   );
-  const visibleContent = partialContent ? content : "";
 
   return {
     isThinking: false,
-    content: visibleContent,
-    contentParts: visibleContent
-      ? [...processParts, { type: "text", text: visibleContent }]
-      : processParts,
+    content,
+    contentParts: [...processParts, { type: "text", text: content }],
     runtimeStatus: buildFailedAgentRuntimeStatus(params.errorMessage),
     ...(params.usage !== undefined ? { usage: params.usage } : {}),
   };

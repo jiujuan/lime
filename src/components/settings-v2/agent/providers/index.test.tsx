@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act } from "react";
 import {
   clickButton,
   cleanupMountedProviderPages,
@@ -7,7 +8,6 @@ import {
   createApiKeyProviders,
   createCloudOfferAccessState,
   createLoggedInSession,
-  createOffer,
   createPetStatus,
   getBodyText,
   hoverTip,
@@ -25,6 +25,7 @@ const {
   mockSendCompanionPetCommand,
   mockApiKeyProviderGetProviders,
   mockSubscribeProviderDataChanged,
+  mockSubscribeAppConfigChanged,
   mockGetConfig,
   mockSaveConfig,
   mockOpenUrl,
@@ -39,6 +40,7 @@ const {
     mockSendCompanionPetCommand: vi.fn(),
     mockApiKeyProviderGetProviders: vi.fn(),
     mockSubscribeProviderDataChanged: vi.fn(),
+    mockSubscribeAppConfigChanged: vi.fn(),
     mockGetConfig: vi.fn(),
     mockSaveConfig: vi.fn(),
     mockOpenUrl: vi.fn(),
@@ -93,6 +95,8 @@ vi.mock("@/lib/api/apiKeyProvider", () => ({
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: (...args: unknown[]) => mockGetConfig(...args),
   saveConfig: (...args: unknown[]) => mockSaveConfig(...args),
+  subscribeAppConfigChanged: (...args: unknown[]) =>
+    mockSubscribeAppConfigChanged(...args),
 }));
 
 vi.mock("@/lib/providerDataEvents", () => ({
@@ -116,6 +120,29 @@ vi.mock("@/hooks/useOemCloudAccess", () => ({
   formatOemCloudModelsSourceLabel: (value?: string) => value || "未知",
   formatOemCloudOfferStateLabel: (value?: string) => value || "未知",
 }));
+
+function createMockAppConfig(options: { companionEnabled?: boolean } = {}) {
+  return {
+    navigation: {
+      enabled_items: options.companionEnabled ? ["companion"] : [],
+    },
+    workspace_preferences: {
+      companion_defaults: {
+        general: {
+          preferredProviderId: "deepseek",
+          preferredModelId: "deepseek-chat",
+          allowFallback: false,
+        },
+      },
+    },
+  };
+}
+
+function enableCompanionEntry() {
+  mockGetConfig.mockResolvedValue(
+    createMockAppConfig({ companionEnabled: true }),
+  );
+}
 
 beforeEach(() => {
   (
@@ -147,17 +174,8 @@ beforeEach(() => {
   });
   mockApiKeyProviderGetProviders.mockResolvedValue(createApiKeyProviders());
   mockSubscribeProviderDataChanged.mockReturnValue(vi.fn());
-  mockGetConfig.mockResolvedValue({
-    workspace_preferences: {
-      companion_defaults: {
-        general: {
-          preferredProviderId: "deepseek",
-          preferredModelId: "deepseek-chat",
-          allowFallback: false,
-        },
-      },
-    },
-  });
+  mockSubscribeAppConfigChanged.mockReturnValue(vi.fn());
+  mockGetConfig.mockResolvedValue(createMockAppConfig());
   mockSaveConfig.mockResolvedValue(undefined);
 });
 
@@ -168,6 +186,8 @@ afterEach(() => {
 
 describe("CloudProviderSettings", () => {
   it("桌宠页应把 Companion 说明和桥接 hint 收进 tips", async () => {
+    enableCompanionEntry();
+
     await renderPage({ initialView: "companion" });
 
     expect(getBodyText()).not.toContain(
@@ -190,7 +210,7 @@ describe("CloudProviderSettings", () => {
     await leaveTip(bridgeTip);
   });
 
-  it("默认应直接进入本地 Provider 主区，并保持切换器激活态清晰", async () => {
+  it("桌宠入口关闭时应只显示本地 Provider 主区", async () => {
     mockUseOemCloudAccess.mockReturnValue(
       createAccessState({
         runtime: null,
@@ -213,7 +233,7 @@ describe("CloudProviderSettings", () => {
     expect(mockUseTranslation).toHaveBeenCalledWith("settings");
     expect(
       container.querySelector('[data-testid="provider-workspace-switcher"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container.querySelector('[data-testid="api-key-provider-stub"]')
         ?.className,
@@ -221,25 +241,27 @@ describe("CloudProviderSettings", () => {
     expect(
       container.querySelectorAll('[data-testid="provider-workspace-switcher"]')
         .length,
-    ).toBe(1);
+    ).toBe(0);
     expect(text).toContain("API Key Provider 设置占位");
-    expect(container.querySelector('[data-testid="companion-provider-card"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="companion-provider-card"]'),
+    ).toBeNull();
     expect(text).not.toContain("把本地 Provider 配置和 OEM 云端服务拆开管理");
     expect(text).not.toContain("把本地 Provider 配置和品牌云端服务拆开管理");
     expect(text).not.toContain("默认先进入“服务商设置”处理 Provider");
     expect(text).not.toContain("public/oem-runtime-config.js");
-    expect(settingsTab?.getAttribute("data-state")).toBe("active");
+    expect(settingsTab).toBeNull();
     expect(cloudTab).toBeNull();
-    expect(companionTab?.getAttribute("data-state")).toBe("inactive");
+    expect(companionTab).toBeNull();
     expect(container.textContent ?? "").not.toContain("当前版本未配置云端服务");
     expect(container.textContent ?? "").not.toContain(
       "public/oem-runtime-config.js",
     );
-    expect(settingsTab?.getAttribute("data-state")).toBe("active");
-    expect(companionTab?.getAttribute("data-state")).toBe("inactive");
+    expect(settingsTab).toBeNull();
+    expect(companionTab).toBeNull();
   });
 
-  it("非 Lime OEM 运行时也应保留本地 Provider 设置入口", async () => {
+  it("OEM 运行时也应默认隐藏桌宠和云端 tab", async () => {
     const baseState = createAccessState();
     mockUseOemCloudAccess.mockReturnValue(
       createAccessState({
@@ -259,14 +281,17 @@ describe("CloudProviderSettings", () => {
     const cloudTab = container.querySelector(
       '[data-testid="provider-workspace-tab-cloud"]',
     );
+    const companionTab = container.querySelector(
+      '[data-testid="provider-workspace-tab-companion"]',
+    );
 
-    expect(settingsTab).not.toBeNull();
+    expect(settingsTab).toBeNull();
     expect(container.textContent ?? "").toContain("API Key Provider 设置占位");
-    expect(settingsTab?.getAttribute("data-state")).toBe("active");
-    expect(cloudTab?.getAttribute("data-state")).toBe("inactive");
+    expect(cloudTab).toBeNull();
+    expect(companionTab).toBeNull();
   });
 
-  it("未登录时 initialView=cloud 不应自动打开登录页", async () => {
+  it("未登录时 initialView=cloud 不应自动打开登录页或渲染云端 tab", async () => {
     const handleGoogleLogin = vi.fn().mockResolvedValue(undefined);
     const openUserCenter = vi.fn();
     mockUseOemCloudAccess.mockReturnValue(
@@ -286,13 +311,71 @@ describe("CloudProviderSettings", () => {
     expect(text).toContain("API Key Provider 设置占位");
     expect(text).not.toContain("已打开 Lime Hub 登录页");
     expect(text).not.toContain("已在浏览器打开 Lime Hub 用户中心");
-    expect(settingsTab?.getAttribute("data-state")).toBe("active");
-    expect(cloudTab?.getAttribute("data-state")).toBe("inactive");
+    expect(text).not.toContain("云端服务");
+    expect(settingsTab).toBeNull();
+    expect(cloudTab).toBeNull();
     expect(handleGoogleLogin).not.toHaveBeenCalled();
     expect(openUserCenter).not.toHaveBeenCalled();
   });
 
-  it("未登录时应直接打开品牌云端登录入口", async () => {
+  it("开启桌宠系统入口后应显示桌宠管理 tab", async () => {
+    enableCompanionEntry();
+
+    const { container } = await renderPage();
+
+    await vi.waitFor(() => {
+      expect(
+        container.querySelector('[data-testid="provider-workspace-switcher"]'),
+      ).not.toBeNull();
+    });
+
+    const settingsTab = container.querySelector(
+      '[data-testid="provider-workspace-tab-settings"]',
+    );
+    const companionTab = container.querySelector(
+      '[data-testid="provider-workspace-tab-companion"]',
+    );
+
+    expect(settingsTab?.getAttribute("data-state")).toBe("active");
+    expect(companionTab?.getAttribute("data-state")).toBe("inactive");
+    expect(container.textContent ?? "").toContain("桌宠管理");
+  });
+
+  it("配置变更后应按可选系统入口状态刷新桌宠管理 tab", async () => {
+    let configChangedListener: (() => void) | null = null;
+    mockSubscribeAppConfigChanged.mockImplementation((listener: () => void) => {
+      configChangedListener = listener;
+      return vi.fn();
+    });
+    mockGetConfig
+      .mockResolvedValueOnce(createMockAppConfig())
+      .mockResolvedValueOnce(createMockAppConfig({ companionEnabled: true }));
+
+    const { container } = await renderPage();
+
+    expect(
+      container.querySelector('[data-testid="provider-workspace-tab-companion"]'),
+    ).toBeNull();
+
+    await vi.waitFor(() => {
+      expect(configChangedListener).not.toBeNull();
+    });
+
+    await act(async () => {
+      configChangedListener?.();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        container.querySelector(
+          '[data-testid="provider-workspace-tab-companion"]',
+        ),
+      ).not.toBeNull();
+    });
+  });
+
+  it("未登录时不再通过云端 tab 打开品牌云端登录入口", async () => {
     const handleGoogleLogin = vi.fn().mockResolvedValue(undefined);
     mockUseOemCloudAccess.mockReturnValue(
       createAccessState({ handleGoogleLogin }),
@@ -300,19 +383,18 @@ describe("CloudProviderSettings", () => {
 
     const { container } = await renderPage();
 
-    await clickButton(container, "云端服务");
-
     const text = container.textContent ?? "";
-    expect(text).toContain("已打开 Lime Hub 登录页，请在浏览器完成授权。");
     expect(text).toContain("API Key Provider 设置占位");
+    expect(text).not.toContain("云端服务");
+    expect(text).not.toContain("已打开 Lime Hub 登录页，请在浏览器完成授权。");
     expect(text).not.toContain("正在打开 Lime Hub 登录");
     expect(text).not.toContain("重新打开登录页");
     expect(text).not.toContain("去个人中心登录");
     expect(text).not.toContain("云端页面承接什么");
-    expect(handleGoogleLogin).toHaveBeenCalledTimes(1);
+    expect(handleGoogleLogin).not.toHaveBeenCalled();
   });
 
-  it("未登录且登录页打开失败时不再渲染客户端登录页", async () => {
+  it("未登录且登录页打开失败时不再渲染客户端登录页或云端 tab", async () => {
     const handleGoogleLogin = vi
       .fn()
       .mockRejectedValue(new Error("登录页没有被浏览器打开，可能被弹窗拦截。"));
@@ -325,18 +407,18 @@ describe("CloudProviderSettings", () => {
 
     const { container } = await renderPage();
 
-    await clickButton(container, "云端服务");
-
     const text = container.textContent ?? "";
     expect(text).toContain("登录页没有被浏览器打开，可能被弹窗拦截。");
-    expect(text).toContain("打开 Lime Hub 用户中心失败");
     expect(text).toContain("API Key Provider 设置占位");
+    expect(text).not.toContain("云端服务");
+    expect(text).not.toContain("打开 Lime Hub 用户中心失败");
     expect(text).not.toContain("Lime Hub 登录页未打开");
     expect(text).not.toContain("https://user.limeai.run/login?");
     expect(text).not.toContain("复制链接");
+    expect(handleGoogleLogin).not.toHaveBeenCalled();
   });
 
-  it("已登录时点击云端服务应跳出到用户中心，不再渲染客户端商业页", async () => {
+  it("已登录时不再渲染云端 tab 或客户端商业页", async () => {
     const openUserCenter = vi.fn();
 
     mockUseOemCloudAccess.mockReturnValue(
@@ -371,14 +453,16 @@ describe("CloudProviderSettings", () => {
 
     const { container } = await renderPage();
 
-    await clickButton(container, "云端服务", 0);
-
     const text = container.textContent ?? "";
     expect(
       container.querySelector('[data-testid="oem-cloud-user-center-handoff"]'),
     ).toBeNull();
-    expect(text).toContain("已在浏览器打开 Lime Hub 用户中心。");
+    expect(
+      container.querySelector('[data-testid="provider-workspace-tab-cloud"]'),
+    ).toBeNull();
     expect(text).toContain("API Key Provider 设置占位");
+    expect(text).not.toContain("云端服务");
+    expect(text).not.toContain("已在浏览器打开 Lime Hub 用户中心。");
     expect(text).not.toContain("由用户中心托管");
     expect(text).not.toContain("云端管理已迁移到服务端");
     expect(text).not.toContain("套餐与价格");
@@ -393,8 +477,7 @@ describe("CloudProviderSettings", () => {
     expect(text).not.toContain("最小 curl 测试");
     expect(text).not.toContain("GPT-5.2 Pro");
     expect(text).not.toContain("设为默认");
-
-    expect(openUserCenter).toHaveBeenCalledWith("/welcome");
+    expect(openUserCenter).not.toHaveBeenCalled();
   });
 
   it("已登录时不再在客户端渲染购买、账单、积分和 API Key 管理入口", async () => {
@@ -425,26 +508,22 @@ describe("CloudProviderSettings", () => {
           currentPlan: null,
           orders: [],
         },
-        offers: [createOffer()],
         preference: {
           providerSource: "oem_cloud",
           providerKey: "lime-hub-main",
         },
-        defaultCloudOffer: createOffer(),
-        activeCloudOffer: createOffer(),
         openUserCenter,
       }),
     );
 
     const { container } = await renderPage();
 
-    await clickButton(container, "云端服务");
-
     const text = container.textContent ?? "";
     expect(
       container.querySelector('[data-testid="cloud-commerce-web-entry-card"]'),
     ).toBeNull();
     expect(text).toContain("API Key Provider 设置占位");
+    expect(text).not.toContain("云端服务");
     expect(text).not.toContain("打开套餐与价格");
     expect(text).not.toContain("查看用量与账单");
     expect(text).not.toContain("管理积分");
@@ -457,8 +536,7 @@ describe("CloudProviderSettings", () => {
     expect(text).not.toContain("撤销 Key");
     expect(text).not.toContain("支付后台配置");
     expect(text).not.toContain("选择适合你的套餐");
-    expect(openUserCenter).toHaveBeenCalledTimes(1);
-    expect(openUserCenter).toHaveBeenCalledWith("/welcome");
+    expect(openUserCenter).not.toHaveBeenCalled();
     expect(mockOpenUrl).not.toHaveBeenCalled();
   });
 
@@ -487,10 +565,9 @@ describe("CloudProviderSettings", () => {
 
     const { container } = await renderPage();
 
-    await clickButton(container, "云端服务", 0);
-
     const text = container.textContent ?? "";
     expect(text).toContain("API Key Provider 设置占位");
+    expect(text).not.toContain("云端服务");
     expect(text).not.toContain("由用户中心托管");
     expect(text).not.toContain("云端管理已迁移到服务端");
     expect(text).not.toContain("Relay GPT Images 2");
@@ -502,60 +579,6 @@ describe("CloudProviderSettings", () => {
     );
   });
 
-  it("服务端误报待登录时不再渲染客户端 Offer 登录提示", async () => {
-    const staleOffer = createOffer({
-      state: "available_logged_out",
-      loggedIn: true,
-      accountStatus: "logged_in",
-      subscriptionStatus: "active",
-      quotaStatus: "ok",
-      canInvoke: true,
-    });
-
-    mockUseOemCloudAccess.mockReturnValue(
-      createAccessState({
-        session: createLoggedInSession(),
-        offers: [staleOffer],
-        preference: {
-          providerSource: "oem_cloud",
-          providerKey: "lime-hub-main",
-        },
-        selectedOffer: {
-          ...staleOffer,
-          loginHint: "请先登录后再查看模型目录",
-          access: {
-            offerId: "offer-001",
-            accessMode: "session",
-            sessionTokenRef: "session-001",
-            hubTokenEnabled: false,
-          },
-        },
-        selectedModels: [
-          {
-            id: "model-001",
-            offerId: "offer-001",
-            modelId: "gpt-5.2-pro",
-            displayName: "GPT-5.2 Pro",
-            recommended: true,
-          },
-        ],
-        defaultCloudOffer: staleOffer,
-        activeCloudOffer: staleOffer,
-      }),
-    );
-
-    const { container } = await renderPage();
-
-    await clickButton(container, "云端服务", 0);
-
-    const text = container.textContent ?? "";
-    expect(text).toContain("API Key Provider 设置占位");
-    expect(text).not.toContain("由用户中心托管");
-    expect(text).not.toContain("available_logged_out");
-    expect(text).not.toContain("available_ready");
-    expect(text).not.toContain("登录提示：请先登录后再查看模型目录");
-  });
-
   it("单个云端来源时不再渲染本地 Offer 网格", async () => {
     mockUseOemCloudAccess.mockReturnValue(
       createCloudOfferAccessState(),
@@ -563,18 +586,18 @@ describe("CloudProviderSettings", () => {
 
     const { container } = await renderPage();
 
-    await clickButton(container, "云端服务");
-
     const offerGrid = container.querySelector(
       '[data-testid="oem-cloud-offer-grid"]',
     );
 
     expect(offerGrid).toBeNull();
     expect(container.textContent ?? "").toContain("API Key Provider 设置占位");
+    expect(container.textContent ?? "").not.toContain("云端服务");
     expect(container.textContent ?? "").not.toContain("由用户中心托管");
   });
 
   it("桌宠管理页应展示桌宠桥接卡片和脱敏边界说明", async () => {
+    enableCompanionEntry();
     mockGetCompanionPetStatus.mockResolvedValue(
       createPetStatus({
         connected: true,
@@ -591,6 +614,12 @@ describe("CloudProviderSettings", () => {
     expect(
       container.querySelector('[data-testid="companion-provider-card"]'),
     ).toBeNull();
+
+    await vi.waitFor(() => {
+      expect(
+        container.querySelector('[data-testid="provider-workspace-tab-companion"]'),
+      ).not.toBeNull();
+    });
 
     await clickButton(container, "桌宠管理", 0);
 
@@ -629,15 +658,21 @@ describe("CloudProviderSettings", () => {
   });
 
   it("带 initialView=companion 时应默认打开桌宠管理页", async () => {
+    enableCompanionEntry();
+
     const { container } = await renderPage({ initialView: "companion" });
 
-    expect(
-      container.querySelector('[data-testid="companion-provider-card"]'),
-    ).not.toBeNull();
+    await vi.waitFor(() => {
+      expect(
+        container.querySelector('[data-testid="companion-provider-card"]'),
+      ).not.toBeNull();
+    });
     expect(container.textContent ?? "").toContain(companionWorkspaceLabel);
   });
 
   it("点击开启桌宠后应调用 launch 接口并展示启动反馈", async () => {
+    enableCompanionEntry();
+
     mockGetCompanionPetStatus
       .mockResolvedValueOnce(createPetStatus())
       .mockResolvedValueOnce(
@@ -650,6 +685,12 @@ describe("CloudProviderSettings", () => {
 
     const { container } = await renderPage();
 
+    await vi.waitFor(() => {
+      expect(
+        container.querySelector('[data-testid="provider-workspace-tab-companion"]'),
+      ).not.toBeNull();
+    });
+
     await clickButton(container, "桌宠管理", 0);
 
     await clickButton(container, "开启桌宠", 2);
@@ -659,6 +700,8 @@ describe("CloudProviderSettings", () => {
   });
 
   it("未安装桌宠时应展示安装引导并支持一键打开下载页", async () => {
+    enableCompanionEntry();
+
     mockLaunchCompanionPet.mockResolvedValue({
       launched: false,
       resolved_path: null,
@@ -671,6 +714,12 @@ describe("CloudProviderSettings", () => {
       .mockResolvedValueOnce(createPetStatus());
 
     const { container } = await renderPage({ initialView: "companion" });
+
+    await vi.waitFor(() => {
+      expect(
+        container.querySelector('[data-testid="companion-provider-card"]'),
+      ).not.toBeNull();
+    });
 
     await clickButton(container, "开启桌宠", 2);
 
@@ -688,6 +737,8 @@ describe("CloudProviderSettings", () => {
   });
 
   it("桌宠已连接且支持 provider 概览时，应允许手动同步摘要", async () => {
+    enableCompanionEntry();
+
     mockGetCompanionPetStatus.mockResolvedValue(
       createPetStatus({
         connected: true,
@@ -697,6 +748,12 @@ describe("CloudProviderSettings", () => {
     );
 
     const { container } = await renderPage();
+
+    await vi.waitFor(() => {
+      expect(
+        container.querySelector('[data-testid="provider-workspace-tab-companion"]'),
+      ).not.toBeNull();
+    });
 
     await clickButton(container, "桌宠管理", 0);
 
@@ -729,6 +786,8 @@ describe("CloudProviderSettings", () => {
   });
 
   it("桌宠已连接但未声明 provider 概览能力时，应展示诊断并禁用手动同步", async () => {
+    enableCompanionEntry();
+
     mockGetCompanionPetStatus.mockResolvedValue(
       createPetStatus({
         connected: true,
@@ -740,6 +799,12 @@ describe("CloudProviderSettings", () => {
     );
 
     const { container } = await renderPage();
+
+    await vi.waitFor(() => {
+      expect(
+        container.querySelector('[data-testid="provider-workspace-tab-companion"]'),
+      ).not.toBeNull();
+    });
 
     await clickButton(container, "桌宠管理", 0);
 

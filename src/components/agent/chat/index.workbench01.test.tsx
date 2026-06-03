@@ -484,10 +484,9 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
       | undefined;
 
     act(() => {
-      latestInputbarProps?.onToolStatesChange?.((previous) => ({
-        ...previous,
+      latestInputbarProps?.onToolStatesChange?.({
         subagent: true,
-      }));
+      });
     });
     await flushEffects(8);
 

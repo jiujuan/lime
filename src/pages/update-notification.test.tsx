@@ -1,28 +1,31 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { UpdateInstallSession } from "@/lib/api/appUpdate";
 
 const {
   mockCloseUpdateWindow,
   mockDismissUpdateNotification,
-  mockDownloadUpdate,
+  mockGetUpdateInstallSession,
   mockGetCurrentWindow,
+  mockListenUpdateInstallSession,
   mockRecordUpdateNotificationAction,
   mockRemindUpdateLater,
   mockShellOpen,
-  mockSkipUpdateVersion,
+  mockStartUpdateInstallSession,
 } = vi.hoisted(() => ({
   mockCloseUpdateWindow: vi.fn(async () => undefined),
   mockDismissUpdateNotification: vi.fn(async () => undefined),
-  mockDownloadUpdate: vi.fn(async () => undefined),
+  mockGetUpdateInstallSession: vi.fn(),
   mockGetCurrentWindow: vi.fn(() => ({
     close: vi.fn(async () => undefined),
     startDragging: vi.fn(async () => undefined),
   })),
+  mockListenUpdateInstallSession: vi.fn(),
   mockRecordUpdateNotificationAction: vi.fn(async () => undefined),
   mockRemindUpdateLater: vi.fn(async () => undefined),
   mockShellOpen: vi.fn(async () => undefined),
-  mockSkipUpdateVersion: vi.fn(async () => undefined),
+  mockStartUpdateInstallSession: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/window", () => ({
@@ -36,10 +39,23 @@ vi.mock("@tauri-apps/plugin-shell", () => ({
 vi.mock("@/lib/api/appUpdate", () => ({
   closeUpdateWindow: mockCloseUpdateWindow,
   dismissUpdateNotification: mockDismissUpdateNotification,
-  downloadUpdate: mockDownloadUpdate,
+  getUpdateInstallSession: mockGetUpdateInstallSession,
+  isUpdateInstallSessionActive: (
+    session:
+      | { stage: string; isActive: boolean }
+      | null
+      | undefined,
+  ) =>
+    Boolean(
+      session?.isActive &&
+        ["checking", "downloading", "installing", "restarting"].includes(
+          session.stage,
+        ),
+    ),
+  listenUpdateInstallSession: mockListenUpdateInstallSession,
   recordUpdateNotificationAction: mockRecordUpdateNotificationAction,
   remindUpdateLater: mockRemindUpdateLater,
-  skipUpdateVersion: mockSkipUpdateVersion,
+  startUpdateInstallSession: mockStartUpdateInstallSession,
 }));
 
 import { changeLimeLocale } from "@/i18n/createI18n";
@@ -84,6 +100,29 @@ function findButtonByText(container: HTMLElement, text: string) {
   return button as HTMLButtonElement;
 }
 
+function createInstallSession(
+  overrides: Partial<UpdateInstallSession> = {},
+): UpdateInstallSession {
+  return {
+    sessionId: "session-1",
+    stage: "downloading",
+    currentVersion: "1.0.0",
+    latestVersion: "1.2.0",
+    downloadUrl: "https://example.com/release",
+    downloadedBytes: 50,
+    totalBytes: 100,
+    percent: 0.5,
+    message: "downloading",
+    error: null,
+    startedAt: 1,
+    updatedAt: 2,
+    completedAt: null,
+    canCloseWindow: true,
+    isActive: true,
+    ...overrides,
+  };
+}
+
 beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
@@ -93,6 +132,19 @@ beforeEach(async () => {
 
   vi.clearAllMocks();
   await changeLimeLocale("en-US");
+  mockGetUpdateInstallSession.mockResolvedValue(
+    createInstallSession({
+      sessionId: "idle",
+      stage: "idle",
+      latestVersion: null,
+      totalBytes: null,
+      percent: 0,
+      message: "idle",
+      isActive: false,
+    }),
+  );
+  mockListenUpdateInstallSession.mockResolvedValue(vi.fn());
+  mockStartUpdateInstallSession.mockResolvedValue(createInstallSession());
 });
 
 afterEach(async () => {
@@ -121,32 +173,20 @@ describe("UpdateNotificationPage", () => {
     const text = getText(container);
     expect(text).toContain("New version 1.2.0");
     expect(text).toContain("(current 1.0.0)");
-    expect(text).toContain("In 1 day");
-    expect(text).toContain("In 3 days");
-    expect(text).toContain("Next week");
+    expect(text).toContain("Later");
     expect(text).toContain("Update now");
+    expect(text).not.toContain("In 3 days");
+    expect(text).not.toContain("Next week");
+    expect(text).not.toContain("Skip this version");
+    expect(text).not.toContain("View release page in browser");
     expect(text).not.toContain("发现新版本");
     expect(
       container.querySelector('button[aria-label="Close reminder"]'),
     ).toBeInstanceOf(HTMLButtonElement);
-    expect(
-      container.querySelector('button[aria-label="Skip this version"]'),
-    ).toBeInstanceOf(HTMLButtonElement);
-    expect(
-      container.querySelector(
-        'button[aria-label="View release page in browser"]',
-      ),
-    ).toBeInstanceOf(HTMLButtonElement);
   });
 
   it("立即更新过程中的按钮状态应使用 common namespace 文案", async () => {
-    let resolveDownload: (() => void) | undefined;
-    mockDownloadUpdate.mockImplementationOnce(
-      () =>
-        new Promise<undefined>((resolve) => {
-          resolveDownload = () => resolve(undefined);
-        }),
-    );
+    mockStartUpdateInstallSession.mockResolvedValueOnce(createInstallSession());
     const container = await renderUpdateNotification(
       "/update-notification?current=1.0.0&latest=1.2.0",
     );
@@ -162,10 +202,10 @@ describe("UpdateNotificationPage", () => {
     expect(mockRecordUpdateNotificationAction).toHaveBeenCalledWith(
       "update_now",
     );
-    expect(mockDownloadUpdate).toHaveBeenCalledTimes(1);
-    expect(getText(container)).toContain("Downloading");
-
-    resolveDownload?.();
-    await flushEffects();
+    expect(mockStartUpdateInstallSession).toHaveBeenCalledTimes(1);
+    expect(getText(container)).toContain("Downloading 50%");
+    expect(
+      container.querySelector('[role="progressbar"]'),
+    ).toBeInstanceOf(HTMLDivElement);
   });
 });

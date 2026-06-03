@@ -404,8 +404,8 @@ describe("AgentThreadReliabilityPanel", () => {
     expect(container.textContent).toContain(
       "来源：conversationProjectionStore.agentUi",
     );
-    expect(container.textContent).toContain("Task / Agent");
-    expect(container.textContent).toContain("Artifact");
+    expect(container.textContent).toContain("任务 / Agent");
+    expect(container.textContent).toContain("制品");
     expect(container.textContent).toContain("Diagnostics");
 
     const copyButton = container.querySelector(

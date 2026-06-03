@@ -150,7 +150,11 @@ describe("EmptyStateComposerPanel", () => {
       sendButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(onSend).toHaveBeenCalledWith("帮我快速开一个新对话");
+    expect(onSend).toHaveBeenCalledWith("帮我快速开一个新对话", {
+      goalEnabled: false,
+      planEnabled: false,
+      subagentEnabled: false,
+    });
   });
 
   it("发送准备中应禁用首页发送入口并展示忙碌态", () => {

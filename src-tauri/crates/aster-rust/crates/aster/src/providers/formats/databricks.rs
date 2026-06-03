@@ -504,6 +504,42 @@ fn ensure_valid_json_schema(schema: &mut Value) {
     }
 }
 
+fn split_reasoning_effort_suffix(model_name: &str) -> (String, Option<String>) {
+    let parts: Vec<&str> = model_name.split('-').collect();
+    let Some(last_part) = parts.last() else {
+        return (model_name.to_string(), None);
+    };
+
+    match *last_part {
+        "low" | "medium" | "high" if parts.len() > 1 => {
+            (parts[..parts.len() - 1].join("-"), Some(last_part.to_string()))
+        }
+        _ => (model_name.to_string(), None),
+    }
+}
+
+fn resolve_reasoning_effort(
+    model_config: &ModelConfig,
+    is_reasoning_model: bool,
+) -> (String, Option<String>) {
+    let explicit_effort = model_config
+        .reasoning_effort
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string);
+
+    if is_reasoning_model {
+        let (model_name, suffix_effort) = split_reasoning_effort_suffix(&model_config.model_name);
+        if explicit_effort.is_some() {
+            return (model_name, explicit_effort);
+        }
+        return (model_name, Some(suffix_effort.unwrap_or_else(|| "medium".to_string())));
+    }
+
+    (model_config.model_name.to_string(), explicit_effort)
+}
+
 #[allow(clippy::too_many_lines)]
 pub fn create_request(
     model_config: &ModelConfig,
@@ -526,25 +562,8 @@ pub fn create_request(
     let is_claude_sonnet =
         model_name.contains("claude-3-7-sonnet") || model_name.contains("claude-4-sonnet"); // can be aster- or databricks-
 
-    // Only extract reasoning effort for O1/O3 models
-    let (model_name, reasoning_effort) = if is_openai_reasoning_model {
-        let parts: Vec<&str> = model_config.model_name.split('-').collect();
-        let last_part = parts.last().unwrap();
-
-        match *last_part {
-            "low" | "medium" | "high" => {
-                let base_name = parts[..parts.len() - 1].join("-");
-                (base_name, Some(last_part.to_string()))
-            }
-            _ => (
-                model_config.model_name.to_string(),
-                Some("medium".to_string()),
-            ),
-        }
-    } else {
-        // For non-O family models, use the model name as is and no reasoning effort
-        (model_config.model_name.to_string(), None)
-    };
+    let (model_name, reasoning_effort) =
+        resolve_reasoning_effort(model_config, is_openai_reasoning_model);
 
     let system_message = DatabricksMessage {
         role: "system".to_string(),
@@ -1041,6 +1060,7 @@ mod tests {
             context_limit: Some(4096),
             temperature: None,
             max_tokens: Some(1024),
+            reasoning_effort: None,
             toolshim: false,
             toolshim_model: None,
             fast_model: None,
@@ -1072,11 +1092,30 @@ mod tests {
             context_limit: Some(4096),
             temperature: None,
             max_tokens: Some(1024),
+            reasoning_effort: None,
             toolshim: false,
             toolshim_model: None,
             fast_model: None,
         };
         let request = create_request(&model_config, "system", &[], &[], &ImageFormat::OpenAi)?;
+        assert_eq!(request["reasoning_effort"], "high");
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_request_explicit_reasoning_effort() -> anyhow::Result<()> {
+        let model_config = ModelConfig {
+            model_name: "o3-mini".to_string(),
+            context_limit: Some(4096),
+            temperature: None,
+            max_tokens: Some(1024),
+            reasoning_effort: Some("high".to_string()),
+            toolshim: false,
+            toolshim_model: None,
+            fast_model: None,
+        };
+        let request = create_request(&model_config, "system", &[], &[], &ImageFormat::OpenAi)?;
+        assert_eq!(request["model"], "o3-mini");
         assert_eq!(request["reasoning_effort"], "high");
         Ok(())
     }
@@ -1386,6 +1425,7 @@ mod tests {
             context_limit: Some(200000),
             temperature: None,
             max_tokens: Some(8192),
+            reasoning_effort: None,
             toolshim: false,
             toolshim_model: None,
             fast_model: None,
@@ -1437,6 +1477,7 @@ mod tests {
             context_limit: Some(128000),
             temperature: None,
             max_tokens: Some(4096),
+            reasoning_effort: None,
             toolshim: false,
             toolshim_model: None,
             fast_model: None,

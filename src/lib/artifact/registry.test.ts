@@ -8,6 +8,7 @@
 import { describe, test, expect } from "vitest";
 import * as fc from "fast-check";
 import React, { lazy } from "react";
+import { fastCheckRuns } from "../../test/fastCheckRuns";
 import { ArtifactRegistry } from "./registry";
 import type {
   ArtifactType,
@@ -131,7 +132,7 @@ describe("Property 5: 注册表操作正确性", () => {
         // 注册后应返回 true
         expect(registry.has(entry.type)).toBe(true);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -160,7 +161,7 @@ describe("Property 5: 注册表操作正确性", () => {
         expect(retrieved?.canEdit).toBe(entry.canEdit);
         expect(retrieved?.fileExtension).toBe(entry.fileExtension);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -192,7 +193,7 @@ describe("Property 5: 注册表操作正确性", () => {
           expect(registeredTypes.has(entry.type)).toBe(true);
         }
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -238,7 +239,7 @@ describe("Property 5: 注册表操作正确性", () => {
           expect(entriesOfType).toHaveLength(1);
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -276,7 +277,7 @@ describe("Property 5: 注册表操作正确性", () => {
         const allEntries = registry.getAll();
         expect(allEntries).toHaveLength(lastRegistered.size);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -315,7 +316,7 @@ describe("Property 5: 注册表操作正确性", () => {
           }
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -347,7 +348,7 @@ describe("Property 5: 注册表操作正确性", () => {
           expect(retrieved).toBe(entry);
         }
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 });
@@ -366,7 +367,7 @@ describe("注册表辅助方法", () => {
         const registry = new ArtifactRegistry();
         expect(registry.isCanvasType(type)).toBe(true);
       }),
-      { numRuns: 50 },
+      { numRuns: fastCheckRuns(50) },
     );
   });
 
@@ -379,7 +380,7 @@ describe("注册表辅助方法", () => {
         const registry = new ArtifactRegistry();
         expect(registry.isCanvasType(type)).toBe(false);
       }),
-      { numRuns: 50 },
+      { numRuns: fastCheckRuns(50) },
     );
   });
 
@@ -412,7 +413,7 @@ describe("注册表辅助方法", () => {
           expect(registry.getFileExtension(type)).toBe(customExtension);
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -438,7 +439,7 @@ describe("注册表辅助方法", () => {
         expect(typeof ext).toBe("string");
         expect(ext.length).toBeGreaterThan(0);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 });

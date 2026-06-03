@@ -10,7 +10,7 @@
 | `apiKeyMask.test.ts` | API Key 脱敏属性测试 |
 | `connectError.ts` | Connect 错误处理工具函数，Toast 通知 |
 | `scheduleMinimumDelayIdleTask.ts` | 最小延迟 idle 调度 helper |
-| `scheduleMinimumDelayIdleTask.test.ts` | 最小延迟 idle 调度测试 |
+| `scheduleMinimumDelayIdleTask.component.test.ts` | 最小延迟 idle 调度测试 |
 
 ## 主要功能
 

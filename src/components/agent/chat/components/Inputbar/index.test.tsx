@@ -42,17 +42,64 @@ const mockCharacterMention = vi.fn<
     inputCompletionEnabled?: boolean;
   }) => React.ReactNode
 >();
-const mockInputbarCore = vi.fn(
-  (props: {
-    onToolClick?: (tool: string) => void;
-    activeTools?: Record<string, boolean>;
-    onSend?: () => void;
-    leftExtra?: React.ReactNode;
-    topExtra?: React.ReactNode;
-    placeholder?: string;
-    toolMode?: "default" | "attach-only";
-    showMetaTools?: boolean;
-  }) => (
+type MockInputbarPlusPanelId = "knowledge" | "skills";
+
+interface MockInputbarPlusMenuConfig {
+  labels: {
+    open: string;
+    addFiles: string;
+    attachKnowledge: string;
+    planMode: string;
+    subagent: string;
+    objective: string;
+    skills: string;
+  };
+  taskEnabled: boolean;
+  knowledgeOpenRequestKey?: number;
+  subagentEnabled?: boolean;
+  knowledgePanel?: React.ReactNode;
+  skillsPanel?: React.ReactNode;
+  onAddFiles: () => void;
+  onToggleTask: () => void;
+  onToggleObjective: () => void;
+  onToggleSubagent?: () => void;
+}
+
+interface MockInputbarCoreProps {
+  onToolClick?: (tool: string) => void;
+  activeTools?: Record<string, boolean>;
+  onSend?: () => void;
+  leftExtra?: React.ReactNode;
+  trailingMeta?: React.ReactNode;
+  topExtra?: React.ReactNode;
+  placeholder?: string;
+  toolMode?: "default" | "attach-only";
+  showMetaTools?: boolean;
+  plusMenu?: MockInputbarPlusMenuConfig;
+}
+
+const mockInputbarCore = vi.fn((props: MockInputbarCoreProps) => props);
+
+function MockInputbarCoreView(props: MockInputbarCoreProps) {
+  mockInputbarCore(props);
+  const [activePanel, setActivePanel] =
+    React.useState<MockInputbarPlusPanelId | null>(null);
+
+  React.useEffect(() => {
+    if (!props.plusMenu?.knowledgeOpenRequestKey) {
+      return;
+    }
+    setActivePanel("knowledge");
+  }, [props.plusMenu?.knowledgeOpenRequestKey]);
+
+  const activePlusPanel =
+    activePanel === "knowledge"
+      ? props.plusMenu?.knowledgePanel
+      : activePanel === "skills"
+        ? props.plusMenu?.skillsPanel
+        : null;
+
+  return (
     <div data-testid="inputbar-core">
       {props.showMetaTools ? (
         <>
@@ -68,6 +115,73 @@ const mockInputbarCore = vi.fn(
           </span>
         </>
       ) : null}
+      {props.plusMenu ? (
+        <div>
+          <button
+            type="button"
+            aria-label={props.plusMenu.labels.open}
+            title={props.plusMenu.labels.open}
+            data-testid="inputbar-plus-trigger"
+          >
+            +
+          </button>
+          <div data-testid="inputbar-plus-menu">
+            <button
+              type="button"
+              data-testid="inputbar-plus-add-files"
+              onClick={props.plusMenu.onAddFiles}
+            >
+              {props.plusMenu.labels.addFiles}
+            </button>
+            <button
+              type="button"
+              data-testid="inputbar-plus-knowledge"
+              disabled={!props.plusMenu.knowledgePanel}
+              onClick={() => setActivePanel("knowledge")}
+            >
+              {props.plusMenu.labels.attachKnowledge}
+            </button>
+            <button
+              type="button"
+              data-testid="inputbar-plus-plan-mode"
+              onClick={props.plusMenu.onToggleTask}
+            >
+              {props.plusMenu.labels.planMode}
+              {props.plusMenu.taskEnabled ? " on" : " off"}
+            </button>
+            {props.plusMenu.onToggleSubagent ? (
+              <button
+                type="button"
+                data-testid="inputbar-plus-subagent-mode"
+                onClick={props.plusMenu.onToggleSubagent}
+              >
+                {props.plusMenu.labels.subagent}
+                {props.plusMenu.subagentEnabled ? " on" : " off"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              data-testid="inputbar-plus-objective"
+              onClick={props.plusMenu.onToggleObjective}
+            >
+              {props.plusMenu.labels.objective}
+            </button>
+            <button
+              type="button"
+              data-testid="inputbar-plus-skills"
+              disabled={!props.plusMenu.skillsPanel}
+              onClick={() => setActivePanel("skills")}
+            >
+              {props.plusMenu.labels.skills}
+            </button>
+            {activePlusPanel ? (
+              <div data-testid={`inputbar-plus-panel-${activePanel}`}>
+                {activePlusPanel}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       <button
         type="button"
         data-testid="send-btn"
@@ -76,22 +190,16 @@ const mockInputbarCore = vi.fn(
         发送
       </button>
       <div data-testid="left-extra">{props.leftExtra}</div>
+      <div data-testid="trailing-meta">{props.trailingMeta}</div>
       <div data-testid="top-extra">{props.topExtra}</div>
     </div>
-  ),
-);
+  );
+}
 
 vi.mock("./components/InputbarCore", () => ({
-  InputbarCore: (props: {
-    onToolClick?: (tool: string) => void;
-    activeTools?: Record<string, boolean>;
-    onSend?: () => void;
-    leftExtra?: React.ReactNode;
-    topExtra?: React.ReactNode;
-    placeholder?: string;
-    toolMode?: "default" | "attach-only";
-    showMetaTools?: boolean;
-  }) => mockInputbarCore(props),
+  InputbarCore: (props: MockInputbarCoreProps) => (
+    <MockInputbarCoreView {...props} />
+  ),
 }));
 
 vi.mock("../../skill-selection/CharacterMention", () => ({
@@ -567,7 +675,7 @@ function expectInputbarSend(
 
 function expandAdvancedControls(container: HTMLDivElement) {
   const toggleButton = container.querySelector(
-    '[data-testid="inputbar-advanced-toggle"]',
+    '[data-testid="inputbar-plus-trigger"]',
   ) as HTMLButtonElement | null;
 
   expect(toggleButton).toBeTruthy();
@@ -577,6 +685,35 @@ function expandAdvancedControls(container: HTMLDivElement) {
   });
 
   return toggleButton;
+}
+
+function openPlusMenuPanel(
+  container: HTMLDivElement,
+  panel: "knowledge" | "skills",
+) {
+  expandAdvancedControls(container);
+  const trigger = document.body.querySelector(
+    `[data-testid="inputbar-plus-${panel}"]`,
+  ) as HTMLButtonElement | null;
+  expect(trigger).toBeTruthy();
+
+  act(() => {
+    trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+
+  const panelElement = document.body.querySelector(
+    `[data-testid="inputbar-plus-panel-${panel}"]`,
+  );
+  expect(panelElement).toBeTruthy();
+  return panelElement as HTMLElement;
+}
+
+function openKnowledgePanel(container: HTMLDivElement) {
+  return openPlusMenuPanel(container, "knowledge");
+}
+
+function openSkillsPanel(container: HTMLDivElement) {
+  return openPlusMenuPanel(container, "skills");
 }
 
 function updateFieldValue(
@@ -734,7 +871,7 @@ describe("Inputbar", () => {
 
   it("@资料兼容入口应打开资料中枢而不是直接启用资料或创建新的 Agent", async () => {
     const onToggleKnowledgePack = vi.fn();
-    const { container } = renderInputbar({
+    renderInputbar({
       knowledgePackSelection: {
         enabled: false,
         packName: "brand-guide",
@@ -772,12 +909,12 @@ describe("Inputbar", () => {
 
     expect(onToggleKnowledgePack).not.toHaveBeenCalled();
     expect(
-      container.querySelector('[data-testid="inputbar-knowledge-hub"]')
+      document.body.querySelector('[data-testid="inputbar-knowledge-hub"]')
         ?.textContent,
     ).toContain("使用这份资料");
 
     const useKnowledgeButton = Array.from(
-      container.querySelectorAll("button"),
+      document.body.querySelectorAll("button"),
     ).find((button) => button.textContent?.includes("使用这份资料"));
 
     act(() => {
@@ -852,7 +989,7 @@ describe("Inputbar", () => {
       container.querySelector('[data-testid="top-extra"]')?.textContent,
     ).not.toContain("资料");
     expect(
-      container.querySelector('[data-testid="inputbar-knowledge-hub"]')
+      document.body.querySelector('[data-testid="inputbar-knowledge-hub"]')
         ?.textContent,
     ).toContain("使用这份资料");
     expect(onToggleKnowledgePack).not.toHaveBeenCalled();
@@ -935,6 +1072,223 @@ describe("Inputbar", () => {
         displayContent: "整理最近发布计划",
       },
     });
+  });
+
+  it("加号菜单开启 plan 和 goal 后发送应下传 mode metadata", async () => {
+    const onSend = vi.fn();
+    renderInputbar({
+      input: "继续执行当前任务",
+      onSend,
+      activeTheme: "general",
+      sessionId: "thread-inputbar-plan-goal",
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      document
+        .querySelector('[data-testid="inputbar-plus-plan-mode"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      document
+        .querySelector('[data-testid="inputbar-plus-objective"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      document
+        .querySelector('[data-testid="send-btn"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expectInputbarSend(onSend, {
+      sendOptions: {
+        displayContent: "继续执行当前任务",
+        requestMetadata: {
+          harness: {
+            task_mode_enabled: true,
+            goal_mode_enabled: true,
+            preferences: {
+              task: true,
+              task_mode: true,
+              objective: true,
+              goal: true,
+            },
+            collaboration_mode: {
+              mode: "plan",
+              source: "inputbar",
+            },
+            thread_goal: {
+              enabled: true,
+              source: "inputbar",
+              status: "active",
+              set: {
+                threadId: "thread-inputbar-plan-goal",
+                objective: null,
+                status: "active",
+                tokenBudget: null,
+              },
+            },
+            goal: {
+              enabled: true,
+              source: "inputbar",
+              status: "active",
+              set: {
+                threadId: "thread-inputbar-plan-goal",
+                objective: null,
+                status: "active",
+                tokenBudget: null,
+              },
+            },
+          },
+        },
+        toolPreferencesOverride: {
+          task: true,
+          subagent: false,
+        },
+      },
+    });
+  });
+
+  it("Plan 和 Goal 开启后应在左侧显示可单独关闭的状态标签，模型放在右侧", async () => {
+    const { container } = renderInputbar({
+      input: "继续执行当前任务",
+      activeTheme: "general",
+      providerType: "openai",
+      setProviderType: vi.fn(),
+      model: "gpt-4.1",
+      setModel: vi.fn(),
+      accessMode: "full-access",
+      setAccessMode: vi.fn(),
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="inputbar-plus-plan-mode"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      container
+        .querySelector('[data-testid="inputbar-plus-objective"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const leftExtra = container.querySelector('[data-testid="left-extra"]');
+    const trailingMeta = container.querySelector(
+      '[data-testid="trailing-meta"]',
+    );
+    const planChip = leftExtra?.querySelector(
+      '[data-testid="inputbar-task-mode-status"]',
+    ) as HTMLButtonElement | null;
+    const objectiveChip = leftExtra?.querySelector(
+      '[data-testid="inputbar-objective-status"]',
+    ) as HTMLButtonElement | null;
+    const accessSelect = leftExtra?.querySelector(
+      '[data-testid="inputbar-access-mode-select"]',
+    ) as HTMLSelectElement | null;
+
+    expect(accessSelect).toBeTruthy();
+    expect(planChip?.textContent).toContain("计划");
+    expect(objectiveChip?.textContent).toContain("追求目标");
+    expect(
+      getComputedStyle(
+        planChip?.querySelector(
+          '[data-testid="inputbar-task-mode-status-remove-mark"]',
+        ) as HTMLElement,
+      ).opacity,
+    ).toBe("0");
+    expect(
+      getComputedStyle(
+        objectiveChip?.querySelector(
+          '[data-testid="inputbar-objective-status-remove-mark"]',
+        ) as HTMLElement,
+      ).opacity,
+    ).toBe("0");
+    expect(
+      accessSelect!.compareDocumentPosition(planChip!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      accessSelect!.compareDocumentPosition(objectiveChip!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      leftExtra?.querySelector('[data-testid="model-selector"]'),
+    ).toBeNull();
+    expect(
+      trailingMeta?.querySelector('[data-testid="model-selector"]'),
+    ).toBeTruthy();
+
+    await act(async () => {
+      planChip?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-task-mode-status"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="inputbar-objective-status"]'),
+    ).toBeTruthy();
+
+    const nextObjectiveChip = container.querySelector(
+      '[data-testid="inputbar-objective-status"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      nextObjectiveChip?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-objective-status"]'),
+    ).toBeNull();
+  });
+
+  it("工作台输入区也应把模型切换器放在右侧", async () => {
+    const { container } = renderInputbar({
+      variant: "workspace",
+      activeTheme: "general",
+      providerType: "openai",
+      setProviderType: vi.fn(),
+      model: "gpt-5.2",
+      setModel: vi.fn(),
+      accessMode: "full-access",
+      setAccessMode: vi.fn(),
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const leftExtra = container.querySelector('[data-testid="left-extra"]');
+    const trailingMeta = container.querySelector(
+      '[data-testid="trailing-meta"]',
+    );
+
+    expect(
+      leftExtra?.querySelector('[data-testid="inputbar-access-mode-select"]'),
+    ).toBeTruthy();
+    expect(
+      leftExtra?.querySelector('[data-testid="model-selector"]'),
+    ).toBeNull();
+    expect(
+      trailingMeta?.querySelector('[data-testid="model-selector"]'),
+    ).toBeTruthy();
   });
 
   it("选择本地安装技能发送时，应把 local:* key 归一到目录 slash key", async () => {
@@ -1135,25 +1489,16 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain("Model");
-    expect(container.textContent).toContain("Advanced settings");
+    expect(
+      container.querySelector('[data-testid="model-selector"]'),
+    ).toBeTruthy();
+    expect(container.textContent).not.toContain("Advanced settings");
 
-    const modelBadge = Array.from(container.querySelectorAll("[title]")).find(
-      (element) => element.getAttribute("title")?.startsWith("Current model:"),
-    );
-    expect(modelBadge?.getAttribute("title")).toBe(
-      "Current model: OpenAI / gpt-4.1",
-    );
-
-    const advancedToggle = container.querySelector(
-      '[data-testid="inputbar-advanced-toggle"]',
+    const plusTrigger = container.querySelector(
+      '[data-testid="inputbar-plus-trigger"]',
     ) as HTMLButtonElement | null;
-    expect(advancedToggle?.getAttribute("aria-label")).toBe(
-      "Expand advanced settings",
-    );
-    expect(advancedToggle?.getAttribute("title")).toBe(
-      "Expand advanced settings",
-    );
+    expect(plusTrigger?.getAttribute("aria-label")).toBe("Open input settings");
+    expect(plusTrigger?.getAttribute("title")).toBe("Open input settings");
 
     const fileManagerToggle = container.querySelector(
       '[data-testid="inputbar-file-manager-toggle"]',
@@ -1163,12 +1508,7 @@ describe("Inputbar", () => {
     );
 
     expandAdvancedControls(container);
-
-    expect(
-      container
-        .querySelector('[data-testid="inputbar-advanced-toggle"]')
-        ?.getAttribute("aria-label"),
-    ).toBe("Collapse advanced settings");
+    expect(document.body.textContent).toContain("Plan mode");
   });
 
   it("带着初始已安装技能进入时，应恢复 capability badge 并继续按 route 发送", async () => {
@@ -2496,7 +2836,7 @@ describe("Inputbar", () => {
     ).toBeNull();
   });
 
-  it("工作区输入区默认隐藏技能入口，展开高级设置后与 @ 面板共用同一技能数据源", async () => {
+  it("工作区输入区默认隐藏技能选择器，通过加号菜单打开独立技能浮层", async () => {
     const { container } = renderInputbar({
       activeTheme: "general",
       skills: [
@@ -2519,20 +2859,20 @@ describe("Inputbar", () => {
       container.querySelector('[data-testid="skill-selector-trigger"]'),
     ).toBeNull();
     expect(
-      container.querySelector('[data-testid="inputbar-advanced-toggle"]'),
+      container.querySelector('[data-testid="inputbar-plus-trigger"]'),
     ).toBeTruthy();
     expect(
       container.querySelector('[data-testid="character-mention-stub"]'),
     ).toBeTruthy();
 
-    expandAdvancedControls(container);
+    openSkillsPanel(container);
 
     expect(
-      container.querySelector('[data-testid="skill-selector-trigger"]'),
+      document.body.querySelector('[data-testid="skill-selector-inline"]'),
     ).toBeTruthy();
   });
 
-  it("存在 executionRuntime 时折叠态应保留当前模型提示，展开后再显示模型选择器", async () => {
+  it("存在 executionRuntime 时底栏也应直接显示模型切换器", async () => {
     const { container } = renderInputbar({
       providerType: "openai",
       setProviderType: vi.fn(),
@@ -2557,15 +2897,7 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain("模型");
-    expect(container.textContent).toContain("gpt-5.4-mini");
     expect(container.textContent).not.toContain("最近执行模型");
-    expect(
-      container.querySelector('[data-testid="model-selector"]'),
-    ).toBeNull();
-
-    expandAdvancedControls(container);
-
     expect(
       container.querySelector('[data-testid="model-selector"]'),
     ).toBeTruthy();
@@ -2587,9 +2919,9 @@ describe("Inputbar", () => {
     expect(
       container.querySelector('[data-testid="inputbar-plan-toggle"]'),
     ).toBeNull();
-    expect(container.querySelector('select[aria-label="权限模式"]')).toBeNull();
-
-    expandAdvancedControls(container);
+    expect(
+      container.querySelector('select[aria-label="权限模式"]'),
+    ).toBeTruthy();
 
     const planToggle = container.querySelector(
       '[data-testid="inputbar-plan-toggle"]',
@@ -2621,8 +2953,6 @@ describe("Inputbar", () => {
     await act(async () => {
       await Promise.resolve();
     });
-
-    expandAdvancedControls(container);
 
     const planToggle = container.querySelector(
       '[data-testid="inputbar-plan-toggle"]',
@@ -2663,8 +2993,6 @@ describe("Inputbar", () => {
       container.querySelector('[data-testid="toggle-web-search"]'),
     ).toBeNull();
 
-    expandAdvancedControls(container);
-
     const toggleButton = container.querySelector(
       '[data-testid="toggle-web-search"]',
     ) as HTMLButtonElement | null;
@@ -2685,8 +3013,6 @@ describe("Inputbar", () => {
     await act(async () => {
       await Promise.resolve();
     });
-
-    expandAdvancedControls(container);
 
     const toggleButton = container.querySelector(
       '[data-testid="toggle-web-search"]',
@@ -2899,24 +3225,14 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    const knowledgeButton = container.querySelector(
-      '[data-testid="inputbar-knowledge-pack-toggle"]',
-    ) as HTMLButtonElement | null;
-    expect(knowledgeButton?.textContent).toContain("资料：内容运营资料 +1");
-
-    act(() => {
-      knowledgeButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-    });
-
-    const hub = container.querySelector(
+    const knowledgePanel = openKnowledgePanel(container);
+    const hub = knowledgePanel.querySelector(
       '[data-testid="inputbar-knowledge-hub"]',
     );
     expect(hub?.textContent).toContain("已自动搭配人设资料：创始人人设资料");
     expect(hub?.textContent).toContain("协同资料（可多选）");
 
-    const campaignOption = container.querySelector(
+    const campaignOption = knowledgePanel.querySelector(
       '[data-testid="inputbar-knowledge-companion-option-campaign-plan"]',
     ) as HTMLButtonElement | null;
     expect(campaignOption).toBeTruthy();
@@ -3000,12 +3316,9 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    const toggle = container.querySelector(
-      '[data-testid="inputbar-knowledge-pack-toggle"]',
-    ) as HTMLButtonElement | null;
-    expect(toggle).toBeTruthy();
-    expect(toggle?.textContent).toContain("资料可用");
-    expect(toggle?.getAttribute("title")).toContain("已有可用项目资料");
+    const knowledgePanel = openKnowledgePanel(container);
+    expect(knowledgePanel.textContent).toContain("品牌产品资料");
+    expect(knowledgePanel.textContent).toContain("已确认，可直接用于本轮生成");
     expect(container.textContent).not.toContain("知识包");
   });
 
@@ -3056,20 +3369,9 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    const toggle = container.querySelector(
-      '[data-testid="inputbar-knowledge-pack-toggle"]',
-    ) as HTMLButtonElement | null;
-    expect(toggle?.textContent).toContain("Knowledge: Brand knowledge +1");
-    expect(toggle?.getAttribute("aria-label")).toBe("Open project knowledge");
-    expect(toggle?.getAttribute("title")).toContain(
-      "Using project knowledge: Brand knowledge",
-    );
+    const knowledgePanel = openKnowledgePanel(container);
 
-    act(() => {
-      toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    const hub = container.querySelector(
+    const hub = knowledgePanel.querySelector(
       '[data-testid="inputbar-knowledge-hub"]',
     );
     expect(hub?.textContent).toContain("Using: Brand knowledge");
@@ -3082,16 +3384,15 @@ describe("Inputbar", () => {
     expect(hub?.textContent).toContain("Companion knowledge (multi-select)");
     expect(hub?.textContent).toContain("Available");
     expect(
-      container
+      knowledgePanel
         .querySelector('[data-testid="inputbar-knowledge-hub-dismiss"]')
         ?.getAttribute("aria-label"),
-    ).toBe("Close knowledge panel");
-    expect(hub?.textContent).toContain("Close knowledge");
+    ).toBeUndefined();
     expect(hub?.textContent).toContain("Add to knowledge");
     expect(hub?.textContent).toContain("Check knowledge");
   });
 
-  it("资料中枢应提供只收起浮层的关闭按钮", async () => {
+  it("资料中枢应在加号菜单中作为独立二级浮层展示", async () => {
     const onToggleKnowledgePack = vi.fn();
     const { container } = renderInputbar({
       knowledgePackSelection: {
@@ -3108,26 +3409,15 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    const toggle = container.querySelector(
-      '[data-testid="inputbar-knowledge-pack-toggle"]',
-    ) as HTMLButtonElement | null;
-
-    act(() => {
-      toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    const dismissButton = container.querySelector(
-      '[data-testid="inputbar-knowledge-hub-dismiss"]',
-    ) as HTMLButtonElement | null;
-    expect(dismissButton).toBeTruthy();
-    expect(dismissButton?.getAttribute("aria-label")).toBe("关闭资料浮层");
-
-    act(() => {
-      dismissButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
+    const knowledgePanel = openKnowledgePanel(container);
+    expect(knowledgePanel).toBeTruthy();
     expect(
-      container.querySelector('[data-testid="inputbar-knowledge-hub"]'),
+      knowledgePanel.querySelector('[data-testid="inputbar-knowledge-hub"]'),
+    ).toBeTruthy();
+    expect(
+      knowledgePanel.querySelector(
+        '[data-testid="inputbar-knowledge-hub-dismiss"]',
+      ),
     ).toBeNull();
     expect(onToggleKnowledgePack).not.toHaveBeenCalled();
   });
@@ -3148,21 +3438,13 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    const toggle = container.querySelector(
-      '[data-testid="inputbar-knowledge-pack-toggle"]',
-    ) as HTMLButtonElement | null;
-    expect(toggle?.textContent).toContain("资料待确认");
-    expect(toggle?.textContent).not.toContain("正在使用");
-
-    act(() => {
-      toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    const hub = container.querySelector(
+    const knowledgePanel = openKnowledgePanel(container);
+    const hub = knowledgePanel.querySelector(
       '[data-testid="inputbar-knowledge-hub"]',
     );
     expect(hub?.textContent).toContain("资料待确认");
     expect(hub?.textContent).toContain("去确认资料");
+    expect(hub?.textContent).not.toContain("正在使用");
     expect(hub?.textContent).not.toContain("管理资料");
     expect(hub?.textContent).not.toContain("关闭资料");
   });
@@ -3177,24 +3459,15 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    const organizeButton = container.querySelector(
-      '[data-testid="inputbar-knowledge-organize"]',
-    ) as HTMLButtonElement | null;
-    expect(organizeButton).toBeTruthy();
-    expect(organizeButton?.textContent).toContain("添加资料");
-
-    act(() => {
-      organizeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    const organizeCard = container.querySelector(
+    const knowledgePanel = openKnowledgePanel(container);
+    const organizeCard = knowledgePanel.querySelector(
       '[data-testid="inputbar-knowledge-hub"]',
     );
     expect(organizeCard?.textContent).toContain("添加项目资料");
     expect(organizeCard?.textContent).toContain("开始添加资料");
 
     const organizeAction = Array.from(
-      container.querySelectorAll("button"),
+      knowledgePanel.querySelectorAll("button"),
     ).find((button) => button.textContent?.includes("开始添加资料"));
     act(() => {
       organizeAction?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -3220,15 +3493,8 @@ describe("Inputbar", () => {
       ),
     ).toBeNull();
 
-    const organizeButton = container.querySelector(
-      '[data-testid="inputbar-knowledge-organize"]',
-    ) as HTMLButtonElement | null;
-
-    act(() => {
-      organizeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    const hub = container.querySelector(
+    const knowledgePanel = openKnowledgePanel(container);
+    const hub = knowledgePanel.querySelector(
       '[data-testid="inputbar-knowledge-hub"]',
     );
     expect(hub?.textContent).toContain("开始添加资料");
@@ -3270,18 +3536,8 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    const knowledgeButton = container.querySelector(
-      '[data-testid="inputbar-knowledge-pack-toggle"]',
-    ) as HTMLButtonElement | null;
-    expect(knowledgeButton).toBeTruthy();
-
-    act(() => {
-      knowledgeButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-    });
-
-    const secondPackOption = container.querySelector(
+    const knowledgePanel = openKnowledgePanel(container);
+    const secondPackOption = knowledgePanel.querySelector(
       '[data-testid="inputbar-knowledge-pack-option-org-knowhow-demo"]',
     ) as HTMLButtonElement | null;
     expect(secondPackOption).toBeTruthy();
@@ -3348,18 +3604,11 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    const knowledgeButton = container.querySelector(
-      '[data-testid="inputbar-knowledge-pack-toggle"]',
-    ) as HTMLButtonElement | null;
-    act(() => {
-      knowledgeButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-    });
+    const knowledgePanel = openKnowledgePanel(container);
 
-    const addButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("添加新资料"),
-    );
+    const addButton = Array.from(
+      knowledgePanel.querySelectorAll("button"),
+    ).find((button) => button.textContent?.includes("添加新资料"));
     expect(addButton).toBeTruthy();
 
     act(() => {
@@ -3400,17 +3649,8 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    const knowledgeButton = container.querySelector(
-      '[data-testid="inputbar-knowledge-pack-toggle"]',
-    ) as HTMLButtonElement | null;
-
-    act(() => {
-      knowledgeButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-    });
-
-    const hub = container.querySelector(
+    const knowledgePanel = openKnowledgePanel(container);
+    const hub = knowledgePanel.querySelector(
       '[data-testid="inputbar-knowledge-hub"]',
     );
     expect(hub?.textContent).toContain("品牌产品资料");
@@ -3421,14 +3661,14 @@ describe("Inputbar", () => {
     expect(hub?.textContent).toContain("检查资料");
     expect(hub?.textContent).not.toContain("看起来你还没有提供原始素材");
     expect(
-      container.querySelector(
+      knowledgePanel.querySelector(
         '[data-testid="inputbar-knowledge-pack-option-no-source-draft"]',
       ),
     ).toBeNull();
 
-    const manageButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("检查资料"),
-    );
+    const manageButton = Array.from(
+      knowledgePanel.querySelectorAll("button"),
+    ).find((button) => button.textContent?.includes("检查资料"));
 
     act(() => {
       manageButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -3462,12 +3702,6 @@ describe("Inputbar", () => {
 
     expect(
       enabledContainer.querySelector('[data-testid="team-selector-stub"]'),
-    ).toBeNull();
-
-    expandAdvancedControls(enabledContainer);
-
-    expect(
-      enabledContainer.querySelector('[data-testid="team-selector-stub"]'),
     ).toBeTruthy();
   });
 
@@ -3493,7 +3727,7 @@ describe("Inputbar", () => {
     expandAdvancedControls(container);
 
     const enableButton = container.querySelector(
-      '[data-testid="toggle-subagent-mode"]',
+      '[data-testid="inputbar-plus-subagent-mode"]',
     ) as HTMLButtonElement | null;
 
     expect(enableButton).toBeTruthy();
@@ -3520,7 +3754,7 @@ describe("Inputbar", () => {
     expandAdvancedControls(container);
 
     const enableButton = container.querySelector(
-      '[data-testid="toggle-subagent-mode"]',
+      '[data-testid="inputbar-plus-subagent-mode"]',
     ) as HTMLButtonElement | null;
 
     expect(enableButton).toBeTruthy();

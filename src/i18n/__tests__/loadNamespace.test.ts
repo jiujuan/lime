@@ -173,9 +173,19 @@ describe("i18n namespace loader", () => {
         "agentChat.inputbar.composer.currentModel.title",
         "agentChat.inputbar.composer.fileManager.open",
         "agentChat.inputbar.composer.fileManager.close",
+        "agentChat.inputbar.plusMenu.open",
+        "agentChat.inputbar.plusMenu.addFiles",
+        "agentChat.inputbar.plusMenu.attachKnowledge",
+        "agentChat.inputbar.plusMenu.planMode",
+        "agentChat.inputbar.plusMenu.objective",
+        "agentChat.inputbar.plusMenu.skills",
+        "agentChat.inputbar.plusMenu.unavailable",
         "agentChat.inputbar.composer.workspacePlaceholder.waiting",
         "agentChat.inputbar.composer.workspacePlaceholder.taskCenter",
         "agentChat.inputbar.composer.workspacePlaceholder.default",
+        "agentChat.inputbar.tools.task.label",
+        "agentChat.inputbar.tools.task.title.enabled",
+        "agentChat.inputbar.tools.task.toast.disabled",
         "agentChat.inputbar.tools.subagent.label",
         "agentChat.inputbar.tools.subagent.title.enabled",
         "agentChat.inputbar.tools.subagent.toast.disabled",
@@ -549,9 +559,7 @@ describe("i18n namespace loader", () => {
       expect(resources[locale].agent).toHaveProperty(
         "skills.workspace.curatedTask.suggestion.action.start",
       );
-      expect(resources[locale].agent).toHaveProperty(
-        "memoryLibrary.title",
-      );
+      expect(resources[locale].agent).toHaveProperty("memoryLibrary.title");
       expect(resources[locale].agent).toHaveProperty(
         "memoryLibrary.points.title",
       );
@@ -626,6 +634,18 @@ describe("i18n namespace loader", () => {
       );
       expect(resources[locale].agent).toHaveProperty(
         "agentChat.imageWorkbenchPreview.placeholder.failed",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.contentWorkbenchTools.groupTitle",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.contentWorkbenchTools.label.audioGeneration",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.contentWorkbenchTools.failure.videoGeneration",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.contentWorkbenchTools.group.multiple.completed",
       );
       expect(resources[locale].agent).toHaveProperty(
         "agentChat.searchResultPreview.expandMore",

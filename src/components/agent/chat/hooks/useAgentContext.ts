@@ -8,6 +8,7 @@ import {
 import { toast } from "sonner";
 import { updateProject } from "@/lib/api/project";
 import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 import { notifyProjectRuntimeAgentsGuide } from "@/components/workspace/services/runtimeAgentsGuideService";
 import type {
   SendMessageFn,
@@ -91,6 +92,9 @@ export function useAgentContext(options: UseAgentContextOptions) {
   const [model, setModelState] = useState(
     () => initialPreferencesRef.current.model,
   );
+  const [reasoningEffort, setReasoningEffortState] = useState<
+    ModelReasoningEffortLevel | ""
+  >("");
   const [executionStrategy, setExecutionStrategyState] =
     useState<AsterExecutionStrategy>(() =>
       resolvePersistedExecutionStrategy(workspaceId),
@@ -108,6 +112,7 @@ export function useAgentContext(options: UseAgentContextOptions) {
 
   const providerTypeRef = useRef(providerType);
   const modelRef = useRef(model);
+  const reasoningEffortRef = useRef<string>(reasoningEffort);
   const scopedProviderPrefKeyRef = useRef<string>(
     getAgentPreferenceKeys(workspaceId).providerKey,
   );
@@ -132,6 +137,7 @@ export function useAgentContext(options: UseAgentContextOptions) {
 
   providerTypeRef.current = providerType;
   modelRef.current = model;
+  reasoningEffortRef.current = reasoningEffort;
 
   const persistSessionModelPreference = useCallback(
     (
@@ -359,8 +365,10 @@ export function useAgentContext(options: UseAgentContextOptions) {
     ) => {
       providerTypeRef.current = preference.providerType;
       modelRef.current = preference.model;
+      reasoningEffortRef.current = "";
       setProviderTypeState(preference.providerType);
       setModelState(preference.model);
+      setReasoningEffortState("");
       savePersisted(scopedProviderPrefKeyRef.current, preference.providerType);
       savePersisted(scopedModelPrefKeyRef.current, preference.model);
       persistSessionModelPreference(
@@ -389,8 +397,10 @@ export function useAgentContext(options: UseAgentContextOptions) {
     (preference: SessionModelPreference) => {
       providerTypeRef.current = preference.providerType;
       modelRef.current = preference.model;
+      reasoningEffortRef.current = "";
       setProviderTypeState(preference.providerType);
       setModelState(preference.model);
+      setReasoningEffortState("");
       savePersisted(scopedProviderPrefKeyRef.current, preference.providerType);
       savePersisted(scopedModelPrefKeyRef.current, preference.model);
     },
@@ -400,7 +410,9 @@ export function useAgentContext(options: UseAgentContextOptions) {
   const setProviderType = useCallback(
     (nextProviderType: string) => {
       providerTypeRef.current = nextProviderType;
+      reasoningEffortRef.current = "";
       setProviderTypeState(nextProviderType);
+      setReasoningEffortState("");
       savePersisted(scopedProviderPrefKeyRef.current, nextProviderType);
 
       const currentSessionId = sessionIdRef.current;
@@ -418,7 +430,9 @@ export function useAgentContext(options: UseAgentContextOptions) {
   const setModel = useCallback(
     (nextModel: string) => {
       modelRef.current = nextModel;
+      reasoningEffortRef.current = "";
       setModelState(nextModel);
+      setReasoningEffortState("");
       savePersisted(scopedModelPrefKeyRef.current, nextModel);
 
       const currentSessionId = sessionIdRef.current;
@@ -431,6 +445,14 @@ export function useAgentContext(options: UseAgentContextOptions) {
       }
     },
     [scheduleSessionProviderSelectionSync, sessionIdRef],
+  );
+
+  const setReasoningEffort = useCallback(
+    (nextReasoningEffort: ModelReasoningEffortLevel | "") => {
+      reasoningEffortRef.current = nextReasoningEffort;
+      setReasoningEffortState(nextReasoningEffort);
+    },
+    [],
   );
 
   const scheduleSessionExecutionStrategySync = useCallback(
@@ -553,8 +575,10 @@ export function useAgentContext(options: UseAgentContextOptions) {
     const scopedPreferences = resolveWorkspaceAgentPreferences(workspaceId);
     providerTypeRef.current = scopedPreferences.providerType;
     modelRef.current = scopedPreferences.model;
+    reasoningEffortRef.current = "";
     setProviderTypeState(scopedPreferences.providerType);
     setModelState(scopedPreferences.model);
+    setReasoningEffortState("");
 
     savePersisted(providerKey, scopedPreferences.providerType);
     savePersisted(modelKey, scopedPreferences.model);
@@ -651,6 +675,9 @@ export function useAgentContext(options: UseAgentContextOptions) {
     model,
     setModel,
     modelRef,
+    reasoningEffort,
+    setReasoningEffort,
+    reasoningEffortRef,
     executionStrategy: effectiveExecutionStrategy,
     setExecutionStrategy,
     setExecutionStrategyState,

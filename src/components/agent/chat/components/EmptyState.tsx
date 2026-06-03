@@ -75,6 +75,10 @@ import {
 } from "../home/HomeStartSurface";
 import { buildHomeSurfaceCopy } from "../home/homeSurfaceCopy";
 import { buildInputbarCoreCopy } from "./Inputbar/components/inputbarCoreCopy";
+import {
+  buildInputbarModeRequestMetadata,
+  buildInputbarToolPreferencesOverride,
+} from "./Inputbar/utils/inputbarModeRequestMetadata";
 import type {
   HomeGuideCard,
   HomeSkillSurfaceItem,
@@ -92,6 +96,7 @@ import { useEmptyStateAttachments } from "./useEmptyStateAttachments";
 import { useEmptyStateRecommendationPreferences } from "./useEmptyStateRecommendationPreferences";
 import { useHomeSkillSurface } from "./useHomeSkillSurface";
 import { useCuratedTaskLauncherState } from "./useCuratedTaskLauncherState";
+import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 
 type AgentI18nKey = keyof AgentI18nResource;
 
@@ -115,9 +120,15 @@ interface EmptyStateProps extends SkillSelectionSourceProps {
   setProviderType: (type: string) => void;
   model: string;
   setModel: (model: string) => void;
+  reasoningEffort?: ModelReasoningEffortLevel | "";
+  setReasoningEffort?: (value: ModelReasoningEffortLevel | "") => void;
   accessMode?: AgentAccessMode;
   setAccessMode?: (mode: AgentAccessMode) => void;
   onManageProviders?: () => void;
+  taskEnabled?: boolean;
+  onTaskEnabledChange?: (enabled: boolean) => void;
+  objectiveEnabled?: boolean;
+  onObjectiveEnabledChange?: (enabled: boolean) => void;
   subagentEnabled?: boolean;
   onSubagentEnabledChange?: (enabled: boolean) => void;
   selectedTeam?: TeamDefinition | null;
@@ -203,9 +214,15 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   setProviderType,
   model,
   setModel,
+  reasoningEffort,
+  setReasoningEffort,
   accessMode,
   setAccessMode,
   onManageProviders,
+  taskEnabled = false,
+  onTaskEnabledChange,
+  objectiveEnabled: objectiveEnabledProp,
+  onObjectiveEnabledChange: onObjectiveEnabledChangeProp,
   subagentEnabled = false,
   onSubagentEnabledChange,
   selectedTeam = null,
@@ -280,6 +297,18 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     useState<InputCapabilitySelection | null>(null);
   const [knowledgeHubOpenRequestKey, setKnowledgeHubOpenRequestKey] =
     useState(0);
+  const [localObjectiveEnabled, setLocalObjectiveEnabled] = useState(false);
+  const objectiveEnabled = objectiveEnabledProp ?? localObjectiveEnabled;
+  const handleObjectiveEnabledChange = useCallback(
+    (enabled: boolean) => {
+      if (onObjectiveEnabledChangeProp) {
+        onObjectiveEnabledChangeProp(enabled);
+        return;
+      }
+      setLocalObjectiveEnabled(enabled);
+    },
+    [onObjectiveEnabledChangeProp],
+  );
   const activeCuratedTaskCapability =
     activeCapability?.kind === "curated_task" ? activeCapability : null;
   const activeCuratedTask = activeCuratedTaskCapability?.task ?? null;
@@ -538,7 +567,14 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       : normalized;
   }, [recommendationSelectedText]);
 
-  const handleSend = (inputOverride = input) => {
+  const handleSend = (
+    inputOverride = input,
+    modeState?: {
+      goalEnabled?: boolean;
+      planEnabled?: boolean;
+      subagentEnabled?: boolean;
+    },
+  ) => {
     const hasPathReferences = pathReferences.length > 0;
     if (
       isComposerBusy ||
@@ -557,7 +593,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       capabilityDispatch.requestMetadata,
       pathReferences,
     );
-    const requestMetadata =
+    const knowledgeRequestMetadata =
       knowledgePackSelection?.enabled &&
       knowledgePackSelection.packName.trim() &&
       knowledgePackSelection.workingDir.trim()
@@ -571,6 +607,19 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
             }),
           }
         : baseRequestMetadata;
+    const inputbarModeState = {
+      goalEnabled: modeState?.goalEnabled ?? objectiveEnabled,
+      planEnabled: modeState?.planEnabled ?? taskEnabled,
+      source: "empty_state",
+      subagentEnabled: modeState?.subagentEnabled ?? subagentEnabled,
+      threadId: sessionId,
+    };
+    const requestMetadata = buildInputbarModeRequestMetadata(
+      knowledgeRequestMetadata,
+      inputbarModeState,
+    );
+    const toolPreferencesOverride =
+      buildInputbarToolPreferencesOverride(inputbarModeState);
     const effectiveInput = inputOverride.trim()
       ? inputOverride
       : hasPathReferences
@@ -588,6 +637,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
               ? { displayContent: capabilityDispatch.displayContent }
               : {}),
             ...(requestMetadata ? { requestMetadata } : {}),
+            ...(toolPreferencesOverride ? { toolPreferencesOverride } : {}),
           }
         : undefined;
 
@@ -1016,6 +1066,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         setProviderType={setProviderType}
         model={model}
         setModel={setModel}
+        reasoningEffort={reasoningEffort}
+        setReasoningEffort={setReasoningEffort}
         accessMode={accessMode}
         setAccessMode={setAccessMode}
         onManageProviders={onManageProviders}
@@ -1076,6 +1128,10 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         showCreationModeSelector={showCreationModeSelector}
         creationMode={creationMode}
         onCreationModeChange={onCreationModeChange}
+        taskEnabled={taskEnabled}
+        onTaskEnabledChange={onTaskEnabledChange}
+        objectiveEnabled={objectiveEnabled}
+        onObjectiveEnabledChange={handleObjectiveEnabledChange}
         subagentEnabled={subagentEnabled}
         onSubagentEnabledChange={onSubagentEnabledChange}
         selectedTeam={selectedTeam}

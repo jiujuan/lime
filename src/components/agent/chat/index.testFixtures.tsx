@@ -827,11 +827,7 @@ interface MountedHarness {
 }
 
 export type MockInputbarSendProps = {
-  onToolStatesChange?: (
-    next:
-      | Record<string, unknown>
-      | ((prev: Record<string, unknown>) => Record<string, unknown>),
-  ) => void;
+  onToolStatesChange?: (next: Record<string, unknown>) => void;
   onSend?: (
     payload?: MockInputbarSendPayload,
   ) => void | Promise<void> | Promise<boolean | void> | boolean;

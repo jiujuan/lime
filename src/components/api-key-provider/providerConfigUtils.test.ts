@@ -11,6 +11,7 @@
 import { describe, expect } from "vitest";
 import { test } from "@fast-check/vitest";
 import * as fc from "fast-check";
+import { fastCheckRuns } from "../../test/fastCheckRuns";
 import {
   getLatestSelectableModel,
   getFieldsForProviderType,
@@ -97,7 +98,7 @@ describe("Property 7: Provider 类型处理正确性", () => {
    *
    * **Validates: Requirements 5.1-5.5**
    */
-  test.prop([providerTypeArbitrary], { numRuns: 100 })(
+  test.prop([providerTypeArbitrary], { numRuns: fastCheckRuns(100) })(
     "每个 Provider 类型应返回正确的字段列表",
     (type: ProviderType) => {
       const fields = getFieldsForProviderType(type);
@@ -116,14 +117,14 @@ describe("Property 7: Provider 类型处理正确性", () => {
     },
   );
 
-  test.prop([providerTypeArbitrary], { numRuns: 100 })(
+  test.prop([providerTypeArbitrary], { numRuns: fastCheckRuns(100) })(
     "apiHost 字段对所有 Provider 类型都是必需的",
     (type: ProviderType) => {
       expect(providerTypeRequiresField(type, "apiHost")).toBe(true);
     },
   );
 
-  test.prop([providerTypeArbitrary], { numRuns: 100 })(
+  test.prop([providerTypeArbitrary], { numRuns: fastCheckRuns(100) })(
     "Azure OpenAI 类型应需要 apiVersion 字段",
     (type: ProviderType) => {
       const requiresApiVersion = providerTypeRequiresField(type, "apiVersion");
@@ -131,7 +132,7 @@ describe("Property 7: Provider 类型处理正确性", () => {
     },
   );
 
-  test.prop([providerTypeArbitrary], { numRuns: 100 })(
+  test.prop([providerTypeArbitrary], { numRuns: fastCheckRuns(100) })(
     "VertexAI 类型应需要 project 和 location 字段",
     (type: ProviderType) => {
       const requiresProject = providerTypeRequiresField(type, "project");
@@ -142,7 +143,7 @@ describe("Property 7: Provider 类型处理正确性", () => {
     },
   );
 
-  test.prop([providerTypeArbitrary], { numRuns: 100 })(
+  test.prop([providerTypeArbitrary], { numRuns: fastCheckRuns(100) })(
     "AWS Bedrock 类型应需要 region 字段",
     (type: ProviderType) => {
       const requiresRegion = providerTypeRequiresField(type, "region");
@@ -150,7 +151,7 @@ describe("Property 7: Provider 类型处理正确性", () => {
     },
   );
 
-  test.prop([providerTypeArbitrary], { numRuns: 100 })(
+  test.prop([providerTypeArbitrary], { numRuns: fastCheckRuns(100) })(
     "标准 OpenAI 兼容类型不应需要额外字段",
     (type: ProviderType) => {
       const standardTypes: ProviderType[] = [

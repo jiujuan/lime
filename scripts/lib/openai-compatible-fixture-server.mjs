@@ -45,15 +45,51 @@ function buildStructuredOutputArguments() {
 }
 
 function hasStructuredOutputTool(body) {
+  return requestToolNames(body).includes(STRUCTURED_OUTPUT_TOOL_NAME);
+}
+
+function requestToolNames(body) {
   if (!Array.isArray(body?.tools)) {
-    return false;
+    return [];
   }
 
-  return body.tools.some((tool) => {
-    const name =
-      tool?.function?.name || tool?.name || tool?.tool?.function?.name;
-    return name === STRUCTURED_OUTPUT_TOOL_NAME;
-  });
+  return body.tools
+    .map((tool) =>
+      String(
+        tool?.function?.name ||
+          tool?.name ||
+          tool?.tool?.function?.name ||
+          "",
+      ).trim(),
+    )
+    .filter(Boolean);
+}
+
+function scriptedToolName(scripted) {
+  return String(scripted?.name || scripted?.toolName || "").trim();
+}
+
+function scriptedToolRequired(scripted) {
+  return scripted?.requireToolInRequest !== false;
+}
+
+function ensureScriptedToolAvailable(scripted, body) {
+  if (scripted?.type !== "tool_call" || !scriptedToolRequired(scripted)) {
+    return;
+  }
+
+  const expectedToolName = scriptedToolName(scripted);
+  if (!expectedToolName) {
+    throw new Error("scripted tool_call is missing name");
+  }
+
+  const tools = requestToolNames(body);
+  if (!tools.includes(expectedToolName)) {
+    const toolSummary = tools.length > 0 ? tools.join(", ") : "<none>";
+    throw new Error(
+      `scripted tool_call '${expectedToolName}' was requested, but provider request tools=${toolSummary}`,
+    );
+  }
 }
 
 function jsonResponse(response, statusCode, payload) {
@@ -322,6 +358,15 @@ function buildProviderDescriptor({ baseUrl, model, apiKey }) {
       model_name: model,
       api_key: apiKey,
       base_url: baseUrl,
+      model_capabilities: {
+        vision: true,
+        tools: true,
+        streaming: true,
+        json_mode: true,
+        function_calling: true,
+        reasoning: false,
+        reasoning_effort: null,
+      },
     },
   };
 }
@@ -331,7 +376,11 @@ function normalizeScriptedResponses(value) {
     return [];
   }
   return value
-    .map((item) => (item && typeof item === "object" ? item : null))
+    .map((item) =>
+      typeof item === "function" || (item && typeof item === "object")
+        ? item
+        : null,
+    )
     .filter(Boolean);
 }
 
@@ -342,8 +391,21 @@ function scriptedResponseAt(scriptedResponses, requestIndex) {
   return scriptedResponses[Math.min(requestIndex, scriptedResponses.length - 1)];
 }
 
-function sendScriptedChatCompletion(response, { model, scripted, stream }) {
+async function resolveScriptedResponse(scriptedResponses, requestIndex, context) {
+  const scripted = scriptedResponseAt(scriptedResponses, requestIndex);
+  if (typeof scripted === "function") {
+    return await scripted(context);
+  }
+  return scripted;
+}
+
+function sendScriptedChatCompletion(response, { model, scripted, stream, body }) {
+  if (!scripted || typeof scripted !== "object") {
+    return false;
+  }
+
   if (scripted.type === "tool_call") {
+    ensureScriptedToolAvailable(scripted, body);
     const toolCall = buildToolCall({
       id: scripted.id,
       idPrefix: scripted.idPrefix,
@@ -420,13 +482,19 @@ export async function startOpenAiCompatibleFixtureServer(options = {}) {
       });
       const requestIndex = requests.length - 1;
       const responseModel = String(body?.model || model);
-      const scripted = scriptedResponseAt(scriptedResponses, requestIndex);
+      const scripted = await resolveScriptedResponse(scriptedResponses, requestIndex, {
+        body,
+        request,
+        requests,
+        requestIndex,
+      });
       if (
         scripted &&
         sendScriptedChatCompletion(response, {
           model: responseModel,
           scripted,
           stream: body?.stream === true,
+          body,
         })
       ) {
         return;

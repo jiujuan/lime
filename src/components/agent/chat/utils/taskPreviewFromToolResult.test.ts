@@ -143,7 +143,8 @@ describe("buildImageTaskPreviewFromToolResult", () => {
           status: "pending_submit",
           normalized_status: "pending",
           path: ".lime/tasks/image_generate/task-json-image-1.json",
-          absolute_path: "/workspace/.lime/tasks/image_generate/task-json-image-1.json",
+          absolute_path:
+            "/workspace/.lime/tasks/image_generate/task-json-image-1.json",
           artifact_path: ".lime/tasks/image_generate/task-json-image-1.json",
           progress: {
             phase: "pending_submit",
@@ -167,7 +168,8 @@ describe("buildImageTaskPreviewFromToolResult", () => {
       prompt: "青柠插画",
       status: "running",
       phase: "queued",
-      taskFilePath: "/workspace/.lime/tasks/image_generate/task-json-image-1.json",
+      taskFilePath:
+        "/workspace/.lime/tasks/image_generate/task-json-image-1.json",
       artifactPath: ".lime/tasks/image_generate/task-json-image-1.json",
       expectedImageCount: 1,
       imageCount: 1,
@@ -204,6 +206,123 @@ describe("buildImageTaskPreviewFromToolResult", () => {
       imageCount: 9,
       layoutHint: "storyboard_3x3",
       statusMessage: "3x3 分镜生成完成。",
+    });
+  });
+});
+
+describe("buildTaskPreviewFromToolResult web image search", () => {
+  it("联网搜图工具应输出图片候选预览与带来源的 artifact document", () => {
+    const toolResult = {
+      metadata: {
+        provider: "pexels",
+        result: {
+          provider: "pexels",
+          query: "cozy coffee table",
+          returnedCount: 2,
+          aspect: "landscape",
+          hits: [
+            {
+              id: "hit-1",
+              thumbnail_url: "https://pexels.example/1-thumb.jpg",
+              content_url: "https://pexels.example/1.jpg",
+              host_page_url: "https://www.pexels.com/photo/1",
+              width: 1600,
+              height: 900,
+              name: "cozy coffee table 1",
+            },
+            {
+              id: "hit-2",
+              thumbnail_url: "https://pexels.example/2-thumb.jpg",
+              content_url: "https://pexels.example/2.jpg",
+              host_page_url: "https://www.pexels.com/photo/2",
+              width: 1600,
+              height: 900,
+              name: "cozy coffee table 2",
+            },
+          ],
+        },
+      },
+    };
+
+    const preview = buildTaskPreviewFromToolResult({
+      toolId: "tool-web-image-1",
+      toolName: "lime_search_web_images",
+      toolArguments: JSON.stringify({
+        query: "cozy coffee table",
+        count: 2,
+        aspect: "landscape",
+      }),
+      toolResult,
+      fallbackPrompt: "帮我找咖啡馆木桌背景图",
+    });
+
+    expect(preview).toMatchObject({
+      kind: "modal_resource_search",
+      taskId: "resource-search:tool-web-image-1",
+      taskType: "modal_resource_search",
+      prompt: "cozy coffee table",
+      title: "Pexels 图片候选",
+      status: "complete",
+      artifactPath: ".lime/runtime/resource-search/tool-web-image-1.md",
+      providerId: "pexels",
+      phase: "completed",
+      statusMessage:
+        "已找到 2 张Pexels图片候选，打开查看可继续挑选与查看来源。",
+      metaItems: ["Pexels", "2 个候选", "landscape"],
+      imageCandidates: [
+        expect.objectContaining({
+          id: "hit-1",
+          thumbnailUrl: "https://pexels.example/1-thumb.jpg",
+          contentUrl: "https://pexels.example/1.jpg",
+          hostPageUrl: "https://www.pexels.com/photo/1",
+        }),
+        expect.objectContaining({
+          id: "hit-2",
+          thumbnailUrl: "https://pexels.example/2-thumb.jpg",
+          contentUrl: "https://pexels.example/2.jpg",
+          hostPageUrl: "https://www.pexels.com/photo/2",
+        }),
+      ],
+    });
+
+    const artifact = buildToolResultArtifactFromToolResult({
+      toolId: "tool-web-image-1",
+      toolName: "lime_search_web_images",
+      toolArguments: JSON.stringify({
+        query: "cozy coffee table",
+        count: 2,
+        aspect: "landscape",
+      }),
+      toolResult,
+      fallbackPrompt: "帮我找咖啡馆木桌背景图",
+    });
+
+    expect(artifact).toMatchObject({
+      filePath: ".lime/runtime/resource-search/tool-web-image-1.md",
+      metadata: {
+        artifact_type: "document",
+        previewText: "已找到 2 张Pexels图片候选",
+        provider: "pexels",
+        query: "cozy coffee table",
+        returnedCount: 2,
+        aspect: "landscape",
+      },
+    });
+    expect(artifact?.metadata.artifactDocument).toMatchObject({
+      artifactId: "resource-search:tool-web-image-1",
+      title: "Pexels 图片候选",
+      sources: [
+        expect.objectContaining({
+          id: "source-1",
+          label: "cozy coffee table 1",
+          locator: { url: "https://www.pexels.com/photo/1" },
+        }),
+        expect.objectContaining({
+          id: "source-2",
+          label: "cozy coffee table 2",
+          locator: { url: "https://www.pexels.com/photo/2" },
+        }),
+      ],
     });
   });
 });

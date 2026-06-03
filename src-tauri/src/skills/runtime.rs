@@ -220,7 +220,7 @@ async fn configure_skill_provider_with_fallback(
     requested_model: &str,
 ) -> Result<SkillProviderSelection, String> {
     let mut configure_result = aster_state
-        .configure_provider_from_pool(db, requested_provider, requested_model, session_id)
+        .configure_provider_from_pool(db, requested_provider, requested_model, session_id, None)
         .await;
 
     if configure_result.is_err() {
@@ -235,7 +235,7 @@ async fn configure_skill_provider_with_fallback(
                 continue;
             }
             match aster_state
-                .configure_provider_from_pool(db, fallback_provider, fallback_model, session_id)
+                .configure_provider_from_pool(db, fallback_provider, fallback_model, session_id, None)
                 .await
             {
                 Ok(config) => {

@@ -352,6 +352,88 @@ describe("ModelSelector", () => {
     expect(pageText).toContain("无多模态");
   });
 
+  it("接口声明支持 reasoning_effort 时应展示强度选择并保持浮层打开", () => {
+    const setReasoningEffort = vi.fn();
+    mockUseProviderModels.mockReturnValue({
+      modelIds: ["gpt-5.2-codex"],
+      models: [
+        createModelMetadata("gpt-5.2-codex", {
+          source: "api",
+          capabilities: {
+            reasoning: true,
+            reasoning_effort: {
+              supported: true,
+              levels: ["low", "medium", "high"],
+              default: "medium",
+              source: "api",
+            },
+          },
+        }),
+      ],
+      loading: false,
+      error: null,
+    });
+
+    const { container } = renderModelSelector({
+      model: "gpt-5.2-codex",
+      reasoningEffort: "medium",
+      setReasoningEffort,
+    });
+
+    clickModelSelectorTrigger(container);
+
+    const panel = document.body.querySelector(
+      '[data-testid="model-selector-reasoning-effort"]',
+    );
+    expect(panel?.textContent).toContain("推理强度");
+    expect(panel?.textContent).toContain("接口声明");
+
+    clickBodyButtonByText("高");
+
+    expect(setReasoningEffort).toHaveBeenCalledWith("high");
+    expect(
+      document.body.querySelector('[data-testid="model-selector-reasoning-effort"]'),
+    ).not.toBeNull();
+  });
+
+  it("未由接口声明 reasoning_effort 时不展示强度选择", () => {
+    mockUseProviderModels.mockReturnValue({
+      modelIds: ["gpt-5.2-codex", "reasoning-only"],
+      models: [
+        createModelMetadata("gpt-5.2-codex", {
+          source: "api",
+          capabilities: {
+            reasoning: true,
+            reasoning_effort: {
+              supported: true,
+              levels: ["low", "medium", "high"],
+              default: "medium",
+              source: "registry",
+            },
+          },
+        }),
+        createModelMetadata("reasoning-only", {
+          source: "api",
+          capabilities: {
+            reasoning: true,
+          },
+        }),
+      ],
+      loading: false,
+      error: null,
+    });
+
+    const { container } = renderModelSelector({
+      model: "gpt-5.2-codex",
+    });
+
+    clickModelSelectorTrigger(container);
+
+    expect(
+      document.body.querySelector('[data-testid="model-selector-reasoning-effort"]'),
+    ).toBeNull();
+  });
+
   it("en-US locale 应展示 common namespace 里的模型选择 chrome", async () => {
     await changeLimeLocale("en-US");
     mockUseProviderModels.mockReturnValue({

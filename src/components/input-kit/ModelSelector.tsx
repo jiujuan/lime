@@ -35,7 +35,10 @@ import { ModelCapabilityBadges } from "@/components/model/ModelCapabilityBadges"
 import { resolveOemCloudRuntimeContext } from "@/lib/api/oemCloudRuntime";
 import { resolveOemLimeHubProviderName } from "@/lib/oemLimeHubProvider";
 import { resolveProviderModelLoadOptions } from "@/lib/model/providerModelLoadOptions";
-import type { EnhancedModelMetadata } from "@/lib/types/modelRegistry";
+import type {
+  EnhancedModelMetadata,
+  ModelReasoningEffortLevel,
+} from "@/lib/types/modelRegistry";
 
 const compactTriggerClassName =
   "h-8 min-w-[104px] max-w-[168px] justify-start gap-1.5 rounded-full border-slate-200/80 bg-white/92 px-2.5 text-slate-600 shadow-none transition-colors hover:border-slate-300 hover:bg-white hover:text-slate-800";
@@ -50,6 +53,7 @@ const BACKGROUND_PRELOAD_IDLE_TIMEOUT_MS = 1_500;
 const BACKGROUND_PRELOAD_FALLBACK_DELAY_MS = 180;
 const NO_PROVIDER_GUIDE_DISMISSED_STORAGE_KEY =
   "lime_model_selector_no_provider_guide_dismissed_v1";
+const DEFAULT_REASONING_EFFORT_LEVEL: ModelReasoningEffortLevel = "medium";
 
 function resolveProviderSelectionValue(provider: ConfiguredProvider): string {
   return provider.providerId ?? provider.key;
@@ -61,11 +65,45 @@ function resolveInitialProviderModel(provider: ConfiguredProvider): string {
   );
 }
 
+function resolveApiReasoningEffortLevels(
+  model: EnhancedModelMetadata | null | undefined,
+): ModelReasoningEffortLevel[] {
+  const support = model?.capabilities.reasoning_effort;
+  if (
+    !support?.supported ||
+    support.source !== "api" ||
+    !Array.isArray(support.levels)
+  ) {
+    return [];
+  }
+
+  return support.levels.filter(Boolean);
+}
+
+function resolveDefaultReasoningEffort(
+  model: EnhancedModelMetadata | null | undefined,
+  levels: ModelReasoningEffortLevel[],
+): ModelReasoningEffortLevel | "" {
+  if (levels.length === 0) {
+    return "";
+  }
+  const supportDefault = model?.capabilities.reasoning_effort?.default;
+  if (supportDefault && levels.includes(supportDefault)) {
+    return supportDefault;
+  }
+  if (levels.includes(DEFAULT_REASONING_EFFORT_LEVEL)) {
+    return DEFAULT_REASONING_EFFORT_LEVEL;
+  }
+  return levels[0] ?? "";
+}
+
 export interface ModelSelectorProps {
   providerType: string;
   setProviderType: (type: string) => void;
   model: string;
   setModel: (model: string) => void;
+  reasoningEffort?: ModelReasoningEffortLevel | "";
+  setReasoningEffort?: (value: ModelReasoningEffortLevel | "") => void;
   activeTheme?: string;
   className?: string;
   compactTrigger?: boolean;
@@ -94,6 +132,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   setProviderType,
   model,
   setModel,
+  reasoningEffort = "",
+  setReasoningEffort,
   activeTheme,
   className,
   compactTrigger = false,
@@ -321,6 +361,55 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     () => modelOptions.filter((item) => item.compatibilityIssue).length,
     [modelOptions],
   );
+  const selectedModelOption = useMemo(
+    () =>
+      modelOptions.find(
+        (item) => item.id === model && !item.compatibilityIssue,
+      ) ?? null,
+    [model, modelOptions],
+  );
+  const selectedReasoningEffortLevels = useMemo(
+    () => resolveApiReasoningEffortLevels(selectedModelOption?.metadata),
+    [selectedModelOption?.metadata],
+  );
+  const selectedReasoningEffort =
+    reasoningEffort &&
+    selectedReasoningEffortLevels.includes(reasoningEffort)
+      ? reasoningEffort
+      : "";
+  const selectedReasoningEffortLabel = selectedReasoningEffort
+    ? t(`common.modelSelector.reasoning.level.${selectedReasoningEffort}`)
+    : "";
+
+  useEffect(() => {
+    if (!setReasoningEffort) {
+      return;
+    }
+
+    if (!selectedModelOption || selectedReasoningEffortLevels.length === 0) {
+      if (reasoningEffort) {
+        setReasoningEffort("");
+      }
+      return;
+    }
+
+    if (
+      !reasoningEffort ||
+      !selectedReasoningEffortLevels.includes(reasoningEffort)
+    ) {
+      setReasoningEffort(
+        resolveDefaultReasoningEffort(
+          selectedModelOption.metadata,
+          selectedReasoningEffortLevels,
+        ),
+      );
+    }
+  }, [
+    reasoningEffort,
+    selectedModelOption,
+    selectedReasoningEffortLevels,
+    setReasoningEffort,
+  ]);
   useEffect(() => {
     if (hasInitialized.current) return;
     if (!shouldLoadProviders) return;
@@ -443,7 +532,11 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           (allowAutoModel
             ? resolvedAutoModelLabel
             : t("common.modelSelector.placeholder"));
-  const compactModelLabel = selectedModelLabel;
+  const selectedModelWithReasoningLabel =
+    selectedReasoningEffortLabel && !showPlaceholderSelection
+      ? `${selectedModelLabel} ${selectedReasoningEffortLabel}`
+      : selectedModelLabel;
+  const compactModelLabel = selectedModelWithReasoningLabel;
   const normalizedTheme = (activeTheme || "").toLowerCase();
   const activeThemeLabel =
     normalizedTheme === "general"
@@ -552,7 +645,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               title={
                 showPlaceholderSelection
                   ? resolvedPlaceholderLabel
-                  : `${selectedProviderLabel} / ${selectedModelLabel}`
+                  : `${selectedProviderLabel} / ${selectedModelWithReasoningLabel}`
               }
             >
               <ProviderIcon
@@ -585,7 +678,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   </span>
                   <span className="text-slate-300 shrink-0">/</span>
                   <span className="text-sm text-slate-500 truncate">
-                    {selectedModelLabel}
+                    {selectedModelWithReasoningLabel}
                   </span>
                 </span>
               )}
@@ -616,7 +709,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 <span className="font-medium">{selectedProviderLabel}</span>
                 <span className="text-slate-300">/</span>
                 <span className="truncate text-slate-500">
-                  {selectedModelLabel}
+                  {selectedModelWithReasoningLabel}
                 </span>
               </div>
             )}
@@ -651,6 +744,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                       onClick={() => {
                         setProviderType("");
                         setModel("");
+                        setReasoningEffort?.("");
                         setOpen(false);
                       }}
                       className={cn(
@@ -713,6 +807,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                                     ? ""
                                     : resolveInitialProviderModel(provider),
                                 );
+                                setReasoningEffort?.("");
                               }}
                               className={cn(
                                 itemClassName,
@@ -792,6 +887,70 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 </div>
               ) : null}
 
+              {selectedReasoningEffortLevels.length > 0 ? (
+                <div
+                  className="mb-2 rounded-2xl border border-slate-200/80 bg-slate-50 px-2.5 py-2"
+                  data-testid="model-selector-reasoning-effort"
+                >
+                  <div className="mb-1.5 flex items-center justify-between gap-2 px-1">
+                    <div className="text-[11px] font-semibold tracking-[0.08em] text-slate-500">
+                      {t("common.modelSelector.reasoning.title")}
+                    </div>
+                    <div className="truncate text-[11px] text-slate-400">
+                      {selectedModelOption?.metadata.source === "api"
+                        ? t("common.modelSelector.reasoning.source.api")
+                        : null}
+                    </div>
+                  </div>
+                  <div
+                    className="grid gap-1"
+                    style={{
+                      gridTemplateColumns: `repeat(${selectedReasoningEffortLevels.length}, minmax(0, 1fr))`,
+                    }}
+                  >
+                    {selectedReasoningEffortLevels.map((level) => {
+                      const label = t(
+                        `common.modelSelector.reasoning.level.${level}`,
+                      );
+                      const selected =
+                        selectedReasoningEffort === level ||
+                        (!selectedReasoningEffort &&
+                          level ===
+                            resolveDefaultReasoningEffort(
+                              selectedModelOption?.metadata,
+                              selectedReasoningEffortLevels,
+                            ));
+                      return (
+                        <button
+                          key={level}
+                          type="button"
+                          aria-pressed={selected}
+                          aria-label={t(
+                            "common.modelSelector.reasoning.aria",
+                            { level: label },
+                          )}
+                          className={cn(
+                            "inline-flex h-7 min-w-0 items-center justify-center gap-1 rounded-full px-2 text-xs font-medium transition-colors",
+                            selected
+                              ? "bg-slate-900 text-white shadow-sm shadow-slate-950/10"
+                              : "text-slate-500 hover:bg-white hover:text-slate-900",
+                          )}
+                          onClick={() => setReasoningEffort?.(level)}
+                        >
+                          <span className="truncate">{label}</span>
+                          {selected ? (
+                            <Check
+                              size={12}
+                              className="shrink-0 opacity-80"
+                            />
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
               <ScrollArea className="flex-1">
                 <div className="space-y-1 p-1">
                   {!selectedProvider &&
@@ -844,6 +1003,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                         <button
                           onClick={() => {
                             setModel("");
+                            setReasoningEffort?.("");
                             setOpen(false);
                           }}
                           className={cn(
@@ -879,6 +1039,16 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                               return;
                             }
                             setModel(currentModelItem.id);
+                            const reasoningLevels =
+                              resolveApiReasoningEffortLevels(
+                                currentModelItem.metadata,
+                              );
+                            setReasoningEffort?.(
+                              resolveDefaultReasoningEffort(
+                                currentModelItem.metadata,
+                                reasoningLevels,
+                              ),
+                            );
                             setOpen(false);
                           }}
                           className={cn(

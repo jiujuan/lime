@@ -41,7 +41,10 @@ import {
   resolveToolProcessNarrative,
   isLikelyWebRetrievalDiagnosticNoise,
 } from "../utils/toolProcessSummary";
-import { isImageGenerationProtocolFailure } from "../utils/limeTaskProtocolNoise";
+import {
+  isLimeTaskProtocolFailure,
+  resolveLimeTaskProtocolFailureDisplayText,
+} from "../utils/limeTaskProtocolNoise";
 
 interface InlineToolProcessStepProps {
   toolCall: ToolCallState;
@@ -143,6 +146,12 @@ const STRUCTURED_DETAIL_OBJECT_KEYS = [
   "document",
   "content",
 ] as const;
+const TASK_BOARD_TOOL_NAMES = new Set([
+  "taskcreate",
+  "tasklist",
+  "taskget",
+  "taskupdate",
+]);
 
 function sanitizeToolResultDetailMarkdown(value: string): string {
   return value.replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -159,6 +168,108 @@ function parseStructuredToolResult(value: string): unknown {
   } catch {
     return null;
   }
+}
+
+function readArray(
+  record: Record<string, unknown> | null,
+  keys: string[],
+): unknown[] | null {
+  if (!record) {
+    return null;
+  }
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function taskRecordFrom(value: unknown): Record<string, unknown> | null {
+  return asRecord(value);
+}
+
+function readTaskSubject(
+  record: Record<string, unknown> | null,
+): string | null {
+  return readString(record, ["subject", "content", "title", "description"]);
+}
+
+function readTaskStatus(record: Record<string, unknown> | null): string | null {
+  return readString(record, ["status", "state"]);
+}
+
+function readTaskId(record: Record<string, unknown> | null): string | null {
+  return readString(record, ["id", "taskId", "task_id"]);
+}
+
+function formatTaskLine(record: Record<string, unknown>): string | null {
+  const id = readTaskId(record);
+  const subject = readTaskSubject(record);
+  const status = readTaskStatus(record);
+  const label = [id ? `#${id}` : null, subject].filter(Boolean).join(" ");
+  const main = label || status;
+  if (!main) {
+    return null;
+  }
+  return status && label ? `${main} · ${status}` : main;
+}
+
+function resolveTaskBoardResultDetailText(params: {
+  toolName: string;
+  outputText: string;
+  metadata: Record<string, unknown> | null;
+  fallbackSummary: string | null;
+}): string | null {
+  const normalizedName = normalizeToolNameKey(params.toolName);
+  if (!TASK_BOARD_TOOL_NAMES.has(normalizedName)) {
+    return null;
+  }
+
+  const parsedOutput = parseStructuredToolResult(params.outputText);
+  const outputRecord = asRecord(parsedOutput);
+  const metadata = params.metadata;
+  const task =
+    taskRecordFrom(metadata?.task) || taskRecordFrom(outputRecord?.task);
+  const tasks =
+    readArray(metadata, ["tasks", "task_list"]) ||
+    readArray(outputRecord, ["tasks", "task_list"]);
+  const lines: string[] = [];
+
+  if (task) {
+    const taskLine = formatTaskLine(task);
+    if (taskLine) {
+      lines.push(taskLine);
+    }
+  }
+
+  if (!task && normalizedName === "taskget") {
+    lines.push("未找到任务");
+  }
+
+  if (tasks) {
+    const taskLines = tasks
+      .map((item) => taskRecordFrom(item))
+      .filter((item): item is Record<string, unknown> => Boolean(item))
+      .map(formatTaskLine)
+      .filter((item): item is string => Boolean(item));
+    if (taskLines.length > 0) {
+      lines.push(...taskLines.slice(0, 5));
+      if (taskLines.length > 5) {
+        lines.push(`还有 ${taskLines.length - 5} 个任务`);
+      }
+    } else if (normalizedName === "tasklist") {
+      lines.push("任务列表为空");
+    }
+  }
+
+  const summary = params.fallbackSummary?.trim();
+  if (summary && !lines.includes(summary)) {
+    lines.unshift(summary);
+  }
+
+  return lines.length > 0 ? lines.join("\n") : summary || null;
 }
 
 function extractStructuredToolDetailText(
@@ -348,25 +459,30 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     const rawText = toolCall.result?.error || toolCall.result?.output || "";
     return extractLimeToolMetadataBlock(rawText).text.trim();
   }, [toolCall.result?.error, toolCall.result?.output]);
-  const isImageGenerationFailureProcess = useMemo(
-    () =>
-      toolCall.status === "failed" &&
-      isImageGenerationProtocolFailure({
-        toolName: toolCall.name,
-        text: rawResultText,
-      }),
-    [rawResultText, toolCall.name, toolCall.status],
-  );
+  const limeTaskProtocolFailureText = useMemo(() => {
+    if (toolCall.status !== "failed") {
+      return null;
+    }
+
+    return isLimeTaskProtocolFailure({
+      toolName: toolCall.name,
+      text: rawResultText,
+    })
+      ? resolveLimeTaskProtocolFailureDisplayText({
+          toolName: toolCall.name,
+          text: rawResultText,
+        })
+      : null;
+  }, [rawResultText, toolCall.name, toolCall.status]);
   const headline = useMemo(
     () =>
-      isImageGenerationFailureProcess
-        ? t("agentChat.imageWorkbenchPreview.placeholder.failed")
-        : buildToolHeadline({
-            toolDisplay,
-            subject,
-            toolName: toolCall.name,
-          }),
-    [isImageGenerationFailureProcess, subject, t, toolCall.name, toolDisplay],
+      limeTaskProtocolFailureText ||
+      buildToolHeadline({
+        toolDisplay,
+        subject,
+        toolName: toolCall.name,
+      }),
+    [limeTaskProtocolFailureText, subject, toolCall.name, toolDisplay],
   );
   const processNarrative = useMemo(
     () => resolveToolProcessNarrative(toolCall),
@@ -374,13 +490,31 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
   );
   const resultText = useMemo(() => {
     if (toolCall.status !== "failed") {
-      return normalizeToolResultDetailText(rawResultText);
+      return (
+        resolveTaskBoardResultDetailText({
+          toolName: toolCall.name,
+          outputText: rawResultText,
+          metadata,
+          fallbackSummary:
+            processNarrative.postSummary ||
+            processNarrative.summary ||
+            processNarrative.preSummary,
+        }) || normalizeToolResultDetailText(rawResultText)
+      );
     }
 
     return (
       resolveToolErrorDetailText(toolCall.name, rawResultText) || rawResultText
     );
-  }, [rawResultText, toolCall.name, toolCall.status]);
+  }, [
+    metadata,
+    processNarrative.postSummary,
+    processNarrative.preSummary,
+    processNarrative.summary,
+    rawResultText,
+    toolCall.name,
+    toolCall.status,
+  ]);
   const shouldHideRawDiagnosticDetail = useMemo(
     () =>
       toolCall.status !== "failed" &&
@@ -399,8 +533,12 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
   );
   const resultImages = useMemo(
     () =>
-      normalizeToolResultImages(toolCall.result?.images, rawResultText) || [],
-    [rawResultText, toolCall.result?.images],
+      normalizeToolResultImages(
+        toolCall.result?.images,
+        rawResultText,
+        toolCall.result?.metadata,
+      ) || [],
+    [rawResultText, toolCall.result?.images, toolCall.result?.metadata],
   );
   const isToolSearch = useMemo(
     () => normalizeToolNameKey(toolCall.name) === "toolsearch",

@@ -543,6 +543,8 @@
   "agentChat.runtimeError.providerQuota": "현재 모델 채널이 결제 또는 할당량 관련 오류를 반환했습니다. Provider/모델 채널의 결제, 할당량 또는 권한 상태를 확인하거나 다른 사용 가능한 모델로 전환하세요.",
   "agentChat.runtimeError.providerUnavailable": "현재 모델 채널을 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도하세요. 계속 실패하면 Provider 상태를 확인하거나 다른 사용 가능한 모델로 전환하세요.",
   "agentChat.runtimeError.internalRuntime": "런타임에서 내부 오류를 반환했습니다. 진단용 세부 정보는 보존되었습니다. 잠시 후 다시 시도하거나 공급자 및 도구 연결 상태를 확인하세요.",
+  "agentChat.emptyFinalReply.errorMessage": "모델이 최종 응답을 출력하지 않았습니다. 다시 시도하세요.",
+  "agentChat.emptyFinalReply.fallbackContent": "이번 실행은 완료되었습니다. 자세한 과정과 산출물은 현재 대화에 보존되어 있습니다.",
   "agentChat.runtimeStrip.theme.general": "일반 대화",
   "agentChat.runtimeStrip.title.general": "일반 도우미",
   "agentChat.runtimeStrip.capability.direct": "직접 답변",

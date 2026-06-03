@@ -543,6 +543,8 @@
   "agentChat.runtimeError.providerQuota": "目前模型通道返回了計費或額度類錯誤，請檢查該 Provider/模型通道的計費、配額或授權狀態，或切換到其他可用模型後重試。",
   "agentChat.runtimeError.providerUnavailable": "目前模型通道暫時不可用，請稍後重試；如果持續失敗，請檢查 Provider 狀態或切換到其他可用模型。",
   "agentChat.runtimeError.internalRuntime": "執行階段返回內部錯誤，已保留詳情供排查。請稍後重試，或檢查服務商與工具連線狀態。",
+  "agentChat.emptyFinalReply.errorMessage": "模型未輸出最終答覆，請重試",
+  "agentChat.emptyFinalReply.fallbackContent": "本輪執行已完成，詳細過程與產物已保留在目前對話中。",
   "agentChat.runtimeStrip.theme.general": "通用對話",
   "agentChat.runtimeStrip.title.general": "通用助手",
   "agentChat.runtimeStrip.capability.direct": "直接回答",

@@ -2,22 +2,41 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
+import type { UpdateInstallSession } from "@/lib/api/appUpdate";
 
 const {
   mockCheckForUpdates,
-  mockDownloadUpdate,
+  mockGetUpdateInstallSession,
   mockGetSkillPackageFileAssociationStatus,
+  mockListenUpdateInstallSession,
   mockSetSkillPackageFileAssociationDefault,
+  mockStartUpdateInstallSession,
 } = vi.hoisted(() => ({
   mockCheckForUpdates: vi.fn(),
-  mockDownloadUpdate: vi.fn(),
+  mockGetUpdateInstallSession: vi.fn(),
   mockGetSkillPackageFileAssociationStatus: vi.fn(),
+  mockListenUpdateInstallSession: vi.fn(),
   mockSetSkillPackageFileAssociationDefault: vi.fn(),
+  mockStartUpdateInstallSession: vi.fn(),
 }));
 
 vi.mock("@/lib/api/appUpdate", () => ({
   checkForUpdates: mockCheckForUpdates,
-  downloadUpdate: mockDownloadUpdate,
+  getUpdateInstallSession: mockGetUpdateInstallSession,
+  isUpdateInstallSessionActive: (
+    session:
+      | { stage: string; isActive: boolean }
+      | null
+      | undefined,
+  ) =>
+    Boolean(
+      session?.isActive &&
+        ["checking", "downloading", "installing", "restarting"].includes(
+          session.stage,
+        ),
+    ),
+  listenUpdateInstallSession: mockListenUpdateInstallSession,
+  startUpdateInstallSession: mockStartUpdateInstallSession,
 }));
 
 vi.mock("@/lib/api/skills", () => ({
@@ -75,6 +94,29 @@ function findButton(container: HTMLElement, text: string): HTMLButtonElement {
   return target as HTMLButtonElement;
 }
 
+function createInstallSession(
+  overrides: Partial<UpdateInstallSession> = {},
+): UpdateInstallSession {
+  return {
+    sessionId: "session-1",
+    stage: "downloading",
+    currentVersion: "1.10.0",
+    latestVersion: "1.10.1",
+    downloadUrl: "https://example.com/lime",
+    downloadedBytes: 50,
+    totalBytes: 100,
+    percent: 0.5,
+    message: "downloading",
+    error: null,
+    startedAt: 1,
+    updatedAt: 2,
+    completedAt: null,
+    canCloseWindow: true,
+    isActive: true,
+    ...overrides,
+  };
+}
+
 beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
@@ -102,11 +144,19 @@ beforeEach(async () => {
     pubDate: "2026-03-20T00:00:00.000Z",
     error: undefined,
   });
-  mockDownloadUpdate.mockResolvedValue({
-    success: false,
-    message: "安装更新失败: signature mismatch。请前往发布页手动下载最新版",
-    filePath: undefined,
-  });
+  mockGetUpdateInstallSession.mockResolvedValue(
+    createInstallSession({
+      sessionId: "idle",
+      stage: "idle",
+      latestVersion: null,
+      totalBytes: null,
+      percent: 0,
+      message: "idle",
+      isActive: false,
+    }),
+  );
+  mockListenUpdateInstallSession.mockResolvedValue(vi.fn());
+  mockStartUpdateInstallSession.mockResolvedValue(createInstallSession());
   mockGetSkillPackageFileAssociationStatus.mockResolvedValue({
     platform: "macos",
     extension: "skill",
@@ -197,7 +247,19 @@ describe("AboutSection", () => {
     expect(text).not.toContain("Made for creators");
   });
 
-  it("点击更新按钮时应重新检查并允许触发下载", async () => {
+  it("点击更新按钮时应重新检查并允许触发安装会话", async () => {
+    mockStartUpdateInstallSession.mockResolvedValueOnce(
+      createInstallSession({
+        stage: "failed",
+        downloadedBytes: 0,
+        totalBytes: null,
+        percent: 0,
+        message: "failed",
+        error: "signature mismatch",
+        completedAt: 3,
+        isActive: false,
+      }),
+    );
     const container = renderComponent();
     await waitForLoad();
 
@@ -213,7 +275,7 @@ describe("AboutSection", () => {
       await waitForLoad();
     });
 
-    expect(mockDownloadUpdate).toHaveBeenCalledTimes(1);
+    expect(mockStartUpdateInstallSession).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain(
       "Unable to install the update automatically. Please download the latest version from the web page.",
     );

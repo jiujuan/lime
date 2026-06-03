@@ -12,14 +12,16 @@ use lime_services::update_check_service::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_updater::UpdaterExt;
 
 const DAY_SECONDS: u64 = 24 * 3600;
 const UPDATE_CHECK_CACHE_TTL_SECS: u64 = 10 * 60;
 const FALLBACK_RELEASES_URL: &str = "https://github.com/limecloud/lime/releases";
 const DEFAULT_UPDATE_MANIFEST_URL: &str = "https://updates.limecloud.com/lime/stable/latest.json";
+pub const UPDATE_INSTALL_SESSION_EVENT: &str = "app-update://session";
 
 /// 编译期注入 updater 公钥；开发环境可为空，此时仅保留手动下载兜底。
 const COMPILED_UPDATER_PUBLIC_KEY: Option<&str> = option_env!("LIME_UPDATER_PUBLIC_KEY");
@@ -76,6 +78,103 @@ pub struct DownloadResult {
     pub file_path: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdateInstallStage {
+    Idle,
+    Checking,
+    Downloading,
+    Installing,
+    Restarting,
+    Completed,
+    Failed,
+    UpToDate,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateInstallSession {
+    pub session_id: String,
+    pub stage: UpdateInstallStage,
+    pub current_version: String,
+    pub latest_version: Option<String>,
+    pub download_url: Option<String>,
+    pub downloaded_bytes: u64,
+    pub total_bytes: Option<u64>,
+    pub percent: f64,
+    pub message: String,
+    pub error: Option<String>,
+    pub started_at: u64,
+    pub updated_at: u64,
+    pub completed_at: Option<u64>,
+    pub can_close_window: bool,
+    pub is_active: bool,
+}
+
+impl Default for UpdateInstallSession {
+    fn default() -> Self {
+        let now = current_unix_timestamp();
+        Self {
+            session_id: "idle".to_string(),
+            stage: UpdateInstallStage::Idle,
+            current_version: UpdateCheckService::current_version().to_string(),
+            latest_version: None,
+            download_url: Some(FALLBACK_RELEASES_URL.to_string()),
+            downloaded_bytes: 0,
+            total_bytes: None,
+            percent: 0.0,
+            message: "尚未开始更新".to_string(),
+            error: None,
+            started_at: now,
+            updated_at: now,
+            completed_at: None,
+            can_close_window: true,
+            is_active: false,
+        }
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct UpdateInstallSessionState {
+    inner: Arc<Mutex<UpdateInstallSession>>,
+}
+
+impl UpdateInstallSessionState {
+    fn snapshot(&self) -> UpdateInstallSession {
+        self.inner
+            .lock()
+            .map(|session| session.clone())
+            .unwrap_or_default()
+    }
+
+    fn replace(&self, session: UpdateInstallSession) -> UpdateInstallSession {
+        match self.inner.lock() {
+            Ok(mut guard) => {
+                *guard = session.clone();
+                session
+            }
+            Err(_) => session,
+        }
+    }
+
+    fn update<F>(&self, updater: F) -> UpdateInstallSession
+    where
+        F: FnOnce(&mut UpdateInstallSession),
+    {
+        match self.inner.lock() {
+            Ok(mut guard) => {
+                updater(&mut guard);
+                guard.clone()
+            }
+            Err(_) => {
+                let mut fallback = UpdateInstallSession::default();
+                updater(&mut fallback);
+                fallback
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct UpdateCheckCache {
     latest: Option<String>,
@@ -114,6 +213,68 @@ fn current_unix_timestamp() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or(0)
+}
+
+fn current_unix_millis() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0)
+}
+
+fn build_update_session_id() -> String {
+    format!("update-install-{}", current_unix_millis())
+}
+
+fn is_active_update_stage(stage: &UpdateInstallStage) -> bool {
+    matches!(
+        stage,
+        UpdateInstallStage::Checking
+            | UpdateInstallStage::Downloading
+            | UpdateInstallStage::Installing
+            | UpdateInstallStage::Restarting
+    )
+}
+
+fn download_progress_percent(downloaded_bytes: u64, total_bytes: Option<u64>) -> f64 {
+    let Some(total_bytes) = total_bytes.filter(|value| *value > 0) else {
+        return 0.0;
+    };
+
+    let percent = (downloaded_bytes as f64 / total_bytes as f64).clamp(0.0, 1.0);
+    (percent * 1000.0).round() / 1000.0
+}
+
+fn emit_update_install_session(app_handle: &AppHandle, session: &UpdateInstallSession) {
+    if let Err(error) = app_handle.emit(UPDATE_INSTALL_SESSION_EVENT, session) {
+        tracing::warn!("[更新安装] 发送安装会话事件失败: {}", error);
+    }
+}
+
+fn replace_update_install_session(
+    app_handle: &AppHandle,
+    state: &UpdateInstallSessionState,
+    session: UpdateInstallSession,
+) -> UpdateInstallSession {
+    let session = state.replace(session);
+    emit_update_install_session(app_handle, &session);
+    session
+}
+
+fn update_install_session<F>(
+    app_handle: &AppHandle,
+    state: &UpdateInstallSessionState,
+    updater: F,
+) -> UpdateInstallSession
+where
+    F: FnOnce(&mut UpdateInstallSession),
+{
+    let session = state.update(|session| {
+        updater(session);
+        session.updated_at = current_unix_timestamp();
+    });
+    emit_update_install_session(app_handle, &session);
+    session
 }
 
 fn updater_manifest_url() -> &'static str {
@@ -391,19 +552,23 @@ async fn perform_update_check(update_service: &UpdateCheckServiceState) -> Updat
     service.finish_check(result).await
 }
 
-async fn install_update_via_updater(app_handle: &AppHandle) -> Result<(), String> {
+fn build_tauri_updater(app_handle: &AppHandle) -> Result<tauri_plugin_updater::Updater, String> {
     let public_key = updater_public_key()
         .ok_or_else(|| "当前构建未内置更新签名公钥，请前往网页下载最新版".to_string())?;
     let manifest_url = url::Url::parse(updater_manifest_url())
         .map_err(|error| format!("更新清单地址无效: {error}"))?;
 
-    let updater = app_handle
+    app_handle
         .updater_builder()
         .pubkey(public_key)
         .endpoints(vec![manifest_url])
         .map_err(|error| format!("初始化更新源失败: {error}"))?
         .build()
-        .map_err(|error| format!("创建 updater 失败: {error}"))?;
+        .map_err(|error| format!("创建 updater 失败: {error}"))
+}
+
+async fn install_update_via_updater(app_handle: &AppHandle) -> Result<(), String> {
+    let updater = build_tauri_updater(app_handle)?;
 
     let update = updater
         .check()
@@ -417,6 +582,83 @@ async fn install_update_via_updater(app_handle: &AppHandle) -> Result<(), String
         .map_err(|error| format!("安装更新失败: {error}"))?;
 
     Ok(())
+}
+
+async fn install_update_via_updater_with_session(
+    app_handle: AppHandle,
+    install_state: UpdateInstallSessionState,
+    session_id: String,
+) -> Result<bool, String> {
+    let updater = build_tauri_updater(&app_handle)?;
+
+    let update = updater
+        .check()
+        .await
+        .map_err(|error| format!("检查更新安装包失败: {error}"))?;
+
+    let Some(update) = update else {
+        update_install_session(&app_handle, &install_state, |session| {
+            session.stage = UpdateInstallStage::UpToDate;
+            session.session_id = session_id.clone();
+            session.percent = 1.0;
+            session.message = "当前已是最新版本".to_string();
+            session.error = None;
+            session.is_active = false;
+            session.can_close_window = true;
+            session.completed_at = Some(current_unix_timestamp());
+        });
+        return Ok(false);
+    };
+
+    update_install_session(&app_handle, &install_state, |session| {
+        session.stage = UpdateInstallStage::Downloading;
+        session.session_id = session_id.clone();
+        session.message = "正在下载更新".to_string();
+        session.error = None;
+        session.is_active = true;
+        session.can_close_window = true;
+    });
+
+    let mut downloaded_bytes = 0_u64;
+    let progress_app = app_handle.clone();
+    let progress_state = install_state.clone();
+    let progress_session_id = session_id.clone();
+    let finished_app = app_handle.clone();
+    let finished_state = install_state.clone();
+    let finished_session_id = session_id.clone();
+
+    update
+        .download_and_install(
+            move |chunk_length, content_length| {
+                downloaded_bytes = downloaded_bytes.saturating_add(chunk_length as u64);
+                update_install_session(&progress_app, &progress_state, |session| {
+                    session.stage = UpdateInstallStage::Downloading;
+                    session.session_id = progress_session_id.clone();
+                    session.downloaded_bytes = downloaded_bytes;
+                    session.total_bytes = content_length;
+                    session.percent = download_progress_percent(downloaded_bytes, content_length);
+                    session.message = "正在下载更新".to_string();
+                    session.error = None;
+                    session.is_active = true;
+                    session.can_close_window = true;
+                });
+            },
+            move || {
+                update_install_session(&finished_app, &finished_state, |session| {
+                    session.stage = UpdateInstallStage::Installing;
+                    session.session_id = finished_session_id.clone();
+                    session.percent = 1.0;
+                    session.message = "下载完成，正在安装更新".to_string();
+                    session.error = None;
+                    session.is_active = true;
+                    session.can_close_window = true;
+                });
+            },
+        )
+        .await
+        .map_err(|error| format!("安装更新失败: {error}"))?;
+
+    Ok(true)
 }
 
 /// 手动检查更新，返回完整检查结果
@@ -434,6 +676,134 @@ pub async fn check_for_updates(
 ) -> Result<VersionCheckResult, String> {
     let info = perform_update_check(update_service.inner()).await;
     Ok(build_version_check_result(info))
+}
+
+/// 启动带进度事件的更新安装会话。
+#[tauri::command]
+pub async fn start_update_install_session(
+    app_handle: AppHandle,
+    update_service: State<'_, UpdateCheckServiceState>,
+    install_state: State<'_, UpdateInstallSessionState>,
+) -> Result<UpdateInstallSession, String> {
+    let current_session = install_state.snapshot();
+    if current_session.is_active && is_active_update_stage(&current_session.stage) {
+        return Ok(current_session);
+    }
+
+    let now = current_unix_timestamp();
+    let session = UpdateInstallSession {
+        session_id: build_update_session_id(),
+        stage: UpdateInstallStage::Checking,
+        current_version: UpdateCheckService::current_version().to_string(),
+        latest_version: None,
+        download_url: Some(FALLBACK_RELEASES_URL.to_string()),
+        downloaded_bytes: 0,
+        total_bytes: None,
+        percent: 0.0,
+        message: "正在检查更新".to_string(),
+        error: None,
+        started_at: now,
+        updated_at: now,
+        completed_at: None,
+        can_close_window: true,
+        is_active: true,
+    };
+
+    let install_state = install_state.inner().clone();
+    let update_service = update_service.inner().clone();
+    let session = replace_update_install_session(&app_handle, &install_state, session);
+    let session_id = session.session_id.clone();
+    let app_handle_for_task = app_handle.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let update_info = perform_update_check(&update_service).await;
+
+        update_install_session(&app_handle_for_task, &install_state, |session| {
+            session.session_id = session_id.clone();
+            session.current_version = update_info.current_version.clone();
+            session.latest_version = update_info.latest_version.clone();
+            session.download_url = update_info
+                .download_url
+                .clone()
+                .or_else(|| Some(FALLBACK_RELEASES_URL.to_string()));
+        });
+
+        if let Some(error) = update_info.error.clone() {
+            update_install_session(&app_handle_for_task, &install_state, |session| {
+                session.stage = UpdateInstallStage::Failed;
+                session.session_id = session_id.clone();
+                session.message = "暂时无法自动安装更新".to_string();
+                session.error = Some(error);
+                session.is_active = false;
+                session.can_close_window = true;
+                session.completed_at = Some(current_unix_timestamp());
+            });
+            return;
+        }
+
+        if !update_info.has_update {
+            update_install_session(&app_handle_for_task, &install_state, |session| {
+                session.stage = UpdateInstallStage::UpToDate;
+                session.session_id = session_id.clone();
+                session.percent = 1.0;
+                session.message = "当前已是最新版本".to_string();
+                session.error = None;
+                session.is_active = false;
+                session.can_close_window = true;
+                session.completed_at = Some(current_unix_timestamp());
+            });
+            return;
+        }
+
+        match install_update_via_updater_with_session(
+            app_handle_for_task.clone(),
+            install_state.clone(),
+            session_id.clone(),
+        )
+        .await
+        {
+            Ok(true) => {
+                update_install_session(&app_handle_for_task, &install_state, |session| {
+                    session.stage = UpdateInstallStage::Restarting;
+                    session.session_id = session_id.clone();
+                    session.percent = 1.0;
+                    session.message = "更新已安装，正在重启 Lime".to_string();
+                    session.error = None;
+                    session.is_active = true;
+                    session.can_close_window = true;
+                    session.completed_at = None;
+                });
+
+                let app_handle_for_restart = app_handle_for_task.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    app_handle_for_restart.restart();
+                });
+            }
+            Ok(false) => {}
+            Err(error) => {
+                update_install_session(&app_handle_for_task, &install_state, |session| {
+                    session.stage = UpdateInstallStage::Failed;
+                    session.session_id = session_id.clone();
+                    session.message = "暂时无法自动安装更新".to_string();
+                    session.error = Some(format!("{error}。请前往发布页手动下载最新版"));
+                    session.is_active = false;
+                    session.can_close_window = true;
+                    session.completed_at = Some(current_unix_timestamp());
+                });
+            }
+        }
+    });
+
+    Ok(session)
+}
+
+/// 获取当前更新安装会话快照。
+#[tauri::command]
+pub fn get_update_install_session(
+    install_state: State<'_, UpdateInstallSessionState>,
+) -> Result<UpdateInstallSession, String> {
+    Ok(install_state.snapshot())
 }
 
 /// 下载并安装更新

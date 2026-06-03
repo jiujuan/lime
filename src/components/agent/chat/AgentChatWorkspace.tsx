@@ -518,6 +518,8 @@ export function AgentChatWorkspace({
   } = useThemeScopedChatToolPreferences(activeTheme, {
     sessionSync: chatToolPreferenceSessionSync,
   });
+  const [inputbarObjectiveModeEnabled, setInputbarObjectiveModeEnabled] =
+    useState(false);
   const {
     projectId,
     shouldDisableSessionRestore,
@@ -1839,6 +1841,8 @@ export function AgentChatWorkspace({
     setProviderType,
     model,
     setModel,
+    reasoningEffort,
+    setReasoningEffort,
     executionStrategy,
     accessMode,
     setAccessMode,
@@ -6382,6 +6386,8 @@ export function AgentChatWorkspace({
     setProviderType,
     model,
     setModel,
+    reasoningEffort,
+    setReasoningEffort,
     sessionExecutionRuntime: executionRuntime,
     projectId: projectId ?? null,
     projectRootPath: project?.rootPath || null,
@@ -6404,6 +6410,8 @@ export function AgentChatWorkspace({
     initialInputCapability: effectiveInitialInputCapability,
     initialKnowledgePackSelection,
     setChatToolPreferences,
+    objectiveEnabled: inputbarObjectiveModeEnabled,
+    onObjectiveEnabledChange: setInputbarObjectiveModeEnabled,
     handleNavigateToSkillSettings,
     handleRefreshSkills,
     soulArtifactVoiceGenerationBrief,
@@ -6811,10 +6819,14 @@ export function AgentChatWorkspace({
     setProviderType,
     model,
     setModel,
+    reasoningEffort,
+    setReasoningEffort,
     accessMode,
     setAccessMode,
     chatToolPreferences: effectiveChatToolPreferences,
     setChatToolPreferences,
+    objectiveEnabled: inputbarObjectiveModeEnabled,
+    onObjectiveEnabledChange: setInputbarObjectiveModeEnabled,
     selectedTeam,
     handleSelectTeam,
     handleEnableSuggestedTeam,

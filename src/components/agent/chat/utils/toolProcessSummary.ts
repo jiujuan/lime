@@ -24,9 +24,10 @@ import {
   resolveUserFacingToolSearchItemLabel,
 } from "./toolSearchResultSummary";
 import {
-  isImageGenerationProtocolFailure,
-  resolveImageGenerationFailureDisplayText,
+  isLimeTaskProtocolFailure,
+  resolveLimeTaskProtocolFailureDisplayText,
 } from "./limeTaskProtocolNoise";
+import { resolveContentWorkbenchToolCopy } from "./contentWorkbenchToolCopy";
 
 type ToolProcessStatus =
   | ToolCallState["status"]
@@ -38,6 +39,7 @@ type ToolProcessNarrativeSource =
   | "tool_search"
   | "search_results"
   | "site"
+  | "vision"
   | "plain_result"
   | "generic";
 
@@ -219,7 +221,10 @@ function isLikelyWebSearchRuntimeUnavailable(
 
 function stripRuntimeProtocolErrorPrefix(value: string): string | null {
   const stripped = value
-    .replace(/^\s*(?:执行失败[:：]\s*)?(?:-32603\s*:\s*)?(?:-32002\s*:?\s*)?/i, "")
+    .replace(
+      /^\s*(?:执行失败[:：]\s*)?(?:-32603\s*:\s*)?(?:-32002\s*:?\s*)?/i,
+      "",
+    )
     .replace(/^\s*(?:json-?rpc|runtime|tool)\s+error[:：]\s*/i, "")
     .trim();
 
@@ -266,8 +271,14 @@ export function resolveToolErrorSummaryText(
     return shorten(WEB_SEARCH_RUNTIME_UNAVAILABLE_MESSAGE, maxLength);
   }
 
-  if (isImageGenerationProtocolFailure({ toolName, text: normalized })) {
-    return shorten(resolveImageGenerationFailureDisplayText(), maxLength);
+  if (isLimeTaskProtocolFailure({ toolName, text: normalized })) {
+    return shorten(
+      resolveLimeTaskProtocolFailureDisplayText({
+        toolName,
+        text: normalized,
+      }),
+      maxLength,
+    );
   }
 
   const protocolSummary = resolveRuntimeProtocolErrorSummaryText(
@@ -292,8 +303,11 @@ export function resolveToolErrorDetailText(
   }
 
   if (!isLikelyWebSearchRuntimeUnavailable(toolName, normalized)) {
-    if (isImageGenerationProtocolFailure({ toolName, text: normalized })) {
-      return resolveImageGenerationFailureDisplayText();
+    if (isLimeTaskProtocolFailure({ toolName, text: normalized })) {
+      return resolveLimeTaskProtocolFailureDisplayText({
+        toolName,
+        text: normalized,
+      });
     }
 
     const stripped = stripRuntimeProtocolErrorPrefix(normalized);
@@ -388,12 +402,8 @@ function buildWebSearchPostSummary(output: string): string | null {
   return `已找到 ${items.length} 个可参考来源`;
 }
 
-function buildFetchSearchFailureSummary(
-  family: "fetch" | "search",
-): string {
-  return family === "fetch"
-    ? "来源暂时无法读取"
-    : "搜索结果暂时无法读取";
+function buildFetchSearchFailureSummary(family: "fetch" | "search"): string {
+  return family === "fetch" ? "来源暂时无法读取" : "搜索结果暂时无法读取";
 }
 
 function buildSitePostSummary(metadata: unknown): string | null {
@@ -427,16 +437,62 @@ function buildSitePostSummary(metadata: unknown): string | null {
   return null;
 }
 
-const LIME_TASK_SUMMARY_LABELS: Partial<Record<string, string>> = {
-  limecreatevideogenerationtask: "视频生成",
-  limecreatetranscriptiontask: "转写",
-  limecreatebroadcastgenerationtask: "口播生成",
-  limecreatecovergenerationtask: "封面生成",
-  limecreateresourcesearchtask: "素材检索",
-  limecreatemodalresourcesearchtask: "素材检索",
-  limecreateimagegenerationtask: "图片生成",
-  limecreateurlparsetask: "链接解析",
-  limecreatetypesettingtask: "排版",
+const LIME_TASK_SUMMARY_LABELS: Partial<
+  Record<string, { key: string; defaultValue: string }>
+> = {
+  limecreatevideogenerationtask: {
+    key: "label.videoGeneration",
+    defaultValue: "视频生成",
+  },
+  limecreateaudiogenerationtask: {
+    key: "label.audioGeneration",
+    defaultValue: "配音生成",
+  },
+  limecreatetranscriptiontask: {
+    key: "label.transcription",
+    defaultValue: "转写",
+  },
+  limecreatebroadcastgenerationtask: {
+    key: "label.broadcastGeneration",
+    defaultValue: "口播生成",
+  },
+  limecreatecovergenerationtask: {
+    key: "label.coverGeneration",
+    defaultValue: "封面生成",
+  },
+  limecreateresourcesearchtask: {
+    key: "label.resourceSearch",
+    defaultValue: "素材检索",
+  },
+  limecreatemodalresourcesearchtask: {
+    key: "label.resourceSearch",
+    defaultValue: "素材检索",
+  },
+  limecreateimagegenerationtask: {
+    key: "label.imageGeneration",
+    defaultValue: "图片生成",
+  },
+  limecreateurlparsetask: {
+    key: "label.urlParse",
+    defaultValue: "链接解析",
+  },
+  limecreatetypesettingtask: {
+    key: "label.typesetting",
+    defaultValue: "排版",
+  },
+};
+
+const DIRECT_CONTENT_SUMMARY_LABELS: Partial<
+  Record<string, { key: string; defaultValue: string }>
+> = {
+  socialgeneratecoverimage: {
+    key: "label.coverImage",
+    defaultValue: "封面图",
+  },
+  generateimage: {
+    key: "label.image",
+    defaultValue: "图片",
+  },
 };
 
 function normalizeNarrativeSubject(
@@ -456,17 +512,66 @@ function buildLimeTaskSummary(
   normalizedName: string,
   subject: string | null,
 ): string | null {
+  const directLabel = DIRECT_CONTENT_SUMMARY_LABELS[normalizedName];
+  if (directLabel) {
+    const normalizedSubject = normalizeNarrativeSubject(subject);
+    const label = resolveContentWorkbenchToolCopy(
+      directLabel.key,
+      directLabel.defaultValue,
+    );
+    return normalizedSubject
+      ? resolveContentWorkbenchToolCopy(
+          `summary.direct.${phase}WithSubject`,
+          {
+            pre: "先生成 {{subject}} 的{{label}}",
+            post: "已生成 {{subject}} 的{{label}}",
+          }[phase],
+          {
+            subject: normalizedSubject,
+            label,
+          },
+        )
+      : resolveContentWorkbenchToolCopy(
+          `summary.direct.${phase}`,
+          {
+            pre: "先生成{{label}}",
+            post: "已生成{{label}}",
+          }[phase],
+          { label },
+        );
+  }
+
   const taskLabel = LIME_TASK_SUMMARY_LABELS[normalizedName];
   if (!taskLabel) {
     return null;
   }
 
   const normalizedSubject = normalizeNarrativeSubject(subject);
-  const prefix = phase === "pre" ? "先发起" : "已发起";
+  const label = resolveContentWorkbenchToolCopy(
+    taskLabel.key,
+    taskLabel.defaultValue,
+  );
 
   return normalizedSubject
-    ? `${prefix} ${normalizedSubject} 的${taskLabel}`
-    : `${prefix}${taskLabel}`;
+    ? resolveContentWorkbenchToolCopy(
+        `summary.task.${phase}WithSubject`,
+        {
+          pre: "先发起 {{subject}} 的{{label}}",
+          post: "已发起 {{subject}} 的{{label}}",
+        }[phase],
+        {
+          subject: normalizedSubject,
+          label,
+        },
+      )
+    : resolveContentWorkbenchToolCopy(
+        `summary.task.${phase}`,
+        {
+          pre: "先发起{{label}}",
+          post: "已发起{{label}}",
+        }[phase],
+        { label },
+      );
 }
 
 function buildSiteToolSummary(
@@ -517,6 +622,20 @@ function buildSiteToolSummary(
   }
 
   return null;
+}
+
+function buildVisionToolSummary(
+  phase: "pre" | "post",
+  normalizedName: string,
+  subject: string | null,
+): string | null {
+  const normalizedSubject = normalizeNarrativeSubject(subject);
+  const prefix = phase === "pre" ? "先" : "已";
+  const verb = normalizedName === "viewimage" ? "查看" : "分析";
+
+  return normalizedSubject
+    ? `${prefix}${verb}图片 ${normalizedSubject}`
+    : `${prefix}${verb}图片`;
 }
 
 function buildCommandPreSummary(
@@ -661,7 +780,9 @@ function buildGenericPostSummary(params: {
     return normalizedSubject ? `已加载技能 ${normalizedSubject}` : "已加载技能";
   }
   if (normalizedName === "listmcpresources") {
-    return "已查看可用 MCP 资源";
+    return normalizedSubject
+      ? `已查看 ${normalizedSubject}`
+      : "已查看可用 MCP 资源";
   }
   if (normalizedName === "readmcpresource") {
     return normalizedSubject
@@ -704,6 +825,21 @@ function buildGenericPostSummary(params: {
     return normalizedSubject
       ? `已查看 ${normalizedSubject} 的协作成员`
       : "已查看团队成员";
+  }
+  if (normalizedName === "waitagent") {
+    return normalizedSubject
+      ? `已查看子任务 ${normalizedSubject} 进展`
+      : "已查看子任务进展";
+  }
+  if (normalizedName === "resumeagent") {
+    return normalizedSubject
+      ? `已继续子任务 ${normalizedSubject}`
+      : "已继续子任务";
+  }
+  if (normalizedName === "closeagent") {
+    return normalizedSubject
+      ? `已暂停子任务 ${normalizedSubject}`
+      : "已暂停子任务";
   }
   if (normalizedName === "croncreate") {
     return normalizedSubject
@@ -752,6 +888,8 @@ function buildGenericPostSummary(params: {
   }
 
   switch (display.family) {
+    case "vision":
+      return buildVisionToolSummary("post", normalizedName, normalizedSubject);
     case "read":
       return normalizedSubject
         ? `已查看 ${normalizedSubject}`
@@ -801,6 +939,7 @@ function buildGenericPreSummary(params: {
   const args = normalizeArgumentsRecord(argumentsValue);
   const metadataRecord = asRecord(metadata);
   const subject = resolveToolSubject(toolName, argumentsValue);
+  const normalizedSubject = normalizeNarrativeSubject(subject);
   const query =
     readString(args, ["query", "q", "pattern", "search_query"]) ||
     readString(metadataRecord, ["query", "q", "pattern", "search_query"]);
@@ -818,11 +957,21 @@ function buildGenericPreSummary(params: {
   }
 
   if (normalizedName === "waitagent") {
-    return "先等待子任务返回结果";
+    return normalizedSubject
+      ? `先等待子任务 ${normalizedSubject} 返回结果`
+      : "先等待子任务返回结果";
+  }
+
+  if (normalizedName === "resumeagent") {
+    return normalizedSubject
+      ? `先继续子任务 ${normalizedSubject}`
+      : "先继续子任务处理";
   }
 
   if (normalizedName === "closeagent") {
-    return "先结束不再需要的子任务";
+    return normalizedSubject
+      ? `先暂停子任务 ${normalizedSubject}`
+      : "先暂停不再需要的子任务";
   }
 
   if (normalizedName === "askuserquestion") {
@@ -864,7 +1013,6 @@ function buildGenericPreSummary(params: {
   }
 
   const display = getToolDisplayInfo(toolName, "running");
-  const normalizedSubject = normalizeNarrativeSubject(subject);
 
   if (normalizedName === "enterplanmode") {
     return "先进入计划模式拆解方案";
@@ -891,7 +1039,9 @@ function buildGenericPreSummary(params: {
   }
 
   if (normalizedName === "listmcpresources") {
-    return "先查看可用 MCP 资源";
+    return normalizedSubject
+      ? `先查看 ${normalizedSubject}`
+      : "先查看可用 MCP 资源";
   }
 
   if (normalizedName === "readmcpresource") {
@@ -1001,6 +1151,8 @@ function buildGenericPreSummary(params: {
   }
 
   switch (display.family) {
+    case "vision":
+      return buildVisionToolSummary("pre", normalizedName, normalizedSubject);
     case "read":
       return normalizedSubject
         ? `先查看 ${normalizedSubject}`
@@ -1018,7 +1170,12 @@ function buildGenericPreSummary(params: {
       return buildCommandPreSummary(normalizedName, args);
     case "fetch": {
       const urlLabel = resolveUrlLabel(args, metadataRecord);
-      return urlLabel ? `先获取 ${urlLabel} 内容` : "先获取外部内容";
+      if (urlLabel) {
+        return `先获取 ${urlLabel} 内容`;
+      }
+      return normalizedSubject
+        ? `先获取 ${normalizedSubject}`
+        : "先获取外部内容";
     }
     case "search":
       return query ? `先搜索 ${shorten(query, 36)}` : "先搜索相关资料";
@@ -1064,13 +1221,16 @@ function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
       ? resolveToolErrorSummaryText(input.toolName, resultOutput, 96) ||
         plainOutput
       : plainOutput;
-  const imageGenerationFailureSummary =
+  const limeTaskFailureSummary =
     input.status === "failed" &&
-    isImageGenerationProtocolFailure({
+    isLimeTaskProtocolFailure({
       toolName: input.toolName,
       text: input.error || resultOutput,
     })
-      ? resolveImageGenerationFailureDisplayText()
+      ? resolveLimeTaskProtocolFailureDisplayText({
+          toolName: input.toolName,
+          text: input.error || resultOutput,
+        })
       : null;
   const args = normalizeArgumentsRecord(input.argumentsValue);
   const metadata = asRecord(input.metadata);
@@ -1080,8 +1240,8 @@ function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
   let postSource: ToolProcessNarrativeSource = "none";
 
   if (input.status === "failed") {
-    if (imageGenerationFailureSummary) {
-      postSummary = imageGenerationFailureSummary;
+    if (limeTaskFailureSummary) {
+      postSummary = limeTaskFailureSummary;
       postSource = "error";
     } else if (display.family === "fetch" || display.family === "search") {
       postSummary = buildFetchSearchFailureSummary(display.family);
@@ -1091,7 +1251,7 @@ function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
         plainError ||
         (failedOutputSummary ? `执行失败：${failedOutputSummary}` : null);
     }
-    if (postSummary && !imageGenerationFailureSummary) {
+    if (postSummary && !limeTaskFailureSummary) {
       if (display.family !== "fetch" && display.family !== "search") {
         if (!postSummary.startsWith("执行失败：")) {
           postSummary = `执行失败：${postSummary}`;
@@ -1138,6 +1298,18 @@ function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
   if (!postSummary && isBrowserToolName(normalizedName)) {
     postSummary = buildBrowserPostSummary(normalizedName, args, metadata);
     postSource = postSummary ? "generic" : "none";
+  }
+
+  if (!postSummary && display.family === "vision") {
+    const visionSummary = buildVisionToolSummary(
+      "post",
+      normalizedName,
+      normalizeNarrativeSubject(subject),
+    );
+    if (visionSummary) {
+      postSummary = visionSummary;
+      postSource = "vision";
+    }
   }
 
   if (!postSummary && plainOutput) {

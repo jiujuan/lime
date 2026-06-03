@@ -169,6 +169,7 @@ fn build_runtime_turn_test_request(message: &str, metadata: Option<Value>) -> As
         provider_config: None,
         provider_preference: None,
         model_preference: None,
+        reasoning_effort: None,
         thinking_enabled: None,
         approval_policy: None,
         sandbox_policy: None,
@@ -278,6 +279,7 @@ impl Provider for AutoCompactThresholdTestProvider {
             context_limit: self.context_limit,
             temperature: None,
             max_tokens: None,
+            reasoning_effort: None,
             toolshim: false,
             toolshim_model: None,
             fast_model: None,
@@ -335,6 +337,7 @@ fn runtime_test_model_capabilities(
         json_mode: true,
         function_calling: true,
         reasoning: false,
+        reasoning_effort: None,
     }
 }
 

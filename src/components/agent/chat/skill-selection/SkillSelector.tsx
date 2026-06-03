@@ -1,5 +1,6 @@
 import React, { Suspense, useCallback, useMemo, useRef, useState } from "react";
 import { FolderOpen, Loader2, RefreshCw, Zap } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   Popover,
   PopoverContent,
@@ -32,6 +33,7 @@ interface SkillSelectorProps {
   serviceSkillGroups?: ServiceSkillGroup[];
   activeSkill?: Skill | null;
   isLoading?: boolean;
+  renderMode?: "button" | "inline";
   onSelectInputCapability: SelectInputCapabilityHandler;
   onClearSkill?: () => void;
   onNavigateToSettings?: () => void;
@@ -82,6 +84,7 @@ export const SkillSelectorContent: React.FC<SkillSelectorContentProps> = ({
   onRefresh,
   onImport,
 }) => {
+  const { t } = useTranslation("agent");
   const activeSkillLabel = getActiveSkillDisplayLabel(activeSkill);
   const handleSelectCapability = React.useCallback(
     (item: InputCapabilityDescriptor) => {
@@ -112,7 +115,7 @@ export const SkillSelectorContent: React.FC<SkillSelectorContentProps> = ({
     <Suspense
       fallback={
         <div className="px-4 py-7 text-center text-sm text-slate-500">
-          加载中...
+          {t("agentChat.inputbar.skillSelector.loading")}
         </div>
       }
     >
@@ -201,7 +204,7 @@ export const SkillSelectorContent: React.FC<SkillSelectorContentProps> = ({
         ) : null}
         {!hasResults && !canRefresh && !canImport ? (
           <div className="px-4 pb-3 text-xs text-slate-400">
-            暂无更多技能操作。
+            {t("agentChat.inputbar.skillSelector.emptyActions")}
           </div>
         ) : null}
       </div>
@@ -215,29 +218,33 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
   serviceSkillGroups = [],
   activeSkill = null,
   isLoading = false,
+  renderMode = "button",
   onSelectInputCapability,
   onClearSkill,
   onNavigateToSettings,
   onImportSkill,
   onRefreshSkills,
 }) => {
+  const { t } = useTranslation("agent");
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [importing, setImporting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [autoRefreshTriggered, setAutoRefreshTriggered] = useState(false);
   const commandRef = useRef<HTMLDivElement>(null);
+  const inlineMode = renderMode === "inline";
+  const effectiveOpen = inlineMode || open;
 
   useIdleModulePreload(() => {
     void preloadCharacterMentionPanel();
   });
 
   React.useEffect(() => {
-    if (!open) {
+    if (!effectiveOpen) {
       setQuery("");
       setAutoRefreshTriggered(false);
     }
-  }, [open]);
+  }, [effectiveOpen]);
 
   const { installedSkills, availableSkills } = useMemo(
     () => partitionMentionableSkills(skills, query),
@@ -273,7 +280,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
 
   React.useEffect(() => {
     if (
-      !open ||
+      !effectiveOpen ||
       autoRefreshTriggered ||
       !onRefreshSkills ||
       refreshBusy ||
@@ -288,7 +295,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
     autoRefreshTriggered,
     handleRefresh,
     onRefreshSkills,
-    open,
+    effectiveOpen,
     refreshBusy,
     skills.length,
   ]);
@@ -337,6 +344,48 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
     }
   };
 
+  const content = (
+    <SkillSelectorContent
+      activeSkill={activeSkill}
+      installedSkills={installedSkills}
+      availableSkills={availableSkills}
+      mentionServiceSkills={filteredServiceSkills}
+      serviceSkillGroups={serviceSkillGroups}
+      query={query}
+      refreshBusy={refreshBusy}
+      hasResults={hasResults}
+      canRefresh={canRefresh}
+      canImport={canImport}
+      importing={importing}
+      commandRef={commandRef}
+      onQueryChange={setQuery}
+      onSelectInputCapability={handleSelectCapability}
+      onSelectAvailableSkill={handleSelectAvailableSkill}
+      onClearSkill={handleClearSkill}
+      onNavigateToSettings={
+        onNavigateToSettings
+          ? () => {
+              setOpen(false);
+              onNavigateToSettings();
+            }
+          : undefined
+      }
+      onRefresh={() => void handleRefresh()}
+      onImport={() => void handleImport()}
+    />
+  );
+
+  if (inlineMode) {
+    return (
+      <div
+        className="w-full overflow-hidden rounded-lg border border-slate-100 bg-white"
+        data-testid="skill-selector-inline"
+      >
+        {content}
+      </div>
+    );
+  }
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -350,7 +399,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
           }`}
         >
           <Zap className="h-3.5 w-3.5" />
-          <span>技能</span>
+          <span>{t("agentChat.inputbar.skillSelector.trigger")}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -359,36 +408,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
         align="start"
         sideOffset={8}
       >
-        {open ? (
-          <SkillSelectorContent
-            activeSkill={activeSkill}
-            installedSkills={installedSkills}
-            availableSkills={availableSkills}
-            mentionServiceSkills={filteredServiceSkills}
-            serviceSkillGroups={serviceSkillGroups}
-            query={query}
-            refreshBusy={refreshBusy}
-            hasResults={hasResults}
-            canRefresh={canRefresh}
-            canImport={canImport}
-            importing={importing}
-            commandRef={commandRef}
-            onQueryChange={setQuery}
-            onSelectInputCapability={handleSelectCapability}
-            onSelectAvailableSkill={handleSelectAvailableSkill}
-            onClearSkill={handleClearSkill}
-            onNavigateToSettings={
-              onNavigateToSettings
-                ? () => {
-                    setOpen(false);
-                    onNavigateToSettings();
-                  }
-                : undefined
-            }
-            onRefresh={() => void handleRefresh()}
-            onImport={() => void handleImport()}
-          />
-        ) : null}
+        {open ? content : null}
       </PopoverContent>
     </Popover>
   );

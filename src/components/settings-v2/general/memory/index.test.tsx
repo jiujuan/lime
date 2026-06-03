@@ -58,6 +58,13 @@ function findButton(container: HTMLElement, text: string): HTMLButtonElement {
   return button as HTMLButtonElement;
 }
 
+async function clickButtonByText(container: HTMLElement, text: string) {
+  await act(async () => {
+    findButton(container, text).click();
+    await Promise.resolve();
+  });
+}
+
 function changeSelectValue(select: HTMLSelectElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(
     HTMLSelectElement.prototype,
@@ -67,31 +74,6 @@ function changeSelectValue(select: HTMLSelectElement, value: string) {
   select.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-function findSelectByOptionText(
-  container: HTMLElement,
-  optionText: string,
-): HTMLSelectElement {
-  const select = Array.from(container.querySelectorAll("select")).find(
-    (element) =>
-      Array.from(element.options).some((option) =>
-        option.textContent?.includes(optionText),
-      ),
-  );
-  if (!select) {
-    throw new Error(`未找到选择框选项: ${optionText}`);
-  }
-  return select as HTMLSelectElement;
-}
-
-function changeInputValue(input: HTMLInputElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(
-    HTMLInputElement.prototype,
-    "value",
-  )?.set;
-  setter?.call(input, value);
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-}
-
 function changeTextareaValue(textarea: HTMLTextAreaElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(
     HTMLTextAreaElement.prototype,
@@ -99,19 +81,6 @@ function changeTextareaValue(textarea: HTMLTextAreaElement, value: string) {
   )?.set;
   setter?.call(textarea, value);
   textarea.dispatchEvent(new Event("input", { bubbles: true }));
-}
-
-function findInputByPlaceholder(
-  container: HTMLElement,
-  placeholder: string,
-): HTMLInputElement {
-  const input = Array.from(container.querySelectorAll("input")).find(
-    (element) => element.getAttribute("placeholder") === placeholder,
-  );
-  if (!input) {
-    throw new Error(`未找到输入框: ${placeholder}`);
-  }
-  return input as HTMLInputElement;
 }
 
 function findTextareaByPlaceholder(
@@ -208,17 +177,22 @@ describe("MemorySettings", () => {
     const bodyText = document.body.textContent ?? "";
     expect(bodyText).toContain("Memory");
     expect(bodyText).toContain(
-      "Configure how memory entries are vectorized and retrieved.",
+      "Everyday settings and advanced tools are separated.",
     );
-    expect(bodyText).toContain("Embedding model");
-    expect(bodyText).toContain("AI Personality / Voice");
-    expect(bodyText).toContain("Import SOUL.md");
-    expect(bodyText).toContain("Export SOUL.md");
-    expect(bodyText).toContain("Auto (local ONNX -> Ollama -> full-text only)");
-    expect(bodyText).toContain("Local ONNX (all-MiniLM-L6-v2)");
-    expect(bodyText).toContain("Ollama");
-    expect(bodyText).toContain("OpenAI API");
-    expect(bodyText).toContain("None (full-text only)");
+    expect(bodyText).toContain("Everyday memory");
+    expect(bodyText).toContain("AI personality");
+    expect(bodyText).toContain("Advanced");
+    expect(bodyText).toContain("Everyday memory status");
+    expect(bodyText).not.toContain("Writing voice");
+    expect(bodyText).not.toContain("Import SOUL.md");
+    expect(bodyText).not.toContain("SOUL.md file content");
+    expect(bodyText).not.toContain(
+      "Auto (local ONNX -> Ollama -> full-text only)",
+    );
+    expect(bodyText).not.toContain("Local ONNX (all-MiniLM-L6-v2)");
+    expect(bodyText).not.toContain("OpenAI API");
+    expect(bodyText).not.toContain("For example: Pragmatic research partner");
+    expect(bodyText).not.toContain("Creator voice ID");
     expect(bodyText).not.toContain("Source policy");
     expect(bodyText).not.toContain("Memory directory");
     expect(bodyText).not.toContain("Hit details");
@@ -230,6 +204,7 @@ describe("MemorySettings", () => {
   it("切换到本地 ONNX 后应保存嵌入配置且保留旧记忆字段", async () => {
     const container = renderComponent();
     await flushEffects();
+    await clickButtonByText(container, "Advanced");
 
     const select = container.querySelector(
       "#memory-embedding-provider",
@@ -273,6 +248,7 @@ describe("MemorySettings", () => {
   it("Ollama 选项应通过 provider 与 provider_id 写入底层配置", async () => {
     const container = renderComponent();
     await flushEffects();
+    await clickButtonByText(container, "Advanced");
 
     const select = container.querySelector(
       "#memory-embedding-provider",
@@ -303,211 +279,22 @@ describe("MemorySettings", () => {
     );
   });
 
-  it("填写并保存 AI 个性 / 声线时应写入 memory.soul 且保留旧记忆字段", async () => {
+  it("选择 AI 个性模板后应写入 memory.soul 且不暴露手填字段", async () => {
     const container = renderComponent();
     await flushEffects();
+    await clickButtonByText(container, "AI personality");
 
-    const soulToggle = container.querySelector<HTMLButtonElement>(
-      '[aria-label="Enable AI personality and voice"]',
+    expect(document.body.textContent).toContain("Initial templates");
+    expect(document.body.textContent).toContain("Direct reviewer");
+    expect(document.body.textContent).not.toContain(
+      "For example: Pragmatic research partner",
     );
-    expect(soulToggle).not.toBeNull();
+    expect(document.body.textContent).not.toContain("Creator voice ID");
+    expect(container.querySelector("input")).toBeNull();
+    expect(container.querySelector("textarea")).toBeNull();
 
     await act(async () => {
-      soulToggle?.click();
-      changeInputValue(
-        findInputByPlaceholder(
-          container,
-          "For example: Pragmatic research partner",
-        ),
-        "Direct partner",
-      );
-      changeTextareaValue(
-        findTextareaByPlaceholder(
-          container,
-          "Describe how Lime should communicate with you in one sentence.",
-        ),
-        "Lead with the answer and keep the reasoning concrete.",
-      );
-      changeTextareaValue(
-        findTextareaByPlaceholder(
-          container,
-          "One per line, for example: lead with the answer; call out risks; give the next step",
-        ),
-        "Call out weak assumptions\nGive the next step",
-      );
-      changeTextareaValue(
-        findTextareaByPlaceholder(
-          container,
-          "One per line, for example: no vague encouragement; do not invent capabilities",
-        ),
-        "No vague encouragement\nDo not invent capabilities",
-      );
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      findButton(container, "Save").click();
-      await Promise.resolve();
-    });
-    await flushEffects();
-
-    expect(mockSaveConfig).toHaveBeenCalledWith(
-      expect.objectContaining({
-        memory: expect.objectContaining({
-          enabled: true,
-          auto: expect.objectContaining({
-            entrypoint: "MEMORY.md",
-          }),
-          soul: expect.objectContaining({
-            enabled: true,
-            name: "Direct partner",
-            summary: "Lead with the answer and keep the reasoning concrete.",
-            communication_style: [
-              "Call out weak assumptions",
-              "Give the next step",
-            ],
-            avoid: ["No vague encouragement", "Do not invent capabilities"],
-            imported_from: "manual",
-            updated_at: expect.any(String),
-          }),
-        }),
-      }),
-    );
-  });
-
-  it("填写并保存正式内容声线时应写入 memory.soul.artifact_voice 且保留旧记忆字段", async () => {
-    const container = renderComponent();
-    await flushEffects();
-
-    const artifactVoiceToggle = container.querySelector<HTMLButtonElement>(
-      '[aria-label="Enable formal content voice"]',
-    );
-    expect(artifactVoiceToggle).not.toBeNull();
-
-    await act(async () => {
-      artifactVoiceToggle?.click();
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      changeSelectValue(
-        findSelectByOptionText(container, "Brand voice"),
-        "brand_voice",
-      );
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      changeInputValue(
-        findInputByPlaceholder(container, "For example: brand-lime-editorial"),
-        "brand-voice-1",
-      );
-      changeInputValue(
-        findInputByPlaceholder(container, "For example: voice-pack-2026"),
-        "voice-pack-1",
-      );
-      changeTextareaValue(
-        findTextareaByPlaceholder(
-          container,
-          "One per line, for example: memory:voice-note-1",
-        ),
-        "memory:voice-note-1\nknowledge:brand-style",
-      );
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      findButton(container, "Save").click();
-      await Promise.resolve();
-    });
-    await flushEffects();
-
-    expect(mockSaveConfig).toHaveBeenCalledWith(
-      expect.objectContaining({
-        memory: expect.objectContaining({
-          enabled: true,
-          auto: expect.objectContaining({
-            entrypoint: "MEMORY.md",
-          }),
-          resolve: expect.objectContaining({
-            follow_imports: true,
-          }),
-          soul: expect.objectContaining({
-            artifact_voice: {
-              enabled: true,
-              voice_source: "brand_voice",
-              creator_voice_id: undefined,
-              brand_voice_id: "brand-voice-1",
-              evidence_pack_id: "voice-pack-1",
-              evidence_refs: ["memory:voice-note-1", "knowledge:brand-style"],
-            },
-            imported_from: "manual",
-            updated_at: expect.any(String),
-          }),
-        }),
-      }),
-    );
-  });
-
-  it("关闭正式内容声线后保存应只关闭 artifact_voice 且保留声线草稿", async () => {
-    mockGetConfig.mockResolvedValueOnce({
-      memory: {
-        enabled: true,
-        max_entries: 1000,
-        retention_days: 30,
-        auto_cleanup: true,
-        profile: {
-          strengths: [],
-          explanation_style: [],
-          challenge_preference: [],
-        },
-        soul: {
-          enabled: true,
-          summary: "Lead with the answer",
-          communication_style: ["Call out weak assumptions"],
-          avoid: [],
-          artifact_voice: {
-            enabled: true,
-            voice_source: "brand_voice",
-            brand_voice_id: "brand-voice-1",
-            evidence_pack_id: "voice-pack-1",
-            evidence_refs: ["memory:voice-note-1"],
-          },
-          imported_from: "manual",
-        },
-        auto: {
-          enabled: true,
-          entrypoint: "MEMORY.md",
-          max_loaded_lines: 200,
-        },
-        resolve: {
-          additional_dirs: [],
-          follow_imports: true,
-          import_max_depth: 5,
-          load_additional_dirs_memory: false,
-        },
-        sources: {
-          project_memory_paths: ["AGENTS.md"],
-          project_rule_dirs: [".agents/rules"],
-          user_memory_path: undefined,
-        },
-        embedding: {
-          provider: "auto",
-          model: "all-MiniLM-L6-v2",
-        },
-      },
-    });
-
-    const container = renderComponent();
-    await flushEffects();
-
-    const artifactVoiceToggle = container.querySelector<HTMLButtonElement>(
-      '[aria-label="Enable formal content voice"]',
-    );
-    expect(artifactVoiceToggle).not.toBeNull();
-
-    await act(async () => {
-      artifactVoiceToggle?.click();
+      findButton(container, "Use template").click();
       await Promise.resolve();
     });
 
@@ -527,15 +314,15 @@ describe("MemorySettings", () => {
           }),
           soul: expect.objectContaining({
             enabled: true,
-            summary: "Lead with the answer",
-            artifact_voice: {
-              enabled: false,
-              voice_source: "brand_voice",
-              creator_voice_id: undefined,
-              brand_voice_id: "brand-voice-1",
-              evidence_pack_id: "voice-pack-1",
-              evidence_refs: ["memory:voice-note-1"],
-            },
+            name: "Balanced partner",
+            summary: expect.stringContaining("Lead with the answer"),
+            communication_style: expect.arrayContaining([
+              "Answer the core question first",
+              "Give a clear next step",
+            ]),
+            avoid: expect.arrayContaining(["Do not use vague encouragement"]),
+            imported_from: "manual",
+            updated_at: expect.any(String),
           }),
         }),
       }),
@@ -545,6 +332,7 @@ describe("MemorySettings", () => {
   it("SOUL.md 导入必须先预览，再应用到草稿并保存", async () => {
     const container = renderComponent();
     await flushEffects();
+    await clickButtonByText(container, "Advanced");
 
     await act(async () => {
       changeTextareaValue(
@@ -598,7 +386,57 @@ describe("MemorySettings", () => {
     );
   });
 
-  it("重置声线后保存应关闭 Soul 且不清空嵌入配置", async () => {
+  it("高级页应显示当前 SOUL.md 文件内容", async () => {
+    mockGetConfig.mockResolvedValueOnce({
+      memory: {
+        enabled: true,
+        max_entries: 1000,
+        retention_days: 30,
+        auto_cleanup: true,
+        soul: {
+          enabled: true,
+          name: "Direct partner",
+          summary: "Lead with the answer",
+          communication_style: ["Call out weak assumptions"],
+          avoid: ["No vague encouragement"],
+          imported_from: "manual",
+        },
+        auto: {
+          enabled: true,
+          entrypoint: "MEMORY.md",
+          max_loaded_lines: 200,
+        },
+        resolve: {
+          additional_dirs: [],
+          follow_imports: true,
+          import_max_depth: 5,
+          load_additional_dirs_memory: false,
+        },
+        sources: {
+          project_memory_paths: ["AGENTS.md"],
+          project_rule_dirs: [".agents/rules"],
+          user_memory_path: undefined,
+        },
+        embedding: {
+          provider: "auto",
+          model: "all-MiniLM-L6-v2",
+        },
+      },
+    });
+
+    renderComponent();
+    await flushEffects();
+    await clickButtonByText(document.body, "Advanced");
+
+    const bodyText = document.body.textContent ?? "";
+    expect(bodyText).toContain("SOUL.md file content");
+    expect(bodyText).toContain("# SOUL.md");
+    expect(bodyText).toContain("Lead with the answer");
+    expect(bodyText).toContain("Copy SOUL.md");
+    expect(bodyText).not.toContain("Export SOUL.md");
+  });
+
+  it("重置个性后保存应关闭 Soul 且不清空嵌入配置", async () => {
     mockGetConfig.mockResolvedValueOnce({
       memory: {
         enabled: true,
@@ -642,11 +480,12 @@ describe("MemorySettings", () => {
 
     const container = renderComponent();
     await flushEffects();
+    await clickButtonByText(container, "AI personality");
 
     expect(document.body.textContent).toContain("Lead with the answer");
 
     await act(async () => {
-      findButton(container, "Reset voice").click();
+      findButton(container, "Reset personality").click();
       await Promise.resolve();
     });
 

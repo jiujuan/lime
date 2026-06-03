@@ -10,6 +10,7 @@
 import { describe, expect } from "vitest";
 import { test } from "@fast-check/vitest";
 import * as fc from "fast-check";
+import { fastCheckRuns } from "../../test/fastCheckRuns";
 import { getSystemProviderIds } from "@/lib/config/providers";
 import type { SystemProviderId } from "@/lib/types/provider";
 import {
@@ -32,7 +33,9 @@ describe("Provider 图标系统", () => {
     // 获取所有 System Provider ID
     const systemProviderIds = getSystemProviderIds();
 
-    test.prop([fc.constantFrom(...systemProviderIds)])(
+    test.prop([fc.constantFrom(...systemProviderIds)], {
+      numRuns: fastCheckRuns(100),
+    })(
       "每个 System Provider 应有对应的图标映射",
       (providerId: SystemProviderId) => {
         // 验证 Provider ID 在映射表中存在
@@ -43,7 +46,9 @@ describe("Provider 图标系统", () => {
       },
     );
 
-    test.prop([fc.constantFrom(...systemProviderIds)])(
+    test.prop([fc.constantFrom(...systemProviderIds)], {
+      numRuns: fastCheckRuns(100),
+    })(
       "每个 System Provider 的图标名称应在可用图标列表中",
       (providerId: SystemProviderId) => {
         const iconName = getIconName(providerId);
@@ -53,7 +58,9 @@ describe("Provider 图标系统", () => {
       },
     );
 
-    test.prop([fc.constantFrom(...systemProviderIds)])(
+    test.prop([fc.constantFrom(...systemProviderIds)], {
+      numRuns: fastCheckRuns(100),
+    })(
       "每个 System Provider 应有对应的图标组件",
       (providerId: SystemProviderId) => {
         const iconName = getIconName(providerId);
@@ -64,7 +71,9 @@ describe("Provider 图标系统", () => {
       },
     );
 
-    test.prop([fc.constantFrom(...systemProviderIds)])(
+    test.prop([fc.constantFrom(...systemProviderIds)], {
+      numRuns: fastCheckRuns(100),
+    })(
       "hasProviderIcon 应对所有 System Provider 返回 true",
       (providerId: SystemProviderId) => {
         expect(hasProviderIcon(providerId)).toBe(true);

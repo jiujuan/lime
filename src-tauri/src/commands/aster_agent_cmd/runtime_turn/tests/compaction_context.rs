@@ -72,6 +72,86 @@ fn build_runtime_turn_context_snapshot_should_capture_final_turn_context_inputs(
 }
 
 #[test]
+fn build_runtime_turn_context_snapshot_should_project_plan_mode() {
+    let metadata = json!({
+        "harness": {
+            "collaboration_mode": {
+                "mode": "plan",
+                "source": "inputbar"
+            },
+            "preferences": {
+                "task": true
+            },
+            "task_mode_enabled": true
+        }
+    });
+
+    let snapshot =
+        build_runtime_turn_context_snapshot(Some(&metadata), &WorkspaceSettings::default());
+
+    assert_eq!(snapshot.collaboration_mode.as_deref(), Some("plan"));
+}
+
+#[test]
+fn build_runtime_turn_context_snapshot_should_infer_plan_mode_from_task_mode() {
+    let metadata = json!({
+        "harness": {
+            "preferences": {
+                "task_mode": true
+            }
+        }
+    });
+
+    let snapshot =
+        build_runtime_turn_context_snapshot(Some(&metadata), &WorkspaceSettings::default());
+
+    assert_eq!(snapshot.collaboration_mode.as_deref(), Some("plan"));
+}
+
+#[test]
+fn build_runtime_turn_context_snapshot_should_keep_thread_goal_params() {
+    let metadata = json!({
+        "harness": {
+            "goal_mode_enabled": true,
+            "thread_goal": {
+                "enabled": true,
+                "status": "active",
+                "set": {
+                    "threadId": "thread-goal-1",
+                    "objective": null,
+                    "status": "active",
+                    "tokenBudget": null
+                }
+            }
+        }
+    });
+
+    let snapshot =
+        build_runtime_turn_context_snapshot(Some(&metadata), &WorkspaceSettings::default());
+    let snapshot_metadata =
+        build_runtime_turn_context_metadata_value(&snapshot).expect("snapshot metadata");
+
+    assert_eq!(
+        snapshot_metadata
+            .get("harness")
+            .and_then(|value| value.get("thread_goal"))
+            .and_then(|value| value.get("set"))
+            .and_then(|value| value.get("threadId"))
+            .and_then(Value::as_str),
+        Some("thread-goal-1")
+    );
+    assert_eq!(
+        snapshot_metadata
+            .get("harness")
+            .and_then(|value| value.get("thread_goal"))
+            .and_then(|value| value.get("set"))
+            .and_then(|value| value.get("status"))
+            .and_then(Value::as_str),
+        Some("active")
+    );
+}
+
+#[test]
 fn build_runtime_compaction_session_config_should_keep_minimal_control_turn_context() {
     let session_config = build_runtime_compaction_session_config(
         "session-compact",

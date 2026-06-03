@@ -58,6 +58,7 @@ import {
 import { toast } from "sonner";
 import { buildInputbarControllerCopy } from "./inputbarControllerCopy";
 import { buildInputbarWorkflowStateCopy } from "../inputbarWorkflowCopy";
+import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 
 interface UseInputbarControllerParams {
   input: string;
@@ -70,8 +71,10 @@ interface UseInputbarControllerParams {
   setProviderType?: (type: string) => void;
   model?: string;
   setModel?: (model: string) => void;
+  reasoningEffort?: ModelReasoningEffortLevel | "";
+  setReasoningEffort?: (value: ModelReasoningEffortLevel | "") => void;
   toolStates?: Partial<InputbarToolStates>;
-  onToolStatesChange?: (states: InputbarToolStates) => void;
+  onToolStatesChange?: (states: Partial<InputbarToolStates>) => void;
   activeTheme?: string;
   initialInputCapability?: AgentInitialInputCapabilityParams;
   variant?: "default" | "workspace";
@@ -100,6 +103,8 @@ export function useInputbarController({
   setProviderType,
   model,
   setModel,
+  reasoningEffort,
+  setReasoningEffort,
   toolStates,
   onToolStatesChange,
   activeTheme,
@@ -127,10 +132,7 @@ export function useInputbarController({
   onRefreshSkills,
 }: UseInputbarControllerParams & SkillSelectionSourceProps) {
   const { t } = useTranslation("agent");
-  const copy = useMemo(
-    () => buildInputbarControllerCopy((key) => t(key)),
-    [t],
-  );
+  const copy = useMemo(() => buildInputbarControllerCopy((key) => t(key)), [t]);
   const workflowCopy = useMemo(
     () => buildInputbarWorkflowStateCopy((key, values) => t(key, values ?? {})),
     [t],
@@ -334,6 +336,8 @@ export function useInputbarController({
     pathReferences,
     activeCapability,
     knowledgePackSelection,
+    activeTools,
+    sessionId,
     onSend,
     clearPendingImages,
     clearPathReferences: onClearPathReferences,
@@ -349,6 +353,8 @@ export function useInputbarController({
     setProviderType,
     model,
     setModel,
+    reasoningEffort,
+    setReasoningEffort,
     handleSend,
     onStop,
     pendingImages,

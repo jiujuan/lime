@@ -43,8 +43,11 @@ const textOnlyCapabilities: ModelCapabilities = {
 
 export function createModelMetadata(
   id: string,
-  overrides: Partial<EnhancedModelMetadata> = {},
+  overrides: Omit<Partial<EnhancedModelMetadata>, "capabilities"> & {
+    capabilities?: Partial<ModelCapabilities>;
+  } = {},
 ): EnhancedModelMetadata {
+  const { capabilities, ...metadataOverrides } = overrides;
   return {
     id,
     display_name: id,
@@ -54,7 +57,7 @@ export function createModelMetadata(
     tier: "pro",
     capabilities: {
       ...defaultCapabilities,
-      ...overrides.capabilities,
+      ...capabilities,
     },
     pricing: null,
     limits: {
@@ -71,7 +74,7 @@ export function createModelMetadata(
     source: "custom",
     created_at: 0,
     updated_at: 0,
-    ...overrides,
+    ...metadataOverrides,
   };
 }
 

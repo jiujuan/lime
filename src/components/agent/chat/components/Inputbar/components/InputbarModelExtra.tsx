@@ -2,6 +2,7 @@ import React from "react";
 import type { AsterSessionExecutionRuntime } from "@/lib/api/agentRuntime";
 import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
 import { ChatModelSelector } from "../../ChatModelSelector";
+import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 
 interface InputbarModelExtraProps {
   isFullscreen?: boolean;
@@ -9,6 +10,8 @@ interface InputbarModelExtraProps {
   setProviderType: (type: string) => void;
   model?: string;
   setModel: (model: string) => void;
+  reasoningEffort?: ModelReasoningEffortLevel | "";
+  setReasoningEffort?: (value: ModelReasoningEffortLevel | "") => void;
   activeTheme?: string;
   onManageProviders?: () => void;
   executionRuntime?: AsterSessionExecutionRuntime | null;
@@ -20,6 +23,8 @@ export const InputbarModelExtra: React.FC<InputbarModelExtraProps> = ({
   setProviderType,
   model,
   setModel,
+  reasoningEffort,
+  setReasoningEffort,
   activeTheme,
   onManageProviders,
   executionRuntime: _executionRuntime = null,
@@ -38,6 +43,8 @@ export const InputbarModelExtra: React.FC<InputbarModelExtraProps> = ({
         setProviderType={setProviderType}
         model={model ?? ""}
         setModel={setModel}
+        reasoningEffort={reasoningEffort ?? ""}
+        setReasoningEffort={setReasoningEffort}
         activeTheme={activeTheme}
         compactTrigger
         popoverSide="top"

@@ -95,6 +95,7 @@ export interface SendMessageOptions {
   skillRequest?: SlashSkillRequest;
   providerOverride?: string;
   modelOverride?: string;
+  reasoningEffort?: string;
   systemPromptOverride?: string;
   searchMode?: AgentRuntimeWebSearchMode;
   skipSessionRestore?: boolean;

@@ -7,6 +7,7 @@
 
 import { describe, test, expect } from "vitest";
 import * as fc from "fast-check";
+import { fastCheckRuns } from "../../test/fastCheckRuns";
 import { artifactRegistry, ArtifactRegistry } from "@/lib/artifact/registry";
 import {
   ALL_ARTIFACT_TYPES,
@@ -363,7 +364,7 @@ describe("Property 10: 工具栏文件扩展名正确性", () => {
         // 扩展名应该在该类型的有效扩展名列表中
         expect(VALID_EXTENSIONS[type]).toContain(ext);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -384,7 +385,7 @@ describe("Property 10: 工具栏文件扩展名正确性", () => {
         const expectedExt = LANGUAGE_EXTENSION_MAP[language.toLowerCase()];
         expect(ext).toBe(expectedExt);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -398,7 +399,7 @@ describe("Property 10: 工具栏文件扩展名正确性", () => {
         const ext = getLanguageExtension(language);
         expect(ext).toBe("txt");
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -425,7 +426,7 @@ describe("Property 10: 工具栏文件扩展名正确性", () => {
         // 扩展名应该在该类型的有效扩展名列表中
         expect(VALID_EXTENSIONS[artifact.type]).toContain(ext);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -447,7 +448,7 @@ describe("Property 10: 工具栏文件扩展名正确性", () => {
         const expectedExt = LANGUAGE_EXTENSION_MAP[language.toLowerCase()];
         expect(ext).toBe(expectedExt);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -462,7 +463,7 @@ describe("Property 10: 工具栏文件扩展名正确性", () => {
         const expectedExt = DEFAULT_FILE_EXTENSIONS[type];
         expect(ext).toBe(expectedExt);
       }),
-      { numRuns: 50 },
+      { numRuns: fastCheckRuns(50) },
     );
   });
 
@@ -477,7 +478,7 @@ describe("Property 10: 工具栏文件扩展名正确性", () => {
         const expectedExt = DEFAULT_FILE_EXTENSIONS[type];
         expect(ext).toBe(expectedExt);
       }),
-      { numRuns: 50 },
+      { numRuns: fastCheckRuns(50) },
     );
   });
 
@@ -516,7 +517,7 @@ describe("Property 10: 工具栏文件扩展名正确性", () => {
           expect(ext).toBe(expectedExt);
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -541,7 +542,7 @@ describe("Property 10: 工具栏文件扩展名正确性", () => {
           expect(filename).toBe(customFilename);
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -572,7 +573,7 @@ describe("Property 10: 工具栏文件扩展名正确性", () => {
           }
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 });

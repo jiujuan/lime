@@ -169,6 +169,32 @@ describe("buildUserInputSubmitOp", () => {
     });
   });
 
+  it("中途切换模型但会话尚未同步时应在 submit payload 带上当前模型", () => {
+    const op = buildUserInputSubmitOp({
+      content: "继续",
+      images: [],
+      sessionId: "session-model-pending",
+      eventName: "aster_stream_model_pending",
+      executionRuntime: {
+        session_id: "session-model-pending",
+        source: "runtime_snapshot",
+        provider_selector: "deepseek",
+        model_name: "deepseek-v4-flash",
+        execution_strategy: "react",
+      },
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveAccessMode: "current",
+      effectiveProviderType: "deepseek",
+      effectiveModel: "deepseek-v4-flash",
+    });
+
+    expect(op.preferences?.providerPreference).toBe("deepseek");
+    expect(op.preferences?.modelPreference).toBe("deepseek-v4-flash");
+  });
+
   it("provider 发生切换时应同时提交 provider/model 偏好", () => {
     const op = buildUserInputSubmitOp({
       content: "使用翻译服务模型",

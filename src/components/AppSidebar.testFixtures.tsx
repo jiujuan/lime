@@ -29,11 +29,9 @@ export const LIME_THEME_STORAGE_KEY = LIME_THEME_STORAGE_KEY_VALUE;
 export const TASK_CENTER_CREATE_DRAFT_TASK_EVENT =
   TASK_CENTER_CREATE_DRAFT_TASK_EVENT_VALUE;
 export const TASK_CENTER_OPEN_TASK_EVENT = TASK_CENTER_OPEN_TASK_EVENT_VALUE;
-export const getStoredOemCloudSessionState =
-  getStoredOemCloudSessionStateImpl;
+export const getStoredOemCloudSessionState = getStoredOemCloudSessionStateImpl;
 export const setOemCloudBootstrapSnapshot = setOemCloudBootstrapSnapshotImpl;
-export const setStoredOemCloudSessionState =
-  setStoredOemCloudSessionStateImpl;
+export const setStoredOemCloudSessionState = setStoredOemCloudSessionStateImpl;
 
 const {
   mockGetConfig,
@@ -57,6 +55,12 @@ const {
   mockToastError,
   mockToastInfo,
   mockRecordAgentUiPerformanceMetric,
+  mockCheckForUpdates,
+  mockGetUpdateInstallSession,
+  mockListenUpdateInstallSession,
+  mockRecordUpdateNotificationAction,
+  mockRemindUpdateLater,
+  mockStartUpdateInstallSession,
 } = vi.hoisted(() => ({
   mockGetConfig: vi.fn(),
   mockSaveConfig: vi.fn(),
@@ -84,26 +88,37 @@ const {
   mockToastError: vi.fn(),
   mockToastInfo: vi.fn(),
   mockRecordAgentUiPerformanceMetric: vi.fn(),
+  mockCheckForUpdates: vi.fn(),
+  mockGetUpdateInstallSession: vi.fn(),
+  mockListenUpdateInstallSession: vi.fn(),
+  mockRecordUpdateNotificationAction: vi.fn(),
+  mockRemindUpdateLater: vi.fn(),
+  mockStartUpdateInstallSession: vi.fn(),
 }));
-
 
 export {
   mockBuildOemCloudUserCenterUrl,
   mockClearSiteAdapterCatalogCache,
+  mockCheckForUpdates,
   mockCreateExternalBrowserOpenTarget,
   mockDeleteAgentRuntimeSession,
+  mockGetUpdateInstallSession,
   mockGetClientReferralDashboard,
   mockGetConfig,
   mockGetConfiguredOemCloudTarget,
+  mockListenUpdateInstallSession,
   mockListAgentRuntimeSessions,
   mockListInstalledAgentApps,
   mockLogoutClient,
   mockOpenExternalUrl,
+  mockRecordUpdateNotificationAction,
   mockRecordAgentUiPerformanceMetric,
+  mockRemindUpdateLater,
   mockSaveConfig,
   mockScheduleMinimumDelayIdleTask,
   mockSetI18nLanguage,
   mockStartOemCloudLogin,
+  mockStartUpdateInstallSession,
   mockSubscribeAppConfigChanged,
   mockToastError,
   mockToastInfo,
@@ -133,6 +148,30 @@ vi.mock("@/lib/api/agentRuntime", () => ({
 vi.mock("@/lib/api/agentApps", () => ({
   AGENT_APPS_CHANGED_EVENT: "lime:agent-apps-changed",
   listInstalledAgentApps: mockListInstalledAgentApps,
+}));
+
+vi.mock("@/lib/api/appUpdate", () => ({
+  checkForUpdates: mockCheckForUpdates,
+  getUpdateInstallSession: mockGetUpdateInstallSession,
+  listenUpdateInstallSession: mockListenUpdateInstallSession,
+  recordUpdateNotificationAction: mockRecordUpdateNotificationAction,
+  remindUpdateLater: mockRemindUpdateLater,
+  startUpdateInstallSession: mockStartUpdateInstallSession,
+  isUpdateInstallSessionActive: (
+    session:
+      | {
+          stage?: string;
+          isActive?: boolean;
+        }
+      | null
+      | undefined,
+  ) =>
+    Boolean(
+      session?.isActive &&
+      (
+        ["checking", "downloading", "installing", "restarting"] as string[]
+      ).includes(session.stage ?? ""),
+    ),
 }));
 
 vi.mock("@/lib/api/oemCloudControlPlane", () => ({
@@ -175,7 +214,8 @@ interface MountedSidebar {
 
 const mountedSidebars: MountedSidebar[] = [];
 export const APP_SIDEBAR_COLLAPSED_STORAGE_KEY = "lime.app-sidebar.collapsed";
-export const APP_SIDEBAR_ENABLED_ITEMS_STORAGE_KEY = "lime.app-sidebar.enabled-items";
+export const APP_SIDEBAR_ENABLED_ITEMS_STORAGE_KEY =
+  "lime.app-sidebar.enabled-items";
 
 export function mountSidebar(options?: {
   currentPage?: Page;
@@ -263,7 +303,10 @@ export async function openAccountMenu(container: HTMLElement) {
   });
 }
 
-export async function clickAccountMenuItem(container: HTMLElement, label: string) {
+export async function clickAccountMenuItem(
+  container: HTMLElement,
+  label: string,
+) {
   await openAccountMenu(container);
 
   await act(async () => {
@@ -365,6 +408,53 @@ export async function resetAppSidebarTest() {
   mockListInstalledAgentApps.mockResolvedValue({ states: [], issues: [] });
   mockUpdateAgentRuntimeSession.mockResolvedValue(undefined);
   mockDeleteAgentRuntimeSession.mockResolvedValue(undefined);
+  mockCheckForUpdates.mockResolvedValue({
+    current: "1.57.0",
+    latest: null,
+    hasUpdate: false,
+    downloadUrl: null,
+    releaseNotesUrl: null,
+    releaseNotes: null,
+    pubDate: null,
+    error: null,
+  });
+  mockGetUpdateInstallSession.mockResolvedValue({
+    sessionId: "idle",
+    stage: "idle",
+    currentVersion: "1.57.0",
+    latestVersion: null,
+    downloadUrl: null,
+    downloadedBytes: 0,
+    totalBytes: null,
+    percent: 0,
+    message: "idle",
+    error: null,
+    startedAt: 0,
+    updatedAt: 0,
+    completedAt: null,
+    canCloseWindow: true,
+    isActive: false,
+  });
+  mockListenUpdateInstallSession.mockResolvedValue(() => undefined);
+  mockRecordUpdateNotificationAction.mockResolvedValue(undefined);
+  mockRemindUpdateLater.mockResolvedValue(0);
+  mockStartUpdateInstallSession.mockResolvedValue({
+    sessionId: "installing",
+    stage: "downloading",
+    currentVersion: "1.57.0",
+    latestVersion: "1.58.0",
+    downloadUrl: "https://example.com/lime",
+    downloadedBytes: 20,
+    totalBytes: 100,
+    percent: 0.2,
+    message: "downloading",
+    error: null,
+    startedAt: 0,
+    updatedAt: 0,
+    completedAt: null,
+    canCloseWindow: true,
+    isActive: true,
+  });
   mockLogoutClient.mockResolvedValue(undefined);
   mockGetConfiguredOemCloudTarget.mockReturnValue({
     baseUrl: "https://user.limeai.run",

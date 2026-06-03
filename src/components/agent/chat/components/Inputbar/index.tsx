@@ -34,6 +34,7 @@ import {
   buildInputbarWorkflowPanelCopy,
 } from "./inputbarWorkflowCopy";
 import type { InputbarSendHandler } from "./inputbarSendPayload";
+import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 
 const SecondaryControlsRow = styled.div`
   position: absolute;
@@ -82,11 +83,13 @@ interface InputbarProps extends SkillSelectionSourceProps {
   setProviderType?: (type: string) => void;
   model?: string;
   setModel?: (model: string) => void;
+  reasoningEffort?: ModelReasoningEffortLevel | "";
+  setReasoningEffort?: (value: ModelReasoningEffortLevel | "") => void;
   executionRuntime?: AsterSessionExecutionRuntime | null;
   accessMode?: AgentAccessMode;
   setAccessMode?: (mode: AgentAccessMode) => void;
   toolStates?: Partial<InputbarToolStates>;
-  onToolStatesChange?: (states: InputbarToolStates) => void;
+  onToolStatesChange?: (states: Partial<InputbarToolStates>) => void;
   activeTheme?: string;
   onManageProviders?: () => void;
   initialInputCapability?: AgentInitialInputCapabilityParams;
@@ -151,6 +154,8 @@ export const Inputbar: React.FC<InputbarProps> = ({
   setProviderType,
   model,
   setModel,
+  reasoningEffort,
+  setReasoningEffort,
   executionRuntime,
   accessMode,
   setAccessMode,
@@ -211,6 +216,14 @@ export const Inputbar: React.FC<InputbarProps> = ({
       ),
     [t],
   );
+  const showModelControls = Boolean(
+    providerType ||
+      model ||
+      setProviderType ||
+      setModel ||
+      onManageProviders ||
+      executionRuntime,
+  );
   const {
     textareaRef,
     isWorkspaceVariant,
@@ -257,6 +270,8 @@ export const Inputbar: React.FC<InputbarProps> = ({
     setProviderType,
     model,
     setModel,
+    reasoningEffort,
+    setReasoningEffort,
     toolStates,
     onToolStatesChange,
     activeTheme,
@@ -370,9 +385,12 @@ export const Inputbar: React.FC<InputbarProps> = ({
         isWorkspaceVariant={isWorkspaceVariant}
         activeTheme={activeTheme}
         onManageProviders={onManageProviders}
+        reasoningEffort={reasoningEffort}
+        setReasoningEffort={setReasoningEffort}
         executionRuntime={executionRuntime}
         accessMode={accessMode}
         setAccessMode={setAccessMode}
+        showModelControls={showModelControls}
         topExtra={topExtra}
         queuedTurns={queuedTurns}
         onPromoteQueuedTurn={onPromoteQueuedTurn}

@@ -636,9 +636,11 @@ export function buildSubmitOpRuntimeCompaction(
     hasEffectiveProviderType &&
     hasEffectiveModel &&
     !shouldDeferModelRoutingToBackend &&
-    (!knownProviderSelector ||
-      normalizeRuntimeIdentifier(knownProviderSelector) !==
+    (!syncedProviderSelector ||
+      !syncedModelName ||
+      normalizeRuntimeIdentifier(syncedProviderSelector) !==
         normalizedEffectiveProviderType);
+  // executionRuntime 只说明上一轮使用过什么模型，不能证明后端已持久化 session model fallback。
   const shouldSubmitModelPreference =
     hasEffectiveProviderType &&
     hasEffectiveModel &&
@@ -646,8 +648,9 @@ export function buildSubmitOpRuntimeCompaction(
     !(shouldDeferModelRoutingToBackend && !hasExplicitModelOverride) &&
     (hasExplicitModelOverride ||
       shouldSubmitProviderPreference ||
-      !knownModelName ||
-    normalizeRuntimeIdentifier(knownModelName) !== normalizedEffectiveModel);
+      !syncedProviderSelector ||
+      !syncedModelName ||
+      normalizeRuntimeIdentifier(syncedModelName) !== normalizedEffectiveModel);
   const normalizedEffectiveExecutionStrategy = normalizeExecutionStrategy(
     effectiveExecutionStrategy,
   );

@@ -3616,6 +3616,7 @@ mod tests {
                 "web_search": true,
                 "provider_preference": "custom-provider",
                 "model_preference": "gpt-5.3-codex",
+                "reasoning_effort": "high",
                 "thinking_enabled": true,
                 "system_prompt": "runtime prompt",
                 "provider_config": {
@@ -3646,6 +3647,7 @@ mod tests {
             Some("custom-provider")
         );
         assert_eq!(mapped.model_preference.as_deref(), Some("gpt-5.3-codex"));
+        assert_eq!(mapped.reasoning_effort.as_deref(), Some("high"));
         assert_eq!(mapped.thinking_enabled, Some(true));
         assert_eq!(mapped.system_prompt.as_deref(), Some("runtime prompt"));
         assert_eq!(
@@ -4144,6 +4146,7 @@ mod tests {
                 provider_config: None,
                 provider_preference: None,
                 model_preference: None,
+                reasoning_effort: None,
                 thinking_enabled: None,
                 approval_policy: None,
                 sandbox_policy: None,
@@ -4430,6 +4433,7 @@ mod tests {
                 provider_config: None,
                 provider_preference: None,
                 model_preference: None,
+                reasoning_effort: None,
                 thinking_enabled: None,
                 approval_policy: None,
                 sandbox_policy: None,
@@ -4505,6 +4509,7 @@ mod tests {
                 provider_config: None,
                 provider_preference: None,
                 model_preference: None,
+                reasoning_effort: None,
                 thinking_enabled: None,
                 approval_policy: None,
                 sandbox_policy: None,
@@ -4569,6 +4574,7 @@ mod tests {
                 provider_config: None,
                 provider_preference: None,
                 model_preference: None,
+                reasoning_effort: None,
                 thinking_enabled: None,
                 approval_policy: None,
                 sandbox_policy: None,
@@ -4637,6 +4643,7 @@ mod tests {
                 provider_config: None,
                 provider_preference: None,
                 model_preference: None,
+                reasoning_effort: None,
                 thinking_enabled: None,
                 approval_policy: Some("never".to_string()),
                 sandbox_policy: Some("danger-full-access".to_string()),

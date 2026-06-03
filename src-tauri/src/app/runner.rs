@@ -292,6 +292,7 @@ pub fn run() {
         .manage(webview_manager_state)
         .manage(chrome_profile_manager_state)
         .manage(update_check_service_state)
+        .manage(commands::update_cmd::UpdateInstallSessionState::default())
         .manage(session_files_state)
         .manage(context_memory_service)
         .manage(recording_service)
@@ -1499,6 +1500,8 @@ pub fn run() {
             // Update Check commands
             commands::update_cmd::check_update,
             commands::update_cmd::check_for_updates,
+            commands::update_cmd::start_update_install_session,
+            commands::update_cmd::get_update_install_session,
             commands::update_cmd::download_update,
             commands::update_cmd::get_update_check_settings,
             commands::update_cmd::set_update_check_settings,

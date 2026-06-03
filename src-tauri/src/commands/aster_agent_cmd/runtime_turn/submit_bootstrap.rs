@@ -261,6 +261,7 @@ mod tests {
             provider_config: None,
             provider_preference: None,
             model_preference: Some("gpt-5.5".to_string()),
+            reasoning_effort: None,
             thinking_enabled: None,
             approval_policy: None,
             sandbox_policy: None,

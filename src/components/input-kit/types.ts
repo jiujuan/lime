@@ -1,3 +1,5 @@
+import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
+
 export interface ComposerAttachment {
   data: string;
   mediaType: string;
@@ -13,6 +15,7 @@ export interface ComposerState {
 export interface ModelSelectionState {
   providerType: string;
   model: string;
+  reasoningEffort?: ModelReasoningEffortLevel | "";
   providersLoading?: boolean;
   modelsLoading?: boolean;
 }
@@ -23,4 +26,5 @@ export interface ComposerActions {
   stop?: () => void;
   setProviderType?: (providerType: string) => void;
   setModel?: (model: string) => void;
+  setReasoningEffort?: (value: ModelReasoningEffortLevel | "") => void;
 }

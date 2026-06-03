@@ -352,12 +352,48 @@ export function isToolSearchToolName(toolName: string): boolean {
   return normalizeToolNameKeyFromInfo(toolName) === "toolsearch";
 }
 
+function parseMimeTypeFromDataUrl(rawUrl: string): string | undefined {
+  const normalized = rawUrl.trim();
+  if (!normalized.startsWith("data:image/")) return undefined;
+  const commaIndex = normalized.indexOf(",");
+  if (commaIndex <= 5) return undefined;
+  const meta = normalized.slice(5, commaIndex);
+  const mimeType = meta.split(";")[0]?.trim();
+  return mimeType?.startsWith("image/") ? mimeType : undefined;
+}
+
+function extractDataImageUrlsFromText(text?: string): string[] {
+  if (!text?.trim()) return [];
+  return Array.from(
+    new Set(text.match(/data:image\/[\w.+-]+;base64,[A-Za-z0-9+/=]+/g) || []),
+  );
+}
+
 export function normalizeToolResultImages(
   rawImages: unknown,
+  fallbackText?: string,
+  metadata?: unknown,
 ): ToolResultImage[] {
-  if (!Array.isArray(rawImages)) return [];
   const normalized: ToolResultImage[] = [];
-  for (const item of rawImages) {
+  const seen = new Set<string>();
+
+  const appendImage = (
+    rawSrc: string,
+    mimeType?: string,
+    origin?: ToolResultImage["origin"],
+  ) => {
+    const src = rawSrc.trim();
+    if (!src || seen.has(src)) return;
+    seen.add(src);
+    normalized.push({ src, mimeType, origin });
+  };
+
+  const imageItems = Array.isArray(rawImages) ? rawImages : [];
+  for (const item of imageItems) {
+    if (typeof item === "string") {
+      appendImage(item, parseMimeTypeFromDataUrl(item), "data_url");
+      continue;
+    }
     if (!item || typeof item !== "object") continue;
     const record = item as Record<string, unknown>;
     const src = typeof record.src === "string" ? record.src.trim() : "";
@@ -372,8 +408,30 @@ export function normalizeToolResultImages(
       record.origin === "file_path"
         ? record.origin
         : undefined;
-    normalized.push({ src, mimeType, origin });
+    appendImage(src, mimeType, origin);
   }
+
+  if (normalized.length === 0 && metadata && typeof metadata === "object") {
+    const record = metadata as Record<string, unknown>;
+    const modelVisibleImage =
+      record.model_visible_image === true || record.modelVisibleImage === true;
+    const rawImageUrl = record.image_url ?? record.imageUrl;
+    const imageUrl = typeof rawImageUrl === "string" ? rawImageUrl.trim() : "";
+    if (modelVisibleImage && imageUrl.startsWith("data:image/")) {
+      const mimeType =
+        (typeof record.mime_type === "string" && record.mime_type.trim()) ||
+        (typeof record.mimeType === "string" && record.mimeType.trim()) ||
+        parseMimeTypeFromDataUrl(imageUrl);
+      appendImage(imageUrl, mimeType, "tool_payload");
+    }
+  }
+
+  if (normalized.length === 0) {
+    for (const dataUrl of extractDataImageUrlsFromText(fallbackText)) {
+      appendImage(dataUrl, parseMimeTypeFromDataUrl(dataUrl), "data_url");
+    }
+  }
+
   return normalized;
 }
 
@@ -562,7 +620,9 @@ export function parseJsonRecord(
   return undefined;
 }
 
-export function formatCommandEncoding(summary: CommandToolSummary): string | null {
+export function formatCommandEncoding(
+  summary: CommandToolSummary,
+): string | null {
   if (!summary.encoding && !summary.stderrEncoding) {
     return null;
   }

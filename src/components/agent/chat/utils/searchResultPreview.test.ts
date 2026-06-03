@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveSearchResultPreviewItemsFromText } from "./searchResultPreview";
+import {
+  isUnifiedWebSearchToolName,
+  resolveSearchResultPreviewItemsFromText,
+} from "./searchResultPreview";
 
 describe("searchResultPreview", () => {
   it("应解析 web search tool_result 里的 content 数组", () => {
@@ -149,5 +152,12 @@ REMINDER: You MUST include the sources above in your response.
         snippet: "Latest world headlines",
       },
     ]);
+  });
+
+  it("应通过共享工具族 helper 识别动态 WebSearch 工具名", () => {
+    expect(isUnifiedWebSearchToolName("WebSearchTool")).toBe(true);
+    expect(isUnifiedWebSearchToolName("mcp__system__web_search")).toBe(true);
+    expect(isUnifiedWebSearchToolName("mcp__news__web_search")).toBe(true);
+    expect(isUnifiedWebSearchToolName("mcp__github__search_code")).toBe(false);
   });
 });

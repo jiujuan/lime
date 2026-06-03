@@ -122,6 +122,56 @@ describe("ToolCallDisplay", () => {
     expect(container.textContent).not.toContain("查看文本详情");
   });
 
+  it("动态 MCP web_search 结果应按搜索来源渲染而不是落回原始结果", () => {
+    const { container } = renderTool({
+      id: "tool-mcp-search-1",
+      name: "mcp__news__web_search",
+      arguments: JSON.stringify({ query: "today international news" }),
+      status: "completed",
+      result: {
+        success: true,
+        output: JSON.stringify({
+          results: [
+            {
+              title: "Reuters World News",
+              url: "https://www.reuters.com/world/",
+              snippet: "Latest international headlines",
+            },
+          ],
+        }),
+      },
+      startTime: new Date("2026-06-02T12:00:00.000Z"),
+      endTime: new Date("2026-06-02T12:00:02.000Z"),
+    });
+
+    expect(document.body.textContent).toContain("Reuters World News");
+    expect(document.body.textContent).toContain("reuters.com");
+    expect(document.body.textContent).toContain("查看文本详情");
+    expect(
+      container.querySelector('[data-testid="tool-call-rendered-result"]'),
+    ).toBeNull();
+  });
+
+  it("动态 MCP mutation 应展示为 MCP 工具过程而不是搜索或读取", () => {
+    const { container } = renderTool({
+      id: "tool-mcp-mutation-1",
+      name: "mcp__github__create_issue",
+      arguments: JSON.stringify({ title: "修复工具渲染" }),
+      status: "completed",
+      result: {
+        success: true,
+        output: JSON.stringify({ id: 123, title: "修复工具渲染" }),
+      },
+      startTime: new Date("2026-06-02T12:00:00.000Z"),
+      endTime: new Date("2026-06-02T12:00:02.000Z"),
+    });
+
+    expect(container.textContent).toContain("MCP 工具");
+    expect(container.textContent).toContain("已调用 MCP 工具 修复工具渲染");
+    expect(container.textContent).not.toContain("MCP 搜索");
+    expect(container.textContent).not.toContain("MCP 读取");
+  });
+
   it("连续多次 WebSearch 应在对话区按搜索批次分组展示", () => {
     const { container } = renderToolList({
       toolCalls: [

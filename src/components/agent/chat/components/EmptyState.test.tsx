@@ -2809,7 +2809,7 @@ describe("EmptyState", () => {
     expect(
       container.querySelector('[data-testid="home-input-tab-suggestion"]')
         ?.textContent,
-    ).toContain("tab");
+    ).toContain("Tab");
     expect(container.textContent).toContain("帮我整理一下会议纪要");
   });
 
@@ -2819,17 +2819,17 @@ describe("EmptyState", () => {
       await Promise.resolve();
     });
 
-    const advancedToggle = container.querySelector(
-      '[data-testid="empty-state-advanced-toggle"]',
+    const plusTrigger = container.querySelector(
+      '[data-testid="inputbar-plus-trigger"]',
     ) as HTMLButtonElement | null;
-    expect(advancedToggle).toBeTruthy();
+    expect(plusTrigger).toBeTruthy();
     const globeToggle = container.querySelector(
       'button[title="联网搜索已关闭"]',
     ) as HTMLButtonElement | null;
     expect(globeToggle).toBeNull();
 
     act(() => {
-      advancedToggle?.click();
+      plusTrigger?.click();
     });
 
     const expandedGlobeToggle = container.querySelector(
@@ -2858,10 +2858,10 @@ describe("EmptyState", () => {
     ) as HTMLButtonElement | null;
     expect(attachButton).toBeTruthy();
 
-    const advancedToggle = container.querySelector(
-      '[data-testid="empty-state-advanced-toggle"]',
+    const plusTrigger = container.querySelector(
+      '[data-testid="inputbar-plus-trigger"]',
     ) as HTMLButtonElement | null;
-    expect(advancedToggle).toBeTruthy();
+    expect(plusTrigger).toBeTruthy();
 
     expect(
       container.querySelector('button[title="深度思考已关闭"]'),
@@ -2877,16 +2877,15 @@ describe("EmptyState", () => {
     ).toBeNull();
     expect(
       container.querySelector('[data-testid="inputbar-access-mode-select"]'),
-    ).toBeNull();
+    ).toBeTruthy();
     expect(
       container.querySelector('[data-testid="chat-model-selector"]'),
-    ).toBeNull();
+    ).toBeTruthy();
     expect(container.textContent).not.toContain("通用任务上下文");
-    expect(container.textContent).toContain("当前模型");
-    expect(container.textContent).toContain("gpt-4.1");
+    expect(container.textContent).not.toContain("当前模型");
 
     act(() => {
-      advancedToggle?.click();
+      plusTrigger?.click();
     });
 
     const thinkingButton = container.querySelector(
@@ -2901,8 +2900,8 @@ describe("EmptyState", () => {
       '[data-testid="inputbar-plan-toggle"]',
     ) as HTMLButtonElement | null;
     expect(planButton).toBeNull();
-    const subagentButton = container.querySelector(
-      'button[title="任务拆分偏好已关闭"]',
+    const subagentButton = document.body.querySelector(
+      '[data-testid="inputbar-plus-subagent-mode"]',
     ) as HTMLButtonElement | null;
     expect(subagentButton).toBeTruthy();
     const accessModeSelect = container.querySelector(
@@ -2965,6 +2964,84 @@ describe("EmptyState", () => {
 
     expectEmptyStateSend(onSend, {
       textOverride: "请输出一篇新品发布文案",
+    });
+  });
+
+  it("首页开启 plan 和 goal 后发送应绑定当前 thread goal", async () => {
+    const onSend = vi.fn();
+    const container = renderEmptyState({
+      input: "请先规划再持续推进这个任务",
+      activeTheme: "general",
+      sessionId: "thread-empty-state-plan-goal",
+      taskEnabled: true,
+      onSend,
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const plusTrigger = container.querySelector(
+      '[data-testid="inputbar-plus-trigger"]',
+    ) as HTMLButtonElement | null;
+    expect(plusTrigger).toBeTruthy();
+
+    act(() => {
+      plusTrigger?.click();
+    });
+
+    const objectiveButton = document.body.querySelector(
+      '[data-testid="inputbar-plus-objective"]',
+    ) as HTMLButtonElement | null;
+    expect(objectiveButton).toBeTruthy();
+
+    act(() => {
+      objectiveButton?.click();
+    });
+
+    const sendButton = container.querySelector(
+      'button[aria-label="发送"]',
+    ) as HTMLButtonElement | null;
+    expect(sendButton).toBeTruthy();
+
+    act(() => {
+      sendButton?.click();
+    });
+
+    expectEmptyStateSend(onSend, {
+      textOverride: "请先规划再持续推进这个任务",
+      sendOptions: expect.objectContaining({
+        requestMetadata: expect.objectContaining({
+          harness: expect.objectContaining({
+            task_mode_enabled: true,
+            goal_mode_enabled: true,
+            preferences: expect.objectContaining({
+              task: true,
+              task_mode: true,
+              goal: true,
+              objective: true,
+            }),
+            collaboration_mode: {
+              mode: "plan",
+              source: "empty_state",
+            },
+            thread_goal: expect.objectContaining({
+              enabled: true,
+              source: "empty_state",
+              status: "active",
+              set: expect.objectContaining({
+                threadId: "thread-empty-state-plan-goal",
+                objective: null,
+                status: "active",
+                tokenBudget: null,
+              }),
+            }),
+          }),
+        }),
+        toolPreferencesOverride: {
+          task: true,
+          subagent: false,
+        },
+      }),
     });
   });
 

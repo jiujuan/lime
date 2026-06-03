@@ -1430,11 +1430,12 @@ describe("tauri-mock/core invoke", () => {
           browser_assist: true,
         }),
       );
-      expect(result.counts.catalog_total).toBe(57);
+      expect(result.counts.catalog_total).toBe(58);
       expect(result.default_allowed_tools).toEqual(
         expect.arrayContaining([
           "social_generate_cover_image",
           "lime_create_image_generation_task",
+          "lime_create_audio_generation_task",
           "lime_create_transcription_task",
           "lime_run_service_skill",
           "lime_site_recommend",
@@ -1447,6 +1448,9 @@ describe("tauri-mock/core invoke", () => {
           expect.objectContaining({ name: "social_generate_cover_image" }),
           expect.objectContaining({
             name: "lime_create_image_generation_task",
+          }),
+          expect.objectContaining({
+            name: "lime_create_audio_generation_task",
           }),
           expect.objectContaining({ name: "lime_run_service_skill" }),
           expect.objectContaining({ name: "lime_site_recommend" }),

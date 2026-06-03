@@ -22,6 +22,7 @@ export type AgentStreamUserInputSendPreparationEnv = Pick<
   | "executionStrategy"
   | "providerTypeRef"
   | "modelRef"
+  | "reasoningEffortRef"
   | "sessionIdRef"
   | "activeStreamRef"
   | "getQueuedTurnsCount"
@@ -58,6 +59,7 @@ export interface PreparedAgentStreamUserInputSend {
   effectiveProviderType: string;
   effectiveModel: string;
   modelOverride?: string;
+  reasoningEffort?: string;
   autoContinue?: import("@/lib/api/agentRuntime").AutoContinueRequestPayload;
   systemPrompt?: string;
   syncedSessionModelPreference: SessionModelPreference | null;
@@ -99,6 +101,8 @@ export function prepareAgentStreamUserInputSend(
   const resolvedProviderOverride = sendOptions?.providerOverride?.trim();
   const resolvedModelOverride =
     sendOptions?.modelOverride?.trim() || modelOverride?.trim();
+  const resolvedReasoningEffort =
+    sendOptions?.reasoningEffort?.trim() || env.reasoningEffortRef.current.trim();
   const effectiveProviderType =
     resolvedProviderOverride || env.providerTypeRef.current;
   const effectiveModel = resolvedModelOverride || env.modelRef.current;
@@ -156,6 +160,7 @@ export function prepareAgentStreamUserInputSend(
     effectiveProviderType,
     effectiveModel,
     modelOverride: resolvedModelOverride,
+    reasoningEffort: resolvedReasoningEffort || undefined,
     autoContinue,
     systemPrompt: resolvedSystemPrompt,
     syncedSessionModelPreference,

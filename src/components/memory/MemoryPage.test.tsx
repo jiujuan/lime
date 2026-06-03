@@ -81,6 +81,16 @@ function findButtonByText(text: string): HTMLButtonElement {
   return button as HTMLButtonElement;
 }
 
+function findButtonContaining(text: string): HTMLButtonElement {
+  const button = Array.from(document.body.querySelectorAll("button")).find(
+    (element) => element.textContent?.includes(text),
+  );
+  if (!button) {
+    throw new Error(`未找到包含文本的按钮: ${text}`);
+  }
+  return button as HTMLButtonElement;
+}
+
 function renderPage(options?: {
   section?: "home" | "durable" | "identity" | "context";
   focusMemoryTitle?: string;
@@ -261,12 +271,25 @@ describe("MemoryPage", () => {
     expect(
       document.body.querySelector('[data-testid="memory-library-list"]'),
     ).toBeNull();
-    expect(bodyText).toContain("嵌入模型");
-    expect(bodyText).toContain("提供商");
-    expect(bodyText).toContain("本地 ONNX（all-MiniLM-L6-v2）");
-    expect(bodyText).not.toContain("memdir");
-    expect(bodyText).not.toContain("Runtime");
-    expect(bodyText).not.toContain("Provider ID");
+    expect(bodyText).toContain("日常记忆");
+    expect(bodyText).toContain("查看 Lime 是否能检索已确认的项目资料和长期偏好");
+    expect(bodyText).not.toContain("本地 ONNX（all-MiniLM-L6-v2）");
+
+    await act(async () => {
+      findButtonContaining("高级").click();
+      await Promise.resolve();
+    });
+    await flushPageEffects(2);
+
+    const advancedBodyText = document.body.textContent ?? "";
+    expect(advancedBodyText).toContain("提供商");
+    expect(advancedBodyText).toContain("本地 ONNX（all-MiniLM-L6-v2）");
+    expect(
+      document.body.querySelector("#memory-embedding-provider"),
+    ).toBeInstanceOf(HTMLSelectElement);
+    expect(advancedBodyText).not.toContain("memdir");
+    expect(advancedBodyText).not.toContain("Runtime");
+    expect(advancedBodyText).not.toContain("Provider ID");
   });
 
   it("应支持搜索过滤并同步右侧详情", async () => {

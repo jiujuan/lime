@@ -93,6 +93,7 @@ pub async fn agent_app_runtime_start_task(
         model_preference: model_preference
             .as_ref()
             .map(|preference| preference.model_preference.clone()),
+        reasoning_effort: None,
         thinking_enabled: None,
         approval_policy: None,
         sandbox_policy: None,

@@ -1,4 +1,9 @@
 export type InputbarToolsCopyKey =
+  | "agentChat.inputbar.tools.task.label"
+  | "agentChat.inputbar.tools.task.title.enabled"
+  | "agentChat.inputbar.tools.task.title.disabled"
+  | "agentChat.inputbar.tools.task.toast.enabled"
+  | "agentChat.inputbar.tools.task.toast.disabled"
   | "agentChat.inputbar.tools.subagent.label"
   | "agentChat.inputbar.tools.subagent.title.enabled"
   | "agentChat.inputbar.tools.subagent.title.disabled"
@@ -18,6 +23,7 @@ interface InputbarToolToggleCopy {
 }
 
 export interface InputbarToolsCopy {
+  task: InputbarToolToggleCopy;
   subagent: InputbarToolToggleCopy;
   fullscreen: {
     entered: string;
@@ -36,6 +42,18 @@ function chooseToggleCopy(
 export function buildInputbarToolsCopy(
   translate: InputbarToolsCopyTranslate,
 ): InputbarToolsCopy {
+  const taskTitleEnabled = translate(
+    "agentChat.inputbar.tools.task.title.enabled",
+  );
+  const taskTitleDisabled = translate(
+    "agentChat.inputbar.tools.task.title.disabled",
+  );
+  const taskToastEnabled = translate(
+    "agentChat.inputbar.tools.task.toast.enabled",
+  );
+  const taskToastDisabled = translate(
+    "agentChat.inputbar.tools.task.toast.disabled",
+  );
   const subagentTitleEnabled = translate(
     "agentChat.inputbar.tools.subagent.title.enabled",
   );
@@ -50,6 +68,13 @@ export function buildInputbarToolsCopy(
   );
 
   return {
+    task: {
+      label: translate("agentChat.inputbar.tools.task.label"),
+      title: (enabled) =>
+        chooseToggleCopy(enabled, taskTitleEnabled, taskTitleDisabled),
+      toast: (enabled) =>
+        chooseToggleCopy(enabled, taskToastEnabled, taskToastDisabled),
+    },
     subagent: {
       label: translate("agentChat.inputbar.tools.subagent.label"),
       title: (enabled) =>

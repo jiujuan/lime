@@ -1,3 +1,4 @@
+import i18n from "i18next";
 import type { Message } from "../types";
 import {
   containsAssistantProtocolResidue,
@@ -9,6 +10,37 @@ export const AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_MESSAGE =
   "模型未输出最终答复，请重试";
 export const AGENT_STREAM_EMPTY_FINAL_REPLY_FALLBACK_CONTENT =
   "本轮执行已完成，详细过程与产物已保留在当前对话中。";
+const AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_MESSAGE_KEY =
+  "agentChat.emptyFinalReply.errorMessage";
+const AGENT_STREAM_EMPTY_FINAL_REPLY_FALLBACK_CONTENT_KEY =
+  "agentChat.emptyFinalReply.fallbackContent";
+
+function readAgentStreamCopy(key: string, fallback: string): string {
+  if (!i18n.isInitialized) {
+    return fallback;
+  }
+
+  return String(
+    i18n.t(key, {
+      ns: "agent",
+      defaultValue: fallback,
+    }),
+  );
+}
+
+export function resolveAgentStreamEmptyFinalReplyErrorMessage(): string {
+  return readAgentStreamCopy(
+    AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_MESSAGE_KEY,
+    AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_MESSAGE,
+  );
+}
+
+export function resolveAgentStreamEmptyFinalReplyFallbackContent(): string {
+  return readAgentStreamCopy(
+    AGENT_STREAM_EMPTY_FINAL_REPLY_FALLBACK_CONTENT_KEY,
+    AGENT_STREAM_EMPTY_FINAL_REPLY_FALLBACK_CONTENT,
+  );
+}
 
 interface AgentStreamCompletionRequestLogPayload {
   eventType: "chat_request_complete";
@@ -67,6 +99,7 @@ export function buildAgentStreamMissingFinalReplyFailurePlan(params: {
   queuedTurnId?: string | null;
   usage?: Message["usage"];
 }): AgentStreamMissingFinalReplyPlan {
+  const toastMessage = resolveAgentStreamEmptyFinalReplyErrorMessage();
   return {
     type: "missing_final_reply_failure",
     errorMessage: params.errorMessage,
@@ -76,7 +109,7 @@ export function buildAgentStreamMissingFinalReplyFailurePlan(params: {
       status: "error",
       error: params.errorMessage,
     },
-    toastMessage: AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_MESSAGE,
+    toastMessage,
     ...(params.usage !== undefined ? { usage: params.usage } : {}),
   };
 }
@@ -99,7 +132,14 @@ export function buildAgentStreamMissingFinalReplyFailureSideEffectPlan(
 }
 
 export function isAgentStreamEmptyFinalReplyError(message: string): boolean {
-  return message.includes(AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_HINT);
+  const lowerMessage = message.toLowerCase();
+  return (
+    message.includes(AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_HINT) ||
+    message.includes(resolveAgentStreamEmptyFinalReplyErrorMessage()) ||
+    lowerMessage.includes("did not produce a final response") ||
+    lowerMessage.includes("did not output a final response") ||
+    lowerMessage.includes("empty final response")
+  );
 }
 
 export function shouldFailAgentStreamMissingFinalReply(params: {
@@ -137,7 +177,7 @@ export function resolveAgentStreamGracefulCompletionContent(params: {
       ? rawFinalContent
       : "") ||
     params.fallbackContent ||
-    AGENT_STREAM_EMPTY_FINAL_REPLY_FALLBACK_CONTENT
+    resolveAgentStreamEmptyFinalReplyFallbackContent()
   );
 }
 
@@ -383,7 +423,7 @@ export function buildAgentStreamFinalDonePlan(params: {
     })
   ) {
     return buildAgentStreamMissingFinalReplyFailurePlan({
-      errorMessage: AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_MESSAGE,
+      errorMessage: resolveAgentStreamEmptyFinalReplyErrorMessage(),
       queuedTurnId: params.queuedTurnId,
       usage: params.usage,
     });

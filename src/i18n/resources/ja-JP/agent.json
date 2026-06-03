@@ -543,6 +543,8 @@
   "agentChat.runtimeError.providerQuota": "現在のモデルチャネルが課金またはクォータ系のエラーを返しました。Provider/モデルチャネルの課金、クォータ、認可状態を確認するか、別の利用可能なモデルに切り替えてください。",
   "agentChat.runtimeError.providerUnavailable": "現在のモデルチャネルは一時的に利用できません。しばらくしてから再試行してください。失敗が続く場合は Provider の状態を確認するか、別の利用可能なモデルに切り替えてください。",
   "agentChat.runtimeError.internalRuntime": "ランタイムが内部エラーを返しました。診断用の詳細は保持されています。しばらくしてから再試行するか、プロバイダーとツール接続を確認してください。",
+  "agentChat.emptyFinalReply.errorMessage": "モデルが最終応答を出力しませんでした。再試行してください。",
+  "agentChat.emptyFinalReply.fallbackContent": "この実行は完了しました。詳細な手順と成果物は現在の会話に保持されています。",
   "agentChat.runtimeStrip.theme.general": "汎用チャット",
   "agentChat.runtimeStrip.title.general": "汎用アシスタント",
   "agentChat.runtimeStrip.capability.direct": "直接回答",

@@ -1,12 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ChevronDown,
-  ChevronUp,
-  FolderOpen,
-  Lightbulb,
-  Settings2,
-  X,
-} from "lucide-react";
+import { FolderOpen, Lightbulb, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -19,6 +12,7 @@ import { CharacterMention } from "../skill-selection/CharacterMention";
 import { BuiltinCommandBadge } from "./Inputbar/components/BuiltinCommandBadge";
 import { InputbarAccessModeSelect } from "./Inputbar/components/InputbarAccessModeSelect";
 import { InputbarCore } from "./Inputbar/components/InputbarCore";
+import { InputbarModeStatusChip } from "./Inputbar/components/InputbarModeStatusChip";
 import { InputbarKnowledgeControl } from "./Inputbar/knowledge/InputbarKnowledgeControl";
 import { InputbarModelExtra } from "./Inputbar/components/InputbarModelExtra";
 import { RuntimeSceneBadge } from "./Inputbar/components/RuntimeSceneBadge";
@@ -37,17 +31,10 @@ import {
   EMPTY_STATE_SELECT_TRIGGER_CLASSNAME,
 } from "./emptyStateSurfaceTokens";
 import {
-  buildEmptyStateAdvancedControlsState,
   buildEmptyStateInputSuggestionState,
   resolveEmptyStateActiveCapability,
 } from "./EmptyStateComposerPanelViewModel";
-import {
-  MetaIconButton,
-  MetaToggleButton,
-  MetaToggleCheck,
-  MetaToggleGlyph,
-  MetaToggleLabel,
-} from "./Inputbar/styles";
+import { MetaIconButton } from "./Inputbar/styles";
 import { getTeamSuggestion } from "../utils/teamSuggestion";
 import {
   buildSkillSelectionBindings,
@@ -63,17 +50,24 @@ import type { CuratedTaskTemplateItem } from "../utils/curatedTaskTemplates";
 import type { CuratedTaskReferenceEntry } from "../utils/curatedTaskReferenceSelection";
 import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface";
 import type { HomeInputSuggestion } from "../home/homeSurfaceTypes";
-import { getProviderLabel } from "@/lib/constants/providerMappings";
 import type {
   InputbarKnowledgePackOption,
   InputbarKnowledgePackSelection,
 } from "./Inputbar/types";
 import type { InputbarCoreCopy } from "./Inputbar/components/inputbarCoreCopy";
+import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 
 interface EmptyStateComposerPanelProps {
   input: string;
   placeholder: string;
-  onSend: (inputOverride?: string) => void;
+  onSend: (
+    inputOverride?: string,
+    modeState?: {
+      goalEnabled?: boolean;
+      planEnabled?: boolean;
+      subagentEnabled?: boolean;
+    },
+  ) => void;
   isLoading?: boolean;
   disabled?: boolean;
   activeTheme: string;
@@ -81,6 +75,8 @@ interface EmptyStateComposerPanelProps {
   setProviderType: (type: string) => void;
   model: string;
   setModel: (model: string) => void;
+  reasoningEffort?: ModelReasoningEffortLevel | "";
+  setReasoningEffort?: (value: ModelReasoningEffortLevel | "") => void;
   accessMode?: AgentAccessMode;
   setAccessMode?: (mode: AgentAccessMode) => void;
   onManageProviders?: () => void;
@@ -110,6 +106,10 @@ interface EmptyStateComposerPanelProps {
   showCreationModeSelector: boolean;
   creationMode: CreationMode;
   onCreationModeChange?: (mode: CreationMode) => void;
+  taskEnabled?: boolean;
+  onTaskEnabledChange?: (enabled: boolean) => void;
+  objectiveEnabled?: boolean;
+  onObjectiveEnabledChange?: (enabled: boolean) => void;
   subagentEnabled: boolean;
   onSubagentEnabledChange?: (enabled: boolean) => void;
   selectedTeam?: TeamDefinition | null;
@@ -201,6 +201,8 @@ export function EmptyStateComposerPanel({
   setProviderType,
   model,
   setModel,
+  reasoningEffort,
+  setReasoningEffort,
   accessMode,
   setAccessMode,
   onManageProviders,
@@ -230,6 +232,10 @@ export function EmptyStateComposerPanel({
   showCreationModeSelector,
   creationMode,
   onCreationModeChange,
+  taskEnabled = false,
+  onTaskEnabledChange,
+  objectiveEnabled: objectiveEnabledProp,
+  onObjectiveEnabledChange,
   subagentEnabled,
   onSubagentEnabledChange,
   selectedTeam,
@@ -262,7 +268,8 @@ export function EmptyStateComposerPanel({
   const [teamSelectorAutoOpenToken, setTeamSelectorAutoOpenToken] = useState<
     number | null
   >(null);
-  const [showAdvancedControls, setShowAdvancedControls] = useState(false);
+  const [localObjectiveEnabled, setLocalObjectiveEnabled] = useState(false);
+  const objectiveEnabled = objectiveEnabledProp ?? localObjectiveEnabled;
   const activeCapabilityState = resolveEmptyStateActiveCapability({
     activeCapability,
     fallbackActiveSkill: skillSelection.activeSkill ?? null,
@@ -367,10 +374,29 @@ export function EmptyStateComposerPanel({
     onSubagentEnabledChange?.(!subagentEnabled);
   };
 
+  const handleToggleTaskMode = () => {
+    onTaskEnabledChange?.(!taskEnabled);
+  };
+
+  const handleToggleObjectiveMode = () => {
+    const nextObjectiveEnabled = !objectiveEnabled;
+    if (onObjectiveEnabledChange) {
+      onObjectiveEnabledChange(nextObjectiveEnabled);
+      return;
+    }
+    setLocalObjectiveEnabled(nextObjectiveEnabled);
+  };
+
   const handleToolAction = (tool: string) => {
     switch (tool) {
       case "attach":
         imageInputRef.current?.click();
+        return;
+      case "task_mode":
+        handleToggleTaskMode();
+        return;
+      case "objective_mode":
+        handleToggleObjectiveMode();
         return;
       case "subagent_mode":
         handleToggleSubagentMode();
@@ -463,8 +489,9 @@ export function EmptyStateComposerPanel({
   const hasKnowledgePackControl = Boolean(
     knowledgePackSelection || onStartKnowledgeOrganize,
   );
-  const knowledgePackControl = hasKnowledgePackControl ? (
+  const plusMenuKnowledgePanel = hasKnowledgePackControl ? (
     <InputbarKnowledgeControl
+      renderMode="inline"
       knowledgePackSelection={knowledgePackSelection}
       knowledgePackOptions={knowledgePackOptions}
       inputText={draftInput}
@@ -475,61 +502,57 @@ export function EmptyStateComposerPanel({
       onStartKnowledgeOrganize={onStartKnowledgeOrganize}
       onManageKnowledgePacks={onManageKnowledgePacks}
     />
-  ) : null;
-  const {
-    currentModelSummary,
-    trimmedModel,
-    hasHighlightedAdvancedPreference,
-    shouldShowAdvancedToggle,
-    shouldShowLeftExtra,
-  } = buildEmptyStateAdvancedControlsState({
-    providerType,
-    model,
-    getProviderLabel,
-    subagentEnabled,
-    knowledgePackEnabled: Boolean(knowledgePackSelection?.enabled),
-    accessMode,
-    isGeneralTheme,
-    shouldShowTeamSelector,
-    showCreationModeSelector,
-    hasAccessModeSetter: Boolean(setAccessMode),
-    hasFileManagerToggle: Boolean(onToggleFileManager),
-    hasKnowledgePackControl,
-  });
-  const advancedToggleLabel = showAdvancedControls
-    ? copy.advancedSettings.collapse
-    : copy.advancedSettings.expand;
+  ) : undefined;
+  const plusMenuSkillsPanel = isGeneralTheme ? (
+    <SkillSelector {...skillSelectorProps} renderMode="inline" />
+  ) : undefined;
+  const plusMenuLabels = copy.plusMenu;
+  const planModeStatusLabel = plusMenuLabels.planMode
+    .replace(/模式$/, "")
+    .replace(/ mode$/i, "");
+  const objectiveStatusLabel = plusMenuLabels.objective;
   const fileManagerToggleLabel = fileManagerOpen
     ? copy.fileManager.close
     : copy.fileManager.open;
-  const leftExtra = shouldShowLeftExtra ? (
+  const plusMenu = {
+    labels: plusMenuLabels,
+    taskEnabled,
+    knowledgeOpenRequestKey: knowledgeHubOpenRequestKey,
+    subagentEnabled,
+    knowledgeActive: Boolean(knowledgePackSelection?.enabled),
+    objectiveActive: objectiveEnabled,
+    skillsActive: Boolean(skillSelection.activeSkill),
+    knowledgePanel: plusMenuKnowledgePanel,
+    skillsPanel: plusMenuSkillsPanel,
+    onAddFiles: () => handleToolAction("attach"),
+    onToggleTask: () => handleToolAction("task_mode"),
+    onToggleObjective: () => handleToolAction("objective_mode"),
+    onToggleSubagent:
+      isGeneralTheme && onSubagentEnabledChange
+        ? () => handleToolAction("subagent_mode")
+        : undefined,
+  };
+  const leftExtra = (
     <>
-      {knowledgePackControl}
+      <InputbarAccessModeSelect
+        accessMode={accessMode}
+        setAccessMode={setAccessMode}
+      />
 
-      {shouldShowAdvancedToggle ? (
-        <MetaToggleButton
-          type="button"
-          $checked={showAdvancedControls || hasHighlightedAdvancedPreference}
-          aria-label={advancedToggleLabel}
-          aria-expanded={showAdvancedControls}
-          data-testid="empty-state-advanced-toggle"
-          title={advancedToggleLabel}
-          onClick={() => setShowAdvancedControls((previous) => !previous)}
-        >
-          <MetaToggleCheck
-            $checked={showAdvancedControls || hasHighlightedAdvancedPreference}
-            aria-hidden
-          />
-          <MetaToggleGlyph aria-hidden>
-            <Settings2 strokeWidth={1.8} />
-          </MetaToggleGlyph>
-          <MetaToggleLabel>{copy.advancedSettings.label}</MetaToggleLabel>
-          {showAdvancedControls ? (
-            <ChevronUp className="h-3.5 w-3.5" aria-hidden />
-          ) : (
-            <ChevronDown className="h-3.5 w-3.5" aria-hidden />
-          )}
-        </MetaToggleButton>
+      {taskEnabled ? (
+        <InputbarModeStatusChip
+          label={planModeStatusLabel}
+          testId="empty-state-task-mode-status"
+          onRemove={() => handleToolAction("task_mode")}
+        />
+      ) : null}
+
+      {objectiveEnabled ? (
+        <InputbarModeStatusChip
+          label={objectiveStatusLabel}
+          testId="empty-state-objective-status"
+          onRemove={() => handleToolAction("objective_mode")}
+        />
       ) : null}
 
       {guideHelpActive ? (
@@ -540,15 +563,52 @@ export function EmptyStateComposerPanel({
         />
       ) : null}
 
-      {!showAdvancedControls && currentModelSummary ? (
-        <Badge
-          variant="outline"
-          className={`${EMPTY_STATE_PASSIVE_BADGE_CLASSNAME} max-w-[240px] items-center overflow-hidden`}
-          title={copy.currentModel.title(currentModelSummary)}
+      {shouldShowTeamSelector ? (
+        <TeamSelector
+          activeTheme={activeTheme}
+          input={draftInput}
+          autoOpenToken={teamSelectorAutoOpenToken}
+          selectedTeam={selectedTeam}
+          workspaceSettings={teamWorkspaceSettings}
+          onPersistCustomTeams={onPersistCustomTeams}
+          onSelectTeam={(team) => onSelectTeam?.(team)}
+        />
+      ) : null}
+
+      {showCreationModeSelector ? (
+        <Select
+          value={creationMode}
+          onValueChange={(value) =>
+            onCreationModeChange?.(value as CreationMode)
+          }
         >
-          <span className="mr-1 text-slate-500">{copy.currentModel.label}</span>
-          <span className="truncate">{trimmedModel}</span>
-        </Badge>
+          <SelectTrigger
+            className={`${EMPTY_STATE_SELECT_TRIGGER_CLASSNAME} min-w-[120px]`}
+          >
+            <div className="flex items-center gap-2">
+              {CREATION_MODE_CONFIG[creationMode].icon}
+              <span>{CREATION_MODE_CONFIG[creationMode].name}</span>
+            </div>
+          </SelectTrigger>
+          <SelectContent className="min-w-[200px] p-1" side="top">
+            <div className="px-2 py-1.5 text-xs font-medium text-slate-500">
+              {copy.creationMode.label}
+            </div>
+            {(
+              Object.entries(CREATION_MODE_CONFIG) as [
+                CreationMode,
+                (typeof CREATION_MODE_CONFIG)[CreationMode],
+              ][]
+            ).map(([key, config]) => (
+              <SelectItem key={key} value={key}>
+                <div className="flex items-center gap-3">
+                  <span className="flex-shrink-0">{config.icon}</span>
+                  <span className="font-medium">{config.name}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       ) : null}
 
       {onToggleFileManager ? (
@@ -563,77 +623,20 @@ export function EmptyStateComposerPanel({
           <FolderOpen className="h-4 w-4" aria-hidden />
         </MetaIconButton>
       ) : null}
-
-      {showAdvancedControls ? (
-        <>
-          {isGeneralTheme ? <SkillSelector {...skillSelectorProps} /> : null}
-
-          {shouldShowTeamSelector ? (
-            <TeamSelector
-              activeTheme={activeTheme}
-              input={draftInput}
-              autoOpenToken={teamSelectorAutoOpenToken}
-              selectedTeam={selectedTeam}
-              workspaceSettings={teamWorkspaceSettings}
-              onPersistCustomTeams={onPersistCustomTeams}
-              onSelectTeam={(team) => onSelectTeam?.(team)}
-            />
-          ) : null}
-
-          <InputbarModelExtra
-            providerType={providerType}
-            setProviderType={setProviderType}
-            model={model}
-            setModel={setModel}
-            activeTheme={activeTheme}
-            onManageProviders={onManageProviders}
-          />
-
-          <InputbarAccessModeSelect
-            accessMode={accessMode}
-            setAccessMode={setAccessMode}
-          />
-
-          {showCreationModeSelector ? (
-            <Select
-              value={creationMode}
-              onValueChange={(value) =>
-                onCreationModeChange?.(value as CreationMode)
-              }
-            >
-              <SelectTrigger
-                className={`${EMPTY_STATE_SELECT_TRIGGER_CLASSNAME} min-w-[120px]`}
-              >
-                <div className="flex items-center gap-2">
-                  {CREATION_MODE_CONFIG[creationMode].icon}
-                  <span>{CREATION_MODE_CONFIG[creationMode].name}</span>
-                </div>
-              </SelectTrigger>
-              <SelectContent className="min-w-[200px] p-1" side="top">
-                <div className="px-2 py-1.5 text-xs font-medium text-slate-500">
-                  {copy.creationMode.label}
-                </div>
-                {(
-                  Object.entries(CREATION_MODE_CONFIG) as [
-                    CreationMode,
-                    (typeof CREATION_MODE_CONFIG)[CreationMode],
-                  ][]
-                ).map(([key, config]) => (
-                  <SelectItem key={key} value={key}>
-                    <div className="flex items-center gap-3">
-                      <span className="flex-shrink-0">{config.icon}</span>
-                      <span className="font-medium">{config.name}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : null}
-
-        </>
-      ) : null}
     </>
-  ) : undefined;
+  );
+  const trailingMeta = (
+    <InputbarModelExtra
+      providerType={providerType}
+      setProviderType={setProviderType}
+      model={model}
+      setModel={setModel}
+      reasoningEffort={reasoningEffort}
+      setReasoningEffort={setReasoningEffort}
+      activeTheme={activeTheme}
+      onManageProviders={onManageProviders}
+    />
+  );
 
   return (
     <>
@@ -673,11 +676,19 @@ export function EmptyStateComposerPanel({
         textareaRef={textareaRef}
         text={draftInput}
         setText={setDraftInput}
-        onSend={() => onSend(draftInput)}
+        onSend={() =>
+          onSend(draftInput, {
+            goalEnabled: objectiveEnabled,
+            planEnabled: taskEnabled,
+            subagentEnabled,
+          })
+        }
         isLoading={isLoading}
         disabled={disabled}
         onToolClick={handleToolAction}
         activeTools={{
+          objective_mode: objectiveEnabled,
+          task_mode: taskEnabled,
           subagent_mode: subagentEnabled,
         }}
         pendingImages={pendingImages}
@@ -697,10 +708,12 @@ export function EmptyStateComposerPanel({
         deferSendOnEnter
         topExtra={topExtra}
         leftExtra={leftExtra}
+        trailingMeta={trailingMeta}
         pathReferences={pathReferences}
         onImportPathReferenceAsKnowledge={onImportPathReferenceAsKnowledge}
         onRemovePathReference={onRemovePathReference}
-        showMetaTools={showAdvancedControls}
+        showMetaTools={false}
+        plusMenu={plusMenu}
         inputSuggestion={activeInputSuggestion}
         onAcceptInputSuggestion={handleAcceptInputSuggestion}
         listenForVoiceShortcut

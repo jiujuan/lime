@@ -1,3 +1,5 @@
+export { isUnifiedWebSearchToolName } from "./toolNameFamily";
+
 export interface SearchResultPreviewItem {
   id: string;
   title: string;
@@ -453,13 +455,4 @@ export function resolveSearchResultPreviewItemsFromText(
   }
 
   return filterUserFacingSearchResults(parseSearchResultText(normalizedText));
-}
-
-export function isUnifiedWebSearchToolName(toolName: string): boolean {
-  return (
-    toolName
-      .replace(/[\s_-]+/g, "")
-      .trim()
-      .toLowerCase() === "websearch"
-  );
 }

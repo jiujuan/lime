@@ -210,8 +210,24 @@ async function runCommand(command, args, env, label) {
   });
 }
 
-function startVite(env) {
-  const child = spawn("npx", ["vite"], {
+function viteServerArgsForUrl(devUrl) {
+  try {
+    const url = new URL(devUrl);
+    const args = ["vite"];
+    if (url.hostname) {
+      args.push("--host", url.hostname);
+    }
+    if (url.port) {
+      args.push("--port", url.port);
+    }
+    return args;
+  } catch {
+    return ["vite"];
+  }
+}
+
+function startVite(env, devUrl) {
+  const child = spawn("npx", viteServerArgsForUrl(devUrl), {
     stdio: "inherit",
     shell: true,
     env,
@@ -283,6 +299,6 @@ export async function runViteDevServerBootstrap({
 
   console.log(`[${logLabel}] 先执行 vite optimize，避免 Tauri 抢跑到半就绪 dev server。`);
   await runCommand("npx", ["vite", "optimize"], env, logLabel);
-  startVite(env);
+  startVite(env, devUrl);
   await waitForExitSignal();
 }

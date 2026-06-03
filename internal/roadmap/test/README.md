@@ -30,23 +30,58 @@
 
 ## 治理后统计
 
-最后统计时间：2026-06-01。
+最后统计时间：2026-06-03。
 
 | 范围 | 命令 | 文件 / 用例 | 实测耗时 | 备注 |
 | --- | --- | --- | --- | --- |
-| 前端分层统计 | `npm run test:layers:stats` | Vitest 总 `892` 个文件；默认可运行 `891`；live-gated `1` | 统计脚本级 | 同一事实源来自 `scripts/lib/vitest-layer-classifier.mjs` |
-| 前端 Unit | `npm run test:unit` | `396` 个文件，`2211` 个 case 收集 | `43.82s`（当前失败） | 本地 / AI TDD 默认第一轮信号；当前剩余 `2` 个文件 / `4` 个断言失败，集中在并行 `webSearch` / `thinking` 参数移除链路 |
+| 前端分层统计 | `npm run test:layers:stats` | Vitest 总 `1012` 个文件；默认可运行 `1011`；live-gated `1` | 统计脚本级 | 同一事实源来自 `scripts/lib/vitest-layer-classifier.mjs`；unit `485`、component `397`，component VM 迁移候选当前 `8` 个；当前工作树含并行新增的 `toolNameFamily.unit.test.ts` |
+| 前端 Unit | `npm run test:unit` | 最近有效默认复测 `483` 个文件，`2851` 个 case | `161.62s`（通过） | 本地 / AI TDD 默认第一轮信号保持绿色；unit runner 默认 Node + threads pool，`--single-fork` / `--pool=forks` 可回退；高负载下的 `293.89s` / `366.78s` 只作为环境噪声记录，不作为稳定基准 |
 | 前端全量 Vitest | `npm run test:frontend:all` | 默认可运行 `891` 个文件；最近完整跑完 `63/63` 批次 | 约 `306.95s` | 交付前 / CI 全量入口；runner 不输出聚合 case 总数 |
-| Rust 后端 | `npm run test:rust` | `1528` passed，`3` ignored | `14.49s` wall | 后端全量测试当前不是主要瓶颈 |
+| 前端 Integration 定向 | `npm run test:integration -- src/lib/layered-design/export.integration.test.ts` | `1` 个文件，`16` 个 case | `29.83s`（通过） | `layered-design` ZIP / PSD 导出属于重二进制打包验证，已移出 unit |
+| Rust Unit | `npm run test:rust:unit` | `1551` passed，`1` ignored | `61.76s` wall | 后端 TDD 默认第一轮信号；另有 `make tdd-rust-filter FILTER=...` 做单测试名定向回路 |
+
+### 2026-06-03 速度优先恢复点
+
+如果后续 Agent 从本文件恢复本任务，先处理速度，再处理候选数量治理。当前有效证据如下：
+
+- 现有 `npm run test:unit` 绿色；调整前由于 `scripts/run-vitest-layer.mjs` 强制 `--poolOptions.forks.singleFork`，486 个 unit 文件全层单 fork 跑完约 `213.05s`。
+- 用同一批 unit 文件直接调用 Vitest、去掉 `singleFork` 后，486 files / 2849 tests 全部通过，耗时 `175.46s`；这说明优先去掉 unit 默认单 fork 预计可直接节省约 `37s`。
+- 已完成第一刀：`test:unit` 默认不再强制 `singleFork`，`--single-fork` 与 `LIME_VITEST_SINGLE_FORK=1` 可作为排查回退；真实入口复测 486 files / 2853 tests 全部通过，耗时 `183.71s`，相比 `213.05s` 快约 `29s`。
+- 进一步加 `--environment node` 后，耗时降到 `137.44s`，且只有 `4` 个文件、`6` 条断言失败；这说明大多数 unit 已经能在 Node 环境运行，当前最大的速度收益来自把少数浏览器依赖 unit 隔离出去。
+- 已完成第二刀：unit 默认追加 `--environment node`；以下 4 个 browser-dependent 测试已显式移到 component 层：
+  - `src/lib/crashReporting.component.test.ts`
+  - `src/lib/workspaceHealthTelemetry.component.test.ts`
+  - `src/lib/utils/scheduleMinimumDelayIdleTask.component.test.ts`
+  - `src/components/agent/chat/hooks/agentStreamSubmitDraft.component.test.ts`
+- 真实入口复测 `npm run test:unit` 482 files / 2841 tests 全部通过，耗时 `138.63s`，已达到当前 `140s` 级目标；Vitest summary 中 `environment 241ms`，说明全层 jsdom 成本已从 unit 移除。
+- 已完成第三刀：unit 默认追加 `--pool threads`，`--pool=forks`、`--single-fork`、`LIME_VITEST_SINGLE_FORK=1` 可回退。实测证据：
+  - `/usr/bin/time -p npm run test:unit -- --pool=threads`：483 files / 2848 tests 通过，`real 115.59`。
+  - `/usr/bin/time -p npm run test:unit`：483 files / 2851 tests 通过，`real 161.62`。
+  - `/usr/bin/time -p npm run test:unit -- --pool=forks`：484 files / 2858 tests 通过，`real 223.28`；该轮已包含并行新增的 `toolNameFamily.unit.test.ts`。
+  - `/usr/bin/time -p npm run test:unit`（默认 threads 后高负载复测）：484 files / 2858 tests 通过，`real 293.89`。
+  - `/usr/bin/time -p npm run test:unit`（临时取消显式 pool 后同一高负载复测）：484 files / 2859 tests 通过，`real 366.78`。
+  - 当时机器 `load averages: 95.67 82.56 71.54`，且存在两个 `tsc --noEmit` 和多个高 CPU GUI / browser 进程；因此这两轮只证明当前机器负载会严重放大 wall time，不应作为回退 threads 默认的稳定证据。
+  - 结论：threads pool 已验证绿色，且同阶段快于显式 forks；当前保留 unit 默认 threads。后续速度基准必须在工作树和机器负载安静后复测。
+- 已完成第四刀：新增 `src/test/fastCheckRuns.ts`，把本地 / AI TDD 的 fast-check 属性测试 runs 默认降到 `25`，CI 保持原始 `50/100` runs，`LIME_FAST_CHECK_RUNS=100` 可在本地强制满量；当前 unit 层 fast-check 文件已全部接入 helper，覆盖 `src/lib/artifact/streaming.test.ts`、`store.test.ts`、`registry.test.ts`、`parser.test.ts`、`src/lib/api/importExport.test.ts`、`src/lib/config/providers.test.ts`、`src/lib/utils/apiKeyMask.test.ts`、`src/components/artifact/ArtifactRenderer.test.ts`、`ArtifactToolbar.test.ts`、`src/components/api-key-provider/ApiKeyProviderSection.test.ts`、`ProviderSetting.test.ts`、`providerConfigUtils.test.ts`、`src/icons/providers/providers-icons.test.ts`。
+  - `npm run test:unit -- src/test/fastCheckRuns.unit.test.ts src/lib/artifact/streaming.test.ts src/lib/artifact/store.test.ts src/lib/artifact/registry.test.ts src/lib/artifact/parser.test.ts src/lib/api/importExport.test.ts src/lib/utils/apiKeyMask.test.ts`：7 files / 63 tests 通过，Vitest duration `3.95s`。
+  - `npm run test:unit -- src/components/api-key-provider/ApiKeyProviderSection.test.ts src/components/api-key-provider/ProviderSetting.test.ts src/components/api-key-provider/providerConfigUtils.test.ts src/components/artifact/ArtifactRenderer.test.ts src/components/artifact/ArtifactToolbar.test.ts src/icons/providers/providers-icons.test.ts src/lib/config/providers.test.ts`：7 files / 105 tests 通过，Vitest duration `11.66s`。
+  - `CI=1 npm run test:unit -- src/lib/utils/apiKeyMask.test.ts`：1 file / 7 tests 通过，证明 CI 环境路径可执行；`fastCheckRuns.unit.test.ts` 机械锁住 CI 仍返回原始 runs。
+- 已开始治理 `useWorkspaceSendActions.test.tsx` 候选：`src/components/agent/chat/workspace/workspaceModelSkillLaunchRequestContext.ts` 承载 model skill launch request context、session binding 和 metadata wrapper 的纯 current helper；`workspaceModelSkillLaunchRequestContext.unit.test.ts` 进入 unit 层，覆盖播报、素材、转写、文本转换、URL、排版、网页、PPT、表单和 session 绑定。`useWorkspaceSendActions.ts` 从约 5475 行降到约 5039 行；component 候选数暂未下降。
+
+下一次重启优先级：
+
+1. **先稳基准**：工作树和机器负载安静后复跑一次 `/usr/bin/time -p npm run test:unit`，确认默认 Node + threads + 本地 fast-check 降采样后的稳定耗时；如果仍明显慢于 `138.63s`，优先做 transform / collect 慢文件画像，而不是继续试错 pool 默认。
+2. **再治理候选数**：剩余 8 个 component migration candidates 仍是下一优先级；优先继续 `useWorkspaceSendActions.test.tsx`，把已由 `workspaceModelSkillLaunchRequestContext.unit.test.ts` 覆盖的重复 metadata 挂载断言删除或拆成 focused component suites。
+3. **最后看 Rust**：`npm run test:rust:unit` 当前约 `61.76s`，后端后续优化重点应是定向 crate / filter 回路，而不是先全量重构 Rust 测试。
 
 前端 Vitest 当前分层：
 
 | 层级 | 文件数 | 默认可运行 | Live-gated |
 | --- | ---: | ---: | ---: |
-| Unit | `396` | `396` | `0` |
-| Component | `369` | `369` | `0` |
-| Contract | `77` | `77` | `0` |
-| Integration | `49` | `49` | `0` |
+| Unit | `485` | `485` | `0` |
+| Component | `397` | `397` | `0` |
+| Contract | `78` | `78` | `0` |
+| Integration | `51` | `51` | `0` |
 | E2E | `1` | `0` | `1` |
 
 ## 前端 View Model 策略

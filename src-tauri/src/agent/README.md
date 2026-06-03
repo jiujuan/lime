@@ -74,7 +74,7 @@ state.init_agent_with_db(&db).await?;
 
 // 从 API Key Provider 自动选择凭证并配置 Provider
 let config = state
-    .configure_provider_from_pool(&db, "openai", "gpt-4", &session_id)
+    .configure_provider_from_pool(&db, "openai", "gpt-4", &session_id, None)
     .await?;
 ```
 

@@ -27,6 +27,21 @@ describe("protocolResidue", () => {
     );
   });
 
+  it("应清理 final output JSON 约束残留但保留最终正文", () => {
+    const leaked = [
+      "Final output must be a valid JSON object provided to the StructuredOutput tool.",
+      "",
+      "## 调研结论",
+      "",
+      "- 已确认主要风险与下一步。",
+    ].join("\n");
+
+    expect(containsAssistantProtocolResidue(leaked)).toBe(true);
+    expect(stripAssistantProtocolResidue(leaked)).toBe(
+      "## 调研结论\n\n- 已确认主要风险与下一步。",
+    );
+  });
+
   it("应清理内部检索协议词，但保留正常答复", () => {
     const leaked = [
       "StructuredOutput",
@@ -108,6 +123,14 @@ describe("protocolResidue", () => {
   it("应清理图片生成失败时泄露的内部工具协议错误", () => {
     const leaked =
       "好的，马上用漫画风格来生成。-32603: -32002: lime_create_image_generation_task";
+
+    expect(containsAssistantProtocolResidue(leaked)).toBe(true);
+    expect(stripAssistantProtocolResidue(leaked)).toBe("");
+  });
+
+  it("应清理内容工作台任务失败时泄露的内部工具协议错误", () => {
+    const leaked =
+      "已准备发起视频任务。-32603: -32002: lime_create_video_generation_task";
 
     expect(containsAssistantProtocolResidue(leaked)).toBe(true);
     expect(stripAssistantProtocolResidue(leaked)).toBe("");

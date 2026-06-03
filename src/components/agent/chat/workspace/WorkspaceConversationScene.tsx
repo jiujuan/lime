@@ -317,6 +317,10 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   setProviderType: ComponentProps<typeof EmptyState>["setProviderType"];
   model: ComponentProps<typeof EmptyState>["model"];
   setModel: ComponentProps<typeof EmptyState>["setModel"];
+  reasoningEffort?: ComponentProps<typeof EmptyState>["reasoningEffort"];
+  setReasoningEffort?: ComponentProps<
+    typeof EmptyState
+  >["setReasoningEffort"];
   accessMode: ComponentProps<typeof EmptyState>["accessMode"];
   setAccessMode?: ComponentProps<typeof EmptyState>["setAccessMode"];
   onManageProviders?: ComponentProps<typeof EmptyState>["onManageProviders"];
@@ -325,6 +329,10 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
     key: ChatToolPreferenceKey,
     enabled: boolean,
   ) => void;
+  objectiveEnabled?: ComponentProps<typeof EmptyState>["objectiveEnabled"];
+  onObjectiveEnabledChange?: ComponentProps<
+    typeof EmptyState
+  >["onObjectiveEnabledChange"];
   selectedTeam: ComponentProps<typeof EmptyState>["selectedTeam"];
   onSelectTeam?: ComponentProps<typeof EmptyState>["onSelectTeam"];
   onEnableSuggestedTeam?: ComponentProps<
@@ -509,11 +517,15 @@ export function WorkspaceConversationScene({
   setProviderType,
   model,
   setModel,
+  reasoningEffort,
+  setReasoningEffort,
   accessMode,
   setAccessMode,
   onManageProviders,
   toolPreferences,
   onToolPreferenceChange,
+  objectiveEnabled,
+  onObjectiveEnabledChange,
   selectedTeam,
   onSelectTeam,
   onEnableSuggestedTeam,
@@ -615,11 +627,15 @@ export function WorkspaceConversationScene({
     setProviderType,
     model,
     setModel,
+    reasoningEffort,
+    setReasoningEffort,
     accessMode,
     setAccessMode,
     onManageProviders,
     toolPreferences,
     onToolPreferenceChange,
+    objectiveEnabled,
+    onObjectiveEnabledChange,
     selectedTeam,
     onSelectTeam,
     onEnableSuggestedTeam,

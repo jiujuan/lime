@@ -2346,6 +2346,8 @@ async function main() {
     logStage("launch-playwright-page");
     context = await launchPlaywrightContext(userDataDir);
     const page = context.pages()[0] ?? (await context.newPage());
+    page.setDefaultTimeout(options.timeoutMs);
+    page.setDefaultNavigationTimeout(options.timeoutMs);
     await page.addInitScript(
       buildCodeRuntimeEventSourceFixtureScript(
         deriveBridgeEventsUrl(options.invokeUrl),
@@ -2355,7 +2357,10 @@ async function main() {
       page,
       options,
     );
-    await page.goto(options.appUrl, { waitUntil: "domcontentloaded" });
+    await page.goto(options.appUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: options.timeoutMs,
+    });
 
     logStage("wait-page-storage-ready");
     await waitForCheck(options, "Lime 首页 origin 可访问", async () => {
@@ -2372,7 +2377,10 @@ async function main() {
     logStage("bootstrap-harness-storage");
     await evaluateScript(page, buildHarnessBootstrapScript());
     logStage("refresh-page");
-    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.reload({
+      waitUntil: "domcontentloaded",
+      timeout: options.timeoutMs,
+    });
 
     logStage("ensure-agent-home");
     await waitForCheck(options, "首页聊天输入框就绪", async () => {

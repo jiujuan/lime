@@ -106,6 +106,7 @@ interface UseAgentStreamOptions {
   accessMode: AgentAccessMode;
   providerTypeRef: MutableRefObject<string>;
   modelRef: MutableRefObject<string>;
+  reasoningEffortRef: MutableRefObject<string>;
   getSyncedSessionModelPreference: (
     sessionId: string,
   ) => SessionModelPreference | null;
@@ -150,6 +151,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     accessMode,
     providerTypeRef,
     modelRef,
+    reasoningEffortRef,
     getSyncedSessionModelPreference,
     getSyncedSessionExecutionStrategy,
     getSyncedSessionRecentPreferences,
@@ -201,6 +203,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
         accessMode,
         providerTypeRef,
         modelRef,
+        reasoningEffortRef,
         sessionIdRef,
         hasPendingPreparedSubmit: () =>
           preparedSubmitGateRef.current.hasPending(),
@@ -245,6 +248,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       modelRef,
       onWriteFile,
       providerTypeRef,
+      reasoningEffortRef,
       queuedTurns.length,
       runtime,
       sessionIdRef,

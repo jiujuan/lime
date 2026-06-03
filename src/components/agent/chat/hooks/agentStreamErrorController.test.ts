@@ -61,10 +61,12 @@ describe("agentStreamErrorController", () => {
       previousContent: "",
     });
 
-    expect(patch.content).toBe("");
+    expect(patch.content).toContain("执行失败：");
     expect(patch.runtimeStatus?.detail).toContain(
       "当前模型通道返回了计费或额度类错误",
     );
+    expect(patch.content).not.toContain("Payment Required");
+    expect(patch.content).not.toContain("Insufficient Balance");
     expect(patch.runtimeStatus?.detail).not.toContain("Payment Required");
     expect(patch.runtimeStatus?.detail).not.toContain("Insufficient Balance");
   });
@@ -145,8 +147,12 @@ describe("agentStreamErrorController", () => {
         type: "tool_use",
         toolCall: expect.objectContaining({ id: "tool-1" }),
       }),
+      {
+        type: "text",
+        text: "执行失败：模型未输出最终答复，请重试",
+      },
     ]);
-    expect(patch.content).toBe("");
+    expect(patch.content).toBe("执行失败：模型未输出最终答复，请重试");
     expect(patch.runtimeStatus?.detail).toBe("模型未输出最终答复，请重试");
   });
 

@@ -1,4 +1,7 @@
-import { safeInvoke } from "@/lib/dev-bridge";
+import type { UnlistenFn } from "@tauri-apps/api/event";
+import { safeInvoke, safeListen } from "@/lib/dev-bridge";
+
+export const UPDATE_INSTALL_SESSION_EVENT = "app-update://session";
 
 export interface VersionInfo {
   current: string;
@@ -15,6 +18,34 @@ export interface DownloadUpdateResult {
   success: boolean;
   message: string;
   filePath?: string;
+}
+
+export type UpdateInstallStage =
+  | "idle"
+  | "checking"
+  | "downloading"
+  | "installing"
+  | "restarting"
+  | "completed"
+  | "failed"
+  | "up_to_date";
+
+export interface UpdateInstallSession {
+  sessionId: string;
+  stage: UpdateInstallStage;
+  currentVersion: string;
+  latestVersion?: string | null;
+  downloadUrl?: string | null;
+  downloadedBytes: number;
+  totalBytes?: number | null;
+  percent: number;
+  message: string;
+  error?: string | null;
+  startedAt: number;
+  updatedAt: number;
+  completedAt?: number | null;
+  canCloseWindow: boolean;
+  isActive: boolean;
 }
 
 export interface UpdateCheckConfig {
@@ -44,6 +75,38 @@ export async function checkForUpdates(): Promise<VersionInfo> {
 
 export async function downloadUpdate(): Promise<DownloadUpdateResult> {
   return safeInvoke<DownloadUpdateResult>("download_update");
+}
+
+export async function startUpdateInstallSession(): Promise<UpdateInstallSession> {
+  return safeInvoke<UpdateInstallSession>("start_update_install_session");
+}
+
+export async function getUpdateInstallSession(): Promise<UpdateInstallSession> {
+  return safeInvoke<UpdateInstallSession>("get_update_install_session");
+}
+
+export async function listenUpdateInstallSession(
+  handler: (session: UpdateInstallSession) => void,
+): Promise<UnlistenFn> {
+  return safeListen<UpdateInstallSession>(
+    UPDATE_INSTALL_SESSION_EVENT,
+    ({ payload }) => handler(payload),
+  );
+}
+
+export function isUpdateInstallSessionActive(
+  session: Pick<UpdateInstallSession, "stage" | "isActive"> | null | undefined,
+): boolean {
+  if (!session?.isActive) {
+    return false;
+  }
+
+  return (
+    session.stage === "checking" ||
+    session.stage === "downloading" ||
+    session.stage === "installing" ||
+    session.stage === "restarting"
+  );
 }
 
 export async function getUpdateCheckSettings(): Promise<UpdateCheckConfig> {

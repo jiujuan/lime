@@ -62,7 +62,9 @@ function normalizeToolRecord(
     return null;
   }
 
-  const name = readString(record.name);
+  const name = readString(
+    record.name ?? record.call_name ?? record.callName ?? record.tool_name,
+  );
   if (!name) {
     return null;
   }

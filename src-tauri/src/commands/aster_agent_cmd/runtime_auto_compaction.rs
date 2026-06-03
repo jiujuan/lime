@@ -201,6 +201,7 @@ mod tests {
                 context_limit: self.context_limit,
                 temperature: None,
                 max_tokens: self.max_tokens,
+                reasoning_effort: None,
                 toolshim: false,
                 toolshim_model: None,
                 fast_model: None,

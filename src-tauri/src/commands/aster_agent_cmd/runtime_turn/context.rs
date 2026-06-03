@@ -74,6 +74,42 @@ pub(super) fn build_runtime_turn_context_override(
     )
 }
 
+fn normalized_collaboration_mode(value: &str) -> Option<String> {
+    match value.trim() {
+        "plan" => Some("plan".to_string()),
+        "default" => Some("default".to_string()),
+        _ => None,
+    }
+}
+
+fn extract_request_collaboration_mode(
+    request_metadata: Option<&serde_json::Value>,
+) -> Option<String> {
+    extract_harness_nested_object(
+        request_metadata,
+        &["collaboration_mode", "collaborationMode"],
+    )
+    .and_then(|metadata| {
+        ["mode", "kind"]
+            .iter()
+            .filter_map(|key| metadata.get(*key))
+            .find_map(serde_json::Value::as_str)
+            .and_then(normalized_collaboration_mode)
+    })
+    .or_else(|| {
+        extract_harness_string(
+            request_metadata,
+            &["collaboration_mode", "collaborationMode", "mode"],
+        )
+        .and_then(|value| normalized_collaboration_mode(&value))
+    })
+    .or_else(|| {
+        extract_harness_bool(request_metadata, &["task_mode_enabled", "taskModeEnabled"])
+            .filter(|enabled| *enabled)
+            .map(|_| "plan".to_string())
+    })
+}
+
 pub(crate) fn build_runtime_turn_context_snapshot(
     request_metadata: Option<&serde_json::Value>,
     workspace_settings: &WorkspaceSettings,
@@ -81,9 +117,14 @@ pub(crate) fn build_runtime_turn_context_snapshot(
     let seed_turn_context =
         request_metadata
             .and_then(serde_json::Value::as_object)
-            .map(|metadata| TurnContextOverride {
-                metadata: metadata.clone().into_iter().collect(),
-                ..TurnContextOverride::default()
+            .map(|metadata| {
+                let mut turn_context = TurnContextOverride {
+                    metadata: metadata.clone().into_iter().collect(),
+                    ..TurnContextOverride::default()
+                };
+                turn_context.collaboration_mode =
+                    extract_request_collaboration_mode(request_metadata);
+                turn_context
             });
 
     build_runtime_turn_context_override(seed_turn_context, request_metadata, workspace_settings)

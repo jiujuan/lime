@@ -98,7 +98,7 @@ async fn run_real_case(
 ) -> Result<RealRunSummary, String> {
     let session_id = format!("real-web-policy-{}", Uuid::new_v4());
     state
-        .configure_provider_from_pool(db, provider_id, model_name, &session_id)
+        .configure_provider_from_pool(db, provider_id, model_name, &session_id, None)
         .await
         .map_err(|e| format!("配置 Provider 失败: {e}"))?;
 

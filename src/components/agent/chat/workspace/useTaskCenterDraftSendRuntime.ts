@@ -8,6 +8,7 @@ import {
 } from "react";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import { mergeAgentUiPerformanceTraceMetadata } from "../hooks/agentStreamPerformanceMetrics";
+import { bindInputbarThreadGoalMetadata } from "../components/Inputbar/utils/inputbarModeRequestMetadata";
 import {
   buildHomePendingPreviewMessages,
   type TaskCenterDraftSendRequest,
@@ -205,15 +206,18 @@ export function useTaskCenterDraftSendDispatchRuntime({
           // 同一条快路径也不应同步跑项目启动 hooks 或 submit 前队列恢复扫描。
           skipSessionStartHooks: true,
           skipPreSubmitResume: true,
-          requestMetadata: mergeAgentUiPerformanceTraceMetadata(
-            request.sendOptions?.requestMetadata,
-            {
-              requestId: request.id,
-              sessionId: dispatchSessionId,
-              source: request.source,
-              submittedAt: request.submittedAt,
-              workspaceId: workspaceId ?? null,
-            },
+          requestMetadata: bindInputbarThreadGoalMetadata(
+            mergeAgentUiPerformanceTraceMetadata(
+              request.sendOptions?.requestMetadata,
+              {
+                requestId: request.id,
+                sessionId: dispatchSessionId,
+                source: request.source,
+                submittedAt: request.submittedAt,
+                workspaceId: workspaceId ?? null,
+              },
+            ),
+            dispatchSessionId,
           ),
         };
         const sendPromise = sendRef.current(

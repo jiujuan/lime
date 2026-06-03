@@ -410,9 +410,7 @@ describe("InlineToolProcessStep", () => {
       endTime: new Date("2026-04-13T10:22:01.000Z"),
     });
 
-    expect(container.textContent).toContain(
-      "搜索结果暂时无法读取",
-    );
+    expect(container.textContent).toContain("搜索结果暂时无法读取");
     expect(container.textContent).toContain("搜索失败");
     expect(container.textContent).not.toContain("执行失败");
 
@@ -610,6 +608,44 @@ describe("InlineToolProcessStep", () => {
     expect(container.textContent).not.toContain("-32603");
     expect(container.textContent).not.toContain(
       "lime_create_image_generation_task",
+    );
+  });
+
+  it("内容工作台任务失败时不应展示内部错误码或工具名", () => {
+    const { container } = renderTool({
+      id: "tool-video-generate-failed-1",
+      name: "lime_create_video_generation_task",
+      arguments: JSON.stringify({
+        prompt: "生成一个产品演示视频",
+      }),
+      status: "failed",
+      result: {
+        success: false,
+        error: "-32603: -32002: lime_create_video_generation_task",
+        output: "",
+      },
+      startTime: new Date("2026-05-14T10:22:00.000Z"),
+      endTime: new Date("2026-05-14T10:22:01.000Z"),
+    });
+
+    expect(container.textContent).toContain("视频生成失败");
+    expect(container.textContent).not.toContain("-32603");
+    expect(container.textContent).not.toContain("-32002");
+    expect(container.textContent).not.toContain(
+      "lime_create_video_generation_task",
+    );
+
+    act(() => {
+      const toggle = container.querySelector(
+        'button[title="展开过程详情"]',
+      ) as HTMLButtonElement | null;
+      toggle?.click();
+    });
+
+    expect(container.textContent).toContain("视频生成失败");
+    expect(container.textContent).not.toContain("-32603");
+    expect(container.textContent).not.toContain(
+      "lime_create_video_generation_task",
     );
   });
 

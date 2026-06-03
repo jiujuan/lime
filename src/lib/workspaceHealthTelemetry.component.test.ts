@@ -7,7 +7,7 @@ import {
   recordWorkspaceRepair,
 } from "./workspaceHealthTelemetry";
 
-describe("workspaceHealthTelemetry", () => {
+describe("workspaceHealthTelemetry browser storage boundary", () => {
   afterEach(() => {
     clearWorkspaceRepairHistory();
   });

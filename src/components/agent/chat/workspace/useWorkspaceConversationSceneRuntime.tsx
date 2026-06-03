@@ -251,10 +251,14 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   setProviderType: ConversationScenePresentationParams["scene"]["setProviderType"];
   model: ConversationScenePresentationParams["scene"]["model"];
   setModel: ConversationScenePresentationParams["scene"]["setModel"];
+  reasoningEffort: ConversationScenePresentationParams["scene"]["reasoningEffort"];
+  setReasoningEffort: ConversationScenePresentationParams["scene"]["setReasoningEffort"];
   accessMode: ConversationScenePresentationParams["scene"]["accessMode"];
   setAccessMode: ConversationScenePresentationParams["scene"]["setAccessMode"];
   chatToolPreferences: ChatToolPreferences;
   setChatToolPreferences: Dispatch<SetStateAction<ChatToolPreferences>>;
+  objectiveEnabled?: ConversationScenePresentationParams["scene"]["objectiveEnabled"];
+  onObjectiveEnabledChange?: ConversationScenePresentationParams["scene"]["onObjectiveEnabledChange"];
   selectedTeam: ConversationScenePresentationParams["scene"]["selectedTeam"];
   handleSelectTeam: ConversationScenePresentationParams["scene"]["onSelectTeam"];
   handleEnableSuggestedTeam: ConversationScenePresentationParams["scene"]["onEnableSuggestedTeam"];
@@ -407,10 +411,14 @@ export function useWorkspaceConversationSceneRuntime({
   setProviderType,
   model,
   setModel,
+  reasoningEffort,
+  setReasoningEffort,
   accessMode,
   setAccessMode,
   chatToolPreferences,
   setChatToolPreferences,
+  objectiveEnabled,
+  onObjectiveEnabledChange,
   selectedTeam,
   handleSelectTeam,
   handleEnableSuggestedTeam,
@@ -823,6 +831,8 @@ export function useWorkspaceConversationSceneRuntime({
       setProviderType,
       model,
       setModel,
+      reasoningEffort,
+      setReasoningEffort,
       accessMode,
       setAccessMode,
       onManageProviders: navigationActions.handleManageProviders,
@@ -832,6 +842,8 @@ export function useWorkspaceConversationSceneRuntime({
           ...previous,
           [key]: enabled,
         })),
+      objectiveEnabled,
+      onObjectiveEnabledChange,
       selectedTeam,
       onSelectTeam: handleSelectTeam,
       onEnableSuggestedTeam: handleEnableSuggestedTeam,

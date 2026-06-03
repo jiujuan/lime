@@ -42,6 +42,11 @@ internal/prd/tools/**
 
 # Internal roadmap&gongzonghao (private)
 internal/exec-plans/
+!internal/exec-plans/
+internal/exec-plans/*
+!internal/exec-plans/agent-tools-test-batches/
+!internal/exec-plans/agent-tools-test-batches/*.md
+!internal/exec-plans/devlime-codex-claude-alignment-gap-list.md
 internal/roadmap/**
 !internal/roadmap/
 !internal/roadmap/lime-service-skill-cloud-config-prd.md
@@ -102,6 +107,10 @@ internal/roadmap/agentapp/**
 internal/roadmap/zuanjia/**
 !internal/roadmap/zuanjia/*.md
 internal/gongzonghao/
+!internal/gongzonghao/
+internal/gongzonghao/*
+!internal/gongzonghao/devlime/
+!internal/gongzonghao/devlime/*.md
 internal/bussniss/
 internal/oem/
 internal/tech/

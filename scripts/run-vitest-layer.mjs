@@ -2,7 +2,6 @@
 
 import { spawnSync } from "node:child_process";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import process from "node:process";
 
 import {
@@ -20,9 +19,7 @@ const repoRoot = process.cwd();
 const includeLiveProviderTests = liveProviderSmokeAllowed();
 
 function resolveVitestEntrypoint() {
-  return fileURLToPath(
-    new URL("../node_modules/vitest/vitest.mjs", import.meta.url),
-  );
+  return path.resolve(repoRoot, "node_modules/vitest/vitest.mjs");
 }
 
 function printUsage() {
@@ -36,10 +33,13 @@ Options:
   --list       只列出当前层测试文件，不执行
   --json       以 JSON 输出列表或执行摘要
   --explain    列表输出包含分类原因
+  --single-fork  强制单 fork 运行；主要用于排查 unit 层并发 flaky
   --help       显示帮助
 
 Examples:
   npm run test:unit -- --list
+  npm run test:unit -- --single-fork
+  npm run test:unit -- --pool=forks
   npm run test:component -- src/components/agent/chat/components/MessageList.test.tsx
   npm run test:integration -- -- --testTimeout=30000
 `);
@@ -57,22 +57,33 @@ export function parseArgs(argv) {
     explain: false,
     json: false,
     list: false,
+    singleFork: false,
   };
   const filters = [];
   const normalizedVitestArgs = [...vitestArgs];
 
-  for (const arg of runnerArgs) {
+  for (let index = 0; index < runnerArgs.length; index += 1) {
+    const arg = runnerArgs[index];
     if (arg === "--explain") {
       options.explain = true;
     } else if (arg === "--json") {
       options.json = true;
     } else if (arg === "--list") {
       options.list = true;
+    } else if (arg === "--single-fork") {
+      options.singleFork = true;
     } else if (arg === "--run") {
       // 分层运行器默认固定以 run 模式启动 Vitest；重复透传会让 Vitest 报错。
       continue;
     } else if (arg === "--help" || arg === "-h") {
       options.help = true;
+    } else if (arg === "--pool" || arg === "--environment") {
+      normalizedVitestArgs.push(arg);
+      const nextArg = runnerArgs[index + 1];
+      if (nextArg && !nextArg.startsWith("-")) {
+        normalizedVitestArgs.push(nextArg);
+        index += 1;
+      }
     } else if (arg.startsWith("-")) {
       normalizedVitestArgs.push(arg);
     } else {
@@ -81,6 +92,94 @@ export function parseArgs(argv) {
   }
 
   return { layer, options, filters, vitestArgs: normalizedVitestArgs };
+}
+
+function isTruthyEnvFlag(value) {
+  return /^(1|true|yes|on)$/i.test(String(value || "").trim());
+}
+
+function hasVitestEnvironmentArg(vitestArgs) {
+  return vitestArgs.some(
+    (arg) => arg === "--environment" || arg.startsWith("--environment="),
+  );
+}
+
+function hasVitestPoolArg(vitestArgs) {
+  return vitestArgs.some((arg) => arg === "--pool" || arg.startsWith("--pool="));
+}
+
+function normalizeUnitPoolEnv(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "";
+  }
+  return /^(forks|threads|vmForks|vmThreads)$/i.test(normalized)
+    ? normalized
+    : "";
+}
+
+export function buildLayerEnvironmentArgs(layer, vitestArgs = []) {
+  if (layer !== "unit" || hasVitestEnvironmentArg(vitestArgs)) {
+    return [];
+  }
+
+  return ["--environment", "node"];
+}
+
+export function buildLayerPoolArgs(
+  layer,
+  vitestArgs = [],
+  options = {},
+  env = process.env,
+) {
+  if (layer !== "unit" || hasVitestPoolArg(vitestArgs)) {
+    return [];
+  }
+
+  if (shouldUseSingleFork(layer, options, env)) {
+    return ["--pool", "forks"];
+  }
+
+  return [
+    "--pool",
+    normalizeUnitPoolEnv(env.LIME_VITEST_UNIT_POOL) || "threads",
+  ];
+}
+
+export function shouldUseSingleFork(layer, options = {}, env = process.env) {
+  if (options.singleFork || isTruthyEnvFlag(env.LIME_VITEST_SINGLE_FORK)) {
+    return true;
+  }
+
+  return layer !== "unit";
+}
+
+export function buildVitestCliArgs({
+  layer,
+  files,
+  options = {},
+  vitestArgs = [],
+  env = process.env,
+}) {
+  const args = [
+    "--max-old-space-size=8192",
+    resolveVitestEntrypoint(),
+    "--run",
+    "--silent=passed-only",
+    "--disableConsoleIntercept",
+  ];
+
+  if (shouldUseSingleFork(layer, options, env)) {
+    args.push("--poolOptions.forks.singleFork");
+  }
+
+  return [
+    ...args,
+    ...buildLayerEnvironmentArgs(layer, vitestArgs),
+    ...buildLayerPoolArgs(layer, vitestArgs, options, env),
+    ...vitestArgs,
+    ...files,
+  ];
 }
 
 function normalizeFilter(value) {
@@ -178,19 +277,10 @@ function printList(entries, options) {
   }
 }
 
-function runVitest(layer, files, vitestArgs) {
+function runVitest(layer, files, vitestArgs, options) {
   const result = spawnSync(
     process.execPath,
-    [
-      "--max-old-space-size=8192",
-      resolveVitestEntrypoint(),
-      "--run",
-      "--silent=passed-only",
-      "--disableConsoleIntercept",
-      "--poolOptions.forks.singleFork",
-      ...vitestArgs,
-      ...files,
-    ],
+    buildVitestCliArgs({ layer, files, options, vitestArgs }),
     {
       stdio: "inherit",
       env: process.env,
@@ -252,6 +342,7 @@ function main() {
     layer,
     entries.map((entry) => entry.file),
     vitestArgs,
+    options,
   );
   process.exit(exitCode);
 }

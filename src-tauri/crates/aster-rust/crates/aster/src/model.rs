@@ -77,6 +77,8 @@ pub struct ModelConfig {
     pub context_limit: Option<usize>,
     pub temperature: Option<f32>,
     pub max_tokens: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
     pub toolshim: bool,
     pub toolshim_model: Option<String>,
     pub fast_model: Option<String>,
@@ -108,6 +110,7 @@ impl ModelConfig {
             context_limit,
             temperature,
             max_tokens,
+            reasoning_effort: None,
             toolshim,
             toolshim_model,
             fast_model: None,
@@ -270,6 +273,13 @@ impl ModelConfig {
         self
     }
 
+    pub fn with_reasoning_effort(mut self, effort: Option<String>) -> Self {
+        self.reasoning_effort = effort
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        self
+    }
+
     pub fn with_toolshim(mut self, toolshim: bool) -> Self {
         self.toolshim = toolshim;
         self
@@ -294,6 +304,7 @@ impl ModelConfig {
 
         rebuilt.temperature = self.temperature;
         rebuilt.max_tokens = self.max_tokens;
+        rebuilt.reasoning_effort = self.reasoning_effort.clone();
         rebuilt.toolshim = self.toolshim;
         rebuilt.toolshim_model = self.toolshim_model.clone();
         rebuilt.fast_model = self.fast_model.clone();
@@ -367,6 +378,7 @@ mod tests {
             .unwrap()
             .with_temperature(Some(0.2))
             .with_max_tokens(Some(2048))
+            .with_reasoning_effort(Some("high".to_string()))
             .with_toolshim(true)
             .with_toolshim_model(Some("qwen3".to_string()));
 
@@ -376,6 +388,7 @@ mod tests {
         assert_eq!(rebuilt.context_limit, Some(1_000_000));
         assert_eq!(rebuilt.temperature, Some(0.2));
         assert_eq!(rebuilt.max_tokens, Some(2048));
+        assert_eq!(rebuilt.reasoning_effort.as_deref(), Some("high"));
         assert!(rebuilt.toolshim);
         assert_eq!(rebuilt.toolshim_model.as_deref(), Some("qwen3"));
     }

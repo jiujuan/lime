@@ -72,6 +72,7 @@ describe("agentStreamPreparedSendDispatch", () => {
       accessMode: "current",
       providerTypeRef: { current: "openai" } as MutableRefObject<string>,
       modelRef: { current: "gpt-5.4" } as MutableRefObject<string>,
+      reasoningEffortRef: { current: "" } as MutableRefObject<string>,
       sessionIdRef: { current: null } as MutableRefObject<string | null>,
       getQueuedTurnsCount: () => 0,
       isThreadBusy: () => false,

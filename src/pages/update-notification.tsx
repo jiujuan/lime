@@ -15,12 +15,15 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import {
   closeUpdateWindow,
   dismissUpdateNotification,
-  downloadUpdate,
+  getUpdateInstallSession,
+  isUpdateInstallSessionActive,
+  listenUpdateInstallSession,
   recordUpdateNotificationAction,
   remindUpdateLater,
-  skipUpdateVersion,
+  startUpdateInstallSession,
+  type UpdateInstallSession,
 } from "@/lib/api/appUpdate";
-import { Bell, Download, ExternalLink, SkipForward, X } from "lucide-react";
+import { Bell, Download, RefreshCw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import "./update-notification.css";
 
@@ -39,6 +42,13 @@ function getUpdateParamsFromUrl(): UpdateParams {
   };
 }
 
+function clampProgressPercent(percent: number | null | undefined): number {
+  if (!Number.isFinite(percent)) {
+    return 0;
+  }
+  return Math.min(100, Math.max(0, Math.round((percent ?? 0) * 100)));
+}
+
 export function UpdateNotificationPage() {
   const { t } = useTranslation("common");
   const [params, setParams] = useState<UpdateParams>({
@@ -46,19 +56,100 @@ export function UpdateNotificationPage() {
     latestVersion: "",
     downloadUrl: "",
   });
-  const [downloading, setDownloading] = useState(false);
+  const [installSession, setInstallSession] =
+    useState<UpdateInstallSession | null>(null);
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
+  const installActive = isUpdateInstallSessionActive(installSession);
+  const hasInstallSession =
+    installSession !== null && installSession.stage !== "idle";
+  const progressPercent = clampProgressPercent(installSession?.percent);
+  const latestVersion =
+    installSession?.latestVersion || params.latestVersion || "";
+  const currentVersion =
+    installSession?.currentVersion || params.currentVersion || "";
+  const downloadUrl =
+    installSession?.downloadUrl || params.downloadUrl || "";
   const closeLabel = t("common.updateNotification.action.close");
-  const skipLabel = t("common.updateNotification.action.skipVersion");
-  const openReleaseLabel = t(
-    "common.updateNotification.action.openReleasePage",
-  );
+  const hideLabel = t("common.updateNotification.action.hide");
+  const sessionProgressLabel = (() => {
+    if (!installSession) {
+      return "";
+    }
+
+    switch (installSession.stage) {
+      case "checking":
+        return t("common.updateNotification.progress.checking");
+      case "downloading":
+        return installSession.totalBytes
+          ? t("common.updateNotification.progress.downloading", {
+              percent: `${progressPercent}%`,
+            })
+          : t("common.updateNotification.progress.downloadingUnknown");
+      case "installing":
+        return t("common.updateNotification.progress.installing");
+      case "restarting":
+        return t("common.updateNotification.progress.restarting");
+      case "failed":
+        return t("common.updateNotification.progress.failed");
+      case "up_to_date":
+        return t("common.updateNotification.progress.upToDate");
+      case "completed":
+        return t("common.updateNotification.progress.completed");
+      case "idle":
+      default:
+        return "";
+    }
+  })();
+  const sessionActionLabel = (() => {
+    if (!installSession) {
+      return t("common.updateNotification.action.updateNow");
+    }
+
+    switch (installSession.stage) {
+      case "checking":
+        return t("common.updateNotification.progress.checking");
+      case "downloading":
+        return t("common.updateNotification.action.downloading");
+      case "installing":
+        return t("common.updateNotification.action.installing");
+      case "restarting":
+        return t("common.updateNotification.action.restarting");
+      case "failed":
+        return t("common.updateNotification.action.retry");
+      default:
+        return t("common.updateNotification.action.updateNow");
+    }
+  })();
 
   useEffect(() => {
     setParams(getUpdateParamsFromUrl());
     const timer = window.setTimeout(() => setVisible(true), 10);
-    return () => window.clearTimeout(timer);
+
+    let disposed = false;
+    void getUpdateInstallSession()
+      .then((session) => {
+        if (!disposed && session.stage !== "idle") {
+          setInstallSession(session);
+        }
+      })
+      .catch((error) => {
+        console.error("读取更新安装会话失败:", error);
+      });
+
+    const unlistenPromise = listenUpdateInstallSession((session) => {
+      setInstallSession(session);
+    });
+
+    return () => {
+      disposed = true;
+      window.clearTimeout(timer);
+      void unlistenPromise
+        .then((unlisten) => unlisten())
+        .catch((error) => {
+          console.error("取消更新安装会话监听失败:", error);
+        });
+    };
   }, []);
 
   // 直接关闭窗口（无动画）
@@ -82,13 +173,18 @@ export function UpdateNotificationPage() {
 
   // 关闭并应用退避策略
   const handleDismiss = useCallback(async () => {
+    if (installActive) {
+      await closeWithAnimation();
+      return;
+    }
+
     try {
-      await dismissUpdateNotification(params.latestVersion || null);
+      await dismissUpdateNotification(latestVersion || null);
     } catch (error) {
       console.error("记录关闭提醒失败:", error);
     }
     await closeWithAnimation();
-  }, [params.latestVersion, closeWithAnimation]);
+  }, [installActive, latestVersion, closeWithAnimation]);
 
   // ESC 关闭窗口
   useEffect(() => {
@@ -113,7 +209,6 @@ export function UpdateNotificationPage() {
 
   // 立即更新
   const handleDownload = async () => {
-    setDownloading(true);
     try {
       await recordUpdateNotificationAction("update_now");
     } catch (error) {
@@ -121,57 +216,30 @@ export function UpdateNotificationPage() {
     }
 
     try {
-      await downloadUpdate();
-      // download_update 成功后会自动重启应用完成升级
+      const session = await startUpdateInstallSession();
+      setInstallSession(session);
     } catch (error) {
-      console.error("下载更新失败:", error);
-      // 如果下载失败，尝试打开浏览器
-      if (params.downloadUrl) {
+      console.error("启动更新安装失败:", error);
+      if (downloadUrl) {
         try {
-          await shellOpen(params.downloadUrl);
-          await closeWithAnimation();
+          await shellOpen(downloadUrl);
         } catch {
-          window.open(params.downloadUrl, "_blank");
+          window.open(downloadUrl, "_blank");
         }
       }
-    } finally {
-      setDownloading(false);
     }
   };
 
   // 稍后提醒
   const handleLater = async (hours: number) => {
+    if (installActive) return;
+
     try {
       await remindUpdateLater(hours);
     } catch (error) {
       console.error("设置稍后提醒失败:", error);
     }
     await closeWithAnimation();
-  };
-
-  // 跳过此版本
-  const handleSkipVersion = async () => {
-    if (params.latestVersion) {
-      try {
-        await skipUpdateVersion(params.latestVersion);
-        await closeWithAnimation();
-      } catch (error) {
-        console.error("跳过版本失败:", error);
-      }
-    }
-  };
-
-  // 在浏览器中打开
-  const handleOpenInBrowser = async () => {
-    if (params.downloadUrl) {
-      try {
-        await shellOpen(params.downloadUrl);
-      } catch (error) {
-        console.error("打开浏览器失败:", error);
-        // 备用方案
-        window.open(params.downloadUrl, "_blank");
-      }
-    }
   };
 
   return (
@@ -187,81 +255,97 @@ export function UpdateNotificationPage() {
         </div>
 
         <div className="update-toast-main">
-          <div className="update-toast-message">
-            {t("common.updateNotification.version.new", {
-              version: params.latestVersion || "",
-            })}
-            {params.currentVersion ? (
-              <span className="update-toast-sub">
-                {t("common.updateNotification.version.current", {
-                  version: params.currentVersion,
-                })}
-              </span>
-            ) : null}
+          <div className="update-toast-top">
+            <div className="update-toast-message">
+              {t("common.updateNotification.version.new", {
+                version: latestVersion,
+              })}
+              {currentVersion ? (
+                <span className="update-toast-sub">
+                  {t("common.updateNotification.version.current", {
+                    version: currentVersion,
+                  })}
+                </span>
+              ) : null}
+            </div>
+
+            <div
+              className="update-toast-actions"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              {installActive ? (
+                <>
+                  <button
+                    onClick={handleDismiss}
+                    className="update-btn update-btn-ghost"
+                  >
+                    {hideLabel}
+                  </button>
+                  <button
+                    disabled
+                    className="update-btn update-btn-primary"
+                    aria-live="polite"
+                  >
+                    <RefreshCw size={14} className="animate-spin" />
+                    {sessionActionLabel}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => handleLater(24)}
+                    className="update-btn update-btn-ghost"
+                  >
+                    {t("common.updateNotification.action.laterOneDay")}
+                  </button>
+                  <button
+                    onClick={handleDismiss}
+                    className="update-btn update-btn-icon"
+                    title={closeLabel}
+                    aria-label={closeLabel}
+                  >
+                    <X size={13} />
+                  </button>
+                  <button
+                    onClick={handleDownload}
+                    className="update-btn update-btn-primary"
+                  >
+                    <Download size={14} />
+                    {sessionActionLabel}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
 
-          <div
-            className="update-toast-actions"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={() => handleLater(24)}
-              className="update-btn update-btn-ghost"
-            >
-              {t("common.updateNotification.action.laterOneDay")}
-            </button>
-            <button
-              onClick={() => handleLater(72)}
-              className="update-btn update-btn-ghost"
-            >
-              {t("common.updateNotification.action.laterThreeDays")}
-            </button>
-            <button
-              onClick={() => handleLater(168)}
-              className="update-btn update-btn-ghost"
-            >
-              {t("common.updateNotification.action.laterNextWeek")}
-            </button>
-            <button
-              onClick={handleDismiss}
-              className="update-btn update-btn-icon"
-              title={closeLabel}
-              aria-label={closeLabel}
-            >
-              <X size={13} />
-            </button>
-            <button
-              onClick={handleSkipVersion}
-              className="update-btn update-btn-ghost"
-              title={skipLabel}
-              aria-label={skipLabel}
-            >
-              <SkipForward size={13} />
-            </button>
-            <button
-              onClick={handleDownload}
-              disabled={downloading}
-              className="update-btn update-btn-primary"
-            >
-              <Download
-                size={14}
-                className={downloading ? "animate-spin" : ""}
-              />
-              {downloading
-                ? t("common.updateNotification.action.downloading")
-                : t("common.updateNotification.action.updateNow")}
-            </button>
-            {params.downloadUrl ? (
-              <button
-                onClick={handleOpenInBrowser}
-                className="update-btn update-btn-icon"
-                title={openReleaseLabel}
-                aria-label={openReleaseLabel}
-              >
-                <ExternalLink size={13} />
-              </button>
-            ) : null}
-          </div>
+          {hasInstallSession ? (
+            <div className="update-session-row" aria-live="polite">
+              <span className="update-session-text">{sessionProgressLabel}</span>
+              {installSession?.stage === "downloading" ||
+              installSession?.stage === "installing" ||
+              installSession?.stage === "restarting" ? (
+                <>
+                  <div
+                    className="update-progress"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={progressPercent}
+                  >
+                    <div
+                      className="update-progress-bar"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+                  {installSession?.totalBytes ? (
+                    <span className="update-progress-value">
+                      {progressPercent}%
+                    </span>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

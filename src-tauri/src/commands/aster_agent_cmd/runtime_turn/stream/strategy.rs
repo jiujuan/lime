@@ -135,6 +135,7 @@ where
                     db,
                     session_id,
                     Some(&fallback_provider_config),
+                    request.reasoning_effort.as_deref(),
                 )
                 .await?;
 

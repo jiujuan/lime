@@ -114,7 +114,7 @@ describe("vitest-layer-classifier unit boundary", () => {
   it("局部 document 领域对象不应误归为 component", () => {
     expect(
       classifyVitestTestFile({
-        filePath: "src/lib/layered-design/export.test.ts",
+        filePath: "src/lib/layered-design/documentProjection.test.ts",
         source: [
           "import { describe, expect, it } from 'vitest';",
           "it('exports layered document', () => {",

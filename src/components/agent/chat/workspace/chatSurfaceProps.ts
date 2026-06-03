@@ -82,6 +82,10 @@ interface BuildWorkspaceEmptyStatePropsParams {
   setProviderType: ComponentProps<typeof EmptyState>["setProviderType"];
   model: ComponentProps<typeof EmptyState>["model"];
   setModel: ComponentProps<typeof EmptyState>["setModel"];
+  reasoningEffort?: ComponentProps<typeof EmptyState>["reasoningEffort"];
+  setReasoningEffort?: ComponentProps<
+    typeof EmptyState
+  >["setReasoningEffort"];
   accessMode: ComponentProps<typeof EmptyState>["accessMode"];
   setAccessMode: ComponentProps<typeof EmptyState>["setAccessMode"];
   onManageProviders?: ComponentProps<typeof EmptyState>["onManageProviders"];
@@ -90,6 +94,10 @@ interface BuildWorkspaceEmptyStatePropsParams {
     key: ChatToolPreferenceKey,
     enabled: boolean,
   ) => void;
+  objectiveEnabled?: ComponentProps<typeof EmptyState>["objectiveEnabled"];
+  onObjectiveEnabledChange?: ComponentProps<
+    typeof EmptyState
+  >["onObjectiveEnabledChange"];
   selectedTeam: ComponentProps<typeof EmptyState>["selectedTeam"];
   onSelectTeam?: ComponentProps<typeof EmptyState>["onSelectTeam"];
   onEnableSuggestedTeam?: ComponentProps<
@@ -211,11 +219,15 @@ export function buildWorkspaceEmptyStateProps({
   setProviderType,
   model,
   setModel,
+  reasoningEffort,
+  setReasoningEffort,
   accessMode,
   setAccessMode,
   onManageProviders,
   toolPreferences,
   onToolPreferenceChange,
+  objectiveEnabled,
+  onObjectiveEnabledChange,
   selectedTeam,
   onSelectTeam,
   onEnableSuggestedTeam,
@@ -284,9 +296,16 @@ export function buildWorkspaceEmptyStateProps({
     setProviderType,
     model,
     setModel,
+    reasoningEffort,
+    setReasoningEffort,
     accessMode,
     setAccessMode,
     onManageProviders,
+    taskEnabled: toolPreferences.task,
+    onTaskEnabledChange: (enabled) =>
+      onToolPreferenceChange("task", enabled),
+    objectiveEnabled,
+    onObjectiveEnabledChange,
     subagentEnabled: toolPreferences.subagent,
     onSubagentEnabledChange: (enabled) =>
       onToolPreferenceChange("subagent", enabled),

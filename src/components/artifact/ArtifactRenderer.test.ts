@@ -7,6 +7,7 @@
 
 import { describe, test, expect } from "vitest";
 import * as fc from "fast-check";
+import { fastCheckRuns } from "../../test/fastCheckRuns";
 import { artifactRegistry } from "@/lib/artifact/registry";
 import {
   ALL_ARTIFACT_TYPES,
@@ -194,7 +195,7 @@ describe("Property 7: Canvas 类型委托正确性", () => {
         // 验证 registry.isCanvasType 也返回 true
         expect(artifactRegistry.isCanvasType(type)).toBe(true);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -214,7 +215,7 @@ describe("Property 7: Canvas 类型委托正确性", () => {
         // 验证 registry.isCanvasType 也返回 false
         expect(artifactRegistry.isCanvasType(type)).toBe(false);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -234,7 +235,7 @@ describe("Property 7: Canvas 类型委托正确性", () => {
         // 验证内容长度一致
         expect(delegated.content.length).toBe(artifact.content.length);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -258,7 +259,7 @@ describe("Property 7: Canvas 类型委托正确性", () => {
           Object.keys(artifact.meta).length,
         );
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -295,7 +296,7 @@ describe("Property 7: Canvas 类型委托正确性", () => {
           }
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -317,7 +318,7 @@ describe("Property 7: Canvas 类型委托正确性", () => {
         const validCanvasSubtypes = ["document", "video", "design"];
         expect(validCanvasSubtypes).toContain(delegated.canvasType);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -376,7 +377,7 @@ describe("Property 7: Canvas 类型委托正确性", () => {
           }
         },
       ),
-      { numRuns: 50 },
+      { numRuns: fastCheckRuns(50) },
     );
   });
 
@@ -435,7 +436,7 @@ describe("Property 7: Canvas 类型委托正确性", () => {
           }
         },
       ),
-      { numRuns: 50 },
+      { numRuns: fastCheckRuns(50) },
     );
   });
 
@@ -452,7 +453,7 @@ describe("Property 7: Canvas 类型委托正确性", () => {
         // 两个函数应返回相同的结果
         expect(fromTypes).toBe(fromRegistry);
       }),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -486,7 +487,7 @@ describe("Property 7: Canvas 类型委托正确性", () => {
           expect(delegated2.meta[key]).toEqual(value);
         }
       }),
-      { numRuns: 50 },
+      { numRuns: fastCheckRuns(50) },
     );
   });
 });

@@ -597,6 +597,20 @@ pub fn create_responses_request(
         "store": options.store,
     });
 
+    if let Some(reasoning_effort) = model_config
+        .reasoning_effort
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        payload.as_object_mut().unwrap().insert(
+            "reasoning".to_string(),
+            json!({
+                "effort": reasoning_effort,
+            }),
+        );
+    }
+
     if let Some(previous_response_id) = options.previous_response_id.as_ref() {
         payload.as_object_mut().unwrap().insert(
             "previous_response_id".to_string(),
@@ -1142,6 +1156,23 @@ mod tests {
         assert_eq!(payload["previous_response_id"], "resp-1");
         assert_eq!(payload["input"][0]["role"], "system");
         assert_eq!(payload["input"][1]["role"], "user");
+    }
+
+    #[test]
+    fn test_create_responses_request_supports_explicit_reasoning_effort() {
+        let model_config = ModelConfig::new("gpt-5.3-codex")
+            .unwrap()
+            .with_reasoning_effort(Some("high".to_string()));
+        let payload = create_responses_request(
+            &model_config,
+            "system",
+            &[Message::user().with_text("继续")],
+            &[],
+            &ResponsesRequestOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(payload["reasoning"]["effort"], "high");
     }
 
     #[test]

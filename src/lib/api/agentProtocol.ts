@@ -775,6 +775,7 @@ export interface AgentUserPreferences {
   providerConfig?: AsterProviderConfig;
   providerPreference?: string;
   modelPreference?: string;
+  reasoningEffort?: string;
   thinking?: boolean;
   webSearch?: boolean;
   searchMode?: AgentRuntimeWebSearchMode;
@@ -1551,6 +1552,7 @@ export function createSubmitTurnRequestFromAgentOp(
         : {}),
       provider_preference: preferences?.providerPreference,
       model_preference: preferences?.modelPreference,
+      reasoning_effort: preferences?.reasoningEffort?.trim() || undefined,
       thinking_enabled: preferences?.thinking,
       approval_policy: preferences?.approvalPolicy,
       sandbox_policy: preferences?.sandboxPolicy,

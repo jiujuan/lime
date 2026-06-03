@@ -91,6 +91,7 @@ import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayId
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import { logAgentDebug } from "@/lib/agentDebug";
 import { AppSidebarConversationShelf } from "@/components/app-sidebar/AppSidebarConversationShelf";
+import { AppUpdateEntry } from "@/components/app-sidebar/AppUpdateEntry";
 import {
   formatSidebarSessionMeta,
   resolveSidebarSessionTitle,
@@ -1569,6 +1570,9 @@ const AccountActionSlot = styled.div<{ $collapsed?: boolean }>`
   position: relative;
   margin-top: 4px;
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: ${({ $collapsed }) => ($collapsed ? "center" : "stretch")};
   justify-content: ${({ $collapsed }) => ($collapsed ? "center" : "stretch")};
 `;
 
@@ -4933,6 +4937,15 @@ export function AppSidebar({
             ref={accountControlRef}
             data-testid="app-sidebar-account-slot"
           >
+            <AppUpdateEntry
+              collapsed={collapsed}
+              onOpenPanel={() => {
+                setAppearancePopoverOpen(false);
+                setLanguageMenuOpen(false);
+                setAccountMenuOpen(false);
+              }}
+            />
+
             {maybeWrapWithTooltip(
               <AccountButton
                 type="button"

@@ -5,10 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import { useWorkspaceInputbarSceneRuntime } from "./useWorkspaceInputbarSceneRuntime";
 
+const mockInputbarRender = vi.hoisted(() => vi.fn());
+
 vi.mock("../components/Inputbar", () => ({
-  Inputbar: ({ overlayAccessory }: { overlayAccessory?: React.ReactNode }) => (
-    <div data-testid="inputbar-mock">{overlayAccessory}</div>
-  ),
+  Inputbar: (props: { overlayAccessory?: React.ReactNode }) => {
+    mockInputbarRender(props);
+    return <div data-testid="inputbar-mock">{props.overlayAccessory}</div>;
+  },
 }));
 
 vi.mock("./WorkspaceHarnessDialogs", () => ({
@@ -85,6 +88,8 @@ function createDefaultProps(
     setProviderType: noop,
     model: "gpt-5",
     setModel: noop,
+    reasoningEffort: "",
+    setReasoningEffort: noop,
     sessionExecutionRuntime: null,
     projectId: "project-1",
     projectRootPath: "/tmp/project-1",
@@ -214,6 +219,18 @@ function renderHookNode(props: HookProps): HTMLDivElement {
   return container;
 }
 
+function getLatestInputbarProps(): {
+  toolStates?: Record<string, boolean>;
+  onToolStatesChange?: (states: Record<string, boolean>) => void;
+} {
+  const latestCall = mockInputbarRender.mock.calls.at(-1);
+  expect(latestCall).toBeTruthy();
+  return latestCall?.[0] as {
+    toolStates?: Record<string, boolean>;
+    onToolStatesChange?: (states: Record<string, boolean>) => void;
+  };
+}
+
 beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
@@ -274,5 +291,71 @@ describe("useWorkspaceInputbarSceneRuntime", () => {
     expect(
       container.querySelector('[data-testid="soul-artifact-voice-turn-toggle"]'),
     ).toBeNull();
+  });
+
+  it("应把工作区 task 偏好映射为 Inputbar plan 受控状态", () => {
+    const setChatToolPreferences = vi.fn();
+    renderHookNode(
+      createDefaultProps({
+        chatToolPreferences: {
+          task: true,
+          subagent: false,
+        },
+        setChatToolPreferences,
+      }),
+    );
+
+    const inputbarProps = getLatestInputbarProps();
+
+    expect(inputbarProps.toolStates).toMatchObject({
+      plan: true,
+      subagent: false,
+    });
+
+    act(() => {
+      inputbarProps.onToolStatesChange?.({
+        plan: false,
+      });
+    });
+
+    const updater = setChatToolPreferences.mock.calls[0]?.[0] as (
+      previous: { task: boolean; subagent: boolean },
+    ) => { task: boolean; subagent: boolean };
+    expect(updater({ task: true, subagent: true })).toEqual({
+      task: false,
+      subagent: true,
+    });
+  });
+
+  it("应把工作区 goal 会话态映射为 Inputbar objective 受控状态", () => {
+    renderHookNode(
+      createDefaultProps({
+        objectiveEnabled: true,
+      }),
+    );
+
+    expect(getLatestInputbarProps().toolStates).toMatchObject({
+      objective: true,
+    });
+  });
+
+  it("Inputbar goal 变更应只更新 goal 会话态，不写入 ChatToolPreferences", () => {
+    const setChatToolPreferences = vi.fn();
+    const onObjectiveEnabledChange = vi.fn();
+    renderHookNode(
+      createDefaultProps({
+        setChatToolPreferences,
+        onObjectiveEnabledChange,
+      }),
+    );
+
+    act(() => {
+      getLatestInputbarProps().onToolStatesChange?.({
+        objective: true,
+      });
+    });
+
+    expect(setChatToolPreferences).not.toHaveBeenCalled();
+    expect(onObjectiveEnabledChange).toHaveBeenCalledWith(true);
   });
 });

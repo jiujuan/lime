@@ -19,6 +19,17 @@ import {
   containsAssistantProtocolResidue,
   stripAssistantProtocolResidue,
 } from "./protocolResidue";
+import { resolveContentWorkbenchToolCopy } from "./contentWorkbenchToolCopy";
+import {
+  classifyMcpToolOperationKind,
+  isBrowserToolName,
+  parseMcpToolName,
+  type McpToolOperationKind,
+  type ParsedMcpToolName,
+} from "./toolNameFamily";
+
+export { classifyMcpToolOperationKind, isBrowserToolName, parseMcpToolName };
+export type { McpToolOperationKind, ParsedMcpToolName };
 
 export type ToolCallStatus = ToolCallState["status"];
 export type ToolCallFamily =
@@ -36,11 +47,6 @@ export type ToolCallFamily =
   | "fetch"
   | "vision"
   | "generic";
-
-export type McpToolOperationKind = Extract<
-  ToolCallFamily,
-  "search" | "list" | "read" | "browser"
->;
 
 export type ToolCallArgumentValue =
   | string
@@ -62,11 +68,18 @@ export interface ToolDisplayDescriptor {
 interface ToolDisplayConfig {
   family: ToolCallFamily;
   label: string;
+  labelKey?: string;
   verb: string;
   icon: LucideIcon;
   groupTitle: string;
+  groupTitleKey?: string;
   actionKey: ToolStatusActionKey;
   actions?: {
+    failed: string;
+    completed: string;
+    running: string;
+  };
+  actionKeys?: {
     failed: string;
     completed: string;
     running: string;
@@ -148,13 +161,22 @@ const TOOL_STATUS_ACTIONS = {
 
 type ToolStatusActionKey = keyof typeof TOOL_STATUS_ACTIONS;
 
-const MCP_MUTATION_ACTION_RE =
-  /(?:^|_)(?:create|update|delete|remove|add|set|send|write|edit|patch|run|execute|submit|publish|approve|reject|reply|comment)(?:_|$)/;
-const MCP_BROWSER_ACTION_RE =
-  /(?:^|_)(?:navigate|goto|click|hover|fill|type|select|press|snapshot|screenshot|drag|upload|wait|tabs?|page|browser|runtime|evaluate)(?:_|$)/;
-const MCP_SEARCH_ACTION_RE = /(?:^|_)(?:search|find|lookup|query)(?:_|$)/;
-const MCP_LIST_ACTION_RE = /(?:^|_)list(?:_|$)/;
-const MCP_READ_ACTION_RE = /(?:^|_)(?:get|read|fetch|open)(?:_|$)/;
+const CONTENT_TASK_GROUP_TITLE = "内容任务";
+const LIME_CREATE_TASK_ACTIONS = {
+  failed: "发起失败",
+  completed: "已发起",
+  running: "发起中",
+} as const;
+const LIME_CREATE_TASK_ACTION_KEYS = {
+  failed: "action.createTask.failed",
+  completed: "action.createTask.completed",
+  running: "action.createTask.running",
+} as const;
+const DIRECT_CONTENT_GENERATION_ACTION_KEYS = {
+  failed: "action.generate.failed",
+  completed: "action.generate.completed",
+  running: "action.generate.running",
+} as const;
 
 const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
   [
@@ -873,6 +895,11 @@ const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
       icon: Eye,
       groupTitle: "图像",
       actionKey: "vision",
+      actions: {
+        failed: "查看失败",
+        completed: "已查看图片",
+        running: "查看中",
+      },
     },
   ],
   [
@@ -880,15 +907,18 @@ const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
     {
       family: "task",
       label: "图片生成",
+      labelKey: "label.imageGeneration",
       verb: "生成",
       icon: FilePlus,
-      groupTitle: "任务",
+      groupTitle: CONTENT_TASK_GROUP_TITLE,
+      groupTitleKey: "groupTitle",
       actionKey: "task",
       actions: {
         failed: "生成失败",
         completed: "已生成",
         running: "生成中",
       },
+      actionKeys: DIRECT_CONTENT_GENERATION_ACTION_KEYS,
     },
   ],
   [
@@ -1117,15 +1147,18 @@ const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
     {
       family: "task",
       label: "封面图生成",
+      labelKey: "label.coverImageGeneration",
       verb: "生成",
       icon: FilePlus,
-      groupTitle: "任务",
+      groupTitle: CONTENT_TASK_GROUP_TITLE,
+      groupTitleKey: "groupTitle",
       actionKey: "task",
       actions: {
         failed: "生成失败",
         completed: "已生成",
         running: "生成中",
       },
+      actionKeys: DIRECT_CONTENT_GENERATION_ACTION_KEYS,
     },
   ],
   [
@@ -1133,10 +1166,29 @@ const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
     {
       family: "task",
       label: "视频生成",
+      labelKey: "label.videoGeneration",
       verb: "发起",
       icon: FilePlus,
-      groupTitle: "任务",
+      groupTitle: CONTENT_TASK_GROUP_TITLE,
+      groupTitleKey: "groupTitle",
       actionKey: "task",
+      actions: LIME_CREATE_TASK_ACTIONS,
+      actionKeys: LIME_CREATE_TASK_ACTION_KEYS,
+    },
+  ],
+  [
+    "limecreateaudiogenerationtask",
+    {
+      family: "task",
+      label: "配音生成",
+      labelKey: "label.audioGeneration",
+      verb: "发起",
+      icon: FilePlus,
+      groupTitle: CONTENT_TASK_GROUP_TITLE,
+      groupTitleKey: "groupTitle",
+      actionKey: "task",
+      actions: LIME_CREATE_TASK_ACTIONS,
+      actionKeys: LIME_CREATE_TASK_ACTION_KEYS,
     },
   ],
   [
@@ -1144,10 +1196,14 @@ const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
     {
       family: "task",
       label: "转写",
+      labelKey: "label.transcription",
       verb: "发起",
       icon: FilePlus,
-      groupTitle: "任务",
+      groupTitle: CONTENT_TASK_GROUP_TITLE,
+      groupTitleKey: "groupTitle",
       actionKey: "task",
+      actions: LIME_CREATE_TASK_ACTIONS,
+      actionKeys: LIME_CREATE_TASK_ACTION_KEYS,
     },
   ],
   [
@@ -1155,10 +1211,14 @@ const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
     {
       family: "task",
       label: "口播生成",
+      labelKey: "label.broadcastGeneration",
       verb: "发起",
       icon: FilePlus,
-      groupTitle: "任务",
+      groupTitle: CONTENT_TASK_GROUP_TITLE,
+      groupTitleKey: "groupTitle",
       actionKey: "task",
+      actions: LIME_CREATE_TASK_ACTIONS,
+      actionKeys: LIME_CREATE_TASK_ACTION_KEYS,
     },
   ],
   [
@@ -1166,10 +1226,14 @@ const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
     {
       family: "task",
       label: "封面生成",
+      labelKey: "label.coverGeneration",
       verb: "发起",
       icon: FilePlus,
-      groupTitle: "任务",
+      groupTitle: CONTENT_TASK_GROUP_TITLE,
+      groupTitleKey: "groupTitle",
       actionKey: "task",
+      actions: LIME_CREATE_TASK_ACTIONS,
+      actionKeys: LIME_CREATE_TASK_ACTION_KEYS,
     },
   ],
   [
@@ -1177,10 +1241,14 @@ const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
     {
       family: "task",
       label: "素材检索",
+      labelKey: "label.resourceSearch",
       verb: "发起",
       icon: FilePlus,
-      groupTitle: "任务",
+      groupTitle: CONTENT_TASK_GROUP_TITLE,
+      groupTitleKey: "groupTitle",
       actionKey: "task",
+      actions: LIME_CREATE_TASK_ACTIONS,
+      actionKeys: LIME_CREATE_TASK_ACTION_KEYS,
     },
   ],
   [
@@ -1188,10 +1256,14 @@ const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
     {
       family: "task",
       label: "素材检索",
+      labelKey: "label.resourceSearch",
       verb: "发起",
       icon: FilePlus,
-      groupTitle: "任务",
+      groupTitle: CONTENT_TASK_GROUP_TITLE,
+      groupTitleKey: "groupTitle",
       actionKey: "task",
+      actions: LIME_CREATE_TASK_ACTIONS,
+      actionKeys: LIME_CREATE_TASK_ACTION_KEYS,
     },
   ],
   [
@@ -1199,15 +1271,14 @@ const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
     {
       family: "task",
       label: "图片生成",
+      labelKey: "label.imageGeneration",
       verb: "发起",
       icon: FilePlus,
-      groupTitle: "任务",
+      groupTitle: CONTENT_TASK_GROUP_TITLE,
+      groupTitleKey: "groupTitle",
       actionKey: "task",
-      actions: {
-        failed: "生成失败",
-        completed: "已生成",
-        running: "生成中",
-      },
+      actions: LIME_CREATE_TASK_ACTIONS,
+      actionKeys: LIME_CREATE_TASK_ACTION_KEYS,
     },
   ],
   [
@@ -1215,10 +1286,14 @@ const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
     {
       family: "task",
       label: "链接解析",
+      labelKey: "label.urlParse",
       verb: "发起",
       icon: FilePlus,
-      groupTitle: "任务",
+      groupTitle: CONTENT_TASK_GROUP_TITLE,
+      groupTitleKey: "groupTitle",
       actionKey: "task",
+      actions: LIME_CREATE_TASK_ACTIONS,
+      actionKeys: LIME_CREATE_TASK_ACTION_KEYS,
     },
   ],
   [
@@ -1226,10 +1301,14 @@ const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
     {
       family: "task",
       label: "排版",
+      labelKey: "label.typesetting",
       verb: "发起",
       icon: FilePlus,
-      groupTitle: "任务",
+      groupTitle: CONTENT_TASK_GROUP_TITLE,
+      groupTitleKey: "groupTitle",
       actionKey: "task",
+      actions: LIME_CREATE_TASK_ACTIONS,
+      actionKeys: LIME_CREATE_TASK_ACTION_KEYS,
     },
   ],
   [
@@ -1357,6 +1436,19 @@ const MCP_OPERATION_TOOL_CONFIGS: Record<
     icon: FileText,
     groupTitle: "MCP",
     actionKey: "read",
+  },
+  mutation: {
+    family: "generic",
+    label: "MCP 工具",
+    verb: "调用",
+    icon: Wrench,
+    groupTitle: "MCP",
+    actionKey: "generic",
+    actions: {
+      failed: "调用失败",
+      completed: "已调用 MCP 工具",
+      running: "调用中",
+    },
   },
   browser: {
     family: "browser",
@@ -1566,6 +1658,98 @@ const PLANNING_TOOL_KEYS = new Set([
   "exitplanmode",
 ]);
 
+const CONTENT_CREATE_TASK_TOOL_KEYS = new Set([
+  "limecreatevideogenerationtask",
+  "limecreateaudiogenerationtask",
+  "limecreatetranscriptiontask",
+  "limecreatebroadcastgenerationtask",
+  "limecreatecovergenerationtask",
+  "limecreateresourcesearchtask",
+  "limecreatemodalresourcesearchtask",
+  "limecreateimagegenerationtask",
+  "limecreateurlparsetask",
+  "limecreatetypesettingtask",
+]);
+
+const DIRECT_CONTENT_GENERATION_TOOL_KEYS = new Set([
+  "socialgeneratecoverimage",
+  "generateimage",
+]);
+
+const SITE_TOOL_KEYS = new Set([
+  "limesitelist",
+  "limesiterecommend",
+  "limesitesearch",
+  "limesiteinfo",
+  "limesiterun",
+]);
+
+const CONTENT_TOOL_USER_FACING_COPY: Partial<
+  Record<string, { key: string; defaultValue: string }>
+> = {
+  generateimage: {
+    key: "userFacing.imageGeneration",
+    defaultValue: "生成图片",
+  },
+  socialgeneratecoverimage: {
+    key: "userFacing.coverImageGeneration",
+    defaultValue: "生成封面图",
+  },
+  limecreatevideogenerationtask: {
+    key: "userFacing.videoGeneration",
+    defaultValue: "生成视频",
+  },
+  limecreateaudiogenerationtask: {
+    key: "userFacing.audioGeneration",
+    defaultValue: "生成配音",
+  },
+  limecreatetranscriptiontask: {
+    key: "userFacing.transcription",
+    defaultValue: "转写音频",
+  },
+  limecreatebroadcastgenerationtask: {
+    key: "userFacing.broadcastGeneration",
+    defaultValue: "生成口播",
+  },
+  limecreatecovergenerationtask: {
+    key: "userFacing.coverGeneration",
+    defaultValue: "生成封面",
+  },
+  limecreateresourcesearchtask: {
+    key: "userFacing.resourceSearch",
+    defaultValue: "检索素材",
+  },
+  limecreatemodalresourcesearchtask: {
+    key: "userFacing.resourceSearch",
+    defaultValue: "检索素材",
+  },
+  limecreateimagegenerationtask: {
+    key: "userFacing.imageGeneration",
+    defaultValue: "生成图片",
+  },
+  limecreateurlparsetask: {
+    key: "userFacing.urlParse",
+    defaultValue: "解析链接",
+  },
+  limecreatetypesettingtask: {
+    key: "userFacing.typesetting",
+    defaultValue: "排版内容",
+  },
+};
+
+const DIRECT_CONTENT_GROUP_LABEL_COPY: Partial<
+  Record<string, { key: string; defaultValue: string }>
+> = {
+  generateimage: {
+    key: "label.image",
+    defaultValue: "图片",
+  },
+  socialgeneratecoverimage: {
+    key: "label.coverImage",
+    defaultValue: "封面图",
+  },
+};
+
 const getToolIcon = (toolName: string): LucideIcon => {
   const name = normalizeToolNameKey(toolName);
   if (name.includes("subagent")) {
@@ -1636,20 +1820,44 @@ const selectToolAction = (
 const toToolDisplayDescriptor = (
   config: ToolDisplayConfig,
   status: ToolCallStatus,
-): ToolDisplayDescriptor => ({
-  family: config.family,
-  label: config.label,
-  verb: config.verb,
-  icon: config.icon,
-  groupTitle: config.groupTitle,
-  action: config.actions
-    ? status === "failed"
-      ? config.actions.failed
+): ToolDisplayDescriptor => {
+  const label = config.labelKey
+    ? resolveContentWorkbenchToolCopy(config.labelKey, config.label)
+    : config.label;
+  const groupTitle = config.groupTitleKey
+    ? resolveContentWorkbenchToolCopy(config.groupTitleKey, config.groupTitle)
+    : config.groupTitle;
+  const actionCopy =
+    status === "failed"
+      ? {
+          key: config.actionKeys?.failed,
+          defaultValue: config.actions?.failed,
+        }
       : status === "completed"
-        ? config.actions.completed
-        : config.actions.running
-    : selectToolAction(config.actionKey, status),
-});
+        ? {
+            key: config.actionKeys?.completed,
+            defaultValue: config.actions?.completed,
+          }
+        : {
+            key: config.actionKeys?.running,
+            defaultValue: config.actions?.running,
+          };
+  const action =
+    actionCopy.key && actionCopy.defaultValue
+      ? resolveContentWorkbenchToolCopy(actionCopy.key, actionCopy.defaultValue)
+      : config.actions
+        ? actionCopy.defaultValue || selectToolAction(config.actionKey, status)
+        : selectToolAction(config.actionKey, status);
+
+  return {
+    family: config.family,
+    label,
+    verb: config.verb,
+    icon: config.icon,
+    groupTitle,
+    action,
+  };
+};
 
 const stringifyToolArgumentValue = (
   value: ToolCallArgumentValue | unknown,
@@ -1691,6 +1899,37 @@ const getFileName = (filePath: string): string => {
   return parts[parts.length - 1] || filePath;
 };
 
+const resolveVisionImageSubject = (
+  args: Record<string, ToolCallArgumentValue>,
+): string | null => {
+  for (const key of ["path", "image_path", "imagePath", "image_url", "url"]) {
+    const value = stringifyToolArgumentValue(args[key]);
+    if (!value) {
+      continue;
+    }
+
+    if (value.startsWith("data:image/")) {
+      return "图片";
+    }
+
+    if (/^https?:\/\//i.test(value)) {
+      try {
+        const url = new URL(value);
+        const pathName = url.pathname.trim();
+        return pathName && pathName !== "/"
+          ? getFileName(pathName)
+          : url.hostname;
+      } catch {
+        return truncatePreviewText(value);
+      }
+    }
+
+    return getFileName(value);
+  }
+
+  return null;
+};
+
 const TOOL_NAME_KEY_ALIASES: Record<string, string> = {
   ask: "askuserquestion",
   requestuserinput: "askuserquestion",
@@ -1724,6 +1963,7 @@ const TOOL_NAME_KEY_ALIASES: Record<string, string> = {
   greptool: "grep",
   lsptool: "lsp",
   listmcpresourcestool: "listmcpresources",
+  listmcpresourcetemplatestool: "listmcpresourcetemplates",
   readmcpresourcetool: "readmcpresource",
   notebookedittool: "notebookedit",
   powershelltool: "powershell",
@@ -1779,10 +2019,15 @@ const USER_FACING_TOOL_LABELS: Record<string, string> = {
   工具入口确认: "确认工具入口",
   文档搜索: "查找文档",
   文档查询: "查看文档",
+  库解析: "查找内容",
   网络搜索: "搜索网页",
   代码分析: "分析代码",
   图片搜索: "搜索图片",
   联网搜图: "搜索图片",
+  行情查询: "获取数据",
+  天气查询: "获取数据",
+  体育查询: "获取数据",
+  时间查询: "获取数据",
   命令执行: "运行命令",
   "REPL 执行": "运行命令",
   PowerShell: "运行命令",
@@ -1806,6 +2051,16 @@ const USER_FACING_TOOL_LABELS: Record<string, string> = {
   工作区同步: "同步内容",
   图像分析: "分析图片",
   图片查看: "查看图片",
+  图片生成: "生成图片",
+  视频生成: "生成视频",
+  配音生成: "生成配音",
+  转写: "转写音频",
+  口播生成: "生成口播",
+  封面生成: "生成封面",
+  封面图生成: "生成封面图",
+  素材检索: "检索素材",
+  链接解析: "解析链接",
+  排版: "排版内容",
   站点能力目录: "查看站点能力",
   站点能力推荐: "推荐站点能力",
   站点能力搜索: "搜索站点能力",
@@ -1822,6 +2077,36 @@ export const normalizeToolNameKey = (value: string): string => {
   return TOOL_NAME_KEY_ALIASES[normalized] || normalized;
 };
 
+const isContentWorkbenchToolKey = (toolName: string): boolean => {
+  const name = normalizeToolNameKey(toolName);
+  return (
+    CONTENT_CREATE_TASK_TOOL_KEYS.has(name) ||
+    DIRECT_CONTENT_GENERATION_TOOL_KEYS.has(name)
+  );
+};
+
+const isDirectContentGenerationToolKey = (toolName: string): boolean =>
+  DIRECT_CONTENT_GENERATION_TOOL_KEYS.has(normalizeToolNameKey(toolName));
+
+const isSiteToolKey = (toolName: string): boolean =>
+  SITE_TOOL_KEYS.has(normalizeToolNameKey(toolName));
+
+const resolveContentWorkbenchUserFacingLabel = (
+  toolName: string,
+): string | null => {
+  const copy = CONTENT_TOOL_USER_FACING_COPY[normalizeToolNameKey(toolName)];
+  return copy
+    ? resolveContentWorkbenchToolCopy(copy.key, copy.defaultValue)
+    : null;
+};
+
+const resolveDirectContentGroupLabel = (toolName: string): string | null => {
+  const copy = DIRECT_CONTENT_GROUP_LABEL_COPY[normalizeToolNameKey(toolName)];
+  return copy
+    ? resolveContentWorkbenchToolCopy(copy.key, copy.defaultValue)
+    : null;
+};
+
 export const humanizeToolName = (toolName: string): string =>
   toolName
     .replace(/^mcp__/, "")
@@ -1829,79 +2114,6 @@ export const humanizeToolName = (toolName: string): string =>
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/[_-]+/g, " ")
     .trim() || "工具调用";
-
-export interface ParsedMcpToolName {
-  serverName: string;
-  innerToolName: string;
-  normalizedInnerToolName: string;
-}
-
-export const parseMcpToolName = (
-  toolName: string,
-): ParsedMcpToolName | null => {
-  if (!toolName.startsWith("mcp__")) {
-    return null;
-  }
-
-  const segments = toolName.split("__");
-  if (segments.length < 3) {
-    return null;
-  }
-
-  const [, serverName, ...innerParts] = segments;
-  const innerToolName = innerParts.join("__").trim();
-  if (!serverName || !innerToolName) {
-    return null;
-  }
-
-  return {
-    serverName,
-    innerToolName,
-    normalizedInnerToolName: innerToolName
-      .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-      .replace(/-/g, "_")
-      .toLowerCase(),
-  };
-};
-
-export const classifyMcpToolOperationKind = (
-  toolName: string,
-): McpToolOperationKind | null => {
-  const parsed = parseMcpToolName(toolName);
-  if (!parsed) {
-    return null;
-  }
-
-  const { serverName, normalizedInnerToolName } = parsed;
-  const normalizedServerName = serverName.toLowerCase();
-
-  if (MCP_MUTATION_ACTION_RE.test(normalizedInnerToolName)) {
-    return null;
-  }
-
-  if (
-    normalizedServerName.includes("browser") ||
-    normalizedServerName.includes("playwright") ||
-    normalizedServerName.includes("chrome") ||
-    MCP_BROWSER_ACTION_RE.test(normalizedInnerToolName)
-  ) {
-    return "browser";
-  }
-
-  if (MCP_SEARCH_ACTION_RE.test(normalizedInnerToolName)) {
-    return "search";
-  }
-
-  if (MCP_LIST_ACTION_RE.test(normalizedInnerToolName)) {
-    return "list";
-  }
-
-  if (MCP_READ_ACTION_RE.test(normalizedInnerToolName)) {
-    return "read";
-  }
-
-  return null;
-};
 
 export const parseToolCallArguments = (
   value?: string,
@@ -1923,30 +2135,6 @@ export const resolveToolFilePath = (
 ): string | null => {
   return extractArtifactProtocolPathsFromValue(args)[0] ?? null;
 };
-
-export const isBrowserToolName = (name: string): boolean =>
-  [
-    "browser",
-    "page",
-    "runtime",
-    "dom",
-    "cdp",
-    "playwright",
-    "navigate",
-    "screenshot",
-    "snapshot",
-    "click",
-    "hover",
-    "upload",
-    "waitfor",
-    "tabs",
-    "open",
-    "presskey",
-    "selectoption",
-    "drag",
-    "evaluate",
-    "goto",
-  ].some((marker) => name.includes(marker));
 
 export const resolveToolPrimarySubject = (
   toolName: string,
@@ -2017,14 +2205,26 @@ export const resolveToolPrimarySubject = (
     ]);
   }
 
-  if (normalizedName === "analyzeimage" || normalizedName === "viewimage") {
+  if (
+    normalizedName === "listmcpresources" ||
+    normalizedName === "listmcpresourcetemplates"
+  ) {
+    return resolveToolArgumentPreview(args, ["server", "serverName", "name"]);
+  }
+
+  if (normalizedName === "readmcpresource") {
     return resolveToolArgumentPreview(args, [
-      "path",
-      "image_path",
-      "imagePath",
-      "image_url",
-      "url",
+      "uri",
+      "resource_uri",
+      "resourceUri",
+      "resource",
+      "server",
+      "serverName",
     ]);
+  }
+
+  if (normalizedName === "analyzeimage" || normalizedName === "viewimage") {
+    return resolveVisionImageSubject(args);
   }
 
   if (isBrowserToolName(normalizedName)) {
@@ -2058,6 +2258,9 @@ export const resolveToolPrimarySubject = (
       "uri",
       "resource_uri",
       "resource",
+      "title",
+      "subject",
+      "action",
       "name",
       "id",
       "repo",
@@ -2269,6 +2472,14 @@ export const getToolDisplayInfo = (
     return toToolDisplayDescriptor(exactMatch, status);
   }
 
+  const mcpOperationKind = classifyMcpToolOperationKind(toolName);
+  if (mcpOperationKind && mcpOperationKind !== "browser") {
+    return toToolDisplayDescriptor(
+      MCP_OPERATION_TOOL_CONFIGS[mcpOperationKind],
+      status,
+    );
+  }
+
   if (isBrowserToolName(name)) {
     const browserMatcher = BROWSER_TOOL_MATCHERS.find((item) =>
       item.match(name),
@@ -2278,7 +2489,6 @@ export const getToolDisplayInfo = (
     }
   }
 
-  const mcpOperationKind = classifyMcpToolOperationKind(toolName);
   if (mcpOperationKind) {
     return toToolDisplayDescriptor(
       MCP_OPERATION_TOOL_CONFIGS[mcpOperationKind],
@@ -2451,9 +2661,61 @@ export const toUserFacingToolDisplayLabel = (label: string): string => {
 };
 
 export const resolveUserFacingToolDisplayLabel = (toolName: string): string =>
+  resolveContentWorkbenchUserFacingLabel(toolName) ||
   toUserFacingToolDisplayLabel(
     resolveToolDisplayLabel(toolName).trim() || toolName,
   );
+
+const buildContentWorkbenchGroupHeadline = (
+  toolCalls: ToolCallState[],
+): string | null => {
+  if (
+    toolCalls.length === 0 ||
+    !toolCalls.every((item) => isContentWorkbenchToolKey(item.name))
+  ) {
+    return null;
+  }
+
+  const failed = toolCalls.some((item) => item.status === "failed");
+  const running = toolCalls.some((item) => item.status === "running");
+  const statusKey = failed ? "failed" : running ? "running" : "completed";
+
+  if (toolCalls.length > 1) {
+    return resolveContentWorkbenchToolCopy(
+      `group.multiple.${statusKey}`,
+      {
+        failed: "内容任务失败 {{count}} 项",
+        running: "内容任务进行中 {{count}} 项",
+        completed: "已发起 {{count}} 个内容任务",
+      }[statusKey],
+      { count: toolCalls.length },
+    );
+  }
+
+  const first = toolCalls[0]!;
+  const info = getToolDisplayInfo(first.name, first.status);
+  const mode = isDirectContentGenerationToolKey(first.name) ? "direct" : "task";
+  const label =
+    mode === "direct"
+      ? resolveDirectContentGroupLabel(first.name) || info.label
+      : info.label;
+
+  return resolveContentWorkbenchToolCopy(
+    `group.single.${mode}.${statusKey}`,
+    mode === "direct"
+      ? {
+          failed: "{{label}}生成失败",
+          running: "{{label}}生成中",
+          completed: "已生成{{label}}",
+        }[statusKey]
+      : {
+          failed: "{{label}}发起失败",
+          running: "{{label}}发起中",
+          completed: "已发起{{label}}",
+        }[statusKey],
+    { label },
+  );
+};
 
 export const buildToolGroupHeadline = (toolCalls: ToolCallState[]): string => {
   const first = toolCalls[0]!;
@@ -2461,8 +2723,16 @@ export const buildToolGroupHeadline = (toolCalls: ToolCallState[]): string => {
   const failed = toolCalls.some((item) => item.status === "failed");
   const running = toolCalls.some((item) => item.status === "running");
 
+  const contentWorkbenchHeadline =
+    buildContentWorkbenchGroupHeadline(toolCalls);
+  if (contentWorkbenchHeadline) {
+    return contentWorkbenchHeadline;
+  }
+
+  const isSiteToolGroup = toolCalls.every((item) => isSiteToolKey(item.name));
+
   if (info.family === "search") {
-    if (info.groupTitle === "站点") {
+    if (isSiteToolGroup) {
       return running
         ? "站点搜索中"
         : failed
@@ -2473,7 +2743,7 @@ export const buildToolGroupHeadline = (toolCalls: ToolCallState[]): string => {
   }
 
   if (["read", "list"].includes(info.family)) {
-    if (info.groupTitle === "站点") {
+    if (isSiteToolGroup) {
       return running
         ? "站点浏览中"
         : failed
@@ -2556,6 +2826,15 @@ export const buildToolGroupHeadline = (toolCalls: ToolCallState[]): string => {
   }
 
   if (info.family === "vision") {
+    const normalizedName = normalizeToolNameKey(first.name);
+    if (normalizedName === "viewimage") {
+      return failed
+        ? `图片查看失败 ${toolCalls.length} 项`
+        : running
+          ? `图片查看中 ${toolCalls.length} 项`
+          : `已查看 ${toolCalls.length} 张图片`;
+    }
+
     return failed
       ? `图像分析失败 ${toolCalls.length} 项`
       : running
@@ -2563,7 +2842,7 @@ export const buildToolGroupHeadline = (toolCalls: ToolCallState[]): string => {
         : `已分析 ${toolCalls.length} 项图像`;
   }
 
-  if (info.groupTitle === "站点") {
+  if (isSiteToolGroup) {
     return failed
       ? `站点操作失败 ${toolCalls.length} 项`
       : running

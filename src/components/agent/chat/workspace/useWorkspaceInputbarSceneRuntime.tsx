@@ -364,6 +364,9 @@ type InputbarParams = InputbarPresentationParams["inputbar"];
 type GeneralWorkbenchDialogParams =
   InputbarPresentationParams["generalWorkbenchDialog"];
 type NavigationActions = ReturnType<typeof useWorkspaceNavigationActions>;
+type WorkspaceInputbarToolStates = NonNullable<
+  ComponentProps<typeof Inputbar>["toolStates"]
+>;
 
 function useWorkspaceInputbarScenePresentationRuntime({
   setMentionedCharacters,
@@ -635,6 +638,8 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
   setProviderType: InputbarParams["setProviderType"];
   model: InputbarParams["model"];
   setModel: InputbarParams["setModel"];
+  reasoningEffort: InputbarParams["reasoningEffort"];
+  setReasoningEffort: InputbarParams["setReasoningEffort"];
   sessionExecutionRuntime: InputbarParams["executionRuntime"];
   projectId: string | null | undefined;
   projectRootPath: string | null | undefined;
@@ -661,6 +666,8 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
   initialInputCapability?: AgentInitialInputCapabilityParams;
   initialKnowledgePackSelection?: AgentInitialKnowledgePackSelectionParams;
   setChatToolPreferences: Dispatch<SetStateAction<ChatToolPreferences>>;
+  objectiveEnabled?: boolean;
+  onObjectiveEnabledChange?: (enabled: boolean) => void;
   handleNavigateToSkillSettings: InputbarParams["onNavigateToSettings"];
   handleRefreshSkills: InputbarParams["onRefreshSkills"];
   soulArtifactVoiceGenerationBrief?: Record<string, unknown> | null;
@@ -762,6 +769,8 @@ export function useWorkspaceInputbarSceneRuntime({
   setProviderType,
   model,
   setModel,
+  reasoningEffort,
+  setReasoningEffort,
   sessionExecutionRuntime,
   projectId,
   projectRootPath,
@@ -783,6 +792,8 @@ export function useWorkspaceInputbarSceneRuntime({
   initialInputCapability,
   initialKnowledgePackSelection,
   setChatToolPreferences,
+  objectiveEnabled = false,
+  onObjectiveEnabledChange,
   handleNavigateToSkillSettings,
   handleRefreshSkills,
   soulArtifactVoiceGenerationBrief,
@@ -888,18 +899,29 @@ export function useWorkspaceInputbarSceneRuntime({
     [handleInputbarSend],
   );
   const handleInputbarToolStatesChange = useCallback(
-    (
-      nextToolStates: Pick<
-        ChatToolPreferences,
-        "subagent"
-      >,
-    ) => {
-      setChatToolPreferences((previous) => ({
-        ...previous,
-        ...nextToolStates,
-      }));
+    (nextToolStates: WorkspaceInputbarToolStates) => {
+      const hasPlanChange = typeof nextToolStates.plan === "boolean";
+      const hasSubagentChange = typeof nextToolStates.subagent === "boolean";
+      const hasObjectiveChange =
+        typeof nextToolStates.objective === "boolean";
+      if (!hasPlanChange && !hasSubagentChange && !hasObjectiveChange) {
+        return;
+      }
+
+      if (hasPlanChange || hasSubagentChange) {
+        setChatToolPreferences((previous) => ({
+          ...previous,
+          ...(hasPlanChange ? { task: nextToolStates.plan } : {}),
+          ...(hasSubagentChange
+            ? { subagent: nextToolStates.subagent }
+            : {}),
+        }));
+      }
+      if (hasObjectiveChange) {
+        onObjectiveEnabledChange?.(nextToolStates.objective === true);
+      }
     },
-    [setChatToolPreferences],
+    [onObjectiveEnabledChange, setChatToolPreferences],
   );
   const dockLayoutMode = layoutMode === "chat" ? "chat" : "chat-canvas";
   const resolvedTurns = useMemo(() => turns ?? [], [turns]);
@@ -970,6 +992,8 @@ export function useWorkspaceInputbarSceneRuntime({
         setProviderType,
         model,
         setModel,
+        reasoningEffort,
+        setReasoningEffort,
         executionRuntime: sessionExecutionRuntime,
         accessMode,
         setAccessMode,
@@ -988,6 +1012,8 @@ export function useWorkspaceInputbarSceneRuntime({
         onSelectServiceSkill,
         initialInputCapability,
         toolStates: {
+          objective: objectiveEnabled,
+          plan: resolvedChatToolPreferences.task,
           subagent: resolvedChatToolPreferences.subagent,
         },
         onToolStatesChange: handleInputbarToolStatesChange,

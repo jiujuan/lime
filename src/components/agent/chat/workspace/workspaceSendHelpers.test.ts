@@ -137,6 +137,81 @@ describe("workspaceSendHelpers runtime team preview", () => {
     expect(metadata.harness).not.toHaveProperty("generationBrief");
   });
 
+  it("输入框 plan / goal mode 应进入工作区 harness metadata", () => {
+    const metadata = buildWorkspaceRequestMetadata({
+      sendOptions: {
+        requestMetadata: {
+          harness: {
+            task_mode_enabled: true,
+            goal_mode_enabled: true,
+            preferences: {
+              task: true,
+              task_mode: true,
+              goal: true,
+              objective: true,
+            },
+            collaboration_mode: {
+              mode: "plan",
+              source: "inputbar",
+            },
+            thread_goal: {
+              enabled: true,
+              source: "inputbar",
+              status: "active",
+              set: {
+                threadId: "thread-workspace-plan-goal",
+                objective: null,
+                status: "active",
+                tokenBudget: null,
+              },
+            },
+          },
+        },
+        toolPreferencesOverride: {
+          task: true,
+          subagent: false,
+        },
+      },
+      effectiveToolPreferences: {
+        task: true,
+        subagent: false,
+      },
+      mappedTheme: "general",
+      isThemeWorkbench: true,
+      currentGateKey: "write_mode",
+      contentId: "content-goal-mode",
+    });
+
+    expect(metadata).toMatchObject({
+      harness: {
+        preferences: {
+          task: true,
+          task_mode: true,
+          subagent: false,
+          goal: true,
+          objective: true,
+        },
+        task_mode_enabled: true,
+        goal_mode_enabled: true,
+        collaboration_mode: {
+          mode: "plan",
+          source: "inputbar",
+        },
+        thread_goal: {
+          enabled: true,
+          source: "inputbar",
+          status: "active",
+          set: {
+            threadId: "thread-workspace-plan-goal",
+            objective: null,
+            status: "active",
+            tokenBudget: null,
+          },
+        },
+      },
+    });
+  });
+
   it("应把显式 Generation Brief voice metadata 收敛到 artifact.generation_brief", () => {
     const metadata = buildWorkspaceRequestMetadata({
       workspaceRequestMetadataBase: {

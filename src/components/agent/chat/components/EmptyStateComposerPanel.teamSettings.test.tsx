@@ -69,16 +69,10 @@ describe("EmptyStateComposerPanel", () => {
 
     expect(
       container.querySelector('[data-testid="empty-state-team-selector"]'),
-    ).toBeNull();
-
-    expandAdvancedControls(container);
-
-    expect(
-      container.querySelector('[data-testid="empty-state-team-selector"]'),
     ).toBeTruthy();
   });
 
-  it("未开启 Team mode 时默认不暴露多代理开关，只保留高级设置入口", () => {
+  it("未开启 Team mode 时默认不显示 TeamSelector，通过加号菜单暴露多代理开关", () => {
     const container = renderPanel({
       isGeneralTheme: true,
       subagentEnabled: false,
@@ -96,7 +90,13 @@ describe("EmptyStateComposerPanel", () => {
       container.querySelector('button[title="任务拆分偏好已关闭"]'),
     ).toBeNull();
     expect(
-      container.querySelector('[data-testid="empty-state-advanced-toggle"]'),
+      container.querySelector('[data-testid="inputbar-plus-trigger"]'),
+    ).toBeTruthy();
+
+    expandAdvancedControls(container);
+
+    expect(
+      document.body.querySelector('[data-testid="inputbar-plus-subagent-mode"]'),
     ).toBeTruthy();
   });
 
@@ -137,7 +137,7 @@ describe("EmptyStateComposerPanel", () => {
       container.querySelector('button[title="任务拆分偏好已关闭"]'),
     ).toBeNull();
     expect(
-      container.querySelector('[data-testid="empty-state-advanced-toggle"]'),
+      container.querySelector('[data-testid="inputbar-plus-trigger"]'),
     ).toBeTruthy();
   });
 
@@ -160,8 +160,8 @@ describe("EmptyStateComposerPanel", () => {
 
     expandAdvancedControls(container);
 
-    const enableButton = container.querySelector(
-      'button[title="任务拆分偏好已关闭"]',
+    const enableButton = document.body.querySelector(
+      '[data-testid="inputbar-plus-subagent-mode"]',
     ) as HTMLButtonElement | null;
 
     expect(enableButton).toBeTruthy();
@@ -197,8 +197,8 @@ describe("EmptyStateComposerPanel", () => {
       container.querySelector('[data-testid="empty-state-team-selector"]'),
     ).toBeTruthy();
 
-    const toggleButton = container.querySelector(
-      'button[title="任务拆分偏好已开启"]',
+    const toggleButton = document.body.querySelector(
+      '[data-testid="inputbar-plus-subagent-mode"]',
     ) as HTMLButtonElement | null;
 
     expect(toggleButton).toBeTruthy();
@@ -215,7 +215,7 @@ describe("EmptyStateComposerPanel", () => {
       container.querySelector('[data-testid="empty-state-team-selector"]'),
     ).toBeNull();
     expect(
-      container.querySelector('button[title="任务拆分偏好已关闭"]'),
+      document.body.querySelector('[data-testid="inputbar-plus-subagent-mode"]'),
     ).toBeTruthy();
   });
 
@@ -247,37 +247,24 @@ describe("EmptyStateComposerPanel", () => {
     expect(suggestionBar?.textContent).toContain("分工建议");
   });
 
-  it("折叠态应显示只读模型信息，展开高级设置后再允许修改", () => {
+  it("底栏应直接显示模型切换器，不再使用只读当前模型信息", () => {
     const container = renderPanel({
       providerType: "claude",
       model: "claude-sonnet-4-5",
     });
 
-    expect(container.textContent).toContain("当前模型");
-    expect(container.textContent).toContain("claude-sonnet-4-5");
-    expect(
-      container.querySelector('[data-testid="empty-state-model-selector"]'),
-    ).toBeNull();
-
-    expandAdvancedControls(container);
-
+    expect(container.textContent).not.toContain("当前模型");
     expect(
       container.querySelector('[data-testid="empty-state-model-selector"]'),
     ).toBeTruthy();
   });
 
-  it("应在高级设置中渲染权限模式选择并透传切换", () => {
+  it("底栏应直接渲染权限模式选择并透传切换", () => {
     const setAccessMode = vi.fn();
     const container = renderPanel({
       accessMode: "current",
       setAccessMode,
     });
-
-    expect(
-      container.querySelector('[data-testid="inputbar-access-mode-select"]'),
-    ).toBeNull();
-
-    expandAdvancedControls(container);
 
     const select = container.querySelector(
       '[data-testid="inputbar-access-mode-select"]',

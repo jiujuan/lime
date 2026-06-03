@@ -76,6 +76,32 @@ describe("toolSearchResultSummary", () => {
     });
   });
 
+  it("应兼容 deferred tool 搜索结果里的 call_name / tool_name 字段", () => {
+    const summary = normalizeToolSearchResultSummary(
+      JSON.stringify({
+        query: "github issue",
+        tools: [
+          {
+            call_name: "mcp__github__create_issue",
+            source: "extension",
+            extensionName: "mcp__github",
+            status: "deferred",
+          },
+          {
+            tool_name: "mcp__docs__read_page",
+            source: "extension",
+            extension_name: "mcp__docs",
+          },
+        ],
+      }),
+    );
+
+    expect(summary?.tools.map((tool) => tool.name)).toEqual([
+      "mcp__github__create_issue",
+      "mcp__docs__read_page",
+    ]);
+  });
+
   it("应解析 pending_mcp_servers 字段", () => {
     const summary = normalizeToolSearchResultSummary(
       JSON.stringify({

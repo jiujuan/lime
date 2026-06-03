@@ -97,6 +97,27 @@ describe("submitOpRuntimeCompaction", () => {
     });
   });
 
+  it("runtime 快照相同但 session 模型尚未同步时仍应提交当前 provider/model", () => {
+    const result = buildSubmitOpRuntimeCompaction({
+      executionRuntime: {
+        session_id: "session-model-pending",
+        source: "runtime_snapshot",
+        provider_selector: "deepseek",
+        model_name: "deepseek-v4-flash",
+        execution_strategy: "react",
+      },
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "deepseek",
+      effectiveModel: "deepseek-v4-flash",
+    });
+
+    expect(result.shouldSubmitProviderPreference).toBe(true);
+    expect(result.shouldSubmitModelPreference).toBe(true);
+  });
+
   it("应裁掉旧 thinking preference，但保留尚未同步到 runtime 的其他显式变更", () => {
     const result = buildSubmitOpRuntimeCompaction({
       requestMetadata: {

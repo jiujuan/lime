@@ -138,6 +138,54 @@ describe("harnessRequestMetadata", () => {
     expect(metadata.turnTeamBlueprint).toBeUndefined();
   });
 
+  it("应保留已有 plan preferences 别名并跟随当前 task 偏好", () => {
+    const metadata = buildHarnessRequestMetadata({
+      base: {
+        preferences: {
+          task: true,
+          task_mode: true,
+          subagent: false,
+        },
+      },
+      theme: "general",
+      preferences: {
+        task: true,
+        subagent: false,
+      },
+      sessionMode: "default",
+    });
+
+    expect(metadata.preferences).toMatchObject({
+      task: true,
+      task_mode: true,
+      subagent: false,
+    });
+    expect(metadata.task_mode_enabled).toBe(true);
+
+    const disabledMetadata = buildHarnessRequestMetadata({
+      base: {
+        preferences: {
+          task: true,
+          task_mode: true,
+          subagent: false,
+        },
+      },
+      theme: "general",
+      preferences: {
+        task: false,
+        subagent: false,
+      },
+      sessionMode: "default",
+    });
+
+    expect(disabledMetadata.preferences).toMatchObject({
+      task: false,
+      task_mode: false,
+      subagent: false,
+    });
+    expect(disabledMetadata.task_mode_enabled).toBeUndefined();
+  });
+
   it("默认会话模式不应写入 gate_key", () => {
     const metadata = buildHarnessRequestMetadata({
       theme: "general",

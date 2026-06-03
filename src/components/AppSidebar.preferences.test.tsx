@@ -8,15 +8,77 @@ import {
   changeLimeLocale,
   cleanupAppSidebarTest,
   flushEffects,
+  mockCheckForUpdates,
   mockGetConfig,
   mountSidebarContainer,
-  resetAppSidebarTest
+  resetAppSidebarTest,
 } from "./AppSidebar.testFixtures";
 import type { AgentPageParams } from "./AppSidebar.testFixtures";
 
 describe("AppSidebar preferences", () => {
   beforeEach(resetAppSidebarTest);
   afterEach(cleanupAppSidebarTest);
+
+  it("检测到新版本时应在账户区显示升级图标并点击展开窄弹窗", async () => {
+    mockCheckForUpdates.mockResolvedValue({
+      current: "1.57.0",
+      latest: "1.58.0",
+      hasUpdate: true,
+      downloadUrl: "https://example.com/lime",
+      releaseNotesUrl: null,
+      releaseNotes: null,
+      pubDate: null,
+      error: null,
+    });
+
+    const container = mountSidebarContainer({
+      currentPageParams: {
+        agentEntry: "new-task",
+      } as AgentPageParams,
+    });
+    await flushEffects(3);
+
+    const accountSlot = container.querySelector(
+      '[data-testid="app-sidebar-account-slot"]',
+    );
+    const updateButton = accountSlot?.querySelector<HTMLButtonElement>(
+      '[data-testid="app-sidebar-update-button"]',
+    );
+
+    expect(updateButton).not.toBeNull();
+    expect(updateButton?.textContent).toBe("");
+    expect(
+      container.querySelector('[data-testid="app-sidebar-update-panel"]'),
+    ).toBeNull();
+
+    await act(async () => {
+      updateButton?.click();
+      await Promise.resolve();
+    });
+
+    const updatePanel = container.querySelector(
+      '[data-testid="app-sidebar-update-panel"]',
+    );
+    expect(updatePanel).not.toBeNull();
+    expect(updatePanel?.textContent).toContain("发现新版本 1.58.0");
+    expect(updatePanel?.textContent).toContain("当前 1.57.0");
+    expect(updatePanel?.textContent).toContain("稍后");
+    expect(updatePanel?.textContent).toContain("立即更新");
+
+    await act(async () => {
+      updatePanel
+        ?.querySelector<HTMLButtonElement>('button[aria-label="收起更新面板"]')
+        ?.click();
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="app-sidebar-update-panel"]'),
+    ).toBeNull();
+    expect(
+      accountSlot?.querySelector('[data-testid="app-sidebar-update-button"]'),
+    ).not.toBeNull();
+  });
 
   it("显式开启后应显示可选系统扩展入口", async () => {
     mockGetConfig.mockResolvedValue({

@@ -45,6 +45,7 @@ export interface BuildUserInputSubmitOpOptions {
   effectiveProviderType: string;
   effectiveModel: string;
   modelOverride?: string;
+  reasoningEffort?: string;
   webSearch?: boolean;
   searchMode?: AgentRuntimeWebSearchMode;
   thinking?: boolean;
@@ -74,6 +75,7 @@ export function buildUserInputSubmitOp(
     effectiveProviderType,
     effectiveModel,
     modelOverride,
+    reasoningEffort,
     searchMode,
     autoContinue,
   } = options;
@@ -113,6 +115,7 @@ export function buildUserInputSubmitOp(
       modelPreference: compaction.shouldSubmitModelPreference
         ? effectiveModel
         : undefined,
+      reasoningEffort: reasoningEffort?.trim() || undefined,
       thinking: undefined,
       approvalPolicy: runtimePolicies.approvalPolicy,
       sandboxPolicy: runtimePolicies.sandboxPolicy,

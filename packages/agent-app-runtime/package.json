@@ -1,6 +1,6 @@
 {
   "name": "@limecloud/agent-app-runtime",
-  "version": "1.57.0",
+  "version": "1.58.0",
   "type": "module",
   "description": "Lime Agent App browser-side runtime SDK: bridge transport, capability adapters, and task orchestration.",
   "license": "MIT",

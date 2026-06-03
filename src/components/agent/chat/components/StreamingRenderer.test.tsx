@@ -380,6 +380,78 @@ describe("StreamingRenderer", () => {
     expect(container.textContent).toContain("已确认主要来源");
   });
 
+  it("交错图片查看过程应保持顺序并支持展开图片预览", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "text",
+          text: "我先查看你给的截图。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-view-image-renderer",
+            name: "ViewImageTool",
+            arguments: JSON.stringify({
+              path: "/workspace/assets/dashboard.png",
+            }),
+            status: "completed",
+            result: {
+              success: true,
+              output:
+                "Viewed image: /workspace/assets/dashboard.png\nFormat: image/png\nImage content is attached to this tool result.",
+              metadata: {
+                model_visible_image: true,
+                image_url: "data:image/png;base64,ZGFzaGJvYXJk",
+                mime_type: "image/png",
+              },
+            },
+            startTime: new Date("2026-06-02T09:00:00.000Z"),
+            endTime: new Date("2026-06-02T09:00:01.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "最终观察：截图里有一个仪表盘。",
+        },
+      ],
+      isStreaming: false,
+    });
+
+    const renderedText = container.textContent || "";
+    expect(renderedText.indexOf("我先查看你给的截图。")).toBeLessThan(
+      renderedText.indexOf("已查看 1 张图片"),
+    );
+    expect(renderedText.indexOf("已查看 1 张图片")).toBeLessThan(
+      renderedText.indexOf("最终观察：截图里有一个仪表盘。"),
+    );
+    expect(renderedText).not.toContain("Viewed image");
+    expect(renderedText).not.toContain("data:image");
+
+    const groupButton = container.querySelector(
+      '[data-testid="streaming-process-group"] button',
+    );
+    act(() => {
+      groupButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const detailButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.title === "展开过程详情",
+    );
+    act(() => {
+      detailButton?.click();
+    });
+
+    const previewImage = container.querySelector("img");
+    expect(previewImage?.getAttribute("src")).toBe(
+      "data:image/png;base64,ZGFzaGJvYXJk",
+    );
+    expect(container.textContent).not.toContain(
+      "data:image/png;base64,ZGFzaGJvYXJk",
+    );
+  });
+
   it("应过滤 assistant 正文中的工具协议残留", () => {
     const { container } = renderHarness({
       content:
@@ -1552,6 +1624,177 @@ describe("StreamingRenderer", () => {
     expect(finalTextIndex).toBeGreaterThan(secondGroupIndex);
   });
 
+  it("任务板工具应按正文片段穿插展示且不泄露任务 JSON", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "text",
+          text: "我先把工作拆成任务板。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-task-create-1",
+            name: "TaskCreateTool",
+            arguments: JSON.stringify({
+              subject: "整理国际新闻",
+              description: "按来源交叉验证并输出摘要",
+            }),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                task: {
+                  id: "1",
+                  subject: "整理国际新闻",
+                },
+              }),
+              metadata: {
+                task: {
+                  id: "1",
+                  subject: "整理国际新闻",
+                  description: "按来源交叉验证并输出摘要",
+                  status: "pending",
+                },
+                task_list_id: "board-main",
+                task_list: [
+                  {
+                    id: "1",
+                    content: "整理国际新闻",
+                    status: "pending",
+                  },
+                ],
+                tasks: [
+                  {
+                    id: "1",
+                    subject: "整理国际新闻",
+                    description: "按来源交叉验证并输出摘要",
+                    status: "pending",
+                  },
+                ],
+              },
+            },
+            startTime: new Date("2026-06-02T09:10:00.000Z"),
+            endTime: new Date("2026-06-02T09:10:01.000Z"),
+          },
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-task-list-1",
+            name: "TaskListTool",
+            arguments: JSON.stringify({}),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                tasks: [
+                  {
+                    id: "1",
+                    subject: "整理国际新闻",
+                    status: "pending",
+                  },
+                ],
+              }),
+              metadata: {
+                task_list_id: "board-main",
+                tasks: [
+                  {
+                    id: "1",
+                    subject: "整理国际新闻",
+                    status: "pending",
+                  },
+                ],
+              },
+            },
+            startTime: new Date("2026-06-02T09:10:02.000Z"),
+            endTime: new Date("2026-06-02T09:10:03.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "任务板已建立，接下来开始执行。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-task-update-1",
+            name: "TaskUpdateTool",
+            arguments: JSON.stringify({
+              task_id: "1",
+              status: "completed",
+            }),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                success: true,
+                taskId: "1",
+                updatedFields: ["status"],
+                statusChange: {
+                  from: "pending",
+                  to: "completed",
+                },
+              }),
+              metadata: {
+                success: true,
+                task_id: "1",
+                task_list_id: "board-main",
+                status_change: {
+                  from: "pending",
+                  to: "completed",
+                },
+              },
+            },
+            startTime: new Date("2026-06-02T09:10:04.000Z"),
+            endTime: new Date("2026-06-02T09:10:05.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "最终结论：任务板状态已经同步完成。",
+        },
+      ],
+      isStreaming: false,
+    });
+
+    const renderedText = container.textContent || "";
+    const introIndex = renderedText.indexOf("我先把工作拆成任务板。");
+    const firstProcessIndex = renderedText.indexOf("已处理 2 项安排");
+    const middleTextIndex =
+      renderedText.indexOf("任务板已建立，接下来开始执行。");
+    const updateProcessIndex = renderedText.indexOf("已处理 1 项安排");
+    const finalTextIndex =
+      renderedText.indexOf("最终结论：任务板状态已经同步完成。");
+
+    expect(introIndex).toBeGreaterThanOrEqual(0);
+    expect(firstProcessIndex).toBeGreaterThan(introIndex);
+    expect(middleTextIndex).toBeGreaterThan(firstProcessIndex);
+    expect(updateProcessIndex).toBeGreaterThan(middleTextIndex);
+    expect(finalTextIndex).toBeGreaterThan(updateProcessIndex);
+    expect(renderedText).not.toContain('"task_list_id"');
+    expect(renderedText).not.toContain('"updatedFields"');
+    expect(renderedText).not.toContain('"tasks"');
+
+    const processGroupButtons = container.querySelectorAll<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+    expect(processGroupButtons.length).toBe(2);
+
+    act(() => {
+      processGroupButtons[0]?.click();
+      processGroupButtons[1]?.click();
+    });
+
+    const expandedText = container.textContent || "";
+    expect(expandedText).toContain("整理国际新闻");
+    expect(expandedText).toContain("已更新任务 1");
+    expect(expandedText).not.toContain("task_list_id");
+    expect(expandedText).not.toContain("updatedFields");
+    expect(expandedText).not.toContain('"tasks"');
+  });
+
   it("交错内容里只有思考时也应渲染为轻量折叠过程行", () => {
     const { container } = renderHarness({
       content: "",
@@ -2074,6 +2317,68 @@ describe("StreamingRenderer", () => {
     expect(container.textContent).not.toContain("先确认过程组行高");
   });
 
+  it("内容工作台工具过程组应保持正文前后顺序并隐藏协议细节", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "text",
+          text: "先把内容工作台任务放在正确位置。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-content-video-1",
+            name: "lime_create_video_generation_task",
+            arguments: JSON.stringify({ prompt: "产品演示短片" }),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                artifact_path: ".lime/tasks/video_generate/demo.json",
+              }),
+            },
+            startTime: new Date("2026-06-03T08:00:00.000Z"),
+            endTime: new Date("2026-06-03T08:00:01.000Z"),
+          },
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-content-audio-1",
+            name: "lime_create_audio_generation_task",
+            arguments: JSON.stringify({ prompt: "播客旁白" }),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                artifact_path: ".lime/tasks/audio_generate/demo.json",
+              }),
+            },
+            startTime: new Date("2026-06-03T08:00:02.000Z"),
+            endTime: new Date("2026-06-03T08:00:03.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "内容任务已发起，继续整理最终说明。",
+        },
+      ],
+    });
+
+    const text = container.textContent || "";
+    const introIndex = text.indexOf("先把内容工作台任务放在正确位置。");
+    const groupIndex = text.indexOf("已发起 2 个内容任务");
+    const finalIndex = text.indexOf("内容任务已发起，继续整理最终说明。");
+
+    expect(introIndex).toBeGreaterThanOrEqual(0);
+    expect(groupIndex).toBeGreaterThan(introIndex);
+    expect(finalIndex).toBeGreaterThan(groupIndex);
+    expect(text).not.toContain(".lime/tasks");
+    expect(text).not.toContain("artifact_path");
+    expect(text).not.toContain("lime_create_video_generation_task");
+  });
+
   it("思考块展开后应压平被切碎成多行的过程 prose", () => {
     const { container } = renderHarness({
       content: "",
@@ -2296,5 +2601,52 @@ describe("StreamingRenderer", () => {
     expect(
       container.querySelector('[data-testid="decision-panel"]'),
     ).toBeNull();
+  });
+
+  it("交错 action_required 应保留前后正文的 DOM 顺序", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "text",
+          text: "需要你的决定。",
+        },
+        {
+          type: "action_required",
+          actionRequired: {
+            requestId: "approval-inline-order",
+            actionType: "tool_confirmation",
+            status: "pending",
+            toolName: "Bash",
+            prompt: "允许执行命令吗？",
+          },
+        },
+        {
+          type: "text",
+          text: "最终结果如下。",
+        },
+      ],
+      onPermissionResponse: vi.fn(),
+    });
+
+    const markdownNodes = container.querySelectorAll(
+      '[data-testid="markdown-renderer"]',
+    );
+    const decisionPanel = container.querySelector(
+      '[data-testid="decision-panel"]',
+    );
+
+    expect(markdownNodes).toHaveLength(2);
+    expect(markdownNodes[0]?.textContent).toContain("需要你的决定");
+    expect(markdownNodes[1]?.textContent).toContain("最终结果");
+    expect(decisionPanel).not.toBeNull();
+    expect(
+      markdownNodes[0].compareDocumentPosition(decisionPanel as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      (decisionPanel as Node).compareDocumentPosition(markdownNodes[1]) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });

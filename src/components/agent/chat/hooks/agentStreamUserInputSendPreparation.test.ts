@@ -27,6 +27,7 @@ describe("agentStreamUserInputSendPreparation", () => {
     threadBusy?: boolean;
     providerType?: string;
     model?: string;
+    reasoningEffort?: string;
   }): AgentStreamUserInputSendPreparationEnv {
     let messages: Message[] = [];
     let isSending = false;
@@ -38,6 +39,9 @@ describe("agentStreamUserInputSendPreparation", () => {
       } as MutableRefObject<string>,
       modelRef: {
         current: options?.model ?? "gpt-5.4",
+      } as MutableRefObject<string>,
+      reasoningEffortRef: {
+        current: options?.reasoningEffort ?? "",
       } as MutableRefObject<string>,
       sessionIdRef: {
         current: options?.sessionId ?? "session-1",

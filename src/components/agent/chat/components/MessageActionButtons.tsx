@@ -67,10 +67,12 @@ export function MessageActionButtons({
     <MessageActions
       className={[
         "message-actions",
+        canSaveMessageAsKnowledge ? "message-actions-persistent" : "",
         isImageWorkbenchMessage ? "image-workbench-message-actions" : "",
       ]
         .filter(Boolean)
         .join(" ")}
+      data-testid="message-actions"
     >
       {canQuoteMessage ? (
         <Button

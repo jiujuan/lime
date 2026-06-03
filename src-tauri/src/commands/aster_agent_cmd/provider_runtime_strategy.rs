@@ -96,6 +96,7 @@ fn default_runtime_model_capabilities() -> ModelCapabilities {
         json_mode: true,
         function_calling: true,
         reasoning: false,
+        reasoning_effort: None,
     }
 }
 
@@ -107,6 +108,7 @@ fn conservative_ollama_fallback_capabilities(fallback: &ModelCapabilities) -> Mo
         json_mode: false,
         function_calling: false,
         reasoning: fallback.reasoning,
+        reasoning_effort: None,
     }
 }
 
@@ -152,6 +154,7 @@ fn parse_ollama_show_capabilities(
         json_mode: supports_tools || fallback.json_mode,
         function_calling: supports_tools,
         reasoning: capability_set.contains("thinking") || fallback.reasoning,
+        reasoning_effort: None,
     }
 }
 
@@ -338,6 +341,7 @@ mod tests {
             json_mode: true,
             function_calling: true,
             reasoning: false,
+            reasoning_effort: None,
         };
 
         let decision = resolve_runtime_tool_call_decision_from_capabilities(
@@ -361,6 +365,7 @@ mod tests {
             json_mode: false,
             function_calling: false,
             reasoning: true,
+            reasoning_effort: None,
         };
 
         let decision = resolve_runtime_tool_call_decision_from_capabilities(
@@ -406,6 +411,7 @@ mod tests {
             json_mode: true,
             function_calling: true,
             reasoning: true,
+            reasoning_effort: None,
         };
 
         let parsed = conservative_ollama_fallback_capabilities(&fallback);

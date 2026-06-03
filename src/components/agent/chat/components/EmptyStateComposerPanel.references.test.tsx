@@ -6,8 +6,37 @@ import {
   renderPanel,
 } from "./EmptyStateComposerPanel.testFixtures";
 
+function openKnowledgePanel(container: HTMLDivElement) {
+  const plusTrigger = container.querySelector(
+    '[data-testid="inputbar-plus-trigger"]',
+  ) as HTMLButtonElement | null;
+  expect(plusTrigger).toBeTruthy();
+
+  act(() => {
+    plusTrigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+
+  const knowledgeTrigger = document.body.querySelector(
+    '[data-testid="inputbar-plus-knowledge"]',
+  ) as HTMLButtonElement | null;
+  expect(knowledgeTrigger).toBeTruthy();
+
+  act(() => {
+    knowledgeTrigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+
+  const knowledgePanel = document.body.querySelector(
+    '[data-testid="inputbar-plus-panel-knowledge"]',
+  ) as HTMLElement | null;
+  expect(knowledgePanel).toBeTruthy();
+  if (!knowledgePanel) {
+    throw new Error("Expected knowledge panel to be open");
+  }
+  return knowledgePanel;
+}
+
 describe("EmptyStateComposerPanel", () => {
-  it("首页空态输入区应把项目资料作为底栏主入口", () => {
+  it("首页空态输入区应从加号菜单打开项目资料中枢", () => {
     const container = renderPanel({
       knowledgePackSelection: {
         enabled: false,
@@ -30,26 +59,15 @@ describe("EmptyStateComposerPanel", () => {
       onManageKnowledgePacks: vi.fn(),
     });
 
-    const toggleButton = container.querySelector(
-      '[data-testid="inputbar-knowledge-pack-toggle"]',
-    ) as HTMLButtonElement | null;
-
-    expect(toggleButton).toBeTruthy();
-    expect(toggleButton?.textContent).toContain("资料可用");
-
-    act(() => {
-      toggleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
+    const knowledgePanel = openKnowledgePanel(container);
 
     expect(
-      container.querySelector('[data-testid="inputbar-knowledge-hub"]'),
+      knowledgePanel.querySelector('[data-testid="inputbar-knowledge-hub"]'),
     ).toBeTruthy();
     expect(
-      container
-        .querySelector('[data-testid="inputbar-knowledge-hub-dismiss"]')
-        ?.getAttribute("aria-label"),
-    ).toBe("关闭资料浮层");
-    expect(container.textContent).toContain("选择项目资料");
+      knowledgePanel.querySelector('[data-testid="inputbar-knowledge-hub-dismiss"]'),
+    ).toBeNull();
+    expect(knowledgePanel.textContent).toContain("选择项目资料");
   });
 
   it("@资料兼容触发时不应渲染普通命令标签", () => {
@@ -81,7 +99,9 @@ describe("EmptyStateComposerPanel", () => {
       container.querySelector('[data-testid="inputbar-builtin-command-badge"]'),
     ).toBeNull();
     expect(
-      container.querySelector('[data-testid="inputbar-knowledge-pack-toggle"]'),
+      openKnowledgePanel(container).querySelector(
+        '[data-testid="inputbar-knowledge-hub"]',
+      ),
     ).toBeTruthy();
   });
 

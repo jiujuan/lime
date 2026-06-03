@@ -10,6 +10,7 @@
 import { describe, expect } from "vitest";
 import { test } from "@fast-check/vitest";
 import * as fc from "fast-check";
+import { fastCheckRuns } from "../../test/fastCheckRuns";
 import type {
   ProviderConfig,
   ProviderType,
@@ -263,7 +264,7 @@ describe("导入导出功能", () => {
    * **Validates: Requirements 9.4**
    */
   describe("Property 18: 导入导出 Round-Trip", () => {
-    test.prop([uniqueProvidersArb], { numRuns: 100 })(
+    test.prop([uniqueProvidersArb], { numRuns: fastCheckRuns(100) })(
       "导出后再导入应保留所有 Provider 配置",
       (providers) => {
         // 导出配置
@@ -288,7 +289,7 @@ describe("导入导出功能", () => {
       },
     );
 
-    test.prop([uniqueProvidersArb], { numRuns: 100 })(
+    test.prop([uniqueProvidersArb], { numRuns: fastCheckRuns(100) })(
       "导入到空数据库应导入所有 Provider",
       (providers) => {
         // 导出配置
@@ -305,33 +306,32 @@ describe("导入导出功能", () => {
       },
     );
 
-    test.prop([uniqueProvidersArb, uniqueProvidersArb], { numRuns: 100 })(
-      "导入时应跳过已存在的 Provider",
-      (existingProviders, newProviders) => {
-        // 创建已存在的 Provider ID 集合
-        const existingIds = new Set(existingProviders.map((p) => p.id));
+    test.prop([uniqueProvidersArb, uniqueProvidersArb], {
+      numRuns: fastCheckRuns(100),
+    })("导入时应跳过已存在的 Provider", (existingProviders, newProviders) => {
+      // 创建已存在的 Provider ID 集合
+      const existingIds = new Set(existingProviders.map((p) => p.id));
 
-        // 导出新 Provider 配置
-        const exported = exportProviders(newProviders, false);
+      // 导出新 Provider 配置
+      const exported = exportProviders(newProviders, false);
 
-        // 导入配置
-        const result = importProviders(exported, existingIds);
+      // 导入配置
+      const result = importProviders(exported, existingIds);
 
-        // 计算预期的导入和跳过数量
-        const expectedImported = newProviders.filter(
-          (p) => !existingIds.has(p.id),
-        ).length;
-        const expectedSkipped = newProviders.filter((p) =>
-          existingIds.has(p.id),
-        ).length;
+      // 计算预期的导入和跳过数量
+      const expectedImported = newProviders.filter(
+        (p) => !existingIds.has(p.id),
+      ).length;
+      const expectedSkipped = newProviders.filter((p) =>
+        existingIds.has(p.id),
+      ).length;
 
-        // 验证导入结果
-        expect(result.imported_providers).toBe(expectedImported);
-        expect(result.skipped_providers).toBe(expectedSkipped);
-      },
-    );
+      // 验证导入结果
+      expect(result.imported_providers).toBe(expectedImported);
+      expect(result.skipped_providers).toBe(expectedSkipped);
+    });
 
-    test.prop([uniqueProvidersArb], { numRuns: 100 })(
+    test.prop([uniqueProvidersArb], { numRuns: fastCheckRuns(100) })(
       "导出的 JSON 应包含版本信息",
       (providers) => {
         const exported = exportProviders(providers, false);
@@ -346,7 +346,7 @@ describe("导入导出功能", () => {
       },
     );
 
-    test.prop([fc.string()], { numRuns: 100 })(
+    test.prop([fc.string()], { numRuns: fastCheckRuns(100) })(
       "无效的 JSON 应返回导入失败",
       (invalidJson) => {
         // 跳过恰好是有效配置的情况
@@ -363,7 +363,7 @@ describe("导入导出功能", () => {
   });
 
   describe("导出配置格式", () => {
-    test.prop([uniqueProvidersArb], { numRuns: 100 })(
+    test.prop([uniqueProvidersArb], { numRuns: fastCheckRuns(100) })(
       "导出的 JSON 应是有效的 JSON 格式",
       (providers) => {
         const exported = exportProviders(providers, false);
@@ -373,7 +373,7 @@ describe("导入导出功能", () => {
       },
     );
 
-    test.prop([uniqueProvidersArb], { numRuns: 100 })(
+    test.prop([uniqueProvidersArb], { numRuns: fastCheckRuns(100) })(
       "导出的配置应包含所有必填字段",
       (providers) => {
         const exported = exportProviders(providers, false);
@@ -397,7 +397,7 @@ describe("导入导出功能", () => {
   });
 
   describe("冲突处理", () => {
-    test.prop([providerConfigArb], { numRuns: 100 })(
+    test.prop([providerConfigArb], { numRuns: fastCheckRuns(100) })(
       "导入已存在的 Provider 应被跳过",
       (provider) => {
         // 导出单个 Provider

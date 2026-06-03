@@ -244,9 +244,12 @@ function unwrapStaticExpression(expression: ts.Expression): ts.Expression {
   return current;
 }
 
-function isI18nTranslateCall(node: ts.CallExpression): boolean {
+function isI18nTranslateCall(
+  node: ts.CallExpression,
+  translationCallIdentifiers: Set<string>,
+): boolean {
   if (ts.isIdentifier(node.expression)) {
-    return node.expression.text === "t";
+    return translationCallIdentifiers.has(node.expression.text);
   }
 
   if (ts.isPropertyAccessExpression(node.expression)) {
@@ -254,6 +257,65 @@ function isI18nTranslateCall(node: ts.CallExpression): boolean {
   }
 
   return false;
+}
+
+function expressionReturnsTranslationCallIdentifier(
+  expression: ts.Expression,
+  translationCallIdentifiers: Set<string>,
+): boolean {
+  const current = unwrapStaticExpression(expression);
+
+  if (ts.isIdentifier(current)) {
+    return translationCallIdentifiers.has(current.text);
+  }
+
+  if (ts.isCallExpression(current) && ts.isIdentifier(current.expression)) {
+    if (current.expression.text !== "useMemo") {
+      return false;
+    }
+
+    const factory = current.arguments[0];
+    if (!factory) {
+      return false;
+    }
+
+    const unwrappedFactory = unwrapStaticExpression(factory);
+    if (
+      ts.isArrowFunction(unwrappedFactory) &&
+      ts.isExpression(unwrappedFactory.body)
+    ) {
+      return expressionReturnsTranslationCallIdentifier(
+        unwrappedFactory.body,
+        translationCallIdentifiers,
+      );
+    }
+  }
+
+  return false;
+}
+
+function collectTranslationCallIdentifiers(
+  sourceFile: ts.SourceFile,
+): Set<string> {
+  const translationCallIdentifiers = new Set<string>(["t"]);
+
+  const visit = (node: ts.Node) => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer &&
+      expressionReturnsTranslationCallIdentifier(
+        node.initializer,
+        translationCallIdentifiers,
+      )
+    ) {
+      translationCallIdentifiers.add(node.name.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+
+  visit(sourceFile);
+  return translationCallIdentifiers;
 }
 
 function resolveStaticStringExpression(
@@ -495,6 +557,8 @@ function collectKeyReferences(filePath: string): {
   );
   const constInitializers = collectConstInitializers(sourceFile);
   const constStrings = collectConstStringValues(sourceFile);
+  const translationCallIdentifiers =
+    collectTranslationCallIdentifiers(sourceFile);
   const literals = new Set<string>();
   const dynamicPatterns = new Map<string, I18nDynamicKeyPattern>();
 
@@ -502,7 +566,10 @@ function collectKeyReferences(filePath: string): {
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
       literals.add(node.text);
     }
-    if (ts.isCallExpression(node) && isI18nTranslateCall(node)) {
+    if (
+      ts.isCallExpression(node) &&
+      isI18nTranslateCall(node, translationCallIdentifiers)
+    ) {
       const firstArg = node.arguments[0];
       if (firstArg) {
         const pattern = createDynamicKeyPattern(

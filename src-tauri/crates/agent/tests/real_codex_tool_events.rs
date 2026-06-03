@@ -87,7 +87,7 @@ async fn test_real_codex_stream_emits_tool_events() {
 
     let state = AsterAgentState::new();
     state
-        .configure_provider_from_pool(&db, &provider_id, &model_name, &session_id)
+        .configure_provider_from_pool(&db, &provider_id, &model_name, &session_id, None)
         .await
         .expect("配置 Provider 失败");
 

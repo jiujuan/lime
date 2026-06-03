@@ -54,11 +54,16 @@ function buildPack(params: {
 interface ProbeProps {
   initialKnowledgePackSelection: AgentInitialKnowledgePackSelectionParams;
   onRuntimeChange: (runtime: WorkspaceKnowledgeRuntime) => void;
+  projectRootPath?: string | null;
 }
 
-function Probe({ initialKnowledgePackSelection, onRuntimeChange }: ProbeProps) {
+function Probe({
+  initialKnowledgePackSelection,
+  onRuntimeChange,
+  projectRootPath = "/tmp/lime-project",
+}: ProbeProps) {
   const runtime = useWorkspaceKnowledgeRuntime({
-    projectRootPath: "/tmp/lime-project",
+    projectRootPath,
     currentSessionTitle: "营销文案",
     input: "",
     setInput: vi.fn(),
@@ -141,6 +146,73 @@ describe("useWorkspaceKnowledgeRuntime initial Knowledge selection", () => {
       );
     });
 
+    await flushEffects();
+
+    expect(latestRuntimeRef.current?.knowledgePackSelection).toMatchObject({
+      enabled: true,
+      packName: "content-calendar",
+      companionPacks: [
+        { name: "xiejing-persona", activation: "implicit" },
+        { name: "private-domain", activation: "explicit" },
+      ],
+    });
+  });
+
+  it("initial selection 变化后应同步显式协同资料", async () => {
+    knowledgeApiMocks.listKnowledgePacks.mockResolvedValue({
+      packs: [
+        buildPack({
+          name: "xiejing-persona",
+          type: "personal-ip",
+          defaultForWorkspace: true,
+        }),
+        buildPack({ name: "content-calendar", type: "content-operations" }),
+        buildPack({
+          name: "private-domain",
+          type: "private-domain-operations",
+        }),
+      ],
+    });
+
+    const latestRuntimeRef: { current: WorkspaceKnowledgeRuntime | null } = {
+      current: null,
+    };
+    const baseSelection: AgentInitialKnowledgePackSelectionParams = {
+      enabled: true,
+      packName: "content-calendar",
+      workingDir: "/tmp/lime-project",
+      label: "内容运营资料",
+      status: "ready",
+    };
+
+    act(() => {
+      root.render(
+        <Probe
+          initialKnowledgePackSelection={baseSelection}
+          onRuntimeChange={(runtime) => {
+            latestRuntimeRef.current = runtime;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    act(() => {
+      root.render(
+        <Probe
+          initialKnowledgePackSelection={{
+            ...baseSelection,
+            companionPacks: [
+              { name: "xiejing-persona", activation: "explicit" },
+              { name: "private-domain", activation: "explicit" },
+            ],
+          }}
+          onRuntimeChange={(runtime) => {
+            latestRuntimeRef.current = runtime;
+          }}
+        />,
+      );
+    });
     await flushEffects();
 
     expect(latestRuntimeRef.current?.knowledgePackSelection).toMatchObject({

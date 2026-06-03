@@ -29,6 +29,7 @@ describe("agentStreamSubmitOpController", () => {
       preferences: {
         providerPreference: "deepseek",
         modelPreference: "deepseek-chat",
+        reasoningEffort: undefined,
         thinking: undefined,
         approvalPolicy: "on-request",
         sandboxPolicy: "workspace-write",
@@ -172,5 +173,95 @@ describe("agentStreamSubmitOpController", () => {
     });
 
     expect(streamOp).toEqual(directOp);
+  });
+
+  it("应把 reasoning effort 带入 user_input preferences", () => {
+    const op = buildAgentStreamSubmitOp({
+      activeSessionId: "session-reasoning-1",
+      content: "继续",
+      images: [],
+      eventName: "aster_stream_reasoning",
+      submitWorkspaceId: "workspace-1",
+      requestTurnId: "turn-reasoning-1",
+      skipPreSubmitResume: true,
+      effectiveExecutionStrategy: "react",
+      effectiveAccessMode: "current",
+      effectiveProviderType: "openai",
+      effectiveModel: "o3-mini",
+      reasoningEffort: " high ",
+    });
+
+    expect(op.preferences?.reasoningEffort).toBe("high");
+  });
+
+  it("应在最终 submit 边界把 thread goal 绑定到真实 session id", () => {
+    const op = buildAgentStreamSubmitOp({
+      activeSessionId: "session-real-1",
+      content: "请按目标推进",
+      images: [],
+      eventName: "aster_stream_goal",
+      requestTurnId: "turn-goal-1",
+      requestMetadata: {
+        harness: {
+          goal_mode_enabled: true,
+          thread_goal: {
+            enabled: true,
+            source: "empty_state",
+            status: "active",
+            set: {
+              threadId: "draft-send-1",
+              objective: null,
+              status: "active",
+              tokenBudget: null,
+            },
+          },
+          goal: {
+            enabled: true,
+            source: "empty_state",
+            status: "active",
+            set: {
+              threadId: "draft-send-1",
+              objective: null,
+              status: "active",
+              tokenBudget: null,
+            },
+          },
+        },
+      },
+      skipPreSubmitResume: true,
+      effectiveExecutionStrategy: "react",
+      effectiveAccessMode: "current",
+      effectiveProviderType: "deepseek",
+      effectiveModel: "deepseek-chat",
+    });
+
+    expect(op.sessionId).toBe("session-real-1");
+    expect(op.metadata).toMatchObject({
+      harness: {
+        goal_mode_enabled: true,
+        thread_goal: {
+          enabled: true,
+          source: "empty_state",
+          status: "active",
+          set: {
+            threadId: "session-real-1",
+            objective: null,
+            status: "active",
+            tokenBudget: null,
+          },
+        },
+        goal: {
+          enabled: true,
+          source: "empty_state",
+          status: "active",
+          set: {
+            threadId: "session-real-1",
+            objective: null,
+            status: "active",
+            tokenBudget: null,
+          },
+        },
+      },
+    });
   });
 });

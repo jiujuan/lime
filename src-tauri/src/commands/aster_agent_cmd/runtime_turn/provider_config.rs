@@ -53,6 +53,7 @@ pub(super) async fn apply_runtime_turn_provider_config(
     db: &DbConnection,
     session_id: &str,
     provider_config: Option<&ConfigureProviderRequest>,
+    reasoning_effort: Option<&str>,
 ) -> Result<(), String> {
     let Some(provider_config) = provider_config else {
         return Ok(());
@@ -77,6 +78,10 @@ pub(super) async fn apply_runtime_turn_provider_config(
         api_key: provider_config.api_key.clone(),
         base_url: provider_config.base_url.clone(),
         credential_uuid: None,
+        reasoning_effort: reasoning_effort
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string),
         force_responses_api: false,
         toolshim: matches!(
             provider_config.tool_call_strategy,
@@ -107,6 +112,10 @@ pub(super) async fn apply_runtime_turn_provider_config(
                     provider_selector,
                     &provider_config.model_name,
                     session_id,
+                    reasoning_effort
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(ToString::to_string),
                 )
                 .await?;
         }

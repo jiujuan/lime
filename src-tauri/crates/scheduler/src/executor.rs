@@ -412,7 +412,7 @@ impl AgentExecutor {
 
         let state = AsterAgentState::new();
         state
-            .configure_provider_from_pool(db, &task.provider_type, &task.model, &session_id)
+            .configure_provider_from_pool(db, &task.provider_type, &task.model, &session_id, None)
             .await
             .map_err(|e| format!("配置 Agent Provider 失败: {e}"))?;
 

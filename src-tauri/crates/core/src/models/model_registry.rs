@@ -19,6 +19,47 @@ pub struct ModelCapabilities {
     pub function_calling: bool,
     /// 是否支持推理/思考
     pub reasoning: bool,
+    /// 是否支持可选推理强度；仅当模型接口明确声明时填充
+    #[serde(default)]
+    pub reasoning_effort: Option<ModelReasoningEffortSupport>,
+}
+
+/// 模型推理强度档位
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelReasoningEffortLevel {
+    None,
+    Minimal,
+    Low,
+    Medium,
+    High,
+    Xhigh,
+}
+
+/// 推理强度能力来源
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelReasoningEffortSource {
+    Api,
+    Registry,
+    Custom,
+    Inferred,
+}
+
+/// 模型推理强度能力
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ModelReasoningEffortSupport {
+    /// 是否支持 reasoning_effort 参数
+    pub supported: bool,
+    /// 支持的档位
+    #[serde(default)]
+    pub levels: Vec<ModelReasoningEffortLevel>,
+    /// 默认档位
+    #[serde(default)]
+    pub default: Option<ModelReasoningEffortLevel>,
+    /// 能力来源
+    #[serde(default)]
+    pub source: Option<ModelReasoningEffortSource>,
 }
 
 /// 模型任务族
@@ -657,6 +698,7 @@ impl ModelsDevModel {
                 json_mode: true, // 大多数模型都支持 JSON 模式
                 function_calling: self.tool_call,
                 reasoning: self.reasoning,
+                reasoning_effort: None,
             },
             task_families: vec![],
             input_modalities: vec![],

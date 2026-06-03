@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ChevronDown, ChevronUp, FolderOpen, Settings2 } from "lucide-react";
+import { FolderOpen } from "lucide-react";
 import type { ChatInputAdapter } from "@/components/input-kit/adapters/types";
 import type { Character } from "@/lib/api/memory";
 import type {
@@ -15,6 +15,7 @@ import { InputbarWorkflowStatusPanel } from "./InputbarWorkflowStatusPanel";
 import { InputbarModelExtra } from "./InputbarModelExtra";
 import { InputbarVisionCapabilityNotice } from "./InputbarVisionCapabilityNotice";
 import { InputbarAccessModeSelect } from "./InputbarAccessModeSelect";
+import { InputbarModeStatusChip } from "./InputbarModeStatusChip";
 import { isGeneralResearchTheme } from "../../../utils/generalAgentPrompt";
 import type { TeamDefinition } from "../../../utils/teamDefinitions";
 import type { WorkspaceSettings } from "@/types/workspace";
@@ -41,15 +42,8 @@ import type {
   WorkflowQuickAction,
   WorkflowStep,
 } from "../../../utils/workflowInputState";
-import { Badge } from "@/components/ui/badge";
-import {
-  MetaIconButton,
-  MetaToggleButton,
-  MetaToggleCheck,
-  MetaToggleGlyph,
-  MetaToggleLabel,
-} from "../styles";
-import { getProviderLabel } from "@/lib/constants/providerMappings";
+import { MetaIconButton } from "../styles";
+import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 
 interface InputbarComposerSectionProps {
   renderWorkflowGeneratingPanel: boolean;
@@ -99,9 +93,12 @@ interface InputbarComposerSectionProps {
   isWorkspaceVariant: boolean;
   activeTheme?: string;
   onManageProviders?: () => void;
+  reasoningEffort?: ModelReasoningEffortLevel | "";
+  setReasoningEffort?: (value: ModelReasoningEffortLevel | "") => void;
   executionRuntime?: AsterSessionExecutionRuntime | null;
   accessMode?: AgentAccessMode;
   setAccessMode?: (mode: AgentAccessMode) => void;
+  showModelControls?: boolean;
   topExtra?: React.ReactNode;
   queuedTurns: QueuedTurnSnapshot[];
   onPromoteQueuedTurn?: (queuedTurnId: string) => void | Promise<boolean>;
@@ -165,9 +162,12 @@ export const InputbarComposerSection: React.FC<
   isWorkspaceVariant,
   activeTheme,
   onManageProviders,
+  reasoningEffort,
+  setReasoningEffort,
   executionRuntime,
   accessMode,
   setAccessMode,
+  showModelControls = false,
   topExtra,
   queuedTurns,
   onPromoteQueuedTurn,
@@ -183,9 +183,7 @@ export const InputbarComposerSection: React.FC<
   const [teamSelectorAutoOpenToken, setTeamSelectorAutoOpenToken] = useState<
     number | null
   >(null);
-  const [showAdvancedControls, setShowAdvancedControls] = useState(false);
-  const showSkillSelector =
-    !isWorkspaceVariant && isGeneralResearchTheme(activeTheme);
+  const showSkillSelector = isGeneralResearchTheme(activeTheme);
   const currentPendingImages =
     (inputAdapter.state.attachments as MessageImage[] | undefined) ||
     pendingImages;
@@ -193,17 +191,14 @@ export const InputbarComposerSection: React.FC<
     buildSkillSelectionBindings(skillSelection);
   const resolvedProviderType = inputAdapter.model?.providerType;
   const resolvedModel = inputAdapter.model?.model;
-  const trimmedProviderType = resolvedProviderType?.trim() || "";
-  const trimmedModel = resolvedModel?.trim() || "";
-  const shouldShowModelControls = !isWorkspaceVariant;
-  const hasConfiguredModel = Boolean(trimmedProviderType && trimmedModel);
-  const currentModelSummary =
-    shouldShowModelControls && hasConfiguredModel
-      ? `${getProviderLabel(trimmedProviderType)} / ${trimmedModel}`
-      : null;
+  const resolvedReasoningEffort =
+    inputAdapter.model?.reasoningEffort ?? reasoningEffort ?? "";
+  const shouldShowModelControls = showModelControls;
   const resolvedSetProviderType =
     inputAdapter.actions.setProviderType || (() => undefined);
   const resolvedSetModel = inputAdapter.actions.setModel || (() => undefined);
+  const resolvedSetReasoningEffort =
+    inputAdapter.actions.setReasoningEffort || setReasoningEffort;
   const shouldShowVisionNotice =
     currentPendingImages.length > 0 &&
     Boolean(resolvedProviderType?.trim()) &&
@@ -233,9 +228,14 @@ export const InputbarComposerSection: React.FC<
   };
   const shouldShowTeamSelector =
     isGeneralResearchTheme(activeTheme) && activeTools["subagent_mode"];
-  const knowledgePackControl =
+  const planModeStatusLabel = copy.plusMenu.planMode
+    .replace(/模式$/, "")
+    .replace(/ mode$/i, "");
+  const objectiveStatusLabel = copy.plusMenu.objective;
+  const plusMenuKnowledgePanel =
     knowledgePackSelection || onStartKnowledgeOrganize ? (
       <InputbarKnowledgeControl
+        renderMode="inline"
         knowledgePackSelection={knowledgePackSelection}
         knowledgePackOptions={knowledgePackOptions}
         inputText={input}
@@ -246,23 +246,10 @@ export const InputbarComposerSection: React.FC<
         onStartKnowledgeOrganize={onStartKnowledgeOrganize}
         onManageKnowledgePacks={onManageKnowledgePacks}
       />
-    ) : null;
-  const hasHighlightedAdvancedPreference =
-    activeTools["subagent_mode"] ||
-    knowledgePackSelection?.enabled ||
-    accessMode === "read-only" ||
-    accessMode === "full-access";
-  const shouldShowAdvancedToggle =
-    showSkillSelector ||
-    shouldShowTeamSelector ||
-    shouldShowModelControls ||
-    Boolean(setAccessMode) ||
-    Boolean(onToggleFileManager);
-  const shouldShowLeftExtra =
-    Boolean(knowledgePackControl) || shouldShowAdvancedToggle;
-  const advancedSettingsLabel = showAdvancedControls
-    ? copy.advancedSettings.collapse
-    : copy.advancedSettings.expand;
+    ) : undefined;
+  const plusMenuSkillsPanel = showSkillSelector ? (
+    <SkillSelector {...skillSelectorProps} renderMode="inline" />
+  ) : undefined;
   const fileManagerLabel = fileManagerOpen
     ? copy.fileManager.close
     : copy.fileManager.open;
@@ -272,62 +259,63 @@ export const InputbarComposerSection: React.FC<
       : contextVariant === "task-center"
         ? copy.workspacePlaceholder.taskCenter
         : copy.workspacePlaceholder.default;
+  const plusMenu = {
+    labels: copy.plusMenu,
+    taskEnabled: Boolean(activeTools["task_mode"]),
+    knowledgeOpenRequestKey: knowledgeHubOpenRequestKey,
+    subagentEnabled: Boolean(activeTools["subagent_mode"]),
+    knowledgeActive: Boolean(knowledgePackSelection?.enabled),
+    objectiveActive: Boolean(activeTools["objective_mode"]),
+    skillsActive: Boolean(skillSelection.activeSkill),
+    knowledgePanel: plusMenuKnowledgePanel,
+    skillsPanel: plusMenuSkillsPanel,
+    onAddFiles: () => handleToolAction("attach"),
+    onToggleTask: () => handleToolAction("task_mode"),
+    onToggleObjective: () => handleToolAction("objective_mode"),
+    onToggleSubagent: showSkillSelector
+      ? () => handleToolAction("subagent_mode")
+      : undefined,
+  };
+  const shouldShowLeftExtra =
+    Boolean(activeTools["task_mode"]) ||
+    Boolean(activeTools["objective_mode"]) ||
+    Boolean(setAccessMode) ||
+    Boolean(onToggleFileManager) ||
+    shouldShowTeamSelector;
   const leftExtra = shouldShowLeftExtra ? (
     <>
-      {knowledgePackControl}
+      <InputbarAccessModeSelect
+        isFullscreen={isFullscreen}
+        accessMode={accessMode}
+        setAccessMode={setAccessMode}
+      />
 
-      {!showAdvancedControls && currentModelSummary ? (
-        <Badge
-          variant="outline"
-          className="h-8 max-w-[240px] items-center overflow-hidden rounded-full border-slate-200/80 bg-white/90 px-3 text-xs font-medium text-slate-600"
-          title={copy.currentModel.title(currentModelSummary)}
-        >
-          <span className="mr-1 text-slate-500">
-            {copy.currentModel.label}
-          </span>
-          <span className="truncate">{trimmedModel}</span>
-        </Badge>
-      ) : null}
-
-      {!showAdvancedControls &&
-      shouldShowModelControls &&
-      !hasConfiguredModel ? (
-        <InputbarModelExtra
-          isFullscreen={isFullscreen}
-          providerType={resolvedProviderType}
-          setProviderType={resolvedSetProviderType}
-          model={resolvedModel}
-          setModel={resolvedSetModel}
-          activeTheme={activeTheme}
-          onManageProviders={onManageProviders}
-          executionRuntime={executionRuntime}
+      {activeTools["task_mode"] ? (
+        <InputbarModeStatusChip
+          label={planModeStatusLabel}
+          testId="inputbar-task-mode-status"
+          onRemove={() => handleToolAction("task_mode")}
         />
       ) : null}
 
-      {shouldShowAdvancedToggle ? (
-        <MetaToggleButton
-          type="button"
-          $checked={showAdvancedControls || hasHighlightedAdvancedPreference}
-          aria-label={advancedSettingsLabel}
-          aria-expanded={showAdvancedControls}
-          data-testid="inputbar-advanced-toggle"
-          title={advancedSettingsLabel}
-          onClick={() => setShowAdvancedControls((previous) => !previous)}
-        >
-          <MetaToggleCheck
-            $checked={showAdvancedControls || hasHighlightedAdvancedPreference}
-            aria-hidden
-          />
-          <MetaToggleGlyph aria-hidden>
-            <Settings2 strokeWidth={1.8} />
-          </MetaToggleGlyph>
-          <MetaToggleLabel>{copy.advancedSettings.label}</MetaToggleLabel>
-          {showAdvancedControls ? (
-            <ChevronUp className="h-3.5 w-3.5" aria-hidden />
-          ) : (
-            <ChevronDown className="h-3.5 w-3.5" aria-hidden />
-          )}
-        </MetaToggleButton>
+      {activeTools["objective_mode"] ? (
+        <InputbarModeStatusChip
+          label={objectiveStatusLabel}
+          testId="inputbar-objective-status"
+          onRemove={() => handleToolAction("objective_mode")}
+        />
+      ) : null}
+
+      {shouldShowTeamSelector ? (
+        <TeamSelector
+          activeTheme={activeTheme}
+          input={input}
+          autoOpenToken={teamSelectorAutoOpenToken}
+          selectedTeam={selectedTeam}
+          workspaceSettings={teamWorkspaceSettings}
+          onPersistCustomTeams={onPersistCustomTeams}
+          onSelectTeam={(team) => onSelectTeam?.(team)}
+        />
       ) : null}
 
       {onToggleFileManager ? (
@@ -342,41 +330,21 @@ export const InputbarComposerSection: React.FC<
           <FolderOpen className="h-4 w-4" aria-hidden />
         </MetaIconButton>
       ) : null}
-
-      {showAdvancedControls ? (
-        <>
-          {showSkillSelector ? <SkillSelector {...skillSelectorProps} /> : null}
-          {shouldShowTeamSelector ? (
-            <TeamSelector
-              activeTheme={activeTheme}
-              input={input}
-              autoOpenToken={teamSelectorAutoOpenToken}
-              selectedTeam={selectedTeam}
-              workspaceSettings={teamWorkspaceSettings}
-              onPersistCustomTeams={onPersistCustomTeams}
-              onSelectTeam={(team) => onSelectTeam?.(team)}
-            />
-          ) : null}
-          {shouldShowModelControls ? (
-            <InputbarModelExtra
-              isFullscreen={isFullscreen}
-              providerType={resolvedProviderType}
-              setProviderType={resolvedSetProviderType}
-              model={resolvedModel}
-              setModel={resolvedSetModel}
-              activeTheme={activeTheme}
-              onManageProviders={onManageProviders}
-              executionRuntime={executionRuntime}
-            />
-          ) : null}
-          <InputbarAccessModeSelect
-            isFullscreen={isFullscreen}
-            accessMode={accessMode}
-            setAccessMode={setAccessMode}
-          />
-        </>
-      ) : null}
     </>
+  ) : undefined;
+  const trailingMeta = shouldShowModelControls ? (
+    <InputbarModelExtra
+      isFullscreen={isFullscreen}
+      providerType={resolvedProviderType}
+      setProviderType={resolvedSetProviderType}
+      model={resolvedModel}
+      setModel={resolvedSetModel}
+      reasoningEffort={resolvedReasoningEffort}
+      setReasoningEffort={resolvedSetReasoningEffort}
+      activeTheme={activeTheme}
+      onManageProviders={onManageProviders}
+      executionRuntime={executionRuntime}
+    />
   ) : undefined;
 
   if (renderWorkflowGeneratingPanel) {
@@ -458,9 +426,7 @@ export const InputbarComposerSection: React.FC<
         onRemovePathReference={onRemovePathReference}
         onPaste={onPaste}
         isFullscreen={isFullscreen}
-        placeholder={
-          isWorkspaceVariant ? workspacePlaceholder : undefined
-        }
+        placeholder={isWorkspaceVariant ? workspacePlaceholder : undefined}
         toolMode={isWorkspaceVariant ? "attach-only" : "default"}
         showDragHandle={!isWorkspaceVariant}
         visualVariant={isWorkspaceVariant ? "floating" : "default"}
@@ -470,7 +436,9 @@ export const InputbarComposerSection: React.FC<
         onPromoteQueuedTurn={onPromoteQueuedTurn}
         onRemoveQueuedTurn={onRemoveQueuedTurn}
         leftExtra={leftExtra}
-        showMetaTools={showAdvancedControls}
+        trailingMeta={trailingMeta}
+        showMetaTools={false}
+        plusMenu={plusMenu}
         listenForVoiceShortcut={isWorkspaceVariant}
       />
     </>

@@ -53,6 +53,7 @@ interface ExecuteAgentStreamSubmitOptions {
   effectiveModel: string;
   effectiveExecutionStrategy: AsterExecutionStrategy;
   modelOverride?: string;
+  reasoningEffort?: string;
   webSearch?: boolean;
   searchMode?: AgentRuntimeWebSearchMode;
   thinking?: boolean;
@@ -136,6 +137,7 @@ export async function executeAgentStreamSubmit(
     effectiveModel,
     effectiveExecutionStrategy,
     modelOverride,
+    reasoningEffort,
     webSearch,
     searchMode,
     thinking,
@@ -286,6 +288,7 @@ export async function executeAgentStreamSubmit(
           effectiveProviderType,
           effectiveModel,
           modelOverride,
+          reasoningEffort,
           webSearch,
           searchMode,
           thinking,

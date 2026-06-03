@@ -35,6 +35,7 @@ export interface AgentStreamPreparedSendEnv {
   accessMode: AgentAccessMode;
   providerTypeRef: MutableRefObject<string>;
   modelRef: MutableRefObject<string>;
+  reasoningEffortRef: MutableRefObject<string>;
   sessionIdRef: MutableRefObject<string | null>;
   getQueuedTurnsCount: () => number;
   isThreadBusy: () => boolean;

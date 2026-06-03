@@ -22,7 +22,7 @@
 2. 已完成 Phase 1 全局 Soul 设置，配置落在 `memory.soul`，复用 current app config 读写，不新增 Tauri 命令。
 3. 已完成 Phase 2 普通聊天注入，`memory_profile_prompt_service` 统一构建 `【全局交互人格】` section，关闭或空配置不注入。
 4. 已完成 Phase 3 `SOUL.md` 导入 / 导出，导入前预览，导入后写 current config，不保留文件路径依赖。
-5. 已接入 Phase 4 current 主链，设置页 `正式内容声线` 写入 `memory.soul.artifact_voice`，hook 只读取保存配置，发送层按“本轮开关 + 无显式 generation_brief”把保存声线作为 fallback 归一化到 `artifact.generation_brief`；正式 Artifact metadata 默认补 `generation_brief` 声线边界，`voice_source=none`，不继承 Global Soul / Expert Persona；显式 `generation_brief` 可独立保留并覆盖保存声线，但不会单独触发 Artifact 生成合同。
+5. 已接入 Phase 4 current 主链，`memory.soul.artifact_voice` 仍是正式内容声线的保存配置事实源，但普通设置页不再暴露声线 ID / evidence 表单；hook 只读取保存配置，发送层按“本轮开关 + 无显式 generation_brief”把保存声线作为 fallback 归一化到 `artifact.generation_brief`；正式 Artifact metadata 默认补 `generation_brief` 声线边界，`voice_source=none`，不继承 Global Soul / Expert Persona；显式 `generation_brief` 可独立保留并覆盖保存声线，但不会单独触发 Artifact 生成合同。
 6. 已推进 Phase 5 专家联动，`expertRuntimeBinding` 输出 personality boundary metadata，`runtime_turn` 将 `harness.expert` 识别为专家会话上下文。
 
 本轮清理：
@@ -34,10 +34,11 @@
 5. `artifact_prompt_service` 只负责把已经归一化的边界投影成 prompt section，不再维护另一份默认值逻辑。
 6. 清理了只带 `generation_brief` 时被 request metadata 删除、反向误触发 Stage / Schema prompt、workspace base / sendOptions 浅合并丢 artifact 字段，以及缺失 / 未知 `voice_source` 仍携带 voice ID 的边界风险。
 7. 清理了保存 Soul 声线提前 merge 到 `workspaceRequestMetadataBase` 的旧做法；保存声线不再作为基础 metadata 常驻，只在发送瞬间按本轮开关和显式覆盖规则进入请求，并写入 `diagnostics.soul_artifact_voice` 解释来源与 guard 结果。
+8. 清理了设置页不合理表单：`MemorySettings` 从 `日常记忆 / AI 个性 / 创作声线 / 高级` 收口为 `日常记忆 / AI 个性 / 高级`；AI 个性只保留当前状态、初始模板和重置，不再让普通用户手填 Soul 字段；SOUL.md 内容查看提前到高级页，导入仅作为迁移草稿入口。
 
 当前不要宣称完成：
 
-1. Phase 4 自动 voice evidence 投影、诊断层详情展示和完整 GUI / E2E 证据。
+1. Phase 4 自动 voice evidence 投影、创作流程内声线选择、诊断层详情展示和完整 GUI / E2E 证据。
 2. Phase 6 品牌 / 项目声线包。
 3. Phase 7 session-scoped personality overlay。
 
@@ -70,8 +71,8 @@
 
 目标：
 
-1. 在设置页提供 AI 个性 / 声线配置入口。
-2. 支持编辑、保存、关闭、重置。
+1. 在设置页提供 AI 个性初始模板、当前状态和高级迁移入口。
+2. 支持选择模板、保存、重置；不让普通用户直接手填 Soul prompt 字段。
 3. 配置写入 current app config 或 memory profile 投影。
 4. 不触及正式 artifact。
 5. 不触碰 Expert Catalog 作为全局事实源。
@@ -190,7 +191,7 @@ npm run test:contracts
 
 1. 已在前端工作区发送层新增 `artifactGenerationBriefMetadata` helper，将显式 voice metadata 归一化为 `artifact.generation_brief`。
 2. 已清理 `generationBrief` / `generation_brief` 别名并保持 sendOptions 覆盖 workspace base 的优先级。
-3. 已在设置页增加 `正式内容声线` 显式开关、个人 / 品牌声线来源、evidence pack 和 evidence refs 配置，写入 `memory.soul.artifact_voice`。
+3. 已下线普通设置页里的 `正式内容声线` 表单；正式内容声线应在创作流程中选择或由后续 evidence 流程形成，不再要求用户在设置页填写 voice ID / evidence refs。
 4. 已在 `useSoulArtifactVoiceGenerationBrief` 从保存配置读取 `memory.soul.artifact_voice` 并投影为保存声线候选；发送层不再提前合并到 workspace base，而是在本轮开关开启、且没有显式 `generation_brief` 时才应用。
 5. 已在配置 normalize、前端 metadata helper 和 Rust 归一化边界清理互斥或孤儿的 `creator_voice_id` / `brand_voice_id`，防止保存声线和本轮显式声线混合，也防止缺失 / 未知 `voice_source` 隐式带入正式产物声线。
 6. 已在 artifact request metadata 归一化阶段补齐 `generation_brief` 边界。
@@ -359,9 +360,14 @@ cargo test --manifest-path "src-tauri/Cargo.toml"
 
 截至 2026-06-03：
 
-1. Phase 4 前端定向测试已通过：`npm exec vitest run "src/components/agent/chat/utils/artifactGenerationBriefMetadata.unit.test.ts" "src/components/agent/chat/workspace/workspaceSendHelpers.test.ts" "src/components/agent/chat/workspace/useWorkspaceInputbarSceneRuntime.test.tsx"`，当前结果为 3 files / 32 tests passed。
-2. 既有 Phase 4 前端定向测试也曾通过：`npm exec vitest run "src/lib/soul/soulConfig.unit.test.ts" "src/hooks/useSoulArtifactVoiceGenerationBrief.test.tsx" "src/components/settings-v2/general/memory/index.test.tsx" "src/components/agent/chat/utils/artifactGenerationBriefMetadata.unit.test.ts" "src/components/agent/chat/workspace/workspaceSendHelpers.test.ts"`，上一轮结果为 5 files / 44 tests passed。
-3. 测试覆盖：Soul config normalization、SOUL.md import / export、正式内容声线设置页保存 / 关闭、保存配置到 Generation Brief 的候选投影、发送时 saved fallback、本轮关闭不注入 artifact 但保留诊断、显式 `generation_brief` 覆盖保存声线且不继承保存 evidence、Generation Brief alias normalize、互斥 voice ID 清理、缺失 / 未知 `voice_source` 不保留孤儿 voice ID、Workspace 输入区本轮开关展示和切换。
-4. `git diff --check` 已针对上一轮 Soul / Generation Brief / Expert 写集通过；本轮新增输入区开关和文档后需要重跑。
-5. Rust `artifact_generation_brief_boundary_service` 已补互斥 voice ID 和未知 `voice_source` 清理测试；上一轮定向命令 `cargo test --manifest-path "src-tauri/Cargo.toml" artifact_generation_brief_boundary_service -- --test-threads=1` 因外部 Cargo / rustc 进程长期占用 `src-tauri/target` artifact lock，尚未闭合，本轮需要重试。
-6. `npm run test:contracts` 已在上一轮通过；本轮新增发送 metadata 和输入区开关后需要重跑。`npm run verify:gui-smoke -- --reuse-running` 上一轮已通过 `workspace-ready`、`browser-runtime`、`site-adapters` 与 `agent-service-skill-entry` 的前端 Vitest 子集，但完整 smoke 卡在 Rust 子测试编译阶段，本轮未宣称 GUI smoke 完整通过。
+1. Phase 4 前端定向测试已通过：`npm exec vitest run "src/lib/soul/soulConfig.unit.test.ts" "src/hooks/useSoulArtifactVoiceGenerationBrief.test.tsx" "src/components/settings-v2/general/memory/index.test.tsx" "src/components/agent/chat/utils/artifactGenerationBriefMetadata.unit.test.ts" "src/components/agent/chat/workspace/workspaceSendHelpers.test.ts" "src/components/agent/chat/workspace/useWorkspaceInputbarSceneRuntime.test.tsx"`，当前结果为 6 files / 50 tests passed。
+2. 测试覆盖：Soul config normalization、SOUL.md import / export、设置页默认隐藏高级 / 声线表单、AI 个性模板写入 `memory.soul`、SOUL.md 文件内容查看、保存配置到 Generation Brief 的候选投影、发送时 saved fallback、本轮关闭不注入 artifact 但保留诊断、显式 `generation_brief` 覆盖保存声线且不继承保存 evidence、Generation Brief alias normalize、互斥 voice ID 清理、缺失 / 未知 `voice_source` 不保留孤儿 voice ID、Workspace 输入区本轮开关展示和切换。
+3. 本轮设置页五语言 key 已对齐；`npm run i18n:unused -- --check` 仍因既有 `agent` / `agentMessageList` 未引用 key 失败，但 `settings` namespace 已清到 `unused=0`。
+4. Playwright 轻量 GUI 检查已覆盖本地 `http://127.0.0.1:1420/` 设置页：记忆页默认只展示 `日常记忆 / AI 个性 / 高级` 三个 tab；`AI 个性` tab 只展示当前状态、三个初始模板、重置和边界说明，无 input / textarea；`高级` tab 将 `SOUL.md 文件内容` 放在导入区之前，空配置显示“当前还没有可查看的 SOUL.md 内容”。
+5. `git diff --check` 已针对本轮设置页、五语言和 Soul 路线图写集通过。
+6. Rust `artifact_generation_brief_boundary_service` 定向测试已通过：`cargo test --manifest-path "src-tauri/Cargo.toml" artifact_generation_brief_boundary_service -- --test-threads=1`，结果为 6 tests passed。
+7. `npm run test:contracts` 已通过。
+8. `npm run bridge:health -- --timeout-ms 120000` 已通过，DevBridge health status 为 `ok`。
+9. `npm run verify:gui-smoke -- --reuse-running` 本轮已通过 `workspace-ready`、`browser-runtime`、`site-adapters`、`agent-service-skill-entry`、`agent-runtime-tool-surface`、`agent-runtime-tool-surface-page`、`code-runtime-fixture`、`agent-runtime-approval-sandbox`、`at-command-registry` 与 `agent-apps` 等 GUI / runtime 主路径 smoke；其中 page smoke 已真实打开 `http://127.0.0.1:1420/`，完成输入、发送、打开 code session、查看 runtime summary、审批与文件 checkpoint 回滚等步骤。
+10. 完整 `verify:gui-smoke` 尚未闭合：本轮失败点为后续 `smoke:knowledge-gui` 的 `page.reload({ waitUntil: "domcontentloaded" })` 超时；失败后脚本已清理 smoke Chrome profile。定向复跑 `npm run smoke:knowledge-gui -- --app-url http://127.0.0.1:1420/ --health-url http://127.0.0.1:3030/health --invoke-url http://127.0.0.1:3030/invoke --timeout-ms 600000 --interval-ms 1000 --i18n-patch-metrics-output /Users/coso/Documents/dev/ai/aiclientproxy/lime/.lime/i18n/patch-metrics.json` 已越过 reload，并推进到 Agent 结果回流，但失败在点击“保存到项目资料”控件；脚本枚举显示该按钮存在且未禁用。该失败当前归类为 GUI smoke 的 knowledge 页面交互命中 / 脚本稳定性缺口，不是 Soul 声线 metadata 边界失败，但在复跑通过前不能宣称完整 GUI smoke 已通过。
+11. 真实 live Provider / 图片生成提交仍按仓库默认门禁跳过；`at-command-registry` 只验证 `@配图` 选择和 prompt 填充，未提交真实模型或图片 Provider。

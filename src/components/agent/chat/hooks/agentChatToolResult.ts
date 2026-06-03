@@ -139,6 +139,7 @@ export const extractDataImageUrlsFromText = (text: string): string[] => {
 export const normalizeToolResultImages = (
   value: unknown,
   fallbackText?: string,
+  metadata?: unknown,
 ): ToolResultImage[] | undefined => {
   const normalized: ToolResultImage[] = [];
   const seen = new Set<string>();
@@ -175,6 +176,22 @@ export const normalizeToolResultImages = (
           ? record.origin
           : undefined;
       appendImage(src, mimeType, origin);
+    }
+  }
+
+  if (normalized.length === 0 && metadata && typeof metadata === "object") {
+    const record = metadata as Record<string, unknown>;
+    const modelVisibleImage =
+      record.model_visible_image === true || record.modelVisibleImage === true;
+    const rawImageUrl = record.image_url ?? record.imageUrl;
+    const imageUrl = typeof rawImageUrl === "string" ? rawImageUrl.trim() : "";
+
+    if (modelVisibleImage && imageUrl.startsWith("data:image/")) {
+      const mimeType =
+        (typeof record.mime_type === "string" && record.mime_type.trim()) ||
+        (typeof record.mimeType === "string" && record.mimeType.trim()) ||
+        parseMimeTypeFromDataUrl(imageUrl);
+      appendImage(imageUrl, mimeType, "tool_payload");
     }
   }
 
@@ -311,22 +328,34 @@ export const normalizeIncomingToolResult = <
   },
 >(
   result: T | null | undefined,
-): T | undefined => {
+):
+  | (T & {
+      output: string;
+      error?: string;
+      images?: ToolResultImage[];
+      metadata?: Record<string, unknown>;
+    })
+  | undefined => {
   if (!result) return undefined;
 
   const normalizedOutput = extractLimeToolMetadataBlock(result.output);
   const normalizedError = extractLimeToolMetadataBlock(result.error);
+  const metadata = normalizeToolResultMetadata(
+    result.metadata,
+    result.output,
+    result.error,
+  );
 
   return {
     ...result,
     output: normalizedOutput.text,
     error: normalizedError.text || undefined,
-    images: normalizeToolResultImages(result.images, normalizedOutput.text),
-    metadata: normalizeToolResultMetadata(
-      result.metadata,
-      result.output,
-      result.error,
+    images: normalizeToolResultImages(
+      result.images,
+      normalizedOutput.text,
+      metadata,
     ),
+    metadata,
   };
 };
 

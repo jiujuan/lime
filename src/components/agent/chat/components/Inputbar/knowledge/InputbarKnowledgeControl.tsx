@@ -136,6 +136,18 @@ const KnowledgeHubCard = styled.div`
   background: #ffffff;
   box-shadow: 0 20px 42px -30px rgba(15, 23, 42, 0.38);
   overflow: hidden;
+
+  &.inline-panel {
+    position: relative;
+    left: auto;
+    bottom: auto;
+    width: 100%;
+    max-height: none;
+    padding: 10px;
+    border: 1px solid rgba(226, 232, 240, 0.92);
+    border-radius: 12px;
+    box-shadow: none;
+  }
 `;
 
 const KnowledgeHubHeader = styled.div`
@@ -232,6 +244,7 @@ export function InputbarKnowledgeControl({
   knowledgePackOptions = [],
   inputText = "",
   openKnowledgeHubRequestKey,
+  renderMode = "button",
   onToggleKnowledgePack,
   onSelectKnowledgePack,
   onToggleKnowledgeCompanionPack,
@@ -242,6 +255,7 @@ export function InputbarKnowledgeControl({
   knowledgePackOptions?: InputbarKnowledgePackOption[];
   inputText?: string;
   openKnowledgeHubRequestKey?: number;
+  renderMode?: "button" | "inline";
   onToggleKnowledgePack?: (enabled: boolean) => void;
   onSelectKnowledgePack?: (packName: string) => void;
   onToggleKnowledgeCompanionPack?: (packName: string, enabled: boolean) => void;
@@ -249,6 +263,7 @@ export function InputbarKnowledgeControl({
   onManageKnowledgePacks?: () => void;
 }) {
   const { t, i18n } = useTranslation("agent");
+  const inlineMode = renderMode === "inline";
   const [showKnowledgeHub, setShowKnowledgeHub] = useState(false);
   const fallbackPackLabel = t(
     "agentChat.inputbar.knowledge.fallbackPackLabel",
@@ -344,11 +359,11 @@ export function InputbarKnowledgeControl({
       : t("agentChat.inputbar.knowledge.toggle.label.add");
 
   useEffect(() => {
-    if (!openKnowledgeHubRequestKey) {
+    if (inlineMode || !openKnowledgeHubRequestKey) {
       return;
     }
     setShowKnowledgeHub(true);
-  }, [openKnowledgeHubRequestKey]);
+  }, [inlineMode, openKnowledgeHubRequestKey]);
 
   const handleSelectKnowledgePack = (option: InputbarKnowledgePackOption) => {
     onSelectKnowledgePack?.(option.packName);
@@ -386,6 +401,176 @@ export function InputbarKnowledgeControl({
     return null;
   }
 
+  const knowledgeHub = (
+    <KnowledgeHubCard
+      className={inlineMode ? "inline-panel" : undefined}
+      data-testid="inputbar-knowledge-hub"
+    >
+      <KnowledgeHubHeader>
+        <KnowledgeHubTitle>
+          <BookOpen className="h-4 w-4 flex-shrink-0 text-emerald-600" />
+          <span>{renderHubCopy(hubState.title)}</span>
+        </KnowledgeHubTitle>
+        {!inlineMode ? (
+          <KnowledgeHubDismissButton
+            type="button"
+            aria-label={t("agentChat.inputbar.knowledge.dismiss.aria")}
+            title={t("agentChat.inputbar.knowledge.dismiss.aria")}
+            data-testid="inputbar-knowledge-hub-dismiss"
+            onClick={() => setShowKnowledgeHub(false)}
+          >
+            <X className="h-3.5 w-3.5" aria-hidden />
+          </KnowledgeHubDismissButton>
+        ) : null}
+      </KnowledgeHubHeader>
+      <KnowledgeHubContent>
+        <KnowledgeHubDescription>
+          {renderHubCopy(hubState.description)}
+        </KnowledgeHubDescription>
+        {readyOptions.length > 0 ? (
+          <>
+            <KnowledgePackSectionTitle>
+              {t("agentChat.inputbar.knowledge.section.main")}
+            </KnowledgePackSectionTitle>
+            <KnowledgePackMenu role="menu" data-testid="inputbar-knowledge-pack-menu">
+              {readyOptions.map((option) => {
+                const isSelected =
+                  option.packName === knowledgePackSelection?.packName;
+                const label = option.label || option.packName;
+
+                return (
+                  <KnowledgePackMenuItem
+                    key={option.packName}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={isSelected}
+                    data-testid={`inputbar-knowledge-pack-option-${option.packName}`}
+                    $active={isSelected}
+                    onClick={() => handleSelectKnowledgePack(option)}
+                  >
+                    <KnowledgePackMenuItemTitle>
+                      <span>{label}</span>
+                      {option.defaultForWorkspace ? (
+                        <KnowledgePackMenuBadge>
+                          {t("agentChat.inputbar.knowledge.badge.default")}
+                        </KnowledgePackMenuBadge>
+                      ) : null}
+                    </KnowledgePackMenuItemTitle>
+                    <KnowledgePackMenuItemMeta>
+                      {t("agentChat.inputbar.knowledge.meta.ready")}
+                    </KnowledgePackMenuItemMeta>
+                  </KnowledgePackMenuItem>
+                );
+              })}
+            </KnowledgePackMenu>
+          </>
+        ) : null}
+        {implicitCompanionLabels.length > 0 ? (
+          <KnowledgeHubDescription data-testid="inputbar-knowledge-implicit-companions">
+            {t("agentChat.inputbar.knowledge.implicitCompanions", {
+              labels: implicitCompanionList,
+            })}
+          </KnowledgeHubDescription>
+        ) : null}
+        {companionCandidates.length > 0 && onToggleKnowledgeCompanionPack ? (
+          <>
+            <KnowledgePackSectionTitle>
+              {t("agentChat.inputbar.knowledge.section.companion")}
+            </KnowledgePackSectionTitle>
+            <KnowledgePackMenu data-testid="inputbar-knowledge-companion-menu">
+              {companionCandidates.map((option) => {
+                const isSelected = explicitCompanionNames.has(option.packName);
+                const label = option.label || option.packName;
+
+                return (
+                  <KnowledgePackMenuItem
+                    key={option.packName}
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={isSelected}
+                    data-testid={`inputbar-knowledge-companion-option-${option.packName}`}
+                    $active={isSelected}
+                    onClick={() =>
+                      onToggleKnowledgeCompanionPack(option.packName, !isSelected)
+                    }
+                  >
+                    <KnowledgePackMenuItemTitle>
+                      <span>{label}</span>
+                      <KnowledgePackMenuBadge>
+                        {t(
+                          isSelected
+                            ? "agentChat.inputbar.knowledge.badge.companionSelected"
+                            : "agentChat.inputbar.knowledge.badge.companionAvailable",
+                        )}
+                      </KnowledgePackMenuBadge>
+                    </KnowledgePackMenuItemTitle>
+                    <KnowledgePackMenuItemMeta>
+                      {t("agentChat.inputbar.knowledge.meta.companion")}
+                    </KnowledgePackMenuItemMeta>
+                  </KnowledgePackMenuItem>
+                );
+              })}
+            </KnowledgePackMenu>
+          </>
+        ) : null}
+        {hiddenPendingCount > 0 ? (
+          <KnowledgeHubDescription>
+            {t("agentChat.inputbar.knowledge.pendingNotice", {
+              count: hiddenPendingCount,
+            })}
+          </KnowledgeHubDescription>
+        ) : null}
+      </KnowledgeHubContent>
+      <KnowledgeHubActions>
+        {effectiveKnowledgeEnabled ? (
+          <KnowledgeHubAction
+            type="button"
+            onClick={() => {
+              onToggleKnowledgePack?.(false);
+              setShowKnowledgeHub(false);
+            }}
+          >
+            {t("agentChat.inputbar.knowledge.action.close")}
+          </KnowledgeHubAction>
+        ) : null}
+        {shouldShowSecondaryOrganizeAction ? (
+          <KnowledgeHubAction
+            type="button"
+            onClick={() => {
+              onStartKnowledgeOrganize?.();
+              setShowKnowledgeHub(false);
+            }}
+          >
+            <MessageSquareText className="h-3.5 w-3.5" />
+            {secondaryOrganizeLabel}
+          </KnowledgeHubAction>
+        ) : null}
+        {shouldShowSecondaryManageAction ? (
+          <KnowledgeHubAction
+            type="button"
+            onClick={() => {
+              onManageKnowledgePacks?.();
+              setShowKnowledgeHub(false);
+            }}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            {t("agentChat.inputbar.knowledge.action.check")}
+          </KnowledgeHubAction>
+        ) : null}
+        {hubState.primaryAction !== "none" ? (
+          <KnowledgeHubAction type="button" $primary onClick={handlePrimaryAction}>
+            <MessageSquareText className="h-3.5 w-3.5" />
+            {renderHubCopy(hubState.primaryLabel)}
+          </KnowledgeHubAction>
+        ) : null}
+      </KnowledgeHubActions>
+    </KnowledgeHubCard>
+  );
+
+  if (inlineMode) {
+    return knowledgeHub;
+  }
+
   return (
     <KnowledgePackControlWrap>
       <MetaToggleButton
@@ -421,178 +606,7 @@ export function InputbarKnowledgeControl({
         <MetaToggleLabel>{knowledgeToggleLabel}</MetaToggleLabel>
         <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
       </MetaToggleButton>
-      {showKnowledgeHub ? (
-        <KnowledgeHubCard data-testid="inputbar-knowledge-hub">
-          <KnowledgeHubHeader>
-            <KnowledgeHubTitle>
-              <BookOpen className="h-4 w-4 flex-shrink-0 text-emerald-600" />
-              <span>{renderHubCopy(hubState.title)}</span>
-            </KnowledgeHubTitle>
-            <KnowledgeHubDismissButton
-              type="button"
-              aria-label={t("agentChat.inputbar.knowledge.dismiss.aria")}
-              title={t("agentChat.inputbar.knowledge.dismiss.aria")}
-              data-testid="inputbar-knowledge-hub-dismiss"
-              onClick={() => setShowKnowledgeHub(false)}
-            >
-              <X className="h-3.5 w-3.5" aria-hidden />
-            </KnowledgeHubDismissButton>
-          </KnowledgeHubHeader>
-          <KnowledgeHubContent>
-            <KnowledgeHubDescription>
-              {renderHubCopy(hubState.description)}
-            </KnowledgeHubDescription>
-            {readyOptions.length > 0 ? (
-              <>
-                <KnowledgePackSectionTitle>
-                  {t("agentChat.inputbar.knowledge.section.main")}
-                </KnowledgePackSectionTitle>
-                <KnowledgePackMenu
-                  role="menu"
-                  data-testid="inputbar-knowledge-pack-menu"
-                >
-                  {readyOptions.map((option) => {
-                    const isSelected =
-                      option.packName === knowledgePackSelection?.packName;
-                    const label = option.label || option.packName;
-
-                    return (
-                      <KnowledgePackMenuItem
-                        key={option.packName}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={isSelected}
-                        data-testid={`inputbar-knowledge-pack-option-${option.packName}`}
-                        $active={isSelected}
-                        onClick={() => handleSelectKnowledgePack(option)}
-                      >
-                        <KnowledgePackMenuItemTitle>
-                          <span>{label}</span>
-                          {option.defaultForWorkspace ? (
-                            <KnowledgePackMenuBadge>
-                              {t("agentChat.inputbar.knowledge.badge.default")}
-                            </KnowledgePackMenuBadge>
-                          ) : null}
-                        </KnowledgePackMenuItemTitle>
-                        <KnowledgePackMenuItemMeta>
-                          {t("agentChat.inputbar.knowledge.meta.ready")}
-                        </KnowledgePackMenuItemMeta>
-                      </KnowledgePackMenuItem>
-                    );
-                  })}
-                </KnowledgePackMenu>
-              </>
-            ) : null}
-            {implicitCompanionLabels.length > 0 ? (
-              <KnowledgeHubDescription data-testid="inputbar-knowledge-implicit-companions">
-                {t("agentChat.inputbar.knowledge.implicitCompanions", {
-                  labels: implicitCompanionList,
-                })}
-              </KnowledgeHubDescription>
-            ) : null}
-            {companionCandidates.length > 0 && onToggleKnowledgeCompanionPack ? (
-              <>
-                <KnowledgePackSectionTitle>
-                  {t("agentChat.inputbar.knowledge.section.companion")}
-                </KnowledgePackSectionTitle>
-                <KnowledgePackMenu data-testid="inputbar-knowledge-companion-menu">
-                  {companionCandidates.map((option) => {
-                    const isSelected = explicitCompanionNames.has(
-                      option.packName,
-                    );
-                    const label = option.label || option.packName;
-
-                    return (
-                      <KnowledgePackMenuItem
-                        key={option.packName}
-                        type="button"
-                        role="menuitemcheckbox"
-                        aria-checked={isSelected}
-                        data-testid={`inputbar-knowledge-companion-option-${option.packName}`}
-                        $active={isSelected}
-                        onClick={() =>
-                          onToggleKnowledgeCompanionPack(
-                            option.packName,
-                            !isSelected,
-                          )
-                        }
-                      >
-                        <KnowledgePackMenuItemTitle>
-                          <span>{label}</span>
-                          <KnowledgePackMenuBadge>
-                            {t(
-                              isSelected
-                                ? "agentChat.inputbar.knowledge.badge.companionSelected"
-                                : "agentChat.inputbar.knowledge.badge.companionAvailable",
-                            )}
-                          </KnowledgePackMenuBadge>
-                        </KnowledgePackMenuItemTitle>
-                        <KnowledgePackMenuItemMeta>
-                          {t("agentChat.inputbar.knowledge.meta.companion")}
-                        </KnowledgePackMenuItemMeta>
-                      </KnowledgePackMenuItem>
-                    );
-                  })}
-                </KnowledgePackMenu>
-              </>
-            ) : null}
-            {hiddenPendingCount > 0 ? (
-              <KnowledgeHubDescription>
-                {t("agentChat.inputbar.knowledge.pendingNotice", {
-                  count: hiddenPendingCount,
-                })}
-              </KnowledgeHubDescription>
-            ) : null}
-          </KnowledgeHubContent>
-          <KnowledgeHubActions>
-            {effectiveKnowledgeEnabled ? (
-              <KnowledgeHubAction
-                type="button"
-                onClick={() => {
-                  onToggleKnowledgePack?.(false);
-                  setShowKnowledgeHub(false);
-                }}
-              >
-                {t("agentChat.inputbar.knowledge.action.close")}
-              </KnowledgeHubAction>
-            ) : null}
-            {shouldShowSecondaryOrganizeAction ? (
-              <KnowledgeHubAction
-                type="button"
-                onClick={() => {
-                  onStartKnowledgeOrganize?.();
-                  setShowKnowledgeHub(false);
-                }}
-              >
-                <MessageSquareText className="h-3.5 w-3.5" />
-                {secondaryOrganizeLabel}
-              </KnowledgeHubAction>
-            ) : null}
-            {shouldShowSecondaryManageAction ? (
-              <KnowledgeHubAction
-                type="button"
-                onClick={() => {
-                  onManageKnowledgePacks?.();
-                  setShowKnowledgeHub(false);
-                }}
-              >
-                <SlidersHorizontal className="h-3.5 w-3.5" />
-                {t("agentChat.inputbar.knowledge.action.check")}
-              </KnowledgeHubAction>
-            ) : null}
-            {hubState.primaryAction !== "none" ? (
-              <KnowledgeHubAction
-                type="button"
-                $primary
-                onClick={handlePrimaryAction}
-              >
-                <MessageSquareText className="h-3.5 w-3.5" />
-                {renderHubCopy(hubState.primaryLabel)}
-              </KnowledgeHubAction>
-            ) : null}
-          </KnowledgeHubActions>
-        </KnowledgeHubCard>
-      ) : null}
+      {showKnowledgeHub ? knowledgeHub : null}
     </KnowledgePackControlWrap>
   );
 }

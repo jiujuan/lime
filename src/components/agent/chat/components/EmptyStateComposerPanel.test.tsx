@@ -2,7 +2,7 @@ import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
   createSkillSelection,
-  expandAdvancedControls,
+  openPlusMenuPanel,
   renderPanel,
   TEST_EN_COMPOSER_COPY,
   TEST_EN_INPUTBAR_CORE_COPY,
@@ -27,7 +27,7 @@ describe("EmptyStateComposerPanel", () => {
     );
   });
 
-  it("首页空态输入区默认隐藏技能入口，展开高级设置后与 @ 面板共用同一技能入口", () => {
+  it("首页空态输入区默认隐藏技能入口，通过加号菜单打开独立技能浮层", () => {
     const container = renderPanel({
       isGeneralTheme: true,
       skillSelection: createSkillSelection({
@@ -51,10 +51,10 @@ describe("EmptyStateComposerPanel", () => {
       container.querySelector('[data-testid="empty-state-skill-selector"]'),
     ).toBeNull();
 
-    expandAdvancedControls(container);
+    openPlusMenuPanel(container, "skills");
 
     expect(
-      container.querySelector('[data-testid="empty-state-skill-selector"]'),
+      document.body.querySelector('[data-testid="empty-state-skill-selector"]'),
     ).toBeTruthy();
   });
 
@@ -119,17 +119,15 @@ describe("EmptyStateComposerPanel", () => {
         ?.getAttribute("title"),
     ).toBe("Close guide help");
 
-    const advancedToggle = container.querySelector(
-      '[data-testid="empty-state-advanced-toggle"]',
+    const plusTrigger = container.querySelector(
+      '[data-testid="inputbar-plus-trigger"]',
     ) as HTMLButtonElement | null;
-    expect(advancedToggle?.getAttribute("aria-label")).toBe(
-      "Expand advanced settings",
-    );
-    expect(advancedToggle?.getAttribute("title")).toBe(
-      "Expand advanced settings",
-    );
-    expect(advancedToggle?.textContent).toContain("Advanced settings");
-    expect(container.textContent).toContain("Current model");
+    expect(plusTrigger?.getAttribute("aria-label")).toBe("Open input settings");
+    expect(plusTrigger?.getAttribute("title")).toBe("Open input settings");
+    expect(container.textContent).not.toContain("Current model");
+    expect(
+      container.querySelector('[data-testid="empty-state-model-selector"]'),
+    ).toBeTruthy();
 
     const fileManagerToggle = container.querySelector(
       '[data-testid="inputbar-file-manager-toggle"]',
@@ -138,14 +136,69 @@ describe("EmptyStateComposerPanel", () => {
       "Open file manager sidebar",
     );
 
-    expandAdvancedControls(container);
-
-    expect(
-      container
-        .querySelector('[data-testid="empty-state-advanced-toggle"]')
-        ?.getAttribute("aria-label"),
-    ).toBe("Collapse advanced settings");
     expect(container.textContent).not.toContain("General task context");
   });
 
+  it("首页 Plan 和 Goal 状态标签应在权限后显示，并可单独关闭", () => {
+    const onTaskEnabledChange = vi.fn();
+    const onObjectiveEnabledChange = vi.fn();
+    const container = renderPanel({
+      taskEnabled: true,
+      onTaskEnabledChange,
+      objectiveEnabled: true,
+      onObjectiveEnabledChange,
+      accessMode: "full-access",
+      setAccessMode: vi.fn(),
+    });
+
+    const leftMeta = container.querySelector(
+      '[data-testid="inputbar-meta-left"]',
+    );
+    const rightMeta = container.querySelector(
+      '[data-testid="inputbar-meta-trailing"]',
+    );
+    const planChip = leftMeta?.querySelector(
+      '[data-testid="empty-state-task-mode-status"]',
+    ) as HTMLButtonElement | null;
+    const objectiveChip = leftMeta?.querySelector(
+      '[data-testid="empty-state-objective-status"]',
+    ) as HTMLButtonElement | null;
+
+    expect(
+      leftMeta?.querySelector('[data-testid="inputbar-access-mode-select"]'),
+    ).toBeTruthy();
+    expect(planChip?.textContent).toContain("计划");
+    expect(objectiveChip?.textContent).toContain("追求目标");
+    expect(
+      getComputedStyle(
+        planChip?.querySelector(
+          '[data-testid="empty-state-task-mode-status-remove-mark"]',
+        ) as HTMLElement,
+      ).opacity,
+    ).toBe("0");
+    expect(
+      getComputedStyle(
+        objectiveChip?.querySelector(
+          '[data-testid="empty-state-objective-status-remove-mark"]',
+        ) as HTMLElement,
+      ).opacity,
+    ).toBe("0");
+    expect(
+      leftMeta?.querySelector('[data-testid="empty-state-model-selector"]'),
+    ).toBeNull();
+    expect(
+      rightMeta?.querySelector('[data-testid="empty-state-model-selector"]'),
+    ).toBeTruthy();
+
+    act(() => {
+      planChip?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onTaskEnabledChange).toHaveBeenCalledWith(false);
+    expect(onObjectiveEnabledChange).not.toHaveBeenCalled();
+
+    act(() => {
+      objectiveChip?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onObjectiveEnabledChange).toHaveBeenCalledWith(false);
+  });
 });

@@ -10,7 +10,7 @@ afterEach(() => {
   clearFrontendCrashBuffer();
 });
 
-describe("crashReporting sanitizeCrashValue", () => {
+describe("crashReporting browser storage boundary", () => {
   it("应脱敏常见密钥与 token", () => {
     const sanitized = sanitizeCrashValue({
       authorization: "Bearer sk-1234567890abcdef",

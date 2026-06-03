@@ -606,8 +606,7 @@ function hydrateSessionDetailMessagesFromThreadItems(
     }
     return left.id.localeCompare(right.id);
   });
-  const finalAgentMessageItemIds =
-    resolveFinalAgentMessageItemIds(sortedItems);
+  const finalAgentMessageItemIds = resolveFinalAgentMessageItemIds(sortedItems);
 
   const messages: Message[] = [];
   let assistantDraft: Message | null = null;
@@ -627,7 +626,8 @@ function hydrateSessionDetailMessagesFromThreadItems(
     const finalParts = (() => {
       const hasFileMutationParts = sanitizedParts.some(
         (part) =>
-          part.type === "tool_use" && isFileMutationToolName(part.toolCall.name),
+          part.type === "tool_use" &&
+          isFileMutationToolName(part.toolCall.name),
       );
       if (!hasFileMutationParts) {
         return sanitizedParts;
@@ -784,13 +784,15 @@ function hydrateSessionDetailMessagesFromThreadItems(
         !Array.isArray(normalizedResult)
           ? (normalizedResult as Record<string, unknown>)
           : undefined;
-      const imageWorkbenchPreviewFromTool = buildImageTaskPreviewFromToolResult({
-        toolId: item.id,
-        toolName: item.tool_name,
-        toolArguments,
-        toolResult: normalizedResultRecord,
-        fallbackPrompt: draft.content,
-      });
+      const imageWorkbenchPreviewFromTool = buildImageTaskPreviewFromToolResult(
+        {
+          toolId: item.id,
+          toolName: item.tool_name,
+          toolArguments,
+          toolResult: normalizedResultRecord,
+          fallbackPrompt: draft.content,
+        },
+      );
       draft.imageWorkbenchPreview = mergeImageWorkbenchPreview(
         draft.imageWorkbenchPreview,
         imageWorkbenchPreviewFromTool || undefined,
@@ -829,7 +831,9 @@ function hydrateSessionDetailMessagesFromThreadItems(
   );
 }
 
-function shouldMergeTimelineProcessMessages(timelineMessages: Message[]): boolean {
+function shouldMergeTimelineProcessMessages(
+  timelineMessages: Message[],
+): boolean {
   if (!hasHistoryAssistantProcessGap(timelineMessages)) {
     return false;
   }
@@ -1240,7 +1244,10 @@ export const mergeAdjacentAssistantMessages = (
       for (const toolCall of currentToolCalls) {
         const existing = toolCallById.get(toolCall.id);
         if (existing) {
-          toolCallById.set(toolCall.id, mergeToolCallStates(existing, toolCall));
+          toolCallById.set(
+            toolCall.id,
+            mergeToolCallStates(existing, toolCall),
+          );
           continue;
         }
         toolCallById.set(toolCall.id, toolCall);
@@ -2050,10 +2057,12 @@ export const mergeHydratedMessagesWithLocalState = (
           message,
         );
       const resolvedContentParts = shouldPreserveLocalVisibleOutput
-        ? mergeHydratedToolStateContentParts(
+        ? (mergeHydratedToolStateContentParts(
             localAssistantMessage?.contentParts,
             contentParts,
-          ) ?? localAssistantMessage?.contentParts ?? contentParts
+          ) ??
+          localAssistantMessage?.contentParts ??
+          contentParts)
         : contentParts;
       const resolvedThinkingContent = shouldPreserveLocalVisibleOutput
         ? (localAssistantMessage?.thinkingContent ??
@@ -2511,6 +2520,11 @@ export const hydrateSessionDetailMessages = (
           const rawErrorText = typeof part.error === "string" ? part.error : "";
           const normalizedOutput = extractLimeToolMetadataBlock(rawOutputText);
           const normalizedError = extractLimeToolMetadataBlock(rawErrorText);
+          const metadata = normalizeToolResultMetadata(
+            part.metadata,
+            rawOutputText,
+            rawErrorText,
+          );
           const normalizedResult = {
             success: part.success !== false,
             output: normalizedOutput.text,
@@ -2518,12 +2532,9 @@ export const hydrateSessionDetailMessages = (
             images: normalizeToolResultImages(
               part.images,
               normalizedOutput.text,
+              metadata,
             ),
-            metadata: normalizeToolResultMetadata(
-              part.metadata,
-              rawOutputText,
-              rawErrorText,
-            ),
+            metadata,
           };
           const success = isToolResultSuccessful(normalizedResult);
           const normalizedResultRecord =

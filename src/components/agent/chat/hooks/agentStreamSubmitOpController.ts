@@ -1,6 +1,7 @@
 import type { AgentUserInputOp } from "@/lib/api/agentProtocol";
 import type { BuildUserInputSubmitOpOptions } from "../utils/buildUserInputSubmitOp";
 import { buildUserInputSubmitOp } from "../utils/buildUserInputSubmitOp";
+import { bindThreadGoalMetadataToSession } from "../utils/harnessRequestMetadata";
 
 type AgentStreamSubmitOpBaseOptions = Omit<
   BuildUserInputSubmitOpOptions,
@@ -25,6 +26,10 @@ export function buildAgentStreamSubmitOp(
 
   return buildUserInputSubmitOp({
     ...submitOpOptions,
+    requestMetadata: bindThreadGoalMetadataToSession(
+      submitOpOptions.requestMetadata,
+      activeSessionId,
+    ),
     sessionId: activeSessionId,
     workspaceId: submitWorkspaceId,
     turnId: requestTurnId,

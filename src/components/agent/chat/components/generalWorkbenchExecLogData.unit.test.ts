@@ -191,7 +191,7 @@ describe("generalWorkbenchExecLogData", () => {
         sourceRef: "content_post_with_cover",
         description: "生成内容主稿，并补齐封面素材。",
         workflowSteps: ["提炼内容主线", "生成封面提示词"],
-        allowedTools: ["查看文件", "图片生成"],
+        allowedTools: ["查看文件", "生成图片"],
         whenToUse: "适合需要主稿与封面同时产出的社媒场景。",
         artifactPaths: ["content-posts/research.md"],
       },

@@ -566,6 +566,14 @@ const WORKBENCH_MOCK_TOOL_SPECS: MockToolSpec[] = [
     input_examples_count: 1,
   },
   {
+    name: "lime_create_audio_generation_task",
+    description: "发起配音生成。",
+    capabilities: ["content_creation"],
+    source: "lime_injected",
+    tags: ["content", "audio", "voice", "task"],
+    input_examples_count: 1,
+  },
+  {
     name: "lime_create_transcription_task",
     description: "创建转写任务。",
     capabilities: ["content_creation"],

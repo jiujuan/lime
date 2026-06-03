@@ -9,6 +9,10 @@ import {
   resolveInputCapabilityDispatch,
   type InputCapabilitySelection,
 } from "../../../skill-selection/inputCapabilitySelection";
+import {
+  buildInputbarModeRequestMetadata,
+  buildInputbarToolPreferencesOverride,
+} from "../utils/inputbarModeRequestMetadata";
 
 interface UseInputbarSendParams {
   input: string;
@@ -16,6 +20,8 @@ interface UseInputbarSendParams {
   pathReferences: MessagePathReference[];
   activeCapability: InputCapabilitySelection | null;
   knowledgePackSelection?: InputbarKnowledgePackSelection | null;
+  activeTools?: Record<string, boolean>;
+  sessionId?: string | null;
   onSend: InputbarSendHandler;
   clearPendingImages: () => void;
   clearPathReferences?: () => void;
@@ -28,6 +34,8 @@ export function useInputbarSend({
   pathReferences,
   activeCapability,
   knowledgePackSelection,
+  activeTools = {},
+  sessionId,
   onSend,
   clearPendingImages,
   clearPathReferences,
@@ -50,7 +58,7 @@ export function useInputbarSend({
       capabilityDispatch.requestMetadata,
       pathReferences,
     );
-    const requestMetadata =
+    const knowledgeRequestMetadata =
       knowledgePackSelection?.enabled &&
       knowledgePackSelection.packName.trim() &&
       knowledgePackSelection.workingDir.trim()
@@ -64,6 +72,19 @@ export function useInputbarSend({
             }),
           }
         : baseRequestMetadata;
+    const inputbarModeState = {
+      goalEnabled: Boolean(activeTools["objective_mode"]),
+      planEnabled: Boolean(activeTools["task_mode"]),
+      source: "inputbar",
+      subagentEnabled: Boolean(activeTools["subagent_mode"]),
+      threadId: sessionId,
+    };
+    const requestMetadata = buildInputbarModeRequestMetadata(
+      knowledgeRequestMetadata,
+      inputbarModeState,
+    );
+    const toolPreferencesOverride =
+      buildInputbarToolPreferencesOverride(inputbarModeState);
     const hasPathReferences = pathReferences.length > 0;
     const textOverride = input.trim()
       ? undefined
@@ -86,6 +107,7 @@ export function useInputbarSend({
                 }
               : {}),
             ...(requestMetadata ? { requestMetadata } : {}),
+            ...(toolPreferencesOverride ? { toolPreferencesOverride } : {}),
           }
         : undefined;
 
@@ -114,11 +136,13 @@ export function useInputbarSend({
     }
   }, [
     activeCapability,
+    activeTools,
     clearActiveCapability,
     clearPendingImages,
     clearPathReferences,
     input,
     knowledgePackSelection,
+    sessionId,
     onSend,
     pendingImages,
     pathReferences,

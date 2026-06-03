@@ -262,6 +262,93 @@ describe("ToolCallDisplay tool search and actions", () => {
     expect(container.textContent).toContain("已删除 cron-job-1");
   });
 
+  it("历史 gated runtime 工具即使当前未注册也应展示可读过程", () => {
+    const { container } = renderToolList({
+      toolCalls: [
+        {
+          id: "tool-config-history-1",
+          name: "ConfigTool",
+          arguments: JSON.stringify({ key: "model" }),
+          status: "completed",
+          result: { success: true, output: "ok" },
+          startTime: new Date("2026-03-20T12:30:00.000Z"),
+          endTime: new Date("2026-03-20T12:30:01.000Z"),
+        },
+        {
+          id: "tool-cron-create-history-1",
+          name: "CronCreateTool",
+          arguments: JSON.stringify({
+            id: "daily-summary",
+            prompt: "整理今天的国际新闻",
+          }),
+          status: "completed",
+          result: { success: true, output: "ok" },
+          startTime: new Date("2026-03-20T12:30:02.000Z"),
+          endTime: new Date("2026-03-20T12:30:03.000Z"),
+        },
+        {
+          id: "tool-remote-trigger-history-1",
+          name: "RemoteTriggerTool",
+          arguments: JSON.stringify({ trigger_id: "remote-news" }),
+          status: "failed",
+          result: {
+            success: false,
+            error:
+              "-32603: -32002: remote trigger runtime is not configured",
+            output: "",
+          },
+          startTime: new Date("2026-03-20T12:30:04.000Z"),
+          endTime: new Date("2026-03-20T12:30:05.000Z"),
+        },
+        {
+          id: "tool-lsp-history-1",
+          name: "LSPTool",
+          arguments: JSON.stringify({
+            operation: "definition",
+            path: "src/main.ts",
+          }),
+          status: "failed",
+          result: {
+            success: false,
+            error: "-32603: -32002: LSP server is not available",
+            output: "",
+          },
+          startTime: new Date("2026-03-20T12:30:06.000Z"),
+          endTime: new Date("2026-03-20T12:30:07.000Z"),
+        },
+        {
+          id: "tool-worktree-history-1",
+          name: "EnterWorktreeTool",
+          arguments: JSON.stringify({}),
+          status: "completed",
+          result: { success: true, output: "ok" },
+          startTime: new Date("2026-03-20T12:30:08.000Z"),
+          endTime: new Date("2026-03-20T12:30:09.000Z"),
+        },
+        {
+          id: "tool-worktree-history-2",
+          name: "ExitWorktreeTool",
+          arguments: JSON.stringify({}),
+          status: "completed",
+          result: { success: true, output: "ok" },
+          startTime: new Date("2026-03-20T12:30:10.000Z"),
+          endTime: new Date("2026-03-20T12:30:11.000Z"),
+        },
+      ],
+    });
+
+    expect(container.textContent).toContain("已调整配置");
+    expect(container.textContent).toContain("已创建 daily-summary");
+    expect(container.textContent).toContain("处理失败 remote-news");
+    expect(container.textContent).toContain("查看失败 main.ts");
+    expect(container.textContent).toContain("已完成 2 个步骤");
+    expect(container.textContent).toContain("EnterWorktreeTool");
+    expect(container.textContent).toContain("ExitWorktreeTool");
+    expect(container.textContent).not.toContain("-32603");
+    expect(container.textContent).not.toContain('"trigger_id"');
+    expect(container.textContent).not.toContain('"operation"');
+  });
+
   it("写文件工具应通过 artifact protocol 解析嵌套产物路径", () => {
     const { container } = renderTool({
       id: "tool-write-nested-1",

@@ -9,6 +9,10 @@ import {
   type ToolCallArgumentValue,
 } from "./toolDisplayInfo";
 import { resolveSearchResultPreviewItemsFromText } from "./searchResultPreview";
+import {
+  isUnifiedWebFetchToolName,
+  isUnifiedWebSearchToolName,
+} from "./toolNameFamily";
 
 export type ToolBatchKind = "exploration" | "browser" | "web_search";
 
@@ -27,6 +31,7 @@ type ToolOperationKind =
   | "web_fetch"
   | "list"
   | "browser"
+  | "mutation"
   | "absorbed"
   | "other";
 
@@ -37,6 +42,7 @@ interface ToolBatchAccumulator {
   webFetchCount: number;
   listCount: number;
   browserCount: number;
+  mutationCount: number;
   webSearchFailedCount: number;
   significantCount: number;
   absorbedCount: number;
@@ -180,20 +186,19 @@ function resolveToolOperationKind(
     return "absorbed";
   }
 
-  if (
-    normalizedName === "websearch" ||
-    normalizedName.includes("websearch") ||
-    normalizedName.includes("web_search")
-  ) {
+  if (normalizedName === "resolvelibraryid") {
+    return "search";
+  }
+
+  if (normalizedName === "querydocs") {
+    return "read";
+  }
+
+  if (isUnifiedWebSearchToolName(descriptor.toolName)) {
     return "web_search";
   }
 
-  if (
-    normalizedName === "webfetch" ||
-    normalizedName.includes("webfetch") ||
-    normalizedName.includes("web_fetch") ||
-    (normalizedName.includes("web") && normalizedName.includes("fetch"))
-  ) {
+  if (isUnifiedWebFetchToolName(descriptor.toolName)) {
     return "web_fetch";
   }
 
@@ -264,6 +269,9 @@ function resolveLatestHint(
           "search",
           "url",
           "href",
+          "libraryName",
+          "library_name",
+          "name",
         ]),
       56,
     );
@@ -272,14 +280,7 @@ function resolveLatestHint(
   if (operationKind === "web_fetch") {
     return shorten(
       descriptor.query ||
-        readString(args, [
-          "query",
-          "q",
-          "pattern",
-          "search",
-          "url",
-          "href",
-        ]),
+        readString(args, ["query", "q", "pattern", "search", "url", "href"]),
       56,
     );
   }
@@ -289,7 +290,20 @@ function resolveLatestHint(
     if (filePath) {
       return shorten(fileNameFromPath(filePath), 48);
     }
-    return shorten(readString(args, ["path", "file_path", "directory"]), 48);
+    return shorten(
+      readString(args, [
+        "path",
+        "file_path",
+        "directory",
+        "query",
+        "q",
+        "libraryId",
+        "library_id",
+        "libraryName",
+        "library_name",
+      ]),
+      48,
+    );
   }
 
   if (operationKind === "browser") {
@@ -319,6 +333,7 @@ function accumulateBatch(entries: ToolLikeDescriptor[]): ToolBatchAccumulator {
     webFetchCount: 0,
     listCount: 0,
     browserCount: 0,
+    mutationCount: 0,
     webSearchFailedCount: 0,
     significantCount: 0,
     absorbedCount: 0,
@@ -361,6 +376,11 @@ function accumulateBatch(entries: ToolLikeDescriptor[]): ToolBatchAccumulator {
       case "browser":
         accumulator.browserCount += 1;
         accumulator.significantCount += 1;
+        break;
+      case "mutation":
+        accumulator.mutationCount += 1;
+        accumulator.significantCount += 1;
+        accumulator.otherCount += 1;
         break;
       case "absorbed":
         accumulator.absorbedCount += 1;
@@ -407,6 +427,7 @@ function buildWebSearchDescriptor(
     webSearchCount,
     listCount,
     browserCount,
+    mutationCount,
     significantCount,
     otherCount,
   } = accumulator;
@@ -415,6 +436,7 @@ function buildWebSearchDescriptor(
     readCount === 0 &&
     listCount === 0 &&
     browserCount === 0 &&
+    mutationCount === 0 &&
     otherCount === 0 &&
     significantCount === webSearchCount + accumulator.webFetchCount;
   if (
@@ -466,6 +488,7 @@ function buildExplorationDescriptor(
     significantCount < 2 ||
     otherCount > 0 ||
     accumulator.browserCount > 0 ||
+    accumulator.mutationCount > 0 ||
     webSearchCount > 0
   ) {
     return null;
@@ -526,7 +549,8 @@ function buildBrowserDescriptor(
     accumulator.readCount > 0 ||
     accumulator.searchCount > 0 ||
     accumulator.webSearchCount > 0 ||
-    accumulator.listCount > 0
+    accumulator.listCount > 0 ||
+    accumulator.mutationCount > 0
   ) {
     return null;
   }
@@ -537,9 +561,7 @@ function buildBrowserDescriptor(
       : [`检查了 ${accumulator.browserCount} 个页面步骤`];
   if (
     accumulator.latestHint &&
-    !supportingLines.some((line) =>
-      line.includes(accumulator.latestHint || ""),
-    )
+    !supportingLines.some((line) => line.includes(accumulator.latestHint || ""))
   ) {
     supportingLines.push(`最近目标：${accumulator.latestHint}`);
   }

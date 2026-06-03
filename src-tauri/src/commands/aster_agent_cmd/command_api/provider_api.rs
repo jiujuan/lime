@@ -73,6 +73,7 @@ pub async fn aster_agent_configure_provider(
         api_key: request.api_key,
         base_url: request.base_url,
         credential_uuid: None,
+        reasoning_effort: None,
         force_responses_api: false,
         toolshim: matches!(
             request.tool_call_strategy,

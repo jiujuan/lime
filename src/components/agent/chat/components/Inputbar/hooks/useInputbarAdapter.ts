@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { createAgentInputAdapter } from "@/components/input-kit";
 import type { MessageImage } from "../../../types";
+import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 
 interface UseInputbarAdapterParams {
   input: string;
@@ -11,6 +12,8 @@ interface UseInputbarAdapterParams {
   setProviderType?: (type: string) => void;
   model?: string;
   setModel?: (model: string) => void;
+  reasoningEffort?: ModelReasoningEffortLevel | "";
+  setReasoningEffort?: (value: ModelReasoningEffortLevel | "") => void;
   handleSend: () => void;
   onStop?: () => void;
   pendingImages: MessageImage[];
@@ -28,6 +31,8 @@ export function useInputbarAdapter({
   setProviderType,
   model,
   setModel,
+  reasoningEffort,
+  setReasoningEffort,
   handleSend,
   onStop,
   pendingImages,
@@ -41,8 +46,10 @@ export function useInputbarAdapter({
         disabled,
         providerType: providerType || "",
         model: model || "",
+        reasoningEffort: reasoningEffort || "",
         setProviderType: setProviderType || NOOP_SET_PROVIDER_TYPE,
         setModel: setModel || NOOP_SET_MODEL,
+        setReasoningEffort,
         send: () => handleSend(),
         stop: onStop,
         attachments: pendingImages,
@@ -56,9 +63,11 @@ export function useInputbarAdapter({
       onStop,
       pendingImages,
       providerType,
+      reasoningEffort,
       setInput,
       setModel,
       setProviderType,
+      setReasoningEffort,
     ],
   );
 }

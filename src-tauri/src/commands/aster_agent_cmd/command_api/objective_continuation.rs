@@ -125,6 +125,7 @@ pub(crate) fn build_objective_continuation_request(
         provider_config: None,
         provider_preference: None,
         model_preference: None,
+        reasoning_effort: None,
         thinking_enabled: None,
         approval_policy: None,
         sandbox_policy: None,

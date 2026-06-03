@@ -50,6 +50,11 @@ const REFERENCE_JS_TOOL_NAME_MAPPINGS = [
   ["PowerShellTool", "powershell"],
   ["ReadMcpResourceTool", "readmcpresource"],
   ["REPLTool", "repl"],
+  ["ListSkills", "listskills"],
+  ["LoadSkill", "loadskill"],
+  ["WaitAgent", "waitagent"],
+  ["ResumeAgent", "resumeagent"],
+  ["CloseAgent", "closeagent"],
   ["RemoteTriggerTool", "remotetrigger"],
   ["ScheduleCronTool", "croncreate"],
   ["SendMessageTool", "sendmessage"],
@@ -104,8 +109,21 @@ describe("toolDisplayInfo", () => {
     expect(resolveToolDisplayLabel("MCPTool")).toBe("MCP 工具");
     expect(resolveToolDisplayLabel("McpAuthTool")).toBe("MCP 授权");
     expect(resolveToolDisplayLabel("REPLTool")).toBe("REPL 执行");
+    expect(resolveToolDisplayLabel("ListSkills")).toBe("技能列表");
+    expect(resolveToolDisplayLabel("LoadSkill")).toBe("技能加载");
+    expect(resolveToolDisplayLabel("WaitAgent")).toBe("查看任务进展");
+    expect(resolveToolDisplayLabel("ResumeAgent")).toBe("继续处理");
+    expect(resolveToolDisplayLabel("CloseAgent")).toBe("暂停处理");
     expect(resolveToolDisplayLabel("EnterWorktreeTool")).toBe("进入工作树");
     expect(resolveToolDisplayLabel("ExitWorktreeTool")).toBe("退出工作树");
+    expect(resolveToolDisplayLabel("SearchQuery")).toBe("网络搜索");
+    expect(resolveToolDisplayLabel("ImageQuery")).toBe("图片搜索");
+    expect(resolveToolDisplayLabel("finance")).toBe("行情查询");
+    expect(resolveToolDisplayLabel("weather")).toBe("天气查询");
+    expect(resolveToolDisplayLabel("sports")).toBe("体育查询");
+    expect(resolveToolDisplayLabel("time")).toBe("时间查询");
+    expect(resolveToolDisplayLabel("ResolveLibraryId")).toBe("库解析");
+    expect(resolveToolDisplayLabel("QueryDocs")).toBe("文档查询");
     expect(resolveToolDisplayLabel("lime_search_web_images")).toBe("联网搜图");
     expect(resolveToolDisplayLabel("AgentTool")).toBe("创建子任务");
     expect(resolveToolDisplayLabel("SendMessageTool")).toBe("补充说明");
@@ -116,6 +134,10 @@ describe("toolDisplayInfo", () => {
     expect(resolveToolDisplayLabel("SyntheticOutputTool")).toBe("最终答复");
     expect(resolveToolDisplayLabel("AgentOutputTool")).toBe("任务输出");
     expect(resolveToolDisplayLabel("BashOutputTool")).toBe("任务输出");
+    expect(resolveToolDisplayLabel("ViewImageTool")).toBe("图片查看");
+    expect(resolveToolDisplayLabel("lime_create_audio_generation_task")).toBe(
+      "配音生成",
+    );
     expect(resolveToolDisplayLabel("lime_create_transcription_task")).toBe(
       "转写",
     );
@@ -125,12 +147,22 @@ describe("toolDisplayInfo", () => {
     expect(resolveToolDisplayLabel("lime_run_service_skill")).toBe(
       "服务技能兼容执行",
     );
+    expect(resolveToolDisplayLabel("social_generate_cover_image")).toBe(
+      "封面图生成",
+    );
     expect(resolveToolDisplayLabel("lime_site_recommend")).toBe("站点能力推荐");
     expect(resolveToolDisplayLabel("mcp__github__search_code")).toBe(
       "MCP 搜索",
     );
+    expect(resolveToolDisplayLabel("mcp__docs__list_pages")).toBe("MCP 列表");
     expect(resolveToolDisplayLabel("mcp__github__get_file_contents")).toBe(
       "MCP 读取",
+    );
+    expect(resolveToolDisplayLabel("mcp__playwright__browser_screenshot")).toBe(
+      "页面截图",
+    );
+    expect(resolveToolDisplayLabel("mcp__github__create_issue")).toBe(
+      "MCP 工具",
     );
   });
 
@@ -150,6 +182,21 @@ describe("toolDisplayInfo", () => {
       "完成 MCP 授权",
     );
     expect(resolveUserFacingToolDisplayLabel("REPLTool")).toBe("运行命令");
+    expect(resolveUserFacingToolDisplayLabel("ListSkills")).toBe("查看技能");
+    expect(resolveUserFacingToolDisplayLabel("LoadSkill")).toBe("加载技能");
+    expect(resolveUserFacingToolDisplayLabel("WaitAgent")).toBe("查看任务进展");
+    expect(resolveUserFacingToolDisplayLabel("ResumeAgent")).toBe("继续处理");
+    expect(resolveUserFacingToolDisplayLabel("CloseAgent")).toBe("暂停处理");
+    expect(resolveUserFacingToolDisplayLabel("SearchQuery")).toBe("搜索网页");
+    expect(resolveUserFacingToolDisplayLabel("ImageQuery")).toBe("搜索图片");
+    expect(resolveUserFacingToolDisplayLabel("finance")).toBe("获取数据");
+    expect(resolveUserFacingToolDisplayLabel("weather")).toBe("获取数据");
+    expect(resolveUserFacingToolDisplayLabel("sports")).toBe("获取数据");
+    expect(resolveUserFacingToolDisplayLabel("time")).toBe("获取数据");
+    expect(resolveUserFacingToolDisplayLabel("ResolveLibraryId")).toBe(
+      "查找内容",
+    );
+    expect(resolveUserFacingToolDisplayLabel("QueryDocs")).toBe("查看文档");
     expect(resolveUserFacingToolDisplayLabel("lime_run_service_skill")).toBe(
       "运行兼容服务技能",
     );
@@ -159,9 +206,18 @@ describe("toolDisplayInfo", () => {
     expect(resolveUserFacingToolDisplayLabel("mcp__github__search_code")).toBe(
       "搜索内容",
     );
+    expect(resolveUserFacingToolDisplayLabel("mcp__docs__list_pages")).toBe(
+      "查看内容",
+    );
     expect(
       resolveUserFacingToolDisplayLabel("mcp__github__get_file_contents"),
     ).toBe("查看内容");
+    expect(
+      resolveUserFacingToolDisplayLabel("mcp__playwright__browser_screenshot"),
+    ).toBe("页面截图");
+    expect(resolveUserFacingToolDisplayLabel("mcp__github__create_issue")).toBe(
+      "调用 MCP 工具",
+    );
     expect(resolveUserFacingToolDisplayLabel("EnterWorktreeTool")).toBe(
       "进入工作树",
     );
@@ -174,6 +230,20 @@ describe("toolDisplayInfo", () => {
     expect(
       resolveUserFacingToolDisplayLabel("mcp__playwright__browser_click"),
     ).toBe("页面点击");
+    expect(resolveUserFacingToolDisplayLabel("ViewImageTool")).toBe("查看图片");
+    expect(
+      resolveUserFacingToolDisplayLabel("lime_create_video_generation_task"),
+    ).toBe("生成视频");
+    expect(
+      resolveUserFacingToolDisplayLabel("lime_create_audio_generation_task"),
+    ).toBe("生成配音");
+    expect(resolveUserFacingToolDisplayLabel("generate_image")).toBe("生成图片");
+    expect(
+      resolveUserFacingToolDisplayLabel("lime_create_image_generation_task"),
+    ).toBe("生成图片");
+    expect(
+      resolveUserFacingToolDisplayLabel("social_generate_cover_image"),
+    ).toBe("生成封面图");
   });
 
   it("应为站点与任务工具提取更贴近主链的主体对象", () => {
@@ -197,6 +267,93 @@ describe("toolDisplayInfo", () => {
     expect(
       getToolDisplayInfo("lime_create_typesetting_task", "running").family,
     ).toBe("task");
+    expect(
+      getToolDisplayInfo("lime_create_audio_generation_task", "completed")
+        .groupTitle,
+    ).toBe("内容任务");
+    expect(
+      getToolDisplayInfo("lime_create_audio_generation_task", "completed")
+        .action,
+    ).toBe("已发起");
+  });
+
+  it("应为外部信息与结构化数据工具提取主体对象", () => {
+    expect(
+      resolveToolPrimarySubject(
+        "SearchQuery",
+        { q: "2026-06-03 international news" },
+        null,
+      ),
+    ).toBe("2026-06-03 international news");
+    expect(
+      resolveToolPrimarySubject(
+        "ImageQuery",
+        { query: "product screenshot" },
+        null,
+      ),
+    ).toBe("product screenshot");
+    expect(resolveToolPrimarySubject("finance", { ticker: "AAPL" }, null)).toBe(
+      "AAPL",
+    );
+    expect(
+      resolveToolPrimarySubject("weather", { location: "Tokyo" }, null),
+    ).toBe("Tokyo");
+    expect(
+      resolveToolPrimarySubject("sports", { team: "GSW", league: "nba" }, null),
+    ).toBe("GSW");
+    expect(
+      resolveToolPrimarySubject("time", { utc_offset: "+09:00" }, null),
+    ).toBe("+09:00");
+    expect(
+      resolveToolPrimarySubject(
+        "ResolveLibraryId",
+        { libraryName: "Next.js" },
+        null,
+      ),
+    ).toBe("Next.js");
+    expect(
+      resolveToolPrimarySubject(
+        "QueryDocs",
+        { query: "React useEffect cleanup" },
+        null,
+      ),
+    ).toBe("React useEffect cleanup");
+  });
+
+  it("应为 MCP resource 与动态 MCP 工具提取用户可读主体对象", () => {
+    expect(
+      resolveToolPrimarySubject(
+        "ListMcpResourcesTool",
+        { server: "docs" },
+        null,
+      ),
+    ).toBe("docs");
+    expect(
+      resolveToolPrimarySubject(
+        "ReadMcpResourceTool",
+        { server: "docs", uri: "file:///guide.md" },
+        null,
+      ),
+    ).toBe("file:///guide.md");
+    expect(
+      resolveToolPrimarySubject(
+        "mcp__github__create_issue",
+        { title: "修复工具渲染" },
+        null,
+      ),
+    ).toBe("修复工具渲染");
+    expect(
+      resolveToolPrimarySubject("LoadSkill", { name: "browser" }, null),
+    ).toBe("browser");
+    expect(
+      resolveToolPrimarySubject("WaitAgent", { id: "agent-1" }, null),
+    ).toBe("agent-1");
+    expect(
+      resolveToolPrimarySubject("ResumeAgent", { session_id: "agent-2" }, null),
+    ).toBe("agent-2");
+    expect(
+      resolveToolPrimarySubject("CloseAgent", { ids: ["agent-3"] }, null),
+    ).toBe("agent-3");
   });
 
   it("应隐藏 ToolSearch 中的内部协议查询词", () => {
@@ -277,5 +434,126 @@ describe("toolDisplayInfo", () => {
         },
       ]),
     ).toBe("已处理 2 项安排");
+  });
+
+  it("应为图片查看批次生成查看语义标题", () => {
+    expect(
+      buildToolGroupHeadline([
+        {
+          id: "tool-view-image-1",
+          name: "ViewImageTool",
+          arguments: JSON.stringify({ path: "assets/sample.png" }),
+          status: "completed",
+          result: { success: true, output: "Viewed image: assets/sample.png" },
+          startTime: new Date("2026-04-13T00:00:00.000Z"),
+          endTime: new Date("2026-04-13T00:00:01.000Z"),
+        },
+      ]),
+    ).toBe("已查看 1 张图片");
+  });
+
+  it("应为内容工作台批次生成发起和生成语义标题", () => {
+    expect(
+      buildToolGroupHeadline([
+        {
+          id: "tool-video-1",
+          name: "lime_create_video_generation_task",
+          arguments: JSON.stringify({ prompt: "产品演示短片" }),
+          status: "completed",
+          result: { success: true, output: "{}" },
+          startTime: new Date("2026-04-13T00:00:00.000Z"),
+          endTime: new Date("2026-04-13T00:00:01.000Z"),
+        },
+      ]),
+    ).toBe("已发起视频生成");
+
+    expect(
+      buildToolGroupHeadline([
+        {
+          id: "tool-audio-1",
+          name: "lime_create_audio_generation_task",
+          arguments: JSON.stringify({ prompt: "播客旁白" }),
+          status: "completed",
+          result: { success: true, output: "{}" },
+          startTime: new Date("2026-04-13T00:00:00.000Z"),
+          endTime: new Date("2026-04-13T00:00:01.000Z"),
+        },
+        {
+          id: "tool-resource-1",
+          name: "lime_create_modal_resource_search_task",
+          arguments: JSON.stringify({ query: "科技 BGM" }),
+          status: "completed",
+          result: { success: true, output: "{}" },
+          startTime: new Date("2026-04-13T00:00:02.000Z"),
+          endTime: new Date("2026-04-13T00:00:03.000Z"),
+        },
+      ]),
+    ).toBe("已发起 2 个内容任务");
+
+    expect(
+      buildToolGroupHeadline([
+        {
+          id: "tool-cover-1",
+          name: "social_generate_cover_image",
+          arguments: JSON.stringify({ subject: "开发 Lime 的经验" }),
+          status: "completed",
+          result: { success: true, output: "{}" },
+          startTime: new Date("2026-04-13T00:00:04.000Z"),
+          endTime: new Date("2026-04-13T00:00:05.000Z"),
+        },
+      ]),
+    ).toBe("已生成封面图");
+  });
+
+  it("应按站点工具族生成批次标题，不依赖展示分组中文", () => {
+    expect(
+      buildToolGroupHeadline([
+        {
+          id: "tool-site-search-1",
+          name: "lime_site_search",
+          arguments: JSON.stringify({ query: "GitHub issue 搜索" }),
+          status: "completed",
+          result: { success: true, output: "{}" },
+          startTime: new Date("2026-04-13T00:00:00.000Z"),
+          endTime: new Date("2026-04-13T00:00:01.000Z"),
+        },
+      ]),
+    ).toBe("已搜索站点能力");
+
+    expect(
+      buildToolGroupHeadline([
+        {
+          id: "tool-site-list-1",
+          name: "lime_site_list",
+          arguments: JSON.stringify({}),
+          status: "running",
+          result: { success: true, output: "{}" },
+          startTime: new Date("2026-04-13T00:00:02.000Z"),
+        },
+      ]),
+    ).toBe("站点浏览中");
+
+    expect(
+      buildToolGroupHeadline([
+        {
+          id: "tool-site-run-1",
+          name: "lime_site_run",
+          arguments: JSON.stringify({ adapter_name: "github/search" }),
+          status: "completed",
+          result: { success: true, output: "{}" },
+          startTime: new Date("2026-04-13T00:00:03.000Z"),
+          endTime: new Date("2026-04-13T00:00:04.000Z"),
+        },
+        {
+          id: "tool-site-info-1",
+          name: "lime_site_info",
+          arguments: JSON.stringify({ adapter_name: "github/search" }),
+          status: "completed",
+          result: { success: true, output: "{}" },
+          startTime: new Date("2026-04-13T00:00:05.000Z"),
+          endTime: new Date("2026-04-13T00:00:06.000Z"),
+        },
+      ]),
+    ).toBe("已完成 2 项站点操作");
   });
 });

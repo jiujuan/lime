@@ -19,6 +19,7 @@ const INVOKE_TIMEOUT_CEILING_MS = 180_000;
 const INVOKE_RETRY_COUNT = 10;
 const INVOKE_RETRY_DELAY_MS = 1_000;
 const DEFAULT_ACTION_TIMEOUT_MS = 45_000;
+const DEFAULT_NAVIGATION_TIMEOUT_MS = 120_000;
 const POST_HEALTH_SETTLE_MS = 1_000;
 const ONBOARDING_VERSION = "1.1.0";
 
@@ -252,6 +253,10 @@ function logStage(label) {
   console.log(`[smoke:knowledge-gui] stage=${label}`);
 }
 
+function navigationTimeoutMs(options) {
+  return Math.min(options.timeoutMs, DEFAULT_NAVIGATION_TIMEOUT_MS);
+}
+
 async function exportI18nPatchMetrics(page, outputPath) {
   if (!outputPath) {
     return;
@@ -461,17 +466,41 @@ async function assertNoUserFacingInternalText(page, label) {
   }
 }
 
-async function clickPageControl(page, { text, ariaLabel, index = 0 }) {
+async function clickPageControl(
+  page,
+  { text, ariaLabel, index = 0, force = false },
+) {
   const locator = ariaLabel
-    ? page.getByRole("button", { name: ariaLabel }).nth(index)
+    ? page.getByRole("button", { name: ariaLabel, exact: true }).nth(index)
     : page
         .locator("button, [role='button'], a")
         .filter({ hasText: text })
         .nth(index);
 
   try {
+    await locator.waitFor({
+      state: "visible",
+      timeout: DEFAULT_ACTION_TIMEOUT_MS,
+    });
+    await locator.scrollIntoViewIfNeeded({
+      timeout: DEFAULT_ACTION_TIMEOUT_MS,
+    });
     await locator.click({ timeout: DEFAULT_ACTION_TIMEOUT_MS });
   } catch (error) {
+    let clickError = error;
+    if (force) {
+      try {
+        await locator.click({
+          timeout: DEFAULT_ACTION_TIMEOUT_MS,
+          force: true,
+        });
+        return;
+      } catch (forceError) {
+        clickError = forceError;
+      }
+    }
+    const errorMessage =
+      clickError instanceof Error ? clickError.message : String(clickError);
     const pageText = await page
       .locator("body")
       .innerText()
@@ -483,6 +512,15 @@ async function clickPageControl(page, { text, ariaLabel, index = 0 }) {
           text: (item.textContent || "").trim().replace(/\s+/g, " "),
           aria: item.getAttribute("aria-label"),
           title: item.getAttribute("title"),
+          rect: (() => {
+            const rect = item.getBoundingClientRect();
+            return {
+              x: Math.round(rect.x),
+              y: Math.round(rect.y),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height),
+            };
+          })(),
           disabled:
             item instanceof HTMLButtonElement ? item.disabled : undefined,
         })),
@@ -493,53 +531,138 @@ async function clickPageControl(page, { text, ariaLabel, index = 0 }) {
         text,
         ariaLabel,
         index,
+        force,
+        error: errorMessage,
         buttons,
+        pageTextPreview: pageText.slice(0, 2_000),
       })}`,
-      { cause: error },
+      { cause: clickError },
     );
   }
 }
 
-async function waitForInputbarKnowledgePackToggle(page, label, timeoutMs) {
-  const locator = page.locator(
-    '[data-testid="inputbar-knowledge-pack-toggle"]',
-  );
+async function clickInputbarKnowledgeEntry(page, label, timeoutMs) {
+  const boundedTimeoutMs = Math.min(timeoutMs, DEFAULT_ACTION_TIMEOUT_MS);
+  const startedAt = Date.now();
+  const entryTestIds = [
+    "inputbar-knowledge-pack-toggle",
+    "inputbar-knowledge-organize",
+  ];
+  const clickErrors = [];
 
-  try {
-    await locator.first().waitFor({ state: "visible", timeout: timeoutMs });
-  } catch (error) {
-    const pageText = await page
-      .locator("body")
-      .innerText()
-      .catch(() => "");
-    const knowledgeControls = await page
-      .locator("[data-testid^='inputbar-knowledge-']")
-      .evaluateAll((items) =>
-        items.slice(0, 40).map((item) => ({
-          testId: item.getAttribute("data-testid"),
-          text: (item.textContent || "").trim().replace(/\s+/g, " "),
-          aria: item.getAttribute("aria-label"),
-          title: item.getAttribute("title"),
-        })),
-      )
-      .catch(() => []);
-    throw new Error(
-      `[smoke:knowledge-gui] ${label} 等待默认项目资料控件失败 ${JSON.stringify(
-        {
-          knowledgeControls,
-        },
-      )}，页面文本预览: ${pageText.slice(0, 2_000)}`,
-      { cause: error },
-    );
+  async function clickVisibleTestId(testId) {
+    const locator = page.locator(`[data-testid="${testId}"]`);
+    const count = await locator.count().catch(() => 0);
+    for (let index = 0; index < Math.min(count, 4); index += 1) {
+      const target = locator.nth(index);
+      const visible = await target
+        .isVisible({ timeout: 250 })
+        .catch(() => false);
+      if (!visible) {
+        continue;
+      }
+      try {
+        await target.scrollIntoViewIfNeeded({ timeout: 1_000 });
+        await target.click({ timeout: 1_000 });
+        return { testId, index };
+      } catch (error) {
+        clickErrors.push({
+          testId,
+          index,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return null;
   }
+
+  while (Date.now() - startedAt < boundedTimeoutMs) {
+    const existingHubVisible = await page
+      .locator('[data-testid="inputbar-knowledge-hub"]')
+      .first()
+      .isVisible({ timeout: 100 })
+      .catch(() => false);
+    if (existingHubVisible) {
+      return "inputbar-knowledge-hub";
+    }
+
+    for (const testId of entryTestIds) {
+      const clicked = await clickVisibleTestId(testId);
+      if (clicked) {
+        return clicked.testId;
+      }
+    }
+
+    const plusClicked = await clickVisibleTestId("inputbar-plus-trigger");
+    if (plusClicked) {
+      const knowledgeClicked = await clickVisibleTestId(
+        "inputbar-plus-knowledge",
+      );
+      if (knowledgeClicked) {
+        return knowledgeClicked.testId;
+      }
+    }
+
+    await sleep(250);
+  }
+
+  const pageText = await page
+    .locator("body")
+    .innerText()
+    .catch(() => "");
+  const knowledgeControls = await page
+    .locator("[data-testid^='inputbar-knowledge-']")
+    .evaluateAll((items) =>
+      items.slice(0, 40).map((item) => ({
+        testId: item.getAttribute("data-testid"),
+        text: (item.textContent || "").trim().replace(/\s+/g, " "),
+        aria: item.getAttribute("aria-label"),
+        title: item.getAttribute("title"),
+        disabled: item instanceof HTMLButtonElement ? item.disabled : undefined,
+      })),
+    )
+    .catch(() => []);
+  const plusControls = await page
+    .locator("[data-testid^='inputbar-plus-']")
+    .evaluateAll((items) =>
+      items.slice(0, 40).map((item) => ({
+        testId: item.getAttribute("data-testid"),
+        text: (item.textContent || "").trim().replace(/\s+/g, " "),
+        aria: item.getAttribute("aria-label"),
+        title: item.getAttribute("title"),
+        disabled: item instanceof HTMLButtonElement ? item.disabled : undefined,
+      })),
+    )
+    .catch(() => []);
+  throw new Error(
+    `[smoke:knowledge-gui] ${label} 等待项目资料入口失败 ${JSON.stringify({
+      knowledgeControls,
+      plusControls,
+      clickErrors: clickErrors.slice(-8),
+    })}，页面文本预览: ${pageText.slice(0, 2_000)}`,
+  );
 }
 
 async function clickTestId(page, { testId, label }) {
   const locator = page.locator(`[data-testid="${testId}"]`).first();
 
   try {
+    await locator.waitFor({
+      state: "visible",
+      timeout: DEFAULT_ACTION_TIMEOUT_MS,
+    });
+    await locator.scrollIntoViewIfNeeded({
+      timeout: DEFAULT_ACTION_TIMEOUT_MS,
+    });
+    const enabled = await locator
+      .isEnabled({ timeout: DEFAULT_ACTION_TIMEOUT_MS })
+      .catch(() => false);
+    if (!enabled) {
+      throw new Error("target control is not enabled");
+    }
     await locator.click({ timeout: DEFAULT_ACTION_TIMEOUT_MS });
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     const pageText = await page
       .locator("body")
       .innerText()
@@ -558,6 +681,7 @@ async function clickTestId(page, { testId, label }) {
     throw new Error(
       `[smoke:knowledge-gui] ${label} 点击失败 ${JSON.stringify({
         testId,
+        error: errorMessage,
         candidates,
       })}，页面文本预览: ${pageText.slice(0, 2_000)}`,
       { cause: error },
@@ -566,11 +690,12 @@ async function clickTestId(page, { testId, label }) {
 }
 
 async function waitForInputbarKnowledgeHub(page, label, timeoutMs) {
+  const boundedTimeoutMs = Math.min(timeoutMs, DEFAULT_ACTION_TIMEOUT_MS);
   try {
     await page
       .locator('[data-testid="inputbar-knowledge-hub"]')
       .first()
-      .waitFor({ state: "visible", timeout: timeoutMs });
+      .waitFor({ state: "visible", timeout: boundedTimeoutMs });
   } catch (error) {
     const pageText = await page
       .locator("body")
@@ -594,6 +719,54 @@ async function waitForInputbarKnowledgeHub(page, label, timeoutMs) {
       { cause: error },
     );
   }
+}
+
+async function closeInputbarPlusMenuIfOpen(page) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const menuVisible = await page
+      .locator('[data-testid="inputbar-plus-menu"]')
+      .first()
+      .isVisible({ timeout: 200 })
+      .catch(() => false);
+    const hubVisible = await page
+      .locator('[data-testid="inputbar-knowledge-hub"]')
+      .first()
+      .isVisible({ timeout: 200 })
+      .catch(() => false);
+    if (!menuVisible && !hubVisible) {
+      return;
+    }
+
+    await page.keyboard.press("Escape").catch(() => undefined);
+    await page.mouse.click(300, 20).catch(() => undefined);
+    await page
+      .locator('[data-testid="inputbar-plus-menu"]')
+      .first()
+      .waitFor({ state: "hidden", timeout: 1_500 })
+      .catch(() => undefined);
+    await page
+      .locator('[data-testid="inputbar-knowledge-hub"]')
+      .first()
+      .waitFor({ state: "hidden", timeout: 1_500 })
+      .catch(() => undefined);
+  }
+}
+
+async function assertInputbarKnowledgeHubText(page, label, needles, timeoutMs) {
+  await closeInputbarPlusMenuIfOpen(page);
+  await clickInputbarKnowledgeEntry(page, label, timeoutMs);
+  await waitForInputbarKnowledgeHub(page, label, timeoutMs);
+  const hub = page.locator('[data-testid="inputbar-knowledge-hub"]').first();
+  const text = await hub.innerText({ timeout: DEFAULT_ACTION_TIMEOUT_MS });
+  const missing = needles.filter((needle) => !text.includes(needle));
+  if (missing.length > 0) {
+    throw new Error(
+      `[smoke:knowledge-gui] ${label} 验收失败，缺少 ${JSON.stringify(
+        missing,
+      )}，资料浮层文本预览: ${text.slice(0, 2_000)}`,
+    );
+  }
+  await closeInputbarPlusMenuIfOpen(page);
 }
 
 async function waitForNotificationToastsToSettle(page) {
@@ -746,9 +919,15 @@ async function syncSmokeProjectStorage(page, options) {
 }
 
 async function restoreKnowledgeOverview(page, options, label) {
-  await page.goto(options.appUrl, { waitUntil: "domcontentloaded" });
+  await page.goto(options.appUrl, {
+    timeout: navigationTimeoutMs(options),
+    waitUntil: "domcontentloaded",
+  });
   await syncSmokeProjectStorage(page, options);
-  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.reload({
+    timeout: navigationTimeoutMs(options),
+    waitUntil: "domcontentloaded",
+  });
   await waitForPageText(
     page,
     `${label} 首页恢复`,
@@ -1106,6 +1285,8 @@ async function runPlaywrightGuiFlow(options) {
   }
 
   const page = context.pages()[0] ?? (await context.newPage());
+  page.setDefaultTimeout(DEFAULT_ACTION_TIMEOUT_MS);
+  page.setDefaultNavigationTimeout(navigationTimeoutMs(options));
   const consoleErrors = [];
   let offlineBuilderCompileInterceptCount = 0;
 
@@ -1141,9 +1322,15 @@ async function runPlaywrightGuiFlow(options) {
 
   try {
     logStage("open-playwright-page");
-    await page.goto(options.appUrl, { waitUntil: "domcontentloaded" });
+    await page.goto(options.appUrl, {
+      timeout: navigationTimeoutMs(options),
+      waitUntil: "domcontentloaded",
+    });
     await syncSmokeProjectStorage(page, options);
-    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.reload({
+      timeout: navigationTimeoutMs(options),
+      waitUntil: "domcontentloaded",
+    });
 
     logStage("wait-home");
     await waitForPageText(
@@ -1154,15 +1341,11 @@ async function runPlaywrightGuiFlow(options) {
     );
 
     logStage("open-home-knowledge-hub");
-    await waitForInputbarKnowledgePackToggle(
+    await clickInputbarKnowledgeEntry(
       page,
-      "首页默认项目资料控件加载",
+      "首页项目资料入口",
       options.timeoutMs,
     );
-    await clickTestId(page, {
-      testId: "entry-home-knowledge-import",
-      label: "首页添加资料入口",
-    });
     await waitForInputbarKnowledgeHub(
       page,
       "首页添加资料入口打开浮层",
@@ -1291,7 +1474,13 @@ async function runPlaywrightGuiFlow(options) {
       await waitForPageText(
         page,
         "Agent 页面加载",
-        [`资料：${DEFAULT_PACK.title}`, "+2", "请基于当前项目资料创作内容"],
+        ["请基于当前项目资料创作内容"],
+        options.timeoutMs,
+      );
+      await assertInputbarKnowledgeHubText(
+        page,
+        "Agent 输入框资料浮层",
+        [DEFAULT_PACK.title, SECONDARY_PACK.title, PERSONA_PACK.title],
         options.timeoutMs,
       );
     } catch (error) {
@@ -1317,16 +1506,18 @@ async function runPlaywrightGuiFlow(options) {
     await waitForPageText(
       page,
       "Agent 结果样本加载",
-      [
-        `资料：${DEFAULT_PACK.title}`,
-        "保存到项目资料",
-        "事实：该结果来自当前 Agent 对话",
-      ],
+      ["保存到项目资料", "事实：该结果来自当前 Agent 对话"],
+      options.timeoutMs,
+    );
+    await assertInputbarKnowledgeHubText(
+      page,
+      "Agent 结果输入框资料浮层",
+      [DEFAULT_PACK.title],
       options.timeoutMs,
     );
 
     logStage("capture-agent-result");
-    await clickPageControl(page, { ariaLabel: "保存到项目资料" });
+    await clickPageControl(page, { ariaLabel: "保存到项目资料", force: true });
 
     logStage("wait-agent-result-save-page");
     await waitForPageText(

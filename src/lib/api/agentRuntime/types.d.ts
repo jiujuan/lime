@@ -1068,6 +1068,7 @@ export interface AgentTurnConfigSnapshot {
   provider_config?: AsterProviderConfig;
   provider_preference?: string;
   model_preference?: string;
+  reasoning_effort?: string;
   thinking_enabled?: boolean;
   approval_policy?: AsterApprovalPolicy;
   sandbox_policy?: AsterSandboxPolicy;

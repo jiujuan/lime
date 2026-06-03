@@ -404,7 +404,7 @@ describe("workspaceServiceSkillEntryActionsViewModel", () => {
     expect(prioritized.map((workspace) => workspace.id)).toEqual([
       "project-new",
       "project-general",
-      "project-video",
+      "project-temporary",
     ]);
     expect(prioritized[0]).toEqual(
       buildFallbackAutomationWorkspace("project-new", "video"),

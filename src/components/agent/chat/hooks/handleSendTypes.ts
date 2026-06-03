@@ -20,6 +20,7 @@ export interface HandleSendOptions {
   capabilityRoute?: InputCapabilitySendRoute;
   providerOverride?: string;
   modelOverride?: string;
+  reasoningEffort?: string;
   systemPromptOverride?: string;
   searchMode?: AgentRuntimeWebSearchMode;
   assistantDraft?: AssistantDraftState;

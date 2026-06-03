@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { limeI18nResources } from "@/i18n/createI18n";
+import { SUPPORTED_LOCALES } from "@/i18n/locales";
 import type { Message } from "../types";
 import {
   AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_MESSAGE,
@@ -15,10 +17,26 @@ import {
 } from "./agentStreamCompletionController";
 
 describe("agentStreamCompletionController", () => {
+  it("空 final 文案应覆盖所有 current locale", () => {
+    for (const locale of SUPPORTED_LOCALES) {
+      expect(limeI18nResources[locale].agent).toHaveProperty(
+        "agentChat.emptyFinalReply.errorMessage",
+      );
+      expect(limeI18nResources[locale].agent).toHaveProperty(
+        "agentChat.emptyFinalReply.fallbackContent",
+      );
+    }
+  });
+
   it("应识别空最终回复错误", () => {
     expect(
       isAgentStreamEmptyFinalReplyError(
         `runtime error: ${AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_MESSAGE}`,
+      ),
+    ).toBe(true);
+    expect(
+      isAgentStreamEmptyFinalReplyError(
+        "The model did not produce a final response. Try again.",
       ),
     ).toBe(true);
     expect(isAgentStreamEmptyFinalReplyError("普通错误")).toBe(false);

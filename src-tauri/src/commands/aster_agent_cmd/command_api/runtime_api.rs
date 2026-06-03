@@ -1463,6 +1463,7 @@ pub async fn agent_runtime_get_tool_inventory(
                 mcp_server_names,
                 mcp_tools,
                 registry_definitions: Vec::new(),
+                resource_helpers_supported: false,
                 current_surface_tool_names: Vec::new(),
                 extension_configs: Vec::new(),
                 visible_extension_tools: Vec::new(),
@@ -1482,6 +1483,7 @@ pub async fn agent_runtime_get_tool_inventory(
             mcp_server_names,
             mcp_tools,
             registry_definitions: Vec::new(),
+            resource_helpers_supported: false,
             current_surface_tool_names: Vec::new(),
             extension_configs: Vec::new(),
             visible_extension_tools: Vec::new(),
@@ -1505,6 +1507,7 @@ pub async fn agent_runtime_get_tool_inventory(
                 mcp_server_names,
                 mcp_tools,
                 registry_definitions: Vec::new(),
+                resource_helpers_supported: false,
                 current_surface_tool_names: Vec::new(),
                 extension_configs: Vec::new(),
                 visible_extension_tools: Vec::new(),
@@ -1533,6 +1536,21 @@ pub async fn agent_runtime_get_tool_inventory(
 
     let extension_configs = agent.get_extension_configs().await;
     let extension_manager = agent.extension_manager.clone();
+    let resource_helpers_supported = match tokio::time::timeout(
+        TOOL_INVENTORY_AUX_TIMEOUT,
+        extension_manager.supports_resources(),
+    )
+    .await
+    {
+        Ok(supported) => supported,
+        Err(_) => {
+            warnings.push(
+                "读取 MCP resource capability 超时，resource helper 已按不可见处理"
+                    .to_string(),
+            );
+            false
+        }
+    };
     let visible_extension_tools = match tokio::time::timeout(
         TOOL_INVENTORY_AUX_TIMEOUT,
         extension_manager.get_prefixed_tools(None),
@@ -1588,6 +1606,7 @@ pub async fn agent_runtime_get_tool_inventory(
         mcp_server_names,
         mcp_tools,
         registry_definitions,
+        resource_helpers_supported,
         current_surface_tool_names,
         extension_configs,
         visible_extension_tools,

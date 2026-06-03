@@ -18,7 +18,7 @@ function createStateSetter<T>(getValue: () => T, setValue: (value: T) => void) {
   };
 }
 
-describe("agentStreamSubmitDraft", () => {
+describe("agentStreamSubmitDraft browser paint boundary", () => {
   afterEach(() => {
     clearAgentUiPerformanceMetrics();
     vi.restoreAllMocks();

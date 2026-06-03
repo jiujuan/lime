@@ -126,6 +126,8 @@ pub struct ProviderConfig {
     pub base_url: Option<String>,
     /// 凭证 UUID（来自 API Key Provider，用于记录使用和健康状态）
     pub credential_uuid: Option<String>,
+    /// 当前回合显式推理强度（仅在上游 /models 接口声明支持时由前端传入）
+    pub reasoning_effort: Option<String>,
     /// 是否强制 OpenAI provider 使用 Responses API
     pub force_responses_api: bool,
     /// 当前回合是否需要用 toolshim 兼容无原生 tools 的模型
@@ -303,6 +305,7 @@ impl AsterAgentState {
                 .credential_uuid
                 .clone()
                 .unwrap_or_else(|| format!("manual:{session_id}")),
+            reasoning_effort: config.reasoning_effort.clone(),
             force_responses_api: config.force_responses_api,
             toolshim: config.toolshim,
             toolshim_model: config.toolshim_model.clone(),
@@ -351,16 +354,18 @@ impl AsterAgentState {
         provider_type: &str,
         model: &str,
         session_id: &str,
+        reasoning_effort: Option<String>,
     ) -> Result<AsterProviderConfig, String> {
         // 确保 Agent 已初始化（使用带数据库的版本）
         self.init_agent_with_db(db).await?;
 
         // 从 API Key Provider 选择凭证并获取配置
-        let aster_config = self
+        let mut aster_config = self
             .credential_bridge
             .select_and_configure(db, provider_type, model)
             .await
             .map_err(|e| format!("从 API Key Provider 选择凭证失败: {e}"))?;
+        aster_config.reasoning_effort = reasoning_effort;
 
         // 创建 Provider
         let provider = create_aster_provider(&aster_config)
@@ -384,6 +389,7 @@ impl AsterAgentState {
             api_key: aster_config.api_key.clone(),
             base_url: aster_config.base_url.clone(),
             credential_uuid: Some(aster_config.credential_uuid.clone()),
+            reasoning_effort: aster_config.reasoning_effort.clone(),
             force_responses_api: aster_config.force_responses_api,
             toolshim: aster_config.toolshim,
             toolshim_model: aster_config.toolshim_model.clone(),
@@ -853,6 +859,7 @@ mod tests {
             api_key: None,
             base_url: None,
             credential_uuid: None,
+            reasoning_effort: None,
             force_responses_api: false,
             toolshim: false,
             toolshim_model: None,
@@ -877,6 +884,7 @@ mod tests {
             api_key: None,
             base_url: None,
             credential_uuid: None,
+            reasoning_effort: None,
             force_responses_api: true,
             toolshim: false,
             toolshim_model: None,
@@ -901,6 +909,7 @@ mod tests {
             api_key: None,
             base_url: None,
             credential_uuid: None,
+            reasoning_effort: None,
             force_responses_api: false,
             toolshim: false,
             toolshim_model: None,

@@ -20,6 +20,14 @@ export type HomeSurfaceCopyKey =
   | "agentChat.home.composer.fileManager.open"
   | "agentChat.home.composer.fileManager.close"
   | "agentChat.home.composer.creationMode.label"
+  | "agentChat.inputbar.plusMenu.open"
+  | "agentChat.inputbar.plusMenu.addFiles"
+  | "agentChat.inputbar.plusMenu.attachKnowledge"
+  | "agentChat.inputbar.plusMenu.planMode"
+  | "agentChat.inputbar.tools.subagent.label"
+  | "agentChat.inputbar.plusMenu.objective"
+  | "agentChat.inputbar.plusMenu.skills"
+  | "agentChat.inputbar.plusMenu.unavailable"
   | "agentChat.home.hero.eyebrow"
   | "agentChat.home.hero.slogan"
   | "agentChat.home.hero.description"
@@ -174,6 +182,16 @@ export interface HomeSurfaceComposerCopy {
     open: string;
     close: string;
   };
+  plusMenu: {
+    open: string;
+    addFiles: string;
+    attachKnowledge: string;
+    planMode: string;
+    subagent: string;
+    objective: string;
+    skills: string;
+    unavailable: string;
+  };
   creationMode: {
     label: string;
   };
@@ -253,6 +271,16 @@ export function buildHomeSurfaceCopy(
       fileManager: {
         open: translate("agentChat.home.composer.fileManager.open"),
         close: translate("agentChat.home.composer.fileManager.close"),
+      },
+      plusMenu: {
+        open: translate("agentChat.inputbar.plusMenu.open"),
+        addFiles: translate("agentChat.inputbar.plusMenu.addFiles"),
+        attachKnowledge: translate("agentChat.inputbar.plusMenu.attachKnowledge"),
+        planMode: translate("agentChat.inputbar.plusMenu.planMode"),
+        subagent: translate("agentChat.inputbar.tools.subagent.label"),
+        objective: translate("agentChat.inputbar.plusMenu.objective"),
+        skills: translate("agentChat.inputbar.plusMenu.skills"),
+        unavailable: translate("agentChat.inputbar.plusMenu.unavailable"),
       },
       creationMode: {
         label: translate("agentChat.home.composer.creationMode.label"),

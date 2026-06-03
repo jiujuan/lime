@@ -1,8 +1,72 @@
+const nowSeconds = () => Math.floor(Date.now() / 1000);
+
+const getPreviewUpdateMode = () => {
+  if (typeof window === "undefined") {
+    return "none";
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const mode =
+    params.get("lime_mock_update") ?? params.get("mock_update") ?? "none";
+
+  if (mode === "1" || mode === "true" || mode === "available") {
+    return "available";
+  }
+
+  if (mode === "downloading") {
+    return "downloading";
+  }
+
+  return "none";
+};
+
+const idleInstallSession = () => {
+  const now = nowSeconds();
+  return {
+    sessionId: "idle",
+    stage: "idle",
+    currentVersion: "1.26.0",
+    latestVersion: null,
+    downloadUrl: "https://github.com/limecloud/lime/releases",
+    downloadedBytes: 0,
+    totalBytes: null,
+    percent: 0,
+    message: "尚未开始更新",
+    error: null,
+    startedAt: now,
+    updatedAt: now,
+    completedAt: null,
+    canCloseWindow: true,
+    isActive: false,
+  };
+};
+
+const downloadingInstallSession = () => {
+  const now = nowSeconds();
+  return {
+    sessionId: "mock-update-session",
+    stage: "downloading",
+    currentVersion: "1.26.0",
+    latestVersion: "1.27.0",
+    downloadUrl: "https://github.com/limecloud/lime/releases",
+    downloadedBytes: 52_428_800,
+    totalBytes: 104_857_600,
+    percent: 0.5,
+    message: "正在下载更新",
+    error: null,
+    startedAt: now,
+    updatedAt: now,
+    completedAt: null,
+    canCloseWindow: true,
+    isActive: true,
+  };
+};
+
 export const updateMocks: Record<string, (args?: any) => any> = {
   check_update: () => ({
     current_version: "1.26.0",
-    latest_version: null,
-    has_update: false,
+    latest_version: getPreviewUpdateMode() === "none" ? null : "1.27.0",
+    has_update: getPreviewUpdateMode() !== "none",
     download_url: "https://github.com/limecloud/lime/releases",
     release_notes_url: "https://github.com/limecloud/lime/releases",
     release_notes: null,
@@ -12,8 +76,8 @@ export const updateMocks: Record<string, (args?: any) => any> = {
   }),
   check_for_updates: () => ({
     current: "1.26.0",
-    latest: null,
-    hasUpdate: false,
+    latest: getPreviewUpdateMode() === "none" ? null : "1.27.0",
+    hasUpdate: getPreviewUpdateMode() !== "none",
     downloadUrl: "https://github.com/limecloud/lime/releases",
     releaseNotesUrl: "https://github.com/limecloud/lime/releases",
     releaseNotes: null,
@@ -45,9 +109,14 @@ export const updateMocks: Record<string, (args?: any) => any> = {
     message: "当前已是最新版本",
     filePath: null,
   }),
+  start_update_install_session: () => downloadingInstallSession(),
+  get_update_install_session: () =>
+    getPreviewUpdateMode() === "downloading"
+      ? downloadingInstallSession()
+      : idleInstallSession(),
   skip_update_version: () => ({}),
-  remind_update_later: () => Math.floor(Date.now() / 1000) + 24 * 3600,
-  dismiss_update_notification: () => Math.floor(Date.now() / 1000) + 24 * 3600,
+  remind_update_later: () => nowSeconds() + 24 * 3600,
+  dismiss_update_notification: () => nowSeconds() + 24 * 3600,
   close_update_window: () => ({}),
   set_update_check_settings: () => ({ success: true }),
   test_update_window: () => ({}),

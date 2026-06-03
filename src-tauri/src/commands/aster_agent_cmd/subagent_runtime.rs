@@ -1192,6 +1192,7 @@ async fn submit_runtime_message_to_managed_session(
         provider_config: None,
         provider_preference: None,
         model_preference: None,
+        reasoning_effort: None,
         thinking_enabled: None,
         approval_policy: Some(access_mode.approval_policy().to_string()),
         sandbox_policy: Some(access_mode.sandbox_policy().to_string()),
@@ -1828,6 +1829,7 @@ async fn inherit_subagent_provider(
             &provider_selector,
             &model_name,
             child_session_id,
+            None,
         )
         .await
         .map(|_| ())?;
@@ -2079,6 +2081,7 @@ pub(crate) async fn agent_runtime_spawn_subagent_internal(
             provider_config: None,
             provider_preference: None,
             model_preference: None,
+            reasoning_effort: request.reasoning_effort.clone(),
             thinking_enabled: None,
             approval_policy: Some(access_mode.approval_policy().to_string()),
             sandbox_policy: Some(access_mode.sandbox_policy().to_string()),
@@ -2212,6 +2215,7 @@ pub(crate) async fn agent_runtime_send_subagent_input_internal(
         provider_config: None,
         provider_preference: None,
         model_preference: None,
+        reasoning_effort: None,
         thinking_enabled: None,
         approval_policy: Some(access_mode.approval_policy().to_string()),
         sandbox_policy: Some(access_mode.sandbox_policy().to_string()),

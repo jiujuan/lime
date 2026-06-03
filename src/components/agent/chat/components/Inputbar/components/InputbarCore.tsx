@@ -15,6 +15,7 @@ import {
   StyledTextarea,
   BottomBar,
   LeftSection,
+  TrailingSection,
   SendButton,
   SecondaryActionButton,
   DragHandle,
@@ -41,6 +42,7 @@ import {
   ImagePlus,
   Loader2,
   Mic,
+  Plus,
   Square,
   X,
 } from "lucide-react";
@@ -51,6 +53,10 @@ import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
 import { QueuedTurnsPanel } from "./QueuedTurnsPanel";
 import { useInputbarDictation } from "../hooks/useInputbarDictation";
 import type { InputbarCoreCopy } from "./inputbarCoreCopy";
+import {
+  InputbarPlusMenu,
+  type InputbarPlusMenuConfig,
+} from "./InputbarPlusMenu";
 
 const INTERACTIVE_TARGET_SELECTOR =
   "button, a, input, textarea, select, option, [role='button'], [contenteditable=''], [contenteditable='true'], [contenteditable='plaintext-only']";
@@ -111,6 +117,8 @@ interface InputbarCoreProps {
   textareaRef?: React.RefObject<HTMLTextAreaElement>;
   /** 输入框底栏左侧扩展区域 */
   leftExtra?: React.ReactNode;
+  /** 输入框底栏尾部元信息区域 */
+  trailingMeta?: React.ReactNode;
   /** 输入框内部顶部扩展区域（textarea 上方） */
   topExtra?: React.ReactNode;
   /** 输入框提示文案 */
@@ -128,6 +136,7 @@ interface InputbarCoreProps {
   onPromoteQueuedTurn?: (queuedTurnId: string) => void | Promise<boolean>;
   onRemoveQueuedTurn?: (queuedTurnId: string) => void | Promise<boolean>;
   showMetaTools?: boolean;
+  plusMenu?: InputbarPlusMenuConfig;
   inputSuggestion?: {
     label: string;
     prompt: string;
@@ -162,6 +171,7 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
   isFullscreen = false,
   textareaRef: externalTextareaRef,
   leftExtra,
+  trailingMeta,
   topExtra,
   placeholder,
   toolMode = "default",
@@ -173,6 +183,7 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
   onPromoteQueuedTurn,
   onRemoveQueuedTurn,
   showMetaTools = true,
+  plusMenu,
   inputSuggestion = null,
   onAcceptInputSuggestion,
   listenForVoiceShortcut = false,
@@ -248,8 +259,12 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
     : "";
   const shouldRenderMetaBar =
     !shouldUseCompactFloatingComposer &&
-    (Boolean(leftExtra) ||
-      (toolMode === "default" && !shouldCollapseFloatingTools));
+    (Boolean(plusMenu) ||
+      Boolean(leftExtra) ||
+      Boolean(trailingMeta) ||
+      (showMetaTools &&
+        toolMode === "default" &&
+        !shouldCollapseFloatingTools));
   const shouldShowInputSuggestion =
     Boolean(inputSuggestion) && text.trim().length === 0 && !disabled;
   const dictationStatusText = buildDictationStatusText(
@@ -540,7 +555,9 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
                       <InputSuggestionText>
                         {inputSuggestion.label}
                       </InputSuggestionText>
-                      <InputSuggestionKeycap>tab</InputSuggestionKeycap>
+                      <InputSuggestionKeycap>
+                        {uiCopy.suggestion.acceptKey}
+                      </InputSuggestionKeycap>
                     </InputSuggestionLayer>
                   ) : null}
                   <StyledTextarea
@@ -636,7 +653,22 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
 
               {shouldRenderMetaBar ? (
                 <BottomBar className={bottomBarClassName}>
-                  <LeftSection className={leftSectionClassName}>
+                  <LeftSection
+                    className={leftSectionClassName}
+                    data-testid="inputbar-meta-left"
+                  >
+                    {plusMenu ? (
+                      <InputbarPlusMenu config={plusMenu} disabled={disabled}>
+                        <InputIconButton
+                          type="button"
+                          aria-label={plusMenu.labels.open}
+                          title={plusMenu.labels.open}
+                          data-testid="inputbar-plus-trigger"
+                        >
+                          <Plus size={15} />
+                        </InputIconButton>
+                      </InputbarPlusMenu>
+                    ) : null}
                     {leftExtra ? <MetaSlot>{leftExtra}</MetaSlot> : null}
                     {!shouldCollapseFloatingTools && showMetaTools ? (
                       <InputbarTools
@@ -647,6 +679,11 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
                       />
                     ) : null}
                   </LeftSection>
+                  {trailingMeta ? (
+                    <TrailingSection data-testid="inputbar-meta-trailing">
+                      <MetaSlot>{trailingMeta}</MetaSlot>
+                    </TrailingSection>
+                  ) : null}
                 </BottomBar>
               ) : null}
             </InputBarContainer>

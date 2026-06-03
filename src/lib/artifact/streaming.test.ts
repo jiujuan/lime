@@ -9,6 +9,7 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 import * as fc from "fast-check";
 import { createStore } from "jotai";
+import { fastCheckRuns } from "../../test/fastCheckRuns";
 import {
   artifactsAtom,
   artifactActionsAtom,
@@ -144,7 +145,7 @@ describe("Property 8: 流式更新状态转换", () => {
           return true;
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -195,7 +196,7 @@ describe("Property 8: 流式更新状态转换", () => {
           return true;
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -251,7 +252,7 @@ describe("Property 8: 流式更新状态转换", () => {
           return true;
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -303,7 +304,7 @@ describe("Property 8: 流式更新状态转换", () => {
           return true;
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -384,7 +385,7 @@ describe("Property 8: 流式更新状态转换", () => {
           return true;
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -433,7 +434,7 @@ describe("Property 8: 流式更新状态转换", () => {
           return true;
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -477,7 +478,7 @@ describe("Property 8: 流式更新状态转换", () => {
           return true;
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -542,7 +543,7 @@ describe("Property 8: 流式更新状态转换", () => {
           return true;
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 });
@@ -590,7 +591,7 @@ describe("useDebouncedValue 防抖行为", () => {
           return true;
         },
       ),
-      { numRuns: 50 },
+      { numRuns: fastCheckRuns(50) },
     );
   });
 
@@ -635,7 +636,7 @@ describe("useDebouncedValue 防抖行为", () => {
           return true;
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 
@@ -676,7 +677,7 @@ describe("useDebouncedValue 防抖行为", () => {
           return true;
         },
       ),
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     );
   });
 });

@@ -193,7 +193,7 @@ describe("deriveHarnessSessionState", () => {
 
     const state = deriveHarnessSessionState(messages, pendingApprovals, items);
 
-    expect(state.runtimeStatus?.title).toBe("正在执行编程任务");
+    expect(state.runtimeStatus?.title).toBe("正在执行任务");
     expect(state.pendingApprovals).toHaveLength(1);
     expect(state.pendingApprovals[0]).toMatchObject({
       requestId: "approval-code-write",

@@ -169,19 +169,12 @@ export const MessageBubble = styled.div<{
   border-radius: ${({ $isUser, $bareMedia }) =>
     $bareMedia || !$isUser ? "0" : "14px"};
   border: ${({ $isUser, $bareMedia }) =>
-    $isUser && !$bareMedia
-        ? "1px solid rgba(229, 231, 235, 0.92)"
-        : "0"};
+    $isUser && !$bareMedia ? "1px solid rgba(229, 231, 235, 0.92)" : "0"};
   background: ${({ $isUser, $bareMedia }) =>
-    $isUser && !$bareMedia
-        ? "#f4f4f3"
-        : "transparent"};
+    $isUser && !$bareMedia ? "#f4f4f3" : "transparent"};
   box-shadow: ${({ $isUser, $bareMedia }) =>
-    $isUser && !$bareMedia
-        ? "none"
-        : "none"};
-  color: ${({ $isUser }) =>
-    $isUser ? "rgb(31, 41, 55)" : "rgb(31, 41, 55)"};
+    $isUser && !$bareMedia ? "none" : "none"};
+  color: ${({ $isUser }) => ($isUser ? "rgb(31, 41, 55)" : "rgb(31, 41, 55)")};
   font-size: ${({ $isUser }) => ($isUser ? "14px" : "15px")};
   line-height: ${({ $isUser }) => ($isUser ? "1.58" : "1.72")};
   font-weight: 400;
@@ -206,7 +199,8 @@ export const MessageActions = styled.div`
   gap: 4px;
   align-self: flex-end;
   position: relative;
-  z-index: 5;
+  z-index: 30;
+  isolation: isolate;
   max-height: 0;
   overflow: hidden;
   opacity: 0;
@@ -219,6 +213,15 @@ export const MessageActions = styled.div`
     margin-top 0.18s ease,
     transform 0.18s ease;
   background-color: transparent;
+
+  &.message-actions-persistent {
+    max-height: 48px;
+    margin-top: 8px;
+    overflow: visible;
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
 
   &.image-workbench-message-actions {
     align-self: flex-start;

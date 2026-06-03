@@ -847,6 +847,21 @@ mod tests {
 
     #[test]
     #[serial]
+    fn test_register_all_tools_with_cron_gate_without_scheduler_hides_current_cron_tools() {
+        let mut registry = ToolRegistry::new();
+
+        temp_env::with_var("AGENT_TRIGGERS", Some("true"), || {
+            let (_history, _hook_manager) =
+                register_all_tools(&mut registry, ToolRegistrationConfig::new());
+
+            assert!(!registry.contains("CronCreate"));
+            assert!(!registry.contains("CronList"));
+            assert!(!registry.contains("CronDelete"));
+        });
+    }
+
+    #[test]
+    #[serial]
     fn test_register_all_tools_with_scheduler_and_gate_registers_current_cron_tools() {
         let mut registry = ToolRegistry::new();
         let config = ToolRegistrationConfig::new().with_scheduler(Arc::new(TestScheduler));
@@ -889,6 +904,64 @@ mod tests {
         let remote_enabled_gates =
             current_surface_tool_gates_from_env_map(&remote_enabled_env, false);
         assert!(remote_enabled_gates.remote_trigger);
+    }
+
+    #[test]
+    fn test_current_surface_tool_gates_cover_all_gated_runtime_tools() {
+        let default_env = HashMap::new();
+        assert_eq!(
+            current_surface_tool_gates_from_env_map(&default_env, false),
+            CurrentSurfaceToolGates {
+                config: false,
+                sleep: false,
+                cron: false,
+                remote_trigger: false,
+                workflow: false,
+                powershell: false,
+            }
+        );
+
+        let enabled_env = HashMap::from([
+            ("USER_TYPE".to_string(), "ant".to_string()),
+            ("PROACTIVE".to_string(), "true".to_string()),
+            ("AGENT_TRIGGERS".to_string(), "yes".to_string()),
+            (REMOTE_TRIGGER_GATE_ENV.to_string(), "on".to_string()),
+            ("WORKFLOW_SCRIPTS".to_string(), "1".to_string()),
+        ]);
+        assert_eq!(
+            current_surface_tool_gates_from_env_map(&enabled_env, false),
+            CurrentSurfaceToolGates {
+                config: true,
+                sleep: true,
+                cron: true,
+                remote_trigger: true,
+                workflow: true,
+                powershell: false,
+            }
+        );
+
+        let kairos_env = HashMap::from([("KAIROS".to_string(), "true".to_string())]);
+        assert!(current_surface_tool_gates_from_env_map(&kairos_env, false).sleep);
+    }
+
+    #[test]
+    fn test_current_surface_powershell_gate_is_windows_only_and_honors_falsy_override() {
+        let default_env = HashMap::new();
+        assert!(current_surface_tool_gates_from_env_map(&default_env, true).powershell);
+        assert!(!current_surface_tool_gates_from_env_map(&default_env, false).powershell);
+
+        for value in ["0", "false", "no", "off"] {
+            let env = HashMap::from([(CURRENT_SURFACE_POWERSHELL_ENV.to_string(), value.into())]);
+            assert!(
+                !current_surface_tool_gates_from_env_map(&env, true).powershell,
+                "PowerShell gate should be disabled for {value}"
+            );
+        }
+
+        let explicit_truthy_env =
+            HashMap::from([(CURRENT_SURFACE_POWERSHELL_ENV.to_string(), "true".to_string())]);
+        assert!(current_surface_tool_gates_from_env_map(&explicit_truthy_env, true).powershell);
+        assert!(!current_surface_tool_gates_from_env_map(&explicit_truthy_env, false).powershell);
     }
 
     #[test]

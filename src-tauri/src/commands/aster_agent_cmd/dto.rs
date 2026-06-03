@@ -75,6 +75,9 @@ pub struct AsterChatRequest {
     /// 模型偏好（后端会基于该偏好解析最终 model_name）
     #[serde(default, alias = "modelPreference")]
     pub model_preference: Option<String>,
+    /// 推理强度偏好（仅当前端基于模型接口能力选择后传入）
+    #[serde(default, alias = "reasoningEffort")]
+    pub reasoning_effort: Option<String>,
     /// 是否偏好 reasoning 变体
     #[serde(default, alias = "thinkingEnabled")]
     pub thinking_enabled: Option<bool>,
@@ -127,6 +130,8 @@ pub struct AgentTurnConfigSnapshot {
     pub provider_preference: Option<String>,
     #[serde(default, alias = "modelPreference")]
     pub model_preference: Option<String>,
+    #[serde(default, alias = "reasoningEffort")]
+    pub reasoning_effort: Option<String>,
     #[serde(default, alias = "thinkingEnabled")]
     pub thinking_enabled: Option<bool>,
     #[serde(default, alias = "approvalPolicy")]
@@ -188,6 +193,9 @@ impl From<AgentRuntimeSubmitTurnRequest> for AsterChatRequest {
             model_preference: turn_config
                 .as_ref()
                 .and_then(|config| config.model_preference.clone()),
+            reasoning_effort: turn_config
+                .as_ref()
+                .and_then(|config| config.reasoning_effort.clone()),
             thinking_enabled: turn_config
                 .as_ref()
                 .and_then(|config| config.thinking_enabled),

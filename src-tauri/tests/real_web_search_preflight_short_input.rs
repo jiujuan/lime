@@ -78,7 +78,7 @@ async fn test_real_web_search_preflight_short_input_continue() {
     let state = AsterAgentState::new();
     let session_id = format!("real-web-preflight-{}", Uuid::new_v4());
     state
-        .configure_provider_from_pool(&db, &provider_id, &model_name, &session_id)
+        .configure_provider_from_pool(&db, &provider_id, &model_name, &session_id, None)
         .await
         .expect("配置 Provider 失败");
 

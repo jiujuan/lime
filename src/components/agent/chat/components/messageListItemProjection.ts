@@ -24,6 +24,7 @@ import {
   parseLeadingUserCommandTag,
   resolveInstalledSkillMessageLabel,
 } from "./messageListUserContentState";
+import { toActionRequired } from "./timeline-utils/itemConverters";
 import { resolveKnowledgeSourceFromArtifacts } from "./messageListKnowledgeSource";
 import {
   resolveImageWorkbenchMessageDisplayState,
@@ -128,7 +129,7 @@ function hasInlineProcessContentParts(
 
   return Boolean(
     options.displayContent.trim() ||
-      options.timelineItems?.some((item) => item.type === "reasoning"),
+    options.timelineItems?.some((item) => item.type === "reasoning"),
   );
 }
 
@@ -209,16 +210,6 @@ function hasProcessBoundaryContentPart(
   );
 }
 
-function hasWebSearchContentPart(parts?: Message["contentParts"]): boolean {
-  return Boolean(
-    parts?.some(
-      (part) =>
-        part.type === "tool_use" &&
-        part.toolCall.name.trim().toLowerCase() === "web_search",
-    ),
-  );
-}
-
 function collectFileChangeBatchPaths(
   parts?: Message["contentParts"],
 ): string[] {
@@ -253,10 +244,39 @@ function resolveAssistantActionContent(params: {
   return params.displayContent.trim();
 }
 
+function hasFinalTextAfterProcessBoundary(
+  parts?: Message["contentParts"],
+): boolean {
+  const normalizedParts = parts || [];
+  const firstProcessIndex = normalizedParts.findIndex(
+    (part) =>
+      part.type === "tool_use" ||
+      part.type === "action_required" ||
+      part.type === "file_changes_batch",
+  );
+  if (firstProcessIndex < 0) {
+    return false;
+  }
+
+  return normalizedParts.some(
+    (part, index) =>
+      index > firstProcessIndex &&
+      part.type === "text" &&
+      part.text.trim().length > 0,
+  );
+}
+
 function resolveProcessSeparatedContentParts(
   parts?: Message["contentParts"],
 ): Message["contentParts"] | undefined {
   if (!hasProcessBoundaryContentPart(parts)) {
+    return parts;
+  }
+
+  const hasActionBoundary = Boolean(
+    parts?.some((part) => part.type === "action_required"),
+  );
+  if (hasActionBoundary) {
     return parts;
   }
 
@@ -372,6 +392,24 @@ function buildTimelineToolContentPart(
   return null;
 }
 
+function buildTimelineActionContentPart(
+  item: AgentThreadItem,
+): MessageContentPart | null {
+  if (item.type !== "approval_request" && item.type !== "request_user_input") {
+    return null;
+  }
+
+  const actionRequired = toActionRequired(item);
+  if (!actionRequired) {
+    return null;
+  }
+
+  return {
+    type: "action_required",
+    actionRequired,
+  };
+}
+
 function buildTimelineInlineContentParts(params: {
   displayContent: string;
   existingContentParts?: Message["contentParts"];
@@ -397,7 +435,11 @@ function buildTimelineInlineContentParts(params: {
       item.type === "command_execution" ||
       item.type === "web_search",
   ).length;
-  if (reasoningCount < 2 && toolLikeCount === 0) {
+  const actionLikeCount = items.filter(
+    (item) =>
+      item.type === "approval_request" || item.type === "request_user_input",
+  ).length;
+  if (reasoningCount < 2 && toolLikeCount === 0 && actionLikeCount === 0) {
     return undefined;
   }
 
@@ -419,6 +461,12 @@ function buildTimelineInlineContentParts(params: {
     const toolPart = buildTimelineToolContentPart(item);
     if (toolPart) {
       parts.push(toolPart);
+      continue;
+    }
+
+    const actionPart = buildTimelineActionContentPart(item);
+    if (actionPart) {
+      parts.push(actionPart);
     }
   }
 
@@ -755,7 +803,7 @@ export function resolveMessageListItemProjection({
     message.role === "assistant" && !isCurrentInteractiveAssistantMessage;
   const usesProcessSeparatedFinalText =
     includeInlineProcessFlow &&
-    hasWebSearchContentPart(conversationContentParts);
+    hasFinalTextAfterProcessBoundary(conversationContentParts);
   const rendererConversationContentParts = usesProcessSeparatedFinalText
     ? resolveProcessSeparatedContentParts(conversationContentParts)
     : conversationContentParts;
@@ -779,7 +827,8 @@ export function resolveMessageListItemProjection({
       parseLeadingUserCommandTag(displayContent, message.inputCapabilityRoute),
     );
   const hasVisibleAssistantText = Boolean(actionContent);
-  const hasImageWorkbenchLeadContent = imageWorkbenchDisplayState.hasLeadContent;
+  const hasImageWorkbenchLeadContent =
+    imageWorkbenchDisplayState.hasLeadContent;
   const shouldCollapseLongHistoricalMessage =
     isRestoredHistoryWindow &&
     message.role === "assistant" &&
@@ -811,7 +860,8 @@ export function resolveMessageListItemProjection({
     !expandedLongHistoricalMessageIds.has(message.id) &&
     !expandedHistoricalAssistantMessageIds.has(message.id);
   const shouldPreviewHistoricalAssistantMessage =
-    shouldCollapseLongHistoricalMessage || shouldCompactHistoricalAssistantMessage;
+    shouldCollapseLongHistoricalMessage ||
+    shouldCompactHistoricalAssistantMessage;
   const historicalAssistantPreviewContent = shouldCollapseLongHistoricalMessage
     ? buildHistoricalMessagePreview(
         displayContent,
@@ -829,10 +879,10 @@ export function resolveMessageListItemProjection({
         MESSAGE_LIST_LONG_HISTORICAL_MESSAGE_PREVIEW_CHARS,
       )
     : actionContent;
-  const rendererRawContent =
-    shouldSuppressDuplicatedFailureText
-      ? ""
-      : shouldCollapseLongHistoricalMessage || shouldFlattenHistoricalAssistantContent
+  const rendererRawContent = shouldSuppressDuplicatedFailureText
+    ? ""
+    : shouldCollapseLongHistoricalMessage ||
+        shouldFlattenHistoricalAssistantContent
       ? rendererContent
       : usesProcessSeparatedFinalText
         ? actionContent
@@ -854,24 +904,25 @@ export function resolveMessageListItemProjection({
       ? undefined
       : message.actionRequests;
   const rendererMarkdownRenderMode =
-    shouldCollapseLongHistoricalMessage || shouldFlattenHistoricalAssistantContent
+    shouldCollapseLongHistoricalMessage ||
+    shouldFlattenHistoricalAssistantContent
       ? ("light" as const)
       : ("standard" as const);
   const canQuoteMessage = Boolean(actionContent);
   const canCopyMessage = Boolean(actionContent);
   const canSaveMessageAsSkill = Boolean(
     message.role === "assistant" &&
-      !message.imageWorkbenchPreview &&
-      !message.isThinking &&
-      actionContent &&
-      actionContent.length >= 24,
+    !message.imageWorkbenchPreview &&
+    !message.isThinking &&
+    actionContent &&
+    actionContent.length >= 24,
   );
   const canSaveMessageAsInspiration = Boolean(
     message.role === "assistant" &&
-      !message.imageWorkbenchPreview &&
-      !message.isThinking &&
-      actionContent &&
-      actionContent.length >= 24,
+    !message.imageWorkbenchPreview &&
+    !message.isThinking &&
+    actionContent &&
+    actionContent.length >= 24,
   );
   const knowledgeArtifactSource =
     message.role === "assistant"
@@ -881,10 +932,10 @@ export function resolveMessageListItemProjection({
     knowledgeArtifactSource?.content.trim() || actionContent;
   const canSaveMessageAsKnowledge = Boolean(
     message.role === "assistant" &&
-      !message.imageWorkbenchPreview &&
-      !message.isThinking &&
-      knowledgeSaveContent &&
-      knowledgeSaveContent.length >= 24,
+    !message.imageWorkbenchPreview &&
+    !message.isThinking &&
+    knowledgeSaveContent &&
+    knowledgeSaveContent.length >= 24,
   );
   const messageSavedSiteContentTarget =
     message.role === "assistant"
@@ -905,9 +956,9 @@ export function resolveMessageListItemProjection({
       : [];
   const shouldRenderMessageCanvasShortcut = Boolean(
     messageSavedSiteContentTarget &&
-      canOpenSavedSiteContent &&
-      !message.imageWorkbenchPreview &&
-      !hasTrailingArtifactTimelineItems,
+    canOpenSavedSiteContent &&
+    !message.imageWorkbenchPreview &&
+    !hasTrailingArtifactTimelineItems,
   );
   const messageCanvasShortcutTitle = messageSavedSiteContentTarget
     ? resolveSiteSavedContentTargetDisplayName(messageSavedSiteContentTarget) ||
@@ -990,9 +1041,12 @@ export function resolveMessageListItemProjection({
         MESSAGE_LIST_HISTORICAL_TIMELINE_COMPACT_ITEM_THRESHOLD) &&
     !expandedHistoricalTimelineKeys.has(primaryTimelineKey!);
   const shouldRenderPrimaryTimelineOutsideBubble =
-    message.role === "assistant" && Boolean(primaryTimeline) && hasVisibleAssistantText;
-  const shouldRenderProposedPlanBlocks =
-    !primaryTimeline?.items.some((item) => item.type === "plan");
+    message.role === "assistant" &&
+    Boolean(primaryTimeline) &&
+    hasVisibleAssistantText;
+  const shouldRenderProposedPlanBlocks = !primaryTimeline?.items.some(
+    (item) => item.type === "plan",
+  );
   const shouldRenderImageWorkbenchBareBubble =
     message.role === "assistant" &&
     Boolean(message.imageWorkbenchPreview) &&

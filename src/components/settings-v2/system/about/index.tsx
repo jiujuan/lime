@@ -8,8 +8,11 @@ import {
 import { useTranslation } from "react-i18next";
 import {
   checkForUpdates,
-  downloadUpdate,
-  type DownloadUpdateResult,
+  getUpdateInstallSession,
+  isUpdateInstallSessionActive,
+  listenUpdateInstallSession,
+  startUpdateInstallSession,
+  type UpdateInstallSession,
   type VersionInfo,
 } from "@/lib/api/appUpdate";
 import {
@@ -35,9 +38,9 @@ export function AboutSection() {
     error: undefined,
   });
   const [checking, setChecking] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-  const [downloadResult, setDownloadResult] =
-    useState<DownloadUpdateResult | null>(null);
+  const [installSession, setInstallSession] =
+    useState<UpdateInstallSession | null>(null);
+  const [installStartFailed, setInstallStartFailed] = useState(false);
   const [skillAssociationStatus, setSkillAssociationStatus] =
     useState<SkillPackageFileAssociationStatus | null>(null);
   const [skillAssociationLoading, setSkillAssociationLoading] = useState(false);
@@ -50,6 +53,64 @@ export function AboutSection() {
     versionInfo.releaseNotesUrl || FALLBACK_RELEASES_URL;
   const isWindows =
     typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
+  const installingUpdate = isUpdateInstallSessionActive(installSession);
+  const rawInstallProgressPercent = installSession?.percent ?? 0;
+  const installProgressPercent = Number.isFinite(rawInstallProgressPercent)
+    ? Math.min(100, Math.max(0, Math.round(rawInstallProgressPercent * 100)))
+    : 0;
+  const hasInstallProgress =
+    installSession !== null && installSession.stage !== "idle";
+  const installFailed =
+    installStartFailed || installSession?.stage === "failed";
+  const installStatusLabel = useMemo(() => {
+    if (!installSession) {
+      return "";
+    }
+
+    switch (installSession.stage) {
+      case "checking":
+        return t("settings.about.update.progress.checking");
+      case "downloading":
+        return installSession.totalBytes
+          ? t("settings.about.update.progress.downloading", {
+              percent: `${installProgressPercent}%`,
+            })
+          : t("settings.about.update.progress.downloadingUnknown");
+      case "installing":
+        return t("settings.about.update.progress.installing");
+      case "restarting":
+        return t("settings.about.update.progress.restarting");
+      case "failed":
+        return t("settings.about.update.progress.failed");
+      case "up_to_date":
+        return t("settings.about.update.progress.upToDate");
+      case "completed":
+        return t("settings.about.update.progress.completed");
+      case "idle":
+      default:
+        return "";
+    }
+  }, [installProgressPercent, installSession, t]);
+  const installActionLabel = useMemo(() => {
+    if (!installSession) {
+      return t("settings.about.action.download");
+    }
+
+    switch (installSession.stage) {
+      case "checking":
+        return t("settings.about.update.progress.checking");
+      case "downloading":
+        return t("settings.about.action.downloading");
+      case "installing":
+        return t("settings.about.action.installing");
+      case "restarting":
+        return t("settings.about.action.restarting");
+      case "failed":
+        return t("settings.about.action.retryDownload");
+      default:
+        return t("settings.about.action.download");
+    }
+  }, [installSession, t]);
 
   useEffect(() => {
     const loadCurrentVersion = async () => {
@@ -77,6 +138,33 @@ export function AboutSection() {
     void loadCurrentVersion();
   }, []);
 
+  useEffect(() => {
+    let disposed = false;
+    void getUpdateInstallSession()
+      .then((session) => {
+        if (!disposed && session.stage !== "idle") {
+          setInstallSession(session);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to read update install session:", error);
+      });
+
+    const unlistenPromise = listenUpdateInstallSession((session) => {
+      setInstallSession(session);
+      setInstallStartFailed(false);
+    });
+
+    return () => {
+      disposed = true;
+      void unlistenPromise
+        .then((unlisten) => unlisten())
+        .catch((error) => {
+          console.error("Failed to remove update install listener:", error);
+        });
+    };
+  }, []);
+
   const refreshSkillAssociationStatus = useCallback(async () => {
     setSkillAssociationLoading(true);
     try {
@@ -100,7 +188,7 @@ export function AboutSection() {
 
   const handleCheckUpdate = async () => {
     setChecking(true);
-    setDownloadResult(null);
+    setInstallStartFailed(false);
     try {
       const result = await checkForUpdates();
       if (result.error) {
@@ -123,35 +211,13 @@ export function AboutSection() {
   };
 
   const handleDownloadUpdate = async () => {
-    setDownloading(true);
-    setDownloadResult(null);
+    setInstallStartFailed(false);
     try {
-      const result = await downloadUpdate();
-      setDownloadResult(result);
-
-      if (result.success) {
-        setTimeout(() => {
-          setDownloadResult({
-            ...result,
-            message: t("settings.about.update.installedRestart"),
-          });
-        }, 1000);
-      } else {
-        console.error("Download failed:", result.message);
-        setDownloadResult({
-          ...result,
-          message: t("settings.about.update.errorDownload"),
-        });
-      }
+      const session = await startUpdateInstallSession();
+      setInstallSession(session);
     } catch (error) {
-      console.error("Failed to download update:", error);
-      setDownloadResult({
-        success: false,
-        message: t("settings.about.update.errorDownload"),
-        filePath: undefined,
-      });
-    } finally {
-      setDownloading(false);
+      console.error("Failed to start update install session:", error);
+      setInstallStartFailed(true);
     }
   };
 
@@ -188,6 +254,20 @@ export function AboutSection() {
   });
 
   const updateStatus = useMemo(() => {
+    if (installingUpdate) {
+      return {
+        label: installStatusLabel || t("settings.about.update.progress.checking"),
+        className: "border-sky-200 bg-sky-50 text-sky-700",
+      };
+    }
+
+    if (installFailed) {
+      return {
+        label: t("settings.about.update.progress.failed"),
+        className: "border-rose-200 bg-rose-50 text-rose-700",
+      };
+    }
+
     if (versionInfo.hasUpdate) {
       return {
         label: t("settings.about.status.updateAvailable", {
@@ -215,7 +295,15 @@ export function AboutSection() {
       label: t("settings.about.status.manualCheck"),
       className: "border-sky-200 bg-sky-50 text-sky-700",
     };
-  }, [t, versionInfo.error, versionInfo.hasUpdate, versionInfo.latest]);
+  }, [
+    installFailed,
+    installStatusLabel,
+    installingUpdate,
+    t,
+    versionInfo.error,
+    versionInfo.hasUpdate,
+    versionInfo.latest,
+  ]);
 
   const skillAssociationStatusMeta = useMemo(() => {
     if (skillAssociationLoading && !skillAssociationStatus) {
@@ -286,7 +374,7 @@ export function AboutSection() {
           <button
             type="button"
             onClick={() => void handleCheckUpdate()}
-            disabled={checking || downloading}
+            disabled={checking || installingUpdate}
             className={SECONDARY_ACTION_BUTTON_CLASS}
           >
             <RefreshCw className={cn("h-4 w-4", checking && "animate-spin")} />
@@ -298,15 +386,13 @@ export function AboutSection() {
               <button
                 type="button"
                 onClick={() => void handleDownloadUpdate()}
-                disabled={downloading}
+                disabled={installingUpdate}
                 className={PRIMARY_ACTION_BUTTON_CLASS}
               >
                 <RefreshCw
-                  className={cn("h-4 w-4", downloading && "animate-spin")}
+                  className={cn("h-4 w-4", installingUpdate && "animate-spin")}
                 />
-                {downloading
-                  ? t("settings.about.action.downloading")
-                  : t("settings.about.action.download")}
+                {installActionLabel}
               </button>
               <a
                 href={manualDownloadUrl}
@@ -327,20 +413,53 @@ export function AboutSection() {
           </p>
         ) : null}
 
-        {downloadResult ? (
+        {hasInstallProgress || installFailed ? (
           <div
             className={cn(
               "mt-5 rounded-[20px] border p-4 text-left text-sm shadow-sm shadow-slate-950/5",
-              downloadResult.success
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-rose-200 bg-rose-50 text-rose-700",
+              installFailed
+                ? "border-rose-200 bg-rose-50 text-rose-700"
+                : installSession?.stage === "restarting" ||
+                    installSession?.stage === "completed" ||
+                    installSession?.stage === "up_to_date"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-sky-200 bg-sky-50 text-sky-700",
             )}
           >
             <div className="flex items-start gap-2">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
               <div className="min-w-0 flex-1">
-                <p>{downloadResult.message}</p>
-                {!downloadResult.success ? (
+                <p>
+                  {installFailed
+                    ? t("settings.about.update.errorDownload")
+                    : installStatusLabel ||
+                      t("settings.about.update.progress.checking")}
+                </p>
+                {!installFailed &&
+                (installSession?.stage === "downloading" ||
+                  installSession?.stage === "installing" ||
+                  installSession?.stage === "restarting") ? (
+                  <div className="mt-3 flex items-center gap-3">
+                    <div
+                      className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/70"
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={installProgressPercent}
+                    >
+                      <div
+                        className="h-full rounded-full bg-slate-950 transition-[width]"
+                        style={{ width: `${installProgressPercent}%` }}
+                      />
+                    </div>
+                    {installSession?.totalBytes ? (
+                      <span className="w-10 text-right text-xs tabular-nums">
+                        {installProgressPercent}%
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+                {installFailed ? (
                   <a
                     href={manualDownloadUrl}
                     target="_blank"

@@ -287,6 +287,17 @@ export const MetaSlot = styled.div`
   min-width: 0;
 `;
 
+export const TrailingSection = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  flex-wrap: wrap;
+`;
+
 export const MetaSelectWrap = styled.label`
   position: relative;
   display: inline-flex;
@@ -518,6 +529,91 @@ export const MetaIconButton = styled.button<{ $active?: boolean }>`
       0 0 0 3px rgba(251, 191, 36, 0.18),
       inset 0 1px 0 rgba(255, 255, 255, 0.92);
   }
+`;
+
+export const ModeStatusChip = styled.button`
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  height: 28px;
+  min-width: 0;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(248, 250, 252, 0.92);
+  color: #475569;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease,
+    padding 0.16s ease,
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+
+  &:hover {
+    padding-left: 30px;
+    border-color: rgba(148, 163, 184, 0.36);
+    background: rgba(241, 245, 249, 0.98);
+    color: #0f172a;
+    transform: translateY(-1px);
+    box-shadow: 0 10px 20px -18px rgba(15, 23, 42, 0.34);
+  }
+
+  &:focus-visible {
+    padding-left: 30px;
+    outline: none;
+    border-color: rgba(59, 130, 246, 0.34);
+    box-shadow:
+      0 0 0 3px rgba(59, 130, 246, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  }
+`;
+
+export const ModeStatusRemoveMark = styled.span`
+  display: inline-flex;
+  position: absolute;
+  left: 8px;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.16);
+  color: #64748b;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.84);
+  transition:
+    background 0.16s ease,
+    color 0.16s ease,
+    opacity 0.16s ease,
+    transform 0.16s ease;
+
+  ${ModeStatusChip}:hover &,
+  ${ModeStatusChip}:focus-visible & {
+    background: rgba(15, 23, 42, 0.09);
+    color: #0f172a;
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  svg {
+    width: 11px;
+    height: 11px;
+  }
+`;
+
+export const ModeStatusLabel = styled.span`
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
 `;
 
 export const ActionButtonGroup = styled.div`

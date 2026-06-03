@@ -166,6 +166,53 @@ describe("i18n unused key scan", () => {
     ]);
   });
 
+  it("应识别 useMemo 包装后的 t 别名动态 key", () => {
+    const root = createTempDir();
+    writeResource(root, "zh-CN", "agentMessageList", {
+      "agentChat.sidebar.heading.recentConversations": "最近对话",
+      "agentChat.sidebar.heading.tasks": "任务",
+      "agentChat.sidebar.static": "静态",
+    });
+    writeFile(
+      root,
+      "src/components/ChatSidebar.tsx",
+      [
+        "type AgentNamespaceTranslation = (key: string) => string;",
+        "export function ChatSidebar({ keyName }: { keyName: string }) {",
+        "  const agentT = useMemo(() => t as unknown as AgentNamespaceTranslation, [t]);",
+        "  return agentT(`agentChat.sidebar.${keyName}`);",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const result = scanUnusedI18nKeys({
+      resourcesDir: path.join(root, "resources"),
+      sourceDirs: [path.join(root, "src")],
+    });
+
+    expect(result.dynamicKeyPatterns).toEqual([
+      expect.objectContaining({
+        pattern: "^agentChat\\.sidebar\\.(.+?)$",
+      }),
+    ]);
+    expect(result.protectedKeys).toEqual([
+      {
+        key: "agentChat.sidebar.heading.recentConversations",
+        namespace: "agentMessageList",
+      },
+      {
+        key: "agentChat.sidebar.heading.tasks",
+        namespace: "agentMessageList",
+      },
+      {
+        key: "agentChat.sidebar.static",
+        namespace: "agentMessageList",
+      },
+    ]);
+    expect(result.unusedKeys).toEqual([]);
+  });
+
   it("应识别文件内 const 前缀并推断动态 key pattern", () => {
     const root = createTempDir();
     writeResource(root, "zh-CN", "agentRuntime", {

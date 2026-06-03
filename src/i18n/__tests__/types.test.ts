@@ -371,6 +371,13 @@ function assertI18nKeyTypes() {
   });
   i18n.t("agentChat.inputbar.composer.fileManager.open", { ns: "agent" });
   i18n.t("agentChat.inputbar.composer.fileManager.close", { ns: "agent" });
+  i18n.t("agentChat.inputbar.plusMenu.open", { ns: "agent" });
+  i18n.t("agentChat.inputbar.plusMenu.addFiles", { ns: "agent" });
+  i18n.t("agentChat.inputbar.plusMenu.attachKnowledge", { ns: "agent" });
+  i18n.t("agentChat.inputbar.plusMenu.planMode", { ns: "agent" });
+  i18n.t("agentChat.inputbar.plusMenu.objective", { ns: "agent" });
+  i18n.t("agentChat.inputbar.plusMenu.skills", { ns: "agent" });
+  i18n.t("agentChat.inputbar.plusMenu.unavailable", { ns: "agent" });
   i18n.t("agentChat.inputbar.composer.workspacePlaceholder.waiting", {
     ns: "agent",
   });
@@ -380,6 +387,11 @@ function assertI18nKeyTypes() {
   i18n.t("agentChat.inputbar.composer.workspacePlaceholder.default", {
     ns: "agent",
   });
+  i18n.t("agentChat.inputbar.tools.task.label", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.task.title.enabled", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.task.title.disabled", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.task.toast.enabled", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.task.toast.disabled", { ns: "agent" });
   i18n.t("agentChat.inputbar.tools.subagent.label", { ns: "agent" });
   i18n.t("agentChat.inputbar.tools.subagent.title.enabled", { ns: "agent" });
   i18n.t("agentChat.inputbar.tools.subagent.title.disabled", { ns: "agent" });
@@ -732,6 +744,17 @@ function assertI18nKeyTypes() {
   });
   i18n.t("agentChat.imageWorkbenchPreview.placeholder.failed", {
     ns: "agent",
+  });
+  i18n.t("agentChat.contentWorkbenchTools.groupTitle", { ns: "agent" });
+  i18n.t("agentChat.contentWorkbenchTools.label.audioGeneration", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.contentWorkbenchTools.failure.videoGeneration", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.contentWorkbenchTools.group.multiple.completed", {
+    ns: "agent",
+    count: 2,
   });
   i18n.t("agentChat.searchResultPreview.expandMore", {
     ns: "agent",

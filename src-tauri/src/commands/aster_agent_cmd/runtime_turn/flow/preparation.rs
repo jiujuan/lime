@@ -431,6 +431,7 @@ mod tests {
             provider_config: None,
             provider_preference: None,
             model_preference: None,
+            reasoning_effort: None,
             thinking_enabled: None,
             approval_policy: None,
             sandbox_policy: None,
@@ -949,8 +950,14 @@ pub(super) async fn prepare_runtime_turn_submit_preparation(
         resolved_turn_id,
     )?;
 
-    apply_runtime_turn_provider_config(state, db, session_id, request.provider_config.as_ref())
-        .await?;
+    apply_runtime_turn_provider_config(
+        state,
+        db,
+        session_id,
+        request.provider_config.as_ref(),
+        request.reasoning_effort.as_deref(),
+    )
+    .await?;
 
     let submit_bootstrap = match prepare_runtime_turn_submit_bootstrap(
         app,

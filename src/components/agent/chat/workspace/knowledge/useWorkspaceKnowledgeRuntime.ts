@@ -122,6 +122,14 @@ export function useWorkspaceKnowledgeRuntime({
     initialSelectionPackName &&
     initialSelectionMatchesWorkingDir,
   );
+  const initialExplicitCompanionPackNames = useMemo(
+    () =>
+      initialKnowledgePackSelection?.companionPacks
+        ?.filter((pack) => pack.activation === "explicit")
+        .map((pack) => pack.name.trim())
+        .filter(Boolean) ?? [],
+    [initialKnowledgePackSelection],
+  );
 
   const refreshKnowledgePacks = useCallback(
     async (workingDir: string, preferredPackName?: string | null) => {
@@ -260,8 +268,40 @@ export function useWorkspaceKnowledgeRuntime({
     });
   }, [knowledgePacks, selectedKnowledgePackName]);
 
+  useEffect(() => {
+    if (
+      !initialSelectionMatchesWorkingDir ||
+      !initialSelectionPackName ||
+      selectedKnowledgePackName !== initialSelectionPackName ||
+      initialExplicitCompanionPackNames.length === 0
+    ) {
+      return;
+    }
+
+    setExplicitCompanionPackNames((current) => {
+      const next = new Set(current);
+      for (const packName of initialExplicitCompanionPackNames) {
+        next.add(packName);
+      }
+      const normalizedNext = Array.from(next);
+      return normalizedNext.length === current.length
+        ? current
+        : normalizedNext;
+    });
+  }, [
+    initialExplicitCompanionPackNames,
+    initialSelectionMatchesWorkingDir,
+    initialSelectionPackName,
+    selectedKnowledgePackName,
+  ]);
+
   const knowledgePackSelection = useMemo(() => {
     if (selectedKnowledgePack && effectiveProjectRootPath) {
+      const resolvedCompanionPacks = resolveKnowledgeRequestCompanionPacks({
+        primaryPackName: selectedKnowledgePack.metadata.name,
+        packs: knowledgePacks,
+        explicitPackNames: explicitCompanionPackNames,
+      });
       return {
         enabled: knowledgePackEnabled,
         packName: selectedKnowledgePack.metadata.name,
@@ -270,11 +310,12 @@ export function useWorkspaceKnowledgeRuntime({
           selectedKnowledgePack.metadata.description ||
           selectedKnowledgePack.metadata.name,
         status: selectedKnowledgePack.metadata.status,
-        companionPacks: resolveKnowledgeRequestCompanionPacks({
-          primaryPackName: selectedKnowledgePack.metadata.name,
-          packs: knowledgePacks,
-          explicitPackNames: explicitCompanionPackNames,
-        }),
+        companionPacks:
+          resolvedCompanionPacks.length > 0
+            ? resolvedCompanionPacks
+            : selectedKnowledgePack.metadata.name === initialSelectionPackName
+              ? initialKnowledgePackSelection?.companionPacks
+              : undefined,
       };
     }
 
@@ -358,18 +399,10 @@ export function useWorkspaceKnowledgeRuntime({
       return;
     }
 
-    void handleSend(
-      undefined,
-      false,
-      false,
-      prompt,
-      "react",
-      undefined,
-      {
-        requestMetadata,
-        displayContent: prompt,
-      },
-    );
+    void handleSend(undefined, false, false, prompt, "react", undefined, {
+      requestMetadata,
+      displayContent: prompt,
+    });
   }, [
     currentSessionTitle,
     effectiveProjectRootPath,

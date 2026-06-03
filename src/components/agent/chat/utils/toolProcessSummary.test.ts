@@ -75,6 +75,44 @@ describe("toolProcessSummary", () => {
     expect(narrative.summary).toBe("已完成等待");
   });
 
+  it("应为图片查看工具提供稳定过程文案，避免展示 raw output", () => {
+    const runningNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "ViewImageTool",
+        status: "running",
+        arguments: JSON.stringify({ path: "/workspace/assets/sample.png" }),
+      }),
+    );
+    const completedNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "view_image",
+        status: "completed",
+        arguments: JSON.stringify({ path: "/workspace/assets/sample.png" }),
+        result: {
+          success: true,
+          output:
+            "Viewed image: /workspace/assets/sample.png\nFormat: image/png\nImage content is attached to this tool result.",
+        },
+      }),
+    );
+    const legacyAnalyzeNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "analyze_image",
+        status: "running",
+        arguments: JSON.stringify({
+          image_path: "/workspace/assets/chart.png",
+        }),
+      }),
+    );
+
+    expect(runningNarrative.preSummary).toBe("先查看图片 sample.png");
+    expect(runningNarrative.summary).toBe("先查看图片 sample.png");
+    expect(completedNarrative.postSummary).toBe("已查看图片 sample.png");
+    expect(completedNarrative.summary).toBe("已查看图片 sample.png");
+    expect(completedNarrative.summary).not.toContain("Viewed image");
+    expect(legacyAnalyzeNarrative.preSummary).toBe("先分析图片 chart.png");
+  });
+
   it("应为计划模式与最终答复提供专用文案", () => {
     const enterPlanNarrative = resolveToolProcessNarrative(
       createToolCall({
@@ -147,6 +185,137 @@ describe("toolProcessSummary", () => {
     expect(cronListNarrative.postSummary).toBe("已查看定时触发器");
   });
 
+  it("应为 gated runtime 工具保留历史主体并净化失败摘要", () => {
+    const cronCreateNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "CronCreateTool",
+        status: "completed",
+        arguments: JSON.stringify({
+          id: "morning-news",
+          prompt: "整理国际新闻",
+        }),
+      }),
+    );
+    const cronDeleteNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "CronDeleteTool",
+        status: "completed",
+        arguments: JSON.stringify({ id: "morning-news" }),
+      }),
+    );
+    const remoteTriggerNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "RemoteTriggerTool",
+        status: "failed",
+        arguments: JSON.stringify({ trigger_id: "remote-daily-news" }),
+        result: {
+          success: false,
+          error: "-32603: -32002: remote trigger runtime is not configured",
+          output: "",
+        },
+      }),
+    );
+    const lspNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "LSPTool",
+        status: "failed",
+        arguments: JSON.stringify({
+          operation: "definition",
+          path: "src/main.ts",
+        }),
+        result: {
+          success: false,
+          error: "-32603: -32002: LSP server is not available",
+          output: "",
+        },
+      }),
+    );
+
+    expect(cronCreateNarrative.preSummary).toBe(
+      "先创建定时触发器 morning-news",
+    );
+    expect(cronCreateNarrative.postSummary).toBe(
+      "已创建定时触发器 morning-news",
+    );
+    expect(cronDeleteNarrative.postSummary).toBe(
+      "已删除定时触发器 morning-news",
+    );
+    expect(remoteTriggerNarrative.summary).toBe(
+      "执行失败：remote trigger runtime is not configured",
+    );
+    expect(remoteTriggerNarrative.summary).not.toContain("-32603");
+    expect(lspNarrative.summary).toBe("执行失败：LSP server is not available");
+    expect(lspNarrative.summary).not.toContain("-32002");
+  });
+
+  it("应为外部信息与结构化数据工具生成可读过程文案", () => {
+    const searchNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "SearchQuery",
+        status: "completed",
+        arguments: JSON.stringify({ q: "2026-06-03 international news" }),
+      }),
+    );
+    const imageNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "ImageQuery",
+        status: "running",
+        arguments: JSON.stringify({ query: "product screenshot" }),
+      }),
+    );
+    const financeNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "finance",
+        status: "completed",
+        arguments: JSON.stringify({ ticker: "AAPL" }),
+      }),
+    );
+    const weatherNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "weather",
+        status: "completed",
+        arguments: JSON.stringify({ location: "Tokyo" }),
+      }),
+    );
+    const timeNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "time",
+        status: "running",
+        arguments: JSON.stringify({ utc_offset: "+09:00" }),
+      }),
+    );
+    const resolveLibraryNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "ResolveLibraryId",
+        status: "completed",
+        arguments: JSON.stringify({ libraryName: "Next.js" }),
+      }),
+    );
+    const queryDocsNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "QueryDocs",
+        status: "completed",
+        arguments: JSON.stringify({ query: "React useEffect cleanup" }),
+      }),
+    );
+
+    expect(searchNarrative.preSummary).toBe(
+      "先搜索 2026-06-03 international news",
+    );
+    expect(searchNarrative.postSummary).toBe(
+      "已搜索 2026-06-03 international news",
+    );
+    expect(imageNarrative.preSummary).toBe("先搜索 product screenshot");
+    expect(imageNarrative.summary).toBe("先搜索 product screenshot");
+    expect(financeNarrative.postSummary).toBe("已获取 AAPL 内容");
+    expect(weatherNarrative.postSummary).toBe("已获取 Tokyo 内容");
+    expect(timeNarrative.preSummary).toBe("先获取 +09:00");
+    expect(resolveLibraryNarrative.postSummary).toBe("已搜索 Next.js");
+    expect(queryDocsNarrative.postSummary).toBe(
+      "已查看 React useEffect cleanup",
+    );
+  });
+
   it("应为 MCP 搜索与读取工具生成可读过程文案", () => {
     const searchNarrative = resolveToolProcessNarrative(
       createToolCall({
@@ -168,6 +337,111 @@ describe("toolProcessSummary", () => {
     expect(readNarrative.preSummary).toBe("先查看 guide.md");
     expect(readNarrative.postSummary).toBe("已查看 guide.md");
     expect(readNarrative.summary).toBe("已查看 guide.md");
+  });
+
+  it("应为 compat dynamic aliases 生成专用过程文案", () => {
+    const mcpNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "MCPTool",
+        status: "completed",
+      }),
+    );
+    const authNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "McpAuthTool",
+        status: "completed",
+      }),
+    );
+    const replNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "REPLTool",
+        status: "running",
+      }),
+    );
+    const listSkillsNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "ListSkills",
+        status: "completed",
+      }),
+    );
+    const loadSkillNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "LoadSkill",
+        status: "completed",
+        arguments: JSON.stringify({ name: "browser" }),
+      }),
+    );
+    const waitNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "WaitAgent",
+        status: "completed",
+        arguments: JSON.stringify({ id: "agent-1" }),
+      }),
+    );
+    const resumeNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "ResumeAgent",
+        status: "running",
+        arguments: JSON.stringify({ id: "agent-1" }),
+      }),
+    );
+    const closeNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "CloseAgent",
+        status: "completed",
+        arguments: JSON.stringify({ id: "agent-1" }),
+      }),
+    );
+
+    expect(mcpNarrative.preSummary).toBe("先调用 MCP 工具");
+    expect(mcpNarrative.postSummary).toBe("已完成 MCP 工具调用");
+    expect(authNarrative.preSummary).toBe("先完成 MCP 授权");
+    expect(authNarrative.postSummary).toBe("已完成 MCP 授权");
+    expect(replNarrative.summary).toBe("先运行命令确认当前状态");
+    expect(listSkillsNarrative.postSummary).toBe("已查看可用技能");
+    expect(loadSkillNarrative.postSummary).toBe("已加载技能 browser");
+    expect(waitNarrative.postSummary).toBe("已查看子任务 agent-1 进展");
+    expect(resumeNarrative.preSummary).toBe("先继续子任务 agent-1");
+    expect(closeNarrative.postSummary).toBe("已暂停子任务 agent-1");
+  });
+
+  it("应为 MCP resource 与 mutation 工具生成可读过程文案", () => {
+    const listResourceNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "ListMcpResourcesTool",
+        status: "completed",
+        arguments: JSON.stringify({ server: "docs" }),
+      }),
+    );
+    const readResourceNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "ReadMcpResourceTool",
+        status: "completed",
+        arguments: JSON.stringify({
+          server: "docs",
+          uri: "file:///guide.md",
+        }),
+      }),
+    );
+    const mutationNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "mcp__github__create_issue",
+        status: "completed",
+        arguments: JSON.stringify({ title: "修复工具渲染" }),
+        result: {
+          success: true,
+          output: JSON.stringify({ id: 123, title: "修复工具渲染" }),
+        },
+      }),
+    );
+
+    expect(listResourceNarrative.preSummary).toBe("先查看 docs");
+    expect(listResourceNarrative.postSummary).toBe("已查看 docs");
+    expect(readResourceNarrative.preSummary).toBe("先读取 file:///guide.md");
+    expect(readResourceNarrative.postSummary).toBe("已读取 file:///guide.md");
+    expect(mutationNarrative.preSummary).toBe("先处理 修复工具渲染");
+    expect(mutationNarrative.postSummary).toBe("已处理 修复工具渲染");
+    expect(mutationNarrative.summary).not.toContain("{");
   });
 
   it("应为站点目录、搜索、详情与执行工具生成站点语义文案", () => {
@@ -243,6 +517,13 @@ describe("toolProcessSummary", () => {
   });
 
   it("应为新补齐的任务工具生成更贴近当前前台的发起文案", () => {
+    const audioNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "lime_create_audio_generation_task",
+        status: "completed",
+        arguments: JSON.stringify({ prompt: "温暖的播客旁白" }),
+      }),
+    );
     const transcriptionNarrative = resolveToolProcessNarrative(
       createToolCall({
         name: "lime_create_transcription_task",
@@ -271,7 +552,15 @@ describe("toolProcessSummary", () => {
         arguments: JSON.stringify({ targetPlatform: "小红书" }),
       }),
     );
+    const coverImageNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "social_generate_cover_image",
+        status: "completed",
+        arguments: JSON.stringify({ subject: "开发 Lime 的经验" }),
+      }),
+    );
 
+    expect(audioNarrative.postSummary).toBe("已发起 温暖的播客旁白 的配音生成");
     expect(transcriptionNarrative.preSummary).toBe(
       "先发起 /tmp/interview.mp4 的转写",
     );
@@ -284,6 +573,12 @@ describe("toolProcessSummary", () => {
       "已发起 https://example.com/report 的链接解析",
     );
     expect(typesettingNarrative.preSummary).toBe("先发起 小红书 的排版");
+    expect(coverImageNarrative.preSummary).toBe(
+      "先生成 开发 Lime 的经验 的封面图",
+    );
+    expect(coverImageNarrative.postSummary).toBe(
+      "已生成 开发 Lime 的经验 的封面图",
+    );
   });
 
   it("应把 WebSearch 协议错误翻译成可操作提示", () => {
@@ -299,9 +594,7 @@ describe("toolProcessSummary", () => {
       }),
     );
 
-    expect(narrative.postSummary).toBe(
-      "搜索结果暂时无法读取",
-    );
+    expect(narrative.postSummary).toBe("搜索结果暂时无法读取");
     expect(narrative.summary).toBe("搜索结果暂时无法读取");
   });
 
@@ -361,8 +654,7 @@ describe("toolProcessSummary", () => {
         }),
         result: {
           success: false,
-          error:
-            "-32603: -32002: sandbox 执行失败: Operation not permitted",
+          error: "-32603: -32002: sandbox 执行失败: Operation not permitted",
           output: "",
         },
       }),
@@ -417,6 +709,48 @@ describe("toolProcessSummary", () => {
     expect(narrative.postSummary).toBe("生成失败");
     expect(narrative.summary).toBe("生成失败");
     expect(narrative.summary).not.toContain("-32603");
-    expect(narrative.summary).not.toContain("lime_create_image_generation_task");
+    expect(narrative.summary).not.toContain(
+      "lime_create_image_generation_task",
+    );
+  });
+
+  it("内容工作台任务失败不应泄露内部协议错误", () => {
+    const cases = [
+      {
+        name: "lime_create_video_generation_task",
+        expected: "视频生成失败",
+      },
+      {
+        name: "lime_create_audio_generation_task",
+        expected: "配音生成失败",
+      },
+      {
+        name: "lime_create_transcription_task",
+        expected: "转写失败",
+      },
+      {
+        name: "lime_create_modal_resource_search_task",
+        expected: "素材检索失败",
+      },
+    ] as const;
+
+    for (const { name, expected } of cases) {
+      const narrative = resolveToolProcessNarrative(
+        createToolCall({
+          name,
+          status: "failed",
+          result: {
+            success: false,
+            error: `-32603: -32002: ${name}`,
+            output: "",
+          },
+        }),
+      );
+
+      expect(narrative.summary).toBe(expected);
+      expect(narrative.summary).not.toContain("-32603");
+      expect(narrative.summary).not.toContain("-32002");
+      expect(narrative.summary).not.toContain(name);
+    }
   });
 });

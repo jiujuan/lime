@@ -62,7 +62,10 @@ import {
   resolveToolErrorDetailText,
   resolveToolProcessNarrative,
 } from "../utils/toolProcessSummary";
-import { isImageGenerationProtocolFailure } from "../utils/limeTaskProtocolNoise";
+import {
+  isLimeTaskProtocolFailure,
+  resolveLimeTaskProtocolFailureDisplayText,
+} from "../utils/limeTaskProtocolNoise";
 import {
   buildRenderedToolResultContent,
   buildToolCallDisplayGroups,
@@ -394,8 +397,17 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
   const isFailed = toolCall.status === "failed";
   const hasResult = !isRunning && toolCall.result;
   const resultImages = useMemo(
-    () => normalizeToolResultImages(toolCall.result?.images),
-    [toolCall.result?.images],
+    () =>
+      normalizeToolResultImages(
+        toolCall.result?.images,
+        toolCall.result?.output,
+        toolCall.result?.metadata,
+      ),
+    [
+      toolCall.result?.images,
+      toolCall.result?.metadata,
+      toolCall.result?.output,
+    ],
   );
   const resultMetadata = useMemo(
     () => normalizeToolResultMetadata(toolCall.result?.metadata),
@@ -422,15 +434,21 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     const rawText = toolCall.result?.error || toolCall.result?.output || "";
     return extractLimeToolMetadataBlock(rawText).text;
   }, [toolCall.result?.error, toolCall.result?.output]);
-  const isImageGenerationFailureResult = useMemo(
-    () =>
-      isFailed &&
-      isImageGenerationProtocolFailure({
-        toolName: toolCall.name,
-        text: rawResultText,
-      }),
-    [isFailed, rawResultText, toolCall.name],
-  );
+  const limeTaskProtocolFailureText = useMemo(() => {
+    if (!isFailed) {
+      return null;
+    }
+
+    return isLimeTaskProtocolFailure({
+      toolName: toolCall.name,
+      text: rawResultText,
+    })
+      ? resolveLimeTaskProtocolFailureDisplayText({
+          toolName: toolCall.name,
+          text: rawResultText,
+        })
+      : null;
+  }, [isFailed, rawResultText, toolCall.name]);
   const resultText = useMemo(() => {
     const normalized = rawResultText;
     if (isFailed) {
@@ -644,14 +662,13 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
   );
   const toolHeadline = useMemo(
     () =>
-      isImageGenerationFailureResult
-        ? t("agentChat.imageWorkbenchPreview.placeholder.failed")
-        : buildToolHeadlineFromInfo({
-            toolDisplay,
-            subject: fileName,
-            toolName: toolCall.name,
-          }),
-    [fileName, isImageGenerationFailureResult, t, toolCall.name, toolDisplay],
+      limeTaskProtocolFailureText ||
+      buildToolHeadlineFromInfo({
+        toolDisplay,
+        subject: fileName,
+        toolName: toolCall.name,
+      }),
+    [fileName, limeTaskProtocolFailureText, toolCall.name, toolDisplay],
   );
   const processNarrative = useMemo(
     () => resolveToolProcessNarrative(toolCall),
@@ -680,7 +697,12 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
       return processNarrative.summary;
     }
     return buildGroupedChildLineFromInfo(toolCall);
-  }, [isToolSearch, processNarrative.postSource, processNarrative.summary, toolCall]);
+  }, [
+    isToolSearch,
+    processNarrative.postSource,
+    processNarrative.summary,
+    toolCall,
+  ]);
   const shouldShowRawSearchResultToggle =
     hasSearchResults && resultText !== emptyOutputLabel;
   const shouldRenderResultPanel =
@@ -715,17 +737,23 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     "agentChat.toolCall.error.openExternalUnsupported",
   );
 
-  const handleOpenExternalUrl = useCallback(async (url: string) => {
-    try {
-      await openExternal(url);
-    } catch {
-      if (typeof window !== "undefined" && typeof window.open === "function") {
-        window.open(url, "_blank");
-        return;
+  const handleOpenExternalUrl = useCallback(
+    async (url: string) => {
+      try {
+        await openExternal(url);
+      } catch {
+        if (
+          typeof window !== "undefined" &&
+          typeof window.open === "function"
+        ) {
+          window.open(url, "_blank");
+          return;
+        }
+        throw new Error(openExternalUnsupportedMessage);
       }
-      throw new Error(openExternalUnsupportedMessage);
-    }
-  }, [openExternalUnsupportedMessage]);
+    },
+    [openExternalUnsupportedMessage],
+  );
 
   useEffect(() => {
     setIsSkillContentExpanded(false);
@@ -1456,9 +1484,7 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
                         >
                           <span>
                             {isDiffFileExpanded
-                              ? t(
-                                  "agentChat.toolCall.diffReview.collapseFile",
-                                )
+                              ? t("agentChat.toolCall.diffReview.collapseFile")
                               : t("agentChat.toolCall.diffReview.expandFile", {
                                   count: hiddenLineCount,
                                 })}

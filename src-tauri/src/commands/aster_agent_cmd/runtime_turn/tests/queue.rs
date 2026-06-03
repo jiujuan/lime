@@ -17,6 +17,65 @@ fn queued_turn_task_should_materialize_turn_id_before_runtime_execution() {
     );
 }
 
+#[test]
+fn queued_turn_task_should_preserve_plan_and_goal_metadata() {
+    let request = build_runtime_turn_test_request(
+        "先规划再持续推进",
+        Some(json!({
+            "harness": {
+                "task_mode_enabled": true,
+                "goal_mode_enabled": true,
+                "preferences": {
+                    "task": true,
+                    "task_mode": true,
+                    "goal": true,
+                    "objective": true
+                },
+                "collaboration_mode": {
+                    "mode": "plan",
+                    "source": "inputbar"
+                },
+                "thread_goal": {
+                    "enabled": true,
+                    "source": "inputbar",
+                    "status": "active",
+                    "set": {
+                        "threadId": "thread-workspace-plan-goal",
+                        "objective": null,
+                        "status": "active",
+                        "tokenBudget": null
+                    }
+                }
+            }
+        })),
+    );
+
+    let queued_task = build_queued_turn_task(request).expect("build queued task");
+    let payload: AsterChatRequest =
+        serde_json::from_value(queued_task.payload).expect("deserialize queued payload");
+    let metadata = payload.metadata.expect("queued payload metadata");
+
+    assert_eq!(
+        metadata.pointer("/harness/collaboration_mode/mode"),
+        Some(&json!("plan"))
+    );
+    assert_eq!(
+        metadata.pointer("/harness/thread_goal/set/threadId"),
+        Some(&json!("thread-workspace-plan-goal"))
+    );
+    assert_eq!(
+        metadata.pointer("/harness/goal_mode_enabled"),
+        Some(&json!(true))
+    );
+    assert!(
+        payload
+            .turn_id
+            .as_deref()
+            .is_some_and(|turn_id| !turn_id.trim().is_empty()),
+        "queued runtime payload must keep materialized turn id"
+    );
+}
+
 #[tokio::test]
 async fn compact_tool_surface_should_bound_provider_tools_in_runtime_crate() {
     ensure_runtime_turn_test_session_manager().await;

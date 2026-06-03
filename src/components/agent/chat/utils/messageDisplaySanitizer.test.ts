@@ -37,6 +37,44 @@ describe("messageDisplaySanitizer", () => {
     ).toEqual([contentParts[1], contentParts[2]]);
   });
 
+  it("应清理 StructuredOutput 协议残留并保留最终 Markdown 正文", () => {
+    const contentParts: ContentPart[] = [
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-structured-output",
+          name: "StructuredOutput",
+          arguments: "{}",
+          status: "completed",
+          result: { success: true, output: "ok" },
+          startTime: new Date("2026-06-03T09:00:00.000Z"),
+        },
+      },
+      {
+        type: "text",
+        text: [
+          "Final output must be a valid JSON object provided to the StructuredOutput tool.",
+          "",
+          "## 调研结论",
+          "",
+          "- 已确认主要风险与下一步。",
+        ].join("\n"),
+      },
+    ];
+
+    expect(
+      sanitizeContentPartsForDisplay(contentParts, {
+        role: "assistant",
+      }),
+    ).toEqual([
+      contentParts[0],
+      {
+        ...contentParts[1],
+        text: "## 调研结论\n\n- 已确认主要风险与下一步。",
+      },
+    ]);
+  });
+
   it("应清理紧邻工具调用的页面操作自述", () => {
     const contentParts: ContentPart[] = [
       {

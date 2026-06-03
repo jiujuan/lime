@@ -4862,8 +4862,7 @@ describe("MessageList", () => {
       {
         id: "msg-assistant-timeline-interleaved-reasoning",
         role: "assistant",
-        content:
-          "我先围绕你给出的路径做只读侦查。\n\n已确认该目录存在。",
+        content: "我先围绕你给出的路径做只读侦查。\n\n已确认该目录存在。",
         timestamp: new Date("2026-05-30T09:10:05.000Z"),
       },
     ];
@@ -6056,9 +6055,7 @@ describe("MessageList", () => {
     expect(contentParts[2]?.toolCall?.name).toBe("web_search");
     expect(contentParts[2]?.toolCall?.arguments).toContain("openPage");
     expect(contentParts[3]?.text).toContain("国际新闻简报");
-    expect(contentParts[3]?.text).not.toContain(
-      "我先联网核实今天的国际新闻",
-    );
+    expect(contentParts[3]?.text).not.toContain("我先联网核实今天的国际新闻");
     expect(call?.rawContent).toContain("国际新闻简报");
     expect(call?.rawContent).not.toContain("我先联网核实今天的国际新闻");
     expect(
@@ -7048,8 +7045,12 @@ describe("MessageList", () => {
     const saveButton = container.querySelector(
       'button[aria-label="Save to project knowledge"]',
     );
+    const messageActions = container.querySelector(
+      '[data-testid="message-actions"]',
+    );
 
     expect(saveButton).not.toBeNull();
+    expect(messageActions?.className).toContain("message-actions-persistent");
 
     act(() => {
       saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));

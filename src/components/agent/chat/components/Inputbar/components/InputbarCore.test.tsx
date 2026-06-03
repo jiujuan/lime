@@ -246,6 +246,140 @@ describe("InputbarCore", () => {
     ).toBeTruthy();
   });
 
+  it("左侧加号应打开 Codex 风格设置浮层并触发工具动作", async () => {
+    const onAddFiles = vi.fn();
+    const onToggleTask = vi.fn();
+    const onToggleObjective = vi.fn();
+    const container = await renderInputbarCore({
+      text: "继续处理",
+      plusMenu: {
+        labels: {
+          open: "打开输入设置",
+          addFiles: "添加照片和文件",
+          attachKnowledge: "附加资料",
+          planMode: "计划模式",
+          subagent: "任务拆分",
+          objective: "追求目标",
+          skills: "技能",
+          unavailable: "当前会话暂不可用",
+        },
+        taskEnabled: true,
+        knowledgeActive: true,
+        skillsActive: true,
+        onAddFiles,
+        onToggleTask,
+        onToggleObjective,
+        knowledgePanel: <div>资料面板</div>,
+        skillsPanel: <div>技能面板</div>,
+      },
+    });
+
+    const plusButton = container.querySelector(
+      'button[aria-label="打开输入设置"]',
+    ) as HTMLButtonElement | null;
+    expect(plusButton).toBeTruthy();
+
+    await act(async () => {
+      plusButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const menu = document.body.querySelector(
+      '[data-testid="inputbar-plus-menu"]',
+    );
+    expect(menu).toBeTruthy();
+    expect(menu?.textContent).toContain("添加照片和文件");
+    expect(menu?.textContent).toContain("计划模式");
+    expect(menu?.textContent).toContain("追求目标");
+    expect(menu?.textContent).toContain("技能");
+
+    await act(async () => {
+      document.body
+        .querySelector('[data-testid="inputbar-plus-plan-mode"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(onToggleTask).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      document.body
+        .querySelector('[data-testid="inputbar-plus-objective"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(onToggleObjective).toHaveBeenCalledTimes(1);
+    expect(
+      document.body.querySelector(
+        '[data-testid="inputbar-plus-panel-objective"]',
+      ),
+    ).toBeNull();
+
+    await act(async () => {
+      document.body
+        .querySelector('[data-testid="inputbar-plus-knowledge"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(
+      document.body.querySelector(
+        '[data-testid="inputbar-plus-panel-knowledge"]',
+      )?.textContent,
+    ).toContain("资料面板");
+
+    await act(async () => {
+      document.body
+        .querySelector('[data-testid="inputbar-plus-add-files"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(onAddFiles).toHaveBeenCalledTimes(1);
+  });
+
+  it("底部 meta 应支持左侧状态和右侧模型分区", async () => {
+    const container = await renderInputbarCore({
+      text: "继续处理",
+      plusMenu: {
+        labels: {
+          open: "打开输入设置",
+          addFiles: "添加照片和文件",
+          attachKnowledge: "附加资料",
+          planMode: "计划模式",
+          subagent: "任务拆分",
+          objective: "追求目标",
+          skills: "技能",
+          unavailable: "当前会话暂不可用",
+        },
+        taskEnabled: false,
+        onAddFiles: vi.fn(),
+        onToggleTask: vi.fn(),
+        onToggleObjective: vi.fn(),
+      },
+      leftExtra: <span data-testid="left-meta-item">完全访问</span>,
+      trailingMeta: <span data-testid="trailing-meta-item">模型切换</span>,
+    });
+
+    const leftMeta = container.querySelector(
+      '[data-testid="inputbar-meta-left"]',
+    );
+    const rightMeta = container.querySelector(
+      '[data-testid="inputbar-meta-trailing"]',
+    );
+
+    expect(
+      leftMeta?.querySelector('[data-testid="left-meta-item"]'),
+    ).toBeTruthy();
+    expect(
+      rightMeta?.querySelector('[data-testid="trailing-meta-item"]'),
+    ).toBeTruthy();
+    expect(
+      leftMeta?.querySelector('[data-testid="trailing-meta-item"]'),
+    ).toBeNull();
+  });
+
   it("添加路径引用时应显示 chip 并允许移除", async () => {
     const onRemovePathReference = vi.fn();
     const container = await renderInputbarCore({

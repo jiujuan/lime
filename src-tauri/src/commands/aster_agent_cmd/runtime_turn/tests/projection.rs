@@ -200,6 +200,9 @@ fn model_unavailable_detection_should_include_tenant_whitelist_and_invalid_model
     assert!(is_runtime_model_unavailable_error(
         "Request failed: Bad request (400): Not supported model stale-chat"
     ));
+    assert!(is_runtime_model_unavailable_error(
+        "[AsterAgent][TTFT] provider stream request failed before body: provider=openai, model=gpt-5.5, elapsed_ms=8517, error=Server error: Server error (503 Service Unavailable): Service temporarily unavailable"
+    ));
     assert!(!is_runtime_model_unavailable_error(
         "Request failed: Bad request (400): invalid schema"
     ));

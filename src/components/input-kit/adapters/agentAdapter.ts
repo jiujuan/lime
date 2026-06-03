@@ -1,5 +1,6 @@
 import type { ChatInputAdapter } from "./types";
 import type { ComposerAttachment } from "../types";
+import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 
 interface CreateAgentInputAdapterOptions {
   text: string;
@@ -8,8 +9,10 @@ interface CreateAgentInputAdapterOptions {
   disabled?: boolean;
   providerType: string;
   model: string;
+  reasoningEffort?: ModelReasoningEffortLevel | "";
   setProviderType: (providerType: string) => void;
   setModel: (model: string) => void;
+  setReasoningEffort?: (value: ModelReasoningEffortLevel | "") => void;
   send: (options?: { textOverride?: string }) => void;
   stop?: () => void;
   attachments?: ComposerAttachment[];
@@ -25,8 +28,10 @@ export const createAgentInputAdapter = (
     disabled,
     providerType,
     model,
+    reasoningEffort,
     setProviderType,
     setModel,
+    setReasoningEffort,
     send,
     stop,
     attachments,
@@ -42,6 +47,7 @@ export const createAgentInputAdapter = (
     model: {
       providerType,
       model,
+      reasoningEffort,
     },
     actions: {
       setText,
@@ -49,6 +55,7 @@ export const createAgentInputAdapter = (
       stop,
       setProviderType,
       setModel,
+      setReasoningEffort,
     },
     ui: {
       showModelSelector: true,

@@ -543,6 +543,8 @@
   "agentChat.runtimeError.providerQuota": "The current model channel returned a billing or quota error. Check the provider/model channel billing, quota, or authorization state, or switch to another available model.",
   "agentChat.runtimeError.providerUnavailable": "The current model channel is temporarily unavailable. Try again later; if it keeps failing, check the provider status or switch to another available model.",
   "agentChat.runtimeError.internalRuntime": "The runtime returned an internal error. Details are preserved for diagnostics. Try again later, or check the provider and tool connection.",
+  "agentChat.emptyFinalReply.errorMessage": "The model did not produce a final response. Try again.",
+  "agentChat.emptyFinalReply.fallbackContent": "This run completed. The detailed steps and artifacts are preserved in the current conversation.",
   "agentChat.runtimeStrip.theme.general": "General chat",
   "agentChat.runtimeStrip.title.general": "General assistant",
   "agentChat.runtimeStrip.capability.direct": "Direct answer",

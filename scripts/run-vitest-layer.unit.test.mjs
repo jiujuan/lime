@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { parseArgs, selectLayerEntries } from "./run-vitest-layer.mjs";
+import {
+  buildLayerEnvironmentArgs,
+  buildLayerPoolArgs,
+  buildVitestCliArgs,
+  parseArgs,
+  selectLayerEntries,
+  shouldUseSingleFork,
+} from "./run-vitest-layer.mjs";
 
 describe("run-vitest-layer 参数解析", () => {
   it("应把 Vitest 选项透传给 Vitest，而不是当成文件过滤器", () => {
@@ -15,6 +22,27 @@ describe("run-vitest-layer 参数解析", () => {
     expect(parseArgs(["unit", "src/lib/foo.test.ts"])).toMatchObject({
       layer: "unit",
       filters: ["src/lib/foo.test.ts"],
+      vitestArgs: [],
+    });
+  });
+
+  it("应支持带独立取值的 Vitest pool / environment 选项", () => {
+    expect(
+      parseArgs(["unit", "--pool", "forks", "--environment", "jsdom"]),
+    ).toMatchObject({
+      layer: "unit",
+      filters: [],
+      vitestArgs: ["--pool", "forks", "--environment", "jsdom"],
+    });
+  });
+
+  it("应把 single fork 作为分层运行器选项处理", () => {
+    expect(parseArgs(["unit", "--single-fork"])).toMatchObject({
+      layer: "unit",
+      options: {
+        singleFork: true,
+      },
+      filters: [],
       vitestArgs: [],
     });
   });
@@ -71,6 +99,96 @@ describe("run-vitest-layer 参数解析", () => {
         reason: "no-runnable-test-file",
         layers: [],
       },
+    ]);
+  });
+});
+
+describe("run-vitest-layer 运行参数", () => {
+  it("unit 层默认不强制 single fork", () => {
+    expect(shouldUseSingleFork("unit", {}, {})).toBe(false);
+    expect(
+      buildVitestCliArgs({
+        layer: "unit",
+        files: ["src/lib/foo.unit.test.ts"],
+        env: {},
+      }),
+    ).not.toContain("--poolOptions.forks.singleFork");
+  });
+
+  it("unit 层默认使用 node 环境", () => {
+    expect(buildLayerEnvironmentArgs("unit")).toEqual([
+      "--environment",
+      "node",
+    ]);
+    expect(
+      buildVitestCliArgs({
+        layer: "unit",
+        files: ["src/lib/foo.unit.test.ts"],
+        env: {},
+      }),
+    ).toContain("node");
+  });
+
+  it("unit 层默认使用 threads pool 提升全量单元测试速度", () => {
+    expect(buildLayerPoolArgs("unit", [], {}, {})).toEqual([
+      "--pool",
+      "threads",
+    ]);
+    expect(
+      buildVitestCliArgs({
+        layer: "unit",
+        files: ["src/lib/foo.unit.test.ts"],
+        env: {},
+      }),
+    ).toContain("threads");
+  });
+
+  it("unit 层可通过环境变量覆盖默认 pool", () => {
+    expect(
+      buildLayerPoolArgs(
+        "unit",
+        [],
+        {},
+        { LIME_VITEST_UNIT_POOL: "vmThreads" },
+      ),
+    ).toEqual(["--pool", "vmThreads"]);
+  });
+
+  it("显式 Vitest pool 会覆盖 unit 默认 threads pool", () => {
+    expect(buildLayerPoolArgs("unit", ["--pool=forks"], {}, {})).toEqual([]);
+    expect(buildLayerPoolArgs("unit", ["--pool", "forks"], {}, {})).toEqual(
+      [],
+    );
+  });
+
+  it("显式 Vitest environment 会覆盖 unit 默认 node 环境", () => {
+    expect(buildLayerEnvironmentArgs("unit", ["--environment", "jsdom"])).toEqual(
+      [],
+    );
+    expect(buildLayerEnvironmentArgs("unit", ["--environment=jsdom"])).toEqual(
+      [],
+    );
+  });
+
+  it("非 unit 层继续默认 single fork", () => {
+    expect(shouldUseSingleFork("component", {}, {})).toBe(true);
+    expect(
+      buildVitestCliArgs({
+        layer: "component",
+        files: ["src/lib/foo.test.tsx"],
+        env: {},
+      }),
+    ).toContain("--poolOptions.forks.singleFork");
+  });
+
+  it("unit 层可通过选项或环境变量强制 single fork", () => {
+    expect(shouldUseSingleFork("unit", { singleFork: true }, {})).toBe(true);
+    expect(
+      shouldUseSingleFork("unit", {}, { LIME_VITEST_SINGLE_FORK: "1" }),
+    ).toBe(true);
+    expect(buildLayerPoolArgs("unit", [], { singleFork: true }, {})).toEqual([
+      "--pool",
+      "forks",
     ]);
   });
 });

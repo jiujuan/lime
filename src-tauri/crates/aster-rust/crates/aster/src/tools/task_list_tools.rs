@@ -22,8 +22,6 @@ use crate::session::extension_data::{
     persist_task_board_state, resolve_task_board_state, TaskBoardItem, TaskBoardItemStatus,
     TaskBoardState,
 };
-#[cfg(test)]
-use crate::session::SessionManager;
 use crate::session::{
     apply_session_update, query_session, resolve_team_context, resolve_team_task_list_id,
     SessionType, TeamMembershipState, TeamSessionState,
@@ -1248,6 +1246,40 @@ mod tests {
         ToolContext::new(PathBuf::from("/tmp")).with_session_id("task-board-session")
     }
 
+    #[test]
+    fn test_task_board_input_aliases_deserialize_to_current_fields() {
+        let create_input: TaskCreateInput = serde_json::from_value(json!({
+            "subject": "整理任务板",
+            "description": "补齐别名覆盖",
+            "active_form": "正在整理任务板"
+        }))
+        .expect("TaskCreate should accept snake_case active_form alias");
+        assert_eq!(create_input.active_form.as_deref(), Some("正在整理任务板"));
+
+        let get_input: TaskGetInput = serde_json::from_value(json!({
+            "task_id": "task-1"
+        }))
+        .expect("TaskGet should accept snake_case task_id alias");
+        assert_eq!(get_input.task_id, "task-1");
+
+        let update_input: TaskUpdateInput = serde_json::from_value(json!({
+            "task_id": "task-1",
+            "active_form": "正在处理任务",
+            "add_blocks": ["task-2"],
+            "add_blocked_by": ["task-0"],
+            "status": "in_progress"
+        }))
+        .expect("TaskUpdate should accept current camelCase fields and snake_case aliases");
+        assert_eq!(update_input.task_id, "task-1");
+        assert_eq!(update_input.active_form.as_deref(), Some("正在处理任务"));
+        assert_eq!(update_input.add_blocks, Some(vec!["task-2".to_string()]));
+        assert_eq!(
+            update_input.add_blocked_by,
+            Some(vec!["task-0".to_string()])
+        );
+        assert_eq!(update_input.status, Some(TaskUpdateStatus::InProgress));
+    }
+
     #[tokio::test]
     #[serial(task_list_tools)]
     async fn test_task_create_and_list_tools() {
@@ -1307,6 +1339,81 @@ mod tests {
             .output
             .unwrap_or_default()
             .contains("移除旧 Task 和 TodoWrite"));
+    }
+
+    #[tokio::test]
+    #[serial(task_list_tools)]
+    async fn test_task_get_tool_returns_null_for_missing_task_without_failure() {
+        let storage = Arc::new(TaskListStorage::new());
+        let get_tool = TaskGetTool::with_storage(storage);
+        let context = create_test_context();
+
+        let get_result = get_tool
+            .execute(json!({ "task_id": "missing-task" }), &context)
+            .await
+            .expect("missing task should still return structured result");
+        assert!(get_result.success);
+        let output: Value =
+            serde_json::from_str(&get_result.output.unwrap_or_default()).expect("valid json");
+        assert_eq!(output["task"], Value::Null);
+        assert_eq!(get_result.metadata["task"], Value::Null);
+        assert_eq!(
+            get_result.metadata["task_list_id"],
+            json!("task-board-session")
+        );
+    }
+
+    #[tokio::test]
+    #[serial(task_list_tools)]
+    async fn test_task_update_tool_accepts_snake_case_dependency_aliases() {
+        let storage = Arc::new(TaskListStorage::new());
+        let create_tool = TaskCreateTool::with_storage(storage.clone());
+        let update_tool = TaskUpdateTool::with_storage(storage.clone());
+        let list_tool = TaskListTool::with_storage(storage);
+        let context = create_test_context();
+
+        create_tool
+            .execute(
+                json!({
+                    "subject": "前置任务",
+                    "description": "阻塞后续任务"
+                }),
+                &context,
+            )
+            .await
+            .expect("task 1 create should succeed");
+        create_tool
+            .execute(
+                json!({
+                    "subject": "后续任务",
+                    "description": "等待前置任务"
+                }),
+                &context,
+            )
+            .await
+            .expect("task 2 create should succeed");
+
+        let update_result = update_tool
+            .execute(
+                json!({
+                    "task_id": "2",
+                    "active_form": "等待前置任务完成",
+                    "add_blocked_by": ["1"]
+                }),
+                &context,
+            )
+            .await
+            .expect("snake_case dependency update should succeed");
+        assert_eq!(update_result.metadata["task"]["activeForm"], json!("等待前置任务完成"));
+        assert_eq!(update_result.metadata["task"]["blockedBy"], json!(["1"]));
+
+        let list_result = list_tool
+            .execute(json!({}), &context)
+            .await
+            .expect("list should succeed");
+        let output: Value =
+            serde_json::from_str(&list_result.output.unwrap_or_default()).expect("valid json");
+        assert_eq!(output["tasks"][1]["blockedBy"], json!(["1"]));
     }
 
     #[tokio::test]

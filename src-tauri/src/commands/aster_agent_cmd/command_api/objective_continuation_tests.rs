@@ -115,6 +115,7 @@ fn continuation_request_can_inherit_direct_provider_config() {
             api_key: Some("fixture-key".to_string()),
             base_url: Some("http://127.0.0.1:56013".to_string()),
             credential_uuid: None,
+            reasoning_effort: None,
             force_responses_api: false,
             toolshim: true,
             toolshim_model: Some("toolshim-fixture".to_string()),

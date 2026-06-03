@@ -61,6 +61,8 @@ pub struct AsterProviderConfig {
     pub base_url: Option<String>,
     /// 凭证 UUID（用于记录使用和健康状态）
     pub credential_uuid: String,
+    /// 当前回合显式推理强度
+    pub reasoning_effort: Option<String>,
     /// 是否强制 OpenAI provider 使用 Responses API（用于 Codex 等兼容链路）
     pub force_responses_api: bool,
     /// 当前回合是否启用 toolshim
@@ -228,6 +230,7 @@ impl CredentialBridge {
             api_key,
             base_url,
             credential_uuid: credential.uuid.clone(),
+            reasoning_effort: None,
             force_responses_api,
             toolshim: false,
             toolshim_model: None,
@@ -329,6 +332,7 @@ fn build_provider_model_config(
             model_config
                 .with_toolshim(config.toolshim)
                 .with_toolshim_model(config.toolshim_model.clone())
+                .with_reasoning_effort(config.reasoning_effort.clone())
         })
         .map_err(|e| {
             CredentialBridgeError::ProviderCreationFailed(format!("创建 ModelConfig 失败: {e}"))
@@ -748,6 +752,7 @@ mod tests {
             api_key: Some("test-key".to_string()),
             base_url: Some("https://example.com/openai".to_string()),
             credential_uuid: "test-uuid".to_string(),
+            reasoning_effort: None,
             force_responses_api: true,
             toolshim: false,
             toolshim_model: None,
@@ -783,6 +788,7 @@ mod tests {
             api_key: Some("test-key".to_string()),
             base_url: Some("https://api.openai.com/v1".to_string()),
             credential_uuid: "test-uuid".to_string(),
+            reasoning_effort: None,
             force_responses_api: true,
             toolshim: false,
             toolshim_model: None,
@@ -818,6 +824,7 @@ mod tests {
             api_key: Some("test-key".to_string()),
             base_url: None,
             credential_uuid: "test-uuid".to_string(),
+            reasoning_effort: None,
             force_responses_api: false,
             toolshim: false,
             toolshim_model: None,
@@ -845,6 +852,7 @@ mod tests {
             api_key: Some("test-key".to_string()),
             base_url: Some("https://open.bigmodel.cn/api/paas/v4".to_string()),
             credential_uuid: "test-uuid".to_string(),
+            reasoning_effort: None,
             force_responses_api: false,
             toolshim: false,
             toolshim_model: None,
@@ -862,6 +870,7 @@ mod tests {
             api_key: Some("test-key".to_string()),
             base_url: Some("https://api.openai.com/v1".to_string()),
             credential_uuid: "test-uuid".to_string(),
+            reasoning_effort: None,
             force_responses_api: false,
             toolshim: false,
             toolshim_model: None,
@@ -879,6 +888,7 @@ mod tests {
             api_key: Some("test-key".to_string()),
             base_url: Some("https://example.com/openai".to_string()),
             credential_uuid: "test-uuid".to_string(),
+            reasoning_effort: None,
             force_responses_api: true,
             toolshim: false,
             toolshim_model: None,
@@ -896,6 +906,7 @@ mod tests {
             api_key: Some("test-key".to_string()),
             base_url: Some("https://token-plan-cn.xiaomimimo.com/anthropic".to_string()),
             credential_uuid: "test-uuid".to_string(),
+            reasoning_effort: None,
             force_responses_api: false,
             toolshim: false,
             toolshim_model: None,
@@ -913,6 +924,7 @@ mod tests {
             api_key: Some("test-key".to_string()),
             base_url: Some("https://api.anthropic.com".to_string()),
             credential_uuid: "test-uuid".to_string(),
+            reasoning_effort: None,
             force_responses_api: false,
             toolshim: false,
             toolshim_model: None,
@@ -972,6 +984,7 @@ mod tests {
             api_key: Some("test-key".to_string()),
             base_url: Some("https://llm.limeai.run#lime_tenant_id=tenant-0001".to_string()),
             credential_uuid: "test-uuid".to_string(),
+            reasoning_effort: None,
             force_responses_api: false,
             toolshim: false,
             toolshim_model: None,
@@ -1007,6 +1020,7 @@ mod tests {
             api_key: Some("test-key".to_string()),
             base_url: Some("https://api.openai.com/v1".to_string()),
             credential_uuid: "test-uuid".to_string(),
+            reasoning_effort: None,
             force_responses_api: false,
             toolshim: false,
             toolshim_model: None,
@@ -1035,6 +1049,7 @@ mod tests {
             api_key: Some("test-key".to_string()),
             base_url: Some("https://open.bigmodel.cn/api/anthropic".to_string()),
             credential_uuid: "test-uuid".to_string(),
+            reasoning_effort: None,
             force_responses_api: false,
             toolshim: false,
             toolshim_model: None,
@@ -1070,6 +1085,7 @@ mod tests {
             api_key: Some("official-key".to_string()),
             base_url: Some("https://api.anthropic.com".to_string()),
             credential_uuid: "test-uuid".to_string(),
+            reasoning_effort: None,
             force_responses_api: false,
             toolshim: false,
             toolshim_model: None,
@@ -1093,6 +1109,7 @@ mod tests {
             api_key: None,
             base_url: Some("http://127.0.0.1:11434".to_string()),
             credential_uuid: "test-uuid".to_string(),
+            reasoning_effort: Some("high".to_string()),
             force_responses_api: false,
             toolshim: true,
             toolshim_model: Some("glm-5.1:cloud".to_string()),
@@ -1105,5 +1122,6 @@ mod tests {
             model_config.toolshim_model.as_deref(),
             Some("glm-5.1:cloud")
         );
+        assert_eq!(model_config.reasoning_effort.as_deref(), Some("high"));
     }
 }

@@ -500,6 +500,7 @@ mod tests {
                     context_limit: Some(context_limit),
                     temperature: None,
                     max_tokens: None,
+                    reasoning_effort: None,
                     toolshim: false,
                     toolshim_model: None,
                     fast_model: None,

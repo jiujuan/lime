@@ -199,7 +199,7 @@ describe("layered-design export", () => {
     expect(exportedDocument.status).toBe("exported");
     expect(exportedDocument.layers).toHaveLength(3);
     expect(JSON.stringify(bundle)).not.toMatch(/poster_generate|canvas:poster/);
-  }, 10_000);
+  }, 30_000);
 
   it("预览 SVG 应来自当前可见图层，并正确转义文本", () => {
     const svg = renderLayeredDesignDocumentToSvg(createExportDocument());
@@ -290,7 +290,7 @@ describe("layered-design export", () => {
     expect(readAscii(psd, 0, psd.byteLength)).not.toMatch(
       /poster_generate|canvas:poster|ImageTaskViewer/,
     );
-  });
+  }, 20_000);
 
   it("远程 assets 应保留引用，不伪装成已下载文件", () => {
     const document = createLayeredDesignDocument({

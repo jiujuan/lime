@@ -8,8 +8,6 @@ import {
   Database,
   FileText,
   RefreshCw,
-  Search,
-  ShieldCheck,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Switch } from "@/components/ui/switch";
@@ -22,8 +20,6 @@ import type {
   MemoryEmbeddingProvider,
   MemoryProfileConfig,
   MemoryResolveConfig,
-  MemorySoulArtifactVoiceConfig,
-  MemorySoulArtifactVoiceSource,
   MemorySoulConfig,
   MemorySourcesConfig,
 } from "@/lib/api/memoryRuntime";
@@ -33,11 +29,8 @@ import {
 } from "@/lib/api/unifiedMemory";
 import {
   buildSoulMarkdown,
-  formatSoulListInput,
   hasSoulContent,
-  normalizeSoulArtifactVoiceConfig,
   normalizeSoulConfig,
-  parseSoulListInput,
   parseSoulMarkdown,
   type SoulImportResult,
   type SoulImportWarningCode,
@@ -49,6 +42,17 @@ type EmbeddingProviderChoice =
   | "ollama"
   | "openai_api"
   | "disabled";
+type MemorySettingsTab = "memory" | "soul" | "advanced";
+type SoulTemplateId = "balanced" | "direct" | "creator";
+
+interface SoulTemplateDefinition {
+  id: SoulTemplateId;
+  titleKey: string;
+  descriptionKey: string;
+  summaryKey: string;
+  communicationKeys: string[];
+  avoidKeys: string[];
+}
 
 interface ProviderChoiceDefinition {
   value: EmbeddingProviderChoice;
@@ -104,6 +108,54 @@ const SOUL_WARNING_KEYS: Record<SoulImportWarningCode, string> = {
   secret_like: "settings.memory.soul.import.warning.secretLike",
   too_long: "settings.memory.soul.import.warning.tooLong",
 };
+
+const SOUL_TEMPLATE_DEFINITIONS: SoulTemplateDefinition[] = [
+  {
+    id: "balanced",
+    titleKey: "settings.memory.soul.template.balanced.title",
+    descriptionKey: "settings.memory.soul.template.balanced.description",
+    summaryKey: "settings.memory.soul.template.balanced.summary",
+    communicationKeys: [
+      "settings.memory.soul.template.balanced.communication.1",
+      "settings.memory.soul.template.balanced.communication.2",
+      "settings.memory.soul.template.balanced.communication.3",
+    ],
+    avoidKeys: [
+      "settings.memory.soul.template.balanced.avoid.1",
+      "settings.memory.soul.template.balanced.avoid.2",
+    ],
+  },
+  {
+    id: "direct",
+    titleKey: "settings.memory.soul.template.direct.title",
+    descriptionKey: "settings.memory.soul.template.direct.description",
+    summaryKey: "settings.memory.soul.template.direct.summary",
+    communicationKeys: [
+      "settings.memory.soul.template.direct.communication.1",
+      "settings.memory.soul.template.direct.communication.2",
+      "settings.memory.soul.template.direct.communication.3",
+    ],
+    avoidKeys: [
+      "settings.memory.soul.template.direct.avoid.1",
+      "settings.memory.soul.template.direct.avoid.2",
+    ],
+  },
+  {
+    id: "creator",
+    titleKey: "settings.memory.soul.template.creator.title",
+    descriptionKey: "settings.memory.soul.template.creator.description",
+    summaryKey: "settings.memory.soul.template.creator.summary",
+    communicationKeys: [
+      "settings.memory.soul.template.creator.communication.1",
+      "settings.memory.soul.template.creator.communication.2",
+      "settings.memory.soul.template.creator.communication.3",
+    ],
+    avoidKeys: [
+      "settings.memory.soul.template.creator.avoid.1",
+      "settings.memory.soul.template.creator.avoid.2",
+    ],
+  },
+];
 
 function memoryT(
   t: TFunction<"settings">,
@@ -250,6 +302,29 @@ function buildSoulDraftPatch(
   });
 }
 
+function readSoulTemplateList(
+  t: TFunction<"settings">,
+  keys: string[],
+): string[] {
+  return keys
+    .map((key) => memoryT(t, key))
+    .filter((item) => item.trim().length > 0);
+}
+
+function buildSoulTemplatePatch(
+  t: TFunction<"settings">,
+  template: SoulTemplateDefinition,
+): Partial<MemorySoulConfig> {
+  return {
+    enabled: true,
+    name: memoryT(t, template.titleKey),
+    summary: memoryT(t, template.summaryKey),
+    communication_style: readSoulTemplateList(t, template.communicationKeys),
+    avoid: readSoulTemplateList(t, template.avoidKeys),
+    imported_from: "manual",
+  };
+}
+
 function LoadingSkeleton() {
   return (
     <div className="mx-auto max-w-[820px] space-y-5 pb-8">
@@ -277,6 +352,7 @@ export function MemorySettings() {
   const [soulImportText, setSoulImportText] = useState("");
   const [soulImportPreview, setSoulImportPreview] =
     useState<SoulImportResult | null>(null);
+  const [activeTab, setActiveTab] = useState<MemorySettingsTab>("memory");
 
   const loadStats = useCallback(async () => {
     setStatsLoading(true);
@@ -335,11 +411,56 @@ export function MemorySettings() {
   const indexedCount = stats?.total_entries ?? stats?.memory_count ?? null;
   const cachedEmbeddingCount = vectorSearchEnabled ? indexedCount : 0;
   const soul = normalizeSoulConfig(draft.soul);
-  const soulArtifactVoice = normalizeSoulArtifactVoiceConfig(
-    soul.artifact_voice,
-  );
   const soulExportMarkdown = buildSoulMarkdown(soul);
   const soulEnabledWithContent = soul.enabled && hasSoulContent(soul);
+  const tabs: Array<{
+    id: MemorySettingsTab;
+    labelKey: string;
+    descriptionKey: string;
+  }> = [
+    {
+      id: "memory",
+      labelKey: "settings.memory.tabs.memory",
+      descriptionKey: "settings.memory.tabs.memory.description",
+    },
+    {
+      id: "soul",
+      labelKey: "settings.memory.tabs.soul",
+      descriptionKey: "settings.memory.tabs.soul.description",
+    },
+    {
+      id: "advanced",
+      labelKey: "settings.memory.tabs.advanced",
+      descriptionKey: "settings.memory.tabs.advanced.description",
+    },
+  ];
+  const soulPreviewItems = [
+    {
+      id: "summary",
+      labelKey: "settings.memory.soul.current.summary",
+      values: soul.summary ? [soul.summary] : [],
+    },
+    {
+      id: "communication",
+      labelKey: "settings.memory.soul.current.communication",
+      values: soul.communication_style ?? [],
+    },
+    {
+      id: "avoid",
+      labelKey: "settings.memory.soul.current.avoid",
+      values: soul.avoid ?? [],
+    },
+    {
+      id: "depth",
+      labelKey: "settings.memory.soul.current.depth",
+      values: soul.explanation_depth ? [soul.explanation_depth] : [],
+    },
+    {
+      id: "challenge",
+      labelKey: "settings.memory.soul.current.challenge",
+      values: soul.challenge_style ? [soul.challenge_style] : [],
+    },
+  ].filter((item) => item.values.length > 0);
 
   const handleProviderChange = (choice: EmbeddingProviderChoice) => {
     setDraft((previous) => ({
@@ -348,35 +469,38 @@ export function MemorySettings() {
     }));
   };
 
-  const updateSoulDraft = (patch: Partial<MemorySoulConfig>) => {
+  const handleSoulTemplateApply = (template: SoulTemplateDefinition) => {
     setDraft((previous) => ({
       ...previous,
-      soul: buildSoulDraftPatch(previous.soul, patch),
+      soul: buildSoulDraftPatch(
+        previous.soul,
+        buildSoulTemplatePatch(t, template),
+      ),
     }));
+    setMessage(memoryT(t, "settings.memory.soul.message.templateApplied"));
+    window.setTimeout(() => setMessage(null), 2500);
   };
 
-  const updateSoulArtifactVoiceDraft = (
-    patch: Partial<MemorySoulArtifactVoiceConfig>,
-  ) => {
+  const handleSoulReset = () => {
     setDraft((previous) => {
       const previousSoul = normalizeSoulConfig(previous.soul);
       return {
         ...previous,
-        soul: buildSoulDraftPatch(previous.soul, {
-          artifact_voice: normalizeSoulArtifactVoiceConfig({
-            ...previousSoul.artifact_voice,
-            ...patch,
-          }),
+        soul: normalizeSoulConfig({
+          enabled: false,
+          name: undefined,
+          summary: undefined,
+          tone: [],
+          communication_style: [],
+          explanation_depth: undefined,
+          challenge_style: undefined,
+          avoid: [],
+          artifact_voice: previousSoul.artifact_voice,
+          imported_from: "manual",
+          updated_at: new Date().toISOString(),
         }),
       };
     });
-  };
-
-  const handleSoulReset = () => {
-    setDraft((previous) => ({
-      ...previous,
-      soul: normalizeSoulConfig({ enabled: false, imported_from: "manual" }),
-    }));
     setSoulImportPreview(null);
     setSoulImportText("");
     setMessage(memoryT(t, "settings.memory.soul.message.reset"));
@@ -401,10 +525,16 @@ export function MemorySettings() {
     if (!soulImportPreview?.canImport) {
       return;
     }
-    setDraft((previous) => ({
-      ...previous,
-      soul: normalizeSoulConfig(soulImportPreview.draft),
-    }));
+    setDraft((previous) => {
+      const previousSoul = normalizeSoulConfig(previous.soul);
+      return {
+        ...previous,
+        soul: normalizeSoulConfig({
+          ...soulImportPreview.draft,
+          artifact_voice: previousSoul.artifact_voice,
+        }),
+      };
+    });
     setMessage(memoryT(t, "settings.memory.soul.message.importApplied"));
     window.setTimeout(() => setMessage(null), 2500);
   };
@@ -517,545 +647,365 @@ export function MemorySettings() {
         </div>
       </section>
 
-      <section className="rounded-md border border-slate-200/90 bg-white p-5 shadow-sm shadow-slate-950/5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-sky-200 bg-sky-50 text-sky-700">
-              <Brain className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-950">
-                {memoryT(t, "settings.memory.soul.title")}
-              </p>
-              <p className="mt-1 text-sm leading-6 text-slate-500">
-                {memoryT(t, "settings.memory.soul.description")}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-            <span className="text-xs font-medium text-slate-600">
-              {soulEnabledWithContent
-                ? memoryT(t, "settings.memory.status.enabled")
-                : memoryT(t, "settings.memory.status.disabled")}
-            </span>
-            <Switch
-              aria-label={memoryT(t, "settings.memory.soul.toggle.aria")}
-              checked={soul.enabled ?? false}
-              onCheckedChange={(checked) =>
-                updateSoulDraft({ enabled: checked })
-              }
-            />
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <label className="block">
-            <span className="text-xs font-semibold text-slate-600">
-              {memoryT(t, "settings.memory.soul.field.name.label")}
-            </span>
-            <input
-              type="text"
-              value={soul.name ?? ""}
-              onChange={(event) =>
-                updateSoulDraft({ name: event.target.value || undefined })
-              }
-              placeholder={memoryT(
-                t,
-                "settings.memory.soul.field.name.placeholder",
-              )}
-              className="mt-2 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs font-semibold text-slate-600">
-              {memoryT(t, "settings.memory.soul.field.tone.label")}
-            </span>
-            <textarea
-              value={formatSoulListInput(soul.tone)}
-              onChange={(event) =>
-                updateSoulDraft({
-                  tone: parseSoulListInput(event.target.value),
-                })
-              }
-              rows={3}
-              placeholder={memoryT(
-                t,
-                "settings.memory.soul.field.tone.placeholder",
-              )}
-              className="mt-2 min-h-[92px] w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white"
-            />
-          </label>
-          <label className="block md:col-span-2">
-            <span className="text-xs font-semibold text-slate-600">
-              {memoryT(t, "settings.memory.soul.field.summary.label")}
-            </span>
-            <textarea
-              value={soul.summary ?? ""}
-              onChange={(event) =>
-                updateSoulDraft({ summary: event.target.value || undefined })
-              }
-              rows={3}
-              placeholder={memoryT(
-                t,
-                "settings.memory.soul.field.summary.placeholder",
-              )}
-              className="mt-2 min-h-[92px] w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs font-semibold text-slate-600">
-              {memoryT(t, "settings.memory.soul.field.communication.label")}
-            </span>
-            <textarea
-              value={formatSoulListInput(soul.communication_style)}
-              onChange={(event) =>
-                updateSoulDraft({
-                  communication_style: parseSoulListInput(event.target.value),
-                })
-              }
-              rows={4}
-              placeholder={memoryT(
-                t,
-                "settings.memory.soul.field.communication.placeholder",
-              )}
-              className="mt-2 min-h-[116px] w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs font-semibold text-slate-600">
-              {memoryT(t, "settings.memory.soul.field.avoid.label")}
-            </span>
-            <textarea
-              value={formatSoulListInput(soul.avoid)}
-              onChange={(event) =>
-                updateSoulDraft({
-                  avoid: parseSoulListInput(event.target.value),
-                })
-              }
-              rows={4}
-              placeholder={memoryT(
-                t,
-                "settings.memory.soul.field.avoid.placeholder",
-              )}
-              className="mt-2 min-h-[116px] w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs font-semibold text-slate-600">
-              {memoryT(t, "settings.memory.soul.field.depth.label")}
-            </span>
-            <input
-              type="text"
-              value={soul.explanation_depth ?? ""}
-              onChange={(event) =>
-                updateSoulDraft({
-                  explanation_depth: event.target.value || undefined,
-                })
-              }
-              placeholder={memoryT(
-                t,
-                "settings.memory.soul.field.depth.placeholder",
-              )}
-              className="mt-2 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs font-semibold text-slate-600">
-              {memoryT(t, "settings.memory.soul.field.challenge.label")}
-            </span>
-            <input
-              type="text"
-              value={soul.challenge_style ?? ""}
-              onChange={(event) =>
-                updateSoulDraft({
-                  challenge_style: event.target.value || undefined,
-                })
-              }
-              placeholder={memoryT(
-                t,
-                "settings.memory.soul.field.challenge.placeholder",
-              )}
-              className="mt-2 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white"
-            />
-          </label>
-        </div>
-
-        <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-900">
-                {memoryT(t, "settings.memory.soul.artifactVoice.title")}
-              </p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">
-                {memoryT(t, "settings.memory.soul.artifactVoice.description")}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2">
-              <span className="text-xs font-medium text-slate-600">
-                {soulArtifactVoice.enabled
-                  ? memoryT(t, "settings.memory.status.enabled")
-                  : memoryT(t, "settings.memory.status.disabled")}
-              </span>
-              <Switch
-                aria-label={memoryT(
-                  t,
-                  "settings.memory.soul.artifactVoice.toggle.aria",
+      <section className="rounded-md border border-slate-200/90 bg-white p-2 shadow-sm shadow-slate-950/5">
+        <div
+          className="grid gap-2 md:grid-cols-3"
+          role="tablist"
+          aria-label={memoryT(t, "settings.memory.tabs.aria")}
+        >
+          {tabs.map((tab) => {
+            const selected = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "rounded-md px-3 py-3 text-left transition",
+                  selected
+                    ? "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200"
+                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-900",
                 )}
-                checked={soulArtifactVoice.enabled ?? false}
-                onCheckedChange={(checked) =>
-                  updateSoulArtifactVoiceDraft({
-                    enabled: checked,
-                    voice_source: checked
-                      ? (soulArtifactVoice.voice_source ?? "creator_voice")
-                      : soulArtifactVoice.voice_source,
-                  })
-                }
-              />
-            </div>
-          </div>
-
-          <div
-            className={cn(
-              "mt-4 grid gap-4 md:grid-cols-2",
-              !soulArtifactVoice.enabled && "opacity-75",
-            )}
-          >
-            <label className="block">
-              <span className="text-xs font-semibold text-slate-600">
-                {memoryT(t, "settings.memory.soul.artifactVoice.source.label")}
-              </span>
-              <select
-                value={soulArtifactVoice.voice_source ?? "creator_voice"}
-                onChange={(event) =>
-                  updateSoulArtifactVoiceDraft({
-                    voice_source: event.target
-                      .value as MemorySoulArtifactVoiceSource,
-                  })
-                }
-                disabled={!soulArtifactVoice.enabled}
-                className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100"
               >
-                <option value="creator_voice">
-                  {memoryT(
-                    t,
-                    "settings.memory.soul.artifactVoice.source.creator",
-                  )}
-                </option>
-                <option value="brand_voice">
-                  {memoryT(
-                    t,
-                    "settings.memory.soul.artifactVoice.source.brand",
-                  )}
-                </option>
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-xs font-semibold text-slate-600">
-                {memoryT(
-                  t,
-                  soulArtifactVoice.voice_source === "brand_voice"
-                    ? "settings.memory.soul.artifactVoice.brandId.label"
-                    : "settings.memory.soul.artifactVoice.creatorId.label",
-                )}
-              </span>
-              <input
-                type="text"
-                value={
-                  soulArtifactVoice.voice_source === "brand_voice"
-                    ? (soulArtifactVoice.brand_voice_id ?? "")
-                    : (soulArtifactVoice.creator_voice_id ?? "")
-                }
-                onChange={(event) =>
-                  updateSoulArtifactVoiceDraft(
-                    soulArtifactVoice.voice_source === "brand_voice"
-                      ? { brand_voice_id: event.target.value || undefined }
-                      : { creator_voice_id: event.target.value || undefined },
-                  )
-                }
-                disabled={!soulArtifactVoice.enabled}
-                placeholder={memoryT(
-                  t,
-                  soulArtifactVoice.voice_source === "brand_voice"
-                    ? "settings.memory.soul.artifactVoice.brandId.placeholder"
-                    : "settings.memory.soul.artifactVoice.creatorId.placeholder",
-                )}
-                className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100"
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs font-semibold text-slate-600">
-                {memoryT(
-                  t,
-                  "settings.memory.soul.artifactVoice.evidencePack.label",
-                )}
-              </span>
-              <input
-                type="text"
-                value={soulArtifactVoice.evidence_pack_id ?? ""}
-                onChange={(event) =>
-                  updateSoulArtifactVoiceDraft({
-                    evidence_pack_id: event.target.value || undefined,
-                  })
-                }
-                disabled={!soulArtifactVoice.enabled}
-                placeholder={memoryT(
-                  t,
-                  "settings.memory.soul.artifactVoice.evidencePack.placeholder",
-                )}
-                className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100"
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs font-semibold text-slate-600">
-                {memoryT(
-                  t,
-                  "settings.memory.soul.artifactVoice.evidenceRefs.label",
-                )}
-              </span>
-              <textarea
-                value={formatSoulListInput(soulArtifactVoice.evidence_refs)}
-                onChange={(event) =>
-                  updateSoulArtifactVoiceDraft({
-                    evidence_refs: parseSoulListInput(event.target.value),
-                  })
-                }
-                rows={3}
-                disabled={!soulArtifactVoice.enabled}
-                placeholder={memoryT(
-                  t,
-                  "settings.memory.soul.artifactVoice.evidenceRefs.placeholder",
-                )}
-                className="mt-2 min-h-[92px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100"
-              />
-            </label>
-          </div>
-
-          <p className="mt-3 text-xs leading-5 text-slate-500">
-            {memoryT(t, "settings.memory.soul.artifactVoice.boundary")}
-          </p>
-        </div>
-
-        <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4">
-          <div className="flex items-start gap-3">
-            <FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-slate-900">
-                {memoryT(t, "settings.memory.soul.import.title")}
-              </p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">
-                {memoryT(t, "settings.memory.soul.import.description")}
-              </p>
-            </div>
-          </div>
-          <textarea
-            value={soulImportText}
-            onChange={(event) => setSoulImportText(event.target.value)}
-            rows={5}
-            placeholder={memoryT(t, "settings.memory.soul.import.placeholder")}
-            className="mt-3 min-h-[128px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400"
-          />
-          {soulImportPreview ? (
-            <div className="mt-3 space-y-2 rounded-md border border-slate-200 bg-white p-3">
-              <p className="text-xs font-semibold text-slate-600">
-                {memoryT(t, "settings.memory.soul.import.preview")}
-              </p>
-              {soulImportPreview.warnings.length > 0 ? (
-                <ul className="space-y-1 text-xs leading-5 text-amber-700">
-                  {soulImportPreview.warnings.map((warning) => (
-                    <li key={warning}>
-                      {memoryT(t, SOUL_WARNING_KEYS[warning])}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              <pre className="max-h-[160px] overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-3 text-xs leading-5 text-slate-50">
-                {soulImportPreview.preview ||
-                  memoryT(t, "settings.memory.soul.import.emptyPreview")}
-              </pre>
-            </div>
-          ) : null}
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={handleSoulImportPreview}
-              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
-            >
-              {memoryT(t, "settings.memory.soul.action.previewImport")}
-            </button>
-            <button
-              type="button"
-              onClick={handleSoulImportApply}
-              disabled={!soulImportPreview?.canImport}
-              className="rounded-md border border-slate-950 bg-slate-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
-            >
-              {memoryT(t, "settings.memory.soul.action.applyImport")}
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-900">
-                {memoryT(t, "settings.memory.soul.export.title")}
-              </p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">
-                {memoryT(t, "settings.memory.soul.export.description")}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleSoulExportCopy}
-              disabled={!soulExportMarkdown}
-              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 disabled:opacity-60"
-            >
-              {memoryT(t, "settings.memory.soul.action.copyExport")}
-            </button>
-          </div>
-          <pre className="mt-3 max-h-[180px] overflow-auto whitespace-pre-wrap rounded-md bg-white p-3 text-xs leading-5 text-slate-600 ring-1 ring-slate-200">
-            {soulExportMarkdown ||
-              memoryT(t, "settings.memory.soul.export.empty")}
-          </pre>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
-          <p className="text-xs leading-5 text-slate-500">
-            {memoryT(t, "settings.memory.soul.boundary")}
-          </p>
-          <button
-            type="button"
-            onClick={handleSoulReset}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-950"
-          >
-            {memoryT(t, "settings.memory.soul.action.reset")}
-          </button>
+                <span className="block text-sm font-semibold">
+                  {memoryT(t, tab.labelKey)}
+                </span>
+                <span className="mt-1 block text-xs leading-5">
+                  {memoryT(t, tab.descriptionKey)}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </section>
 
-      <section className="rounded-md border border-slate-200/90 bg-white p-5 shadow-sm shadow-slate-950/5">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700">
-            <Database className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-slate-950">
-              {memoryT(t, "settings.memory.embedding.title")}
-            </p>
-            <p className="mt-1 text-sm leading-6 text-slate-500">
-              {memoryT(t, "settings.memory.embedding.description")}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-              <ShieldCheck className="h-4 w-4 text-emerald-600" />
-              {memoryT(t, "settings.memory.embedding.status.provider")}
+      {activeTab === "soul" ? (
+        <section className="rounded-md border border-slate-200/90 bg-white p-5 shadow-sm shadow-slate-950/5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-sky-200 bg-sky-50 text-sky-700">
+                <Brain className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-950">
+                  {memoryT(t, "settings.memory.soul.title")}
+                </p>
+                <p className="mt-1 text-sm leading-6 text-slate-500">
+                  {memoryT(t, "settings.memory.soul.description")}
+                </p>
+              </div>
             </div>
-            <p className="mt-2 text-base font-semibold text-slate-950">
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+              {soulEnabledWithContent
+                ? memoryT(t, "settings.memory.soul.current.enabled")
+                : memoryT(t, "settings.memory.soul.current.disabled")}
+            </div>
+          </div>
+
+          <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-950">
+                  {soulEnabledWithContent
+                    ? (soul.name ??
+                      memoryT(t, "settings.memory.soul.current.title"))
+                    : memoryT(t, "settings.memory.soul.current.emptyTitle")}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  {soulEnabledWithContent
+                    ? memoryT(t, "settings.memory.soul.current.description")
+                    : memoryT(
+                        t,
+                        "settings.memory.soul.current.emptyDescription",
+                      )}
+                </p>
+              </div>
+            </div>
+            {soulPreviewItems.length > 0 ? (
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {soulPreviewItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-md bg-white p-3 ring-1 ring-slate-200"
+                  >
+                    <p className="text-xs font-semibold text-slate-500">
+                      {memoryT(t, item.labelKey)}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {item.values.map((value) => (
+                        <span
+                          key={value}
+                          className="rounded-md bg-slate-100 px-2 py-1 text-xs leading-5 text-slate-700"
+                        >
+                          {value}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mt-5">
+            <p className="text-sm font-semibold text-slate-950">
+              {memoryT(t, "settings.memory.soul.template.title")}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              {memoryT(t, "settings.memory.soul.template.description")}
+            </p>
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              {SOUL_TEMPLATE_DEFINITIONS.map((template) => {
+                return (
+                  <div
+                    key={template.id}
+                    className="flex min-h-[168px] flex-col justify-between rounded-md border border-slate-200 bg-white p-4"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-slate-950">
+                        {memoryT(t, template.titleKey)}
+                      </p>
+                      <p className="mt-2 text-xs leading-5 text-slate-500">
+                        {memoryT(t, template.descriptionKey)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSoulTemplateApply(template)}
+                      className="mt-4 rounded-md border border-slate-950 bg-slate-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-slate-800"
+                    >
+                      {memoryT(t, "settings.memory.soul.template.apply")}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+            <div>
+              <p className="text-xs font-semibold text-slate-700">
+                {memoryT(t, "settings.memory.soul.boundary.title")}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                {memoryT(t, "settings.memory.soul.boundary.description")}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleSoulReset}
+              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-950"
+            >
+              {memoryT(t, "settings.memory.soul.action.reset")}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {activeTab === "advanced" ? (
+        <section className="rounded-md border border-slate-200/90 bg-white p-5 shadow-sm shadow-slate-950/5">
+          <label
+            className="text-sm font-semibold text-slate-950"
+            htmlFor="memory-embedding-provider"
+          >
+            {memoryT(t, "settings.memory.embedding.providerSelect.title")}
+          </label>
+          <p className="mt-1 text-sm leading-6 text-slate-500">
+            {memoryT(t, "settings.memory.embedding.providerSelect.description")}
+          </p>
+
+          <div className="relative mt-4">
+            <select
+              id="memory-embedding-provider"
+              value={providerChoice}
+              onChange={(event) =>
+                handleProviderChange(
+                  event.target.value as EmbeddingProviderChoice,
+                )
+              }
+              className="w-full appearance-none rounded-md border border-slate-200 bg-slate-50 px-4 py-3 pr-10 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-400 focus:bg-white"
+              aria-label={memoryT(
+                t,
+                "settings.memory.embedding.providerSelect.aria",
+              )}
+            >
+              {PROVIDER_CHOICES.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {memoryT(t, item.labelKey)}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          </div>
+
+          <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-semibold text-slate-900">
               {memoryT(t, activeProvider.labelKey)}
             </p>
-          </div>
-          <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-              <Search className="h-4 w-4 text-sky-600" />
-              {memoryT(t, "settings.memory.embedding.status.model")}
-            </div>
-            <p className="mt-2 text-base font-semibold text-slate-950">
-              {embeddingConfig.model || activeProvider.model}
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              {memoryT(t, activeProvider.descriptionKey)}
             </p>
           </div>
-          <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-medium text-slate-500">
-              {memoryT(t, "settings.memory.embedding.status.vectorSearch")}
-            </p>
-            <p
-              className={cn(
-                "mt-2 text-base font-semibold",
-                vectorSearchEnabled ? "text-emerald-700" : "text-slate-500",
-              )}
-            >
-              {vectorSearchEnabled
-                ? memoryT(t, "settings.memory.embedding.status.enabled")
-                : memoryT(t, "settings.memory.embedding.status.disabled")}
-            </p>
-          </div>
-          <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-medium text-slate-500">
-                {memoryT(t, "settings.memory.embedding.status.indexed")}
-              </p>
+
+          <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-900">
+                    {memoryT(t, "settings.memory.soul.export.title")}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    {memoryT(t, "settings.memory.soul.export.description")}
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => loadStats()}
-                disabled={statsLoading}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
-                aria-label={memoryT(t, "settings.memory.action.refresh")}
+                onClick={handleSoulExportCopy}
+                disabled={!soulExportMarkdown}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 disabled:opacity-60"
               >
-                <RefreshCw
-                  className={cn("h-3.5 w-3.5", statsLoading && "animate-spin")}
-                />
+                {memoryT(t, "settings.memory.soul.action.copyExport")}
               </button>
             </div>
-            <p className="mt-2 text-base font-semibold text-slate-950">
-              {memoryT(t, "settings.memory.embedding.status.indexedValue", {
-                count: formatCount(indexedCount),
-              })}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              {memoryT(t, "settings.memory.embedding.status.cachedValue", {
-                count: formatCount(cachedEmbeddingCount),
-              })}
-            </p>
+            <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap rounded-md bg-white p-3 text-xs leading-5 text-slate-600 ring-1 ring-slate-200">
+              {soulExportMarkdown ||
+                memoryT(t, "settings.memory.soul.export.empty")}
+            </pre>
           </div>
-        </div>
-      </section>
 
-      <section className="rounded-md border border-slate-200/90 bg-white p-5 shadow-sm shadow-slate-950/5">
-        <label
-          className="text-sm font-semibold text-slate-950"
-          htmlFor="memory-embedding-provider"
-        >
-          {memoryT(t, "settings.memory.embedding.providerSelect.title")}
-        </label>
-        <p className="mt-1 text-sm leading-6 text-slate-500">
-          {memoryT(t, "settings.memory.embedding.providerSelect.description")}
-        </p>
+          <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-start gap-3">
+              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-slate-900">
+                  {memoryT(t, "settings.memory.soul.import.title")}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  {memoryT(t, "settings.memory.soul.import.description")}
+                </p>
+              </div>
+            </div>
+            <textarea
+              value={soulImportText}
+              onChange={(event) => setSoulImportText(event.target.value)}
+              rows={5}
+              placeholder={memoryT(
+                t,
+                "settings.memory.soul.import.placeholder",
+              )}
+              className="mt-3 min-h-[128px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400"
+            />
+            {soulImportPreview ? (
+              <div className="mt-3 space-y-2 rounded-md border border-slate-200 bg-white p-3">
+                <p className="text-xs font-semibold text-slate-600">
+                  {memoryT(t, "settings.memory.soul.import.preview")}
+                </p>
+                {soulImportPreview.warnings.length > 0 ? (
+                  <ul className="space-y-1 text-xs leading-5 text-amber-700">
+                    {soulImportPreview.warnings.map((warning) => (
+                      <li key={warning}>
+                        {memoryT(t, SOUL_WARNING_KEYS[warning])}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                <pre className="max-h-[160px] overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-3 text-xs leading-5 text-slate-50">
+                  {soulImportPreview.preview ||
+                    memoryT(t, "settings.memory.soul.import.emptyPreview")}
+                </pre>
+              </div>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleSoulImportPreview}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+              >
+                {memoryT(t, "settings.memory.soul.action.previewImport")}
+              </button>
+              <button
+                type="button"
+                onClick={handleSoulImportApply}
+                disabled={!soulImportPreview?.canImport}
+                className="rounded-md border border-slate-950 bg-slate-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
+              >
+                {memoryT(t, "settings.memory.soul.action.applyImport")}
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
-        <div className="relative mt-4">
-          <select
-            id="memory-embedding-provider"
-            value={providerChoice}
-            onChange={(event) =>
-              handleProviderChange(
-                event.target.value as EmbeddingProviderChoice,
-              )
-            }
-            className="w-full appearance-none rounded-md border border-slate-200 bg-slate-50 px-4 py-3 pr-10 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-400 focus:bg-white"
-            aria-label={memoryT(
-              t,
-              "settings.memory.embedding.providerSelect.aria",
-            )}
-          >
-            {PROVIDER_CHOICES.map((item) => (
-              <option key={item.value} value={item.value}>
-                {memoryT(t, item.labelKey)}
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        </div>
+      {activeTab === "memory" ? (
+        <section className="rounded-md border border-slate-200/90 bg-white p-5 shadow-sm shadow-slate-950/5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700">
+              <Database className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-slate-950">
+                {memoryT(t, "settings.memory.everyday.title")}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-slate-500">
+                {memoryT(t, "settings.memory.everyday.description")}
+              </p>
+            </div>
+          </div>
 
-        <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">
-          <p className="text-sm font-semibold text-slate-900">
-            {memoryT(t, activeProvider.labelKey)}
-          </p>
-          <p className="mt-1 text-sm leading-6 text-slate-500">
-            {memoryT(t, activeProvider.descriptionKey)}
-          </p>
-        </div>
-      </section>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-medium text-slate-500">
+                {memoryT(t, "settings.memory.embedding.status.vectorSearch")}
+              </p>
+              <p
+                className={cn(
+                  "mt-2 text-base font-semibold",
+                  vectorSearchEnabled ? "text-emerald-700" : "text-slate-500",
+                )}
+              >
+                {vectorSearchEnabled
+                  ? memoryT(t, "settings.memory.embedding.status.enabled")
+                  : memoryT(t, "settings.memory.embedding.status.disabled")}
+              </p>
+            </div>
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-medium text-slate-500">
+                  {memoryT(t, "settings.memory.embedding.status.indexed")}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => loadStats()}
+                  disabled={statsLoading}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
+                  aria-label={memoryT(t, "settings.memory.action.refresh")}
+                >
+                  <RefreshCw
+                    className={cn(
+                      "h-3.5 w-3.5",
+                      statsLoading && "animate-spin",
+                    )}
+                  />
+                </button>
+              </div>
+              <p className="mt-2 text-base font-semibold text-slate-950">
+                {memoryT(t, "settings.memory.embedding.status.indexedValue", {
+                  count: formatCount(indexedCount),
+                })}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {memoryT(t, "settings.memory.embedding.status.cachedValue", {
+                  count: formatCount(cachedEmbeddingCount),
+                })}
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <div className="flex flex-col gap-3 rounded-md border border-slate-200/90 bg-white p-4 shadow-sm shadow-slate-950/5 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs leading-5 text-slate-500">

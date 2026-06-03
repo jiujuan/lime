@@ -199,6 +199,10 @@ fn is_compact_tool_surface_tool(tool_name: &str) -> bool {
         .any(|candidate| candidate.eq_ignore_ascii_case(tool_name))
 }
 
+fn is_compact_tool_surface_tool_or_allowed(tool_name: &str, allowed_tools: &[String]) -> bool {
+    is_compact_tool_surface_tool(tool_name) || matches_turn_tool_scope(tool_name, allowed_tools)
+}
+
 fn normalize_turn_metadata_tool_list(value: Option<&Value>) -> Vec<String> {
     let Some(items) = value.and_then(Value::as_array) else {
         return Vec::new();
@@ -274,6 +278,7 @@ fn filter_tools_for_turn_scope(
 fn filter_tools_for_turn_surface(
     mut tools: Vec<Tool>,
     tool_surface_mode: Option<&str>,
+    allowed_tools: &[String],
 ) -> Vec<Tool> {
     match tool_surface_mode {
         Some(TURN_TOOL_SURFACE_DIRECT_ANSWER) => Vec::new(),
@@ -282,7 +287,7 @@ fn filter_tools_for_turn_surface(
             tools
         }
         Some(TURN_TOOL_SURFACE_COMPACT_TOOLS) => {
-            tools.retain(|tool| is_compact_tool_surface_tool(&tool.name));
+            tools.retain(|tool| is_compact_tool_surface_tool_or_allowed(&tool.name, allowed_tools));
             tools
         }
         _ => tools,
@@ -865,8 +870,12 @@ impl Agent {
             tools.retain(|tool| tool.name.starts_with(&code_exec_prefix));
         }
 
-        tools = filter_tools_for_turn_surface(tools, turn_tool_surface_mode.as_deref());
         let (turn_allowed_tools, turn_disallowed_tools) = resolve_turn_tool_scope();
+        tools = filter_tools_for_turn_surface(
+            tools,
+            turn_tool_surface_mode.as_deref(),
+            &turn_allowed_tools,
+        );
         tools = filter_tools_for_turn_scope(tools, &turn_allowed_tools, &turn_disallowed_tools);
         let provider_name = self
             .provider()
@@ -2412,6 +2421,61 @@ mod tests {
 
         let names: Vec<String> = tools.iter().map(|tool| tool.name.to_string()).collect();
         assert_eq!(names, vec!["Read".to_string()]);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn prepare_tools_and_prompt_extends_compact_surface_with_turn_scoped_allowed_tools(
+    ) -> anyhow::Result<()> {
+        let agent = crate::agents::Agent::new();
+
+        let session = SessionManager::create_session(
+            std::path::PathBuf::default(),
+            "test-compact-tool-scope-extension".to_string(),
+            SessionType::Hidden,
+        )
+        .await?;
+
+        let model_config = ModelConfig::new("test-model").unwrap();
+        let provider = std::sync::Arc::new(MockProvider {
+            model_config,
+            observed_models: None,
+        });
+        agent.update_provider(provider, &session.id).await?;
+
+        let mut turn_context =
+            build_turn_context_with_tool_surface(TURN_TOOL_SURFACE_COMPACT_TOOLS);
+        turn_context.metadata.insert(
+            "tool_scope".to_string(),
+            json!({
+                "allowed_tools": ["Bash", "NotebookEdit", VIEW_IMAGE_TOOL_NAME],
+            }),
+        );
+
+        let working_dir = std::env::current_dir()?;
+        let (tools, _toolshim_tools, _system_prompt) =
+            crate::session_context::with_turn_context(Some(turn_context), async {
+                agent
+                    .prepare_tools_and_prompt(
+                        &working_dir,
+                        None,
+                        false,
+                        &ModelConfig::new("test-model").unwrap(),
+                    )
+                    .await
+            })
+            .await?;
+
+        let names: Vec<String> = tools.iter().map(|tool| tool.name.to_string()).collect();
+        assert_eq!(
+            names,
+            vec![
+                "Bash".to_string(),
+                "NotebookEdit".to_string(),
+                VIEW_IMAGE_TOOL_NAME.to_string(),
+            ]
+        );
 
         Ok(())
     }

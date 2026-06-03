@@ -11,6 +11,7 @@
 import { describe, expect } from "vitest";
 import { test } from "@fast-check/vitest";
 import * as fc from "fast-check";
+import { fastCheckRuns } from "../../test/fastCheckRuns";
 import {
   verifyProviderSelectionSync,
   extractSelectionState,
@@ -125,7 +126,9 @@ describe("Property 2: Provider 选择同步", () => {
    *
    * **Validates: Requirements 1.4**
    */
-  test.prop([providerIdArbitrary, providerIdArbitrary], { numRuns: 100 })(
+  test.prop([providerIdArbitrary, providerIdArbitrary], {
+    numRuns: fastCheckRuns(100),
+  })(
     "选中的 Provider ID 应与设置面板显示的 Provider ID 同步",
     (selectedId: string | null, displayedId: string | null) => {
       // 当两个 ID 相同时，应该同步
@@ -141,7 +144,7 @@ describe("Property 2: Provider 选择同步", () => {
     },
   );
 
-  test.prop([providerWithKeysArbitrary], { numRuns: 100 })(
+  test.prop([providerWithKeysArbitrary], { numRuns: fastCheckRuns(100) })(
     "当选中 Provider 时，设置面板应显示该 Provider 的信息",
     (provider: ProviderWithKeysDisplay) => {
       const state = extractSelectionState(provider.id, provider);
@@ -161,7 +164,7 @@ describe("Property 2: Provider 选择同步", () => {
     expect(state.isSynced).toBe(true);
   });
 
-  test.prop([providerWithKeysArbitrary], { numRuns: 100 })(
+  test.prop([providerWithKeysArbitrary], { numRuns: fastCheckRuns(100) })(
     "选中状态变化时应保持同步",
     (provider: ProviderWithKeysDisplay) => {
       // 模拟从空状态到选中状态
@@ -199,7 +202,7 @@ describe("Property 2: Provider 选择同步", () => {
 
   // 状态提取测试
   describe("状态提取", () => {
-    test.prop([providerWithKeysArbitrary], { numRuns: 100 })(
+    test.prop([providerWithKeysArbitrary], { numRuns: fastCheckRuns(100) })(
       "extractSelectionState 应正确提取选择状态",
       (provider: ProviderWithKeysDisplay) => {
         const state = extractSelectionState(provider.id, provider);
@@ -242,7 +245,7 @@ describe("Property 2: Provider 选择同步", () => {
   describe("Provider 列表选择", () => {
     test.prop(
       [fc.array(providerWithKeysArbitrary, { minLength: 1, maxLength: 10 })],
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     )(
       "从 Provider 列表中选择任意 Provider 应同步到设置面板",
       (providers: ProviderWithKeysDisplay[]) => {
@@ -263,7 +266,7 @@ describe("Property 2: Provider 选择同步", () => {
 
     test.prop(
       [fc.array(providerWithKeysArbitrary, { minLength: 2, maxLength: 10 })],
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     )(
       "切换选择不同 Provider 应正确同步",
       (providers: ProviderWithKeysDisplay[]) => {

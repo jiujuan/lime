@@ -1382,10 +1382,11 @@ describe("agentStreamRuntimeHandler", () => {
       setIsSending: vi.fn() as never,
     });
 
-    expect(messages[0]?.content).toBe("执行失败：模型未输出最终答复，请重试");
+    expect(messages[0]?.content).toContain("执行失败：");
     expect(messages[0]?.runtimeStatus).toMatchObject({
       phase: "failed",
       title: "当前处理失败",
+      detail: "模型未输出最终答复，请重试",
     });
     expect(mockToast.error).toHaveBeenCalledWith("模型未输出最终答复，请重试");
   });
@@ -1596,6 +1597,108 @@ describe("agentStreamRuntimeHandler", () => {
       "本轮执行已完成，详细过程与产物已保留在当前对话中。",
     );
     expect(messages[0]?.runtimeStatus).toBeUndefined();
+    expect(mockToast.error).not.toHaveBeenCalledWith(
+      "模型未输出最终答复，请重试",
+    );
+  });
+
+  it("provider stream 失败即使已有工具过程也应落失败态并保留过程卡", () => {
+    const providerUnavailableMessage =
+      "当前模型通道暂时不可用，请稍后重试；如果持续失败，请检查 Provider 状态或切换到其他可用模型。";
+    let messages: Message[] = [
+      {
+        id: "assistant-provider-error",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-01T11:14:20.000Z"),
+        isThinking: true,
+        contentParts: [
+          {
+            type: "tool_use",
+            toolCall: {
+              id: "tool-search-1",
+              name: "web_search",
+              arguments: JSON.stringify({ query: "international news today" }),
+              status: "completed",
+              startTime: new Date("2026-06-01T11:14:11.000Z"),
+              endTime: new Date("2026-06-01T11:14:19.000Z"),
+              result: { success: true, output: "results" },
+            },
+          },
+        ],
+      },
+    ];
+
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+
+    handleTurnStreamEvent({
+      data: {
+        type: "error",
+        message:
+          "[AsterAgent][TTFT] provider stream request failed before body: provider=openai, model=gpt-5.5, elapsed_ms=8517, error=Server error: Server error (503 Service Unavailable): Service temporarily unavailable",
+      } as AgentEvent,
+      requestState: {
+        accumulatedContent: "",
+        hasMeaningfulCompletionSignal: true,
+        queuedTurnId: "queued-provider-error",
+        requestLogId: null,
+        requestStartedAt: 0,
+        requestFinished: false,
+      },
+      callbacks: {
+        activateStream: () => {},
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts) => parts,
+      },
+      eventName: "agent-runtime-provider-error",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-provider-error",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react",
+      content: "",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    });
+
+    expect(messages[0]?.content).toContain("执行失败：");
+    expect(messages[0]?.contentParts).toEqual([
+      expect.objectContaining({ type: "tool_use" }),
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringContaining("执行失败："),
+      }),
+    ]);
+    expect(messages[0]?.runtimeStatus).toMatchObject({
+      phase: "failed",
+      detail: providerUnavailableMessage,
+    });
+    expect(mockToast.error).toHaveBeenCalledWith(providerUnavailableMessage);
     expect(mockToast.error).not.toHaveBeenCalledWith(
       "模型未输出最终答复，请重试",
     );

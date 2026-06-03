@@ -13,8 +13,9 @@ use lime_core::database::dao::api_key_provider::{infer_managed_runtime_spec, Api
 use lime_core::database::DbConnection;
 use lime_core::models::model_registry::{
     EnhancedModelMetadata, ModelAliasSource, ModelCapabilities, ModelDeploymentSource, ModelLimits,
-    ModelManagementPlane, ModelModality, ModelRuntimeFeature, ModelSource, ModelStatus,
-    ModelSyncState, ModelTaskFamily, ModelTier, ProviderAliasConfig, UserModelPreference,
+    ModelManagementPlane, ModelModality, ModelReasoningEffortLevel, ModelReasoningEffortSource,
+    ModelReasoningEffortSupport, ModelRuntimeFeature, ModelSource, ModelStatus, ModelSyncState,
+    ModelTaskFamily, ModelTier, ProviderAliasConfig, UserModelPreference,
 };
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -309,6 +310,365 @@ fn merge_api_capability_signals(
             _ => {}
         }
     }
+}
+
+fn parse_reasoning_effort_level(value: &str) -> Option<ModelReasoningEffortLevel> {
+    match normalize_api_field_name(value).as_str() {
+        "none" | "off" | "disabled" => Some(ModelReasoningEffortLevel::None),
+        "minimal" | "minimum" | "min" => Some(ModelReasoningEffortLevel::Minimal),
+        "low" => Some(ModelReasoningEffortLevel::Low),
+        "medium" | "med" => Some(ModelReasoningEffortLevel::Medium),
+        "high" => Some(ModelReasoningEffortLevel::High),
+        "xhigh" | "x_high" | "extra_high" | "very_high" | "ultra" | "ultra_high" | "max"
+        | "maximum" => Some(ModelReasoningEffortLevel::Xhigh),
+        _ => None,
+    }
+}
+
+fn push_unique_reasoning_effort_level(
+    levels: &mut Vec<ModelReasoningEffortLevel>,
+    level: ModelReasoningEffortLevel,
+) {
+    if !levels.contains(&level) {
+        levels.push(level);
+    }
+}
+
+fn parse_reasoning_effort_levels_value(
+    value: Option<&serde_json::Value>,
+) -> Vec<ModelReasoningEffortLevel> {
+    let mut levels = Vec::new();
+    let Some(value) = value else {
+        return levels;
+    };
+
+    match value {
+        serde_json::Value::String(item) => {
+            for segment in item.split([',', '|', '/']) {
+                if let Some(level) = parse_reasoning_effort_level(segment) {
+                    push_unique_reasoning_effort_level(&mut levels, level);
+                }
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                for level in parse_reasoning_effort_levels_value(Some(item)) {
+                    push_unique_reasoning_effort_level(&mut levels, level);
+                }
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for (key, value) in map {
+                match value {
+                    serde_json::Value::Bool(true) => {
+                        if let Some(level) = parse_reasoning_effort_level(key) {
+                            push_unique_reasoning_effort_level(&mut levels, level);
+                        }
+                    }
+                    _ => {
+                        for level in parse_reasoning_effort_levels_value(Some(value)) {
+                            push_unique_reasoning_effort_level(&mut levels, level);
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+
+    levels
+}
+
+fn normalize_api_field_name(value: &str) -> String {
+    let mut normalized = String::new();
+    let mut previous_was_separator = true;
+    for character in value.trim().chars() {
+        if character.is_ascii_uppercase() {
+            if !previous_was_separator && !normalized.ends_with('_') {
+                normalized.push('_');
+            }
+            normalized.push(character.to_ascii_lowercase());
+            previous_was_separator = false;
+        } else if character == '-' || character == ' ' || character == '.' {
+            if !normalized.ends_with('_') {
+                normalized.push('_');
+            }
+            previous_was_separator = true;
+        } else {
+            normalized.push(character.to_ascii_lowercase());
+            previous_was_separator = character == '_';
+        }
+    }
+    normalized.trim_matches('_').to_string()
+}
+
+fn api_field_matches(key: &str, expected: &[&str]) -> bool {
+    let normalized = normalize_api_field_name(key);
+    expected
+        .iter()
+        .any(|candidate| normalized == normalize_api_field_name(candidate))
+}
+
+fn collect_named_reasoning_effort_levels(
+    value: Option<&serde_json::Value>,
+    field_names: &[&str],
+    levels: &mut Vec<ModelReasoningEffortLevel>,
+) {
+    let Some(value) = value else {
+        return;
+    };
+    let serde_json::Value::Object(map) = value else {
+        return;
+    };
+
+    for (key, item) in map {
+        if api_field_matches(key, field_names) {
+            for level in parse_reasoning_effort_levels_value(Some(item)) {
+                push_unique_reasoning_effort_level(levels, level);
+            }
+        }
+        if item.is_object() {
+            collect_named_reasoning_effort_levels(Some(item), field_names, levels);
+        }
+    }
+}
+
+fn contains_reasoning_effort_parameter(value: Option<&serde_json::Value>) -> bool {
+    let Some(value) = value else {
+        return false;
+    };
+
+    match value {
+        serde_json::Value::String(item) => matches!(
+            normalize_api_field_name(item).as_str(),
+            "reasoning_effort" | "reasoning_effort_level" | "reasoning_effort_levels"
+        ),
+        serde_json::Value::Array(items) => items
+            .iter()
+            .any(|item| contains_reasoning_effort_parameter(Some(item))),
+        serde_json::Value::Object(map) => map.iter().any(|(key, item)| {
+            let is_reasoning_effort_key = matches!(
+                normalize_api_field_name(key).as_str(),
+                "reasoning_effort"
+                    | "reasoning_effort_level"
+                    | "reasoning_effort_levels"
+                    | "supported_reasoning_efforts"
+                    | "reasoning_efforts"
+            );
+            match item {
+                serde_json::Value::Bool(true) => is_reasoning_effort_key,
+                serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
+                    contains_reasoning_effort_parameter(Some(item))
+                }
+                serde_json::Value::String(_) => {
+                    is_reasoning_effort_key || contains_reasoning_effort_parameter(Some(item))
+                }
+                _ => false,
+            }
+        }),
+        _ => false,
+    }
+}
+
+fn explicit_reasoning_effort_supported(value: Option<&serde_json::Value>) -> bool {
+    let Some(value) = value else {
+        return false;
+    };
+
+    match value {
+        serde_json::Value::Bool(supported) => *supported,
+        serde_json::Value::String(_) | serde_json::Value::Array(_) => {
+            !parse_reasoning_effort_levels_value(Some(value)).is_empty()
+        }
+        serde_json::Value::Object(map) => {
+            let explicitly_disabled = map.iter().any(|(key, item)| {
+                api_field_matches(key, &["supported", "enabled"])
+                    && matches!(item, serde_json::Value::Bool(false))
+            });
+            if explicitly_disabled {
+                return false;
+            }
+            map.iter().any(|(key, item)| {
+                (api_field_matches(key, &["supported", "enabled"])
+                    && matches!(item, serde_json::Value::Bool(true)))
+                    || !parse_reasoning_effort_levels_value(Some(item)).is_empty()
+                    || contains_reasoning_effort_parameter(Some(item))
+            })
+        }
+        _ => false,
+    }
+}
+
+fn explicit_reasoning_effort_disabled(value: Option<&serde_json::Value>) -> bool {
+    let Some(value) = value else {
+        return false;
+    };
+
+    match value {
+        serde_json::Value::Bool(supported) => !supported,
+        serde_json::Value::Object(map) => map.iter().any(|(key, item)| {
+            api_field_matches(key, &["supported", "enabled"])
+                && matches!(item, serde_json::Value::Bool(false))
+        }),
+        _ => false,
+    }
+}
+
+fn contains_disabled_reasoning_effort_support(value: Option<&serde_json::Value>) -> bool {
+    let Some(value) = value else {
+        return false;
+    };
+
+    match value {
+        serde_json::Value::Array(items) => items
+            .iter()
+            .any(|item| contains_disabled_reasoning_effort_support(Some(item))),
+        serde_json::Value::Object(map) => map.iter().any(|(key, item)| {
+            let is_reasoning_effort_key = api_field_matches(
+                key,
+                &[
+                    "reasoning_effort",
+                    "reasoningEffort",
+                    "supported_reasoning_efforts",
+                    "supportedReasoningEfforts",
+                ],
+            );
+            (is_reasoning_effort_key && explicit_reasoning_effort_disabled(Some(item)))
+                || contains_disabled_reasoning_effort_support(Some(item))
+        }),
+        _ => false,
+    }
+}
+
+fn collect_default_reasoning_effort_level(
+    value: Option<&serde_json::Value>,
+) -> Option<ModelReasoningEffortLevel> {
+    let serde_json::Value::Object(map) = value? else {
+        return parse_reasoning_effort_levels_value(value)
+            .into_iter()
+            .next();
+    };
+
+    for (key, item) in map {
+        if api_field_matches(
+            key,
+            &[
+                "default_reasoning_effort",
+                "defaultReasoningEffort",
+                "default_effort",
+                "defaultEffort",
+                "default",
+            ],
+        ) {
+            if let Some(default) = parse_reasoning_effort_levels_value(Some(item))
+                .into_iter()
+                .next()
+            {
+                return Some(default);
+            }
+        }
+        if item.is_object() {
+            if let Some(default) = collect_default_reasoning_effort_level(Some(item)) {
+                return Some(default);
+            }
+        }
+    }
+
+    None
+}
+
+fn resolve_api_reasoning_effort_support(
+    model: &ApiModelResponse,
+) -> Option<ModelReasoningEffortSupport> {
+    if explicit_reasoning_effort_disabled(model.reasoning_effort.as_ref())
+        || contains_disabled_reasoning_effort_support(model.reasoning.as_ref())
+        || contains_disabled_reasoning_effort_support(model.capabilities.as_ref())
+    {
+        return None;
+    }
+
+    let mut levels = Vec::new();
+    for value in [
+        model.reasoning_effort.as_ref(),
+        model.reasoning_effort_levels.as_ref(),
+        model.reasoning_efforts.as_ref(),
+        model.supported_reasoning_efforts.as_ref(),
+    ] {
+        for level in parse_reasoning_effort_levels_value(value) {
+            push_unique_reasoning_effort_level(&mut levels, level);
+        }
+    }
+
+    for value in [
+        model.reasoning.as_ref(),
+        model.capabilities.as_ref(),
+        model.reasoning_effort.as_ref(),
+    ] {
+        collect_named_reasoning_effort_levels(
+            value,
+            &[
+                "levels",
+                "efforts",
+                "supported",
+                "supported_levels",
+                "supportedLevels",
+                "effort",
+                "reasoning_effort",
+                "reasoningEffort",
+                "reasoning_effort_levels",
+                "reasoningEffortLevels",
+                "reasoning_efforts",
+                "supported_reasoning_efforts",
+                "supportedReasoningEfforts",
+            ],
+            &mut levels,
+        );
+    }
+
+    let supports_parameter = [
+        model.supported_parameters.as_ref(),
+        model.reasoning_effort.as_ref(),
+        model.reasoning.as_ref(),
+        model.capabilities.as_ref(),
+    ]
+    .into_iter()
+    .any(contains_reasoning_effort_parameter)
+        || explicit_reasoning_effort_supported(model.reasoning_effort.as_ref());
+
+    if levels.is_empty() && supports_parameter {
+        levels = vec![
+            ModelReasoningEffortLevel::Low,
+            ModelReasoningEffortLevel::Medium,
+            ModelReasoningEffortLevel::High,
+        ];
+    }
+
+    if levels.is_empty() {
+        return None;
+    }
+
+    let default = [
+        model.reasoning_effort.as_ref(),
+        model.reasoning.as_ref(),
+        model.capabilities.as_ref(),
+    ]
+    .into_iter()
+    .find_map(collect_default_reasoning_effort_level)
+    .filter(|level| levels.contains(level))
+    .or_else(|| {
+        if levels.contains(&ModelReasoningEffortLevel::Medium) {
+            Some(ModelReasoningEffortLevel::Medium)
+        } else {
+            levels.first().cloned()
+        }
+    });
+
+    Some(ModelReasoningEffortSupport {
+        supported: true,
+        levels,
+        default,
+        source: Some(ModelReasoningEffortSource::Api),
+    })
 }
 
 fn infer_reasoning_capability(model_id: &str) -> bool {
@@ -715,6 +1075,7 @@ fn infer_model_capabilities(
         reasoning: task_families.contains(&ModelTaskFamily::Reasoning)
             || provider_id.map(normalize_identifier).as_deref() == Some("codex")
             || infer_reasoning_capability(model_id),
+        reasoning_effort: None,
     }
 }
 
@@ -2513,6 +2874,12 @@ impl ModelRegistryService {
                 runtime_features: None,
                 vision_supported: None,
                 capabilities: None,
+                supported_parameters: None,
+                reasoning: None,
+                reasoning_effort: None,
+                reasoning_effort_levels: None,
+                reasoning_efforts: None,
+                supported_reasoning_efforts: None,
             })
             .collect();
 
@@ -2603,6 +2970,12 @@ impl ModelRegistryService {
                 runtime_features: None,
                 vision_supported: None,
                 capabilities: None,
+                supported_parameters: None,
+                reasoning: None,
+                reasoning_effort: None,
+                reasoning_effort_levels: None,
+                reasoning_efforts: None,
+                supported_reasoning_efforts: None,
             })
             .collect();
 
@@ -2636,6 +3009,12 @@ impl ModelRegistryService {
                 runtime_features: None,
                 vision_supported: None,
                 capabilities: None,
+                supported_parameters: None,
+                reasoning: None,
+                reasoning_effort: None,
+                reasoning_effort_levels: None,
+                reasoning_efforts: None,
+                supported_reasoning_efforts: None,
             })
             .collect())
     }
@@ -2647,7 +3026,7 @@ impl ModelRegistryService {
         provider_id: &str,
         now: i64,
     ) -> EnhancedModelMetadata {
-        let display_name = model.display_name.unwrap_or_else(|| {
+        let display_name = model.display_name.clone().unwrap_or_else(|| {
             model
                 .id
                 .split('/')
@@ -2682,6 +3061,11 @@ impl ModelRegistryService {
             &mut api_output_modalities,
             &mut api_runtime_features,
         );
+        let api_reasoning_effort_support = resolve_api_reasoning_effort_support(&model);
+        if api_reasoning_effort_support.is_some() {
+            push_unique(&mut api_task_families, ModelTaskFamily::Reasoning);
+            push_unique(&mut api_runtime_features, ModelRuntimeFeature::Reasoning);
+        }
         let initial_taxonomy = infer_model_taxonomy(ModelTaxonomyInput {
             model_id: &model.id,
             provider_id: Some(provider_id),
@@ -2699,11 +3083,15 @@ impl ModelRegistryService {
             explicit_alias_source: None,
             canonical_model: canonical_model.as_ref(),
         });
-        let capabilities = infer_model_capabilities(
+        let mut capabilities = infer_model_capabilities(
             &model.id,
             Some(provider_id),
             &initial_taxonomy.task_families,
         );
+        if let Some(reasoning_effort) = api_reasoning_effort_support {
+            capabilities.reasoning = true;
+            capabilities.reasoning_effort = Some(reasoning_effort);
+        }
         let taxonomy = infer_model_taxonomy(ModelTaxonomyInput {
             model_id: &model.id,
             provider_id: Some(provider_id),
@@ -2778,6 +3166,12 @@ impl ModelRegistryService {
                 runtime_features: None,
                 vision_supported: None,
                 capabilities: None,
+                supported_parameters: None,
+                reasoning: None,
+                reasoning_effort: None,
+                reasoning_effort_levels: None,
+                reasoning_efforts: None,
+                supported_reasoning_efforts: None,
             },
             provider_id,
             now,
@@ -2949,6 +3343,18 @@ struct ApiModelResponse {
     vision_supported: Option<bool>,
     #[serde(default)]
     capabilities: Option<serde_json::Value>,
+    #[serde(default, alias = "supportedParameters", alias = "supported_params")]
+    supported_parameters: Option<serde_json::Value>,
+    #[serde(default)]
+    reasoning: Option<serde_json::Value>,
+    #[serde(default, alias = "reasoningEffort")]
+    reasoning_effort: Option<serde_json::Value>,
+    #[serde(default, alias = "reasoningEffortLevels")]
+    reasoning_effort_levels: Option<serde_json::Value>,
+    #[serde(default, alias = "reasoningEfforts")]
+    reasoning_efforts: Option<serde_json::Value>,
+    #[serde(default, alias = "supportedReasoningEfforts")]
+    supported_reasoning_efforts: Option<serde_json::Value>,
 }
 
 #[derive(Debug)]
@@ -3074,8 +3480,8 @@ mod tests {
     use lime_core::database::dao::api_key_provider::ApiProviderType;
     use lime_core::database::DbConnection;
     use lime_core::models::model_registry::{
-        EnhancedModelMetadata, ModelCapabilities, ModelModality, ModelRuntimeFeature, ModelSource,
-        ModelTaskFamily,
+        EnhancedModelMetadata, ModelCapabilities, ModelModality, ModelReasoningEffortLevel,
+        ModelReasoningEffortSource, ModelRuntimeFeature, ModelSource, ModelTaskFamily,
     };
     use rusqlite::{params, Connection};
     use std::sync::{Arc, Mutex};
@@ -3146,6 +3552,7 @@ mod tests {
             json_mode: true,
             function_calling: true,
             reasoning: false,
+            reasoning_effort: None,
         };
         let modality_taxonomy = infer_model_taxonomy(ModelTaxonomyInput {
             model_id: "provider-vlm-chat",
@@ -3301,6 +3708,133 @@ mod tests {
             .task_families
             .contains(&ModelTaskFamily::VisionUnderstanding));
         assert!(model.capabilities.vision);
+    }
+
+    #[test]
+    fn test_convert_api_model_uses_supported_parameters_for_reasoning_effort() {
+        let (service, _db) = setup_cache_service();
+        let response = ModelRegistryService::parse_openai_models_response(
+            r#"{
+              "data": [
+                {
+                  "id": "o3-mini",
+                  "supported_parameters": ["temperature", "reasoning_effort"]
+                }
+              ]
+            }"#,
+        )
+        .expect("parse response");
+        let model =
+            service.convert_api_model(response.into_iter().next().expect("model"), "gateway", 0);
+        let support = model
+            .capabilities
+            .reasoning_effort
+            .expect("reasoning effort support");
+
+        assert!(support.supported);
+        assert_eq!(support.source, Some(ModelReasoningEffortSource::Api));
+        assert_eq!(
+            support.levels,
+            vec![
+                ModelReasoningEffortLevel::Low,
+                ModelReasoningEffortLevel::Medium,
+                ModelReasoningEffortLevel::High,
+            ]
+        );
+        assert_eq!(support.default, Some(ModelReasoningEffortLevel::Medium));
+    }
+
+    #[test]
+    fn test_convert_api_model_preserves_explicit_reasoning_effort_levels() {
+        let (service, _db) = setup_cache_service();
+        let response = ModelRegistryService::parse_openai_models_response(
+            r#"{
+              "data": [
+                {
+                  "id": "gpt-5.4",
+                  "reasoning_effort_levels": ["low", "medium", "high", "xhigh"]
+                }
+              ]
+            }"#,
+        )
+        .expect("parse response");
+        let model =
+            service.convert_api_model(response.into_iter().next().expect("model"), "gateway", 0);
+        let support = model
+            .capabilities
+            .reasoning_effort
+            .expect("reasoning effort support");
+
+        assert_eq!(
+            support.levels,
+            vec![
+                ModelReasoningEffortLevel::Low,
+                ModelReasoningEffortLevel::Medium,
+                ModelReasoningEffortLevel::High,
+                ModelReasoningEffortLevel::Xhigh,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_convert_api_model_does_not_infer_reasoning_effort_from_reasoning_flag() {
+        let (service, _db) = setup_cache_service();
+        let response = ModelRegistryService::parse_openai_models_response(
+            r#"{
+              "data": [
+                {
+                  "id": "reasoning-chat",
+                  "capabilities": { "reasoning": true }
+                }
+              ]
+            }"#,
+        )
+        .expect("parse response");
+        let model =
+            service.convert_api_model(response.into_iter().next().expect("model"), "gateway", 0);
+
+        assert!(model.capabilities.reasoning);
+        assert!(model.capabilities.reasoning_effort.is_none());
+    }
+
+    #[test]
+    fn test_convert_api_model_does_not_enable_reasoning_effort_from_generic_effort_parameter() {
+        let (service, _db) = setup_cache_service();
+        let response = ModelRegistryService::parse_openai_models_response(
+            r#"{
+              "data": [
+                {
+                  "id": "proxy-chat",
+                  "supported_parameters": ["temperature", "effort"]
+                }
+              ]
+            }"#,
+        )
+        .expect("parse response");
+        let model =
+            service.convert_api_model(response.into_iter().next().expect("model"), "gateway", 0);
+
+        assert!(model.capabilities.reasoning_effort.is_none());
+    }
+
+    #[test]
+    fn test_convert_api_model_respects_disabled_reasoning_effort_signal() {
+        let (service, _db) = setup_cache_service();
+        let response = ModelRegistryService::parse_openai_models_response(
+            r#"{
+              "data": [
+                {
+                  "id": "proxy-chat",
+                  "reasoning_effort": { "supported": false, "levels": ["low", "medium", "high"] }
+                }
+              ]
+            }"#,
+        )
+        .expect("parse response");
+        let model =
+            service.convert_api_model(response.into_iter().next().expect("model"), "gateway", 0);
+
+        assert!(model.capabilities.reasoning_effort.is_none());
     }
 
     #[test]

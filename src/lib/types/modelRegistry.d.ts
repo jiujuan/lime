@@ -17,6 +17,23 @@ export interface ModelCapabilities {
     function_calling: boolean;
     /** 是否支持推理/思考 */
     reasoning: boolean;
+    /** 是否支持可选推理强度；仅当模型接口明确声明时填充 */
+    reasoning_effort?: ModelReasoningEffortSupport | null;
+}
+/** 模型推理强度档位 */
+export type ModelReasoningEffortLevel = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
+/** 推理强度能力来源 */
+export type ModelReasoningEffortSource = "api" | "registry" | "custom" | "inferred";
+/** 模型推理强度能力 */
+export interface ModelReasoningEffortSupport {
+    /** 是否支持 reasoning_effort 参数 */
+    supported: boolean;
+    /** 支持的档位 */
+    levels: ModelReasoningEffortLevel[];
+    /** 默认档位 */
+    default?: ModelReasoningEffortLevel | null;
+    /** 能力来源 */
+    source?: ModelReasoningEffortSource;
 }
 /** 模型任务族 */
 export type ModelTaskFamily = "chat" | "reasoning" | "vision_understanding" | "image_generation" | "image_edit" | "speech_to_text" | "text_to_speech" | "embedding" | "rerank" | "moderation";

@@ -436,6 +436,7 @@ fn infer_model_capabilities(
         reasoning: task_families.contains(&ModelTaskFamily::Reasoning)
             || infer_reasoning_capability(model_id)
             || provider_id.map(normalize_identifier).as_deref() == Some("codex"),
+        reasoning_effort: None,
     }
 }
 

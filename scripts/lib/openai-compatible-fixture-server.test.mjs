@@ -48,6 +48,15 @@ describe("openai-compatible-fixture-server", () => {
         model_name: DEFAULT_FIXTURE_MODEL,
         api_key: DEFAULT_FIXTURE_API_KEY,
         base_url: fixture.baseUrl,
+        model_capabilities: {
+          vision: true,
+          tools: true,
+          streaming: true,
+          json_mode: true,
+          function_calling: true,
+          reasoning: false,
+          reasoning_effort: null,
+        },
       },
     });
   });
@@ -222,6 +231,133 @@ describe("openai-compatible-fixture-server", () => {
     expect(second.ok).toBe(true);
     const secondText = await second.text();
     expect(secondText).toContain("CODE_RUNTIME_OK");
+    expect(fixture.requests).toHaveLength(2);
+  });
+
+  it("scripted tool call 默认必须确认目标工具已进入 provider request", async () => {
+    const fixture = await startFixture({
+      scriptedResponses: [
+        {
+          type: "tool_call",
+          id: "call-read-fixture",
+          name: "Read",
+          arguments: {
+            path: "README.md",
+          },
+        },
+      ],
+    });
+
+    const response = await fetch(`${fixture.baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: DEFAULT_FIXTURE_MODEL,
+        messages: [{ role: "user", content: "read a file" }],
+        tools: [],
+        stream: true,
+      }),
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.error.message).toContain("provider request tools=<none>");
+  });
+
+  it("scripted response 函数应能基于上一轮 tool result 动态生成下一次 tool call", async () => {
+    const fixture = await startFixture({
+      scriptedResponses: [
+        {
+          type: "tool_call",
+          id: "call-background-bash",
+          name: "Bash",
+          arguments: {
+            command: "node -e \"setInterval(() => console.log('tick'), 1000)\"",
+            background: true,
+          },
+        },
+        ({ body, requestIndex, requests }) => {
+          expect(requestIndex).toBe(1);
+          expect(requests).toHaveLength(2);
+          const messagesText = (body.messages || [])
+            .map((message) =>
+              typeof message?.content === "string"
+                ? message.content
+                : JSON.stringify(message?.content || ""),
+            )
+            .join("\n");
+          const taskId = messagesText.match(/"task_id"\s*:\s*"([^"]+)"/)?.[1];
+          if (!taskId) {
+            throw new Error("dynamic scripted response missing task_id");
+          }
+          return {
+            type: "tool_call",
+            id: "call-dynamic-task-output",
+            name: "TaskOutput",
+            arguments: {
+              task_id: taskId,
+              block: true,
+              timeout: 2000,
+            },
+          };
+        },
+      ],
+    });
+
+    const first = await fetch(`${fixture.baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: DEFAULT_FIXTURE_MODEL,
+        messages: [{ role: "user", content: "start background task" }],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "Bash",
+              parameters: { type: "object", properties: {} },
+            },
+          },
+        ],
+        stream: true,
+      }),
+    });
+
+    expect(first.ok).toBe(true);
+    expect(await first.text()).toContain('"Bash"');
+
+    const second = await fetch(`${fixture.baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: DEFAULT_FIXTURE_MODEL,
+        messages: [
+          {
+            role: "tool",
+            content: JSON.stringify({
+              task_id: "runtime-background-task-42",
+              status: "running",
+            }),
+          },
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "TaskOutput",
+              parameters: { type: "object", properties: {} },
+            },
+          },
+        ],
+        stream: true,
+      }),
+    });
+
+    expect(second.ok).toBe(true);
+    const secondText = await second.text();
+    expect(secondText).toContain('"TaskOutput"');
+    expect(secondText).toContain("runtime-background-task-42");
     expect(fixture.requests).toHaveLength(2);
   });
 });

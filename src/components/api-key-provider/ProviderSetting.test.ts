@@ -11,6 +11,7 @@
 import { describe, expect } from "vitest";
 import { test } from "@fast-check/vitest";
 import * as fc from "fast-check";
+import { fastCheckRuns } from "../../test/fastCheckRuns";
 import { extractProviderSettingInfo } from "./ProviderSetting";
 import type {
   ProviderWithKeysDisplay,
@@ -113,7 +114,7 @@ describe("Property 6: Provider 设置面板字段完整性", () => {
    *
    * **Validates: Requirements 4.1**
    */
-  test.prop([providerWithKeysArbitrary], { numRuns: 100 })(
+  test.prop([providerWithKeysArbitrary], { numRuns: fastCheckRuns(100) })(
     "每个 Provider 设置面板应包含所有必需字段",
     (provider: ProviderWithKeysDisplay) => {
       const info = extractProviderSettingInfo(provider);
@@ -141,7 +142,7 @@ describe("Property 6: Provider 设置面板字段完整性", () => {
     },
   );
 
-  test.prop([providerWithKeysArbitrary], { numRuns: 100 })(
+  test.prop([providerWithKeysArbitrary], { numRuns: fastCheckRuns(100) })(
     "Provider ID 应为非空字符串（用于图标显示）",
     (provider: ProviderWithKeysDisplay) => {
       expect(typeof provider.id).toBe("string");
@@ -149,7 +150,7 @@ describe("Property 6: Provider 设置面板字段完整性", () => {
     },
   );
 
-  test.prop([providerWithKeysArbitrary], { numRuns: 100 })(
+  test.prop([providerWithKeysArbitrary], { numRuns: fastCheckRuns(100) })(
     "Provider 名称应为非空字符串",
     (provider: ProviderWithKeysDisplay) => {
       expect(typeof provider.name).toBe("string");
@@ -157,14 +158,14 @@ describe("Property 6: Provider 设置面板字段完整性", () => {
     },
   );
 
-  test.prop([providerWithKeysArbitrary], { numRuns: 100 })(
+  test.prop([providerWithKeysArbitrary], { numRuns: fastCheckRuns(100) })(
     "Provider 启用状态应为布尔值",
     (provider: ProviderWithKeysDisplay) => {
       expect(typeof provider.enabled).toBe("boolean");
     },
   );
 
-  test.prop([providerWithKeysArbitrary], { numRuns: 100 })(
+  test.prop([providerWithKeysArbitrary], { numRuns: fastCheckRuns(100) })(
     "Provider API Host 应为有效 URL",
     (provider: ProviderWithKeysDisplay) => {
       expect(typeof provider.api_host).toBe("string");
@@ -292,7 +293,7 @@ describe("Property 6: Provider 设置面板字段完整性", () => {
 
   // API Keys 数组验证
   describe("API Keys 数组验证", () => {
-    test.prop([providerWithKeysArbitrary], { numRuns: 100 })(
+    test.prop([providerWithKeysArbitrary], { numRuns: fastCheckRuns(100) })(
       "api_keys 应为数组",
       (provider: ProviderWithKeysDisplay) => {
         expect(Array.isArray(provider.api_keys)).toBe(true);
@@ -301,7 +302,7 @@ describe("Property 6: Provider 设置面板字段完整性", () => {
 
     test.prop(
       [fc.array(apiKeyDisplayArbitrary, { minLength: 1, maxLength: 5 })],
-      { numRuns: 100 },
+      { numRuns: fastCheckRuns(100) },
     )("每个 API Key 应包含必需字段", (apiKeys: ApiKeyDisplay[]) => {
       for (const apiKey of apiKeys) {
         expect(typeof apiKey.id).toBe("string");
