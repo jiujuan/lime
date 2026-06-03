@@ -9,6 +9,26 @@ import {
 } from "./rust-test-layer-classifier.mjs";
 
 const MANIFEST_PATH = "src-tauri/Cargo.toml";
+const CARGO_OPTIONS_WITH_VALUE = new Set([
+  "-j",
+  "-p",
+  "-Z",
+  "--bench",
+  "--bin",
+  "--color",
+  "--config",
+  "--example",
+  "--exclude",
+  "--features",
+  "--jobs",
+  "--manifest-path",
+  "--message-format",
+  "--package",
+  "--profile",
+  "--target",
+  "--target-dir",
+  "--test",
+]);
 
 function liveProviderSmokeAllowed() {
   return (
@@ -117,6 +137,61 @@ export function filterEntriesForCargoArgs(entries, cargoArgs) {
   return entries.filter((entry) => entry.packageName === "lime");
 }
 
+export function findCargoTestFilters(cargoArgs) {
+  const filters = [];
+  let skipNext = false;
+
+  for (const arg of cargoArgs) {
+    if (skipNext) {
+      skipNext = false;
+      continue;
+    }
+
+    if (CARGO_OPTIONS_WITH_VALUE.has(arg)) {
+      skipNext = true;
+      continue;
+    }
+
+    if (
+      [...CARGO_OPTIONS_WITH_VALUE].some((option) =>
+        arg.startsWith(`${option}=`),
+      )
+    ) {
+      continue;
+    }
+
+    if (arg.startsWith("-")) {
+      continue;
+    }
+
+    filters.push(arg);
+  }
+
+  return filters;
+}
+
+export function countExecutedTestsFromCargoOutput(output) {
+  const summaryPattern =
+    /test result: \w+\. (?<passed>\d+) passed; (?<failed>\d+) failed; (?<ignored>\d+) ignored; (?<measured>\d+) measured; (?<filtered>\d+) filtered out;/g;
+  let executed = 0;
+
+  for (const match of output.matchAll(summaryPattern)) {
+    executed +=
+      Number(match.groups.passed) +
+      Number(match.groups.failed) +
+      Number(match.groups.measured);
+  }
+
+  return executed;
+}
+
+export function shouldFailOnZeroExecutedTests(cargoArgs, testArgs) {
+  return (
+    findCargoTestFilters(cargoArgs).length > 0 &&
+    !testArgs.some((arg) => arg === "--list")
+  );
+}
+
 function listLayerEntries(layer, options, cargoArgs) {
   const scopedEntries = filterEntriesForCargoArgs(
     classifyRustTestFiles(process.cwd()).filter(
@@ -154,13 +229,36 @@ function runCargo(layer, cargoArgs, testArgs) {
   }
 
   console.log(`[rust-layer] running cargo ${args.join(" ")}`);
+  const failOnZeroExecutedTests = shouldFailOnZeroExecutedTests(
+    cargoArgs,
+    finalTestArgs,
+  );
   const result = spawnSync("cargo", args, {
-    stdio: "inherit",
+    encoding: failOnZeroExecutedTests ? "utf8" : undefined,
     env: process.env,
+    maxBuffer: 50 * 1024 * 1024,
+    stdio: failOnZeroExecutedTests ? "pipe" : "inherit",
   });
 
   if (result.error) {
     throw result.error;
+  }
+
+  if (failOnZeroExecutedTests) {
+    const stdout = result.stdout ?? "";
+    const stderr = result.stderr ?? "";
+    process.stderr.write(stderr);
+    process.stdout.write(stdout);
+
+    if (
+      result.status === 0 &&
+      countExecutedTestsFromCargoOutput(`${stdout}\n${stderr}`) === 0
+    ) {
+      console.error(
+        `[rust-layer] cargo test filter matched no executed tests: ${findCargoTestFilters(cargoArgs).join(" ")}`,
+      );
+      return 1;
+    }
   }
 
   return typeof result.status === "number" ? result.status : 1;
