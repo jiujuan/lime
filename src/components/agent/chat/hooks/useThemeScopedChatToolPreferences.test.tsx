@@ -81,7 +81,7 @@ describe("useThemeScopedChatToolPreferences", () => {
 
   it("应按当前主题读取工具偏好", () => {
     saveChatToolPreferences(
-      { webSearch: true, thinking: false, task: true, subagent: false },
+      { task: true, subagent: false },
       "general",
     );
 
@@ -89,8 +89,6 @@ describe("useThemeScopedChatToolPreferences", () => {
 
     try {
       expect(harness.getValue().chatToolPreferences).toEqual({
-        webSearch: true,
-        thinking: false,
         task: true,
         subagent: false,
       });
@@ -101,11 +99,11 @@ describe("useThemeScopedChatToolPreferences", () => {
 
   it("切换主题时应切换作用域，并在更新后持久化当前主题", () => {
     saveChatToolPreferences(
-      { webSearch: true, thinking: false, task: false, subagent: false },
+      { task: false, subagent: false },
       "general",
     );
     saveChatToolPreferences(
-      { webSearch: false, thinking: true, task: true, subagent: true },
+      { task: true, subagent: true },
       "general",
     );
 
@@ -114,16 +112,12 @@ describe("useThemeScopedChatToolPreferences", () => {
     try {
       harness.rerender("general");
       expect(harness.getValue().chatToolPreferences).toEqual({
-        webSearch: false,
-        thinking: true,
         task: true,
         subagent: true,
       });
 
       act(() => {
         harness.getValue().setChatToolPreferences({
-          webSearch: true,
-          thinking: true,
           task: false,
           subagent: true,
         });
@@ -135,8 +129,6 @@ describe("useThemeScopedChatToolPreferences", () => {
             "null",
         ),
       ).toEqual({
-        webSearch: true,
-        thinking: true,
         task: false,
         subagent: true,
       });
@@ -147,7 +139,7 @@ describe("useThemeScopedChatToolPreferences", () => {
 
   it("收到 runtime 快照时应优先回灌工具偏好", () => {
     saveChatToolPreferences(
-      { webSearch: false, thinking: false, task: true, subagent: false },
+      { task: true, subagent: false },
       "general",
     );
 
@@ -156,16 +148,12 @@ describe("useThemeScopedChatToolPreferences", () => {
     try {
       act(() => {
         harness.getValue().syncChatToolPreferencesSource("general", {
-          webSearch: true,
-          thinking: true,
           task: false,
           subagent: true,
         });
       });
 
       expect(harness.getValue().chatToolPreferences).toEqual({
-        webSearch: true,
-        thinking: true,
         task: false,
         subagent: true,
       });
@@ -175,8 +163,6 @@ describe("useThemeScopedChatToolPreferences", () => {
             "null",
         ),
       ).toEqual({
-        webSearch: true,
-        thinking: true,
         task: false,
         subagent: true,
       });
@@ -191,32 +177,24 @@ describe("useThemeScopedChatToolPreferences", () => {
     try {
       act(() => {
         harness.getValue().syncChatToolPreferencesSource("general", {
-          webSearch: true,
-          thinking: false,
           task: false,
           subagent: false,
         });
       });
       act(() => {
         harness.getValue().setChatToolPreferences({
-          webSearch: false,
-          thinking: true,
           task: true,
           subagent: true,
         });
       });
       act(() => {
         harness.getValue().syncChatToolPreferencesSource("general", {
-          webSearch: true,
-          thinking: false,
           task: false,
           subagent: false,
         });
       });
 
       expect(harness.getValue().chatToolPreferences).toEqual({
-        webSearch: false,
-        thinking: true,
         task: true,
         subagent: true,
       });
@@ -233,24 +211,18 @@ describe("useThemeScopedChatToolPreferences", () => {
     try {
       act(() => {
         harness.getValue().setChatToolPreferences({
-          webSearch: false,
-          thinking: true,
           task: true,
           subagent: false,
         });
       });
       act(() => {
         harness.getValue().syncChatToolPreferencesSource("general", {
-          webSearch: true,
-          thinking: false,
           task: false,
           subagent: true,
         });
       });
 
       expect(harness.getValue().chatToolPreferences).toEqual({
-        webSearch: false,
-        thinking: true,
         task: true,
         subagent: false,
       });
@@ -272,7 +244,6 @@ describe("useThemeScopedChatToolPreferences", () => {
       act(() => {
         harness.getValue().setChatToolPreferences((previous) => ({
           ...previous,
-          thinking: true,
           subagent: true,
         }));
       });
@@ -282,8 +253,6 @@ describe("useThemeScopedChatToolPreferences", () => {
 
       expect(setSessionRecentPreferences).toHaveBeenCalledTimes(1);
       expect(setSessionRecentPreferences).toHaveBeenCalledWith("session-42", {
-        webSearch: false,
-        thinking: true,
         task: false,
         subagent: true,
       });
@@ -304,8 +273,6 @@ describe("useThemeScopedChatToolPreferences", () => {
     try {
       act(() => {
         harness.getValue().syncChatToolPreferencesSource("general", {
-          webSearch: true,
-          thinking: true,
           task: true,
           subagent: false,
         });
@@ -332,8 +299,6 @@ describe("useThemeScopedChatToolPreferences", () => {
     try {
       act(() => {
         harness.getValue().setChatToolPreferences({
-          webSearch: true,
-          thinking: true,
           task: false,
           subagent: true,
         });
@@ -345,8 +310,6 @@ describe("useThemeScopedChatToolPreferences", () => {
       expect(
         harness.getValue().getSyncedSessionRecentPreferences("session-sync-1"),
       ).toEqual({
-        webSearch: true,
-        thinking: true,
         task: false,
         subagent: true,
       });

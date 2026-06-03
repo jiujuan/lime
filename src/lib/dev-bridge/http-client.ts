@@ -25,7 +25,8 @@ const DEV_BRIDGE_AGENT_APP_PACKAGE_COMMAND_TIMEOUT_MS = 60000;
 const DEV_BRIDGE_AGENT_APP_UI_RUNTIME_START_TIMEOUT_MS = 150000;
 const DEV_BRIDGE_SKILL_EXECUTION_TIMEOUT_MS = 5 * 60 * 1000;
 const DEV_BRIDGE_LAYERED_DESIGN_PROJECT_TIMEOUT_MS = 60000;
-const DEV_BRIDGE_AGENT_SESSION_READ_TIMEOUT_MS = 8000;
+const DEV_BRIDGE_AGENT_SESSION_GET_TIMEOUT_MS = 20000;
+const DEV_BRIDGE_AGENT_SESSION_LIST_TIMEOUT_MS = 8000;
 const DEV_BRIDGE_AGENT_SESSION_PATCH_TIMEOUT_MS = 5000;
 const DEV_BRIDGE_AGENT_SESSION_CREATE_TIMEOUT_MS = 15000;
 const DEV_BRIDGE_PROVIDER_PROBE_TIMEOUT_MS = 30000;
@@ -127,11 +128,11 @@ export function resolveBridgeRequestTimeoutMs(cmd: string): number {
     return DEV_BRIDGE_STARTUP_TRUTH_COMMAND_TIMEOUT_MS;
   }
 
-  if (
-    cmd === "agent_runtime_get_session" ||
-    cmd === "agent_runtime_list_sessions"
-  ) {
-    return DEV_BRIDGE_AGENT_SESSION_READ_TIMEOUT_MS;
+  if (cmd === "agent_runtime_get_session") {
+    return DEV_BRIDGE_AGENT_SESSION_GET_TIMEOUT_MS;
+  }
+  if (cmd === "agent_runtime_list_sessions") {
+    return DEV_BRIDGE_AGENT_SESSION_LIST_TIMEOUT_MS;
   }
   if (cmd === "agent_runtime_update_session") {
     return DEV_BRIDGE_AGENT_SESSION_PATCH_TIMEOUT_MS;

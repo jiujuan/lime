@@ -10,6 +10,8 @@ use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 
+const TOKEN_ESTIMATOR_INIT_STACK_SIZE: usize = 16 * 1024 * 1024;
+
 /// Token 使用记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenUsageRecord {
@@ -450,10 +452,12 @@ pub struct TokenEstimator {
 impl TokenEstimator {
     /// 创建新的 Token 估算器
     pub fn new() -> Result<Self, TokenEstimatorError> {
-        let default_bpe = tiktoken_rs::cl100k_base()
-            .map_err(|e| TokenEstimatorError::InitializationError(e.to_string()))?;
-        let o200k_bpe = tiktoken_rs::o200k_base()
-            .map_err(|e| TokenEstimatorError::InitializationError(e.to_string()))?;
+        let default_bpe = init_bpe_on_large_stack("infra-cl100k-tokenizer-init", || {
+            tiktoken_rs::cl100k_base().map_err(|error| error.to_string())
+        })?;
+        let o200k_bpe = init_bpe_on_large_stack("infra-o200k-tokenizer-init", || {
+            tiktoken_rs::o200k_base().map_err(|error| error.to_string())
+        })?;
 
         Ok(Self {
             default_bpe,
@@ -512,6 +516,29 @@ impl Default for TokenEstimator {
     fn default() -> Self {
         Self::new().expect("Failed to create TokenEstimator")
     }
+}
+
+fn init_bpe_on_large_stack<F>(
+    name: &'static str,
+    init: F,
+) -> Result<tiktoken_rs::CoreBPE, TokenEstimatorError>
+where
+    F: FnOnce() -> Result<tiktoken_rs::CoreBPE, String> + Send + 'static,
+{
+    std::thread::Builder::new()
+        .name(name.to_string())
+        .stack_size(TOKEN_ESTIMATOR_INIT_STACK_SIZE)
+        .spawn(init)
+        .map_err(|error| {
+            TokenEstimatorError::InitializationError(format!(
+                "创建 tokenizer 初始化线程失败: {error}"
+            ))
+        })?
+        .join()
+        .map_err(|_| {
+            TokenEstimatorError::InitializationError("tokenizer 初始化线程 panic".to_string())
+        })?
+        .map_err(TokenEstimatorError::InitializationError)
 }
 
 /// Token 估算器错误

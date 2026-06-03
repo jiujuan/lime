@@ -26,7 +26,7 @@ import {
 } from "../utils/agentThreadGrouping";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
 import { isActionRequestA2UICompatible } from "../utils/actionRequestA2UI";
-import { resolveInternalImageTaskDisplayName } from "../utils/internalImagePlaceholder";
+import { resolveRuntimeAttachmentTaskDisplayName } from "../utils/runtimeAttachmentPlaceholder";
 import { isHiddenConversationArtifactPath } from "../utils/internalArtifactVisibility";
 import { parseAIResponse } from "@/lib/workspace/a2ui";
 import type { A2UIResponse } from "@/lib/workspace/a2ui";
@@ -493,7 +493,7 @@ function renderGroupItemDetails(
   if (item.type === "subagent_activity") {
     const subagentSessionId = item.session_id?.trim();
     const displayTitle =
-      resolveInternalImageTaskDisplayName(item.title) || "子任务";
+      resolveRuntimeAttachmentTaskDisplayName(item.title) || "子任务";
 
     return (
       <SurfaceCard

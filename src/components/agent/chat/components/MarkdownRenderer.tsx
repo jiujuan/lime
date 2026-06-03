@@ -48,7 +48,7 @@ const CODE_FONT_FAMILY =
 const MarkdownContainer = styled.div`
   font-size: inherit;
   line-height: inherit;
-  color: hsl(var(--foreground));
+  color: #1f2937;
   overflow-wrap: break-word;
   word-break: break-word;
   text-wrap: pretty;
@@ -63,9 +63,10 @@ const MarkdownContainer = styled.div`
 
   p {
     margin: 0 0 0.95em;
-    color: hsl(var(--foreground));
+    color: inherit;
     font-size: 1em;
     line-height: inherit;
+    font-weight: 400;
   }
 
   h1,
@@ -74,11 +75,11 @@ const MarkdownContainer = styled.div`
   h4,
   h5,
   h6 {
-    font-weight: 700;
+    font-weight: 600;
     margin: 1.08em 0 0.5em;
     line-height: 1.42;
     letter-spacing: 0;
-    color: hsl(var(--foreground));
+    color: #111827;
   }
 
   h1:first-child,
@@ -88,13 +89,13 @@ const MarkdownContainer = styled.div`
   }
 
   h1 {
-    font-size: 1.16em;
+    font-size: 1.14em;
   }
   h2 {
-    font-size: 1.1em;
+    font-size: 1.08em;
   }
   h3 {
-    font-size: 1.04em;
+    font-size: 1.03em;
   }
   h4 {
     font-size: 1em;
@@ -121,6 +122,8 @@ const MarkdownContainer = styled.div`
   li {
     margin: 0.26em 0;
     padding-left: 0.08rem;
+    color: inherit;
+    font-weight: 400;
   }
 
   li > p {
@@ -140,8 +143,8 @@ const MarkdownContainer = styled.div`
   }
 
   strong {
-    font-weight: 700;
-    color: hsl(var(--foreground));
+    font-weight: 600;
+    color: #111827;
   }
 
   em {
@@ -224,10 +227,10 @@ const MarkdownContainer = styled.div`
   }
 
   a {
-    color: hsl(var(--primary));
+    color: #2563eb;
     text-decoration: underline;
     text-underline-offset: 0.18em;
-    text-decoration-color: hsl(var(--primary) / 0.32);
+    text-decoration-color: rgba(37, 99, 235, 0.32);
     &:hover {
       text-decoration-color: currentColor;
     }
@@ -519,7 +522,7 @@ const COMPACT_PIPE_TABLE_SEPARATOR_PATTERN = /\|\|[ \t:|-]{3,}\|\|/;
 const MARKDOWN_FENCE_LINE_PATTERN = /^\s*(`{3,}|~{3,})/;
 const MARKDOWN_FENCE_OPEN_PATTERN = /^(\s*)(`{3,}|~{3,})\s*([^\s`]*)?.*$/;
 const INLINE_COLLAPSED_FENCE_PATTERN =
-  /```([A-Za-z0-9_+.#-]+)(?![ \t]*\n)([\s\S]*?)```/g;
+  /```([A-Za-z0-9_+.#-]+)(?=[^\r\nA-Za-z0-9_+.#-])([\s\S]*?)```/g;
 const COLLAPSED_MARKDOWN_TRAILING_TABLE_TEXT_PATTERN =
   /\|(?=[\u3400-\u9fffA-Za-z][^|\n]{0,24}[：:])/g;
 const COLLAPSED_SPACED_HEADING_PATTERN = /[^\n#]#{2,6}\s+\S/g;
@@ -529,6 +532,15 @@ const COLLAPSED_BULLET_LIST_PATTERN = /(?:[：:]\s*|\s)[-*+]\s+\S/g;
 const MARKDOWN_HEADING_LINE_PATTERN = /^#{1,6}\s+\S/;
 const MARKDOWN_ORDERED_LIST_LINE_PATTERN = /^[1-9]\d{0,1}\.\s+\S/;
 const MARKDOWN_UNORDERED_LIST_LINE_PATTERN = /^[-*+]\s+\S/;
+const PARTIAL_COLLAPSED_MARKDOWN_LINE_PATTERN =
+  /(?:[^\n]\*\*[^*\n]{1,32}[：:]\*\*|[A-Za-z0-9\u3400-\u9fff。！？.!?)）】》”’\]][-+]\s*(?:\*\*)?[\u3400-\u9fffA-Za-z]|[\u3400-\u9fff，。！？；：,.!?;:)）】》”’\]][1-9]\d{0,1}\.\s+\S)/u;
+const INLINE_FOLLOW_UP_ORDERED_MARKERS_PATTERN =
+  /[2-9]\d{0,1}\.\s+\S[^\n]*[3-9]\d{0,1}\.\s+\S/u;
+const COLLAPSED_HEADING_PROSE_BODY_PATTERN = /[。！？.!?]/u;
+const COLLAPSED_HEADING_TITLE_FORBIDDEN_PATTERN =
+  /[#>*`_[\]()|：:。！？.!?,，；;]/u;
+const COLLAPSED_HEADING_BODY_LEADING_FORBIDDEN_PATTERN =
+  /^[#>*`_[\]()|：:。！？.!?,，；;]/u;
 
 interface MarkdownRendererProps {
   content: string;
@@ -676,8 +688,95 @@ function normalizeCompactPipeTableLine(line: string): string {
     .join("\n");
 }
 
+function isCompactPipeTableContinuationLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (
+    !trimmed ||
+    MARKDOWN_HEADING_LINE_PATTERN.test(trimmed) ||
+    MARKDOWN_FENCE_LINE_PATTERN.test(trimmed)
+  ) {
+    return false;
+  }
+
+  return (
+    trimmed.includes("|") &&
+    parsePipeTableCells(trimmed).filter(Boolean).length >= 2
+  );
+}
+
+function collectCompactPipeTableLine(
+  lines: string[],
+  startIndex: number,
+): { line: string; endIndex: number } {
+  let line = lines[startIndex] ?? "";
+  let endIndex = startIndex;
+  let cursor = startIndex + 1;
+
+  while (cursor < lines.length) {
+    const currentLine = lines[cursor] ?? "";
+    const nextLine = lines[cursor + 1] ?? "";
+
+    if (
+      currentLine.trim() === "" &&
+      isCompactPipeTableContinuationLine(nextLine)
+    ) {
+      line = `${line.trimEnd()} ${nextLine.trim()}`;
+      endIndex = cursor + 1;
+      cursor += 2;
+      continue;
+    }
+
+    if (isCompactPipeTableContinuationLine(currentLine)) {
+      line = `${line.trimEnd()} ${currentLine.trim()}`;
+      endIndex = cursor;
+      cursor += 1;
+      continue;
+    }
+
+    break;
+  }
+
+  return { line, endIndex };
+}
+
 function countPatternMatches(value: string, pattern: RegExp): number {
   return value.match(pattern)?.length ?? 0;
+}
+
+function collectTextOutsideMarkdownFences(markdown: string): string {
+  const outsideLines: string[] = [];
+  let activeFence: { marker: "`" | "~"; markerLength: number } | null = null;
+
+  for (const line of markdown.split("\n")) {
+    const fenceMatch = MARKDOWN_FENCE_OPEN_PATTERN.exec(line);
+    if (!activeFence && fenceMatch) {
+      const markerRun = fenceMatch[2] || "";
+      activeFence = {
+        marker: markerRun.startsWith("~") ? "~" : "`",
+        markerLength: markerRun.length,
+      };
+      continue;
+    }
+
+    if (activeFence) {
+      if (fenceMatch) {
+        const markerRun = fenceMatch[2] || "";
+        const marker = markerRun.startsWith("~") ? "~" : "`";
+        if (
+          marker === activeFence.marker &&
+          markerRun.length >= activeFence.markerLength &&
+          line.trim() === markerRun
+        ) {
+          activeFence = null;
+        }
+      }
+      continue;
+    }
+
+    outsideLines.push(line);
+  }
+
+  return outsideLines.join("\n");
 }
 
 function shouldNormalizeCollapsedMarkdownBlocks(markdown: string): boolean {
@@ -686,43 +785,54 @@ function shouldNormalizeCollapsedMarkdownBlocks(markdown: string): boolean {
     return false;
   }
 
-  const lines = trimmed.split("\n");
-  const hasSparseLineBreaks =
-    lines.length <= 2 || trimmed.length / Math.max(lines.length, 1) > 800;
-  if (!hasSparseLineBreaks) {
+  const outsideText = collectTextOutsideMarkdownFences(trimmed).trim();
+  const hasInlineCollapsedFence = INLINE_COLLAPSED_FENCE_PATTERN.test(trimmed);
+  INLINE_COLLAPSED_FENCE_PATTERN.lastIndex = 0;
+  if (!outsideText && !hasInlineCollapsedFence) {
     return false;
   }
 
+  const scanText = outsideText || trimmed;
+  const lines = scanText.split("\n");
+  const hasSparseLineBreaks =
+    lines.length <= 2 || scanText.length / Math.max(lines.length, 1) > 800;
+  const hasPartiallyCollapsedLine = lines.some(
+    (line) =>
+      line.length >= 72 && PARTIAL_COLLAPSED_MARKDOWN_LINE_PATTERN.test(line),
+  );
+
   const collapsedSpacedHeadingCount = countPatternMatches(
-    trimmed,
+    scanText,
     COLLAPSED_SPACED_HEADING_PATTERN,
   );
   const collapsedOrderedListCount = countPatternMatches(
-    trimmed,
+    scanText,
     COLLAPSED_ORDERED_LIST_PATTERN,
   );
   const collapsedBulletListCount = countPatternMatches(
-    trimmed,
+    scanText,
     COLLAPSED_BULLET_LIST_PATTERN,
   );
   const markerCount = [
-    /(^|[^#])#{1,6}(?!#)\S/.test(trimmed),
+    /(^|[^#])#{1,6}(?!#)\S/.test(scanText),
     collapsedSpacedHeadingCount > 0,
-    /---#{1,6}(?!#)\S/.test(trimmed),
-    /[：:]\s*[-*+]\s+\S|`-\s*\S/.test(trimmed),
-    /[：:]\s*[1-9]\d{0,1}\.\s+\S/.test(trimmed),
+    /---#{1,6}(?!#)\S/.test(scanText),
+    /[：:]\s*[-*+]\s+\S|`-\s*\S/.test(scanText),
+    /[：:]\s*[1-9]\d{0,1}\.\s+\S/.test(scanText),
     collapsedOrderedListCount >= 2,
     collapsedBulletListCount >= 2,
-    COMPACT_PIPE_TABLE_SEPARATOR_PATTERN.test(trimmed),
-    INLINE_COLLAPSED_FENCE_PATTERN.test(trimmed),
+    COMPACT_PIPE_TABLE_SEPARATOR_PATTERN.test(scanText),
+    hasInlineCollapsedFence,
   ].filter(Boolean).length;
 
   INLINE_COLLAPSED_FENCE_PATTERN.lastIndex = 0;
   return (
-    markerCount >= 2 ||
-    collapsedSpacedHeadingCount >= 2 ||
-    collapsedOrderedListCount >= 2 ||
-    collapsedBulletListCount >= 2
+    hasPartiallyCollapsedLine ||
+    (hasSparseLineBreaks &&
+      (markerCount >= 2 ||
+        collapsedSpacedHeadingCount >= 2 ||
+        collapsedOrderedListCount >= 2 ||
+        collapsedBulletListCount >= 2))
   );
 }
 
@@ -801,32 +911,180 @@ function transformOutsideMarkdownFences(
 }
 
 function normalizeCollapsedMarkdownTextBlocks(markdown: string): string {
-  const normalized = markdown
-    .replace(/---(?=#{1,6}(?!#)\S)/g, "\n\n---\n\n")
+  const withBlockBoundaries = markdown
+    .replace(/---(?=#{1,6}(?!#)\s*\S)/g, "\n\n---\n\n")
     .replace(/([^\n#])(?=#{2,6}\s+\S)/g, "$1\n\n")
     .replace(/(^|[^A-Za-z0-9#\n])(?=#{1,6}(?!#)\S)/g, "$1\n\n")
     .replace(/(^|\n)(#{1,6})(?!#)(?=\S)/g, "$1$2 ")
+    .replace(/(^|\n)(#{1,6}\s+\d+\.)(?=\S)/g, "$1$2 ")
+    .replace(
+      /(^|\n)(#{1,6}\s+[^\n*#]{2,64}?)(?=\*\*[\u3400-\u9fffA-Za-z0-9][^*\n]{0,32}[：:])/gu,
+      "$1$2\n\n",
+    )
+    .replace(
+      /(^|\n)(#{1,6}\s+[^\n#>]{2,90}?)(?=>\s*\S)/gu,
+      "$1$2\n\n",
+    )
+    .replace(
+      /(^|\n)(#{1,6}\s+[^\n`#]{2,64}?)(?=`[^`\n])/gu,
+      (_match, prefix: string, heading: string) => {
+        const headingText = heading.replace(/^#{1,6}\s+/, "").trim();
+        if (/^[1-9]\d{0,1}\.$/.test(headingText)) {
+          return `${prefix}${heading}`;
+        }
+        return `${prefix}${heading}\n\n`;
+      },
+    )
     .replace(/([：:])(\|[^\n]*?\|\|[ \t:|-]{3,}\|\|)/g, "$1\n\n$2")
-    .replace(COLLAPSED_MARKDOWN_TRAILING_TABLE_TEXT_PATTERN, "|\n\n")
+    .replace(COLLAPSED_MARKDOWN_TRAILING_TABLE_TEXT_PATTERN, "|\n\n");
+
+  const normalized = normalizeCompactPipeTables(withBlockBoundaries)
+    .replace(/\*\*([^*\n]{1,32}[：:])(?!\*)(?![^\n]{0,120}\*\*)/gu, "**$1**")
+    .replace(
+      /(?<=[\u3400-\u9fffA-Za-z0-9。！？.!?])(\*\*[^*\n]{1,32}[：:]\*\*)/gu,
+      "\n\n$1",
+    )
+    .replace(
+      /(^|\n)(\*\*[^*\n]{1,32}[：:]\*\*)[ \t]*(?=[\u3400-\u9fffA-Za-z0-9])/gu,
+      "$1$2\n\n",
+    )
+    .replace(
+      /(^|\n)([-*+]\s+)(\*\*[^*\n]{1,32}[：:]\*\*)[ \t]*(?=[\u3400-\u9fffA-Za-z0-9])/gu,
+      "$1$2$3 ",
+    )
+    .replace(
+      /(^|\n)(#{1,6}\s+[^\n#]{2,90}?)(?<=[\u3400-\u9fff）】》”’])([-*+])\s*(?=(?:\*\*)?(?:[\u3400-\u9fffA-Za-z0-9]|\[))/gu,
+      "$1$2\n\n$3 ",
+    )
     .replace(/([：:])\s*([1-9]\d{0,1}\.\s+)/g, "$1\n\n$2")
     .replace(
-      /(?<=[\u3400-\u9fffA-Za-z0-9，。！？；：,.!?;:）】》”’)\]])\s+([1-9]\d{0,1}\.\s+\S)/gu,
-      "\n$1",
+      /(?<=[\u3400-\u9fff，。！？；：,.!?;:)）】》”’\]])([1-9]\d{0,1}\.\s+\S)/gu,
+      "\n\n$1",
     )
-    .replace(/([：:])\s*([-*+])\s*/g, "$1\n$2 ")
     .replace(
-      /(?<=[\u3400-\u9fffA-Za-z0-9）】》”’)\]])([-*+])(?=[\u3400-\u9fffA-Za-z][^，。！？；：,.!?;:\n]{0,24}[：:])/gu,
+      /(?<=[\u3400-\u9fffA-Za-z0-9，。！？；：,.!?;:)）】》”’\]])\s+([1-9]\d{0,1}\.\s+\S)/gu,
+      "\n\n$1",
+    )
+    .replace(/([：:])\s*([-+])\s*/g, "$1\n$2 ")
+    .replace(/([：:])\s*(\*)(?!\*)\s*/g, "$1\n$2 ")
+    .replace(
+      /(?<=[\u3400-\u9fffA-Za-z0-9。！？.!?)）】》”’\]])([-+]|(?<!\*)\*(?!\*))\s+(?=(?:\*\*)?[\u3400-\u9fffA-Za-z][^\n]{2,})/gu,
       "\n$1 ",
     )
     .replace(
-      /(?<=[\u3400-\u9fffA-Za-z0-9）】》”’)\]])\s+([-*+]\s+\S)/gu,
+      /(?<=[\u3400-\u9fffA-Za-z0-9)）】》”’\]])([-+]|(?<!\*)\*(?!\*))(?=[\u3400-\u9fffA-Za-z][^，。！？；：,.!?;:\n]{0,24}[：:])/gu,
+      "\n$1 ",
+    )
+    .replace(
+      /(?<=[\u3400-\u9fffA-Za-z0-9。！？.!?)）】》”’\]])([-+])(?=[\u3400-\u9fff])/gu,
+      "\n$1 ",
+    )
+    .replace(
+      /(^|\n)([-*+]\s+)(\*\*[^*\n]{1,32}[：:]\*\*)[ \t]*(?=[\u3400-\u9fffA-Za-z0-9])/gu,
+      "$1$2$3 ",
+    )
+    .replace(
+      /(?<=[\u3400-\u9fffA-Za-z0-9)）】》”’\]])\s+((?:[-+]|(?<!\*)\*(?!\*))\s+\S)/gu,
       "\n$1",
     )
     .replace(/`-\s*/g, "`\n- ")
-    .replace(/([：:])```/g, "$1\n\n```")
-    .replace(/\n{3,}/g, "\n\n");
+    .replace(/([：:])```/g, "$1\n\n```");
 
-  return normalizeRecoveredListNesting(normalized).trim();
+  const withHeadingProseBoundaries =
+    normalizeCollapsedHeadingProseBoundaries(normalized);
+
+  return normalizeRecoveredListNesting(
+    withHeadingProseBoundaries.replace(/\n{3,}/g, "\n\n"),
+  ).trim();
+}
+
+type WordSegment = {
+  segment: string;
+  index: number;
+  isWordLike?: boolean;
+};
+
+type WordSegmenter = {
+  segment(input: string): Iterable<WordSegment>;
+};
+
+type IntlWithWordSegmenter = typeof Intl & {
+  Segmenter?: new (
+    locale?: string | string[],
+    options?: { granularity?: "word" },
+  ) => WordSegmenter;
+};
+
+function getWordSegmentBoundaries(value: string): number[] {
+  const SegmenterConstructor = (Intl as IntlWithWordSegmenter).Segmenter;
+  if (!SegmenterConstructor) {
+    return [];
+  }
+
+  const segmenter = new SegmenterConstructor(["zh", "en"], {
+    granularity: "word",
+  });
+  const boundaries: number[] = [];
+
+  for (const segment of segmenter.segment(value)) {
+    const isWordLike =
+      segment.isWordLike ??
+      /[\u3400-\u9fffA-Za-z0-9]/u.test(segment.segment);
+    if (!isWordLike) {
+      continue;
+    }
+    boundaries.push(segment.index + segment.segment.length);
+  }
+
+  return boundaries;
+}
+
+function findCollapsedHeadingProseBoundary(value: string): number | null {
+  const trimmed = value.trim();
+  if (
+    trimmed.length < 28 ||
+    !COLLAPSED_HEADING_PROSE_BODY_PATTERN.test(trimmed) ||
+    /^(?:[1-9]\d{0,1}\.\s|[-*+]\s|>)/.test(trimmed)
+  ) {
+    return null;
+  }
+
+  for (const boundary of getWordSegmentBoundaries(trimmed).slice(1, 5)) {
+    const title = trimmed.slice(0, boundary).trim();
+    const body = trimmed.slice(boundary).trimStart();
+    if (
+      title.length >= 4 &&
+      title.length <= 16 &&
+      body.length >= 18 &&
+      !COLLAPSED_HEADING_TITLE_FORBIDDEN_PATTERN.test(title) &&
+      !COLLAPSED_HEADING_BODY_LEADING_FORBIDDEN_PATTERN.test(body) &&
+      COLLAPSED_HEADING_PROSE_BODY_PATTERN.test(body)
+    ) {
+      return boundary;
+    }
+  }
+
+  return null;
+}
+
+function normalizeCollapsedHeadingProseBoundaries(markdown: string): string {
+  return markdown
+    .split("\n")
+    .map((line) => {
+      const match = /^(\s{0,3}#{1,6}\s+)(\S[^\n]*)$/u.exec(line);
+      if (!match) {
+        return line;
+      }
+
+      const [, prefix, headingText] = match;
+      const boundary = findCollapsedHeadingProseBoundary(headingText);
+      if (boundary == null) {
+        return line;
+      }
+
+      return `${prefix}${headingText.slice(0, boundary).trimEnd()}\n\n${headingText.slice(boundary).trimStart()}`;
+    })
+    .join("\n");
 }
 
 function normalizeRecoveredListNesting(markdown: string): string {
@@ -872,29 +1130,63 @@ function normalizeCollapsedMarkdownBlocks(markdown: string): string {
   );
 }
 
+function normalizeInlineFollowUpListMarkers(markdown: string): string {
+  if (!INLINE_FOLLOW_UP_ORDERED_MARKERS_PATTERN.test(markdown)) {
+    return markdown;
+  }
+
+  return transformOutsideMarkdownFences(markdown, (text) =>
+    text.replace(
+      /(^|\n)([^\n]*[2-9]\d{0,1}\.\s+\S[^\n]*[3-9]\d{0,1}\.\s+\S[^\n]*)/gu,
+      (_match, prefix: string, line: string) => {
+        const trimmedLine = line.trim();
+        if (/^1\.\s+/.test(trimmedLine)) {
+          return `${prefix}${trimmedLine.replace(/\s+([2-9]\d{0,1}\.\s+)/g, "\n$1")}`;
+        }
+        return `${prefix}- ${trimmedLine.replace(/\s*[2-9]\d{0,1}\.\s+/g, "\n- ")}`;
+      },
+    ),
+  );
+}
+
 function normalizeCompactPipeTables(markdown: string): string {
   if (!COMPACT_PIPE_TABLE_SEPARATOR_PATTERN.test(markdown)) {
     return markdown;
   }
 
   let activeFenceMarker: "`" | "~" | null = null;
-  return markdown
-    .split("\n")
-    .map((line) => {
-      const fenceMatch = MARKDOWN_FENCE_LINE_PATTERN.exec(line);
-      if (fenceMatch) {
-        const marker = fenceMatch[1]?.startsWith("~") ? "~" : "`";
-        activeFenceMarker = activeFenceMarker === marker ? null : marker;
-        return line;
-      }
+  const lines = markdown.split("\n");
+  const outputLines: string[] = [];
 
-      if (activeFenceMarker) {
-        return line;
-      }
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    const fenceMatch = MARKDOWN_FENCE_LINE_PATTERN.exec(line);
+    if (fenceMatch) {
+      const marker = fenceMatch[1]?.startsWith("~") ? "~" : "`";
+      activeFenceMarker = activeFenceMarker === marker ? null : marker;
+      outputLines.push(line);
+      continue;
+    }
 
-      return normalizeCompactPipeTableLine(line);
-    })
-    .join("\n");
+    if (activeFenceMarker) {
+      outputLines.push(line);
+      continue;
+    }
+
+    if (COMPACT_PIPE_TABLE_SEPARATOR_PATTERN.test(line)) {
+      const collected = collectCompactPipeTableLine(lines, index);
+      const normalizedLine = normalizeCompactPipeTableLine(collected.line);
+      if (normalizedLine !== collected.line) {
+        outputLines.push(normalizedLine);
+        index = collected.endIndex;
+        continue;
+      }
+    }
+
+    outputLines.push(normalizeCompactPipeTableLine(line));
+  }
+
+  return outputLines.join("\n");
 }
 
 function isMarkdownFenceInfo(info: string | undefined): boolean {
@@ -1258,7 +1550,11 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
 
       return {
         text: normalizeCompactPipeTables(
-          normalizeMarkdownTableFences(normalizeCollapsedMarkdownBlocks(result)),
+          normalizeMarkdownTableFences(
+            normalizeInlineFollowUpListMarkers(
+              normalizeCollapsedMarkdownBlocks(result),
+            ),
+          ),
         ),
         images,
       };

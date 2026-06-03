@@ -32,6 +32,7 @@ import { useContentSync } from "./hooks/useContentSync";
 import { useDeveloperFeatureFlags } from "@/hooks/useDeveloperFeatureFlags";
 import { useGlobalMediaGenerationDefaults } from "@/hooks/useGlobalMediaGenerationDefaults";
 import { useServiceModelsConfig } from "@/hooks/useServiceModelsConfig";
+import { useSoulArtifactVoiceGenerationBrief } from "@/hooks/useSoulArtifactVoiceGenerationBrief";
 import { useTrayModelShortcuts } from "./hooks/useTrayModelShortcuts";
 import { type CanvasWorkbenchLayoutMode } from "./components/CanvasWorkbenchLayout";
 import type { CreationMode } from "./components/types";
@@ -172,6 +173,7 @@ import {
 } from "./workspace/useTaskCenterDraftSendRuntime";
 import { useTaskCenterDraftMaterializationRuntime } from "./workspace/useTaskCenterDraftMaterializationRuntime";
 import { useTaskCenterTabChrome } from "./workspace/useTaskCenterTabChrome";
+import { resolveTaskCenterTopicTitle } from "./workspace/taskCenterTabProjection";
 import { useTaskCenterTopicNavigationRuntime } from "./workspace/useTaskCenterTopicNavigationRuntime";
 import { markTaskCenterDraftTabRunning } from "./workspace/taskCenterDraftTabs";
 import { useWorkspaceCanvasTaskFileSync } from "./workspace/useWorkspaceCanvasTaskFileSync";
@@ -253,7 +255,6 @@ import type { ArtifactTimelineOpenTarget } from "./utils/artifactTimelineNavigat
 import { createUnifiedMemory } from "@/lib/api/unifiedMemory";
 import { getDefaultGuidePromptByTheme } from "./utils/defaultGuidePrompt";
 import { shouldShowChatLayout } from "./utils/chatLayoutVisibility";
-import { resolveInternalImageTaskDisplayName } from "./utils/internalImagePlaceholder";
 import { mergePathReferences } from "./utils/pathReferences";
 import {
   applyTaskCenterRouteTabSyncToMap,
@@ -983,6 +984,15 @@ export function AgentChatWorkspace({
   const { mediaDefaults, loading: mediaDefaultsLoading } =
     useGlobalMediaGenerationDefaults();
   const { serviceModels, agentResponseLanguage } = useServiceModelsConfig();
+  const { generationBrief: soulArtifactVoiceGenerationBrief } =
+    useSoulArtifactVoiceGenerationBrief();
+  const [
+    soulArtifactVoiceEnabledForTurn,
+    setSoulArtifactVoiceEnabledForTurn,
+  ] = useState(true);
+  useEffect(() => {
+    setSoulArtifactVoiceEnabledForTurn(true);
+  }, [soulArtifactVoiceGenerationBrief]);
   const inputCompletionEnabled =
     serviceModels.input_completion?.enabled !== false;
   const effectiveImageWorkbenchPreference = useMemo(
@@ -1166,18 +1176,20 @@ export function AgentChatWorkspace({
     },
     [expertAgentLaunch],
   );
-  const workspaceRequestMetadataWithExpertSkills = useMemo(
-    () =>
-      mergeExpertSkillRefsIntoRequestMetadata(
-        initialRequestMetadata ?? initialAutoSendRequestMetadata ?? null,
-        expertSkillRefsOverride,
-      ),
-    [
+  const workspaceRequestMetadataWithExpertSkills = useMemo(() => {
+    const metadataWithExpertSkills = mergeExpertSkillRefsIntoRequestMetadata(
+      initialRequestMetadata ?? initialAutoSendRequestMetadata ?? null,
       expertSkillRefsOverride,
-      initialAutoSendRequestMetadata,
-      initialRequestMetadata,
-    ],
-  );
+    );
+    return metadataWithExpertSkills &&
+      Object.keys(metadataWithExpertSkills).length > 0
+      ? metadataWithExpertSkills
+      : null;
+  }, [
+    expertSkillRefsOverride,
+    initialAutoSendRequestMetadata,
+    initialRequestMetadata,
+  ]);
   const initialPendingServiceSkillLaunchSignature = useMemo(() => {
     const skillId = initialPendingServiceSkillLaunch?.skillId?.trim();
     const skillKey = initialPendingServiceSkillLaunch?.skillKey?.trim();
@@ -2096,8 +2108,6 @@ export function AgentChatWorkspace({
         loadChatToolPreferences(activeTheme),
         executionStrategy,
       ),
-      webSearch: false,
-      thinking: false,
     };
     const backfillKey = `${trimmedSessionId}:${JSON.stringify([
       fallbackPreferences.task,
@@ -3413,11 +3423,13 @@ export function AgentChatWorkspace({
       if (boundary.shouldDismissGeneralWorkbenchEntryPrompt) {
         clearGeneralWorkbenchEntryPrompt();
       }
+      setSoulArtifactVoiceEnabledForTurn(true);
     },
     [
       clearGeneralWorkbenchEntryPrompt,
       consumeInitialPrompt,
       initialDispatchKey,
+      setSoulArtifactVoiceEnabledForTurn,
     ],
   );
   const rollbackAfterSendFailure = useCallback(
@@ -3820,6 +3832,8 @@ export function AgentChatWorkspace({
     browserAssistAutoLaunch: browserAssistRequestAutoLaunch,
     workspaceRequestMetadataBase:
       workspaceRequestMetadataWithExpertSkills ?? undefined,
+    savedSoulArtifactVoiceGenerationBrief: soulArtifactVoiceGenerationBrief,
+    soulArtifactVoiceEnabledForTurn,
     serviceModels,
     agentResponseLanguage,
     messages,
@@ -3886,17 +3900,8 @@ export function AgentChatWorkspace({
       return;
     }
 
-    await handleSendRef.current(
-      [],
-      undefined,
-      undefined,
-      promptToSend,
-    );
-  }, [
-    generalWorkbenchEntryPrompt,
-    handleSendRef,
-    input,
-  ]);
+    await handleSendRef.current([], undefined, undefined, promptToSend);
+  }, [generalWorkbenchEntryPrompt, handleSendRef, input]);
   const applyWorkbenchFollowUpActionPayload = useCallback(
     (payload: GeneralWorkbenchFollowUpActionPayload) => {
       const normalizedPrompt = payload.prompt.trim();
@@ -4324,8 +4329,10 @@ export function AgentChatWorkspace({
         return;
       }
 
-      const currentTitle =
-        resolveInternalImageTaskDisplayName(topic.title) || untitledTaskLabel;
+      const currentTitle = resolveTaskCenterTopicTitle(
+        topic.title,
+        untitledTaskLabel,
+      );
       const nextTitle = window
         .prompt(taskCenterRenamePromptLabel, currentTitle)
         ?.trim();
@@ -4543,7 +4550,9 @@ export function AgentChatWorkspace({
       shouldHideDetachedTaskCenterTabs,
       normalizedInitialSessionId,
       sessionId,
-      currentSessionIsKnownTopic: Boolean(sessionId && topicById.has(sessionId)),
+      currentSessionIsKnownTopic: Boolean(
+        sessionId && topicById.has(sessionId),
+      ),
       hasDisplayMessages,
       switchingTopicId: taskCenterTransitionTopicId,
       openTabIds: taskCenterOpenTabIds,
@@ -6397,6 +6406,10 @@ export function AgentChatWorkspace({
     setChatToolPreferences,
     handleNavigateToSkillSettings,
     handleRefreshSkills,
+    soulArtifactVoiceGenerationBrief,
+    soulArtifactVoiceEnabledForTurn,
+    onSoulArtifactVoiceEnabledForTurnChange:
+      setSoulArtifactVoiceEnabledForTurn,
     turns,
     threadItems: effectiveThreadItems,
     currentTurnId,

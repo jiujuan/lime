@@ -1,6 +1,10 @@
 import type { Topic } from "../hooks/agentChatShared";
 import type { TaskCenterTabItem } from "../components/TaskCenterTabStrip";
-import { resolveInternalImageTaskDisplayName } from "../utils/internalImagePlaceholder";
+import {
+  isOnlyRuntimeAttachmentPlaceholderText,
+  resolveRuntimeAttachmentTaskDisplayName,
+} from "../utils/runtimeAttachmentPlaceholder";
+import { isAssistantRuntimeErrorDisplayText } from "../utils/messageDisplaySanitizer";
 import { MAX_TASK_CENTER_OPEN_TABS } from "../utils/taskCenterTabs";
 import type { TaskCenterDraftTab } from "./agentChatWorkspaceHelpers";
 
@@ -35,6 +39,25 @@ function resolveTopicUpdatedAt(topic: Topic): Date {
     : new Date(topic.updatedAt ?? topic.createdAt ?? Date.now());
 }
 
+export function resolveTaskCenterTopicTitle(
+  value: string | null | undefined,
+  fallbackTitle: string,
+): string {
+  const title = value?.trim() || "";
+  if (
+    isAssistantRuntimeErrorDisplayText(title, {
+      allowTruncatedTitle: true,
+    })
+  ) {
+    return fallbackTitle;
+  }
+
+  const attachmentTitle = isOnlyRuntimeAttachmentPlaceholderText(title)
+    ? resolveRuntimeAttachmentTaskDisplayName(title)
+    : null;
+  return attachmentTitle || title || fallbackTitle;
+}
+
 export function buildTaskCenterTabItems({
   draftTabs,
   activeDraftTabId,
@@ -61,8 +84,7 @@ export function buildTaskCenterTabItems({
     .filter((topic): topic is Topic => Boolean(topic))
     .map((topic) => ({
       id: topic.id,
-      title:
-        resolveInternalImageTaskDisplayName(topic.title) || untitledTaskLabel,
+      title: resolveTaskCenterTopicTitle(topic.title, untitledTaskLabel),
       status: topic.status ?? "done",
       updatedAt: resolveTopicUpdatedAt(topic),
       isActive: !isDraftTabActive && topic.id === (previewTopicId ?? sessionId),

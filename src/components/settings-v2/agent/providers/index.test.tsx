@@ -1,7 +1,20 @@
-import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import settingsZhCN from "@/i18n/resources/zh-CN/settings.json";
+import {
+  clickButton,
+  cleanupMountedProviderPages,
+  companionWorkspaceLabel,
+  createAccessState,
+  createApiKeyProviders,
+  createCloudOfferAccessState,
+  createLoggedInSession,
+  createOffer,
+  createPetStatus,
+  getBodyText,
+  hoverTip,
+  leaveTip,
+  renderPage,
+  translate,
+} from "./cloudProviderSettingsTestFixtures";
 
 const {
   mockUseOemCloudAccess,
@@ -104,255 +117,6 @@ vi.mock("@/hooks/useOemCloudAccess", () => ({
   formatOemCloudOfferStateLabel: (value?: string) => value || "未知",
 }));
 
-import { CloudProviderSettings } from ".";
-
-const settingsDictionary = settingsZhCN as Record<string, string>;
-const companionWorkspaceLabel =
-  settingsDictionary["settings.providers.workspaceView.companion.label"];
-
-function interpolateTemplate(
-  template: string,
-  values?: Record<string, unknown>,
-): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-    String(values?.[name] ?? ""),
-  );
-}
-
-function createTranslate(dictionary: Record<string, string>) {
-  return (key: string, options?: unknown) => {
-    if (typeof options === "string") {
-      return options;
-    }
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        dictionary[key] ||
-        (typeof values.defaultValue === "string" ? values.defaultValue : key);
-      return interpolateTemplate(template, values);
-    }
-
-    return dictionary[key] || key;
-  };
-}
-
-const translate = createTranslate(settingsDictionary);
-
-interface MountedPage {
-  container: HTMLDivElement;
-  root: Root;
-}
-
-const mounted: MountedPage[] = [];
-
-function createOffer(overrides: Record<string, unknown> = {}) {
-  return {
-    providerKey: "lime-hub-main",
-    displayName: "Lime Hub 主服务",
-    source: "oem_cloud",
-    state: "available_ready",
-    description: "统一下发的云端目录",
-    visible: true,
-    loggedIn: true,
-    accountStatus: "logged_in",
-    subscriptionStatus: "active",
-    quotaStatus: "ok",
-    canInvoke: true,
-    defaultModel: "gpt-5.2-pro",
-    effectiveAccessMode: "session",
-    apiKeyModeEnabled: false,
-    tenantOverrideApplied: false,
-    configMode: "managed",
-    modelsSource: "hub_catalog",
-    developerAccessVisible: false,
-    availableModelCount: 2,
-    fallbackToLocalAllowed: true,
-    currentPlan: "Pro",
-    creditsSummary: "余额充足",
-    tags: [],
-    ...overrides,
-  };
-}
-
-function createAccessState(overrides: Record<string, unknown> = {}) {
-  return {
-    runtime: {
-      baseUrl: "https://user.limeai.run",
-      controlPlaneBaseUrl: "https://user.limeai.run/api",
-      sceneBaseUrl: "https://user.limeai.run/scene-api",
-      gatewayBaseUrl: "https://user.limeai.run/gateway-api",
-      tenantId: "tenant-0001",
-      sessionToken: null,
-      hubProviderName: "Lime Hub",
-      loginPath: "/login",
-      desktopClientId: "desktop-client",
-      desktopOauthRedirectUrl: "lime://oauth/callback",
-      desktopOauthNextPath: "/welcome",
-    },
-    configuredTarget: {
-      baseUrl: "https://user.limeai.run",
-      tenantId: "tenant-0001",
-    },
-    hubProviderName: "Lime Hub",
-    session: null,
-    bootstrap: null,
-    offers: [],
-    preference: null,
-    paymentConfigs: [],
-    plans: [],
-    subscription: null,
-    creditAccount: null,
-    creditsDashboard: null,
-    topupPackages: [],
-    usageDashboard: null,
-    billingDashboard: null,
-    orders: [],
-    creditTopupOrders: [],
-    accessTokens: [],
-    activeAccessToken: null,
-    lastIssuedRawToken: null,
-    commerceErrorMessage: null,
-    selectedOffer: null,
-    selectedModels: [],
-    defaultCloudOffer: null,
-    activeCloudOffer: null,
-    initializing: false,
-    refreshing: false,
-    loadingCommerce: false,
-    loadingDetail: false,
-    openingGoogleLogin: false,
-    savingDefault: "",
-    managingToken: "",
-    errorMessage: null,
-    infoMessage: null,
-    defaultProviderSummary: null,
-    defaultProviderSourceLabel: "未设定",
-    activeAccessModeLabel: "登录会话",
-    activeConfigModeLabel: "托管模式",
-    activeModelsSourceLabel: "云端目录",
-    activeDeveloperAccessEnabled: false,
-    activeDeveloperAccessLabel: "已关闭",
-    handleRefresh: vi.fn(),
-    handleGoogleLogin: vi.fn(),
-    openOfferDetail: vi.fn(),
-    handleSetDefault: vi.fn(),
-    handleCreateAccessToken: vi.fn(),
-    handleRotateAccessToken: vi.fn(),
-    handleRevokeAccessToken: vi.fn(),
-    handleDismissIssuedToken: vi.fn(),
-    openUserCenter: vi.fn(),
-    ...overrides,
-  };
-}
-
-function createPetStatus(overrides: Record<string, unknown> = {}) {
-  return {
-    endpoint: "ws://127.0.0.1:45554/companion/pet",
-    server_listening: true,
-    connected: false,
-    client_id: null,
-    platform: null,
-    capabilities: [],
-    last_event: null,
-    last_error: null,
-    last_state: "idle",
-    ...overrides,
-  };
-}
-
-function createApiKeyProviders() {
-  return [
-    {
-      id: "deepseek",
-      name: "DeepSeek",
-      type: "openai",
-      api_host: "https://api.deepseek.com/v1",
-      is_system: false,
-      group: "cloud",
-      enabled: true,
-      sort_order: 5,
-      api_version: undefined,
-      project: undefined,
-      location: undefined,
-      region: undefined,
-      custom_models: [],
-      api_key_count: 1,
-      api_keys: [
-        {
-          id: "key-deepseek-1",
-          provider_id: "deepseek",
-          api_key_masked: "sk-***1234",
-          alias: "主 Key",
-          enabled: true,
-          usage_count: 0,
-          error_count: 0,
-          last_used_at: undefined,
-          created_at: "2026-04-01T00:00:00Z",
-        },
-      ],
-      created_at: "2026-04-01T00:00:00Z",
-      updated_at: "2026-04-01T00:00:00Z",
-    },
-  ];
-}
-
-async function renderPage(
-  props: {
-    initialView?: "settings" | "cloud" | "companion";
-  } = {},
-) {
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root = createRoot(container);
-
-  await act(async () => {
-    root.render(<CloudProviderSettings {...props} />);
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-
-  const page = { container, root };
-  mounted.push(page);
-  return page;
-}
-
-function findButton(container: HTMLElement, text: string) {
-  const button = Array.from(container.querySelectorAll("button")).find((item) =>
-    item.textContent?.includes(text),
-  );
-
-  if (!button) {
-    throw new Error(`未找到按钮: ${text}`);
-  }
-  return button as HTMLButtonElement;
-}
-
-function getBodyText() {
-  return document.body.textContent ?? "";
-}
-
-async function hoverTip(ariaLabel: string) {
-  const trigger = document.body.querySelector(
-    `button[aria-label='${ariaLabel}']`,
-  );
-  expect(trigger).toBeInstanceOf(HTMLButtonElement);
-
-  await act(async () => {
-    trigger?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-    await Promise.resolve();
-  });
-
-  return trigger as HTMLButtonElement;
-}
-
-async function leaveTip(trigger: HTMLButtonElement | null) {
-  await act(async () => {
-    trigger?.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
-    await Promise.resolve();
-  });
-}
-
 beforeEach(() => {
   (
     globalThis as typeof globalThis & {
@@ -399,18 +163,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
-
-  while (mounted.length > 0) {
-    const current = mounted.pop();
-    if (!current) {
-      break;
-    }
-
-    act(() => {
-      current.root.unmount();
-    });
-    current.container.remove();
-  }
+  cleanupMountedProviderPages();
 });
 
 describe("CloudProviderSettings", () => {
@@ -547,12 +300,7 @@ describe("CloudProviderSettings", () => {
 
     const { container } = await renderPage();
 
-    await act(async () => {
-      findButton(container, "云端服务").dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      await Promise.resolve();
-    });
+    await clickButton(container, "云端服务");
 
     const text = container.textContent ?? "";
     expect(text).toContain("已打开 Lime Hub 登录页，请在浏览器完成授权。");
@@ -577,12 +325,7 @@ describe("CloudProviderSettings", () => {
 
     const { container } = await renderPage();
 
-    await act(async () => {
-      findButton(container, "云端服务").dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      await Promise.resolve();
-    });
+    await clickButton(container, "云端服务");
 
     const text = container.textContent ?? "";
     expect(text).toContain("登录页没有被浏览器打开，可能被弹窗拦截。");
@@ -598,18 +341,7 @@ describe("CloudProviderSettings", () => {
 
     mockUseOemCloudAccess.mockReturnValue(
       createAccessState({
-        session: {
-          tenant: { id: "tenant-0001" },
-          user: {
-            id: "user-001",
-            email: "operator@example.com",
-            displayName: "Demo Operator",
-          },
-          session: {
-            id: "session-001",
-            expiresAt: "2026-03-25T08:00:00.000Z",
-          },
-        },
+        session: createLoggedInSession(),
         subscription: {
           id: "subscription-001",
           tenantId: "tenant-0001",
@@ -639,11 +371,7 @@ describe("CloudProviderSettings", () => {
 
     const { container } = await renderPage();
 
-    await act(async () => {
-      findButton(container, "云端服务").dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-    });
+    await clickButton(container, "云端服务", 0);
 
     const text = container.textContent ?? "";
     expect(
@@ -674,18 +402,7 @@ describe("CloudProviderSettings", () => {
 
     mockUseOemCloudAccess.mockReturnValue(
       createAccessState({
-        session: {
-          tenant: { id: "tenant-0001" },
-          user: {
-            id: "user-001",
-            email: "operator@example.com",
-            displayName: "Demo Operator",
-          },
-          session: {
-            id: "session-001",
-            expiresAt: "2026-03-25T08:00:00.000Z",
-          },
-        },
+        session: createLoggedInSession(),
         pendingPayment: {
           kind: "plan_order",
           orderId: "order-001",
@@ -721,12 +438,7 @@ describe("CloudProviderSettings", () => {
 
     const { container } = await renderPage();
 
-    await act(async () => {
-      findButton(container, "云端服务").dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      await Promise.resolve();
-    });
+    await clickButton(container, "云端服务");
 
     const text = container.textContent ?? "";
     expect(
@@ -752,32 +464,7 @@ describe("CloudProviderSettings", () => {
 
   it("已下发 taxonomy 时也不再由客户端渲染品牌模型目录", async () => {
     mockUseOemCloudAccess.mockReturnValue(
-      createAccessState({
-        session: {
-          tenant: { id: "tenant-0001" },
-          user: {
-            id: "user-001",
-            email: "operator@example.com",
-            displayName: "Demo Operator",
-          },
-          session: {
-            id: "session-001",
-            expiresAt: "2026-03-25T08:00:00.000Z",
-          },
-        },
-        offers: [createOffer()],
-        preference: {
-          providerSource: "oem_cloud",
-          providerKey: "lime-hub-main",
-        },
-        selectedOffer: {
-          ...createOffer(),
-          access: {
-            offerId: "offer-001",
-            accessMode: "session",
-            hubTokenEnabled: false,
-          },
-        },
+      createCloudOfferAccessState({
         selectedModels: [
           {
             id: "model-002",
@@ -795,18 +482,12 @@ describe("CloudProviderSettings", () => {
             description: "应优先使用统一 taxonomy",
           },
         ],
-        defaultCloudOffer: createOffer(),
-        activeCloudOffer: createOffer(),
       }),
     );
 
     const { container } = await renderPage();
 
-    await act(async () => {
-      findButton(container, "云端服务").dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-    });
+    await clickButton(container, "云端服务", 0);
 
     const text = container.textContent ?? "";
     expect(text).toContain("API Key Provider 设置占位");
@@ -833,18 +514,7 @@ describe("CloudProviderSettings", () => {
 
     mockUseOemCloudAccess.mockReturnValue(
       createAccessState({
-        session: {
-          tenant: { id: "tenant-0001" },
-          user: {
-            id: "user-001",
-            email: "operator@example.com",
-            displayName: "Demo Operator",
-          },
-          session: {
-            id: "session-001",
-            expiresAt: "2026-03-25T08:00:00.000Z",
-          },
-        },
+        session: createLoggedInSession(),
         offers: [staleOffer],
         preference: {
           providerSource: "oem_cloud",
@@ -876,11 +546,7 @@ describe("CloudProviderSettings", () => {
 
     const { container } = await renderPage();
 
-    await act(async () => {
-      findButton(container, "云端服务").dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-    });
+    await clickButton(container, "云端服务", 0);
 
     const text = container.textContent ?? "";
     expect(text).toContain("API Key Provider 设置占位");
@@ -892,45 +558,12 @@ describe("CloudProviderSettings", () => {
 
   it("单个云端来源时不再渲染本地 Offer 网格", async () => {
     mockUseOemCloudAccess.mockReturnValue(
-      createAccessState({
-        session: {
-          tenant: { id: "tenant-0001" },
-          user: {
-            id: "user-001",
-            email: "operator@example.com",
-            displayName: "Demo Operator",
-          },
-          session: {
-            id: "session-001",
-            expiresAt: "2026-03-25T08:00:00.000Z",
-          },
-        },
-        offers: [createOffer()],
-        preference: {
-          providerSource: "oem_cloud",
-          providerKey: "lime-hub-main",
-        },
-        selectedOffer: {
-          ...createOffer(),
-          access: {
-            offerId: "offer-001",
-            accessMode: "session",
-            hubTokenEnabled: false,
-          },
-        },
-        defaultCloudOffer: createOffer(),
-        activeCloudOffer: createOffer(),
-      }),
+      createCloudOfferAccessState(),
     );
 
     const { container } = await renderPage();
 
-    await act(async () => {
-      findButton(container, "云端服务").dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      await Promise.resolve();
-    });
+    await clickButton(container, "云端服务");
 
     const offerGrid = container.querySelector(
       '[data-testid="oem-cloud-offer-grid"]',
@@ -959,11 +592,7 @@ describe("CloudProviderSettings", () => {
       container.querySelector('[data-testid="companion-provider-card"]'),
     ).toBeNull();
 
-    await act(async () => {
-      findButton(container, "桌宠管理").dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-    });
+    await clickButton(container, "桌宠管理", 0);
 
     const text = container.textContent ?? "";
 
@@ -1021,19 +650,9 @@ describe("CloudProviderSettings", () => {
 
     const { container } = await renderPage();
 
-    await act(async () => {
-      findButton(container, "桌宠管理").dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-    });
+    await clickButton(container, "桌宠管理", 0);
 
-    await act(async () => {
-      findButton(container, "开启桌宠").dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await clickButton(container, "开启桌宠", 2);
 
     expect(mockLaunchCompanionPet).toHaveBeenCalledTimes(1);
     expect(container.textContent ?? "").toContain("已请求开启桌宠");
@@ -1053,13 +672,7 @@ describe("CloudProviderSettings", () => {
 
     const { container } = await renderPage({ initialView: "companion" });
 
-    await act(async () => {
-      findButton(container, "开启桌宠").dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await clickButton(container, "开启桌宠", 2);
 
     expect(
       container.querySelector('[data-testid="companion-install-guide"]'),
@@ -1067,12 +680,7 @@ describe("CloudProviderSettings", () => {
     expect(container.textContent ?? "").toContain("还没有安装 Lime Pet");
     expect(container.textContent ?? "").toContain("下载安装 Lime Pet");
 
-    await act(async () => {
-      findButton(container, "下载安装 Lime Pet").dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      await Promise.resolve();
-    });
+    await clickButton(container, "下载安装 Lime Pet");
 
     expect(mockOpenUrl).toHaveBeenCalledWith(
       "https://github.com/limecloud/lime-pet/releases/latest",
@@ -1090,19 +698,9 @@ describe("CloudProviderSettings", () => {
 
     const { container } = await renderPage();
 
-    await act(async () => {
-      findButton(container, "桌宠管理").dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-    });
+    await clickButton(container, "桌宠管理", 0);
 
-    await act(async () => {
-      findButton(container, "立即同步到桌宠").dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await clickButton(container, "立即同步到桌宠", 2);
 
     expect(mockSendCompanionPetCommand).toHaveBeenCalledWith({
       event: "pet.provider_overview",
@@ -1143,11 +741,7 @@ describe("CloudProviderSettings", () => {
 
     const { container } = await renderPage();
 
-    await act(async () => {
-      findButton(container, "桌宠管理").dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-    });
+    await clickButton(container, "桌宠管理", 0);
 
     const syncButton = container.querySelector(
       '[data-testid="companion-sync-preview"]',

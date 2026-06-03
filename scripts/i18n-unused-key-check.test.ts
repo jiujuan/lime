@@ -17,7 +17,11 @@ function createTempDir(): string {
   return dir;
 }
 
-function writeFile(root: string, relativePath: string, content: string): string {
+function writeFile(
+  root: string,
+  relativePath: string,
+  content: string,
+): string {
   const filePath = path.join(root, relativePath);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content);
@@ -56,7 +60,7 @@ describe("i18n unused key scan", () => {
       root,
       "src/components/SaveButton.tsx",
       [
-        'export function SaveButton({ t }: { t: (key: string) => string }) {',
+        "export function SaveButton({ t }: { t: (key: string) => string }) {",
         '  return <button>{t("common.save")}</button>;',
         "}",
         "",
@@ -102,7 +106,7 @@ describe("i18n unused key scan", () => {
       root,
       "src/components/SaveButton.tsx",
       [
-        'export function SaveButton({ i18n }: { i18n: { t: (key: string) => string } }) {',
+        "export function SaveButton({ i18n }: { i18n: { t: (key: string) => string } }) {",
         '  return <button>{i18n.t("common.save")}</button>;',
         "}",
         "",
@@ -133,7 +137,7 @@ describe("i18n unused key scan", () => {
       "src/components/ThemeLabel.tsx",
       [
         'export function ThemeLabel({ mode }: { mode: "dark" | "light" }) {',
-        '  return <span>{t(`settings.theme.${mode}.label`)}</span>;',
+        "  return <span>{t(`settings.theme.${mode}.label` as never)}</span>;",
         "}",
         "",
       ].join("\n"),

@@ -36,7 +36,6 @@ use lime_core::database::dao::agent::AgentDao;
 #[cfg(test)]
 use lime_core::database::dao::agent_run::AgentRun;
 use lime_core::database::dao::agent_run::AgentRunDao;
-#[cfg(test)]
 use lime_core::database::dao::agent_timeline::AgentThreadTurnStatus;
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -81,8 +80,8 @@ fn normalize_runtime_session_history_before_message_id(
 }
 
 fn should_list_runtime_queue_snapshots(
-    _detail: &lime_agent::SessionDetail,
-    _history_limit: Option<usize>,
+    detail: &lime_agent::SessionDetail,
+    history_limit: Option<usize>,
     history_offset: usize,
     history_before_message_id: Option<i64>,
 ) -> bool {
@@ -90,7 +89,28 @@ fn should_list_runtime_queue_snapshots(
         return false;
     }
 
-    true
+    if history_limit.is_none() || detail.is_persisted_empty() {
+        return true;
+    }
+
+    has_active_runtime_projection(detail)
+}
+
+fn has_active_runtime_projection(detail: &lime_agent::SessionDetail) -> bool {
+    detail
+        .turns
+        .iter()
+        .any(|turn| matches!(turn.status, AgentThreadTurnStatus::Running))
+        || detail
+            .execution_runtime
+            .as_ref()
+            .and_then(|runtime| runtime.latest_turn_status.as_deref())
+            .map(is_active_runtime_turn_status)
+            .unwrap_or(false)
+}
+
+fn is_active_runtime_turn_status(status: &str) -> bool {
+    matches!(status.trim(), "queued" | "running")
 }
 
 async fn resume_runtime_queue_with_warning(
@@ -587,7 +607,8 @@ pub async fn agent_runtime_list_file_checkpoints(
     );
     tracing::info!("[AsterAgent] 列出文件快照: {}", request.session_id);
     let context =
-        load_runtime_export_context(&runtime, &request.session_id, "列出文件快照前").await?;
+        load_runtime_file_checkpoint_context(&runtime, &request.session_id, "列出文件快照前")
+            .await?;
     Ok(list_file_checkpoints(&context.detail))
 }
 
@@ -620,7 +641,8 @@ pub async fn agent_runtime_get_file_checkpoint(
         request.checkpoint_id
     );
     let context =
-        load_runtime_export_context(&runtime, &request.session_id, "获取文件快照详情前").await?;
+        load_runtime_file_checkpoint_context(&runtime, &request.session_id, "获取文件快照详情前")
+            .await?;
     get_file_checkpoint(
         &context.detail,
         &context.workspace_root,
@@ -657,7 +679,8 @@ pub async fn agent_runtime_diff_file_checkpoint(
         request.checkpoint_id
     );
     let context =
-        load_runtime_export_context(&runtime, &request.session_id, "获取文件快照 diff 前").await?;
+        load_runtime_file_checkpoint_context(&runtime, &request.session_id, "获取文件快照 diff 前")
+            .await?;
     diff_file_checkpoint(&context.detail, request.checkpoint_id.as_str())
 }
 
@@ -691,7 +714,8 @@ pub async fn agent_runtime_restore_file_checkpoint(
         request.create_backup
     );
     let context =
-        load_runtime_export_context(&runtime, &request.session_id, "恢复文件快照前").await?;
+        load_runtime_file_checkpoint_context(&runtime, &request.session_id, "恢复文件快照前")
+            .await?;
     restore_file_checkpoint(
         &context.detail,
         &context.workspace_root,
@@ -704,6 +728,11 @@ pub async fn agent_runtime_restore_file_checkpoint(
 struct RuntimeExportContext {
     detail: SessionDetail,
     thread_read: AgentRuntimeThreadReadModel,
+    workspace_root: PathBuf,
+}
+
+struct RuntimeFileCheckpointContext {
+    detail: SessionDetail,
     workspace_root: PathBuf,
 }
 
@@ -739,6 +768,25 @@ async fn load_runtime_export_context(
     Ok(RuntimeExportContext {
         detail,
         thread_read,
+        workspace_root,
+    })
+}
+
+async fn load_runtime_file_checkpoint_context(
+    runtime: &RuntimeCommandContext,
+    session_id: &str,
+    action_label: &str,
+) -> Result<RuntimeFileCheckpointContext, String> {
+    resume_runtime_queue_with_warning(runtime, session_id, action_label).await;
+
+    let detail = AsterAgentWrapper::get_session_sync_with_full_timeline_without_messages(
+        runtime.db(),
+        session_id,
+    )?;
+    let workspace_root = resolve_runtime_export_workspace_root(runtime.db(), &detail)?;
+
+    Ok(RuntimeFileCheckpointContext {
+        detail,
         workspace_root,
     })
 }
@@ -1666,6 +1714,39 @@ mod tests {
         }
     }
 
+    fn execution_runtime_with_latest_status(status: &str) -> lime_agent::SessionExecutionRuntime {
+        lime_agent::SessionExecutionRuntime {
+            session_id: "session-runtime-queue".to_string(),
+            provider_selector: None,
+            provider_name: None,
+            model_name: None,
+            execution_strategy: Some("react".to_string()),
+            output_schema_runtime: None,
+            source: lime_agent::SessionExecutionRuntimeSource::RuntimeSnapshot,
+            mode: None,
+            latest_turn_id: Some("turn-runtime-queue".to_string()),
+            latest_turn_status: Some(status.to_string()),
+            context_summary: None,
+            recent_access_mode: None,
+            recent_preferences: None,
+            recent_team_selection: None,
+            recent_theme: None,
+            recent_session_mode: None,
+            recent_gate_key: None,
+            recent_run_title: None,
+            recent_content_id: None,
+            recent_response_language: None,
+            task_profile: None,
+            routing_decision: None,
+            limit_state: None,
+            cost_state: None,
+            permission_state: None,
+            limit_event: None,
+            oem_policy: None,
+            runtime_summary: None,
+        }
+    }
+
     fn thread_read_for_harness_projection(runtime_summary: Value) -> AgentRuntimeThreadReadModel {
         AgentRuntimeThreadReadModel {
             thread_id: "thread-agent-app".to_string(),
@@ -1760,10 +1841,10 @@ mod tests {
     }
 
     #[test]
-    fn should_list_runtime_queue_snapshots_for_first_history_page() {
+    fn should_skip_runtime_queue_snapshots_for_completed_limited_history() {
         let detail = detail_with_turn_status(AgentThreadTurnStatus::Completed);
 
-        assert!(should_list_runtime_queue_snapshots(
+        assert!(!should_list_runtime_queue_snapshots(
             &detail,
             Some(80),
             0,
@@ -1787,6 +1868,19 @@ mod tests {
     #[test]
     fn should_list_runtime_queue_snapshots_for_running_limited_history() {
         let detail = detail_with_turn_status(AgentThreadTurnStatus::Running);
+
+        assert!(should_list_runtime_queue_snapshots(
+            &detail,
+            Some(80),
+            0,
+            None
+        ));
+    }
+
+    #[test]
+    fn should_list_runtime_queue_snapshots_for_queued_limited_history_runtime() {
+        let mut detail = detail_with_turn_status(AgentThreadTurnStatus::Completed);
+        detail.execution_runtime = Some(execution_runtime_with_latest_status("queued"));
 
         assert!(should_list_runtime_queue_snapshots(
             &detail,

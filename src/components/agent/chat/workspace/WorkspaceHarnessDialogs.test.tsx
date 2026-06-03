@@ -59,8 +59,6 @@ function renderDialog(
         onOpenChange={vi.fn()}
         activeTheme="general"
         toolPreferences={{
-          webSearch: true,
-          thinking: true,
           task: true,
           subagent: true,
         }}

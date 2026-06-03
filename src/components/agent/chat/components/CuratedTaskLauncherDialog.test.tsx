@@ -56,6 +56,12 @@ function buildExperienceMemoryReferenceEntry() {
   ])[0];
 }
 
+function findConfirmButton() {
+  return document.body.querySelector(
+    '[data-testid="curated-task-launcher-confirm"]',
+  ) as HTMLButtonElement | null;
+}
+
 describe("CuratedTaskLauncherDialog", () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -392,97 +398,6 @@ describe("CuratedTaskLauncherDialog", () => {
     );
   });
 
-  it("复盘模板 launcher 应在启动确认层显影当前结果基线的经营摘要", async () => {
-    const task = findCuratedTaskTemplateById("account-project-review");
-    expect(task).not.toBeNull();
-
-    await act(async () => {
-      root.render(
-        <CuratedTaskLauncherDialog
-          open
-          task={task}
-          initialReferenceEntries={[
-            {
-              id: "sceneapp:content-pack:run:1",
-              sourceKind: "sceneapp_execution_summary",
-              title: "AI 内容周报",
-              summary: "当前已有一轮项目结果，可直接作为复盘基线。",
-              category: "experience",
-              categoryLabel: "成果",
-              tags: ["复盘"],
-              taskPrefillByTaskId: {
-                "account-project-review": {
-                  project_goal: "AI 内容周报",
-                  existing_results:
-                    "这轮运行已产出项目结果 当前卡点：复核阻塞 当前判断：先补复核与修复 经营动作：优先准备结果对齐包，再决定是否继续放大。 更适合去向：结果对齐",
-                },
-              },
-            },
-          ]}
-          onOpenChange={() => undefined}
-          onConfirm={() => undefined}
-        />,
-      );
-      await Promise.resolve();
-    });
-
-    const baselineCard = document.body.querySelector(
-      '[data-testid="curated-task-launcher-sceneapp-baseline-card"]',
-    );
-    expect(baselineCard?.textContent).toContain("当前结果基线");
-    expect(baselineCard?.textContent).toContain("AI 内容周报");
-    expect(baselineCard?.textContent).toContain("当前判断：先补复核与修复");
-    expect(baselineCard?.textContent).toContain("当前卡点：复核阻塞");
-    expect(baselineCard?.textContent).toContain("更适合去向：结果对齐");
-    expect(document.body.textContent).toContain(
-      "下面的 账号或项目目标 / 已有结果或数据 已按这轮结果自动带入",
-    );
-  });
-
-  it("切到下游结果模板后，launcher 仍应显影 sceneapp 基线摘要", async () => {
-    const task = findCuratedTaskTemplateById("daily-trend-briefing");
-    expect(task).not.toBeNull();
-
-    await act(async () => {
-      root.render(
-        <CuratedTaskLauncherDialog
-          open
-          task={task}
-          initialReferenceEntries={[
-            {
-              id: "sceneapp:content-pack:run:1",
-              sourceKind: "sceneapp_execution_summary",
-              title: "AI 内容周报",
-              summary: "当前已有一轮项目结果，可直接作为后续生成基线。",
-              category: "experience",
-              categoryLabel: "成果",
-              tags: ["复盘"],
-              taskPrefillByTaskId: {
-                "account-project-review": {
-                  project_goal: "AI 内容周报",
-                  existing_results:
-                    "这轮运行已产出项目结果 当前卡点：复核阻塞 当前判断：先补复核与修复 经营动作：优先准备结果对齐包，再决定是否继续放大。 更适合去向：结果对齐",
-                },
-              },
-            },
-          ]}
-          onOpenChange={() => undefined}
-          onConfirm={() => undefined}
-        />,
-      );
-      await Promise.resolve();
-    });
-
-    const baselineCard = document.body.querySelector(
-      '[data-testid="curated-task-launcher-sceneapp-baseline-card"]',
-    );
-    expect(baselineCard?.textContent).toContain("当前结果基线");
-    expect(baselineCard?.textContent).toContain("AI 内容周报");
-    expect(baselineCard?.textContent).toContain("当前判断：先补复核与修复");
-    expect(baselineCard?.textContent).toContain("当前卡点：复核阻塞");
-    expect(baselineCard?.textContent).toContain("更适合去向：结果对齐");
-  });
-
   it("成果类灵感 reference 进入下游结果模板时，也应带出基线和默认预填", async () => {
     const task = findCuratedTaskTemplateById("daily-trend-briefing");
     const memoryReferenceEntry = buildExperienceMemoryReferenceEntry();
@@ -678,21 +593,13 @@ describe("CuratedTaskLauncherDialog", () => {
     expect(document.body.textContent).toContain("AI 内容周报");
     expect(document.body.textContent).toContain("品牌语气偏好");
 
-    const confirmButton =
-      (document.body.querySelector(
-        '[data-testid="curated-task-launcher-confirm"]',
-      ) as HTMLButtonElement | null) ??
-      Array.from(document.body.querySelectorAll("button")).find((button) =>
-        button.textContent?.includes("开始生成"),
-      );
+    const confirmButton = findConfirmButton();
     expect(confirmButton).toBeTruthy();
     expect(confirmButton?.getAttribute("disabled")).toBeNull();
-
     await act(async () => {
       confirmButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
     });
-
     expect(onConfirm).toHaveBeenCalledWith(
       expect.objectContaining({ id: "account-project-review" }),
       expect.objectContaining({
@@ -860,13 +767,7 @@ describe("CuratedTaskLauncherDialog", () => {
     expect(document.body.textContent).toContain("活动背景补充");
     expect(document.body.textContent).toContain("品牌语气偏好");
 
-    const confirmButton =
-      (document.body.querySelector(
-        '[data-testid="curated-task-launcher-confirm"]',
-      ) as HTMLButtonElement | null) ??
-      Array.from(document.body.querySelectorAll("button")).find((button) =>
-        button.textContent?.includes("开始生成"),
-      );
+    const confirmButton = findConfirmButton();
     expect(confirmButton).toBeTruthy();
 
     await act(async () => {

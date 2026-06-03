@@ -1,8 +1,17 @@
-import React from "react";
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
+import {
+  cleanupMountedModelSelectors,
+  clickBodyButtonByText,
+  clickModelSelectorTrigger,
+  clickNoProviderGuideDismissButton,
+  createModelMetadata,
+  createReasoningModelMetadata,
+  createTextOnlyModelMetadata,
+  getBodyText,
+  renderModelSelector,
+} from "./ModelSelector.testFixtures";
 
 const {
   mockUseConfiguredProviders,
@@ -51,72 +60,6 @@ vi.mock("@/components/agent/chat/utils/modelThemePolicy", () => ({
   filterModelsByTheme: (...args: unknown[]) => mockFilterModelsByTheme(...args),
 }));
 
-import { ModelSelector } from "./ModelSelector";
-
-interface MountedRoot {
-  root: Root;
-  container: HTMLDivElement;
-}
-
-const mountedRoots: MountedRoot[] = [];
-
-function createModelMetadata(id: string) {
-  return {
-    id,
-    display_name: id,
-    provider_id: "fal",
-    provider_name: "Fal",
-    family: null,
-    tier: "pro" as const,
-    capabilities: {
-      vision: false,
-      tools: false,
-      streaming: false,
-      json_mode: false,
-      function_calling: false,
-      reasoning: false,
-    },
-    pricing: null,
-    limits: {
-      context_length: null,
-      max_output_tokens: null,
-      requests_per_minute: null,
-      tokens_per_minute: null,
-    },
-    status: "active" as const,
-    release_date: null,
-    is_latest: false,
-    description: null,
-    source: "custom" as const,
-    created_at: 0,
-    updated_at: 0,
-  };
-}
-
-function renderModelSelector(
-  props: Partial<React.ComponentProps<typeof ModelSelector>> = {},
-) {
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root = createRoot(container);
-
-  const mergedProps: React.ComponentProps<typeof ModelSelector> = {
-    providerType: "custom-codex",
-    setProviderType: vi.fn(),
-    model: "gpt-5.3-codex",
-    setModel: vi.fn(),
-    activeTheme: "general",
-    ...props,
-  };
-
-  act(() => {
-    root.render(<ModelSelector {...mergedProps} />);
-  });
-
-  mountedRoots.push({ root, container });
-  return { container, props: mergedProps };
-}
-
 beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
@@ -147,28 +90,8 @@ beforeEach(async () => {
   mockUseProviderModels.mockReturnValue({
     modelIds: ["gpt-5.3-codex", "gpt-5.2-codex"],
     models: [
-      {
-        id: "gpt-5.3-codex",
-        capabilities: {
-          vision: true,
-          tools: true,
-          streaming: true,
-          json_mode: true,
-          function_calling: true,
-          reasoning: true,
-        },
-      },
-      {
-        id: "gpt-5.2-codex",
-        capabilities: {
-          vision: false,
-          tools: true,
-          streaming: true,
-          json_mode: true,
-          function_calling: true,
-          reasoning: false,
-        },
-      },
+      createReasoningModelMetadata("gpt-5.3-codex"),
+      createTextOnlyModelMetadata("gpt-5.2-codex"),
     ],
     loading: false,
     error: null,
@@ -183,14 +106,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  while (mountedRoots.length > 0) {
-    const mounted = mountedRoots.pop();
-    if (!mounted) break;
-    act(() => {
-      mounted.root.unmount();
-    });
-    mounted.container.remove();
-  }
+  cleanupMountedModelSelectors();
   window.localStorage.clear();
   await changeLimeLocale("zh-CN");
 });
@@ -324,16 +240,7 @@ describe("ModelSelector", () => {
       setModel,
     });
 
-    const trigger = container.querySelector(
-      'button[role="combobox"]',
-    ) as HTMLButtonElement | null;
-    if (!trigger) {
-      throw new Error("未找到模型选择触发器");
-    }
-
-    act(() => {
-      trigger.click();
-    });
+    clickModelSelectorTrigger(container);
 
     expect(setModel).toHaveBeenCalledWith("gpt-5.2-codex");
   });
@@ -378,27 +285,8 @@ describe("ModelSelector", () => {
       setModel,
     });
 
-    const trigger = container.querySelector(
-      'button[role="combobox"]',
-    ) as HTMLButtonElement | null;
-    if (!trigger) {
-      throw new Error("未找到模型选择触发器");
-    }
-
-    act(() => {
-      trigger.click();
-    });
-
-    const deepseekButton = Array.from(
-      document.body.querySelectorAll<HTMLButtonElement>("button"),
-    ).find((button) => button.textContent?.includes("DeepSeek"));
-    if (!deepseekButton) {
-      throw new Error("未找到 DeepSeek 供应商按钮");
-    }
-
-    act(() => {
-      deepseekButton.click();
-    });
+    clickModelSelectorTrigger(container);
+    clickBodyButtonByText("DeepSeek");
 
     expect(setProviderType).toHaveBeenCalledWith("deepseek");
     expect(setModel).toHaveBeenCalledWith("deepseek-chat");
@@ -435,18 +323,9 @@ describe("ModelSelector", () => {
       getFallbackModels: () => [createModelMetadata("fal-ai/nano-banana-pro")],
     });
 
-    const trigger = container.querySelector(
-      'button[role="combobox"]',
-    ) as HTMLButtonElement | null;
-    if (!trigger) {
-      throw new Error("未找到模型选择触发器");
-    }
+    clickModelSelectorTrigger(container);
 
-    act(() => {
-      trigger.click();
-    });
-
-    const pageText = document.body.textContent || "";
+    const pageText = getBodyText();
     expect(pageText).toContain("fal-ai/nano-banana-pro");
     expect(pageText).not.toContain("gpt-5.2-pro");
     expect(pageText).not.toContain("暂无可用模型");
@@ -456,28 +335,8 @@ describe("ModelSelector", () => {
     mockUseProviderModels.mockReturnValue({
       modelIds: ["gpt-5.3-codex", "text-only-chat"],
       models: [
-        {
-          id: "gpt-5.3-codex",
-          capabilities: {
-            vision: true,
-            tools: true,
-            streaming: true,
-            json_mode: true,
-            function_calling: true,
-            reasoning: true,
-          },
-        },
-        {
-          id: "text-only-chat",
-          capabilities: {
-            vision: false,
-            tools: true,
-            streaming: true,
-            json_mode: true,
-            function_calling: true,
-            reasoning: false,
-          },
-        },
+        createReasoningModelMetadata("gpt-5.3-codex"),
+        createTextOnlyModelMetadata("text-only-chat"),
       ],
       loading: false,
       error: null,
@@ -485,18 +344,9 @@ describe("ModelSelector", () => {
 
     const { container } = renderModelSelector();
 
-    const trigger = container.querySelector(
-      'button[role="combobox"]',
-    ) as HTMLButtonElement | null;
-    if (!trigger) {
-      throw new Error("未找到模型选择触发器");
-    }
+    clickModelSelectorTrigger(container);
 
-    act(() => {
-      trigger.click();
-    });
-
-    const pageText = document.body.textContent || "";
+    const pageText = getBodyText();
     expect(pageText).toContain("支持思考");
     expect(pageText).toContain("支持多模态");
     expect(pageText).toContain("无多模态");
@@ -507,28 +357,8 @@ describe("ModelSelector", () => {
     mockUseProviderModels.mockReturnValue({
       modelIds: ["gpt-5.3-codex", "text-only-chat"],
       models: [
-        {
-          id: "gpt-5.3-codex",
-          capabilities: {
-            vision: true,
-            tools: true,
-            streaming: true,
-            json_mode: true,
-            function_calling: true,
-            reasoning: true,
-          },
-        },
-        {
-          id: "text-only-chat",
-          capabilities: {
-            vision: false,
-            tools: true,
-            streaming: true,
-            json_mode: true,
-            function_calling: true,
-            reasoning: false,
-          },
-        },
+        createReasoningModelMetadata("gpt-5.3-codex"),
+        createTextOnlyModelMetadata("text-only-chat"),
       ],
       loading: false,
       error: null,
@@ -538,18 +368,9 @@ describe("ModelSelector", () => {
       onManageProviders: vi.fn(),
     });
 
-    const trigger = container.querySelector(
-      'button[role="combobox"]',
-    ) as HTMLButtonElement | null;
-    if (!trigger) {
-      throw new Error("未找到模型选择触发器");
-    }
+    clickModelSelectorTrigger(container);
 
-    act(() => {
-      trigger.click();
-    });
-
-    const pageText = document.body.textContent || "";
+    const pageText = getBodyText();
     expect(pageText).toContain("Model selection");
     expect(pageText).toContain("Currently organized by General chat");
     expect(pageText).toContain("Providers");
@@ -587,28 +408,8 @@ describe("ModelSelector", () => {
     mockUseProviderModels.mockReturnValue({
       modelIds: ["gpt-5.5", "deepseek-v4-flash"],
       models: [
-        {
-          id: "gpt-5.5",
-          capabilities: {
-            vision: true,
-            tools: true,
-            streaming: true,
-            json_mode: true,
-            function_calling: true,
-            reasoning: true,
-          },
-        },
-        {
-          id: "deepseek-v4-flash",
-          capabilities: {
-            vision: false,
-            tools: true,
-            streaming: true,
-            json_mode: true,
-            function_calling: true,
-            reasoning: false,
-          },
-        },
+        createReasoningModelMetadata("gpt-5.5"),
+        createTextOnlyModelMetadata("deepseek-v4-flash"),
       ],
       loading: false,
       error: null,
@@ -619,18 +420,9 @@ describe("ModelSelector", () => {
       model: "gpt-5.5",
     });
 
-    const trigger = container.querySelector(
-      'button[role="combobox"]',
-    ) as HTMLButtonElement | null;
-    if (!trigger) {
-      throw new Error("未找到模型选择触发器");
-    }
+    clickModelSelectorTrigger(container);
 
-    act(() => {
-      trigger.click();
-    });
-
-    const pageText = document.body.textContent || "";
+    const pageText = getBodyText();
     expect(pageText).toContain("云端模型");
     expect(pageText).toContain("本地与自定义");
     expect(pageText).toContain("Lime 云端");
@@ -673,16 +465,7 @@ describe("ModelSelector", () => {
     expect(container.textContent).toContain("Lime 云端");
     expect(container.textContent).toContain("需要登录");
 
-    const trigger = container.querySelector(
-      'button[role="combobox"]',
-    ) as HTMLButtonElement | null;
-    if (!trigger) {
-      throw new Error("未找到模型选择触发器");
-    }
-
-    act(() => {
-      trigger.click();
-    });
+    clickModelSelectorTrigger(container);
 
     expect(mockUseProviderModels).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -696,7 +479,7 @@ describe("ModelSelector", () => {
       }),
     );
 
-    const pageText = document.body.textContent || "";
+    const pageText = getBodyText();
     expect(pageText).toContain("云端模型");
     expect(pageText).toContain("Lime 云端");
     expect(pageText).toContain("需要登录");
@@ -705,16 +488,7 @@ describe("ModelSelector", () => {
     expect(pageText).not.toContain("gpt-5.5");
     expect(pageText).not.toContain("gpt-5.4");
 
-    const loginButton = Array.from(
-      document.body.querySelectorAll<HTMLButtonElement>("button"),
-    ).find((button) => button.textContent?.includes("去登录"));
-    if (!loginButton) {
-      throw new Error("未找到去登录按钮");
-    }
-
-    act(() => {
-      loginButton.click();
-    });
+    clickBodyButtonByText("去登录");
 
     expect(onManageProviders).toHaveBeenCalledTimes(1);
   });
@@ -737,17 +511,7 @@ describe("ModelSelector", () => {
     mockUseProviderModels.mockReturnValue({
       modelIds: ["glm-5.1"],
       models: [
-        {
-          id: "glm-5.1",
-          capabilities: {
-            vision: true,
-            tools: true,
-            streaming: true,
-            json_mode: true,
-            function_calling: true,
-            reasoning: true,
-          },
-        },
+        createReasoningModelMetadata("glm-5.1"),
       ],
       loading: false,
       error: null,
@@ -758,18 +522,9 @@ describe("ModelSelector", () => {
       model: "glm-5.1",
     });
 
-    const trigger = container.querySelector(
-      'button[role="combobox"]',
-    ) as HTMLButtonElement | null;
-    if (!trigger) {
-      throw new Error("未找到模型选择触发器");
-    }
+    clickModelSelectorTrigger(container);
 
-    act(() => {
-      trigger.click();
-    });
-
-    const pageText = document.body.textContent || "";
+    const pageText = getBodyText();
     expect(pageText).toContain("显式缓存");
     expect(pageText).toContain("未声明自动 Prompt Cache");
     expect(pageText).toContain("cache_control");
@@ -844,17 +599,7 @@ describe("ModelSelector", () => {
     mockUseProviderModels.mockReturnValue({
       modelIds: [model],
       models: [
-        {
-          id: model,
-          capabilities: {
-            vision: true,
-            tools: true,
-            streaming: true,
-            json_mode: true,
-            function_calling: true,
-            reasoning: true,
-          },
-        },
+        createReasoningModelMetadata(model),
       ],
       loading: false,
       error: null,
@@ -865,18 +610,9 @@ describe("ModelSelector", () => {
       model,
     });
 
-    const trigger = container.querySelector(
-      'button[role="combobox"]',
-    ) as HTMLButtonElement | null;
-    if (!trigger) {
-      throw new Error("未找到模型选择触发器");
-    }
+    clickModelSelectorTrigger(container);
 
-    act(() => {
-      trigger.click();
-    });
-
-    const pageText = document.body.textContent || "";
+    const pageText = getBodyText();
     expect(pageText).not.toContain("显式缓存");
     expect(pageText).not.toContain("未声明自动 Prompt Cache");
   });
@@ -900,17 +636,7 @@ describe("ModelSelector", () => {
     mockUseProviderModels.mockReturnValue({
       modelIds: ["glm-5.1"],
       models: [
-        {
-          id: "glm-5.1",
-          capabilities: {
-            vision: true,
-            tools: true,
-            streaming: true,
-            json_mode: true,
-            function_calling: true,
-            reasoning: true,
-          },
-        },
+        createReasoningModelMetadata("glm-5.1"),
       ],
       loading: false,
       error: null,
@@ -921,18 +647,9 @@ describe("ModelSelector", () => {
       model: "glm-5.1",
     });
 
-    const trigger = container.querySelector(
-      'button[role="combobox"]',
-    ) as HTMLButtonElement | null;
-    if (!trigger) {
-      throw new Error("未找到模型选择触发器");
-    }
+    clickModelSelectorTrigger(container);
 
-    act(() => {
-      trigger.click();
-    });
-
-    const pageText = document.body.textContent || "";
+    const pageText = getBodyText();
     expect(pageText).not.toContain("显式缓存");
     expect(pageText).not.toContain("未声明自动 Prompt Cache");
   });
@@ -956,16 +673,7 @@ describe("ModelSelector", () => {
 
     expect(firstRender.container.textContent).toContain("工具模型未配置");
 
-    const dismissButton = firstRender.container.querySelector(
-      'button[aria-label="关闭工具模型未配置提示"]',
-    ) as HTMLButtonElement | null;
-    if (!dismissButton) {
-      throw new Error("未找到关闭引导按钮");
-    }
-
-    act(() => {
-      dismissButton.click();
-    });
+    clickNoProviderGuideDismissButton(firstRender.container);
 
     expect(firstRender.container.textContent ?? "").not.toContain(
       "工具模型未配置",

@@ -10,6 +10,7 @@ pub mod agent_timeline_service;
 pub mod artifact_diff_service;
 pub mod artifact_document_service;
 pub mod artifact_document_validator;
+pub mod artifact_generation_brief_boundary_service;
 pub mod artifact_ops_service;
 pub mod artifact_output_schema_service;
 pub mod artifact_prompt_service;

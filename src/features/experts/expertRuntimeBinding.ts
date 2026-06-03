@@ -10,6 +10,22 @@ export interface BuildExpertRuntimeMetadataOptions {
   skillRefsOverride?: string[] | null;
 }
 
+export interface ExpertPersonalityBoundary {
+  inheritsGlobalSoul: true;
+  globalSoulScope: "communication_rhythm";
+  expertPersonaScope: "current_expert_session";
+  writesBackToGlobalSoul: false;
+  formalArtifactVoiceSource: "generation_brief_only";
+}
+
+export interface ExpertPersonalityBoundaryMetadata {
+  inherits_global_soul: true;
+  global_soul_scope: "communication_rhythm";
+  expert_persona_scope: "current_expert_session";
+  writes_back_to_global_soul: false;
+  formal_artifact_voice_source: "generation_brief_only";
+}
+
 export interface ExpertRuntimeMetadata extends Record<string, unknown> {
   expert: {
     expertId: string;
@@ -26,6 +42,7 @@ export interface ExpertRuntimeMetadata extends Record<string, unknown> {
     workflowRefs: string[];
     memoryEnabled: boolean;
     workflowEnabled: boolean;
+    personalityBoundary: ExpertPersonalityBoundary;
   };
   harness: {
     expert: {
@@ -43,6 +60,7 @@ export interface ExpertRuntimeMetadata extends Record<string, unknown> {
       workflow_refs: string[];
       memory_enabled: boolean;
       workflow_enabled: boolean;
+      personality_boundary: ExpertPersonalityBoundaryMetadata;
     };
   };
 }
@@ -52,7 +70,10 @@ function optionalString(value?: string): string | undefined {
   return normalized ? normalized : undefined;
 }
 
-export function formatExpertRefList(refs: string[], emptyLabel: string): string {
+export function formatExpertRefList(
+  refs: string[],
+  emptyLabel: string,
+): string {
   return refs.length > 0 ? refs.join("、") : emptyLabel;
 }
 
@@ -66,6 +87,13 @@ export function buildExpertRuntimeMetadata(
     options.skillRefsOverride && options.skillRefsOverride.length > 0
       ? [...options.skillRefsOverride]
       : [...expert.release.skillRefs];
+  const personalityBoundary: ExpertPersonalityBoundary = {
+    inheritsGlobalSoul: true,
+    globalSoulScope: "communication_rhythm",
+    expertPersonaScope: "current_expert_session",
+    writesBackToGlobalSoul: false,
+    formalArtifactVoiceSource: "generation_brief_only",
+  };
   const common = {
     expertId: expert.id,
     releaseId: expert.release.releaseId,
@@ -83,6 +111,7 @@ export function buildExpertRuntimeMetadata(
     workflowRefs: workflowEnabled ? [...expert.release.workflowRefs] : [],
     memoryEnabled,
     workflowEnabled,
+    personalityBoundary,
   };
 
   return {
@@ -103,6 +132,15 @@ export function buildExpertRuntimeMetadata(
         workflow_refs: [...common.workflowRefs],
         memory_enabled: common.memoryEnabled,
         workflow_enabled: common.workflowEnabled,
+        personality_boundary: {
+          inherits_global_soul: common.personalityBoundary.inheritsGlobalSoul,
+          global_soul_scope: common.personalityBoundary.globalSoulScope,
+          expert_persona_scope: common.personalityBoundary.expertPersonaScope,
+          writes_back_to_global_soul:
+            common.personalityBoundary.writesBackToGlobalSoul,
+          formal_artifact_voice_source:
+            common.personalityBoundary.formalArtifactVoiceSource,
+        },
       },
     },
   };

@@ -1,178 +1,37 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  sanitizeContentPartsForDisplay,
-  sanitizeMessageTextForDisplay,
+  containsInternalImagePlaceholder,
+  isOnlyInternalImagePlaceholderText,
+  replaceInternalImagePlaceholders,
+  resolveInternalImageTaskDisplayName,
 } from "./internalImagePlaceholder";
-import type { ContentPart } from "../types";
 
-describe("internalImagePlaceholder", () => {
-  it("应清理紧邻工具调用的调度自述文本", () => {
-    const contentParts: ContentPart[] = [
-      {
-        type: "text",
-        text: "ToolSearch 只返回了元数据，让我直接调用 WebSearch 进行多组检索。",
-      },
-      {
-        type: "tool_use",
-        toolCall: {
-          id: "tool-narration-strip",
-          name: "WebSearch",
-          arguments: "{}",
-          status: "completed",
-          result: { success: true, output: "ok" },
-          startTime: new Date("2026-04-13T09:00:00.000Z"),
-        },
-      },
-      {
-        type: "text",
-        text: "已经整理出 3 个可信来源。",
-      },
-    ];
-
-    expect(
-      sanitizeContentPartsForDisplay(contentParts, {
-        role: "assistant",
-      }),
-    ).toEqual([contentParts[1], contentParts[2]]);
+describe("internalImagePlaceholder compat", () => {
+  it("应识别方括号和裸文本图片占位", () => {
+    expect(containsInternalImagePlaceholder("[Image #1]")).toBe(true);
+    expect(containsInternalImagePlaceholder("参考 Image #2 继续处理")).toBe(
+      true,
+    );
+    expect(containsInternalImagePlaceholder("Image archive #2")).toBe(false);
   });
 
-  it("应清理紧邻工具调用的页面操作自述", () => {
-    const contentParts: ContentPart[] = [
-      {
-        type: "tool_use",
-        toolCall: {
-          id: "tool-narration-page",
-          name: "webReader",
-          arguments: "{}",
-          status: "completed",
-          result: { success: true, output: "ok" },
-          startTime: new Date("2026-04-13T09:01:00.000Z"),
-        },
-      },
-      {
-        type: "text",
-        text: "我已经打开 GitHub 搜索页，接下来开始筛选结果。",
-      },
-      {
-        type: "text",
-        text: "筛到两个官方仓库入口。",
-      },
-    ];
-
-    expect(
-      sanitizeContentPartsForDisplay(contentParts, {
-        role: "assistant",
-      }),
-    ).toEqual([contentParts[0], contentParts[2]]);
+  it("应判断文本是否只有内部图片占位", () => {
+    expect(isOnlyInternalImagePlaceholderText("[Image #1], Image #2")).toBe(
+      true,
+    );
+    expect(isOnlyInternalImagePlaceholderText("[Image #1] 请分析")).toBe(false);
   });
 
-  it("带结论的正常说明不应被误删", () => {
-    const contentParts: ContentPart[] = [
-      {
-        type: "text",
-        text: "我用 WebSearch 查到 3 个官方来源，结论是目前只支持桌面端。",
-      },
-      {
-        type: "tool_use",
-        toolCall: {
-          id: "tool-narration-keep",
-          name: "WebSearch",
-          arguments: "{}",
-          status: "completed",
-          result: { success: true, output: "ok" },
-          startTime: new Date("2026-04-13T09:02:00.000Z"),
-        },
-      },
-    ];
-
+  it("应把内部图片占位替换成展示文案", () => {
     expect(
-      sanitizeContentPartsForDisplay(contentParts, {
-        role: "assistant",
-      }),
-    ).toEqual(contentParts);
+      replaceInternalImagePlaceholders("已收到 [Image #1] 和 Image #2", "图片"),
+    ).toBe("已收到  图片  和 图片");
   });
 
-  it("不挨着工具调用的普通说明不应被清理", () => {
-    const contentParts: ContentPart[] = [
-      {
-        type: "text",
-        text: "ToolSearch 用于查询当前可用工具，这里是在解释概念。",
-      },
-      {
-        type: "text",
-        text: "下面再继续说明使用方式。",
-      },
-    ];
-
-    expect(
-      sanitizeContentPartsForDisplay(contentParts, {
-        role: "assistant",
-      }),
-    ).toEqual(contentParts);
-  });
-
-  it("普通消息文本清洗仍不应误删工具说明", () => {
-    const text = "ToolSearch 用于查询当前可用工具，这里是在给用户解释概念。";
-
-    expect(
-      sanitizeMessageTextForDisplay(text, {
-        role: "assistant",
-      }),
-    ).toBe(text);
-  });
-
-  it("应去掉 assistant 消息里的 markdown 阶段结论标题", () => {
-    const text = "## 阶段结论\n\n已经找到关键线索。";
-
-    expect(
-      sanitizeMessageTextForDisplay(text, {
-        role: "assistant",
-      }),
-    ).toBe("已经找到关键线索。");
-  });
-
-  it("应去掉 assistant 消息里的行内阶段结论文案", () => {
-    const text = "阶段结论：已经找到关键线索。";
-
-    expect(
-      sanitizeMessageTextForDisplay(text, {
-        role: "assistant",
-      }),
-    ).toBe("已经找到关键线索。");
-  });
-
-  it("应把跨会话协作包络清洗成可读文案", () => {
-    const text = `<teammate-message teammate_id="researcher" summary="同步结果">
-继续验证
-</teammate-message>`;
-
-    expect(
-      sanitizeMessageTextForDisplay(text, {
-        role: "user",
-      }),
-    ).toBe("协作消息 · researcher · 同步结果\n\n继续验证");
-  });
-
-  it("应同步清洗 contentParts 里的协作包络文本", () => {
-    const contentParts: ContentPart[] = [
-      {
-        type: "text",
-        text: `<cross-session-message from="uds:session-a">
-继续验证
-</cross-session-message>`,
-      },
-    ];
-
-    expect(
-      sanitizeContentPartsForDisplay(contentParts, {
-        role: "assistant",
-      }),
-    ).toEqual([
-      {
-        type: "text",
-        text: "跨会话消息 · uds:session-a\n\n继续验证",
-      },
-    ]);
+  it("应把纯图片任务标签转成可读名称", () => {
+    expect(resolveInternalImageTaskDisplayName("[Image #3]")).toBe("图片任务 3");
+    expect(resolveInternalImageTaskDisplayName("生成封面")).toBe("生成封面");
+    expect(resolveInternalImageTaskDisplayName("  ")).toBeNull();
   });
 });

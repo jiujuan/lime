@@ -1,10 +1,22 @@
-import React from "react";
-import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
-import { AutomationSettings } from ".";
+import {
+  cleanupMountedAutomationSettings,
+  clickElement,
+  createAgentTurnJob,
+  createAutomationRun,
+  createBrowserJob,
+  createLastDelivery,
+  getBodyText,
+  hoverTip,
+  leaveTip,
+  openJobDetails,
+  renderSettings,
+  setupDefaultAutomationMocks,
+  setupManagedObjectiveAutomationMocks,
+  setupSceneAppAutomationMocks,
+} from "./automationSettingsTestFixtures";
 
 const {
   mockGetAutomationSchedulerConfig,
@@ -96,7 +108,17 @@ vi.mock("sonner", () => ({
   },
 }));
 
-const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
+const automationMocks = {
+  mockGetAutomationSchedulerConfig,
+  mockGetAutomationStatus,
+  mockGetAutomationJobs,
+  mockGetAutomationHealth,
+  mockGetAutomationRunHistory,
+  mockListProjects,
+  mockAuditAgentRuntimeObjective,
+  mockOpenPathWithDefaultApp,
+  mockRevealPathInFinder,
+};
 
 beforeEach(async () => {
   (
@@ -106,405 +128,14 @@ beforeEach(async () => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
   await changeLimeLocale("zh-CN");
-
-  mockGetAutomationSchedulerConfig.mockResolvedValue({
-    enabled: true,
-    poll_interval_secs: 30,
-    enable_history: true,
-  });
-  mockGetAutomationStatus.mockResolvedValue({
-    running: true,
-    last_polled_at: "2026-03-16T00:00:00Z",
-    next_poll_at: "2026-03-16T00:00:30Z",
-    last_job_count: 1,
-    total_executions: 1,
-    active_job_id: null,
-    active_job_name: null,
-  });
-  mockGetAutomationJobs.mockResolvedValue([
-    {
-      id: "job-browser-1",
-      name: "浏览器巡检",
-      description: "启动浏览器并等待人工检查",
-      enabled: true,
-      workspace_id: "workspace-default",
-      execution_mode: "intelligent",
-      schedule: { kind: "every", every_secs: 900 },
-      payload: {
-        kind: "browser_session",
-        profile_id: "profile-1",
-        profile_key: "shop_us",
-        url: "https://seller.example.com/dashboard",
-        environment_preset_id: "preset-1",
-        target_id: null,
-        open_window: false,
-        stream_mode: "events",
-      },
-      delivery: {
-        mode: "announce",
-        channel: "local_file",
-        target: "/tmp/lime/browser-output.json",
-        best_effort: false,
-        output_schema: "json",
-        output_format: "json",
-      },
-      timeout_secs: 120,
-      max_retries: 2,
-      next_run_at: "2026-03-16T00:15:00Z",
-      last_status: "waiting_for_human",
-      last_error: null,
-      last_run_at: "2026-03-16T00:00:00Z",
-      last_finished_at: null,
-      running_started_at: "2026-03-16T00:00:00Z",
-      consecutive_failures: 0,
-      last_retry_count: 0,
-      auto_disabled_until: null,
-      last_delivery: {
-        success: false,
-        message: "写入本地文件失败: permission denied",
-        channel: "local_file",
-        target: "/tmp/lime/browser-output.json",
-        output_kind: "json",
-        output_schema: "json",
-        output_format: "json",
-        output_preview: '{\n  "session_id": "mock-cdp-session-shop_us"\n}',
-        delivery_attempt_id: "dlv-run-browser-1",
-        run_id: "run-browser-1",
-        execution_retry_count: 0,
-        delivery_attempts: 2,
-        attempted_at: "2026-03-16T00:00:08Z",
-      },
-      created_at: "2026-03-16T00:00:00Z",
-      updated_at: "2026-03-16T00:00:00Z",
-    },
-  ]);
-  mockGetAutomationHealth.mockResolvedValue({
-    total_jobs: 1,
-    enabled_jobs: 1,
-    pending_jobs: 0,
-    running_jobs: 0,
-    failed_jobs: 0,
-    cooldown_jobs: 0,
-    stale_running_jobs: 0,
-    failed_last_24h: 0,
-    failure_trend_24h: [],
-    alerts: [],
-    risky_jobs: [
-      {
-        job_id: "job-browser-1",
-        name: "浏览器巡检",
-        status: "waiting_for_human",
-        consecutive_failures: 0,
-        retry_count: 0,
-        detail_message: "等待你确认是否继续执行",
-        auto_disabled_until: null,
-        updated_at: "2026-03-16T00:00:10Z",
-      },
-    ],
-    generated_at: "2026-03-16T00:00:00Z",
-  });
-  mockGetAutomationRunHistory.mockResolvedValue([
-    {
-      id: "run-browser-1",
-      source: "automation",
-      source_ref: "job-browser-1",
-      session_id: "mock-cdp-session-shop_us",
-      status: "running",
-      started_at: "2026-03-16T00:00:00Z",
-      finished_at: null,
-      duration_ms: null,
-      error_code: null,
-      error_message: null,
-      metadata: JSON.stringify({
-        payload_kind: "browser_session",
-        profile_key: "shop_us",
-        session_id: "mock-cdp-session-shop_us",
-        browser_lifecycle_state: "waiting_for_human",
-        human_reason: "等待你确认是否继续执行",
-        delivery: {
-          success: false,
-          message: "写入本地文件失败: permission denied",
-          channel: "local_file",
-          target: "/tmp/lime/browser-output.json",
-          output_kind: "json",
-          output_schema: "json",
-          output_format: "json",
-          output_preview: '{\n  "session_id": "mock-cdp-session-shop_us"\n}',
-          delivery_attempt_id: "dlv-run-browser-1",
-          run_id: "run-browser-1",
-          execution_retry_count: 0,
-          delivery_attempts: 2,
-          attempted_at: "2026-03-16T00:00:08Z",
-        },
-      }),
-      created_at: "2026-03-16T00:00:00Z",
-      updated_at: "2026-03-16T00:00:10Z",
-    },
-  ]);
-  mockListProjects.mockResolvedValue([
-    {
-      id: "workspace-default",
-      name: "默认工作区",
-      rootPath: "/workspace/default",
-    },
-  ]);
-  mockAuditAgentRuntimeObjective.mockResolvedValue({});
-  mockOpenPathWithDefaultApp.mockResolvedValue(undefined);
-  mockRevealPathInFinder.mockResolvedValue(undefined);
+  setupDefaultAutomationMocks(automationMocks);
 });
 
 afterEach(async () => {
-  while (mountedRoots.length > 0) {
-    const mounted = mountedRoots.pop();
-    if (!mounted) {
-      break;
-    }
-    act(() => {
-      mounted.root.unmount();
-    });
-    mounted.container.remove();
-  }
+  await cleanupMountedAutomationSettings();
   vi.clearAllMocks();
   await changeLimeLocale("zh-CN");
 });
-
-async function renderSettings(
-  props: Partial<React.ComponentProps<typeof AutomationSettings>> = {},
-) {
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  mountedRoots.push({ root, container });
-  await act(async () => {
-    root.render(<AutomationSettings {...props} />);
-  });
-  for (let index = 0; index < 4; index += 1) {
-    await act(async () => {
-      await Promise.resolve();
-    });
-  }
-  return container;
-}
-
-async function openJobDetails(container: HTMLDivElement, jobId: string) {
-  const button = container.querySelector(
-    `[data-testid='automation-job-open-details-${jobId}']`,
-  ) as HTMLButtonElement | null;
-
-  expect(button).not.toBeNull();
-
-  await act(async () => {
-    button?.click();
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-}
-
-function getBodyText() {
-  return document.body.textContent ?? "";
-}
-
-async function hoverTip(ariaLabel: string) {
-  const trigger = document.body.querySelector(
-    `button[aria-label='${ariaLabel}']`,
-  );
-  expect(trigger).toBeInstanceOf(HTMLButtonElement);
-
-  await act(async () => {
-    trigger?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-    await Promise.resolve();
-  });
-
-  return trigger as HTMLButtonElement;
-}
-
-async function leaveTip(trigger: HTMLButtonElement | null) {
-  await act(async () => {
-    trigger?.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
-    await Promise.resolve();
-  });
-}
-
-function setupSceneAppAutomationMocks() {
-  const sceneAppJob = {
-    id: "job-sceneapp-1",
-    name: "故事短视频套件｜定时执行",
-    description: "按统一做法合同持续产出 Project Pack。",
-    enabled: true,
-    workspace_id: "workspace-default",
-    execution_mode: "intelligent",
-    schedule: { kind: "cron", expr: "0 9 * * *", tz: "Asia/Shanghai" },
-    payload: {
-      kind: "agent_turn",
-      prompt: "请执行 SceneApp 自动化任务。",
-      system_prompt: null,
-      web_search: false,
-      request_metadata: {
-        sceneapp: {
-          id: "story-video-suite",
-          title: "故事短视频套件",
-          sceneapp_type: "hybrid",
-          delivery_contract: "project_pack",
-        },
-        harness: {
-          sceneapp_id: "story-video-suite",
-          entry_source: "sceneapp_detail_preview",
-          project_id: "workspace-default",
-          workspace_id: "workspace-default",
-          sceneapp_launch: {
-            sceneapp_id: "story-video-suite",
-            entry_source: "sceneapp_detail_preview",
-            project_id: "workspace-default",
-            workspace_id: "workspace-default",
-            reference_memory_ids: ["memory-1"],
-          },
-        },
-        sceneapp_reference_memory_ids: ["memory-1"],
-        sceneapp_slots: {
-          topic: "AI 创作者工具",
-        },
-      },
-    },
-    delivery: {
-      mode: "none",
-      channel: null,
-      target: null,
-      best_effort: true,
-      output_schema: "text",
-      output_format: "text",
-    },
-    timeout_secs: 120,
-    max_retries: 2,
-    next_run_at: "2026-03-16T09:00:00Z",
-    last_status: "success",
-    last_error: null,
-    last_run_at: "2026-03-16T08:59:00Z",
-    last_finished_at: "2026-03-16T09:00:10Z",
-    running_started_at: null,
-    consecutive_failures: 0,
-    last_retry_count: 0,
-    auto_disabled_until: null,
-    last_delivery: {
-      success: true,
-      message: "写入成功",
-      channel: "local_file",
-      target: "/tmp/lime/story-video-suite/brief.md",
-      output_kind: "document",
-      output_schema: "text",
-      output_format: "text",
-      output_preview: "# brief",
-      delivery_attempt_id: "delivery-sceneapp-1",
-      run_id: "run-sceneapp-1",
-      execution_retry_count: 0,
-      delivery_attempts: 1,
-      attempted_at: "2026-03-16T09:00:10Z",
-    },
-    created_at: "2026-03-16T00:00:00Z",
-    updated_at: "2026-03-16T00:00:00Z",
-  };
-  const sceneAppAgentRun = {
-    id: "run-sceneapp-1",
-    source: "automation",
-    source_ref: "job-sceneapp-1",
-    session_id: "session-sceneapp-1",
-    status: "success",
-    started_at: "2026-03-16T08:59:00Z",
-    finished_at: "2026-03-16T09:00:10Z",
-    duration_ms: 70_000,
-    error_code: null,
-    error_message: null,
-    metadata: JSON.stringify({
-      sceneapp: {
-        id: "story-video-suite",
-      },
-    }),
-    created_at: "2026-03-16T08:59:00Z",
-    updated_at: "2026-03-16T09:00:10Z",
-  };
-  mockGetAutomationJobs.mockResolvedValue([sceneAppJob]);
-  mockGetAutomationRunHistory.mockResolvedValue([sceneAppAgentRun]);
-
-  return {
-    sceneAppJob,
-  };
-}
-
-function setupManagedObjectiveAutomationMocks() {
-  const managedObjectiveJob = {
-    id: "job-managed-objective-1",
-    name: "目标日报",
-    description: "持续推进可审计目标。",
-    enabled: true,
-    workspace_id: "workspace-default",
-    execution_mode: "skill",
-    schedule: { kind: "cron", expr: "0 9 * * *", tz: "Asia/Shanghai" },
-    payload: {
-      kind: "agent_turn",
-      prompt: "请继续推进目标。",
-      system_prompt: null,
-      web_search: false,
-      request_metadata: {
-        harness: {
-          managed_objective: {
-            objective_id: "objective-1",
-            owner_type: "automation_job",
-            owner_id: "job-managed-objective-1",
-            objective_text: "产出可审计日报",
-            success_criteria: ["生成 Markdown", "附带证据包"],
-            state: "active",
-            last_evidence_pack_ref:
-              ".lime/harness/job-managed-objective-1/evidence",
-            last_artifact_refs: ["reports/daily.md"],
-          },
-        },
-      },
-    },
-    delivery: {
-      mode: "none",
-      channel: null,
-      target: null,
-      best_effort: true,
-      output_schema: "text",
-      output_format: "text",
-    },
-    timeout_secs: 120,
-    max_retries: 1,
-    next_run_at: "2026-03-16T09:00:00Z",
-    last_status: "success",
-    last_error: null,
-    last_run_at: "2026-03-16T08:59:00Z",
-    last_finished_at: "2026-03-16T09:00:10Z",
-    running_started_at: null,
-    consecutive_failures: 0,
-    last_retry_count: 0,
-    auto_disabled_until: null,
-    last_delivery: null,
-    created_at: "2026-03-16T00:00:00Z",
-    updated_at: "2026-03-16T00:00:00Z",
-  };
-  const managedObjectiveRun = {
-    id: "run-managed-objective-1",
-    source: "automation",
-    source_ref: "job-managed-objective-1",
-    session_id: "session-managed-objective-1",
-    status: "success",
-    started_at: "2026-03-16T08:59:00Z",
-    finished_at: "2026-03-16T09:00:10Z",
-    duration_ms: 70_000,
-    error_code: null,
-    error_message: null,
-    metadata: "{}",
-    created_at: "2026-03-16T08:59:00Z",
-    updated_at: "2026-03-16T09:00:10Z",
-  };
-
-  mockGetAutomationJobs.mockResolvedValue([managedObjectiveJob]);
-  mockGetAutomationRunHistory.mockResolvedValue([managedObjectiveRun]);
-
-  return {
-    managedObjectiveJob,
-  };
-}
 
 describe("AutomationSettings", () => {
   it("应把工作台说明和任务入口说明收进 tips", async () => {
@@ -557,51 +188,30 @@ describe("AutomationSettings", () => {
   }, 10_000);
 
   it("应展示 Google Sheets 作为输出目标标签", async () => {
+    const sheetsTarget =
+      "spreadsheet_id=sheet-1;sheet=巡检结果;credentials_file=C:/lime/service-account.json";
+
     mockGetAutomationJobs.mockResolvedValueOnce([
-      {
+      createBrowserJob({
         id: "job-browser-2",
         name: "Google Sheets 巡检输出",
         description: "把结构化结果追加到表格",
-        enabled: true,
-        workspace_id: "workspace-default",
-        execution_mode: "intelligent",
-        schedule: { kind: "every", every_secs: 900 },
-        payload: {
-          kind: "browser_session",
-          profile_id: "profile-1",
-          profile_key: "shop_us",
-          url: "https://seller.example.com/dashboard",
-          environment_preset_id: "preset-1",
-          target_id: null,
-          open_window: false,
-          stream_mode: "events",
-        },
         delivery: {
           mode: "announce",
           channel: "google_sheets",
-          target:
-            "spreadsheet_id=sheet-1;sheet=巡检结果;credentials_file=C:/lime/service-account.json",
+          target: sheetsTarget,
           best_effort: true,
           output_schema: "table",
           output_format: "json",
         },
-        timeout_secs: 120,
-        max_retries: 2,
-        next_run_at: "2026-03-16T00:15:00Z",
         last_status: "success",
-        last_error: null,
-        last_run_at: "2026-03-16T00:00:00Z",
         last_finished_at: "2026-03-16T00:00:08Z",
         running_started_at: null,
-        consecutive_failures: 0,
-        last_retry_count: 0,
-        auto_disabled_until: null,
-        last_delivery: {
+        last_delivery: createLastDelivery({
           success: true,
           message: "Google Sheets 已追加 2 行",
           channel: "google_sheets",
-          target:
-            "spreadsheet_id=sheet-1;sheet=巡检结果;credentials_file=C:/lime/service-account.json",
+          target: sheetsTarget,
           output_kind: "table",
           output_schema: "table",
           output_format: "json",
@@ -610,11 +220,8 @@ describe("AutomationSettings", () => {
           run_id: "run-browser-2",
           execution_retry_count: 1,
           delivery_attempts: 1,
-          attempted_at: "2026-03-16T00:00:08Z",
-        },
-        created_at: "2026-03-16T00:00:00Z",
-        updated_at: "2026-03-16T00:00:00Z",
-      },
+        }),
+      }),
     ]);
 
     const container = await renderSettings();
@@ -710,7 +317,7 @@ describe("AutomationSettings", () => {
   });
 
   it("绑定目标详情应从最新运行会话触发 automation owner 审计", async () => {
-    setupManagedObjectiveAutomationMocks();
+    setupManagedObjectiveAutomationMocks(automationMocks);
     const container = await renderSettings({
       mode: "workspace",
     });
@@ -722,11 +329,7 @@ describe("AutomationSettings", () => {
     );
     expect(auditButton).not.toBeNull();
 
-    await act(async () => {
-      auditButton?.click();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await clickElement(auditButton, 2);
 
     expect(mockAuditAgentRuntimeObjective).toHaveBeenCalledWith({
       sessionId: "session-managed-objective-1",
@@ -737,7 +340,7 @@ describe("AutomationSettings", () => {
   });
 
   it("绑定目标详情应打开工作区内的证据引用", async () => {
-    setupManagedObjectiveAutomationMocks();
+    setupManagedObjectiveAutomationMocks(automationMocks);
     const container = await renderSettings({
       mode: "workspace",
     });
@@ -749,10 +352,7 @@ describe("AutomationSettings", () => {
     );
     expect(openEvidenceButton).not.toBeNull();
 
-    await act(async () => {
-      openEvidenceButton?.click();
-      await Promise.resolve();
-    });
+    await clickElement(openEvidenceButton);
 
     expect(mockOpenPathWithDefaultApp).toHaveBeenCalledWith(
       "/workspace/default/.lime/harness/job-managed-objective-1/evidence",
@@ -773,10 +373,7 @@ describe("AutomationSettings", () => {
       container.querySelector("[data-testid='automation-health-panel']"),
     ).toBeNull();
 
-    await act(async () => {
-      overviewTab?.click();
-      await Promise.resolve();
-    });
+    await clickElement(overviewTab);
 
     expect(container.textContent).toContain("运行概览");
     expect(
@@ -795,10 +392,7 @@ describe("AutomationSettings", () => {
 
     expect(templateButton).not.toBeNull();
 
-    await act(async () => {
-      templateButton?.click();
-      await Promise.resolve();
-    });
+    await clickElement(templateButton);
 
     expect(
       container.querySelector("[data-testid='automation-job-dialog']")
@@ -820,84 +414,10 @@ describe("AutomationSettings", () => {
 
   it("workspace 模式应支持按页面参数预选任务", async () => {
     mockGetAutomationJobs.mockResolvedValueOnce([
-      {
-        id: "job-browser-1",
-        name: "浏览器巡检",
-        description: "启动浏览器并等待人工检查",
-        enabled: true,
-        workspace_id: "workspace-default",
-        execution_mode: "intelligent",
-        schedule: { kind: "every", every_secs: 900 },
-        payload: {
-          kind: "browser_session",
-          profile_id: "profile-1",
-          profile_key: "shop_us",
-          url: "https://seller.example.com/dashboard",
-          environment_preset_id: "preset-1",
-          target_id: null,
-          open_window: false,
-          stream_mode: "events",
-        },
-        delivery: {
-          mode: "announce",
-          channel: "local_file",
-          target: "/tmp/lime/browser-output.json",
-          best_effort: false,
-          output_schema: "json",
-          output_format: "json",
-        },
-        timeout_secs: 120,
-        max_retries: 2,
-        next_run_at: "2026-03-16T00:15:00Z",
-        last_status: "waiting_for_human",
-        last_error: null,
-        last_run_at: "2026-03-16T00:00:00Z",
-        last_finished_at: null,
-        running_started_at: "2026-03-16T00:00:00Z",
-        consecutive_failures: 0,
-        last_retry_count: 0,
-        auto_disabled_until: null,
-        last_delivery: null,
-        created_at: "2026-03-16T00:00:00Z",
-        updated_at: "2026-03-16T00:00:00Z",
-      },
-      {
+      createBrowserJob({ last_delivery: null }),
+      createAgentTurnJob({
         id: "job-agent-2",
-        name: "日报摘要",
-        description: "生成日报",
-        enabled: true,
-        workspace_id: "workspace-default",
-        execution_mode: "skill",
-        schedule: { kind: "cron", expr: "0 9 * * *", tz: "Asia/Shanghai" },
-        payload: {
-          kind: "agent_turn",
-          prompt: "请输出日报摘要",
-          system_prompt: null,
-          web_search: false,
-        },
-        delivery: {
-          mode: "none",
-          channel: null,
-          target: null,
-          best_effort: true,
-          output_schema: "text",
-          output_format: "text",
-        },
-        timeout_secs: 120,
-        max_retries: 2,
-        next_run_at: "2026-03-16T09:00:00Z",
-        last_status: "success",
-        last_error: null,
-        last_run_at: "2026-03-16T08:59:00Z",
-        last_finished_at: "2026-03-16T09:00:10Z",
-        running_started_at: null,
-        consecutive_failures: 0,
-        last_retry_count: 0,
-        auto_disabled_until: null,
-        last_delivery: null,
-        created_at: "2026-03-16T00:00:00Z",
-        updated_at: "2026-03-16T00:00:00Z",
-      },
+      }),
     ]);
 
     await renderSettings({
@@ -940,76 +460,54 @@ describe("AutomationSettings", () => {
   });
 
   it("服务型技能自动化任务应展示参数摘要与主稿绑定", async () => {
+    const scheduledSkillMetadata = {
+      service_skill: {
+        id: "daily-trend-briefing",
+        title: "每日趋势摘要",
+        runner_type: "scheduled",
+        execution_location: "client_default",
+        source: "cloud_catalog",
+        slot_values: [
+          {
+            key: "platform",
+            label: "监测平台",
+            value: "X / Twitter",
+          },
+          {
+            key: "industry_keywords",
+            label: "行业关键词",
+            value: "AI Agent，创作者工具",
+          },
+        ],
+        user_input: "重点关注新增热点与异常波动。",
+      },
+      harness: {
+        theme: "general",
+        content_id: "content-service-skill-1",
+      },
+    };
+
     mockGetAutomationJobs.mockResolvedValueOnce([
-      {
+      createAgentTurnJob({
         id: "job-service-skill-1",
         name: "每日趋势摘要｜定时执行",
         description: "围绕指定平台与关键词输出趋势摘要。",
-        enabled: true,
-        workspace_id: "workspace-default",
-        execution_mode: "skill",
-        schedule: { kind: "cron", expr: "0 9 * * *", tz: "Asia/Shanghai" },
         payload: {
           kind: "agent_turn",
           prompt: "[技能任务] 每日趋势摘要",
           system_prompt: null,
           web_search: false,
           content_id: "content-service-skill-1",
-          request_metadata: {
-            service_skill: {
-              id: "daily-trend-briefing",
-              title: "每日趋势摘要",
-              runner_type: "scheduled",
-              execution_location: "client_default",
-              source: "cloud_catalog",
-              slot_values: [
-                {
-                  key: "platform",
-                  label: "监测平台",
-                  value: "X / Twitter",
-                },
-                {
-                  key: "industry_keywords",
-                  label: "行业关键词",
-                  value: "AI Agent，创作者工具",
-                },
-              ],
-              user_input: "重点关注新增热点与异常波动。",
-            },
-            harness: {
-              theme: "general",
-              content_id: "content-service-skill-1",
-            },
-          },
+          request_metadata: scheduledSkillMetadata,
         },
-        delivery: {
-          mode: "none",
-          channel: null,
-          target: null,
-          best_effort: true,
-          output_schema: "text",
-          output_format: "text",
-        },
-        timeout_secs: 120,
-        max_retries: 2,
-        next_run_at: "2026-03-16T09:00:00Z",
         last_status: "error",
         last_error: "模型返回空结果",
-        last_run_at: "2026-03-16T08:59:00Z",
-        last_finished_at: "2026-03-16T09:00:10Z",
-        running_started_at: null,
         consecutive_failures: 1,
-        last_retry_count: 0,
-        auto_disabled_until: null,
-        last_delivery: null,
-        created_at: "2026-03-16T00:00:00Z",
-        updated_at: "2026-03-16T00:00:00Z",
-      },
+      }),
     ]);
     mockGetAutomationRunHistory.mockResolvedValueOnce([
-      {
+      createAutomationRun({
         id: "run-service-skill-1",
-        source: "automation",
         source_ref: "job-service-skill-1",
         session_id: "session-service-skill-1",
         status: "error",
@@ -1019,12 +517,9 @@ describe("AutomationSettings", () => {
         error_code: "empty_result",
         error_message: "模型返回空结果",
         metadata: JSON.stringify({
+          ...scheduledSkillMetadata,
           service_skill: {
-            id: "daily-trend-briefing",
-            title: "每日趋势摘要",
-            runner_type: "scheduled",
-            execution_location: "client_default",
-            source: "cloud_catalog",
+            ...scheduledSkillMetadata.service_skill,
             slot_values: [
               {
                 key: "platform",
@@ -1040,13 +535,8 @@ describe("AutomationSettings", () => {
             user_input: "优先记录增速最快的话题。",
           },
           content_id: "content-service-skill-run-1",
-          harness: {
-            theme: "general",
-          },
         }),
-        created_at: "2026-03-16T08:59:00Z",
-        updated_at: "2026-03-16T09:00:10Z",
-      },
+      }),
     ]);
 
     const container = await renderSettings({
@@ -1106,14 +596,10 @@ describe("AutomationSettings", () => {
 
   it("自动化任务列表应展示绑定目标摘要", async () => {
     mockGetAutomationJobs.mockResolvedValueOnce([
-      {
+      createAgentTurnJob({
         id: "job-managed-objective-1",
         name: "每日目标摘要｜定时执行",
         description: "围绕目标持续生成可审计摘要。",
-        enabled: true,
-        workspace_id: "workspace-default",
-        execution_mode: "skill",
-        schedule: { kind: "cron", expr: "0 9 * * *", tz: "Asia/Shanghai" },
         payload: {
           kind: "agent_turn",
           prompt: "继续推进每日目标摘要。",
@@ -1136,29 +622,10 @@ describe("AutomationSettings", () => {
             },
           },
         },
-        delivery: {
-          mode: "none",
-          channel: null,
-          target: null,
-          best_effort: true,
-          output_schema: "text",
-          output_format: "text",
-        },
-        timeout_secs: 120,
-        max_retries: 2,
-        next_run_at: "2026-03-16T09:00:00Z",
         last_status: "error",
         last_error: "等待补充输入",
-        last_run_at: "2026-03-16T08:59:00Z",
-        last_finished_at: "2026-03-16T09:00:10Z",
-        running_started_at: null,
         consecutive_failures: 3,
-        last_retry_count: 0,
-        auto_disabled_until: null,
-        last_delivery: null,
-        created_at: "2026-03-16T00:00:00Z",
-        updated_at: "2026-03-16T00:00:00Z",
-      },
+      }),
     ]);
 
     const container = await renderSettings({ mode: "workspace" });
@@ -1177,92 +644,60 @@ describe("AutomationSettings", () => {
   });
 
   it("旧目录 cloud_required 任务应显示兼容标记而不是云执行", async () => {
+    const compatSkillMetadata = {
+      service_skill: {
+        id: "account-performance-tracking",
+        title: "账号增长跟踪",
+        runner_type: "managed",
+        execution_location: "cloud_required",
+        source: "cloud_catalog",
+        slot_values: [
+          {
+            key: "account",
+            label: "监测账号",
+            value: "@lime_next",
+          },
+        ],
+      },
+      harness: {
+        theme: "growth",
+        content_id: "content-service-skill-compat-1",
+      },
+    };
+
     mockGetAutomationJobs.mockResolvedValueOnce([
-      {
+      createAgentTurnJob({
         id: "job-service-skill-compat-1",
         name: "账号跟踪｜旧目录兼容",
         description: "从旧目录兼容标记迁移过来的技能任务。",
-        enabled: true,
-        workspace_id: "workspace-default",
-        execution_mode: "skill",
         schedule: { kind: "every", every_secs: 3600 },
+        max_retries: 1,
+        next_run_at: "2026-03-16T10:00:00Z",
+        last_run_at: "2026-03-16T09:00:00Z",
+        last_finished_at: "2026-03-16T09:00:30Z",
         payload: {
           kind: "agent_turn",
           prompt: "[技能任务] 账号跟踪",
           system_prompt: null,
           web_search: false,
           content_id: "content-service-skill-compat-1",
-          request_metadata: {
-            service_skill: {
-              id: "account-performance-tracking",
-              title: "账号增长跟踪",
-              runner_type: "managed",
-              execution_location: "cloud_required",
-              source: "cloud_catalog",
-              slot_values: [
-                {
-                  key: "account",
-                  label: "监测账号",
-                  value: "@lime_next",
-                },
-              ],
-            },
-            harness: {
-              theme: "growth",
-              content_id: "content-service-skill-compat-1",
-            },
-          },
+          request_metadata: compatSkillMetadata,
         },
-        delivery: {
-          mode: "none",
-          channel: null,
-          target: null,
-          best_effort: true,
-          output_schema: "text",
-          output_format: "text",
-        },
-        timeout_secs: 120,
-        max_retries: 1,
-        next_run_at: "2026-03-16T10:00:00Z",
-        last_status: "success",
-        last_error: null,
-        last_run_at: "2026-03-16T09:00:00Z",
-        last_finished_at: "2026-03-16T09:00:30Z",
-        running_started_at: null,
-        consecutive_failures: 0,
-        last_retry_count: 0,
-        auto_disabled_until: null,
-        last_delivery: null,
-        created_at: "2026-03-16T00:00:00Z",
-        updated_at: "2026-03-16T00:00:00Z",
-      },
+      }),
     ]);
     mockGetAutomationRunHistory.mockResolvedValueOnce([
-      {
+      createAutomationRun({
         id: "run-service-skill-compat-1",
-        source: "automation",
         source_ref: "job-service-skill-compat-1",
         session_id: "session-service-skill-compat-1",
         status: "success",
         started_at: "2026-03-16T09:00:00Z",
         finished_at: "2026-03-16T09:00:30Z",
         duration_ms: 30_000,
-        error_code: null,
-        error_message: null,
         metadata: JSON.stringify({
           service_skill: {
-            id: "account-performance-tracking",
-            title: "账号增长跟踪",
-            runner_type: "managed",
+            ...compatSkillMetadata.service_skill,
             execution_location: "client_default",
-            source: "cloud_catalog",
-            slot_values: [
-              {
-                key: "account",
-                label: "监测账号",
-                value: "@lime_next",
-              },
-            ],
           },
           harness: {
             theme: "growth",
@@ -1270,7 +705,7 @@ describe("AutomationSettings", () => {
         }),
         created_at: "2026-03-16T09:00:00Z",
         updated_at: "2026-03-16T09:00:30Z",
-      },
+      }),
     ]);
 
     const container = await renderSettings({
@@ -1299,7 +734,7 @@ describe("AutomationSettings", () => {
   });
 
   it("旧 SceneApp 自动化任务应只显示下线提示，不再保留独立运行面入口", async () => {
-    setupSceneAppAutomationMocks();
+    setupSceneAppAutomationMocks(automationMocks);
 
     await renderSettings({
       mode: "workspace",

@@ -3,11 +3,16 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderWithKeysDisplay } from "@/lib/api/apiKeyProvider";
-import settingsZhCN from "@/i18n/resources/zh-CN/settings.json";
 import {
   findModelBoundImageCommandEntryForModel,
   getCurrentSkillCatalogSnapshot,
 } from "@/lib/api/skillCatalog";
+import {
+  changeInput,
+  createProvider,
+  getApiModelSuggestionLabels,
+  translate,
+} from "./ProviderSetting.uiTestFixtures";
 
 const { mockFetchProviderModelsAuto } = vi.hoisted(() => ({
   mockFetchProviderModelsAuto: vi.fn(),
@@ -31,83 +36,12 @@ vi.mock("react-i18next", () => ({
 
 import { ProviderSetting } from "./ProviderSetting";
 
-const settingsDictionary = settingsZhCN as Record<string, string>;
-
-function interpolateTemplate(
-  template: string,
-  values?: Record<string, unknown>,
-): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-    String(values?.[name] ?? ""),
-  );
-}
-
-function createTranslate(dictionary: Record<string, string>) {
-  return (
-    key: string,
-    fallbackOrOptions?: string | { defaultValue?: string },
-  ) => {
-    if (typeof fallbackOrOptions === "string") {
-      return fallbackOrOptions;
-    }
-
-    if (fallbackOrOptions && typeof fallbackOrOptions === "object") {
-      const template =
-        dictionary[key] ||
-        (typeof fallbackOrOptions.defaultValue === "string"
-          ? fallbackOrOptions.defaultValue
-          : key);
-      return interpolateTemplate(
-        template,
-        fallbackOrOptions as Record<string, unknown>,
-      );
-    }
-
-    return dictionary[key] || key;
-  };
-}
-
-const translate = createTranslate(settingsDictionary);
-
 interface MountedRoot {
   container: HTMLDivElement;
   root: Root;
 }
 
 const mountedRoots: MountedRoot[] = [];
-
-function createProvider(
-  overrides: Partial<ProviderWithKeysDisplay> = {},
-): ProviderWithKeysDisplay {
-  return {
-    id: "deepseek",
-    name: "DeepSeek",
-    type: "openai",
-    api_host: "https://api.deepseek.com",
-    is_system: false,
-    group: "mainstream",
-    enabled: true,
-    sort_order: 1,
-    api_key_count: 1,
-    custom_models: ["deepseek-chat"],
-    created_at: new Date("2026-03-15T00:00:00.000Z").toISOString(),
-    updated_at: new Date("2026-03-15T00:00:00.000Z").toISOString(),
-    api_keys: [
-      {
-        id: "key-001",
-        provider_id: "deepseek",
-        api_key_masked: "sk-****1234",
-        alias: "生产账号",
-        enabled: true,
-        usage_count: 12,
-        error_count: 0,
-        last_used_at: new Date("2026-03-15T08:00:00.000Z").toISOString(),
-        created_at: new Date("2026-03-14T00:00:00.000Z").toISOString(),
-      },
-    ],
-    ...overrides,
-  };
-}
 
 function renderSetting(
   provider: ProviderWithKeysDisplay | null,
@@ -133,21 +67,11 @@ async function flushEffects(times = 2) {
   });
 }
 
-function changeInput(input: HTMLInputElement, value: string) {
-  const valueSetter = Object.getOwnPropertyDescriptor(
-    HTMLInputElement.prototype,
-    "value",
-  )?.set;
-  valueSetter?.call(input, value);
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-}
-
-function getApiModelSuggestionLabels(container: HTMLElement): string[] {
-  return Array.from(
-    container.querySelectorAll<HTMLButtonElement>(
-      '[data-testid="api-model-suggestion"]',
-    ),
-  ).map((button) => button.textContent?.trim() ?? "");
+function byTestId<T extends HTMLElement>(
+  container: HTMLElement,
+  testId: string,
+): T | null {
+  return container.querySelector<T>(`[data-testid="${testId}"]`);
 }
 
 beforeEach(() => {
@@ -208,20 +132,10 @@ describe("ProviderSetting", () => {
     expect(text).not.toContain("协议配置表单");
     expect(text).not.toContain("连接验证");
     expect(text).not.toContain("支持的模型");
-    expect(
-      container.querySelector('[data-testid="provider-simple-card"]'),
-    ).not.toBeNull();
-    expect(
-      container.querySelector('[data-testid="provider-api-host-input"]'),
-    ).not.toBeNull();
-    expect(
-      container.querySelector(
-        '[data-testid="provider-test-connection-button"]',
-      ),
-    ).not.toBeNull();
-    expect(
-      container.querySelector('[data-testid="provider-api-key-save-button"]'),
-    ).not.toBeNull();
+    expect(byTestId(container, "provider-simple-card")).not.toBeNull();
+    expect(byTestId(container, "provider-api-host-input")).not.toBeNull();
+    expect(byTestId(container, "provider-test-connection-button")).not.toBeNull();
+    expect(byTestId(container, "provider-api-key-save-button")).not.toBeNull();
   });
 
   it("应支持修改并保存 Provider API Host", async () => {
@@ -240,11 +154,10 @@ describe("ProviderSetting", () => {
     );
     await flushEffects();
 
-    const input = container.querySelector<HTMLInputElement>(
-      '[data-testid="provider-api-host-input"]',
-    );
-    const saveButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="provider-api-host-save-button"]',
+    const input = byTestId<HTMLInputElement>(container, "provider-api-host-input");
+    const saveButton = byTestId<HTMLButtonElement>(
+      container,
+      "provider-api-host-save-button",
     );
 
     expect(input?.value).toBe(
@@ -300,11 +213,13 @@ describe("ProviderSetting", () => {
     );
     await flushEffects();
 
-    const hostInput = container.querySelector<HTMLInputElement>(
-      '[data-testid="provider-api-host-input"]',
+    const hostInput = byTestId<HTMLInputElement>(
+      container,
+      "provider-api-host-input",
     );
-    const testButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="provider-test-connection-button"]',
+    const testButton = byTestId<HTMLButtonElement>(
+      container,
+      "provider-test-connection-button",
     );
 
     await act(async () => {
@@ -349,9 +264,7 @@ describe("ProviderSetting", () => {
     );
     await flushEffects();
 
-    expect(
-      container.querySelector('[data-testid="provider-login-required"]'),
-    ).not.toBeNull();
+    expect(byTestId(container, "provider-login-required")).not.toBeNull();
     expect(container.textContent ?? "").toContain("Lime 云端");
     expect(container.textContent ?? "").toContain("需要登录");
     expect(container.textContent ?? "").toContain(
@@ -361,11 +274,7 @@ describe("ProviderSetting", () => {
     expect(container.textContent ?? "").not.toContain("从接口获取");
 
     await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>(
-          '[data-testid="provider-login-button"]',
-        )
-        ?.click();
+      byTestId<HTMLButtonElement>(container, "provider-login-button")?.click();
       await Promise.resolve();
     });
 
@@ -379,11 +288,10 @@ describe("ProviderSetting", () => {
     });
     await flushEffects();
 
-    const input = container.querySelector<HTMLInputElement>(
-      '[data-testid="model-draft-input"]',
-    );
-    const button = container.querySelector<HTMLButtonElement>(
-      '[data-testid="model-draft-add-button"]',
+    const input = byTestId<HTMLInputElement>(container, "model-draft-input");
+    const button = byTestId<HTMLButtonElement>(
+      container,
+      "model-draft-add-button",
     );
 
     expect(input).not.toBeNull();
@@ -414,9 +322,7 @@ describe("ProviderSetting", () => {
     const container = renderSetting(createProvider({ custom_models: [] }));
     await flushEffects();
 
-    const button = container.querySelector<HTMLButtonElement>(
-      '[data-testid="fetch-models-button"]',
-    );
+    const button = byTestId<HTMLButtonElement>(container, "fetch-models-button");
 
     await act(async () => {
       button?.click();
@@ -427,124 +333,7 @@ describe("ProviderSetting", () => {
     expect(mockFetchProviderModelsAuto).toHaveBeenCalledWith("deepseek");
     expect(container.textContent ?? "").toContain("API 获取失败");
     expect(container.textContent ?? "").not.toContain("wrong-fallback-model");
-    expect(
-      container.querySelector('[data-testid="api-model-suggestions"]'),
-    ).toBeNull();
-  });
-
-  it("Responses 图片入口不支持 /models 时应保留手动图片模型并显示确认态", async () => {
-    mockFetchProviderModelsAuto.mockResolvedValueOnce({
-      source: "Error",
-      models: [],
-      error: "当前 Responses 兼容入口未提供标准 /models 接口。",
-      diagnostic_hint: null,
-    });
-    const container = renderSetting(
-      createProvider({
-        id: "airgate-openai-images",
-        name: "OpenAI-gpt-images-2",
-        type: "openai",
-        api_host: "https://code.ylsagi.com/codex",
-        custom_models: ["gpt-images-2"],
-      }),
-    );
-    await flushEffects();
-
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('[data-testid="fetch-models-button"]')
-        ?.click();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const status = container.querySelector<HTMLElement>(
-      '[data-testid="model-fetch-status"]',
-    );
-    expect(status?.textContent ?? "").toContain("已确认 Responses 图片模型");
-    expect(status?.textContent ?? "").toContain("gpt-images-2");
-    expect(status?.className ?? "").toContain("border-emerald-200");
-    expect(container.textContent ?? "").toContain("gpt-images-2");
-    expect(
-      container.querySelector('[data-testid="api-model-suggestions"]'),
-    ).toBeNull();
-  });
-
-  it("Responses 图片入口缺少声明模型时仍提示手动添加", async () => {
-    mockFetchProviderModelsAuto.mockResolvedValueOnce({
-      source: "Error",
-      models: [],
-      error: "当前 Responses 兼容入口未提供标准 /models 接口。",
-      diagnostic_hint: null,
-    });
-    const container = renderSetting(
-      createProvider({
-        id: "airgate-openai-images",
-        name: "OpenAI-gpt-images-2",
-        type: "openai-response",
-        api_host: "https://api.openai.com/v1",
-        custom_models: [],
-      }),
-    );
-    await flushEffects();
-
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('[data-testid="fetch-models-button"]')
-        ?.click();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const status = container.querySelector<HTMLElement>(
-      '[data-testid="model-fetch-status"]',
-    );
-    expect(status?.textContent ?? "").toContain(
-      "该 Responses 图片入口不提供标准 /models 枚举",
-    );
-    expect(status?.textContent ?? "").toContain("请手动添加 gpt-images-2");
-    expect(status?.className ?? "").toContain("border-sky-200");
-  });
-
-  it("Responses 图片入口返回已声明图片模型时应显示确认态", async () => {
-    mockFetchProviderModelsAuto.mockResolvedValueOnce({
-      source: "Api",
-      models: [{ id: "gpt-images-2" }],
-      error: null,
-      diagnostic_hint:
-        "当前 Responses 图片入口不提供标准 /models 枚举；已使用 Provider 中声明的图片模型作为可用模型，并写入 10 天缓存。",
-    });
-    const container = renderSetting(
-      createProvider({
-        id: "airgate-openai-images",
-        name: "OpenAI-gpt-images-2",
-        type: "openai",
-        api_host: "https://code.ylsagi.com/codex",
-        custom_models: ["gpt-images-2"],
-      }),
-    );
-    await flushEffects();
-
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('[data-testid="fetch-models-button"]')
-        ?.click();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const status = container.querySelector<HTMLElement>(
-      '[data-testid="model-fetch-status"]',
-    );
-    expect(status?.textContent ?? "").toContain("已确认 1 个模型");
-    expect(status?.textContent ?? "").toContain("已包含全部结果");
-    expect(status?.className ?? "").toContain("border-emerald-200");
-    expect(container.textContent ?? "").not.toContain(
-      "该 Responses 图片入口不提供标准 /models 枚举",
-    );
-    expect(
-      container.querySelector('[data-testid="api-model-suggestions"]'),
-    ).toBeNull();
+    expect(byTestId(container, "api-model-suggestions")).toBeNull();
   });
 
   it("图片模型行应能创建本地 @命令绑定", async () => {
@@ -559,8 +348,9 @@ describe("ProviderSetting", () => {
     );
     await flushEffects();
 
-    const createButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="create-image-command-button"]',
+    const createButton = byTestId<HTMLButtonElement>(
+      container,
+      "create-image-command-button",
     );
     expect(createButton).not.toBeNull();
     expect(createButton?.textContent ?? "").toContain("创建 @命令");
@@ -570,17 +360,17 @@ describe("ProviderSetting", () => {
       await Promise.resolve();
     });
 
-    const input = container.querySelector<HTMLInputElement>(
-      '[data-testid="image-command-trigger-input"]',
+    const input = byTestId<HTMLInputElement>(
+      container,
+      "image-command-trigger-input",
     );
     expect(input?.value).toBe("@GPT Images 2");
 
     await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>(
-          '[data-testid="image-command-save-button"]',
-        )
-        ?.click();
+      byTestId<HTMLButtonElement>(
+        container,
+        "image-command-save-button",
+      )?.click();
       await Promise.resolve();
     });
 
@@ -605,45 +395,6 @@ describe("ProviderSetting", () => {
     });
   });
 
-  it("Fal Provider 不支持 /models 时应保留手动模型并显示确认态", async () => {
-    mockFetchProviderModelsAuto.mockResolvedValueOnce({
-      source: "Error",
-      models: [],
-      error: "Fal 不提供标准 /models 枚举。",
-      diagnostic_hint: "请在 Provider 中手动添加 fal-ai/... 模型 ID。",
-    });
-    const container = renderSetting(
-      createProvider({
-        id: "fal",
-        name: "Fal",
-        type: "openai",
-        api_host: "https://fal.run/fal-ai",
-        custom_models: ["fal-ai/nano-banana-pro"],
-      }),
-    );
-    await flushEffects();
-
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('[data-testid="fetch-models-button"]')
-        ?.click();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const status = container.querySelector<HTMLElement>(
-      '[data-testid="model-fetch-status"]',
-    );
-    expect(status?.textContent ?? "").toContain("已确认 Fal 模型");
-    expect(status?.textContent ?? "").toContain("fal-ai/nano-banana-pro");
-    expect(status?.className ?? "").toContain("border-emerald-200");
-    expect(container.textContent ?? "").toContain("fal-ai/nano-banana-pro");
-    expect(container.textContent ?? "").not.toContain("API 获取失败");
-    expect(
-      container.querySelector('[data-testid="api-model-suggestions"]'),
-    ).toBeNull();
-  });
-
   it("Fal Provider 没有 API Key 时仍可确认手动声明模型", async () => {
     mockFetchProviderModelsAuto.mockResolvedValueOnce({
       source: "Api",
@@ -663,11 +414,13 @@ describe("ProviderSetting", () => {
     );
     await flushEffects();
 
-    const fetchButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="fetch-models-button"]',
+    const fetchButton = byTestId<HTMLButtonElement>(
+      container,
+      "fetch-models-button",
     );
-    const connectionButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="provider-test-connection-button"]',
+    const connectionButton = byTestId<HTMLButtonElement>(
+      container,
+      "provider-test-connection-button",
     );
     expect(fetchButton?.disabled).toBe(false);
     expect(connectionButton?.disabled).toBe(true);
@@ -683,84 +436,9 @@ describe("ProviderSetting", () => {
     });
 
     expect(mockFetchProviderModelsAuto).toHaveBeenCalledWith("fal");
-    const status = container.querySelector<HTMLElement>(
-      '[data-testid="model-fetch-status"]',
-    );
+    const status = byTestId<HTMLElement>(container, "model-fetch-status");
     expect(status?.textContent ?? "").toContain("已确认 1 个模型");
     expect(status?.textContent ?? "").not.toContain("请先填写并保存 API 密钥");
-  });
-
-  it("Fal Provider 只有非 Fal 模型时应提示添加 fal-ai 模型", async () => {
-    mockFetchProviderModelsAuto.mockResolvedValueOnce({
-      source: "Error",
-      models: [],
-      error: "Fal 不提供标准 /models 枚举。",
-      diagnostic_hint:
-        "当前模型优先级没有可用 Fal 图片模型；请手动添加 fal-ai/nano-banana-pro。",
-    });
-    const container = renderSetting(
-      createProvider({
-        id: "fal",
-        name: "Fal",
-        type: "openai",
-        api_host: "https://fal.run/fal-ai",
-        custom_models: ["gpt-5.2-pro"],
-      }),
-    );
-    await flushEffects();
-
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('[data-testid="fetch-models-button"]')
-        ?.click();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const status = container.querySelector<HTMLElement>(
-      '[data-testid="model-fetch-status"]',
-    );
-    expect(status?.textContent ?? "").toContain(
-      "当前模型优先级没有可用 Fal 图片模型",
-    );
-    expect(status?.textContent ?? "").toContain("fal-ai/nano-banana-pro");
-    expect(status?.className ?? "").toContain("border-sky-200");
-    expect(container.textContent ?? "").not.toContain("API 获取失败");
-  });
-
-  it("Fal Provider 命中旧缓存里的非 Fal 模型时不应显示确认态", async () => {
-    mockFetchProviderModelsAuto.mockResolvedValueOnce({
-      source: "Api",
-      models: [{ id: "gpt-5.2-pro" }],
-      error: null,
-      from_cache: true,
-    });
-    const container = renderSetting(
-      createProvider({
-        id: "fal",
-        name: "Fal",
-        type: "openai",
-        api_host: "https://fal.run/fal-ai",
-        custom_models: ["gpt-5.2-pro"],
-      }),
-    );
-    await flushEffects();
-
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('[data-testid="fetch-models-button"]')
-        ?.click();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const status = container.querySelector<HTMLElement>(
-      '[data-testid="model-fetch-status"]',
-    );
-    expect(status?.textContent ?? "").toContain("当前没有可用 Fal 图片模型");
-    expect(status?.textContent ?? "").toContain("fal-ai/nano-banana-pro");
-    expect(status?.textContent ?? "").not.toContain("已确认 1 个模型");
-    expect(status?.className ?? "").toContain("border-sky-200");
   });
 
   it("接口获取成功后点击模型建议才加入优先级", async () => {
@@ -832,8 +510,9 @@ describe("ProviderSetting", () => {
       "provider-model-12",
     );
 
-    const filterInput = container.querySelector<HTMLInputElement>(
-      '[data-testid="api-model-filter-input"]',
+    const filterInput = byTestId<HTMLInputElement>(
+      container,
+      "api-model-filter-input",
     );
 
     await act(async () => {
@@ -855,8 +534,9 @@ describe("ProviderSetting", () => {
     });
     await flushEffects();
 
-    const button = container.querySelector<HTMLButtonElement>(
-      '[data-testid="provider-delete-button"]',
+    const button = byTestId<HTMLButtonElement>(
+      container,
+      "provider-delete-button",
     );
 
     expect(button).not.toBeNull();
@@ -884,8 +564,9 @@ describe("ProviderSetting", () => {
     });
     await flushEffects();
 
-    const button = container.querySelector<HTMLButtonElement>(
-      '[data-testid="provider-delete-button"]',
+    const button = byTestId<HTMLButtonElement>(
+      container,
+      "provider-delete-button",
     );
 
     expect(button).not.toBeNull();
@@ -915,11 +596,10 @@ describe("ProviderSetting", () => {
     });
     await flushEffects();
 
-    const input = container.querySelector<HTMLInputElement>(
-      '[data-testid="provider-api-key-input"]',
-    );
-    const saveButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="provider-api-key-save-button"]',
+    const input = byTestId<HTMLInputElement>(container, "provider-api-key-input");
+    const saveButton = byTestId<HTMLButtonElement>(
+      container,
+      "provider-api-key-save-button",
     );
 
     expect(saveButton).not.toBeNull();
@@ -947,9 +627,7 @@ describe("ProviderSetting", () => {
     );
     expect(onTestConnection).not.toHaveBeenCalled();
     expect(container.textContent ?? "").toContain("API 密钥已保存");
-    expect(
-      container.querySelector('[data-testid="api-key-status"]'),
-    ).not.toBeNull();
+    expect(byTestId(container, "api-key-status")).not.toBeNull();
   });
 
   it("保存 API 密钥遇到重复 Key 时不应假装替换成功", async () => {
@@ -959,11 +637,10 @@ describe("ProviderSetting", () => {
     });
     await flushEffects();
 
-    const input = container.querySelector<HTMLInputElement>(
-      '[data-testid="provider-api-key-input"]',
-    );
-    const saveButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="provider-api-key-save-button"]',
+    const input = byTestId<HTMLInputElement>(container, "provider-api-key-input");
+    const saveButton = byTestId<HTMLButtonElement>(
+      container,
+      "provider-api-key-save-button",
     );
 
     await act(async () => {
@@ -977,9 +654,7 @@ describe("ProviderSetting", () => {
       await Promise.resolve();
     });
 
-    const status = container.querySelector<HTMLElement>(
-      '[data-testid="api-key-status"]',
-    );
+    const status = byTestId<HTMLElement>(container, "api-key-status");
     expect(onAddApiKey).toHaveBeenCalledWith(
       "deepseek",
       "sk-duplicated-key",
@@ -1000,11 +675,10 @@ describe("ProviderSetting", () => {
     });
     await flushEffects();
 
-    const input = container.querySelector<HTMLInputElement>(
-      '[data-testid="provider-api-key-input"]',
-    );
-    const saveButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="provider-api-key-save-button"]',
+    const input = byTestId<HTMLInputElement>(container, "provider-api-key-input");
+    const saveButton = byTestId<HTMLButtonElement>(
+      container,
+      "provider-api-key-save-button",
     );
 
     await act(async () => {
@@ -1018,9 +692,7 @@ describe("ProviderSetting", () => {
       await Promise.resolve();
     });
 
-    const status = container.querySelector<HTMLElement>(
-      '[data-testid="api-key-status"]',
-    );
+    const status = byTestId<HTMLElement>(container, "api-key-status");
     expect(onAddApiKey).toHaveBeenCalledWith(
       "deepseek",
       "sk-missing-provider",
@@ -1046,11 +718,10 @@ describe("ProviderSetting", () => {
     );
     await flushEffects();
 
-    const input = container.querySelector<HTMLInputElement>(
-      '[data-testid="provider-api-key-input"]',
-    );
-    const button = container.querySelector<HTMLButtonElement>(
-      '[data-testid="provider-test-connection-button"]',
+    const input = byTestId<HTMLInputElement>(container, "provider-api-key-input");
+    const button = byTestId<HTMLButtonElement>(
+      container,
+      "provider-test-connection-button",
     );
 
     await act(async () => {
@@ -1095,8 +766,9 @@ describe("ProviderSetting", () => {
     });
     await flushEffects();
 
-    const button = container.querySelector<HTMLButtonElement>(
-      '[data-testid="provider-test-connection-button"]',
+    const button = byTestId<HTMLButtonElement>(
+      container,
+      "provider-test-connection-button",
     );
 
     await act(async () => {

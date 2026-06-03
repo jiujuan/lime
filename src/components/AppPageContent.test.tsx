@@ -6,65 +6,30 @@ import type { AgentPageParams, Page, PageParams } from "@/types/page";
 import { AppPageContent } from "./AppPageContent";
 
 const latestAgentChatProps = vi.hoisted(
-  () =>
-    ({
-      value: null as Record<string, unknown> | null,
-    }) as { value: Record<string, unknown> | null },
+  () => ({ value: null as Record<string, unknown> | null }),
 );
 const agentChatLifecycle = vi.hoisted(
-  () =>
-    ({
-      mounts: 0,
-      unmounts: 0,
-    }) as { mounts: number; unmounts: number },
+  () => ({ mounts: 0, unmounts: 0 }),
 );
 const latestSkillsWorkspaceProps = vi.hoisted(
-  () =>
-    ({
-      value: null as Record<string, unknown> | null,
-    }) as { value: Record<string, unknown> | null },
+  () => ({ value: null as Record<string, unknown> | null }),
 );
 const latestMemoryPageProps = vi.hoisted(
-  () =>
-    ({
-      value: null as Record<string, unknown> | null,
-    }) as { value: Record<string, unknown> | null },
+  () => ({ value: null as Record<string, unknown> | null }),
 );
 const latestKnowledgePageProps = vi.hoisted(
-  () =>
-    ({
-      value: null as Record<string, unknown> | null,
-    }) as { value: Record<string, unknown> | null },
+  () => ({ value: null as Record<string, unknown> | null }),
 );
 const latestAgentAppsProps = vi.hoisted(
-  () =>
-    ({
-      value: null as Record<string, unknown> | null,
-    }) as { value: Record<string, unknown> | null },
+  () => ({ value: null as Record<string, unknown> | null }),
 );
 const latestExpertPlazaProps = vi.hoisted(
-  () =>
-    ({
-      value: null as Record<string, unknown> | null,
-    }) as { value: Record<string, unknown> | null },
+  () => ({ value: null as Record<string, unknown> | null }),
 );
-const agentAppLabLifecycle = vi.hoisted(
-  () =>
-    ({
-      mounts: 0,
-    }) as { mounts: number },
-);
-const agentAppsLifecycle = vi.hoisted(
-  () =>
-    ({
-      mounts: 0,
-    }) as { mounts: number },
-);
+const agentAppLabLifecycle = vi.hoisted(() => ({ mounts: 0 }));
+const agentAppsLifecycle = vi.hoisted(() => ({ mounts: 0 }));
 const agentAppRuntimeLifecycle = vi.hoisted(
-  () =>
-    ({
-      mounts: 0,
-    }) as { mounts: number },
+  () => ({ mounts: 0 }),
 );
 vi.mock("./agent/chat", () => ({
   AgentChatPage: (props: Record<string, unknown>) => {
@@ -211,6 +176,10 @@ function renderContent(currentPage: Page, pageParams: PageParams = {}) {
       });
     },
   };
+}
+
+function expectTestId(container: HTMLElement, testId: string) {
+  expect(container.querySelector(`[data-testid="${testId}"]`)).not.toBeNull();
 }
 
 async function flushEffects(times = 6) {
@@ -688,18 +657,14 @@ describe("AppPageContent", () => {
     const { container } = renderContent("channels");
     await flushEffects();
 
-    expect(
-      container.querySelector('[data-testid="im-config-page"]'),
-    ).not.toBeNull();
+    expectTestId(container, "im-config-page");
   });
 
   it("settings 页面应渲染设置页入口", async () => {
     const { container } = renderContent("settings");
     await flushEffects();
 
-    expect(
-      container.querySelector('[data-testid="settings-page"]'),
-    ).not.toBeNull();
+    expectTestId(container, "settings-page");
   });
 
   it("skills 页面应把技能草稿参数透传给 SkillsWorkspacePage", async () => {
@@ -753,9 +718,7 @@ describe("AppPageContent", () => {
     });
     await flushEffects();
 
-    expect(
-      container.querySelector('[data-testid="knowledge-page"]'),
-    ).not.toBeNull();
+    expectTestId(container, "knowledge-page");
     expect(latestKnowledgePageProps.value).toMatchObject({
       pageParams: {
         workingDir: "/tmp/project-knowledge",
@@ -768,9 +731,7 @@ describe("AppPageContent", () => {
     const { container } = renderContent("experts");
     await flushEffects();
 
-    expect(
-      container.querySelector('[data-testid="expert-plaza-page"]'),
-    ).not.toBeNull();
+    expectTestId(container, "expert-plaza-page");
     expect(latestExpertPlazaProps.value?.onNavigate).toEqual(
       expect.any(Function),
     );
@@ -780,9 +741,7 @@ describe("AppPageContent", () => {
     const { container } = renderContent("agent-app-lab");
     await flushEffects();
 
-    expect(
-      container.querySelector('[data-testid="agent-app-lab-page"]'),
-    ).not.toBeNull();
+    expectTestId(container, "agent-app-lab-page");
     expect(agentAppLabLifecycle.mounts).toBe(1);
   });
 
@@ -792,9 +751,7 @@ describe("AppPageContent", () => {
     });
     await flushEffects();
 
-    expect(
-      container.querySelector('[data-testid="agent-apps-page"]'),
-    ).not.toBeNull();
+    expectTestId(container, "agent-apps-page");
     expect(agentAppsLifecycle.mounts).toBe(1);
     expect(latestAgentAppsProps.value).toMatchObject({
       pageParams: {
@@ -811,9 +768,7 @@ describe("AppPageContent", () => {
     });
     await flushEffects();
 
-    expect(
-      container.querySelector('[data-testid="agent-app-runtime-page"]'),
-    ).not.toBeNull();
+    expectTestId(container, "agent-app-runtime-page");
     expect(agentAppRuntimeLifecycle.mounts).toBe(1);
   });
 });

@@ -42,8 +42,6 @@ describe("chatToolPreferences", () => {
     );
 
     expect(loadChatToolPreferences("custom-theme")).toEqual({
-      webSearch: false,
-      thinking: false,
       task: true,
       subagent: true,
     });
@@ -51,23 +49,19 @@ describe("chatToolPreferences", () => {
 
   it("应按主题作用域保存偏好，但不恢复搜索与思考旧开关", () => {
     saveChatToolPreferences(
-      { webSearch: true, thinking: false, task: true, subagent: false },
+      { task: true, subagent: false },
       "general",
     );
     saveChatToolPreferences(
-      { webSearch: false, thinking: true, task: false, subagent: true },
+      { task: false, subagent: true },
       "custom-theme",
     );
 
     expect(loadChatToolPreferences("general")).toEqual({
-      webSearch: false,
-      thinking: false,
       task: true,
       subagent: false,
     });
     expect(loadChatToolPreferences("custom-theme")).toEqual({
-      webSearch: false,
-      thinking: false,
       task: false,
       subagent: true,
     });
@@ -82,8 +76,6 @@ describe("chatToolPreferences", () => {
         chatMode: "general",
         contentId: null,
         preferences: {
-          webSearch: true,
-          thinking: false,
           task: false,
           subagent: false,
         },
@@ -95,8 +87,6 @@ describe("chatToolPreferences", () => {
         chatMode: "general",
         contentId: null,
         preferences: {
-          webSearch: true,
-          thinking: true,
           task: false,
           subagent: false,
         },
@@ -108,16 +98,12 @@ describe("chatToolPreferences", () => {
     expect(
       alignChatToolPreferencesWithExecutionStrategy(
         {
-          webSearch: false,
-          thinking: false,
           task: false,
           subagent: false,
         },
         "code_orchestrated" as never,
       ),
     ).toEqual({
-      webSearch: false,
-      thinking: false,
       task: false,
       subagent: false,
     });
@@ -127,16 +113,12 @@ describe("chatToolPreferences", () => {
     expect(
       alignChatToolPreferencesWithExecutionStrategy(
         {
-          webSearch: true,
-          thinking: true,
           task: true,
           subagent: true,
         },
         "react",
       ),
     ).toEqual({
-      webSearch: true,
-      thinking: true,
       task: true,
       subagent: true,
     });

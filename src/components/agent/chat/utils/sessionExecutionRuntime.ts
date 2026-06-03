@@ -179,8 +179,6 @@ export function createChatToolPreferencesFromExecutionRuntime(
 
   return alignChatToolPreferencesWithExecutionStrategy(
     {
-      webSearch: false,
-      thinking: false,
       task: task ?? false,
       subagent: subagent ?? false,
     },
@@ -198,8 +196,6 @@ export function createSessionRecentPreferencesFromChatToolPreferences(
   preferences: ChatToolPreferences,
 ): AsterSessionExecutionRuntimePreferences {
   return {
-    webSearch: false,
-    thinking: false,
     task: preferences.task,
     subagent: preferences.subagent,
   };

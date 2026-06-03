@@ -39,7 +39,10 @@ const SKIP_PREFIXES = [
   "src/i18n/__tests__/",
 ];
 
-const SKIP_FILE_PATTERNS = [/\.(test|spec)\.[^.]+$/];
+const SKIP_FILE_PATTERNS = [
+  /\.(test|spec)\.[^.]+$/,
+  /\.testFixtures\.[^.]+$/,
+];
 
 const VISIBLE_PROP_NAMES = new Set([
   "alt",

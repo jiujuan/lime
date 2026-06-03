@@ -52,15 +52,19 @@ import {
   formatEntryModifiedTime,
   formatFileSize,
 } from "./fileManagerDisplay";
+import {
+  asPinnedLocation,
+  buildContextMenuActionDescriptors,
+  isApplicationEntry,
+  isSkillPackageEntry,
+  resolveContextMenuPosition,
+  type FileManagerActionLabels,
+  type FileManagerContextMenuAction,
+} from "./fileManagerSidebarViewModel";
 
 const PINNED_LOCATIONS_STORAGE_KEY = "lime.file-manager.pinned-locations";
-const APPLICATION_ENTRY_PATTERN = /\.(app|appref-ms|exe|lnk)$/i;
-const SKILL_PACKAGE_ENTRY_PATTERN = /\.(?:skill|skills)$/i;
 const MAX_ICON_PREFETCH_ENTRIES = 72;
 const ICON_PREFETCH_CONCURRENCY = 2;
-const CONTEXT_MENU_WIDTH_PX = 208;
-const CONTEXT_MENU_HEIGHT_PX = 320;
-const CONTEXT_MENU_GAP_PX = 8;
 
 type ViewMode = "list" | "grid";
 
@@ -79,49 +83,21 @@ interface ContextMenuState {
   entry: FileEntry;
 }
 
-interface ContextMenuAction {
-  action: string;
-  label: string;
-  icon: LucideIcon;
-  disabled?: boolean;
-  title?: string;
-}
-
-interface FileManagerActionLabels {
-  open: string;
-  reveal: string;
-  addToChat: string;
-  preview: string;
-  importKnowledge: string;
-  importKnowledgeTitle: string;
-  copyPath: string;
-  copyName: string;
-  pin: string;
-  refresh: string;
-  installPackage: string;
-  installPackageTitle: string;
-}
-
-function asPinnedLocation(value: unknown): FileManagerLocation | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null;
-  }
-  const record = value as Record<string, unknown>;
-  if (
-    typeof record.id !== "string" ||
-    typeof record.label !== "string" ||
-    typeof record.path !== "string" ||
-    typeof record.kind !== "string"
-  ) {
-    return null;
-  }
-  return {
-    id: record.id,
-    label: record.label,
-    path: record.path,
-    kind: record.kind,
-  };
-}
+const CONTEXT_MENU_ICON_BY_ACTION: Record<
+  FileManagerContextMenuAction,
+  LucideIcon
+> = {
+  open: ExternalLink,
+  reveal: Folder,
+  add: PlusCircle,
+  "preview-workspace": AppWindow,
+  "install-skill-package": Package,
+  "import-knowledge": FileText,
+  "copy-path": Copy,
+  "copy-name": FileText,
+  pin: Pin,
+  refresh: RefreshCw,
+};
 
 function loadPinnedLocations(): FileManagerLocation[] {
   if (typeof window === "undefined") {
@@ -168,68 +144,6 @@ function getLocationIcon(kind: string): LucideIcon {
   }
 }
 
-function isApplicationEntry(
-  entry: FileEntry,
-  activeLocationKind: string,
-): boolean {
-  if (APPLICATION_ENTRY_PATTERN.test(entry.name)) {
-    return true;
-  }
-  return activeLocationKind === "applications" && !entry.isDir;
-}
-
-function isSkillPackageEntry(entry: FileEntry): boolean {
-  return !entry.isDir && SKILL_PACKAGE_ENTRY_PATTERN.test(entry.name);
-}
-
-function resolveContextMenuPosition(
-  clientX: number,
-  clientY: number,
-  sidebarRect: DOMRect | null,
-): { x: number; y: number } {
-  if (typeof window === "undefined") {
-    return { x: clientX, y: clientY };
-  }
-
-  const usableSidebarRect =
-    sidebarRect && sidebarRect.width > 0 ? sidebarRect : null;
-  const leftBoundary = Math.max(
-    CONTEXT_MENU_GAP_PX,
-    usableSidebarRect
-      ? usableSidebarRect.left + CONTEXT_MENU_GAP_PX
-      : CONTEXT_MENU_GAP_PX,
-  );
-  const rightBoundary = Math.min(
-    window.innerWidth - CONTEXT_MENU_GAP_PX,
-    usableSidebarRect
-      ? usableSidebarRect.right - CONTEXT_MENU_GAP_PX
-      : window.innerWidth - CONTEXT_MENU_GAP_PX,
-  );
-  const topBoundary = Math.max(
-    CONTEXT_MENU_GAP_PX,
-    usableSidebarRect
-      ? usableSidebarRect.top + CONTEXT_MENU_GAP_PX
-      : CONTEXT_MENU_GAP_PX,
-  );
-  const bottomBoundary = Math.min(
-    window.innerHeight - CONTEXT_MENU_GAP_PX,
-    usableSidebarRect
-      ? usableSidebarRect.bottom - CONTEXT_MENU_GAP_PX
-      : window.innerHeight - CONTEXT_MENU_GAP_PX,
-  );
-
-  return {
-    x: Math.max(
-      leftBoundary,
-      Math.min(clientX, rightBoundary - CONTEXT_MENU_WIDTH_PX),
-    ),
-    y: Math.max(
-      topBoundary,
-      Math.min(clientY, bottomBoundary - CONTEXT_MENU_HEIGHT_PX),
-    ),
-  };
-}
-
 function EntryIcon({
   icon: Icon,
   className,
@@ -264,59 +178,6 @@ async function copyText(
   } catch {
     toast.error(errorMessage);
   }
-}
-
-function buildContextMenuActions(
-  entry: FileEntry,
-  knowledgeImportEnabled: boolean,
-  workspacePreviewEnabled: boolean,
-  skillPackageInstallEnabled: boolean,
-  labels: FileManagerActionLabels,
-): ContextMenuAction[] {
-  const isSkillPackage = isSkillPackageEntry(entry);
-  const actions: ContextMenuAction[] = [
-    { action: "open", label: labels.open, icon: ExternalLink },
-    { action: "reveal", label: labels.reveal, icon: Folder },
-  ];
-
-  if (skillPackageInstallEnabled && isSkillPackage) {
-    actions.push({
-      action: "install-skill-package",
-      label: labels.installPackage,
-      icon: Package,
-      title: labels.installPackageTitle,
-    });
-  } else {
-    actions.push({ action: "add", label: labels.addToChat, icon: PlusCircle });
-  }
-
-  if (workspacePreviewEnabled && !entry.isDir && !isSkillPackage) {
-    actions.push({
-      action: "preview-workspace",
-      label: labels.preview,
-      icon: AppWindow,
-    });
-  }
-
-  if (knowledgeImportEnabled && !entry.isDir && !isSkillPackage) {
-    const unsupportedMessage = getKnowledgeUnsupportedSourceMessage(entry);
-    actions.push({
-      action: "import-knowledge",
-      label: labels.importKnowledge,
-      icon: FileText,
-      disabled: Boolean(unsupportedMessage),
-      title: unsupportedMessage || labels.importKnowledgeTitle,
-    });
-  }
-
-  actions.push(
-    { action: "copy-path", label: labels.copyPath, icon: Copy },
-    { action: "copy-name", label: labels.copyName, icon: FileText },
-    { action: "pin", label: labels.pin, icon: Pin },
-    { action: "refresh", label: labels.refresh, icon: RefreshCw },
-  );
-
-  return actions;
 }
 
 export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
@@ -846,13 +707,19 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
           const sidebar = event.currentTarget.closest(
             '[data-testid="file-manager-sidebar"]',
           );
-          const position = resolveContextMenuPosition(
-            event.clientX,
-            event.clientY,
-            sidebar instanceof HTMLElement
-              ? sidebar.getBoundingClientRect()
-              : null,
-          );
+          const position =
+            typeof window === "undefined"
+              ? { x: event.clientX, y: event.clientY }
+              : resolveContextMenuPosition({
+                  clientX: event.clientX,
+                  clientY: event.clientY,
+                  sidebarRect:
+                    sidebar instanceof HTMLElement
+                      ? sidebar.getBoundingClientRect()
+                      : null,
+                  viewportWidth: window.innerWidth,
+                  viewportHeight: window.innerHeight,
+                });
           setContextMenu({ ...position, entry });
         }}
         className={cn(
@@ -1098,13 +965,17 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onMouseDown={(event) => event.stopPropagation()}
         >
-          {buildContextMenuActions(
-            contextMenu.entry,
-            Boolean(onImportAsKnowledge),
-            Boolean(onOpenFileInWorkspace),
-            Boolean(onInstallSkillPackage),
-            actionLabels,
-          ).map(({ action, label, icon: MenuIcon, disabled, title }) => {
+          {buildContextMenuActionDescriptors({
+            entry: contextMenu.entry,
+            knowledgeImportEnabled: Boolean(onImportAsKnowledge),
+            workspacePreviewEnabled: Boolean(onOpenFileInWorkspace),
+            skillPackageInstallEnabled: Boolean(onInstallSkillPackage),
+            labels: actionLabels,
+            knowledgeUnsupportedMessage: getKnowledgeUnsupportedSourceMessage(
+              contextMenu.entry,
+            ),
+          }).map(({ action, label, disabled, title }) => {
+            const MenuIcon = CONTEXT_MENU_ICON_BY_ACTION[action];
             return (
               <button
                 key={action}

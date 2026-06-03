@@ -36,7 +36,7 @@ pub(super) fn has_root_object_key(request_metadata: Option<&serde_json::Value>, 
 pub(super) fn request_metadata_contains_full_runtime_context(
     request_metadata: Option<&serde_json::Value>,
 ) -> bool {
-    const FULL_RUNTIME_HARNESS_OBJECT_KEYS: [(&str, &str); 20] = [
+    const FULL_RUNTIME_HARNESS_OBJECT_KEYS: [(&str, &str); 21] = [
         ("image_skill_launch", "imageSkillLaunch"),
         ("service_skill_launch", "serviceSkillLaunch"),
         ("service_scene_launch", "serviceSceneLaunch"),
@@ -60,6 +60,7 @@ pub(super) fn request_metadata_contains_full_runtime_context(
             "workspaceSkillRuntimeEnable",
         ),
         ("team_memory_shadow", "teamMemoryShadow"),
+        ("expert", "expert"),
     ];
     const FULL_RUNTIME_HARNESS_OBJECT_KEYS_EXTRA: [(&str, &str); 4] = [
         ("transcription_skill_launch", "transcriptionSkillLaunch"),

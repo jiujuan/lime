@@ -473,8 +473,7 @@ mod tests {
 
     #[test]
     fn explicit_web_search_turn_should_stay_allowed_until_search_mode_requires_it() {
-        let request =
-            runtime_policy_test_request("需要时可以补充外部资料", Some(true), None, None);
+        let request = runtime_policy_test_request("需要时可以补充外部资料", Some(true), None, None);
 
         let RuntimeTurnPolicyPreparation {
             request_tool_policy,
@@ -589,8 +588,8 @@ mod tests {
     fn session_recent_web_search_disabled_flag_should_not_override_default_tool_surface() {
         let request = runtime_policy_test_request("需要时可以补充外部资料", None, None, None);
         let session_recent_preferences = lime_agent::SessionExecutionRuntimePreferences {
-            web_search: false,
-            thinking: false,
+            web_search: Some(false),
+            thinking: Some(false),
             task: false,
             subagent: false,
         };

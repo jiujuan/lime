@@ -31,6 +31,7 @@ interface MessageAssistantBodyProps {
   historicalAssistantPreviewContent: string;
   imageWorkbenchRendererState: ImageWorkbenchRendererState;
   message: Message;
+  sessionId?: string | null;
   messageCanvasShortcutPath: string | null;
   messageCanvasShortcutTitle: string;
   messageSavedSiteContentTarget: SiteSavedContentTarget | null;
@@ -84,6 +85,7 @@ export function MessageAssistantBody({
   historicalAssistantPreviewContent,
   imageWorkbenchRendererState,
   message,
+  sessionId,
   messageCanvasShortcutPath,
   messageCanvasShortcutTitle,
   messageSavedSiteContentTarget,
@@ -191,6 +193,7 @@ export function MessageAssistantBody({
               : undefined
           }
           onFileClick={onFileClick}
+          fileChangesUndoSessionId={sessionId}
           onOpenSavedSiteContent={onOpenSavedSiteContent}
           onPermissionResponse={onPermissionResponse}
           collapseCodeBlocks={collapseCodeBlocks}

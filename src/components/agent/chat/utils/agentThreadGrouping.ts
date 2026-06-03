@@ -5,7 +5,7 @@ import {
   extractFilesystemEventPathsFromValue,
 } from "@/lib/filesystem-event-protocol";
 import type { AgentThreadItem, AgentThreadItemStatus } from "../types";
-import { resolveInternalImageTaskDisplayName } from "./internalImagePlaceholder";
+import { resolveRuntimeAttachmentTaskDisplayName } from "./runtimeAttachmentPlaceholder";
 import { resolveUserFacingToolDisplayLabel } from "./toolDisplayInfo";
 import { shouldHideTurnSummaryFromConversation } from "./turnSummaryPresentation";
 import { summarizeThreadProcessBatch } from "./toolBatchGrouping";
@@ -651,7 +651,7 @@ function summarizeSubagentItem(item: AgentThreadItem): string | null {
     return null;
   }
   return prefixAction(
-    resolveInternalImageTaskDisplayName(item.title) ||
+    resolveRuntimeAttachmentTaskDisplayName(item.title) ||
       item.summary ||
       item.status_label ||
       "子任务",

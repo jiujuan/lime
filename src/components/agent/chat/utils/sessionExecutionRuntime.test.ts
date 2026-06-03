@@ -174,8 +174,6 @@ describe("sessionExecutionRuntime", () => {
         },
       }),
     ).toEqual({
-      webSearch: false,
-      thinking: false,
       task: false,
       subagent: true,
     });
@@ -186,15 +184,11 @@ describe("sessionExecutionRuntime", () => {
       createChatToolPreferencesFromExecutionRuntime({
         execution_strategy: "code_orchestrated" as never,
         recent_preferences: {
-          webSearch: false,
-          thinking: false,
           task: false,
           subagent: false,
         },
       }),
     ).toEqual({
-      webSearch: false,
-      thinking: false,
       task: false,
       subagent: false,
     });
@@ -203,14 +197,10 @@ describe("sessionExecutionRuntime", () => {
   it("应把工具偏好转换成 session recent_preferences 请求载荷并丢弃旧搜索/思考开关", () => {
     expect(
       createSessionRecentPreferencesFromChatToolPreferences({
-        webSearch: true,
-        thinking: false,
         task: true,
         subagent: false,
       }),
     ).toEqual({
-      webSearch: false,
-      thinking: false,
       task: true,
       subagent: false,
     });

@@ -15,7 +15,7 @@ import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
 import { normalizeProjectId } from "../utils/topicProjectResolution";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
-import { sanitizeMessageTextForPreview } from "../utils/internalImagePlaceholder";
+import { sanitizeMessageTextForPreview } from "../utils/messageDisplaySanitizer";
 
 export type TaskStatus = "draft" | "running" | "waiting" | "done" | "failed";
 export type TaskStatusReason =
@@ -218,6 +218,24 @@ function extractToolCallPreview(message: Message): string {
   return `最近执行：${toolName}`;
 }
 
+function hasAssistantFinalText(message: Message | undefined): boolean {
+  if (!message || message.role !== "assistant") {
+    return false;
+  }
+
+  if (message.runtimeStatus?.phase === "failed") {
+    return false;
+  }
+
+  if (message.content.trim().length > 0) {
+    return true;
+  }
+
+  return (message.contentParts || []).some(
+    (part) => part.type === "text" && part.text.trim().length > 0,
+  );
+}
+
 function extractActionRequestPreview(message: Message): string {
   const pendingAction = [...(message.actionRequests || [])]
     .reverse()
@@ -360,7 +378,7 @@ export function deriveTaskLiveState(params: {
   const latestToolFailed = latestMessage?.toolCalls?.some(
     (item) => item.status === "failed",
   );
-  if (latestToolFailed) {
+  if (latestToolFailed && !hasAssistantFinalText(latestMessage)) {
     return {
       status: "failed",
       statusReason: "tool_failure",

@@ -1,9 +1,21 @@
-import React from "react";
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
-import { BrowserRuntimeDebugPanel } from "./BrowserRuntimeDebugPanel";
+import {
+  cleanupMountedBrowserRuntimeDebugPanels,
+  clickButtonByText,
+  createAttachedChromeBridgeStatus,
+  createAttachedBrowserProfile,
+  createChromeBridgeStatus,
+  createChromeObserver,
+  createDefaultRuntimeState,
+  createDeferredPromise,
+  createSiteAdapter,
+  createSiteAdapterRecommendation,
+  createSiteAdapterRunResult,
+  flushPanelEffects,
+  renderPanel,
+} from "./browserRuntimeDebugPanelTestFixtures";
 
 const { mockUseBrowserRuntimeDebug } = vi.hoisted(() => ({
   mockUseBrowserRuntimeDebug: vi.fn(),
@@ -29,45 +41,6 @@ const {
   mockSiteRunAdapter: vi.fn(),
 }));
 
-const defaultRuntimeState = {
-  selectedSession: null,
-  selectedProfileKey: "general_browser_assist",
-  setSelectedProfileKey: vi.fn(),
-  selectedTargetId: "",
-  setSelectedTargetId: vi.fn(),
-  targets: [],
-  sessionState: null,
-  latestFrame: null,
-  latestFrameMetadata: null,
-  consoleEvents: [],
-  networkEvents: [],
-  loadingTargets: false,
-  openingSession: false,
-  streaming: false,
-  refreshingState: false,
-  controlBusy: false,
-  selectedProfileTransportKind: "managed_cdp",
-  runtimeConnectionError: null,
-  lifecycleState: null,
-  isHumanControlling: false,
-  isWaitingForHuman: false,
-  isAgentResuming: false,
-  isExistingSessionProfile: false,
-  canDirectControl: false,
-  refreshTargets: vi.fn(async () => undefined),
-  openSession: vi.fn(async () => undefined),
-  startStream: vi.fn(async () => undefined),
-  stopStream: vi.fn(async () => undefined),
-  closeSession: vi.fn(async () => undefined),
-  refreshSessionState: vi.fn(async () => undefined),
-  takeOverSession: vi.fn(async () => undefined),
-  releaseSession: vi.fn(async () => undefined),
-  resumeSession: vi.fn(async () => undefined),
-  clickAt: vi.fn(async () => undefined),
-  scrollPage: vi.fn(async () => undefined),
-  typeIntoFocusedElement: vi.fn(async () => undefined),
-};
-
 vi.mock("./useBrowserRuntimeDebug", () => ({
   useBrowserRuntimeDebug: mockUseBrowserRuntimeDebug,
 }));
@@ -87,8 +60,6 @@ vi.mock("./api", () => ({
   },
 }));
 
-const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
-
 beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
@@ -96,19 +67,10 @@ beforeEach(async () => {
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
   await changeLimeLocale("zh-CN");
-  mockUseBrowserRuntimeDebug.mockReturnValue({
-    ...defaultRuntimeState,
-  });
+  mockUseBrowserRuntimeDebug.mockReturnValue(createDefaultRuntimeState());
   mockGetBrowserRuntimeAuditLogs.mockResolvedValue([]);
   mockListBrowserProfiles.mockResolvedValue([]);
-  mockGetChromeBridgeStatus.mockResolvedValue({
-    observer_count: 0,
-    control_count: 0,
-    pending_command_count: 0,
-    observers: [],
-    controls: [],
-    pending_commands: [],
-  });
+  mockGetChromeBridgeStatus.mockResolvedValue(createChromeBridgeStatus());
   mockBrowserExecuteAction.mockResolvedValue({
     success: true,
     backend: "lime_extension_bridge",
@@ -124,60 +86,9 @@ beforeEach(async () => {
       },
     },
   });
-  mockSiteListAdapters.mockResolvedValue([
-    {
-      name: "github/search",
-      domain: "github.com",
-      description: "按关键词采集 GitHub 仓库搜索结果。",
-      read_only: true,
-      capabilities: ["search", "repository"],
-      input_schema: {
-        type: "object",
-        properties: {
-          query: { type: "string" },
-          limit: { type: "integer" },
-        },
-        required: ["query"],
-      },
-      example_args: {
-        query: "model context protocol",
-        limit: 5,
-      },
-      example: 'github/search {"query":"model context protocol","limit":5}',
-      auth_hint: "若需要完整结果，请先在浏览器中登录 GitHub。",
-    },
-  ]);
+  mockSiteListAdapters.mockResolvedValue([createSiteAdapter()]);
   mockSiteRecommendAdapters.mockResolvedValue([
-    {
-      adapter: {
-        name: "github/search",
-        domain: "github.com",
-        description: "按关键词采集 GitHub 仓库搜索结果。",
-        read_only: true,
-        capabilities: ["search", "repository", "research"],
-        input_schema: {
-          type: "object",
-          properties: {
-            query: { type: "string" },
-            limit: { type: "integer" },
-          },
-          required: ["query"],
-        },
-        example_args: {
-          query: "model context protocol",
-          limit: 5,
-        },
-        example: 'github/search {"query":"model context protocol","limit":5}',
-        auth_hint: "若需要完整结果，请先在浏览器中登录 GitHub。",
-      },
-      reason:
-        "已检测到资料 general_browser_assist 当前停留在 github.com，可直接复用已连接的浏览器上下文。",
-      profile_key: "general_browser_assist",
-      target_id: "mock-target-1",
-      entry_url:
-        "https://github.com/search?q=model%20context%20protocol&type=repositories",
-      score: 100,
-    },
+    createSiteAdapterRecommendation(),
   ]);
   mockSiteGetAdapterCatalogStatus.mockResolvedValue({
     exists: false,
@@ -188,76 +99,13 @@ beforeEach(async () => {
     synced_at: "2026-03-16T10:00:00Z",
     adapter_count: 1,
   });
-  mockSiteRunAdapter.mockResolvedValue({
-    ok: true,
-    adapter: "github/search",
-    domain: "github.com",
-    profile_key: "general_browser_assist",
-    session_id: "mock-cdp-session",
-    target_id: "mock-target-1",
-    entry_url:
-      "https://github.com/search?q=model%20context%20protocol&type=repositories",
-    source_url:
-      "https://github.com/search?q=model%20context%20protocol&type=repositories",
-    data: {
-      items: [{ title: "mock repo", url: "https://github.com/mock/repo" }],
-    },
-  });
+  mockSiteRunAdapter.mockResolvedValue(createSiteAdapterRunResult());
 });
 
 afterEach(() => {
-  while (mountedRoots.length > 0) {
-    const mounted = mountedRoots.pop();
-    if (!mounted) break;
-    act(() => {
-      mounted.root.unmount();
-    });
-    mounted.container.remove();
-  }
+  cleanupMountedBrowserRuntimeDebugPanels();
   vi.clearAllMocks();
 });
-
-async function renderPanel(props?: {
-  initialProfileKey?: string;
-  initialSessionId?: string;
-}) {
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  mountedRoots.push({ root, container });
-  await act(async () => {
-    root.render(
-      <BrowserRuntimeDebugPanel
-        sessions={[]}
-        initialProfileKey={props?.initialProfileKey ?? "general_browser_assist"}
-        initialSessionId={props?.initialSessionId ?? "browser-session-1"}
-      />,
-    );
-  });
-  await act(async () => {
-    await Promise.resolve();
-  });
-  return container;
-}
-
-async function flushPanelEffects(times = 4) {
-  for (let i = 0; i < times; i += 1) {
-    await act(async () => {
-      await Promise.resolve();
-    });
-    await new Promise<void>((resolve) => {
-      window.setTimeout(resolve, 0);
-    });
-  }
-}
-
-function createDeferredPromise<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((nextResolve) => {
-    resolve = nextResolve;
-  });
-  return { promise, resolve };
-}
 
 describe("BrowserRuntimeDebugPanel", () => {
   it("存在初始附着会话时不应因空 session 列表而退回占位提示", async () => {
@@ -297,10 +145,8 @@ describe("BrowserRuntimeDebugPanel", () => {
       (button) => button.textContent?.includes("Advanced debug"),
     );
 
-    await act(async () => {
-      toggleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
+    expect(toggleButton).toBeTruthy();
+    await clickButtonByText(container, "Advanced debug");
 
     expect(container.textContent).toContain("Profile session");
     expect(container.textContent).toContain("CDP tab");
@@ -317,11 +163,12 @@ describe("BrowserRuntimeDebugPanel", () => {
   });
 
   it("启动浏览器时应展示明确的加载提示", async () => {
-    mockUseBrowserRuntimeDebug.mockReturnValue({
-      ...defaultRuntimeState,
+    mockUseBrowserRuntimeDebug.mockReturnValue(
+      createDefaultRuntimeState({
       openingSession: true,
       refreshingState: false,
-    });
+      }),
+    );
 
     const container = await renderPanel();
 
@@ -370,10 +217,7 @@ describe("BrowserRuntimeDebugPanel", () => {
 
     expect(toggleButton).toBeTruthy();
 
-    await act(async () => {
-      toggleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
+    await clickButtonByText(container, "高级调试");
 
     expect(mockGetBrowserRuntimeAuditLogs).toHaveBeenCalledWith(16);
     expect(container.textContent).toContain("最近启动与动作审计");
@@ -384,28 +228,14 @@ describe("BrowserRuntimeDebugPanel", () => {
 
   it("高级调试中应支持执行站点命令", async () => {
     const container = await renderPanel();
-    const toggleButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("高级调试"),
-    );
 
-    await act(async () => {
-      toggleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
+    await clickButtonByText(container, "高级调试");
     await flushPanelEffects();
 
     expect(container.textContent).toContain("站点命令调试");
     expect(container.textContent).toContain("github/search");
 
-    const runButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("执行站点命令"),
-    );
-    expect(runButton).toBeTruthy();
-
-    await act(async () => {
-      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
+    await clickButtonByText(container, "执行站点命令");
     await flushPanelEffects();
 
     expect(mockSiteRunAdapter).toHaveBeenCalledWith({
@@ -422,61 +252,19 @@ describe("BrowserRuntimeDebugPanel", () => {
 
   it("无 CDP 会话但存在附着资料时应展示附着当前 Chrome 调试面板", async () => {
     mockUseBrowserRuntimeDebug.mockReturnValue({
-      ...defaultRuntimeState,
+      ...createDefaultRuntimeState(),
       selectedProfileKey: "weibo_attach",
     });
-    mockListBrowserProfiles.mockResolvedValue([
-      {
-        id: "profile-attach",
-        profile_key: "weibo_attach",
-        name: "微博附着",
-        description: "复用当前 Chrome",
-        site_scope: "weibo.com",
-        launch_url: "https://weibo.com/home",
-        transport_kind: "existing_session",
-        profile_dir: "",
-        managed_profile_dir: null,
-        created_at: "2026-03-15T00:00:00Z",
-        updated_at: "2026-03-15T00:00:00Z",
-        last_used_at: null,
-        archived_at: null,
-      },
-    ]);
-    mockGetChromeBridgeStatus.mockResolvedValue({
-      observer_count: 1,
-      control_count: 0,
-      pending_command_count: 0,
-      observers: [
-        {
-          client_id: "observer-1",
-          profile_key: "weibo_attach",
-          connected_at: "2026-03-15T00:00:00Z",
-          user_agent: "Chrome",
-          last_heartbeat_at: "2026-03-15T00:00:08Z",
-          last_page_info: {
-            title: "微博首页",
-            url: "https://weibo.com/home",
-            markdown: "# 微博首页",
-            updated_at: "2026-03-15T00:00:08Z",
-          },
-        },
-      ],
-      controls: [],
-      pending_commands: [],
-    });
+    mockListBrowserProfiles.mockResolvedValue([createAttachedBrowserProfile()]);
+    mockGetChromeBridgeStatus.mockResolvedValue(
+      createAttachedChromeBridgeStatus(),
+    );
 
     const container = await renderPanel({
       initialProfileKey: "weibo_attach",
       initialSessionId: undefined,
     });
-    const toggleButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("高级调试"),
-    );
-
-    await act(async () => {
-      toggleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
+    await clickButtonByText(container, "高级调试");
 
     expect(container.textContent).toContain("附着当前 Chrome");
     expect(container.textContent).toContain("微博附着");
@@ -487,61 +275,19 @@ describe("BrowserRuntimeDebugPanel", () => {
   it("英文界面应使用 workspace namespace 附着 Chrome presentation 文案", async () => {
     await changeLimeLocale("en-US");
     mockUseBrowserRuntimeDebug.mockReturnValue({
-      ...defaultRuntimeState,
+      ...createDefaultRuntimeState(),
       selectedProfileKey: "weibo_attach",
     });
-    mockListBrowserProfiles.mockResolvedValue([
-      {
-        id: "profile-attach",
-        profile_key: "weibo_attach",
-        name: "微博附着",
-        description: "复用当前 Chrome",
-        site_scope: "weibo.com",
-        launch_url: "https://weibo.com/home",
-        transport_kind: "existing_session",
-        profile_dir: "",
-        managed_profile_dir: null,
-        created_at: "2026-03-15T00:00:00Z",
-        updated_at: "2026-03-15T00:00:00Z",
-        last_used_at: null,
-        archived_at: null,
-      },
-    ]);
-    mockGetChromeBridgeStatus.mockResolvedValue({
-      observer_count: 1,
-      control_count: 0,
-      pending_command_count: 0,
-      observers: [
-        {
-          client_id: "observer-1",
-          profile_key: "weibo_attach",
-          connected_at: "2026-03-15T00:00:00Z",
-          user_agent: "Chrome",
-          last_heartbeat_at: "2026-03-15T00:00:08Z",
-          last_page_info: {
-            title: "微博首页",
-            url: "https://weibo.com/home",
-            markdown: "# 微博首页",
-            updated_at: "2026-03-15T00:00:08Z",
-          },
-        },
-      ],
-      controls: [],
-      pending_commands: [],
-    });
+    mockListBrowserProfiles.mockResolvedValue([createAttachedBrowserProfile()]);
+    mockGetChromeBridgeStatus.mockResolvedValue(
+      createAttachedChromeBridgeStatus(),
+    );
 
     const container = await renderPanel({
       initialProfileKey: "weibo_attach",
       initialSessionId: undefined,
     });
-    const toggleButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("Advanced debug"),
-    );
-
-    await act(async () => {
-      toggleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
+    await clickButtonByText(container, "Advanced debug");
 
     expect(container.textContent).toContain("Attached current Chrome");
     expect(container.textContent).toContain("Read current page");
@@ -551,7 +297,7 @@ describe("BrowserRuntimeDebugPanel", () => {
 
   it("existing_session 正在切到 runtime 会话时不应回退附着面板", async () => {
     mockUseBrowserRuntimeDebug.mockReturnValue({
-      ...defaultRuntimeState,
+      ...createDefaultRuntimeState(),
       selectedProfileKey: "weibo_attach",
       selectedSession: {
         profile_key: "weibo_attach",
@@ -567,45 +313,10 @@ describe("BrowserRuntimeDebugPanel", () => {
       selectedProfileTransportKind: "existing_session",
       isExistingSessionProfile: true,
     });
-    mockListBrowserProfiles.mockResolvedValue([
-      {
-        id: "profile-attach",
-        profile_key: "weibo_attach",
-        name: "微博附着",
-        description: "复用当前 Chrome",
-        site_scope: "weibo.com",
-        launch_url: "https://weibo.com/home",
-        transport_kind: "existing_session",
-        profile_dir: "",
-        managed_profile_dir: null,
-        created_at: "2026-03-15T00:00:00Z",
-        updated_at: "2026-03-15T00:00:00Z",
-        last_used_at: null,
-        archived_at: null,
-      },
-    ]);
-    mockGetChromeBridgeStatus.mockResolvedValue({
-      observer_count: 1,
-      control_count: 0,
-      pending_command_count: 0,
-      observers: [
-        {
-          client_id: "observer-1",
-          profile_key: "weibo_attach",
-          connected_at: "2026-03-15T00:00:00Z",
-          user_agent: "Chrome",
-          last_heartbeat_at: "2026-03-15T00:00:08Z",
-          last_page_info: {
-            title: "微博首页",
-            url: "https://weibo.com/home",
-            markdown: "# 微博首页",
-            updated_at: "2026-03-15T00:00:08Z",
-          },
-        },
-      ],
-      controls: [],
-      pending_commands: [],
-    });
+    mockListBrowserProfiles.mockResolvedValue([createAttachedBrowserProfile()]);
+    mockGetChromeBridgeStatus.mockResolvedValue(
+      createAttachedChromeBridgeStatus(),
+    );
 
     const container = await renderPanel({
       initialProfileKey: "weibo_attach",
@@ -620,93 +331,56 @@ describe("BrowserRuntimeDebugPanel", () => {
   it("附着模式应支持读取并切换当前 Chrome 标签页", async () => {
     const onMessage = vi.fn();
     mockUseBrowserRuntimeDebug.mockReturnValue({
-      ...defaultRuntimeState,
+      ...createDefaultRuntimeState(),
       selectedProfileKey: "weibo_attach",
     });
-    mockListBrowserProfiles.mockResolvedValue([
-      {
-        id: "profile-attach",
-        profile_key: "weibo_attach",
-        name: "微博附着",
-        description: "复用当前 Chrome",
-        site_scope: "weibo.com",
-        launch_url: "https://weibo.com/home",
-        transport_kind: "existing_session",
-        profile_dir: "",
-        managed_profile_dir: null,
-        created_at: "2026-03-15T00:00:00Z",
-        updated_at: "2026-03-15T00:00:00Z",
-        last_used_at: null,
-        archived_at: null,
-      },
-    ]);
+    mockListBrowserProfiles.mockResolvedValue([createAttachedBrowserProfile()]);
     mockGetChromeBridgeStatus
-      .mockResolvedValueOnce({
-        observer_count: 1,
-        control_count: 0,
-        pending_command_count: 0,
-        observers: [
-          {
-            client_id: "observer-1",
-            profile_key: "weibo_attach",
-            connected_at: "2026-03-15T00:00:00Z",
-            user_agent: "Chrome",
-            last_heartbeat_at: "2026-03-15T00:00:02Z",
-            last_page_info: {
-              title: "微博首页",
-              url: "https://weibo.com/home",
-              markdown: "# 微博首页",
-              updated_at: "2026-03-15T00:00:05Z",
-            },
-          },
-        ],
-        controls: [],
-        pending_commands: [],
-      })
-      .mockResolvedValueOnce({
-        observer_count: 1,
-        control_count: 0,
-        pending_command_count: 0,
-        observers: [
-          {
-            client_id: "observer-1",
-            profile_key: "weibo_attach",
-            connected_at: "2026-03-15T00:00:00Z",
-            user_agent: "Chrome",
-            last_heartbeat_at: "2026-03-15T00:00:06Z",
-            last_page_info: {
-              title: "微博首页",
-              url: "https://weibo.com/home",
-              markdown: "# 微博首页",
-              updated_at: "2026-03-15T00:00:05Z",
-            },
-          },
-        ],
-        controls: [],
-        pending_commands: [],
-      })
-      .mockResolvedValue({
-        observer_count: 1,
-        control_count: 0,
-        pending_command_count: 0,
-        observers: [
-          {
-            client_id: "observer-1",
-            profile_key: "weibo_attach",
-            connected_at: "2026-03-15T00:00:00Z",
-            user_agent: "Chrome",
-            last_heartbeat_at: "2026-03-15T00:00:06Z",
-            last_page_info: {
-              title: "微博首页",
-              url: "https://weibo.com/home",
-              markdown: "# 微博首页",
-              updated_at: "2026-03-15T00:00:05Z",
-            },
-          },
-        ],
-        controls: [],
-        pending_commands: [],
-      });
+      .mockResolvedValueOnce(
+        createAttachedChromeBridgeStatus({
+          observers: [
+            createChromeObserver({
+              last_heartbeat_at: "2026-03-15T00:00:02Z",
+              last_page_info: {
+                title: "微博首页",
+                url: "https://weibo.com/home",
+                markdown: "# 微博首页",
+                updated_at: "2026-03-15T00:00:05Z",
+              },
+            }),
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createAttachedChromeBridgeStatus({
+          observers: [
+            createChromeObserver({
+              last_heartbeat_at: "2026-03-15T00:00:06Z",
+              last_page_info: {
+                title: "微博首页",
+                url: "https://weibo.com/home",
+                markdown: "# 微博首页",
+                updated_at: "2026-03-15T00:00:05Z",
+              },
+            }),
+          ],
+        }),
+      )
+      .mockResolvedValue(
+        createAttachedChromeBridgeStatus({
+          observers: [
+            createChromeObserver({
+              last_heartbeat_at: "2026-03-15T00:00:06Z",
+              last_page_info: {
+                title: "微博首页",
+                url: "https://weibo.com/home",
+                markdown: "# 微博首页",
+                updated_at: "2026-03-15T00:00:05Z",
+              },
+            }),
+          ],
+        }),
+      );
     mockBrowserExecuteAction
       .mockResolvedValueOnce({
         success: true,
@@ -778,40 +452,14 @@ describe("BrowserRuntimeDebugPanel", () => {
         },
       });
 
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    mountedRoots.push({ root, container });
-    await act(async () => {
-      root.render(
-        <BrowserRuntimeDebugPanel
-          sessions={[]}
-          initialProfileKey="weibo_attach"
-          onMessage={onMessage}
-        />,
-      );
-    });
-    await act(async () => {
-      await Promise.resolve();
+    const container = await renderPanel({
+      initialProfileKey: "weibo_attach",
+      initialSessionId: undefined,
+      onMessage,
     });
 
-    const toggleButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("高级调试"),
-    );
-
-    await act(async () => {
-      toggleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    const loadTabsButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("读取标签页"));
-
-    await act(async () => {
-      loadTabsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
+    await clickButtonByText(container, "高级调试");
+    await clickButtonByText(container, "读取标签页");
 
     expect(mockBrowserExecuteAction).toHaveBeenNthCalledWith(1, {
       profile_key: "weibo_attach",
@@ -821,14 +469,7 @@ describe("BrowserRuntimeDebugPanel", () => {
     });
     expect(container.textContent).toContain("微博创作中心");
 
-    const switchButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("切换到此页"),
-    );
-
-    await act(async () => {
-      switchButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
+    await clickButtonByText(container, "切换到此页");
 
     expect(mockBrowserExecuteAction).toHaveBeenNthCalledWith(2, {
       profile_key: "weibo_attach",
@@ -873,48 +514,24 @@ describe("BrowserRuntimeDebugPanel", () => {
     }>();
 
     mockUseBrowserRuntimeDebug.mockReturnValue({
-      ...defaultRuntimeState,
+      ...createDefaultRuntimeState(),
       selectedProfileKey: "weibo_attach",
     });
-    mockListBrowserProfiles.mockResolvedValue([
-      {
-        id: "profile-attach",
-        profile_key: "weibo_attach",
-        name: "微博附着",
-        description: "复用当前 Chrome",
-        site_scope: "weibo.com",
-        launch_url: "https://weibo.com/home",
-        transport_kind: "existing_session",
-        profile_dir: "",
-        managed_profile_dir: null,
-        created_at: "2026-03-15T00:00:00Z",
-        updated_at: "2026-03-15T00:00:00Z",
-        last_used_at: null,
-        archived_at: null,
-      },
-    ]);
-    mockGetChromeBridgeStatus.mockResolvedValue({
-      observer_count: 1,
-      control_count: 0,
-      pending_command_count: 0,
-      observers: [
-        {
-          client_id: "observer-1",
-          profile_key: "weibo_attach",
-          connected_at: "2026-03-15T00:00:00Z",
-          user_agent: "Chrome",
-          last_heartbeat_at: "2026-03-15T00:00:06Z",
-          last_page_info: {
-            title: "初始页面",
-            url: "https://weibo.com/home",
-            markdown: "# 初始页面",
-            updated_at: "2026-03-15T00:00:05Z",
-          },
-        },
-      ],
-      controls: [],
-      pending_commands: [],
-    });
+    mockListBrowserProfiles.mockResolvedValue([createAttachedBrowserProfile()]);
+    mockGetChromeBridgeStatus.mockResolvedValue(
+      createAttachedChromeBridgeStatus({
+        observers: [
+          createChromeObserver({
+            last_page_info: {
+              title: "初始页面",
+              url: "https://weibo.com/home",
+              markdown: "# 初始页面",
+              updated_at: "2026-03-15T00:00:05Z",
+            },
+          }),
+        ],
+      }),
+    );
     mockBrowserExecuteAction
       .mockImplementationOnce(() => deferredReadPage.promise)
       .mockResolvedValueOnce({
@@ -991,41 +608,10 @@ describe("BrowserRuntimeDebugPanel", () => {
       initialProfileKey: "weibo_attach",
       initialSessionId: undefined,
     });
-    const toggleButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("高级调试"),
-    );
-
-    await act(async () => {
-      toggleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    const loadPageButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("读取当前页面"));
-
-    await act(async () => {
-      loadPageButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    const loadTabsButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("读取标签页"));
-
-    await act(async () => {
-      loadTabsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    const switchButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("切换到此页"),
-    );
-
-    await act(async () => {
-      switchButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
+    await clickButtonByText(container, "高级调试");
+    await clickButtonByText(container, "读取当前页面");
+    await clickButtonByText(container, "读取标签页");
+    await clickButtonByText(container, "切换到此页");
 
     expect(container.textContent).toContain("切换后页面");
     expect(container.textContent).not.toContain("过期页面");

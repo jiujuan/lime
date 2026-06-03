@@ -860,7 +860,10 @@ export const ExpertInfoPanel = memo(function ExpertInfoPanel({
     [candidates, skillQuery],
   );
 
-  const baseSkillRefs = useMemo(() => (expert ? expert.skillRefs : []), [expert]);
+  const baseSkillRefs = useMemo(
+    () => (expert ? expert.skillRefs : []),
+    [expert],
+  );
   const effectiveSkillRefs = useMemo(
     () => dedupeSkillRefs([...baseSkillRefs, ...addedSkillRefs]),
     [addedSkillRefs, baseSkillRefs],
@@ -1027,6 +1030,12 @@ export const ExpertInfoPanel = memo(function ExpertInfoPanel({
               {t(
                 "agentExperts.info.boundary.private",
                 "不会把项目文件、私有记忆或对话内容写回公共专家目录。",
+              )}
+            </li>
+            <li>
+              {t(
+                "agentExperts.info.boundary.soul",
+                "全局 Soul 只影响沟通节奏；专家人格不会写回全局 Soul，也不会默认进入正式产物。",
               )}
             </li>
           </BulletList>

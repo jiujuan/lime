@@ -1,35 +1,23 @@
 import { useCallback, useMemo, useState } from "react";
-import type { StepStatus } from "@/lib/workspace/workbenchContract";
 import type { SidebarActivityLog } from "../hooks/useThemeContextWorkspace";
 import {
-  buildGeneralWorkbenchActivityLogGroups,
-  buildGeneralWorkbenchCreationTaskGroups,
-  formatGeneralWorkbenchRunMetadata,
-  formatGeneralWorkbenchStagesLabel,
-  parseGeneralWorkbenchRunMetadataSummary,
   type GeneralWorkbenchCreationTaskEvent,
-  type GeneralWorkbenchRunMetadataSummary,
 } from "./generalWorkbenchWorkflowData";
+import {
+  buildGeneralWorkbenchWorkflowPanelViewModel,
+  type GeneralWorkbenchWorkflowPanelViewModel,
+  type GeneralWorkbenchWorkflowStepInput,
+} from "./generalWorkbenchWorkflowPanelViewModel";
 
 interface UseGeneralWorkbenchWorkflowPanelStateParams {
-  workflowSteps: Array<{ id: string; title: string; status: StepStatus }>;
+  workflowSteps: GeneralWorkbenchWorkflowStepInput[];
   activityLogs: SidebarActivityLog[];
   creationTaskEvents: GeneralWorkbenchCreationTaskEvent[];
   activeRunMetadata: string | null;
 }
 
-export interface GeneralWorkbenchWorkflowPanelState {
-  completedSteps: number;
-  progressPercent: number;
-  groupedActivityLogs: ReturnType<
-    typeof buildGeneralWorkbenchActivityLogGroups
-  >;
-  groupedCreationTaskEvents: ReturnType<
-    typeof buildGeneralWorkbenchCreationTaskGroups
-  >;
-  activeRunStagesLabel: string | null;
-  runMetadataText: string;
-  runMetadataSummary: GeneralWorkbenchRunMetadataSummary;
+export interface GeneralWorkbenchWorkflowPanelState
+  extends GeneralWorkbenchWorkflowPanelViewModel {
   showActivityLogs: boolean;
   showBranchRecords: boolean;
   showCreationTasks: boolean;
@@ -48,39 +36,15 @@ export function useGeneralWorkbenchWorkflowPanelState({
   const [showBranchRecords, setShowBranchRecords] = useState(false);
   const [showCreationTasks, setShowCreationTasks] = useState(false);
 
-  const completedSteps = useMemo(
-    () => workflowSteps.filter((step) => step.status === "completed").length,
-    [workflowSteps],
-  );
-
-  const progressPercent =
-    workflowSteps.length > 0
-      ? (completedSteps / workflowSteps.length) * 100
-      : 0;
-
-  const groupedActivityLogs = useMemo(
-    () => buildGeneralWorkbenchActivityLogGroups(activityLogs),
-    [activityLogs],
-  );
-
-  const groupedCreationTaskEvents = useMemo(
-    () => buildGeneralWorkbenchCreationTaskGroups(creationTaskEvents),
-    [creationTaskEvents],
-  );
-
-  const runMetadataSummary = useMemo(
-    () => parseGeneralWorkbenchRunMetadataSummary(activeRunMetadata),
-    [activeRunMetadata],
-  );
-
-  const runMetadataText = useMemo(
-    () => formatGeneralWorkbenchRunMetadata(activeRunMetadata),
-    [activeRunMetadata],
-  );
-
-  const activeRunStagesLabel = useMemo(
-    () => formatGeneralWorkbenchStagesLabel(runMetadataSummary.stages),
-    [runMetadataSummary.stages],
+  const viewModel = useMemo(
+    () =>
+      buildGeneralWorkbenchWorkflowPanelViewModel({
+        workflowSteps,
+        activityLogs,
+        creationTaskEvents,
+        activeRunMetadata,
+      }),
+    [activeRunMetadata, activityLogs, creationTaskEvents, workflowSteps],
   );
 
   const toggleActivityLogs = useCallback(() => {
@@ -96,13 +60,7 @@ export function useGeneralWorkbenchWorkflowPanelState({
   }, []);
 
   return {
-    completedSteps,
-    progressPercent,
-    groupedActivityLogs,
-    groupedCreationTaskEvents,
-    activeRunStagesLabel,
-    runMetadataText,
-    runMetadataSummary,
+    ...viewModel,
     showActivityLogs,
     showBranchRecords,
     showCreationTasks,

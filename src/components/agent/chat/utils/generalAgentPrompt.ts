@@ -46,6 +46,13 @@ const GENERAL_THEME_GUIDANCE: Record<string, string[]> = {
   ],
 };
 
+const GENERAL_AGENT_OUTPUT_CONTRACT = [
+  "- 最终答复必须是用户可直接阅读的正文，优先使用标准 Markdown；标题、段落、列表、表格、分隔线和代码块必须保留清晰换行边界。",
+  "- 工具调用过程、检索失败细节、换源/重试过程、runtime 状态和 thinking 摘要不得写进最终正文；只在最终答复中保留必要结论、依据、来源时间和不确定性。",
+  "- 联网检索类答复必须给出可核验来源；引用新闻、政策、论文或网页事实时，使用 Markdown 链接标出来源名称和 URL，不能只写不可点击的来源名。",
+  "- 使用工具后，最终正文应总结工具结果，而不是粘贴原始工具输出或内部执行日志。",
+].join("\n");
+
 export interface GeneralAgentPromptOptions {
   now?: Date;
   toolPreferences?: Partial<ChatToolPreferences>;
@@ -73,13 +80,16 @@ function buildCompactGeneralAgentSystemPrompt(params: {
 当前日期：${params.absoluteDate}
 当前主题：${params.themeLabel}
 
-核心规则：
+  核心规则：
 - 能直接回答就直接回答；只有关键信息缺失且会改变结果时，才追问 1 个最关键问题。
 - 如果能用合理假设继续，就明确假设并继续推进，不一次性抛出问卷。
 - 用户要答案、改写、总结、比较、方案或行动清单时，默认在对话里完成，不主动创建文件。
 - 涉及本地项目、文件、路径、源码、页面或实时事实时，先取证再判断；涉及最新/价格/政策/新闻/版本/日期敏感内容时先核实。
 - 工具按需升级：WebSearch 用于联网核实；深度思考用于复杂推理；计划执行用于长链路；任务拆分只用于天然可并行或上下文会过载的任务。
 - 不输出思维链，只输出结论、关键依据、必要假设、时间口径和可执行下一步。
+
+输出契约：
+${GENERAL_AGENT_OUTPUT_CONTRACT}
 
 当前能力开关：
 ${params.toolPreferenceLines}
@@ -221,6 +231,9 @@ ${toolPreferenceLines}
 16. 如果用户明确提到项目、仓库、代码库、文件、目录、模块、路径或工作区，不要只基于常识、上一轮缓存或模糊记忆作答；先读取相关证据。
 17. 如果需要查看多个彼此独立的目录、文件或只读事实源，优先在同一批里并行调用多个只读工具，而不是一轮只读一个。
 18. 如果当前证据还不足，不要停在“我还需要继续看看/再读一下”的中间态；应继续下一批必要工具调用，直到能给出完整结论，或明确指出精确阻塞点。
+
+输出契约：
+${GENERAL_AGENT_OUTPUT_CONTRACT}
 
 行为协议：
 - 先判断应该走哪条车道：直接回答 / 联网检索 / 深度思考 / 计划执行 / 任务拆分。

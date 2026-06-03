@@ -12,7 +12,8 @@ import {
 import {
   sanitizeContentPartsForDisplay,
   sanitizeMessageTextForDisplay,
-} from "../utils/internalImagePlaceholder";
+} from "../utils/messageDisplaySanitizer";
+import { shouldUseAgentMessageAsFinalText } from "../utils/agentMessagePhase";
 import { hasStructuredHistoricalContentHint } from "../projection/historicalMessageHydrationProjection";
 import { isRuntimeStatusDiagnosticsOnly } from "../utils/turnSummaryPresentation";
 import type { MessageListRenderGroup } from "./MessageList.types";
@@ -43,6 +44,7 @@ import {
   shouldSuppressPreAnswerThinkingTimeline,
 } from "./messageListInlineProcess";
 import { shouldRenderAssistantRuntimeStatusPill } from "./messageAssistantMetaFooterState";
+import { resolveAgentRuntimeErrorPresentation } from "../utils/agentRuntimeErrorPresentation";
 import {
   MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_PREVIEW_CHARS,
   MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_THRESHOLD,
@@ -72,6 +74,16 @@ function isRuntimeFailureOnlyAssistantText(
   const contentText = normalizeFailureContentForCompare(actionContent);
   if (!detailText || !contentText) {
     return false;
+  }
+
+  const rawFailureText = contentText.replace(/^执行失败：/, "").trim();
+  if (rawFailureText && rawFailureText !== contentText) {
+    const presentedFailureText = normalizeFailureContentForCompare(
+      resolveAgentRuntimeErrorPresentation(rawFailureText).displayMessage,
+    );
+    if (presentedFailureText === detailText) {
+      return true;
+    }
   }
 
   return (
@@ -184,6 +196,92 @@ function appendThinkingContentPart(
   parts.push({ type: "thinking", text: normalized });
 }
 
+function hasProcessBoundaryContentPart(
+  parts?: Message["contentParts"],
+): boolean {
+  return Boolean(
+    parts?.some(
+      (part) =>
+        part.type === "tool_use" ||
+        part.type === "action_required" ||
+        part.type === "file_changes_batch",
+    ),
+  );
+}
+
+function hasWebSearchContentPart(parts?: Message["contentParts"]): boolean {
+  return Boolean(
+    parts?.some(
+      (part) =>
+        part.type === "tool_use" &&
+        part.toolCall.name.trim().toLowerCase() === "web_search",
+    ),
+  );
+}
+
+function collectFileChangeBatchPaths(
+  parts?: Message["contentParts"],
+): string[] {
+  return (parts || []).flatMap((part) =>
+    part.type === "file_changes_batch"
+      ? part.aggregate.files.map((file) => file.path)
+      : [],
+  );
+}
+
+function resolveFinalTextFromContentParts(
+  parts?: Message["contentParts"],
+): string {
+  const textParts =
+    parts?.filter(
+      (part): part is Extract<MessageContentPart, { type: "text" }> =>
+        part.type === "text" && part.text.trim().length > 0,
+    ) || [];
+
+  return textParts[textParts.length - 1]?.text.trim() || "";
+}
+
+function resolveAssistantActionContent(params: {
+  displayContent: string;
+  conversationContentParts?: Message["contentParts"];
+  useProcessSeparatedFinalText: boolean;
+}): string {
+  if (params.useProcessSeparatedFinalText) {
+    return resolveFinalTextFromContentParts(params.conversationContentParts);
+  }
+
+  return params.displayContent.trim();
+}
+
+function resolveProcessSeparatedContentParts(
+  parts?: Message["contentParts"],
+): Message["contentParts"] | undefined {
+  if (!hasProcessBoundaryContentPart(parts)) {
+    return parts;
+  }
+
+  const firstProcessIndex = (parts || []).findIndex(
+    (part) =>
+      part.type === "tool_use" ||
+      part.type === "action_required" ||
+      part.type === "file_changes_batch",
+  );
+  const lastTextIndex = (parts || []).reduce(
+    (lastIndex, part, index) =>
+      part.type === "text" && part.text.trim().length > 0 ? index : lastIndex,
+    -1,
+  );
+
+  const filtered = (parts || []).filter((part, index) => {
+    if (part.type !== "text") {
+      return true;
+    }
+    return index < firstProcessIndex || index === lastTextIndex;
+  });
+
+  return filtered.length > 0 ? filtered : undefined;
+}
+
 function buildTimelineToolContentPart(
   item: AgentThreadItem,
 ): MessageContentPart | null {
@@ -252,8 +350,11 @@ function buildTimelineToolContentPart(
       type: "tool_use",
       toolCall: {
         id: item.id,
-        name: item.action || "WebSearch",
-        arguments: stringifyTimelineArguments({ query: item.query || "" }),
+        name: "web_search",
+        arguments: stringifyTimelineArguments({
+          action: item.action || "web_search",
+          query: item.query || item.action || "",
+        }),
         status,
         startTime: new Date(item.started_at),
         endTime: item.completed_at ? new Date(item.completed_at) : undefined,
@@ -278,7 +379,10 @@ function buildTimelineInlineContentParts(params: {
 }): Message["contentParts"] | undefined {
   const items = params.items || [];
   const hasAgentMessage = items.some(
-    (item) => item.type === "agent_message" && item.text.trim().length > 0,
+    (item) =>
+      item.type === "agent_message" &&
+      shouldUseAgentMessageAsFinalText(item.phase) &&
+      item.text.trim().length > 0,
   );
   if (!hasAgentMessage) {
     return undefined;
@@ -304,7 +408,10 @@ function buildTimelineInlineContentParts(params: {
       continue;
     }
 
-    if (item.type === "agent_message") {
+    if (
+      item.type === "agent_message" &&
+      shouldUseAgentMessageAsFinalText(item.phase)
+    ) {
       appendTextContentPart(parts, item.text);
       continue;
     }
@@ -565,6 +672,11 @@ export function resolveMessageListItemProjection({
   const visiblePrimaryTimelineItems = shouldHoldPreAnswerThinkingTimeline
     ? []
     : primaryTimelineItems;
+  const fileChangeBatchPaths = [
+    ...collectFileChangeBatchPaths(message.contentParts),
+    ...collectFileChangeBatchPaths(displayContentParts),
+    ...collectFileChangeBatchPaths(conversationContentParts),
+  ];
   const trailingTimelineItems = timeline
     ? dedupeDeferredTimelineItems(
         timelineConversationItems.filter((item) =>
@@ -573,7 +685,10 @@ export function resolveMessageListItemProjection({
       ).filter(
         (item) =>
           item.type !== "file_artifact" ||
-          !isHiddenConversationArtifactPath(item.path),
+          (!isHiddenConversationArtifactPath(item.path) &&
+            !fileChangeBatchPaths.some((changedPath) =>
+              areArtifactProtocolPathsEquivalent(item.path, changedPath),
+            )),
       )
     : [];
   const hasDeferredHistoricalTimelineDetails =
@@ -601,6 +716,10 @@ export function resolveMessageListItemProjection({
   const trailingArtifactPaths = trailingTimelineItems.flatMap((item) =>
     item.type === "file_artifact" ? [item.path] : [],
   );
+  const alreadyRenderedArtifactPaths = [
+    ...trailingArtifactPaths,
+    ...fileChangeBatchPaths,
+  ];
   const timelineActionRequests = inlineProcessCoverage.actionRequestCounts.size
     ? undefined
     : message.actionRequests;
@@ -634,7 +753,17 @@ export function resolveMessageListItemProjection({
       (message.id === lastAssistantMessageId && hasActiveInteractiveRuntime));
   const shouldReadOnlyInteractiveContent =
     message.role === "assistant" && !isCurrentInteractiveAssistantMessage;
-  const rawActionContent = displayContent.trim();
+  const usesProcessSeparatedFinalText =
+    includeInlineProcessFlow &&
+    hasWebSearchContentPart(conversationContentParts);
+  const rendererConversationContentParts = usesProcessSeparatedFinalText
+    ? resolveProcessSeparatedContentParts(conversationContentParts)
+    : conversationContentParts;
+  const rawActionContent = resolveAssistantActionContent({
+    displayContent,
+    conversationContentParts,
+    useProcessSeparatedFinalText: usesProcessSeparatedFinalText,
+  });
   const shouldSuppressDuplicatedFailureText =
     Boolean(timeline) &&
     isRuntimeFailureOnlyAssistantText(message, rawActionContent);
@@ -701,13 +830,19 @@ export function resolveMessageListItemProjection({
       )
     : actionContent;
   const rendererRawContent =
-    shouldCollapseLongHistoricalMessage || shouldFlattenHistoricalAssistantContent
+    shouldSuppressDuplicatedFailureText
+      ? ""
+      : shouldCollapseLongHistoricalMessage || shouldFlattenHistoricalAssistantContent
       ? rendererContent
-      : visibleRawDisplayContent;
+      : usesProcessSeparatedFinalText
+        ? actionContent
+        : actionContent || visibleRawDisplayContent;
   const rendererContentParts =
-    shouldCollapseLongHistoricalMessage || shouldFlattenHistoricalAssistantContent
+    shouldSuppressDuplicatedFailureText ||
+    shouldCollapseLongHistoricalMessage ||
+    shouldFlattenHistoricalAssistantContent
       ? undefined
-      : conversationContentParts;
+      : rendererConversationContentParts;
   const rendererThinkingContent = shouldCollapseLongHistoricalMessage
     ? undefined
     : conversationThinkingContent;
@@ -763,8 +898,8 @@ export function resolveMessageListItemProjection({
             return false;
           }
 
-          return !trailingArtifactPaths.some((timelinePath) =>
-            areArtifactProtocolPathsEquivalent(artifactPath, timelinePath),
+          return !alreadyRenderedArtifactPaths.some((renderedPath) =>
+            areArtifactProtocolPathsEquivalent(artifactPath, renderedPath),
           );
         })
       : [];

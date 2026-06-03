@@ -127,6 +127,18 @@ describe("artifact-protocol", () => {
     ).toBe(true);
     expect(
       areArtifactProtocolPathsEquivalent(
+        ".lime/qc/code-runtime-fixture/src/greeting.ts",
+        "src/greeting.ts",
+      ),
+    ).toBe(true);
+    expect(
+      areArtifactProtocolPathsEquivalent(
+        ".lime/qc/code-runtime-fixture/src/greeting.ts",
+        "/Users/coso/Library/Application Support/lime/projects/code-runtime-fixture/src/greeting.ts",
+      ),
+    ).toBe(true);
+    expect(
+      areArtifactProtocolPathsEquivalent(
         "content-posts/cover.png",
         "assets/cover.png",
       ),

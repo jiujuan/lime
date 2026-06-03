@@ -107,6 +107,10 @@ describe("ExpertInfoPanel", () => {
     const { container, onSkillRefsChange } = renderPanel();
     await flushEffects();
 
+    expect(container.textContent).toContain(
+      "全局 Soul 只影响沟通节奏；专家人格不会写回全局 Soul，也不会默认进入正式产物。",
+    );
+
     const addButton = container.querySelector<HTMLButtonElement>(
       '[data-testid="expert-info-skills-add"]',
     );

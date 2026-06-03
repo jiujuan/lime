@@ -30,7 +30,11 @@ import {
 import {
   sanitizeContentPartsForDisplay,
   sanitizeMessageTextForDisplay,
-} from "../utils/internalImagePlaceholder";
+} from "../utils/messageDisplaySanitizer";
+import {
+  resolveFinalAgentMessageItemIds,
+  shouldUseAgentMessageAsFinalText,
+} from "../utils/agentMessagePhase";
 import {
   aggregateFileChanges,
   isFileMutationToolName,
@@ -527,8 +531,16 @@ interface HydrateSessionDetailMessagesOptions {
 function buildMessageFromThreadItem(
   item: AgentThreadItem,
   topicId: string,
+  finalAgentMessageItemIds: Set<string>,
 ): Message | null {
   if (item.type !== "user_message" && item.type !== "agent_message") {
+    return null;
+  }
+  if (
+    item.type === "agent_message" &&
+    (!shouldUseAgentMessageAsFinalText(item.phase) ||
+      !finalAgentMessageItemIds.has(item.id))
+  ) {
     return null;
   }
 
@@ -594,6 +606,8 @@ function hydrateSessionDetailMessagesFromThreadItems(
     }
     return left.id.localeCompare(right.id);
   });
+  const finalAgentMessageItemIds =
+    resolveFinalAgentMessageItemIds(sortedItems);
 
   const messages: Message[] = [];
   let assistantDraft: Message | null = null;
@@ -688,7 +702,11 @@ function hydrateSessionDetailMessagesFromThreadItems(
 
   for (const item of sortedItems) {
     if (item.type === "user_message" || item.type === "agent_message") {
-      const message = buildMessageFromThreadItem(item, topicId);
+      const message = buildMessageFromThreadItem(
+        item,
+        topicId,
+        finalAgentMessageItemIds,
+      );
       if (!message) {
         continue;
       }

@@ -141,6 +141,16 @@ export function resolveAgentStreamGracefulCompletionContent(params: {
   );
 }
 
+function isProcessBoundaryContentPart(
+  part: NonNullable<Message["contentParts"]>[number],
+): boolean {
+  return (
+    part.type === "tool_use" ||
+    part.type === "action_required" ||
+    part.type === "file_changes_batch"
+  );
+}
+
 export function reconcileAgentStreamFinalContentParts(params: {
   parts: Message["contentParts"];
   finalContent: string;
@@ -188,6 +198,16 @@ export function reconcileAgentStreamFinalContentParts(params: {
   }
 
   const nextParts = [...visibleParts];
+  const processBoundaryIndex = visibleParts.findIndex(
+    isProcessBoundaryContentPart,
+  );
+  const lastTextAfterProcessIndex =
+    processBoundaryIndex >= 0
+      ? textPartIndexes
+          .slice()
+          .reverse()
+          .find((index) => index > processBoundaryIndex)
+      : undefined;
   if (params.finalContent.startsWith(textContent)) {
     const suffix = params.finalContent.slice(textContent.length);
     if (!suffix) {
@@ -203,6 +223,29 @@ export function reconcileAgentStreamFinalContentParts(params: {
       return nextParts;
     }
     return [...nextParts, { type: "text", text: suffix }];
+  }
+
+  if (processBoundaryIndex >= 0) {
+    if (lastTextAfterProcessIndex !== undefined) {
+      const prefixBeforeLast = textPartIndexes
+        .filter((index) => index < lastTextAfterProcessIndex)
+        .map((index) => {
+          const part = visibleParts[index];
+          return part?.type === "text" ? part.text : "";
+        })
+        .join("");
+      const nextText =
+        prefixBeforeLast && params.finalContent.startsWith(prefixBeforeLast)
+          ? params.finalContent.slice(prefixBeforeLast.length)
+          : params.finalContent;
+      nextParts[lastTextAfterProcessIndex] = {
+        type: "text",
+        text: nextText,
+      };
+      return nextParts;
+    }
+
+    return [...nextParts, { type: "text", text: params.finalContent }];
   }
 
   if (textPartIndexes.length === 1) {

@@ -41,21 +41,31 @@ import type {
   AsterSubagentParentContext,
   AsterSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
-import {
-  deriveTaskLiveState,
-  extractTaskPreviewFromMessages,
-  type Topic,
-  type TaskStatus,
-  type TaskStatusReason,
-} from "../hooks/agentChatShared";
+import { type Topic, type TaskStatusReason } from "../hooks/agentChatShared";
 import type { Message } from "../types";
-import { resolveInternalImageTaskDisplayName } from "../utils/internalImagePlaceholder";
+import {
+  buildChatSidebarTaskItems,
+  buildCollapsedTeamSummary,
+  buildTaskSections,
+  CHAT_SIDEBAR_STATUS_META,
+  filterChatSidebarTaskItems,
+  formatRelativeTime,
+  OLDER_TASKS_INITIAL_COUNT,
+  resolveCurrentTaskPreview,
+  resolveSidebarDisplayTitle,
+  resolveSubagentSessionTypeLabel,
+  resolveSubagentStatusMeta,
+  resolveUnixDate,
+  shouldMarkSubagentAsFocus,
+  sortSubagentSessionsByPriority,
+  TEAM_SECTION_INITIAL_CHILD_COUNT,
+  TEAM_SECTION_INITIAL_SIBLING_COUNT,
+  type ChatSidebarContextVariant,
+  type ChatSidebarStatusFilter,
+  type TaskCardViewModel,
+  type TaskSectionKey,
+} from "./ChatSidebarViewModel";
 
-const RECENT_TASK_WINDOW_MS = 1000 * 60 * 60 * 24 * 3;
-const OLDER_TASKS_INITIAL_COUNT = 8;
-const TEAM_SECTION_INITIAL_CHILD_COUNT = 3;
-const TEAM_SECTION_INITIAL_SIBLING_COUNT = 2;
-const TEAM_SECTION_LABEL = "子任务";
 const PINNED_TASK_IDS_STORAGE_KEY = "lime_task_sidebar_pinned_ids";
 const HISTORY_LOADING_SKELETON_ROWS = 4;
 
@@ -66,70 +76,10 @@ const CHAT_SIDEBAR_ACTIVE_FILTER_CLASSNAME =
   "border-emerald-200 bg-[linear-gradient(135deg,rgba(240,253,250,0.98)_0%,rgba(236,253,245,0.96)_52%,rgba(224,242,254,0.95)_100%)] text-slate-800 shadow-sm shadow-emerald-950/10 dark:border-white dark:bg-white dark:text-slate-900";
 const RECENT_CONVERSATION_RENDER_LOG_THRESHOLD_MS = 8;
 
-const STATUS_META: Record<
-  TaskStatus,
-  {
-    label: string;
-    badgeClassName: string;
-    dotClassName: string;
-  }
-> = {
-  draft: {
-    label: "待补充",
-    badgeClassName:
-      "border border-slate-200/80 bg-white/80 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300",
-    dotClassName: "bg-slate-400",
-  },
-  running: {
-    label: "进行中",
-    badgeClassName:
-      "border border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300",
-    dotClassName: "bg-sky-500",
-  },
-  waiting: {
-    label: "待处理",
-    badgeClassName:
-      "border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300",
-    dotClassName: "bg-amber-500",
-  },
-  done: {
-    label: "已完成",
-    badgeClassName:
-      "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300",
-    dotClassName: "bg-emerald-500",
-  },
-  failed: {
-    label: "执行失败",
-    badgeClassName:
-      "border border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300",
-    dotClassName: "bg-rose-500",
-  },
-};
-
-type TaskSectionKey = "running" | "waiting" | "recent" | "older";
-
-type ChatSidebarContextVariant = "default" | "task-center";
-
-interface TaskCardViewModel {
-  id: string;
-  title: string;
-  updatedAt: Date;
-  workspaceId?: string | null;
-  messagesCount: number;
-  status: TaskStatus;
-  statusReason?: TaskStatusReason;
-  statusLabel: string;
-  lastPreview: string;
-  isCurrent: boolean;
-  isPinned: boolean;
-  hasUnread: boolean;
-}
-
-interface TaskSection {
-  key: TaskSectionKey;
-  title: string;
-  items: TaskCardViewModel[];
-}
+type AgentNamespaceTranslation = (
+  key: string,
+  options?: Record<string, unknown>,
+) => unknown;
 
 interface ChatSidebarProps {
   contextVariant?: ChatSidebarContextVariant;
@@ -174,57 +124,6 @@ interface TaskCenterNavSection {
   items: TaskCenterNavItem[];
 }
 
-function formatRelativeTime(date: Date) {
-  const diffMs = Date.now() - date.getTime();
-  const diffMinutes = Math.max(1, Math.floor(diffMs / (1000 * 60)));
-
-  if (diffMinutes < 60) {
-    return `${diffMinutes}分钟前`;
-  }
-
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) {
-    return `${diffHours}小时前`;
-  }
-
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 30) {
-    return `${diffDays}天前`;
-  }
-
-  return date.toLocaleDateString("zh-CN", {
-    month: "numeric",
-    day: "numeric",
-  });
-}
-
-function normalizePreviewText(value: string) {
-  return value.trim().replace(/\s+/g, " ").slice(0, 72);
-}
-
-function resolveSidebarDisplayTitle(
-  value: string | null | undefined,
-  fallback: string,
-) {
-  return resolveInternalImageTaskDisplayName(value) || fallback;
-}
-
-function resolveCurrentTaskPreview(messages: Message[]) {
-  return extractTaskPreviewFromMessages(messages);
-}
-
-function sortTaskItems(items: TaskCardViewModel[]) {
-  return [...items].sort((left, right) => {
-    if (left.isCurrent !== right.isCurrent) {
-      return left.isCurrent ? -1 : 1;
-    }
-    if (left.isPinned !== right.isPinned) {
-      return left.isPinned ? -1 : 1;
-    }
-    return right.updatedAt.getTime() - left.updatedAt.getTime();
-  });
-}
-
 function loadPinnedTaskIds() {
   if (typeof window === "undefined") {
     return [] as string[];
@@ -239,288 +138,6 @@ function loadPinnedTaskIds() {
   } catch {
     return [];
   }
-}
-
-function resolveCurrentStatusPreview(
-  status: TaskStatus,
-  statusReason: TaskStatusReason | undefined,
-  fallbackPreview: string,
-  pendingActionCount: number,
-  workspaceError: boolean,
-) {
-  if (
-    (workspaceError || statusReason === "workspace_error") &&
-    status === "failed"
-  ) {
-    return "工作区异常，等待你重新选择本地目录后继续。";
-  }
-  if (status === "running") {
-    return "正在生成回复或执行工具，请稍候。";
-  }
-  if (status === "waiting" && pendingActionCount > 0) {
-    return "等待你确认或补充信息后继续执行。";
-  }
-  if (status === "draft") {
-    return "等待你补充任务需求后开始执行。";
-  }
-  return fallbackPreview;
-}
-
-function resolveStatusLabel(
-  status: TaskStatus,
-  statusReason?: TaskStatusReason,
-): string {
-  if (status === "failed" && statusReason === "workspace_error") {
-    return "工作区异常";
-  }
-
-  return STATUS_META[status].label;
-}
-
-function resolveTaskStatus(params: {
-  topic: Topic;
-  currentTopicId: string | null;
-  currentMessages: Message[];
-  isSending: boolean;
-  pendingActionCount: number;
-  queuedTurnCount: number;
-  threadStatus?: string | null;
-  workspaceError: boolean;
-}) {
-  const {
-    topic,
-    currentTopicId,
-    currentMessages,
-    isSending,
-    pendingActionCount,
-    queuedTurnCount,
-    threadStatus,
-    workspaceError,
-  } = params;
-
-  if (topic.id === currentTopicId) {
-    return deriveTaskLiveState({
-      messages: currentMessages,
-      isSending,
-      pendingActionCount,
-      queuedTurnCount,
-      threadStatus,
-      workspaceError,
-    });
-  }
-
-  return {
-    status: topic.status,
-    statusReason: topic.statusReason ?? "default",
-  };
-}
-
-function buildTaskSections(
-  items: TaskCardViewModel[],
-  contextVariant: ChatSidebarContextVariant,
-) {
-  const now = Date.now();
-  const running: TaskCardViewModel[] = [];
-  const waiting: TaskCardViewModel[] = [];
-  const recent: TaskCardViewModel[] = [];
-  const older: TaskCardViewModel[] = [];
-
-  for (const item of items) {
-    if (item.status === "running") {
-      running.push(item);
-      continue;
-    }
-
-    if (
-      item.status === "waiting" ||
-      item.status === "draft" ||
-      item.status === "failed"
-    ) {
-      waiting.push(item);
-      continue;
-    }
-
-    if (now - item.updatedAt.getTime() <= RECENT_TASK_WINDOW_MS) {
-      recent.push(item);
-      continue;
-    }
-
-    older.push(item);
-  }
-
-  const titleSet =
-    contextVariant === "task-center"
-      ? {
-          running: "进行中",
-          waiting: "待继续",
-          recent: "最近对话",
-          older: "归档",
-        }
-      : {
-          running: "进行中",
-          waiting: "待处理",
-          recent: "最近完成",
-          older: "更早任务",
-        };
-
-  return [
-    { key: "running", title: titleSet.running, items: sortTaskItems(running) },
-    { key: "waiting", title: titleSet.waiting, items: sortTaskItems(waiting) },
-    { key: "recent", title: titleSet.recent, items: sortTaskItems(recent) },
-    { key: "older", title: titleSet.older, items: sortTaskItems(older) },
-  ] satisfies TaskSection[];
-}
-
-const SUBAGENT_STATUS_META: Record<
-  NonNullable<AsterSubagentSessionInfo["runtime_status"]> | "idle",
-  {
-    label: string;
-    badgeClassName: string;
-  }
-> = {
-  idle: {
-    label: "待开始",
-    badgeClassName:
-      "border border-slate-200 bg-white text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300",
-  },
-  queued: {
-    label: "稍后开始",
-    badgeClassName:
-      "border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200",
-  },
-  running: {
-    label: "处理中",
-    badgeClassName:
-      "border border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-200",
-  },
-  completed: {
-    label: "已完成",
-    badgeClassName:
-      "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200",
-  },
-  failed: {
-    label: "失败",
-    badgeClassName:
-      "border border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200",
-  },
-  aborted: {
-    label: "已中止",
-    badgeClassName:
-      "border border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200",
-  },
-  closed: {
-    label: "已关闭",
-    badgeClassName:
-      "border border-slate-200 bg-slate-100 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300",
-  },
-};
-
-const TEAM_STATUS_SUMMARY_ORDER: Array<
-  NonNullable<AsterSubagentSessionInfo["runtime_status"]> | "idle"
-> = ["running", "queued", "completed", "failed", "aborted", "closed", "idle"];
-
-const SUBAGENT_TASK_PRIORITY: Record<
-  NonNullable<AsterSubagentSessionInfo["runtime_status"]> | "idle",
-  number
-> = {
-  running: 0,
-  queued: 1,
-  failed: 2,
-  aborted: 2,
-  completed: 3,
-  closed: 4,
-  idle: 5,
-};
-
-function resolveSubagentStatusMeta(
-  status?: AsterSubagentSessionInfo["runtime_status"],
-) {
-  return SUBAGENT_STATUS_META[status ?? "idle"];
-}
-
-function sortSubagentSessionsByPriority(
-  sessions: AsterSubagentSessionInfo[],
-): AsterSubagentSessionInfo[] {
-  return [...sessions].sort((left, right) => {
-    const leftPriority =
-      SUBAGENT_TASK_PRIORITY[left.runtime_status ?? "idle"] ??
-      SUBAGENT_TASK_PRIORITY.idle;
-    const rightPriority =
-      SUBAGENT_TASK_PRIORITY[right.runtime_status ?? "idle"] ??
-      SUBAGENT_TASK_PRIORITY.idle;
-
-    if (leftPriority !== rightPriority) {
-      return leftPriority - rightPriority;
-    }
-
-    if (left.updated_at !== right.updated_at) {
-      return right.updated_at - left.updated_at;
-    }
-
-    if (left.created_at !== right.created_at) {
-      return right.created_at - left.created_at;
-    }
-
-    return left.id.localeCompare(right.id);
-  });
-}
-
-function shouldMarkSubagentAsFocus(
-  session: AsterSubagentSessionInfo | undefined,
-): boolean {
-  if (!session) {
-    return false;
-  }
-
-  const status = session.runtime_status ?? "idle";
-  return status !== "completed" && status !== "closed";
-}
-
-function resolveSubagentSessionTypeLabel(value?: string) {
-  switch (value) {
-    case "sub_agent":
-      return "子任务";
-    case "fork":
-      return "分支会话";
-    case "user":
-    default:
-      return value?.trim() || "会话";
-  }
-}
-
-function resolveUnixDate(value?: number) {
-  if (!value) {
-    return null;
-  }
-
-  const timestamp = new Date(value * 1000);
-  return Number.isNaN(timestamp.getTime()) ? null : timestamp;
-}
-
-function buildCollapsedTeamSummary(
-  sessions: AsterSubagentSessionInfo[],
-  label: string,
-) {
-  const counts = new Map<
-    NonNullable<AsterSubagentSessionInfo["runtime_status"]> | "idle",
-    number
-  >();
-
-  for (const session of sessions) {
-    const key = session.runtime_status ?? "idle";
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-
-  const statusSummary = TEAM_STATUS_SUMMARY_ORDER.map((status) => {
-    const count = counts.get(status) ?? 0;
-    if (count <= 0) {
-      return null;
-    }
-
-    return `${count} 个${SUBAGENT_STATUS_META[status].label}`;
-  }).filter((item): item is string => Boolean(item));
-
-  return ["已收起", label, ...statusSummary].join(" · ");
 }
 
 export const ChatSidebar: React.FC<ChatSidebarProps> = ({
@@ -550,10 +167,17 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   onReturnToParentSession,
 }) => {
   const { t } = useTranslation("agent");
+  const agentT = useMemo(() => t as unknown as AgentNamespaceTranslation, [t]);
+  const sidebarText = useCallback(
+    (key: string, options?: Record<string, unknown>) =>
+      String(agentT(`agentChat.sidebar.${key}`, options)),
+    [agentT],
+  );
   const [editingTopicId, setEditingTopicId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [searchKeyword, setSearchKeyword] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active">("all");
+  const [statusFilter, setStatusFilter] =
+    useState<ChatSidebarStatusFilter>("all");
   const [showAllOlder, setShowAllOlder] = useState(false);
   const [pinnedTaskIds, setPinnedTaskIds] = useState<string[]>(() =>
     loadPinnedTaskIds(),
@@ -584,45 +208,17 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
   const taskItems = useMemo(() => {
     const startedAt = Date.now();
-    const items = topics.map((topic) => {
-      const { status, statusReason } = resolveTaskStatus({
-        topic,
-        currentTopicId,
-        currentMessages,
-        isSending,
-        pendingActionCount,
-        queuedTurnCount,
-        threadStatus,
-        workspaceError,
-      });
-
-      const statusLabel = resolveStatusLabel(status, statusReason);
-      const isCurrent = topic.id === currentTopicId;
-      const fallbackPreview = normalizePreviewText(topic.lastPreview);
-      const preview = isCurrent
-        ? resolveCurrentStatusPreview(
-            status,
-            statusReason,
-            currentTaskPreview || fallbackPreview,
-            pendingActionCount,
-            workspaceError,
-          )
-        : fallbackPreview;
-
-      return {
-        id: topic.id,
-        title: resolveSidebarDisplayTitle(topic.title, "未命名任务"),
-        updatedAt: topic.updatedAt || topic.createdAt,
-        workspaceId: topic.workspaceId ?? null,
-        messagesCount: topic.messagesCount,
-        status,
-        statusReason,
-        statusLabel,
-        lastPreview: preview || "等待你补充任务需求后开始执行。",
-        isCurrent,
-        isPinned: topic.isPinned || pinnedTaskIdSet.has(topic.id),
-        hasUnread: topic.hasUnread,
-      } satisfies TaskCardViewModel;
+    const items = buildChatSidebarTaskItems({
+      topics,
+      currentTopicId,
+      currentMessages,
+      currentTaskPreview,
+      isSending,
+      pendingActionCount,
+      queuedTurnCount,
+      threadStatus,
+      pinnedTaskIdSet,
+      workspaceError,
     });
     const durationMs = Date.now() - startedAt;
     if (
@@ -735,10 +331,15 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       buildCollapsedTeamSummary(
         teamSummarySessions,
         subagentParentContext
-          ? `${siblingSubagentSessions.length} 个并行子任务`
-          : `${sortedChildSubagentSessions.length} 个子任务`,
+          ? sidebarText("team.parallelSubtaskCount", {
+              count: siblingSubagentSessions.length,
+            })
+          : sidebarText("team.subtaskCount", {
+              count: sortedChildSubagentSessions.length,
+            }),
       ),
     [
+      sidebarText,
       siblingSubagentSessions,
       sortedChildSubagentSessions,
       subagentParentContext,
@@ -748,24 +349,12 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
   const filteredTaskItems = useMemo(() => {
     const startedAt = Date.now();
-    const keyword = searchKeyword.trim().toLowerCase();
-    const items = taskItems.filter((item) => {
-      if (
-        statusFilter === "active" &&
-        item.status !== "running" &&
-        item.status !== "waiting"
-      ) {
-        return false;
-      }
-
-      if (!keyword) {
-        return true;
-      }
-
-      return `${item.title} ${item.lastPreview} ${item.statusLabel}`
-        .toLowerCase()
-        .includes(keyword);
+    const items = filterChatSidebarTaskItems({
+      taskItems,
+      searchKeyword,
+      statusFilter,
     });
+    const hasKeyword = searchKeyword.trim().length > 0;
     const durationMs = Date.now() - startedAt;
     if (
       contextVariant === "task-center" ||
@@ -774,7 +363,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       const metricContext = {
         durationMs,
         filteredCount: items.length,
-        hasKeyword: keyword.length > 0,
+        hasKeyword,
         sourceCount: taskItems.length,
         statusFilter,
       };
@@ -787,7 +376,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
         "recentConversations.filtered",
         metricContext,
         {
-          dedupeKey: `recentConversations.filtered:${contextVariant}:${taskItems.length}:${items.length}:${statusFilter}:${keyword.length > 0}`,
+          dedupeKey: `recentConversations.filtered:${contextVariant}:${taskItems.length}:${items.length}:${statusFilter}:${hasKeyword}`,
           throttleMs: 1000,
         },
       );
@@ -839,44 +428,54 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   const hasAnyTasks = topics.length > 0;
   const hasFilteredResults = filteredTaskItems.length > 0;
   const isInitialHistoryLoading = !topicsReady && topics.length === 0;
-  const taskHeadingLabel = isTaskCenter ? "最近对话" : "任务";
+  const taskHeadingLabel = sidebarText(
+    isTaskCenter ? "heading.recentConversations" : "heading.tasks",
+  );
   const taskHeadingHint = isTaskCenter
-    ? "继续最近对话，待处理会话会优先显示在前面。"
+    ? sidebarText("heading.recentConversationsHint")
     : null;
   const searchPlaceholder = isTaskCenter
-    ? "搜索对话标题或摘要"
-    : "搜索任务标题或摘要";
-  const newChatLabel = isTaskCenter ? "新建对话" : "新建任务";
-  const allTasksLabel = isTaskCenter ? "全部对话" : "全部任务";
-  const activeTasksLabel = isTaskCenter ? "待继续" : "仅看进行中";
-  const emptyStateTitle = isTaskCenter ? "还没有最近对话" : "还没有任务";
+    ? sidebarText("search.conversationPlaceholder")
+    : sidebarText("search.taskPlaceholder");
+  const newChatLabel = isTaskCenter
+    ? sidebarText("action.newConversation")
+    : sidebarText("action.newTask");
+  const allTasksLabel = isTaskCenter
+    ? sidebarText("filter.allConversations")
+    : sidebarText("filter.allTasks");
+  const activeTasksLabel = isTaskCenter
+    ? sidebarText("filter.activeConversations")
+    : sidebarText("filter.activeTasks");
+  const emptyStateTitle = isTaskCenter
+    ? sidebarText("empty.noRecentConversationsTitle")
+    : sidebarText("empty.noTasksTitle");
   const emptyStateDescription = isTaskCenter
-    ? "从“新建对话”开始后，最近对话会自动出现在这里。"
-    : "从“新建任务”开始输入需求，创建后会出现在这里。";
-  const noResultsTitle = isTaskCenter ? "没有匹配的对话" : "没有匹配的任务";
+    ? sidebarText("empty.noRecentConversationsDescription")
+    : sidebarText("empty.noTasksDescription");
+  const noResultsTitle = isTaskCenter
+    ? sidebarText("empty.noConversationResultsTitle")
+    : sidebarText("empty.noTaskResultsTitle");
   const noResultsDescription = isTaskCenter
-    ? "试试搜索对话标题、摘要或状态关键词。"
-    : "试试搜索标题、执行摘要或状态关键词。";
+    ? sidebarText("empty.noConversationResultsDescription")
+    : sidebarText("empty.noTaskResultsDescription");
   const olderSectionMoreLabel = isTaskCenter
-    ? "查看更多归档对话"
-    : "查看更多历史任务";
-  const historyLoadingTitle = t(
-    "agentChat.sidebar.history.loadingTitle",
-  );
+    ? sidebarText("action.showMoreArchivedConversations")
+    : sidebarText("action.showMoreOlderTasks");
+  const historyLoadingTitle = t("agentChat.sidebar.history.loadingTitle");
   const historyLoadingDescription = t(
     "agentChat.sidebar.history.loadingDescription",
   );
-  const historyLoadingBadge = t(
-    "agentChat.sidebar.history.loadingBadge",
-  );
+  const historyLoadingBadge = t("agentChat.sidebar.history.loadingBadge");
   const handleCreateConversation = isTaskCenter
     ? (onOpenTaskCenterHome ?? onNewChat)
     : onNewChat;
   const taskCountLabel = isInitialHistoryLoading
     ? historyLoadingBadge
     : searchKeyword.trim()
-      ? `${filteredTaskItems.length} 个结果`
-      : `${topics.length} 个${isTaskCenter ? "对话" : "任务"}`;
+      ? sidebarText("count.results", { count: filteredTaskItems.length })
+      : sidebarText(isTaskCenter ? "count.conversations" : "count.tasks", {
+          count: topics.length,
+        });
   const sidebarShellClassName = isTaskCenter
     ? "w-[308px] shrink-0 overflow-hidden rounded-[30px] border border-slate-200 bg-[linear-gradient(180deg,#fbfcfd_0%,#f3f6f8_100%)] shadow-sm shadow-slate-950/5 dark:border-white/10 dark:bg-[#111318]"
     : "w-[308px] shrink-0 overflow-hidden rounded-[30px] border border-emerald-200/40 bg-[linear-gradient(180deg,rgba(252,254,252,0.98)_0%,rgba(247,251,248,0.92)_100%)] shadow-sm shadow-slate-950/5 backdrop-blur dark:border-white/10 dark:bg-[#111318]";
@@ -895,11 +494,11 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     () => [
       {
         id: "tasks",
-        title: "任务",
+        title: sidebarText("nav.tasks"),
         items: [
           {
             id: "new-task",
-            label: "新建任务",
+            label: sidebarText("nav.newTask"),
             icon: Plus,
             onClick: onOpenTaskCenterHome ?? onNewChat,
           },
@@ -907,11 +506,11 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       },
       {
         id: "capabilities",
-        title: "能力",
+        title: sidebarText("nav.capabilities"),
         items: [
           {
             id: "skills",
-            label: "Skills",
+            label: sidebarText("nav.skills"),
             icon: Sparkles,
             onClick: onOpenSkillsPage,
           },
@@ -919,17 +518,17 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       },
       {
         id: "knowledge",
-        title: "资料",
+        title: sidebarText("nav.knowledge"),
         items: [
           {
             id: "knowledge",
-            label: "项目资料",
+            label: sidebarText("nav.projectKnowledge"),
             icon: BookOpen,
             onClick: onOpenKnowledgePage,
           },
           {
             id: "memory",
-            label: "灵感库",
+            label: sidebarText("nav.inspirationLibrary"),
             icon: BrainCircuit,
             onClick: onOpenMemoryPage,
           },
@@ -942,6 +541,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       onOpenMemoryPage,
       onOpenSkillsPage,
       onOpenTaskCenterHome,
+      sidebarText,
     ],
   );
 
@@ -1099,7 +699,10 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {resolveSidebarDisplayTitle(session.name, "未命名子任务")}
+                {resolveSidebarDisplayTitle(
+                  session.name,
+                  sidebarText("team.untitledSubtask"),
+                )}
               </div>
               {options?.focusLabel ? (
                 <Badge className="border border-sky-200 bg-sky-50 text-sky-700">
@@ -1116,10 +719,16 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                   resolveSubagentSessionTypeLabel(session.session_type)}
               </span>
               {session.role_hint ? (
-                <span>角色 · {session.role_hint}</span>
+                <span>
+                  {sidebarText("team.roleHint", { role: session.role_hint })}
+                </span>
               ) : null}
               {updatedAt ? (
-                <span>更新于 {formatRelativeTime(updatedAt)}</span>
+                <span>
+                  {sidebarText("team.updatedAt", {
+                    time: formatRelativeTime(updatedAt),
+                  })}
+                </span>
               ) : null}
             </div>
             {session.task_summary ? (
@@ -1308,28 +917,30 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     </div>
                     <div className="min-w-0">
                       <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                        {TEAM_SECTION_LABEL}
+                        {sidebarText("team.label")}
                       </div>
                       <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-slate-500 dark:text-slate-400">
                         {teamSectionCollapsed
                           ? collapsedTeamSummary
                           : subagentParentContext
-                            ? "当前线程来自主助手，可直接返回主助手并切换其他子任务；正在处理的任务会排在前面。"
-                            : "这里优先展示正在处理的子任务，再回到当前任务和后续节点。"}
+                            ? sidebarText("team.parentThreadDescription")
+                            : sidebarText("team.childThreadDescription")}
                       </p>
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <Badge className="border border-slate-200 bg-white text-slate-600 dark:border-white/10 dark:bg-white/10 dark:text-slate-200">
                       {subagentParentContext
-                        ? "子任务线程"
-                        : `${sortedChildSubagentSessions.length} 个子任务`}
+                        ? sidebarText("team.subtaskThread")
+                        : sidebarText("team.subtaskCount", {
+                            count: sortedChildSubagentSessions.length,
+                          })}
                     </Badge>
                     {hasAnyTasks ? (
                       <button
                         type="button"
-                        aria-label="跳转到任务列表"
-                        title="跳转到任务列表"
+                        aria-label={sidebarText("team.jumpToTasks")}
+                        title={sidebarText("team.jumpToTasks")}
                         onClick={handleJumpToTaskSection}
                         className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/90 text-slate-500 transition hover:border-slate-300 hover:bg-white hover:text-slate-900 dark:border-white/10 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/15 dark:hover:text-slate-100"
                       >
@@ -1340,8 +951,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                       type="button"
                       aria-label={
                         teamSectionCollapsed
-                          ? `展开${TEAM_SECTION_LABEL}`
-                          : `收起${TEAM_SECTION_LABEL}`
+                          ? sidebarText("team.expand")
+                          : sidebarText("team.collapse")
                       }
                       onClick={() =>
                         setTeamSectionCollapsedOverride(
@@ -1386,11 +997,11 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                               {subagentParentContext.parent_session_name}
                             </div>
                             <Badge className="border border-slate-200 bg-white text-slate-600 dark:border-white/10 dark:bg-white/10 dark:text-slate-200">
-                              父会话
+                              {sidebarText("team.parentSession")}
                             </Badge>
                           </div>
                           <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-300">
-                            返回主线程，查看完整进展和原始上下文。
+                            {sidebarText("team.returnToParentDescription")}
                           </p>
                         </div>
                       </div>
@@ -1401,22 +1012,29 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                         <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                           {resolveSidebarDisplayTitle(
                             currentTaskItem?.title,
-                            "当前子任务",
+                            sidebarText("team.currentSubtask"),
                           )}
                         </div>
                         <Badge className="border border-emerald-200 bg-white/90 text-emerald-700 shadow-sm shadow-emerald-950/10 dark:border-white/10 dark:bg-white/10 dark:text-slate-100">
-                          当前子任务
+                          {sidebarText("team.currentSubtask")}
                         </Badge>
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                        <span>来自父会话委派</span>
+                        <span>{sidebarText("team.delegatedFromParent")}</span>
                         {subagentParentContext.role_hint ? (
-                          <span>角色 · {subagentParentContext.role_hint}</span>
+                          <span>
+                            {sidebarText("team.roleHint", {
+                              role: subagentParentContext.role_hint,
+                            })}
+                          </span>
                         ) : null}
                         {currentTaskItem?.updatedAt ? (
                           <span>
-                            更新于{" "}
-                            {formatRelativeTime(currentTaskItem.updatedAt)}
+                            {sidebarText("team.updatedAt", {
+                              time: formatRelativeTime(
+                                currentTaskItem.updatedAt,
+                              ),
+                            })}
                           </span>
                         ) : null}
                       </div>
@@ -1431,17 +1049,19 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                       <div className="space-y-2">
                         <div className="flex items-center justify-between px-1">
                           <div className="text-[11px] font-semibold tracking-[0.12em] text-slate-500">
-                            并行子任务
+                            {sidebarText("team.parallelSubtasks")}
                           </div>
                           <div className="text-[11px] text-slate-400">
-                            {siblingSubagentSessions.length} 个
+                            {sidebarText("team.count", {
+                              count: siblingSubagentSessions.length,
+                            })}
                           </div>
                         </div>
                         {visibleSiblingSubagentSessions.map((session, index) =>
                           renderSubagentSessionCard(session, {
                             focusLabel:
                               index === 0 && shouldMarkSubagentAsFocus(session)
-                                ? "当前焦点"
+                                ? sidebarText("team.currentFocus")
                                 : undefined,
                           }),
                         )}
@@ -1451,7 +1071,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                             onClick={() => setShowAllSiblingSubagents(true)}
                             className="w-full rounded-2xl border border-dashed border-slate-200/80 bg-white/70 px-3 py-2 text-xs font-medium text-slate-500 transition hover:border-slate-300 hover:bg-white hover:text-slate-900 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-slate-100"
                           >
-                            展开剩余 {hiddenSiblingSubagentCount} 个并行子任务
+                            {sidebarText("team.expandRemainingParallel", {
+                              count: hiddenSiblingSubagentCount,
+                            })}
                           </button>
                         ) : null}
                         {showAllSiblingSubagents &&
@@ -1462,7 +1084,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                             onClick={() => setShowAllSiblingSubagents(false)}
                             className="w-full rounded-2xl border border-slate-200/80 bg-white/78 px-3 py-2 text-xs font-medium text-slate-500 transition hover:border-slate-300 hover:bg-white hover:text-slate-900 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-slate-100"
                           >
-                            收起并行子任务列表
+                            {sidebarText("team.collapseParallelList")}
                           </button>
                         ) : null}
                       </div>
@@ -1475,7 +1097,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                         focusLabel:
                           session.id === sortedChildSubagentSessions[0]?.id &&
                           shouldMarkSubagentAsFocus(session)
-                            ? "当前焦点"
+                            ? sidebarText("team.currentFocus")
                             : undefined,
                         highlightCurrent: session.id === currentTopicId,
                       }),
@@ -1486,7 +1108,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                         onClick={() => setShowAllChildSubagents(true)}
                         className="w-full rounded-2xl border border-dashed border-slate-200/80 bg-white/70 px-3 py-2 text-xs font-medium text-slate-500 transition hover:border-slate-300 hover:bg-white hover:text-slate-900 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-slate-100"
                       >
-                        展开剩余 {hiddenChildSubagentCount} 个子任务
+                        {sidebarText("team.expandRemainingSubtasks", {
+                          count: hiddenChildSubagentCount,
+                        })}
                       </button>
                     ) : null}
                     {showAllChildSubagents &&
@@ -1497,7 +1121,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                         onClick={() => setShowAllChildSubagents(false)}
                         className="w-full rounded-2xl border border-slate-200/80 bg-white/78 px-3 py-2 text-xs font-medium text-slate-500 transition hover:border-slate-300 hover:bg-white hover:text-slate-900 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-slate-100"
                       >
-                        收起子任务列表
+                        {sidebarText("team.collapseSubtaskList")}
                       </button>
                     ) : null}
                   </div>
@@ -1639,7 +1263,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                       {isSectionCollapsed ? null : (
                         <div className="space-y-2">
                           {visibleItems.map((item) => {
-                            const statusMeta = STATUS_META[item.status];
+                            const statusMeta =
+                              CHAT_SIDEBAR_STATUS_META[item.status];
                             const isResumableItem =
                               item.status === "waiting" ||
                               (item.status === "failed" &&
@@ -1720,7 +1345,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                                                 />
                                               ) : null}
                                               <div className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
-                                                {item.title || "未命名任务"}
+                                                {item.title ||
+                                                  sidebarText("task.untitled")}
                                               </div>
                                               {item.isPinned ? (
                                                 <Pin className="h-3.5 w-3.5 text-emerald-400" />
@@ -1738,8 +1364,10 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                                             </div>
                                             <button
                                               type="button"
-                                              aria-label="删除任务"
-                                              title="删除任务"
+                                              aria-label={sidebarText(
+                                                "task.delete",
+                                              )}
+                                              title={sidebarText("task.delete")}
                                               className={cn(
                                                 "inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-300",
                                                 item.isCurrent
@@ -1757,7 +1385,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                                               <DropdownMenuTrigger asChild>
                                                 <button
                                                   type="button"
-                                                  aria-label="任务操作"
+                                                  aria-label={sidebarText(
+                                                    "task.actions",
+                                                  )}
                                                   className={cn(
                                                     "inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-slate-100",
                                                     item.isCurrent
@@ -1781,7 +1411,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                                                   }
                                                 >
                                                   <PencilLine className="h-4 w-4" />
-                                                  重命名任务
+                                                  {sidebarText("task.rename")}
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem
                                                   onClick={() =>
@@ -1794,8 +1424,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                                                     <Pin className="h-4 w-4" />
                                                   )}
                                                   {item.isPinned
-                                                    ? "取消固定"
-                                                    : "固定任务"}
+                                                    ? sidebarText("task.unpin")
+                                                    : sidebarText("task.pin")}
                                                 </DropdownMenuItem>
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem
@@ -1805,7 +1435,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                                                   }
                                                 >
                                                   <Trash2 className="h-4 w-4" />
-                                                  删除任务
+                                                  {sidebarText("task.delete")}
                                                 </DropdownMenuItem>
                                               </DropdownMenuContent>
                                             </DropdownMenu>
@@ -1833,8 +1463,10 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                                       </Badge>
                                       <span className="text-[11px] text-slate-400">
                                         {item.messagesCount > 0
-                                          ? `${item.messagesCount} 条消息`
-                                          : "尚未开始执行"}
+                                          ? sidebarText("task.messageCount", {
+                                              count: item.messagesCount,
+                                            })
+                                          : sidebarText("task.notStarted")}
                                       </span>
                                       {isResumableItem && onResumeTask ? (
                                         <button
@@ -1845,7 +1477,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                                           }}
                                           className="inline-flex items-center rounded-full border border-amber-200/80 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 transition hover:border-amber-300 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/15"
                                         >
-                                          继续任务
+                                          {sidebarText("task.resume")}
                                         </button>
                                       ) : null}
                                     </div>

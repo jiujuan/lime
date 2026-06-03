@@ -25,7 +25,10 @@ const I18N_HARDCODED_SCAN_PREFIXES = [
   "src/pages/",
 ];
 const I18N_HARDCODED_SCAN_FILES = new Set(["src/App.tsx", "src/main.tsx"]);
-const I18N_HARDCODED_SCAN_FILE_PATTERNS = [/\.(test|spec)\.[^.]+$/];
+const I18N_HARDCODED_SCAN_FILE_PATTERNS = [
+  /\.(test|spec)\.[^.]+$/,
+  /\.testFixtures\.[^.]+$/,
+];
 
 function parseArgs(argv) {
   const result = {

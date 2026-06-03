@@ -580,6 +580,67 @@ describe("EmptyState", () => {
     ).toBeNull();
   });
 
+  it("第二屏向上回首屏应使用非 passive wheel listener", async () => {
+    const addEventListenerSpy = vi.spyOn(
+      HTMLElement.prototype,
+      "addEventListener",
+    );
+    const originalScrollTo = HTMLElement.prototype.scrollTo;
+    const scrollTo = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      value: scrollTo,
+    });
+
+    try {
+      const container = renderEmptyState({
+        activeTheme: "general",
+        onLaunchBrowserAssist: vi.fn(),
+        onSelectServiceSkill: vi.fn(),
+      });
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(addEventListenerSpy).toHaveBeenCalledWith(
+        "wheel",
+        expect.any(Function),
+        { passive: false },
+      );
+
+      const secondScreen = container.querySelector(
+        '[data-testid="home-second-screen"]',
+      ) as HTMLElement | null;
+      expect(secondScreen).toBeTruthy();
+
+      act(() => {
+        secondScreen?.dispatchEvent(
+          new WheelEvent("wheel", {
+            bubbles: true,
+            cancelable: true,
+            deltaY: -24,
+          }),
+        );
+      });
+
+      expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "smooth" });
+    } finally {
+      addEventListenerSpy.mockRestore();
+      if (originalScrollTo) {
+        Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+          configurable: true,
+          value: originalScrollTo,
+        });
+      } else {
+        Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+          configurable: true,
+          value: undefined,
+        });
+      }
+    }
+  });
+
   it("通用首页静态起手与引导文案应跟随 en-US 资源", async () => {
     await changeLimeLocale("en-US");
     const container = renderEmptyState({

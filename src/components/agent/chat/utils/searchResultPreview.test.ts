@@ -121,4 +121,33 @@ REMINDER: You MUST include the sources above in your response.
       },
     ]);
   });
+
+  it("应过滤搜索引擎导航与备案页脚噪音，只保留真实来源", () => {
+    const items = resolveSearchResultPreviewItemsFromText(
+      JSON.stringify({
+        results: [
+          {
+            title: "了解必应 获取新版必应壁纸应用 增值电信业务经营许可证",
+            url: "https://www.bing.com/search?q=world+news",
+            snippet: "京ICP备10036305号-7",
+          },
+          {
+            title: "Reuters World News",
+            url: "https://www.reuters.com/world/",
+            snippet: "Latest world headlines",
+          },
+        ],
+      }),
+    );
+
+    expect(items).toEqual([
+      {
+        id: "search-record-0-https://www.reuters.com/world/",
+        title: "Reuters World News",
+        url: "https://www.reuters.com/world/",
+        hostname: "reuters.com",
+        snippet: "Latest world headlines",
+      },
+    ]);
+  });
 });

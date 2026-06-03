@@ -1,348 +1,79 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { changeLimeLocale } from "@/i18n/createI18n";
+import { describe, expect, it, vi } from "vitest";
 import { setStoredOemCloudSessionState } from "@/lib/oemCloudSession";
 import { OEM_CLOUD_PAYMENT_RETURN_EVENT } from "@/lib/oemCloudPaymentReturn";
+import {
+  controlPlaneMocks,
+  createDeferred,
+  createOpenedWindow,
+  desktopAuthMocks,
+  flushEffects,
+  latestState,
+  mountHookHarness,
+  shellOpenMock,
+  systemBrowserMocks,
+  tauriRuntimeMocks,
+  useOemCloudAccessTestLifecycle,
+} from "./useOemCloudAccess.testFixtures";
 
-const controlPlaneMocks = vi.hoisted(() => ({
-  getClientBootstrap: vi.fn(),
-  getClientCloudActivation: vi.fn(),
-  getClientOrder: vi.fn(),
-  getClientCreditTopupOrder: vi.fn(),
-  getClientProviderOffer: vi.fn(),
-  listClientProviderOfferModels: vi.fn(),
-  updateClientProviderPreference: vi.fn(),
-  createClientOrder: vi.fn(),
-  createClientOrderCheckout: vi.fn(),
-  createClientCreditTopupOrder: vi.fn(),
-  createClientCreditTopupOrderCheckout: vi.fn(),
-  createClientAccessToken: vi.fn(),
-  rotateClientAccessToken: vi.fn(),
-  revokeClientAccessToken: vi.fn(),
-  createClientDesktopAuthSession: vi.fn(),
-  pollClientDesktopAuthSession: vi.fn(),
-  loginClientByPassword: vi.fn(),
-  logoutClient: vi.fn(),
-  sendClientAuthEmailCode: vi.fn(),
-  verifyClientAuthEmailCode: vi.fn(),
-}));
-
-const shellOpenMock = vi.hoisted(() => vi.fn());
-const systemBrowserMocks = vi.hoisted(() => ({
-  openExternalUrlWithSystemBrowser: vi.fn(),
-  startOemCloudOAuthCallbackBridge: vi.fn(),
-}));
-const tauriRuntimeMocks = vi.hoisted(() => ({
-  hasTauriInvokeCapability: vi.fn(),
-  hasTauriRuntimeMarkers: vi.fn(),
-}));
-const desktopAuthMocks = vi.hoisted(() => ({
-  completeOemCloudDesktopOAuthLogin: vi.fn(),
-}));
-
-vi.mock("@/lib/api/oemCloudControlPlane", () => {
-  class MockOemCloudControlPlaneError extends Error {
-    status: number;
-
-    constructor(message: string, status = 500) {
-      super(message);
-      this.status = status;
-    }
-  }
-
+function createBootstrapPayload() {
   return {
-    OemCloudControlPlaneError: MockOemCloudControlPlaneError,
-    getClientBootstrap: controlPlaneMocks.getClientBootstrap,
-    getClientCloudActivation: controlPlaneMocks.getClientCloudActivation,
-    getClientOrder: controlPlaneMocks.getClientOrder,
-    getClientCreditTopupOrder: controlPlaneMocks.getClientCreditTopupOrder,
-    getClientProviderOffer: controlPlaneMocks.getClientProviderOffer,
-    listClientProviderOfferModels:
-      controlPlaneMocks.listClientProviderOfferModels,
-    updateClientProviderPreference:
-      controlPlaneMocks.updateClientProviderPreference,
-    createClientOrder: controlPlaneMocks.createClientOrder,
-    createClientOrderCheckout: controlPlaneMocks.createClientOrderCheckout,
-    createClientCreditTopupOrder:
-      controlPlaneMocks.createClientCreditTopupOrder,
-    createClientCreditTopupOrderCheckout:
-      controlPlaneMocks.createClientCreditTopupOrderCheckout,
-    createClientAccessToken: controlPlaneMocks.createClientAccessToken,
-    rotateClientAccessToken: controlPlaneMocks.rotateClientAccessToken,
-    revokeClientAccessToken: controlPlaneMocks.revokeClientAccessToken,
-    createClientDesktopAuthSession:
-      controlPlaneMocks.createClientDesktopAuthSession,
-    pollClientDesktopAuthSession:
-      controlPlaneMocks.pollClientDesktopAuthSession,
-    loginClientByPassword: controlPlaneMocks.loginClientByPassword,
-    logoutClient: controlPlaneMocks.logoutClient,
-    sendClientAuthEmailCode: controlPlaneMocks.sendClientAuthEmailCode,
-    verifyClientAuthEmailCode: controlPlaneMocks.verifyClientAuthEmailCode,
-  };
-});
-
-vi.mock("@tauri-apps/plugin-shell", () => ({
-  open: shellOpenMock,
-}));
-
-vi.mock("@/lib/api/externalUrl", () => ({
-  OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT: "oem-cloud-oauth-callback",
-  openExternalUrlWithSystemBrowser:
-    systemBrowserMocks.openExternalUrlWithSystemBrowser,
-  startOemCloudOAuthCallbackBridge:
-    systemBrowserMocks.startOemCloudOAuthCallbackBridge,
-}));
-
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriInvokeCapability: tauriRuntimeMocks.hasTauriInvokeCapability,
-  hasTauriRuntimeMarkers: tauriRuntimeMocks.hasTauriRuntimeMarkers,
-}));
-
-vi.mock("@/lib/oemCloudDesktopAuth", () => ({
-  OEM_CLOUD_OAUTH_COMPLETED_EVENT: "lime:oem-cloud-oauth-completed",
-  completeOemCloudDesktopOAuthLogin:
-    desktopAuthMocks.completeOemCloudDesktopOAuthLogin,
-}));
-
-vi.mock("@/lib/serviceSkillCatalogBootstrap", () => ({
-  syncServiceSkillCatalogFromBootstrapPayload: vi.fn(),
-}));
-
-vi.mock("@/lib/skillCatalogBootstrap", () => ({
-  syncSkillCatalogFromBootstrapPayload: vi.fn(),
-}));
-
-vi.mock("@/lib/api/skillCatalog", () => ({
-  clearSkillCatalogCache: vi.fn(),
-}));
-
-vi.mock("@/lib/siteAdapterCatalogBootstrap", () => ({
-  syncSiteAdapterCatalogFromBootstrapPayload: vi.fn(),
-  clearSiteAdapterCatalogCache: vi.fn(),
-}));
-
-import { useOemCloudAccess } from "./useOemCloudAccess";
-
-interface MountedHarness {
-  container: HTMLDivElement;
-  root: Root;
-}
-
-function createDeferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((nextResolve, nextReject) => {
-    resolve = nextResolve;
-    reject = nextReject;
-  });
-  return {
-    promise,
-    resolve,
-    reject,
-  };
-}
-
-function createOpenedWindow() {
-  return {
-    closed: false,
-    opener: {},
-    close: vi.fn(),
-    document: {
-      title: "",
-      body: {
-        innerHTML: "",
+    session: {
+      tenant: {
+        id: "tenant-0001",
+        name: "JustAI Demo",
+      },
+      user: {
+        id: "user-001",
+        email: "operator@example.com",
+        displayName: "Demo Operator",
+      },
+      session: {
+        id: "session-001",
+        tenantId: "tenant-0001",
+        userId: "user-001",
+        expiresAt: "2026-03-25T08:00:00.000Z",
       },
     },
-    location: {
-      assign: vi.fn(),
+    providerOffersSummary: [],
+    providerPreference: null,
+    serviceSkillCatalog: {
+      items: [],
     },
-  } as unknown as Window;
+    sceneCatalog: [],
+    gateway: {
+      basePath: "/gateway-api",
+    },
+  };
 }
 
-let latestState: ReturnType<typeof useOemCloudAccess> | null = null;
-
-function HookHarness() {
-  latestState = useOemCloudAccess();
-  return (
-    <div data-testid="hook-state">
-      {latestState.initializing
-        ? "initializing"
-        : latestState.session?.session.id || "anonymous"}
-    </div>
-  );
-}
-
-async function flushEffects() {
-  await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
+function restoreStoredSession() {
+  setStoredOemCloudSessionState({
+    token: "session-token-restore",
+    tenant: {
+      id: "tenant-0001",
+    },
+    user: {
+      id: "user-001",
+    },
+    session: {
+      id: "session-001",
+    },
   });
 }
 
 describe("useOemCloudAccess", () => {
-  let mountedHarness: MountedHarness | null = null;
-
-  beforeEach(async () => {
-    await changeLimeLocale("en-US");
-    (
-      globalThis as typeof globalThis & {
-        IS_REACT_ACT_ENVIRONMENT?: boolean;
-      }
-    ).IS_REACT_ACT_ENVIRONMENT = true;
-
-    latestState = null;
-    window.localStorage.clear();
-    delete window.__LIME_SESSION_TOKEN__;
-    delete window.__LIME_BOOTSTRAP__;
-    window.__LIME_OEM_CLOUD__ = {
-      enabled: true,
-      baseUrl: "https://user.limeai.run",
-      tenantId: "tenant-0001",
-    };
-
-    controlPlaneMocks.getClientCloudActivation.mockResolvedValue({
-      gateway: {
-        basePath: "https://llm.limeai.run",
-        openAIBaseUrl: "https://llm.limeai.run/v1",
-        anthropicBaseUrl: "https://llm.limeai.run",
-      },
-      llmBaseUrl: "https://llm.limeai.run",
-      openAIBaseUrl: "https://llm.limeai.run/v1",
-      anthropicBaseUrl: "https://llm.limeai.run",
-      readiness: {
-        status: "no_api_key",
-        title: "还没有可用 API Key",
-        canInvoke: false,
-        blockers: ["api_key"],
-        steps: [],
-      },
-      pendingPayment: null,
-      paymentConfigs: [],
-      plans: [],
-      subscription: null,
-      creditAccount: null,
-      creditsDashboard: null,
-      topupPackages: [],
-      usageDashboard: null,
-      billingDashboard: null,
-      providerOffers: [],
-      selectedOffer: null,
-      providerModels: [],
-      providerPreference: null,
-      accessTokens: [],
-      activeAccessToken: { hasActive: false, token: null },
-      orders: [],
-      creditTopupOrders: [],
-    });
-    controlPlaneMocks.getClientProviderOffer.mockResolvedValue(null);
-    controlPlaneMocks.getClientOrder.mockResolvedValue(null);
-    controlPlaneMocks.getClientCreditTopupOrder.mockResolvedValue(null);
-    controlPlaneMocks.listClientProviderOfferModels.mockResolvedValue([]);
-    controlPlaneMocks.updateClientProviderPreference.mockResolvedValue(null);
-    controlPlaneMocks.createClientOrder.mockResolvedValue(null);
-    controlPlaneMocks.createClientOrderCheckout.mockResolvedValue(null);
-    controlPlaneMocks.createClientCreditTopupOrder.mockResolvedValue(null);
-    controlPlaneMocks.createClientCreditTopupOrderCheckout.mockResolvedValue(
-      null,
-    );
-    controlPlaneMocks.createClientAccessToken.mockResolvedValue(null);
-    controlPlaneMocks.rotateClientAccessToken.mockResolvedValue(null);
-    controlPlaneMocks.revokeClientAccessToken.mockResolvedValue(null);
-    controlPlaneMocks.createClientDesktopAuthSession.mockResolvedValue(null);
-    controlPlaneMocks.pollClientDesktopAuthSession.mockResolvedValue(null);
-    controlPlaneMocks.loginClientByPassword.mockResolvedValue(null);
-    controlPlaneMocks.logoutClient.mockResolvedValue(undefined);
-    controlPlaneMocks.sendClientAuthEmailCode.mockResolvedValue(null);
-    controlPlaneMocks.verifyClientAuthEmailCode.mockResolvedValue(null);
-    desktopAuthMocks.completeOemCloudDesktopOAuthLogin.mockResolvedValue({});
-    shellOpenMock.mockResolvedValue(undefined);
-    systemBrowserMocks.openExternalUrlWithSystemBrowser.mockReset();
-    systemBrowserMocks.openExternalUrlWithSystemBrowser.mockResolvedValue(
-      undefined,
-    );
-    systemBrowserMocks.startOemCloudOAuthCallbackBridge.mockReset();
-    systemBrowserMocks.startOemCloudOAuthCallbackBridge.mockResolvedValue({
-      callbackUrl: "http://127.0.0.1:18081/oauth/callback",
-    });
-    tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(true);
-    tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(true);
-  });
-
-  afterEach(async () => {
-    vi.clearAllMocks();
-    vi.useRealTimers();
-    window.localStorage.clear();
-    delete window.__LIME_SESSION_TOKEN__;
-    delete window.__LIME_BOOTSTRAP__;
-    delete window.__LIME_OEM_CLOUD__;
-
-    if (mountedHarness) {
-      act(() => {
-        mountedHarness?.root.unmount();
-      });
-      mountedHarness.container.remove();
-      mountedHarness = null;
-    }
-    await changeLimeLocale("zh-CN");
-  });
+  useOemCloudAccessTestLifecycle();
 
   it("恢复本地会话时不应因重复 effect 触发而卡在初始化中", async () => {
-    const bootstrapPayload = {
-      session: {
-        tenant: {
-          id: "tenant-0001",
-          name: "JustAI Demo",
-        },
-        user: {
-          id: "user-001",
-          email: "operator@example.com",
-          displayName: "Demo Operator",
-        },
-        session: {
-          id: "session-001",
-          tenantId: "tenant-0001",
-          userId: "user-001",
-          expiresAt: "2026-03-25T08:00:00.000Z",
-        },
-      },
-      providerOffersSummary: [],
-      providerPreference: null,
-      serviceSkillCatalog: {
-        items: [],
-      },
-      sceneCatalog: [],
-      gateway: {
-        basePath: "/gateway-api",
-      },
-    };
+    const bootstrapPayload = createBootstrapPayload();
     const bootstrapDeferred = createDeferred<typeof bootstrapPayload>();
     controlPlaneMocks.getClientBootstrap.mockImplementation(
       () => bootstrapDeferred.promise,
     );
+    restoreStoredSession();
 
-    setStoredOemCloudSessionState({
-      token: "session-token-restore",
-      tenant: {
-        id: "tenant-0001",
-      },
-      user: {
-        id: "user-001",
-      },
-      session: {
-        id: "session-001",
-      },
-    });
-
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    mountedHarness = { container, root };
-
-    act(() => {
-      root.render(<HookHarness />);
-    });
-
+    mountHookHarness();
     await flushEffects();
 
     expect(controlPlaneMocks.getClientBootstrap).toHaveBeenCalledTimes(1);
@@ -360,34 +91,6 @@ describe("useOemCloudAccess", () => {
   });
 
   it("客户端不再创建购买订单，API Key 明文只临时保存", async () => {
-    const bootstrapPayload = {
-      session: {
-        tenant: {
-          id: "tenant-0001",
-          name: "JustAI Demo",
-        },
-        user: {
-          id: "user-001",
-          email: "operator@example.com",
-          displayName: "Demo Operator",
-        },
-        session: {
-          id: "session-001",
-          tenantId: "tenant-0001",
-          userId: "user-001",
-          expiresAt: "2026-03-25T08:00:00.000Z",
-        },
-      },
-      providerOffersSummary: [],
-      providerPreference: null,
-      serviceSkillCatalog: {
-        items: [],
-      },
-      sceneCatalog: [],
-      gateway: {
-        basePath: "/gateway-api",
-      },
-    };
     const accessToken = {
       id: "token-001",
       tenantId: "tenant-0001",
@@ -401,33 +104,16 @@ describe("useOemCloudAccess", () => {
       updatedAt: "2026-04-27T00:00:00.000Z",
       expiresAt: "2026-05-27T00:00:00.000Z",
     };
-    controlPlaneMocks.getClientBootstrap.mockResolvedValue(bootstrapPayload);
+    controlPlaneMocks.getClientBootstrap.mockResolvedValue(
+      createBootstrapPayload(),
+    );
     controlPlaneMocks.createClientAccessToken.mockResolvedValue({
       token: accessToken,
       apiKey: "sk-lime-once",
     });
+    restoreStoredSession();
 
-    setStoredOemCloudSessionState({
-      token: "session-token-restore",
-      tenant: {
-        id: "tenant-0001",
-      },
-      user: {
-        id: "user-001",
-      },
-      session: {
-        id: "session-001",
-      },
-    });
-
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    mountedHarness = { container, root };
-
-    act(() => {
-      root.render(<HookHarness />);
-    });
+    mountHookHarness();
     await flushEffects();
 
     expect("handlePurchasePlan" in (latestState ?? {})).toBe(false);
@@ -472,14 +158,7 @@ describe("useOemCloudAccess", () => {
       expiresInSeconds: 600,
     });
 
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    mountedHarness = { container, root };
-
-    act(() => {
-      root.render(<HookHarness />);
-    });
+    mountHookHarness();
     await flushEffects();
 
     act(() => {
@@ -507,57 +186,12 @@ describe("useOemCloudAccess", () => {
   });
 
   it("支付回跳事件应刷新云端权益并接回订单 watcher", async () => {
-    const bootstrapPayload = {
-      session: {
-        tenant: {
-          id: "tenant-0001",
-          name: "JustAI Demo",
-        },
-        user: {
-          id: "user-001",
-          email: "operator@example.com",
-          displayName: "Demo Operator",
-        },
-        session: {
-          id: "session-001",
-          tenantId: "tenant-0001",
-          userId: "user-001",
-          expiresAt: "2026-03-25T08:00:00.000Z",
-        },
-      },
-      providerOffersSummary: [],
-      providerPreference: null,
-      serviceSkillCatalog: {
-        items: [],
-      },
-      sceneCatalog: [],
-      gateway: {
-        basePath: "/gateway-api",
-      },
-    };
-    controlPlaneMocks.getClientBootstrap.mockResolvedValue(bootstrapPayload);
+    controlPlaneMocks.getClientBootstrap.mockResolvedValue(
+      createBootstrapPayload(),
+    );
+    restoreStoredSession();
 
-    setStoredOemCloudSessionState({
-      token: "session-token-restore",
-      tenant: {
-        id: "tenant-0001",
-      },
-      user: {
-        id: "user-001",
-      },
-      session: {
-        id: "session-001",
-      },
-    });
-
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    mountedHarness = { container, root };
-
-    act(() => {
-      root.render(<HookHarness />);
-    });
+    mountHookHarness();
     await flushEffects();
     controlPlaneMocks.getClientBootstrap.mockClear();
     controlPlaneMocks.getClientCloudActivation.mockClear();
@@ -645,14 +279,7 @@ describe("useOemCloudAccess", () => {
       },
     );
 
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    mountedHarness = { container, root };
-
-    act(() => {
-      root.render(<HookHarness />);
-    });
+    mountHookHarness();
     await flushEffects();
 
     await act(async () => {
@@ -718,14 +345,7 @@ describe("useOemCloudAccess", () => {
     );
     shellOpenMock.mockRejectedValue(new Error("permission denied"));
 
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    mountedHarness = { container, root };
-
-    act(() => {
-      root.render(<HookHarness />);
-    });
+    mountHookHarness();
     await flushEffects();
 
     await act(async () => {
@@ -751,14 +371,7 @@ describe("useOemCloudAccess", () => {
       new Error("tenant not found"),
     );
 
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    mountedHarness = { container, root };
-
-    act(() => {
-      root.render(<HookHarness />);
-    });
+    mountHookHarness();
     await flushEffects();
 
     await act(async () => {
@@ -798,14 +411,7 @@ describe("useOemCloudAccess", () => {
       .spyOn(window, "open")
       .mockReturnValueOnce(openedWindow);
 
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    mountedHarness = { container, root };
-
-    act(() => {
-      root.render(<HookHarness />);
-    });
+    mountHookHarness();
     await flushEffects();
 
     try {
@@ -843,14 +449,7 @@ describe("useOemCloudAccess", () => {
       new Error("desktop client not found"),
     );
 
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    mountedHarness = { container, root };
-
-    act(() => {
-      root.render(<HookHarness />);
-    });
+    mountHookHarness();
     await flushEffects();
 
     await act(async () => {

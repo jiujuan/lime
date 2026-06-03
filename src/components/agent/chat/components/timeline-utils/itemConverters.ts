@@ -111,10 +111,14 @@ export function toToolCallState(item: AgentThreadItem): ToolCallState | null {
     case "web_search":
       return {
         id: item.id,
-        name: item.action || "web_search",
+        name: "web_search",
         arguments:
           item.query !== undefined
-            ? JSON.stringify({ query: item.query }, null, 2)
+            ? JSON.stringify(
+                { action: item.action || "web_search", query: item.query },
+                null,
+                2,
+              )
             : undefined,
         status: mapItemStatus(item.status),
         result:

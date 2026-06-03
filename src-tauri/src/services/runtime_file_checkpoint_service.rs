@@ -59,10 +59,10 @@ pub fn get_file_checkpoint(
     let metadata = record.metadata.as_ref();
     let snapshot_path = extract_snapshot_path(metadata, record.summary.path.as_str())
         .unwrap_or_else(|| record.summary.path.clone());
-    let checkpoint_document = read_json_relative(workspace_root, snapshot_path.as_str())
+    let checkpoint_document = read_json_workspace_path(workspace_root, snapshot_path.as_str())
         .or_else(|| extract_artifact_document(metadata));
-    let live_document =
-        read_json_relative(workspace_root, record.summary.path.as_str()).or_else(|| {
+    let live_document = read_json_workspace_path(workspace_root, record.summary.path.as_str())
+        .or_else(|| {
             if snapshot_path == record.summary.path {
                 checkpoint_document.clone()
             } else {
@@ -119,13 +119,21 @@ pub fn restore_file_checkpoint(
     let metadata = record.metadata.as_ref();
     let snapshot_path = extract_snapshot_path(metadata, record.summary.path.as_str())
         .unwrap_or_else(|| record.summary.path.clone());
-    let live_relative_path = normalize_workspace_relative_path(record.summary.path.as_str())?;
-    let snapshot_relative_path = normalize_workspace_relative_path(snapshot_path.as_str())?;
+    let live_relative_path =
+        resolve_workspace_relative_path(workspace_root, record.summary.path.as_str())?;
+    let snapshot_relative_path =
+        resolve_workspace_relative_path(workspace_root, snapshot_path.as_str())?;
     let live_path = workspace_root.join(relative_path_to_platform_path(&live_relative_path));
     let snapshot_path =
         workspace_root.join(relative_path_to_platform_path(&snapshot_relative_path));
+    let restored_content = extract_previous_content_from_file_change(metadata);
+    if restored_content.is_none() && live_relative_path == snapshot_relative_path {
+        return Err(format!(
+            "文件快照与目标文件相同，无法安全恢复: {live_relative_path}"
+        ));
+    }
 
-    if !snapshot_path.is_file() {
+    if restored_content.is_none() && !snapshot_path.is_file() {
         return Err(format!(
             "文件快照不存在或不可读取: {snapshot_relative_path}"
         ));
@@ -153,8 +161,13 @@ pub fn restore_file_checkpoint(
             .map_err(|error| format!("创建目标文件目录失败: {live_relative_path}, {error}"))?;
     }
 
-    fs::copy(&snapshot_path, &live_path)
-        .map_err(|error| format!("恢复文件快照失败: {live_relative_path}, {error}"))?;
+    if let Some(content) = restored_content {
+        fs::write(&live_path, content)
+            .map_err(|error| format!("恢复文件快照失败: {live_relative_path}, {error}"))?;
+    } else {
+        fs::copy(&snapshot_path, &live_path)
+            .map_err(|error| format!("恢复文件快照失败: {live_relative_path}, {error}"))?;
+    }
 
     Ok(AgentRuntimeFileCheckpointRestoreResult {
         session_id: detail.id.clone(),
@@ -419,11 +432,66 @@ fn extract_version_diff(metadata: Option<&Value>) -> Option<Value> {
         .cloned()
 }
 
-fn read_json_relative(workspace_root: &Path, relative_path: &str) -> Option<Value> {
-    let normalized = normalize_workspace_relative_path(relative_path).ok()?;
+fn extract_previous_content_from_file_change(metadata: Option<&Value>) -> Option<String> {
+    let file_change = metadata_object(metadata)?
+        .get("file_change")
+        .and_then(Value::as_object)?;
+    if file_change
+        .get("truncated")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return None;
+    }
+
+    let diff = file_change.get("diff").and_then(Value::as_array)?;
+    let mut lines = Vec::new();
+    let mut saw_removed_line = false;
+
+    for entry in diff {
+        let entry = entry.as_object()?;
+        let kind = entry.get("kind").and_then(Value::as_str)?;
+        let value = entry.get("value").and_then(Value::as_str)?;
+        match kind {
+            "context" => lines.push(value.to_string()),
+            "remove" => {
+                saw_removed_line = true;
+                lines.push(value.to_string());
+            }
+            "add" => {}
+            _ => return None,
+        }
+    }
+
+    if !saw_removed_line {
+        return None;
+    }
+
+    Some(lines.join("\n"))
+}
+
+fn read_json_workspace_path(workspace_root: &Path, path: &str) -> Option<Value> {
+    let normalized = resolve_workspace_relative_path(workspace_root, path).ok()?;
     let path = workspace_root.join(relative_path_to_platform_path(&normalized));
     let raw = fs::read_to_string(path).ok()?;
     serde_json::from_str::<Value>(&raw).ok()
+}
+
+fn resolve_workspace_relative_path(workspace_root: &Path, path: &str) -> Result<String, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("文件路径不能为空".to_string());
+    }
+
+    let candidate = PathBuf::from(trimmed);
+    if candidate.is_absolute() {
+        let relative_path = candidate
+            .strip_prefix(workspace_root)
+            .map_err(|_| format!("文件路径必须位于当前工作区内: {path}"))?;
+        return normalize_workspace_relative_path(&relative_path.to_string_lossy());
+    }
+
+    normalize_workspace_relative_path(trimmed)
 }
 
 fn normalize_workspace_relative_path(relative_path: &str) -> Result<String, String> {
@@ -743,6 +811,140 @@ mod tests {
     }
 
     #[test]
+    fn restore_file_checkpoint_should_use_file_change_diff_when_snapshot_is_live_file() {
+        let temp_dir = tempdir().expect("temp dir");
+        let workspace_root = temp_dir.path();
+        let live_path = workspace_root.join(".lime/qc/code-runtime-fixture/src/greeting.ts");
+        fs::create_dir_all(live_path.parent().expect("live parent")).expect("live dir");
+        fs::write(
+            &live_path,
+            "export function greeting() {\n  return 'Hello Lime Runtime';\n}\n\nexport const runtimeVerified = true;\n",
+        )
+        .expect("write live");
+        let detail = build_detail(build_item_with_path(
+            ".lime/qc/code-runtime-fixture/src/greeting.ts",
+            None,
+            Some(serde_json::json!({
+                "artifactKind": "code_file",
+                "artifactVersion": {
+                    "snapshotPath": ".lime/qc/code-runtime-fixture/src/greeting.ts"
+                },
+                "file_change": {
+                    "kind": "update",
+                    "path": ".lime/qc/code-runtime-fixture/src/greeting.ts",
+                    "truncated": false,
+                    "diff": [
+                        { "kind": "context", "value": "export function greeting() {" },
+                        { "kind": "remove", "value": "  return 'Hello from initial fixture';" },
+                        { "kind": "add", "value": "  return 'Hello Lime Runtime';" },
+                        { "kind": "context", "value": "}" },
+                        { "kind": "context", "value": "" },
+                        { "kind": "add", "value": "export const runtimeVerified = true;" },
+                        { "kind": "add", "value": "" }
+                    ]
+                }
+            })),
+        ));
+
+        let result = restore_file_checkpoint(
+            &detail,
+            workspace_root,
+            "artifact-document:req-1",
+            true,
+            true,
+        )
+        .expect("restore should use inverse diff");
+
+        assert_eq!(
+            fs::read_to_string(&live_path).expect("read live"),
+            "export function greeting() {\n  return 'Hello from initial fixture';\n}\n"
+        );
+        let backup_path = result.backup_path.expect("backup path");
+        assert_eq!(
+            fs::read_to_string(workspace_root.join(relative_path_to_platform_path(&backup_path)))
+                .expect("read backup"),
+            "export function greeting() {\n  return 'Hello Lime Runtime';\n}\n\nexport const runtimeVerified = true;\n"
+        );
+    }
+
+    #[test]
+    fn restore_file_checkpoint_should_reject_live_snapshot_without_inverse_diff() {
+        let temp_dir = tempdir().expect("temp dir");
+        let workspace_root = temp_dir.path();
+        let live_path = workspace_root.join(".lime/qc/code-runtime-fixture/src/greeting.ts");
+        fs::create_dir_all(live_path.parent().expect("live parent")).expect("live dir");
+        fs::write(&live_path, "current").expect("write live");
+        let detail = build_detail(build_item_with_path(
+            ".lime/qc/code-runtime-fixture/src/greeting.ts",
+            None,
+            Some(serde_json::json!({
+                "artifactVersion": {
+                    "snapshotPath": ".lime/qc/code-runtime-fixture/src/greeting.ts"
+                }
+            })),
+        ));
+
+        let error = restore_file_checkpoint(
+            &detail,
+            workspace_root,
+            "artifact-document:req-1",
+            true,
+            true,
+        )
+        .expect_err("same live snapshot should be rejected");
+
+        assert!(error.contains("无法安全恢复"));
+        assert_eq!(
+            fs::read_to_string(&live_path).expect("read live"),
+            "current"
+        );
+        let backup_root = workspace_root.join(".lime/file-checkpoint-backups");
+        assert!(!backup_root.exists());
+    }
+
+    #[test]
+    fn restore_file_checkpoint_should_accept_absolute_path_inside_workspace() {
+        let temp_dir = tempdir().expect("temp dir");
+        let workspace_root = temp_dir.path();
+        let live_path = workspace_root.join(".lime/qc/code-runtime-fixture/src/greeting.ts");
+        let snapshot_path =
+            workspace_root.join(".lime/qc/code-runtime-fixture/versions/greeting-v2.ts");
+        fs::create_dir_all(live_path.parent().expect("live parent")).expect("live dir");
+        fs::create_dir_all(snapshot_path.parent().expect("snapshot parent")).expect("snapshot dir");
+        fs::write(&live_path, "current").expect("write live");
+        fs::write(&snapshot_path, "snapshot").expect("write snapshot");
+
+        let detail = build_detail(build_item_with_path(
+            live_path.to_string_lossy().as_ref(),
+            Some("snapshot"),
+            Some(serde_json::json!({
+                "artifactVersion": {
+                    "snapshotPath": snapshot_path.to_string_lossy()
+                }
+            })),
+        ));
+
+        let result = restore_file_checkpoint(
+            &detail,
+            workspace_root,
+            "artifact-document:req-1",
+            true,
+            true,
+        )
+        .expect("restore should accept workspace absolute path");
+
+        assert_eq!(
+            result.live_path,
+            ".lime/qc/code-runtime-fixture/src/greeting.ts"
+        );
+        assert_eq!(
+            fs::read_to_string(&live_path).expect("read live"),
+            "snapshot"
+        );
+        assert!(result.backup_path.is_some());
+    }
+
+    #[test]
     fn restore_file_checkpoint_should_reject_workspace_escape_path() {
         let temp_dir = tempdir().expect("temp dir");
         let detail = build_detail(build_item_with_path(
@@ -763,6 +965,34 @@ mod tests {
             true,
         )
         .expect_err("path escape should fail");
+
+        assert!(error.contains("当前工作区"));
+    }
+
+    #[test]
+    fn restore_file_checkpoint_should_reject_absolute_path_outside_workspace() {
+        let workspace_dir = tempdir().expect("workspace dir");
+        let outside_dir = tempdir().expect("outside dir");
+        let outside_path = outside_dir.path().join("outside.json");
+        fs::write(&outside_path, "{}").expect("write outside");
+        let detail = build_detail(build_item_with_path(
+            outside_path.to_string_lossy().as_ref(),
+            Some("{}"),
+            Some(serde_json::json!({
+                "artifactVersion": {
+                    "snapshotPath": outside_path.to_string_lossy()
+                }
+            })),
+        ));
+
+        let error = restore_file_checkpoint(
+            &detail,
+            workspace_dir.path(),
+            "artifact-document:req-1",
+            true,
+            true,
+        )
+        .expect_err("outside absolute path should fail");
 
         assert!(error.contains("当前工作区"));
     }

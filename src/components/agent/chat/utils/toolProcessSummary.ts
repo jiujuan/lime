@@ -1216,8 +1216,10 @@ export function resolveAgentThreadToolProcessNarrative(
 
   if (item.type === "web_search") {
     return buildNarrative({
-      toolName: item.action || "web_search",
-      argumentsValue: item.query ? { query: item.query } : undefined,
+      toolName: "web_search",
+      argumentsValue: item.query
+        ? { action: item.action || "web_search", query: item.query }
+        : { action: item.action || "web_search" },
       status: item.status,
       output: item.output,
     });

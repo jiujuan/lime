@@ -88,8 +88,6 @@ describe("workspaceSendHelpers runtime team preview", () => {
   it("浏览器 requirement 应进入工作区发送 metadata，而不是依赖组件挂载验证", () => {
     const metadata = buildWorkspaceRequestMetadata({
       effectiveToolPreferences: {
-        webSearch: false,
-        thinking: false,
         task: false,
         subagent: false,
       },
@@ -122,6 +120,288 @@ describe("workspaceSendHelpers runtime team preview", () => {
     });
   });
 
+  it("默认工作区 metadata 不应注入 Creator / Brand Voice", () => {
+    const metadata = buildWorkspaceRequestMetadata({
+      effectiveToolPreferences: {
+        task: false,
+        subagent: false,
+      },
+      mappedTheme: "general",
+      isThemeWorkbench: true,
+      currentGateKey: "write_mode",
+      contentId: "content-no-voice",
+    });
+
+    expect(metadata.artifact).toBeUndefined();
+    expect(metadata.harness).not.toHaveProperty("generation_brief");
+    expect(metadata.harness).not.toHaveProperty("generationBrief");
+  });
+
+  it("应把显式 Generation Brief voice metadata 收敛到 artifact.generation_brief", () => {
+    const metadata = buildWorkspaceRequestMetadata({
+      workspaceRequestMetadataBase: {
+        trace_id: "trace-voice-1",
+      },
+      sendOptions: {
+        requestMetadata: {
+          artifact: {
+            generationBrief: {
+              voiceSource: "brand_voice",
+              voiceGuard: "user_explicit",
+              brandVoiceId: "brand-voice-1",
+              evidencePackId: "voice-pack-1",
+              inheritsGlobalSoul: false,
+              inheritsExpertPersona: false,
+            },
+          },
+        },
+      },
+      effectiveToolPreferences: {
+        task: false,
+        subagent: false,
+      },
+      mappedTheme: "general",
+      isThemeWorkbench: true,
+      currentGateKey: "write_mode",
+      contentId: "content-brand-voice",
+    });
+
+    expect(metadata).toMatchObject({
+      trace_id: "trace-voice-1",
+      artifact: {
+        generation_brief: {
+          voice_source: "brand_voice",
+          voice_guard: "user_explicit",
+          brand_voice_id: "brand-voice-1",
+          evidence_pack_id: "voice-pack-1",
+          inherits_global_soul: false,
+          inherits_expert_persona: false,
+        },
+      },
+      harness: expect.objectContaining({
+        theme: "general",
+        session_mode: "general_workbench",
+        content_id: "content-brand-voice",
+      }),
+    });
+    expect(metadata.artifact as Record<string, unknown>).not.toHaveProperty(
+      "generationBrief",
+    );
+    expect(metadata.harness).not.toHaveProperty("generation_brief");
+  });
+
+  it("只带 generation_brief 时不应在前端补 Artifact Stage / Schema 合同", () => {
+    const metadata = buildWorkspaceRequestMetadata({
+      sendOptions: {
+        requestMetadata: {
+          generationBrief: {
+            voiceSource: "creator_voice",
+            creatorVoiceId: "creator-voice-1",
+            evidenceRefs: ["memory:voice-1"],
+          },
+        },
+      },
+      effectiveToolPreferences: {
+        task: false,
+        subagent: false,
+      },
+      mappedTheme: "general",
+      isThemeWorkbench: false,
+      currentGateKey: "write_mode",
+    });
+
+    expect(metadata.artifact).toEqual({
+      generation_brief: {
+        voice_source: "creator_voice",
+        creator_voice_id: "creator-voice-1",
+        evidence_refs: ["memory:voice-1"],
+      },
+    });
+    expect(metadata).not.toHaveProperty("generationBrief");
+    expect(metadata.artifact as Record<string, unknown>).not.toHaveProperty(
+      "artifact_mode",
+    );
+    expect(metadata.artifact as Record<string, unknown>).not.toHaveProperty(
+      "artifact_stage",
+    );
+    expect(metadata.artifact as Record<string, unknown>).not.toHaveProperty(
+      "artifact_kind",
+    );
+  });
+
+  it("workspace base 与 sendOptions 的 artifact metadata 应深合并", () => {
+    const metadata = buildWorkspaceRequestMetadata({
+      workspaceRequestMetadataBase: {
+        artifact: {
+          artifact_mode: "draft",
+          artifact_kind: "analysis",
+        },
+      },
+      sendOptions: {
+        requestMetadata: {
+          artifact: {
+            workbench_surface: "right_panel",
+            generationBrief: {
+              voiceSource: "brand_voice",
+              evidencePackId: "voice-pack-1",
+            },
+          },
+        },
+      },
+      effectiveToolPreferences: {
+        task: false,
+        subagent: false,
+      },
+      mappedTheme: "general",
+      isThemeWorkbench: true,
+      currentGateKey: "write_mode",
+      contentId: "content-merged-artifact",
+    });
+
+    expect(metadata.artifact).toEqual({
+      artifact_mode: "draft",
+      artifact_kind: "analysis",
+      workbench_surface: "right_panel",
+      generation_brief: {
+        voice_source: "brand_voice",
+        evidence_pack_id: "voice-pack-1",
+      },
+    });
+  });
+
+  it("保存的 Soul 创作声线无本轮显式声线时应作为发送 fallback", () => {
+    const metadata = buildWorkspaceRequestMetadata({
+      savedSoulArtifactVoiceGenerationBrief: {
+        voice_source: "brand_voice",
+        voice_guard: "user_explicit",
+        brand_voice_id: "saved-brand-voice",
+        evidence_source: "memory.soul.artifact_voice",
+      },
+      soulArtifactVoiceEnabledForTurn: true,
+      effectiveToolPreferences: {
+        task: false,
+        subagent: false,
+      },
+      mappedTheme: "general",
+      isThemeWorkbench: true,
+      currentGateKey: "write_mode",
+      contentId: "content-saved-voice",
+    });
+
+    expect(metadata).toMatchObject({
+      artifact: {
+        generation_brief: {
+          voice_source: "brand_voice",
+          voice_guard: "user_explicit",
+          brand_voice_id: "saved-brand-voice",
+          evidence_source: "memory.soul.artifact_voice",
+        },
+      },
+      diagnostics: {
+        soul_artifact_voice: {
+          status: "saved_applied",
+          enabled_for_turn: true,
+          source: "memory.soul.artifact_voice",
+          guard_result: "applied",
+          voice_source: "brand_voice",
+          voice_guard: "user_explicit",
+          evidence_source: "memory.soul.artifact_voice",
+        },
+      },
+    });
+  });
+
+  it("本轮关闭保存的 Soul 创作声线时不应注入 artifact metadata", () => {
+    const metadata = buildWorkspaceRequestMetadata({
+      savedSoulArtifactVoiceGenerationBrief: {
+        voice_source: "brand_voice",
+        voice_guard: "user_explicit",
+        brand_voice_id: "saved-brand-voice",
+        evidence_source: "memory.soul.artifact_voice",
+      },
+      soulArtifactVoiceEnabledForTurn: false,
+      effectiveToolPreferences: {
+        task: false,
+        subagent: false,
+      },
+      mappedTheme: "general",
+      isThemeWorkbench: true,
+      currentGateKey: "write_mode",
+      contentId: "content-saved-voice-disabled",
+    });
+
+    expect(metadata.artifact).toBeUndefined();
+    expect(metadata).toMatchObject({
+      diagnostics: {
+        soul_artifact_voice: {
+          status: "disabled_for_turn",
+          enabled_for_turn: false,
+          source: "memory.soul.artifact_voice",
+          guard_result: "blocked_by_turn_override",
+          voice_source: "brand_voice",
+          voice_guard: "user_explicit",
+          evidence_source: "memory.soul.artifact_voice",
+        },
+      },
+    });
+  });
+
+  it("本轮显式声线应覆盖保存的 Soul 创作声线且不继承保存 evidence", () => {
+    const metadata = buildWorkspaceRequestMetadata({
+      savedSoulArtifactVoiceGenerationBrief: {
+        voice_source: "brand_voice",
+        voice_guard: "user_explicit",
+        brand_voice_id: "saved-brand-voice",
+        evidence_source: "memory.soul.artifact_voice",
+      },
+      soulArtifactVoiceEnabledForTurn: true,
+      sendOptions: {
+        requestMetadata: {
+          generationBrief: {
+            voiceSource: "creator_voice",
+            creatorVoiceId: "turn-creator-voice",
+            evidenceRefs: ["memory:turn-voice"],
+          },
+        },
+      },
+      effectiveToolPreferences: {
+        task: false,
+        subagent: false,
+      },
+      mappedTheme: "general",
+      isThemeWorkbench: true,
+      currentGateKey: "write_mode",
+      contentId: "content-turn-voice",
+    });
+
+    expect(metadata).toMatchObject({
+      artifact: {
+        generation_brief: {
+          voice_source: "creator_voice",
+          creator_voice_id: "turn-creator-voice",
+          evidence_refs: ["memory:turn-voice"],
+        },
+      },
+      diagnostics: {
+        soul_artifact_voice: {
+          status: "turn_explicit",
+          enabled_for_turn: true,
+          source: "request_metadata.generation_brief",
+          guard_result: "applied",
+          voice_source: "creator_voice",
+          evidence_refs: ["memory:turn-voice"],
+          evidence_ref_count: 1,
+        },
+      },
+    });
+    expect(metadata.artifact).not.toMatchObject({
+      generation_brief: {
+        brand_voice_id: "saved-brand-voice",
+        evidence_source: "memory.soul.artifact_voice",
+      },
+    });
+  });
+
   it("自动首发 metadata 中已有浏览器协助参数时应继续保留", () => {
     const metadata = buildWorkspaceRequestMetadata({
       sendOptions: {
@@ -137,8 +417,6 @@ describe("workspaceSendHelpers runtime team preview", () => {
         },
       },
       effectiveToolPreferences: {
-        webSearch: false,
-        thinking: false,
         task: false,
         subagent: false,
       },

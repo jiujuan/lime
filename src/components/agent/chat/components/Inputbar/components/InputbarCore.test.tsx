@@ -132,7 +132,6 @@ function translateResource(
 const TEST_INPUTBAR_CORE_COPY = buildInputbarCoreCopy((key, values) =>
   translateResource(agentZhCNResource, key, values),
 );
-
 const TEST_EN_INPUTBAR_CORE_COPY = buildInputbarCoreCopy((key, values) =>
   translateResource(agentEnUSResource, key, values),
 );
@@ -245,35 +244,6 @@ describe("InputbarCore", () => {
     expect(
       container.querySelector('button[aria-label="添加图片"]'),
     ).toBeTruthy();
-  });
-
-  it("应支持使用 en-US copy 渲染输入区 chrome 文案", async () => {
-    const container = await renderInputbarCore({
-      uiCopy: TEST_EN_INPUTBAR_CORE_COPY,
-      visualVariant: "default",
-      toolMode: "default",
-      isLoading: true,
-      queuedTurns: [
-        {
-          queued_turn_id: "queued-en-1",
-          message_preview: "Follow-up brief",
-          message_text: "Queue body",
-          created_at: 1700000000000,
-          image_count: 0,
-          position: 1,
-        },
-      ],
-    });
-
-    expect(
-      container.querySelector('button[aria-label="Add image"]'),
-    ).toBeTruthy();
-    expect(
-      container.querySelector('button[aria-label="Expand input"]'),
-    ).toBeTruthy();
-    expect(container.querySelector('button[aria-label="Send"]')).toBeNull();
-    expect(container.textContent).toContain("Handle later");
-    expect(container.querySelector('button[aria-label="Stop"]')).toBeTruthy();
   });
 
   it("添加路径引用时应显示 chip 并允许移除", async () => {

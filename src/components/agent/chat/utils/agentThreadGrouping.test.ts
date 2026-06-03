@@ -307,6 +307,34 @@ describe("agentThreadGrouping", () => {
     expect(model.orderedBlocks[0]?.rawDetailLabel).toBe("展开查看探索明细");
   });
 
+  it("连续 WebSearch 线程项应折叠成网页搜索摘要", () => {
+    const items: AgentThreadItem[] = [
+      {
+        ...createBaseItem("search-1", 1),
+        type: "web_search",
+        action: "search",
+        query: "today world news Reuters",
+      },
+      {
+        ...createBaseItem("search-2", 2),
+        type: "web_search",
+        action: "openPage",
+        query: "https://apnews.com/hub/world-news",
+      },
+    ];
+
+    const model = buildAgentThreadDisplayModel(items);
+
+    expect(model.orderedBlocks).toHaveLength(1);
+    expect(model.orderedBlocks[0]?.title).toBe("已搜索网页 2 次");
+    expect(model.orderedBlocks[0]?.previewLines).toEqual([
+      "today world news Reuters",
+      "https://apnews.com/hub/world-news",
+    ]);
+    expect(model.orderedBlocks[0]?.countLabel).toBe("2 次");
+    expect(model.orderedBlocks[0]?.rawDetailLabel).toBe("展开查看搜索来源");
+  });
+
   it("交互与任务结果预览应使用更直白的用户文案", () => {
     const items: AgentThreadItem[] = [
       {

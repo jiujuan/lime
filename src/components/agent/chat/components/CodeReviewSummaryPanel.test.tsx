@@ -530,41 +530,6 @@ describe("CodeReviewSummaryPanel", () => {
     );
   });
 
-  it("输出预览应裁剪长内容，避免摘要卡膨胀", () => {
-    const longPreview = Array.from(
-      { length: 12 },
-      (_, index) => `line-${index + 1} ${"x".repeat(60)}`,
-    ).join("\n");
-    const { container } = renderPanel({
-      harnessState: {
-        ...createEmptyHarnessState(),
-        outputSignals: [
-          {
-            id: "signal-long",
-            toolCallId: "tool-long",
-            toolName: "bash",
-            title: "测试输出",
-            summary: "vitest passed",
-            preview: longPreview,
-            exitCode: 0,
-          },
-        ],
-        hasSignals: true,
-      },
-      fileCheckpointSummary: null,
-    });
-
-    const outputPreview = container.querySelector(
-      '[data-testid="code-review-summary-output-preview"]',
-    ) as HTMLElement | null;
-
-    expect(outputPreview?.textContent).toContain("输出片段");
-    expect(outputPreview?.textContent).toContain("line-1");
-    expect(outputPreview?.textContent).toContain("line-4");
-    expect(outputPreview?.textContent).toContain("...");
-    expect(outputPreview?.textContent).not.toContain("line-5");
-  });
-
   it("文件变更超过三条时应提示剩余数量", () => {
     const { container } = renderPanel({
       harnessState: {

@@ -869,7 +869,7 @@ describe("Agent API 治理护栏", () => {
   it("getAgentRuntimeSession 遇到 transient DevBridge 读失败时只输出 warn 调试日志", async () => {
     mockSafeInvoke.mockRejectedValueOnce(
       new Error(
-        '[DevBridge] 浏览器模式无法连接后端桥接，命令 "agent_runtime_get_session" 执行失败。原始错误: Failed to fetch (timeout after 8000ms)',
+        '[DevBridge] 浏览器模式无法连接后端桥接，命令 "agent_runtime_get_session" 执行失败。原始错误: Failed to fetch (timeout after 20000ms)',
       ),
     );
 
@@ -877,7 +877,7 @@ describe("Agent API 治理护栏", () => {
       getAgentRuntimeSession("session-runtime-transient", {
         historyLimit: 40,
       }),
-    ).rejects.toThrow("timeout after 8000ms");
+    ).rejects.toThrow("timeout after 20000ms");
 
     const errorDebugCall = mockLogAgentDebug.mock.calls.find(
       ([component, phase]) =>

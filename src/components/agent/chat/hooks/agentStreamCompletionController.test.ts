@@ -62,7 +62,7 @@ describe("agentStreamCompletionController", () => {
     ).toBe("兜底内容");
   });
 
-  it("应在最终文本变化时重建 text part 并保留过程 part", () => {
+  it("最终文本变化时应保留过程顺序并把最终正文放到过程后", () => {
     const parts = [
       { type: "text", text: "原始" },
       { type: "tool_use", toolCall: { id: "tool-a" } },
@@ -76,8 +76,30 @@ describe("agentStreamCompletionController", () => {
         surfaceThinkingDeltas: true,
       }),
     ).toEqual([
-      { type: "text", text: "最终" },
+      { type: "text", text: "原始" },
       { type: "tool_use", toolCall: { id: "tool-a" } },
+      { type: "text", text: "最终" },
+    ]);
+  });
+
+  it("最终文本修正工具后的尾部正文时不应把正文挪到工具前", () => {
+    const parts = [
+      { type: "text", text: "我先查证来源。" },
+      { type: "tool_use", toolCall: { id: "tool-search" } },
+      { type: "text", text: "## 简报\n\n- 初稿。" },
+    ] as unknown as Message["contentParts"];
+
+    expect(
+      reconcileAgentStreamFinalContentParts({
+        parts,
+        finalContent: "## 简报\n\n- 修正后的最终稿。",
+        rawContent: "## 简报\n\n- 初稿。",
+        surfaceThinkingDeltas: true,
+      }),
+    ).toEqual([
+      { type: "text", text: "我先查证来源。" },
+      { type: "tool_use", toolCall: { id: "tool-search" } },
+      { type: "text", text: "## 简报\n\n- 修正后的最终稿。" },
     ]);
   });
 

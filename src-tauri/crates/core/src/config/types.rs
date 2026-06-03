@@ -2514,6 +2514,94 @@ pub struct MemoryProfileConfig {
     pub challenge_preference: Vec<String>,
 }
 
+/// Soul 导入来源
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum MemorySoulImportSource {
+    /// 用户手动配置
+    #[default]
+    Manual,
+    /// 从 SOUL.md 导入
+    SoulMd,
+}
+
+/// 正式产物创作声线来源
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum MemorySoulArtifactVoiceSource {
+    /// 使用用户显式配置的创作者声线
+    #[default]
+    CreatorVoice,
+    /// 使用用户显式配置的品牌声线
+    BrandVoice,
+}
+
+/// 正式产物创作声线配置
+///
+/// 该配置只作为 Generation Brief 的显式输入，默认不影响正式产物。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct MemorySoulArtifactVoiceConfig {
+    /// 是否允许本配置进入正式产物 Generation Brief
+    #[serde(default)]
+    pub enabled: bool,
+    /// 声线来源
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub voice_source: Option<MemorySoulArtifactVoiceSource>,
+    /// 创作者声线 ID
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub creator_voice_id: Option<String>,
+    /// 品牌声线 ID
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brand_voice_id: Option<String>,
+    /// Evidence Pack ID
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_pack_id: Option<String>,
+    /// 可追踪 evidence 引用
+    #[serde(default)]
+    pub evidence_refs: Vec<String>,
+}
+
+/// 全局交互人格配置
+///
+/// 该配置只表达 Lime 与用户互动时的语气、解释节奏和追问方式。
+/// 正式创作声线必须通过 Generation Brief，不从这里默认进入 artifact。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct MemorySoulConfig {
+    /// 是否启用全局交互人格
+    #[serde(default)]
+    pub enabled: bool,
+    /// 人格名称
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// 一句话风格摘要
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// 语气标签
+    #[serde(default)]
+    pub tone: Vec<String>,
+    /// 沟通方式
+    #[serde(default)]
+    pub communication_style: Vec<String>,
+    /// 解释深度
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub explanation_depth: Option<String>,
+    /// 遇到弱假设或分歧时的处理方式
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub challenge_style: Option<String>,
+    /// 避免事项
+    #[serde(default)]
+    pub avoid: Vec<String>,
+    /// 正式产物创作声线配置
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact_voice: Option<MemorySoulArtifactVoiceConfig>,
+    /// 导入来源
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imported_from: Option<MemorySoulImportSource>,
+    /// 更新时间
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+}
+
 /// 记忆来源配置
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MemorySourcesConfig {
@@ -2692,6 +2780,9 @@ pub struct MemoryConfig {
     /// 记忆偏好画像
     #[serde(default)]
     pub profile: Option<MemoryProfileConfig>,
+    /// 全局交互人格
+    #[serde(default)]
+    pub soul: Option<MemorySoulConfig>,
     /// 记忆来源配置
     #[serde(default)]
     pub sources: MemorySourcesConfig,

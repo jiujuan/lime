@@ -5,12 +5,9 @@ import type {
   SetStateAction,
 } from "react";
 import { useEffect, useMemo, useState } from "react";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { formatNumber } from "@/i18n/format";
 import { StepProgress } from "@/lib/workspace/workbenchUi";
-import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime";
-import type { AgentThreadItem } from "@/lib/api/agentProtocol";
 import { useWorkspaceNavigationActions } from "./useWorkspaceNavigationActions";
 import { useWorkspaceInputbarSceneRuntime } from "./useWorkspaceInputbarSceneRuntime";
 import { useWorkspaceCanvasSceneRuntime } from "./useWorkspaceCanvasSceneRuntime";
@@ -19,11 +16,7 @@ import { CanvasSessionOverviewPanel } from "../components/CanvasSessionOverviewP
 import { MessageList } from "../components/MessageList";
 import { TeamWorkspaceDock } from "../components/TeamWorkspaceDock";
 import type {
-  CanvasWorkbenchChangeItem,
-  CanvasWorkbenchChangeView,
-  CanvasWorkbenchHeaderView,
   CanvasWorkbenchSessionView,
-  CanvasWorkbenchSummaryStat,
   CanvasWorkbenchUtilityView,
 } from "../components/CanvasWorkbenchLayout";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
@@ -46,7 +39,21 @@ import {
   type TeamWorkbenchSurfaceProps,
 } from "./chatSurfaceProps";
 import { WorkspaceConversationScene } from "./WorkspaceConversationScene";
-import { extractFileNameFromPath } from "./workspacePath";
+import {
+  buildCanvasWorkbenchChangeView,
+  buildOutputHeaderViewModel,
+  buildQuotedReplyText,
+  buildSessionHeaderViewModel,
+  buildSessionRuntimeCounters,
+  buildSessionRuntimeProjectionIdentity,
+  buildSessionRuntimeProjectionState,
+  buildWorkspaceHeaderView,
+  isCodeOutputThreadItem,
+  resolveNextSessionRuntimeProjectionState,
+  resolveSessionRuntimeProjectionStatus,
+  resolveSessionStatusBadge,
+  shouldConsiderSessionRuntimeProjectionDeferral,
+} from "./workspaceConversationSceneViewModel";
 
 type InputbarScene = Pick<
   ReturnType<typeof useWorkspaceInputbarSceneRuntime>,
@@ -62,7 +69,6 @@ type InputbarScene = Pick<
   | "onStartKnowledgeOrganize"
   | "onManageKnowledgePacks"
 >;
-type AgentTranslate = TFunction<"agent", undefined>;
 type CanvasScene = Pick<
   ReturnType<typeof useWorkspaceCanvasSceneRuntime>,
   | "hasLiveCanvasPreviewContent"
@@ -191,63 +197,6 @@ function renderWorkspaceConversationScene({
   };
 }
 
-function shortenSessionText(value?: string | null, maxLength = 120): string {
-  const normalized = (value || "").trim().replace(/\s+/g, " ");
-  if (!normalized) {
-    return "";
-  }
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
-  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
-}
-
-function resolveSessionStatusBadge(
-  status?: "running" | "completed" | "failed" | "aborted" | null,
-  t?: AgentTranslate,
-): {
-  label: string;
-  tone: "default" | "accent" | "success";
-} {
-  if (status === "running") {
-    return {
-      label: t?.("agentChat.sessionOverview.status.turn.running") ?? "执行中",
-      tone: "accent",
-    };
-  }
-  if (status === "completed") {
-    return {
-      label: t?.("agentChat.sessionOverview.status.turn.completed") ?? "已完成",
-      tone: "success",
-    };
-  }
-  if (status === "failed") {
-    return {
-      label: t?.("agentChat.sessionOverview.status.turn.failed") ?? "失败",
-      tone: "default",
-    };
-  }
-  if (status === "aborted") {
-    return {
-      label: t?.("agentChat.sessionOverview.status.turn.aborted") ?? "已中断",
-      tone: "default",
-    };
-  }
-  return {
-    label: t?.("agentChat.sessionOverview.status.turn.idle") ?? "空闲",
-    tone: "default",
-  };
-}
-
-function resolvePathLeaf(value?: string | null): string {
-  const normalized = (value || "").trim().replace(/\\/g, "/");
-  if (!normalized) {
-    return "";
-  }
-  const segments = normalized.split("/").filter(Boolean);
-  return segments.at(-1) || normalized;
-}
-
 const SESSION_RUNTIME_PROJECTION_DEFER_MESSAGE_THRESHOLD = 20;
 const SESSION_RUNTIME_PROJECTION_DEFER_TURN_THRESHOLD = 6;
 const SESSION_RUNTIME_PROJECTION_DEFER_ITEM_THRESHOLD = 24;
@@ -271,235 +220,6 @@ const EMPTY_PROJECTED_QUEUED_TURNS: NonNullable<
 const EMPTY_PROJECTED_CHILD_SUBAGENT_SESSIONS: NonNullable<
   ConversationScenePresentationParams["messageList"]["childSubagentSessions"]
 > = [];
-
-const CODE_OUTPUT_ITEM_TYPES = new Set([
-  "command_execution",
-  "tool_call",
-  "error",
-  "warning",
-]);
-
-function normalizeChangePath(value: string): string {
-  return value.replace(/\\/g, "/").trim().toLowerCase();
-}
-
-function readMetadataRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function readMetadataText(
-  metadata: Record<string, unknown> | null,
-  keys: string[],
-): string | undefined {
-  for (const key of keys) {
-    const value = metadata?.[key];
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-  return undefined;
-}
-
-function readMetadataRecordValue(
-  metadata: Record<string, unknown> | null,
-  keys: string[],
-): Record<string, unknown> | null {
-  for (const key of keys) {
-    const value = readMetadataRecord(metadata?.[key]);
-    if (value) {
-      return value;
-    }
-  }
-  return null;
-}
-
-function readMetadataVersionNo(
-  metadata: Record<string, unknown> | null,
-): number | undefined {
-  const versionRecord = readMetadataRecordValue(metadata, [
-    "artifactVersion",
-    "artifact_version",
-  ]);
-  const rawValue =
-    metadata?.artifactVersionNo ??
-    metadata?.artifact_version_no ??
-    metadata?.versionNo ??
-    metadata?.version_no ??
-    versionRecord?.versionNo ??
-    versionRecord?.version_no;
-  if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
-    return rawValue;
-  }
-  if (typeof rawValue === "string" && rawValue.trim()) {
-    const parsed = Number(rawValue.trim());
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
-}
-
-function buildFileArtifactChangeItem(
-  item: Extract<AgentThreadItem, { type: "file_artifact" }>,
-  fileCheckpointSummary?: AgentRuntimeFileCheckpointThreadSummary | null,
-): CanvasWorkbenchChangeItem | null {
-  const path = item.path.trim();
-  if (!path) {
-    return null;
-  }
-
-  const metadata = readMetadataRecord(item.metadata);
-  const versionRecord = readMetadataRecordValue(metadata, [
-    "artifactVersion",
-    "artifact_version",
-  ]);
-  const preview =
-    readMetadataText(metadata, [
-      "previewText",
-      "preview_text",
-      "artifactSummary",
-      "artifact_summary",
-      "summary",
-    ]) || item.content;
-  const latestCheckpoint = fileCheckpointSummary?.latest_checkpoint || null;
-  const metadataCheckpointPath =
-    readMetadataText(metadata, ["snapshotPath", "snapshot_path"]) ||
-    readMetadataText(versionRecord, ["snapshotPath", "snapshot_path"]);
-  const checkpointMatches =
-    latestCheckpoint?.path &&
-    normalizeChangePath(latestCheckpoint.path) === normalizeChangePath(path);
-  const versionNo = readMetadataVersionNo(metadata);
-
-  return {
-    id: item.id,
-    path,
-    displayName:
-      readMetadataText(metadata, [
-        "artifactTitle",
-        "artifact_title",
-        "title",
-        "fileName",
-        "filename",
-      ]) || extractFileNameFromPath(path),
-    source: item.source,
-    status: item.status,
-    preview,
-    currentContent: item.content || preview || null,
-    previousContent: null,
-    checkpointPath: checkpointMatches
-      ? latestCheckpoint.path
-      : metadataCheckpointPath || null,
-    checkpointLabel:
-      (checkpointMatches && latestCheckpoint.version_no) || versionNo
-        ? `v${latestCheckpoint?.version_no || versionNo}`
-        : null,
-  };
-}
-
-function upsertChangeItem(
-  byPath: Map<string, CanvasWorkbenchChangeItem>,
-  item: CanvasWorkbenchChangeItem | null,
-) {
-  if (!item) {
-    return;
-  }
-  const key = normalizeChangePath(item.path);
-  const previous = byPath.get(key);
-  if (!previous) {
-    byPath.set(key, item);
-    return;
-  }
-
-  byPath.set(key, {
-    ...previous,
-    ...item,
-    id: previous.id,
-    currentContent: item.currentContent || previous.currentContent,
-    previousContent: item.previousContent ?? previous.previousContent,
-    preview: item.preview || previous.preview,
-    source: item.source || previous.source,
-    absolutePath: item.absolutePath || previous.absolutePath,
-    status:
-      previous.status === "in_progress" || item.status === "in_progress"
-        ? "in_progress"
-        : previous.status === "failed" || item.status === "failed"
-          ? "failed"
-          : item.status || previous.status,
-    checkpointPath: item.checkpointPath || previous.checkpointPath,
-    checkpointLabel: item.checkpointLabel || previous.checkpointLabel,
-  });
-}
-
-function buildCanvasWorkbenchChangeView({
-  threadItems,
-  fileCheckpointSummary,
-  onOpenFile,
-}: {
-  threadItems: AgentThreadItem[];
-  fileCheckpointSummary?: AgentRuntimeFileCheckpointThreadSummary | null;
-  onOpenFile?: (path: string) => void | Promise<void>;
-}): CanvasWorkbenchChangeView | null {
-  const byPath = new Map<string, CanvasWorkbenchChangeItem>();
-
-  threadItems
-    .filter(
-      (item): item is Extract<AgentThreadItem, { type: "file_artifact" }> =>
-        item.type === "file_artifact",
-    )
-    .forEach((item) => {
-      upsertChangeItem(
-        byPath,
-        buildFileArtifactChangeItem(item, fileCheckpointSummary),
-      );
-    });
-
-  const items = [...byPath.values()];
-  if (items.length === 0 && !(fileCheckpointSummary?.count ?? 0)) {
-    return null;
-  }
-
-  const latestCheckpoint = fileCheckpointSummary?.latest_checkpoint || null;
-  const latestCheckpointPath =
-    latestCheckpoint?.snapshot_path || latestCheckpoint?.path || null;
-
-  return {
-    items,
-    checkpointCount: fileCheckpointSummary?.count ?? 0,
-    latestCheckpointPath,
-    onOpenFile,
-  };
-}
-
-interface SessionRuntimeProjectionState {
-  key: string;
-  sessionId: string;
-  firstMessageId: string;
-  lastMessageId: string;
-  ready: boolean;
-}
-
-function buildSessionRuntimeProjectionState(params: {
-  key: string;
-  sessionId: string;
-  firstMessageId: string;
-  lastMessageId: string;
-  ready: boolean;
-}): SessionRuntimeProjectionState {
-  return params;
-}
-
-function resolveNextSessionRuntimeProjectionState(
-  current: SessionRuntimeProjectionState,
-  next: SessionRuntimeProjectionState,
-): SessionRuntimeProjectionState {
-  return current.key === next.key &&
-    current.sessionId === next.sessionId &&
-    current.firstMessageId === next.firstMessageId &&
-    current.lastMessageId === next.lastMessageId &&
-    current.ready === next.ready
-    ? current
-    : next;
-}
 
 interface UseWorkspaceConversationSceneRuntimeParams {
   messageListEmptyStateVariant?: "default" | "task-center";
@@ -808,72 +528,49 @@ export function useWorkspaceConversationSceneRuntime({
 }: UseWorkspaceConversationSceneRuntimeParams) {
   const { i18n, t } = useTranslation("agent");
   const locale = i18n.language;
-  const sessionRuntimeProjectionSessionId = sessionId ?? "no-session";
-  const sessionRuntimeProjectionFirstMessageId =
-    displayMessages[0]?.id ?? "no-first-message";
-  const sessionRuntimeProjectionLastMessageId =
-    displayMessages[displayMessages.length - 1]?.id ?? "no-last-message";
-  const sessionRuntimeProjectionLastTurnId =
-    turns[turns.length - 1]?.id ?? "no-last-turn";
-  const sessionRuntimeProjectionLastItemId =
-    effectiveThreadItems[effectiveThreadItems.length - 1]?.id ?? "no-last-item";
-  const sessionRuntimeProjectionKey = [
-    sessionRuntimeProjectionSessionId,
-    sessionRuntimeProjectionFirstMessageId,
-    sessionRuntimeProjectionLastMessageId,
-    sessionRuntimeProjectionLastTurnId,
-    sessionRuntimeProjectionLastItemId,
-  ].join("|");
-  const shouldTreatAsRestoredHistoryWindow = isRestoringSession;
-  const hasHeavySessionRuntimeProjection =
-    displayMessages.length >=
-      SESSION_RUNTIME_PROJECTION_DEFER_MESSAGE_THRESHOLD ||
-    turns.length >= SESSION_RUNTIME_PROJECTION_DEFER_TURN_THRESHOLD ||
-    effectiveThreadItems.length >=
-      SESSION_RUNTIME_PROJECTION_DEFER_ITEM_THRESHOLD;
+  const sessionRuntimeProjectionIdentity =
+    buildSessionRuntimeProjectionIdentity({
+      sessionId,
+      messages: displayMessages,
+      turns,
+      threadItems: effectiveThreadItems,
+    });
   const shouldConsiderDeferringSessionRuntimeProjection =
-    shouldTreatAsRestoredHistoryWindow &&
-    !isSending &&
-    !focusedTimelineItemId &&
-    !pendingA2UIForm &&
-    hasHeavySessionRuntimeProjection;
+    shouldConsiderSessionRuntimeProjectionDeferral({
+      isRestoringSession,
+      isSending: Boolean(isSending),
+      focusedTimelineItemId,
+      pendingA2UIForm,
+      messageCount: displayMessages.length,
+      turnCount: turns.length,
+      threadItemCount: effectiveThreadItems.length,
+      messageThreshold: SESSION_RUNTIME_PROJECTION_DEFER_MESSAGE_THRESHOLD,
+      turnThreshold: SESSION_RUNTIME_PROJECTION_DEFER_TURN_THRESHOLD,
+      threadItemThreshold: SESSION_RUNTIME_PROJECTION_DEFER_ITEM_THRESHOLD,
+    });
   const [sessionRuntimeProjectionState, setSessionRuntimeProjectionState] =
     useState(() =>
       buildSessionRuntimeProjectionState({
-        key: sessionRuntimeProjectionKey,
-        sessionId: sessionRuntimeProjectionSessionId,
-        firstMessageId: sessionRuntimeProjectionFirstMessageId,
-        lastMessageId: sessionRuntimeProjectionLastMessageId,
+        key: sessionRuntimeProjectionIdentity.key,
+        sessionId: sessionRuntimeProjectionIdentity.sessionId,
+        firstMessageId: sessionRuntimeProjectionIdentity.firstMessageId,
+        lastMessageId: sessionRuntimeProjectionIdentity.lastMessageId,
         ready: !shouldConsiderDeferringSessionRuntimeProjection,
       }),
     );
-  const sessionRuntimeProjectionAlreadyReady =
-    sessionRuntimeProjectionState.key === sessionRuntimeProjectionKey &&
-    sessionRuntimeProjectionState.ready;
-  const isAppendOnlyMessageProjectionUpdate =
-    sessionRuntimeProjectionState.key !== sessionRuntimeProjectionKey &&
-    sessionRuntimeProjectionState.sessionId ===
-      sessionRuntimeProjectionSessionId &&
-    sessionRuntimeProjectionState.firstMessageId ===
-      sessionRuntimeProjectionFirstMessageId &&
-    sessionRuntimeProjectionState.lastMessageId !==
-      sessionRuntimeProjectionLastMessageId;
-  const shouldDeferSessionRuntimeProjection =
-    shouldConsiderDeferringSessionRuntimeProjection &&
-    !sessionRuntimeProjectionAlreadyReady &&
-    !isAppendOnlyMessageProjectionUpdate;
-  const sessionRuntimeProjectionReady =
-    sessionRuntimeProjectionState.key === sessionRuntimeProjectionKey
-      ? sessionRuntimeProjectionState.ready
-      : !shouldDeferSessionRuntimeProjection;
+  const sessionRuntimeProjectionStatus = resolveSessionRuntimeProjectionStatus({
+    currentState: sessionRuntimeProjectionState,
+    identity: sessionRuntimeProjectionIdentity,
+    shouldConsiderDeferring: shouldConsiderDeferringSessionRuntimeProjection,
+  });
 
   useEffect(() => {
-    if (!shouldDeferSessionRuntimeProjection) {
+    if (!sessionRuntimeProjectionStatus.shouldDefer) {
       const nextState = buildSessionRuntimeProjectionState({
-        key: sessionRuntimeProjectionKey,
-        sessionId: sessionRuntimeProjectionSessionId,
-        firstMessageId: sessionRuntimeProjectionFirstMessageId,
-        lastMessageId: sessionRuntimeProjectionLastMessageId,
+        key: sessionRuntimeProjectionIdentity.key,
+        sessionId: sessionRuntimeProjectionIdentity.sessionId,
+        firstMessageId: sessionRuntimeProjectionIdentity.firstMessageId,
+        lastMessageId: sessionRuntimeProjectionIdentity.lastMessageId,
         ready: true,
       });
       setSessionRuntimeProjectionState((current) =>
@@ -883,10 +580,10 @@ export function useWorkspaceConversationSceneRuntime({
     }
 
     const pendingState = buildSessionRuntimeProjectionState({
-      key: sessionRuntimeProjectionKey,
-      sessionId: sessionRuntimeProjectionSessionId,
-      firstMessageId: sessionRuntimeProjectionFirstMessageId,
-      lastMessageId: sessionRuntimeProjectionLastMessageId,
+      key: sessionRuntimeProjectionIdentity.key,
+      sessionId: sessionRuntimeProjectionIdentity.sessionId,
+      firstMessageId: sessionRuntimeProjectionIdentity.firstMessageId,
+      lastMessageId: sessionRuntimeProjectionIdentity.lastMessageId,
       ready: false,
     });
     setSessionRuntimeProjectionState((current) =>
@@ -895,14 +592,14 @@ export function useWorkspaceConversationSceneRuntime({
     return scheduleMinimumDelayIdleTask(
       () => {
         const readyState = buildSessionRuntimeProjectionState({
-          key: sessionRuntimeProjectionKey,
-          sessionId: sessionRuntimeProjectionSessionId,
-          firstMessageId: sessionRuntimeProjectionFirstMessageId,
-          lastMessageId: sessionRuntimeProjectionLastMessageId,
+          key: sessionRuntimeProjectionIdentity.key,
+          sessionId: sessionRuntimeProjectionIdentity.sessionId,
+          firstMessageId: sessionRuntimeProjectionIdentity.firstMessageId,
+          lastMessageId: sessionRuntimeProjectionIdentity.lastMessageId,
           ready: true,
         });
         setSessionRuntimeProjectionState((current) =>
-          current.key === sessionRuntimeProjectionKey
+          current.key === sessionRuntimeProjectionIdentity.key
             ? resolveNextSessionRuntimeProjectionState(current, readyState)
             : current,
         );
@@ -913,24 +610,15 @@ export function useWorkspaceConversationSceneRuntime({
       },
     );
   }, [
-    displayMessages.length,
-    effectiveThreadItems.length,
-    focusedTimelineItemId,
-    hasHeavySessionRuntimeProjection,
-    isSending,
-    pendingA2UIForm,
-    sessionRuntimeProjectionFirstMessageId,
-    sessionRuntimeProjectionKey,
-    sessionRuntimeProjectionLastMessageId,
-    sessionRuntimeProjectionSessionId,
-    shouldConsiderDeferringSessionRuntimeProjection,
-    shouldDeferSessionRuntimeProjection,
-    shouldTreatAsRestoredHistoryWindow,
-    turns.length,
+    sessionRuntimeProjectionIdentity.firstMessageId,
+    sessionRuntimeProjectionIdentity.key,
+    sessionRuntimeProjectionIdentity.lastMessageId,
+    sessionRuntimeProjectionIdentity.sessionId,
+    sessionRuntimeProjectionStatus.shouldDefer,
   ]);
 
   const shouldUseDeferredSessionRuntimeProjection =
-    shouldDeferSessionRuntimeProjection && !sessionRuntimeProjectionReady;
+    sessionRuntimeProjectionStatus.shouldUseDeferredProjection;
   const projectedTurns = shouldUseDeferredSessionRuntimeProjection
     ? EMPTY_PROJECTED_TURNS
     : turns;
@@ -958,22 +646,14 @@ export function useWorkspaceConversationSceneRuntime({
       ? EMPTY_PROJECTED_CHILD_SUBAGENT_SESSIONS
       : childSubagentSessions;
   const handleQuoteMessage = (content: string) => {
-    const normalized = content.trim();
-    if (!normalized) {
+    const quotedText = buildQuotedReplyText({
+      content,
+      input,
+    });
+    if (!quotedText) {
       return;
     }
-
-    const quotedBlock = `${normalized
-      .split("\n")
-      .map((line) => `> ${line}`)
-      .join("\n")}\n\n`;
-
-    if (!input.trim()) {
-      setInput(quotedBlock);
-      return;
-    }
-
-    setInput(`${input.trimEnd()}\n\n${quotedBlock}`);
+    setInput(quotedText);
   };
 
   const teamWorkspaceDockLayoutMode =
@@ -1018,217 +698,79 @@ export function useWorkspaceConversationSceneRuntime({
       projectedTurns,
     ],
   );
-  const outputItemCount = projectedThreadItems.filter((item) =>
-    CODE_OUTPUT_ITEM_TYPES.has(item.type),
-  ).length;
-  const failedOutputItemCount = projectedThreadItems.filter(
-    (item) => CODE_OUTPUT_ITEM_TYPES.has(item.type) && item.status === "failed",
-  ).length;
-  const inProgressItemCount = projectedThreadItems.filter(
-    (item) => item.status === "in_progress",
-  ).length;
-  const generatedFileCount = projectedThreadItems.filter(
-    (item) => item.type === "file_artifact",
-  ).length;
-  const inProgressItemCountLabel = formatNumber(inProgressItemCount, {
-    locale,
-  });
-  const generatedFileCountLabel = formatNumber(generatedFileCount, { locale });
-  const pendingActionCountLabel = formatNumber(projectedPendingActions.length, {
-    locale,
-  });
-  const queuedTurnCountLabel = formatNumber(projectedQueuedTurns.length, {
-    locale,
-  });
   const fileCheckpointSummary =
     projectedThreadRead?.file_checkpoint_summary || null;
-  const hasRuntimeFileChanges =
-    (fileCheckpointSummary?.count ?? 0) > 0 ||
-    projectedThreadItems.some((item) => item.type === "file_artifact");
-  const hasRuntimeOutputs = outputItemCount > 0;
-  const shouldUseRuntimeWorkbench =
-    hasRuntimeFileChanges || hasRuntimeOutputs || inProgressItemCount > 0;
+  const sessionRuntimeCounters = buildSessionRuntimeCounters({
+    threadItems: projectedThreadItems,
+    fileCheckpointSummary,
+    pendingActions: projectedPendingActions,
+    queuedTurns: projectedQueuedTurns,
+  });
+  const sessionRuntimeCountLabels = {
+    inProgressItemCountLabel: formatNumber(
+      sessionRuntimeCounters.inProgressItemCount,
+      { locale },
+    ),
+    generatedFileCountLabel: formatNumber(
+      sessionRuntimeCounters.generatedFileCount,
+      { locale },
+    ),
+    pendingActionCountLabel: formatNumber(projectedPendingActions.length, {
+      locale,
+    }),
+    queuedTurnCountLabel: formatNumber(projectedQueuedTurns.length, {
+      locale,
+    }),
+  };
   const changeView = useMemo(() => {
     return buildCanvasWorkbenchChangeView({
-      threadItems: hasRuntimeFileChanges ? projectedThreadItems : [],
+      threadItems: sessionRuntimeCounters.hasRuntimeFileChanges
+        ? projectedThreadItems
+        : [],
       fileCheckpointSummary,
       onOpenFile: canvasScene.handleOpenCanvasWorkbenchPath,
     });
   }, [
     canvasScene.handleOpenCanvasWorkbenchPath,
     fileCheckpointSummary,
-    hasRuntimeFileChanges,
     projectedThreadItems,
+    sessionRuntimeCounters.hasRuntimeFileChanges,
   ]);
-  const sessionSummaryStats: CanvasWorkbenchSummaryStat[] = [
-    {
-      key: "session-status",
-      label: t("agentChat.workspaceSession.summary.status.label"),
-      value: currentSessionStatus.label,
-      detail: t("agentChat.workspaceSession.summary.status.detail"),
-      tone: currentSessionStatus.tone,
-    },
-    {
-      key: "session-generated-files",
-      label: t("agentChat.workspaceSession.summary.outputs.label"),
-      value:
-        inProgressItemCount > 0
-          ? t("agentChat.workspaceSession.summary.outputs.value.inProgress", {
-              countLabel: inProgressItemCountLabel,
-            })
-          : generatedFileCount > 0
-            ? t("agentChat.workspaceSession.summary.outputs.value.files", {
-                countLabel: generatedFileCountLabel,
-              })
-            : t("agentChat.workspaceSession.summary.outputs.value.empty"),
-      detail:
-        inProgressItemCount > 0
-          ? t("agentChat.workspaceSession.summary.outputs.detail.inProgress")
-          : generatedFileCount > 0
-            ? t("agentChat.workspaceSession.summary.outputs.detail.files")
-            : t("agentChat.workspaceSession.summary.outputs.detail.empty"),
-      tone: inProgressItemCount > 0 ? "accent" : "default",
-    },
-    {
-      key: "session-follow-up",
-      label:
-        projectedPendingActions.length > 0
-          ? t("agentChat.workspaceSession.summary.next.label.pending")
-          : projectedQueuedTurns.length > 0
-            ? t("agentChat.workspaceSession.summary.next.label.queued")
-            : t("agentChat.workspaceSession.summary.next.label.idle"),
-      value:
-        projectedPendingActions.length > 0
-          ? t("agentChat.workspaceSession.summary.next.value.pending", {
-              countLabel: pendingActionCountLabel,
-            })
-          : projectedQueuedTurns.length > 0
-            ? t("agentChat.workspaceSession.summary.next.value.queued", {
-                countLabel: queuedTurnCountLabel,
-              })
-            : t("agentChat.workspaceSession.summary.next.value.idle"),
-      detail:
-        projectedPendingActions.length > 0
-          ? t("agentChat.workspaceSession.summary.next.detail.pending")
-          : projectedQueuedTurns.length > 0
-            ? t("agentChat.workspaceSession.summary.next.detail.queued", {
-                countLabel: queuedTurnCountLabel,
-              })
-            : t("agentChat.workspaceSession.summary.next.detail.idle"),
-      tone:
-        projectedPendingActions.length > 0
-          ? "accent"
-          : projectedQueuedTurns.length > 0
-            ? "default"
-            : "default",
-    },
-  ];
-  const shouldExposeSessionProgress =
-    inProgressItemCount > 0 ||
-    projectedPendingActions.length > 0 ||
-    projectedQueuedTurns.length > 0;
-  const sessionView: CanvasWorkbenchSessionView | null =
-    shouldExposeSessionProgress
-      ? {
-          eyebrow: t("agentChat.workspaceSession.eyebrow"),
-          title: t("agentChat.workspaceSession.title"),
-          tabLabel: t("agentChat.workspaceSession.tabLabel"),
-          tabBadge:
-            inProgressItemCount > 0
-              ? t("agentChat.workspaceSession.badge.inProgress", {
-                  countLabel: inProgressItemCountLabel,
-                })
-              : projectedQueuedTurns.length > 0
-                ? t("agentChat.workspaceSession.badge.queued", {
-                    countLabel: queuedTurnCountLabel,
-                  })
-                : undefined,
-          tabBadgeTone: inProgressItemCount > 0 ? "sky" : "slate",
-          subtitle: currentSessionTurn
-            ? t("agentChat.workspaceSession.subtitle.current", {
-                prompt:
-                  shortenSessionText(currentSessionTurn.prompt_text, 160) ||
-                  t("agentChat.sessionOverview.latestPromptFallback"),
-              })
-            : t("agentChat.workspaceSession.subtitle.empty"),
-          summaryStats: sessionSummaryStats,
-          badges: [
-            {
-              key: "session-status",
-              label: currentSessionStatus.label,
-              tone: currentSessionStatus.tone,
-            },
-            {
-              key: "session-generated-files",
-              label:
-                inProgressItemCount > 0
-                  ? t("agentChat.workspaceSession.badge.inProgress", {
-                      countLabel: inProgressItemCountLabel,
-                    })
-                  : t("agentChat.workspaceSession.badge.files", {
-                      countLabel: generatedFileCountLabel,
-                    }),
-              tone: inProgressItemCount > 0 ? "accent" : "default",
-            },
-            ...(projectedPendingActions.length > 0
-              ? [
-                  {
-                    key: "session-pending-actions",
-                    label: t("agentChat.workspaceSession.badge.pending", {
-                      countLabel: pendingActionCountLabel,
-                    }),
-                    tone: "accent" as const,
-                  },
-                ]
-              : []),
-            ...(projectedQueuedTurns.length > 0
-              ? [
-                  {
-                    key: "session-queued-turns",
-                    label: t("agentChat.workspaceSession.badge.queued", {
-                      countLabel: queuedTurnCountLabel,
-                    }),
-                    tone: "default" as const,
-                  },
-                ]
-              : []),
-          ],
-          renderPanel: () => (
-            <CanvasSessionOverviewPanel
-              turns={projectedTurns}
-              threadItems={projectedThreadItems}
-              currentTurnId={projectedCurrentTurnId}
-              pendingActions={projectedPendingActions}
-              queuedTurns={projectedQueuedTurns}
-              isSending={isSending}
-              focusedItemId={focusedTimelineItemId}
-            />
-          ),
-        }
-      : null;
+  const sessionHeaderView = buildSessionHeaderViewModel({
+    t,
+    currentSessionTurn,
+    currentSessionStatus,
+    counters: sessionRuntimeCounters,
+    labels: sessionRuntimeCountLabels,
+    pendingActionCount: projectedPendingActions.length,
+    queuedTurnCount: projectedQueuedTurns.length,
+  });
+  const sessionView: CanvasWorkbenchSessionView | null = sessionHeaderView
+    ? {
+        ...sessionHeaderView,
+        renderPanel: () => (
+          <CanvasSessionOverviewPanel
+            turns={projectedTurns}
+            threadItems={projectedThreadItems}
+            currentTurnId={projectedCurrentTurnId}
+            pendingActions={projectedPendingActions}
+            queuedTurns={projectedQueuedTurns}
+            isSending={isSending}
+            focusedItemId={focusedTimelineItemId}
+          />
+        ),
+      }
+    : null;
+  const outputHeaderView = buildOutputHeaderViewModel({
+    t,
+    counters: sessionRuntimeCounters,
+  });
   const outputView: CanvasWorkbenchUtilityView = {
-    enabled: shouldUseRuntimeWorkbench,
-    tabLabel: t("agentChat.workspaceSession.outputView.tabLabel"),
-    title: t("agentChat.workspaceSession.outputView.title"),
-    subtitle: t("agentChat.workspaceSession.outputView.subtitle"),
-    tabBadge:
-      outputItemCount > 0
-        ? outputItemCount > 99
-          ? "99+"
-          : `${outputItemCount}`
-        : undefined,
-    tabBadgeTone:
-      failedOutputItemCount > 0
-        ? "rose"
-        : outputItemCount > 0
-          ? "sky"
-          : "slate",
+    ...outputHeaderView,
     renderPanel: () => (
       <CanvasSessionOverviewPanel
         turns={projectedTurns}
-        threadItems={projectedThreadItems.filter((item) =>
-          CODE_OUTPUT_ITEM_TYPES.has(item.type),
-        )}
+        threadItems={projectedThreadItems.filter(isCodeOutputThreadItem)}
         currentTurnId={projectedCurrentTurnId}
         pendingActions={[]}
         queuedTurns={[]}
@@ -1237,91 +779,11 @@ export function useWorkspaceConversationSceneRuntime({
       />
     ),
   };
-  const workspaceRootLabel = resolvePathLeaf(projectRootPath) || "未绑定";
-  const workspaceBindingValue = workspacePathMissing
-    ? "路径缺失"
-    : workspaceHealthError
-      ? "状态异常"
-      : projectRootPath
-        ? "已连接"
-        : "未绑定";
-  const workspaceView: CanvasWorkbenchHeaderView = {
-    eyebrow: "Project Workspace",
-    tabLabel: "文件",
-    tabBadge:
-      workspacePathMissing || workspaceHealthError
-        ? workspaceBindingValue
-        : projectRootPath?.trim()
-          ? workspaceRootLabel
-          : undefined,
-    tabBadgeTone:
-      workspacePathMissing || workspaceHealthError
-        ? "rose"
-        : projectRootPath?.trim()
-          ? "sky"
-          : undefined,
-    title: projectRootPath?.trim()
-      ? "项目工作区文件"
-      : "当前没有可浏览的项目文件",
-    subtitle: projectRootPath?.trim()
-      ? projectRootPath
-      : "绑定工作区目录后，这里会显示真实文件树。",
-    badges: [
-      {
-        key: "workspace-root",
-        label: projectRootPath?.trim() ? workspaceRootLabel : "未绑定工作区",
-        tone: projectRootPath?.trim() ? "accent" : "default",
-      },
-      ...(workspacePathMissing
-        ? [
-            {
-              key: "workspace-missing",
-              label: "路径缺失",
-              tone: "default" as const,
-            },
-          ]
-        : workspaceHealthError
-          ? [
-              {
-                key: "workspace-health-error",
-                label: "状态异常",
-                tone: "default" as const,
-              },
-            ]
-          : []),
-    ],
-    summaryStats: [
-      {
-        key: "workspace-root",
-        label: "工作区",
-        value: workspaceRootLabel,
-        detail:
-          projectRootPath?.trim() || "绑定工作区后，这里会展示真实文件树。",
-        tone: projectRootPath?.trim() ? "accent" : "default",
-      },
-      {
-        key: "workspace-binding",
-        label: "目录状态",
-        value: workspaceBindingValue,
-        detail: workspacePathMissing
-          ? "当前工作区路径缺失，需重新选择目录。"
-          : workspaceHealthError
-            ? "当前工作区状态异常，建议先修复后再继续浏览。"
-            : projectRootPath?.trim()
-              ? "画布会直接读取项目里的真实文件。"
-              : "尚未绑定工作区目录。",
-        tone:
-          workspacePathMissing || workspaceHealthError ? "default" : "success",
-      },
-    ],
-    panelCopy: {
-      unavailableText: "当前工作区路径不可用，暂时无法浏览项目文件。",
-      emptyText: "当前会话没有绑定可浏览的工作区目录。",
-      sectionEyebrow: "项目目录",
-      loadingText: "正在加载目录...",
-      emptyDirectoryText: "暂无目录内容。",
-    },
-  };
+  const workspaceView = buildWorkspaceHeaderView({
+    projectRootPath,
+    workspacePathMissing: Boolean(workspacePathMissing),
+    workspaceHealthError,
+  });
 
   return renderWorkspaceConversationScene({
     scene: {
@@ -1576,12 +1038,20 @@ export function useWorkspaceConversationSceneRuntime({
       onRevealPath: canvasScene.handleRevealCanvasWorkbenchPath,
       onClose: canvasScene.handleCloseCanvasWorkbench,
       renderPreview: canvasScene.renderCanvasWorkbenchPreview,
-      workbenchMode: shouldUseRuntimeWorkbench ? "coding" : "default",
+      workbenchMode: sessionRuntimeCounters.shouldUseRuntimeWorkbench
+        ? "coding"
+        : "default",
       workspaceView,
       sessionView,
-      outputView: shouldUseRuntimeWorkbench ? outputView : null,
-      logView: shouldUseRuntimeWorkbench ? sessionView : null,
-      changeView: shouldUseRuntimeWorkbench ? changeView : null,
+      outputView: sessionRuntimeCounters.shouldUseRuntimeWorkbench
+        ? outputView
+        : null,
+      logView: sessionRuntimeCounters.shouldUseRuntimeWorkbench
+        ? sessionView
+        : null,
+      changeView: sessionRuntimeCounters.shouldUseRuntimeWorkbench
+        ? changeView
+        : null,
       onLayoutModeChange: shouldSyncCanvasWorkbenchLayoutMode
         ? setCanvasWorkbenchLayoutMode
         : undefined,

@@ -27,8 +27,7 @@ fn resolve_turn_execution_profile_should_use_fast_chat_for_plain_general_message
 }
 
 #[test]
-fn resolve_turn_execution_profile_should_not_use_full_runtime_for_plain_react_strategy()
-{
+fn resolve_turn_execution_profile_should_not_use_full_runtime_for_plain_react_strategy() {
     let request = build_runtime_turn_test_request(
         "继续修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
         Some(json!({
@@ -113,6 +112,48 @@ fn resolve_turn_execution_profile_should_use_full_runtime_for_service_skill_laun
     );
     let policy = lime_agent::resolve_request_tool_policy(Some(false), false);
 
+    assert_eq!(
+        resolve_turn_execution_profile(
+            &request,
+            RuntimeChatMode::General,
+            &policy,
+            false,
+            AsterExecutionStrategy::React,
+        ),
+        TurnExecutionProfile::FullRuntime
+    );
+}
+
+#[test]
+fn resolve_turn_execution_profile_should_use_full_runtime_for_expert_metadata() {
+    let request = build_runtime_turn_test_request(
+        "请以营销策略专家身份分析这个活动方案",
+        Some(json!({
+            "harness": {
+                "theme": "general",
+                "chat_mode": "general",
+                "expert": {
+                    "expert_id": "marketing-strategist",
+                    "release_id": "rel-marketing-strategist-20260515",
+                    "persona_ref": "expert-persona:marketing-strategist@1.0.0",
+                    "memory_enabled": true,
+                    "workflow_enabled": true,
+                    "personality_boundary": {
+                        "inherits_global_soul": true,
+                        "global_soul_scope": "communication_rhythm",
+                        "expert_persona_scope": "current_expert_session",
+                        "writes_back_to_global_soul": false,
+                        "formal_artifact_voice_source": "generation_brief_only"
+                    }
+                }
+            }
+        })),
+    );
+    let policy = lime_agent::resolve_request_tool_policy(Some(false), false);
+
+    assert!(request_metadata_contains_full_runtime_context(
+        request.metadata.as_ref()
+    ));
     assert_eq!(
         resolve_turn_execution_profile(
             &request,

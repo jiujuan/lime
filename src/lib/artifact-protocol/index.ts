@@ -71,6 +71,18 @@ function hasSameTrailingSegments(left: string[], right: string[]): boolean {
   return minLength > 0;
 }
 
+function countMatchingTrailingSegments(left: string[], right: string[]): number {
+  const minLength = Math.min(left.length, right.length);
+  let count = 0;
+  for (let index = 1; index <= minLength; index += 1) {
+    if (left[left.length - index] !== right[right.length - index]) {
+      break;
+    }
+    count += 1;
+  }
+  return count;
+}
+
 function appendArtifactProtocolPath(paths: Set<string>, value: unknown): void {
   const normalized = normalizeText(value);
   if (!normalized) {
@@ -235,11 +247,11 @@ export function areArtifactProtocolPathsEquivalent(
     return true;
   }
 
-  if (leftPath.isAbsolute !== rightPath.isAbsolute) {
-    return hasSameTrailingSegments(leftPath.segments, rightPath.segments);
+  if (hasSameTrailingSegments(leftPath.segments, rightPath.segments)) {
+    return true;
   }
 
-  return false;
+  return countMatchingTrailingSegments(leftPath.segments, rightPath.segments) >= 3;
 }
 
 export function isArtifactProtocolImagePath(value?: string | null): boolean {

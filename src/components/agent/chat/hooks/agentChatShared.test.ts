@@ -162,6 +162,75 @@ describe("agentChatShared", () => {
     });
   });
 
+  it("同一回合已有最终助手正文时局部工具失败不应覆盖完成态", () => {
+    const finalText = "## 今日国际新闻简报\n\n- 要闻摘要，附来源。";
+
+    expect(
+      deriveTaskLiveState({
+        messages: [
+          {
+            id: "msg-news-with-partial-tool-failure",
+            role: "assistant",
+            content: finalText,
+            timestamp: new Date("2026-06-02T10:00:20.000Z"),
+            contentParts: [
+              {
+                type: "tool_use",
+                toolCall: {
+                  id: "tool-search-ok",
+                  name: "WebSearch",
+                  arguments: '{"query":"international news"}',
+                  status: "completed",
+                  startTime: new Date("2026-06-02T10:00:01.000Z"),
+                  endTime: new Date("2026-06-02T10:00:03.000Z"),
+                },
+              },
+              {
+                type: "tool_use",
+                toolCall: {
+                  id: "tool-fetch-failed",
+                  name: "WebFetch",
+                  arguments: '{"url":"https://example.invalid/news"}',
+                  status: "failed",
+                  startTime: new Date("2026-06-02T10:00:04.000Z"),
+                  endTime: new Date("2026-06-02T10:00:05.000Z"),
+                },
+              },
+              {
+                type: "text",
+                text: finalText,
+              },
+            ],
+            toolCalls: [
+              {
+                id: "tool-search-ok",
+                name: "WebSearch",
+                arguments: '{"query":"international news"}',
+                status: "completed",
+                startTime: new Date("2026-06-02T10:00:01.000Z"),
+                endTime: new Date("2026-06-02T10:00:03.000Z"),
+              },
+              {
+                id: "tool-fetch-failed",
+                name: "WebFetch",
+                arguments: '{"url":"https://example.invalid/news"}',
+                status: "failed",
+                startTime: new Date("2026-06-02T10:00:04.000Z"),
+                endTime: new Date("2026-06-02T10:00:05.000Z"),
+              },
+            ],
+          },
+        ],
+        isSending: false,
+        pendingActionCount: 0,
+        workspaceError: false,
+      }),
+    ).toEqual({
+      status: "done",
+      statusReason: "default",
+    });
+  });
+
   it("当前线程仍在运行时，不应把最新 assistant 消息误判为已完成", () => {
     const messages: Message[] = [
       {

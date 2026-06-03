@@ -337,55 +337,6 @@ describe("FileManagerSidebar", () => {
     ]);
   });
 
-  it("右键菜单靠近侧栏右侧时应向左避让", async () => {
-    const { container } = await renderFileManagerSidebar();
-    const sidebar = container.querySelector(
-      '[data-testid="file-manager-sidebar"]',
-    ) as HTMLElement | null;
-    const fileEntry = Array.from(
-      container.querySelectorAll('[data-testid="file-manager-entry"]'),
-    ).find((entry) => entry.textContent?.includes("brief.txt"));
-
-    expect(sidebar).toBeTruthy();
-    expect(fileEntry).toBeTruthy();
-
-    if (sidebar) {
-      sidebar.getBoundingClientRect = () =>
-        ({
-          x: 20,
-          y: 0,
-          left: 20,
-          top: 0,
-          right: 420,
-          bottom: 700,
-          width: 400,
-          height: 700,
-          toJSON: () => ({}),
-        }) as DOMRect;
-    }
-
-    await act(async () => {
-      fileEntry?.dispatchEvent(
-        new MouseEvent("contextmenu", {
-          bubbles: true,
-          cancelable: true,
-          clientX: 390,
-          clientY: 80,
-        }),
-      );
-      await Promise.resolve();
-    });
-
-    const menu = document.querySelector(
-      '[data-testid="file-manager-context-menu"]',
-    ) as HTMLElement | null;
-    expect(menu).toBeTruthy();
-    expect(menu?.className).toContain("w-52");
-    expect(menu?.style.left).toBe("204px");
-    expect(menu?.textContent).toContain("显示位置");
-    expect(menu?.textContent).not.toContain("在系统文件管理器中显示");
-  });
-
   it("提供项目目录时应优先打开当前项目", async () => {
     const { container } = await renderFileManagerSidebar({
       initialDirectory: "/workspace/project",

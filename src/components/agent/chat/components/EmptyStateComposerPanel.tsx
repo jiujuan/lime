@@ -37,6 +37,11 @@ import {
   EMPTY_STATE_SELECT_TRIGGER_CLASSNAME,
 } from "./emptyStateSurfaceTokens";
 import {
+  buildEmptyStateAdvancedControlsState,
+  buildEmptyStateInputSuggestionState,
+  resolveEmptyStateActiveCapability,
+} from "./EmptyStateComposerPanelViewModel";
+import {
   MetaIconButton,
   MetaToggleButton,
   MetaToggleCheck,
@@ -258,26 +263,17 @@ export function EmptyStateComposerPanel({
     number | null
   >(null);
   const [showAdvancedControls, setShowAdvancedControls] = useState(false);
-  const activeBuiltinCommand =
-    activeCapability?.kind === "builtin_command" &&
-    activeCapability.command.key !== "knowledge_pack" &&
-    activeCapability.command.key !== "knowledge_settle"
-      ? activeCapability.command
-      : null;
-  const activeRuntimeScene =
-    activeCapability?.kind === "runtime_scene"
-      ? activeCapability.command
-      : null;
-  const activeCuratedTask =
-    activeCapability?.kind === "curated_task" ? activeCapability.task : null;
-  const activeCuratedTaskReferenceEntries =
-    activeCapability?.kind === "curated_task"
-      ? activeCapability.referenceEntries
-      : undefined;
-  const activeSkill =
-    activeCapability?.kind === "installed_skill"
-      ? activeCapability.skill
-      : (skillSelection.activeSkill ?? null);
+  const activeCapabilityState = resolveEmptyStateActiveCapability({
+    activeCapability,
+    fallbackActiveSkill: skillSelection.activeSkill ?? null,
+  });
+  const {
+    activeBuiltinCommand,
+    activeRuntimeScene,
+    activeCuratedTask,
+    activeCuratedTaskReferenceEntries,
+    activeSkill,
+  } = activeCapabilityState;
   const clearActiveSkill = skillSelection.onClearSkill;
   const { mentionProps: mentionSkillProps, selectorProps: skillSelectorProps } =
     buildSkillSelectionBindings(skillSelection);
@@ -301,35 +297,22 @@ export function EmptyStateComposerPanel({
     teamSuggestion.shouldSuggest &&
     dismissedSuggestionKey !== suggestionKey;
   const shouldShowTeamSelector = isGeneralTheme && subagentEnabled;
-  const sortedInputSuggestions = useMemo(
-    () =>
-      [...inputSuggestions].sort((left, right) => {
-        if (left.order !== right.order) {
-          return left.order - right.order;
-        }
-        return left.label.localeCompare(right.label, "zh-CN");
-      }),
-    [inputSuggestions],
-  );
   const [inputSuggestionIndex, setInputSuggestionIndex] = useState(0);
-  const shouldShowInputSuggestion =
-    sortedInputSuggestions.length > 0 &&
-    !isLoading &&
-    !disabled &&
-    draftInput.trim().length === 0 &&
-    pendingImages.length === 0 &&
-    !guideHelpActive &&
-    !activeBuiltinCommand &&
-    !activeRuntimeScene &&
-    !activeCuratedTask &&
-    !activeSkill &&
-    !creationReplaySurface;
-  const activeInputSuggestion =
-    shouldShowInputSuggestion && sortedInputSuggestions.length > 0
-      ? sortedInputSuggestions[
-          inputSuggestionIndex % sortedInputSuggestions.length
-        ]
-      : null;
+  const {
+    sortedInputSuggestions,
+    shouldShowInputSuggestion,
+    activeInputSuggestion,
+  } = buildEmptyStateInputSuggestionState({
+    inputSuggestions,
+    isLoading,
+    disabled,
+    draftInput,
+    pendingImageCount: pendingImages.length,
+    guideHelpActive,
+    activeCapability: activeCapabilityState,
+    creationReplaySurface,
+    inputSuggestionIndex,
+  });
 
   useEffect(() => {
     if (inputSuggestionIndex < sortedInputSuggestions.length) {
@@ -477,42 +460,42 @@ export function EmptyStateComposerPanel({
       </>
     ) : undefined;
 
-  const shouldShowThemeSpecificExtra = showCreationModeSelector;
-  const shouldShowModelControls = true;
-  const trimmedProviderType = providerType.trim();
-  const trimmedModel = model.trim();
-  const hasConfiguredModel = Boolean(trimmedProviderType && trimmedModel);
-  const currentModelSummary = hasConfiguredModel
-    ? `${getProviderLabel(trimmedProviderType)} / ${trimmedModel}`
-    : null;
-  const knowledgePackControl =
-    knowledgePackSelection || onStartKnowledgeOrganize ? (
-      <InputbarKnowledgeControl
-        knowledgePackSelection={knowledgePackSelection}
-        knowledgePackOptions={knowledgePackOptions}
-        inputText={draftInput}
-        openKnowledgeHubRequestKey={knowledgeHubOpenRequestKey}
-        onToggleKnowledgePack={onToggleKnowledgePack}
-        onSelectKnowledgePack={onSelectKnowledgePack}
-        onToggleKnowledgeCompanionPack={onToggleKnowledgeCompanionPack}
-        onStartKnowledgeOrganize={onStartKnowledgeOrganize}
-        onManageKnowledgePacks={onManageKnowledgePacks}
-      />
-    ) : null;
-  const hasHighlightedAdvancedPreference =
-    subagentEnabled ||
-    knowledgePackSelection?.enabled ||
-    accessMode === "read-only" ||
-    accessMode === "full-access";
-  const shouldShowAdvancedToggle =
-    isGeneralTheme ||
-    shouldShowTeamSelector ||
-    shouldShowModelControls ||
-    Boolean(setAccessMode) ||
-    shouldShowThemeSpecificExtra ||
-    Boolean(onToggleFileManager);
-  const shouldShowLeftExtra =
-    Boolean(knowledgePackControl) || shouldShowAdvancedToggle;
+  const hasKnowledgePackControl = Boolean(
+    knowledgePackSelection || onStartKnowledgeOrganize,
+  );
+  const knowledgePackControl = hasKnowledgePackControl ? (
+    <InputbarKnowledgeControl
+      knowledgePackSelection={knowledgePackSelection}
+      knowledgePackOptions={knowledgePackOptions}
+      inputText={draftInput}
+      openKnowledgeHubRequestKey={knowledgeHubOpenRequestKey}
+      onToggleKnowledgePack={onToggleKnowledgePack}
+      onSelectKnowledgePack={onSelectKnowledgePack}
+      onToggleKnowledgeCompanionPack={onToggleKnowledgeCompanionPack}
+      onStartKnowledgeOrganize={onStartKnowledgeOrganize}
+      onManageKnowledgePacks={onManageKnowledgePacks}
+    />
+  ) : null;
+  const {
+    currentModelSummary,
+    trimmedModel,
+    hasHighlightedAdvancedPreference,
+    shouldShowAdvancedToggle,
+    shouldShowLeftExtra,
+  } = buildEmptyStateAdvancedControlsState({
+    providerType,
+    model,
+    getProviderLabel,
+    subagentEnabled,
+    knowledgePackEnabled: Boolean(knowledgePackSelection?.enabled),
+    accessMode,
+    isGeneralTheme,
+    shouldShowTeamSelector,
+    showCreationModeSelector,
+    hasAccessModeSetter: Boolean(setAccessMode),
+    hasFileManagerToggle: Boolean(onToggleFileManager),
+    hasKnowledgePackControl,
+  });
   const advancedToggleLabel = showAdvancedControls
     ? copy.advancedSettings.collapse
     : copy.advancedSettings.expand;

@@ -1260,7 +1260,7 @@ function deriveHarnessSessionStateFromItems(
         outputSignals.push({
           id: `${item.id}:web`,
           toolCallId: item.id,
-          toolName: item.action || "web_search",
+          toolName: "web_search",
           title: "联网检索摘要",
           summary: item.query || "联网检索",
           preview: buildTextPreview(item.output),

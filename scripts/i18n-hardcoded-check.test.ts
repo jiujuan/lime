@@ -40,9 +40,9 @@ describe("i18n hardcoded scan", () => {
       root,
       "src/components/settings/LanguagePicker.tsx",
       [
-        'export function LanguagePicker() {',
+        "export function LanguagePicker() {",
         "  return (",
-        '    <section>',
+        "    <section>",
         '      <button title="切换界面语言">切换语言</button>',
         '      <span>{"同步设置"}</span>',
         "    </section>",
@@ -88,7 +88,7 @@ describe("i18n hardcoded scan", () => {
       [
         "export function LanguagePicker() {",
         '  const label = "保存";',
-        "  return <div className={label}>{t(\"切换界面语言\")}</div>;",
+        '  return <div className={label}>{t("切换界面语言")}</div>;',
         "}",
         "",
       ].join("\n"),
@@ -103,6 +103,25 @@ describe("i18n hardcoded scan", () => {
     expect(result.files).toHaveLength(1);
     expect(result.findings).toHaveLength(0);
     expect(formatHardcodedI18nReport(result)).toContain("通过");
+  });
+
+  it("应忽略测试替身文件中的用户可见文案", () => {
+    const root = createTempDir();
+    writeFixture(
+      root,
+      "src/components/settings/LanguagePicker.testFixtures.tsx",
+      '<button aria-label="切换界面语言">切换语言</button>\n',
+    );
+
+    const result = scanHardcodedI18n([
+      path.join(
+        root,
+        "src/components/settings/LanguagePicker.testFixtures.tsx",
+      ),
+    ]);
+
+    expect(result.files).toHaveLength(0);
+    expect(result.findings).toHaveLength(0);
   });
 
   it("应忽略快捷键单字符 token，但继续报告普通用户可见文案", () => {

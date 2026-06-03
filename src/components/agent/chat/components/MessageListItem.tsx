@@ -1,7 +1,10 @@
 import React from "react";
+import { Check, Copy, Pencil } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Artifact } from "@/lib/artifact/types";
 import type { A2UIFormData } from "@/lib/workspace/a2ui";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
+import { formatDate } from "@/i18n/format";
 import { MessageWrapper, ContentColumn, MessageBubble } from "../styles";
 import { type TokenUsagePromptCacheNotice } from "./TokenUsageDisplay";
 import type { InputbarRuntimeStatusLineModel } from "../utils/inputbarRuntimeStatusLine";
@@ -32,6 +35,7 @@ import { resolveMessageListItemProjection } from "./messageListItemProjection";
 export interface MessageListItemProps {
   msg: Message;
   group: MessageListRenderGroup;
+  sessionId?: string | null;
   streamingTextOverlay?: AgentStreamTextOverlaySnapshot | null;
   activeConversationRuntimeStatusLine: InputbarRuntimeStatusLineModel | null;
   activeCurrentTurnId: string | null;
@@ -75,6 +79,7 @@ export interface MessageListItemProps {
     target: MessagePreviewTarget,
     message: Message,
   ) => void;
+  onEditMessage?: (id: string, content: string) => void;
   onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
   onOpenSubagentSession?: (sessionId: string) => void;
   onPermissionResponse?: (response: ConfirmResponse) => void;
@@ -103,6 +108,7 @@ export interface MessageListItemProps {
 export function MessageListItem({
   msg,
   group,
+  sessionId,
   streamingTextOverlay = null,
   activeConversationRuntimeStatusLine,
   activeCurrentTurnId,
@@ -143,6 +149,7 @@ export function MessageListItem({
   onInterruptCurrentTurn,
   onOpenArtifactFromTimeline,
   onOpenMessagePreview,
+  onEditMessage,
   onOpenSavedSiteContent,
   onOpenSubagentSession,
   onPermissionResponse,
@@ -152,6 +159,7 @@ export function MessageListItem({
   onSaveMessageAsSkill,
   onWriteFile,
 }: MessageListItemProps) {
+  const { i18n, t } = useTranslation("agent");
   const projection = resolveMessageListItemProjection({
     activeCurrentTurnId,
     activePendingA2UISource,
@@ -228,15 +236,51 @@ export function MessageListItem({
     onSaveMessageAsKnowledge && projection.canSaveMessageAsKnowledge,
   );
   const showMessageActions =
-    (msg.role === "user" &&
-      !isUserCommandMessage &&
-      (canQuoteMessage || canCopyMessage)) ||
     (msg.role === "assistant" &&
       Boolean(msg.imageWorkbenchPreview) &&
       (canQuoteMessage || canCopyMessage)) ||
     canSaveMessageAsSkill ||
     canSaveMessageAsInspiration ||
     canSaveMessageAsKnowledge;
+  const userMessageFooter =
+    msg.role === "user" && !isUserCommandMessage ? (
+      <div
+        className="user-message-footer flex items-center justify-end gap-2 pr-1 text-xs leading-5 text-slate-400"
+        data-testid="user-message-footer"
+      >
+        <span data-testid="user-message-timestamp">
+          {formatDate(msg.timestamp, {
+            locale: i18n.language,
+            weekday: "long",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          })}
+        </span>
+        {canCopyMessage ? (
+          <button
+            type="button"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            onClick={() => void handleCopy(actionContent, msg.id)}
+            aria-label={t("agentChat.messageList.actions.copy")}
+            title={t("agentChat.messageList.actions.copy")}
+          >
+            {copiedId === msg.id ? <Check size={13} /> : <Copy size={13} />}
+          </button>
+        ) : null}
+        {onEditMessage ? (
+          <button
+            type="button"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            onClick={() => onEditMessage(msg.id, displayContent)}
+            aria-label={t("agentChat.messageList.actions.edit")}
+            title={t("agentChat.messageList.actions.edit")}
+          >
+            <Pencil size={13} />
+          </button>
+        ) : null}
+      </div>
+    ) : null;
   const assistantMetaFooterState = resolveMessageAssistantMetaFooterState({
     activeConversationRuntimeStatusLine,
     hasAssistantBodyContent,
@@ -332,6 +376,10 @@ export function MessageListItem({
             className={
               isUserCommandMessage ? "message-bubble-user-command" : undefined
             }
+            data-message-role={msg.role}
+            data-visual-tone={
+              msg.role === "user" ? "neutral-user" : "neutral-assistant"
+            }
             aria-label={msg.role === "assistant" ? assistantLabel : undefined}
           >
             {msg.role === "assistant" ? (
@@ -352,6 +400,7 @@ export function MessageListItem({
                 }
                 imageWorkbenchRendererState={imageWorkbenchRendererState}
                 message={msg}
+                sessionId={sessionId}
                 messageCanvasShortcutPath={messageCanvasShortcutPath}
                 messageCanvasShortcutTitle={messageCanvasShortcutTitle}
                 messageSavedSiteContentTarget={messageSavedSiteContentTarget}
@@ -473,6 +522,7 @@ export function MessageListItem({
             ) : null}
           </MessageBubble>
         ) : null}
+        {userMessageFooter}
         {!hasAssistantBodyContent ? assistantMetaFooter : null}
       </ContentColumn>
     </MessageWrapper>

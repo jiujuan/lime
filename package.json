@@ -1,8 +1,10 @@
 {
   "name": "lime",
   "private": true,
-  "workspaces": ["packages/*"],
-  "version": "1.56.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "version": "1.57.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -74,6 +76,10 @@
     "test:bridge": "npm test -- src/lib/dev-bridge/safeInvoke.test.ts src/lib/tauri-mock/core.test.ts",
     "test:contracts": "npm run check:agent-runtime-clients && node scripts/check-command-contracts.mjs && node scripts/check-harness-contracts.mjs && npm run governance:modality-contracts && npm run harness:cleanup-report:check && npm run docs:boundary",
     "test:rust": "cargo test --manifest-path \"src-tauri/Cargo.toml\"",
+    "test:rust:unit": "node scripts/run-rust-layer.mjs unit",
+    "test:rust:integration": "node scripts/run-rust-layer.mjs integration",
+    "test:rust:e2e": "node scripts/run-rust-layer.mjs e2e",
+    "test:rust:layers:stats": "node scripts/report-rust-test-layers.mjs",
     "harness:analysis": "node scripts/harness-analysis-brief.mjs",
     "harness:eval": "node scripts/harness-eval-runner.mjs",
     "harness:eval:json": "node scripts/harness-eval-runner.mjs --format json",

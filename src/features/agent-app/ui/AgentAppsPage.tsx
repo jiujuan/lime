@@ -40,7 +40,6 @@ import {
   type AgentAppInstallReviewResult,
   type AgentAppUninstallRehearsalResult,
 } from "@/lib/api/agentApps";
-import { buildCloudAgentAppSourceState } from "../install/installReview";
 import { resolveAgentAppHostFlags } from "../featureFlag";
 import { InMemoryAgentAppCapabilityStore } from "../adapters/InMemoryAgentAppCapabilityStore";
 import { AdapterCapabilityHost } from "../adapters/AdapterCapabilityHost";
@@ -56,6 +55,27 @@ import {
 } from "../install/lifecycleAction";
 import { buildRuntimePackageLoadForPreview } from "./agentAppsRuntime";
 import { resolveInstalledAgentAppDisplayName } from "./agentAppDisplay";
+import {
+  buildAppCenterFilterCounts,
+  buildAppCenterItems,
+  canOneClickUpdate,
+  filterAppCenterItems,
+  getActionLabelKey,
+  getAppCenterPageCount,
+  getCloudActionLabelKey,
+  getDefaultEntry,
+  getDetailActionLabelKey,
+  hasCloudUpdate,
+  isCloudActionDisabled,
+  isPrimaryActionDisabled,
+  isUiEntry,
+  paginateAppCenterItems,
+  type AppCenterItem,
+  type AppCenterSourceFilter,
+  type AppCenterSourceKind,
+  type AppCenterStatusFilter,
+  type AppCenterStatusKind,
+} from "./AgentAppsPageViewModel";
 import { UiExtensionHost } from "../runtime/uiExtensionHost";
 import { WorkflowRuntimeHost } from "../runtime/workflowRuntimeHost";
 import { evaluateAgentAppEntryRuntimeGuard } from "../runtime/entryRuntimeGuard";
@@ -72,7 +92,6 @@ import type {
   HostCapabilityProfile,
   InstalledAppPreview,
   InstalledAgentAppState,
-  PackageSourceKind,
   ProjectedEntry,
 } from "../types";
 
@@ -88,181 +107,6 @@ const PAGE_FLAGS = resolveAgentAppHostFlags({
   cloudBootstrapEnabled: true,
 });
 
-const APP_CENTER_PAGE_SIZE = 20;
-
-type AppCenterSourceKind = "cloud" | "local" | "hybrid";
-type AppCenterStatusKind =
-  | "installed"
-  | "installable"
-  | "update"
-  | "registration"
-  | "disabled"
-  | "partial";
-type AppCenterStatusFilter = "all" | "installed" | "installable" | "attention";
-type AppCenterSourceFilter = "all" | "cloud" | "local";
-type AppCenterActionLabelKey =
-  | "agentApp.apps.center.action.open"
-  | "agentApp.apps.center.action.install"
-  | "agentApp.apps.center.action.update"
-  | "agentApp.apps.center.action.updateOneClick"
-  | "agentApp.apps.center.action.activate"
-  | "agentApp.apps.center.action.enable";
-
-type CloudSourceState = ReturnType<typeof buildCloudAgentAppSourceState>;
-
-interface AppCenterItem {
-  appId: string;
-  title: string;
-  description: string;
-  iconSrc: string;
-  installedState?: InstalledAgentAppState;
-  cloudApp?: CloudBootstrapApp;
-  sourceKind: AppCenterSourceKind;
-  statusKind: AppCenterStatusKind;
-  installedVersion?: string;
-  cloudVersion?: string;
-  entries: ProjectedEntry[];
-  sourceState?: CloudSourceState;
-  registrationBlocked: boolean;
-  canReviewCloud: boolean;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
-
-function normalizeOptionalText(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const normalized = value.trim();
-  return normalized || undefined;
-}
-
-function escapeSvgText(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function svgToDataUri(svg: string): string {
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-}
-
-function buildAppNameIcon(title: string): string {
-  const safeTitle = escapeSvgText(title || "Lime App");
-  const initial = escapeSvgText([...safeTitle][0] || "L");
-  return svgToDataUri(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="${safeTitle}"><defs><linearGradient id="g" x1="16" y1="12" x2="82" y2="86" gradientUnits="userSpaceOnUse"><stop stop-color="#ecfdf5"/><stop offset="0.55" stop-color="#eff6ff"/><stop offset="1" stop-color="#f8fafc"/></linearGradient></defs><rect width="96" height="96" rx="22" fill="url(#g)"/><rect x="1" y="1" width="94" height="94" rx="21" fill="none" stroke="#cbd5e1"/><circle cx="70" cy="25" r="9" fill="#10b981" fill-opacity="0.18"/><path d="M24 36h48M24 50h36M24 64h26" stroke="#64748b" stroke-width="5" stroke-linecap="round"/><text x="70" y="74" text-anchor="middle" font-family="ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="24" font-weight="800" fill="#0f172a">${initial}</text></svg>`,
-  );
-}
-
-function isDirectAssetSrc(value: string): boolean {
-  return /^(?:https?:|data:|blob:|asset:|tauri:)/i.test(value);
-}
-
-function isRelativeIconPath(value: string): boolean {
-  return value.startsWith("./") || value.startsWith("../");
-}
-
-function joinLocalPath(basePath: string, relativePath: string): string {
-  const normalizedBase = basePath.replace(/\/+$/, "");
-  const normalizedRelative = relativePath.replace(/^\.?\//, "");
-  return `${normalizedBase}/${normalizedRelative}`;
-}
-
-function getPresentationString(
-  presentation: unknown,
-  keys: string[],
-): string | undefined {
-  if (!isRecord(presentation)) {
-    return undefined;
-  }
-  for (const key of keys) {
-    const value = normalizeOptionalText(presentation[key]);
-    if (value) {
-      return value;
-    }
-  }
-  return undefined;
-}
-
-function getCloudAppIconCandidate(
-  cloudApp: CloudBootstrapApp | undefined,
-): string | undefined {
-  if (!cloudApp) {
-    return undefined;
-  }
-  return (
-    normalizeOptionalText(cloudApp.iconUrl) ??
-    normalizeOptionalText(cloudApp.logoUrl) ??
-    getPresentationString(cloudApp.presentation, ["iconUrl", "logoUrl"]) ??
-    normalizeOptionalText(cloudApp.icon) ??
-    getPresentationString(cloudApp.presentation, ["icon"])
-  );
-}
-
-function getInstalledAppIconCandidate(
-  state: InstalledAgentAppState | undefined,
-): string | undefined {
-  if (!state) {
-    return undefined;
-  }
-  return (
-    normalizeOptionalText(state.projection.install.branding.icon) ??
-    getPresentationString(state.projection.app.presentation, [
-      "iconUrl",
-      "logoUrl",
-      "icon",
-    ]) ??
-    getPresentationString(state.manifest.presentation, [
-      "iconUrl",
-      "logoUrl",
-      "icon",
-    ])
-  );
-}
-
-function getLocalSourceRoot(
-  state: InstalledAgentAppState | undefined,
-): string | undefined {
-  if (
-    !state ||
-    !["local_folder", "explicit_manifest"].includes(
-      state.identity.sourceKind as PackageSourceKind,
-    )
-  ) {
-    return undefined;
-  }
-  return normalizeOptionalText(state.identity.sourceUri);
-}
-
-function resolveAppIconSrc(params: {
-  title: string;
-  installedState?: InstalledAgentAppState;
-  cloudApp?: CloudBootstrapApp;
-}): string {
-  const candidate =
-    getInstalledAppIconCandidate(params.installedState) ??
-    getCloudAppIconCandidate(params.cloudApp);
-  if (!candidate) {
-    return buildAppNameIcon(params.title);
-  }
-  if (candidate.trim().startsWith("<svg")) {
-    return svgToDataUri(candidate.trim());
-  }
-  if (isDirectAssetSrc(candidate)) {
-    return candidate;
-  }
-  const sourceRoot = getLocalSourceRoot(params.installedState);
-  if (sourceRoot && isRelativeIconPath(candidate)) {
-    return convertLocalFileSrc(joinLocalPath(sourceRoot, candidate));
-  }
-  return buildAppNameIcon(params.title);
-}
-
 function buildProfile(): HostCapabilityProfile {
   return buildWorkflowRuntimeCapabilityProfile({
     ...PAGE_FLAGS,
@@ -270,10 +114,6 @@ function buildProfile(): HostCapabilityProfile {
     uiRuntimeEnabled: true,
     workerRuntimeEnabled: true,
   });
-}
-
-function isUiEntry(entry: ProjectedEntry): boolean {
-  return ["page", "panel", "settings"].includes(entry.kind);
 }
 
 function buildPreviewFromInstalledState(
@@ -337,196 +177,6 @@ function appCenterSourceClass(source: AppCenterSourceKind): string {
     return "border-slate-200 bg-slate-50 text-slate-700";
   }
   return "border-emerald-200 bg-emerald-50 text-emerald-700";
-}
-
-function getAppDescription(
-  installedState: InstalledAgentAppState | undefined,
-  cloudApp: CloudBootstrapApp | undefined,
-): string {
-  return (
-    installedState?.projection.app.description ??
-    installedState?.manifest.description ??
-    cloudApp?.disabledReason ??
-    ""
-  );
-}
-
-function getAppTitle(
-  installedState: InstalledAgentAppState | undefined,
-  cloudApp: CloudBootstrapApp | undefined,
-  appId: string,
-): string {
-  return (
-    cloudApp?.displayName ??
-    (installedState
-      ? resolveInstalledAgentAppDisplayName(installedState)
-      : null) ??
-    appId
-  );
-}
-
-function getSourceKind(
-  installedState: InstalledAgentAppState | undefined,
-  cloudApp: CloudBootstrapApp | undefined,
-): AppCenterSourceKind {
-  if (installedState && cloudApp) {
-    return installedState.identity.sourceKind === "cloud_release"
-      ? "cloud"
-      : "hybrid";
-  }
-  if (cloudApp || installedState?.identity.sourceKind === "cloud_release") {
-    return "cloud";
-  }
-  return "local";
-}
-
-function getStatusKind(params: {
-  installedState?: InstalledAgentAppState;
-  cloudApp?: CloudBootstrapApp;
-  sourceState?: CloudSourceState;
-  registrationBlocked: boolean;
-}): AppCenterStatusKind {
-  const { installedState, cloudApp, sourceState, registrationBlocked } = params;
-  if (installedState?.disabled) {
-    return "disabled";
-  }
-  if (registrationBlocked) {
-    return "registration";
-  }
-  if (
-    installedState &&
-    cloudApp &&
-    cloudApp.version !== installedState.identity.appVersion
-  ) {
-    return "update";
-  }
-  if (
-    installedState &&
-    !["ready", "degraded"].includes(installedState.readiness.status)
-  ) {
-    return "partial";
-  }
-  if (installedState) {
-    return "installed";
-  }
-  if (sourceState && !sourceState.canReview) {
-    return "partial";
-  }
-  return "installable";
-}
-
-function buildAppCenterItems(params: {
-  installed: InstalledAgentAppState[];
-  cloudApps: CloudBootstrapApp[];
-  catalogSource: AgentAppCloudCatalogResult["source"] | "seeded";
-}): AppCenterItem[] {
-  const installedById = new Map(
-    params.installed.map((state) => [state.appId, state] as const),
-  );
-  const cloudById = new Map<string, CloudBootstrapApp>();
-  for (const app of params.cloudApps) {
-    if (!cloudById.has(app.appId)) {
-      cloudById.set(app.appId, app);
-    }
-  }
-
-  const appIds = new Set<string>([
-    ...params.installed.map((state) => state.appId),
-    ...params.cloudApps.map((app) => app.appId),
-  ]);
-
-  return Array.from(appIds)
-    .map((appId) => {
-      const installedState = installedById.get(appId);
-      const cloudApp = cloudById.get(appId);
-      const sourceState = cloudApp
-        ? buildCloudAgentAppSourceState({
-            app: cloudApp,
-            catalogSource: params.catalogSource,
-            installed: params.installed,
-          })
-        : undefined;
-      const registrationBlocked = Boolean(
-        cloudApp?.registrationRequired &&
-        cloudApp.registrationState !== "active",
-      );
-      const statusKind = getStatusKind({
-        installedState,
-        cloudApp,
-        sourceState,
-        registrationBlocked,
-      });
-      const title = getAppTitle(installedState, cloudApp, appId);
-
-      return {
-        appId,
-        title,
-        description: getAppDescription(installedState, cloudApp),
-        iconSrc: resolveAppIconSrc({ title, installedState, cloudApp }),
-        installedState,
-        cloudApp,
-        sourceKind: getSourceKind(installedState, cloudApp),
-        statusKind,
-        installedVersion: installedState?.identity.appVersion,
-        cloudVersion: cloudApp?.version,
-        entries: installedState?.projection.entries ?? [],
-        sourceState,
-        registrationBlocked,
-        canReviewCloud: Boolean(sourceState?.canReview),
-      } satisfies AppCenterItem;
-    })
-    .sort((left, right) => {
-      if (Boolean(left.installedState) !== Boolean(right.installedState)) {
-        return left.installedState ? -1 : 1;
-      }
-      if (left.statusKind !== right.statusKind) {
-        const weights: Record<AppCenterStatusKind, number> = {
-          update: 0,
-          registration: 1,
-          disabled: 2,
-          partial: 3,
-          installed: 4,
-          installable: 5,
-        };
-        return weights[left.statusKind] - weights[right.statusKind];
-      }
-      return left.title.localeCompare(right.title, "zh-Hans-CN");
-    });
-}
-
-function matchesStatusFilter(
-  item: AppCenterItem,
-  filter: AppCenterStatusFilter,
-): boolean {
-  if (filter === "all") {
-    return true;
-  }
-  if (filter === "installed") {
-    return Boolean(item.installedState);
-  }
-  if (filter === "installable") {
-    return item.statusKind === "installable";
-  }
-  return ["update", "registration", "disabled", "partial"].includes(
-    item.statusKind,
-  );
-}
-
-function matchesSourceFilter(
-  item: AppCenterItem,
-  filter: AppCenterSourceFilter,
-): boolean {
-  if (filter === "all") {
-    return true;
-  }
-  if (filter === "cloud") {
-    return item.sourceKind === "cloud" || item.sourceKind === "hybrid";
-  }
-  return item.sourceKind === "local" || item.sourceKind === "hybrid";
-}
-
-function getDefaultEntry(item: AppCenterItem): ProjectedEntry | null {
-  return item.entries.find(isUiEntry) ?? item.entries[0] ?? null;
 }
 
 export function AgentAppsPage({
@@ -594,52 +244,29 @@ export function AgentAppsPage({
         installed,
         cloudApps,
         catalogSource: cloudCatalog?.source ?? "seeded",
+        convertLocalFileSrc,
       }),
     [cloudApps, cloudCatalog?.source, installed],
   );
 
-  const filteredItems = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
-    return appItems.filter((item) => {
-      if (!matchesStatusFilter(item, statusFilter)) {
-        return false;
-      }
-      if (!matchesSourceFilter(item, sourceFilter)) {
-        return false;
-      }
-      if (!normalizedQuery) {
-        return true;
-      }
-      return [item.title, item.description, item.appId]
-        .filter(Boolean)
-        .some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
-    });
-  }, [appItems, searchQuery, sourceFilter, statusFilter]);
+  const filteredItems = useMemo(
+    () =>
+      filterAppCenterItems(appItems, {
+        searchQuery,
+        sourceFilter,
+        statusFilter,
+      }),
+    [appItems, searchQuery, sourceFilter, statusFilter],
+  );
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredItems.length / APP_CENTER_PAGE_SIZE),
-  );
-  const pagedItems = filteredItems.slice(
-    (currentPage - 1) * APP_CENTER_PAGE_SIZE,
-    currentPage * APP_CENTER_PAGE_SIZE,
-  );
+  const totalPages = getAppCenterPageCount(filteredItems.length);
+  const pagedItems = paginateAppCenterItems(filteredItems, currentPage);
   const selectedItem =
     filteredItems.find((item) => item.appId === selectedAppId) ?? null;
   const selected = selectedItem?.installedState ?? null;
 
   const filterCounts = useMemo(
-    () => ({
-      all: appItems.length,
-      installed: appItems.filter((item) => Boolean(item.installedState)).length,
-      installable: appItems.filter((item) => item.statusKind === "installable")
-        .length,
-      attention: appItems.filter((item) =>
-        ["update", "registration", "disabled", "partial"].includes(
-          item.statusKind,
-        ),
-      ).length,
-    }),
+    () => buildAppCenterFilterCounts(appItems),
     [appItems],
   );
 
@@ -1113,109 +740,6 @@ export function AgentAppsPage({
     setMoreInfoOpen(false);
   }
 
-  function hasCloudUpdate(item: AppCenterItem): boolean {
-    return Boolean(
-      item.installedVersion &&
-      item.cloudVersion &&
-      item.installedVersion !== item.cloudVersion,
-    );
-  }
-
-  function canOneClickUpdate(item: AppCenterItem): boolean {
-    return Boolean(
-      item.installedState &&
-      item.cloudApp &&
-      hasCloudUpdate(item),
-    );
-  }
-
-  function getActionLabelKey(item: AppCenterItem): AppCenterActionLabelKey {
-    if (item.installedState) {
-      if (item.statusKind === "disabled") {
-        return "agentApp.apps.center.action.enable";
-      }
-      if (item.registrationBlocked) {
-        return "agentApp.apps.center.action.activate";
-      }
-      if (canOneClickUpdate(item)) {
-        return "agentApp.apps.center.action.updateOneClick";
-      }
-      return "agentApp.apps.center.action.open";
-    }
-    if (item.statusKind === "registration") {
-      return "agentApp.apps.center.action.activate";
-    }
-    if (item.statusKind === "update") {
-      return "agentApp.apps.center.action.update";
-    }
-    if (item.statusKind === "installable" || !item.installedState) {
-      return "agentApp.apps.center.action.install";
-    }
-    if (item.statusKind === "disabled") {
-      return "agentApp.apps.center.action.enable";
-    }
-    return "agentApp.apps.center.action.open";
-  }
-
-  function getCloudActionLabelKey(
-    item: AppCenterItem,
-  ): AppCenterActionLabelKey {
-    if (item.registrationBlocked) {
-      return "agentApp.apps.center.action.activate";
-    }
-    if (hasCloudUpdate(item)) {
-      return "agentApp.apps.center.action.update";
-    }
-    return "agentApp.apps.center.action.install";
-  }
-
-  function getDetailActionLabelKey(
-    item: AppCenterItem,
-  ): AppCenterActionLabelKey {
-    return getActionLabelKey(item);
-  }
-
-  function isPrimaryActionDisabled(item: AppCenterItem): boolean {
-    if (busyAction) {
-      return true;
-    }
-    if (item.installedState) {
-      if (item.statusKind === "disabled") {
-        return false;
-      }
-      if (item.registrationBlocked) {
-        return false;
-      }
-      if (canOneClickUpdate(item)) {
-        return !item.canReviewCloud;
-      }
-      return !getDefaultEntry(item);
-    }
-    if (item.statusKind === "registration") {
-      return true;
-    }
-    if (!item.installedState && !item.canReviewCloud) {
-      return true;
-    }
-    if (item.cloudApp && ["installable", "update"].includes(item.statusKind)) {
-      return !item.canReviewCloud;
-    }
-    if (item.statusKind === "disabled") {
-      return false;
-    }
-    return Boolean(item.installedState && !getDefaultEntry(item));
-  }
-
-  function isCloudActionDisabled(item: AppCenterItem): boolean {
-    if (Boolean(busyAction) || !item.cloudApp) {
-      return true;
-    }
-    if (item.registrationBlocked) {
-      return true;
-    }
-    return !item.canReviewCloud;
-  }
-
   async function handlePrimaryAction(item: AppCenterItem) {
     if (item.statusKind === "disabled" && item.installedState) {
       await handleSetDisabled(item.installedState, false);
@@ -1661,7 +1185,7 @@ export function AgentAppsPage({
                         <button
                           type="button"
                           className="inline-flex h-8 flex-1 min-w-0 items-center justify-center gap-2 rounded-full bg-[color:var(--lime-text-strong)] px-3 text-xs font-semibold text-[color:var(--lime-surface)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={isPrimaryActionDisabled(item)}
+                          disabled={isPrimaryActionDisabled(item, busyAction)}
                           onClick={(event) => {
                             event.stopPropagation();
                             void handlePrimaryAction(item);
@@ -1701,8 +1225,9 @@ export function AgentAppsPage({
                           className="mt-2 inline-flex h-8 w-full items-center justify-center rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-xs font-semibold text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
                           disabled={
                             canOneClickUpdate(item)
-                              ? isPrimaryActionDisabled(item) || !defaultEntry
-                              : isCloudActionDisabled(item)
+                              ? isPrimaryActionDisabled(item, busyAction) ||
+                                !defaultEntry
+                              : isCloudActionDisabled(item, busyAction)
                           }
                           onClick={(event) => {
                             event.stopPropagation();
@@ -1856,7 +1381,10 @@ export function AgentAppsPage({
                     <button
                       type="button"
                       className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-full bg-[color:var(--lime-text-strong)] px-3 text-sm font-semibold text-[color:var(--lime-surface)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-80"
-                      disabled={isPrimaryActionDisabled(selectedItem)}
+                      disabled={isPrimaryActionDisabled(
+                        selectedItem,
+                        busyAction,
+                      )}
                       onClick={() => void handlePrimaryAction(selectedItem)}
                     >
                       {canOneClickUpdate(selectedItem) ? (
@@ -1874,9 +1402,12 @@ export function AgentAppsPage({
                         className="inline-flex h-10 w-full items-center justify-center rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-sm font-semibold text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
                         disabled={
                           canOneClickUpdate(selectedItem)
-                            ? isPrimaryActionDisabled(selectedItem) ||
+                            ? isPrimaryActionDisabled(
+                                selectedItem,
+                                busyAction,
+                              ) ||
                               !getDefaultEntry(selectedItem)
-                            : isCloudActionDisabled(selectedItem)
+                            : isCloudActionDisabled(selectedItem, busyAction)
                         }
                         onClick={() => {
                           if (canOneClickUpdate(selectedItem)) {

@@ -250,7 +250,7 @@ pub(in crate::commands::aster_agent_cmd) fn build_chat_run_metadata_base(
         (
             "thinking_enabled",
             &["thinking_enabled", "thinkingEnabled"][..],
-            session_recent_preferences.map(|preferences| preferences.thinking),
+            session_recent_preferences.and_then(|preferences| preferences.thinking),
         ),
         (
             "task_mode_enabled",

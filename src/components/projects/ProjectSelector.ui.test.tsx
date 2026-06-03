@@ -1,9 +1,14 @@
 import React from "react";
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Project } from "@/types/project";
-import { ProjectSelector } from "./ProjectSelector";
+import {
+  cleanupMountedProjectSelectors,
+  createProject,
+  createUseProjectsResult,
+  findButton,
+  flushAsync,
+  renderProjectSelector,
+} from "./ProjectSelector.uiTestFixtures";
 
 const {
   mockUseProjects,
@@ -32,93 +37,16 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (
-      key: string,
-      options?: {
-        count?: number;
-        defaultValue?: string;
-        [key: string]: unknown;
-      },
-    ) => {
-      const translations: Record<string, string> = {
-        "common.cancel": "取消",
-        "common.delete": "删除",
-        "common.loading": "加载中...",
-        "common.save": "保存",
-        "common.projectSelector.action.createProject": "新建项目",
-        "common.projectSelector.action.createWorkspace": "新建工作区",
-        "common.projectSelector.action.deleting": "移除中...",
-        "common.projectSelector.action.openExistingFolder": "打开现有文件夹",
-        "common.projectSelector.action.remove": "移除",
-        "common.projectSelector.action.removeEntity": "移除{{entity}}",
-        "common.projectSelector.action.revealPath.default": "显示位置",
-        "common.projectSelector.action.revealPath.linux": "在文件管理器中显示",
-        "common.projectSelector.action.revealPath.macos": "在 Finder 中显示",
-        "common.projectSelector.action.revealPath.unknown": "显示位置",
-        "common.projectSelector.action.revealPath.windows":
-          "在文件资源管理器中显示",
-        "common.projectSelector.action.rename": "重命名",
-        "common.projectSelector.action.saving": "保存中...",
-        "common.projectSelector.action.viewContents": "查看内容",
-        "common.projectSelector.badge.default": "默认",
-        "common.projectSelector.current.label": "当前{{entity}}：",
-        "common.projectSelector.empty": "未找到匹配项目",
-        "common.projectSelector.entity.project": "项目",
-        "common.projectSelector.entity.workspace": "工作区",
-        "common.projectSelector.header.count": "{{count}} 个{{entity}}",
-        "common.projectSelector.header.description":
-          "在这里切换、搜索和管理可见{{entity}}列表。",
-        "common.projectSelector.header.title": "选择{{entity}}",
-        "common.projectSelector.management.defaultLocked":
-          "默认{{entity}}不可重命名或移除",
-        "common.projectSelector.management.description.project":
-          "当前只管理可见项目，不影响本地目录与已有文件。",
-        "common.projectSelector.management.description.workspace":
-          "当前只管理可见工作区，不影响本地目录与已有文件。",
-        "common.projectSelector.management.title.project": "项目管理",
-        "common.projectSelector.management.title.workspace": "工作区管理",
-        "common.projectSelector.meta.default": "默认项目",
-        "common.projectSelector.meta.pending": "待选择项目",
-        "common.projectSelector.path.notSet": "未设置目录",
-        "common.projectSelector.placeholder.project": "选择项目",
-        "common.projectSelector.placeholder.workspace": "选择工作区",
-        "common.projectSelector.remove.dangerDescription":
-          "只移除 Lime 中的记录，不删除本地目录和已有文件。",
-        "common.projectSelector.remove.dangerTitle": "本地文件会保留",
-        "common.projectSelector.remove.description":
-          "确定要移除{{entity}}{{name}}吗？",
-        "common.projectSelector.remove.title": "移除{{entity}}",
-        "common.projectSelector.rename.description":
-          "更新{{entity}}名称，不会修改本地目录路径。",
-        "common.projectSelector.rename.placeholder": "输入新的项目名称",
-        "common.projectSelector.rename.title": "重命名{{entity}}",
-        "common.projectSelector.search.placeholder": "搜索{{entity}}",
-        "common.projectSelector.toast.created": "{{entity}}已创建",
-        "common.projectSelector.toast.nameRequired": "{{entity}}名称不能为空",
-        "common.projectSelector.toast.openExistingFolderFailed":
-          "打开现有文件夹失败：{{message}}",
-        "common.projectSelector.toast.pathMissing": "当前没有可打开的本地目录",
-        "common.projectSelector.toast.removeFailed": "移除失败：{{message}}",
-        "common.projectSelector.toast.removed":
-          "{{entity}}已移除，本地目录未删除",
-        "common.projectSelector.toast.revealPathFailed":
-          "打开位置失败：{{message}}",
-        "common.projectSelector.toast.renamed": "{{entity}}名称已更新",
-        "common.projectSelector.toast.renameFailed": "重命名失败：{{message}}",
-        "common.projectSelector.workspaceType.blog": "博客",
-        "common.projectSelector.workspaceType.general": "通用",
-        "common.projectSelector.workspaceType.persistent": "持久化",
-        "common.projectSelector.workspaceType.temporary": "临时",
-      };
-      const template = options?.defaultValue ?? translations[key] ?? key;
-      return template.replace(/{{(\w+)}}/g, (_, name: string) =>
-        String(options?.[name] ?? ""),
-      );
-    },
-  }),
-}));
+vi.mock("react-i18next", async () => {
+  const { translateProjectSelectorTestKey } = await import(
+    "./ProjectSelector.i18nTestStub"
+  );
+  return {
+    useTranslation: () => ({
+      t: translateProjectSelectorTestKey,
+    }),
+  };
+});
 
 vi.mock("@/hooks/useProjects", () => ({
   useProjects: mockUseProjects,
@@ -166,170 +94,42 @@ vi.mock("@/components/projects/CreateProjectDialog", () => ({
 }));
 
 vi.mock("@/components/ui/button", () => ({
-  Button: ({
-    children,
-    onClick,
-    disabled,
-    type = "button",
-    ...rest
-  }: {
+  Button: ({ children, onClick, disabled, type = "button", ...rest }: {
     children: React.ReactNode;
     onClick?: () => void;
     disabled?: boolean;
     type?: "button" | "submit" | "reset";
     [key: string]: unknown;
-  }) => (
-    <button type={type} onClick={onClick} disabled={disabled} {...rest}>
-      {children}
-    </button>
-  ),
+  }) => <button type={type} onClick={onClick} disabled={disabled} {...rest}>{children}</button>,
 }));
 
 vi.mock("@/components/ui/input", () => ({
-  Input: ({
-    value,
-    onChange,
-    placeholder,
-    ...rest
-  }: React.InputHTMLAttributes<HTMLInputElement>) => (
-    <input
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-      {...rest}
-    />
+  Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => (
+    <input {...props} />
   ),
 }));
 
 vi.mock("@/components/ui/popover", () => ({
-  Popover: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  PopoverContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  PopoverTrigger: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
+  Popover: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  PopoverContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  PopoverTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
 vi.mock("@/components/ui/scroll-area", () => ({
-  ScrollArea: ({
-    children,
-    ...props
-  }: React.HTMLAttributes<HTMLDivElement> & {
-    children: React.ReactNode;
-  }) => <div {...props}>{children}</div>,
+  ScrollArea: (props: React.HTMLAttributes<HTMLDivElement>) => (
+    <div {...props} />
+  ),
 }));
 
 vi.mock("@/components/ui/dialog", () => ({
   Dialog: ({ open, children }: { open: boolean; children: React.ReactNode }) =>
     open ? <div>{children}</div> : null,
-  DialogContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogDescription: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogFooter: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogHeader: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogTitle: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
+  DialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogDescription: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
-
-function createProject(overrides: Partial<Project>): Project {
-  return {
-    id: "project-id",
-    name: "项目",
-    workspaceType: "general",
-    rootPath: "/tmp/project",
-    isDefault: false,
-    icon: undefined,
-    color: undefined,
-    isFavorite: false,
-    isArchived: false,
-    tags: [],
-    createdAt: 1,
-    updatedAt: 1,
-    ...overrides,
-  };
-}
-
-interface MountedHarness {
-  container: HTMLDivElement;
-  root: Root;
-}
-
-const mountedRoots: MountedHarness[] = [];
-
-function createUseProjectsResult(overrides?: Record<string, unknown>) {
-  return {
-    projects: [],
-    generalProjects: [],
-    filteredProjects: [],
-    defaultProject: null,
-    loading: false,
-    error: null,
-    filter: {},
-    setFilter: vi.fn(),
-    refresh: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-    rename: vi.fn(),
-    remove: vi.fn(async () => true),
-    getOrCreateDefault: vi.fn(async () =>
-      createProject({
-        id: "default",
-        name: "默认项目",
-        isDefault: true,
-        workspaceType: "general",
-      }),
-    ),
-    ...overrides,
-  };
-}
-
-function renderProjectSelector(
-  props?: Partial<React.ComponentProps<typeof ProjectSelector>>,
-) {
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root = createRoot(container);
-
-  const defaultProps: React.ComponentProps<typeof ProjectSelector> = {
-    value: "default",
-    onChange: vi.fn(),
-    workspaceType: "general",
-    enableManagement: true,
-  };
-
-  act(() => {
-    root.render(<ProjectSelector {...defaultProps} {...props} />);
-  });
-
-  mountedRoots.push({ container, root });
-  return container;
-}
-
-function findButton(
-  container: HTMLElement,
-  text: string,
-): HTMLButtonElement | null {
-  return (Array.from(container.querySelectorAll("button")).find((button) =>
-    button.textContent?.includes(text),
-  ) || null) as HTMLButtonElement | null;
-}
-
-async function flushAsync() {
-  await act(async () => {
-    await Promise.resolve();
-  });
-}
 
 beforeEach(() => {
   (
@@ -345,14 +145,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  while (mountedRoots.length > 0) {
-    const mounted = mountedRoots.pop();
-    if (!mounted) break;
-    act(() => {
-      mounted.root.unmount();
-    });
-    mounted.container.remove();
-  }
+  cleanupMountedProjectSelectors();
   vi.clearAllMocks();
 });
 

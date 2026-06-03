@@ -12,6 +12,8 @@ use chrono::Utc;
 use serde_json::{json, Value};
 use std::sync::OnceLock;
 
+const TOKEN_ENCODER_INIT_STACK_SIZE: usize = 16 * 1024 * 1024;
+
 /// Default token threshold before a tool payload becomes an eviction candidate.
 pub const DEFAULT_TOOL_TOKEN_LIMIT_BEFORE_EVICT: usize = 20_000;
 
@@ -156,9 +158,18 @@ impl Default for ToolIoPreviewConfig {
 
 fn token_encoder() -> Option<&'static tiktoken_rs::CoreBPE> {
     static TOKEN_ENCODER: OnceLock<Option<tiktoken_rs::CoreBPE>> = OnceLock::new();
-    TOKEN_ENCODER
-        .get_or_init(|| tiktoken_rs::o200k_base().ok())
-        .as_ref()
+    TOKEN_ENCODER.get_or_init(init_token_encoder).as_ref()
+}
+
+fn init_token_encoder() -> Option<tiktoken_rs::CoreBPE> {
+    std::thread::Builder::new()
+        .name("aster-token-encoder-init".to_string())
+        .stack_size(TOKEN_ENCODER_INIT_STACK_SIZE)
+        .spawn(|| tiktoken_rs::o200k_base().ok())
+        .ok()?
+        .join()
+        .ok()
+        .flatten()
 }
 
 /// Estimate tokens for a tool I/O text payload.

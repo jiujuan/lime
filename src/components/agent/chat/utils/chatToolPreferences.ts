@@ -2,8 +2,6 @@ import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
 import { isGeneralResearchTheme } from "./generalAgentPrompt";
 
 export interface ChatToolPreferences {
-  webSearch: boolean;
-  thinking: boolean;
   task: boolean;
   subagent: boolean;
 }
@@ -24,8 +22,6 @@ export function alignChatToolPreferencesWithExecutionStrategy(
 }
 
 export const DEFAULT_CHAT_TOOL_PREFERENCES: ChatToolPreferences = {
-  webSearch: false,
-  thinking: false,
   task: false,
   subagent: false,
 };
@@ -63,8 +59,6 @@ const parseStoredPreferences = (
 ): ChatToolPreferences => {
   const parsed = JSON.parse(raw) as Partial<ChatToolPreferences>;
   return {
-    webSearch: false,
-    thinking: false,
     task: normalizeBoolean(parsed.task, fallback.task),
     subagent: normalizeBoolean(parsed.subagent, fallback.subagent),
   };

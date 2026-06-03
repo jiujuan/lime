@@ -360,7 +360,7 @@ export function createInlineCoverageMatcher(coverage: InlineProcessCoverage) {
       case "web_search":
         return consumeInlineCoverageCount(
           remainingToolNameCounts,
-          normalizeInlineCoverageKey(item.action || "web_search"),
+          normalizeInlineCoverageKey("web_search"),
         );
       case "approval_request":
       case "request_user_input":
@@ -460,6 +460,16 @@ export function filterConversationDisplayContentParts(
   return filtered.length > 0 ? filtered : undefined;
 }
 
+function isTimelineProcessBoundaryPart(
+  part: NonNullable<Message["contentParts"]>[number],
+): boolean {
+  return (
+    part.type === "tool_use" ||
+    part.type === "action_required" ||
+    part.type === "file_changes_batch"
+  );
+}
+
 export function mergeStreamingOverlayContentParts(
   parts: Message["contentParts"] | undefined,
   overlayContent: string | null,
@@ -497,6 +507,39 @@ export function mergeStreamingOverlayContentParts(
       return nextParts;
     }
     return [...nextParts, { type: "text", text: pendingText }];
+  }
+
+  const processBoundaryIndex = parts.findIndex(isTimelineProcessBoundaryPart);
+  if (processBoundaryIndex >= 0) {
+    const textIndexes = parts.flatMap((part, index) =>
+      part.type === "text" ? [index] : [],
+    );
+    const lastTextAfterProcessIndex = textIndexes
+      .slice()
+      .reverse()
+      .find((index) => index > processBoundaryIndex);
+
+    if (lastTextAfterProcessIndex !== undefined) {
+      const prefixBeforeLast = textIndexes
+        .filter((index) => index < lastTextAfterProcessIndex)
+        .map((index) => {
+          const part = parts[index];
+          return part?.type === "text" ? part.text : "";
+        })
+        .join("");
+      const nextText =
+        prefixBeforeLast && overlayContent.startsWith(prefixBeforeLast)
+          ? overlayContent.slice(prefixBeforeLast.length)
+          : overlayContent;
+      const nextParts = [...parts];
+      nextParts[lastTextAfterProcessIndex] = {
+        type: "text",
+        text: nextText,
+      };
+      return nextParts;
+    }
+
+    return [...parts, textPart];
   }
 
   const firstTextIndex = parts.findIndex((part) => part.type === "text");

@@ -1,9 +1,23 @@
-import React from "react";
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
-import { BrowserSiteAdapterPanel } from "./BrowserSiteAdapterPanel";
+import {
+  changeInputValue,
+  cleanupMountedBrowserSiteAdapterPanels,
+  clickButtonByText,
+  createBrowserProfile,
+  createCatalogStatus,
+  createChromeBridgeStatus,
+  createChromeObserver,
+  createProject,
+  createSiteAdapter,
+  createSiteRecommendation,
+  createSiteRunResult,
+  createZhihuAdapter,
+  findInputByPlaceholder,
+  flushMicrotasks,
+  renderPanel,
+} from "./browserSiteAdapterPanelTestFixtures";
 
 const {
   mockSiteListAdapters,
@@ -59,8 +73,6 @@ vi.mock("@/lib/siteAdapterCatalogBootstrap", () => ({
   subscribeSiteAdapterCatalogChanged: mockSubscribeSiteAdapterCatalogChanged,
 }));
 
-const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
-
 beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
@@ -69,110 +81,13 @@ beforeEach(async () => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
   await changeLimeLocale("zh-CN");
 
-  mockSiteListAdapters.mockResolvedValue([
-    {
-      name: "github/search",
-      domain: "github.com",
-      description: "按关键词采集 GitHub 仓库搜索结果。",
-      read_only: true,
-      capabilities: ["search", "repository"],
-      input_schema: {
-        type: "object",
-        properties: {
-          query: { type: "string" },
-          limit: { type: "integer" },
-        },
-        required: ["query"],
-      },
-      example_args: {
-        query: "model context protocol",
-        limit: 5,
-      },
-      example: 'github/search {"query":"model context protocol","limit":5}',
-      auth_hint: "若需要完整结果，请先在浏览器中登录 GitHub。",
-    },
-  ]);
-  mockSiteRecommendAdapters.mockResolvedValue([
-    {
-      adapter: {
-        name: "github/search",
-        domain: "github.com",
-        description: "按关键词采集 GitHub 仓库搜索结果。",
-        read_only: true,
-        capabilities: ["search", "repository", "research"],
-        input_schema: {
-          type: "object",
-          properties: {
-            query: { type: "string" },
-            limit: { type: "integer" },
-          },
-          required: ["query"],
-        },
-        example_args: {
-          query: "model context protocol",
-          limit: 5,
-        },
-        example: 'github/search {"query":"model context protocol","limit":5}',
-        auth_hint: "若需要完整结果，请先在浏览器中登录 GitHub。",
-      },
-      reason:
-        "已检测到资料 通用浏览器资料 当前停留在 github.com，可直接复用已连接的 Chrome 上下文。",
-      profile_key: "general_browser_assist",
-      target_id: "mock-target-1",
-      entry_url:
-        "https://github.com/search?q=model%20context%20protocol&type=repositories",
-      score: 100,
-    },
-  ]);
-  mockSiteGetAdapterCatalogStatus.mockResolvedValue({
-    exists: true,
-    source_kind: "server_synced",
-    registry_version: 3,
-    directory: "/tmp/site-adapters/server-synced",
-    catalog_version: "tenant-sync-1",
-    tenant_id: "tenant-demo",
-    synced_at: "2026-03-25T12:00:00.000Z",
-    adapter_count: 1,
-  });
-  mockListBrowserProfiles.mockResolvedValue([
-    {
-      id: "profile-1",
-      profile_key: "general_browser_assist",
-      name: "通用浏览器资料",
-      description: "默认资料",
-      site_scope: "github.com",
-      launch_url: "https://github.com",
-      transport_kind: "managed_cdp",
-      profile_dir: "/tmp/profile",
-      managed_profile_dir: "/tmp/managed-profile",
-      created_at: "2026-03-24T00:00:00Z",
-      updated_at: "2026-03-24T00:00:00Z",
-      last_used_at: null,
-      archived_at: null,
-    },
-  ]);
-  mockGetChromeBridgeStatus.mockResolvedValue({
-    observer_count: 0,
-    control_count: 0,
-    pending_command_count: 0,
-    observers: [],
-    controls: [],
-    pending_commands: [],
-  });
+  mockSiteListAdapters.mockResolvedValue([createSiteAdapter()]);
+  mockSiteRecommendAdapters.mockResolvedValue([createSiteRecommendation()]);
+  mockSiteGetAdapterCatalogStatus.mockResolvedValue(createCatalogStatus());
+  mockListBrowserProfiles.mockResolvedValue([createBrowserProfile()]);
+  mockGetChromeBridgeStatus.mockResolvedValue(createChromeBridgeStatus());
   mockSiteRunAdapter.mockImplementation(async (request) => ({
-    ok: true,
-    adapter: "github/search",
-    domain: "github.com",
-    profile_key: "general_browser_assist",
-    session_id: "mock-cdp-session",
-    target_id: "mock-target-1",
-    entry_url:
-      "https://github.com/search?q=model%20context%20protocol&type=repositories",
-    source_url:
-      "https://github.com/search?q=model%20context%20protocol&type=repositories",
-    data: {
-      items: [{ title: "mock repo", url: "https://github.com/mock/repo" }],
-    },
+    ...createSiteRunResult(),
     saved_content:
       request.content_id || request.project_id
         ? {
@@ -193,30 +108,13 @@ beforeEach(async () => {
         : undefined,
   }));
   mockListProjects.mockResolvedValue([
-    {
-      id: "project-1",
-      name: "默认项目",
-      workspaceType: "general",
-      rootPath: "/tmp/project-1",
-      isDefault: true,
-      createdAt: 1,
-      updatedAt: 1,
-      isFavorite: false,
-      isArchived: false,
-      tags: [],
-    },
-    {
+    createProject(),
+    createProject({
       id: "project-2",
       name: "竞品情报",
-      workspaceType: "general",
       rootPath: "/tmp/project-2",
       isDefault: false,
-      createdAt: 1,
-      updatedAt: 1,
-      isFavorite: false,
-      isArchived: false,
-      tags: [],
-    },
+    }),
   ]);
   mockSiteSaveAdapterResult.mockImplementation(async (request) => ({
     content_id: request.content_id || "content-1",
@@ -232,38 +130,9 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  while (mountedRoots.length > 0) {
-    const mounted = mountedRoots.pop();
-    if (!mounted) break;
-    act(() => {
-      mounted.root.unmount();
-    });
-    mounted.container.remove();
-  }
+  cleanupMountedBrowserSiteAdapterPanels();
   vi.clearAllMocks();
 });
-
-async function renderPanel(
-  props?: Partial<React.ComponentProps<typeof BrowserSiteAdapterPanel>>,
-) {
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  mountedRoots.push({ root, container });
-  await act(async () => {
-    root.render(
-      <BrowserSiteAdapterPanel
-        selectedProfileKey="general_browser_assist"
-        variant="workspace"
-        {...props}
-      />,
-    );
-  });
-  await act(async () => {
-    await Promise.resolve();
-  });
-  return container;
-}
 
 describe("BrowserSiteAdapterPanel", () => {
   it("工作台模式应支持把站点结果保存到资源项目", async () => {
@@ -281,15 +150,7 @@ describe("BrowserSiteAdapterPanel", () => {
     expect(container.textContent).toContain("推荐适配器");
     expect(container.textContent).toContain("已匹配标签页");
 
-    const runButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("执行站点命令"),
-    );
-    expect(runButton).toBeTruthy();
-
-    await act(async () => {
-      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
+    await clickButtonByText(container, "执行站点命令");
 
     expect(container.textContent).toContain("执行成功");
     expect(container.textContent).toContain("返回 1 条结构化记录");
@@ -318,17 +179,7 @@ describe("BrowserSiteAdapterPanel", () => {
       "已保存：站点采集 github/search · model context protocol · 竞品情报",
     );
 
-    const openSavedContentButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("打开已保存内容"));
-    expect(openSavedContentButton).toBeTruthy();
-
-    await act(async () => {
-      openSavedContentButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      await Promise.resolve();
-    });
+    await clickButtonByText(container, "打开已保存内容");
 
     expect(onNavigate).toHaveBeenCalledWith("agent", {
       projectId: "project-2",
@@ -337,37 +188,16 @@ describe("BrowserSiteAdapterPanel", () => {
       fromResources: true,
     });
 
-    const saveTitleInput = Array.from(container.querySelectorAll("input")).find(
-      (input) => input.placeholder === "留空则自动生成标题",
+    const saveTitleInput = findInputByPlaceholder(
+      container,
+      "留空则自动生成标题",
     );
-    expect(saveTitleInput).toBeTruthy();
-    expect(saveTitleInput).toBeInstanceOf(HTMLInputElement);
-    expect((saveTitleInput as HTMLInputElement).value).toBe(
+    expect(saveTitleInput.value).toBe(
       "站点采集 github/search · model context protocol",
     );
 
-    const saveButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("结果文档"),
-    );
-    expect(saveButton).toBeTruthy();
-
-    await act(async () => {
-      if (saveTitleInput instanceof HTMLInputElement) {
-        const valueSetter = Object.getOwnPropertyDescriptor(
-          HTMLInputElement.prototype,
-          "value",
-        )?.set;
-        expect(valueSetter).toBeTypeOf("function");
-        valueSetter?.call(saveTitleInput, "GitHub MCP 自定义标题");
-        saveTitleInput.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
+    await changeInputValue(saveTitleInput, "GitHub MCP 自定义标题");
+    await clickButtonByText(container, "结果文档");
 
     expect(mockSiteSaveAdapterResult).toHaveBeenCalledTimes(1);
     expect(mockSiteSaveAdapterResult).toHaveBeenNthCalledWith(
@@ -398,8 +228,8 @@ describe("BrowserSiteAdapterPanel", () => {
 
   it("未显式指定 profile_key 时应优先选择已连接的 existing_session 资料", async () => {
     mockListBrowserProfiles.mockResolvedValueOnce([
-      {
-        id: "profile-attach",
+      createBrowserProfile({
+        id: "profile-research",
         profile_key: "research_attach",
         name: "研究附着资料",
         description: "当前 Chrome",
@@ -408,49 +238,15 @@ describe("BrowserSiteAdapterPanel", () => {
         transport_kind: "existing_session",
         profile_dir: "",
         managed_profile_dir: null,
-        created_at: "2026-03-24T00:00:00Z",
-        updated_at: "2026-03-24T00:00:00Z",
-        last_used_at: null,
-        archived_at: null,
-      },
-      {
-        id: "profile-1",
-        profile_key: "general_browser_assist",
-        name: "通用浏览器资料",
-        description: "默认资料",
-        site_scope: "github.com",
-        launch_url: "https://github.com",
-        transport_kind: "managed_cdp",
-        profile_dir: "/tmp/profile",
-        managed_profile_dir: "/tmp/managed-profile",
-        created_at: "2026-03-24T00:00:00Z",
-        updated_at: "2026-03-24T00:00:00Z",
-        last_used_at: null,
-        archived_at: null,
-      },
+      }),
+      createBrowserProfile(),
     ]);
-    mockGetChromeBridgeStatus.mockResolvedValueOnce({
+    mockGetChromeBridgeStatus.mockResolvedValueOnce(
+      createChromeBridgeStatus({
       observer_count: 1,
-      control_count: 0,
-      pending_command_count: 0,
-      observers: [
-        {
-          client_id: "observer-1",
-          profile_key: "research_attach",
-          connected_at: "2026-03-24T00:00:00Z",
-          user_agent: "Chrome",
-          last_heartbeat_at: "2026-03-24T00:00:01Z",
-          last_page_info: {
-            title: "GitHub",
-            url: "https://github.com/trending",
-            markdown: "GitHub",
-            updated_at: "2026-03-24T00:00:01Z",
-          },
-        },
-      ],
-      controls: [],
-      pending_commands: [],
-    });
+        observers: [createChromeObserver()],
+      }),
+    );
 
     const container = await renderPanel({ selectedProfileKey: undefined });
     expect(container.textContent).toContain("当前将使用：research_attach");
@@ -458,15 +254,7 @@ describe("BrowserSiteAdapterPanel", () => {
     expect(container.textContent).toContain("研究附着资料");
     expect(container.textContent).toContain("模式：existing_session");
 
-    const runButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("执行站点命令"),
-    );
-    expect(runButton).toBeTruthy();
-
-    await act(async () => {
-      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
+    await clickButtonByText(container, "执行站点命令");
 
     expect(mockSiteRunAdapter).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -477,97 +265,23 @@ describe("BrowserSiteAdapterPanel", () => {
 
   it("点击推荐适配器后应切换当前适配器与推荐资料", async () => {
     mockSiteListAdapters.mockResolvedValueOnce([
-      {
-        name: "github/search",
-        domain: "github.com",
-        description: "按关键词采集 GitHub 仓库搜索结果。",
-        read_only: true,
-        capabilities: ["search", "repository", "research"],
-        input_schema: {
-          type: "object",
-          properties: {
-            query: { type: "string" },
-            limit: { type: "integer" },
-          },
-          required: ["query"],
-        },
-        example_args: {
-          query: "model context protocol",
-          limit: 5,
-        },
-        example: 'github/search {"query":"model context protocol","limit":5}',
-        auth_hint: "若需要完整结果，请先在浏览器中登录 GitHub。",
-      },
-      {
-        name: "zhihu/search",
-        domain: "www.zhihu.com",
-        description: "按关键词采集知乎搜索结果。",
-        read_only: true,
-        capabilities: ["search", "research"],
-        input_schema: {
-          type: "object",
-          properties: {
-            query: { type: "string" },
-            limit: { type: "integer" },
-          },
-          required: ["query"],
-        },
-        example_args: {
-          query: "AI Agent",
-          limit: 5,
-        },
-        example: 'zhihu/search {"query":"AI Agent","limit":5}',
-        auth_hint: "请先在浏览器中登录知乎，再重试该命令。",
-      },
+      createSiteAdapter({ capabilities: ["search", "repository", "research"] }),
+      createZhihuAdapter(),
     ]);
     mockSiteRecommendAdapters.mockResolvedValueOnce([
-      {
-        adapter: {
-          name: "zhihu/search",
-          domain: "www.zhihu.com",
-          description: "按关键词采集知乎搜索结果。",
-          read_only: true,
-          capabilities: ["search", "research"],
-          input_schema: {
-            type: "object",
-            properties: {
-              query: { type: "string" },
-              limit: { type: "integer" },
-            },
-            required: ["query"],
-          },
-          example_args: {
-            query: "AI Agent",
-            limit: 5,
-          },
-          example: 'zhihu/search {"query":"AI Agent","limit":5}',
-          auth_hint: "请先在浏览器中登录知乎，再重试该命令。",
-        },
+      createSiteRecommendation({
+        adapter: createZhihuAdapter(),
         reason:
           "资料 知乎附着资料 已绑定站点范围 www.zhihu.com，可优先作为该适配器的执行上下文。",
         profile_key: "zhihu_attach",
         target_id: undefined,
         entry_url: "https://www.zhihu.com/search?type=content&q=AI%20Agent",
         score: 75,
-      },
+      }),
     ]);
     mockListBrowserProfiles.mockResolvedValueOnce([
-      {
-        id: "profile-1",
-        profile_key: "general_browser_assist",
-        name: "通用浏览器资料",
-        description: "默认资料",
-        site_scope: "github.com",
-        launch_url: "https://github.com",
-        transport_kind: "managed_cdp",
-        profile_dir: "/tmp/profile",
-        managed_profile_dir: "/tmp/managed-profile",
-        created_at: "2026-03-24T00:00:00Z",
-        updated_at: "2026-03-24T00:00:00Z",
-        last_used_at: null,
-        archived_at: null,
-      },
-      {
+      createBrowserProfile(),
+      createBrowserProfile({
         id: "profile-2",
         profile_key: "zhihu_attach",
         name: "知乎附着资料",
@@ -577,26 +291,12 @@ describe("BrowserSiteAdapterPanel", () => {
         transport_kind: "existing_session",
         profile_dir: "",
         managed_profile_dir: null,
-        created_at: "2026-03-24T00:00:00Z",
-        updated_at: "2026-03-24T00:00:00Z",
-        last_used_at: null,
-        archived_at: null,
-      },
+      }),
     ]);
 
     const container = await renderPanel();
 
-    const recommendButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("zhihu/search"));
-    expect(recommendButton).toBeTruthy();
-
-    await act(async () => {
-      recommendButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      await Promise.resolve();
-    });
+    await clickButtonByText(container, "zhihu/search");
 
     const adapterSelect = container.querySelector("select");
     expect(adapterSelect).toBeInstanceOf(HTMLSelectElement);
@@ -613,33 +313,8 @@ describe("BrowserSiteAdapterPanel", () => {
     expect(container.textContent).toContain("生效适配器：1");
 
     mockSiteListAdapters.mockResolvedValueOnce([
-      {
-        name: "github/search",
-        domain: "github.com",
-        description: "按关键词采集 GitHub 仓库搜索结果。",
-        read_only: true,
-        capabilities: ["search", "repository"],
-        input_schema: {
-          type: "object",
-          properties: {
-            query: { type: "string" },
-            limit: { type: "integer" },
-          },
-          required: ["query"],
-        },
-        example_args: {
-          query: "model context protocol",
-          limit: 5,
-        },
-        example: 'github/search {"query":"model context protocol","limit":5}',
-        auth_hint: "若需要完整结果，请先在浏览器中登录 GitHub。",
-      },
-      {
-        name: "zhihu/search",
-        domain: "www.zhihu.com",
-        description: "按关键词采集知乎搜索结果。",
-        read_only: true,
-        capabilities: ["search", "research"],
+      createSiteAdapter(),
+      createZhihuAdapter({
         input_schema: {
           type: "object",
           properties: {
@@ -647,76 +322,37 @@ describe("BrowserSiteAdapterPanel", () => {
           },
           required: ["query"],
         },
-        example_args: {
-          query: "AI Agent",
-        },
+        example_args: { query: "AI Agent" },
         example: 'zhihu/search {"query":"AI Agent"}',
-        auth_hint: "请先在浏览器中登录知乎，再重试该命令。",
-      },
+      }),
     ]);
     mockSiteRecommendAdapters.mockResolvedValueOnce([
-      {
-        adapter: {
-          name: "zhihu/search",
-          domain: "www.zhihu.com",
-          description: "按关键词采集知乎搜索结果。",
-          read_only: true,
-          capabilities: ["search", "research"],
+      createSiteRecommendation({
+        adapter: createZhihuAdapter({
           input_schema: {
             type: "object",
-            properties: {
-              query: { type: "string" },
-            },
+            properties: { query: { type: "string" } },
             required: ["query"],
           },
-          example_args: {
-            query: "AI Agent",
-          },
+          example_args: { query: "AI Agent" },
           example: 'zhihu/search {"query":"AI Agent"}',
-          auth_hint: "请先在浏览器中登录知乎，再重试该命令。",
-        },
+        }),
         reason: "服务端目录已刷新，可新增知乎脚本。",
-        profile_key: "general_browser_assist",
         target_id: "mock-target-2",
         entry_url: "https://www.zhihu.com/search?type=content&q=AI%20Agent",
         score: 98,
-      },
+      }),
     ]);
-    mockSiteGetAdapterCatalogStatus.mockResolvedValueOnce({
-      exists: true,
-      source_kind: "server_synced",
+    mockSiteGetAdapterCatalogStatus.mockResolvedValueOnce(
+      createCatalogStatus({
       registry_version: 4,
-      directory: "/tmp/site-adapters/server-synced",
       catalog_version: "tenant-sync-2",
-      tenant_id: "tenant-demo",
       synced_at: "2026-03-26T12:00:00.000Z",
       adapter_count: 2,
-    });
-    mockListBrowserProfiles.mockResolvedValueOnce([
-      {
-        id: "profile-1",
-        profile_key: "general_browser_assist",
-        name: "通用浏览器资料",
-        description: "默认资料",
-        site_scope: "github.com",
-        launch_url: "https://github.com",
-        transport_kind: "managed_cdp",
-        profile_dir: "/tmp/profile",
-        managed_profile_dir: "/tmp/managed-profile",
-        created_at: "2026-03-24T00:00:00Z",
-        updated_at: "2026-03-24T00:00:00Z",
-        last_used_at: null,
-        archived_at: null,
-      },
-    ]);
-    mockGetChromeBridgeStatus.mockResolvedValueOnce({
-      observer_count: 0,
-      control_count: 0,
-      pending_command_count: 0,
-      observers: [],
-      controls: [],
-      pending_commands: [],
-    });
+      }),
+    );
+    mockListBrowserProfiles.mockResolvedValueOnce([createBrowserProfile()]);
+    mockGetChromeBridgeStatus.mockResolvedValueOnce(createChromeBridgeStatus());
 
     const changedListener =
       mockSubscribeSiteAdapterCatalogChanged.mock.calls[0]?.[0];
@@ -728,9 +364,8 @@ describe("BrowserSiteAdapterPanel", () => {
         source_kind: "server_synced",
         adapter_count: 2,
       });
-      await Promise.resolve();
-      await Promise.resolve();
     });
+    await flushMicrotasks(2);
 
     expect(mockSiteListAdapters).toHaveBeenCalledTimes(2);
     expect(mockSiteGetAdapterCatalogStatus).toHaveBeenCalledTimes(2);
@@ -740,31 +375,18 @@ describe("BrowserSiteAdapterPanel", () => {
   });
 
   it("站点不可达时应展示错误码与恢复建议", async () => {
-    mockSiteRunAdapter.mockResolvedValueOnce({
+    mockSiteRunAdapter.mockResolvedValueOnce(
+      createSiteRunResult({
       ok: false,
-      adapter: "github/search",
-      domain: "github.com",
-      profile_key: "general_browser_assist",
-      session_id: "mock-cdp-session",
-      target_id: "mock-target-1",
-      entry_url:
-        "https://github.com/search?q=model%20context%20protocol&type=repositories",
       error_code: "site_unreachable",
       error_message: "导航站点失败: CDP 命令超时: Page.navigate",
       report_hint:
         "目标站点可能加载较慢、发生重定向，或当前网络暂时不可达；请先确认入口 URL 能正常打开，必要时增大 timeout_ms 后重试。",
-    });
+      }),
+    );
 
     const container = await renderPanel();
-    const runButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("执行站点命令"),
-    );
-    expect(runButton).toBeTruthy();
-
-    await act(async () => {
-      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
+    await clickButtonByText(container, "执行站点命令");
 
     expect(container.textContent).toContain("执行失败");
     expect(container.textContent).toContain("错误码：site_unreachable");
@@ -790,10 +412,7 @@ describe("BrowserSiteAdapterPanel", () => {
       initialSaveTitle: "GitHub 仓库线索 · browser assist mcp",
     });
 
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await flushMicrotasks(2);
 
     expect(mockSiteRunAdapter).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -820,14 +439,7 @@ describe("BrowserSiteAdapterPanel", () => {
   });
 
   it("要求附着会话且未连接当前 Chrome 时应阻止自动执行", async () => {
-    mockGetChromeBridgeStatus.mockResolvedValueOnce({
-      observer_count: 0,
-      control_count: 0,
-      pending_command_count: 0,
-      observers: [],
-      controls: [],
-      pending_commands: [],
-    });
+    mockGetChromeBridgeStatus.mockResolvedValueOnce(createChromeBridgeStatus());
 
     const onMessage = vi.fn();
     const container = await renderPanel({
@@ -843,10 +455,7 @@ describe("BrowserSiteAdapterPanel", () => {
       initialRequireAttachedSession: true,
     });
 
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await flushMicrotasks(2);
 
     expect(mockSiteRunAdapter).not.toHaveBeenCalled();
     expect(container.textContent).toContain(
@@ -862,28 +471,12 @@ describe("BrowserSiteAdapterPanel", () => {
   });
 
   it("要求附着会话时应忽略托管资料并交给后端自动选择已连接会话", async () => {
-    mockGetChromeBridgeStatus.mockResolvedValueOnce({
+    mockGetChromeBridgeStatus.mockResolvedValueOnce(
+      createChromeBridgeStatus({
       observer_count: 1,
-      control_count: 0,
-      pending_command_count: 0,
-      observers: [
-        {
-          client_id: "observer-1",
-          profile_key: "observer-only",
-          connected_at: "2026-03-24T00:00:00Z",
-          user_agent: "Chrome",
-          last_heartbeat_at: "2026-03-24T00:00:01Z",
-          last_page_info: {
-            title: "GitHub",
-            url: "https://github.com/trending",
-            markdown: "GitHub",
-            updated_at: "2026-03-24T00:00:01Z",
-          },
-        },
-      ],
-      controls: [],
-      pending_commands: [],
-    });
+        observers: [createChromeObserver({ profile_key: "observer-only" })],
+      }),
+    );
 
     const container = await renderPanel({
       initialRequireAttachedSession: true,
@@ -891,15 +484,7 @@ describe("BrowserSiteAdapterPanel", () => {
 
     expect(container.textContent).toContain("当前将使用：自动选择已连接会话");
 
-    const runButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("执行站点命令"),
-    );
-    expect(runButton).toBeTruthy();
-
-    await act(async () => {
-      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
+    await clickButtonByText(container, "执行站点命令");
 
     expect(mockSiteRunAdapter).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -922,15 +507,7 @@ describe("BrowserSiteAdapterPanel", () => {
     expect(container.textContent).toContain("写回当前主稿");
     expect(container.textContent).toContain("内容 ID：content-current-1");
 
-    const runButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("执行站点命令"),
-    );
-    expect(runButton).toBeTruthy();
-
-    await act(async () => {
-      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
+    await clickButtonByText(container, "执行站点命令");
 
     expect(mockSiteRunAdapter).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -946,15 +523,7 @@ describe("BrowserSiteAdapterPanel", () => {
     });
     expect(container.textContent).toContain("已写回：当前主稿 · 当前主稿");
 
-    const rewriteButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("再次写回当前主稿"),
-    );
-    expect(rewriteButton).toBeTruthy();
-
-    await act(async () => {
-      rewriteButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
+    await clickButtonByText(container, "再次写回当前主稿");
 
     expect(mockSiteSaveAdapterResult).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -967,17 +536,7 @@ describe("BrowserSiteAdapterPanel", () => {
       text: "已写回当前主稿",
     });
 
-    const openCurrentContentButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("打开当前主稿"));
-    expect(openCurrentContentButton).toBeTruthy();
-
-    await act(async () => {
-      openCurrentContentButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      await Promise.resolve();
-    });
+    await clickButtonByText(container, "打开当前主稿");
 
     expect(onNavigate).toHaveBeenCalledWith("agent", {
       projectId: "project-1",
@@ -988,20 +547,8 @@ describe("BrowserSiteAdapterPanel", () => {
   });
 
   it("存在 markdown_relative_path 时应优先导航到导出结果文件", async () => {
-    mockSiteRunAdapter.mockImplementationOnce(async () => ({
-      ok: true,
-      adapter: "github/search",
-      domain: "github.com",
-      profile_key: "general_browser_assist",
-      session_id: "mock-cdp-session",
-      target_id: "mock-target-1",
-      entry_url:
-        "https://github.com/search?q=model%20context%20protocol&type=repositories",
-      source_url:
-        "https://github.com/search?q=model%20context%20protocol&type=repositories",
-      data: {
-        items: [{ title: "mock repo", url: "https://github.com/mock/repo" }],
-      },
+    mockSiteRunAdapter.mockImplementationOnce(async () =>
+      createSiteRunResult({
       saved_content: {
         content_id: "content-markdown-1",
         project_id: "project-2",
@@ -1010,32 +557,15 @@ describe("BrowserSiteAdapterPanel", () => {
       },
       saved_project_id: "project-2",
       saved_by: "explicit_project",
-    }));
+      }),
+    );
 
     const onNavigate = vi.fn();
     const container = await renderPanel({ onNavigate });
 
-    const runButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("执行站点命令"),
-    );
-    expect(runButton).toBeTruthy();
+    await clickButtonByText(container, "执行站点命令");
 
-    await act(async () => {
-      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    const openExportButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("打开导出结果"));
-    expect(openExportButton).toBeTruthy();
-
-    await act(async () => {
-      openExportButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      await Promise.resolve();
-    });
+    await clickButtonByText(container, "打开导出结果");
 
     expect(onNavigate).toHaveBeenCalledWith(
       "agent",

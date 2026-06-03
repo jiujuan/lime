@@ -77,8 +77,6 @@ describe("agentStreamSubmitOpController", () => {
         model_name: "gpt-4.1",
         execution_strategy: "react",
         recent_preferences: {
-          webSearch: false,
-          thinking: true,
           task: false,
           subagent: false,
         },
@@ -89,8 +87,6 @@ describe("agentStreamSubmitOpController", () => {
         recent_content_id: "content-social-1",
       },
       syncedRecentPreferences: {
-        webSearch: false,
-        thinking: true,
         task: false,
         subagent: false,
       },
@@ -103,8 +99,6 @@ describe("agentStreamSubmitOpController", () => {
       effectiveAccessMode: "current",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-4.1",
-      webSearch: false,
-      thinking: true,
       autoContinue: {
         enabled: true,
         fast_mode_enabled: true,
@@ -147,8 +141,6 @@ describe("agentStreamSubmitOpController", () => {
         model_name: "gpt-4.1",
         execution_strategy: "react",
         recent_preferences: {
-          webSearch: false,
-          thinking: true,
           task: false,
           subagent: false,
         },
@@ -159,8 +151,6 @@ describe("agentStreamSubmitOpController", () => {
         recent_content_id: "content-social-1",
       },
       syncedRecentPreferences: {
-        webSearch: false,
-        thinking: true,
         task: false,
         subagent: false,
       },
@@ -173,8 +163,6 @@ describe("agentStreamSubmitOpController", () => {
       effectiveAccessMode: "current",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-4.1",
-      webSearch: false,
-      thinking: true,
       autoContinue: {
         enabled: true,
         fast_mode_enabled: true,

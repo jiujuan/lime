@@ -14,6 +14,7 @@ import {
   isLiveProviderTestPath,
   liveProviderSmokeAllowed,
 } from "./lib/live-provider-smoke-gate.mjs";
+import { isVitestRunnableTestFile } from "./lib/vitest-test-file-filter.mjs";
 
 const repoRoot = process.cwd();
 const includeLiveProviderTests = liveProviderSmokeAllowed();
@@ -108,18 +109,58 @@ function displayPath(file) {
   return file.replaceAll("\\", "/");
 }
 
-function collectLayerEntries(layer, filters) {
-  const files = collectVitestTestFiles(repoRoot).filter((file) =>
-    matchesFilters(file, filters),
+export function selectLayerEntries(allEntries, layer, filters) {
+  const candidateEntries = allEntries.filter((entry) =>
+    matchesFilters(entry.file, filters),
   );
-  const entries = classifyVitestTestFiles(repoRoot, files).filter((entry) => {
+  const entries = candidateEntries.filter((entry) => entry.layer === layer);
+  const filterMisses = filters.flatMap((filter) => {
+    const matchingEntries = allEntries.filter((entry) =>
+      matchesFilters(entry.file, [filter]),
+    );
+    if (matchingEntries.length === 0) {
+      return [
+        {
+          filter,
+          reason: "no-runnable-test-file",
+          layers: [],
+        },
+      ];
+    }
+    if (!matchingEntries.some((entry) => entry.layer === layer)) {
+      return [
+        {
+          filter,
+          reason: "wrong-layer",
+          layers: Array.from(
+            new Set(matchingEntries.map((entry) => entry.layer)),
+          ).sort(),
+        },
+      ];
+    }
+    return [];
+  });
+
+  return { entries, filterMisses };
+}
+
+function collectLayerEntries(layer, filters) {
+  const files = collectVitestTestFiles(repoRoot)
+    .filter(isVitestRunnableTestFile)
+    .filter((file) => {
+      if (includeLiveProviderTests) {
+        return true;
+      }
+      return !isLiveProviderTestPath(file);
+    });
+  const allEntries = classifyVitestTestFiles(repoRoot, files).filter((entry) => {
     if (!includeLiveProviderTests && isLiveProviderTestPath(entry.file)) {
       return false;
     }
-    return entry.layer === layer;
+    return true;
   });
 
-  return entries;
+  return selectLayerEntries(allEntries, layer, filters);
 }
 
 function printList(entries, options) {
@@ -180,7 +221,19 @@ function main() {
     process.exit(1);
   }
 
-  const entries = collectLayerEntries(layer, filters);
+  const { entries, filterMisses } = collectLayerEntries(layer, filters);
+  if (filterMisses.length > 0) {
+    console.error(
+      `[vitest-layer] ${layer} layer did not include all requested filters:`,
+    );
+    for (const miss of filterMisses) {
+      const layerSummary =
+        miss.layers.length > 0 ? ` matched layers=${miss.layers.join(",")}` : "";
+      console.error(`- ${miss.filter} (${miss.reason}${layerSummary})`);
+    }
+    process.exit(1);
+  }
+
   if (options.list) {
     printList(entries, options);
     return;

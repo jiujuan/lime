@@ -16,6 +16,65 @@ function createUrlPattern(): RegExp {
   return new RegExp(URL_PATTERN_SOURCE, "gi");
 }
 
+function isSearchEngineHostname(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  return (
+    normalized === "bing.com" ||
+    normalized.endsWith(".bing.com") ||
+    normalized === "google.com" ||
+    normalized.endsWith(".google.com") ||
+    normalized === "baidu.com" ||
+    normalized.endsWith(".baidu.com")
+  );
+}
+
+function isSearchEngineNavigationNoise(item: SearchResultPreviewItem): boolean {
+  const normalizedTitle = item.title.trim();
+  const normalizedSnippet = item.snippet?.trim() || "";
+  const text = `${normalizedTitle} ${normalizedSnippet}`;
+
+  if (isSearchEngineHostname(item.hostname)) {
+    return true;
+  }
+
+  if (!normalizedTitle) {
+    return true;
+  }
+
+  return /(?:了解必应|新版必应壁纸|增值电信业务经营许可证|京ICP备|隐私声明|使用条款|privacy|terms of use)/i.test(
+    text,
+  );
+}
+
+function filterUserFacingSearchResults(
+  items: SearchResultPreviewItem[],
+): SearchResultPreviewItem[] {
+  return reindexSearchResultPreviewItems(
+    items.filter((item) => !isSearchEngineNavigationNoise(item)),
+  );
+}
+
+function reindexSearchResultPreviewItems(
+  items: SearchResultPreviewItem[],
+): SearchResultPreviewItem[] {
+  const typeCounts = new Map<string, number>();
+
+  return items.map((item) => {
+    const type = item.id.match(/^search-(record|markdown|text|url)-\d+-/)?.[1];
+    if (!type) {
+      return item;
+    }
+
+    const nextIndex = typeCounts.get(type) || 0;
+    typeCounts.set(type, nextIndex + 1);
+
+    return {
+      ...item,
+      id: `search-${type}-${nextIndex}-${item.url}`,
+    };
+  });
+}
+
 function extractBalancedJsonSnippets(rawText: string): string[] {
   const snippets: string[] = [];
   const stack: string[] = [];
@@ -390,10 +449,10 @@ export function resolveSearchResultPreviewItemsFromText(
 
   const structuredEntries = parseSearchResultRecords(normalizedText);
   if (structuredEntries.length > 0) {
-    return structuredEntries;
+    return filterUserFacingSearchResults(structuredEntries);
   }
 
-  return parseSearchResultText(normalizedText);
+  return filterUserFacingSearchResults(parseSearchResultText(normalizedText));
 }
 
 export function isUnifiedWebSearchToolName(toolName: string): boolean {

@@ -1144,6 +1144,12 @@ describe("i18n namespace loader", () => {
         "settings.memory.title",
       );
       expect(resources[locale].settings).toHaveProperty(
+        "settings.memory.soul.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.memory.soul.import.warning.projectRules",
+      );
+      expect(resources[locale].settings).toHaveProperty(
         "settings.memory.embedding.provider.ollama.label",
       );
       expect(resources[locale].settings).toHaveProperty(

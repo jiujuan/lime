@@ -317,6 +317,94 @@ pub fn count_session_messages_sync(db: &DbConnection, session_id: &str) -> Resul
     agent_session_repository::count_session_messages(&conn, session_id)
 }
 
+/// 获取会话 timeline 详情，但不读取/投影 messages。
+///
+/// 文件 checkpoint、evidence 索引等只依赖 timeline item；走完整消息投影会触发
+/// 历史 tool I/O token 估算，既慢，也会把轻量命令耦合到 tokenizer 初始化。
+pub fn get_session_sync_with_full_timeline_without_messages(
+    db: &DbConnection,
+    session_id: &str,
+) -> Result<SessionDetail, String> {
+    let started_at = Instant::now();
+    let (session_detail, turns, items, todo_items, session_ms, turns_ms, items_ms, todo_ms) = {
+        let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
+
+        let session_started_at = Instant::now();
+        let session_detail =
+            agent_session_repository::get_session_without_messages(&conn, session_id)
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("会话不存在: {session_id}"))?;
+        let session_ms = session_started_at.elapsed().as_millis();
+
+        let turns_started_at = Instant::now();
+        let turns = AgentTimelineDao::list_turns_by_thread(&conn, session_id)
+            .map_err(|e| format!("获取 turn 历史失败: {e}"))?;
+        let turns_ms = turns_started_at.elapsed().as_millis();
+
+        let items_started_at = Instant::now();
+        let items = AgentTimelineDao::list_items_by_thread(&conn, session_id)
+            .map_err(|e| format!("获取 item 历史失败: {e}"))?;
+        let items_ms = items_started_at.elapsed().as_millis();
+
+        let todo_started_at = Instant::now();
+        let todo_items = load_session_todo_items_from_conn(&conn, session_id);
+        let todo_ms = todo_started_at.elapsed().as_millis();
+
+        (
+            session_detail,
+            turns,
+            items,
+            todo_items,
+            session_ms,
+            turns_ms,
+            items_ms,
+            todo_ms,
+        )
+    };
+
+    let SessionRecordDetail {
+        session,
+        workspace_id,
+    } = session_detail;
+    let total_ms = started_at.elapsed().as_millis();
+
+    tracing::info!(
+        "[SessionStore] get_session_sync_without_messages 完成: session_id={}, total_ms={}, session_ms={}, turns_ms={}, items_ms={}, todo_ms={}, turns_count={}, items_count={}, todo_count={}",
+        session_id,
+        total_ms,
+        session_ms,
+        turns_ms,
+        items_ms,
+        todo_ms,
+        turns.len(),
+        items.len(),
+        todo_items.len(),
+    );
+
+    Ok(SessionDetail {
+        id: session.id,
+        name: session.title.unwrap_or_else(|| "未命名".to_string()),
+        created_at: chrono::DateTime::parse_from_rfc3339(&session.created_at)
+            .map(|dt| dt.timestamp())
+            .unwrap_or(0),
+        updated_at: chrono::DateTime::parse_from_rfc3339(&session.updated_at)
+            .map(|dt| dt.timestamp())
+            .unwrap_or(0),
+        thread_id: session_id.to_string(),
+        model: Some(session.model),
+        working_dir: session.working_dir,
+        workspace_id,
+        messages: Vec::new(),
+        execution_strategy: session.execution_strategy,
+        execution_runtime: None,
+        turns,
+        items,
+        todo_items,
+        child_subagent_sessions: Vec::new(),
+        subagent_parent_context: None,
+    })
+}
+
 /// 获取会话详情；传入 history_limit 时只读取末尾历史，用于旧会话首屏恢复。
 pub fn get_session_sync_with_history_limit(
     db: &DbConnection,

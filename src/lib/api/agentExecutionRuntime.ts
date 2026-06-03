@@ -22,8 +22,8 @@ export type AsterSessionExecutionRuntimeSource =
   | "model_change";
 
 export interface AsterSessionExecutionRuntimePreferences {
-  webSearch: boolean;
-  thinking: boolean;
+  webSearch?: boolean;
+  thinking?: boolean;
   task: boolean;
   subagent: boolean;
 }

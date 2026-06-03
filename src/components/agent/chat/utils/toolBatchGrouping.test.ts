@@ -67,6 +67,169 @@ describe("toolBatchGrouping", () => {
     );
   });
 
+  it("应把 WebSearch 工具批次展示为网页搜索轨迹", () => {
+    const summary = summarizeStreamingToolBatch([
+      createToolCall("web_search", {
+        query: "today world news Reuters",
+      }),
+      createToolCall("WebSearchTool", {
+        query: "AP world news June 2026",
+      }),
+      createToolCall("mcp__system__web_search", {
+        url: "https://apnews.com/hub/world-news",
+      }),
+    ]);
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        kind: "web_search",
+        title: "已搜索网页 3 次",
+        countLabel: "3 次",
+        rawDetailLabel: "展开查看搜索来源",
+      }),
+    );
+    expect(summary?.supportingLines).toContain("today world news Reuters");
+    expect(summary?.supportingLines).toContain("AP world news June 2026");
+    expect(summary?.supportingLines).toContain(
+      "https://apnews.com/hub/world-news",
+    );
+  });
+
+  it("应从 WebSearch 结果中提取来源行而不暴露原始输出", () => {
+    const summary = summarizeStreamingToolBatch([
+      {
+        ...createToolCall("WebSearch", {
+          query: "today world news",
+        }),
+        result: {
+          success: true,
+          output: JSON.stringify({
+            results: [
+              {
+                title: "了解必应 获取新版必应壁纸应用 增值电信业务经营许可证",
+                url: "https://www.bing.com/search?q=today+world+news",
+              },
+              {
+                title: "Reuters World News",
+                url: "https://www.reuters.com/world/",
+              },
+            ],
+          }),
+        },
+      },
+      {
+        ...createToolCall("mcp__news__web_search", {
+          query: "global headlines",
+        }),
+        result: {
+          success: true,
+          output: "[AP World News](https://apnews.com/hub/world-news)",
+        },
+      },
+    ]);
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        kind: "web_search",
+        title: "已搜索网页 2 次",
+      }),
+    );
+    expect(summary?.supportingLines).toEqual(
+      expect.arrayContaining([
+        "today world news",
+        "Reuters World News",
+        "global headlines",
+        "AP World News",
+      ]),
+    );
+    expect(summary?.supportingLines.join("\n")).not.toContain("必应");
+    expect(summary?.supportingLines.join("\n")).not.toContain(
+      "增值电信业务经营许可证",
+    );
+  });
+
+  it("WebSearch 后续 WebFetch 成功或失败都应吸收到网页搜索批次", () => {
+    const summary = summarizeStreamingToolBatch([
+      {
+        ...createToolCall("web_search", {
+          query: "June 2 2026 world news",
+        }),
+        result: {
+          success: true,
+          output: JSON.stringify({
+            results: [
+              {
+                title: "Reuters World News",
+                url: "https://www.reuters.com/world/",
+              },
+            ],
+          }),
+        },
+      },
+      {
+        ...createToolCall("WebFetch", {
+          url: "https://www.reuters.com/world/",
+        }),
+        status: "failed",
+        result: {
+          success: false,
+          output: "503 Service Unavailable",
+          error: "503 Service Unavailable",
+        },
+      },
+      {
+        ...createToolCall("WebFetch", {
+          url: "https://news.un.org/en/",
+        }),
+        result: {
+          success: true,
+          output: JSON.stringify({
+            code: 200,
+            result: "large raw page payload should not become the batch title",
+          }),
+        },
+      },
+    ]);
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        kind: "web_search",
+        title: "已搜索网页 1 次",
+        countLabel: "1 次",
+        rawDetailLabel: "展开查看搜索来源",
+      }),
+    );
+    expect(summary?.supportingLines).toEqual(
+      expect.arrayContaining([
+        "June 2 2026 world news",
+        "Reuters World News",
+        "https://www.reuters.com/world/",
+        "https://news.un.org/en/",
+      ]),
+    );
+  });
+
+  it("普通搜索工具仍应按项目线索展示，避免混成 WebSearch", () => {
+    const summary = summarizeStreamingToolBatch([
+      createToolCall("mcp__github__search_code", {
+        query: "runtime policy",
+      }),
+      createToolCall("Grep", {
+        pattern: "runtime policy",
+        path: "src",
+      }),
+    ]);
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        kind: "exploration",
+        title: "已搜索关键线索",
+        countLabel: "搜 2",
+        rawDetailLabel: "展开查看探索明细",
+      }),
+    );
+  });
+
   it("应继续把浏览器 MCP 步骤聚合为页面检查摘要", () => {
     const summary = summarizeStreamingToolBatch([
       createToolCall("mcp__lime-browser__navigate", {
@@ -84,7 +247,7 @@ describe("toolBatchGrouping", () => {
         countLabel: "2 步",
       }),
     );
-    expect(summary?.supportingLines).toContain("检查了 2 个页面步骤");
-    expect(summary?.supportingLines).toContain("最近目标：#cta");
+    expect(summary?.supportingLines).toContain("https://example.com");
+    expect(summary?.supportingLines).toContain("#cta");
   });
 });

@@ -219,6 +219,7 @@ function assertI18nKeyTypes() {
   i18n.t("agentChat.serviceSkills.catalogSource.synced", { ns: "agent" });
   i18n.t("agentExperts.title", { ns: "agent" });
   i18n.t("agentExperts.info.sections.workflow", { ns: "agent" });
+  i18n.t("agentExperts.info.boundary.soul", { ns: "agent" });
   i18n.t("agentExperts.chat.banner", { ns: "agent", title: "合同审阅" });
   i18n.t("agentExperts.chat.runtimePrompt", {
     ns: "agent",
@@ -1230,6 +1231,10 @@ function assertI18nKeyTypes() {
   i18n.t("settings.hotkeys.summary.globalReady", { ns: "settings" });
   i18n.t("settings.hotkeys.catalog.scene.global.title", { ns: "settings" });
   i18n.t("settings.memory.title", { ns: "settings" });
+  i18n.t("settings.memory.soul.title", { ns: "settings" });
+  i18n.t("settings.memory.soul.import.warning.projectRules", {
+    ns: "settings",
+  });
   i18n.t("settings.memory.embedding.provider.ollama.label", {
     ns: "settings",
   });

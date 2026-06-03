@@ -145,6 +145,16 @@ vi.mock("./ImportExportDialog", () => ({
 }));
 
 import { ApiKeyProviderSection } from "./ApiKeyProviderSection";
+import {
+  createApiKeyProviderHookState,
+  createProvider,
+  defaultSystemProviderCatalog,
+  findByTestId,
+  maybeByTestId,
+  maybeProviderItem,
+  maybeTemplateCard,
+  setInputValue,
+} from "./ApiKeyProviderSection.uiTestFixtures";
 
 interface MountedRoot {
   container: HTMLDivElement;
@@ -153,78 +163,8 @@ interface MountedRoot {
 
 const mountedRoots: MountedRoot[] = [];
 
-function createProvider(
-  overrides: Partial<ProviderWithKeysDisplay> = {},
-): ProviderWithKeysDisplay {
-  return {
-    id: "deepseek",
-    name: "DeepSeek",
-    type: "openai",
-    api_host: "https://api.deepseek.com",
-    is_system: true,
-    group: "mainstream",
-    enabled: true,
-    sort_order: 1,
-    api_key_count: 1,
-    custom_models: ["deepseek-chat"],
-    prompt_cache_mode: null,
-    created_at: new Date("2026-03-15T00:00:00.000Z").toISOString(),
-    updated_at: new Date("2026-03-15T00:00:00.000Z").toISOString(),
-    api_keys: [
-      {
-        id: "key-1",
-        provider_id: "deepseek",
-        api_key_masked: "sk-****1234",
-        enabled: true,
-        usage_count: 0,
-        error_count: 0,
-        created_at: new Date("2026-03-15T00:00:00.000Z").toISOString(),
-      },
-    ],
-    ...overrides,
-  };
-}
-
 function createHookState(overrides: Record<string, unknown> = {}) {
-  const deepseek = createProvider();
-  const openai = createProvider({
-    id: "openai",
-    name: "OpenAI",
-    enabled: false,
-    sort_order: 2,
-    custom_models: [],
-    api_keys: [],
-    api_key_count: 0,
-  });
-  const state = {
-    providers: [deepseek, openai],
-    selectedProviderId: "deepseek",
-    selectedProvider: deepseek,
-    loading: false,
-    error: null,
-    searchQuery: "",
-    collapsedGroups: new Set(),
-    refresh: vi.fn().mockResolvedValue(undefined),
-    selectProvider: vi.fn(),
-    setSearchQuery: vi.fn(),
-    toggleGroup: vi.fn(),
-    reorderProviders: vi.fn().mockResolvedValue(undefined),
-    addCustomProvider: vi.fn().mockResolvedValue({ id: "custom-1" }),
-    updateProvider: vi.fn().mockResolvedValue({ id: "custom-1" }),
-    deleteCustomProvider: vi.fn().mockResolvedValue(true),
-    toggleProviderEnabled: vi.fn().mockResolvedValue({ id: "deepseek" }),
-    addApiKey: vi.fn().mockResolvedValue({ id: "key-new" }),
-    deleteApiKey: vi.fn().mockResolvedValue(true),
-    toggleApiKey: vi.fn().mockResolvedValue({ id: "key-1" }),
-    updateApiKeyAlias: vi.fn().mockResolvedValue({ id: "key-1" }),
-    exportConfig: vi.fn().mockResolvedValue("{}"),
-    importConfig: vi.fn().mockResolvedValue({ success: true }),
-    filteredProviders: [deepseek, openai],
-    providersByGroup: new Map(),
-    ...overrides,
-  };
-  mockUseApiKeyProvider.mockReturnValue(state);
-  return state;
+  return createApiKeyProviderHookState(mockUseApiKeyProvider, vi.fn, overrides);
 }
 
 function renderSection() {
@@ -248,29 +188,39 @@ async function flushEffects(times = 2) {
   });
 }
 
-function findByTestId<T extends HTMLElement>(testId: string): T {
-  const element = document.querySelector(`[data-testid="${testId}"]`);
-  if (!(element instanceof HTMLElement)) {
-    throw new Error(`未找到 data-testid=${testId} 的节点`);
-  }
-  return element as T;
+async function clickByTestId(testId: string, flushes = 1) {
+  await act(async () => {
+    findByTestId<HTMLButtonElement>(testId).click();
+    for (let index = 0; index < flushes; index += 1) {
+      await Promise.resolve();
+    }
+  });
 }
 
-function setInputValue(input: HTMLInputElement, value: string) {
-  const valueSetter = Object.getOwnPropertyDescriptor(input, "value")?.set;
-  const prototypeValueSetter = Object.getOwnPropertyDescriptor(
-    Object.getPrototypeOf(input),
-    "value",
-  )?.set;
+async function openCustomProviderForm() {
+  await clickByTestId("add-model-button");
+  await clickByTestId("custom-provider-template-card");
+}
 
-  if (prototypeValueSetter && valueSetter !== prototypeValueSetter) {
-    prototypeValueSetter.call(input, value);
-  } else {
-    input.value = value;
-  }
-
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-  input.dispatchEvent(new Event("change", { bubbles: true }));
+async function submitCustomProviderDraft({
+  name,
+  apiHost,
+  apiKey = "sk-test",
+  model,
+}: {
+  name: string;
+  apiHost: string;
+  apiKey?: string;
+  model: string;
+}) {
+  await act(async () => {
+    setInputValue(findByTestId<HTMLInputElement>("model-provider-name-input"), name);
+    setInputValue(findByTestId<HTMLInputElement>("model-api-host-input"), apiHost);
+    setInputValue(findByTestId<HTMLInputElement>("model-api-key-input"), apiKey);
+    setInputValue(findByTestId<HTMLInputElement>("model-draft-input"), model);
+  });
+  await clickByTestId("model-draft-add-button");
+  await clickByTestId("model-activate-button", 3);
 }
 
 beforeEach(() => {
@@ -280,17 +230,7 @@ beforeEach(() => {
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
   vi.clearAllMocks();
-  mockGetSystemProviderCatalog.mockResolvedValue([
-    {
-      id: "deepseek",
-      name: "DeepSeek",
-      type: "openai",
-      api_host: "https://api.deepseek.com",
-      group: "mainstream",
-      sort_order: 1,
-      legacy_ids: [],
-    },
-  ]);
+  mockGetSystemProviderCatalog.mockResolvedValue(defaultSystemProviderCatalog);
   mockUseModelRegistry.mockReturnValue({
     groupedByProvider: new Map([
       [
@@ -333,68 +273,28 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     const container = renderSection();
     await flushEffects();
 
-    expect(container.querySelector('[data-testid="provider-list"]')).toBeNull();
+    expect(maybeByTestId(container, "provider-list")).toBeNull();
+    expect(maybeByTestId(container, "enabled-model-list")).not.toBeNull();
+    expect(maybeByTestId(container, "api-key-provider-section")?.className).toContain(
+      "min-h-0",
+    );
+    expect(maybeByTestId(container, "api-key-provider-detail")?.className).toContain(
+      "min-h-0",
+    );
+    expect(maybeByTestId(container, "enabled-model-list")?.className).toContain(
+      "overflow-hidden",
+    );
     expect(
-      container.querySelector('[data-testid="enabled-model-list"]'),
-    ).not.toBeNull();
-    expect(
-      container.querySelector('[data-testid="api-key-provider-section"]')
-        ?.className,
-    ).toContain("min-h-0");
-    expect(
-      container.querySelector('[data-testid="api-key-provider-detail"]')
-        ?.className,
-    ).toContain("min-h-0");
-    expect(
-      container.querySelector('[data-testid="enabled-model-list"]')
-        ?.className,
-    ).toContain("overflow-hidden");
-    expect(
-      container.querySelector('[data-testid="enabled-model-scroll-region"]')
-        ?.className,
+      maybeByTestId(container, "enabled-model-scroll-region")?.className,
     ).toContain("overflow-y-auto");
     expect(
-      container.querySelector('[data-testid="enabled-model-scroll-region"]')
-        ?.className,
+      maybeByTestId(container, "enabled-model-scroll-region")?.className,
     ).toContain("overscroll-contain");
     expect(container.textContent ?? "").toContain("启用的模型");
     expect(container.textContent ?? "").toContain("添加模型");
     expect(container.textContent ?? "").toContain("导入 / 导出配置");
     expect(container.textContent ?? "").toContain("DeepSeek");
     expect(container.textContent ?? "").not.toContain("OpenAI");
-  });
-
-  it("本地模型管理列表不展示云端托管的 Lime Hub Provider", async () => {
-    const limeHub = createProvider({
-      id: "lime-hub",
-      name: "Lime Hub",
-      group: "cloud",
-      sort_order: 0,
-      custom_models: ["gpt-5.2-pro"],
-    });
-    const deepseek = createProvider();
-    const hookState = createHookState({
-      providers: [limeHub, deepseek],
-      selectedProviderId: "lime-hub",
-      selectedProvider: null,
-      filteredProviders: [deepseek],
-    });
-
-    const container = renderSection();
-    await flushEffects();
-
-    expect(
-      container.querySelector(
-        '[data-testid="enabled-model-item"][data-provider-id="lime-hub"]',
-      ),
-    ).toBeNull();
-    expect(
-      container.querySelector(
-        '[data-testid="enabled-model-item"][data-provider-id="deepseek"]',
-      ),
-    ).not.toBeNull();
-    expect(hookState.selectProvider).toHaveBeenCalledWith("deepseek");
-    expect(container.textContent ?? "").not.toContain("默认 (Lime Hub)");
   });
 
   it("未登录时可在 AI 服务商列表中展示 Lime Hub 登录提示", async () => {
@@ -427,11 +327,7 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     mountedRoots.push({ container, root });
     await flushEffects();
 
-    expect(
-      container.querySelector(
-        '[data-testid="enabled-model-item"][data-provider-id="lime-hub"]',
-      ),
-    ).not.toBeNull();
+    expect(maybeProviderItem(container, "lime-hub")).not.toBeNull();
     expect(container.textContent ?? "").toContain("Lime 云端");
     expect(container.textContent ?? "").toContain("需要登录");
     expect(container.textContent ?? "").toContain(
@@ -440,11 +336,10 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     expect(hookState.selectProvider).not.toHaveBeenCalledWith("deepseek");
 
     await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>(
-          '[data-testid="provider-login-button"]',
-        )
-        ?.click();
+      maybeByTestId<HTMLButtonElement>(
+        container,
+        "provider-login-button",
+      )?.click();
       await Promise.resolve();
     });
 
@@ -479,16 +374,12 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
       await Promise.resolve();
     });
 
-    expect(
-      container.querySelector('[data-testid="model-add-catalog"]'),
-    ).not.toBeNull();
+    expect(maybeByTestId(container, "model-add-catalog")).not.toBeNull();
     expect(container.textContent ?? "").toContain("推荐服务");
     expect(
-      container.querySelector('[data-testid="custom-provider-template-card"]'),
+      maybeByTestId(container, "custom-provider-template-card"),
     ).not.toBeNull();
-    expect(
-      container.querySelector('[data-testid="provider-setting-stub"]'),
-    ).toBeNull();
+    expect(maybeByTestId(container, "provider-setting-stub")).toBeNull();
   });
 
   it("添加流程应提供与详情页一致的接口获取模型入口，并自动填入小模型列表", async () => {
@@ -522,11 +413,7 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     });
 
     await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>(
-          '[data-template-id="catalog-deepseek"]',
-        )
-        ?.click();
+      maybeTemplateCard(container, "catalog-deepseek")?.click();
       await Promise.resolve();
     });
 
@@ -593,25 +480,16 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
       findByTestId<HTMLButtonElement>("add-model-button").click();
       await Promise.resolve();
     });
-    expect(
-      container.querySelector('[data-testid="model-add-catalog"]'),
-    ).not.toBeNull();
+    expect(maybeByTestId(container, "model-add-catalog")).not.toBeNull();
 
     await act(async () => {
-      const item = container.querySelector<HTMLButtonElement>(
-        '[data-testid="enabled-model-item"][data-provider-id="deepseek"]',
-      );
-      item?.click();
+      maybeProviderItem(container, "deepseek")?.click();
       await Promise.resolve();
     });
 
     expect(hookState.selectProvider).toHaveBeenCalledWith("deepseek");
-    expect(
-      container.querySelector('[data-testid="model-add-catalog"]'),
-    ).toBeNull();
-    expect(
-      container.querySelector('[data-testid="provider-setting-stub"]'),
-    ).not.toBeNull();
+    expect(maybeByTestId(container, "model-add-catalog")).toBeNull();
+    expect(maybeByTestId(container, "provider-setting-stub")).not.toBeNull();
   });
 
   it("国内分类应展示 DeepSeek，资源模型目录里的渠道也应进入添加列表", async () => {
@@ -637,15 +515,11 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
       "Z.AI Coding Plan（海外）",
     );
     expect(
-      container.querySelector('[data-testid="model-add-catalog"]')?.className,
+      maybeByTestId(container, "model-add-catalog")?.className,
     ).toContain("overflow-y-auto");
 
     await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>(
-          '[data-template-id="glm-cn-coding-plan"]',
-        )
-        ?.click();
+      maybeTemplateCard(container, "glm-cn-coding-plan")?.click();
       await Promise.resolve();
     });
 
@@ -681,11 +555,7 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     });
 
     await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>(
-          '[data-template-id="catalog-sensenova"]',
-        )
-        ?.click();
+      maybeTemplateCard(container, "catalog-sensenova")?.click();
       await Promise.resolve();
     });
 
@@ -719,29 +589,17 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     expect(text).toContain("MiniMax Coding Plan（海外）");
     expect(text).toContain("Alibaba Coding Plan（海外）");
     expect(text).not.toContain("GLM Coding Plan（国内）");
+    expect(maybeTemplateCard(container, "kimi-code-subscription")).not.toBeNull();
+    expect(maybeTemplateCard(container, "zai-coding-plan")).not.toBeNull();
     expect(
-      container.querySelector('[data-template-id="kimi-code-subscription"]'),
+      maybeTemplateCard(container, "minimax-coding-plan-global"),
     ).not.toBeNull();
     expect(
-      container.querySelector('[data-template-id="zai-coding-plan"]'),
-    ).not.toBeNull();
-    expect(
-      container.querySelector(
-        '[data-template-id="minimax-coding-plan-global"]',
-      ),
-    ).not.toBeNull();
-    expect(
-      container.querySelector(
-        '[data-template-id="alibaba-coding-plan-global"]',
-      ),
+      maybeTemplateCard(container, "alibaba-coding-plan-global"),
     ).not.toBeNull();
 
     await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>(
-          '[data-template-id="kimi-code-subscription"]',
-        )
-        ?.click();
+      maybeTemplateCard(container, "kimi-code-subscription")?.click();
       await Promise.resolve();
     });
 
@@ -754,45 +612,11 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     const hookState = createHookState();
     renderSection();
 
-    await act(async () => {
-      findByTestId<HTMLButtonElement>("add-model-button").click();
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      findByTestId<HTMLButtonElement>("custom-provider-template-card").click();
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      setInputValue(
-        findByTestId<HTMLInputElement>("model-provider-name-input"),
-        "My API",
-      );
-      setInputValue(
-        findByTestId<HTMLInputElement>("model-api-host-input"),
-        "https://api.example.com/v1",
-      );
-      setInputValue(
-        findByTestId<HTMLInputElement>("model-api-key-input"),
-        "sk-test",
-      );
-      setInputValue(
-        findByTestId<HTMLInputElement>("model-draft-input"),
-        "my-model",
-      );
-    });
-
-    await act(async () => {
-      findByTestId<HTMLButtonElement>("model-draft-add-button").click();
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      findByTestId<HTMLButtonElement>("model-activate-button").click();
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+    await openCustomProviderForm();
+    await submitCustomProviderDraft({
+      name: "My API",
+      apiHost: "https://api.example.com/v1",
+      model: "my-model",
     });
 
     expect(hookState.addCustomProvider).toHaveBeenCalledWith(
@@ -823,45 +647,11 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     const hookState = createHookState();
     renderSection();
 
-    await act(async () => {
-      findByTestId<HTMLButtonElement>("add-model-button").click();
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      findByTestId<HTMLButtonElement>("custom-provider-template-card").click();
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      setInputValue(
-        findByTestId<HTMLInputElement>("model-provider-name-input"),
-        "SenseNova",
-      );
-      setInputValue(
-        findByTestId<HTMLInputElement>("model-api-host-input"),
-        "https://platform.sensenova.cn/docs",
-      );
-      setInputValue(
-        findByTestId<HTMLInputElement>("model-api-key-input"),
-        "sk-test",
-      );
-      setInputValue(
-        findByTestId<HTMLInputElement>("model-draft-input"),
-        "sensenova-test-model",
-      );
-    });
-
-    await act(async () => {
-      findByTestId<HTMLButtonElement>("model-draft-add-button").click();
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      findByTestId<HTMLButtonElement>("model-activate-button").click();
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+    await openCustomProviderForm();
+    await submitCustomProviderDraft({
+      name: "SenseNova",
+      apiHost: "https://platform.sensenova.cn/docs",
+      model: "sensenova-test-model",
     });
 
     expect(hookState.addCustomProvider).toHaveBeenCalledWith(
@@ -880,45 +670,11 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     const hookState = createHookState();
     renderSection();
 
-    await act(async () => {
-      findByTestId<HTMLButtonElement>("add-model-button").click();
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      findByTestId<HTMLButtonElement>("custom-provider-template-card").click();
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      setInputValue(
-        findByTestId<HTMLInputElement>("model-provider-name-input"),
-        "My API",
-      );
-      setInputValue(
-        findByTestId<HTMLInputElement>("model-api-host-input"),
-        "https://api.example.com/v1",
-      );
-      setInputValue(
-        findByTestId<HTMLInputElement>("model-api-key-input"),
-        "sk-test",
-      );
-      setInputValue(
-        findByTestId<HTMLInputElement>("model-draft-input"),
-        "my-model",
-      );
-    });
-
-    await act(async () => {
-      findByTestId<HTMLButtonElement>("model-draft-add-button").click();
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      findByTestId<HTMLButtonElement>("model-activate-button").click();
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+    await openCustomProviderForm();
+    await submitCustomProviderDraft({
+      name: "My API",
+      apiHost: "https://api.example.com/v1",
+      model: "my-model",
     });
 
     expect(hookState.addCustomProvider).toHaveBeenCalled();

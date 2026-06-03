@@ -145,6 +145,23 @@ pub fn get_session_with_messages(
         .map_err(|error| format!("获取会话详情失败: {error}"))
 }
 
+pub fn get_session_without_messages(
+    conn: &Connection,
+    session_id: &str,
+) -> Result<Option<SessionRecordDetail>, String> {
+    AgentDao::get_session(conn, session_id)
+        .map(|session| {
+            session.map(|session| SessionRecordDetail {
+                workspace_id: resolve_workspace_id_by_working_dir(
+                    conn,
+                    session.working_dir.as_deref(),
+                ),
+                session,
+            })
+        })
+        .map_err(|error| format!("获取会话详情失败: {error}"))
+}
+
 pub fn get_session_with_messages_tail(
     conn: &Connection,
     session_id: &str,

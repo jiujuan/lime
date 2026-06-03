@@ -14,12 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  summarizeCuratedTaskFollowUpActions,
   buildCuratedTaskTemplateCopy,
-  summarizeCuratedTaskOutputContract,
-  summarizeCuratedTaskRequiredInputs,
-  findCuratedTaskTemplateById,
-  hasFilledAllCuratedTaskRequiredInputs,
   resolveCuratedTaskInputValues,
   type CuratedTaskPresentationCopy,
   type CuratedTaskInputValues,
@@ -32,7 +27,6 @@ import {
   listCuratedTaskRecommendationSignals,
   subscribeCuratedTaskRecommendationSignalsChanged,
 } from "@/components/agent/chat/utils/curatedTaskRecommendationSignals";
-import { buildReviewFeedbackProjection } from "@/components/agent/chat/utils/reviewFeedbackProjection";
 import {
   buildCuratedTaskLaunchInputPrefillFromReferenceEntries,
   buildCuratedTaskReferenceEntries,
@@ -48,6 +42,17 @@ import {
   buildSceneAppExecutionReviewPrefillSnapshot,
 } from "@/components/agent/chat/utils/sceneAppCuratedTaskReference";
 import type { AgentI18nResource } from "@/i18n/agentResources";
+import {
+  buildActiveReviewBaselineModel,
+  buildCuratedTaskLauncherReadiness,
+  buildLauncherOutcomeSummary,
+  buildLauncherStarterContract,
+  MAX_REFERENCE_SELECTION_COUNT,
+  planReferenceEntrySelection,
+  resolvePrimarySuggestedTask,
+  resolveSelectedReferenceEntries,
+  selectLatestReviewTaskSignal,
+} from "./CuratedTaskLauncherDialogViewModel";
 
 type AgentI18nKey = keyof AgentI18nResource;
 
@@ -74,8 +79,6 @@ interface CuratedTaskLauncherDialogProps {
     referenceSelection: CuratedTaskReferenceSelection,
   ) => void;
 }
-
-const MAX_REFERENCE_SELECTION_COUNT = 3;
 
 export function CuratedTaskLauncherDialog({
   open,
@@ -233,67 +236,44 @@ export function CuratedTaskLauncherDialog({
     };
   }, [open, referenceEntriesVersion, seededReferenceEntries, task, t]);
 
-  const isLaunchDisabled = useMemo(() => {
-    if (!task) {
-      return true;
-    }
-
-    return !hasFilledAllCuratedTaskRequiredInputs({
-      task,
-      inputValues,
-    });
-  }, [inputValues, task]);
-
-  const selectedReferenceEntries = useMemo(() => {
-    const referenceEntryMap = new Map(
-      referenceEntries.map((entry) => [entry.id, entry]),
-    );
-
-    return selectedReferenceEntryIds
-      .map((id) => referenceEntryMap.get(id))
-      .filter((entry): entry is CuratedTaskReferenceEntry => Boolean(entry));
-  }, [referenceEntries, selectedReferenceEntryIds]);
-
-  const missingSelectedReferenceCount =
-    selectedReferenceEntryIds.length - selectedReferenceEntries.length;
-
-  const requiredFieldCount = task?.requiredInputFields.length ?? 0;
-  const filledRequiredFieldCount = useMemo(() => {
-    if (!task) {
-      return 0;
-    }
-
-    return task.requiredInputFields.filter((field) => {
-      const value = inputValues[field.key];
-      return typeof value === "string" && value.trim().length > 0;
-    }).length;
-  }, [inputValues, task]);
-  const remainingRequiredFieldCount = Math.max(
-    requiredFieldCount - filledRequiredFieldCount,
-    0,
+  const {
+    isLaunchDisabled,
+    remainingRequiredFieldCount,
+    launcherReadinessLabel,
+  } = useMemo(
+    () =>
+      buildCuratedTaskLauncherReadiness({
+        task,
+        inputValues,
+        copy: {
+          readinessReady: t("curatedTask.launcher.readiness.ready"),
+          readinessMissing: (count) =>
+            t("curatedTask.launcher.readiness.missing", {
+              count,
+            }),
+        },
+      }),
+    [inputValues, task, t],
   );
-  const launcherReadinessLabel =
-    remainingRequiredFieldCount === 0
-      ? t("curatedTask.launcher.readiness.ready")
-      : t("curatedTask.launcher.readiness.missing", {
-          count: remainingRequiredFieldCount,
-        });
+
+  const { selectedReferenceEntries, missingSelectedReferenceCount } = useMemo(
+    () =>
+      resolveSelectedReferenceEntries({
+        referenceEntries,
+        selectedReferenceEntryIds,
+      }),
+    [referenceEntries, selectedReferenceEntryIds],
+  );
 
   const launcherOutcomeSummary = useMemo(() => {
-    if (!task) {
-      return "";
-    }
-
-    const followUp = task.followUpActions[0];
-    if (followUp) {
-      return t("curatedTask.launcher.outcome.withFollowUp", {
-        followUp,
-        outputHint: task.outputHint,
-      });
-    }
-
-    return t("curatedTask.launcher.outcome.default", {
-      outputHint: task.outputHint,
+    return buildLauncherOutcomeSummary({
+      task,
+      copy: {
+        outcomeWithFollowUp: (values) =>
+          t("curatedTask.launcher.outcome.withFollowUp", values),
+        outcomeDefault: (values) =>
+          t("curatedTask.launcher.outcome.default", values),
+      },
     });
   }, [task, t]);
   const curatedTaskPresentationCopy = useMemo<CuratedTaskPresentationCopy>(
@@ -318,120 +298,61 @@ export function CuratedTaskLauncherDialog({
     [locale, t],
   );
   const launcherStarterContract = useMemo(() => {
-    if (!task) {
-      return null;
-    }
-
-    return {
-      requiredSummary:
-        summarizeCuratedTaskRequiredInputs(
-          task,
-          2,
-          curatedTaskPresentationCopy,
-        ) || t("curatedTask.launcher.contract.requiredEmpty"),
-      outputSummary:
-        summarizeCuratedTaskOutputContract(
-          task,
-          2,
-          curatedTaskPresentationCopy,
-        ) || task.outputHint,
-      followUpSummary: summarizeCuratedTaskFollowUpActions(
-        task,
-        2,
-        curatedTaskPresentationCopy,
-      ),
-    };
+    return buildLauncherStarterContract({
+      task,
+      presentationCopy: curatedTaskPresentationCopy,
+      copy: {
+        contractRequiredEmpty: t(
+          "curatedTask.launcher.contract.requiredEmpty",
+        ),
+      },
+    });
   }, [curatedTaskPresentationCopy, task, t]);
 
   const latestReviewTaskSignal = useMemo(
     () =>
-      listCuratedTaskRecommendationSignals({
-        projectId,
-        sessionId,
-      })
-        .filter((signal) => signal.source === "review_feedback")
-        .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null,
+      selectLatestReviewTaskSignal(
+        listCuratedTaskRecommendationSignals({
+          projectId,
+          sessionId,
+        }),
+      ),
     [projectId, sessionId],
   );
-  const reviewFeedbackProjection = useMemo(() => {
-    if (!task) {
-      return null;
-    }
-
-    return buildReviewFeedbackProjection({
-      signal: latestReviewTaskSignal,
-      currentTaskId: task.id,
-      currentTaskTitle: task.title,
-    });
-  }, [latestReviewTaskSignal, task]);
-  const primarySuggestedTask = useMemo(() => {
-    if (
-      !reviewFeedbackProjection ||
-      reviewFeedbackProjection.matchedCurrentTask
-    ) {
-      return null;
-    }
-
-    const suggestedTaskId = reviewFeedbackProjection.suggestedTasks[0]?.taskId;
-    if (!suggestedTaskId) {
-      return null;
-    }
-
-    return findCuratedTaskTemplateById(
-      suggestedTaskId,
-      curatedTaskTemplateCopy,
-    );
-  }, [curatedTaskTemplateCopy, reviewFeedbackProjection]);
-
-  const activeReviewBaselineSnapshot = useMemo(() => {
-    if (!task) {
-      return null;
-    }
-
-    const activeReferenceEntries =
-      selectedReferenceEntries.length > 0
-        ? selectedReferenceEntries
-        : seededReferenceEntries;
-
-    return buildSceneAppExecutionReviewPrefillSnapshot({
-      referenceEntries: activeReferenceEntries,
-      taskId: task.id,
-    });
-  }, [seededReferenceEntries, selectedReferenceEntries, task]);
-
-  const activeReviewBaselineHighlights = useMemo(
+  const { reviewFeedbackProjection, primarySuggestedTask } = useMemo(
     () =>
-      buildSceneAppExecutionReviewPrefillHighlights(
-        activeReviewBaselineSnapshot,
-      ),
-    [activeReviewBaselineSnapshot],
+      resolvePrimarySuggestedTask({
+        currentTask: task,
+        latestReviewTaskSignal,
+        curatedTaskTemplateCopy,
+      }),
+    [curatedTaskTemplateCopy, latestReviewTaskSignal, task],
   );
 
-  const activeReviewBaselineCarryHint = useMemo(() => {
-    if (!activeReviewBaselineSnapshot || !task) {
-      return null;
-    }
-
-    const carriedFields = task.requiredInputFields
-      .filter((field) => (inputValues[field.key] ?? "").trim())
-      .map((field) => field.label);
-    if (carriedFields.length === 0) {
-      return null;
-    }
-
-    const fields = carriedFields.join(
-      t("curatedTask.launcher.carry.fieldSeparator", " / "),
-    );
-    if (task.id === "account-project-review") {
-      return t("curatedTask.launcher.carry.review", {
-        fields,
-      });
-    }
-
-    return t("curatedTask.launcher.carry.default", {
-      fields,
-    });
-  }, [activeReviewBaselineSnapshot, inputValues, task, t]);
+  const {
+    activeReviewBaselineSnapshot,
+    activeReviewBaselineHighlights,
+    activeReviewBaselineCarryHint,
+  } = useMemo(
+    () =>
+      buildActiveReviewBaselineModel({
+        task,
+        selectedReferenceEntries,
+        seededReferenceEntries,
+        inputValues,
+        copy: {
+          carryFieldSeparator: t(
+            "curatedTask.launcher.carry.fieldSeparator",
+            " / ",
+          ),
+          carryReview: (fields) =>
+            t("curatedTask.launcher.carry.review", { fields }),
+          carryDefault: (fields) =>
+            t("curatedTask.launcher.carry.default", { fields }),
+        },
+      }),
+    [inputValues, seededReferenceEntries, selectedReferenceEntries, task, t],
+  );
 
   const handleValueChange = (key: string, value: string) => {
     setInputValues((current) => ({
@@ -441,17 +362,13 @@ export function CuratedTaskLauncherDialog({
   };
 
   const handleToggleReferenceEntry = (entryId: string) => {
-    setSelectedReferenceEntryIds((current) => {
-      if (current.includes(entryId)) {
-        return current.filter((id) => id !== entryId);
-      }
-
-      if (current.length >= MAX_REFERENCE_SELECTION_COUNT) {
-        return current;
-      }
-
-      return [...current, entryId];
-    });
+    setSelectedReferenceEntryIds((current) =>
+      planReferenceEntrySelection({
+        currentIds: current,
+        entryId,
+        maxSelectionCount: MAX_REFERENCE_SELECTION_COUNT,
+      }),
+    );
   };
 
   const handleConfirm = () => {

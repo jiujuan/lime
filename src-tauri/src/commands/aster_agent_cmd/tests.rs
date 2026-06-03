@@ -3944,10 +3944,36 @@ mod tests {
         assert_eq!(
             request.recent_preferences,
             Some(lime_agent::SessionExecutionRuntimePreferences {
-                web_search: true,
-                thinking: false,
+                web_search: Some(true),
+                thinking: Some(false),
                 task: true,
                 subagent: true,
+            })
+        );
+    }
+
+    #[test]
+    fn test_agent_runtime_update_session_request_allows_current_recent_preferences_without_legacy_fields(
+    ) {
+        let request: AgentRuntimeUpdateSessionRequest = serde_json::from_value(serde_json::json!({
+            "sessionId": "session-1",
+            "providerName": "provider-a",
+            "modelName": "model-a",
+            "recentPreferences": {
+                "task": true,
+                "subagent": false
+            }
+        }))
+        .expect("request should deserialize");
+
+        assert_eq!(request.session_id, "session-1");
+        assert_eq!(
+            request.recent_preferences,
+            Some(lime_agent::SessionExecutionRuntimePreferences {
+                web_search: None,
+                thinking: None,
+                task: true,
+                subagent: false,
             })
         );
     }
@@ -4285,8 +4311,8 @@ mod tests {
             }
         });
         let session_recent_preferences = lime_agent::SessionExecutionRuntimePreferences {
-            web_search: false,
-            thinking: true,
+            web_search: Some(false),
+            thinking: Some(true),
             task: false,
             subagent: true,
         };
@@ -4311,8 +4337,8 @@ mod tests {
             }
         });
         let session_recent_preferences = lime_agent::SessionExecutionRuntimePreferences {
-            web_search: false,
-            thinking: true,
+            web_search: Some(false),
+            thinking: Some(true),
             task: false,
             subagent: true,
         };
@@ -4330,8 +4356,8 @@ mod tests {
     #[test]
     fn test_resolve_request_web_search_preference_from_sources_ignores_session_runtime() {
         let session_recent_preferences = lime_agent::SessionExecutionRuntimePreferences {
-            web_search: true,
-            thinking: true,
+            web_search: Some(true),
+            thinking: Some(true),
             task: false,
             subagent: true,
         };
@@ -4465,8 +4491,8 @@ mod tests {
     #[test]
     fn test_build_chat_run_metadata_base_falls_back_to_session_recent_preferences() {
         let session_recent_preferences = lime_agent::SessionExecutionRuntimePreferences {
-            web_search: false,
-            thinking: true,
+            web_search: Some(false),
+            thinking: Some(true),
             task: true,
             subagent: false,
         };

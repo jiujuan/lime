@@ -30,8 +30,11 @@ import type {
 import { resolveProviderTestModel } from "./ApiKeyProviderSection.helpers";
 import { ModelAddPanel } from "./ModelAddPanel";
 import { ModelProviderList } from "./ModelProviderList";
-import { buildEnabledModelItems } from "./ModelProviderList.utils";
-import { isOemManagedHubProvider } from "@/lib/oemLimeHubProvider";
+import {
+  buildApiKeyProviderSectionViewModel,
+  planDeleteProviderConfig,
+  planEnabledModelSelection,
+} from "./ApiKeyProviderSectionViewModel";
 
 // ============================================================================
 // 类型定义
@@ -104,41 +107,31 @@ export const ApiKeyProviderSection = forwardRef<
   // 导入导出对话框状态
   const [showImportExportDialog, setShowImportExportDialog] = useState(false);
   const [showAddModelFlow, setShowAddModelFlow] = useState(false);
-  const enabledModelItems = useMemo(
-    () => buildEnabledModelItems(providers, { exposeOemLoginPrompt }),
-    [exposeOemLoginPrompt, providers],
-  );
-  const selectedProviderLoginRequired = Boolean(
-    selectedProvider &&
-    exposeOemLoginPrompt &&
-    isOemManagedHubProvider(selectedProvider) &&
-    selectedProvider.api_key_count === 0 &&
-    (selectedProvider.api_keys ?? []).filter((apiKey) => apiKey.enabled)
-      .length === 0 &&
-    !(selectedProvider.custom_models ?? []).some(
-      (modelId) => modelId.trim().length > 0,
-    ),
+  const viewModel = useMemo(
+    () =>
+      buildApiKeyProviderSectionViewModel({
+        providers,
+        selectedProvider,
+        exposeOemLoginPrompt,
+      }),
+    [exposeOemLoginPrompt, providers, selectedProvider],
   );
 
   useEffect(() => {
-    if (showAddModelFlow) {
-      return;
+    const plan = planEnabledModelSelection({
+      enabledModelItems: viewModel.enabledModelItems,
+      selectedProviderId,
+      showAddModelFlow,
+    });
+    if (plan.type === "select") {
+      selectProvider(plan.providerId);
     }
-
-    if (enabledModelItems.length === 0) {
-      if (selectedProviderId) {
-        selectProvider(null);
-      }
-      return;
-    }
-
-    if (
-      !selectedProviderId ||
-      !enabledModelItems.some((item) => item.id === selectedProviderId)
-    ) {
-      selectProvider(enabledModelItems[0].id);
-    }
-  }, [enabledModelItems, selectProvider, selectedProviderId, showAddModelFlow]);
+  }, [
+    selectProvider,
+    selectedProviderId,
+    showAddModelFlow,
+    viewModel.enabledModelItems,
+  ]);
 
   const resolveCurrentTestModel = useCallback(() => {
     const input = document.getElementById(
@@ -178,25 +171,25 @@ export const ApiKeyProviderSection = forwardRef<
 
   const handleDeleteProviderConfig = useCallback(
     async (providerId: string): Promise<boolean> => {
-      const targetProvider = providers.find(
-        (provider) => provider.id === providerId,
-      );
-      if (!targetProvider) {
+      const plan = planDeleteProviderConfig({
+        providers,
+        providerId,
+        selectedProviderId,
+      });
+
+      if (plan.type === "missing") {
         return false;
       }
 
-      if (!targetProvider.is_system) {
+      if (plan.type === "delete-custom") {
         return deleteCustomProvider(providerId);
       }
 
-      for (const apiKey of targetProvider.api_keys ?? []) {
-        await deleteApiKey(apiKey.id);
+      for (const apiKeyId of plan.apiKeyIds) {
+        await deleteApiKey(apiKeyId);
       }
-      await updateProvider(providerId, {
-        enabled: false,
-        custom_models: [],
-      });
-      if (selectedProviderId === providerId) {
+      await updateProvider(providerId, plan.update);
+      if (plan.clearSelection) {
         selectProvider(null);
       }
 
@@ -301,7 +294,9 @@ export const ApiKeyProviderSection = forwardRef<
             onTestConnection={handleTestConnection}
             onDeleteProvider={handleDeleteProviderConfig}
             authStatus={
-              selectedProviderLoginRequired ? "login_required" : "ready"
+              viewModel.selectedProviderLoginRequired
+                ? "login_required"
+                : "ready"
             }
             onLogin={onOemLogin}
             loading={loading}

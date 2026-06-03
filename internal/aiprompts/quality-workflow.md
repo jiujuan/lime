@@ -194,6 +194,10 @@ npm run test:integration
 npm run test:e2e
 npm run test:layers:stats
 npm run test:frontend:all
+npm run test:rust:unit
+npm run test:rust:integration
+npm run test:rust:e2e
+npm run test:rust:layers:stats
 ```
 
 作用：
@@ -205,10 +209,16 @@ npm run test:frontend:all
 - `test:e2e` 覆盖 Vitest 内显式 E2E / smoke / live-gated 测试；真实产品主路径仍以 `verify:gui-smoke` / Playwright 为准
 - `test:layers:stats` 按同一分类事实源输出分层统计、默认可运行数、live-gated 数，以及 component 测试的 VM 迁移候选提示
 - `test:frontend:all` 保留现有前端 Vitest 全量兼容入口
+- `test:rust:unit` 默认覆盖 Cargo default package 的 lib / module 单元测试，是后端 TDD 默认第一轮信号；改 workspace crate 时用 `npm run test:rust:unit -- -p <crate> <filter>` 定向运行
+- `test:rust:integration` 默认覆盖 Cargo default package 的 integration test targets；需要扩大到全后端时显式传 `--workspace`
+- `test:rust:e2e` 只在 `LIME_REAL_API_TEST=1` 或 `PROXYCAST_REAL_API_TEST=1` 显式打开时运行 ignored/live Rust E2E；默认不消耗真实 Provider / ASR 凭证
+- `test:rust:layers:stats` 输出 Rust 测试文件分层统计，区分 workspace 默认可运行、live-gated 和 excluded subcrate 治理项
+- Rust 分层命令的 `--list` 遵循同一 Cargo package scope：默认只列 root `lime` package，传 `--workspace` 才列全 workspace，传 `-p <crate>` 只列目标 crate；全树治理统计只看 `test:rust:layers:stats`
 
 边界：
 
 - `test:unit` 只证明快速逻辑回归，不等于可交付
+- `test:rust:unit` 也只证明后端快速逻辑回归；Rust 模块交付仍需按风险补受影响 crate、integration、workspace 或全量 `test:rust`
 - 显式后缀不能降低风险层级；`*.unit.test.*` 只在无 React/jsdom、DevBridge/Tauri、文件系统、网络、Playwright 等外部边界时进入 unit
 - GUI 壳、Workspace、主页面路径、Tauri 命令和 Bridge 改动仍必须按后续 Layer 1-3 跑对应校验
 - 前端复杂 UI 逻辑应优先抽到 View Model / projection / selector 中做单元测试；组件测试只保留必要渲染和事件接线，核心用户流程交给 GUI smoke / E2E
@@ -735,6 +745,10 @@ npm run test:integration
 npm run test:e2e
 npm run test:layers:stats
 npm run test:frontend:all
+npm run test:rust:unit
+npm run test:rust:integration
+npm run test:rust:e2e
+npm run test:rust:layers:stats
 npm test
 npm run test:bridge
 npm run test:contracts

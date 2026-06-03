@@ -52,6 +52,21 @@ describe("agentRuntimeErrorPresentation", () => {
     });
   });
 
+  it("503 与 Service Unavailable 应转换为模型通道暂不可用提示", async () => {
+    await changeLimeLocale("zh-CN");
+
+    expect(
+      resolveAgentRuntimeErrorPresentation(
+        "Agent provider execution failed: Server error: Server error (503 Service Unavailable): Service temporarily unavailable",
+      ),
+    ).toEqual({
+      displayMessage:
+        "当前模型通道暂时不可用，请稍后重试；如果持续失败，请检查 Provider 状态或切换到其他可用模型。",
+      toastMessage:
+        "当前模型通道暂时不可用，请稍后重试；如果持续失败，请检查 Provider 状态或切换到其他可用模型。",
+    });
+  });
+
   it("JSON-RPC 内部错误应转换为短提示", async () => {
     await changeLimeLocale("zh-CN");
 

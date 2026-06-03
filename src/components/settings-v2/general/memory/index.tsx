@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TFunction } from "i18next";
 import {
   AlertCircle,
+  Brain,
   CheckCircle2,
   ChevronDown,
   Database,
+  FileText,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -20,12 +22,26 @@ import type {
   MemoryEmbeddingProvider,
   MemoryProfileConfig,
   MemoryResolveConfig,
+  MemorySoulArtifactVoiceConfig,
+  MemorySoulArtifactVoiceSource,
+  MemorySoulConfig,
   MemorySourcesConfig,
 } from "@/lib/api/memoryRuntime";
 import {
   getUnifiedMemoryStats,
   type UnifiedMemoryStatsResponse,
 } from "@/lib/api/unifiedMemory";
+import {
+  buildSoulMarkdown,
+  formatSoulListInput,
+  hasSoulContent,
+  normalizeSoulArtifactVoiceConfig,
+  normalizeSoulConfig,
+  parseSoulListInput,
+  parseSoulMarkdown,
+  type SoulImportResult,
+  type SoulImportWarningCode,
+} from "@/lib/soul/soulConfig";
 
 type EmbeddingProviderChoice =
   | "auto"
@@ -81,6 +97,13 @@ const PROVIDER_CHOICES: ProviderChoiceDefinition[] = [
     model: "all-MiniLM-L6-v2",
   },
 ];
+const SOUL_WARNING_KEYS: Record<SoulImportWarningCode, string> = {
+  empty: "settings.memory.soul.import.warning.empty",
+  local_path: "settings.memory.soul.import.warning.localPath",
+  project_rules: "settings.memory.soul.import.warning.projectRules",
+  secret_like: "settings.memory.soul.import.warning.secretLike",
+  too_long: "settings.memory.soul.import.warning.tooLong",
+};
 
 function memoryT(
   t: TFunction<"settings">,
@@ -106,16 +129,16 @@ function normalizeProfile(profile?: MemoryProfileConfig): MemoryProfileConfig {
 function normalizeSources(sources?: MemorySourcesConfig): MemorySourcesConfig {
   return {
     managed_policy_path: sources?.managed_policy_path ?? undefined,
-    project_memory_paths:
-      sources?.project_memory_paths?.filter((item) => item.trim().length > 0)
-        .length
-        ? sources.project_memory_paths
-        : [".lime/AGENTS.md"],
-    project_rule_dirs:
-      sources?.project_rule_dirs?.filter((item) => item.trim().length > 0)
-        .length
-        ? sources.project_rule_dirs
-        : [".agents/rules"],
+    project_memory_paths: sources?.project_memory_paths?.filter(
+      (item) => item.trim().length > 0,
+    ).length
+      ? sources.project_memory_paths
+      : [".lime/AGENTS.md"],
+    project_rule_dirs: sources?.project_rule_dirs?.filter(
+      (item) => item.trim().length > 0,
+    ).length
+      ? sources.project_rule_dirs
+      : [".agents/rules"],
     user_memory_path: sources?.user_memory_path ?? undefined,
     project_local_memory_path:
       sources?.project_local_memory_path ?? ".lime/AGENTS.local.md",
@@ -165,6 +188,7 @@ function normalizeMemoryConfig(memory?: MemoryConfig): MemoryConfig {
     retention_days: memory?.retention_days ?? 30,
     auto_cleanup: memory?.auto_cleanup ?? true,
     profile: normalizeProfile(memory?.profile),
+    soul: normalizeSoulConfig(memory?.soul),
     sources: normalizeSources(memory?.sources),
     auto: normalizeAuto(memory?.auto),
     resolve: normalizeResolve(memory?.resolve),
@@ -214,6 +238,18 @@ function formatCount(value?: number | null): string {
   return new Intl.NumberFormat().format(value);
 }
 
+function buildSoulDraftPatch(
+  current: MemorySoulConfig | undefined,
+  patch: Partial<MemorySoulConfig>,
+): MemorySoulConfig {
+  return normalizeSoulConfig({
+    ...normalizeSoulConfig(current),
+    ...patch,
+    imported_from: patch.imported_from ?? "manual",
+    updated_at: new Date().toISOString(),
+  });
+}
+
 function LoadingSkeleton() {
   return (
     <div className="mx-auto max-w-[820px] space-y-5 pb-8">
@@ -238,6 +274,9 @@ export function MemorySettings() {
   const [saving, setSaving] = useState(false);
   const [statsLoading, setStatsLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [soulImportText, setSoulImportText] = useState("");
+  const [soulImportPreview, setSoulImportPreview] =
+    useState<SoulImportResult | null>(null);
 
   const loadStats = useCallback(async () => {
     setStatsLoading(true);
@@ -295,12 +334,96 @@ export function MemorySettings() {
     draft.enabled && embeddingConfig.provider !== "disabled";
   const indexedCount = stats?.total_entries ?? stats?.memory_count ?? null;
   const cachedEmbeddingCount = vectorSearchEnabled ? indexedCount : 0;
+  const soul = normalizeSoulConfig(draft.soul);
+  const soulArtifactVoice = normalizeSoulArtifactVoiceConfig(
+    soul.artifact_voice,
+  );
+  const soulExportMarkdown = buildSoulMarkdown(soul);
+  const soulEnabledWithContent = soul.enabled && hasSoulContent(soul);
 
   const handleProviderChange = (choice: EmbeddingProviderChoice) => {
     setDraft((previous) => ({
       ...previous,
       embedding: buildEmbeddingConfig(choice),
     }));
+  };
+
+  const updateSoulDraft = (patch: Partial<MemorySoulConfig>) => {
+    setDraft((previous) => ({
+      ...previous,
+      soul: buildSoulDraftPatch(previous.soul, patch),
+    }));
+  };
+
+  const updateSoulArtifactVoiceDraft = (
+    patch: Partial<MemorySoulArtifactVoiceConfig>,
+  ) => {
+    setDraft((previous) => {
+      const previousSoul = normalizeSoulConfig(previous.soul);
+      return {
+        ...previous,
+        soul: buildSoulDraftPatch(previous.soul, {
+          artifact_voice: normalizeSoulArtifactVoiceConfig({
+            ...previousSoul.artifact_voice,
+            ...patch,
+          }),
+        }),
+      };
+    });
+  };
+
+  const handleSoulReset = () => {
+    setDraft((previous) => ({
+      ...previous,
+      soul: normalizeSoulConfig({ enabled: false, imported_from: "manual" }),
+    }));
+    setSoulImportPreview(null);
+    setSoulImportText("");
+    setMessage(memoryT(t, "settings.memory.soul.message.reset"));
+    window.setTimeout(() => setMessage(null), 2500);
+  };
+
+  const handleSoulImportPreview = () => {
+    const result = parseSoulMarkdown(soulImportText);
+    setSoulImportPreview(result);
+    setMessage(
+      memoryT(
+        t,
+        result.canImport
+          ? "settings.memory.soul.message.importPreviewReady"
+          : "settings.memory.soul.message.importEmpty",
+      ),
+    );
+    window.setTimeout(() => setMessage(null), 2500);
+  };
+
+  const handleSoulImportApply = () => {
+    if (!soulImportPreview?.canImport) {
+      return;
+    }
+    setDraft((previous) => ({
+      ...previous,
+      soul: normalizeSoulConfig(soulImportPreview.draft),
+    }));
+    setMessage(memoryT(t, "settings.memory.soul.message.importApplied"));
+    window.setTimeout(() => setMessage(null), 2500);
+  };
+
+  const handleSoulExportCopy = async () => {
+    if (!soulExportMarkdown) {
+      setMessage(memoryT(t, "settings.memory.soul.message.exportEmpty"));
+      window.setTimeout(() => setMessage(null), 2500);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(soulExportMarkdown);
+      setMessage(memoryT(t, "settings.memory.soul.message.exportCopied"));
+    } catch (error) {
+      console.error("复制 SOUL.md 失败:", error);
+      setMessage(memoryT(t, "settings.memory.soul.message.exportCopyFailed"));
+    }
+    window.setTimeout(() => setMessage(null), 2500);
   };
 
   const handleCancel = () => {
@@ -341,7 +464,7 @@ export function MemorySettings() {
 
   const messageIsError = Boolean(
     message &&
-      /失败|失敗|실패|failed|error|cannot|can't/u.test(message.toLowerCase()),
+    /失败|失敗|실패|failed|error|cannot|can't/u.test(message.toLowerCase()),
   );
 
   return (
@@ -391,6 +514,421 @@ export function MemorySettings() {
               }
             />
           </div>
+        </div>
+      </section>
+
+      <section className="rounded-md border border-slate-200/90 bg-white p-5 shadow-sm shadow-slate-950/5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-sky-200 bg-sky-50 text-sky-700">
+              <Brain className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-950">
+                {memoryT(t, "settings.memory.soul.title")}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-slate-500">
+                {memoryT(t, "settings.memory.soul.description")}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+            <span className="text-xs font-medium text-slate-600">
+              {soulEnabledWithContent
+                ? memoryT(t, "settings.memory.status.enabled")
+                : memoryT(t, "settings.memory.status.disabled")}
+            </span>
+            <Switch
+              aria-label={memoryT(t, "settings.memory.soul.toggle.aria")}
+              checked={soul.enabled ?? false}
+              onCheckedChange={(checked) =>
+                updateSoulDraft({ enabled: checked })
+              }
+            />
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <label className="block">
+            <span className="text-xs font-semibold text-slate-600">
+              {memoryT(t, "settings.memory.soul.field.name.label")}
+            </span>
+            <input
+              type="text"
+              value={soul.name ?? ""}
+              onChange={(event) =>
+                updateSoulDraft({ name: event.target.value || undefined })
+              }
+              placeholder={memoryT(
+                t,
+                "settings.memory.soul.field.name.placeholder",
+              )}
+              className="mt-2 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-semibold text-slate-600">
+              {memoryT(t, "settings.memory.soul.field.tone.label")}
+            </span>
+            <textarea
+              value={formatSoulListInput(soul.tone)}
+              onChange={(event) =>
+                updateSoulDraft({
+                  tone: parseSoulListInput(event.target.value),
+                })
+              }
+              rows={3}
+              placeholder={memoryT(
+                t,
+                "settings.memory.soul.field.tone.placeholder",
+              )}
+              className="mt-2 min-h-[92px] w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white"
+            />
+          </label>
+          <label className="block md:col-span-2">
+            <span className="text-xs font-semibold text-slate-600">
+              {memoryT(t, "settings.memory.soul.field.summary.label")}
+            </span>
+            <textarea
+              value={soul.summary ?? ""}
+              onChange={(event) =>
+                updateSoulDraft({ summary: event.target.value || undefined })
+              }
+              rows={3}
+              placeholder={memoryT(
+                t,
+                "settings.memory.soul.field.summary.placeholder",
+              )}
+              className="mt-2 min-h-[92px] w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-semibold text-slate-600">
+              {memoryT(t, "settings.memory.soul.field.communication.label")}
+            </span>
+            <textarea
+              value={formatSoulListInput(soul.communication_style)}
+              onChange={(event) =>
+                updateSoulDraft({
+                  communication_style: parseSoulListInput(event.target.value),
+                })
+              }
+              rows={4}
+              placeholder={memoryT(
+                t,
+                "settings.memory.soul.field.communication.placeholder",
+              )}
+              className="mt-2 min-h-[116px] w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-semibold text-slate-600">
+              {memoryT(t, "settings.memory.soul.field.avoid.label")}
+            </span>
+            <textarea
+              value={formatSoulListInput(soul.avoid)}
+              onChange={(event) =>
+                updateSoulDraft({
+                  avoid: parseSoulListInput(event.target.value),
+                })
+              }
+              rows={4}
+              placeholder={memoryT(
+                t,
+                "settings.memory.soul.field.avoid.placeholder",
+              )}
+              className="mt-2 min-h-[116px] w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-semibold text-slate-600">
+              {memoryT(t, "settings.memory.soul.field.depth.label")}
+            </span>
+            <input
+              type="text"
+              value={soul.explanation_depth ?? ""}
+              onChange={(event) =>
+                updateSoulDraft({
+                  explanation_depth: event.target.value || undefined,
+                })
+              }
+              placeholder={memoryT(
+                t,
+                "settings.memory.soul.field.depth.placeholder",
+              )}
+              className="mt-2 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-semibold text-slate-600">
+              {memoryT(t, "settings.memory.soul.field.challenge.label")}
+            </span>
+            <input
+              type="text"
+              value={soul.challenge_style ?? ""}
+              onChange={(event) =>
+                updateSoulDraft({
+                  challenge_style: event.target.value || undefined,
+                })
+              }
+              placeholder={memoryT(
+                t,
+                "settings.memory.soul.field.challenge.placeholder",
+              )}
+              className="mt-2 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white"
+            />
+          </label>
+        </div>
+
+        <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-900">
+                {memoryT(t, "settings.memory.soul.artifactVoice.title")}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                {memoryT(t, "settings.memory.soul.artifactVoice.description")}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2">
+              <span className="text-xs font-medium text-slate-600">
+                {soulArtifactVoice.enabled
+                  ? memoryT(t, "settings.memory.status.enabled")
+                  : memoryT(t, "settings.memory.status.disabled")}
+              </span>
+              <Switch
+                aria-label={memoryT(
+                  t,
+                  "settings.memory.soul.artifactVoice.toggle.aria",
+                )}
+                checked={soulArtifactVoice.enabled ?? false}
+                onCheckedChange={(checked) =>
+                  updateSoulArtifactVoiceDraft({
+                    enabled: checked,
+                    voice_source: checked
+                      ? (soulArtifactVoice.voice_source ?? "creator_voice")
+                      : soulArtifactVoice.voice_source,
+                  })
+                }
+              />
+            </div>
+          </div>
+
+          <div
+            className={cn(
+              "mt-4 grid gap-4 md:grid-cols-2",
+              !soulArtifactVoice.enabled && "opacity-75",
+            )}
+          >
+            <label className="block">
+              <span className="text-xs font-semibold text-slate-600">
+                {memoryT(t, "settings.memory.soul.artifactVoice.source.label")}
+              </span>
+              <select
+                value={soulArtifactVoice.voice_source ?? "creator_voice"}
+                onChange={(event) =>
+                  updateSoulArtifactVoiceDraft({
+                    voice_source: event.target
+                      .value as MemorySoulArtifactVoiceSource,
+                  })
+                }
+                disabled={!soulArtifactVoice.enabled}
+                className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100"
+              >
+                <option value="creator_voice">
+                  {memoryT(
+                    t,
+                    "settings.memory.soul.artifactVoice.source.creator",
+                  )}
+                </option>
+                <option value="brand_voice">
+                  {memoryT(
+                    t,
+                    "settings.memory.soul.artifactVoice.source.brand",
+                  )}
+                </option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold text-slate-600">
+                {memoryT(
+                  t,
+                  soulArtifactVoice.voice_source === "brand_voice"
+                    ? "settings.memory.soul.artifactVoice.brandId.label"
+                    : "settings.memory.soul.artifactVoice.creatorId.label",
+                )}
+              </span>
+              <input
+                type="text"
+                value={
+                  soulArtifactVoice.voice_source === "brand_voice"
+                    ? (soulArtifactVoice.brand_voice_id ?? "")
+                    : (soulArtifactVoice.creator_voice_id ?? "")
+                }
+                onChange={(event) =>
+                  updateSoulArtifactVoiceDraft(
+                    soulArtifactVoice.voice_source === "brand_voice"
+                      ? { brand_voice_id: event.target.value || undefined }
+                      : { creator_voice_id: event.target.value || undefined },
+                  )
+                }
+                disabled={!soulArtifactVoice.enabled}
+                placeholder={memoryT(
+                  t,
+                  soulArtifactVoice.voice_source === "brand_voice"
+                    ? "settings.memory.soul.artifactVoice.brandId.placeholder"
+                    : "settings.memory.soul.artifactVoice.creatorId.placeholder",
+                )}
+                className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold text-slate-600">
+                {memoryT(
+                  t,
+                  "settings.memory.soul.artifactVoice.evidencePack.label",
+                )}
+              </span>
+              <input
+                type="text"
+                value={soulArtifactVoice.evidence_pack_id ?? ""}
+                onChange={(event) =>
+                  updateSoulArtifactVoiceDraft({
+                    evidence_pack_id: event.target.value || undefined,
+                  })
+                }
+                disabled={!soulArtifactVoice.enabled}
+                placeholder={memoryT(
+                  t,
+                  "settings.memory.soul.artifactVoice.evidencePack.placeholder",
+                )}
+                className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold text-slate-600">
+                {memoryT(
+                  t,
+                  "settings.memory.soul.artifactVoice.evidenceRefs.label",
+                )}
+              </span>
+              <textarea
+                value={formatSoulListInput(soulArtifactVoice.evidence_refs)}
+                onChange={(event) =>
+                  updateSoulArtifactVoiceDraft({
+                    evidence_refs: parseSoulListInput(event.target.value),
+                  })
+                }
+                rows={3}
+                disabled={!soulArtifactVoice.enabled}
+                placeholder={memoryT(
+                  t,
+                  "settings.memory.soul.artifactVoice.evidenceRefs.placeholder",
+                )}
+                className="mt-2 min-h-[92px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100"
+              />
+            </label>
+          </div>
+
+          <p className="mt-3 text-xs leading-5 text-slate-500">
+            {memoryT(t, "settings.memory.soul.artifactVoice.boundary")}
+          </p>
+        </div>
+
+        <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4">
+          <div className="flex items-start gap-3">
+            <FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-slate-900">
+                {memoryT(t, "settings.memory.soul.import.title")}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                {memoryT(t, "settings.memory.soul.import.description")}
+              </p>
+            </div>
+          </div>
+          <textarea
+            value={soulImportText}
+            onChange={(event) => setSoulImportText(event.target.value)}
+            rows={5}
+            placeholder={memoryT(t, "settings.memory.soul.import.placeholder")}
+            className="mt-3 min-h-[128px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400"
+          />
+          {soulImportPreview ? (
+            <div className="mt-3 space-y-2 rounded-md border border-slate-200 bg-white p-3">
+              <p className="text-xs font-semibold text-slate-600">
+                {memoryT(t, "settings.memory.soul.import.preview")}
+              </p>
+              {soulImportPreview.warnings.length > 0 ? (
+                <ul className="space-y-1 text-xs leading-5 text-amber-700">
+                  {soulImportPreview.warnings.map((warning) => (
+                    <li key={warning}>
+                      {memoryT(t, SOUL_WARNING_KEYS[warning])}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <pre className="max-h-[160px] overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-3 text-xs leading-5 text-slate-50">
+                {soulImportPreview.preview ||
+                  memoryT(t, "settings.memory.soul.import.emptyPreview")}
+              </pre>
+            </div>
+          ) : null}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleSoulImportPreview}
+              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+            >
+              {memoryT(t, "settings.memory.soul.action.previewImport")}
+            </button>
+            <button
+              type="button"
+              onClick={handleSoulImportApply}
+              disabled={!soulImportPreview?.canImport}
+              className="rounded-md border border-slate-950 bg-slate-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
+            >
+              {memoryT(t, "settings.memory.soul.action.applyImport")}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-900">
+                {memoryT(t, "settings.memory.soul.export.title")}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                {memoryT(t, "settings.memory.soul.export.description")}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleSoulExportCopy}
+              disabled={!soulExportMarkdown}
+              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 disabled:opacity-60"
+            >
+              {memoryT(t, "settings.memory.soul.action.copyExport")}
+            </button>
+          </div>
+          <pre className="mt-3 max-h-[180px] overflow-auto whitespace-pre-wrap rounded-md bg-white p-3 text-xs leading-5 text-slate-600 ring-1 ring-slate-200">
+            {soulExportMarkdown ||
+              memoryT(t, "settings.memory.soul.export.empty")}
+          </pre>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs leading-5 text-slate-500">
+            {memoryT(t, "settings.memory.soul.boundary")}
+          </p>
+          <button
+            type="button"
+            onClick={handleSoulReset}
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-950"
+          >
+            {memoryT(t, "settings.memory.soul.action.reset")}
+          </button>
         </div>
       </section>
 
@@ -490,7 +1028,9 @@ export function MemorySettings() {
             id="memory-embedding-provider"
             value={providerChoice}
             onChange={(event) =>
-              handleProviderChange(event.target.value as EmbeddingProviderChoice)
+              handleProviderChange(
+                event.target.value as EmbeddingProviderChoice,
+              )
             }
             className="w-full appearance-none rounded-md border border-slate-200 bg-slate-50 px-4 py-3 pr-10 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-400 focus:bg-white"
             aria-label={memoryT(

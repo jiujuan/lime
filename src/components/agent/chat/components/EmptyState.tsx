@@ -5,17 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import styled, { keyframes } from "styled-components";
 import { useTranslation } from "react-i18next";
-import { getConfig } from "@/lib/api/appConfig";
-import {
-  getSkillCatalog,
-  listSkillCatalogEntries,
-  listSkillCatalogSceneEntries,
-  subscribeSkillCatalogChanged,
-  type SkillCatalogEntry,
-  type SkillCatalogSceneEntry,
-} from "@/lib/api/skillCatalog";
 import type { CreationMode } from "./types";
 import { toast } from "sonner";
 import {
@@ -36,42 +26,28 @@ import {
   type CuratedTaskTemplateItem,
 } from "../utils/curatedTaskTemplates";
 import { subscribeCuratedTaskRecommendationSignalsChanged } from "../utils/curatedTaskRecommendationSignals";
-import {
-  extractCuratedTaskReferenceMemoryIds,
-  mergeCuratedTaskReferenceEntries,
-  normalizeCuratedTaskReferenceMemoryIds,
-} from "../utils/curatedTaskReferenceSelection";
 import type {
   CuratedTaskReferenceEntry,
   CuratedTaskReferenceSelection,
 } from "../utils/curatedTaskReferenceSelection";
 import { CuratedTaskLauncherDialog } from "./CuratedTaskLauncherDialog";
 import { EmptyStateComposerPanel } from "./EmptyStateComposerPanel";
-import { EmptyStateHero } from "./EmptyStateHero";
 import { EmptyStateQuickActions } from "./EmptyStateQuickActions";
 import {
-  EMPTY_STATE_CONTENT_WRAPPER_CLASSNAME,
-  EMPTY_STATE_PAGE_CONTAINER_CLASSNAME,
-} from "./emptyStateSurfaceTokens";
+  EmptyStateComposerFrame,
+  EmptyStateLayout,
+} from "./EmptyStateLayout";
 import {
   buildSkillSelectionProps,
   type SkillSelectionSourceProps,
 } from "../skill-selection/skillSelectionBindings";
 import type { Character } from "@/lib/api/memory";
 import type { WorkspaceSettings } from "@/types/workspace";
-import type { MessageImage, MessagePathReference } from "../types";
+import type { MessagePathReference } from "../types";
 import type { TeamDefinition } from "../utils/teamDefinitions";
 import { isGeneralResearchTheme } from "../utils/generalAgentPrompt";
 import type { AgentAccessMode } from "../hooks/agentChatStorage";
-import {
-  getClipboardImageCandidates,
-  readImageAttachment,
-} from "../utils/imageAttachments";
-import {
-  buildPathReferenceRequestMetadata,
-  readCustomPathReferencesFromDataTransfer,
-  readSystemPathReferencesFromFiles,
-} from "../utils/pathReferences";
+import { buildPathReferenceRequestMetadata } from "../utils/pathReferences";
 import { buildKnowledgeRequestMetadata } from "@/features/knowledge/agent/knowledgeMetadata";
 import type { InputbarSendHandler } from "./Inputbar/inputbarSendPayload";
 import {
@@ -86,15 +62,10 @@ import type {
   InputbarKnowledgePackSelection,
 } from "./Inputbar/types";
 import {
-  listSlashEntryUsage,
-  subscribeSlashEntryUsageChanged,
-} from "../skill-selection/slashEntryUsage";
-import {
   getSiteSkillAutoLaunchExample,
   hasAutoLaunchableSiteSkill,
 } from "../service-skills/siteSkillExamplePrompts";
 import { buildServiceSkillHomeCopy } from "../service-skills/homeCopy";
-import { listFeaturedHomeServiceSkills } from "../service-skills/homeEntrySkills";
 import type { RuntimeToolAvailability } from "../utils/runtimeToolAvailability";
 import type { AgentTaskRuntimeCardModel } from "../utils/agentTaskRuntime";
 import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface";
@@ -102,15 +73,6 @@ import {
   HomeStartSurface,
   type HomeSupplementalAction,
 } from "../home/HomeStartSurface";
-import { HomeSkillGallery } from "../home/HomeSkillGallery";
-import {
-  buildHomeGalleryItems,
-  buildHomeGuideCards,
-  buildHomeInputSuggestions,
-  buildHomeSkillItems,
-  buildHomeSkillSections,
-  buildHomeStarterChips,
-} from "../home/buildHomeSkillSurface";
 import { buildHomeSurfaceCopy } from "../home/homeSurfaceCopy";
 import { buildInputbarCoreCopy } from "./Inputbar/components/inputbarCoreCopy";
 import type {
@@ -118,197 +80,20 @@ import type {
   HomeSkillSurfaceItem,
   HomeStarterChip,
 } from "../home/homeSurfaceTypes";
+import {
+  buildEmptyStateQuickActionItems,
+  buildRecentSessionSupplementalAction,
+  resolveEffectiveCuratedTaskReferences,
+  resolveGuideHelpLabel,
+  resolveRecentSessionLinkModel,
+  shouldExposeHomeInputSuggestions,
+} from "./EmptyStateViewModel";
+import { useEmptyStateAttachments } from "./useEmptyStateAttachments";
+import { useEmptyStateRecommendationPreferences } from "./useEmptyStateRecommendationPreferences";
+import { useHomeSkillSurface } from "./useHomeSkillSurface";
+import { useCuratedTaskLauncherState } from "./useCuratedTaskLauncherState";
 
 type AgentI18nKey = keyof AgentI18nResource;
-
-const contentReveal = keyframes`
-  from {
-    opacity: 0;
-    transform: translateY(18px) scale(0.992);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-`;
-
-const PageContainer = styled.div.attrs({
-  className: EMPTY_STATE_PAGE_CONTAINER_CLASSNAME,
-})`
-  display: flex;
-  flex: 1 1 auto;
-  min-height: 0;
-  height: 100%;
-  flex-direction: column;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scroll-behavior: smooth;
-  scroll-snap-type: y mandatory;
-  isolation: isolate;
-  background:
-    radial-gradient(
-      circle at 8% 12%,
-      var(--lime-home-glow-primary, rgba(132, 204, 22, 0.08)),
-      transparent 28%
-    ),
-    radial-gradient(
-      circle at 76% 16%,
-      var(--lime-home-glow-secondary, rgba(186, 230, 253, 0.16)),
-      transparent 30%
-    ),
-    linear-gradient(
-      180deg,
-      var(--lime-home-bg-start, #f8fcf7) 0%,
-      var(--lime-home-bg-mid, #f9fbf8) 42%,
-      var(--lime-home-bg-end, #f5faf7) 100%
-    );
-`;
-
-const ContentWrapper = styled.div.attrs({
-  className: EMPTY_STATE_CONTENT_WRAPPER_CLASSNAME,
-})`
-  display: flex;
-  flex: 0 0 auto;
-  min-height: 100%;
-  height: 100%;
-  width: 100%;
-  box-sizing: border-box;
-  position: relative;
-  overflow: hidden;
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
-  animation: ${contentReveal} 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  padding: 0.45rem 0.25rem 4.7rem;
-
-  @media (prefers-reduced-motion: reduce) {
-    animation: none;
-  }
-`;
-
-const ComposerGlowFrame = styled.div`
-  position: relative;
-  isolation: isolate;
-
-  &::after {
-    content: "";
-    position: absolute;
-    left: clamp(1.5rem, 9vw, 7rem);
-    right: clamp(1.5rem, 9vw, 7rem);
-    bottom: -1.1rem;
-    z-index: 0;
-    height: clamp(34px, 5vw, 58px);
-    border-radius: 999px;
-    background: linear-gradient(
-      90deg,
-      transparent 0%,
-      rgba(187, 247, 208, 0.18) 16%,
-      rgba(110, 231, 183, 0.36) 42%,
-      rgba(45, 212, 191, 0.34) 58%,
-      rgba(186, 230, 253, 0.18) 84%,
-      transparent 100%
-    );
-    filter: blur(18px);
-    opacity: 0.86;
-    pointer-events: none;
-  }
-
-  > * {
-    position: relative;
-    z-index: 1;
-  }
-`;
-
-const ScrollCue = styled.a`
-  position: absolute;
-  left: 50%;
-  bottom: clamp(0.7rem, 1.9vh, 1.25rem);
-  z-index: 0;
-  display: grid;
-  width: min(680px, calc(100% - 2rem));
-  max-width: calc(100% - 2rem);
-  grid-template-columns: minmax(64px, 1fr) auto minmax(64px, 1fr);
-  align-items: center;
-  justify-content: center;
-  gap: 0.9rem;
-  transform: translateX(-50%);
-  padding: 0.35rem 0;
-  color: var(--lime-brand-strong, rgb(47 83 60));
-  font-size: 13px;
-  font-weight: 760;
-  line-height: 1;
-  text-decoration: none;
-  white-space: nowrap;
-  pointer-events: none;
-  transition:
-    color 160ms ease,
-    transform 160ms ease;
-
-  &:hover {
-    color: var(--lime-text, rgb(71 85 105));
-    transform: translateX(-50%) translateY(-1px);
-  }
-`;
-
-const ScrollCueLine = styled.span`
-  display: block;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--lime-surface-border-strong, rgba(203, 213, 225, 0.82)) 18%,
-    var(--lime-surface-border-strong, rgba(203, 213, 225, 0.82)) 82%,
-    transparent 100%
-  );
-`;
-
-const ScrollCueText = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.32rem;
-  border-radius: 999px;
-  border: 1px solid rgba(187, 247, 208, 0.86);
-  background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.94),
-      rgba(240, 253, 244, 0.88)
-    ),
-    var(--lime-surface, #fff);
-  padding: 0.42rem 0.78rem;
-  box-shadow:
-    0 10px 28px rgba(15, 23, 42, 0.055),
-    inset 0 1px 0 rgba(255, 255, 255, 0.92);
-`;
-
-const ScrollCueArrow = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: inherit;
-  font-size: 14px;
-  line-height: 1;
-`;
-
-const SecondScreenSection = styled.section`
-  display: flex;
-  flex: 0 0 auto;
-  min-height: 100%;
-  height: 100%;
-  width: 100%;
-  box-sizing: border-box;
-  align-items: flex-start;
-  justify-content: center;
-  overflow-y: auto;
-  overscroll-behavior: auto;
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
-  padding: clamp(3.5rem, 8vh, 6rem) 0.25rem clamp(3rem, 8vh, 5.5rem);
-`;
-
-const SecondScreenInner = styled.div`
-  width: min(1180px, 100%);
-  min-width: 0;
-`;
 
 interface EmptyStateProps extends SkillSelectionSourceProps {
   input: string;
@@ -405,18 +190,6 @@ interface EmptyStateProps extends SkillSelectionSourceProps {
 
 const CREATION_THEMES: string[] = [];
 
-const THEME_ICONS: Record<string, string> = {
-  general: "✨",
-};
-
-function truncatePrompt(value: string, maxLength = 92) {
-  const normalized = value.trim().replace(/\s+/g, " ");
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
-  return `${normalized.slice(0, maxLength).trim()}…`;
-}
-
 export const EmptyState: React.FC<EmptyStateProps> = ({
   input,
   setInput,
@@ -502,7 +275,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     () => buildInputbarCoreCopy(translateAgentCopyKey),
     [translateAgentCopyKey],
   );
-  const pageContainerRef = useRef<HTMLDivElement | null>(null);
   const handledInitialInputCapabilitySignatureRef = useRef("");
   const [activeCapability, setActiveCapability] =
     useState<InputCapabilitySelection | null>(null);
@@ -517,26 +289,14 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     activeCuratedTaskCapability?.referenceMemoryIds;
   const activeCuratedTaskReferenceEntries =
     activeCuratedTaskCapability?.referenceEntries;
-  const effectiveDefaultCuratedTaskReferenceMemoryIds = useMemo(
-    () =>
-      defaultCuratedTaskReferenceMemoryIds ??
-      creationReplaySurface?.defaultReferenceMemoryIds ??
-      [],
-    [
-      creationReplaySurface?.defaultReferenceMemoryIds,
-      defaultCuratedTaskReferenceMemoryIds,
-    ],
-  );
-  const effectiveDefaultCuratedTaskReferenceEntries = useMemo(
-    () =>
-      defaultCuratedTaskReferenceEntries ??
-      creationReplaySurface?.defaultReferenceEntries ??
-      [],
-    [
-      creationReplaySurface?.defaultReferenceEntries,
-      defaultCuratedTaskReferenceEntries,
-    ],
-  );
+  const {
+    effectiveDefaultCuratedTaskReferenceMemoryIds,
+    effectiveDefaultCuratedTaskReferenceEntries,
+  } = resolveEffectiveCuratedTaskReferences({
+    defaultCuratedTaskReferenceMemoryIds,
+    defaultCuratedTaskReferenceEntries,
+    creationReplaySurface,
+  });
   const currentSkill =
     activeCapability?.kind === "installed_skill"
       ? activeCapability.skill
@@ -666,63 +426,30 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   const siteSkillAutoLaunchExample =
     getSiteSkillAutoLaunchExample(serviceSkills);
 
-  const [
-    appendSelectedTextToRecommendation,
-    setAppendSelectedTextToRecommendation,
-  ] = useState(true);
   const [curatedTaskTemplatesVersion, setCuratedTaskTemplatesVersion] =
     useState(0);
   const [
     curatedTaskRecommendationSignalsVersion,
     setCuratedTaskRecommendationSignalsVersion,
   ] = useState(0);
-  const [slashEntryUsageVersion, setSlashEntryUsageVersion] = useState(0);
-  const [curatedTaskLauncherTask, setCuratedTaskLauncherTask] =
-    useState<CuratedTaskTemplateItem | null>(null);
-  const [
-    curatedTaskLauncherInitialInputValues,
-    setCuratedTaskLauncherInitialInputValues,
-  ] = useState<CuratedTaskInputValues | null>(null);
-  const [
-    curatedTaskLauncherInitialReferenceMemoryIds,
-    setCuratedTaskLauncherInitialReferenceMemoryIds,
-  ] = useState<string[] | null>(null);
-  const [
-    curatedTaskLauncherInitialReferenceEntries,
-    setCuratedTaskLauncherInitialReferenceEntries,
-  ] = useState<CuratedTaskReferenceEntry[] | null>(null);
-  const [curatedTaskLauncherPrefillHint, setCuratedTaskLauncherPrefillHint] =
-    useState<string | null>(null);
-
-  useEffect(() => {
-    const loadConfigPreferences = async () => {
-      try {
-        const loadedConfig = await getConfig();
-        setAppendSelectedTextToRecommendation(
-          loadedConfig.chat_appearance
-            ?.append_selected_text_to_recommendation ?? true,
-        );
-      } catch (e) {
-        console.error("加载入口配置失败:", e);
-      }
-    };
-    void loadConfigPreferences();
-
-    const handleConfigChange = () => {
-      void loadConfigPreferences();
-    };
-    window.addEventListener(
-      "chat-appearance-config-changed",
-      handleConfigChange,
-    );
-
-    return () => {
-      window.removeEventListener(
-        "chat-appearance-config-changed",
-        handleConfigChange,
-      );
-    };
-  }, []);
+  const { appendSelectedTextToRecommendation } =
+    useEmptyStateRecommendationPreferences();
+  const {
+    applyReviewSuggestion: applyLauncherReviewSuggestion,
+    handleOpenChange: handleCuratedTaskLauncherOpenChange,
+    initialInputValues: curatedTaskLauncherInitialInputValues,
+    initialReferenceEntries: curatedTaskLauncherInitialReferenceEntries,
+    initialReferenceMemoryIds: curatedTaskLauncherInitialReferenceMemoryIds,
+    open: openCuratedTaskLauncher,
+    prefillHint: curatedTaskLauncherPrefillHint,
+    reset: resetCuratedTaskLauncher,
+    task: curatedTaskLauncherTask,
+  } = useCuratedTaskLauncherState({
+    effectiveDefaultCuratedTaskReferenceEntries,
+    effectiveDefaultCuratedTaskReferenceMemoryIds,
+    reviewSuggestionPrefillHint:
+      homeSurfaceCopy.curatedTaskReviewSuggestionPrefillHint,
+  });
 
   useEffect(() => {
     return subscribeCuratedTaskTemplateUsageChanged(() => {
@@ -733,12 +460,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   useEffect(() => {
     return subscribeCuratedTaskRecommendationSignalsChanged(() => {
       setCuratedTaskRecommendationSignalsVersion((previous) => previous + 1);
-    });
-  }, []);
-
-  useEffect(() => {
-    return subscribeSlashEntryUsageChanged(() => {
-      setSlashEntryUsageVersion((previous) => previous + 1);
     });
   }, []);
 
@@ -755,9 +476,20 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   // 判断当前主题是否需要显示创作模式选择器
   const showCreationModeSelector = CREATION_THEMES.includes(activeTheme);
 
-  const [pendingImages, setPendingImages] = useState<MessageImage[]>([]);
   const isGeneralTheme = isGeneralResearchTheme(activeTheme);
   const isComposerBusy = isLoading || disabled;
+  const {
+    clearPendingImages,
+    handleDragOver,
+    handleDrop,
+    handleFileSelect,
+    handlePaste,
+    handleRemoveImage,
+    pendingImages,
+  } = useEmptyStateAttachments({
+    toastCopy: homeSurfaceCopy.toast,
+    onAddPathReferences,
+  });
 
   const recommendationSelectedText = appendSelectedTextToRecommendation
     ? selectedText
@@ -805,114 +537,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       ? `${normalized.slice(0, 56).trim()}…`
       : normalized;
   }, [recommendationSelectedText]);
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    Array.from(files).forEach((file) => {
-      void readImageAttachment(file)
-        .then((image) => {
-          setPendingImages((prev) => [...prev, image]);
-        })
-        .catch(() => {
-          toast.error(
-            homeSurfaceCopy.toast.imageReadFailed(
-              file.name || homeSurfaceCopy.toast.unnamedImage,
-            ),
-          );
-        });
-    });
-
-    e.target.value = "";
-  };
-
-  const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const imageFiles = getClipboardImageCandidates(event.clipboardData);
-    if (imageFiles.length === 0) {
-      return;
-    }
-
-    event.preventDefault();
-    imageFiles.forEach(({ file, mediaType }, index) => {
-      void readImageAttachment(file, mediaType)
-        .then((image) => {
-          setPendingImages((prev) => [...prev, image]);
-          if (index === 0) {
-            toast.success(homeSurfaceCopy.toast.imagePasted);
-          }
-        })
-        .catch(() => {
-          toast.error(
-            homeSurfaceCopy.toast.imageReadFailed(
-              file.name || homeSurfaceCopy.toast.unnamedImage,
-            ),
-          );
-        });
-    });
-  };
-
-  const handleDragOver = (event: React.DragEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-  };
-
-  const handleDrop = (event: React.DragEvent) => {
-    const customReferences = readCustomPathReferencesFromDataTransfer(
-      event.dataTransfer,
-    );
-    if (customReferences.length > 0) {
-      event.preventDefault();
-      event.stopPropagation();
-      onAddPathReferences?.(customReferences);
-      return;
-    }
-
-    const files = event.dataTransfer.files;
-    const systemReferences =
-      files && files.length > 0 ? readSystemPathReferencesFromFiles(files) : [];
-    if (systemReferences.length > 0) {
-      event.preventDefault();
-      event.stopPropagation();
-      onAddPathReferences?.(systemReferences);
-      return;
-    }
-
-    const imageFiles = getClipboardImageCandidates(event.dataTransfer);
-    if (imageFiles.length > 0) {
-      event.preventDefault();
-      event.stopPropagation();
-      imageFiles.forEach(({ file, mediaType }, index) => {
-        void readImageAttachment(file, mediaType)
-          .then((image) => {
-            setPendingImages((prev) => [...prev, image]);
-            if (index === 0) {
-              toast.success(homeSurfaceCopy.toast.imageAdded);
-            }
-          })
-          .catch(() => {
-            toast.error(
-              homeSurfaceCopy.toast.imageReadFailed(
-                file.name || homeSurfaceCopy.toast.unnamedImage,
-              ),
-            );
-          });
-      });
-      return;
-    }
-
-    if (files && files.length > 0) {
-      event.preventDefault();
-      event.stopPropagation();
-      toast.error(homeSurfaceCopy.toast.systemPathDropUnsupported);
-    }
-  };
-
-  const handleRemoveImage = (index: number) => {
-    setPendingImages((prev) =>
-      prev.filter((_, currentIndex) => currentIndex !== index),
-    );
-  };
 
   const handleSend = (inputOverride = input) => {
     const hasPathReferences = pathReferences.length > 0;
@@ -972,7 +596,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       textOverride: effectiveInput,
       sendOptions,
     });
-    setPendingImages([]);
+    clearPendingImages();
     onClearPathReferences?.();
     clearSelectedSkill?.();
   };
@@ -1024,38 +648,17 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       initialReferenceEntries?: CuratedTaskReferenceEntry[] | null,
       prefillHint?: string | null,
     ) => {
-      const mergedReferenceEntries = mergeCuratedTaskReferenceEntries([
-        ...(initialReferenceEntries ?? []),
-        ...effectiveDefaultCuratedTaskReferenceEntries,
-      ]);
-      const mergedReferenceMemoryIds =
-        normalizeCuratedTaskReferenceMemoryIds([
-          ...(initialReferenceMemoryIds ?? []),
-          ...(extractCuratedTaskReferenceMemoryIds(mergedReferenceEntries) ??
-            []),
-          ...effectiveDefaultCuratedTaskReferenceMemoryIds,
-        ]) ?? null;
-      setCuratedTaskLauncherTask(template);
-      setCuratedTaskLauncherInitialInputValues(initialInputValues ?? null);
-      setCuratedTaskLauncherInitialReferenceMemoryIds(mergedReferenceMemoryIds);
-      setCuratedTaskLauncherInitialReferenceEntries(mergedReferenceEntries);
-      setCuratedTaskLauncherPrefillHint(prefillHint ?? null);
+      openCuratedTaskLauncher(
+        template,
+        initialInputValues,
+        initialReferenceMemoryIds,
+        initialReferenceEntries,
+        prefillHint,
+      );
     },
-    [
-      effectiveDefaultCuratedTaskReferenceEntries,
-      effectiveDefaultCuratedTaskReferenceMemoryIds,
-    ],
+    [openCuratedTaskLauncher],
   );
 
-  const handleCuratedTaskLauncherOpenChange = useCallback((open: boolean) => {
-    if (!open) {
-      setCuratedTaskLauncherTask(null);
-      setCuratedTaskLauncherInitialInputValues(null);
-      setCuratedTaskLauncherInitialReferenceMemoryIds(null);
-      setCuratedTaskLauncherInitialReferenceEntries(null);
-      setCuratedTaskLauncherPrefillHint(null);
-    }
-  }, []);
   const handleApplyLauncherReviewSuggestion = useCallback(
     (
       template: CuratedTaskTemplateItem,
@@ -1064,19 +667,9 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         referenceSelection: CuratedTaskReferenceSelection;
       },
     ) => {
-      setCuratedTaskLauncherTask(template);
-      setCuratedTaskLauncherInitialInputValues(options.inputValues);
-      setCuratedTaskLauncherInitialReferenceMemoryIds(
-        options.referenceSelection.referenceMemoryIds,
-      );
-      setCuratedTaskLauncherInitialReferenceEntries(
-        options.referenceSelection.referenceEntries,
-      );
-      setCuratedTaskLauncherPrefillHint(
-        homeSurfaceCopy.curatedTaskReviewSuggestionPrefillHint,
-      );
+      applyLauncherReviewSuggestion(template, options);
     },
-    [homeSurfaceCopy.curatedTaskReviewSuggestionPrefillHint],
+    [applyLauncherReviewSuggestion],
   );
 
   const handleApplyCuratedTaskTemplate = useCallback(
@@ -1092,11 +685,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         referenceEntries: referenceSelection.referenceEntries,
       });
       setCuratedTaskTemplatesVersion((previous) => previous + 1);
-      setCuratedTaskLauncherTask(null);
-      setCuratedTaskLauncherInitialInputValues(null);
-      setCuratedTaskLauncherInitialReferenceMemoryIds(null);
-      setCuratedTaskLauncherInitialReferenceEntries(null);
-      setCuratedTaskLauncherPrefillHint(null);
+      resetCuratedTaskLauncher();
 
       if (template.shouldEnableTeamMode && !subagentEnabled) {
         onSubagentEnabledChange?.(true);
@@ -1151,6 +740,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       input,
       onLaunchBrowserAssist,
       onSubagentEnabledChange,
+      resetCuratedTaskLauncher,
       selectedText,
       setInput,
       subagentEnabled,
@@ -1159,26 +749,16 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 
   const quickActionItems = useMemo(
     () =>
-      currentRecommendations.slice(0, 4).map(([shortLabel, fullPrompt]) => ({
-        key: `${activeTheme}-${shortLabel}`,
-        title: shortLabel,
-        description: truncatePrompt(fullPrompt),
-        badge: homeSurfaceCopy.quickActions.badge(
-          THEME_ICONS[activeTheme] || "✨",
-        ),
-        prompt: fullPrompt,
-      })),
+      buildEmptyStateQuickActionItems({
+        activeTheme,
+        recommendations: currentRecommendations,
+        resolveBadge: homeSurfaceCopy.quickActions.badge,
+      }),
     [activeTheme, currentRecommendations, homeSurfaceCopy.quickActions],
   );
 
   const quickStartPresets = homeSurfaceCopy.quickActions.presets;
 
-  const [homeCatalogEntries, setHomeCatalogEntries] = useState<
-    SkillCatalogEntry[]
-  >([]);
-  const [homeCatalogSceneEntries, setHomeCatalogSceneEntries] = useState<
-    SkillCatalogSceneEntry[]
-  >([]);
   const [guideHelpActive, setGuideHelpActive] = useState(false);
 
   useEffect(() => {
@@ -1187,94 +767,30 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     }
   }, [isGeneralTheme]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const loadCatalogScenes = async () => {
-      try {
-        const catalog = await getSkillCatalog();
-        if (cancelled) {
-          return;
-        }
-        const entries = listSkillCatalogEntries(catalog).filter((entry) =>
-          (entry.surfaceScopes ?? []).includes("home"),
-        );
-        setHomeCatalogEntries(entries);
-        setHomeCatalogSceneEntries(
-          listSkillCatalogSceneEntries(catalog).filter((entry) =>
-            (entry.surfaceScopes ?? []).includes("home"),
-          ),
-        );
-      } catch {
-        if (!cancelled) {
-          setHomeCatalogEntries([]);
-          setHomeCatalogSceneEntries([]);
-        }
-      }
-    };
-
-    void loadCatalogScenes();
-    const unsubscribe = subscribeSkillCatalogChanged(() => {
-      void loadCatalogScenes();
-    });
-
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, []);
-
-  const homeServiceSkillItems = useMemo(
-    () => listFeaturedHomeServiceSkills(serviceSkills ?? [], { limit: 6 }),
-    [serviceSkills],
-  );
-  const homeStarterChips = useMemo(
-    () => buildHomeStarterChips(homeCatalogEntries, homeSurfaceCopy),
-    [homeCatalogEntries, homeSurfaceCopy],
-  );
-  const homeInputSuggestions = useMemo(
-    () => buildHomeInputSuggestions(homeCatalogEntries, homeSurfaceCopy),
-    [homeCatalogEntries, homeSurfaceCopy],
-  );
-  const homeGuideCards = useMemo(
-    () => buildHomeGuideCards(homeCatalogEntries, homeSurfaceCopy),
-    [homeCatalogEntries, homeSurfaceCopy],
-  );
-  const guideHelpStarterLabel = useMemo(
-    () =>
-      homeStarterChips.find((chip) => chip.launchKind === "toggle_guide")
-        ?.label,
-    [homeStarterChips],
-  );
-  const guideHelpLabel = guideHelpStarterLabel
-    ? homeSurfaceCopy.guideHelpContextLabelWithStarter(guideHelpStarterLabel)
-    : homeSurfaceCopy.guideHelpContextLabel;
-
-  const homeSkillItems = useMemo(() => {
-    void slashEntryUsageVersion;
-    return buildHomeSkillItems({
-      curatedTasks: curatedTaskTemplates,
-      serviceSkillHomeCopy,
-      catalogSceneEntries: homeCatalogSceneEntries,
-      serviceSkills: homeServiceSkillItems,
-      installedSkills: skillSelection.skills ?? [],
-      slashEntryUsage: listSlashEntryUsage(),
-    });
-  }, [
-    curatedTaskTemplates,
-    homeCatalogSceneEntries,
-    homeServiceSkillItems,
+  const {
+    galleryItems: homeGalleryItems,
+    guideCards: homeGuideCards,
+    inputSuggestions: homeInputSuggestions,
+    serviceSkillItems: homeServiceSkillItems,
+    skillItems: homeSkillItems,
+    skillSections: homeSkillSections,
+    starterChips: homeStarterChips,
+  } = useHomeSkillSurface({
+    copy: homeSurfaceCopy,
+    curatedTasks: curatedTaskTemplates,
+    installedSkills: skillSelection.skills ?? [],
     serviceSkillHomeCopy,
-    skillSelection.skills,
-    slashEntryUsageVersion,
-  ]);
-
-  const homeSkillSections = useMemo(
-    () => buildHomeSkillSections(homeSkillItems, homeSurfaceCopy),
-    [homeSkillItems, homeSurfaceCopy],
-  );
-  const homeGalleryItems = useMemo(
-    () => buildHomeGalleryItems(homeSkillItems, "all"),
-    [homeSkillItems],
+    serviceSkills: serviceSkills ?? [],
+  });
+  const guideHelpLabel = useMemo(
+    () =>
+      resolveGuideHelpLabel({
+        starterChips: homeStarterChips,
+        contextLabel: homeSurfaceCopy.guideHelpContextLabel,
+        contextLabelWithStarter:
+          homeSurfaceCopy.guideHelpContextLabelWithStarter,
+      }),
+    [homeStarterChips, homeSurfaceCopy],
   );
 
   const handleSelectHomeSkillItem = useCallback(
@@ -1433,42 +949,51 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   );
 
   const recentSessionLinkLabel = useMemo(() => {
-    const normalizedTitle = truncatePrompt(recentSessionTitle || "", 18);
-    const effectiveRecentSessionActionLabel =
-      recentSessionActionLabel ??
-      homeSurfaceCopy.chrome.recentSessionDefaultActionLabel;
-    if (!normalizedTitle) {
-      return effectiveRecentSessionActionLabel;
-    }
-    return `${effectiveRecentSessionActionLabel} · ${normalizedTitle}`;
+    return resolveRecentSessionLinkModel({
+      recentSessionTitle,
+      recentSessionSummary,
+      recentSessionActionLabel,
+      defaultActionLabel: homeSurfaceCopy.chrome.recentSessionDefaultActionLabel,
+    }).recentSessionLinkLabel;
   }, [
     homeSurfaceCopy.chrome.recentSessionDefaultActionLabel,
     recentSessionActionLabel,
+    recentSessionSummary,
     recentSessionTitle,
   ]);
   const recentSessionLinkTitle = useMemo(
     () =>
-      [recentSessionTitle, recentSessionSummary]
-        .map((value) => value?.trim())
-        .filter((value): value is string => Boolean(value))
-        .join(" · "),
-    [recentSessionSummary, recentSessionTitle],
+      resolveRecentSessionLinkModel({
+        recentSessionTitle,
+        recentSessionSummary,
+        recentSessionActionLabel,
+        defaultActionLabel:
+          homeSurfaceCopy.chrome.recentSessionDefaultActionLabel,
+      }).recentSessionLinkTitle,
+    [
+      homeSurfaceCopy.chrome.recentSessionDefaultActionLabel,
+      recentSessionActionLabel,
+      recentSessionSummary,
+      recentSessionTitle,
+    ],
   );
 
   const homeSupplementalActions = useMemo<HomeSupplementalAction[]>(() => {
-    const actions: HomeSupplementalAction[] = [];
+    const recentSessionAction = buildRecentSessionSupplementalAction({
+      recentSessionTitle,
+      recentSessionLinkLabel,
+      recentSessionLinkTitle,
+      hasResumeHandler: Boolean(onResumeRecentSession),
+    });
 
-    if (recentSessionTitle && onResumeRecentSession) {
-      actions.push({
-        id: "recent-session",
-        label: recentSessionLinkLabel,
-        title: recentSessionLinkTitle || undefined,
-        testId: "entry-recent-session-resume",
-        onSelect: onResumeRecentSession,
-      });
-    }
-
-    return actions;
+    return recentSessionAction && onResumeRecentSession
+      ? [
+          {
+            ...recentSessionAction,
+            onSelect: onResumeRecentSession,
+          },
+        ]
+      : [];
   }, [
     onResumeRecentSession,
     recentSessionLinkLabel,
@@ -1477,7 +1002,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   ]);
 
   const composerPanel = (
-    <ComposerGlowFrame>
+    <EmptyStateComposerFrame>
       <EmptyStateComposerPanel
         input={input}
         placeholder={
@@ -1570,13 +1095,18 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         fileManagerOpen={fileManagerOpen}
         onToggleFileManager={onToggleFileManager}
         inputSuggestions={
-          hasAutoLaunchSiteSkill || guideHelpActive ? [] : homeInputSuggestions
+          shouldExposeHomeInputSuggestions({
+            hasAutoLaunchSiteSkill,
+            guideHelpActive,
+          })
+            ? homeInputSuggestions
+            : []
         }
         guideHelpActive={guideHelpActive}
         guideHelpLabel={guideHelpLabel}
         onClearGuideHelp={() => setGuideHelpActive(false)}
       />
-    </ComposerGlowFrame>
+    </EmptyStateComposerFrame>
   );
 
   const defaultQuickActionsPanel = (
@@ -1608,64 +1138,19 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       onSelectSkillItem={handleSelectHomeSkillItem}
     />
   );
-  const handleSecondScreenWheel = useCallback(
-    (event: React.WheelEvent<HTMLElement>) => {
-      if (event.deltaY >= 0 || event.currentTarget.scrollTop > 1) {
-        return;
-      }
-
-      event.preventDefault();
-      pageContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-    },
-    [],
-  );
 
   return (
-    <PageContainer ref={pageContainerRef}>
-      <ContentWrapper>
-        <EmptyStateHero
-          eyebrow={homeSurfaceCopy.hero.eyebrow}
-          title=""
-          slogan={homeSurfaceCopy.hero.slogan}
-          description={homeSurfaceCopy.hero.description}
-          supportingDescription={homeSurfaceCopy.hero.supportingDescription}
-          cards={[]}
-          prioritySlot={composerPanel}
-          supportingSlot={
-            isGeneralTheme ? homeStartSurfacePanel : defaultQuickActionsPanel
-          }
-        />
-        {isGeneralTheme && homeGalleryItems.length > 0 ? (
-          <ScrollCue
-            href="#home-skill-gallery-screen"
-            data-testid="home-scroll-cue"
-            aria-label={homeSurfaceCopy.chrome.scrollCueLabel}
-          >
-            <ScrollCueLine aria-hidden />
-            <ScrollCueText>
-              {homeSurfaceCopy.chrome.scrollCueLabel}
-              <ScrollCueArrow aria-hidden>↓</ScrollCueArrow>
-            </ScrollCueText>
-            <ScrollCueLine aria-hidden />
-          </ScrollCue>
-        ) : null}
-      </ContentWrapper>
-      {isGeneralTheme && homeGalleryItems.length > 0 ? (
-        <SecondScreenSection
-          id="home-skill-gallery-screen"
-          aria-label={homeSurfaceCopy.chrome.secondScreenLabel}
-          data-testid="home-second-screen"
-          onWheel={handleSecondScreenWheel}
-        >
-          <SecondScreenInner>
-            <HomeSkillGallery
-              items={homeGalleryItems}
-              copy={homeSurfaceCopy.chrome}
-              onSelectItem={handleSelectHomeSkillItem}
-            />
-          </SecondScreenInner>
-        </SecondScreenSection>
-      ) : null}
+    <EmptyStateLayout
+      heroCopy={homeSurfaceCopy.hero}
+      chromeCopy={homeSurfaceCopy.chrome}
+      prioritySlot={composerPanel}
+      supportingSlot={
+        isGeneralTheme ? homeStartSurfacePanel : defaultQuickActionsPanel
+      }
+      isGeneralTheme={isGeneralTheme}
+      galleryItems={homeGalleryItems}
+      onSelectGalleryItem={handleSelectHomeSkillItem}
+    >
       <CuratedTaskLauncherDialog
         open={Boolean(curatedTaskLauncherTask)}
         task={curatedTaskLauncherTask}
@@ -1679,6 +1164,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         onApplyReviewSuggestion={handleApplyLauncherReviewSuggestion}
         onConfirm={handleApplyCuratedTaskTemplate}
       />
-    </PageContainer>
+    </EmptyStateLayout>
   );
 };

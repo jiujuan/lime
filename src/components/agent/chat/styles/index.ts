@@ -74,8 +74,8 @@ export const MessageListContainer = styled(ScrollArea)<{
       ? LIME_STAGE_SURFACE
       : `linear-gradient(
           180deg,
-          var(--lime-surface-muted, rgba(242, 247, 243, 0.66)) 0%,
-          var(--lime-surface-soft, rgba(248, 252, 249, 0.26)) 22%,
+          rgba(248, 250, 252, 0.62) 0%,
+          rgba(255, 255, 255, 0.48) 24%,
           rgba(255, 255, 255, 0) 100%
         )`};
 `;
@@ -111,6 +111,31 @@ export const MessageWrapper = styled.div<{
     margin-top: 8px;
     transform: translateY(0);
     pointer-events: auto;
+    overflow: visible;
+  }
+
+  .user-message-footer {
+    max-height: 0;
+    margin-top: 0;
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(-2px);
+    pointer-events: none;
+    transition:
+      opacity 0.18s ease,
+      max-height 0.18s ease,
+      margin-top 0.18s ease,
+      transform 0.18s ease;
+  }
+
+  &:hover .user-message-footer,
+  &:focus-within .user-message-footer {
+    max-height: 28px;
+    margin-top: 6px;
+    overflow: visible;
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
   }
 `;
 
@@ -136,29 +161,30 @@ export const MessageBubble = styled.div<{
         ? "min(72%, 560px)"
         : "min(100%, 1040px)"};
   padding: ${({ $isUser, $bareMedia }) =>
-    $isUser ? "12px 16px" : $bareMedia ? "0" : "0 4px"};
+    $isUser ? "6px 12px" : $bareMedia ? "0" : "0 4px"};
   display: flex;
   flex-direction: column;
   gap: ${({ $isUser, $bareMedia }) =>
     $isUser ? "8px" : $bareMedia ? "0" : "10px"};
   border-radius: ${({ $isUser, $bareMedia }) =>
-    $bareMedia || !$isUser ? "0" : "18px"};
+    $bareMedia || !$isUser ? "0" : "14px"};
   border: ${({ $isUser, $bareMedia }) =>
     $isUser && !$bareMedia
-        ? "1px solid var(--lime-surface-border-strong, rgba(187, 247, 208, 0.72))"
+        ? "1px solid rgba(229, 231, 235, 0.92)"
         : "0"};
   background: ${({ $isUser, $bareMedia }) =>
     $isUser && !$bareMedia
-        ? "linear-gradient(180deg, var(--lime-surface, #ffffff) 0%, var(--lime-brand-soft, #ecfdf5) 100%)"
+        ? "#f4f4f3"
         : "transparent"};
   box-shadow: ${({ $isUser, $bareMedia }) =>
     $isUser && !$bareMedia
-        ? "0 16px 36px -30px rgba(15, 23, 42, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.74)"
+        ? "none"
         : "none"};
   color: ${({ $isUser }) =>
-    $isUser ? "rgb(30, 41, 59)" : "var(--foreground)"};
-  font-size: 15px;
-  line-height: 1.7;
+    $isUser ? "rgb(31, 41, 55)" : "rgb(31, 41, 55)"};
+  font-size: ${({ $isUser }) => ($isUser ? "14px" : "15px")};
+  line-height: ${({ $isUser }) => ($isUser ? "1.58" : "1.72")};
+  font-weight: 400;
   position: relative;
 
   .markdown-renderer,
@@ -181,12 +207,12 @@ export const MessageActions = styled.div`
   align-self: flex-end;
   position: relative;
   z-index: 5;
-  max-height: 48px;
-  overflow: visible;
-  opacity: 1;
-  pointer-events: auto;
-  margin-top: 8px;
-  transform: translateY(0);
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  margin-top: 0;
+  transform: translateY(-2px);
   transition:
     opacity 0.18s ease,
     max-height 0.18s ease,

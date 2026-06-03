@@ -666,5 +666,11 @@
   "agentChat.inputIntent.imageGeneration.rules.includeAny": "配圖 | 圖片 | 圖像 | 插畫 | 海報 | 封面 | 主視覺 | 視覺 | 畫面 | 畫一張 | 畫個 | 生成一張 | 出一張 | 做一張 | 設計一張 | image | poster | cover",
   "agentChat.inputIntent.imageGeneration.rules.requireAny": "直式 | 橫版 | 方圖 | 比例 | 尺寸 | 留白 | 標題區 | 構圖 | 色調 | 配色 | 風格 | 水彩 | 插畫 | 攝影 | 電影感 | 海報 | 封面 | 主視覺 | 品牌視覺 | 背景 | 主體 | 字體 | 1:1 | 3:4 | 4:5 | 9:16 | 16:9 | 4:3 | 3:2 | 2:3 | 21:9 | 5:4",
   "agentChat.inputIntent.imageGeneration.rules.excludeAny": "提示詞 | prompt | 方案 | 文案 | 分析 | 拆解 | 描述 | 改寫 | 潤色 | 翻譯 | 總結 | 只要 | 不要生成 | 不要畫 | 先別生成 | 不需要生成 | no image",
-  "agentChat.inputIntent.imageGeneration.systemPrompt": "你是 Lime 的聊天入口意圖確認器。\n使用者這輪沒有使用明確圖片生成命令，但輸入可能是在請求生成圖片。\n本輪只能回覆這一句：{{confirmation}}\n不要輸出方案、完整提示詞、草圖或任務狀態，也不要呼叫任何圖片工具。"
+  "agentChat.inputIntent.imageGeneration.systemPrompt": "你是 Lime 的聊天入口意圖確認器。\n使用者這輪沒有使用明確圖片生成命令，但輸入可能是在請求生成圖片。\n本輪只能回覆這一句：{{confirmation}}\n不要輸出方案、完整提示詞、草圖或任務狀態，也不要呼叫任何圖片工具。",
+  "agentChat.threadReliability.panel.projection.metric.action": "操作 / HITL",
+  "agentChat.threadReliability.panel.projection.metric.task": "任務 / Agent",
+  "agentChat.threadReliability.panel.projection.metric.artifact": "製品",
+  "agentChat.threadReliability.panel.projection.metric.evidence": "證據",
+  "agentChat.threadReliability.panel.projection.metric.diagnostics": "診斷",
+  "agentChat.threadReliability.panel.fileCheckpoints.version": "v{{version}}"
 }

@@ -59,6 +59,76 @@ describe("vitest-layer-classifier unit boundary", () => {
     });
   });
 
+  it("普通字符串或注释中的浏览器词不应误归为 component", () => {
+    expect(
+      classifyVitestTestFile({
+        filePath: "src/i18n/__tests__/types.test.ts",
+        source: [
+          "import { describe, expect, it } from 'vitest';",
+          "const keys = [",
+          "  'workspace.document.editor.placeholder',",
+          "  'errors.svgRenderer.error.renderFailed',",
+          "  'settings.browser.window.navigator.label',",
+          "];",
+          "// document window localStorage 只是注释中的词",
+          "it('checks translation keys', () => expect(keys).toHaveLength(3));",
+        ].join("\n"),
+      }),
+    ).toMatchObject({
+      layer: "unit",
+      reasons: ["default:unit"],
+    });
+  });
+
+  it("真实浏览器全局对象代码引用仍应归为 component", () => {
+    const samples = [
+      {
+        filePath: "src/lib/api/skillCatalog.test.ts",
+        source:
+          "it('reads storage', () => expect(window.localStorage).toBeDefined());",
+      },
+      {
+        filePath: "src/lib/layered-design/analyzer.test.ts",
+        source:
+          "it('creates element', () => document.createElement('canvas'));",
+      },
+      {
+        filePath: "src/components/Foo.test.ts",
+        source: "it('matches media', () => expect(matchMedia('(dark)')).toBeDefined());",
+      },
+      {
+        filePath: "src/components/Foo.test.ts",
+        source:
+          "it('observes resize', () => expect(new ResizeObserver(() => undefined)).toBeDefined());",
+      },
+    ];
+
+    for (const sample of samples) {
+      expect(classifyVitestTestFile(sample)).toMatchObject({
+        layer: "component",
+        reasons: ["browser-dom"],
+      });
+    }
+  });
+
+  it("局部 document 领域对象不应误归为 component", () => {
+    expect(
+      classifyVitestTestFile({
+        filePath: "src/lib/layered-design/export.test.ts",
+        source: [
+          "import { describe, expect, it } from 'vitest';",
+          "it('exports layered document', () => {",
+          "  const document = createLayeredDesignDocument({ layers: [] });",
+          "  expect(document.layers).toHaveLength(0);",
+          "});",
+        ].join("\n"),
+      }),
+    ).toMatchObject({
+      layer: "unit",
+      reasons: ["default:unit"],
+    });
+  });
+
   it("显式 unit 后缀不能掩盖 React/jsdom 组件边界", () => {
     expect(
       classifyVitestTestFile({

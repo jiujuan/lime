@@ -2571,6 +2571,8 @@ interface UseWorkspaceSendActionsParams {
     | null;
   browserAssistAutoLaunch?: boolean | null;
   workspaceRequestMetadataBase?: Record<string, unknown>;
+  savedSoulArtifactVoiceGenerationBrief?: Record<string, unknown> | null;
+  soulArtifactVoiceEnabledForTurn?: boolean;
   serviceModels?: ServiceModelsConfig;
   agentResponseLanguage?: string | null;
   messages: Message[];
@@ -2724,6 +2726,8 @@ export function useWorkspaceSendActions({
   browserAssistPreferredBackend,
   browserAssistAutoLaunch,
   workspaceRequestMetadataBase,
+  savedSoulArtifactVoiceGenerationBrief,
+  soulArtifactVoiceEnabledForTurn,
   serviceModels,
   agentResponseLanguage,
   messages,
@@ -5172,6 +5176,8 @@ export function useWorkspaceSendActions({
 
         const nextRequestMetadata = buildWorkspaceRequestMetadata({
           workspaceRequestMetadataBase,
+          savedSoulArtifactVoiceGenerationBrief,
+          soulArtifactVoiceEnabledForTurn,
           sendOptions: {
             ...(sendOptions || {}),
             toolPreferencesOverride: effectiveToolPreferences,
@@ -5357,6 +5363,8 @@ export function useWorkspaceSendActions({
       setRuntimeTeamDispatchPreview,
       themeWorkbenchActiveQueueTitle,
       workspaceRequestMetadataBase,
+      savedSoulArtifactVoiceGenerationBrief,
+      soulArtifactVoiceEnabledForTurn,
     ],
   );
 

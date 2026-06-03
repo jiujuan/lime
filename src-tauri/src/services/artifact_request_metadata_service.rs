@@ -5,6 +5,10 @@
 
 use serde_json::{Map, Value};
 
+use crate::services::artifact_generation_brief_boundary_service::{
+    artifact_has_generation_brief_boundary, normalize_generation_brief_boundary_in_artifact,
+};
+
 const GENERAL_WORKBENCH_SESSION_MODE: &str = "general_workbench";
 const LEGACY_GENERAL_WORKBENCH_SESSION_MODE_ALIAS: &str = "theme_workbench";
 
@@ -25,8 +29,9 @@ const ARTIFACT_MEANINGFUL_KEYS: &[&str] = &[
     "artifactTargetBlockId",
     "artifact_rewrite_instruction",
     "artifactRewriteInstruction",
+    "generation_brief",
+    "generationBrief",
 ];
-
 fn normalize_text(value: Option<&str>) -> Option<String> {
     value
         .map(str::trim)
@@ -117,6 +122,8 @@ fn is_flat_artifact_metadata_key(key: &str) -> bool {
             | "artifactTargetBlockId"
             | "artifact_rewrite_instruction"
             | "artifactRewriteInstruction"
+            | "generation_brief"
+            | "generationBrief"
     )
 }
 
@@ -359,9 +366,11 @@ pub fn normalize_request_metadata_with_artifact_options(
     let mut normalized = root.clone();
     let has_meaningful_artifact_metadata = ARTIFACT_MEANINGFUL_KEYS
         .iter()
-        .any(|key| is_meaningful_artifact_value(artifact.get(*key)));
+        .any(|key| is_meaningful_artifact_value(artifact.get(*key)))
+        || artifact_has_generation_brief_boundary(&artifact);
 
     if has_meaningful_artifact_metadata {
+        normalize_generation_brief_boundary_in_artifact(&mut artifact);
         normalized.insert("artifact".to_string(), Value::Object(artifact));
     } else {
         normalized.remove("artifact");
@@ -430,6 +439,24 @@ mod tests {
                 .pointer("/artifact/artifact_request_id")
                 .and_then(Value::as_str),
             Some("artifact:content-1")
+        );
+        assert_eq!(
+            normalized
+                .pointer("/artifact/generation_brief/voice_source")
+                .and_then(Value::as_str),
+            Some("none")
+        );
+        assert_eq!(
+            normalized
+                .pointer("/artifact/generation_brief/voice_guard")
+                .and_then(Value::as_str),
+            Some("generation_brief_only")
+        );
+        assert_eq!(
+            normalized
+                .pointer("/artifact/generation_brief/inherits_global_soul")
+                .and_then(Value::as_bool),
+            Some(false)
         );
     }
 
@@ -528,6 +555,92 @@ mod tests {
                 .pointer("/artifact/artifact_mode")
                 .and_then(Value::as_str),
             None
+        );
+        assert_eq!(
+            normalized
+                .pointer("/artifact/generation_brief/voice_source")
+                .and_then(Value::as_str),
+            Some("none")
+        );
+    }
+
+    #[test]
+    fn should_preserve_explicit_generation_brief_boundary() {
+        let metadata = json!({
+            "artifact": {
+                "artifact_kind": "analysis",
+                "generationBrief": {
+                    "voiceSource": "brand_voice",
+                    "voiceGuard": "user_explicit",
+                    "inheritsGlobalSoul": false,
+                    "inheritsExpertPersona": false,
+                    "evidence_pack_id": "voice-pack-1"
+                }
+            }
+        });
+
+        let normalized = normalize_request_metadata_with_artifact_defaults(
+            Some(metadata),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("normalized metadata");
+
+        assert!(normalized.pointer("/artifact/generationBrief").is_none());
+        assert_eq!(
+            normalized
+                .pointer("/artifact/generation_brief/voice_source")
+                .and_then(Value::as_str),
+            Some("brand_voice")
+        );
+        assert_eq!(
+            normalized
+                .pointer("/artifact/generation_brief/voice_guard")
+                .and_then(Value::as_str),
+            Some("user_explicit")
+        );
+        assert_eq!(
+            normalized
+                .pointer("/artifact/generation_brief/evidence_pack_id")
+                .and_then(Value::as_str),
+            Some("voice-pack-1")
+        );
+    }
+
+    #[test]
+    fn should_preserve_generation_brief_boundary_without_artifact_contract_fields() {
+        let metadata = json!({
+            "artifact": {
+                "generationBrief": {
+                    "voiceSource": "brand_voice"
+                }
+            }
+        });
+
+        let normalized = normalize_request_metadata_with_artifact_defaults(
+            Some(metadata),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("normalized metadata");
+
+        assert_eq!(
+            normalized
+                .pointer("/artifact/generation_brief/voice_source")
+                .and_then(Value::as_str),
+            Some("brand_voice")
+        );
+        assert_eq!(
+            normalized
+                .pointer("/artifact/generation_brief/inherits_global_soul")
+                .and_then(Value::as_bool),
+            Some(false)
         );
     }
 

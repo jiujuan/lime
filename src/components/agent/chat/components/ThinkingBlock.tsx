@@ -87,13 +87,13 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
                   grouped ? "mt-2 h-2 w-2" : "mt-1.5 h-2.5 w-2.5",
                   isStreaming
                     ? "animate-pulse bg-sky-500 shadow-[0_0_0_4px_rgba(14,165,233,0.14)]"
-                    : "bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.14)]",
+                    : "bg-slate-400 shadow-[0_0_0_4px_rgba(148,163,184,0.14)]",
                 )}
               />
               <div className="min-w-0 flex-1">
                 <div
                   className={cn(
-                    "text-sm font-medium leading-6",
+                    "text-[13px] font-normal leading-6",
                     grouped ? "text-slate-700" : "text-slate-800",
                   )}
                 >

@@ -3,8 +3,6 @@ import type { ChatToolPreferences } from "./utils/chatToolPreferences";
 import { resolveWorkspaceEntry } from "./workspaceEntry";
 
 const defaultToolPreferences: ChatToolPreferences = {
-  webSearch: false,
-  thinking: false,
   task: false,
   subagent: false,
 };

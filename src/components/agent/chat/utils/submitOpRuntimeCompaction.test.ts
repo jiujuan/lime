@@ -43,8 +43,6 @@ describe("submitOpRuntimeCompaction", () => {
         model_name: "gpt-4.1",
         execution_strategy: "react",
         recent_preferences: {
-          webSearch: false,
-          thinking: true,
           task: false,
           subagent: true,
         },
@@ -74,8 +72,6 @@ describe("submitOpRuntimeCompaction", () => {
         recent_content_id: "content-social-1",
       },
       syncedRecentPreferences: {
-        webSearch: false,
-        thinking: true,
         task: false,
         subagent: true,
       },
@@ -122,8 +118,6 @@ describe("submitOpRuntimeCompaction", () => {
         model_name: "gpt-4.1",
         execution_strategy: "react",
         recent_preferences: {
-          webSearch: false,
-          thinking: false,
           task: false,
           subagent: false,
         },
@@ -134,8 +128,6 @@ describe("submitOpRuntimeCompaction", () => {
         recent_content_id: "content-social-1",
       },
       syncedRecentPreferences: {
-        webSearch: false,
-        thinking: false,
         task: false,
         subagent: false,
       },
@@ -209,8 +201,6 @@ describe("submitOpRuntimeCompaction", () => {
       },
       executionRuntime: null,
       syncedRecentPreferences: {
-        webSearch: false,
-        thinking: true,
         task: true,
         subagent: false,
       },
@@ -551,8 +541,6 @@ describe("submitOpRuntimeCompaction", () => {
         model_name: "gpt-4.1",
         execution_strategy: "react",
         recent_preferences: {
-          webSearch: false,
-          thinking: false,
           task: false,
           subagent: true,
         },
@@ -573,8 +561,6 @@ describe("submitOpRuntimeCompaction", () => {
         },
       },
       syncedRecentPreferences: {
-        webSearch: false,
-        thinking: false,
         task: false,
         subagent: true,
       },

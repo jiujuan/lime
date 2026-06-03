@@ -90,10 +90,13 @@ const COMPONENT_PATTERNS = [
     reason: "react-render",
     pattern: /\brender\s*\(|\bscreen\.|\bfireEvent\.|\buserEvent\.|\bwithin\s*\(|\bwaitFor\s*\(/,
   },
+];
+
+const BROWSER_DOM_COMPONENT_PATTERNS = [
   {
     reason: "browser-dom",
     pattern:
-      /\bwindow\b|\bdocument\b|\bnavigator\b|\blocalStorage\b|\bsessionStorage\b|\bResizeObserver\b|\bIntersectionObserver\b|\bmatchMedia\b/,
+      /\bwindow\s*\.|\bnavigator\s*\.|\bglobalThis\s*\.\s*(?:window|document|navigator|localStorage|sessionStorage|ResizeObserver|IntersectionObserver|matchMedia)\b|(?:^|[^\w$])(?:localStorage|sessionStorage)\s*\.|\bnew\s+(?:ResizeObserver|IntersectionObserver)\b|(?:^|[^\w$])matchMedia\s*\(|\bdocument\s*\.\s*(?:createElement|createTextNode|querySelector|querySelectorAll|getElementById|getElementsByClassName|getElementsByTagName|body|documentElement|head|activeElement|addEventListener|removeEventListener|dispatchEvent|cookie|title|visibilityState|fonts)\b/,
   },
 ];
 
@@ -144,6 +147,15 @@ function matchReasons(patterns, input) {
   return patterns
     .filter(({ pattern }) => pattern.test(input))
     .map(({ reason }) => reason);
+}
+
+function stripTextLiteralsAndComments(source) {
+  return String(source || "")
+    .replace(/`(?:\\[\s\S]|[^`\\])*`/g, " ")
+    .replace(/"(?:\\[\s\S]|[^"\\])*"/g, " ")
+    .replace(/'(?:\\[\s\S]|[^'\\])*'/g, " ")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[^:\\])\/\/.*$/gm, "$1 ");
 }
 
 function countPattern(source, pattern) {
@@ -256,7 +268,13 @@ export function classifyVitestTestFile({ filePath, source = "" }) {
     );
   }
 
-  const componentReasons = matchReasons(COMPONENT_PATTERNS, text);
+  const componentReasons = [
+    ...matchReasons(COMPONENT_PATTERNS, text),
+    ...matchReasons(
+      BROWSER_DOM_COMPONENT_PATTERNS,
+      stripTextLiteralsAndComments(source),
+    ),
+  ];
   if (componentReasons.length > 0 || includesTsxPath(normalizedPath)) {
     if (shouldUseExplicitLayer(explicitLayer, "component")) {
       return createLayerClassification(

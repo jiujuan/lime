@@ -61,12 +61,12 @@ describe("agentStreamErrorController", () => {
       previousContent: "",
     });
 
-    expect(patch.content).toContain("当前模型通道返回了计费或额度类错误");
+    expect(patch.content).toBe("");
     expect(patch.runtimeStatus?.detail).toContain(
       "当前模型通道返回了计费或额度类错误",
     );
-    expect(patch.content).not.toContain("Payment Required");
-    expect(patch.content).not.toContain("Insufficient Balance");
+    expect(patch.runtimeStatus?.detail).not.toContain("Payment Required");
+    expect(patch.runtimeStatus?.detail).not.toContain("Insufficient Balance");
   });
 
   it("Provider 402 失败 timeline summary 应使用友好提示", () => {
@@ -117,7 +117,7 @@ describe("agentStreamErrorController", () => {
     });
   });
 
-  it("失败 patch 应保留既有过程 part，并用失败正文替换 text part", () => {
+  it("无正文失败 patch 应保留既有过程 part，并移除重复失败正文", () => {
     const patch = buildAgentStreamFailedAssistantMessagePatch({
       accumulatedContent: "",
       errorMessage: "模型未输出最终答复，请重试",
@@ -145,11 +145,9 @@ describe("agentStreamErrorController", () => {
         type: "tool_use",
         toolCall: expect.objectContaining({ id: "tool-1" }),
       }),
-      {
-        type: "text",
-        text: "执行失败：模型未输出最终答复，请重试",
-      },
     ]);
+    expect(patch.content).toBe("");
+    expect(patch.runtimeStatus?.detail).toBe("模型未输出最终答复，请重试");
   });
 
   it("应构造错误失败副作用计划", () => {

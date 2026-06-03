@@ -143,8 +143,6 @@ function renderScene(
       setAccessMode: vi.fn(),
       onManageProviders: vi.fn(),
       toolPreferences: {
-        webSearch: false,
-        thinking: false,
         task: false,
         subagent: false,
       },

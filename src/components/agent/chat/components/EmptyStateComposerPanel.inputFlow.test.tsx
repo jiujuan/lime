@@ -1,0 +1,211 @@
+import { act } from "react";
+import { describe, expect, it, vi } from "vitest";
+import {
+  renderPanel,
+  updateTextareaValue,
+} from "./EmptyStateComposerPanel.testFixtures";
+
+describe("EmptyStateComposerPanel", () => {
+  it("输入为空时展示 Tab 起手建议，按 Tab 后填入当前建议", async () => {
+    const container = renderPanel({
+      inputSuggestions: [
+        {
+          id: "suggestion-email",
+          label: "帮我写一封工作邮件",
+          prompt: "请帮我写一封工作邮件。",
+          order: 10,
+        },
+      ],
+    });
+
+    expect(
+      container.querySelector('[data-testid="home-input-tab-suggestion"]')
+        ?.textContent,
+    ).toContain("帮我写一封工作邮件");
+
+    const textarea = container.querySelector("textarea");
+    await act(async () => {
+      textarea?.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Tab",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(
+      (container.querySelector("textarea") as HTMLTextAreaElement).value,
+    ).toBe("请帮我写一封工作邮件。");
+    expect(
+      container.querySelector('[data-testid="home-input-tab-suggestion"]'),
+    ).toBeNull();
+  });
+
+  it("Shift+Tab 保持焦点切换，不填入起手建议", () => {
+    const container = renderPanel({
+      inputSuggestions: [
+        {
+          id: "suggestion-email",
+          label: "帮我写一封工作邮件",
+          prompt: "请帮我写一封工作邮件。",
+          order: 10,
+        },
+      ],
+    });
+
+    const textarea = container.querySelector("textarea");
+    act(() => {
+      textarea?.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Tab",
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+
+    expect(
+      (container.querySelector("textarea") as HTMLTextAreaElement).value,
+    ).toBe("");
+  });
+
+  it("引导帮助模式应展示可关闭的上下文 badge 并隐藏 Tab 起手建议", () => {
+    const onClearGuideHelp = vi.fn();
+    const container = renderPanel({
+      guideHelpActive: true,
+      guideHelpLabel: "Lime 引导帮助",
+      onClearGuideHelp,
+      inputSuggestions: [
+        {
+          id: "suggestion-meeting",
+          label: "帮我整理一下会议纪要",
+          prompt: "帮我整理一下会议纪要。",
+          order: 10,
+        },
+      ],
+    });
+
+    expect(
+      container.querySelector('[data-testid="home-guide-help-active-badge"]')
+        ?.textContent,
+    ).toContain("Lime 引导帮助");
+    expect(
+      container.querySelector('[data-testid="home-guide-help-toolbar-badge"]')
+        ?.textContent,
+    ).toContain("引导帮助");
+    expect(
+      container.querySelector('[data-testid="home-input-tab-suggestion"]'),
+    ).toBeNull();
+
+    const closeButton = container.querySelector(
+      '[data-testid="home-guide-help-active-badge"] button',
+    ) as HTMLButtonElement | null;
+    act(() => {
+      closeButton?.click();
+    });
+
+    expect(onClearGuideHelp).toHaveBeenCalledTimes(1);
+
+    const toolbarCloseButton = container.querySelector(
+      '[data-testid="home-guide-help-toolbar-badge"]',
+    ) as HTMLButtonElement | null;
+    act(() => {
+      toolbarCloseButton?.click();
+    });
+
+    expect(onClearGuideHelp).toHaveBeenCalledTimes(2);
+  });
+
+  it("应将 onPaste 绑定到输入框", () => {
+    const onPaste = vi.fn();
+    const container = renderPanel({ onPaste });
+    const textarea = container.querySelector("textarea");
+
+    expect(textarea).toBeTruthy();
+
+    act(() => {
+      textarea?.dispatchEvent(new Event("paste", { bubbles: true }));
+    });
+
+    expect(onPaste).toHaveBeenCalledTimes(1);
+  });
+
+  it("发送时应把本地草稿显式传给首页发送链", () => {
+    const onSend = vi.fn();
+    const container = renderPanel({ onSend });
+    const textarea = container.querySelector("textarea");
+
+    updateTextareaValue(textarea, "帮我快速开一个新对话");
+
+    const sendButton = container.querySelector(
+      'button[title="发送"]',
+    ) as HTMLButtonElement | null;
+
+    expect(sendButton?.disabled).toBe(false);
+
+    act(() => {
+      sendButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onSend).toHaveBeenCalledWith("帮我快速开一个新对话");
+  });
+
+  it("发送准备中应禁用首页发送入口并展示忙碌态", () => {
+    const onSend = vi.fn();
+    const container = renderPanel({
+      input: "请帮我梳理首页首次发送链路",
+      isLoading: true,
+      disabled: true,
+      onSend,
+    });
+
+    const textarea = container.querySelector(
+      "textarea",
+    ) as HTMLTextAreaElement | null;
+    const pendingButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("稍后处理"),
+    ) as HTMLButtonElement | undefined;
+
+    expect(textarea?.disabled).toBe(true);
+    expect(pendingButton).toBeTruthy();
+    expect(pendingButton?.disabled).toBe(true);
+    expect(container.querySelector('button[title="发送"]')).toBeNull();
+
+    act(() => {
+      pendingButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("有待发送图片时应显示预览并支持删除", () => {
+    const onRemoveImage = vi.fn();
+    const container = renderPanel({
+      pendingImages: [
+        {
+          data: "aGVsbG8=",
+          mediaType: "image/png",
+        },
+      ],
+      onRemoveImage,
+    });
+
+    expect(container.querySelector('img[alt="预览 1"]')).toBeTruthy();
+
+    const removeButton = container.querySelector(
+      'button[aria-label="移除图片 1"]',
+    ) as HTMLButtonElement | null;
+
+    expect(removeButton).toBeTruthy();
+
+    act(() => {
+      removeButton?.click();
+    });
+
+    expect(onRemoveImage).toHaveBeenCalledWith(0);
+  });
+
+});

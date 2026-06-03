@@ -14,6 +14,9 @@ const PROVIDER_SESSION_EXPIRED_ERROR_MESSAGE =
 const PROVIDER_CHANNEL_ERROR_MESSAGE =
   "当前模型通道暂不可用，请前往设置 -> AI 服务商检查 Provider 配置，必要时切换模型后重试。";
 
+const PROVIDER_UNAVAILABLE_ERROR_MESSAGE =
+  "当前模型通道暂时不可用，请稍后重试；如果持续失败，请检查 Provider 状态或切换到其他可用模型。";
+
 const INTERNAL_RUNTIME_ERROR_MESSAGE =
   "运行时返回内部错误，已保留详情用于排查。请稍后重试，或检查服务商与工具连接状态。";
 
@@ -24,7 +27,7 @@ function normalizeRuntimeErrorMessage(errorMessage: string): string {
 
 function looksLikeHttpStatus(
   message: string,
-  status: "401" | "402" | "403",
+  status: "401" | "402" | "403" | "503",
 ): boolean {
   return new RegExp(`(^|\\D)${status}(\\D|$)`).test(message);
 }
@@ -113,6 +116,17 @@ function isLikelyProviderChannelError(message: string): boolean {
   return message.includes("no available channel for model");
 }
 
+function isLikelyProviderUnavailableError(message: string): boolean {
+  return (
+    looksLikeHttpStatus(message, "503") ||
+    includesAny(message, [
+      "service unavailable",
+      "temporarily unavailable",
+      "provider request failed with status: 503",
+    ])
+  );
+}
+
 function isLikelyInternalRuntimeTransportError(message: string): boolean {
   return (
     includesAny(message, ["-32603", "-32002", "troubleshooting"]) ||
@@ -143,6 +157,17 @@ export function resolveAgentRuntimeErrorPresentation(errorMessage: string): {
     return {
       displayMessage: PROVIDER_CHANNEL_ERROR_MESSAGE,
       toastMessage: PROVIDER_CHANNEL_ERROR_MESSAGE,
+    };
+  }
+
+  if (isLikelyProviderUnavailableError(lowerMessage)) {
+    const message = readAgentRuntimeCopy(
+      "agentChat.runtimeError.providerUnavailable",
+      PROVIDER_UNAVAILABLE_ERROR_MESSAGE,
+    );
+    return {
+      displayMessage: message,
+      toastMessage: message,
     };
   }
 

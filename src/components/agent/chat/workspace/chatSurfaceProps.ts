@@ -23,8 +23,6 @@ export interface AgentUiTeamWorkbenchPromptMetadata {
 }
 
 type ChatToolPreferences = {
-  webSearch: boolean;
-  thinking: boolean;
   task: boolean;
   subagent: boolean;
 };

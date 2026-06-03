@@ -15,6 +15,8 @@ import type {
 } from "../types";
 
 const parseAIResponseMock = vi.fn();
+const listAgentRuntimeFileCheckpointsMock = vi.fn();
+const restoreAgentRuntimeFileCheckpointMock = vi.fn();
 const mockMarkdownRenderer = vi.fn(
   ({
     content,
@@ -48,23 +50,87 @@ vi.mock("@/lib/artifact/hooks/useDebouncedValue", () => ({
   useDebouncedValue: <T,>(value: T) => value,
 }));
 
+vi.mock("@/lib/api/agentRuntime", () => ({
+  listAgentRuntimeFileCheckpoints: (...args: unknown[]) =>
+    listAgentRuntimeFileCheckpointsMock(...args),
+  restoreAgentRuntimeFileCheckpoint: (...args: unknown[]) =>
+    restoreAgentRuntimeFileCheckpointMock(...args),
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, values?: Record<string, unknown>) => {
       if (key === "agentChat.fileChangesSummary.summary") {
-        return `${values?.count ?? 0} 个文件已更改`;
+        return `已编辑 ${values?.count ?? 0} 个文件`;
       }
       if (key === "agentChat.fileChangesSummary.review") {
-        return "在此审查";
+        return "审核";
       }
-      if (key === "agentChat.fileChangesSummary.guide") {
-        return "引导";
+      if (key === "agentChat.fileChangesSummary.undo") {
+        return "撤销";
+      }
+      if (key === "agentChat.fileChangesSummary.undoUnavailable") {
+        return "没有可用的文件快照";
+      }
+      if (key === "agentChat.fileChangesSummary.undoConfirmTitle") {
+        return "撤销这些文件改动？";
+      }
+      if (key === "agentChat.fileChangesSummary.undoConfirmDescription") {
+        return `将从运行时文件快照恢复 ${values?.count ?? 0} 个文件，并保留当前文件备份。`;
+      }
+      if (key === "agentChat.fileChangesSummary.undoConfirmAction") {
+        return "确认撤销";
+      }
+      if (key === "agentChat.fileChangesSummary.undoCancel") {
+        return "取消";
+      }
+      if (key === "agentChat.fileChangesSummary.undoRestoring") {
+        return "正在撤销文件改动…";
+      }
+      if (key === "agentChat.fileChangesSummary.undoSuccess") {
+        return `已撤销 ${values?.count ?? 0} 个文件改动`;
+      }
+      if (key === "agentChat.fileChangesSummary.undoFailed") {
+        return `撤销失败：${values?.error ?? ""}`;
+      }
+      if (key.startsWith("agentChat.fileChangesSummary.undoError.")) {
+        return key;
+      }
+      if (key === "agentChat.fileChangesSummary.expandFiles") {
+        return `展开其余 ${values?.count ?? 0} 个文件`;
+      }
+      if (key === "agentChat.fileChangesSummary.collapseFiles") {
+        return "收起文件";
       }
       if (key === "agentChat.fileChangesSummary.writing") {
         return "正在写入文件…";
       }
-      if (key === "agentChat.fileChangesSummary.truncated") {
-        return `… (+${values?.added ?? 0} −${values?.removed ?? 0} 行，diff 已截断)`;
+      if (key === "agentChat.fileChangesSummary.reviewCanvasTitle") {
+        return `${values?.path ?? ""} 的变更审阅`;
+      }
+      if (key === "agentChat.fileChangesSummary.reviewCanvasStatus") {
+        return `状态：${values?.status ?? ""}`;
+      }
+      if (key === "agentChat.fileChangesSummary.reviewStatus.modified") {
+        return "修改";
+      }
+      if (key === "agentChat.fileChangesSummary.reviewStatus.added") {
+        return "新增";
+      }
+      if (key === "agentChat.fileChangesSummary.reviewStatus.deleted") {
+        return "删除";
+      }
+      if (key === "agentChat.fileChangesSummary.reviewStatus.unknown") {
+        return "变更";
+      }
+      if (key === "agentChat.fileChangesSummary.reviewAdditions") {
+        return `+${values?.count ?? 0} 行`;
+      }
+      if (key === "agentChat.fileChangesSummary.reviewDeletions") {
+        return `-${values?.count ?? 0} 行`;
+      }
+      if (key === "agentChat.fileChangesSummary.reviewHunks") {
+        return `${values?.count ?? 0} 处变更`;
       }
       return key;
     },
@@ -186,6 +252,7 @@ function renderHarness(props: {
     context?: WriteArtifactContext,
   ) => void;
   onFileClick?: (fileName: string, content: string) => void;
+  fileChangesUndoSessionId?: string | null;
   onOpenSavedSiteContent?: (target: {
     projectId: string;
     contentId: string;
@@ -262,6 +329,55 @@ describe("StreamingRenderer", () => {
       container.querySelector('[data-testid="streaming-process-group"]'),
     ).toBeTruthy();
     expect(container.textContent).toContain("已经整理出 3 个可信来源。");
+  });
+
+  it("交错检索过程不应把工具前后的短过渡片段渲染成正文", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "text",
+          text: "我",
+        },
+        {
+          type: "thinking",
+          text: "Searching for current sources.",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-source-search-renderer",
+            name: "WebSearch",
+            arguments: JSON.stringify({ query: "current sources" }),
+            status: "completed",
+            result: { success: true, output: "ok" },
+            startTime: new Date("2026-06-02T09:00:00.000Z"),
+            endTime: new Date("2026-06-02T09:00:01.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "先联网核实可用来源。",
+        },
+        {
+          type: "text",
+          text: "调研简报：\n\n- 已确认主要来源。",
+        },
+      ],
+      isStreaming: false,
+    });
+
+    expect(
+      container.querySelector('[data-testid="streaming-process-group"]'),
+    ).toBeTruthy();
+    expect(container.textContent).not.toContain(
+      "Searching for current sources",
+    );
+    expect(container.textContent).not.toContain("先联网核实");
+    expect(container.textContent).not.toContain("我先");
+    expect(container.textContent).not.toContain("我");
+    expect(container.textContent).toContain("调研简报");
+    expect(container.textContent).toContain("已确认主要来源");
   });
 
   it("应过滤 assistant 正文中的工具协议残留", () => {
@@ -450,7 +566,7 @@ describe("StreamingRenderer", () => {
     ).toBeNull();
   });
 
-  it("文件变更批次应渲染为审查卡并默认列出改动预览", () => {
+  it("文件变更批次应渲染为可展开的文件审查卡", () => {
     const onFileClick = vi.fn();
     const { container } = renderHarness({
       content: "",
@@ -473,7 +589,8 @@ describe("StreamingRenderer", () => {
                 diff: [
                   {
                     kind: "add",
-                    value: "主图里面的编辑，比如文字拖拽、放大、缩小、选择字号、选择字体这些都还不能用",
+                    value:
+                      "主图里面的编辑，比如文字拖拽、放大、缩小、选择字号、选择字体这些都还不能用",
                   },
                   {
                     kind: "add",
@@ -481,7 +598,8 @@ describe("StreamingRenderer", () => {
                   },
                   {
                     kind: "add",
-                    value: "样板中心的厂家这里直接多个厂家标签切换，显示出他的最新样板款式的列表",
+                    value:
+                      "样板中心的厂家这里直接多个厂家标签切换，显示出他的最新样板款式的列表",
                   },
                   {
                     kind: "add",
@@ -500,29 +618,250 @@ describe("StreamingRenderer", () => {
       onFileClick,
     });
 
-    const card = container.querySelector('[data-testid="file-changes-summary-card"]');
+    const card = container.querySelector(
+      '[data-testid="file-changes-summary-card"]',
+    );
     expect(card).not.toBeNull();
-    expect(card?.textContent).toContain("1 个文件已更改");
+    expect(card?.textContent).toContain("已编辑 1 个文件");
     expect(card?.textContent).toContain("+18");
     expect(card?.textContent).toContain("-7");
-    expect(card?.textContent).toContain("在此审查");
-    expect(card?.textContent).toContain("引导");
+    expect(card?.textContent).toContain("审核");
+    expect(card?.textContent).toContain("撤销");
     expect(
-      container.querySelectorAll('[data-testid="file-changes-summary-row"]'),
-    ).toHaveLength(4);
-    expect(card?.textContent).toContain("主图里面的编辑");
+      container.querySelectorAll(
+        '[data-testid="file-changes-summary-file-row"]',
+      ),
+    ).toHaveLength(1);
+    expect(card?.textContent).toContain("src/components/CreationFlow.tsx");
+    expect(card?.textContent).not.toContain("主图里面的编辑");
     expect(card?.textContent).not.toContain("旧的主图入口说明");
 
-    const reviewButton = Array.from(card?.querySelectorAll("button") || []).find(
-      (button) => button.textContent?.includes("在此审查"),
-    );
+    const reviewButton = Array.from(
+      card?.querySelectorAll("button") || [],
+    ).find((button) => button.textContent?.includes("审核"));
     act(() => {
       reviewButton?.click();
     });
-    expect(onFileClick).toHaveBeenCalledWith(
+    expect(onFileClick).toHaveBeenCalledTimes(1);
+    expect(onFileClick.mock.calls[0]?.[0]).toBe(
       "src/components/CreationFlow.tsx",
-      "",
     );
+    expect(onFileClick.mock.calls[0]?.[1]).toContain(
+      "# src/components/CreationFlow.tsx 的变更审阅",
+    );
+    expect(onFileClick.mock.calls[0]?.[1]).toContain("- 状态：修改");
+    expect(onFileClick.mock.calls[0]?.[1]).toContain("+主图里面的编辑");
+    expect(onFileClick.mock.calls[0]?.[1]).toContain("-旧的主图入口说明");
+    expect(card?.textContent).not.toContain("主图里面的编辑");
+
+    const fileRow = container.querySelector(
+      '[data-testid="file-changes-summary-file-row"]',
+    ) as HTMLButtonElement | null;
+    act(() => {
+      fileRow?.click();
+    });
+    expect(onFileClick).toHaveBeenCalledTimes(2);
+    expect(fileRow?.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("文件变更审查卡应支持折叠长文件列表；缺少 session 时撤销不可用", () => {
+    const files = Array.from({ length: 8 }, (_, index) => ({
+      path: `src/generated/file-${index + 1}.ts`,
+      kind: "update" as const,
+      linesAdded: index + 1,
+      linesRemoved: index,
+      truncated: false,
+      source: "backend" as const,
+      status: "completed" as const,
+      diff: [{ kind: "add" as const, value: `新增第 ${index + 1} 行` }],
+    }));
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "file_changes_batch",
+          aggregate: {
+            fileCount: files.length,
+            totalAdded: 36,
+            totalRemoved: 28,
+            files,
+          },
+        },
+      ],
+    });
+
+    const card = container.querySelector(
+      '[data-testid="file-changes-summary-card"]',
+    );
+    expect(card?.textContent).toContain("已编辑 8 个文件");
+    expect(card?.textContent).toContain("收起文件");
+    expect(
+      container.querySelectorAll(
+        '[data-testid="file-changes-summary-file-row"]',
+      ),
+    ).toHaveLength(8);
+
+    const undoButton = Array.from(card?.querySelectorAll("button") || []).find(
+      (button) => button.textContent?.includes("撤销"),
+    ) as HTMLButtonElement | undefined;
+    expect(undoButton?.disabled).toBe(true);
+    expect(undoButton?.title).toBe("没有可用的文件快照");
+
+    const toggle = container.querySelector(
+      '[data-testid="file-changes-summary-toggle"]',
+    ) as HTMLButtonElement | null;
+    act(() => {
+      toggle?.click();
+    });
+
+    expect(card?.textContent).toContain("展开其余 2 个文件");
+    expect(
+      container.querySelectorAll(
+        '[data-testid="file-changes-summary-file-row"]',
+      ),
+    ).toHaveLength(6);
+  });
+
+  it("文件变更审查卡撤销应通过 session checkpoint 调用真实恢复命令", async () => {
+    listAgentRuntimeFileCheckpointsMock.mockResolvedValue({
+      session_id: "session-code-runtime",
+      thread_id: "thread-code-runtime",
+      checkpoint_count: 1,
+      checkpoints: [
+        {
+          checkpoint_id: "checkpoint-greeting",
+          turn_id: "turn-code-runtime",
+          path: ".lime/qc/code-runtime-fixture/src/greeting.ts",
+          snapshot_path: ".lime/file-checkpoints/checkpoint-greeting.ts",
+          source: "artifact_snapshot",
+          updated_at: "2026-06-02T10:01:00.000Z",
+          validation_issue_count: 0,
+        },
+      ],
+    });
+    restoreAgentRuntimeFileCheckpointMock.mockResolvedValue({
+      session_id: "session-code-runtime",
+      thread_id: "thread-code-runtime",
+      checkpoint: { checkpoint_id: "checkpoint-greeting" },
+      live_path: "src/greeting.ts",
+      snapshot_path: ".lime/checkpoints/greeting.ts",
+      backup_path: ".lime/file-checkpoint-backups/greeting.ts",
+      restored_at: "2026-06-02T10:02:00.000Z",
+    });
+
+    const { container } = renderHarness({
+      content: "",
+      fileChangesUndoSessionId: "session-code-runtime",
+      contentParts: [
+        {
+          type: "file_changes_batch",
+          aggregate: {
+            fileCount: 1,
+            totalAdded: 3,
+            totalRemoved: 1,
+            files: [
+              {
+                path: "src/greeting.ts",
+                kind: "update",
+                linesAdded: 3,
+                linesRemoved: 1,
+                truncated: false,
+                source: "backend",
+                status: "completed",
+                diff: [],
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    const card = container.querySelector(
+      '[data-testid="file-changes-summary-card"]',
+    );
+    const undoButton = Array.from(card?.querySelectorAll("button") || []).find(
+      (button) => button.textContent?.includes("撤销"),
+    ) as HTMLButtonElement | undefined;
+    expect(undoButton?.disabled).toBe(false);
+
+    act(() => {
+      undoButton?.click();
+    });
+
+    const confirmButton = container.querySelector(
+      '[data-testid="file-changes-summary-undo-confirm"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      confirmButton?.click();
+    });
+
+    expect(listAgentRuntimeFileCheckpointsMock).toHaveBeenCalledWith({
+      session_id: "session-code-runtime",
+    });
+    expect(restoreAgentRuntimeFileCheckpointMock).toHaveBeenCalledWith({
+      session_id: "session-code-runtime",
+      checkpoint_id: "checkpoint-greeting",
+      confirm_restore: true,
+      create_backup: true,
+    });
+    expect(container.textContent).toContain("已撤销 1 个文件改动");
+  });
+
+  it("文件变更审查卡应隐藏绝对路径前缀并向工作台传入完整 diff", () => {
+    const onFileClick = vi.fn();
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "file_changes_batch",
+          aggregate: {
+            fileCount: 1,
+            totalAdded: 1,
+            totalRemoved: 1,
+            files: [
+              {
+                path: "/Users/coso/Library/Application Support/lime/projects/Demo/.lime/qc/code-runtime-fixture/src/greeting.ts",
+                kind: "update",
+                linesAdded: 1,
+                linesRemoved: 1,
+                truncated: false,
+                source: "backend",
+                status: "completed",
+                diff: [
+                  { kind: "context", value: "const a = 1;" },
+                  { kind: "context", value: "const b = 2;" },
+                  { kind: "context", value: "const c = 3;" },
+                  { kind: "remove", value: "旧 runtime 入口" },
+                  { kind: "add", value: "新 runtime 入口" },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+      onFileClick,
+    });
+
+    const fileRow = container.querySelector(
+      '[data-testid="file-changes-summary-file-row"]',
+    ) as HTMLButtonElement | null;
+    expect(container.textContent).toContain(
+      ".lime/qc/code-runtime-fixture/src/greeting.ts",
+    );
+    expect(container.textContent).not.toContain(
+      "/Users/coso/Library/Application Support/lime/projects/Demo",
+    );
+
+    act(() => {
+      fileRow?.click();
+    });
+
+    expect(onFileClick.mock.calls[0]?.[0]).toBe(
+      "/Users/coso/Library/Application Support/lime/projects/Demo/.lime/qc/code-runtime-fixture/src/greeting.ts",
+    );
+    expect(onFileClick.mock.calls[0]?.[1]).toContain(" const a = 1;");
+    expect(onFileClick.mock.calls[0]?.[1]).toContain("-旧 runtime 入口");
+    expect(onFileClick.mock.calls[0]?.[1]).toContain("+新 runtime 入口");
   });
 
   it("普通工具列表应透传已保存站点内容打开回调", () => {
@@ -608,9 +947,9 @@ describe("StreamingRenderer", () => {
       processGroupButton?.click();
     });
 
-    const markdownButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("在下方预览导出 Markdown"),
-    );
+    const markdownButton = Array.from(
+      container.querySelectorAll("button"),
+    ).find((button) => button.textContent?.includes("在下方预览导出 Markdown"));
     expect(markdownButton).toBeTruthy();
 
     act(() => {
@@ -781,9 +1120,8 @@ describe("StreamingRenderer", () => {
     expect(container.textContent).toContain("已运行 3 条命令");
     expect(container.textContent).not.toContain("先盘点目录");
     expect(
-      container.querySelectorAll(
-        '[data-testid="inline-tool-process-step"]',
-      ).length,
+      container.querySelectorAll('[data-testid="inline-tool-process-step"]')
+        .length,
     ).toBe(0);
     expect(container.textContent).toContain("目录已盘点。");
 
@@ -797,6 +1135,346 @@ describe("StreamingRenderer", () => {
     expect(expandedToolSteps.length).toBe(3);
     expect(expandedToolSteps[0]?.getAttribute("data-grouped")).toBe("yes");
     expect(container.textContent).toContain("先盘点目录");
+  });
+
+  it("消息仍在输出时，已失败的工具批次也应默认折叠，避免工具输出切开正文", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "text",
+          text: "## 调研简报\n\n摘要：已整理出当前可用的主要来源。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-failed-after-answer-1",
+            name: "WebSearch",
+            arguments: JSON.stringify({ query: "current sources" }),
+            status: "failed",
+            result: {
+              success: false,
+              output: "Execution failed: HTTP 401 Unknown Error",
+            },
+            startTime: new Date("2026-06-02T09:00:00.000Z"),
+            endTime: new Date("2026-06-02T09:00:01.000Z"),
+          },
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-failed-after-answer-2",
+            name: "WebFetch",
+            arguments: JSON.stringify({ url: "https://example.com/source" }),
+            status: "failed",
+            result: {
+              success: false,
+              output: "Fetching data issues",
+            },
+            startTime: new Date("2026-06-02T09:00:02.000Z"),
+            endTime: new Date("2026-06-02T09:00:03.000Z"),
+          },
+        },
+      ],
+      isStreaming: true,
+    });
+
+    const processGroup = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+
+    expect(processGroup?.getAttribute("aria-expanded")).toBe("false");
+    expect(container.textContent).toContain("调研简报");
+    expect(container.textContent).toContain("失败 2 个步骤");
+    expect(container.textContent).not.toContain("Execution failed");
+    expect(container.textContent).not.toContain("Fetching data issues");
+  });
+
+  it("消息仍在输出时，运行中的工具批次也应默认折叠，避免实时输出切开正文", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "text",
+          text: "我先核实今天的国际新闻，再整理成简报。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-running-fetch-1",
+            name: "WebFetch",
+            arguments: JSON.stringify({ url: "https://example.com/world" }),
+            status: "running",
+            result: {
+              success: true,
+              output: "raw html payload should stay hidden while grouped",
+            },
+            startTime: new Date("2026-06-02T09:00:00.000Z"),
+          },
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-running-fetch-2",
+            name: "WebFetch",
+            arguments: JSON.stringify({ url: "https://example.com/news" }),
+            status: "completed",
+            result: {
+              success: true,
+              output: "another raw payload should stay hidden while grouped",
+            },
+            startTime: new Date("2026-06-02T09:00:02.000Z"),
+            endTime: new Date("2026-06-02T09:00:03.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "## 国际新闻简报\n\n- 正在整理已确认来源。",
+        },
+      ],
+      isStreaming: true,
+    });
+
+    const processGroup = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+
+    expect(processGroup?.getAttribute("aria-expanded")).toBe("false");
+    expect(container.textContent).toContain("我先核实今天的国际新闻");
+    expect(container.textContent).toContain("已搜索关键线索");
+    expect(container.textContent).toContain("国际新闻简报");
+    expect(container.textContent).not.toContain("raw html payload");
+    expect(container.textContent).not.toContain("another raw payload");
+  });
+
+  it("交错网页搜索应作为同一条回复里的轻量过程块，不切断最终简报", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "text",
+          text: "我先联网核实今天的国际新闻，再整理成简报。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-news-search-1",
+            name: "web_search",
+            arguments: JSON.stringify({ query: "today international news" }),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                results: [
+                  {
+                    title: "Reuters World News",
+                    url: "https://www.reuters.com/world/",
+                  },
+                ],
+              }),
+            },
+            startTime: new Date("2026-06-02T09:00:00.000Z"),
+            endTime: new Date("2026-06-02T09:00:01.000Z"),
+          },
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-news-search-2",
+            name: "mcp__news__web_search",
+            arguments: JSON.stringify({ query: "global headlines" }),
+            status: "completed",
+            result: {
+              success: true,
+              output: "[AP World News](https://apnews.com/hub/world-news)",
+            },
+            startTime: new Date("2026-06-02T09:00:02.000Z"),
+            endTime: new Date("2026-06-02T09:00:03.000Z"),
+          },
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-news-search-3",
+            name: "WebSearchTool",
+            arguments: JSON.stringify({ query: "UN international news" }),
+            status: "completed",
+            result: {
+              success: true,
+              output: "https://news.un.org/en/",
+            },
+            startTime: new Date("2026-06-02T09:00:04.000Z"),
+            endTime: new Date("2026-06-02T09:00:05.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "## 国际新闻简报\n\n- 多个来源已经交叉确认。\n- 以下按地区和影响排序。",
+        },
+      ],
+      isStreaming: false,
+    });
+
+    const renderedText = container.textContent || "";
+    const introIndex = renderedText.indexOf("我先联网核实今天的国际新闻");
+    const processIndex = renderedText.indexOf("已搜索网页 3 次");
+    const briefingIndex = renderedText.indexOf("国际新闻简报");
+
+    expect(introIndex).toBeGreaterThanOrEqual(0);
+    expect(processIndex).toBeGreaterThan(introIndex);
+    expect(briefingIndex).toBeGreaterThan(processIndex);
+    expect(renderedText).toContain("today international news");
+    expect(renderedText).toContain("Reuters World News");
+    expect(renderedText).toContain("global headlines");
+    expect(renderedText).toContain("AP World News");
+    expect(renderedText).toContain("多个来源已经交叉确认");
+    expect(renderedText).not.toContain('"results"');
+    expect(renderedText).not.toContain("https://apnews.com/hub/world-news");
+    expect(
+      container.querySelector('[data-testid="inline-tool-process-step"]'),
+    ).toBeNull();
+  });
+
+  it("网页搜索批次混入 WebFetch 时展开态也只展示搜索来源摘要", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "text",
+          text: "我会先联网核实今天的主要国际新闻来源。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-news-mixed-search",
+            name: "web_search",
+            arguments: JSON.stringify({ query: "June 2 2026 world news" }),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                results: [
+                  {
+                    title: "Reuters World News",
+                    url: "https://www.reuters.com/world/",
+                  },
+                ],
+              }),
+            },
+            startTime: new Date("2026-06-02T09:00:00.000Z"),
+            endTime: new Date("2026-06-02T09:00:01.000Z"),
+          },
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-news-mixed-fetch-failed",
+            name: "WebFetch",
+            arguments: JSON.stringify({
+              url: "https://www.reuters.com/world/",
+            }),
+            status: "failed",
+            result: {
+              success: false,
+              output: "503 Service Unavailable",
+              error: "503 Service Unavailable",
+            },
+            startTime: new Date("2026-06-02T09:00:02.000Z"),
+            endTime: new Date("2026-06-02T09:00:03.000Z"),
+          },
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-news-mixed-fetch-ok",
+            name: "WebFetch",
+            arguments: JSON.stringify({ url: "https://news.un.org/en/" }),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                code: 200,
+                result: "raw page payload should not be rendered",
+              }),
+            },
+            startTime: new Date("2026-06-02T09:00:04.000Z"),
+            endTime: new Date("2026-06-02T09:00:05.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "## 今日国际新闻简报\n\n- 已按来源整理。",
+        },
+      ],
+      isStreaming: false,
+    });
+
+    const processGroupButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+    expect(processGroupButton?.textContent).toContain("已搜索网页 1 次");
+    expect(container.textContent).not.toContain("失败 3 个步骤");
+    expect(container.textContent).not.toContain("raw page payload");
+    expect(container.textContent).not.toContain("503 Service Unavailable");
+
+    act(() => {
+      processGroupButton?.click();
+    });
+
+    expect(container.textContent).toContain("June 2 2026 world news");
+    expect(container.textContent).toContain("Reuters World News");
+    expect(container.textContent).toContain("https://www.reuters.com/world/");
+    expect(container.textContent).toContain("https://news.un.org/en/");
+    expect(container.textContent).not.toContain("raw page payload");
+    expect(container.textContent).not.toContain("503 Service Unavailable");
+    expect(
+      container.querySelector('[data-testid="inline-tool-process-step"]'),
+    ).toBeNull();
+  });
+
+  it("交错工具之间的过程状态自述不应作为正文块显示", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-status-narration-before",
+            name: "WebSearch",
+            arguments: JSON.stringify({ query: "current sources" }),
+            status: "completed",
+            result: { success: true, output: "ok" },
+            startTime: new Date("2026-06-02T09:00:00.000Z"),
+            endTime: new Date("2026-06-02T09:00:01.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "第一轮搜索结果质量不高，我继续从更可靠的页面聚合要点，避免把无关结果混进去。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-status-narration-after",
+            name: "WebFetch",
+            arguments: JSON.stringify({ url: "https://example.com/source" }),
+            status: "completed",
+            result: { success: true, output: "ok" },
+            startTime: new Date("2026-06-02T09:00:02.000Z"),
+            endTime: new Date("2026-06-02T09:00:03.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "## 调研简报\n\n- 已确认主要来源。",
+        },
+      ],
+      isStreaming: false,
+    });
+
+    expect(container.textContent).not.toContain("第一轮搜索结果质量不高");
+    expect(container.textContent).toContain("调研简报");
+    expect(container.textContent).toContain("已确认主要来源");
   });
 
   it("交错内容里的工具折叠不应跨正文合并", () => {
@@ -1097,7 +1775,9 @@ describe("StreamingRenderer", () => {
     });
 
     expect(container.querySelector('[data-testid="a2ui-card"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="decision-panel"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="decision-panel"]'),
+    ).toBeNull();
   });
 
   it("pending_write_file 应触发流式 onWriteFile 回调", () => {
@@ -1330,7 +2010,7 @@ describe("StreamingRenderer", () => {
     expect(container.textContent).toContain("先生成一版草稿");
   });
 
-  it("运行中的过程组应展开，完成后自动折叠为摘要", () => {
+  it("包含工具的运行中过程组应默认折叠，完成后保持摘要", () => {
     const { container, rerender } = renderHarness({
       content: "",
       contentParts: [
@@ -1356,11 +2036,11 @@ describe("StreamingRenderer", () => {
       '[data-testid="streaming-process-group"] button',
     );
     expect(runningProcessGroup).not.toBeNull();
-    expect(runningProcessGroup?.getAttribute("aria-expanded")).toBe("true");
-    expect(container.textContent).toContain("先确认过程组行高");
+    expect(runningProcessGroup?.getAttribute("aria-expanded")).toBe("false");
+    expect(container.textContent).not.toContain("先确认过程组行高");
     expect(
       container.querySelector('[data-testid="inline-tool-process-step"]'),
-    ).not.toBeNull();
+    ).toBeNull();
 
     rerender({
       content: "",
@@ -1547,9 +2227,9 @@ describe("StreamingRenderer", () => {
     expect(
       container.querySelectorAll('[data-testid="decision-panel"]'),
     ).toHaveLength(1);
-    expect(container.querySelectorAll('[data-testid="a2ui-card"]')).toHaveLength(
-      1,
-    );
+    expect(
+      container.querySelectorAll('[data-testid="a2ui-card"]'),
+    ).toHaveLength(1);
     expect(
       container
         .querySelector('[data-testid="a2ui-card"]')

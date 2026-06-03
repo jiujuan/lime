@@ -66,8 +66,6 @@ type HookProps = Parameters<typeof useWorkspaceServiceSkillEntryActions>[0];
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 const DEFAULT_CHAT_TOOL_PREFERENCES: ChatToolPreferences = {
-  webSearch: false,
-  thinking: false,
   task: false,
   subagent: false,
 };

@@ -1,0 +1,707 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+  compatibleAgentAppStandardVersions,
+  currentAgentAppHostRuntimeVersion,
+  currentAgentAppStandardVersion,
+} from "../readiness/hostCapabilityProfile";
+import {
+  apiMocks,
+  buildReadyState,
+  dispatchBridgeMessage,
+  flush,
+  getRuntimeFrame,
+  renderPage,
+  runtimeApiMocks,
+  useAgentAppRuntimePageTestLifecycle,
+} from "./AgentAppRuntimePage.testFixtures";
+
+describe("AgentAppRuntimePage Host Bridge", () => {
+  useAgentAppRuntimePageTestLifecycle();
+
+  it("App 可通过 lime.capabilities.getProfile 发现 Host capability profile", async () => {
+    const container = await renderPage();
+    await flush();
+    const frame = getRuntimeFrame(container);
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.capabilities",
+        method: "getProfile",
+      },
+      "profile-discovery",
+    );
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:response",
+        requestId: "profile-discovery",
+        payload: expect.objectContaining({
+          ok: true,
+          result: expect.objectContaining({
+            appRuntimeVersion: currentAgentAppHostRuntimeVersion,
+            standardVersions: {
+              current: currentAgentAppStandardVersion,
+              compatible: compatibleAgentAppStandardVersions,
+            },
+            runtimeProfile: expect.objectContaining({
+              runtimeId: "content-factory-app:in_lime:0.8.0",
+              runtimeVersion: currentAgentAppHostRuntimeVersion,
+              shellKind: "desktop",
+              installMode: "in_lime",
+            }),
+            runtimeCapabilities: expect.objectContaining({
+              "lime.agent": expect.objectContaining({
+                available: true,
+                implementation: "adapter",
+              }),
+            }),
+            standards: expect.objectContaining({
+              layeredManifest: expect.objectContaining({
+                version: "0.5",
+                enabled: true,
+              }),
+              agentRuntime: expect.objectContaining({
+                version: "0.6",
+                enabled: false,
+              }),
+              requirementBoundary: expect.objectContaining({
+                version: "0.7",
+                enabled: false,
+              }),
+            }),
+            capabilities: expect.objectContaining({
+              "lime.capabilities": expect.objectContaining({
+                enabled: true,
+                implementation: "native",
+              }),
+              "lime.agent": expect.objectContaining({
+                enabled: true,
+              }),
+              "lime.skills": expect.objectContaining({
+                enabled: true,
+                implementation: "adapter",
+              }),
+              "lime.memory": expect.objectContaining({
+                enabled: true,
+                implementation: "adapter",
+              }),
+              "lime.context": expect.objectContaining({
+                enabled: true,
+                implementation: "adapter",
+              }),
+              "lime.search": expect.objectContaining({
+                enabled: true,
+                implementation: "adapter",
+              }),
+              "lime.browser": expect.objectContaining({
+                enabled: true,
+                implementation: "adapter",
+              }),
+              "lime.documents": expect.objectContaining({
+                enabled: true,
+                implementation: "adapter",
+              }),
+              "lime.media": expect.objectContaining({
+                enabled: true,
+                implementation: "adapter",
+              }),
+              "lime.mcp": expect.objectContaining({
+                enabled: true,
+                implementation: "adapter",
+              }),
+              "lime.terminal": expect.objectContaining({
+                enabled: true,
+                implementation: "adapter",
+              }),
+              "lime.connectors": expect.objectContaining({
+                enabled: true,
+                implementation: "adapter",
+              }),
+            }),
+          }),
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:error",
+        requestId: "profile-discovery",
+      }),
+      expect.any(String),
+    );
+  });
+
+  it("App 可通过 Lime 客户端 profile 读取 v0.6 AgentRuntime 合同", async () => {
+    const agentRuntime = {
+      agentTask: {
+        eventSchema: "lime.agent-task-event.v1",
+        resultSchema: "lime.agent-task-result.v1",
+        structuredOutput: {
+          type: "json_schema",
+          schemaRef: "./artifacts/content-factory-workspace-patch.schema.json",
+        },
+        approval: { behavior: "host-mediated" },
+        sessionPolicy: { modes: ["new", "resume", "continue", "fork"] },
+        toolDiscovery: { mode: "on_demand" },
+        checkpointScope: { workflowState: true },
+        observability: { profileEvents: true },
+      },
+    };
+    const container = await renderPage(
+      buildReadyState({
+        manifestPatch: {
+          manifestVersion: "0.6.0",
+          version: "0.6.0",
+          requires: {
+            sdk: "@lime/app-sdk@^0.6.0",
+            capabilities: ["lime.agent", "lime.skills", "lime.usage"],
+          },
+          agentRuntime,
+        },
+      }),
+    );
+    await flush();
+    const frame = getRuntimeFrame(container);
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.capabilities",
+        method: "getProfile",
+      },
+      "profile-v06-runtime",
+    );
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:response",
+        requestId: "profile-v06-runtime",
+        payload: expect.objectContaining({
+          ok: true,
+          result: expect.objectContaining({
+            appRuntimeVersion: currentAgentAppHostRuntimeVersion,
+            standardVersions: {
+              current: currentAgentAppStandardVersion,
+              compatible: compatibleAgentAppStandardVersions,
+            },
+            standards: expect.objectContaining({
+              layeredManifest: expect.objectContaining({
+                version: "0.5",
+                enabled: true,
+                layerFiles: expect.arrayContaining(["app.capabilities.yaml"]),
+              }),
+              agentRuntime: expect.objectContaining({
+                version: "0.6",
+                enabled: true,
+                manifestVersion: "0.6",
+                eventSchema: "lime.agent-task-event.v1",
+                resultSchema: "lime.agent-task-result.v1",
+                structuredOutput: true,
+                approval: true,
+                sessionPolicy: true,
+                toolDiscovery: true,
+                checkpointScope: true,
+                observability: true,
+              }),
+              requirementBoundary: expect.objectContaining({
+                version: "0.7",
+                enabled: false,
+              }),
+            }),
+            agentRuntime,
+          }),
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+  });
+
+  it("App 可通过 Lime 客户端 profile 读取 v0.7 需求边界与能力交接", async () => {
+    const requirements = {
+      requirements: [
+        {
+          id: "CF-R001",
+          text: "生成可审核内容草稿",
+          priority: "mvp",
+        },
+      ],
+      nonGoals: ["不在 App 包内保存外部凭证"],
+    };
+    const boundary = {
+      boundaries: [
+        {
+          requirementId: "CF-R001",
+          planes: {
+            app: { owns: ["workflow_state"] },
+            host: { requires: ["lime.agent", "lime.evidence"] },
+          },
+        },
+      ],
+    };
+    const integrations = [
+      {
+        key: "planning_table",
+        provider: "cloud.table",
+        executionPlane: "hybrid",
+        hostCapability: "lime.connectors",
+      },
+    ];
+    const operations = [
+      {
+        key: "write_external_draft",
+        type: "external_write",
+        sideEffect: "external_write",
+        approvalRequired: true,
+        dryRunRequired: true,
+        evidenceRequired: true,
+        autoExecute: false,
+      },
+    ];
+    const container = await renderPage(
+      buildReadyState({
+        manifestPatch: {
+          manifestVersion: "0.7.0",
+          version: "0.7.0",
+          requires: {
+            sdk: "@lime/app-sdk@^0.7.0",
+            capabilities: ["lime.agent", "lime.connectors", "lime.evidence"],
+          },
+          requirements,
+          boundary,
+          integrations,
+          operations,
+        },
+      }),
+    );
+    await flush();
+    const frame = getRuntimeFrame(container);
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.capabilities",
+        method: "getProfile",
+      },
+      "profile-v07-handoff",
+    );
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:response",
+        requestId: "profile-v07-handoff",
+        payload: expect.objectContaining({
+          ok: true,
+          result: expect.objectContaining({
+            appRuntimeVersion: currentAgentAppHostRuntimeVersion,
+            standardVersions: {
+              current: currentAgentAppStandardVersion,
+              compatible: compatibleAgentAppStandardVersions,
+            },
+            requirements,
+            boundary,
+            integrations,
+            operations,
+            standards: expect.objectContaining({
+              requirementBoundary: expect.objectContaining({
+                version: "0.7",
+                enabled: true,
+                manifestVersion: "0.7",
+                requirementCount: 1,
+                boundaryCount: 1,
+                integrationCount: 1,
+                operationCount: 1,
+                hostCloudManagedExecution: true,
+                externalSideEffectsRequireApproval: true,
+              }),
+            }),
+          }),
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+  });
+
+  it("Host Bridge 能在同一 App 作用域内 start / stream / get / cancel / retry Agent task", async () => {
+    const container = await renderPage();
+    await flush();
+    const frame = getRuntimeFrame(container);
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.agent",
+        method: "startTask",
+        input: {
+          title: "生成内容场景",
+          prompt: "基于项目知识生成内容场景",
+          taskKind: "content.scenario_planning",
+          idempotencyKey: "dashboard:scenario",
+          input: { projectId: "project-1" },
+          expectedOutput: { artifactKind: "content_table" },
+          humanReview: true,
+        },
+      },
+      "task-start",
+    );
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.agent",
+        method: "streamTask",
+        input: { taskId: "agent-app-task-1" },
+      },
+      "task-stream",
+    );
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.agent",
+        method: "getTask",
+        input: { taskId: "agent-app-task-1" },
+      },
+      "task-get",
+    );
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.agent",
+        method: "submitHostResponse",
+        input: {
+          taskId: "agent-app-task-1",
+          requestId: "runtime-request-1",
+          actionType: "ask_user",
+          response: "补充项目定位：高客单价咨询服务。",
+        },
+      },
+      "task-host-response",
+    );
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.agent",
+        method: "cancelTask",
+        input: { taskId: "agent-app-task-1" },
+      },
+      "task-cancel",
+    );
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.agent",
+        method: "retryTask",
+        input: { taskId: "agent-app-task-1" },
+      },
+      "task-retry",
+    );
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:response",
+        requestId: "task-start",
+        payload: expect.objectContaining({
+          ok: true,
+          result: expect.objectContaining({
+            taskId: "agent-app-task-1",
+            traceId: "agent-app-trace-1",
+            status: "running",
+            humanReview: true,
+          }),
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:response",
+        requestId: "task-stream",
+        payload: expect.objectContaining({
+          ok: true,
+          result: [
+            expect.objectContaining({
+              type: "task:progress",
+              status: "running",
+            }),
+          ],
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:response",
+        requestId: "task-get",
+        payload: expect.objectContaining({
+          ok: true,
+          result: expect.objectContaining({
+            taskId: "agent-app-task-1",
+            traceId: "agent-app-trace-1",
+            status: "running",
+            taskKind: "content.scenario_planning",
+          }),
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:response",
+        requestId: "task-host-response",
+        payload: expect.objectContaining({
+          ok: true,
+          result: {
+            taskId: "agent-app-task-1",
+            requestId: "runtime-request-1",
+            status: "submitted",
+            submittedAt: expect.any(String),
+          },
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:response",
+        requestId: "task-cancel",
+        payload: expect.objectContaining({
+          ok: true,
+          result: expect.objectContaining({
+            taskId: "agent-app-task-1",
+            status: "cancelled",
+            events: expect.arrayContaining([
+              expect.objectContaining({ type: "task:cancelled" }),
+            ]),
+          }),
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:response",
+        requestId: "task-retry",
+        payload: expect.objectContaining({
+          ok: true,
+          result: expect.objectContaining({
+            taskId: "agent-app-task-2",
+            traceId: "agent-app-trace-2",
+            retryOfTaskId: "agent-app-task-1",
+            retryAttempt: 1,
+            status: "running",
+            humanReview: true,
+          }),
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+    expect(runtimeApiMocks.getAgentAppRuntimeTask).toHaveBeenCalledWith({
+      appId: "content-factory-app",
+      taskId: "agent-app-task-1",
+      sessionId: "agent-app-session-1",
+    });
+    expect(runtimeApiMocks.cancelAgentAppRuntimeTask).toHaveBeenCalledWith({
+      appId: "content-factory-app",
+      taskId: "agent-app-task-1",
+      sessionId: "agent-app-session-1",
+      turnId: "agent-app-turn-1",
+    });
+    expect(
+      runtimeApiMocks.submitAgentAppRuntimeHostResponse,
+    ).toHaveBeenCalledWith({
+      appId: "content-factory-app",
+      taskId: "agent-app-task-1",
+      runtimeRequest: expect.objectContaining({
+        session_id: "agent-app-session-1",
+        request_id: "runtime-request-1",
+        action_type: "ask_user",
+        confirmed: true,
+        response: "补充项目定位：高客单价咨询服务。",
+        action_scope: expect.objectContaining({
+          session_id: "agent-app-session-1",
+          turn_id: "agent-app-turn-1",
+        }),
+      }),
+    });
+  });
+
+  it("Host Bridge 写回 artifact / evidence 时应拒绝未声明 subject", async () => {
+    const container = await renderPage();
+    await flush();
+    const frame = getRuntimeFrame(container);
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.artifacts",
+        method: "create",
+        input: {
+          kind: "content_table",
+          title: "内容表",
+          content: { rows: [] },
+        },
+      },
+      "artifact-ok",
+    );
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.evidence",
+        method: "record",
+        input: {
+          kind: "fact_grounding",
+          message: "声明过的事实支撑证据。",
+          refs: ["adapter-artifact-1"],
+        },
+      },
+      "evidence-ok",
+    );
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.artifacts",
+        method: "create",
+        input: {
+          kind: "undeclared_asset_pack",
+          title: "未声明资产包",
+          content: {},
+        },
+      },
+      "artifact-blocked",
+    );
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.evidence",
+        method: "record",
+        input: {
+          kind: "undeclared_evidence_subject",
+          message: "未声明证据。",
+        },
+      },
+      "evidence-blocked",
+    );
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:response",
+        requestId: "artifact-ok",
+        payload: expect.objectContaining({
+          ok: true,
+          result: expect.objectContaining({
+            kind: "content_table",
+            title: "内容表",
+          }),
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:response",
+        requestId: "evidence-ok",
+        payload: expect.objectContaining({
+          ok: true,
+          result: expect.objectContaining({
+            kind: "fact_grounding",
+            refs: ["adapter-artifact-1"],
+          }),
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:error",
+        requestId: "artifact-blocked",
+        payload: expect.objectContaining({
+          ok: false,
+          code: "upstream_failed",
+          causeCode: "WRITEBACK_NOT_DECLARED",
+          error: expect.objectContaining({
+            code: "upstream_failed",
+            causeCode: "WRITEBACK_NOT_DECLARED",
+            capability: "lime.artifacts",
+            method: "create",
+          }),
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:error",
+        requestId: "evidence-blocked",
+        payload: expect.objectContaining({
+          ok: false,
+          code: "upstream_failed",
+          causeCode: "WRITEBACK_NOT_DECLARED",
+          error: expect.objectContaining({
+            code: "upstream_failed",
+            causeCode: "WRITEBACK_NOT_DECLARED",
+            capability: "lime.evidence",
+            method: "record",
+          }),
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+  });
+
+  it("Host Bridge 忽略非 runtime origin 的消息", async () => {
+    const container = await renderPage();
+    await flush();
+    const frame = getRuntimeFrame(container);
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      { capability: "lime.storage" },
+      "evil-req",
+      "https://evil.example",
+    );
+
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId: "evil-req",
+      }),
+      expect.any(String),
+    );
+  });
+
+  it("runtime 启动失败时显示可重试错误态", async () => {
+    apiMocks.startAgentAppUiRuntime.mockRejectedValueOnce(
+      new Error("请从本地 APP.md 目录重新安装该 App。"),
+    );
+    const container = await renderPage();
+    await flush();
+
+    expect(container.textContent).toContain("App 打开失败");
+    expect(container.textContent).toContain(
+      "请从本地 APP.md 目录重新安装该 App。",
+    );
+    expect(container.textContent).toContain("重新打开");
+    expect(
+      container.querySelector('[data-testid="agent-app-runtime-frame"]'),
+    ).toBeNull();
+  });
+});

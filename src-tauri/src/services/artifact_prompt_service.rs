@@ -5,12 +5,15 @@
 
 use serde_json::Value;
 
+use crate::services::artifact_generation_brief_boundary_service::ArtifactGenerationBriefBoundary;
+
 const ARTIFACT_DELIVERY_POLICY_PROMPT_MARKER: &str = "【Artifact 交付策略】";
 const ARTIFACT_SOURCE_POLICY_PROMPT_MARKER: &str = "【Artifact 来源策略】";
 const ARTIFACT_STAGE1_PROMPT_MARKER: &str = "【Artifact Stage 1 合同】";
 const ARTIFACT_STAGE2_PROMPT_MARKER: &str = "【Artifact Stage 2 合同】";
 const ARTIFACT_REWRITE_PROMPT_MARKER: &str = "【Artifact Rewrite 合同】";
 const ARTIFACT_SCHEMA_HINT_PROMPT_MARKER: &str = "【Artifact 输出 Schema 提示】";
+const ARTIFACT_GENERATION_BRIEF_PROMPT_MARKER: &str = "【Generation Brief 声线边界】";
 const ARTIFACT_DOCUMENT_SCHEMA_VERSION: &str = "artifact_document.v1";
 const ARTIFACT_ALLOWED_BLOCKS: &[&str] = &[
     "section_header",
@@ -38,6 +41,8 @@ struct ArtifactPromptContext {
     request_id: Option<String>,
     target_block_id: Option<String>,
     rewrite_instruction: Option<String>,
+    generation_brief: Option<ArtifactGenerationBriefBoundary>,
+    has_artifact_contract_fields: bool,
 }
 
 fn normalize_text(value: Option<&str>) -> Option<String> {
@@ -69,7 +74,7 @@ fn extract_artifact_string(request_metadata: Option<&Value>, keys: &[&str]) -> O
 fn build_artifact_prompt_context(
     request_metadata: Option<&Value>,
 ) -> Option<ArtifactPromptContext> {
-    let context = ArtifactPromptContext {
+    let mut context = ArtifactPromptContext {
         mode: extract_artifact_string(request_metadata, &["artifact_mode", "artifactMode"]),
         kind: extract_artifact_string(request_metadata, &["artifact_kind", "artifactKind"]),
         stage: extract_artifact_string(request_metadata, &["artifact_stage", "artifactStage"]),
@@ -93,9 +98,11 @@ fn build_artifact_prompt_context(
             request_metadata,
             &["artifact_rewrite_instruction", "artifactRewriteInstruction"],
         ),
+        generation_brief: ArtifactGenerationBriefBoundary::from_request_metadata(request_metadata),
+        has_artifact_contract_fields: false,
     };
 
-    let has_meaningful_fields = [
+    context.has_artifact_contract_fields = [
         context.mode.as_ref(),
         context.kind.as_ref(),
         context.stage.as_ref(),
@@ -108,7 +115,7 @@ fn build_artifact_prompt_context(
     .iter()
     .any(|value| value.is_some());
 
-    if has_meaningful_fields {
+    if context.has_artifact_contract_fields || context.generation_brief.is_some() {
         Some(context)
     } else {
         None
@@ -137,6 +144,10 @@ fn merge_prompt_section(
 }
 
 fn build_artifact_delivery_prompt(context: &ArtifactPromptContext) -> Option<String> {
+    if !context.has_artifact_contract_fields {
+        return None;
+    }
+
     if matches!(context.mode.as_deref(), Some("none")) {
         return None;
     }
@@ -191,7 +202,38 @@ fn build_artifact_source_policy_prompt(context: &ArtifactPromptContext) -> Optio
     ))
 }
 
+fn build_artifact_generation_brief_prompt(context: &ArtifactPromptContext) -> Option<String> {
+    let boundary = context.generation_brief.as_ref()?;
+
+    Some(format!(
+        "{ARTIFACT_GENERATION_BRIEF_PROMPT_MARKER}\n\
+- voice_source：{voice_source}\n\
+- voice_guard：{voice_guard}\n\
+- global_soul_scope：{global_soul_scope}\n\
+- expert_persona_scope：{expert_persona_scope}\n\
+- formal_artifact_voice_source：{formal_artifact_voice_source}\n\
+- inherits_global_soul：{inherits_global_soul}\n\
+- inherits_expert_persona：{inherits_expert_persona}\n\
+执行要求：\n\
+1. 正式 Artifact 默认不吸收 Global Soul、Expert Persona 或 Companion Soul 的口吻。\n\
+2. 只有 voice_source 明确不是 `none`，且 voice_guard 允许时，才把 Creator / Brand Voice 写进正式产物。\n\
+3. Global Soul 只影响与用户沟通的解释节奏；Expert Persona 只约束当前专家会话的任务角色。\n\
+4. 若用户没有显式要求创作声线，保持产物风格服务于当前任务、受众、事实和结构。",
+        voice_source = boundary.voice_source.as_str(),
+        voice_guard = boundary.voice_guard.as_str(),
+        global_soul_scope = boundary.global_soul_scope.as_str(),
+        expert_persona_scope = boundary.expert_persona_scope.as_str(),
+        formal_artifact_voice_source = boundary.formal_artifact_voice_source.as_str(),
+        inherits_global_soul = boundary.inherits_global_soul,
+        inherits_expert_persona = boundary.inherits_expert_persona,
+    ))
+}
+
 fn build_artifact_stage_prompt(context: &ArtifactPromptContext) -> Option<String> {
+    if !context.has_artifact_contract_fields {
+        return None;
+    }
+
     let stage = context
         .stage
         .as_deref()
@@ -247,6 +289,10 @@ fn build_artifact_stage_prompt(context: &ArtifactPromptContext) -> Option<String
 }
 
 fn build_artifact_schema_hint_prompt(context: &ArtifactPromptContext) -> Option<String> {
+    if !context.has_artifact_contract_fields {
+        return None;
+    }
+
     if matches!(context.mode.as_deref(), Some("none"))
         || matches!(context.stage.as_deref(), Some("stage1"))
     {
@@ -339,8 +385,13 @@ pub fn merge_system_prompt_with_artifact_context(
         build_artifact_source_policy_prompt(&context),
         ARTIFACT_SOURCE_POLICY_PROMPT_MARKER,
     );
-    let with_stage = merge_prompt_section(
+    let with_generation_brief = merge_prompt_section(
         with_sources,
+        build_artifact_generation_brief_prompt(&context),
+        ARTIFACT_GENERATION_BRIEF_PROMPT_MARKER,
+    );
+    let with_stage = merge_prompt_section(
+        with_generation_brief,
         build_artifact_stage_prompt(&context),
         if matches!(context.stage.as_deref(), Some("stage1")) {
             ARTIFACT_STAGE1_PROMPT_MARKER
@@ -393,6 +444,76 @@ mod tests {
         assert!(merged.contains("ArtifactDocument v1"));
         assert!(merged.contains("artifact.block.upsert"));
         assert!(merged.contains("artifact_ops"));
+    }
+
+    #[test]
+    fn should_build_generation_brief_boundary_prompt_when_present() {
+        let metadata = serde_json::json!({
+            "artifact": {
+                "artifact_mode": "draft",
+                "artifact_kind": "report",
+                "generation_brief": {
+                    "voice_source": "none",
+                    "voice_guard": "generation_brief_only",
+                    "inherits_global_soul": false,
+                    "inherits_expert_persona": false
+                }
+            }
+        });
+
+        let merged =
+            merge_system_prompt_with_artifact_context(None, Some(&metadata)).unwrap_or_default();
+
+        assert!(merged.contains(ARTIFACT_GENERATION_BRIEF_PROMPT_MARKER));
+        assert!(merged.contains("voice_source：none"));
+        assert!(merged.contains("inherits_global_soul：false"));
+        assert!(merged.contains("正式 Artifact 默认不吸收 Global Soul"));
+        assert!(merged.contains("只有 voice_source 明确不是 `none`"));
+    }
+
+    #[test]
+    fn should_preserve_explicit_creator_voice_boundary_prompt() {
+        let metadata = serde_json::json!({
+            "artifact": {
+                "artifact_mode": "draft",
+                "artifact_kind": "report",
+                "generation_brief": {
+                    "voice_source": "brand_voice",
+                    "voice_guard": "user_explicit",
+                    "global_soul_scope": "interaction_only",
+                    "formal_artifact_voice_source": "generation_brief_only",
+                    "inherits_global_soul": false,
+                    "inherits_expert_persona": false
+                }
+            }
+        });
+
+        let merged =
+            merge_system_prompt_with_artifact_context(None, Some(&metadata)).unwrap_or_default();
+
+        assert!(merged.contains("voice_source：brand_voice"));
+        assert!(merged.contains("voice_guard：user_explicit"));
+        assert!(merged.contains("formal_artifact_voice_source：generation_brief_only"));
+    }
+
+    #[test]
+    fn should_not_start_artifact_contract_when_only_generation_brief_is_present() {
+        let metadata = serde_json::json!({
+            "artifact": {
+                "generation_brief": {
+                    "voice_source": "brand_voice"
+                }
+            }
+        });
+
+        let merged =
+            merge_system_prompt_with_artifact_context(None, Some(&metadata)).unwrap_or_default();
+
+        assert!(merged.contains(ARTIFACT_GENERATION_BRIEF_PROMPT_MARKER));
+        assert!(merged.contains("voice_source：brand_voice"));
+        assert!(!merged.contains(ARTIFACT_DELIVERY_POLICY_PROMPT_MARKER));
+        assert!(!merged.contains(ARTIFACT_STAGE2_PROMPT_MARKER));
+        assert!(!merged.contains(ARTIFACT_SCHEMA_HINT_PROMPT_MARKER));
     }
 
     #[test]

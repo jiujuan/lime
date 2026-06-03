@@ -1,5 +1,6 @@
 import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
 import { formatDate, formatRelativeTime } from "@/i18n/format";
+import { isAssistantRuntimeErrorDisplayText } from "@/components/agent/chat/utils/messageDisplaySanitizer";
 
 export interface SidebarSessionMetaOptions {
   locale?: string | null;
@@ -78,5 +79,13 @@ export function resolveSidebarSessionTitle(
   session: AsterSessionInfo,
   fallbackTitle: string,
 ): string {
-  return session.name?.trim() || fallbackTitle;
+  const title = session.name?.trim() || "";
+  if (
+    isAssistantRuntimeErrorDisplayText(title, {
+      allowTruncatedTitle: true,
+    })
+  ) {
+    return fallbackTitle;
+  }
+  return title || fallbackTitle;
 }

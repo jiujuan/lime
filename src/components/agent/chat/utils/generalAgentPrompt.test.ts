@@ -23,8 +23,6 @@ describe("generalAgentPrompt", () => {
     const prompt = buildGeneralAgentSystemPrompt("general", {
       now: new Date("2026-03-12T12:00:00+08:00"),
       toolPreferences: {
-        webSearch: false,
-        thinking: false,
         task: true,
         subagent: true,
       },
@@ -45,6 +43,13 @@ describe("generalAgentPrompt", () => {
     expect(prompt).not.toContain("多代理");
     expect(prompt).toContain("没有显式路径或保存要求时");
     expect(prompt).toContain("写计划 / 写方案 / 写报告");
+    expect(prompt).toContain("输出契约");
+    expect(prompt).toContain("标准 Markdown");
+    expect(prompt).toContain("工具调用过程");
+    expect(prompt).toContain("不得写进最终正文");
+    expect(prompt).toContain("可核验来源");
+    expect(prompt).toContain("Markdown 链接");
+    expect(prompt).toContain("粘贴原始工具输出");
   });
 
   it("通用主题 Prompt 应回落到统一的主题说明", () => {
@@ -132,5 +137,10 @@ describe("generalAgentPrompt", () => {
     expect(compactPrompt).toContain("lime_site_run");
     expect(compactPrompt).toContain("Playwright code");
     expect(compactPrompt).toContain("general_browser_assist");
+    expect(compactPrompt).toContain("输出契约");
+    expect(compactPrompt).toContain("标准 Markdown");
+    expect(compactPrompt).toContain("runtime 状态");
+    expect(compactPrompt).toContain("最终正文");
+    expect(compactPrompt).toContain("Markdown 链接");
   });
 });

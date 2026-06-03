@@ -9,7 +9,6 @@ import {
   listProjects,
   type Project,
 } from "@/lib/api/project";
-import { normalizeThemeType } from "@/lib/workspace/workbenchContract";
 import {
   type AutomationJobDialogInitialValues,
   type AutomationJobDialogSubmit,
@@ -26,12 +25,9 @@ import {
 } from "../workspaceEntry";
 import {
   composeServiceSkillPrompt,
-  createDefaultServiceSkillSlotValues,
   validateServiceSkillSlotValues,
 } from "../service-skills/promptComposer";
 import {
-  buildServiceSkillAutomationAgentTurnPayloadContext,
-  buildServiceSkillAutomationInitialValues,
   supportsServiceSkillLocalAutomation,
 } from "../service-skills/automationDraft";
 import { recordServiceSkillAutomationLink } from "../service-skills/automationLinkStorage";
@@ -39,7 +35,6 @@ import {
   buildServiceSkillLaunchA2UIResponse,
   readServiceSkillLaunchSlotValuesFromFormData,
 } from "../service-skills/serviceSkillLaunchA2UI";
-import { resolveServiceSkillLaunchPrefill } from "../service-skills/serviceSkillLaunchPrefill";
 import { buildServiceSkillWorkspaceSeed } from "../service-skills/workspaceLaunch";
 import {
   buildSiteLaunchBlockedMessage,
@@ -61,118 +56,24 @@ import type {
 } from "../service-skills/types";
 import type { TeamDefinition } from "../utils/teamDefinitions";
 import { attachSelectedTeamToRequestMetadata } from "../utils/teamRequestMetadata";
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  return "请稍后重试";
-}
-
-function normalizeOptionalText(value?: string | null): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
-  const normalized = value.trim();
-  return normalized ? normalized : undefined;
-}
-
-function siteSkillRequiresProject(skill: ServiceSkillHomeItem): boolean {
-  if (!isServiceSkillExecutableAsSiteAdapter(skill)) {
-    return false;
-  }
-
-  return (
-    skill.readinessRequirements?.requiresProject ||
-    (skill.siteCapabilityBinding.saveMode ?? "project_resource") ===
-      "project_resource"
-  );
-}
+import {
+  buildFallbackAutomationWorkspace,
+  buildServiceSkillAutomationSetupState,
+  buildServiceSkillAutomationSubmitRequest,
+  buildServiceSkillSelectionPlan,
+  getWorkspaceServiceSkillErrorMessage,
+  normalizeWorkspaceServiceSkillOptionalText,
+  type PendingServiceSkillAutomationLaunch,
+  type PendingServiceSkillLaunchInputState,
+  prioritizeAutomationWorkspaces,
+  resolveServiceSkillLaunchUserInput,
+  type ServiceSkillSelectionOptions,
+  shouldCreateServiceSkillAutomationContent,
+  siteSkillRequiresProject,
+} from "./workspaceServiceSkillEntryActionsViewModel";
 
 interface ServiceSkillLaunchOptions {
   launchUserInput?: string | null;
-}
-
-interface ServiceSkillSelectionOptions {
-  requestKey?: number | string;
-  initialSlotValues?: ServiceSkillSlotValues;
-  prefillHint?: string;
-  launchUserInput?: string | null;
-}
-
-function resolveServiceSkillLaunchUserInput(
-  currentInput: string,
-  options?: ServiceSkillLaunchOptions,
-): string | undefined {
-  if (options && "launchUserInput" in options) {
-    return normalizeOptionalText(options.launchUserInput);
-  }
-
-  return normalizeOptionalText(currentInput);
-}
-
-function resolveFallbackProjectType(theme?: string): Project["workspaceType"] {
-  return normalizeThemeType(theme);
-}
-
-function buildFallbackAutomationWorkspace(
-  projectId: string,
-  theme?: string,
-): Project {
-  return {
-    id: projectId,
-    name: projectId,
-    workspaceType: resolveFallbackProjectType(theme),
-    rootPath: "",
-    isDefault: false,
-    createdAt: 0,
-    updatedAt: 0,
-    isFavorite: false,
-    isArchived: false,
-    tags: [],
-  };
-}
-
-function prioritizeAutomationWorkspaces(
-  workspaces: Project[],
-  projectId?: string | null,
-  theme?: string,
-): Project[] {
-  const normalizedProjectId = normalizeProjectId(projectId);
-  if (!normalizedProjectId) {
-    return workspaces;
-  }
-
-  const matched = workspaces.find(
-    (workspace) => workspace.id === normalizedProjectId,
-  );
-  const fallbackWorkspace =
-    matched ?? buildFallbackAutomationWorkspace(normalizedProjectId, theme);
-  const remaining = workspaces.filter(
-    (workspace) => workspace.id !== normalizedProjectId,
-  );
-
-  return [fallbackWorkspace, ...remaining];
-}
-
-interface PendingServiceSkillAutomationLaunch {
-  skill: ServiceSkillHomeItem;
-  prompt: string;
-  slotValues: ServiceSkillSlotValues;
-  userInput?: string;
-  usage: RecordServiceSkillUsageInput;
-}
-
-interface PendingServiceSkillLaunchInputState {
-  requestKey: string;
-  skill: ServiceSkillHomeItem;
-  initialSlotValues: ServiceSkillSlotValues;
-  prefillHint?: string;
-  launchUserInput?: string;
 }
 
 interface UseWorkspaceServiceSkillEntryActionsParams {
@@ -504,7 +405,7 @@ export function useWorkspaceServiceSkillEntryActions({
       try {
         resolvedProjectId = await resolveSiteSkillProjectId(skill);
       } catch (error) {
-        toast.error(getErrorMessage(error));
+        toast.error(getWorkspaceServiceSkillErrorMessage(error));
         return;
       }
 
@@ -519,7 +420,9 @@ export function useWorkspaceServiceSkillEntryActions({
           slotValues,
         );
       } catch (error) {
-        toast.error(`解析站点技能失败：${getErrorMessage(error)}`);
+        toast.error(
+          `解析站点技能失败：${getWorkspaceServiceSkillErrorMessage(error)}`,
+        );
         return;
       }
 
@@ -553,7 +456,11 @@ export function useWorkspaceServiceSkillEntryActions({
           );
           nextContentId = created?.id ?? undefined;
         } catch (error) {
-          toast.error(`准备浏览器采集主稿失败：${getErrorMessage(error)}`);
+          toast.error(
+            `准备浏览器采集主稿失败：${getWorkspaceServiceSkillErrorMessage(
+              error,
+            )}`,
+          );
           return;
         }
       }
@@ -601,7 +508,9 @@ export function useWorkspaceServiceSkillEntryActions({
     ): Promise<boolean> => {
       const persistedLaunchUserInput =
         options && "launchUserInput" in options
-          ? normalizeOptionalText(options.launchUserInput)
+          ? normalizeWorkspaceServiceSkillOptionalText(
+              options.launchUserInput,
+            )
           : undefined;
 
       if (isServiceSkillExecutableAsSiteAdapter(skill)) {
@@ -612,7 +521,9 @@ export function useWorkspaceServiceSkillEntryActions({
             slotValues,
           );
         } catch (error) {
-          toast.error(`解析站点技能失败：${getErrorMessage(error)}`);
+          toast.error(
+            `解析站点技能失败：${getWorkspaceServiceSkillErrorMessage(error)}`,
+          );
           return false;
         }
 
@@ -642,7 +553,9 @@ export function useWorkspaceServiceSkillEntryActions({
             options,
           );
         } catch (error) {
-          toast.error(`准备站点技能失败：${getErrorMessage(error)}`);
+          toast.error(
+            `准备站点技能失败：${getWorkspaceServiceSkillErrorMessage(error)}`,
+          );
           return false;
         }
 
@@ -686,7 +599,9 @@ export function useWorkspaceServiceSkillEntryActions({
           prompt,
         );
       } catch (error) {
-        toast.error(`准备技能工作区失败：${getErrorMessage(error)}`);
+        toast.error(
+          `准备技能工作区失败：${getWorkspaceServiceSkillErrorMessage(error)}`,
+        );
         return false;
       }
 
@@ -790,41 +705,22 @@ export function useWorkspaceServiceSkillEntryActions({
 
   const handleServiceSkillSelect = useCallback(
     (skill: ServiceSkillHomeItem, options?: ServiceSkillSelectionOptions) => {
-      const replayPrefill = resolveServiceSkillLaunchPrefill({
+      const selectionPlan = buildServiceSkillSelectionPlan({
         skill,
+        options,
         creationReplay,
+        nextRequestCount: serviceSkillLaunchRequestCountRef.current + 1,
       });
-      const resolvedLaunchUserInput =
-        normalizeOptionalText(options?.launchUserInput) ??
-        replayPrefill?.launchUserInput;
-      const initialSlotValues = {
-        ...createDefaultServiceSkillSlotValues(skill),
-        ...(replayPrefill?.slotValues || {}),
-        ...(options?.initialSlotValues || {}),
-      };
-      const validation = validateServiceSkillSlotValues(
-        skill,
-        initialSlotValues,
-      );
 
-      if (skill.slotSchema.length === 0 || validation.valid) {
-        void handleServiceSkillLaunch(skill, initialSlotValues, {
-          launchUserInput: resolvedLaunchUserInput,
+      if (selectionPlan.kind === "launch") {
+        void handleServiceSkillLaunch(skill, selectionPlan.slotValues, {
+          launchUserInput: selectionPlan.launchUserInput,
         });
         return;
       }
 
       serviceSkillLaunchRequestCountRef.current += 1;
-      setPendingServiceSkillLaunchInput({
-        requestKey:
-          options?.requestKey === undefined
-            ? `${skill.id}:${serviceSkillLaunchRequestCountRef.current}`
-            : `${skill.id}:${options.requestKey}`,
-        skill,
-        initialSlotValues,
-        prefillHint: options?.prefillHint ?? replayPrefill?.hint,
-        launchUserInput: resolvedLaunchUserInput,
-      });
+      setPendingServiceSkillLaunchInput(selectionPlan.pendingInput);
     },
     [creationReplay, handleServiceSkillLaunch],
   );
@@ -850,13 +746,6 @@ export function useWorkspaceServiceSkillEntryActions({
         return;
       }
 
-      const prompt = composeServiceSkillPrompt({
-        skill,
-        slotValues,
-        userInput: input.trim() || undefined,
-      });
-      const userInput = input.trim() || undefined;
-
       try {
         let workspaces: Project[];
         try {
@@ -874,30 +763,24 @@ export function useWorkspaceServiceSkillEntryActions({
           ];
         }
 
-        setAutomationWorkspaces(workspaces);
-        setAutomationDialogInitialValues(
-          buildServiceSkillAutomationInitialValues({
-            skill,
-            slotValues,
-            userInput,
-            workspaceId: currentProjectId,
-          }),
-        );
-        setPendingServiceSkillAutomation({
+        const setupState = buildServiceSkillAutomationSetupState({
           skill,
-          prompt,
           slotValues,
-          userInput,
-          usage: {
-            skillId: skill.id,
-            runnerType: skill.runnerType,
-            slotValues,
-          },
+          input,
+          workspaceId: currentProjectId,
         });
+
+        setAutomationWorkspaces(workspaces);
+        setAutomationDialogInitialValues(setupState.dialogInitialValues);
+        setPendingServiceSkillAutomation(setupState.pendingAutomation);
         setPendingServiceSkillLaunchInput(null);
         setAutomationDialogOpen(true);
       } catch (error) {
-        toast.error(`准备本地自动化任务失败：${getErrorMessage(error)}`);
+        toast.error(
+          `准备本地自动化任务失败：${getWorkspaceServiceSkillErrorMessage(
+            error,
+          )}`,
+        );
       }
     },
     [
@@ -929,28 +812,27 @@ export function useWorkspaceServiceSkillEntryActions({
         let request = payload.request;
         let automationContentId = currentContentId;
 
-        if (pendingLaunch && request.payload.kind === "agent_turn") {
-          if (!automationContentId) {
-            const createdContent = await createServiceSkillSeededContent(
-              pendingLaunch.skill,
-              request.workspace_id,
-            );
-            automationContentId = createdContent?.id ?? null;
-          }
-
-          request = {
-            ...request,
-            payload: {
-              ...request.payload,
-              ...buildServiceSkillAutomationAgentTurnPayloadContext({
-                skill: pendingLaunch.skill,
-                slotValues: pendingLaunch.slotValues,
-                userInput: pendingLaunch.userInput,
-                contentId: automationContentId,
-              }),
-            },
-          };
+        if (
+          shouldCreateServiceSkillAutomationContent({
+            pendingAutomation: pendingLaunch,
+            request,
+            contentId: automationContentId,
+          }) &&
+          pendingLaunch
+        ) {
+          const createdContent = await createServiceSkillSeededContent(
+            pendingLaunch.skill,
+            request.workspace_id,
+          );
+          automationContentId = createdContent?.id ?? null;
         }
+        const submitRequestPlan = buildServiceSkillAutomationSubmitRequest({
+          pendingAutomation: pendingLaunch,
+          request,
+          contentId: automationContentId,
+        });
+        request = submitRequestPlan.request;
+        automationContentId = submitRequestPlan.automationContentId;
 
         const createdJob = await createAutomationJob(request);
         recordAutomationJobAgentUiProjection(createdJob, "created");
@@ -983,7 +865,9 @@ export function useWorkspaceServiceSkillEntryActions({
           );
         } catch (error) {
           toast.error(
-            `自动化任务已创建，但准备工作区失败：${getErrorMessage(error)}`,
+            `自动化任务已创建，但准备工作区失败：${getWorkspaceServiceSkillErrorMessage(
+              error,
+            )}`,
           );
           return;
         }
@@ -993,7 +877,11 @@ export function useWorkspaceServiceSkillEntryActions({
           toast.error("自动化已创建，但没能回到生成，请稍后手动打开。");
         }
       } catch (error) {
-        toast.error(`创建本地自动化任务失败：${getErrorMessage(error)}`);
+        toast.error(
+          `创建本地自动化任务失败：${getWorkspaceServiceSkillErrorMessage(
+            error,
+          )}`,
+        );
         throw error;
       } finally {
         setAutomationJobSaving(false);

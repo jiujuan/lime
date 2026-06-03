@@ -442,8 +442,6 @@ function mountHook(initialProps?: Partial<HookProps>): HookHarness {
     mentionedCharacters: [],
     setMentionedCharacters: mockSetMentionedCharacters,
     chatToolPreferences: {
-      webSearch: false,
-      thinking: false,
       task: false,
       subagent: false,
     },
@@ -1244,8 +1242,6 @@ Extract it into the Agent Skills directory.`,
     const harness = mountHook({
       input: "请拆解这个复杂需求，并安排多人协作推进",
       chatToolPreferences: {
-        webSearch: false,
-        thinking: false,
         task: false,
         subagent: true,
       },
@@ -5651,8 +5647,6 @@ Extract it into the Agent Skills directory.`,
       input: "继续修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
       executionStrategy: "react",
       chatToolPreferences: {
-        webSearch: false,
-        thinking: false,
         task: false,
         subagent: false,
       },
@@ -6607,8 +6601,6 @@ Extract it into the Agent Skills directory.`,
     const harness = mountHook({
       input: "@浏览器 打开 https://news.baidu.com 并提炼页面主要内容",
       chatToolPreferences: {
-        webSearch: true,
-        thinking: false,
         task: false,
         subagent: false,
       },
@@ -6666,8 +6658,6 @@ Extract it into the Agent Skills directory.`,
     const harness = mountHook({
       input: "@Browser Agent open https://openai.com/pricing and compare plans",
       chatToolPreferences: {
-        webSearch: true,
-        thinking: false,
         task: false,
         subagent: false,
       },
@@ -6720,8 +6710,6 @@ Extract it into the Agent Skills directory.`,
     const harness = mountHook({
       input: "@Mini Tester open https://example.com and verify the CTA flow",
       chatToolPreferences: {
-        webSearch: true,
-        thinking: false,
         task: false,
         subagent: false,
       },

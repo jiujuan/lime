@@ -1,5 +1,4 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import {
@@ -7,6 +6,13 @@ import {
   VOICE_MODEL_SETTINGS_FOCUS_STORAGE_KEY,
   VOICE_MODEL_SETTINGS_SECTION_ID,
 } from "@/lib/voiceModelSettingsNavigation";
+import {
+  cleanupMountedVoiceSettings,
+  createDeferred,
+  createVoiceInputConfig,
+  flushEffects,
+  renderComponent,
+} from "./voiceSettingsTestFixtures";
 
 const {
   mockGetConfig,
@@ -212,14 +218,6 @@ vi.mock("@/components/voice/InstructionEditor", () => ({
   ),
 }));
 
-import { VoiceSettings } from ".";
-
-interface Mounted {
-  container: HTMLDivElement;
-  root: Root;
-}
-
-const mounted: Mounted[] = [];
 let emitVoiceModelProgress:
   | ((event: {
       model_id: string;
@@ -240,25 +238,6 @@ const originalHtmlScrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
   "scrollIntoView",
 );
 
-function renderComponent(): HTMLDivElement {
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  act(() => {
-    root.render(<VoiceSettings />);
-  });
-  mounted.push({ container, root });
-  return container;
-}
-
-async function flushEffects(times = 4) {
-  await act(async () => {
-    for (let index = 0; index < times; index += 1) {
-      await Promise.resolve();
-    }
-  });
-}
-
 async function waitForScrollIntoView() {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     await flushEffects(2);
@@ -268,57 +247,6 @@ async function waitForScrollIntoView() {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   throw new Error("等待语音模型区块滚动聚焦超时");
-}
-
-function createDeferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-}
-
-function createVoiceInputConfig(overrides: Record<string, unknown> = {}) {
-  return {
-    enabled: true,
-    shortcut: "CommandOrControl+Shift+V",
-    processor: {
-      polish_enabled: true,
-      polish_provider: "openai",
-      polish_model: "gpt-4.1-mini",
-      default_instruction_id: "default",
-    },
-    output: {
-      mode: "type",
-      type_delay_ms: 10,
-    },
-    instructions: [
-      {
-        id: "default",
-        name: "默认润色",
-        prompt: "{{text}}",
-        is_preset: true,
-      },
-      {
-        id: "translate_en",
-        name: "翻译为英文",
-        prompt: "{{text}}",
-        is_preset: true,
-      },
-      {
-        id: "email",
-        name: "邮件格式",
-        prompt: "{{text}}",
-        is_preset: false,
-      },
-    ],
-    selected_device_id: undefined,
-    sound_enabled: true,
-    translate_instruction_id: "translate_en",
-    ...overrides,
-  };
 }
 
 beforeEach(async () => {
@@ -467,16 +395,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  while (mounted.length > 0) {
-    const target = mounted.pop();
-    if (!target) {
-      break;
-    }
-    act(() => {
-      target.root.unmount();
-    });
-    target.container.remove();
-  }
+  cleanupMountedVoiceSettings();
   window.sessionStorage.removeItem(VOICE_MODEL_SETTINGS_FOCUS_STORAGE_KEY);
   if (originalScrollIntoViewDescriptor) {
     Object.defineProperty(

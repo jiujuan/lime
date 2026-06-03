@@ -34,10 +34,7 @@ import type {
   Message,
 } from "../types";
 import type { HarnessSessionState } from "../utils/harnessState";
-import {
-  buildThreadReliabilityView,
-  type ThreadReliabilityTone,
-} from "../utils/threadReliabilityView";
+import { buildThreadReliabilityView } from "../utils/threadReliabilityView";
 import { resolveRuntimeRoutingEvidence } from "../utils/runtimeRoutingEvidence";
 import {
   buildReliabilityDiagnosticText,
@@ -62,6 +59,15 @@ import { AgentThreadMemoryPrefetchBaselineCard } from "./AgentThreadMemoryPrefet
 import { AgentThreadMemoryPrefetchPreview } from "./AgentThreadMemoryPrefetchPreview";
 import { AgentThreadOutcomeSummary } from "./AgentThreadOutcomeSummary";
 import { AgentThreadRoutingEvidenceCard } from "./AgentThreadRoutingEvidenceCard";
+import {
+  resolveLatestTurnPrompt,
+  resolveRuntimeDecisionReason,
+  resolveRuntimeFallbackChain,
+  resolveStatShellClassName,
+  resolveTeamMemoryShadowKey,
+  resolveToneClassName,
+  serializeReliabilityClipboardPayload,
+} from "./AgentThreadReliabilityPanelViewModel";
 
 interface AgentThreadReliabilityPanelProps {
   threadRead?: AgentRuntimeThreadReadModel | null;
@@ -85,47 +91,10 @@ interface AgentThreadReliabilityPanelProps {
   diagnosticRuntimeContext?: AgentThreadReliabilityDiagnosticContext | null;
 }
 
-function serializeClipboardPayload(value: unknown): string {
-  return JSON.stringify(
-    value,
-    (_key, item) => (item instanceof Date ? item.toISOString() : item),
-    2,
-  );
-}
-
-function resolveToneClassName(tone: ThreadReliabilityTone) {
-  switch (tone) {
-    case "running":
-      return "border-sky-200 bg-sky-50 text-sky-700";
-    case "waiting":
-      return "border-amber-200 bg-amber-50 text-amber-700";
-    case "completed":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-    case "failed":
-      return "border-rose-200 bg-rose-50 text-rose-700";
-    case "paused":
-      return "border-slate-200 bg-slate-50 text-slate-700";
-    default:
-      return "border-slate-200 bg-slate-50 text-slate-700";
-  }
-}
-
-function resolveStatShellClassName(tone: ThreadReliabilityTone) {
-  switch (tone) {
-    case "running":
-      return "border-sky-200/80 bg-sky-50";
-    case "waiting":
-      return "border-amber-200/80 bg-amber-50";
-    case "completed":
-      return "border-emerald-200/80 bg-emerald-50";
-    case "failed":
-      return "border-rose-200/80 bg-rose-50";
-    case "paused":
-      return "border-slate-200/80 bg-slate-50";
-    default:
-      return "border-slate-200/80 bg-slate-50";
-  }
-}
+type AgentNamespaceTranslation = (
+  key: string,
+  options?: Record<string, unknown>,
+) => unknown;
 
 export const AgentThreadReliabilityPanel: React.FC<
   AgentThreadReliabilityPanelProps
@@ -151,115 +120,89 @@ export const AgentThreadReliabilityPanel: React.FC<
   diagnosticRuntimeContext = null,
 }) => {
   const { t, i18n } = useTranslation("agent");
+  const agentT = useMemo(() => t as unknown as AgentNamespaceTranslation, [t]);
   const translateProjection = useCallback<AgentUiProjectionTranslation>(
-    (key, options) => String(t(key as never, options as never)),
-    [t],
+    (key, options) => String(agentT(key, options)),
+    [agentT],
   );
   const text = useCallback(
     (key: string, options?: Record<string, unknown>) =>
-      String(
-        t(
-          `agentChat.threadReliability.panel.${key}` as never,
-          options as never,
-        ),
-      ),
-    [t],
+      String(agentT(`agentChat.threadReliability.panel.${key}`, options)),
+    [agentT],
   );
   const locale = i18n.resolvedLanguage || i18n.language;
   const routingEvidenceText = useMemo(
     () => ({
       decisionReason: String(
-        t(
-          "agentChat.threadReliability.routingEvidence.decisionReason" as never,
-        ),
+        agentT("agentChat.threadReliability.routingEvidence.decisionReason"),
       ),
       decisionSource: String(
-        t(
-          "agentChat.threadReliability.routingEvidence.decisionSource" as never,
-        ),
+        agentT("agentChat.threadReliability.routingEvidence.decisionSource"),
       ),
       durationUnknown: String(
-        t(
-          "agentChat.threadReliability.routingEvidence.durationUnknown" as never,
-        ),
+        agentT("agentChat.threadReliability.routingEvidence.durationUnknown"),
       ),
       evidence: String(
-        t("agentChat.threadReliability.routingEvidence.evidence" as never),
+        agentT("agentChat.threadReliability.routingEvidence.evidence"),
       ),
       evidenceSource: String(
-        t(
-          "agentChat.threadReliability.routingEvidence.evidenceSource" as never,
-        ),
+        agentT("agentChat.threadReliability.routingEvidence.evidenceSource"),
       ),
       fallbackSlot: String(
-        t("agentChat.threadReliability.routingEvidence.fallbackSlot" as never),
+        agentT("agentChat.threadReliability.routingEvidence.fallbackSlot"),
       ),
       fallbackChain: String(
-        t("agentChat.threadReliability.routingEvidence.fallbackChain" as never),
+        agentT("agentChat.threadReliability.routingEvidence.fallbackChain"),
       ),
       firstText: String(
-        t("agentChat.threadReliability.routingEvidence.firstText" as never),
+        agentT("agentChat.threadReliability.routingEvidence.firstText"),
       ),
       firstThinking: String(
-        t("agentChat.threadReliability.routingEvidence.firstThinking" as never),
+        agentT("agentChat.threadReliability.routingEvidence.firstThinking"),
       ),
       firstVisible: String(
-        t("agentChat.threadReliability.routingEvidence.firstVisible" as never),
+        agentT("agentChat.threadReliability.routingEvidence.firstVisible"),
       ),
       firstTokenMetrics: String(
-        t(
-          "agentChat.threadReliability.routingEvidence.firstTokenMetrics" as never,
-        ),
+        agentT("agentChat.threadReliability.routingEvidence.firstTokenMetrics"),
       ),
-      none: String(
-        t("agentChat.threadReliability.routingEvidence.none" as never),
-      ),
+      none: String(agentT("agentChat.threadReliability.routingEvidence.none")),
       oemLocked: String(
-        t("agentChat.threadReliability.routingEvidence.oemLocked" as never),
+        agentT("agentChat.threadReliability.routingEvidence.oemLocked"),
       ),
       oemModelPrefix: String(
-        t(
-          "agentChat.threadReliability.routingEvidence.oemModelPrefix" as never,
-        ),
+        agentT("agentChat.threadReliability.routingEvidence.oemModelPrefix"),
       ),
       oemQuotaLow: String(
-        t("agentChat.threadReliability.routingEvidence.oemQuotaLow" as never),
+        agentT("agentChat.threadReliability.routingEvidence.oemQuotaLow"),
       ),
       selectedModel: String(
-        t("agentChat.threadReliability.routingEvidence.selectedModel" as never),
+        agentT("agentChat.threadReliability.routingEvidence.selectedModel"),
       ),
       requestedModel: String(
-        t(
-          "agentChat.threadReliability.routingEvidence.requestedModel" as never,
-        ),
+        agentT("agentChat.threadReliability.routingEvidence.requestedModel"),
       ),
-      run: String(
-        t("agentChat.threadReliability.routingEvidence.run" as never),
-      ),
+      run: String(agentT("agentChat.threadReliability.routingEvidence.run")),
       runUnknown: String(
-        t("agentChat.threadReliability.routingEvidence.runUnknown" as never),
+        agentT("agentChat.threadReliability.routingEvidence.runUnknown"),
       ),
       serviceModelSlot: String(
-        t(
-          "agentChat.threadReliability.routingEvidence.serviceModelSlot" as never,
-        ),
+        agentT("agentChat.threadReliability.routingEvidence.serviceModelSlot"),
       ),
       settingsSource: String(
-        t(
-          "agentChat.threadReliability.routingEvidence.settingsSource" as never,
-        ),
+        agentT("agentChat.threadReliability.routingEvidence.settingsSource"),
       ),
       title: String(
-        t("agentChat.threadReliability.routingEvidence.title" as never),
+        agentT("agentChat.threadReliability.routingEvidence.title"),
       ),
       unknown: String(
-        t("agentChat.threadReliability.routingEvidence.unknown" as never),
+        agentT("agentChat.threadReliability.routingEvidence.unknown"),
       ),
       unset: String(
-        t("agentChat.threadReliability.routingEvidence.unset" as never),
+        agentT("agentChat.threadReliability.routingEvidence.unset"),
       ),
     }),
-    [t],
+    [agentT],
   );
   const [isInterrupting, setIsInterrupting] = useState(false);
   const [isResumingThread, setIsResumingThread] = useState(false);
@@ -311,25 +254,19 @@ export const AgentThreadReliabilityPanel: React.FC<
   const summary = isInterrupting ? text("summary.interrupting") : view.summary;
   const latestCompactionBoundary =
     threadRead?.latest_compaction_boundary || null;
-  const runtimeSummary = threadRead?.runtime_summary || null;
   const oemPolicy = threadRead?.oem_policy || null;
   const runtimeRoutingEvidence = useMemo(
     () => resolveRuntimeRoutingEvidence(threadRead),
     [threadRead],
   );
-  const fallbackChain = Array.isArray(threadRead?.fallback_chain)
-    ? threadRead?.fallback_chain || []
-    : Array.isArray(
-          (runtimeSummary as { fallbackChain?: unknown } | null)?.fallbackChain,
-        )
-      ? (((runtimeSummary as { fallbackChain?: string[] | null })
-          .fallbackChain || []) as string[])
-      : runtimeRoutingEvidence.fallbackChain;
-  const runtimeDecisionReason =
-    threadRead?.decision_reason ||
-    ((runtimeSummary as { decisionReason?: string | null } | null)
-      ?.decisionReason ??
-      runtimeRoutingEvidence.decisionReason);
+  const fallbackChain = resolveRuntimeFallbackChain(
+    threadRead,
+    runtimeRoutingEvidence,
+  );
+  const runtimeDecisionReason = resolveRuntimeDecisionReason(
+    threadRead,
+    runtimeRoutingEvidence,
+  );
   const latestCompactionCreatedLabel = formatDiagnosticDateTime(
     latestCompactionBoundary?.created_at,
     locale,
@@ -351,27 +288,18 @@ export const AgentThreadReliabilityPanel: React.FC<
     latestFileCheckpoint?.preview_text,
     180,
   );
-  const latestTurnPrompt = useMemo(() => {
-    const activeTurn =
-      turns.find((turn) => turn.id === currentTurnId) ||
-      turns[turns.length - 1];
-    return activeTurn?.prompt_text?.trim() || "";
-  }, [currentTurnId, turns]);
+  const latestTurnPrompt = useMemo(
+    () => resolveLatestTurnPrompt(turns, currentTurnId),
+    [currentTurnId, turns],
+  );
   const teamMemoryShadowMetadata = useMemo(
     () => buildTeamMemoryShadowRequestMetadata(teamMemorySnapshot),
     [teamMemorySnapshot],
   );
-  const teamMemoryShadowKey = useMemo(() => {
-    if (!teamMemoryShadowMetadata) {
-      return "";
-    }
-    return [
-      teamMemoryShadowMetadata.repo_scope,
-      ...teamMemoryShadowMetadata.entries.map(
-        (entry) => `${entry.key}:${entry.updated_at}`,
-      ),
-    ].join("|");
-  }, [teamMemoryShadowMetadata]);
+  const teamMemoryShadowKey = useMemo(
+    () => resolveTeamMemoryShadowKey(teamMemoryShadowMetadata),
+    [teamMemoryShadowMetadata],
+  );
   const diagnosticSessionId = diagnosticRuntimeContext?.sessionId?.trim() || "";
   const diagnosticWorkingDir =
     diagnosticRuntimeContext?.workingDir?.trim() || "";
@@ -578,7 +506,7 @@ export const AgentThreadReliabilityPanel: React.FC<
 
     try {
       await navigator.clipboard.writeText(
-        serializeClipboardPayload(
+        serializeReliabilityClipboardPayload(
           buildReliabilityRawPayload({
             threadRead,
             turns,
@@ -759,31 +687,41 @@ export const AgentThreadReliabilityPanel: React.FC<
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
             <div className="rounded-xl border border-sky-100 bg-white px-3 py-2">
-              <div className="text-[11px] text-sky-700">Action / HITL</div>
+              <div className="text-[11px] text-sky-700">
+                {text("projection.metric.action")}
+              </div>
               <div className="mt-1 text-lg font-semibold text-sky-950">
                 {agentUiProjectionSummary.actionCount}
               </div>
             </div>
             <div className="rounded-xl border border-sky-100 bg-white px-3 py-2">
-              <div className="text-[11px] text-sky-700">Task / Agent</div>
+              <div className="text-[11px] text-sky-700">
+                {text("projection.metric.task")}
+              </div>
               <div className="mt-1 text-lg font-semibold text-sky-950">
                 {agentUiProjectionSummary.taskCount}
               </div>
             </div>
             <div className="rounded-xl border border-sky-100 bg-white px-3 py-2">
-              <div className="text-[11px] text-sky-700">Artifact</div>
+              <div className="text-[11px] text-sky-700">
+                {text("projection.metric.artifact")}
+              </div>
               <div className="mt-1 text-lg font-semibold text-sky-950">
                 {agentUiProjectionSummary.artifactCount}
               </div>
             </div>
             <div className="rounded-xl border border-sky-100 bg-white px-3 py-2">
-              <div className="text-[11px] text-sky-700">Evidence</div>
+              <div className="text-[11px] text-sky-700">
+                {text("projection.metric.evidence")}
+              </div>
               <div className="mt-1 text-lg font-semibold text-sky-950">
                 {agentUiProjectionSummary.evidenceCount}
               </div>
             </div>
             <div className="rounded-xl border border-sky-100 bg-white px-3 py-2">
-              <div className="text-[11px] text-sky-700">Diagnostics</div>
+              <div className="text-[11px] text-sky-700">
+                {text("projection.metric.diagnostics")}
+              </div>
               <div className="mt-1 text-lg font-semibold text-sky-950">
                 {agentUiProjectionSummary.diagnosticsCount}
               </div>
@@ -1145,7 +1083,9 @@ export const AgentThreadReliabilityPanel: React.FC<
                   variant="outline"
                   className="border-slate-200 bg-white text-slate-700"
                 >
-                  v{latestFileCheckpoint.version_no}
+                  {text("fileCheckpoints.version", {
+                    version: latestFileCheckpoint.version_no,
+                  })}
                 </Badge>
               ) : null}
             </div>

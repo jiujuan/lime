@@ -5,8 +5,8 @@ export type AsterSandboxPolicy = "read-only" | "workspace-write" | "danger-full-
 export type AsterSessionExecutionRuntimeAccessMode = "read-only" | "current" | "full-access";
 export type AsterSessionExecutionRuntimeSource = "session" | "runtime_snapshot" | "turn_context" | "model_change";
 export interface AsterSessionExecutionRuntimePreferences {
-    webSearch: boolean;
-    thinking: boolean;
+    webSearch?: boolean;
+    thinking?: boolean;
     task: boolean;
     subagent: boolean;
 }

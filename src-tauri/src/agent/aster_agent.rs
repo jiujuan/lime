@@ -102,6 +102,13 @@ impl AsterAgentWrapper {
         lime_agent::get_session_sync(db, session_id)
     }
 
+    pub fn get_session_sync_with_full_timeline_without_messages(
+        db: &DbConnection,
+        session_id: &str,
+    ) -> Result<SessionDetail, String> {
+        lime_agent::get_session_sync_with_full_timeline_without_messages(db, session_id)
+    }
+
     pub async fn get_runtime_session_detail(
         db: &DbConnection,
         session_id: &str,

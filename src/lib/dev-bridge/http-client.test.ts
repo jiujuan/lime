@@ -515,6 +515,12 @@ describe("http-client", () => {
     expect(
       resolveBridgeRequestTimeoutMs("workspace_ensure_default_ready"),
     ).toBe(30000);
+    expect(resolveBridgeRequestTimeoutMs("agent_runtime_get_session")).toBe(
+      20000,
+    );
+    expect(resolveBridgeRequestTimeoutMs("agent_runtime_list_sessions")).toBe(
+      8000,
+    );
     expect(resolveBridgeRequestTimeoutMs("agent_app_start_ui_runtime")).toBe(
       150000,
     );

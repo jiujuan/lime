@@ -320,16 +320,10 @@ async function inputTextarea(textarea: HTMLTextAreaElement, value: string) {
   });
 }
 
-function getBodyText() {
-  return document.body.textContent ?? "";
-}
-
 beforeEach(async () => {
-  (
-    globalThis as typeof globalThis & {
-      IS_REACT_ACT_ENVIRONMENT?: boolean;
-    }
-  ).IS_REACT_ACT_ENVIRONMENT = true;
+  (globalThis as typeof globalThis & {
+    IS_REACT_ACT_ENVIRONMENT?: boolean;
+  }).IS_REACT_ACT_ENVIRONMENT = true;
 
   vi.clearAllMocks();
   await changeLimeLocale("en-US");
@@ -453,7 +447,7 @@ describe("DeveloperSettings", () => {
     renderComponent();
     await flushEffects();
 
-    const text = getBodyText();
+    const text = document.body.textContent ?? "";
     expect(text).not.toContain("诊断建议");
     expect(text).not.toContain("动作清单");
     expect(text).not.toContain("首屏说明已收纳");

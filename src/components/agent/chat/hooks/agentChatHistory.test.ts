@@ -207,6 +207,217 @@ describe("agentChatHistory", () => {
     });
   });
 
+  it("历史恢复不应把 commentary 阶段消息合并进最终正文", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-commentary-final",
+      created_at: 1,
+      updated_at: 2,
+      history_limit: 40,
+      messages: [],
+      turns: [
+        {
+          id: "turn-commentary-final",
+          thread_id: "session-commentary-final",
+          prompt_text: "整理今天的国际新闻",
+          status: "completed",
+          started_at: "2026-06-02T10:00:00.000Z",
+          completed_at: "2026-06-02T10:00:20.000Z",
+          created_at: "2026-06-02T10:00:00.000Z",
+          updated_at: "2026-06-02T10:00:20.000Z",
+        },
+      ],
+      items: [
+        {
+          id: "user-commentary-final",
+          thread_id: "session-commentary-final",
+          turn_id: "turn-commentary-final",
+          sequence: 1,
+          type: "user_message",
+          content: "整理今天的国际新闻",
+          status: "completed",
+          started_at: "2026-06-02T10:00:00.000Z",
+          completed_at: "2026-06-02T10:00:00.000Z",
+          updated_at: "2026-06-02T10:00:00.000Z",
+        } as never,
+        {
+          id: "assistant-commentary",
+          thread_id: "session-commentary-final",
+          turn_id: "turn-commentary-final",
+          sequence: 2,
+          type: "agent_message",
+          text: "我会先检索多组来源并交叉核对。",
+          phase: "commentary",
+          status: "completed",
+          started_at: "2026-06-02T10:00:01.000Z",
+          completed_at: "2026-06-02T10:00:02.000Z",
+          updated_at: "2026-06-02T10:00:02.000Z",
+        } as never,
+        {
+          id: "assistant-final",
+          thread_id: "session-commentary-final",
+          turn_id: "turn-commentary-final",
+          sequence: 3,
+          type: "agent_message",
+          text: "## 今日国际新闻简报\n\n- 第一条要闻。",
+          phase: "final_answer",
+          status: "completed",
+          started_at: "2026-06-02T10:00:18.000Z",
+          completed_at: "2026-06-02T10:00:20.000Z",
+          updated_at: "2026-06-02T10:00:20.000Z",
+        } as never,
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-commentary-final",
+    );
+
+    expect(messages).toHaveLength(2);
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      content: "## 今日国际新闻简报\n\n- 第一条要闻。",
+      contentParts: [
+        {
+          type: "text",
+          text: "## 今日国际新闻简报\n\n- 第一条要闻。",
+        },
+      ],
+    });
+    expect(messages[1]?.content).not.toContain("我会先检索");
+    expect(
+      messages[1]?.contentParts
+        ?.filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n"),
+    ).not.toContain("我会先检索");
+  });
+
+  it("历史恢复应把旧无 phase turn 中最后一条 agent_message 作为最终正文", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-legacy-unphased-final",
+      created_at: 1,
+      updated_at: 2,
+      history_limit: 40,
+      messages: [],
+      turns: [
+        {
+          id: "turn-legacy-unphased-final",
+          thread_id: "session-legacy-unphased-final",
+          prompt_text: "整理今天的国际新闻",
+          status: "completed",
+          started_at: "2026-06-02T10:00:00.000Z",
+          completed_at: "2026-06-02T10:00:30.000Z",
+          created_at: "2026-06-02T10:00:00.000Z",
+          updated_at: "2026-06-02T10:00:30.000Z",
+        },
+      ],
+      items: [
+        {
+          id: "user-legacy-unphased-final",
+          thread_id: "session-legacy-unphased-final",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 1,
+          type: "user_message",
+          content: "整理今天的国际新闻",
+          status: "completed",
+          started_at: "2026-06-02T10:00:00.000Z",
+          completed_at: "2026-06-02T10:00:00.000Z",
+          updated_at: "2026-06-02T10:00:00.000Z",
+        } as never,
+        {
+          id: "assistant-process-search",
+          thread_id: "session-legacy-unphased-final",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 2,
+          type: "agent_message",
+          text: "我会先做几组中英文检索，覆盖多个新闻源。",
+          status: "completed",
+          started_at: "2026-06-02T10:00:01.000Z",
+          completed_at: "2026-06-02T10:00:02.000Z",
+          updated_at: "2026-06-02T10:00:02.000Z",
+        } as never,
+        {
+          id: "tool-web-search",
+          thread_id: "session-legacy-unphased-final",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 3,
+          type: "tool_call",
+          tool_name: "WebSearch",
+          arguments: { query: "world news headlines" },
+          output: "搜索结果摘要",
+          success: true,
+          status: "completed",
+          started_at: "2026-06-02T10:00:03.000Z",
+          completed_at: "2026-06-02T10:00:05.000Z",
+          updated_at: "2026-06-02T10:00:05.000Z",
+        } as never,
+        {
+          id: "assistant-process-fetch",
+          thread_id: "session-legacy-unphased-final",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 4,
+          type: "agent_message",
+          text: "搜索结果里噪声较多，我再打开几个页面交叉核对。",
+          status: "completed",
+          started_at: "2026-06-02T10:00:06.000Z",
+          completed_at: "2026-06-02T10:00:07.000Z",
+          updated_at: "2026-06-02T10:00:07.000Z",
+        } as never,
+        {
+          id: "tool-web-fetch-failed",
+          thread_id: "session-legacy-unphased-final",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 5,
+          type: "tool_call",
+          tool_name: "WebFetch",
+          arguments: { url: "https://example.invalid/news" },
+          output: "",
+          error: "请求失败",
+          success: false,
+          status: "failed",
+          started_at: "2026-06-02T10:00:08.000Z",
+          completed_at: "2026-06-02T10:00:09.000Z",
+          updated_at: "2026-06-02T10:00:09.000Z",
+        } as never,
+        {
+          id: "assistant-final-news",
+          thread_id: "session-legacy-unphased-final",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 6,
+          type: "agent_message",
+          text: "## 今日国际新闻简报\n\n- 重点一：附来源。",
+          status: "completed",
+          started_at: "2026-06-02T10:00:28.000Z",
+          completed_at: "2026-06-02T10:00:30.000Z",
+          updated_at: "2026-06-02T10:00:30.000Z",
+        } as never,
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-legacy-unphased-final",
+    );
+
+    expect(messages).toHaveLength(2);
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      content: "## 今日国际新闻简报\n\n- 重点一：附来源。",
+    });
+    expect(messages[1]?.content).not.toContain("我会先做");
+    expect(messages[1]?.content).not.toContain("噪声较多");
+    expect(messages[1]?.contentParts?.map((part) => part.type)).toEqual([
+      "tool_use",
+      "tool_use",
+      "text",
+    ]);
+    expect(messages[1]?.toolCalls?.map((tool) => tool.status)).toEqual([
+      "completed",
+      "failed",
+    ]);
+  });
+
   it("后端 detail.messages 有正文时仍应从 timeline 恢复 Skill、思考与用户输入", () => {
     const detail: AsterSessionDetail = {
       id: "session-skill-timeline-process",

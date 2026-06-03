@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { AlertTriangle, CheckCircle2, Info, Loader2 } from "lucide-react";
 import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
 import { StepProgress } from "@/lib/workspace/workbenchUi";
@@ -42,8 +43,6 @@ type WorkspaceMainAreaProps = Omit<
 >;
 type CanvasWorkbenchLayoutProps = ComponentProps<typeof CanvasWorkbenchLayout>;
 type ChatToolPreferences = {
-  webSearch: boolean;
-  thinking: boolean;
   task: boolean;
   subagent: boolean;
 };
@@ -52,6 +51,10 @@ type StepProgressProps = ComponentProps<typeof StepProgress>;
 type MessageListProps = ComponentProps<typeof MessageList>;
 type TeamWorkspaceDockProps = ComponentProps<typeof TeamWorkspaceDock>;
 type EmptyStateProps = ComponentProps<typeof EmptyState>;
+type AgentNamespaceTranslation = (
+  key: string,
+  options?: Record<string, unknown>,
+) => unknown;
 
 interface WorkspaceChatContentParams {
   entryBannerVisible: boolean;
@@ -77,6 +80,15 @@ interface WorkspaceChatContentParams {
   a2uiSubmissionNotice?: A2UISubmissionNoticeData | null;
   showInlineInputbar: boolean;
   inputbarNode: ReactNode;
+  copy: WorkspaceChatContentCopy;
+}
+
+interface WorkspaceChatContentCopy {
+  entryBannerClose: string;
+  entryBannerCloseAria: string;
+  workspaceMissing: string;
+  workspaceReselect: string;
+  workspaceDismissAria: string;
 }
 
 function resolveContentSyncNoticeMeta(status: Exclude<SyncStatus, "idle">): {
@@ -129,6 +141,7 @@ function renderWorkspaceChatContent({
   a2uiSubmissionNotice,
   showInlineInputbar,
   inputbarNode,
+  copy,
 }: WorkspaceChatContentParams): ReactNode {
   const pendingA2UISource = messageListProps.activePendingA2UISource ?? null;
   const hasPendingA2UIMessageTailPayload = Boolean(
@@ -185,9 +198,9 @@ function renderWorkspaceChatContent({
             <EntryBannerClose
               type="button"
               onClick={onDismissEntryBanner}
-              aria-label="关闭入口提示"
+              aria-label={copy.entryBannerCloseAria}
             >
-              关闭
+              {copy.entryBannerClose}
             </EntryBannerClose>
           </EntryBanner>
         ) : null}
@@ -224,21 +237,19 @@ function renderWorkspaceChatContent({
           <>
             {showWorkspaceAlert ? (
               <div className="mx-4 mb-2 flex items-center gap-2 rounded-[18px] border border-amber-200/90 bg-amber-50/86 px-3.5 py-2.5 text-sm text-amber-800 shadow-sm shadow-amber-950/5 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
-                <span className="flex-1">
-                  工作区目录不存在，请重新选择一个本地目录后继续
-                </span>
+                <span className="flex-1">{copy.workspaceMissing}</span>
                 <button
                   type="button"
                   onClick={onSelectWorkspaceDirectory}
                   className="shrink-0 rounded-xl border border-amber-200 bg-white/84 px-2.5 py-1 text-xs font-medium text-amber-900 transition hover:border-amber-300 hover:bg-white dark:bg-amber-800 dark:text-amber-100 dark:hover:bg-amber-700"
                 >
-                  重新选择目录
+                  {copy.workspaceReselect}
                 </button>
                 <button
                   type="button"
                   onClick={onDismissWorkspaceAlert}
                   className="shrink-0 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200"
-                  aria-label="关闭"
+                  aria-label={copy.workspaceDismissAria}
                 >
                   ✕
                 </button>
@@ -590,6 +601,10 @@ export function WorkspaceConversationScene({
   showFloatingInputOverlay,
   hasPendingA2UIForm,
 }: WorkspaceConversationSceneProps) {
+  const { t } = useTranslation("agent");
+  const agentT = t as unknown as AgentNamespaceTranslation;
+  const text = (key: string) =>
+    String(agentT(`agentChat.workspaceConversation.${key}`));
   const emptyStateProps = buildWorkspaceEmptyStateProps({
     input,
     setInput,
@@ -686,6 +701,13 @@ export function WorkspaceConversationScene({
     showInlineInputbar:
       !contextWorkspaceEnabled && !shouldHideGeneralWorkbenchInputForTheme,
     inputbarNode,
+    copy: {
+      entryBannerClose: text("entryBanner.close"),
+      entryBannerCloseAria: text("entryBanner.closeAria"),
+      workspaceMissing: text("workspaceAlert.missing"),
+      workspaceReselect: text("workspaceAlert.reselect"),
+      workspaceDismissAria: text("workspaceAlert.dismissAria"),
+    },
   });
   const chatNavbarProps = buildWorkspaceNavbarProps({
     visible: navbarVisible,

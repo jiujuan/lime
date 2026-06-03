@@ -1,4 +1,3 @@
-import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -280,11 +279,9 @@ describe("KnowledgePage", () => {
   let pendingPack: KnowledgePackDetail;
 
   beforeEach(() => {
-    (
-      globalThis as typeof globalThis & {
-        IS_REACT_ACT_ENVIRONMENT?: boolean;
-      }
-    ).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as typeof globalThis & {
+      IS_REACT_ACT_ENVIRONMENT?: boolean;
+    }).IS_REACT_ACT_ENVIRONMENT = true;
     vi.clearAllMocks();
     window.localStorage.clear();
 
@@ -406,7 +403,6 @@ describe("KnowledgePage", () => {
     expect(container.textContent).toContain("金花黑茶品牌产品资料");
     expect(container.textContent).toContain("已可用");
     expect(container.textContent).toContain("去确认");
-
     const defaultText = container.textContent ?? "";
     for (const forbidden of [
       "Builder Skill",

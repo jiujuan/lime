@@ -112,6 +112,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Test layer budget
+        run: node scripts/check-vitest-layer-budget.mjs --max-component-candidates 8
+
       - name: Unit tests
         run: npm run test:unit
 
@@ -147,6 +150,9 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Test layer budget
+        run: node scripts/check-vitest-layer-budget.mjs --max-component-candidates 8
 
       - name: Full frontend Vitest
         run: npm run test:frontend:all
@@ -219,6 +225,37 @@ jobs:
       - name: Run headless GUI smoke
         run: npm run verify:gui-smoke -- --timeout-ms 1800000
 
+  rust:
+    name: Rust Quick
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: changed
+    if: ${{ github.event_name == 'pull_request' && (needs.changed.outputs.rust == 'true' || needs.changed.outputs.fallback == 'true' || needs.changed.outputs.workflow == 'true') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: quality-rust-quick
+          cache-on-failure: true
+
+      - name: Rust layer budget
+        run: node scripts/check-rust-layer-budget.mjs --max-e2e-runnable 0
+
+      - name: Unit Rust tests
+        run: npm run test:rust:unit
+
   rust_full:
     name: Rust Full
     runs-on: ubuntu-latest
@@ -283,6 +320,7 @@ jobs:
       - frontend_full
       - bridge_contracts
       - gui_smoke
+      - rust
       - rust_full
       - windows_shell_runtime
     if: always()
@@ -298,6 +336,7 @@ jobs:
           FRONTEND_FULL_RESULT='${{ needs.frontend_full.result }}'
           BRIDGE_RESULT='${{ needs.bridge_contracts.result }}'
           GUI_SMOKE_RESULT='${{ needs.gui_smoke.result }}'
+          RUST_RESULT='${{ needs.rust.result }}'
           RUST_FULL_RESULT='${{ needs.rust_full.result }}'
           WINDOWS_SHELL_RESULT='${{ needs.windows_shell_runtime.result }}'
           FALLBACK='${{ needs.changed.outputs.fallback }}'
@@ -316,12 +355,18 @@ jobs:
             IS_WORKFLOW_DISPATCH="true"
           fi
           FRONTEND_QUICK_REQUIRED="false"
+          RUST_QUICK_REQUIRED="false"
           MAIN_FULL_REQUIRED="false"
           if [[ "${DOCS_ONLY}" != "true" ]]; then
             if [[ "${IS_MAIN_PUSH}" == "true" || "${IS_WORKFLOW_DISPATCH}" == "true" ]]; then
               MAIN_FULL_REQUIRED="true"
-            elif [[ "${FRONTEND_REQUIRED}" == "true" || "${FALLBACK}" == "true" || "${WORKFLOW}" == "true" ]]; then
-              FRONTEND_QUICK_REQUIRED="true"
+            else
+              if [[ "${FRONTEND_REQUIRED}" == "true" || "${FALLBACK}" == "true" || "${WORKFLOW}" == "true" ]]; then
+                FRONTEND_QUICK_REQUIRED="true"
+              fi
+              if [[ "${RUST_REQUIRED}" == "true" || "${FALLBACK}" == "true" || "${WORKFLOW}" == "true" ]]; then
+                RUST_QUICK_REQUIRED="true"
+              fi
             fi
           fi
 
@@ -338,6 +383,7 @@ jobs:
           echo "frontend_full : ${FRONTEND_FULL_RESULT}"
           echo "bridge      : ${BRIDGE_RESULT}"
           echo "gui_smoke   : ${GUI_SMOKE_RESULT}"
+          echo "rust_quick  : ${RUST_RESULT}"
           echo "rust_full   : ${RUST_FULL_RESULT}"
           echo "windows_shell_runtime: ${WINDOWS_SHELL_RESULT}"
 
@@ -379,6 +425,13 @@ jobs:
               fi
             fi
 
+            if [[ -z "${FAILURE_REASON}" && "${RUST_QUICK_REQUIRED}" == 'true' ]]; then
+              if [[ "${RUST_RESULT}" != 'success' ]]; then
+                FINAL_STATUS="failed"
+                FAILURE_REASON="rust quick failed"
+              fi
+            fi
+
             if [[ -z "${FAILURE_REASON}" && "${MAIN_FULL_REQUIRED}" == 'true' ]]; then
               if [[ "${FRONTEND_FULL_RESULT}" != 'success' ]]; then
                 FINAL_STATUS="failed"
@@ -411,9 +464,9 @@ jobs:
               if [[ "${FAILURE_REASON}" == "integrity failed" ]]; then
                 NEXT_ACTION='Run `npm run verify:app-version` and sync package / Cargo / Tauri version files.'
               elif [[ "${FAILURE_REASON}" == "frontend quick failed" ]]; then
-                NEXT_ACTION='Run `npm run lint && npm run typecheck && npm run test:unit && npm run test:contract` to reproduce the frontend quick failure locally.'
+                NEXT_ACTION='Run `npm run lint && npm run typecheck && node scripts/check-vitest-layer-budget.mjs --max-component-candidates 8 && npm run test:unit && npm run test:contract` to reproduce the frontend quick failure locally.'
               elif [[ "${FAILURE_REASON}" == "frontend full failed" ]]; then
-                NEXT_ACTION='Run `npm run test:frontend:all` after `npm run lint && npm run typecheck` to reproduce the full frontend failure locally.'
+                NEXT_ACTION='Run `node scripts/check-vitest-layer-budget.mjs --max-component-candidates 8 && npm run test:frontend:all` after `npm run lint && npm run typecheck` to reproduce the full frontend failure locally.'
               elif [[ "${FAILURE_REASON}" == "bridge/contracts failed" ]]; then
                 if [[ ",${BRIDGE_REASONS}," == *",harness_cleanup_contract,"* ]]; then
                   NEXT_ACTION='Run `npm run harness:cleanup-report:check` first, then `npm run test:contracts`.'
@@ -424,6 +477,8 @@ jobs:
                 fi
               elif [[ "${FAILURE_REASON}" == "gui smoke failed" ]]; then
                 NEXT_ACTION='Run `npm run verify:gui-smoke -- --timeout-ms 900000` and inspect DevBridge / headless Tauri readiness.'
+              elif [[ "${FAILURE_REASON}" == "rust quick failed" ]]; then
+                NEXT_ACTION='Run `node scripts/check-rust-layer-budget.mjs --max-e2e-runnable 0 && npm run test:rust:unit` to reproduce the Rust unit-layer failure locally.'
               elif [[ "${FAILURE_REASON}" == "windows shell runtime failed" ]]; then
                 NEXT_ACTION='Run `cargo test --manifest-path src-tauri/Cargo.toml -p lime-agent --test windows_shell_runtime -- --test-threads=1` on Windows and inspect PowerShell PATH fallback.'
               elif [[ "${FAILURE_REASON}" == "rust full failed" ]]; then
@@ -452,6 +507,7 @@ jobs:
             echo "| frontend_full | ${MAIN_FULL_REQUIRED} | ${FRONTEND_FULL_RESULT} |"
             echo "| bridge_contracts | ${BRIDGE_REQUIRED} | ${BRIDGE_RESULT} |"
             echo "| gui_smoke | ${GUI_SMOKE_REQUIRED} / main_full=${MAIN_FULL_REQUIRED} | ${GUI_SMOKE_RESULT} |"
+            echo "| rust_quick | ${RUST_QUICK_REQUIRED} | ${RUST_RESULT} |"
             echo "| rust_full | ${MAIN_FULL_REQUIRED} | ${RUST_FULL_RESULT} |"
             echo "| windows_shell_runtime | ${RUST_REQUIRED} | ${WINDOWS_SHELL_RESULT} |"
             echo

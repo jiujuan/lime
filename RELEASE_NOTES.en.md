@@ -1,38 +1,42 @@
-## Lime v1.56.0
+## Lime v1.57.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
 
-- Expanded the Harness status panel with issue evidence packs, handoff bundles, replay cases, review decisions, file review, output signals, tool inventory, and runtime facts so real Agent runs can be preserved as reviewable evidence.
-- Converged the Agent input bar onto the unified `react` runtime path, removing the pre-send execution strategy / thinking / web search controls so search, reasoning effort, and tool use are decided by the model from task context.
+- Agent run completion now prefers the final answer text from the timeline when materializing artifacts, memory capture, and file checkpoints, avoiding intermediate reasoning or streaming fragments being persisted as final output.
+- Expanded Agent workspace presentation and replay boundaries for file changes, tool processes, internal image placeholders, artifact generation briefs, runtime attachments, and message phases.
+- Memory settings and runtime metadata now have clearer file checkpoint, memory profile, and artifact request metadata paths, giving future replayable runs a more stable source of truth.
+- Added Rust test-layer commands: `test:rust:unit`, `test:rust:integration`, `test:rust:e2e`, and `test:rust:layers:stats`, aligning backend TDD with the frontend layered test workflow.
 
 ### Fixes
 
-- Fixed legacy `auto` / `code_orchestrated` execution strategy normalization across the frontend, metadata, and Rust turn context so old strategies no longer leak into current submit payloads.
-- Fixed Agent runtime status copy for search, browser, reasoning, and collaboration capability states so the status strip matches the current tool surface and runtime strategy.
-- Fixed input bar submit payload boundaries so thinking, web search, and execution strategy fields already owned by the session/runtime are not resubmitted redundantly.
+- Fixed normalization for final Agent messages, thinking text, tool batches, and search result previews so internal process text, empty fragments, and provider error details are less likely to leak into user-visible messages.
+- Fixed Markdown and streaming renderer boundaries for code blocks, placeholder content, and ongoing output states, improving long replies and tool output rendering.
+- Fixed state assembly boundaries in Workspace send actions, chat history, task-center tabs, and Agent runtime error presentation to reduce stale-state display issues.
+- Fixed regression-covered behavior around expert bindings, memory APIs, artifact protocol, and OEM cloud access.
 
 ### Improvements And Refactors
 
-- Split the Harness status panel from one large component into dedicated section, shell, primitive, preview dialog, handoff export, tool inventory, file review, and output signal modules.
-- Moved more Harness presentation logic into View Models / selectors / helpers, covering file review, diff summaries, output signals, text path parsing, tool inventory, runtime facts, and handoff / evidence / replay / analysis artifacts.
-- Simplified state assembly in Workspace, Inputbar, Agent Chat session, auto-title, task-center draft, and submit paths, reducing business coupling inside React components and hooks.
+- Continued moving complex UI logic from Agent Chat, App Sidebar, Skills Workspace, Agent Apps, Resource Manager, Settings, and Provider panels into View Models / projections / selectors / helpers.
+- Split large component suites by behavior while keeping real React DOM / hook / mock wiring coverage, and moved pure logic into `*.unit.test.ts` where appropriate.
+- Simplified responsibility boundaries in Agent workspace, Empty State, General Workbench, Chat Sidebar, File Manager, Curated Task Launcher, and API Key Provider components.
+- Updated test-layer governance docs and roadmap entries for frontend and Rust layer commands, candidate statistics, and GUI / Bridge risk rules.
 
 ### Tests And Quality
 
-- Strengthened the Vitest layer classifier so explicit low-risk suffixes cannot hide React/jsdom, DevBridge/Tauri, filesystem, network, or Playwright boundaries.
-- `test:layers:stats` now reports component unit-migration candidates based on case count, file size, and business-logic keywords.
-- Updated local and CI quality policy: PR fast gates focus on `lint`, `typecheck`, `test:unit`, and `test:contract`, while `main` / manual runs keep full frontend, Rust, and GUI smoke coverage.
-- Added and updated unit / component / contract regressions for Harness, Inputbar, Workspace, Agent runtime, test layering, and submit protocol paths.
+- Added or split regression coverage across Agent workspace, Skills, Agent Apps, Resource Manager, Settings, Browser runtime, Capability Drafts, and App Sidebar without dropping user-visible behavior coverage.
+- Added Rust test-layer runners, classifier, and statistics scripts, and wired the commands into root scripts, quality docs, and the Agent guide.
+- Strengthened the Vitest layer classifier and unit/component/contract regressions while continuing to reduce oversized component test files.
+- Added unit and targeted regressions for Agent runtime final text, request metadata, session execution runtime, message sanitizer, file changes undo, and artifact generation brief metadata.
 
 ### Documentation
 
-- Updated `AGENTS.md`, `internal/aiprompts/quality-workflow.md`, and `internal/test/unit-tests.md` to require new frontend logic to move first into View Models / projections / selectors / helpers with `*.unit.test.ts` coverage.
-- Updated `internal/roadmap/test/README.md` with frontend test-layer governance stats, Harness split progress, and anti-regression rules.
+- Updated `AGENTS.md`, `internal/aiprompts/quality-workflow.md`, and `internal/roadmap/test/README.md` with Rust test-layer entries and frontend test-layer governance progress.
+- Added `internal/roadmap/soul/` planning docs for Soul configuration, including PRD, architecture, acceptance criteria, diagrams, and rollout plan.
 
 ### Other
 
-- Updated the root app, Tauri workspace, Tauri config, CLI npm package, and lockfile versions to `1.56.0`.
+- Updated the root app, Tauri workspace, Tauri config, CLI npm package, Agent App runtime package, and lockfiles to `1.57.0`.
 
-**Full changes**: `v1.55.0` -> `v1.56.0`
+**Full changes**: `v1.56.0` -> `v1.57.0`

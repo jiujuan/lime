@@ -117,7 +117,7 @@ function SearchResultHoverCard({
           aria-label={t("agentChat.searchResultPreview.previewAria", {
             title: item.title,
           })}
-          className="w-full rounded-xl border border-border bg-background px-3 py-2 text-left transition-colors hover:bg-muted/60"
+          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-left transition-colors hover:bg-slate-50"
           onMouseEnter={handleOpenPreview}
           onMouseLeave={handleScheduleClose}
           onFocus={handleOpenPreview}
@@ -125,9 +125,9 @@ function SearchResultHoverCard({
           onClick={() => void onOpenUrl(item.url)}
         >
           <div className="flex items-start gap-3">
-            <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+            <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-slate-300" />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium text-foreground">
+              <div className="truncate text-[13px] font-normal text-slate-700">
                 {item.title}
               </div>
               <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">

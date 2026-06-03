@@ -10,6 +10,8 @@ use crate::conversation::message::Message;
 
 static TOKENIZER: OnceCell<Arc<CoreBPE>> = OnceCell::const_new();
 
+const TOKENIZER_INIT_STACK_SIZE: usize = 16 * 1024 * 1024;
+
 const MAX_TOKEN_CACHE_SIZE: usize = 10_000;
 
 // token use for various bits of a tool calls:
@@ -184,14 +186,22 @@ impl TokenCounter {
 
 async fn get_tokenizer() -> Result<Arc<CoreBPE>, String> {
     let tokenizer = TOKENIZER
-        .get_or_init(|| async {
-            match tiktoken_rs::o200k_base() {
-                Ok(bpe) => Arc::new(bpe),
-                Err(e) => panic!("Failed to initialize o200k_base tokenizer: {}", e),
-            }
-        })
-        .await;
+        .get_or_try_init(|| async { init_o200k_tokenizer().map(Arc::new) })
+        .await?;
     Ok(tokenizer.clone())
+}
+
+fn init_o200k_tokenizer() -> Result<CoreBPE, String> {
+    std::thread::Builder::new()
+        .name("aster-token-counter-init".to_string())
+        .stack_size(TOKENIZER_INIT_STACK_SIZE)
+        .spawn(|| {
+            tiktoken_rs::o200k_base()
+                .map_err(|error| format!("初始化 o200k_base tokenizer 失败: {error}"))
+        })
+        .map_err(|error| format!("创建 tokenizer 初始化线程失败: {error}"))?
+        .join()
+        .map_err(|_| "tokenizer 初始化线程 panic".to_string())?
 }
 
 pub async fn create_token_counter() -> Result<TokenCounter, String> {

@@ -104,4 +104,36 @@ describe("vitest-layer-report", () => {
       "- src/components/Foo.test.tsx (large-component-suite, business-logic-keywords)",
     );
   });
+
+  it("应从统计中排除测试夹具支持文件", () => {
+    const report = buildVitestLayerReport({
+      entries: [
+        {
+          file: "src/components/Foo.testFixtures.tsx",
+          layer: "component",
+          explicitLayer: null,
+          live: false,
+          reasons: ["browser-dom"],
+          unitMigrationHints: ["large-component-file"],
+        },
+        {
+          file: "src/components/Foo.test.tsx",
+          layer: "component",
+          explicitLayer: null,
+          live: false,
+          reasons: ["browser-dom"],
+          unitMigrationHints: ["large-component-file"],
+        },
+      ],
+    });
+
+    expect(report.totals.total).toBe(1);
+    expect(report.layers.component.total).toBe(1);
+    expect(report.componentUnitMigrationCandidates.files).toEqual([
+      {
+        file: "src/components/Foo.test.tsx",
+        hints: ["large-component-file"],
+      },
+    ]);
+  });
 });

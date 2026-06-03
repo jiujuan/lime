@@ -136,8 +136,10 @@ impl SessionExecutionRuntimeAccessMode {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionExecutionRuntimePreferences {
-    pub web_search: bool,
-    pub thinking: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web_search: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<bool>,
     pub task: bool,
     pub subagent: bool,
 }
@@ -834,8 +836,8 @@ fn extract_recent_preferences_from_metadata(
     }
 
     Some(SessionExecutionRuntimePreferences {
-        web_search: web_search.unwrap_or(false),
-        thinking: thinking.unwrap_or(false),
+        web_search,
+        thinking,
         task: task.unwrap_or(false),
         subagent: subagent.unwrap_or(false),
     })
@@ -1855,8 +1857,8 @@ mod tests {
         assert_eq!(
             runtime.recent_preferences,
             Some(SessionExecutionRuntimePreferences {
-                web_search: true,
-                thinking: true,
+                web_search: Some(true),
+                thinking: Some(true),
                 task: false,
                 subagent: true,
             })
@@ -2333,8 +2335,8 @@ mod tests {
         let session = Session {
             id: "session-4".to_string(),
             extension_data: SessionExecutionRuntimePreferences {
-                web_search: false,
-                thinking: true,
+                web_search: Some(false),
+                thinking: Some(true),
                 task: true,
                 subagent: false,
             }
@@ -2351,8 +2353,8 @@ mod tests {
         assert_eq!(
             runtime.recent_preferences,
             Some(SessionExecutionRuntimePreferences {
-                web_search: false,
-                thinking: true,
+                web_search: Some(false),
+                thinking: Some(true),
                 task: true,
                 subagent: false,
             })

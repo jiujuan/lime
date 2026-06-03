@@ -85,8 +85,6 @@ function renderStrip(
       <AgentRuntimeStrip
         activeTheme="general"
         toolPreferences={{
-          webSearch: true,
-          thinking: true,
           task: true,
           subagent: true,
         }}
@@ -162,8 +160,6 @@ describe("AgentRuntimeStrip", () => {
       },
       runtimeToolAvailability: CODE_RUNTIME_TOOL_AVAILABILITY,
       toolPreferences: {
-        webSearch: true,
-        thinking: true,
         task: true,
         subagent: true,
       },

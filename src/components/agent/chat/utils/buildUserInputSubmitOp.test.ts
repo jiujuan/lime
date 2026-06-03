@@ -37,8 +37,6 @@ describe("buildUserInputSubmitOp", () => {
         model_name: "gpt-4.1",
         execution_strategy: "react",
         recent_preferences: {
-          webSearch: false,
-          thinking: true,
           task: false,
           subagent: false,
         },
@@ -49,8 +47,6 @@ describe("buildUserInputSubmitOp", () => {
         recent_content_id: "content-social-1",
       },
       syncedRecentPreferences: {
-        webSearch: false,
-        thinking: true,
         task: false,
         subagent: false,
       },
@@ -63,8 +59,6 @@ describe("buildUserInputSubmitOp", () => {
       effectiveAccessMode: "current",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-4.1",
-      webSearch: false,
-      thinking: true,
     });
 
     expect(op).toEqual({
@@ -122,8 +116,6 @@ describe("buildUserInputSubmitOp", () => {
         model_name: "gpt-4.1",
         execution_strategy: "react",
         recent_preferences: {
-          webSearch: false,
-          thinking: false,
           task: false,
           subagent: false,
         },
@@ -133,8 +125,6 @@ describe("buildUserInputSubmitOp", () => {
         recent_run_title: "社媒初稿",
       },
       syncedRecentPreferences: {
-        webSearch: false,
-        thinking: false,
         task: false,
         subagent: false,
       },
@@ -148,8 +138,6 @@ describe("buildUserInputSubmitOp", () => {
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5",
       modelOverride: "gpt-5",
-      webSearch: false,
-      thinking: true,
       autoContinue: {
         enabled: true,
         fast_mode_enabled: false,
@@ -194,15 +182,11 @@ describe("buildUserInputSubmitOp", () => {
         model_name: "gpt-4.1",
         execution_strategy: "react",
         recent_preferences: {
-          webSearch: false,
-          thinking: false,
           task: false,
           subagent: false,
         },
       },
       syncedRecentPreferences: {
-        webSearch: false,
-        thinking: false,
         task: false,
         subagent: false,
       },
@@ -216,8 +200,6 @@ describe("buildUserInputSubmitOp", () => {
       effectiveProviderType: "translation-provider",
       effectiveModel: "translation-model",
       modelOverride: "translation-model",
-      webSearch: false,
-      thinking: false,
     });
 
     expect(op.preferences?.providerPreference).toBe("translation-provider");
@@ -268,8 +250,6 @@ describe("buildUserInputSubmitOp", () => {
       effectiveAccessMode: "current",
       effectiveProviderType: "deepseek",
       effectiveModel: "deepseek-v4-pro",
-      webSearch: false,
-      thinking: false,
     });
 
     expect(op.preferences?.providerPreference).toBeUndefined();
@@ -301,8 +281,6 @@ describe("buildUserInputSubmitOp", () => {
       effectiveAccessMode: "current",
       effectiveProviderType: "",
       effectiveModel: "gpt-5.5",
-      webSearch: false,
-      thinking: false,
     });
 
     expect(op.preferences?.providerPreference).toBeUndefined();
@@ -339,8 +317,6 @@ describe("buildUserInputSubmitOp", () => {
       effectiveAccessMode: "current",
       effectiveProviderType: "deepseek",
       effectiveModel: "deepseek-v4-pro",
-      webSearch: false,
-      thinking: false,
     });
 
     expect(op.preferences?.providerConfig).toEqual({
@@ -381,8 +357,6 @@ describe("buildUserInputSubmitOp", () => {
       effectiveAccessMode: "current",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5.5",
-      webSearch: false,
-      thinking: false,
     });
 
     expect(op.preferences?.webSearch).toBeUndefined();

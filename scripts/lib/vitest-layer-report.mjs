@@ -7,6 +7,7 @@ import {
   isLiveProviderTestPath,
   liveProviderSmokeAllowed,
 } from "./live-provider-smoke-gate.mjs";
+import { isVitestRunnableTestFile } from "./vitest-test-file-filter.mjs";
 
 function emptyLayerBucket() {
   return {
@@ -38,13 +39,16 @@ export function buildVitestLayerReport({
   const classifiedEntries =
     entries ??
     classifyVitestTestFiles(process.cwd(), collectVitestTestFiles(process.cwd()));
+  const runnableTestEntries = classifiedEntries.filter((entry) =>
+    isVitestRunnableTestFile(entry.file),
+  );
   const layers = Object.fromEntries(
     VITEST_LAYER_NAMES.map((layer) => [layer, emptyLayerBucket()]),
   );
   const componentUnitMigrationCandidates =
     emptyComponentUnitMigrationCandidates();
 
-  for (const entry of classifiedEntries) {
+  for (const entry of runnableTestEntries) {
     const bucket = layers[entry.layer] ?? emptyLayerBucket();
     layers[entry.layer] = bucket;
 
@@ -80,7 +84,7 @@ export function buildVitestLayerReport({
   }
 
   const totals = {
-    total: classifiedEntries.length,
+    total: runnableTestEntries.length,
     runnableByDefault: Object.values(layers).reduce(
       (sum, layer) => sum + layer.runnableByDefault,
       0,

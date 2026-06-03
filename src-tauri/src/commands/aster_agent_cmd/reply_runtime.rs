@@ -50,7 +50,8 @@ pub(super) async fn build_turn_runtime_statuses(
     } else {
         (
             "正在交给模型处理".to_string(),
-            "运行时已准备当前工具面，模型会根据上下文自行判断是否需要搜索、浏览器或其他工具。".to_string(),
+            "运行时已准备当前工具面，模型会根据上下文自行判断是否需要搜索、浏览器或其他工具。"
+                .to_string(),
             vec![
                 "普通输入已进入 Agent 主链".to_string(),
                 "前端不再预选搜索、思考或编程策略".to_string(),

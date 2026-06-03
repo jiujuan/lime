@@ -605,6 +605,137 @@ describe("MarkdownRenderer", () => {
     expect(container.textContent).not.toContain("继续： 1.");
   });
 
+  it("压成单段的简报应恢复标题、时间口径和分节列表", () => {
+    const content =
+      "## 今日简报**时间口径：2026 年 6 月 2 日；主要依据可核实来源。---## 一、地缘政治- 第一条事件 来源：[Source A](https://example.com/a)- 第二条事件**观察重点：*局势变化仍需继续关注。---## 任意小节1. 第一项2. 第二项3. 第三项";
+
+    const container = render(content);
+    const headings = container.querySelectorAll("[data-markdown-heading-level]");
+    const paragraphs = container.querySelectorAll("p");
+    const links = container.querySelectorAll("a");
+    const orderedItems = container.querySelectorAll("ol > li");
+    const bulletItems = container.querySelectorAll("ul > li");
+
+    expect(headings).toHaveLength(3);
+    expect(headings[0]?.textContent).toBe("今日简报");
+    expect(paragraphs[0]?.textContent).toContain("时间口径");
+    expect(links[0]?.getAttribute("href")).toBe("https://example.com/a");
+    expect(bulletItems.length).toBeGreaterThanOrEqual(2);
+    expect(orderedItems).toHaveLength(3);
+    expect(container.textContent).not.toContain("简报**时间口径");
+    expect(container.textContent).not.toContain("小节1.");
+  });
+
+  it("真实压缩国际新闻简报应恢复来源、标题和影响判断边界", () => {
+    const content =
+      "## 今日国际新闻简报｜2026年6月2日>口径：根据已检索到的 **NPR、AP News、Al Jazeera** 等公开页面整理；Reuters/BBC 部分页面抓取受限，因此以下以可核验页面内容为主。### 一句话总览今天国际新闻的主线集中在 **中东冲突升级、美伊/伊以相关紧张、刚果 Ebola 疫情、东欧俄乌外溢风险、非洲与拉美政治动态，以及 AI/科技资本市场动向**。---##1. 中东：以色列、黎巴嫩、伊朗、美国相关局势升温- **以色列在黎巴嫩南部和加沙的军事行动继续引发地区紧张。**- NPR 报道称，伊朗因以色列在黎巴嫩、加沙的行动，**暂停与美国的相关谈判**。- Al Jazeera 报道称，伊朗警告以色列在黎巴嫩和加沙的攻击可能威胁美国推动的停火谈判。- AP News 页面头条显示，美国轰炸伊朗军事设施，并拦截伊朗向驻科威特美军发射的导弹。**影响判断：**中东局势正从局部冲突向更广泛的美伊、伊以、以黎关系扩散，短期内会继续影响能源、航运与地区安全预期。---##2.以色列控制周边土地问题引发争议- NPR关注以色列近年来在 **加沙、黎巴嫩、叙利亚邻近区域** 控制土地的问题。-以方称这些区域是安全缓冲区，但以色列国内也有人主张更永久性地扩大边界。**影响判断：**这类“临时安全区”是否长期化，将影响未来停火安排、边境谈判和地区政治格局。---## 今日值得继续关注的3 条主线1. **中东是否进一步升级** 特别是美国、伊朗、以色列、黎巴嫩真主党之间是否出现新一轮军事行动或谈判破裂。2. **刚果 Ebola 疫情是否外溢**重点看 WHO 后续评估、周边国家防控措施，以及疫苗/治疗资源调配。---##主要信息来源- [NPR World News](https://www.npr.org/sections/world/)- [AP News World](https://apnews.com/world-news)- [Al Jazeera News](https://www.aljazeera.com/news/)";
+
+    const container = render(content);
+    const headings = Array.from(
+      container.querySelectorAll("[data-markdown-heading-level]"),
+    ).map((heading) => heading.textContent);
+    const bulletItems = Array.from(container.querySelectorAll("ul > li")).map(
+      (item) => item.textContent,
+    );
+    const orderedItems = container.querySelectorAll("ol > li");
+    const links = Array.from(container.querySelectorAll("a")).map((link) =>
+      link.getAttribute("href"),
+    );
+
+    expect(headings).toEqual([
+      "今日国际新闻简报｜2026年6月2日",
+      "一句话总览",
+      "1. 中东：以色列、黎巴嫩、伊朗、美国相关局势升温",
+      "2. 以色列控制周边土地问题引发争议",
+      "今日值得继续关注的3 条主线",
+      "主要信息来源",
+    ]);
+    expect(container.querySelector("blockquote")?.textContent).toContain(
+      "NPR、AP News、Al Jazeera",
+    );
+    expect(bulletItems).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("以色列在黎巴嫩南部和加沙"),
+        expect.stringContaining("NPR 报道称"),
+        expect.stringContaining("以方称这些区域是安全缓冲区"),
+        expect.stringContaining("NPR World News"),
+      ]),
+    );
+    expect(orderedItems).toHaveLength(2);
+    expect(links).toEqual([
+      "https://www.npr.org/sections/world/",
+      "https://apnews.com/world-news",
+      "https://www.aljazeera.com/news/",
+    ]);
+    expect(container.textContent).not.toContain("总览今天");
+    expect(container.textContent).not.toContain("升温-");
+    expect(container.textContent).not.toContain("导弹。影响判断");
+    expect(container.textContent).not.toContain("##主要信息来源");
+  });
+
+  it("局部压缩的列表项应在来源、观察重点和后续关注处恢复块级边界", () => {
+    const content = [
+      "## 二、俄乌战争：联合国呼吁降温",
+      "- 联合国强调乌克兰战争需要降级，近期袭击增加 联合国方面警告，乌克兰战事中的袭击活动上升，呼吁各方避免进一步升级。 来源：UN News**观察重点：**俄乌战争仍是欧洲安全核心风险，近期袭击增加意味着谈判空间可能继续收窄，民用基础设施、人道援助与能源供应仍面临压力。",
+      "## 三、Gaza、西岸与阿富汗：人道问题持续",
+      "- 联合国发布“世界新闻简报”，涉及 Gaza、西岸、阿富汗等地动态 当日联合国简报提及 Gaza、西岸与阿富汗局势。 来源：UN News- Gaza 难民营中以足球活动提供短暂喘息 联合国报道提到，前职业球员组织足球比赛。",
+      "## 六、气候与社会议题",
+      "- 全球气温预计仍将接近纪录高位 联合国相关机构警告，全球温度仍可能维持在接近历史纪录的水平。- **联合国提醒：禁止儿童使用社交媒体不是唯一答案，平台应“安全设计”** 联合国人权相关报道强调，保护儿童线上安全不能只靠简单禁令。",
+      "## 任意后续小节",
+      "黎巴嫩—以色列边境是否进一步升级2. Gaza 停火与人道物资准入是否改善3. 俄乌双方袭击频率是否继续上升",
+    ].join("\n\n");
+
+    const container = render(content);
+    const listItems = Array.from(container.querySelectorAll("li")).map(
+      (item) => item.textContent,
+    );
+    const paragraphs = Array.from(container.querySelectorAll("p")).map(
+      (paragraph) => paragraph.textContent,
+    );
+
+    expect(listItems).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("联合国强调乌克兰战争需要降级"),
+        expect.stringContaining("Gaza 难民营中以足球活动"),
+        expect.stringContaining("联合国提醒："),
+        expect.stringContaining("禁止儿童使用社交媒体"),
+        expect.stringContaining("Gaza 停火与人道物资准入是否改善"),
+        expect.stringContaining("俄乌双方袭击频率是否继续上升"),
+      ]),
+    );
+    expect(container.textContent).toContain("黎巴嫩—以色列边境是否进一步升级");
+    expect(paragraphs).toEqual(
+      expect.arrayContaining([
+        "观察重点：",
+        expect.stringContaining("俄乌战争仍是欧洲安全核心风险"),
+      ]),
+    );
+    expect(container.textContent).not.toContain("UN News观察重点");
+    expect(container.textContent).not.toContain("UN News**观察重点");
+    expect(container.textContent).not.toContain("UN News- Gaza");
+    expect(container.textContent).not.toContain("水平。- 联合国提醒");
+    expect(container.textContent).not.toContain("安全设计”**");
+    expect(container.textContent).not.toContain("升级2.");
+  });
+
+  it("任意标题后的无编号首项和后续编号应按结构恢复", () => {
+    const content =
+      "## 任意标题\n\n第一项内容2. 第二项内容3. 第三项内容";
+
+    const container = render(content);
+    const listItems = Array.from(container.querySelectorAll("li")).map(
+      (item) => item.textContent,
+    );
+
+    expect(listItems).toEqual([
+      "第一项内容",
+      "第二项内容",
+      "第三项内容",
+    ]);
+    expect(container.textContent).not.toContain("内容2.");
+    expect(container.textContent).not.toContain("内容3.");
+  });
+
   it("不应改写代码块里的紧凑竖线文本", () => {
     const content = [
       "```text",

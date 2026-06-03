@@ -629,12 +629,12 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
         ) : null}
         <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">
           {toolCall.status === "running" ? (
-            <Loader2 className="h-4 w-4 animate-spin text-sky-600" />
+            <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
           ) : (
             <ToolIcon
               className={cn(
                 "h-4 w-4",
-                toolCall.status === "completed" && "text-emerald-600",
+                toolCall.status === "completed" && "text-slate-400",
                 toolCall.status === "failed" && "text-rose-600",
                 toolCall.status !== "completed" &&
                   toolCall.status !== "failed" &&
@@ -658,7 +658,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
               }}
               aria-expanded={hasDetails ? expanded : undefined}
             >
-              <div className="truncate text-sm font-medium leading-6 text-slate-800">
+              <div className="truncate text-[13px] font-normal leading-6 text-slate-700">
                 {headline}
               </div>
               <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-1 text-xs leading-5 text-slate-500">

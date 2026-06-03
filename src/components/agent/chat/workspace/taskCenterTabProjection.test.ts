@@ -3,6 +3,7 @@ import type { Topic } from "../hooks/agentChatShared";
 import {
   buildBrowserWorkspaceHomeTabItem,
   buildTaskCenterTabItems,
+  resolveTaskCenterTopicTitle,
   shouldRenderTaskCenterTabStrip,
   TASK_CENTER_HOME_TAB_ID,
 } from "./taskCenterTabProjection";
@@ -104,6 +105,24 @@ describe("taskCenterTabProjection", () => {
       renamable: false,
       closable: false,
     });
+  });
+
+  it("应清理任务标签里的运行时错误标题并保留附件标题", () => {
+    const runtimeErrorEnvelope = [
+      "Ran into this error: Server error: upstream temporarily unavailable.",
+      "",
+      "Please retry if you think this is a transient or recoverable error.",
+    ].join("\n");
+
+    expect(resolveTaskCenterTopicTitle(runtimeErrorEnvelope, "未命名任务")).toBe(
+      "未命名任务",
+    );
+    expect(resolveTaskCenterTopicTitle("Ran into this erro...", "未命名任务")).toBe(
+      "未命名任务",
+    );
+    expect(resolveTaskCenterTopicTitle("[Image #4]", "未命名任务")).toBe(
+      "图片任务 4",
+    );
   });
 
   it("应只在 claw 或 new-task 已有本地会话时渲染任务标签栏", () => {

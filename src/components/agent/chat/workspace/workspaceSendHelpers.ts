@@ -14,6 +14,12 @@ import {
   type HarnessOemRoutingRequestMetadata,
   type HarnessTenantFeatureFlagsRequestMetadata,
 } from "../utils/harnessRequestMetadata";
+import {
+  hasGenerationBriefMetadata,
+  mergeGenerationBriefIntoArtifactMetadata,
+  mergeRequestMetadataWithArtifact,
+  mergeSoulArtifactVoiceDiagnostics,
+} from "../utils/artifactGenerationBriefMetadata";
 import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
 import type { AssistantDraftState } from "../hooks/agentChatShared";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
@@ -625,6 +631,8 @@ interface PrimeBrowserAssistBeforeSendOptions {
 interface BuildWorkspaceRequestMetadataOptions {
   workspaceRequestMetadataBase?: Record<string, unknown>;
   sendOptions?: HandleSendOptions;
+  savedSoulArtifactVoiceGenerationBrief?: Record<string, unknown> | null;
+  soulArtifactVoiceEnabledForTurn?: boolean;
   currentProviderType?: string | null;
   effectiveToolPreferences: ChatToolPreferences;
   mappedTheme: ThemeType;
@@ -880,6 +888,8 @@ export function buildWorkspaceRequestMetadata(
   const {
     workspaceRequestMetadataBase,
     sendOptions,
+    savedSoulArtifactVoiceGenerationBrief,
+    soulArtifactVoiceEnabledForTurn,
     currentProviderType,
     effectiveToolPreferences,
     mappedTheme,
@@ -978,7 +988,9 @@ export function buildWorkspaceRequestMetadata(
     selectedTeamRoles: resolvedSelectedTeamRoles,
     teamMemoryShadow: resolvedTeamMemoryShadow,
     agentResponseLanguage,
-    oemRouting: oemRoutingMatchesCurrentProvider ? resolvedOemRouting : undefined,
+    oemRouting: oemRoutingMatchesCurrentProvider
+      ? resolvedOemRouting
+      : undefined,
     tenantFeatureFlags: resolvedTenantFeatureFlags,
   });
   if (!oemRoutingMatchesCurrentProvider) {
@@ -986,9 +998,35 @@ export function buildWorkspaceRequestMetadata(
     delete harnessMetadata.oemRouting;
   }
 
+  const hasExplicitGenerationBrief =
+    hasGenerationBriefMetadata(workspaceRequestMetadataBase) ||
+    hasGenerationBriefMetadata(sendOptions?.requestMetadata);
+  const shouldApplySavedSoulArtifactVoice =
+    soulArtifactVoiceEnabledForTurn !== false &&
+    !hasExplicitGenerationBrief &&
+    Boolean(savedSoulArtifactVoiceGenerationBrief);
+  const baseRequestMetadata = shouldApplySavedSoulArtifactVoice
+    ? mergeGenerationBriefIntoArtifactMetadata(
+        workspaceRequestMetadataBase,
+        savedSoulArtifactVoiceGenerationBrief,
+      )
+    : mergeGenerationBriefIntoArtifactMetadata(workspaceRequestMetadataBase);
+  const requestMetadata = mergeSoulArtifactVoiceDiagnostics(
+    mergeGenerationBriefIntoArtifactMetadata(
+      mergeRequestMetadataWithArtifact(
+        baseRequestMetadata,
+        sendOptions?.requestMetadata,
+      ),
+    ),
+    {
+      savedGenerationBrief: savedSoulArtifactVoiceGenerationBrief,
+      savedVoiceEnabledForTurn: soulArtifactVoiceEnabledForTurn,
+      hasExplicitGenerationBrief,
+    },
+  );
+
   return {
-    ...(workspaceRequestMetadataBase || {}),
-    ...(sendOptions?.requestMetadata || {}),
+    ...requestMetadata,
     harness: harnessMetadata,
   };
 }

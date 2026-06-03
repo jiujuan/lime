@@ -108,8 +108,6 @@ function createBaseParams(overrides: Record<string, unknown> = {}) {
     accessMode: "default",
     setAccessMode: noop,
     chatToolPreferences: {
-      webSearch: false,
-      thinking: false,
       task: false,
       subagent: false,
     },

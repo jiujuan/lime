@@ -1,0 +1,717 @@
+import { act, type ComponentProps, type ReactNode } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, vi } from "vitest";
+import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime";
+import {
+  areLightweightRenderersRegistered,
+  registerLightweightRenderers,
+} from "@/components/artifact/renderers";
+import { changeLimeLocale } from "@/i18n/createI18n";
+import { HarnessStatusPanel } from "./HarnessStatusPanel";
+import type { HarnessSessionState } from "../utils/harnessState";
+import { clearAgentUiProjectionEvents } from "../projection/conversationProjectionStore";
+
+const {
+  exportAgentRuntimeAnalysisHandoffMock,
+  exportAgentRuntimeEvidencePackMock,
+  exportAgentRuntimeHandoffBundleMock,
+  exportAgentRuntimeReplayCaseMock,
+  exportAgentRuntimeReviewDecisionTemplateMock,
+  saveAgentRuntimeReviewDecisionMock,
+  prefetchContextMemoryForTurnMock,
+  mockToast,
+} = vi.hoisted(() => ({
+  exportAgentRuntimeAnalysisHandoffMock: vi.fn(),
+  exportAgentRuntimeEvidencePackMock: vi.fn(),
+  exportAgentRuntimeHandoffBundleMock: vi.fn(),
+  exportAgentRuntimeReplayCaseMock: vi.fn(),
+  exportAgentRuntimeReviewDecisionTemplateMock: vi.fn(),
+  saveAgentRuntimeReviewDecisionMock: vi.fn(),
+  prefetchContextMemoryForTurnMock: vi.fn(),
+  mockToast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+  },
+}));
+
+export function getHarnessPanelTestMocks() {
+  return {
+    exportAgentRuntimeAnalysisHandoffMock,
+    exportAgentRuntimeEvidencePackMock,
+    exportAgentRuntimeHandoffBundleMock,
+    exportAgentRuntimeReplayCaseMock,
+    exportAgentRuntimeReviewDecisionTemplateMock,
+    saveAgentRuntimeReviewDecisionMock,
+    prefetchContextMemoryForTurnMock,
+    mockToast,
+  };
+}
+
+vi.mock("@/lib/api/agentRuntime", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api/agentRuntime")>(
+    "@/lib/api/agentRuntime",
+  );
+  return {
+    ...actual,
+    exportAgentRuntimeAnalysisHandoff: exportAgentRuntimeAnalysisHandoffMock,
+    exportAgentRuntimeEvidencePack: exportAgentRuntimeEvidencePackMock,
+    exportAgentRuntimeHandoffBundle: exportAgentRuntimeHandoffBundleMock,
+    exportAgentRuntimeReplayCase: exportAgentRuntimeReplayCaseMock,
+    exportAgentRuntimeReviewDecisionTemplate:
+      exportAgentRuntimeReviewDecisionTemplateMock,
+    saveAgentRuntimeReviewDecision: saveAgentRuntimeReviewDecisionMock,
+  };
+});
+
+vi.mock("sonner", () => ({
+  toast: mockToast,
+}));
+
+vi.mock("react-syntax-highlighter", () => ({
+  Prism: ({ children }: { children?: unknown }) => (
+    <pre data-testid="syntax-highlighter-mock">{String(children ?? "")}</pre>
+  ),
+}));
+
+vi.mock("react-syntax-highlighter/dist/esm/styles/prism", () => ({
+  oneLight: {},
+}));
+
+vi.mock("@/lib/api/memoryRuntime", () => ({
+  prefetchContextMemoryForTurn: prefetchContextMemoryForTurnMock,
+}));
+
+export interface RenderResult {
+  container: HTMLDivElement;
+  root: Root;
+}
+
+const mountedRoots: RenderResult[] = [];
+let originalClipboard: Clipboard | undefined;
+let originalWindowOpen: typeof window.open;
+
+export function createHarnessState(
+  overrides: Partial<HarnessSessionState> = {},
+): HarnessSessionState {
+  return {
+    runtimeStatus: null,
+    pendingApprovals: [],
+    latestContextTrace: [],
+    plan: {
+      phase: "idle",
+      items: [],
+    },
+    activity: {
+      planning: 0,
+      filesystem: 1,
+      execution: 0,
+      web: 0,
+      skills: 0,
+      delegation: 0,
+    },
+    delegatedTasks: [],
+    outputSignals: [],
+    activeFileWrites: [],
+    recentFileEvents: [],
+    hasSignals: true,
+    ...overrides,
+  };
+}
+
+export function renderPanel(
+  overrides: Partial<ComponentProps<typeof HarnessStatusPanel>> = {},
+): RenderResult {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  act(() => {
+    root.render(
+      <HarnessStatusPanel
+        harnessState={createHarnessState()}
+        environment={{
+          skillsCount: 2,
+          skillNames: ["read_file", "write_todos"],
+          memorySignals: ["风格"],
+          contextItemsCount: 2,
+          activeContextCount: 1,
+          contextItemNames: ["需求.md"],
+          contextEnabled: true,
+        }}
+        {...overrides}
+      />,
+    );
+  });
+
+  const rendered = { container, root };
+  mountedRoots.push(rendered);
+  return rendered;
+}
+
+export function mountHarnessElement(element: ReactNode): RenderResult {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  act(() => {
+    root.render(element);
+  });
+
+  const rendered = { container, root };
+  mountedRoots.push(rendered);
+  return rendered;
+}
+
+export function setInputValue(
+  input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+  value: string,
+) {
+  const prototype =
+    input instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : input instanceof HTMLSelectElement
+        ? HTMLSelectElement.prototype
+        : HTMLInputElement.prototype;
+  const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
+  descriptor?.set?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+export function findButtonByText(text: string): HTMLButtonElement | null {
+  return Array.from(document.body.querySelectorAll("button")).find(
+    (button): button is HTMLButtonElement =>
+      button.textContent?.trim() === text,
+  ) as HTMLButtonElement | null;
+}
+
+export async function flushUntilTextAppears(text: string): Promise<void> {
+  for (let index = 0; index < 80; index += 1) {
+    if (document.body.textContent?.includes(text)) {
+      return;
+    }
+    await act(async () => {
+      await Promise.resolve();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+  }
+}
+
+export function createToolInventory(): AgentRuntimeToolInventory {
+  return {
+    request: {
+      caller: "assistant",
+      surface: {
+        workbench: false,
+        browser_assist: true,
+      },
+    },
+    agent_initialized: true,
+    warnings: ["extension 搜索工具面存在延迟加载项"],
+    mcp_servers: ["lime-browser"],
+    default_allowed_tools: ["ToolSearch", "WebSearch"],
+    counts: {
+      catalog_total: 3,
+      catalog_current_total: 3,
+      catalog_compat_total: 0,
+      catalog_deprecated_total: 0,
+      default_allowed_total: 2,
+      runtime_total: 4,
+      runtime_visible_total: 3,
+      registry_total: 2,
+      registry_visible_total: 1,
+      registry_catalog_unmapped_total: 0,
+      extension_surface_total: 1,
+      extension_mcp_bridge_total: 1,
+      extension_runtime_total: 0,
+      extension_tool_total: 1,
+      extension_tool_visible_total: 1,
+      mcp_server_total: 1,
+      mcp_tool_total: 1,
+      mcp_tool_visible_total: 1,
+    },
+    catalog_tools: [
+      {
+        name: "bash",
+        profiles: ["core"],
+        capabilities: ["execution"],
+        lifecycle: "current",
+        source: "aster_builtin",
+        permission_plane: "parameter_restricted",
+        workspace_default_allow: false,
+        execution_warning_policy: "shell_command_risk",
+        execution_warning_policy_source: "runtime",
+        execution_restriction_profile: "workspace_shell_command",
+        execution_restriction_profile_source: "runtime",
+        execution_sandbox_profile: "workspace_command",
+        execution_sandbox_profile_source: "runtime",
+      },
+      {
+        name: "write",
+        profiles: ["core"],
+        capabilities: ["workspace_io"],
+        lifecycle: "current",
+        source: "aster_builtin",
+        permission_plane: "parameter_restricted",
+        workspace_default_allow: false,
+        execution_warning_policy: "none",
+        execution_warning_policy_source: "persisted",
+        execution_restriction_profile: "workspace_path_required",
+        execution_restriction_profile_source: "persisted",
+        execution_sandbox_profile: "none",
+        execution_sandbox_profile_source: "default",
+      },
+      {
+        name: "ToolSearch",
+        profiles: ["core"],
+        capabilities: ["web_search"],
+        lifecycle: "current",
+        source: "lime_injected",
+        permission_plane: "session_allowlist",
+        workspace_default_allow: true,
+        execution_warning_policy: "none",
+        execution_warning_policy_source: "default",
+        execution_restriction_profile: "none",
+        execution_restriction_profile_source: "default",
+        execution_sandbox_profile: "none",
+        execution_sandbox_profile_source: "default",
+      },
+    ],
+    registry_tools: [
+      {
+        name: "bash",
+        description: "执行工作区命令",
+        catalog_entry_name: "bash",
+        catalog_source: "aster_builtin",
+        catalog_lifecycle: "current",
+        catalog_permission_plane: "parameter_restricted",
+        catalog_workspace_default_allow: false,
+        catalog_execution_warning_policy: "shell_command_risk",
+        catalog_execution_warning_policy_source: "runtime",
+        catalog_execution_restriction_profile: "workspace_shell_command",
+        catalog_execution_restriction_profile_source: "runtime",
+        catalog_execution_sandbox_profile: "workspace_command",
+        catalog_execution_sandbox_profile_source: "runtime",
+        deferred_loading: false,
+        always_visible: false,
+        allowed_callers: ["assistant"],
+        tags: ["shell"],
+        input_examples_count: 2,
+        caller_allowed: true,
+        visible_in_context: true,
+      },
+      {
+        name: "ToolSearch",
+        description: "搜索工具目录",
+        catalog_entry_name: "ToolSearch",
+        catalog_source: "lime_injected",
+        catalog_lifecycle: "current",
+        catalog_permission_plane: "session_allowlist",
+        catalog_workspace_default_allow: true,
+        catalog_execution_warning_policy: "none",
+        catalog_execution_warning_policy_source: "default",
+        catalog_execution_restriction_profile: "none",
+        catalog_execution_restriction_profile_source: "default",
+        catalog_execution_sandbox_profile: "none",
+        catalog_execution_sandbox_profile_source: "default",
+        deferred_loading: true,
+        always_visible: true,
+        allowed_callers: [],
+        tags: ["search"],
+        input_examples_count: 1,
+        caller_allowed: false,
+        visible_in_context: false,
+      },
+    ],
+    runtime_tools: [
+      {
+        name: "Agent",
+        description: "创建或调度子任务",
+        source_kind: "current_surface",
+        catalog_entry_name: "Agent",
+        catalog_source: "aster_builtin",
+        catalog_lifecycle: "current",
+        catalog_permission_plane: "session_allowlist",
+        catalog_workspace_default_allow: false,
+        deferred_loading: false,
+        always_visible: false,
+        allowed_callers: [],
+        tags: [],
+        input_examples_count: 0,
+        caller_allowed: true,
+        visible_in_context: true,
+      },
+      {
+        name: "bash",
+        description: "执行工作区命令",
+        source_kind: "registry_native",
+        catalog_entry_name: "bash",
+        catalog_source: "aster_builtin",
+        catalog_lifecycle: "current",
+        catalog_permission_plane: "parameter_restricted",
+        catalog_workspace_default_allow: false,
+        deferred_loading: false,
+        always_visible: false,
+        allowed_callers: ["assistant"],
+        tags: ["shell"],
+        input_examples_count: 2,
+        caller_allowed: true,
+        visible_in_context: true,
+      },
+      {
+        name: "mcp__lime-browser__navigate",
+        description: "打开网页",
+        source_kind: "runtime_extension",
+        source_label: "mcp__lime-browser",
+        status: "loaded",
+        deferred_loading: false,
+        always_visible: false,
+        allowed_callers: ["assistant"],
+        tags: [],
+        input_examples_count: 0,
+        caller_allowed: true,
+        visible_in_context: true,
+      },
+      {
+        name: "ToolSearch",
+        description: "搜索工具目录",
+        source_kind: "registry_native",
+        catalog_entry_name: "ToolSearch",
+        catalog_source: "lime_injected",
+        catalog_lifecycle: "current",
+        catalog_permission_plane: "session_allowlist",
+        catalog_workspace_default_allow: true,
+        deferred_loading: true,
+        always_visible: true,
+        allowed_callers: [],
+        tags: ["search"],
+        input_examples_count: 1,
+        caller_allowed: false,
+        visible_in_context: false,
+      },
+    ],
+    extension_surfaces: [
+      {
+        extension_name: "mcp__lime-browser",
+        description: "浏览器桥接工具面",
+        source_kind: "mcp_bridge",
+        deferred_loading: true,
+        allowed_caller: "assistant",
+        available_tools: ["navigate", "click"],
+        always_expose_tools: ["navigate"],
+        loaded_tools: ["mcp__lime-browser__navigate"],
+        searchable_tools: [
+          "mcp__lime-browser__navigate",
+          "mcp__lime-browser__click",
+        ],
+      },
+    ],
+    extension_tools: [
+      {
+        name: "mcp__lime-browser__navigate",
+        description: "打开网页",
+        extension_name: "mcp__lime-browser",
+        source_kind: "mcp_bridge",
+        deferred_loading: false,
+        allowed_caller: "assistant",
+        status: "loaded",
+        caller_allowed: true,
+        visible_in_context: true,
+      },
+    ],
+    mcp_tools: [
+      {
+        server_name: "lime-browser",
+        name: "mcp__lime-browser__navigate",
+        description: "导航到指定页面",
+        deferred_loading: false,
+        always_visible: true,
+        allowed_callers: ["assistant"],
+        tags: ["browser", "navigation"],
+        input_examples_count: 1,
+        caller_allowed: true,
+        visible_in_context: true,
+      },
+    ],
+  };
+}
+
+export function createAlignedRuntimeToolInventory(): AgentRuntimeToolInventory {
+  const base = createToolInventory();
+
+  return {
+    ...base,
+    counts: {
+      ...base.counts,
+      runtime_total: 15,
+      runtime_visible_total: 14,
+    },
+    runtime_tools: [
+      {
+        name: "Agent",
+        description: "创建或调度子任务",
+        source_kind: "current_surface",
+        catalog_entry_name: "Agent",
+        catalog_source: "aster_builtin",
+        catalog_lifecycle: "current",
+        catalog_permission_plane: "session_allowlist",
+        catalog_workspace_default_allow: false,
+        deferred_loading: false,
+        always_visible: false,
+        allowed_callers: [],
+        tags: [],
+        input_examples_count: 0,
+        caller_allowed: true,
+        visible_in_context: true,
+      },
+      {
+        name: "SendMessage",
+        description: "向子任务追加输入",
+        source_kind: "current_surface",
+        catalog_entry_name: "SendMessage",
+        catalog_source: "aster_builtin",
+        catalog_lifecycle: "current",
+        catalog_permission_plane: "session_allowlist",
+        catalog_workspace_default_allow: false,
+        deferred_loading: false,
+        always_visible: false,
+        allowed_callers: [],
+        tags: ["team"],
+        input_examples_count: 0,
+        caller_allowed: true,
+        visible_in_context: true,
+      },
+      {
+        name: "TeamCreate",
+        description: "创建协作团队",
+        source_kind: "current_surface",
+        catalog_entry_name: "TeamCreate",
+        catalog_source: "aster_builtin",
+        catalog_lifecycle: "current",
+        catalog_permission_plane: "session_allowlist",
+        catalog_workspace_default_allow: false,
+        deferred_loading: false,
+        always_visible: false,
+        allowed_callers: [],
+        tags: ["team"],
+        input_examples_count: 0,
+        caller_allowed: true,
+        visible_in_context: true,
+      },
+      {
+        name: "TeamDelete",
+        description: "删除协作团队",
+        source_kind: "current_surface",
+        catalog_entry_name: "TeamDelete",
+        catalog_source: "aster_builtin",
+        catalog_lifecycle: "current",
+        catalog_permission_plane: "session_allowlist",
+        catalog_workspace_default_allow: false,
+        deferred_loading: false,
+        always_visible: false,
+        allowed_callers: [],
+        tags: ["team"],
+        input_examples_count: 0,
+        caller_allowed: true,
+        visible_in_context: true,
+      },
+      {
+        name: "ListPeers",
+        description: "列出当前团队成员",
+        source_kind: "current_surface",
+        catalog_entry_name: "ListPeers",
+        catalog_source: "aster_builtin",
+        catalog_lifecycle: "current",
+        catalog_permission_plane: "session_allowlist",
+        catalog_workspace_default_allow: false,
+        deferred_loading: false,
+        always_visible: false,
+        allowed_callers: [],
+        tags: ["team"],
+        input_examples_count: 0,
+        caller_allowed: true,
+        visible_in_context: true,
+      },
+      {
+        name: "TaskCreate",
+        description: "创建任务",
+        source_kind: "current_surface",
+        catalog_entry_name: "TaskCreate",
+        catalog_source: "aster_builtin",
+        catalog_lifecycle: "current",
+        catalog_permission_plane: "session_allowlist",
+        catalog_workspace_default_allow: false,
+        deferred_loading: false,
+        always_visible: false,
+        allowed_callers: [],
+        tags: ["task"],
+        input_examples_count: 0,
+        caller_allowed: true,
+        visible_in_context: true,
+      },
+      {
+        name: "TaskGet",
+        description: "查看任务详情",
+        source_kind: "current_surface",
+        catalog_entry_name: "TaskGet",
+        catalog_source: "aster_builtin",
+        catalog_lifecycle: "current",
+        catalog_permission_plane: "session_allowlist",
+        catalog_workspace_default_allow: false,
+        deferred_loading: false,
+        always_visible: false,
+        allowed_callers: [],
+        tags: ["task"],
+        input_examples_count: 0,
+        caller_allowed: true,
+        visible_in_context: true,
+      },
+      {
+        name: "TaskList",
+        description: "列出任务",
+        source_kind: "current_surface",
+        catalog_entry_name: "TaskList",
+        catalog_source: "aster_builtin",
+        catalog_lifecycle: "current",
+        catalog_permission_plane: "session_allowlist",
+        catalog_workspace_default_allow: false,
+        deferred_loading: false,
+        always_visible: false,
+        allowed_callers: [],
+        tags: ["task"],
+        input_examples_count: 0,
+        caller_allowed: true,
+        visible_in_context: true,
+      },
+      {
+        name: "TaskUpdate",
+        description: "更新任务",
+        source_kind: "current_surface",
+        catalog_entry_name: "TaskUpdate",
+        catalog_source: "aster_builtin",
+        catalog_lifecycle: "current",
+        catalog_permission_plane: "session_allowlist",
+        catalog_workspace_default_allow: false,
+        deferred_loading: false,
+        always_visible: false,
+        allowed_callers: [],
+        tags: ["task"],
+        input_examples_count: 0,
+        caller_allowed: true,
+        visible_in_context: true,
+      },
+      {
+        name: "TaskOutput",
+        description: "读取任务输出",
+        source_kind: "current_surface",
+        catalog_entry_name: "TaskOutput",
+        catalog_source: "aster_builtin",
+        catalog_lifecycle: "current",
+        catalog_permission_plane: "session_allowlist",
+        catalog_workspace_default_allow: false,
+        deferred_loading: false,
+        always_visible: false,
+        allowed_callers: [],
+        tags: ["task"],
+        input_examples_count: 0,
+        caller_allowed: true,
+        visible_in_context: true,
+      },
+      {
+        name: "TaskStop",
+        description: "终止任务",
+        source_kind: "current_surface",
+        catalog_entry_name: "TaskStop",
+        catalog_source: "aster_builtin",
+        catalog_lifecycle: "current",
+        catalog_permission_plane: "session_allowlist",
+        catalog_workspace_default_allow: false,
+        deferred_loading: false,
+        always_visible: false,
+        allowed_callers: [],
+        tags: ["task"],
+        input_examples_count: 0,
+        caller_allowed: true,
+        visible_in_context: true,
+      },
+      {
+        name: "WebSearch",
+        description: "执行联网检索",
+        source_kind: "current_surface",
+        catalog_entry_name: "WebSearch",
+        catalog_source: "lime_injected",
+        catalog_lifecycle: "current",
+        catalog_permission_plane: "session_allowlist",
+        catalog_workspace_default_allow: true,
+        deferred_loading: false,
+        always_visible: false,
+        allowed_callers: [],
+        tags: ["search"],
+        input_examples_count: 0,
+        caller_allowed: true,
+        visible_in_context: true,
+      },
+      ...(base.runtime_tools ?? []).filter((entry) => entry.name !== "Agent"),
+    ],
+  };
+}
+
+beforeEach(async () => {
+  (
+    globalThis as typeof globalThis & {
+      IS_REACT_ACT_ENVIRONMENT?: boolean;
+    }
+  ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
+
+  if (!areLightweightRenderersRegistered()) {
+    registerLightweightRenderers();
+  }
+
+  originalClipboard = navigator.clipboard;
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: {
+      writeText: vi.fn().mockResolvedValue(undefined),
+    },
+  });
+  originalWindowOpen = window.open;
+  Object.defineProperty(window, "open", {
+    configurable: true,
+    value: vi.fn(),
+  });
+  prefetchContextMemoryForTurnMock.mockResolvedValue({
+    session_id: "session-default",
+    rules_source_paths: [],
+    working_memory_excerpt: null,
+    durable_memories: [],
+    team_memory_entries: [],
+    latest_compaction: null,
+    prompt: null,
+  });
+});
+
+afterEach(() => {
+  while (mountedRoots.length > 0) {
+    const mounted = mountedRoots.pop();
+    if (!mounted) {
+      break;
+    }
+    act(() => {
+      mounted.root.unmount();
+    });
+    mounted.container.remove();
+  }
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: originalClipboard,
+  });
+  Object.defineProperty(window, "open", {
+    configurable: true,
+    value: originalWindowOpen,
+  });
+  clearAgentUiProjectionEvents();
+  vi.clearAllMocks();
+});

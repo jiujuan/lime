@@ -36,6 +36,71 @@ describe("messageListInlineProcess", () => {
     ]);
   });
 
+  it("流式 overlay 与前置过程说明不连续时应追加到工具之后", () => {
+    const parts = [
+      { type: "text", text: "我先联网核实今天的国际新闻。" },
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-search",
+          name: "web_search",
+          status: "completed",
+        },
+      },
+    ] as unknown as Message["contentParts"];
+
+    expect(
+      mergeStreamingOverlayContentParts(
+        parts,
+        "## 今日国际新闻简报\n\n- 第一条要闻。",
+      ),
+    ).toEqual([
+      { type: "text", text: "我先联网核实今天的国际新闻。" },
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-search",
+          name: "web_search",
+          status: "completed",
+        },
+      },
+      { type: "text", text: "## 今日国际新闻简报\n\n- 第一条要闻。" },
+    ]);
+  });
+
+  it("流式 overlay 修正工具后的尾部正文时不应把正文挪到工具前", () => {
+    const parts = [
+      { type: "text", text: "我先查证来源。" },
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-search",
+          name: "web_search",
+          status: "completed",
+        },
+      },
+      { type: "text", text: "## 简报\n\n- 初稿。" },
+    ] as unknown as Message["contentParts"];
+
+    expect(
+      mergeStreamingOverlayContentParts(
+        parts,
+        "## 简报\n\n- 修正后的最终稿。",
+      ),
+    ).toEqual([
+      { type: "text", text: "我先查证来源。" },
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-search",
+          name: "web_search",
+          status: "completed",
+        },
+      },
+      { type: "text", text: "## 简报\n\n- 修正后的最终稿。" },
+    ]);
+  });
+
   it("内联命令与搜索工具应覆盖对应 timeline 项，避免外置重复展示", () => {
     const coverage = resolveInlineProcessCoverage({
       contentParts: [

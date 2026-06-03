@@ -1,10 +1,18 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
+import {
+  cleanupMountedChromeRelaySettings,
+  cloneBrowserActionCapabilities,
+  findButton,
+  findTabButton,
+  flushEffects,
+  getBodyText,
+  openAdvancedTab,
+  renderComponent,
+} from "./chromeRelaySettingsTestFixtures";
 
 const {
-  mockOpenDialog,
   mockGetConfig,
   mockSetBrowserConnectorInstallRoot,
   mockGetBrowserConnectorSettings,
@@ -24,37 +32,30 @@ const {
   mockGetBrowserBackendPolicy,
   mockGetBrowserBackendsStatus,
   mockOpenBrowserConnectorGuideWindow,
-} = vi.hoisted(() => {
-  return {
-    mockOpenDialog: vi.fn(),
-    mockGetConfig: vi.fn(),
-    mockSetBrowserConnectorInstallRoot: vi.fn(),
-    mockGetBrowserConnectorSettings: vi.fn(),
-    mockGetBrowserConnectorInstallStatus: vi.fn(),
-    mockInstallBrowserConnectorExtension: vi.fn(),
-    mockSetBrowserConnectorEnabled: vi.fn(),
-    mockSetSystemConnectorEnabled: vi.fn(),
-    mockSetBrowserActionCapabilityEnabled: vi.fn(),
-    mockOpenBrowserExtensionsPage: vi.fn(),
-    mockOpenBrowserRemoteDebuggingPage: vi.fn(),
-    mockLaunchBrowserSession: vi.fn(),
-    mockOpenBrowserRuntimeDebuggerWindow: vi.fn(),
-    mockGetChromeProfileSessions: vi.fn(),
-    mockGetChromeBridgeEndpointInfo: vi.fn(),
-    mockGetChromeBridgeStatus: vi.fn(),
-    mockDisconnectBrowserConnectorSession: vi.fn(),
-    mockGetBrowserBackendPolicy: vi.fn(),
-    mockGetBrowserBackendsStatus: vi.fn(),
-    mockOpenBrowserConnectorGuideWindow: vi.fn(),
-  };
-});
+} = vi.hoisted(() => ({
+  mockGetConfig: vi.fn(),
+  mockSetBrowserConnectorInstallRoot: vi.fn(),
+  mockGetBrowserConnectorSettings: vi.fn(),
+  mockGetBrowserConnectorInstallStatus: vi.fn(),
+  mockInstallBrowserConnectorExtension: vi.fn(),
+  mockSetBrowserConnectorEnabled: vi.fn(),
+  mockSetSystemConnectorEnabled: vi.fn(),
+  mockSetBrowserActionCapabilityEnabled: vi.fn(),
+  mockOpenBrowserExtensionsPage: vi.fn(),
+  mockOpenBrowserRemoteDebuggingPage: vi.fn(),
+  mockLaunchBrowserSession: vi.fn(),
+  mockOpenBrowserRuntimeDebuggerWindow: vi.fn(),
+  mockGetChromeProfileSessions: vi.fn(),
+  mockGetChromeBridgeEndpointInfo: vi.fn(),
+  mockGetChromeBridgeStatus: vi.fn(),
+  mockDisconnectBrowserConnectorSession: vi.fn(),
+  mockGetBrowserBackendPolicy: vi.fn(),
+  mockGetBrowserBackendsStatus: vi.fn(),
+  mockOpenBrowserConnectorGuideWindow: vi.fn(),
+}));
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
-}));
-
-vi.mock("@tauri-apps/plugin-dialog", () => ({
-  open: (...args: unknown[]) => mockOpenDialog(...args),
 }));
 
 vi.mock("@/features/browser-runtime", () => ({
@@ -100,98 +101,7 @@ vi.mock("@/lib/webview-api", async () => {
   };
 });
 
-import { ChromeRelaySettings } from ".";
-
-interface Mounted {
-  container: HTMLDivElement;
-  root: Root;
-}
-
-const mounted: Mounted[] = [];
 const mockWriteClipboardText = vi.fn();
-const mockBrowserActionCapabilities = [
-  {
-    key: "read_page",
-    label: "页面快照",
-    description: "抓取当前页面快照。",
-    group: "read",
-    enabled: true,
-  },
-  {
-    key: "find",
-    label: "页面内查找",
-    description: "在当前页面中查找文本。",
-    group: "read",
-    enabled: true,
-  },
-  {
-    key: "navigate",
-    label: "导航",
-    description: "导航到目标地址。",
-    group: "write",
-    enabled: true,
-  },
-  {
-    key: "click",
-    label: "点击元素",
-    description: "点击页面元素。",
-    group: "write",
-    enabled: true,
-  },
-] as const;
-
-function renderComponent() {
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  act(() => {
-    root.render(<ChromeRelaySettings />);
-  });
-  mounted.push({ container, root });
-  return container;
-}
-
-async function flushEffects() {
-  await act(async () => {
-    await Promise.resolve();
-    await new Promise((resolve) => window.setTimeout(resolve, 0));
-  });
-}
-
-function getBodyText() {
-  return document.body.textContent ?? "";
-}
-
-function findButton(container: HTMLElement, text: string): HTMLButtonElement {
-  const target = Array.from(container.querySelectorAll("button")).find(
-    (button) => button.textContent?.includes(text),
-  );
-  if (!target) {
-    throw new Error(`未找到按钮: ${text}`);
-  }
-  return target as HTMLButtonElement;
-}
-
-function findTabButton(
-  container: HTMLElement,
-  text: string,
-): HTMLButtonElement {
-  const target = Array.from(container.querySelectorAll("button")).find(
-    (button) => button.textContent?.trim().startsWith(text),
-  );
-  if (!target) {
-    throw new Error(`未找到页签按钮: ${text}`);
-  }
-  return target as HTMLButtonElement;
-}
-
-async function openAdvancedTab(container: HTMLElement) {
-  const tabButton = findButton(container, "Open Advanced Tools");
-  await act(async () => {
-    tabButton.click();
-    await flushEffects();
-  });
-}
 
 beforeEach(async () => {
   (
@@ -210,8 +120,6 @@ beforeEach(async () => {
 
   mockWriteClipboardText.mockResolvedValue(undefined);
 
-  mockOpenDialog.mockResolvedValue("/Users/test/connectors");
-
   mockGetConfig.mockResolvedValue({
     web_search: {
       engine: "google",
@@ -221,9 +129,7 @@ beforeEach(async () => {
     enabled: true,
     install_root_dir: null,
     install_dir: null,
-    browser_action_capabilities: mockBrowserActionCapabilities.map(
-      (capability) => ({ ...capability }),
-    ),
+    browser_action_capabilities: cloneBrowserActionCapabilities(),
     system_connectors: [
       {
         id: "calendar",
@@ -242,9 +148,7 @@ beforeEach(async () => {
     enabled: true,
     install_root_dir: "/Users/test/connectors",
     install_dir: "/Users/test/connectors/Lime Browser Connector",
-    browser_action_capabilities: mockBrowserActionCapabilities.map(
-      (capability) => ({ ...capability }),
-    ),
+    browser_action_capabilities: cloneBrowserActionCapabilities(),
     system_connectors: [
       {
         id: "calendar",
@@ -282,9 +186,7 @@ beforeEach(async () => {
     enabled: false,
     install_root_dir: null,
     install_dir: null,
-    browser_action_capabilities: mockBrowserActionCapabilities.map(
-      (capability) => ({ ...capability }),
-    ),
+    browser_action_capabilities: cloneBrowserActionCapabilities(),
     system_connectors: [
       {
         id: "calendar",
@@ -303,9 +205,7 @@ beforeEach(async () => {
     enabled: true,
     install_root_dir: null,
     install_dir: null,
-    browser_action_capabilities: mockBrowserActionCapabilities.map(
-      (capability) => ({ ...capability }),
-    ),
+    browser_action_capabilities: cloneBrowserActionCapabilities(),
     system_connectors: [
       {
         id: "calendar",
@@ -438,14 +338,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  while (mounted.length > 0) {
-    const target = mounted.pop();
-    if (!target) break;
-    act(() => {
-      target.root.unmount();
-    });
-    target.container.remove();
-  }
+  cleanupMountedChromeRelaySettings();
   vi.clearAllMocks();
   await changeLimeLocale("zh-CN");
 });

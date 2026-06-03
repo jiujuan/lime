@@ -74,6 +74,9 @@ internal/roadmap/voice/**
 !internal/roadmap/memory/
 internal/roadmap/memory/**
 !internal/roadmap/memory/*.md
+!internal/roadmap/soul/
+internal/roadmap/soul/**
+!internal/roadmap/soul/*.md
 !internal/roadmap/knowledge/
 internal/roadmap/knowledge/**
 !internal/roadmap/knowledge/prd.md

@@ -47,7 +47,7 @@ import {
 import {
   sanitizeContentPartsForDisplay,
   sanitizeMessageTextForDisplay,
-} from "../utils/internalImagePlaceholder";
+} from "../utils/messageDisplaySanitizer";
 import { isPureRuntimePeerMessageText } from "../utils/runtimePeerMessageDisplay";
 import {
   summarizeStreamingToolBatch,
@@ -58,6 +58,10 @@ import {
   getToolDisplayInfo,
 } from "../utils/toolDisplayInfo";
 import { resolveToolProcessNarrative } from "../utils/toolProcessSummary";
+import {
+  FileChangesUndoError,
+  restoreFileChangesFromCheckpoints,
+} from "../utils/fileChangesUndo";
 
 const STRUCTURED_CONTENT_HINT_RE = /<a2ui|```\s*a2ui|<write_file|<document/i;
 const STRUCTURED_PARSE_CACHE_LIMIT = 64;
@@ -657,8 +661,8 @@ function buildStreamingProcessSummary(entries: StreamingProcessEntry[]): {
   if (toolCount > 0) {
     const toolCalls = toolEntries.map((entry) => entry.toolCall);
     const families = new Set(
-      toolCalls.map((toolCall) =>
-        getToolDisplayInfo(toolCall.name, toolCall.status).family,
+      toolCalls.map(
+        (toolCall) => getToolDisplayInfo(toolCall.name, toolCall.status).family,
       ),
     );
     if (families.size === 1) {
@@ -772,14 +776,36 @@ function buildStreamingProcessSummary(entries: StreamingProcessEntry[]): {
   };
 }
 
+function shouldAutoExpandProcessEntries(
+  entries: StreamingProcessEntry[],
+  isMessageStreaming: boolean,
+): boolean {
+  if (!isMessageStreaming) {
+    return false;
+  }
+
+  const hasTool = entries.some((entry) => entry.kind === "tool");
+  if (hasTool) {
+    return false;
+  }
+
+  const hasPendingAction = entries.some(
+    (entry) =>
+      entry.kind === "action" && entry.actionRequired.status !== "submitted",
+  );
+  if (hasPendingAction) {
+    return true;
+  }
+
+  return entries.every((entry) => entry.kind === "thinking");
+}
+
 const GroupedProcessShell: React.FC<{
   groupMarker: string;
   children: React.ReactNode;
 }> = ({ groupMarker, children }) => (
   <div className="flex items-start gap-2 py-1.5">
-    <span className="pt-0.5 font-mono text-xs text-slate-400">
-      {groupMarker}
-    </span>
+    <span className="pt-0.5 text-xs text-slate-300">{groupMarker}</span>
     <div className="min-w-0 flex-1">{children}</div>
   </div>
 );
@@ -808,20 +834,24 @@ const StreamingProcessGroup: React.FC<{
   }, [defaultExpanded]);
 
   return (
-    <div className="py-0.5" data-testid="streaming-process-group">
+    <div
+      className="py-0.5"
+      data-testid="streaming-process-group"
+      data-visual-tone="neutral"
+    >
       <button
         type="button"
-        className="flex w-full items-start gap-2 py-1.5 text-left transition-colors hover:bg-slate-50"
+        className="flex w-full items-start gap-2 rounded-lg py-1.5 text-left transition-colors hover:bg-slate-50/70"
         onClick={() => setExpanded((current) => !current)}
         aria-expanded={expanded}
       >
         <ChevronDown
           className={cn(
-            "mt-0.5 h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200",
+            "mt-1 h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-200",
             expanded && "rotate-180",
           )}
         />
-        <span className="min-w-0 flex-1 text-sm font-medium leading-6 text-slate-700">
+        <span className="min-w-0 flex-1 text-[13px] font-normal leading-6 text-slate-600">
           <span className="block break-words">{summaryText}</span>
           {metaText ? (
             <span className="mt-0.5 block text-xs font-normal leading-5 text-slate-500">
@@ -830,7 +860,7 @@ const StreamingProcessGroup: React.FC<{
           ) : null}
           {descriptor?.supportingLines?.length ? (
             <span className="mt-0.5 block space-y-0.5">
-              {descriptor.supportingLines.slice(0, 2).map((line) => (
+              {descriptor.supportingLines.slice(0, 5).map((line) => (
                 <span
                   key={line}
                   className="block text-xs font-normal leading-5 text-slate-500"
@@ -844,11 +874,21 @@ const StreamingProcessGroup: React.FC<{
       </button>
       {expanded ? (
         <div className="ml-2">
-          {entries.map((entry, index) => (
-            <React.Fragment key={entry.id}>
-              {renderEntry(entry, true, index === 0 ? "└" : "·")}
-            </React.Fragment>
-          ))}
+          {descriptor?.kind === "web_search" &&
+          descriptor.supportingLines.length > 0
+            ? descriptor.supportingLines.slice(0, 10).map((line, index) => (
+                <GroupedProcessShell
+                  key={`web-search-source-${index}-${line}`}
+                  groupMarker={index === 0 ? "└" : "·"}
+                >
+                  <div className="text-xs leading-5 text-slate-500">{line}</div>
+                </GroupedProcessShell>
+              ))
+            : entries.map((entry, index) => (
+                <React.Fragment key={entry.id}>
+                  {renderEntry(entry, true, index === 0 ? "└" : "·")}
+                </React.Fragment>
+              ))}
         </div>
       ) : null}
     </div>
@@ -896,6 +936,8 @@ interface StreamingRendererProps {
   ) => void;
   /** 文件点击回调 */
   onFileClick?: (fileName: string, content: string) => void;
+  /** 当前会话 ID；存在时文件变更摘要可用 runtime file checkpoint 执行撤销。 */
+  fileChangesUndoSessionId?: string | null;
   onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
   /** 权限确认响应回调 */
   onPermissionResponse?: (response: ConfirmResponse) => void;
@@ -948,6 +990,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
     renderA2UIInline = true,
     onWriteFile,
     onFileClick,
+    fileChangesUndoSessionId,
     onOpenSavedSiteContent,
     onPermissionResponse,
     collapseCodeBlocks,
@@ -1360,7 +1403,10 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
             <StreamingProcessGroup
               key={key}
               entries={entries}
-              defaultExpanded={isStreaming}
+              defaultExpanded={shouldAutoExpandProcessEntries(
+                entries,
+                isStreaming,
+              )}
               renderEntry={renderProcessEntry}
             />
           );
@@ -1642,13 +1688,37 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
             return;
           }
           flushProcessBuffer(String(index));
+          const undoSessionId = fileChangesUndoSessionId;
           nodes.push(
             <FileChangesSummaryCard
               key={`file-changes-${index}`}
               aggregate={part.aggregate}
               isStreaming={isStreaming}
+              onUndo={
+                undoSessionId
+                  ? async () => {
+                      try {
+                        return await restoreFileChangesFromCheckpoints({
+                          aggregate: part.aggregate,
+                          sessionId: undoSessionId,
+                        });
+                      } catch (error) {
+                        if (error instanceof FileChangesUndoError) {
+                          throw new Error(
+                            t(
+                              `agentChat.fileChangesSummary.undoError.${error.code}`,
+                            ),
+                          );
+                        }
+                        throw error;
+                      }
+                    }
+                  : undefined
+              }
               onFileClick={
-                onFileClick ? (path) => onFileClick(path, "") : undefined
+                onFileClick
+                  ? (path, content) => onFileClick(path, content)
+                  : undefined
               }
             />,
           );

@@ -49,6 +49,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
   isSending = false,
   assistantLabel = "Lime",
   onQuoteMessage,
+  onEditMessage,
   onA2UISubmit,
   renderA2UIInline = true,
   a2uiFormDataMap,
@@ -237,6 +238,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
       <MessageListItem
         msg={msg}
         group={group}
+        sessionId={sessionId}
         streamingTextOverlay={streamingTextOverlay}
         activeConversationRuntimeStatusLine={
           timelineState.activeConversationRuntimeStatusLine
@@ -286,6 +288,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
         onFileClick={onFileClick}
         onInterruptCurrentTurn={onInterruptCurrentTurn}
         onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
+        onEditMessage={onEditMessage}
         onOpenMessagePreview={onOpenMessagePreview}
         onOpenSavedSiteContent={onOpenSavedSiteContent}
         onOpenSubagentSession={onOpenSubagentSession}
@@ -318,6 +321,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
       onA2UISubmit,
       onArtifactClick,
       onCodeBlockClick,
+      onEditMessage,
       onFileClick,
       onInterruptCurrentTurn,
       onOpenArtifactFromTimeline,
@@ -335,6 +339,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
       providerType,
       renderA2UIInline,
       renderWindow.isRestoredHistoryWindow,
+      sessionId,
       shouldCollapseCodeBlock,
       threadRead,
       timelineFocusRequestKey,

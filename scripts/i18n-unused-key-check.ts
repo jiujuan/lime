@@ -107,7 +107,9 @@ function normalizePath(filePath: string): string {
 
 function displayPath(filePath: string): string {
   const relative = path.relative(REPO_ROOT, filePath);
-  return normalizePath(relative && !relative.startsWith("..") ? relative : filePath);
+  return normalizePath(
+    relative && !relative.startsWith("..") ? relative : filePath,
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -128,7 +130,9 @@ function listResourceKeys(
 ): UnusedI18nKey[] {
   const localeDir = path.join(resourcesDir, sourceLocale);
   if (!fs.existsSync(localeDir)) {
-    throw new Error(`Source locale resources directory does not exist: ${localeDir}`);
+    throw new Error(
+      `Source locale resources directory does not exist: ${localeDir}`,
+    );
   }
 
   return fs
@@ -143,7 +147,9 @@ function listResourceKeys(
       }));
     })
     .sort((left, right) =>
-      `${left.namespace}:${left.key}`.localeCompare(`${right.namespace}:${right.key}`),
+      `${left.namespace}:${left.key}`.localeCompare(
+        `${right.namespace}:${right.key}`,
+      ),
     );
 }
 
@@ -168,7 +174,10 @@ function isSourceFile(filePath: string, includeTests: boolean): boolean {
   return true;
 }
 
-function collectSourceFiles(sourceDirs: string[], includeTests: boolean): string[] {
+function collectSourceFiles(
+  sourceDirs: string[],
+  includeTests: boolean,
+): string[] {
   const files: string[] = [];
   const visit = (target: string) => {
     if (!fs.existsSync(target)) {
@@ -221,6 +230,20 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function unwrapStaticExpression(expression: ts.Expression): ts.Expression {
+  let current: ts.Expression = expression;
+
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current)
+  ) {
+    current = current.expression;
+  }
+
+  return current;
+}
+
 function isI18nTranslateCall(node: ts.CallExpression): boolean {
   if (ts.isIdentifier(node.expression)) {
     return node.expression.text === "t";
@@ -238,11 +261,7 @@ function resolveStaticStringExpression(
   constStrings: Map<string, string>,
   constInitializers: Map<string, ts.Expression>,
 ): string | null {
-  let current: ts.Expression = expression;
-
-  while (ts.isParenthesizedExpression(current)) {
-    current = current.expression;
-  }
+  const current = unwrapStaticExpression(expression);
 
   if (
     ts.isStringLiteral(current) ||
@@ -257,7 +276,11 @@ function resolveStaticStringExpression(
     }
     const initializer = constInitializers.get(current.text);
     return initializer
-      ? resolveStaticStringExpression(initializer, constStrings, constInitializers)
+      ? resolveStaticStringExpression(
+          initializer,
+          constStrings,
+          constInitializers,
+        )
       : null;
   }
 
@@ -281,12 +304,18 @@ function resolveStaticStringExpression(
   return null;
 }
 
-function collectConstStringValues(sourceFile: ts.SourceFile): Map<string, string> {
+function collectConstStringValues(
+  sourceFile: ts.SourceFile,
+): Map<string, string> {
   const constStrings = new Map<string, string>();
   const constInitializers = collectConstInitializers(sourceFile);
 
   const visit = (node: ts.Node) => {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer
+    ) {
       const declarationList = node.parent;
       if (
         ts.isVariableDeclarationList(declarationList) &&
@@ -309,11 +338,17 @@ function collectConstStringValues(sourceFile: ts.SourceFile): Map<string, string
   return constStrings;
 }
 
-function collectConstInitializers(sourceFile: ts.SourceFile): Map<string, ts.Expression> {
+function collectConstInitializers(
+  sourceFile: ts.SourceFile,
+): Map<string, ts.Expression> {
   const constInitializers = new Map<string, ts.Expression>();
 
   const visit = (node: ts.Node) => {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer
+    ) {
       const declarationList = node.parent;
       if (
         ts.isVariableDeclarationList(declarationList) &&
@@ -336,14 +371,12 @@ function createDynamicKeyPattern(
   constInitializers: Map<string, ts.Expression>,
   expression: ts.Expression,
 ): I18nDynamicKeyPattern | null {
-  function render(
-    expr: ts.Expression,
-  ): { pattern: string; prefix: string; hasWildcard: boolean } {
-    let current: ts.Expression = expr;
-
-    while (ts.isParenthesizedExpression(current)) {
-      current = current.expression;
-    }
+  function render(expr: ts.Expression): {
+    pattern: string;
+    prefix: string;
+    hasWildcard: boolean;
+  } {
+    const current = unwrapStaticExpression(expr);
 
     if (
       ts.isStringLiteral(current) ||
@@ -390,7 +423,9 @@ function createDynamicKeyPattern(
       const right = render(current.right);
       return {
         pattern: `${left.pattern}${right.pattern}`,
-        prefix: left.hasWildcard ? left.prefix : `${left.prefix}${right.prefix}`,
+        prefix: left.hasWildcard
+          ? left.prefix
+          : `${left.prefix}${right.prefix}`,
         hasWildcard: left.hasWildcard || right.hasWildcard,
       };
     }
@@ -429,12 +464,17 @@ function createDynamicKeyPattern(
   if (!rendered.hasWildcard && !rendered.prefix.includes(".")) {
     return null;
   }
-  if (!rendered.prefix || !/^[A-Za-z][\w-]*(?:\.[A-Za-z0-9][\w-]*)+\.$/.test(rendered.prefix)) {
+  if (
+    !rendered.prefix ||
+    !/^[A-Za-z][\w-]*(?:\.[A-Za-z0-9][\w-]*)+\.$/.test(rendered.prefix)
+  ) {
     return null;
   }
 
   const pattern = `^${rendered.pattern}$`;
-  const position = sourceFile.getLineAndCharacterOfPosition(expression.getStart(sourceFile));
+  const position = sourceFile.getLineAndCharacterOfPosition(
+    expression.getStart(sourceFile),
+  );
   return {
     pattern,
     source: `${displayPath(filePath)}:${position.line + 1}`,
@@ -459,10 +499,7 @@ function collectKeyReferences(filePath: string): {
   const dynamicPatterns = new Map<string, I18nDynamicKeyPattern>();
 
   const visit = (node: ts.Node) => {
-    if (
-      ts.isStringLiteral(node) ||
-      ts.isNoSubstitutionTemplateLiteral(node)
-    ) {
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
       literals.add(node.text);
     }
     if (ts.isCallExpression(node) && isI18nTranslateCall(node)) {
@@ -491,7 +528,9 @@ function collectKeyReferences(filePath: string): {
 }
 
 function isProtectedKey(key: string, protectedPrefixes: string[]): boolean {
-  return protectedPrefixes.some((prefix) => key === prefix || key.startsWith(prefix));
+  return protectedPrefixes.some(
+    (prefix) => key === prefix || key.startsWith(prefix),
+  );
 }
 
 function buildNamespaceSummaries(
@@ -506,7 +545,10 @@ function buildNamespaceSummaries(
   const unusedCounts = new Map<string, number>();
 
   for (const item of resourceKeys) {
-    resourceCounts.set(item.namespace, (resourceCounts.get(item.namespace) ?? 0) + 1);
+    resourceCounts.set(
+      item.namespace,
+      (resourceCounts.get(item.namespace) ?? 0) + 1,
+    );
     if (referencedKeySet.has(item.key)) {
       referencedCounts.set(
         item.namespace,
@@ -516,11 +558,17 @@ function buildNamespaceSummaries(
   }
 
   for (const item of protectedKeys) {
-    protectedCounts.set(item.namespace, (protectedCounts.get(item.namespace) ?? 0) + 1);
+    protectedCounts.set(
+      item.namespace,
+      (protectedCounts.get(item.namespace) ?? 0) + 1,
+    );
   }
 
   for (const item of unusedKeys) {
-    unusedCounts.set(item.namespace, (unusedCounts.get(item.namespace) ?? 0) + 1);
+    unusedCounts.set(
+      item.namespace,
+      (unusedCounts.get(item.namespace) ?? 0) + 1,
+    );
   }
 
   return [...resourceCounts.keys()]
@@ -560,7 +608,9 @@ export function scanUnusedI18nKeys(
     ...DEFAULT_PROTECTED_PREFIXES,
     ...(options.protectedPrefixes ?? []),
   ];
-  const sourceDirs = options.sourceDirs.map((sourceDir) => path.resolve(sourceDir));
+  const sourceDirs = options.sourceDirs.map((sourceDir) =>
+    path.resolve(sourceDir),
+  );
   const resourceKeys = listResourceKeys(resourcesDir, sourceLocale);
   const scannedFilePaths = collectSourceFiles(
     sourceDirs,
@@ -714,7 +764,9 @@ export function formatUnusedI18nKeyReport(
     lines.push("[i18n:unused] 通过：未发现未引用的 source locale key。");
   } else {
     lines.push("[i18n:unused] 未引用 key 候选：");
-    for (const [namespace, keys] of Object.entries(report.unusedKeysByNamespace)) {
+    for (const [namespace, keys] of Object.entries(
+      report.unusedKeysByNamespace,
+    )) {
       lines.push(`  ${namespace}: ${keys.length}`);
       for (const key of keys.slice(0, 20)) {
         lines.push(`    - ${key}`);
@@ -728,7 +780,8 @@ export function formatUnusedI18nKeyReport(
   if (Object.keys(report.unusedKeyFamiliesByNamespace).length > 0) {
     lines.push("[i18n:unused] 未引用 key 家族热点：");
     for (const item of result.namespaceSummaries.slice(0, 10)) {
-      const families = report.unusedKeyFamiliesByNamespace[item.namespace] ?? [];
+      const families =
+        report.unusedKeyFamiliesByNamespace[item.namespace] ?? [];
       if (families.length === 0) {
         continue;
       }
@@ -755,7 +808,9 @@ export function formatUnusedI18nKeyReport(
 
   if (result.protectedKeys.length > 0) {
     lines.push("[i18n:unused] protected dynamic key 候选：");
-    for (const [namespace, keys] of Object.entries(report.protectedKeysByNamespace)) {
+    for (const [namespace, keys] of Object.entries(
+      report.protectedKeysByNamespace,
+    )) {
       lines.push(`  ${namespace}: ${keys.length}`);
     }
   }
@@ -802,7 +857,9 @@ function parseCliArgs(argv: string[]): CliOptions {
         index += 1;
         continue;
       }
-      throw new Error(`Unknown or missing format value: ${next ?? "(missing)"}`);
+      throw new Error(
+        `Unknown or missing format value: ${next ?? "(missing)"}`,
+      );
     }
     if (arg === "--protected-prefix" && next) {
       options.protectedPrefixes?.push(next);

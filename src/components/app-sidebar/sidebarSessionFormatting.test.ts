@@ -61,4 +61,25 @@ describe("sidebarSessionFormatting", () => {
       ),
     ).toBe("Untitled conversation");
   });
+
+  it("运行时错误包络不应作为侧栏会话标题展示", () => {
+    const runtimeErrorEnvelope = [
+      "Ran into this error: Server error: upstream temporarily unavailable.",
+      "",
+      "Please retry if you think this is a transient or recoverable error.",
+    ].join("\n");
+
+    expect(
+      resolveSidebarSessionTitle(
+        buildSession({ name: runtimeErrorEnvelope }),
+        "Untitled conversation",
+      ),
+    ).toBe("Untitled conversation");
+    expect(
+      resolveSidebarSessionTitle(
+        buildSession({ name: "Ran into this erro..." }),
+        "Untitled conversation",
+      ),
+    ).toBe("Untitled conversation");
+  });
 });

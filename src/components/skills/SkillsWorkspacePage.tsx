@@ -49,26 +49,33 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { resolveServiceSkillEntryDescription } from "@/components/agent/chat/service-skills/entryAdapter";
 import { buildServiceSkillRecommendationBuckets } from "@/components/agent/chat/service-skills/recommendedServiceSkills";
 import {
   resolveServiceSkillLaunchPrefill,
   type ServiceSkillLaunchPrefillCopy,
 } from "@/components/agent/chat/service-skills/serviceSkillLaunchPrefill";
-import {
-  buildServiceSkillCapabilityDescription,
-  type ServiceSkillPresentationCopy,
-} from "@/components/agent/chat/service-skills/skillPresentation";
+import type { ServiceSkillPresentationCopy } from "@/components/agent/chat/service-skills/skillPresentation";
 import type {
   ServiceSkillHomeItem,
   ServiceSkillTone,
 } from "@/components/agent/chat/service-skills/types";
 import { useServiceSkills } from "@/components/agent/chat/service-skills/useServiceSkills";
 import {
-  buildInstalledSkillCapabilityDescription,
   resolveInstalledSkillPromise,
   type InstalledSkillPresentationCopy,
 } from "./installedSkillPresentation";
+import {
+  buildInstalledLocalSkills,
+  buildMarketplaceIconPlaceholder,
+  buildSkillStoreItems,
+  getVisibleBuiltinLocalSkills,
+  getVisibleInstalledLocalSkills,
+  getVisibleSkillStoreItems,
+  getVisibleUserInstalledSkills,
+  splitFeaturedSkillStoreItems,
+  type SkillsWorkspaceView,
+  type SkillStoreItem,
+} from "./SkillsWorkspacePageViewModel";
 import { SkillScaffoldDialog } from "./SkillScaffoldDialog";
 import { SkillPackageInstallDialog } from "./SkillPackageInstallDialog";
 import {
@@ -93,7 +100,6 @@ import {
   getOfficialSkillMarketplaceBundle,
   installOfficialMarketplaceSkill,
   type SkillMarketplaceBundle,
-  type SkillMarketplaceItem,
   type SkillMarketplaceVisualAsset,
 } from "@/lib/api/officialSkillMarketplace";
 import { useOfficialSkillMarketplace } from "@/hooks/useOfficialSkillMarketplace";
@@ -104,20 +110,6 @@ interface SkillsWorkspacePageProps {
   onNavigate: (page: Page, params?: PageParams) => void;
   pageParams?: SkillsPageParams;
 }
-
-type SkillsWorkspaceView = "store" | "builtin" | "installed";
-
-type SkillStoreItem =
-  | {
-      source: "official";
-      skill: SkillMarketplaceItem;
-      serviceSkill?: never;
-    }
-  | {
-      source: "local_fallback";
-      skill: SkillMarketplaceItem;
-      serviceSkill: ServiceSkillHomeItem;
-    };
 
 type MarketplaceSkillActionState =
   | "not_installed"
@@ -160,36 +152,6 @@ type InstalledSkillDetailContentState =
       message: string;
     };
 
-function escapeSvgText(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function buildMarketplaceCoverPlaceholder(
-  title: string,
-  category?: string,
-): SkillMarketplaceVisualAsset {
-  const safeTitle = escapeSvgText(title || "Lime Skill");
-  const safeCategory = escapeSvgText(category || "Official");
-  return {
-    kind: "svg",
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180" role="img" aria-label="${safeTitle}"><rect width="320" height="180" rx="22" fill="#f7f7f5"/><rect x="1" y="1" width="318" height="178" rx="21" fill="none" stroke="#deded8"/><circle cx="264" cy="48" r="28" fill="#ededeb"/><path d="M48 70h118M48 92h186M48 114h142" stroke="#8d8d86" stroke-width="8" stroke-linecap="round"/><text x="48" y="145" font-family="ui-sans-serif,system-ui" font-size="18" font-weight="700" fill="#262626">${safeTitle}</text><text x="48" y="165" font-family="ui-sans-serif,system-ui" font-size="12" fill="#8c8c8c">${safeCategory}</text></svg>`,
-  };
-}
-
-function buildMarketplaceIconPlaceholder(
-  title: string,
-): SkillMarketplaceVisualAsset {
-  const safeTitle = escapeSvgText(title || "Lime");
-  const initial = escapeSvgText([...safeTitle][0] || "L");
-  return {
-    kind: "svg",
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="${safeTitle}"><rect width="96" height="96" rx="20" fill="#f5f5f5"/><rect x="1" y="1" width="94" height="94" rx="19" fill="none" stroke="#d9d9d9"/><path d="M28 36h40M28 48h32M28 60h24" stroke="#8c8c8c" stroke-width="5" stroke-linecap="round"/><text x="48" y="82" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="18" font-weight="700" fill="#595959">${initial}</text></svg>`,
-  };
-}
-
 function svgToDataUri(svg?: string): string | null {
   const normalized = svg?.trim();
   if (!normalized || !normalized.startsWith("<svg")) {
@@ -206,31 +168,6 @@ function resolveVisualAssetSource(
     return url;
   }
   return svgToDataUri(asset?.svg);
-}
-
-function buildFallbackMarketplaceItem(
-  skill: ServiceSkillHomeItem,
-): SkillMarketplaceItem {
-  return {
-    id: `local-fallback:${skill.id}`,
-    name: skill.skillKey || skill.id,
-    aliases: skill.aliases ?? [],
-    title: skill.title,
-    summary: skill.summary || resolveServiceSkillEntryDescription(skill),
-    category: skill.category,
-    outputHint: skill.outputHint,
-    version: skill.version,
-    sort: 0,
-    icon: buildMarketplaceIconPlaceholder(skill.title),
-    cover: buildMarketplaceCoverPlaceholder(skill.title, skill.category),
-    bundle: skill.skillBundle
-      ? {
-          ...skill.skillBundle,
-          resourceSummary: skill.skillBundle.resourceSummary,
-          standardCompliance: skill.skillBundle.standardCompliance,
-        }
-      : undefined,
-  };
 }
 
 function SkillsHeroBannerSvg() {
@@ -414,26 +351,6 @@ function buildInstalledSkillFallbackMarkdown(
   ]
     .filter(Boolean)
     .join("\n\n");
-}
-
-function normalizeKeyword(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function matchesText(
-  query: string,
-  ...values: Array<string | undefined>
-): boolean {
-  const normalizedQuery = normalizeKeyword(query);
-  if (!normalizedQuery) {
-    return true;
-  }
-
-  return values.some((value) =>
-    String(value ?? "")
-      .toLowerCase()
-      .includes(normalizedQuery),
-  );
 }
 
 const SKILL_AUTO_LOAD_PREFERENCES_STORAGE_KEY =
@@ -772,20 +689,10 @@ export function SkillsWorkspacePage({
     null,
   );
 
-  const installedLocalSkills = useMemo(() => {
-    const installedSkills = localSkills.filter((skill) => skill.installed);
-
-    if (!optimisticInstalledSkill) {
-      return installedSkills;
-    }
-
-    return [
-      optimisticInstalledSkill,
-      ...installedSkills.filter(
-        (skill) => skill.directory !== optimisticInstalledSkill.directory,
-      ),
-    ];
-  }, [localSkills, optimisticInstalledSkill]);
+  const installedLocalSkills = useMemo(
+    () => buildInstalledLocalSkills(localSkills, optimisticInstalledSkill),
+    [localSkills, optimisticInstalledSkill],
+  );
   const localSkillByDirectory = useMemo(() => {
     const result = new Map<string, Skill>();
     for (const skill of installedLocalSkills) {
@@ -899,43 +806,21 @@ export function SkillsWorkspacePage({
     [creationProjectId, onNavigate],
   );
 
-  const visibleInstalledLocalSkills = useMemo(() => {
-    const filteredSkills = installedLocalSkills.filter((skill) =>
-      matchesText(
+  const visibleInstalledLocalSkills = useMemo(
+    () =>
+      getVisibleInstalledLocalSkills({
+        installedLocalSkills,
         searchQuery,
-        skill.name,
-        skill.description,
-        skill.key,
-        skill.repoOwner,
-        skill.repoName,
-        buildInstalledSkillCapabilityDescription(skill, {
-          copy: installedSkillPresentationCopy,
-        }),
-      ),
-    );
-
-    if (!highlightedInstalledSkillDirectory) {
-      return filteredSkills;
-    }
-
-    return [...filteredSkills].sort((left, right) => {
-      const leftHighlighted =
-        left.directory === highlightedInstalledSkillDirectory ? 1 : 0;
-      const rightHighlighted =
-        right.directory === highlightedInstalledSkillDirectory ? 1 : 0;
-
-      if (leftHighlighted !== rightHighlighted) {
-        return rightHighlighted - leftHighlighted;
-      }
-
-      return left.name.localeCompare(right.name, "zh-CN");
-    });
-  }, [
-    highlightedInstalledSkillDirectory,
-    installedLocalSkills,
-    installedSkillPresentationCopy,
-    searchQuery,
-  ]);
+        highlightedInstalledSkillDirectory,
+        copy: installedSkillPresentationCopy,
+      }),
+    [
+      highlightedInstalledSkillDirectory,
+      installedLocalSkills,
+      installedSkillPresentationCopy,
+      searchQuery,
+    ],
+  );
   const handleRefreshAll = async () => {
     setRefreshing(true);
     try {
@@ -1556,45 +1441,26 @@ export function SkillsWorkspacePage({
       t("skills.workspace.scaffold.defaultTitle"),
     [activeScaffoldDraft, t],
   );
-  const skillStoreItems = useMemo<SkillStoreItem[]>(() => {
-    if (officialMarketplaceSkills.length > 0) {
-      return officialMarketplaceSkills.map((skill) => ({
-        source: "official",
-        skill,
-      }));
-    }
-
-    return workspaceServiceSkills.slice(0, 12).map((serviceSkill) => ({
-      source: "local_fallback",
-      skill: buildFallbackMarketplaceItem(serviceSkill),
-      serviceSkill,
-    }));
-  }, [officialMarketplaceSkills, workspaceServiceSkills]);
-
-  const visibleStoreItems = useMemo(() => {
-    return skillStoreItems.filter(({ skill, serviceSkill }) =>
-      matchesText(
-        searchQuery,
-        skill.title,
-        skill.summary,
-        skill.category,
-        skill.outputHint,
-        skill.bundle?.description,
-        ...(skill.aliases ?? []),
-        serviceSkill
-          ? buildServiceSkillCapabilityDescription(serviceSkill, {
-              copy: serviceSkillPresentationCopy,
-            })
-          : undefined,
-      ),
-    );
-  }, [searchQuery, serviceSkillPresentationCopy, skillStoreItems]);
-  const featuredStoreItems = useMemo(
-    () => visibleStoreItems.slice(0, 9),
-    [visibleStoreItems],
+  const skillStoreItems = useMemo<SkillStoreItem[]>(
+    () =>
+      buildSkillStoreItems({
+        officialMarketplaceSkills,
+        workspaceServiceSkills,
+      }),
+    [officialMarketplaceSkills, workspaceServiceSkills],
   );
-  const otherStoreItems = useMemo(
-    () => visibleStoreItems.slice(9),
+
+  const visibleStoreItems = useMemo(
+    () =>
+      getVisibleSkillStoreItems({
+        skillStoreItems,
+        searchQuery,
+        serviceSkillPresentationCopy,
+      }),
+    [searchQuery, serviceSkillPresentationCopy, skillStoreItems],
+  );
+  const { featuredStoreItems, otherStoreItems } = useMemo(
+    () => splitFeaturedSkillStoreItems(visibleStoreItems),
     [visibleStoreItems],
   );
 
@@ -1713,19 +1579,11 @@ export function SkillsWorkspacePage({
   }, [detailInstalledSkill]);
 
   const visibleBuiltinLocalSkills = useMemo(
-    () =>
-      localSkills
-        .filter((skill) => skill.sourceKind === "builtin")
-        .filter((skill) =>
-          matchesText(searchQuery, skill.name, skill.description, skill.key),
-        ),
+    () => getVisibleBuiltinLocalSkills({ localSkills, searchQuery }),
     [localSkills, searchQuery],
   );
   const visibleUserInstalledSkills = useMemo(
-    () =>
-      visibleInstalledLocalSkills.filter(
-        (skill) => skill.sourceKind !== "builtin",
-      ),
+    () => getVisibleUserInstalledSkills(visibleInstalledLocalSkills),
     [visibleInstalledLocalSkills],
   );
   const skillStoreCount = skillStoreItems.length;
