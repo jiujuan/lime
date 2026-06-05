@@ -15,3 +15,5 @@ pub(super) use self::document_autopersist::maybe_persist_artifact_document_after
 pub(super) use self::document_autopersist::should_skip_default_fast_chat_artifact_autopersist;
 #[cfg(test)]
 pub(super) use self::workspace_patch::build_agent_app_output_contract_workspace_patch;
+
+pub(super) type RuntimeArtifactMaterializationHostContext<'a> = RuntimeSideEventHostContext<'a>;

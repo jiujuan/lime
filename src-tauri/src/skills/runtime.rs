@@ -235,7 +235,13 @@ async fn configure_skill_provider_with_fallback(
                 continue;
             }
             match aster_state
-                .configure_provider_from_pool(db, fallback_provider, fallback_model, session_id, None)
+                .configure_provider_from_pool(
+                    db,
+                    fallback_provider,
+                    fallback_model,
+                    session_id,
+                    None,
+                )
                 .await
             {
                 Ok(config) => {

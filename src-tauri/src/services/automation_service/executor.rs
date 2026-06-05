@@ -5,7 +5,10 @@
 use super::{AutomationJobRecord, AutomationPayload, BROWSER_AUTOMATION_RETIRED_MESSAGE};
 use crate::agent::AsterAgentWrapper;
 use crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState;
-use crate::commands::aster_agent_cmd::{build_queued_turn_task, build_runtime_queue_executor};
+use crate::commands::aster_agent_cmd::app_server_host::{
+    build_tauri_aster_app_server, submit_desktop_app_server_turn, DesktopAppServerSubmitTurnInput,
+};
+use crate::commands::aster_agent_cmd::RuntimeCommandContext;
 use crate::config::GlobalConfigManagerState;
 use crate::database::DbConnection;
 use crate::mcp::McpManagerState;
@@ -155,8 +158,17 @@ async fn execute_agent_turn(
     let automation_state = app
         .try_state::<AutomationServiceState>()
         .ok_or_else(|| "AutomationServiceState 未初始化".to_string())?;
-    let queued_task = build_queued_turn_task(runtime_request.request)?;
-    crate::agent::runtime_queue_service::submit_runtime_turn(
+
+    let host_options =
+        serde_json::to_value(&runtime_request.request).map_err(|error| error.to_string())?;
+    let event_name = runtime_request.request.event_name.clone();
+    let message = runtime_request.request.message.clone();
+    let metadata = runtime_request.request.metadata.clone();
+    let provider_preference = runtime_request.request.provider_preference.clone();
+    let model_preference = runtime_request.request.model_preference.clone();
+    let queued_turn_id = runtime_request.request.queued_turn_id.clone();
+    let turn_id = runtime_request.request.turn_id.clone();
+    let runtime = RuntimeCommandContext::new(
         app.clone(),
         agent_state.inner(),
         db,
@@ -165,10 +177,29 @@ async fn execute_agent_turn(
         config_manager.inner(),
         mcp_manager.inner(),
         automation_state.inner(),
-        queued_task,
-        false,
-        false,
-        build_runtime_queue_executor(),
+    );
+    let app_server = build_tauri_aster_app_server(runtime);
+    submit_desktop_app_server_turn(
+        &app_server,
+        DesktopAppServerSubmitTurnInput {
+            client_name: "automation-agent-turn",
+            client_title: "Automation Agent Turn",
+            app_id: "automation",
+            session_id: &session_id,
+            workspace_id: &job.workspace_id,
+            turn_id: turn_id.as_deref(),
+            event_name: &event_name,
+            message,
+            metadata,
+            provider_preference: provider_preference.as_deref(),
+            model_preference: model_preference.as_deref(),
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+            queued_turn_id,
+            host_options: Some(serde_json::json!({
+                "asterChatRequest": host_options
+            })),
+        },
     )
     .await?;
 

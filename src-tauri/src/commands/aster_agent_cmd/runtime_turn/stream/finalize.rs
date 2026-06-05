@@ -35,10 +35,10 @@ pub(super) fn is_runtime_turn_cancelled_error(error: &str) -> bool {
 }
 
 pub(crate) async fn finalize_runtime_turn_result(
+    event_port: Arc<dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort>,
+    terminal_timeline_port: &dyn RuntimeTurnTerminalTimelinePort,
     agent: &Agent,
-    app: &AppHandle,
-    state: &AsterAgentState,
-    db: &DbConnection,
+    host: RuntimeTurnHostContext<'_>,
     event_name: &str,
     timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
     workspace_root: &str,
@@ -49,9 +49,12 @@ pub(crate) async fn finalize_runtime_turn_result(
     request_metadata: Option<&serde_json::Value>,
     result: Result<String, String>,
 ) -> Result<(), String> {
+    let side_event_host =
+        RuntimeSideEventHostContext::new(host.app, event_name, timeline_recorder, workspace_root);
+    let projection_port = TauriRuntimeProjectionEventPort::new(host.app);
     complete_runtime_status_projection(
         agent,
-        app,
+        host.app,
         event_name,
         timeline_recorder,
         workspace_root,
@@ -59,16 +62,12 @@ pub(crate) async fn finalize_runtime_turn_result(
     )
     .await;
 
-    let terminal_events = {
-        let mut recorder = match timeline_recorder.lock() {
-            Ok(guard) => guard,
-            Err(error) => error.into_inner(),
-        };
-        match result.as_ref() {
-            Ok(_) => recorder.complete_turn_success(),
-            Err(error) if is_runtime_turn_cancelled_error(error) => recorder.abort_turn(error),
-            Err(error) => recorder.fail_turn(error),
+    let terminal_events = match result.as_ref() {
+        Ok(_) => terminal_timeline_port.complete_turn_success(),
+        Err(error) if is_runtime_turn_cancelled_error(error) => {
+            terminal_timeline_port.abort_turn(error)
         }
+        Err(error) => terminal_timeline_port.fail_turn(error),
     };
     if let Err(error) = &terminal_events {
         let message = match result.as_ref() {
@@ -78,18 +77,22 @@ pub(crate) async fn finalize_runtime_turn_result(
         tracing::warn!("[AsterAgent] {}（已降级继续）: {}", message, error);
     }
     if let Ok(events) = terminal_events {
-        emit_runtime_events(app, event_name, events);
+        emit_runtime_events(event_port.as_ref(), &projection_port, event_name, events);
     }
     match result.as_ref() {
         Ok(_) => {
-            emit_agent_runtime_profile_event(
-                app,
+            emit_agent_runtime_profile_event_with_port(
+                &projection_port,
                 event_name,
                 build_runtime_task_completed_profile_event(profile_stream, task_profile_refs),
             );
-            emit_agent_runtime_profile_event(app, event_name, profile_stream.turn_completed());
-            emit_agent_runtime_profile_event(
-                app,
+            emit_agent_runtime_profile_event_with_port(
+                &projection_port,
+                event_name,
+                profile_stream.turn_completed(),
+            );
+            emit_agent_runtime_profile_event_with_port(
+                &projection_port,
                 event_name,
                 profile_stream.snapshot_updated("completed"),
             );
@@ -103,15 +106,15 @@ pub(crate) async fn finalize_runtime_turn_result(
                 error,
                 false,
             ) {
-                emit_agent_runtime_profile_event(app, event_name, event);
+                emit_agent_runtime_profile_event_with_port(&projection_port, event_name, event);
             }
-            emit_agent_runtime_profile_event(
-                app,
+            emit_agent_runtime_profile_event_with_port(
+                &projection_port,
                 event_name,
                 profile_stream.turn_failed(failure_category, error),
             );
-            emit_agent_runtime_profile_event(
-                app,
+            emit_agent_runtime_profile_event_with_port(
+                &projection_port,
                 event_name,
                 profile_stream.snapshot_updated("failed"),
             );
@@ -121,32 +124,28 @@ pub(crate) async fn finalize_runtime_turn_result(
     match result {
         Ok(assistant_output) => {
             let unsupported_stop_warning = run_runtime_stop_project_hooks_for_session_with_runtime(
-                db,
-                state,
-                app.state::<crate::mcp::McpManagerState>().inner(),
+                host.db,
+                host.state,
+                host.mcp_manager,
                 session_id,
                 false,
                 Some(assistant_output.as_str()),
             )
             .await;
             if let Some(message) = unsupported_stop_warning {
-                emit_runtime_side_event(
-                    app,
-                    event_name,
-                    timeline_recorder,
-                    workspace_root,
-                    RuntimeAgentEvent::Warning {
-                        code: Some(STOP_HOOK_CONTINUATION_UNSUPPORTED_WARNING_CODE.to_string()),
-                        message,
-                    },
-                );
+                side_event_host.emit_side_event(RuntimeAgentEvent::Warning {
+                    code: Some(STOP_HOOK_CONTINUATION_UNSUPPORTED_WARNING_CODE.to_string()),
+                    message,
+                });
             }
-            let done_event = resolve_runtime_final_done_event(session_id, Some(db)).await;
+            let done_event = resolve_runtime_final_done_event(session_id, Some(host.db)).await;
             if let RuntimeAgentEvent::FinalDone {
                 usage: Some(ref usage),
             } = done_event
             {
-                if let Err(error) = persist_latest_assistant_message_usage(db, session_id, usage) {
+                if let Err(error) =
+                    persist_latest_assistant_message_usage(host.db, session_id, usage)
+                {
                     tracing::warn!(
                         "[AsterAgent] 持久化消息 usage 失败（已降级继续）: {}",
                         error
@@ -157,46 +156,46 @@ pub(crate) async fn finalize_runtime_turn_result(
                     lime_agent::SessionExecutionRuntimeCostState,
                 >(request_metadata, "cost_state")
                 {
-                    emit_runtime_side_event(
-                        app,
-                        event_name,
-                        timeline_recorder,
-                        workspace_root,
-                        RuntimeAgentEvent::CostRecorded {
-                            cost_state: lime_agent::apply_usage_to_cost_state(cost_state, usage),
-                        },
-                    );
+                    side_event_host.emit_side_event(RuntimeAgentEvent::CostRecorded {
+                        cost_state: lime_agent::apply_usage_to_cost_state(cost_state, usage),
+                    });
                 }
             }
-            if let Err(error) = app.emit(event_name, &done_event) {
-                tracing::error!("[AsterAgent] 发送完成事件失败: {}", error);
-            }
-            emit_agent_app_runtime_event_projection(app, event_name, &done_event);
-            emit_subagent_status_changed_events(app, session_id).await;
+            event_port.emit_runtime_queue_event(event_name, &done_event);
+            emit_agent_app_runtime_event_projection_with_port(
+                &projection_port,
+                event_name,
+                &done_event,
+            );
+            emit_subagent_status_changed_events(host.app, session_id).await;
             Ok(())
         }
         Err(error) => {
             if is_runtime_turn_cancelled_error(&error) {
                 let final_done_event = RuntimeAgentEvent::FinalDone { usage: None };
-                if let Err(emit_error) = app.emit(event_name, &final_done_event) {
-                    tracing::error!("[AsterAgent] 发送中断完成事件失败: {}", emit_error);
-                }
-                emit_agent_app_runtime_event_projection(app, event_name, &final_done_event);
-                emit_subagent_status_changed_events(app, session_id).await;
+                event_port.emit_runtime_queue_event(event_name, &final_done_event);
+                emit_agent_app_runtime_event_projection_with_port(
+                    &projection_port,
+                    event_name,
+                    &final_done_event,
+                );
+                emit_subagent_status_changed_events(host.app, session_id).await;
                 return Ok(());
             }
             if let Some(limit_event) = lime_agent::detect_runtime_limit_event(Some(&error)) {
                 let event = map_runtime_limit_event_to_runtime_agent_event(limit_event);
-                emit_runtime_side_event(app, event_name, timeline_recorder, workspace_root, event);
+                side_event_host.emit_side_event(event);
             }
             let error_event = RuntimeAgentEvent::Error {
                 message: error.clone(),
             };
-            if let Err(emit_error) = app.emit(event_name, &error_event) {
-                tracing::error!("[AsterAgent] 发送错误事件失败: {}", emit_error);
-            }
-            emit_agent_app_runtime_event_projection(app, event_name, &error_event);
-            emit_subagent_status_changed_events(app, session_id).await;
+            event_port.emit_runtime_queue_event(event_name, &error_event);
+            emit_agent_app_runtime_event_projection_with_port(
+                &projection_port,
+                event_name,
+                &error_event,
+            );
+            emit_subagent_status_changed_events(host.app, session_id).await;
             Err(error)
         }
     }

@@ -9,6 +9,8 @@
 2. **先读对应文档再改代码** - 尤其是命令边界、GUI 主路径、迁移收口、Provider 与凭证
 3. **GUI 改动优先看质量链路** - Lime 是 GUI 桌面产品，先看 `quality-workflow.md` 与 `playwright-e2e.md`
 4. **新旧并存问题先看治理文档** - 避免在 compat / deprecated 路径上继续长新表面
+5. **新增命名不要加品牌前缀** - 新程序、目录、crate/package、Tauri 命令、API 网关、类型、模块和脚本默认使用领域名，不要加 `Lime` / `lime_` / `lime-`；只有对外品牌、历史兼容或生态固定命名才例外，并在计划里说明
+6. **新增 Agent 逻辑默认走 App Server** - 新 AI Agent、runtime、host integration、跨 App 复用能力先落到 `app-server` crates、JSON-RPC 协议和 App Server adapter；`agent_runtime_*` / Aster Tauri command 只作为 Lime Desktop 兼容适配层
 
 ## 按场景导航
 

@@ -7,13 +7,15 @@
 use crate::agent::aster_state::{ProviderConfig, SessionConfigBuilder};
 use crate::agent::runtime_queue_service::{
     clear_runtime_queue as clear_runtime_queue_service,
+    clear_runtime_queue_with_event_port as clear_runtime_queue_with_event_port_service,
     finish_active_runtime_turn_if_matches as finish_active_runtime_turn_if_matches_service,
     list_runtime_queue_snapshots as list_runtime_queue_snapshots_service,
     promote_runtime_queued_turn as promote_runtime_queued_turn_service,
     remove_runtime_queued_turn as remove_runtime_queued_turn_service,
-    resume_persisted_runtime_queues_on_startup as resume_persisted_runtime_queues_on_startup_service,
-    resume_runtime_queue_if_needed as resume_runtime_queue_if_needed_service,
-    submit_runtime_turn as submit_runtime_turn_service, RuntimeQueueExecutor,
+    resume_persisted_runtime_queues_on_startup_with_event_port as resume_persisted_runtime_queues_on_startup_with_event_port_service,
+    resume_runtime_queue_if_needed_with_event_port as resume_runtime_queue_if_needed_with_event_port_service,
+    submit_runtime_turn_with_event_port as submit_runtime_turn_with_event_port_service,
+    RuntimeQueueEventPort, RuntimeQueueExecutor, RuntimeQueueHostPorts, TauriRuntimeQueueEventPort,
 };
 use crate::agent::{
     AsterAgentState, AsterAgentWrapper, QueuedTurnSnapshot, QueuedTurnTask, SessionDetail,
@@ -334,6 +336,7 @@ fn normalize_optional_text(value: Option<String>) -> Option<String> {
 pub(crate) mod action_runtime;
 mod agentruntime_profile;
 mod analysis_skill_launch;
+pub(crate) mod app_server_host;
 mod broadcast_skill_launch;
 mod browser_assist;
 pub(crate) mod command_api;
@@ -547,7 +550,9 @@ pub(crate) use runtime_plugin_agents::{
 pub(crate) use runtime_task_profile::{
     attempt_id_from_turn_id, run_id_from_turn_id, task_id_from_thread_id,
 };
-pub(crate) use runtime_turn::{build_queued_turn_task, build_runtime_queue_executor};
+pub(crate) use runtime_turn::{
+    build_queued_turn_task, build_runtime_queue_executor, build_runtime_queue_host_ports,
+};
 #[cfg(test)]
 pub(crate) use runtime_turn::{
     resolve_request_web_search_preference_from_sources, resolve_workspace_id_from_sources,
@@ -646,6 +651,7 @@ pub(crate) struct RuntimeCommandContext {
     mcp_manager: McpManagerState,
     automation_state: AutomationServiceState,
     runtime_queue_executor: RuntimeQueueExecutor,
+    runtime_queue_ports: RuntimeQueueHostPorts,
 }
 
 impl std::fmt::Debug for RuntimeCommandContext {
@@ -660,6 +666,7 @@ impl std::fmt::Debug for RuntimeCommandContext {
             .field("mcp_manager", &"<mcp-manager>")
             .field("automation_state", &"<automation-state>")
             .field("runtime_queue_executor", &"<runtime-queue-executor>")
+            .field("runtime_queue_ports", &"<runtime-queue-host-ports>")
             .finish()
     }
 }
@@ -678,6 +685,7 @@ impl Clone for RuntimeCommandContext {
             mcp_manager: self.mcp_manager.clone(),
             automation_state: self.automation_state.clone(),
             runtime_queue_executor: self.runtime_queue_executor.clone(),
+            runtime_queue_ports: self.runtime_queue_ports.clone(),
         }
     }
 }
@@ -693,8 +701,35 @@ impl RuntimeCommandContext {
         mcp_manager: &McpManagerState,
         automation_state: &AutomationServiceState,
     ) -> Self {
-        Self {
+        let runtime_queue_event_port =
+            Arc::new(TauriRuntimeQueueEventPort::new(app_handle.clone()));
+        Self::new_with_host_ports(
             app_handle,
+            state,
+            db,
+            api_key_provider_service,
+            logs,
+            config_manager,
+            mcp_manager,
+            automation_state,
+            build_runtime_queue_host_ports(runtime_queue_event_port),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new_with_host_ports(
+        app_handle: AppHandle,
+        state: &AsterAgentState,
+        db: &DbConnection,
+        api_key_provider_service: &ApiKeyProviderServiceState,
+        logs: &LogState,
+        config_manager: &GlobalConfigManagerState,
+        mcp_manager: &McpManagerState,
+        automation_state: &AutomationServiceState,
+        runtime_queue_ports: RuntimeQueueHostPorts,
+    ) -> Self {
+        Self {
+            app_handle: app_handle.clone(),
             state: state.clone(),
             db: db.clone(),
             api_key_provider_service: ApiKeyProviderServiceState(
@@ -705,6 +740,7 @@ impl RuntimeCommandContext {
             mcp_manager: mcp_manager.clone(),
             automation_state: automation_state.clone(),
             runtime_queue_executor: build_runtime_queue_executor(),
+            runtime_queue_ports,
         }
     }
 
@@ -716,8 +752,42 @@ impl RuntimeCommandContext {
         &self.db
     }
 
+    pub(crate) fn app_handle(&self) -> &AppHandle {
+        &self.app_handle
+    }
+
     pub(crate) fn mcp_manager(&self) -> &McpManagerState {
         &self.mcp_manager
+    }
+
+    pub(crate) fn api_key_provider_service(&self) -> &ApiKeyProviderServiceState {
+        &self.api_key_provider_service
+    }
+
+    pub(crate) fn config_manager(&self) -> &GlobalConfigManagerState {
+        &self.config_manager
+    }
+
+    pub(crate) fn with_runtime_queue_event_port(
+        &self,
+        runtime_queue_event_port: Arc<dyn RuntimeQueueEventPort>,
+    ) -> Self {
+        Self {
+            app_handle: self.app_handle.clone(),
+            state: self.state.clone(),
+            db: self.db.clone(),
+            api_key_provider_service: ApiKeyProviderServiceState(
+                self.api_key_provider_service.0.clone(),
+            ),
+            logs: self.logs.clone(),
+            config_manager: GlobalConfigManagerState(self.config_manager.0.clone()),
+            mcp_manager: self.mcp_manager.clone(),
+            automation_state: self.automation_state.clone(),
+            runtime_queue_executor: self.runtime_queue_executor.clone(),
+            runtime_queue_ports: self
+                .runtime_queue_ports
+                .with_event_port(runtime_queue_event_port),
+        }
     }
 
     pub(crate) async fn submit_runtime_turn(
@@ -726,7 +796,7 @@ impl RuntimeCommandContext {
         queue_if_busy: bool,
         skip_pre_submit_resume: bool,
     ) -> Result<(), String> {
-        submit_runtime_turn_service(
+        submit_runtime_turn_with_event_port_service(
             self.app_handle.clone(),
             &self.state,
             &self.db,
@@ -739,6 +809,7 @@ impl RuntimeCommandContext {
             queue_if_busy,
             skip_pre_submit_resume,
             self.runtime_queue_executor.clone(),
+            self.runtime_queue_ports.clone(),
         )
         .await
     }
@@ -747,7 +818,7 @@ impl RuntimeCommandContext {
         &self,
         session_id: String,
     ) -> Result<bool, String> {
-        resume_runtime_queue_if_needed_service(
+        resume_runtime_queue_if_needed_with_event_port_service(
             self.app_handle.clone(),
             &self.state,
             &self.db,
@@ -758,12 +829,13 @@ impl RuntimeCommandContext {
             &self.automation_state,
             session_id,
             self.runtime_queue_executor.clone(),
+            self.runtime_queue_ports.clone(),
         )
         .await
     }
 
     pub(crate) async fn resume_persisted_runtime_queues_on_startup(&self) -> Result<usize, String> {
-        resume_persisted_runtime_queues_on_startup_service(
+        resume_persisted_runtime_queues_on_startup_with_event_port_service(
             self.app_handle.clone(),
             &self.state,
             &self.db,
@@ -773,6 +845,7 @@ impl RuntimeCommandContext {
             &self.mcp_manager,
             &self.automation_state,
             self.runtime_queue_executor.clone(),
+            self.runtime_queue_ports.clone(),
         )
         .await
     }
@@ -781,7 +854,11 @@ impl RuntimeCommandContext {
         &self,
         session_id: &str,
     ) -> Result<Vec<aster::session::QueuedTurnRuntime>, String> {
-        clear_runtime_queue_service(&self.app_handle, session_id).await
+        clear_runtime_queue_with_event_port_service(
+            session_id,
+            self.runtime_queue_ports.event_port.clone(),
+        )
+        .await
     }
 }
 

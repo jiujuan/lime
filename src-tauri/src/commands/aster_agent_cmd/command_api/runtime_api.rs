@@ -7,6 +7,9 @@ use super::thread_read_projection::{
     latest_model_delta_timing_from_run, merge_latest_model_delta_timing_into_thread_read,
 };
 use super::*;
+use crate::commands::aster_agent_cmd::app_server_host::{
+    build_tauri_aster_app_server, submit_desktop_app_server_turn, DesktopAppServerSubmitTurnInput,
+};
 use crate::commands::aster_agent_cmd::dto::AgentRuntimeSessionHistoryCursor;
 use crate::database::lock_db;
 use crate::services::agent_timeline_service::abort_running_turn_by_id;
@@ -173,16 +176,44 @@ pub async fn agent_runtime_submit_turn(
         skip_pre_submit_resume,
         fast_response_routing
     );
-    let queued_task = build_queued_turn_task(runtime_request)?;
+    let host_options = serde_json::to_value(&runtime_request).map_err(|error| error.to_string())?;
+    let turn_id = runtime_request.turn_id.clone();
+    let queued_turn_id = runtime_request.queued_turn_id.clone();
+    let workspace_id = runtime_request.workspace_id.clone();
+    let message = runtime_request.message.clone();
+    let metadata = runtime_request.metadata.clone();
+    let provider_preference = runtime_request.provider_preference.clone();
+    let model_preference = runtime_request.model_preference.clone();
+    let app_server = build_tauri_aster_app_server(runtime.clone());
     tracing::info!(
-        "[AsterAgent][TTFT] submit_turn queued_task built: session_id={}, event_name={}, elapsed_ms={}",
+        "[AsterAgent][TTFT] submit_turn app_server request built: session_id={}, event_name={}, elapsed_ms={}",
         session_id,
         event_name,
         submit_started_at.elapsed().as_millis()
     );
-    runtime
-        .submit_runtime_turn(queued_task, queue_if_busy, skip_pre_submit_resume)
-        .await
+    submit_desktop_app_server_turn(
+        &app_server,
+        DesktopAppServerSubmitTurnInput {
+            client_name: "agent-runtime",
+            client_title: "Agent Runtime",
+            app_id: "desktop",
+            session_id: &session_id,
+            workspace_id: &workspace_id,
+            turn_id: turn_id.as_deref(),
+            event_name: &event_name,
+            message,
+            metadata,
+            provider_preference: provider_preference.as_deref(),
+            model_preference: model_preference.as_deref(),
+            queue_if_busy,
+            skip_pre_submit_resume,
+            queued_turn_id,
+            host_options: Some(serde_json::json!({
+                "asterChatRequest": host_options
+            })),
+        },
+    )
+    .await
 }
 
 /// 统一运行时：中断当前 turn。
@@ -725,7 +756,7 @@ pub async fn agent_runtime_restore_file_checkpoint(
     )
 }
 
-struct RuntimeExportContext {
+pub(crate) struct RuntimeExportContext {
     detail: SessionDetail,
     thread_read: AgentRuntimeThreadReadModel,
     workspace_root: PathBuf,
@@ -770,6 +801,29 @@ async fn load_runtime_export_context(
         thread_read,
         workspace_root,
     })
+}
+
+pub(crate) async fn export_runtime_evidence_pack_for_runtime(
+    runtime: &RuntimeCommandContext,
+    session_id: &str,
+    locale: Option<&str>,
+    action_label: &str,
+) -> Result<(RuntimeExportContext, RuntimeEvidencePackExportResult), String> {
+    let context = load_runtime_export_context(runtime, session_id, action_label).await?;
+    let owner_runs = {
+        let conn = lock_db(runtime.db())?;
+        AgentRunDao::list_runs_by_session(&conn, session_id, 20)
+            .map_err(|error| format!("查询 evidence pack owner runs 失败: {error}"))?
+    };
+    let export = export_runtime_evidence_pack_with_owner_runs_and_locale(
+        &context.detail,
+        &context.thread_read,
+        &context.workspace_root,
+        &owner_runs,
+        locale,
+    )?;
+
+    Ok((context, export))
 }
 
 async fn load_runtime_file_checkpoint_context(
@@ -1142,7 +1196,6 @@ pub async fn agent_runtime_export_evidence_pack(
     session_id: String,
 ) -> Result<RuntimeEvidencePackExportResult, String> {
     let app_for_projection = app.clone();
-    let db_handle = db.inner().clone();
     let evidence_locale = config_manager.0.config().language;
     let runtime = build_runtime_command_context(
         app,
@@ -1155,21 +1208,13 @@ pub async fn agent_runtime_export_evidence_pack(
         automation_state,
     );
     tracing::info!("[AsterAgent] 导出 evidence pack: {}", session_id);
-    let context =
-        load_runtime_export_context(&runtime, &session_id, "导出 evidence pack 前").await?;
-    let owner_runs = {
-        let conn = lock_db(&db_handle)?;
-        AgentRunDao::list_runs_by_session(&conn, &session_id, 20)
-            .map_err(|error| format!("查询 evidence pack owner runs 失败: {error}"))?
-    };
-
-    let export = export_runtime_evidence_pack_with_owner_runs_and_locale(
-        &context.detail,
-        &context.thread_read,
-        &context.workspace_root,
-        &owner_runs,
+    let (context, export) = export_runtime_evidence_pack_for_runtime(
+        &runtime,
+        &session_id,
         Some(evidence_locale.as_str()),
-    )?;
+        "导出 evidence pack 前",
+    )
+    .await?;
     emit_agent_app_runtime_harness_export_projection(
         &app_for_projection,
         &context,
@@ -1391,6 +1436,24 @@ pub async fn agent_runtime_get_tool_inventory(
     request: Option<AgentRuntimeToolInventoryRequest>,
 ) -> Result<crate::agent_tools::inventory::AgentToolInventorySnapshot, String> {
     let request = request.unwrap_or_default();
+    let (surface, caller, request_metadata) = normalize_runtime_tool_inventory_request(request);
+    collect_runtime_tool_inventory(
+        &app,
+        state.inner(),
+        db.inner(),
+        api_key_provider_service.inner(),
+        config_manager.inner(),
+        mcp_manager.inner(),
+        surface,
+        caller,
+        request_metadata,
+    )
+    .await
+}
+
+fn normalize_runtime_tool_inventory_request(
+    request: AgentRuntimeToolInventoryRequest,
+) -> (WorkspaceToolSurface, String, Option<serde_json::Value>) {
     let caller = lime_core::tool_calling::normalize_tool_caller(request.caller.as_deref())
         .unwrap_or_else(|| "assistant".to_string());
     let surface = match (request.workbench, request.browser_assist) {
@@ -1399,17 +1462,32 @@ pub async fn agent_runtime_get_tool_inventory(
         (false, true) => WorkspaceToolSurface::browser_assist(),
         (false, false) => WorkspaceToolSurface::core(),
     };
+    (surface, caller, request.metadata)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn collect_runtime_tool_inventory(
+    app: &AppHandle,
+    state: &AsterAgentState,
+    db: &DbConnection,
+    api_key_provider_service: &ApiKeyProviderServiceState,
+    config_manager: &GlobalConfigManagerState,
+    mcp_manager: &McpManagerState,
+    surface: WorkspaceToolSurface,
+    caller: String,
+    request_metadata: Option<serde_json::Value>,
+) -> Result<crate::agent_tools::inventory::AgentToolInventorySnapshot, String> {
     let mut warnings = Vec::new();
 
     if state.is_initialized().await {
         match tokio::time::timeout(
             TOOL_INVENTORY_AUX_TIMEOUT,
             ensure_runtime_support_tools_registered(
-                &app,
-                state.inner(),
-                db.inner(),
-                api_key_provider_service.inner(),
-                mcp_manager.inner(),
+                app,
+                state,
+                db,
+                api_key_provider_service,
+                mcp_manager,
             ),
         )
         .await
@@ -1459,7 +1537,7 @@ pub async fn agent_runtime_get_tool_inventory(
                 agent_initialized: false,
                 warnings,
                 persisted_execution_policy: Some(config_manager.config().agent.tool_execution),
-                request_metadata: request.metadata.clone(),
+                request_metadata: request_metadata.clone(),
                 mcp_server_names,
                 mcp_tools,
                 registry_definitions: Vec::new(),
@@ -1479,7 +1557,7 @@ pub async fn agent_runtime_get_tool_inventory(
             agent_initialized: false,
             warnings,
             persisted_execution_policy: Some(config_manager.config().agent.tool_execution),
-            request_metadata: request.metadata.clone(),
+            request_metadata: request_metadata.clone(),
             mcp_server_names,
             mcp_tools,
             registry_definitions: Vec::new(),
@@ -1503,7 +1581,7 @@ pub async fn agent_runtime_get_tool_inventory(
                 agent_initialized: true,
                 warnings,
                 persisted_execution_policy: Some(config_manager.config().agent.tool_execution),
-                request_metadata: request.metadata.clone(),
+                request_metadata: request_metadata.clone(),
                 mcp_server_names,
                 mcp_tools,
                 registry_definitions: Vec::new(),
@@ -1545,8 +1623,7 @@ pub async fn agent_runtime_get_tool_inventory(
         Ok(supported) => supported,
         Err(_) => {
             warnings.push(
-                "读取 MCP resource capability 超时，resource helper 已按不可见处理"
-                    .to_string(),
+                "读取 MCP resource capability 超时，resource helper 已按不可见处理".to_string(),
             );
             false
         }
@@ -1602,7 +1679,7 @@ pub async fn agent_runtime_get_tool_inventory(
         agent_initialized: true,
         warnings,
         persisted_execution_policy: Some(config_manager.config().agent.tool_execution),
-        request_metadata: request.metadata.clone(),
+        request_metadata,
         mcp_server_names,
         mcp_tools,
         registry_definitions,

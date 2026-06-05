@@ -57,16 +57,8 @@ fn provider_not_configured_submit_error(request: &AsterChatRequest) -> String {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(super) async fn prepare_runtime_turn_submit_bootstrap(
-    app: &AppHandle,
-    state: &AsterAgentState,
-    db: &DbConnection,
-    api_key_provider_service: &ApiKeyProviderServiceState,
-    logs: &LogState,
-    config_manager: &GlobalConfigManagerState,
-    mcp_manager: &McpManagerState,
-    automation_state: &AutomationServiceState,
+    host: RuntimeTurnHostContext<'_>,
     request: &AsterChatRequest,
     session_id: &str,
     workspace_root: &str,
@@ -78,11 +70,11 @@ pub(super) async fn prepare_runtime_turn_submit_bootstrap(
     request_tool_policy: &RequestToolPolicy,
     turn_input_builder: &mut TurnInputEnvelopeBuilder,
 ) -> Result<RuntimeTurnSubmitBootstrap, String> {
-    if !state.is_provider_configured().await {
+    if !host.state.is_provider_configured().await {
         return Err(provider_not_configured_submit_error(request));
     }
 
-    let effective_provider_config = state.get_provider_config().await;
+    let effective_provider_config = host.state.get_provider_config().await;
     let provider_routing_snapshot =
         effective_provider_config
             .as_ref()
@@ -125,14 +117,14 @@ pub(super) async fn prepare_runtime_turn_submit_bootstrap(
     let explicit_local_focus_paths =
         extract_explicit_local_focus_paths_from_message(&request.message);
     let sandbox_outcome = apply_workspace_sandbox_permissions(
-        state,
-        config_manager,
-        db,
-        api_key_provider_service,
-        logs,
-        mcp_manager,
-        automation_state,
-        app,
+        host.state,
+        host.config_manager,
+        host.db,
+        host.api_key_provider_service,
+        host.logs,
+        host.mcp_manager,
+        host.automation_state,
+        host.app,
         session_id,
         request_metadata.as_ref(),
         workspace_root,
@@ -174,9 +166,11 @@ pub(super) async fn prepare_runtime_turn_submit_bootstrap(
                     code: Some(WORKSPACE_SANDBOX_FALLBACK_WARNING_CODE.to_string()),
                     message: warning_message,
                 };
-                if let Err(error) = app.emit(&request.event_name, &warning_event) {
-                    tracing::error!("[AsterAgent] 发送 sandbox 降级提醒失败: {}", error);
-                }
+                host.emit_runtime_event(
+                    &request.event_name,
+                    &warning_event,
+                    "发送 sandbox 降级提醒失败",
+                );
             }
         }
     }
@@ -227,7 +221,7 @@ pub(super) async fn prepare_runtime_turn_submit_bootstrap(
         request_metadata,
         runtime_memory_config: runtime_config.memory.clone(),
         provider_continuation_capability,
-        tracker: ExecutionTracker::new(db.clone()),
+        tracker: ExecutionTracker::new(host.db.clone()),
     })
 }
 

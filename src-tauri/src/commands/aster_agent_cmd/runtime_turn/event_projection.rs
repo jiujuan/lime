@@ -6,25 +6,63 @@ mod primary_task;
 
 use self::primary_task::build_agent_app_runtime_event_primary_task_event;
 
+pub(crate) trait RuntimeProjectionEventPort {
+    fn emit_profile_event(
+        &self,
+        event_name: &str,
+        event: &AgentRuntimeProfileEvent,
+    ) -> Result<(), String>;
+
+    fn emit_projection_payload(&self, event_name: &str, payload: Value) -> Result<(), String>;
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct TauriRuntimeProjectionEventPort<'a> {
+    app: &'a AppHandle,
+}
+
+impl<'a> TauriRuntimeProjectionEventPort<'a> {
+    pub(crate) fn new(app: &'a AppHandle) -> Self {
+        Self { app }
+    }
+}
+
+impl RuntimeProjectionEventPort for TauriRuntimeProjectionEventPort<'_> {
+    fn emit_profile_event(
+        &self,
+        event_name: &str,
+        event: &AgentRuntimeProfileEvent,
+    ) -> Result<(), String> {
+        self.app
+            .emit(event_name, event)
+            .map_err(|error| error.to_string())
+    }
+
+    fn emit_projection_payload(&self, event_name: &str, payload: Value) -> Result<(), String> {
+        self.app
+            .emit(event_name, payload)
+            .map_err(|error| error.to_string())
+    }
+}
+
 pub(super) fn emit_runtime_events(
-    app: &AppHandle,
+    event_port: &dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort,
+    projection_port: &dyn RuntimeProjectionEventPort,
     event_name: &str,
     events: Vec<RuntimeAgentEvent>,
 ) {
     for event in events {
-        if let Err(error) = app.emit(event_name, &event) {
-            tracing::error!("[AsterAgent] 发送运行时事件失败: {}", error);
-        }
-        emit_agent_app_runtime_event_projection(app, event_name, &event);
+        event_port.emit_runtime_queue_event(event_name, &event);
+        emit_agent_app_runtime_event_projection_with_port(projection_port, event_name, &event);
     }
 }
 
-pub(crate) fn emit_agent_runtime_profile_event(
-    app: &AppHandle,
+pub(crate) fn emit_agent_runtime_profile_event_with_port(
+    projection_port: &dyn RuntimeProjectionEventPort,
     event_name: &str,
     event: AgentRuntimeProfileEvent,
 ) {
-    if let Err(error) = app.emit(event_name, &event) {
+    if let Err(error) = projection_port.emit_profile_event(event_name, &event) {
         tracing::warn!(
             "[AsterAgent][AgentRuntimeProfile] 发送 profile 事件失败: type={}, event_name={}, error={}",
             event.event_type,
@@ -32,7 +70,7 @@ pub(crate) fn emit_agent_runtime_profile_event(
             error
         );
     }
-    emit_agent_app_runtime_profile_projection_event(app, event_name, &event);
+    emit_agent_app_runtime_profile_projection_event_with_port(projection_port, event_name, &event);
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -199,8 +237,8 @@ pub(super) fn build_agent_app_runtime_profile_projection_payload(
     }))
 }
 
-pub(super) fn emit_agent_app_runtime_profile_projection_event(
-    app: &AppHandle,
+pub(super) fn emit_agent_app_runtime_profile_projection_event_with_port(
+    projection_port: &dyn RuntimeProjectionEventPort,
     event_name: &str,
     event: &AgentRuntimeProfileEvent,
 ) {
@@ -212,7 +250,7 @@ pub(super) fn emit_agent_app_runtime_profile_projection_event(
         return;
     };
     let projection_event_name = agent_app_runtime_projection_event_name(&scope);
-    if let Err(error) = app.emit(&projection_event_name, payload) {
+    if let Err(error) = projection_port.emit_projection_payload(&projection_event_name, payload) {
         tracing::warn!(
             "[AsterAgent][AgentRuntimeProfile] 发送 Agent App task projection 失败: event_name={}, profile_type={}, error={}",
             projection_event_name,
@@ -446,8 +484,8 @@ pub(super) fn build_agent_app_runtime_event_projection_payload(
     }))
 }
 
-pub(super) fn emit_agent_app_runtime_event_projection(
-    app: &AppHandle,
+pub(super) fn emit_agent_app_runtime_event_projection_with_port(
+    projection_port: &dyn RuntimeProjectionEventPort,
     event_name: &str,
     event: &RuntimeAgentEvent,
 ) {
@@ -458,7 +496,7 @@ pub(super) fn emit_agent_app_runtime_event_projection(
         return;
     };
     let projection_event_name = agent_app_runtime_projection_event_name(&scope);
-    if let Err(error) = app.emit(&projection_event_name, payload) {
+    if let Err(error) = projection_port.emit_projection_payload(&projection_event_name, payload) {
         tracing::warn!(
             "[AsterAgent] 发送 Agent App runtime event projection 失败: event_name={}, error={}",
             projection_event_name,

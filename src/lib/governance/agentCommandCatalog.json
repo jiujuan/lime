@@ -8,6 +8,8 @@
     "aster_agent_status",
     "aster_agent_configure_provider",
     "aster_agent_reset",
+    "app_server_handle_json_lines",
+    "app_server_drain_events",
     "agent_app_inspect_local_package",
     "agent_app_fetch_cloud_package",
     "agent_app_save_installed_state",

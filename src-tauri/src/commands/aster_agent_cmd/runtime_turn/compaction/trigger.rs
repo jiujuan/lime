@@ -75,19 +75,19 @@ pub(super) fn resolve_pre_compact_current_tokens(session: &aster::session::Sessi
         })
 }
 
-pub(super) fn emit_context_compaction_skip(app: &AppHandle, event_name: &str, message: &str) {
+pub(super) fn emit_context_compaction_skip(
+    host: &RuntimeCompactionHostContext<'_>,
+    event_name: &str,
+    message: &str,
+) {
     let warning_event = RuntimeAgentEvent::Warning {
         code: Some(CONTEXT_COMPACTION_NOT_NEEDED_WARNING_CODE.to_string()),
         message: message.to_string(),
     };
-    if let Err(error) = app.emit(event_name, &warning_event) {
-        tracing::warn!("[AsterAgent] 发送压缩跳过提醒失败: {}", error);
-    }
+    host.warn_runtime_event(event_name, &warning_event, "发送压缩跳过提醒失败");
 
     let done_event = RuntimeAgentEvent::FinalDone { usage: None };
-    if let Err(error) = app.emit(event_name, &done_event) {
-        tracing::warn!("[AsterAgent] 发送压缩跳过完成事件失败: {}", error);
-    }
+    host.warn_runtime_event(event_name, &done_event, "发送压缩跳过完成事件失败");
 }
 
 pub(in crate::commands::aster_agent_cmd::runtime_turn) fn build_runtime_compaction_session_config(

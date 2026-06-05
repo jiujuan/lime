@@ -3,7 +3,7 @@ use super::*;
 #[allow(clippy::too_many_arguments)]
 pub(in crate::commands::aster_agent_cmd::runtime_turn) async fn prepare_runtime_turn_prelude(
     agent: &Agent,
-    app: &AppHandle,
+    host: RuntimeTurnHostContext<'_>,
     request: &AsterChatRequest,
     timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
     workspace_root: &str,
@@ -40,7 +40,7 @@ pub(in crate::commands::aster_agent_cmd::runtime_turn) async fn prepare_runtime_
     for status in [initial_runtime_status, decided_runtime_status] {
         emit_runtime_status_with_projection(
             agent,
-            app,
+            host.app,
             &request.event_name,
             timeline_recorder,
             workspace_root,
@@ -52,7 +52,7 @@ pub(in crate::commands::aster_agent_cmd::runtime_turn) async fn prepare_runtime_
     }
 
     emit_runtime_request_resolution_events(
-        app,
+        host.app,
         &request.event_name,
         timeline_recorder,
         workspace_root,
@@ -60,13 +60,13 @@ pub(in crate::commands::aster_agent_cmd::runtime_turn) async fn prepare_runtime_
     );
 
     if let Some(preload) = service_skill_preload {
-        emit_service_skill_preload_runtime_events(
-            app,
+        let skill_launch_host = RuntimeSkillLaunchHostContext::new(
+            host.app,
             &request.event_name,
             timeline_recorder,
             workspace_root,
-            preload,
         );
+        emit_service_skill_preload_runtime_events(skill_launch_host, preload);
     }
 
     Ok(())

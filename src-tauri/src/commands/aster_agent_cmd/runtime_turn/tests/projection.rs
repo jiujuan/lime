@@ -1,4 +1,46 @@
 use super::*;
+use std::sync::{Arc, Mutex};
+
+#[derive(Default)]
+struct CapturedProjectionEvents {
+    profile_events: Arc<Mutex<Vec<(String, AgentRuntimeProfileEvent)>>>,
+    projection_payloads: Arc<Mutex<Vec<(String, Value)>>>,
+}
+
+impl CapturedProjectionEvents {
+    fn profile_events(&self) -> Vec<(String, AgentRuntimeProfileEvent)> {
+        self.profile_events.lock().expect("profile events").clone()
+    }
+
+    fn projection_payloads(&self) -> Vec<(String, Value)> {
+        self.projection_payloads
+            .lock()
+            .expect("projection payloads")
+            .clone()
+    }
+}
+
+impl RuntimeProjectionEventPort for CapturedProjectionEvents {
+    fn emit_profile_event(
+        &self,
+        event_name: &str,
+        event: &AgentRuntimeProfileEvent,
+    ) -> Result<(), String> {
+        self.profile_events
+            .lock()
+            .expect("profile events")
+            .push((event_name.to_string(), event.clone()));
+        Ok(())
+    }
+
+    fn emit_projection_payload(&self, event_name: &str, payload: Value) -> Result<(), String> {
+        self.projection_payloads
+            .lock()
+            .expect("projection payloads")
+            .push((event_name.to_string(), payload));
+        Ok(())
+    }
+}
 
 #[test]
 fn agent_app_runtime_profile_projection_extracts_scope_from_event_name() {
@@ -53,6 +95,39 @@ fn agent_app_runtime_profile_projection_builds_canonical_task_event_payload() {
 }
 
 #[test]
+fn agent_runtime_profile_event_uses_projection_event_port() {
+    let profile_stream =
+        AgentRuntimeProfileStream::new("session-1", "thread-1", "turn-1").expect("profile stream");
+    let event = profile_stream.turn_started();
+    let port = CapturedProjectionEvents::default();
+
+    emit_agent_runtime_profile_event_with_port(
+        &port,
+        "agent_app_runtime:content-factory-app:task-1",
+        event.clone(),
+    );
+
+    let profile_events = port.profile_events();
+    assert_eq!(profile_events.len(), 1);
+    assert_eq!(
+        profile_events[0].0,
+        "agent_app_runtime:content-factory-app:task-1"
+    );
+    assert_eq!(profile_events[0].1, event);
+
+    let projection_payloads = port.projection_payloads();
+    assert_eq!(projection_payloads.len(), 1);
+    assert_eq!(
+        projection_payloads[0].0,
+        "agent_app_runtime:content-factory-app:task-1"
+    );
+    assert_eq!(
+        projection_payloads[0].1.get("type").and_then(Value::as_str),
+        Some("agent_app_runtime:profileProjection")
+    );
+}
+
+#[test]
 fn agent_app_runtime_runtime_event_projection_builds_artifact_task_event_payload() {
     let event = RuntimeAgentEvent::ArtifactSnapshot {
         artifact: lime_agent::AgentArtifactSignal {
@@ -102,6 +177,32 @@ fn agent_app_runtime_runtime_event_projection_builds_artifact_task_event_payload
             .and_then(|content_batch| content_batch.get("count")),
         Some(&json!(20))
     );
+}
+
+#[test]
+fn agent_app_runtime_event_projection_uses_projection_event_port() {
+    let event = RuntimeAgentEvent::TextDelta {
+        text: "第一段真实输出".to_string(),
+    };
+    let port = CapturedProjectionEvents::default();
+
+    emit_agent_app_runtime_event_projection_with_port(
+        &port,
+        "agent_app_runtime:content-factory-app:task-1",
+        &event,
+    );
+
+    let projection_payloads = port.projection_payloads();
+    assert_eq!(projection_payloads.len(), 1);
+    assert_eq!(
+        projection_payloads[0].0,
+        "agent_app_runtime:content-factory-app:task-1"
+    );
+    assert_eq!(
+        projection_payloads[0].1.get("type").and_then(Value::as_str),
+        Some("agent_app_runtime:runtimeEventProjection")
+    );
+    assert_eq!(port.profile_events().len(), 0);
 }
 
 #[test]

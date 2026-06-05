@@ -22,7 +22,7 @@ src-tauri/src/services/
 ## 核心服务
 
 > 注意：`general_chat/` 兼容壳已删除。
-> 新功能与新治理都应直接落到 `agent_runtime_*` 与现役 `agent/chat` 体系，不要重新引回旧入口。
+> 新 AI Agent、runtime、host integration 与跨 App 复用能力应直接落到 App Server JSON-RPC current 主链；`agent_runtime_*` 与现役 `agent/chat` 体系只继续服务 Desktop 兼容和既有 GUI 主路径，不要重新引回旧入口。
 > 旧 `ProviderPoolService`、`TokenCacheService` 与 OAuth/local CLI credential runtime 已退役。凭证选择统一走 `ApiKeyProviderService`。
 
 ### ApiKeyProviderService

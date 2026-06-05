@@ -92,9 +92,7 @@ impl RuntimeTurnSubmitPreparation {
 }
 
 async fn prepare_runtime_turn_session(
-    app: &AppHandle,
-    logs: &LogState,
-    db: &DbConnection,
+    host: RuntimeTurnHostContext<'_>,
     request: &AsterChatRequest,
     session_id: &str,
     workspace_root: &str,
@@ -129,21 +127,24 @@ async fn prepare_runtime_turn_session(
                 workspace_root
             )
         });
-        logs.write()
+        host.logs
+            .write()
             .await
             .add("warn", &format!("[AsterAgent] {}", warning_message));
         let warning_event = RuntimeAgentEvent::Warning {
             code: Some(WORKSPACE_PATH_AUTO_CREATED_WARNING_CODE.to_string()),
             message: warning_message,
         };
-        if let Err(error) = app.emit(&request.event_name, &warning_event) {
-            tracing::error!("[AsterAgent] 发送工作区自动恢复提醒失败: {}", error);
-        }
+        host.emit_runtime_event(
+            &request.event_name,
+            &warning_event,
+            "发送工作区自动恢复提醒失败",
+        );
     }
 
     let mut session_state_snapshot = SessionStateSnapshot::from_persisted_metadata(
         session_id,
-        AsterAgentWrapper::get_persisted_session_metadata_sync(db, session_id)?,
+        AsterAgentWrapper::get_persisted_session_metadata_sync(host.db, session_id)?,
     );
 
     if session_state_snapshot.needs_working_dir_update(workspace_root) {
@@ -152,7 +153,7 @@ async fn prepare_runtime_turn_session(
             session_state_snapshot.working_dir().unwrap_or_default(),
             workspace_root
         );
-        AsterAgentWrapper::update_session_working_dir_sync(db, session_id, workspace_root)?;
+        AsterAgentWrapper::update_session_working_dir_sync(host.db, session_id, workspace_root)?;
         session_state_snapshot =
             session_state_snapshot.with_working_dir(Some(workspace_root.to_string()));
     }
@@ -733,6 +734,7 @@ mod tests {
 }
 
 fn fail_pending_runtime_permission_confirmation_before_provider_bootstrap(
+    event_port: &dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort,
     app: &AppHandle,
     db: &DbConnection,
     request: &AsterChatRequest,
@@ -755,13 +757,17 @@ fn fail_pending_runtime_permission_confirmation_before_provider_bootstrap(
         resolved_turn_id,
         request.message.clone(),
     )?));
-    maybe_emit_runtime_permission_confirmation_request(
+    let side_event_host = RuntimeSideEventHostContext::new(
         app,
-        request,
+        &request.event_name,
+        &timeline_recorder,
         workspace_root,
+    );
+    maybe_emit_runtime_permission_confirmation_request(
+        side_event_host,
+        request,
         session_id,
         resolved_turn_id,
-        &timeline_recorder,
         &permission_state,
     );
 
@@ -780,13 +786,15 @@ fn fail_pending_runtime_permission_confirmation_before_provider_bootstrap(
         );
     }
     if let Ok(events) = terminal_events {
-        emit_runtime_events(app, &request.event_name, events);
+        let projection_port = TauriRuntimeProjectionEventPort::new(app);
+        emit_runtime_events(event_port, &projection_port, &request.event_name, events);
     }
 
     Err(error)
 }
 
 fn emit_provider_bootstrap_failure_runtime_events(
+    event_port: &dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort,
     app: &AppHandle,
     db: &DbConnection,
     request: &AsterChatRequest,
@@ -824,33 +832,28 @@ fn emit_provider_bootstrap_failure_runtime_events(
         );
     }
     if let Ok(events) = terminal_events {
-        emit_runtime_events(app, &request.event_name, events);
+        let projection_port = TauriRuntimeProjectionEventPort::new(app);
+        emit_runtime_events(event_port, &projection_port, &request.event_name, events);
     }
 
     let error_event = RuntimeAgentEvent::Error {
         message: error.to_string(),
     };
-    if let Err(emit_error) = app.emit(&request.event_name, &error_event) {
-        tracing::warn!(
-            "[AsterAgent] 发送 provider bootstrap 阻断错误事件失败: {}",
-            emit_error
-        );
-    }
-    emit_agent_app_runtime_event_projection(app, &request.event_name, &error_event);
+    event_port.emit_runtime_queue_event(&request.event_name, &error_event);
+    let projection_port = TauriRuntimeProjectionEventPort::new(app);
+    emit_agent_app_runtime_event_projection_with_port(
+        &projection_port,
+        &request.event_name,
+        &error_event,
+    );
 
     Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn prepare_runtime_turn_submit_preparation(
-    app: &AppHandle,
-    state: &AsterAgentState,
-    db: &DbConnection,
-    api_key_provider_service: &ApiKeyProviderServiceState,
-    logs: &LogState,
-    config_manager: &GlobalConfigManagerState,
-    mcp_manager: &McpManagerState,
-    automation_state: &AutomationServiceState,
+    event_port: &dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort,
+    host: RuntimeTurnHostContext<'_>,
     request: &mut AsterChatRequest,
     session_id: &str,
     workspace_id: &str,
@@ -870,9 +873,7 @@ pub(super) async fn prepare_runtime_turn_submit_preparation(
         session_recent_preferences,
         session_recent_team_selection,
     } = prepare_runtime_turn_session(
-        app,
-        logs,
-        db,
+        host,
         request,
         session_id,
         workspace_root,
@@ -902,9 +903,9 @@ pub(super) async fn prepare_runtime_turn_submit_preparation(
         include_context_trace,
         mut turn_input_builder,
     } = prepare_runtime_turn_request(
-        state,
-        db,
-        mcp_manager,
+        host.state,
+        host.db,
+        host.mcp_manager,
         request,
         session_id,
         workspace_id,
@@ -925,7 +926,7 @@ pub(super) async fn prepare_runtime_turn_submit_preparation(
         effective_strategy,
         system_prompt_source,
     } = prepare_runtime_turn_prompt_strategy(
-        db,
+        host.db,
         request,
         session_id,
         workspace_root,
@@ -942,8 +943,9 @@ pub(super) async fn prepare_runtime_turn_submit_preparation(
     );
 
     fail_pending_runtime_permission_confirmation_before_provider_bootstrap(
-        app,
-        db,
+        event_port,
+        host.app,
+        host.db,
         request,
         session_id,
         workspace_root,
@@ -951,8 +953,8 @@ pub(super) async fn prepare_runtime_turn_submit_preparation(
     )?;
 
     apply_runtime_turn_provider_config(
-        state,
-        db,
+        host.state,
+        host.db,
         session_id,
         request.provider_config.as_ref(),
         request.reasoning_effort.as_deref(),
@@ -960,14 +962,7 @@ pub(super) async fn prepare_runtime_turn_submit_preparation(
     .await?;
 
     let submit_bootstrap = match prepare_runtime_turn_submit_bootstrap(
-        app,
-        state,
-        db,
-        api_key_provider_service,
-        logs,
-        config_manager,
-        mcp_manager,
-        automation_state,
+        host,
         request,
         session_id,
         workspace_root,
@@ -983,10 +978,11 @@ pub(super) async fn prepare_runtime_turn_submit_preparation(
     {
         Ok(submit_bootstrap) => submit_bootstrap,
         Err(error) => {
-            if !state.is_provider_configured().await {
+            if !host.state.is_provider_configured().await {
                 if let Err(record_error) = emit_provider_bootstrap_failure_runtime_events(
-                    app,
-                    db,
+                    event_port,
+                    host.app,
+                    host.db,
                     request,
                     session_id,
                     workspace_root,

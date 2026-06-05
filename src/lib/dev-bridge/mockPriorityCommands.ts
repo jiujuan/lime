@@ -163,6 +163,8 @@ const bridgeTruthCommands = new Set<string>([
   "capability_draft_submit_approval_session_inputs",
   "capability_draft_execute_controlled_get",
   "agent_runtime_list_workspace_skill_bindings",
+  "app_server_handle_json_lines",
+  "app_server_drain_events",
   "get_skills_for_app",
   "get_local_skills_for_app",
   "install_skill_for_app",

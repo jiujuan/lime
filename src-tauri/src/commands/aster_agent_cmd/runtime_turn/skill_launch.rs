@@ -4,37 +4,193 @@ use super::runtime_turn_agent_app_skill_contract::{
 use super::*;
 use aster::providers::base::Provider;
 
-pub(super) fn emit_runtime_side_event(
-    app: &AppHandle,
-    event_name: &str,
-    timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
-    workspace_root: &str,
-    event: RuntimeAgentEvent,
-) {
-    {
-        let mut recorder = match timeline_recorder.lock() {
+pub(super) trait RuntimeSideEventPort: Send + Sync {
+    fn emit_runtime_event(&self, event_name: &str, event: &RuntimeAgentEvent, error_label: &str);
+}
+
+pub(super) trait RuntimeTimelineEventPort: Send + Sync {
+    fn record_runtime_event(&self, event: &RuntimeAgentEvent) -> Result<(), String>;
+
+    fn record_request_user_input(
+        &self,
+        request_id: String,
+        action_type: String,
+        prompt: Option<String>,
+        questions: Option<Vec<lime_core::database::dao::agent_timeline::AgentRequestQuestion>>,
+    ) -> Result<(), String>;
+}
+
+#[derive(Clone)]
+pub(super) struct TauriRuntimeSideEventPort {
+    app: AppHandle,
+}
+
+impl TauriRuntimeSideEventPort {
+    pub(super) fn new(app: AppHandle) -> Self {
+        Self { app }
+    }
+}
+
+impl RuntimeSideEventPort for TauriRuntimeSideEventPort {
+    fn emit_runtime_event(&self, event_name: &str, event: &RuntimeAgentEvent, error_label: &str) {
+        if let Err(error) = self.app.emit(event_name, event) {
+            tracing::warn!("[AsterAgent] {}: {}", error_label, error);
+        }
+        let projection_port = TauriRuntimeProjectionEventPort::new(&self.app);
+        emit_agent_app_runtime_event_projection_with_port(&projection_port, event_name, event);
+    }
+}
+
+pub(super) struct TauriRuntimeTimelineEventPort<'a> {
+    app: &'a AppHandle,
+    event_name: &'a str,
+    timeline_recorder: &'a Arc<Mutex<AgentTimelineRecorder>>,
+    workspace_root: &'a str,
+}
+
+impl<'a> TauriRuntimeTimelineEventPort<'a> {
+    pub(super) fn new(
+        app: &'a AppHandle,
+        event_name: &'a str,
+        timeline_recorder: &'a Arc<Mutex<AgentTimelineRecorder>>,
+        workspace_root: &'a str,
+    ) -> Self {
+        Self {
+            app,
+            event_name,
+            timeline_recorder,
+            workspace_root,
+        }
+    }
+}
+
+impl RuntimeTimelineEventPort for TauriRuntimeTimelineEventPort<'_> {
+    fn record_runtime_event(&self, event: &RuntimeAgentEvent) -> Result<(), String> {
+        let mut recorder = match self.timeline_recorder.lock() {
             Ok(guard) => guard,
             Err(error) => error.into_inner(),
         };
-        if let Err(error) = recorder.record_runtime_event(app, event_name, &event, workspace_root) {
+        recorder.record_runtime_event(self.app, self.event_name, event, self.workspace_root)
+    }
+
+    fn record_request_user_input(
+        &self,
+        request_id: String,
+        action_type: String,
+        prompt: Option<String>,
+        questions: Option<Vec<lime_core::database::dao::agent_timeline::AgentRequestQuestion>>,
+    ) -> Result<(), String> {
+        let mut recorder = match self.timeline_recorder.lock() {
+            Ok(guard) => guard,
+            Err(error) => error.into_inner(),
+        };
+        recorder.record_request_user_input(
+            self.app,
+            self.event_name,
+            request_id,
+            action_type,
+            prompt,
+            questions,
+        )
+    }
+}
+
+#[derive(Clone)]
+pub(super) struct RuntimeSideEventHostContext<'a> {
+    app: &'a AppHandle,
+    event_port: Arc<dyn RuntimeSideEventPort + 'a>,
+    timeline_port: Arc<dyn RuntimeTimelineEventPort + 'a>,
+    event_name: &'a str,
+    workspace_root: &'a str,
+}
+
+pub(super) type RuntimeSkillLaunchHostContext<'a> = RuntimeSideEventHostContext<'a>;
+
+impl<'a> RuntimeSideEventHostContext<'a> {
+    pub(super) fn new(
+        app: &'a AppHandle,
+        event_name: &'a str,
+        timeline_recorder: &'a Arc<Mutex<AgentTimelineRecorder>>,
+        workspace_root: &'a str,
+    ) -> Self {
+        Self::with_event_port(
+            app,
+            Arc::new(TauriRuntimeSideEventPort::new(app.clone())),
+            Arc::new(TauriRuntimeTimelineEventPort::new(
+                app,
+                event_name,
+                timeline_recorder,
+                workspace_root,
+            )),
+            event_name,
+            workspace_root,
+        )
+    }
+
+    pub(super) fn with_event_port(
+        app: &'a AppHandle,
+        event_port: Arc<dyn RuntimeSideEventPort + 'a>,
+        timeline_port: Arc<dyn RuntimeTimelineEventPort + 'a>,
+        event_name: &'a str,
+        workspace_root: &'a str,
+    ) -> Self {
+        Self {
+            app,
+            event_port,
+            timeline_port,
+            event_name,
+            workspace_root,
+        }
+    }
+
+    pub(super) fn emit_side_event(&self, event: RuntimeAgentEvent) {
+        if let Err(error) = self.timeline_port.record_runtime_event(&event) {
             tracing::warn!(
                 "[AsterAgent] 记录 Artifact 运行时事件失败（已降级继续）: {}",
                 error
             );
         }
+
+        self.event_port
+            .emit_runtime_event(self.event_name, &event, "发送 Artifact 运行时事件失败");
     }
 
-    if let Err(error) = app.emit(event_name, &event) {
-        tracing::warn!("[AsterAgent] 发送 Artifact 运行时事件失败: {}", error);
+    pub(super) fn record_request_user_input(
+        &self,
+        request_id: String,
+        action_type: String,
+        prompt: Option<String>,
+        questions: Option<Vec<lime_core::database::dao::agent_timeline::AgentRequestQuestion>>,
+    ) -> Result<(), String> {
+        self.timeline_port
+            .record_request_user_input(request_id, action_type, prompt, questions)
     }
-    emit_agent_app_runtime_event_projection(app, event_name, &event);
+
+    pub(super) fn workspace_root(&self) -> &str {
+        self.workspace_root
+    }
+
+    fn build_tool_context(
+        &self,
+        session_id: &str,
+        thread_id: &str,
+        turn_id: &str,
+        project_id: Option<&str>,
+        content_id: Option<&str>,
+    ) -> ToolContext {
+        build_image_skill_launch_tool_context(
+            self.workspace_root,
+            session_id,
+            thread_id,
+            turn_id,
+            project_id,
+            content_id,
+        )
+    }
 }
 
 pub(super) fn emit_service_skill_preload_runtime_events(
-    app: &AppHandle,
-    event_name: &str,
-    timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
-    workspace_root: &str,
+    host: RuntimeSkillLaunchHostContext<'_>,
     execution: &ServiceSkillLaunchPreloadExecution,
 ) {
     let projection = match build_service_skill_preload_tool_projection(execution) {
@@ -48,27 +204,15 @@ pub(super) fn emit_service_skill_preload_runtime_events(
         }
     };
 
-    emit_runtime_side_event(
-        app,
-        event_name,
-        timeline_recorder,
-        workspace_root,
-        RuntimeAgentEvent::ToolStart {
-            tool_name: projection.tool_name.clone(),
-            tool_id: projection.tool_id.clone(),
-            arguments: Some(projection.arguments),
-        },
-    );
-    emit_runtime_side_event(
-        app,
-        event_name,
-        timeline_recorder,
-        workspace_root,
-        RuntimeAgentEvent::ToolEnd {
-            tool_id: projection.tool_id,
-            result: projection.result,
-        },
-    );
+    host.emit_side_event(RuntimeAgentEvent::ToolStart {
+        tool_name: projection.tool_name.clone(),
+        tool_id: projection.tool_id.clone(),
+        arguments: Some(projection.arguments),
+    });
+    host.emit_side_event(RuntimeAgentEvent::ToolEnd {
+        tool_id: projection.tool_id,
+        result: projection.result,
+    });
 }
 
 pub(super) fn build_image_skill_launch_tool_context(
@@ -289,11 +433,9 @@ pub(super) fn agent_app_required_skill_failed_tool_result(
 }
 
 pub(super) async fn execute_agent_app_required_skill_contract(
-    app: &AppHandle,
+    host: RuntimeSkillLaunchHostContext<'_>,
     agent: &Agent,
     request: &AsterChatRequest,
-    timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
-    workspace_root: &str,
     session_id: &str,
     thread_id: &str,
     turn_id: &str,
@@ -305,8 +447,7 @@ pub(super) async fn execute_agent_app_required_skill_contract(
         return Ok(());
     };
     let tool = lime_agent::tools::LimeSkillTool::new();
-    let context = build_image_skill_launch_tool_context(
-        workspace_root,
+    let context = host.build_tool_context(
         session_id,
         thread_id,
         turn_id,
@@ -327,17 +468,11 @@ pub(super) async fn execute_agent_app_required_skill_contract(
             thread_id,
             turn_id,
         );
-        emit_runtime_side_event(
-            app,
-            &request.event_name,
-            timeline_recorder,
-            workspace_root,
-            RuntimeAgentEvent::ToolStart {
-                tool_name: agent_app_required_skill_tool_display_name(skill_name),
-                tool_id: tool_id.clone(),
-                arguments: serde_json::to_string(&params).ok(),
-            },
-        );
+        host.emit_side_event(RuntimeAgentEvent::ToolStart {
+            tool_name: agent_app_required_skill_tool_display_name(skill_name),
+            tool_id: tool_id.clone(),
+            arguments: serde_json::to_string(&params).ok(),
+        });
 
         let result = tool.execute(params, &context).await;
         match result {
@@ -346,16 +481,10 @@ pub(super) async fn execute_agent_app_required_skill_contract(
                     agent_app_required_skill_agent_tool_result(skill_name, source, tool_result);
                 let success = agent_result.success;
                 let error = agent_result.error.clone();
-                emit_runtime_side_event(
-                    app,
-                    &request.event_name,
-                    timeline_recorder,
-                    workspace_root,
-                    RuntimeAgentEvent::ToolEnd {
-                        tool_id,
-                        result: agent_result,
-                    },
-                );
+                host.emit_side_event(RuntimeAgentEvent::ToolEnd {
+                    tool_id,
+                    result: agent_result,
+                });
                 if !success {
                     return Err(format!(
                         "Agent App required Skill({}) 执行失败: {}",
@@ -369,18 +498,12 @@ pub(super) async fn execute_agent_app_required_skill_contract(
                     "Agent App required Skill({}) 执行失败: {}",
                     skill_name, error
                 );
-                emit_runtime_side_event(
-                    app,
-                    &request.event_name,
-                    timeline_recorder,
-                    workspace_root,
-                    RuntimeAgentEvent::ToolEnd {
-                        tool_id,
-                        result: agent_app_required_skill_failed_tool_result(
-                            skill_name, source, &message,
-                        ),
-                    },
-                );
+                host.emit_side_event(RuntimeAgentEvent::ToolEnd {
+                    tool_id,
+                    result: agent_app_required_skill_failed_tool_result(
+                        skill_name, source, &message,
+                    ),
+                });
                 return Err(message);
             }
         }
@@ -390,20 +513,15 @@ pub(super) async fn execute_agent_app_required_skill_contract(
 }
 
 pub(super) fn emit_image_skill_launch_tool_event(
-    app: &AppHandle,
-    event_name: &str,
-    timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
-    workspace_root: &str,
+    host: RuntimeSkillLaunchHostContext<'_>,
     event: RuntimeAgentEvent,
 ) {
-    emit_runtime_side_event(app, event_name, timeline_recorder, workspace_root, event);
+    host.emit_side_event(event);
 }
 
 pub(super) fn execute_image_skill_launch_direct_task(
-    app: &AppHandle,
+    host: RuntimeSkillLaunchHostContext<'_>,
     request: &AsterChatRequest,
-    timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
-    workspace_root: &str,
     session_id: &str,
     thread_id: &str,
     turn_id: &str,
@@ -422,10 +540,7 @@ pub(super) fn execute_image_skill_launch_direct_task(
 
     let tool_id = format!("image-skill-launch:{turn_id}");
     emit_image_skill_launch_tool_event(
-        app,
-        &request.event_name,
-        timeline_recorder,
-        workspace_root,
+        host.clone(),
         RuntimeAgentEvent::ToolStart {
             tool_name: "Skill".to_string(),
             tool_id: tool_id.clone(),
@@ -433,21 +548,17 @@ pub(super) fn execute_image_skill_launch_direct_task(
         },
     );
 
-    let context = build_image_skill_launch_tool_context(
-        workspace_root,
+    let context = host.build_tool_context(
         session_id,
         thread_id,
         turn_id,
         request.project_id.as_deref(),
         None,
     );
-    match submit_image_generation_task_value(app, &context, task.tool_params) {
+    match submit_image_generation_task_value(host.app, &context, task.tool_params) {
         Ok(tool_result) => {
             emit_image_skill_launch_tool_event(
-                app,
-                &request.event_name,
-                timeline_recorder,
-                workspace_root,
+                host,
                 RuntimeAgentEvent::ToolEnd {
                     tool_id,
                     result: image_skill_launch_agent_tool_result(tool_result),
@@ -458,10 +569,7 @@ pub(super) fn execute_image_skill_launch_direct_task(
         Err(error) => {
             let message = format!("创建图片任务失败: {error}");
             emit_image_skill_launch_tool_event(
-                app,
-                &request.event_name,
-                timeline_recorder,
-                workspace_root,
+                host,
                 RuntimeAgentEvent::ToolEnd {
                     tool_id,
                     result: image_skill_launch_failed_tool_result(&message),

@@ -89,11 +89,9 @@ pub(in crate::commands::aster_agent_cmd::runtime_turn) async fn maybe_auto_compa
     );
     let compact_started_at = Instant::now();
     let auto_event_name = build_auto_context_compaction_event_name(session_id);
+    let host = RuntimeCompactionHostContext::new(app, state, db, config_manager);
     match compact_runtime_session_with_trigger_and_model_timeout(
-        app,
-        state,
-        db,
-        config_manager,
+        host,
         session_id.to_string(),
         auto_event_name,
         RuntimeSessionCompactionTrigger::Auto,
@@ -130,9 +128,12 @@ pub(in crate::commands::aster_agent_cmd::runtime_turn) async fn maybe_auto_compa
                 code: Some(AUTO_CONTEXT_COMPACTION_FAILED_WARNING_CODE.to_string()),
                 message: format!("自动压缩上下文失败，已继续当前请求：{error}"),
             };
-            if let Err(emit_error) = app.emit(request_event_name, &warning_event) {
-                tracing::warn!("[AsterAgent] 发送自动压缩失败提醒失败: {}", emit_error);
-            }
+            let warning_host = RuntimeCompactionHostContext::new(app, state, db, config_manager);
+            warning_host.warn_runtime_event(
+                request_event_name,
+                &warning_event,
+                "发送自动压缩失败提醒失败",
+            );
         }
     }
 

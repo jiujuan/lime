@@ -1,4 +1,32 @@
 use super::*;
+use lime_services::context_memory_service::ContextMemoryService;
+
+pub(super) trait RuntimeMemoryCapturePort: Send + Sync {
+    fn context_memory_service(&self) -> Arc<ContextMemoryService>;
+}
+
+struct TauriRuntimeMemoryCapturePort {
+    context_memory_service: Arc<ContextMemoryService>,
+}
+
+impl TauriRuntimeMemoryCapturePort {
+    fn new(app: &AppHandle) -> Self {
+        let context_memory_service = app
+            .state::<crate::commands::context_memory::ContextMemoryServiceState>()
+            .inner()
+            .0
+            .clone();
+        Self {
+            context_memory_service,
+        }
+    }
+}
+
+impl RuntimeMemoryCapturePort for TauriRuntimeMemoryCapturePort {
+    fn context_memory_service(&self) -> Arc<ContextMemoryService> {
+        self.context_memory_service.clone()
+    }
+}
 
 pub(super) fn normalize_runtime_memory_capture_text(input: &str) -> String {
     input.split_whitespace().collect::<Vec<_>>().join(" ")
@@ -64,19 +92,34 @@ pub(super) fn spawn_runtime_memory_capture_task(
     user_message: &str,
     assistant_output: &str,
 ) {
-    if !memory_config.enabled || !memory_config.auto.enabled {
+    if !should_start_runtime_memory_capture(&memory_config, user_message, assistant_output) {
         return;
     }
 
-    if !should_auto_capture_runtime_memory_turn(user_message, assistant_output) {
+    let port = TauriRuntimeMemoryCapturePort::new(app);
+    spawn_runtime_memory_capture_task_with_port(
+        &port,
+        db,
+        memory_config,
+        session_id,
+        user_message,
+        assistant_output,
+    );
+}
+
+pub(super) fn spawn_runtime_memory_capture_task_with_port(
+    port: &dyn RuntimeMemoryCapturePort,
+    db: &DbConnection,
+    memory_config: lime_core::config::MemoryConfig,
+    session_id: &str,
+    user_message: &str,
+    assistant_output: &str,
+) {
+    if !should_start_runtime_memory_capture(&memory_config, user_message, assistant_output) {
         return;
     }
 
-    let context_memory_service = app
-        .state::<crate::commands::context_memory::ContextMemoryServiceState>()
-        .inner()
-        .0
-        .clone();
+    let context_memory_service = port.context_memory_service();
     let db = db.clone();
     let session_id = session_id.to_string();
 
@@ -167,4 +210,51 @@ pub(super) fn spawn_runtime_memory_capture_task(
             }
         }
     });
+}
+
+fn should_start_runtime_memory_capture(
+    memory_config: &lime_core::config::MemoryConfig,
+    user_message: &str,
+    assistant_output: &str,
+) -> bool {
+    memory_config.enabled
+        && memory_config.auto.enabled
+        && should_auto_capture_runtime_memory_turn(user_message, assistant_output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct CountingMemoryCapturePort {
+        calls: Arc<AtomicUsize>,
+    }
+
+    impl RuntimeMemoryCapturePort for CountingMemoryCapturePort {
+        fn context_memory_service(&self) -> Arc<ContextMemoryService> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            panic!("disabled auto memory capture should not resolve context memory service")
+        }
+    }
+
+    #[test]
+    fn disabled_auto_memory_capture_does_not_touch_host_port() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let port = CountingMemoryCapturePort {
+            calls: calls.clone(),
+        };
+        let db = Arc::new(Mutex::new(rusqlite::Connection::open_in_memory().unwrap()));
+
+        spawn_runtime_memory_capture_task_with_port(
+            &port,
+            &db,
+            lime_core::config::MemoryConfig::default(),
+            "session-1",
+            "记住这个偏好",
+            "这是一段足够长的助手输出，用于确保如果开关没有提前短路就会尝试进入后台记忆沉淀。",
+        );
+
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
 }

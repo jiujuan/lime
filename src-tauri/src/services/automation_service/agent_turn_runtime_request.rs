@@ -162,7 +162,7 @@ fn normalize_agent_turn_request_metadata(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::aster_agent_cmd::{build_queued_turn_task, AsterChatRequest};
+    use crate::commands::aster_agent_cmd::AsterChatRequest;
     use lime_core::config::{AutomationExecutionMode, DeliveryConfig, TaskSchedule};
     use serde_json::json;
 
@@ -196,7 +196,7 @@ mod tests {
     }
 
     #[test]
-    fn agent_turn_runtime_request_should_materialize_standard_queue_payload() {
+    fn agent_turn_runtime_request_should_materialize_app_server_host_options_payload() {
         let built = build_agent_turn_runtime_request(
             &sample_job(),
             "session-1",
@@ -231,26 +231,17 @@ mod tests {
             lime_agent::SessionExecutionRuntimeAccessMode::Current
         );
 
-        let queued_task = build_queued_turn_task(built.request).expect("build queued task");
+        let host_options =
+            serde_json::to_value(&built.request).expect("serialize app server host options");
         let payload: AsterChatRequest =
-            serde_json::from_value(queued_task.payload).expect("deserialize queued payload");
+            serde_json::from_value(host_options).expect("deserialize host options payload");
 
-        assert_eq!(queued_task.session_id, "session-1");
         assert_eq!(payload.session_id, "session-1");
         assert_eq!(payload.workspace_id, "workspace-1");
         assert_eq!(payload.queue_if_busy, Some(false));
         assert!(payload.auto_continue.is_none());
-        assert_eq!(
-            payload.queued_turn_id.as_deref(),
-            Some(queued_task.queued_turn_id.as_str())
-        );
-        assert!(
-            payload
-                .turn_id
-                .as_deref()
-                .is_some_and(|turn_id| !turn_id.trim().is_empty()),
-            "standard queue builder must materialize a turn id"
-        );
+        assert!(payload.queued_turn_id.is_none());
+        assert!(payload.turn_id.is_none());
         assert!(payload.message.contains("任务名称：每日趋势摘要"));
         assert!(payload.message.contains("生成 Markdown 趋势摘要"));
         assert_eq!(payload.system_prompt.as_deref(), Some("只输出 Markdown"));
@@ -306,9 +297,10 @@ mod tests {
         )
         .expect("build runtime request");
 
-        let queued_task = build_queued_turn_task(built.request).expect("build queued task");
+        let host_options =
+            serde_json::to_value(&built.request).expect("serialize app server host options");
         let payload: AsterChatRequest =
-            serde_json::from_value(queued_task.payload).expect("deserialize queued payload");
+            serde_json::from_value(host_options).expect("deserialize host options payload");
         let provider_config = payload
             .provider_config
             .expect("fixture provider_config should be forwarded");

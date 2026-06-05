@@ -475,10 +475,7 @@ fn build_registry_inventory(
             let catalog_entry = tool_catalog_entry(&definition.name);
             let caller_allowed = tool_matches_caller(&metadata, Some(caller));
             let visible_in_context = caller_allowed
-                && resource_helper_visibility_allowed(
-                    &definition.name,
-                    resource_helpers_supported,
-                )
+                && resource_helper_visibility_allowed(&definition.name, resource_helpers_supported)
                 && tool_visible_in_context(&metadata, false);
             let catalog_execution_policy = catalog_entry.map(|entry| {
                 resolve_tool_execution_policy_resolution(entry.name, execution_policy_input)
@@ -1773,10 +1770,7 @@ mod tests {
                 .expect("ToolSearch should stay in inventory");
             assert!(tool_search.visible_in_context);
 
-            for tool_name in [
-                LIST_MCP_RESOURCES_TOOL_NAME,
-                READ_MCP_RESOURCE_TOOL_NAME,
-            ] {
+            for tool_name in [LIST_MCP_RESOURCES_TOOL_NAME, READ_MCP_RESOURCE_TOOL_NAME] {
                 let registry_tool = inventory
                     .registry_tools
                     .iter()

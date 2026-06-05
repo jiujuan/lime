@@ -248,12 +248,10 @@ pub(super) fn build_runtime_permission_confirmation_schema(
 }
 
 pub(super) fn maybe_emit_runtime_permission_confirmation_request(
-    app: &AppHandle,
+    side_event_host: RuntimeSideEventHostContext<'_>,
     request: &AsterChatRequest,
-    workspace_root: &str,
     thread_id: &str,
     turn_id: &str,
-    timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
     permission_state: &lime_agent::SessionExecutionRuntimePermissionState,
 ) {
     if !should_create_runtime_permission_confirmation_request(permission_state) {
@@ -263,50 +261,36 @@ pub(super) fn maybe_emit_runtime_permission_confirmation_request(
     let request_id = runtime_permission_confirmation_request_id(turn_id);
     let prompt = build_runtime_permission_confirmation_prompt(permission_state);
     let questions = build_runtime_permission_confirmation_questions(permission_state);
-    {
-        let mut recorder = match timeline_recorder.lock() {
-            Ok(guard) => guard,
-            Err(error) => error.into_inner(),
-        };
-        if let Err(error) = recorder.record_request_user_input(
-            app,
-            &request.event_name,
-            request_id.clone(),
-            "elicitation".to_string(),
-            Some(prompt.clone()),
-            Some(questions.clone()),
-        ) {
-            tracing::warn!(
-                "[AsterAgent] 记录权限确认请求失败（已降级只发送 action_required）: {}",
-                error
-            );
-        }
+    if let Err(error) = side_event_host.record_request_user_input(
+        request_id.clone(),
+        "elicitation".to_string(),
+        Some(prompt.clone()),
+        Some(questions.clone()),
+    ) {
+        tracing::warn!(
+            "[AsterAgent] 记录权限确认请求失败（已降级只发送 action_required）: {}",
+            error
+        );
     }
 
-    emit_runtime_side_event(
-        app,
-        &request.event_name,
-        timeline_recorder,
-        workspace_root,
-        RuntimeAgentEvent::ActionRequired {
-            request_id,
-            action_type: "elicitation".to_string(),
-            data: serde_json::json!({
-                "request_id": runtime_permission_confirmation_request_id(turn_id),
-                "action_type": "elicitation",
-                "prompt": prompt,
-                "questions": questions,
-                "requested_schema": build_runtime_permission_confirmation_schema(&questions),
-                "permission_state": permission_state,
-                "source": "runtime_permission_confirmation",
-            }),
-            scope: Some(lime_agent::AgentActionRequiredScope {
-                session_id: Some(request.session_id.clone()),
-                thread_id: Some(thread_id.to_string()),
-                turn_id: Some(turn_id.to_string()),
-            }),
-        },
-    );
+    side_event_host.emit_side_event(RuntimeAgentEvent::ActionRequired {
+        request_id,
+        action_type: "elicitation".to_string(),
+        data: serde_json::json!({
+            "request_id": runtime_permission_confirmation_request_id(turn_id),
+            "action_type": "elicitation",
+            "prompt": prompt,
+            "questions": questions,
+            "requested_schema": build_runtime_permission_confirmation_schema(&questions),
+            "permission_state": permission_state,
+            "source": "runtime_permission_confirmation",
+        }),
+        scope: Some(lime_agent::AgentActionRequiredScope {
+            session_id: Some(request.session_id.clone()),
+            thread_id: Some(thread_id.to_string()),
+            turn_id: Some(turn_id.to_string()),
+        }),
+    });
 }
 
 pub(super) fn build_runtime_permission_review_status_from_state(

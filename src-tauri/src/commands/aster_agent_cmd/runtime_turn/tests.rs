@@ -13,6 +13,8 @@ use super::runtime_turn_compaction::{
 use super::runtime_turn_event_projection::{
     build_agent_app_runtime_event_projection_payload,
     build_agent_app_runtime_profile_projection_payload,
+    emit_agent_app_runtime_event_projection_with_port, emit_agent_runtime_profile_event_with_port,
+    RuntimeProjectionEventPort,
 };
 use super::runtime_turn_image_policy::RuntimeImageInputPolicy;
 use super::runtime_turn_image_policy::{

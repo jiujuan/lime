@@ -9,9 +9,12 @@ use super::types::{AgentAppRuntimeStartTaskRequest, AgentAppRuntimeStartTaskResu
 use crate::agent::AsterAgentState;
 use crate::app::LogState;
 use crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState;
+use crate::commands::aster_agent_cmd::app_server_host::{
+    build_tauri_aster_app_server, submit_desktop_app_server_turn, DesktopAppServerSubmitTurnInput,
+};
 use crate::commands::aster_agent_cmd::{
-    build_queued_turn_task, create_runtime_session_internal_with_runtime_and_session_id,
-    AsterChatRequest, AsterExecutionStrategy, RuntimeCommandContext,
+    create_runtime_session_internal_with_runtime_and_session_id, AsterExecutionStrategy,
+    RuntimeCommandContext,
 };
 use crate::config::GlobalConfigManagerState;
 use crate::database::DbConnection;
@@ -80,37 +83,6 @@ pub async fn agent_app_runtime_start_task(
     if let Some(model_preference) = model_preference.as_ref() {
         insert_agent_app_runtime_model_preference_metadata(&mut metadata, model_preference);
     }
-    let message = build_agent_app_runtime_task_message(&request);
-    let runtime_request = AsterChatRequest {
-        message,
-        session_id: session_id.clone(),
-        event_name: event_name.clone(),
-        images: None,
-        provider_config: None,
-        provider_preference: model_preference
-            .as_ref()
-            .map(|preference| preference.provider_preference.clone()),
-        model_preference: model_preference
-            .as_ref()
-            .map(|preference| preference.model_preference.clone()),
-        reasoning_effort: None,
-        thinking_enabled: None,
-        approval_policy: None,
-        sandbox_policy: None,
-        project_id: None,
-        workspace_id,
-        web_search: None,
-        search_mode: None,
-        execution_strategy: Some(AsterExecutionStrategy::React),
-        auto_continue: None,
-        system_prompt: None,
-        metadata: Some(metadata),
-        turn_id: Some(turn_id.clone()),
-        queue_if_busy: Some(request.queue_if_busy.unwrap_or(true)),
-        queued_turn_id: Some(format!("agent-app-queued-{task_id}")),
-    };
-
-    let queued_task = build_queued_turn_task(runtime_request)?;
     let runtime = RuntimeCommandContext::new(
         app,
         state.inner(),
@@ -121,13 +93,32 @@ pub async fn agent_app_runtime_start_task(
         mcp_manager.inner(),
         automation_state.inner(),
     );
-    runtime
-        .submit_runtime_turn(
-            queued_task,
-            request.queue_if_busy.unwrap_or(true),
-            request.skip_pre_submit_resume.unwrap_or(false),
-        )
-        .await?;
+    let app_server = build_tauri_aster_app_server(runtime);
+    submit_desktop_app_server_turn(
+        &app_server,
+        DesktopAppServerSubmitTurnInput {
+            client_name: "agent-app-runtime",
+            client_title: "Agent App Runtime",
+            app_id: &app_id,
+            session_id: &session_id,
+            workspace_id: &workspace_id,
+            turn_id: Some(&turn_id),
+            event_name: &event_name,
+            message: build_agent_app_runtime_task_message(&request),
+            metadata: Some(metadata),
+            provider_preference: model_preference
+                .as_ref()
+                .map(|preference| preference.provider_preference.as_str()),
+            model_preference: model_preference
+                .as_ref()
+                .map(|preference| preference.model_preference.as_str()),
+            queue_if_busy: request.queue_if_busy.unwrap_or(true),
+            skip_pre_submit_resume: request.skip_pre_submit_resume.unwrap_or(false),
+            queued_turn_id: Some(format!("agent-app-queued-{task_id}")),
+            host_options: None,
+        },
+    )
+    .await?;
 
     Ok(AgentAppRuntimeStartTaskResult {
         app_id,

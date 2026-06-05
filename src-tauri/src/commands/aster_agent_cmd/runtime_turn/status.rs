@@ -50,22 +50,43 @@ pub(super) fn build_submit_accepted_runtime_status() -> AgentRuntimeStatus {
     }
 }
 
-pub(super) fn emit_submit_accepted_runtime_status(app: &AppHandle, event_name: &str) {
+fn build_submit_accepted_runtime_status_event() -> RuntimeAgentEvent {
+    RuntimeAgentEvent::RuntimeStatus {
+        status: build_submit_accepted_runtime_status(),
+    }
+}
+
+pub(super) fn emit_submit_accepted_runtime_status(
+    event_port: &dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort,
+    app: &AppHandle,
+    event_name: &str,
+) {
     if event_name.trim().is_empty() {
         return;
     }
 
-    let event = RuntimeAgentEvent::RuntimeStatus {
-        status: build_submit_accepted_runtime_status(),
-    };
-    if let Err(error) = app.emit(event_name, &event) {
-        tracing::warn!(
-            "[AsterAgent] 发送 submit accepted runtime_status 失败: event_name={}, error={}",
-            event_name,
-            error
-        );
+    let event = build_submit_accepted_runtime_status_event();
+    event_port.emit_runtime_queue_event(event_name, &event);
+    let projection_port = TauriRuntimeProjectionEventPort::new(app);
+    emit_agent_app_runtime_event_projection_with_port(&projection_port, event_name, &event);
+}
+
+#[cfg(test)]
+mod submit_accepted_status_tests {
+    use super::*;
+
+    #[test]
+    fn submit_accepted_runtime_status_event_is_preparing_status() {
+        let event = build_submit_accepted_runtime_status_event();
+
+        match event {
+            RuntimeAgentEvent::RuntimeStatus { status } => {
+                assert_eq!(status.phase, "preparing");
+                assert_eq!(status.title, "已接收请求，正在准备执行");
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
     }
-    emit_agent_app_runtime_event_projection(app, event_name, &event);
 }
 
 pub(super) fn describe_provider_request_attempt(
@@ -141,13 +162,25 @@ pub(super) fn build_runtime_turn_keepalive_status(
     }
 }
 
+fn build_runtime_turn_keepalive_status_event(
+    sequence: u64,
+    elapsed: Duration,
+) -> RuntimeAgentEvent {
+    RuntimeAgentEvent::RuntimeStatus {
+        status: build_runtime_turn_keepalive_status(sequence, elapsed),
+    }
+}
+
 pub(super) struct RuntimeTurnKeepaliveGuard {
     stopped: Arc<AtomicBool>,
     handle: tokio::task::JoinHandle<()>,
 }
 
 impl RuntimeTurnKeepaliveGuard {
-    pub(super) fn start(app: AppHandle, event_name: String) -> Option<Self> {
+    pub(super) fn start(
+        event_port: Arc<dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort>,
+        event_name: String,
+    ) -> Option<Self> {
         if event_name.trim().is_empty() {
             return None;
         }
@@ -163,19 +196,33 @@ impl RuntimeTurnKeepaliveGuard {
                     break;
                 }
                 sequence += 1;
-                let status = build_runtime_turn_keepalive_status(sequence, started_at.elapsed());
-                let event = RuntimeAgentEvent::RuntimeStatus { status };
-                if let Err(error) = app.emit(&event_name, &event) {
-                    tracing::warn!(
-                        "[AsterAgent] 发送 runtime keepalive 失败: event_name={}, error={}",
-                        event_name,
-                        error
-                    );
-                }
+                let event =
+                    build_runtime_turn_keepalive_status_event(sequence, started_at.elapsed());
+                event_port.emit_runtime_queue_event(&event_name, &event);
             }
         });
 
         Some(Self { stopped, handle })
+    }
+}
+
+#[cfg(test)]
+mod keepalive_status_tests {
+    use super::*;
+
+    #[test]
+    fn runtime_turn_keepalive_status_event_is_runtime_status() {
+        let event = build_runtime_turn_keepalive_status_event(2, Duration::from_secs(30));
+
+        match event {
+            RuntimeAgentEvent::RuntimeStatus { status } => {
+                assert_eq!(status.phase, "routing");
+                assert_eq!(status.title, "仍在执行，等待下一步进度");
+                let metadata = status.metadata.expect("metadata");
+                assert_eq!(metadata["keepalive_sequence"], serde_json::json!(2));
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
     }
 }
 

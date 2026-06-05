@@ -317,6 +317,74 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
+name = "app-server"
+version = "1.59.0"
+dependencies = [
+ "anyhow",
+ "app-server-protocol",
+ "app-server-transport",
+ "async-trait",
+ "chrono",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "app-server-client"
+version = "1.59.0"
+dependencies = [
+ "app-server-protocol",
+ "app-server-transport",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "app-server-daemon"
+version = "1.59.0"
+dependencies = [
+ "app-server-protocol",
+ "app-server-transport",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "app-server-protocol"
+version = "1.59.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "app-server-test-client"
+version = "1.59.0"
+dependencies = [
+ "anyhow",
+ "app-server-client",
+ "app-server-protocol",
+ "app-server-transport",
+ "serde_json",
+]
+
+[[package]]
+name = "app-server-transport"
+version = "1.59.0"
+dependencies = [
+ "app-server-protocol",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "arbitrary"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5258,9 +5326,10 @@ dependencies = [
 
 [[package]]
 name = "lime"
-version = "1.58.0"
+version = "1.59.0"
 dependencies = [
  "anyhow",
+ "app-server",
  "arboard",
  "aster-core",
  "async-stream",
@@ -5365,7 +5434,7 @@ dependencies = [
 
 [[package]]
 name = "lime-agent"
-version = "1.58.0"
+version = "1.59.0"
 dependencies = [
  "anyhow",
  "aster-core",
@@ -5394,7 +5463,7 @@ dependencies = [
 
 [[package]]
 name = "lime-browser-runtime"
-version = "1.58.0"
+version = "1.59.0"
 dependencies = [
  "chrono",
  "futures",
@@ -5411,7 +5480,7 @@ dependencies = [
 
 [[package]]
 name = "lime-cli"
-version = "1.58.0"
+version = "1.59.0"
 dependencies = [
  "clap",
  "lime-core",
@@ -5423,7 +5492,7 @@ dependencies = [
 
 [[package]]
 name = "lime-config"
-version = "1.58.0"
+version = "1.59.0"
 dependencies = [
  "async-trait",
  "lime-core",
@@ -5439,7 +5508,7 @@ dependencies = [
 
 [[package]]
 name = "lime-core"
-version = "1.58.0"
+version = "1.59.0"
 dependencies = [
  "aster-models",
  "async-trait",
@@ -5495,7 +5564,7 @@ dependencies = [
 
 [[package]]
 name = "lime-gateway"
-version = "1.58.0"
+version = "1.59.0"
 dependencies = [
  "aes",
  "axum 0.7.9",
@@ -5525,7 +5594,7 @@ dependencies = [
 
 [[package]]
 name = "lime-infra"
-version = "1.58.0"
+version = "1.59.0"
 dependencies = [
  "chrono",
  "dashmap 5.5.3",
@@ -5545,7 +5614,7 @@ dependencies = [
 
 [[package]]
 name = "lime-knowledge"
-version = "1.58.0"
+version = "1.59.0"
 dependencies = [
  "chrono",
  "hex",
@@ -5558,7 +5627,7 @@ dependencies = [
 
 [[package]]
 name = "lime-mcp"
-version = "1.58.0"
+version = "1.59.0"
 dependencies = [
  "async-trait",
  "dirs 5.0.1",
@@ -5574,7 +5643,7 @@ dependencies = [
 
 [[package]]
 name = "lime-media-runtime"
-version = "1.58.0"
+version = "1.59.0"
 dependencies = [
  "axum 0.7.9",
  "base64 0.22.1",
@@ -5606,7 +5675,7 @@ dependencies = [
 
 [[package]]
 name = "lime-processor"
-version = "1.58.0"
+version = "1.59.0"
 dependencies = [
  "async-trait",
  "lime-core",
@@ -5625,7 +5694,7 @@ dependencies = [
 
 [[package]]
 name = "lime-providers"
-version = "1.58.0"
+version = "1.59.0"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -5680,7 +5749,7 @@ dependencies = [
 
 [[package]]
 name = "lime-server"
-version = "1.58.0"
+version = "1.59.0"
 dependencies = [
  "aster-core",
  "async-stream",
@@ -5724,7 +5793,7 @@ dependencies = [
 
 [[package]]
 name = "lime-server-utils"
-version = "1.58.0"
+version = "1.59.0"
 dependencies = [
  "axum 0.7.9",
  "futures",
@@ -5739,7 +5808,7 @@ dependencies = [
 
 [[package]]
 name = "lime-services"
-version = "1.58.0"
+version = "1.59.0"
 dependencies = [
  "anyhow",
  "aster-core",
@@ -5784,7 +5853,7 @@ dependencies = [
 
 [[package]]
 name = "lime-skills"
-version = "1.58.0"
+version = "1.59.0"
 dependencies = [
  "async-trait",
  "dirs 5.0.1",
@@ -5802,7 +5871,7 @@ dependencies = [
 
 [[package]]
 name = "lime-websocket"
-version = "1.58.0"
+version = "1.59.0"
 dependencies = [
  "axum 0.7.9",
  "chrono",

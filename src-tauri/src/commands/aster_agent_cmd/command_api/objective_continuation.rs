@@ -1,5 +1,9 @@
+use super::objective_support::resolve_objective_workspace_id;
 use super::*;
 use crate::agent::runtime_queue_service::AgentRuntimeQueueContext;
+use crate::commands::aster_agent_cmd::app_server_host::{
+    build_tauri_aster_app_server, submit_desktop_aster_chat_request, DesktopAsterChatSubmitInput,
+};
 use crate::database::{lock_db, DbConnection};
 use lime_core::database::dao::agent_run::{AgentRun, AgentRunDao};
 use lime_core::database::dao::agent_timeline::AgentThreadTurnStatus;
@@ -77,9 +81,22 @@ struct AutoContinuationGuardInput<'a> {
     now: chrono::DateTime<chrono::Utc>,
 }
 
+#[cfg(test)]
 pub(crate) fn build_objective_continuation_request(
     objective: &ManagedObjectiveRecord,
     source: ManagedObjectiveContinuationSource,
+) -> AsterChatRequest {
+    build_objective_continuation_request_with_workspace(
+        objective,
+        source,
+        objective.workspace_id.clone().unwrap_or_default(),
+    )
+}
+
+pub(crate) fn build_objective_continuation_request_with_workspace(
+    objective: &ManagedObjectiveRecord,
+    source: ManagedObjectiveContinuationSource,
+    workspace_id: String,
 ) -> AsterChatRequest {
     let criteria = if objective.success_criteria.is_empty() {
         "未设置单独成功标准，请按目标本身判断下一步。".to_string()
@@ -130,7 +147,7 @@ pub(crate) fn build_objective_continuation_request(
         approval_policy: None,
         sandbox_policy: None,
         project_id: None,
-        workspace_id: objective.workspace_id.clone().unwrap_or_default(),
+        workspace_id,
         web_search: None,
         search_mode: None,
         execution_strategy: None,
@@ -242,18 +259,17 @@ pub(crate) async fn maybe_submit_managed_objective_auto_continuation(
 
     match decision {
         AutoContinuationGuardDecision::Allow => {
-            let mut request = build_objective_continuation_request(
+            let mut request = build_objective_continuation_request_with_workspace(
                 &objective,
                 ManagedObjectiveContinuationSource::AutoIdle,
+                resolve_objective_workspace_id(&context.db, &objective)?,
             );
             apply_provider_config_to_continuation_request(
                 &mut request,
                 context.state.get_provider_config().await,
             );
             insert_auto_continuation_guard_metadata(&mut request, &run_summary, &policy);
-            let queued_task = build_queued_turn_task(request)?;
-            let queued_turn_id = queued_task.queued_turn_id.clone();
-            crate::agent::runtime_queue_service::submit_runtime_turn(
+            let runtime = RuntimeCommandContext::new(
                 context.app.clone(),
                 &context.state,
                 &context.db,
@@ -262,10 +278,18 @@ pub(crate) async fn maybe_submit_managed_objective_auto_continuation(
                 &context.config_manager,
                 &context.mcp_manager,
                 &context.automation_state,
-                queued_task,
-                true,
-                true,
-                build_runtime_queue_executor(),
+            );
+            let app_server = build_tauri_aster_app_server(runtime);
+            let queued_turn_id = submit_desktop_aster_chat_request(
+                &app_server,
+                DesktopAsterChatSubmitInput {
+                    client_name: "managed-objective",
+                    client_title: "Managed Objective",
+                    app_id: "desktop",
+                    request,
+                    queue_if_busy: true,
+                    skip_pre_submit_resume: true,
+                },
             )
             .await?;
             if let Err(error) = persist_auto_continuation_guard_audit(

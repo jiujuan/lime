@@ -1,15 +1,24 @@
-use super::attempt::execute_runtime_stream_attempt;
+use super::attempt::{
+    execute_runtime_stream_attempt, RuntimeStreamAttemptContext, RuntimeStreamAttemptHostContext,
+};
 use super::finalize::is_runtime_turn_cancelled_error;
 use super::*;
+
+#[derive(Clone, Copy)]
+struct RuntimeStreamRecoveryHostContext<'a> {
+    app: &'a AppHandle,
+    state: &'a AsterAgentState,
+    db: &'a DbConnection,
+    api_key_provider_service: &'a ApiKeyProviderServiceState,
+}
 
 #[allow(clippy::too_many_arguments)]
 pub(in crate::commands::aster_agent_cmd::runtime_turn) async fn execute_runtime_stream_with_strategy<
     F,
 >(
+    event_port: Arc<dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort>,
     agent: &Agent,
-    app: &AppHandle,
-    state: &AsterAgentState,
-    db: &DbConnection,
+    host: RuntimeTurnHostContext<'_>,
     request: &AsterChatRequest,
     timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
     run_observation: &Arc<Mutex<ChatRunObservation>>,
@@ -42,11 +51,12 @@ where
         primary_provider_name,
         primary_model_name
     );
-    let primary_result = execute_runtime_stream_attempt(
-        agent,
-        app,
-        db,
-        request,
+    let attempt_context = RuntimeStreamAttemptContext {
+        event_port,
+        host: RuntimeStreamAttemptHostContext {
+            app: host.app,
+            db: host.db,
+        },
         timeline_recorder,
         run_observation,
         runtime_memory_config,
@@ -58,12 +68,19 @@ where
         execution_profile,
         request_metadata,
         provider_continuation_capability,
-        profile_stream.clone(),
-        build_session_config(),
-        cancel_token.clone(),
+        profile_stream,
+        cancel_token,
         request_tool_policy,
-    )
-    .await;
+    };
+    let recovery_host = RuntimeStreamRecoveryHostContext {
+        app: host.app,
+        state: host.state,
+        db: host.db,
+        api_key_provider_service: host.api_key_provider_service,
+    };
+    let primary_result =
+        execute_runtime_stream_attempt(&attempt_context, agent, request, build_session_config())
+            .await;
 
     let run_result = match primary_result {
         Ok(assistant_output) => {
@@ -95,11 +112,10 @@ where
                     return Ok(None);
                 }
 
-                let api_key_provider_service = app.state::<ApiKeyProviderServiceState>();
                 let Some(fallback_provider_config) = resolve_runtime_provider_model_recovery_config(
-                    app,
-                    db,
-                    api_key_provider_service.inner(),
+                    recovery_host.app,
+                    recovery_host.db,
+                    recovery_host.api_key_provider_service,
                     request,
                     provider_selector,
                     &provider_config.model_name,
@@ -116,24 +132,24 @@ where
                     provider_config.model_name,
                     fallback_provider_config.model_name
                 );
-                emit_runtime_side_event(
-                    app,
+                let side_event_host = RuntimeSideEventHostContext::new(
+                    recovery_host.app,
                     &request.event_name,
-                    timeline_recorder,
-                    workspace_root,
-                    RuntimeAgentEvent::Warning {
-                        code: Some(RUNTIME_MODEL_PERMISSION_FALLBACK_WARNING_CODE.to_string()),
-                        message: format!(
-                            "当前模型暂不可用，已自动切换到同 Provider 的兼容候选模型 `{}` 后重试。",
-                            fallback_provider_config.model_name
-                        ),
-                    },
+                    attempt_context.timeline_recorder,
+                    attempt_context.workspace_root,
                 );
+                side_event_host.emit_side_event(RuntimeAgentEvent::Warning {
+                    code: Some(RUNTIME_MODEL_PERMISSION_FALLBACK_WARNING_CODE.to_string()),
+                    message: format!(
+                        "当前模型暂不可用，已自动切换到同 Provider 的兼容候选模型 `{}` 后重试。",
+                        fallback_provider_config.model_name
+                    ),
+                });
 
                 apply_runtime_turn_provider_config(
-                    state,
-                    db,
-                    session_id,
+                    recovery_host.state,
+                    recovery_host.db,
+                    attempt_context.session_id,
                     Some(&fallback_provider_config),
                     request.reasoning_effort.as_deref(),
                 )
@@ -155,25 +171,10 @@ where
                 );
 
                 match execute_runtime_stream_attempt(
+                    &attempt_context,
                     agent,
-                    app,
-                    db,
                     &fallback_request,
-                    timeline_recorder,
-                    run_observation,
-                    runtime_memory_config,
-                    session_id,
-                    workspace_root,
-                    workspace_id,
-                    thread_id,
-                    turn_id,
-                    execution_profile,
-                    request_metadata,
-                    provider_continuation_capability,
-                    profile_stream.clone(),
                     build_session_config(),
-                    cancel_token.clone(),
-                    request_tool_policy,
                 )
                 .await
                 {
@@ -208,19 +209,12 @@ where
                             fallback_attempt_started_at.elapsed().as_millis(),
                             fallback_error.message
                         );
-                        emit_runtime_side_event(
-                            app,
-                            &request.event_name,
-                            timeline_recorder,
-                            workspace_root,
-                            RuntimeAgentEvent::Warning {
-                                code: Some(
-                                    RUNTIME_MODEL_PERMISSION_FALLBACK_FAILED_WARNING_CODE
-                                        .to_string(),
-                                ),
-                                message: fallback_message.clone(),
-                            },
-                        );
+                        side_event_host.emit_side_event(RuntimeAgentEvent::Warning {
+                            code: Some(
+                                RUNTIME_MODEL_PERMISSION_FALLBACK_FAILED_WARNING_CODE.to_string(),
+                            ),
+                            message: fallback_message.clone(),
+                        });
                         Err(fallback_message)
                     }
                 }

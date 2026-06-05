@@ -8,7 +8,10 @@ use super::super::runtime_turn_image_policy::{
     merge_runtime_image_input_unsupported_system_prompt, resolve_runtime_forwarded_images,
 };
 use super::super::runtime_turn_memory::spawn_runtime_memory_capture_task;
-use super::events::{record_runtime_stream_event, RuntimeStreamTiming, RuntimeToolProfileState};
+use super::events::{
+    record_runtime_stream_event, RuntimeStreamEventContext, RuntimeStreamTiming,
+    RuntimeToolProfileState, TauriRuntimeStreamTimelineEventPort,
+};
 use super::*;
 use crate::database::lock_db;
 use lime_agent::request_tool_policy::{ReplyAttemptError, StreamReplyExecution};
@@ -76,60 +79,73 @@ fn resolve_runtime_turn_final_text_output(
     resolve_final_agent_message_text_from_items(&items, turn_id).unwrap_or(fallback)
 }
 
-#[allow(clippy::too_many_arguments)]
+pub(super) struct RuntimeStreamAttemptContext<'a> {
+    pub(super) event_port: Arc<dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort>,
+    pub(super) host: RuntimeStreamAttemptHostContext<'a>,
+    pub(super) timeline_recorder: &'a Arc<Mutex<AgentTimelineRecorder>>,
+    pub(super) run_observation: &'a Arc<Mutex<ChatRunObservation>>,
+    pub(super) runtime_memory_config: &'a lime_core::config::MemoryConfig,
+    pub(super) session_id: &'a str,
+    pub(super) workspace_root: &'a str,
+    pub(super) workspace_id: &'a str,
+    pub(super) thread_id: &'a str,
+    pub(super) turn_id: &'a str,
+    pub(super) execution_profile: TurnExecutionProfile,
+    pub(super) request_metadata: Option<&'a serde_json::Value>,
+    pub(super) provider_continuation_capability: ProviderContinuationCapability,
+    pub(super) profile_stream: AgentRuntimeProfileStream,
+    pub(super) cancel_token: CancellationToken,
+    pub(super) request_tool_policy: &'a RequestToolPolicy,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct RuntimeStreamAttemptHostContext<'a> {
+    pub(super) app: &'a AppHandle,
+    pub(super) db: &'a DbConnection,
+}
+
 fn finalize_runtime_stream_success(
-    app: &AppHandle,
-    db: &DbConnection,
+    context: &RuntimeStreamAttemptContext<'_>,
     event_name: &str,
-    timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
-    run_observation: &Arc<Mutex<ChatRunObservation>>,
-    runtime_memory_config: &lime_core::config::MemoryConfig,
-    session_id: &str,
     user_message: &str,
-    workspace_root: &str,
-    workspace_id: &str,
-    thread_id: &str,
-    turn_id: &str,
-    execution_profile: TurnExecutionProfile,
-    request_metadata: Option<&serde_json::Value>,
     execution: &StreamReplyExecution,
 ) -> String {
     let final_text_output = resolve_runtime_turn_final_text_output(
-        db,
-        thread_id,
-        turn_id,
+        context.host.db,
+        context.thread_id,
+        context.turn_id,
         execution.text_output.as_str(),
     );
     materialize_agent_app_output_contract_artifact_after_stream(
-        app,
+        context.host.app,
         event_name,
-        timeline_recorder,
-        run_observation,
-        workspace_root,
-        thread_id,
-        turn_id,
-        request_metadata,
+        context.timeline_recorder,
+        context.run_observation,
+        context.workspace_root,
+        context.thread_id,
+        context.turn_id,
+        context.request_metadata,
         final_text_output.as_str(),
     );
     maybe_persist_artifact_document_after_stream(
-        app,
-        db,
+        context.host.app,
+        context.host.db,
         event_name,
-        timeline_recorder,
-        run_observation,
-        workspace_root,
-        workspace_id,
-        thread_id,
-        turn_id,
-        execution_profile,
-        request_metadata,
+        context.timeline_recorder,
+        context.run_observation,
+        context.workspace_root,
+        context.workspace_id,
+        context.thread_id,
+        context.turn_id,
+        context.execution_profile,
+        context.request_metadata,
         final_text_output.as_str(),
     );
     spawn_runtime_memory_capture_task(
-        app,
-        db,
-        runtime_memory_config.clone(),
-        session_id,
+        context.host.app,
+        context.host.db,
+        context.runtime_memory_config.clone(),
+        context.session_id,
         user_message,
         final_text_output.as_str(),
     );
@@ -137,36 +153,20 @@ fn finalize_runtime_stream_success(
     final_text_output
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(super) async fn execute_runtime_stream_attempt(
+    context: &RuntimeStreamAttemptContext<'_>,
     agent: &Agent,
-    app: &AppHandle,
-    db: &DbConnection,
     request: &AsterChatRequest,
-    timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
-    run_observation: &Arc<Mutex<ChatRunObservation>>,
-    runtime_memory_config: &lime_core::config::MemoryConfig,
-    session_id: &str,
-    workspace_root: &str,
-    workspace_id: &str,
-    thread_id: &str,
-    turn_id: &str,
-    execution_profile: TurnExecutionProfile,
-    request_metadata: Option<&serde_json::Value>,
-    provider_continuation_capability: ProviderContinuationCapability,
-    profile_stream: AgentRuntimeProfileStream,
     mut session_config: aster::agents::types::SessionConfig,
-    cancel_token: CancellationToken,
-    request_tool_policy: &RequestToolPolicy,
 ) -> Result<String, ReplyAttemptError> {
+    let side_event_host = RuntimeSideEventHostContext::new(
+        context.host.app,
+        &request.event_name,
+        context.timeline_recorder,
+        context.workspace_root,
+    );
     if let Some(warning_event) = build_runtime_image_input_unsupported_warning(request) {
-        emit_runtime_side_event(
-            app,
-            &request.event_name,
-            timeline_recorder,
-            workspace_root,
-            warning_event,
-        );
+        side_event_host.emit_side_event(warning_event);
     }
     session_config.system_prompt = merge_runtime_image_input_unsupported_system_prompt(
         session_config.system_prompt.take(),
@@ -175,42 +175,58 @@ pub(super) async fn execute_runtime_stream_attempt(
     let images_for_provider = resolve_runtime_forwarded_images(request);
     let stream_timing = RuntimeStreamTiming::new();
     let (provider_selector, provider_name, model_name) = describe_provider_request_attempt(request);
-    emit_agent_runtime_profile_event(
-        app,
+    let projection_port = TauriRuntimeProjectionEventPort::new(context.host.app);
+    emit_agent_runtime_profile_event_with_port(
+        &projection_port,
         &request.event_name,
-        profile_stream.model_requested(&provider_selector, &provider_name, &model_name),
+        context
+            .profile_stream
+            .model_requested(&provider_selector, &provider_name, &model_name),
     );
     let tool_profile_state = Arc::new(Mutex::new(RuntimeToolProfileState::default()));
 
     let execution = match stream_reply_once(
         agent,
-        app,
+        context.host.app,
         &request.event_name,
         build_runtime_user_message(&request.message, images_for_provider),
-        Some(Path::new(workspace_root)),
+        Some(Path::new(context.workspace_root)),
         session_config,
-        cancel_token,
-        request_tool_policy,
+        context.cancel_token.clone(),
+        context.request_tool_policy,
         {
-            let run_observation = run_observation.clone();
-            let app = app.clone();
+            let run_observation = context.run_observation.clone();
+            let app = context.host.app.clone();
             let event_name = request.event_name.clone();
-            let timeline_recorder = timeline_recorder.clone();
+            let timeline_recorder = context.timeline_recorder.clone();
             let stream_timing = stream_timing.clone();
-            let profile_stream = profile_stream.clone();
+            let profile_stream = context.profile_stream.clone();
             let tool_profile_state = tool_profile_state.clone();
+            let event_port = context.event_port.clone();
+            let workspace_root = context.workspace_root.to_string();
+            let timeline_port = TauriRuntimeStreamTimelineEventPort::new(
+                app.clone(),
+                event_name.clone(),
+                timeline_recorder.clone(),
+                workspace_root.clone(),
+            );
+            let request_metadata = context.request_metadata;
+            let provider_continuation_capability = context.provider_continuation_capability;
             move |event| {
                 record_runtime_stream_event(
-                    &run_observation,
-                    &app,
-                    &event_name,
-                    &timeline_recorder,
-                    workspace_root,
-                    request_metadata,
-                    provider_continuation_capability,
-                    &stream_timing,
-                    &profile_stream,
-                    &tool_profile_state,
+                    RuntimeStreamEventContext {
+                        event_port: event_port.as_ref(),
+                        projection_port: &projection_port,
+                        timeline_port: &timeline_port,
+                        run_observation: &run_observation,
+                        event_name: &event_name,
+                        workspace_root: workspace_root.as_str(),
+                        request_metadata,
+                        provider_continuation_capability,
+                        stream_timing: &stream_timing,
+                        profile_stream: &profile_stream,
+                        tool_profile_state: &tool_profile_state,
+                    },
                     event,
                 )
             }
@@ -220,10 +236,10 @@ pub(super) async fn execute_runtime_stream_attempt(
     {
         Ok(execution) => execution,
         Err(error) => {
-            emit_agent_runtime_profile_event(
-                app,
+            emit_agent_runtime_profile_event_with_port(
+                &projection_port,
                 &request.event_name,
-                profile_stream.model_failed(
+                context.profile_stream.model_failed(
                     &provider_selector,
                     &provider_name,
                     &model_name,
@@ -237,10 +253,10 @@ pub(super) async fn execute_runtime_stream_attempt(
     };
 
     if execution.cancelled {
-        emit_agent_runtime_profile_event(
-            app,
+        emit_agent_runtime_profile_event_with_port(
+            &projection_port,
             &request.event_name,
-            profile_stream.model_failed(
+            context.profile_stream.model_failed(
                 &provider_selector,
                 &provider_name,
                 &model_name,
@@ -251,7 +267,7 @@ pub(super) async fn execute_runtime_stream_attempt(
         );
         tracing::info!(
             "[AsterAgent] runtime turn cancelled before success finalization: session_id={}, event_name={}, emitted_any={}",
-            session_id,
+            context.session_id,
             request.event_name,
             execution.emitted_any
         );
@@ -261,28 +277,13 @@ pub(super) async fn execute_runtime_stream_attempt(
         });
     }
 
-    let final_text_output = finalize_runtime_stream_success(
-        app,
-        db,
-        &request.event_name,
-        timeline_recorder,
-        run_observation,
-        runtime_memory_config,
-        session_id,
-        &request.message,
-        workspace_root,
-        workspace_id,
-        thread_id,
-        turn_id,
-        execution_profile,
-        request_metadata,
-        &execution,
-    );
+    let final_text_output =
+        finalize_runtime_stream_success(context, &request.event_name, &request.message, &execution);
 
-    emit_agent_runtime_profile_event(
-        app,
+    emit_agent_runtime_profile_event_with_port(
+        &projection_port,
         &request.event_name,
-        profile_stream.model_completed(
+        context.profile_stream.model_completed(
             &provider_selector,
             &provider_name,
             &model_name,

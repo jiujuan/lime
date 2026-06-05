@@ -136,21 +136,60 @@ pub(super) fn collect_runtime_request_resolution_side_events(
     events
 }
 
+pub(super) trait RuntimeTurnTerminalTimelinePort: Send + Sync {
+    fn complete_turn_success(&self) -> Result<Vec<RuntimeAgentEvent>, String>;
+
+    fn abort_turn(&self, error: &str) -> Result<Vec<RuntimeAgentEvent>, String>;
+
+    fn fail_turn(&self, error: &str) -> Result<Vec<RuntimeAgentEvent>, String>;
+}
+
+pub(super) struct RecorderRuntimeTurnTerminalTimelinePort {
+    timeline_recorder: Arc<Mutex<AgentTimelineRecorder>>,
+}
+
+impl RecorderRuntimeTurnTerminalTimelinePort {
+    pub(super) fn new(timeline_recorder: Arc<Mutex<AgentTimelineRecorder>>) -> Self {
+        Self { timeline_recorder }
+    }
+}
+
+impl RuntimeTurnTerminalTimelinePort for RecorderRuntimeTurnTerminalTimelinePort {
+    fn complete_turn_success(&self) -> Result<Vec<RuntimeAgentEvent>, String> {
+        let mut recorder = match self.timeline_recorder.lock() {
+            Ok(guard) => guard,
+            Err(error) => error.into_inner(),
+        };
+        recorder.complete_turn_success()
+    }
+
+    fn abort_turn(&self, error: &str) -> Result<Vec<RuntimeAgentEvent>, String> {
+        let mut recorder = match self.timeline_recorder.lock() {
+            Ok(guard) => guard,
+            Err(error) => error.into_inner(),
+        };
+        recorder.abort_turn(error)
+    }
+
+    fn fail_turn(&self, error: &str) -> Result<Vec<RuntimeAgentEvent>, String> {
+        let mut recorder = match self.timeline_recorder.lock() {
+            Ok(guard) => guard,
+            Err(error) => error.into_inner(),
+        };
+        recorder.fail_turn(error)
+    }
+}
+
 pub(super) fn fail_runtime_turn_before_model_execution(
+    event_port: &dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort,
+    terminal_timeline_port: &dyn RuntimeTurnTerminalTimelinePort,
     app: &AppHandle,
     event_name: &str,
-    timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
     profile_stream: &AgentRuntimeProfileStream,
     task_profile_refs: &RuntimeTurnTaskProfileRefs,
     message: &str,
 ) {
-    let terminal_events = {
-        let mut recorder = match timeline_recorder.lock() {
-            Ok(guard) => guard,
-            Err(error) => error.into_inner(),
-        };
-        recorder.fail_turn(message)
-    };
+    let terminal_events = terminal_timeline_port.fail_turn(message);
     if let Err(error) = &terminal_events {
         tracing::warn!(
             "[AsterAgent] 记录运行时执行前阻断 turn 时间线失败（已降级继续）: {}",
@@ -158,10 +197,12 @@ pub(super) fn fail_runtime_turn_before_model_execution(
         );
     }
     if let Ok(events) = terminal_events {
-        emit_runtime_events(app, event_name, events);
+        let projection_port = TauriRuntimeProjectionEventPort::new(app);
+        emit_runtime_events(event_port, &projection_port, event_name, events);
     }
 
     let failure_category = profile_failure_category(message);
+    let projection_port = TauriRuntimeProjectionEventPort::new(app);
     for event in build_runtime_task_failed_profile_events(
         profile_stream,
         task_profile_refs,
@@ -169,22 +210,24 @@ pub(super) fn fail_runtime_turn_before_model_execution(
         message,
         false,
     ) {
-        emit_agent_runtime_profile_event(app, event_name, event);
+        emit_agent_runtime_profile_event_with_port(&projection_port, event_name, event);
     }
-    emit_agent_runtime_profile_event(
-        app,
+    emit_agent_runtime_profile_event_with_port(
+        &projection_port,
         event_name,
         profile_stream.turn_failed(failure_category, message),
     );
-    emit_agent_runtime_profile_event(app, event_name, profile_stream.snapshot_updated("failed"));
+    emit_agent_runtime_profile_event_with_port(
+        &projection_port,
+        event_name,
+        profile_stream.snapshot_updated("failed"),
+    );
 
     let error_event = RuntimeAgentEvent::Error {
         message: message.to_string(),
     };
-    if let Err(error) = app.emit(event_name, &error_event) {
-        tracing::error!("[AsterAgent] 发送运行时执行前阻断错误事件失败: {}", error);
-    }
-    emit_agent_app_runtime_event_projection(app, event_name, &error_event);
+    event_port.emit_runtime_queue_event(event_name, &error_event);
+    emit_agent_app_runtime_event_projection_with_port(&projection_port, event_name, &error_event);
 }
 
 pub(super) fn emit_runtime_request_resolution_events(
@@ -194,8 +237,9 @@ pub(super) fn emit_runtime_request_resolution_events(
     workspace_root: &str,
     request_metadata: Option<&serde_json::Value>,
 ) {
+    let host = RuntimeSideEventHostContext::new(app, event_name, timeline_recorder, workspace_root);
     for event in collect_runtime_request_resolution_side_events(request_metadata) {
-        emit_runtime_side_event(app, event_name, timeline_recorder, workspace_root, event);
+        host.emit_side_event(event);
     }
 }
 

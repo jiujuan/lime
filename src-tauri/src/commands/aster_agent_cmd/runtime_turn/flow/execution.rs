@@ -47,11 +47,10 @@ impl RuntimeTurnExecutionContext {
     #[allow(clippy::too_many_arguments)]
     async fn execute_and_finalize(
         &self,
+        event_port: Arc<dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort>,
         tracker: &ExecutionTracker,
         agent: &Agent,
-        app: &AppHandle,
-        state: &AsterAgentState,
-        db: &DbConnection,
+        host: RuntimeTurnHostContext<'_>,
         request: &AsterChatRequest,
         runtime_memory_config: &lime_core::config::MemoryConfig,
         session_id: &str,
@@ -73,6 +72,8 @@ impl RuntimeTurnExecutionContext {
         let task_profile_refs = self.task_profile_refs.clone();
         let runtime_status_session_config = self.runtime_status_session_config.clone();
         let stream_session_config_state = self.stream_session_config_state.clone();
+        let event_port_for_stream = event_port.clone();
+        let host_for_stream = host;
 
         let final_result = tracker
             .with_run_custom(
@@ -82,10 +83,9 @@ impl RuntimeTurnExecutionContext {
                 Some(serde_json::Value::Object(run_start_metadata)),
                 async move {
                     execute_runtime_stream_with_strategy(
+                        event_port_for_stream,
                         agent,
-                        app,
-                        state,
-                        db,
+                        host_for_stream,
                         request,
                         &timeline_recorder,
                         &run_observation,
@@ -110,11 +110,13 @@ impl RuntimeTurnExecutionContext {
             )
             .await;
 
+        let terminal_timeline_port =
+            RecorderRuntimeTurnTerminalTimelinePort::new(Arc::clone(&self.timeline_recorder));
         finalize_runtime_turn_result(
+            event_port,
+            &terminal_timeline_port,
             agent,
-            app,
-            state,
-            db,
+            host,
             &request.event_name,
             &self.timeline_recorder,
             workspace_root,
@@ -151,9 +153,13 @@ impl RuntimeTurnPreparedExecution {
         self.runtime_turn_artifacts.turn_state.turn_id.as_str()
     }
 
-    pub(super) fn emit_profile_turn_submitted(&self, app: &AppHandle, event_name: &str) {
-        emit_agent_runtime_profile_event(
-            app,
+    pub(super) fn emit_profile_turn_submitted(
+        &self,
+        projection_port: &dyn RuntimeProjectionEventPort,
+        event_name: &str,
+    ) {
+        emit_agent_runtime_profile_event_with_port(
+            projection_port,
             event_name,
             self.runtime_turn_execution_context
                 .profile_stream
@@ -161,34 +167,47 @@ impl RuntimeTurnPreparedExecution {
         );
     }
 
-    pub(super) fn emit_profile_task_started(&self, app: &AppHandle, event_name: &str) {
+    pub(super) fn emit_profile_task_started(
+        &self,
+        projection_port: &dyn RuntimeProjectionEventPort,
+        event_name: &str,
+    ) {
         for event in build_runtime_task_start_profile_events(
             &self.runtime_turn_execution_context.profile_stream,
             &self.runtime_turn_execution_context.task_profile_refs,
         ) {
-            emit_agent_runtime_profile_event(app, event_name, event);
+            emit_agent_runtime_profile_event_with_port(projection_port, event_name, event);
         }
     }
 
     pub(super) fn fail_before_model_execution(
         &self,
+        event_port: &dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort,
         app: &AppHandle,
         event_name: &str,
         error: &str,
     ) {
+        let terminal_timeline_port = RecorderRuntimeTurnTerminalTimelinePort::new(Arc::clone(
+            &self.runtime_turn_execution_context.timeline_recorder,
+        ));
         fail_runtime_turn_before_model_execution(
+            event_port,
+            &terminal_timeline_port,
             app,
             event_name,
-            &self.runtime_turn_execution_context.timeline_recorder,
             &self.runtime_turn_execution_context.profile_stream,
             &self.runtime_turn_execution_context.task_profile_refs,
             error,
         );
     }
 
-    fn emit_profile_turn_started(&self, app: &AppHandle, event_name: &str) {
-        emit_agent_runtime_profile_event(
-            app,
+    fn emit_profile_turn_started(
+        &self,
+        projection_port: &dyn RuntimeProjectionEventPort,
+        event_name: &str,
+    ) {
+        emit_agent_runtime_profile_event_with_port(
+            projection_port,
             event_name,
             self.runtime_turn_execution_context
                 .profile_stream
@@ -199,7 +218,7 @@ impl RuntimeTurnPreparedExecution {
     async fn emit_prelude(
         &self,
         agent: &Agent,
-        app: &AppHandle,
+        host: RuntimeTurnHostContext<'_>,
         request: &AsterChatRequest,
         workspace_root: &str,
         effective_strategy: AsterExecutionStrategy,
@@ -207,10 +226,11 @@ impl RuntimeTurnPreparedExecution {
         model_name: Option<&str>,
         session_recent_preferences: Option<&lime_agent::SessionExecutionRuntimePreferences>,
     ) -> Result<(), String> {
-        self.emit_profile_turn_started(app, &request.event_name);
+        let projection_port = TauriRuntimeProjectionEventPort::new(host.app);
+        self.emit_profile_turn_started(&projection_port, &request.event_name);
         prepare_runtime_turn_prelude(
             agent,
-            app,
+            host,
             request,
             &self.runtime_turn_execution_context.timeline_recorder,
             workspace_root,
@@ -248,6 +268,7 @@ impl RuntimeTurnPreparedExecution {
 
     async fn fail_after_status_completion(
         &self,
+        event_port: &dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort,
         agent: &Agent,
         app: &AppHandle,
         request: &AsterChatRequest,
@@ -261,18 +282,17 @@ impl RuntimeTurnPreparedExecution {
             workspace_root,
         )
         .await;
-        self.fail_before_model_execution(app, &request.event_name, error);
+        self.fail_before_model_execution(event_port, app, &request.event_name, error);
         Err(error.to_string())
     }
 
     #[allow(clippy::too_many_arguments)]
     pub(super) async fn emit_prelude_and_execute(
         &self,
+        event_port: Arc<dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort>,
         agent: &Agent,
         tracker: &ExecutionTracker,
-        app: &AppHandle,
-        state: &AsterAgentState,
-        db: &DbConnection,
+        host: RuntimeTurnHostContext<'_>,
         request: &AsterChatRequest,
         runtime_memory_config: &lime_core::config::MemoryConfig,
         session_id: &str,
@@ -289,7 +309,7 @@ impl RuntimeTurnPreparedExecution {
     ) -> Result<(), String> {
         self.emit_prelude(
             agent,
-            app,
+            host,
             request,
             workspace_root,
             effective_strategy,
@@ -304,18 +324,29 @@ impl RuntimeTurnPreparedExecution {
         >(request_metadata, "permission_state")
         {
             if permission_state_requires_turn_gating(&permission_state) {
-                maybe_emit_runtime_permission_confirmation_request(
-                    app,
-                    request,
+                let side_event_host = RuntimeSideEventHostContext::new(
+                    host.app,
+                    &request.event_name,
+                    &self.runtime_turn_execution_context.timeline_recorder,
                     workspace_root,
+                );
+                maybe_emit_runtime_permission_confirmation_request(
+                    side_event_host,
+                    request,
                     self.thread_id(),
                     self.turn_id(),
-                    &self.runtime_turn_execution_context.timeline_recorder,
                     &permission_state,
                 );
                 let error = format_permission_turn_gating_error(&permission_state);
                 return self
-                    .fail_after_status_completion(agent, app, request, workspace_root, &error)
+                    .fail_after_status_completion(
+                        event_port.as_ref(),
+                        agent,
+                        host.app,
+                        request,
+                        workspace_root,
+                        &error,
+                    )
                     .await;
             }
         }
@@ -330,13 +361,17 @@ impl RuntimeTurnPreparedExecution {
                 let task_profile = extract_runtime_resolution_payload::<
                     lime_agent::SessionExecutionRuntimeTaskProfile,
                 >(request_metadata, "task_profile");
-                maybe_emit_runtime_user_lock_capability_request(
-                    app,
-                    request,
+                let side_event_host = RuntimeSideEventHostContext::new(
+                    host.app,
+                    &request.event_name,
+                    &self.runtime_turn_execution_context.timeline_recorder,
                     workspace_root,
+                );
+                maybe_emit_runtime_user_lock_capability_request(
+                    side_event_host,
+                    request,
                     self.thread_id(),
                     self.turn_id(),
-                    &self.runtime_turn_execution_context.timeline_recorder,
                     &limit_state,
                     routing_decision.as_ref(),
                     task_profile.as_ref(),
@@ -347,17 +382,29 @@ impl RuntimeTurnPreparedExecution {
                     task_profile.as_ref(),
                 );
                 return self
-                    .fail_after_status_completion(agent, app, request, workspace_root, &error)
+                    .fail_after_status_completion(
+                        event_port.as_ref(),
+                        agent,
+                        host.app,
+                        request,
+                        workspace_root,
+                        &error,
+                    )
                     .await;
             }
         }
 
-        if let Err(error) = execute_agent_app_required_skill_contract(
-            app,
-            agent,
-            request,
+        let skill_launch_host = RuntimeSkillLaunchHostContext::new(
+            host.app,
+            &request.event_name,
             &self.runtime_turn_execution_context.timeline_recorder,
             workspace_root,
+        );
+
+        if let Err(error) = execute_agent_app_required_skill_contract(
+            skill_launch_host.clone(),
+            agent,
+            request,
             session_id,
             self.thread_id(),
             self.turn_id(),
@@ -366,26 +413,34 @@ impl RuntimeTurnPreparedExecution {
         .await
         {
             return self
-                .fail_after_status_completion(agent, app, request, workspace_root, &error)
+                .fail_after_status_completion(
+                    event_port.as_ref(),
+                    agent,
+                    host.app,
+                    request,
+                    workspace_root,
+                    &error,
+                )
                 .await;
         }
 
         match execute_image_skill_launch_direct_task(
-            app,
+            skill_launch_host,
             request,
-            &self.runtime_turn_execution_context.timeline_recorder,
-            workspace_root,
             session_id,
             self.thread_id(),
             self.turn_id(),
             request_metadata,
         ) {
             Ok(true) => {
+                let terminal_timeline_port = RecorderRuntimeTurnTerminalTimelinePort::new(
+                    Arc::clone(&self.runtime_turn_execution_context.timeline_recorder),
+                );
                 return finalize_runtime_turn_result(
+                    event_port.clone(),
+                    &terminal_timeline_port,
                     agent,
-                    app,
-                    state,
-                    db,
+                    host,
                     &request.event_name,
                     &self.runtime_turn_execution_context.timeline_recorder,
                     workspace_root,
@@ -402,11 +457,14 @@ impl RuntimeTurnPreparedExecution {
             }
             Ok(false) => {}
             Err(error) => {
+                let terminal_timeline_port = RecorderRuntimeTurnTerminalTimelinePort::new(
+                    Arc::clone(&self.runtime_turn_execution_context.timeline_recorder),
+                );
                 return finalize_runtime_turn_result(
+                    event_port.clone(),
+                    &terminal_timeline_port,
                     agent,
-                    app,
-                    state,
-                    db,
+                    host,
                     &request.event_name,
                     &self.runtime_turn_execution_context.timeline_recorder,
                     workspace_root,
@@ -425,11 +483,10 @@ impl RuntimeTurnPreparedExecution {
 
         self.runtime_turn_execution_context
             .execute_and_finalize(
+                event_port,
                 tracker,
                 agent,
-                app,
-                state,
-                db,
+                host,
                 request,
                 runtime_memory_config,
                 session_id,

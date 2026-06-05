@@ -119,6 +119,8 @@ export const agentRuntimeMocks: Record<string, (args?: any) => any> = {
     initialized: true,
     provider_configured: true,
   }),
+  app_server_handle_json_lines: () => ({ lines: [] }),
+  app_server_drain_events: () => ({ lines: [] }),
   agent_runtime_submit_turn: () => ({}),
   agent_runtime_interrupt_turn: () => true,
   agent_runtime_create_session: () => "mock-aster-session",

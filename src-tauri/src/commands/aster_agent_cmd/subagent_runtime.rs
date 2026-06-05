@@ -1,3 +1,7 @@
+use super::app_server_host::{
+    build_tauri_aster_app_server, ensure_desktop_aster_chat_request_ids,
+    submit_desktop_aster_chat_request, DesktopAsterChatSubmitInput,
+};
 use super::*;
 use chrono::Utc;
 use lime_agent::restore_aster_runtime_queued_turns;
@@ -1166,6 +1170,27 @@ async fn maybe_handle_shutdown_response_for_lead(
     .map(Some)
 }
 
+async fn submit_subagent_app_server_turn(
+    runtime_command_context: &RuntimeCommandContext,
+    request: AsterChatRequest,
+    queue_if_busy: bool,
+    skip_pre_submit_resume: bool,
+) -> Result<String, String> {
+    let app_server = build_tauri_aster_app_server(runtime_command_context.clone());
+    submit_desktop_aster_chat_request(
+        &app_server,
+        DesktopAsterChatSubmitInput {
+            client_name: "subagent-runtime",
+            client_title: "Subagent Runtime",
+            app_id: "desktop",
+            request,
+            queue_if_busy,
+            skip_pre_submit_resume,
+        },
+    )
+    .await
+}
+
 async fn submit_runtime_message_to_managed_session(
     runtime: &SubagentControlRuntime,
     runtime_command_context: &RuntimeCommandContext,
@@ -1184,7 +1209,7 @@ async fn submit_runtime_message_to_managed_session(
 
     let workspace_id =
         resolve_workspace_id_for_working_dir(&runtime.db, session.working_dir.as_path())?;
-    let queued_task = build_queued_turn_task(AsterChatRequest {
+    let request = AsterChatRequest {
         message,
         session_id: session_id.clone(),
         event_name: build_target_runtime_event_name(session),
@@ -1213,11 +1238,9 @@ async fn submit_runtime_message_to_managed_session(
         turn_id: None,
         queue_if_busy: Some(true),
         queued_turn_id: None,
-    })?;
-    let submission_id = queued_task.queued_turn_id.clone();
-    runtime_command_context
-        .submit_runtime_turn(queued_task, true, false)
-        .await?;
+    };
+    let submission_id =
+        submit_subagent_app_server_turn(runtime_command_context, request, true, false).await?;
 
     Ok(AgentRuntimeSendSubagentInputResponse { submission_id })
 }
@@ -2037,15 +2060,13 @@ fn validate_effective_spawn_isolation(
 
 fn spawn_subagent_turn_in_background(
     runtime: SubagentControlRuntime,
-    request: AsterChatRequest,
+    mut request: AsterChatRequest,
 ) -> Result<String, String> {
-    let queued_task = build_queued_turn_task(request)?;
-    let submission_id = queued_task.queued_turn_id.clone();
+    let submission_id = ensure_desktop_aster_chat_request_ids(&mut request, false)?;
     let runtime_command_context = runtime.runtime_command_context();
     tokio::spawn(async move {
-        if let Err(error) = runtime_command_context
-            .submit_runtime_turn(queued_task, false, false)
-            .await
+        if let Err(error) =
+            submit_subagent_app_server_turn(&runtime_command_context, request, false, false).await
         {
             tracing::warn!("[AsterAgent][Subagent] 后台启动子代理失败: {}", error);
         }
@@ -2207,7 +2228,7 @@ pub(crate) async fn agent_runtime_send_subagent_input_internal(
 
     let workspace_id =
         resolve_workspace_id_for_working_dir(&runtime.db, session.working_dir.as_path())?;
-    let queued_task = build_queued_turn_task(AsterChatRequest {
+    let request = AsterChatRequest {
         message,
         session_id: session_id.clone(),
         event_name: build_target_runtime_event_name(&session),
@@ -2247,11 +2268,9 @@ pub(crate) async fn agent_runtime_send_subagent_input_internal(
         turn_id: None,
         queue_if_busy: Some(true),
         queued_turn_id: None,
-    })?;
-    let submission_id = queued_task.queued_turn_id.clone();
-    runtime_command_context
-        .submit_runtime_turn(queued_task, true, false)
-        .await?;
+    };
+    let submission_id =
+        submit_subagent_app_server_turn(&runtime_command_context, request, true, false).await?;
     emit_subagent_status_changed_events(&runtime.app_handle, &session_id).await;
 
     Ok(AgentRuntimeSendSubagentInputResponse { submission_id })

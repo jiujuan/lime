@@ -69,6 +69,37 @@ pub(crate) fn maybe_persist_artifact_document_after_stream(
     request_metadata: Option<&serde_json::Value>,
     final_text_output: &str,
 ) {
+    let host = RuntimeArtifactMaterializationHostContext::new(
+        app,
+        event_name,
+        timeline_recorder,
+        workspace_root,
+    );
+    maybe_persist_artifact_document_after_stream_with_host(
+        host,
+        db,
+        run_observation,
+        workspace_id,
+        thread_id,
+        turn_id,
+        execution_profile,
+        request_metadata,
+        final_text_output,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn maybe_persist_artifact_document_after_stream_with_host(
+    host: RuntimeArtifactMaterializationHostContext<'_>,
+    db: &DbConnection,
+    run_observation: &Arc<Mutex<ChatRunObservation>>,
+    workspace_id: &str,
+    thread_id: &str,
+    turn_id: &str,
+    execution_profile: TurnExecutionProfile,
+    request_metadata: Option<&serde_json::Value>,
+    final_text_output: &str,
+) {
     if should_skip_default_fast_chat_artifact_autopersist(execution_profile, request_metadata) {
         return;
     }
@@ -83,7 +114,7 @@ pub(crate) fn maybe_persist_artifact_document_after_stream(
 
     let persist_params =
         crate::services::artifact_document_service::ArtifactDocumentPersistParams {
-            workspace_root: PathBuf::from(workspace_root),
+            workspace_root: PathBuf::from(host.workspace_root()),
             workspace_id: Some(workspace_id.to_string()),
             thread_id: thread_id.to_string(),
             turn_id: turn_id.to_string(),
@@ -103,26 +134,20 @@ pub(crate) fn maybe_persist_artifact_document_after_stream(
                 observation.record_artifact_path(persisted.relative_path.clone(), request_metadata);
             }
 
-            emit_runtime_side_event(
-                app,
-                event_name,
-                timeline_recorder,
-                workspace_root,
-                RuntimeAgentEvent::ArtifactSnapshot {
-                    artifact: lime_agent::AgentArtifactSignal {
-                        artifact_id: persisted.artifact_id.clone(),
-                        file_path: persisted.relative_path.clone(),
-                        content: Some(persisted.serialized_document.clone()),
-                        metadata: Some(
-                            persisted
-                                .snapshot_metadata
-                                .iter()
-                                .map(|(key, value)| (key.clone(), value.clone()))
-                                .collect(),
-                        ),
-                    },
+            host.emit_side_event(RuntimeAgentEvent::ArtifactSnapshot {
+                artifact: lime_agent::AgentArtifactSignal {
+                    artifact_id: persisted.artifact_id.clone(),
+                    file_path: persisted.relative_path.clone(),
+                    content: Some(persisted.serialized_document.clone()),
+                    metadata: Some(
+                        persisted
+                            .snapshot_metadata
+                            .iter()
+                            .map(|(key, value)| (key.clone(), value.clone()))
+                            .collect(),
+                    ),
                 },
-            );
+            });
 
             if let Err(error) =
                 crate::services::artifact_document_service::sync_persisted_artifact_document_to_content(
@@ -154,29 +179,17 @@ pub(crate) fn maybe_persist_artifact_document_after_stream(
                     persisted.fallback_used,
                     &persisted.issues,
                 );
-                emit_runtime_side_event(
-                    app,
-                    event_name,
-                    timeline_recorder,
-                    workspace_root,
-                    RuntimeAgentEvent::Warning {
-                        code: Some(code.to_string()),
-                        message: format!("{prefix}: {detail}"),
-                    },
-                );
+                host.emit_side_event(RuntimeAgentEvent::Warning {
+                    code: Some(code.to_string()),
+                    message: format!("{prefix}: {detail}"),
+                });
             }
         }
         Err(error) => {
-            emit_runtime_side_event(
-                app,
-                event_name,
-                timeline_recorder,
-                workspace_root,
-                RuntimeAgentEvent::Warning {
-                    code: Some(ARTIFACT_DOCUMENT_PERSIST_FAILED_WARNING_CODE.to_string()),
-                    message: format!("ArtifactDocument 自动落盘失败，已保留消息区结果：{error}"),
-                },
-            );
+            host.emit_side_event(RuntimeAgentEvent::Warning {
+                code: Some(ARTIFACT_DOCUMENT_PERSIST_FAILED_WARNING_CODE.to_string()),
+                message: format!("ArtifactDocument 自动落盘失败，已保留消息区结果：{error}"),
+            });
         }
     }
 }

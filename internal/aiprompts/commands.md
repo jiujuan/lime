@@ -21,6 +21,10 @@
 
 `组件 / Hook -> src/lib/api/* 网关 -> safeInvoke -> Rust command`
 
+新增命令和对应前端网关命名必须使用领域名，不要加 `Lime` / `lime_` / `lime-` 品牌前缀。例如 App Server 入口使用 `app_server_*`，不要写成带品牌前缀的命名。只有历史兼容、对外品牌标识或外部生态已固定的名字才允许例外，并在路线图或执行计划写明原因和退出条件。
+
+新增 AI Agent / runtime / host integration / 跨 App 复用能力默认走 App Server JSON-RPC current 主链。只有为 Lime Desktop 现有 GUI 做兼容适配时，才继续触碰 `agent_runtime_*` / Aster Tauri command；这类改动不能承接新业务逻辑，必须写清退出条件。
+
 这样做的目的不是“多包一层”，而是为了保证：
 
 - 前端只有一个可治理的调用出口
@@ -160,7 +164,7 @@ Agent App current 安装 / package / runtime 主链不得在页面或 feature is
 
 `agent_app_start_ui_runtime` 启动 App UI 子进程时只能注入 Lime 本机 Gateway 的短期 Agent App scoped token；不得把上游 Provider API Key 或全局 `server.api_key` 原样下发给 App。当前 token scope 固定为 `model-generation`，只允许 App 侧通过 `LIME_GATEWAY_BASE / LIME_ACCESS_TOKEN` 调 Lime Gateway 标准 `/v1/chat/completions` 或 `/v1/messages` 生成端点；图片、count tokens、Gemini 原生和其他控制面端点仍只接受全局 Gateway key。
 
-`agent_app_runtime_*` 是 Agent App 进入 AgentRuntime 主链的 current facade：它只把 App-scoped task / host response 适配到 `agent_runtime_submit_turn`、`agent_runtime_interrupt_turn`、`agent_runtime_get_thread_read` 和 `agent_runtime_respond_action`，不得复制 Claw `*_skill_launch.rs`、不得新增垂直 `content_factory_*` Agent 命令，也不得把 `LIME_GATEWAY_*` 直接模型调用宣称为完整 Agent 能力。
+`agent_app_runtime_*` 是 Agent App 进入 App Server / AgentRuntime 主链的 Desktop facade：`agent_app_runtime_start_task` 必须经 App Server JSON-RPC `agentSession/turn/start` 进入 `RuntimeCore -> AsterBackend -> TauriAsterBackendHost`，不能再直接复制 `AsterChatRequest -> build_queued_turn_task` 提交流程。cancel / read / host response 在 App Server protocol 覆盖前可继续作为 Desktop compat 适配到既有 `agent_runtime_*` 读写命令，但不得复制 Claw `*_skill_launch.rs`、不得新增垂直 `content_factory_*` Agent 命令，也不得把 `LIME_GATEWAY_*` 直接模型调用宣称为完整 Agent 能力。
 
 P17.3 之前禁止真实删除 Agent App 本地数据：`agent_app_uninstall_rehearsal` 只生成 keep-data / delete-data 演练，`agent_app_uninstall` 只能返回同一演练摘要和未删除的 installed list，不得执行 `remove_file` / `remove_dir_all` 或移除 installed state。真实 delete-data 必须等后续路线图单独打开并补齐 evidence / residual audit / confirmation gate。
 
@@ -621,7 +625,7 @@ npm run verify:local
 
 以下是仓库当前已经明确收敛的几个方向：
 
-- **Agent / Codex 主命令**：继续收敛到 `agent_runtime_*`
+- **新增 Agent / Codex 服务化能力主链**：继续收敛到 App Server JSON-RPC；`agent_runtime_*` 只作为 Lime Desktop 现有 GUI 的兼容适配入口，其中 `agent_runtime_submit_turn` 内部必须走 App Server JSON-RPC `agentSession/turn/start`，旧 queue 提交只允许留在 `TauriAsterBackendHost` adapter 内
 - **子代理运行时主链**：继续收敛到 `agent_runtime_spawn_subagent`；当前 request surface 使用 `name / teamName / runInBackground / mode / isolation / cwd` 等字段，其中 `teamName` 需要与 `name` 搭配并依附现有 Team 上下文，`cwd` 必须是绝对目录，并稳定投影到 child session 的 `working_dir` 与 Team 成员展示；当前 runtime 仍会明确拒绝非空 `mode / isolation`
 - **Team runtime 工具主链**：当前协作工具面继续收敛到 `Agent / TeamCreate / TeamDelete / SendMessage / ListPeers`；不要把已删除的 `SubAgentTask` compat 工具重新接回新的多代理主路径
 - **用户可见消息工具主链**：继续收敛到 `SendUserMessage`，用于把回复、进度同步、主动提醒和附件送到用户主可见消息面；不要再把这类能力拆到其它平行工具名或旁路协议里

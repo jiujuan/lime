@@ -43,11 +43,9 @@ pub(crate) use self::prompt::{
     request_metadata_has_fast_response_routing, should_override_system_prompt_for_fast_response,
 };
 
-#[allow(clippy::too_many_arguments)]
 async fn execute_runtime_turn_submit(
-    app: &AppHandle,
-    state: &AsterAgentState,
-    db: &DbConnection,
+    event_port: Arc<dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort>,
+    host: RuntimeTurnHostContext<'_>,
     request: &AsterChatRequest,
     session_id: &str,
     workspace_id: &str,
@@ -83,7 +81,7 @@ async fn execute_runtime_turn_submit(
 
     sync_browser_assist_runtime_hint(session_id, submit_bootstrap.request_metadata.as_ref()).await;
 
-    let agent_arc = state.get_agent_arc();
+    let agent_arc = host.state.get_agent_arc();
     let provider_model_name = request
         .provider_config
         .as_ref()
@@ -91,7 +89,7 @@ async fn execute_runtime_turn_submit(
     let auto_continue_metadata = auto_continue_config.clone();
     let runtime_turn_prepared_execution = prepare_runtime_turn_execution(
         &agent_arc,
-        db,
+        host.db,
         request,
         session_id,
         workspace_id,
@@ -120,18 +118,25 @@ async fn execute_runtime_turn_submit(
         runtime_turn_prepared_execution.turn_id(),
         started_at.elapsed().as_millis()
     );
-    runtime_turn_prepared_execution.emit_profile_turn_submitted(app, &request.event_name);
-    runtime_turn_prepared_execution.emit_profile_task_started(app, &request.event_name);
+    let projection_port = TauriRuntimeProjectionEventPort::new(host.app);
+    runtime_turn_prepared_execution
+        .emit_profile_turn_submitted(&projection_port, &request.event_name);
+    runtime_turn_prepared_execution
+        .emit_profile_task_started(&projection_port, &request.event_name);
 
     let guard = agent_arc.read().await;
     let Some(agent) = guard.as_ref() else {
         let error = "Agent not initialized".to_string();
-        fail_runtime_turn_before_model_execution(
-            app,
-            &request.event_name,
+        let terminal_timeline_port = RecorderRuntimeTurnTerminalTimelinePort::new(Arc::clone(
             &runtime_turn_prepared_execution
                 .runtime_turn_execution_context
                 .timeline_recorder,
+        ));
+        fail_runtime_turn_before_model_execution(
+            event_port.as_ref(),
+            &terminal_timeline_port,
+            host.app,
+            &request.event_name,
             &runtime_turn_prepared_execution
                 .runtime_turn_execution_context
                 .profile_stream,
@@ -156,11 +161,10 @@ async fn execute_runtime_turn_submit(
     );
     runtime_turn_prepared_execution
         .emit_prelude_and_execute(
+            event_port,
             agent,
             &submit_bootstrap.tracker,
-            app,
-            state,
-            db,
+            host,
             request,
             &submit_bootstrap.runtime_memory_config,
             session_id,
@@ -178,11 +182,9 @@ async fn execute_runtime_turn_submit(
         .await
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn execute_runtime_turn_with_session_scope(
-    app: &AppHandle,
-    state: &AsterAgentState,
-    db: &DbConnection,
+    event_port: Arc<dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort>,
+    host: RuntimeTurnHostContext<'_>,
     request: &AsterChatRequest,
     session_id: &str,
     workspace_id: &str,
@@ -196,16 +198,15 @@ async fn execute_runtime_turn_with_session_scope(
     let model_skill_tool_allowed_skill_sources =
         submit_preparation.model_skill_tool_allowed_skill_sources();
     with_runtime_turn_session_scope(
-        state,
+        host.state,
         session_id,
         model_skill_tool_enabled,
         model_skill_tool_allowed_skill_names,
         model_skill_tool_allowed_skill_sources,
         move |cancel_token| async move {
             execute_runtime_turn_submit(
-                app,
-                state,
-                db,
+                event_port,
+                host,
                 request,
                 session_id,
                 workspace_id,
@@ -220,19 +221,19 @@ async fn execute_runtime_turn_with_session_scope(
     .await
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(super) async fn execute_runtime_turn_pipeline(
-    app: &AppHandle,
-    state: &AsterAgentState,
-    db: &DbConnection,
-    api_key_provider_service: &ApiKeyProviderServiceState,
-    logs: &LogState,
-    config_manager: &GlobalConfigManagerState,
-    mcp_manager: &McpManagerState,
-    automation_state: &AutomationServiceState,
+    event_port: Arc<dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort>,
+    host: RuntimeTurnHostContext<'_>,
     mut request: AsterChatRequest,
 ) -> Result<(), String> {
-    prepare_runtime_turn_entry(app, state, db, api_key_provider_service, mcp_manager).await?;
+    prepare_runtime_turn_entry(
+        host.app,
+        host.state,
+        host.db,
+        host.api_key_provider_service,
+        host.mcp_manager,
+    )
+    .await?;
     let RuntimeTurnIngressContext {
         owned_session_id,
         workspace_id,
@@ -244,11 +245,11 @@ pub(super) async fn execute_runtime_turn_pipeline(
         workspace_repaired,
         workspace_warning,
     } = prepare_runtime_turn_ingress_context(
-        app,
-        db,
-        api_key_provider_service,
-        logs,
-        config_manager,
+        host.app,
+        host.db,
+        host.api_key_provider_service,
+        host.logs,
+        host.config_manager,
         &mut request,
     )
     .await?;
@@ -257,22 +258,16 @@ pub(super) async fn execute_runtime_turn_pipeline(
         &request.message,
         owned_session_id.as_str(),
         workspace_root.as_str(),
-        db,
-        state,
-        mcp_manager,
+        host.db,
+        host.state,
+        host.mcp_manager,
     )
     .await?;
 
     let session_id = owned_session_id.as_str();
     let submit_preparation = prepare_runtime_turn_submit_preparation(
-        app,
-        state,
-        db,
-        api_key_provider_service,
-        logs,
-        config_manager,
-        mcp_manager,
-        automation_state,
+        event_port.as_ref(),
+        host,
         &mut request,
         session_id,
         workspace_id.as_str(),
@@ -287,9 +282,8 @@ pub(super) async fn execute_runtime_turn_pipeline(
     .await?;
 
     execute_runtime_turn_with_session_scope(
-        app,
-        state,
-        db,
+        event_port,
+        host,
         &request,
         session_id,
         workspace_id.as_str(),

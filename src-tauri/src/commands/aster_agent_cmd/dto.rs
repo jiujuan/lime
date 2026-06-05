@@ -3298,7 +3298,7 @@ pub struct AgentRuntimeActionScope {
     pub turn_id: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct AgentRuntimeRespondActionRequest {
     #[serde(alias = "sessionId")]
     pub session_id: String,

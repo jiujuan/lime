@@ -90,20 +90,15 @@ pub(crate) fn timeline_recorder_emits_equivalent_runtime_event(event: &RuntimeAg
 }
 
 fn emit_direct_runtime_stream_event(
-    app: &AppHandle,
+    event_port: &dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort,
+    projection_port: &dyn RuntimeProjectionEventPort,
     event_name: &str,
     stream_timing: &RuntimeStreamTiming,
     event: &RuntimeAgentEvent,
 ) {
     stream_timing.mark_direct_emit(event_name, event);
-    if let Err(error) = app.emit(event_name, event) {
-        tracing::warn!(
-            "[AsterAgent] 发送实时运行时事件失败: event_name={}, error={}",
-            event_name,
-            error
-        );
-    }
-    emit_agent_app_runtime_event_projection(app, event_name, event);
+    event_port.emit_runtime_queue_event(event_name, event);
+    emit_agent_app_runtime_event_projection_with_port(projection_port, event_name, event);
 }
 
 #[derive(Default)]
@@ -276,7 +271,7 @@ pub(crate) fn project_runtime_tool_profile_events(
 }
 
 fn emit_runtime_tool_profile_events(
-    app: &AppHandle,
+    projection_port: &dyn RuntimeProjectionEventPort,
     event_name: &str,
     profile_stream: &AgentRuntimeProfileStream,
     tool_profile_state: &Arc<Mutex<RuntimeToolProfileState>>,
@@ -296,54 +291,103 @@ fn emit_runtime_tool_profile_events(
     };
 
     for event in profile_events {
-        emit_agent_runtime_profile_event(app, event_name, event);
+        emit_agent_runtime_profile_event_with_port(projection_port, event_name, event);
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+pub(super) trait RuntimeStreamTimelineEventPort: Send + Sync {
+    fn record_runtime_event(&self, event: &RuntimeAgentEvent) -> Result<(), String>;
+}
+
+pub(super) struct TauriRuntimeStreamTimelineEventPort {
+    app: AppHandle,
+    event_name: String,
+    timeline_recorder: Arc<Mutex<AgentTimelineRecorder>>,
+    workspace_root: String,
+}
+
+impl TauriRuntimeStreamTimelineEventPort {
+    pub(super) fn new(
+        app: AppHandle,
+        event_name: impl Into<String>,
+        timeline_recorder: Arc<Mutex<AgentTimelineRecorder>>,
+        workspace_root: impl Into<String>,
+    ) -> Self {
+        Self {
+            app,
+            event_name: event_name.into(),
+            timeline_recorder,
+            workspace_root: workspace_root.into(),
+        }
+    }
+}
+
+impl RuntimeStreamTimelineEventPort for TauriRuntimeStreamTimelineEventPort {
+    fn record_runtime_event(&self, event: &RuntimeAgentEvent) -> Result<(), String> {
+        let mut recorder = match self.timeline_recorder.lock() {
+            Ok(guard) => guard,
+            Err(error) => error.into_inner(),
+        };
+        recorder.record_runtime_event(&self.app, &self.event_name, event, &self.workspace_root)
+    }
+}
+
+pub(super) struct RuntimeStreamEventContext<'a> {
+    pub(super) event_port: &'a dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort,
+    pub(super) projection_port: &'a dyn RuntimeProjectionEventPort,
+    pub(super) timeline_port: &'a dyn RuntimeStreamTimelineEventPort,
+    pub(super) run_observation: &'a Arc<Mutex<ChatRunObservation>>,
+    pub(super) event_name: &'a str,
+    pub(super) workspace_root: &'a str,
+    pub(super) request_metadata: Option<&'a serde_json::Value>,
+    pub(super) provider_continuation_capability: ProviderContinuationCapability,
+    pub(super) stream_timing: &'a RuntimeStreamTiming,
+    pub(super) profile_stream: &'a AgentRuntimeProfileStream,
+    pub(super) tool_profile_state: &'a Arc<Mutex<RuntimeToolProfileState>>,
+}
+
 pub(super) fn record_runtime_stream_event(
-    run_observation: &Arc<Mutex<ChatRunObservation>>,
-    app: &AppHandle,
-    event_name: &str,
-    timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
-    workspace_root: &str,
-    request_metadata: Option<&serde_json::Value>,
-    provider_continuation_capability: ProviderContinuationCapability,
-    stream_timing: &RuntimeStreamTiming,
-    profile_stream: &AgentRuntimeProfileStream,
-    tool_profile_state: &Arc<Mutex<RuntimeToolProfileState>>,
+    context: RuntimeStreamEventContext<'_>,
     event: &RuntimeAgentEvent,
 ) -> bool {
     let emitted_directly = should_emit_runtime_stream_event_directly(event);
     if emitted_directly {
-        emit_direct_runtime_stream_event(app, event_name, stream_timing, event);
+        emit_direct_runtime_stream_event(
+            context.event_port,
+            context.projection_port,
+            context.event_name,
+            context.stream_timing,
+            event,
+        );
     }
 
-    let mut observation = match run_observation.lock() {
+    let mut observation = match context.run_observation.lock() {
         Ok(guard) => guard,
         Err(error) => {
             tracing::warn!("[AsterAgent] run observation lock poisoned，继续复用内部状态");
             error.into_inner()
         }
     };
-    observation.record_model_delta_timing(event, stream_timing.elapsed_ms());
+    observation.record_model_delta_timing(event, context.stream_timing.elapsed_ms());
     observation.record_event(
         event,
-        workspace_root,
-        request_metadata,
-        provider_continuation_capability,
+        context.workspace_root,
+        context.request_metadata,
+        context.provider_continuation_capability,
     );
-    emit_runtime_tool_profile_events(app, event_name, profile_stream, tool_profile_state, event);
+    emit_runtime_tool_profile_events(
+        context.projection_port,
+        context.event_name,
+        context.profile_stream,
+        context.tool_profile_state,
+        event,
+    );
 
     if !should_record_runtime_stream_event_on_timeline(event) {
         return emitted_directly;
     }
 
-    let mut recorder = match timeline_recorder.lock() {
-        Ok(guard) => guard,
-        Err(error) => error.into_inner(),
-    };
-    match recorder.record_runtime_event(app, event_name, event, workspace_root) {
+    match context.timeline_port.record_runtime_event(event) {
         Ok(()) => emitted_directly || timeline_recorder_emits_equivalent_runtime_event(event),
         Err(error) => {
             tracing::warn!("[AsterAgent] 记录时间线事件失败（已降级继续）: {}", error);

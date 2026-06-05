@@ -1,4 +1,7 @@
 use super::*;
+use crate::commands::aster_agent_cmd::app_server_host::{
+    build_tauri_aster_app_server, submit_desktop_aster_chat_request, DesktopAsterChatSubmitInput,
+};
 use crate::database::lock_db;
 use lime_core::database::managed_objective_repository::{
     clear_objective_by_owner, get_agent_session_workspace_id, get_objective_by_owner,
@@ -8,9 +11,11 @@ use lime_core::database::managed_objective_repository::{
 use serde_json::Value;
 
 use super::objective_continuation::{
-    build_objective_continuation_request, ManagedObjectiveContinuationSource,
+    build_objective_continuation_request_with_workspace, ManagedObjectiveContinuationSource,
 };
-use super::objective_support::{load_active_objective, normalize_session_id};
+use super::objective_support::{
+    load_active_objective, normalize_session_id, resolve_objective_workspace_id,
+};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -164,15 +169,24 @@ pub async fn agent_runtime_continue_objective(
     assert_objective_can_continue(&objective)?;
     assert_runtime_can_continue(&runtime, &session_id).await?;
 
-    let request = build_objective_continuation_request(
+    let request = build_objective_continuation_request_with_workspace(
         &objective,
         ManagedObjectiveContinuationSource::ManualGui,
+        resolve_objective_workspace_id(runtime.db(), &objective)?,
     );
-    let queued_task = build_queued_turn_task(request)?;
-    let queued_turn_id = queued_task.queued_turn_id.clone();
-    runtime
-        .submit_runtime_turn(queued_task, false, false)
-        .await?;
+    let app_server = build_tauri_aster_app_server(runtime);
+    let queued_turn_id = submit_desktop_aster_chat_request(
+        &app_server,
+        DesktopAsterChatSubmitInput {
+            client_name: "managed-objective",
+            client_title: "Managed Objective",
+            app_id: "desktop",
+            request,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+    )
+    .await?;
 
     Ok(AgentRuntimeContinueObjectiveResult {
         submitted: true,
@@ -230,6 +244,7 @@ async fn assert_runtime_can_continue(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::aster_agent_cmd::command_api::objective_continuation::build_objective_continuation_request;
 
     fn objective_with_status(status: ManagedObjectiveStatus) -> ManagedObjectiveRecord {
         ManagedObjectiveRecord {

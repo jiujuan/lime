@@ -1,6 +1,8 @@
 [workspace]
 members = ["crates/*"]
 exclude = [
+  "crates/agent-app-server",
+  "crates/agent-app-server-protocol",
   "crates/aster",
   "crates/aster-models",
   "crates/aster-rust",
@@ -9,7 +11,7 @@ exclude = [
 resolver = "2"
 
 [workspace.package]
-version = "1.58.0"
+version = "1.59.0"
 edition = "2021"
 authors = ["coso"]
 repository = "https://github.com/aiclientproxy/lime"
@@ -36,6 +38,12 @@ lime-gateway = { path = "crates/gateway" }
 lime-browser-runtime = { path = "crates/browser-runtime" }
 lime-media-runtime = { path = "crates/media-runtime" }
 lime-knowledge = { path = "crates/knowledge" }
+app-server = { path = "crates/app-server" }
+app-server-client = { path = "crates/app-server-client" }
+app-server-daemon = { path = "crates/app-server-daemon" }
+app-server-protocol = { path = "crates/app-server-protocol" }
+app-server-test-client = { path = "crates/app-server-test-client" }
+app-server-transport = { path = "crates/app-server-transport" }
 voice-core = { path = "crates/voice-core" }
 aster = { package = "aster-core", path = "crates/aster-rust/crates/aster" }
 aster-models = { path = "crates/aster-rust/crates/aster-models" }
@@ -199,7 +207,7 @@ version = "2.4.9"
 
 [package]
 name = "lime"
-version = "1.58.0"
+version = "1.59.0"
 description = "AI API Proxy Desktop App"
 authors = ["you"]
 edition = "2021"
@@ -229,6 +237,7 @@ lime-skills.workspace = true
 lime-mcp.workspace = true
 lime-gateway.workspace = true
 lime-agent.workspace = true
+app-server = { workspace = true, features = ["aster-backend"] }
 lime-scheduler.workspace = true
 lime-memory.workspace = true
 lime-embedding.workspace = true

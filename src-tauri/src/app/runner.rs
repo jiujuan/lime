@@ -1346,6 +1346,8 @@ pub fn run() {
             commands::aster_agent_cmd::command_api::provider_api::aster_agent_status,
             commands::aster_agent_cmd::command_api::provider_api::aster_agent_reset,
             commands::aster_agent_cmd::command_api::provider_api::aster_agent_configure_provider,
+            commands::aster_agent_cmd::app_server_host::app_server_handle_json_lines,
+            commands::aster_agent_cmd::app_server_host::app_server_drain_events,
             commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_submit_turn,
             commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_interrupt_turn,
             commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_compact_session,

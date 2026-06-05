@@ -1,5 +1,7 @@
 use super::agentruntime_profile::AgentRuntimeProfileStream;
-use super::runtime_turn::emit_agent_runtime_profile_event;
+use super::runtime_turn::{
+    emit_agent_runtime_profile_event_with_port, TauriRuntimeProjectionEventPort,
+};
 use super::session_runtime::delete_runtime_session_internal_with_runtime;
 use super::*;
 use lime_agent::{build_diagnostics_runtime_status_metadata, AgentEvent as RuntimeAgentEvent};
@@ -168,8 +170,9 @@ fn maybe_emit_action_resolved_profile_event(
         return;
     };
 
-    emit_agent_runtime_profile_event(
-        app,
+    let projection_port = TauriRuntimeProjectionEventPort::new(app);
+    emit_agent_runtime_profile_event_with_port(
+        &projection_port,
         event_name.as_str(),
         stream.action_resolved(
             request.request_id.as_str(),
@@ -449,27 +452,36 @@ pub async fn agent_runtime_respond_action(
     db: State<'_, DbConnection>,
     request: AgentRuntimeRespondActionRequest,
 ) -> Result<(), String> {
+    respond_runtime_action_internal(&app, state.inner(), db.inner(), request).await
+}
+
+pub(crate) async fn respond_runtime_action_internal(
+    app: &AppHandle,
+    state: &AsterAgentState,
+    db: &DbConnection,
+    request: AgentRuntimeRespondActionRequest,
+) -> Result<(), String> {
     if is_runtime_permission_confirmation_request_id(&request.request_id) {
         let result = complete_runtime_permission_confirmation_request(
-            &app,
+            app,
             normalize_optional_text(request.event_name.clone()).as_deref(),
-            db.inner(),
+            db,
             &request,
         );
         if result.is_ok() {
-            maybe_emit_action_resolved_profile_event(&app, &request);
+            maybe_emit_action_resolved_profile_event(app, &request);
         }
         return result;
     }
     if is_runtime_user_lock_capability_request_id(&request.request_id) {
         let result = complete_runtime_user_lock_capability_request(
-            &app,
+            app,
             normalize_optional_text(request.event_name.clone()).as_deref(),
-            db.inner(),
+            db,
             &request,
         );
         if result.is_ok() {
-            maybe_emit_action_resolved_profile_event(&app, &request);
+            maybe_emit_action_resolved_profile_event(app, &request);
         }
         return result;
     }
@@ -477,7 +489,7 @@ pub async fn agent_runtime_respond_action(
     let result = match request.action_type {
         AgentRuntimeActionType::ToolConfirmation => {
             confirm_runtime_action_internal(
-                state.inner(),
+                state,
                 ConfirmRequest {
                     request_id: request.request_id.clone(),
                     confirmed: request.confirmed,
@@ -492,8 +504,8 @@ pub async fn agent_runtime_respond_action(
             let resume_event_name = normalize_optional_text(request.event_name.clone());
             let submitted_user_data = user_data.clone();
             submit_runtime_elicitation_response_internal(
-                state.inner(),
-                db.inner(),
+                state,
+                db,
                 request.session_id.clone(),
                 SubmitElicitationResponseRequest {
                     request_id: request.request_id.clone(),
@@ -505,16 +517,16 @@ pub async fn agent_runtime_respond_action(
             .await?;
 
             complete_runtime_ask_or_elicitation_request(
-                &app,
+                app,
                 resume_event_name.as_deref(),
-                db.inner(),
+                db,
                 &request,
                 submitted_user_data,
             )
         }
     };
     if result.is_ok() {
-        maybe_emit_action_resolved_profile_event(&app, &request);
+        maybe_emit_action_resolved_profile_event(app, &request);
     }
     result
 }

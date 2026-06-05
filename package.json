@@ -4,7 +4,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "1.58.0",
+  "version": "1.59.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -74,7 +74,7 @@
     "test:watch": "node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs",
     "test:frontend": "npm run lint && npm run typecheck && npm test",
     "test:bridge": "npm test -- src/lib/dev-bridge/safeInvoke.test.ts src/lib/tauri-mock/core.test.ts",
-    "test:contracts": "npm run check:agent-runtime-clients && node scripts/check-command-contracts.mjs && node scripts/check-harness-contracts.mjs && npm run governance:modality-contracts && npm run harness:cleanup-report:check && npm run docs:boundary",
+    "test:contracts": "npm run check:agent-runtime-clients && node scripts/check-app-server-client-contract.mjs && node scripts/check-command-contracts.mjs && node scripts/check-harness-contracts.mjs && npm run governance:modality-contracts && npm run harness:cleanup-report:check && npm run docs:boundary",
     "test:rust": "cargo test --manifest-path \"src-tauri/Cargo.toml\"",
     "test:rust:unit": "node scripts/run-rust-layer.mjs unit",
     "test:rust:integration": "node scripts/run-rust-layer.mjs integration",
@@ -166,8 +166,13 @@
     "ai-verify:file": "tsx scripts/ai-code-verify.ts --files",
     "bridge:e2e": "node scripts/chrome-bridge-e2e.mjs",
     "bridge:health": "node scripts/check-dev-bridge-health.mjs",
+    "app-server:manifest": "npm --prefix \"packages/app-server-client\" run build && node scripts/app-server-release-manifest.mjs",
+    "app-server:manifest:test": "npm --prefix \"packages/app-server-client\" run build && node scripts/app-server-release-manifest.test.mjs",
     "smoke:workspace-ready": "node scripts/workspace-ready-smoke.mjs",
     "smoke:browser-runtime": "node scripts/browser-runtime-smoke.mjs",
+    "smoke:app-server-stdio": "npm --prefix \"packages/app-server-client\" run build && node scripts/app-server-stdio-smoke.mjs",
+    "smoke:app-server-sidecar-lifecycle": "npm --prefix \"packages/app-server-client\" run build && node scripts/app-server-sidecar-lifecycle-smoke.mjs",
+    "smoke:app-server-external-backend": "npm --prefix \"packages/app-server-client\" run build && node scripts/app-server-external-backend-smoke.mjs",
     "smoke:site-adapters": "node scripts/site-adapter-catalog-smoke.mjs",
     "smoke:agent-runtime-tool-surface": "node scripts/agent-runtime-tool-surface-smoke.mjs",
     "smoke:agent-runtime-tool-surface-page": "node scripts/agent-runtime-tool-surface-page-smoke.mjs",

@@ -1,46 +1,51 @@
-## Lime v1.58.0
+## Lime v1.59.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
 
-- Update notifications now include an automatic install session, letting the UI follow checking, downloading, installing, restarting, failed, and up-to-date states through the `app-update://session` event.
-- The model selector can read `reasoning_effort` capabilities exposed by APIs or the registry, then show and persist reasoning-effort choices from the Agent input bar.
-- The Agent input bar now has a Plus menu that consolidates attachments, knowledge packs, Plan, Objective, Subagent, and Skill entry points while preserving inline knowledge and skill controls in workspace mode.
-- Agent runtime tool inventory now gates MCP resource helper visibility, showing resource-read helpers only when the runtime explicitly supports them.
-- Task board tools now accept `snake_case` input aliases and return structured null results for missing tasks, improving model tool-call compatibility.
+- Added the local App Server JSON-RPC runtime skeleton, giving Lime Desktop and independent apps a shared protocol boundary for Agent sessions, turns, events, actions, artifacts, and evidence.
+- Added the App Server TypeScript client so independent apps can use typed connections to start sessions, submit turns, cancel turns, respond to actions, and consume `agentSession/event` notifications.
+- Added App Server sidecar lifecycle support, including packaged resources manifests, platform artifact resolution, sha256 verification, initialize handshake, and event routing.
+- Added the standalone App Server app policy source so independent apps can inject scoped capabilities from a JSON policy manifest and constrain capability discovery with `--app-policy`.
+- Added the standalone external backend configuration path, allowing App Server to prototype host-independent turn, cancel, and action-response handling through an external backend process.
+- Started routing the Desktop Agent runtime main path through an in-process App Server adapter, allowing existing Tauri command compatibility entry points to submit Agent turns through JSON-RPC.
+- Added `capability/list`, `artifact/read`, `evidence/export`, and `agentSession/action/respond` protocol surfaces for capability discovery, artifact reading, evidence export, and approval responses from independent apps.
 
 ### Fixes
 
-- Fixed update-install session state, browser mocks, window closing, and manual-download fallback so automatic update failures leave a clear recovery path.
-- Fixed model-registry parsing for provider capability fields, reducing missed reasoning-effort, task-family, modality, and runtime-feature signals.
-- Fixed normalization in Agent messages, tool process displays, search result previews, site media, and the streaming renderer so protocol residue and empty content are less likely to appear in user-visible messages.
-- Fixed state assembly around Workspace sends, task-center drafts, initial knowledge selection, and runtime compaction metadata.
-- Fixed Knowledge GUI smoke targeting and diagnostics around the Plus menu, knowledge popovers, page navigation, and long waits.
+- Fixed App Server turn id, `queueIfBusy`, `skipPreSubmitResume`, and legacy Aster request parameter propagation, reducing migration risk around lost runtime options or mismatched ids.
+- Fixed Desktop direct event bridge scoping and terminal-event cleanup so session / turn events are less likely to be duplicated or leave stale listeners behind.
+- Fixed capability discovery filtering across session, workspace, and runtime-enable facts so only executable capabilities are projected into `agentSession/turn/start`.
+- Fixed artifact read and evidence export read-model boundaries around pagination, content status, and provider injection so independent apps can read runtime output without relying on UI inference.
 
 ### Improvements And Refactors
 
-- Reworked input-bar advanced options into the Plus menu, status chips, and a dedicated model-control area, reducing always-visible controls while keeping active modes easy to scan.
-- Continued moving complex Agent Chat, Inputbar, Workspace send, Tool display, Model selector, and Settings logic into View Models / helpers / projections.
-- Reworked Memory settings into Memory, Soul, and Advanced sections, adding Soul templates, preview, import, and reset flows.
-- Provider settings now decide whether to show the companion entry from navigation configuration, reducing invalid entry points mixed with OEM cloud surfaces.
-- Update notification UI now has more consistent progress, failure, skip, remind-later, close, and mock-preview states.
+- Split Agent runtime service boundaries into `RuntimeCore`, `ExecutionBackend`, `AsterBackend`, and host adapters, reducing business logic growth inside Tauri command glue.
+- Added the `app-server-protocol`, `app-server-transport`, `app-server`, `app-server-client`, `app-server-daemon`, and `app-server-test-client` crate family to separate protocol, transport, server, client, and test boundaries.
+- Moved runtime queue, stream, projection, managed objective continuation, and event emission behind host ports so App Server and Desktop can share the same execution path.
+- Consolidated Desktop host dependencies for runtime turns into `RuntimeTurnHostContext`, reducing scattered AppHandle, database, config, and service-state parameter passing.
+- Kept the public `app-server` crate independent from Tauri and prevented Aster-private DTOs from becoming part of the public JSON-RPC protocol.
 
 ### Tests And Quality
 
-- Added `smoke:agent-runtime-tool-execution` for release-time coverage of the Agent runtime tool execution path.
-- Strengthened `knowledge-gui-smoke` coverage for the Plus menu, knowledge popovers, navigation timeouts, click diagnostics, and offline fixtures.
-- Added or expanded regressions for update notifications, automatic install sessions, model reasoning effort, the input-bar Plus menu, tool displays, Task board, MCP resource helpers, Provider settings, and Soul settings.
-- Improved the OpenAI-compatible fixture server, Vitest layer runner, i18n unused-key checks, and test classification coverage.
-- Updated the root app, Tauri workspace, Tauri config, CLI npm package, Agent App runtime package, and lockfiles to `1.58.0`.
+- Added App Server client / protocol contract checks to `npm run test:contracts`, covering key Rust protocol, router, runtime, Desktop adapter, TypeScript client, and sidecar helper consistency.
+- Added `app-server:manifest` and `app-server:manifest:test` for generating and validating App Server sidecar release manifests.
+- Added `smoke:app-server-stdio` to verify the app-server binary over stdio JSON-RPC initialize, session, and turn flows.
+- Added `smoke:app-server-sidecar-lifecycle` to cover packaged manifests, sha256 verification, sidecar startup, connection, and lifecycle recovery.
+- Added Rust regressions for app policy manifests, external backends, standalone CLI arguments, and factory injection.
+- Added App Server Rust tests, a host boundary guard, TypeScript client tests, and renderer-safe API regressions.
+- Updated the root app, Tauri workspace, Tauri config, CLI npm package, Agent App runtime package, App Server client package, and lockfiles to `1.59.0`.
 
 ### Documentation
 
-- Updated the engineering quality workflow and test-governance roadmap with the new layered-test and release-smoke entries.
-- Updated the Soul rollout plan with delivery phases and acceptance boundaries for Memory / Soul settings.
+- Added the `internal/roadmap/appserver/` roadmap set, including PRD, architecture, protocol, sequences, flowcharts, service extraction, independent app integration, and Electron migration planning.
+- Added the App Server implementation plan with P0 through P3.61 status, fact-source classification, validation entries, and remaining exit criteria.
+- Added `packages/app-server-client/README.md` with the recommended independent-app integration shape for the TypeScript client and sidecar.
+- Updated engineering navigation, command boundary, governance, and services docs to converge cross-app Agent runtime work onto the App Server current path.
 
 ### Other
 
-- Tauri updater config now includes Windows `installMode`, aligning installer behavior with the update-install session.
+- Added App Server release-manifest generation and packaged sidecar resource-path conventions for future independent-app distribution of the App Server binary.
 
-**Full changes**: `v1.57.0` -> `v1.58.0`
+**Full changes**: `v1.58.0` -> `v1.59.0`

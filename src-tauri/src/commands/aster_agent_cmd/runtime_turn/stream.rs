@@ -27,6 +27,7 @@ pub(super) use self::strategy::execute_runtime_stream_with_strategy;
 
 pub(super) async fn execute_aster_chat_request(
     app: &AppHandle,
+    event_port: std::sync::Arc<dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort>,
     state: &AsterAgentState,
     db: &DbConnection,
     api_key_provider_service: &ApiKeyProviderServiceState,
@@ -36,16 +37,7 @@ pub(super) async fn execute_aster_chat_request(
     automation_state: &AutomationServiceState,
     request: AsterChatRequest,
 ) -> Result<(), String> {
-    tracing::info!(
-        "[AsterAgent] 发送流式消息: session={}, event={}",
-        request.session_id,
-        request.event_name
-    );
-    emit_submit_accepted_runtime_status(app, &request.event_name);
-    let _keepalive_guard =
-        RuntimeTurnKeepaliveGuard::start(app.clone(), request.event_name.clone());
-
-    execute_runtime_turn_pipeline(
+    let host = RuntimeTurnHostContext::new(
         app,
         state,
         db,
@@ -54,7 +46,15 @@ pub(super) async fn execute_aster_chat_request(
         config_manager,
         mcp_manager,
         automation_state,
-        request,
-    )
-    .await
+    );
+    tracing::info!(
+        "[AsterAgent] 发送流式消息: session={}, event={}",
+        request.session_id,
+        request.event_name
+    );
+    emit_submit_accepted_runtime_status(event_port.as_ref(), app, &request.event_name);
+    let _keepalive_guard =
+        RuntimeTurnKeepaliveGuard::start(event_port.clone(), request.event_name.clone());
+
+    execute_runtime_turn_pipeline(event_port, host, request).await
 }

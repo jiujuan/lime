@@ -102,13 +102,17 @@ use runtime_turn_context::{
     build_artifact_document_warning_message, build_runtime_run_start_metadata,
     build_runtime_session_config, build_runtime_turn_context_metadata_value,
 };
-pub(crate) use runtime_turn_event_projection::emit_agent_runtime_profile_event;
 #[cfg(test)]
 use runtime_turn_event_projection::{
     agent_app_runtime_projection_event_name, parse_agent_app_runtime_projection_scope,
 };
 use runtime_turn_event_projection::{
-    emit_agent_app_runtime_event_projection, emit_runtime_events, non_empty_projection_text,
+    emit_agent_app_runtime_event_projection_with_port, emit_runtime_events,
+    non_empty_projection_text,
+};
+pub(crate) use runtime_turn_event_projection::{
+    emit_agent_runtime_profile_event_with_port, RuntimeProjectionEventPort,
+    TauriRuntimeProjectionEventPort,
 };
 use runtime_turn_flow::execute_runtime_turn_pipeline;
 pub(crate) use runtime_turn_flow::request_metadata_has_fast_response_routing;
@@ -132,7 +136,9 @@ use runtime_turn_provider_config::{
 };
 #[cfg(test)]
 use runtime_turn_provider_config::{resolve_provider_config_apply_mode, ProviderConfigApplyMode};
-pub(crate) use runtime_turn_queue::{build_queued_turn_task, build_runtime_queue_executor};
+pub(crate) use runtime_turn_queue::{
+    build_queued_turn_task, build_runtime_queue_executor, build_runtime_queue_host_ports,
+};
 use runtime_turn_request_metadata::should_skip_artifact_document_autopersist;
 #[cfg(test)]
 use runtime_turn_request_metadata::{
@@ -149,6 +155,7 @@ use runtime_turn_request_resolution::{
     collect_runtime_request_resolution_side_events, emit_runtime_request_resolution_events,
     extract_runtime_resolution_payload, fail_runtime_turn_before_model_execution,
     map_runtime_limit_event_to_runtime_agent_event, merge_runtime_request_resolution_metadata,
+    RecorderRuntimeTurnTerminalTimelinePort, RuntimeTurnTerminalTimelinePort,
 };
 #[cfg(test)]
 use runtime_turn_request_resolution_permission::{
@@ -173,8 +180,9 @@ use runtime_turn_skill_launch::{
     build_image_skill_launch_tool_context,
 };
 use runtime_turn_skill_launch::{
-    emit_runtime_side_event, emit_service_skill_preload_runtime_events,
-    execute_agent_app_required_skill_contract, execute_image_skill_launch_direct_task,
+    emit_service_skill_preload_runtime_events, execute_agent_app_required_skill_contract,
+    execute_image_skill_launch_direct_task, RuntimeSideEventHostContext,
+    RuntimeSkillLaunchHostContext,
 };
 use runtime_turn_status::{
     build_runtime_model_recovery_failure_message, describe_provider_request_attempt,
@@ -223,6 +231,55 @@ const COMPACTION_FALLBACK_PROVIDER_CHAIN: [(&str, &str); 4] = [
     ("anthropic", "claude-3-haiku-20240307"),
     ("kiro", "anthropic.claude-3-haiku-20240307-v1:0"),
 ];
+
+#[derive(Clone, Copy)]
+pub(super) struct RuntimeTurnHostContext<'a> {
+    pub(super) app: &'a AppHandle,
+    pub(super) state: &'a AsterAgentState,
+    pub(super) db: &'a DbConnection,
+    pub(super) api_key_provider_service: &'a ApiKeyProviderServiceState,
+    pub(super) logs: &'a LogState,
+    pub(super) config_manager: &'a GlobalConfigManagerState,
+    pub(super) mcp_manager: &'a McpManagerState,
+    pub(super) automation_state: &'a AutomationServiceState,
+}
+
+impl<'a> RuntimeTurnHostContext<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn new(
+        app: &'a AppHandle,
+        state: &'a AsterAgentState,
+        db: &'a DbConnection,
+        api_key_provider_service: &'a ApiKeyProviderServiceState,
+        logs: &'a LogState,
+        config_manager: &'a GlobalConfigManagerState,
+        mcp_manager: &'a McpManagerState,
+        automation_state: &'a AutomationServiceState,
+    ) -> Self {
+        Self {
+            app,
+            state,
+            db,
+            api_key_provider_service,
+            logs,
+            config_manager,
+            mcp_manager,
+            automation_state,
+        }
+    }
+
+    pub(super) fn emit_runtime_event(
+        &self,
+        event_name: &str,
+        event: &RuntimeAgentEvent,
+        error_label: &str,
+    ) {
+        if let Err(error) = self.app.emit(event_name, event) {
+            tracing::error!("[AsterAgent] {}: {}", error_label, error);
+        }
+    }
+}
+
 #[cfg(test)]
 #[path = "runtime_turn/tests.rs"]
 mod tests;

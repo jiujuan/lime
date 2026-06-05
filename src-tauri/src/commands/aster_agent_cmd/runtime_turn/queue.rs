@@ -1,5 +1,10 @@
 use super::runtime_turn_stream::execute_aster_chat_request;
 use super::*;
+use crate::agent::runtime_queue_service::{
+    AgentRuntimeQueueContext, ManagedObjectiveContinuationPort, RuntimeQueueEventPort,
+    RuntimeQueueExecutionPort, RuntimeQueueHostPorts, RuntimeQueueProjectionPort,
+};
+use async_trait::async_trait;
 
 fn build_queued_turn_preview(message: &str) -> String {
     let compact = message.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -257,22 +262,68 @@ fn build_team_running_runtime_status(snapshot: &TeamRuntimeGovernorSnapshot) -> 
     }
 }
 
-fn emit_transient_runtime_status(app: &AppHandle, event_name: &str, status: AgentRuntimeStatus) {
+fn emit_transient_runtime_status(
+    event_port: &dyn crate::agent::runtime_queue_service::RuntimeQueueEventPort,
+    event_name: &str,
+    status: AgentRuntimeStatus,
+) {
     if event_name.trim().is_empty() {
         return;
     }
     let event = RuntimeAgentEvent::RuntimeStatus { status };
-    if let Err(error) = app.emit(event_name, &event) {
-        tracing::warn!(
-            "[AsterAgent] 发送 team runtime 状态失败: event_name={}, error={}",
-            event_name,
-            error
+    event_port.emit_runtime_queue_event(event_name, &event);
+}
+
+#[cfg(test)]
+mod transient_status_tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    #[derive(Default)]
+    struct RecordingRuntimeQueueEventPort {
+        events: Mutex<Vec<(String, RuntimeAgentEvent)>>,
+    }
+
+    impl crate::agent::runtime_queue_service::RuntimeQueueEventPort for RecordingRuntimeQueueEventPort {
+        fn emit_runtime_queue_event(&self, event_name: &str, event: &RuntimeAgentEvent) {
+            self.events
+                .lock()
+                .expect("events lock")
+                .push((event_name.to_string(), event.clone()));
+        }
+    }
+
+    #[test]
+    fn transient_runtime_status_uses_runtime_queue_event_port() {
+        let port = RecordingRuntimeQueueEventPort::default();
+
+        emit_transient_runtime_status(
+            &port,
+            "agentSession/event/sess_1",
+            AgentRuntimeStatus {
+                phase: "routing".to_string(),
+                title: "等待执行窗口".to_string(),
+                detail: "稍后继续".to_string(),
+                checkpoints: vec!["checkpoint".to_string()],
+                metadata: None,
+            },
         );
+
+        let events = port.events.lock().expect("events lock");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].0, "agentSession/event/sess_1");
+        match &events[0].1 {
+            RuntimeAgentEvent::RuntimeStatus { status } => {
+                assert_eq!(status.phase, "routing");
+                assert_eq!(status.title, "等待执行窗口");
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
     }
 }
 
 async fn execute_queued_request_with_team_runtime_governor(
-    context: &crate::agent::runtime_queue_service::AgentRuntimeQueueContext,
+    context: &AgentRuntimeQueueContext,
     request: AsterChatRequest,
 ) -> Result<(), String> {
     let request_session_id = request.session_id.clone();
@@ -285,12 +336,16 @@ async fn execute_queued_request_with_team_runtime_governor(
             preview_provider_runtime_wait_snapshot(&provider_group).await
         {
             emit_transient_runtime_status(
-                &context.app,
+                context.ports.event_port.as_ref(),
                 &request.event_name,
                 build_provider_waiting_runtime_status(&waiting_snapshot, is_team_member),
             );
             if is_team_member {
-                emit_subagent_status_changed_events(&context.app, &request_session_id).await;
+                context
+                    .ports
+                    .projection_port
+                    .emit_subagent_status_changed(context, &request_session_id)
+                    .await;
             }
         }
 
@@ -303,13 +358,17 @@ async fn execute_queued_request_with_team_runtime_governor(
             snapshot_provider_runtime_lease(&provider_guard_lease_id).await
         {
             emit_transient_runtime_status(
-                &context.app,
+                context.ports.event_port.as_ref(),
                 &request.event_name,
                 build_provider_running_runtime_status(&running_snapshot, is_team_member),
             );
         }
         if is_team_member {
-            emit_subagent_status_changed_events(&context.app, &request_session_id).await;
+            context
+                .ports
+                .projection_port
+                .emit_subagent_status_changed(context, &request_session_id)
+                .await;
         }
         Some(permit)
     } else {
@@ -321,11 +380,15 @@ async fn execute_queued_request_with_team_runtime_governor(
             preview_team_runtime_wait_snapshot(&parent_session_id, &provider_group).await
         {
             emit_transient_runtime_status(
-                &context.app,
+                context.ports.event_port.as_ref(),
                 &request.event_name,
                 build_team_waiting_runtime_status(&waiting_snapshot),
             );
-            emit_subagent_status_changed_events(&context.app, &request_session_id).await;
+            context
+                .ports
+                .projection_port
+                .emit_subagent_status_changed(context, &request_session_id)
+                .await;
         }
 
         let permit = acquire_team_runtime_permit(
@@ -336,56 +399,46 @@ async fn execute_queued_request_with_team_runtime_governor(
         .await;
         if let Some(running_snapshot) = snapshot_team_runtime_session(&request_session_id).await {
             emit_transient_runtime_status(
-                &context.app,
+                context.ports.event_port.as_ref(),
                 &request.event_name,
                 build_team_running_runtime_status(&running_snapshot),
             );
         }
-        emit_subagent_status_changed_events(&context.app, &request_session_id).await;
+        context
+            .ports
+            .projection_port
+            .emit_subagent_status_changed(context, &request_session_id)
+            .await;
 
-        let result = execute_aster_chat_request(
-            &context.app,
-            &context.state,
-            &context.db,
-            &context.api_key_provider_service,
-            &context.logs,
-            &context.config_manager,
-            &context.mcp_manager,
-            &context.automation_state,
-            request.clone(),
-        )
-        .await;
+        let result = execute_runtime_queue_request(context, request.clone()).await;
 
         release_team_runtime_permit(permit).await;
-        emit_subagent_status_changed_events(&context.app, &request_session_id).await;
+        context
+            .ports
+            .projection_port
+            .emit_subagent_status_changed(context, &request_session_id)
+            .await;
         result
     } else {
-        execute_aster_chat_request(
-            &context.app,
-            &context.state,
-            &context.db,
-            &context.api_key_provider_service,
-            &context.logs,
-            &context.config_manager,
-            &context.mcp_manager,
-            &context.automation_state,
-            request,
-        )
-        .await
+        execute_runtime_queue_request(context, request).await
     };
 
     if let Some(permit) = provider_guard_permit {
         release_provider_runtime_permit(permit).await;
         if is_team_member {
-            emit_subagent_status_changed_events(&context.app, &request_session_id).await;
+            context
+                .ports
+                .projection_port
+                .emit_subagent_status_changed(context, &request_session_id)
+                .await;
         }
     }
     if result.is_ok() {
-        match crate::commands::aster_agent_cmd::command_api::objective_continuation::maybe_submit_managed_objective_auto_continuation(
-            context,
-            &request_session_id,
-        )
-        .await
+        match context
+            .ports
+            .objective_continuation_port
+            .maybe_submit_auto_continuation(context, &request_session_id)
+            .await
         {
             Ok(Some(queued_turn_id)) => {
                 tracing::info!(
@@ -405,6 +458,86 @@ async fn execute_queued_request_with_team_runtime_governor(
         }
     }
     result
+}
+
+async fn execute_runtime_queue_request(
+    context: &AgentRuntimeQueueContext,
+    request: AsterChatRequest,
+) -> Result<(), String> {
+    let payload = serde_json::to_value(request)
+        .map_err(|error| format!("序列化 runtime queue execution payload 失败: {error}"))?;
+    context
+        .ports
+        .execution_port
+        .execute_runtime_queue_payload(context, payload)
+        .await
+}
+
+struct DesktopRuntimeQueueExecutionPort;
+
+#[async_trait]
+impl RuntimeQueueExecutionPort for DesktopRuntimeQueueExecutionPort {
+    async fn execute_runtime_queue_payload(
+        &self,
+        context: &AgentRuntimeQueueContext,
+        payload: serde_json::Value,
+    ) -> Result<(), String> {
+        let request = deserialize_queued_turn_request(payload)?;
+        execute_aster_chat_request(
+            &context.app,
+            context.ports.event_port.clone(),
+            &context.state,
+            &context.db,
+            &context.api_key_provider_service,
+            &context.logs,
+            &context.config_manager,
+            &context.mcp_manager,
+            &context.automation_state,
+            request,
+        )
+        .await
+    }
+}
+
+struct DesktopRuntimeQueueProjectionPort;
+
+#[async_trait]
+impl RuntimeQueueProjectionPort for DesktopRuntimeQueueProjectionPort {
+    async fn emit_subagent_status_changed(
+        &self,
+        context: &AgentRuntimeQueueContext,
+        session_id: &str,
+    ) {
+        emit_subagent_status_changed_events(&context.app, session_id).await;
+    }
+}
+
+struct DesktopManagedObjectiveContinuationPort;
+
+#[async_trait]
+impl ManagedObjectiveContinuationPort for DesktopManagedObjectiveContinuationPort {
+    async fn maybe_submit_auto_continuation(
+        &self,
+        context: &AgentRuntimeQueueContext,
+        session_id: &str,
+    ) -> Result<Option<String>, String> {
+        crate::commands::aster_agent_cmd::command_api::objective_continuation::maybe_submit_managed_objective_auto_continuation(
+            context,
+            session_id,
+        )
+        .await
+    }
+}
+
+pub(crate) fn build_runtime_queue_host_ports(
+    event_port: Arc<dyn RuntimeQueueEventPort>,
+) -> RuntimeQueueHostPorts {
+    RuntimeQueueHostPorts::new(
+        event_port,
+        Arc::new(DesktopRuntimeQueueExecutionPort),
+        Arc::new(DesktopRuntimeQueueProjectionPort),
+        Arc::new(DesktopManagedObjectiveContinuationPort),
+    )
 }
 
 pub(crate) fn build_queued_turn_task(

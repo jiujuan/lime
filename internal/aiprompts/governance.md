@@ -270,7 +270,7 @@ npm run test:contracts
 遇到 Agent / 聊天 / 会话相关新旧并存时，至少问这几个问题：
 
 - 前端唯一入口是不是已经收敛到现役 API 网关
-- Rust 唯一入口是不是已经收敛到 `agent_runtime_*`
+- 新增服务化能力是不是已经收敛到 App Server JSON-RPC；旧 `agent_runtime_*` 是否只作为 Desktop 兼容适配入口
 - 旧 `chat_*`、`general_chat_*`、历史 helper 是否还在继续长逻辑
 - 命令契约五个事实源之间有没有漂移
 
