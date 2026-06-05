@@ -85,7 +85,7 @@ function getInstructionIcon(instruction: VoiceInstruction): React.ReactNode {
 }
 
 /**
- * 将 KeyboardEvent 转换为 Tauri 快捷键格式
+ * 将 KeyboardEvent 转换为 Desktop Host 快捷键格式
  */
 function keyEventToShortcut(e: KeyboardEvent): string | null {
   const modifiers: string[] = [];

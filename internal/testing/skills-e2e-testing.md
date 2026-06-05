@@ -52,9 +52,9 @@ description: 一个简单的问候技能，用于测试 Skills 集成
 EOF
 ```
 
-2. 启动 Lime 应用：
+2. 启动 Electron current 应用：
 ```bash
-cd lime && npm run tauri dev
+cd lime && npm run dev
 ```
 
 3. 打开开发者工具（Cmd+Option+I），查看控制台日志
@@ -183,7 +183,7 @@ rm -rf ~/.lime/skills/test-calculator
 
 ## 自动化测试（未来计划）
 
-后续可以使用 Playwright 或 Tauri 的测试框架实现自动化 E2E 测试：
+后续可以使用 Playwright、Electron smoke 或 App Server contract 实现自动化 E2E 测试：
 
 ```typescript
 // 示例：Playwright E2E 测试

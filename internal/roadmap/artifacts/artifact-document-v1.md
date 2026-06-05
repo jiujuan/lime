@@ -744,8 +744,8 @@ src/lib/artifact-document/examples.ts
 后端建议新增：
 
 ```text
-src-tauri/src/services/artifact_document_service.rs
-src-tauri/src/services/artifact_document_validator.rs
+lime-rs/src/services/artifact_document_service.rs
+lime-rs/src/services/artifact_document_validator.rs
 ```
 
 ## 14. 本版刻意不做

@@ -53,7 +53,7 @@ jobs:
           NOTES_FILE="$RUNNER_TEMP/release-notes.md"
 
           if [[ "$TAG" == *-* ]]; then
-            echo "::error::Stable updater release does not accept prerelease tag: $TAG"
+            echo "::error::Stable release does not accept prerelease tag: $TAG"
             exit 1
           fi
 
@@ -84,17 +84,14 @@ jobs:
             exit 0
           fi
 
-          create_args=(
-            release create "$TAG"
-            --repo "$GITHUB_REPOSITORY"
-            --target "$TARGET_REF"
-            --title "Lime $TAG"
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$TARGET_REF" \
+            --title "Lime $TAG" \
             --notes-file "$NOTES_FILE"
-          )
-
-          gh "${create_args[@]}" || gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
 
   build:
+    name: Build Electron ${{ matrix.name }}
     needs: prepare_release
     strategy:
       fail-fast: false
@@ -102,21 +99,32 @@ jobs:
         include:
           - platform: macos-latest
             target: aarch64-apple-darwin
+            host_platform: darwin
+            arch: arm64
+            feed: darwin-arm64
+            electron_args: --mac dmg zip --arm64
             name: macOS-arm64
           - platform: macos-15-intel
             target: x86_64-apple-darwin
+            host_platform: darwin
+            arch: x64
+            feed: darwin-x64
+            electron_args: --mac dmg zip --x64
             name: macOS-x64
           - platform: windows-2022
             target: x86_64-pc-windows-msvc
+            host_platform: win32
+            arch: x64
+            feed: win32-x64
+            electron_args: --win nsis --x64
             name: Windows-x64
 
     runs-on: ${{ matrix.platform }}
     env:
-      LIME_UPDATER_PUBLIC_KEY_RAW: ${{ secrets.LIME_UPDATER_PUBLIC_KEY }}
-      LIME_UPDATES_BASE_URL: ${{ secrets.LIME_UPDATES_BASE_URL || vars.LIME_UPDATES_BASE_URL }}
-      TAURI_SIGNING_PRIVATE_KEY_RAW: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       NODE_OPTIONS: --max-old-space-size=8192
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
+      ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
+      LIME_ELECTRON_UPDATES_URL: ${{ (secrets.LIME_UPDATES_BASE_URL || vars.LIME_UPDATES_BASE_URL || 'https://updates.limecloud.com') }}/lime/stable/${{ matrix.feed }}/
 
     steps:
       - name: Checkout
@@ -125,17 +133,12 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.inputs.source_ref || github.ref }}
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "pnpm"
-          cache-dependency-path: "pnpm-lock.yaml"
+          cache: "npm"
+          cache-dependency-path: "package-lock.json"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -148,637 +151,93 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: lime-rs
           shared-key: "rust-${{ matrix.target }}"
           cache-on-failure: true
           cache-all-crates: true
           save-if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
 
-      - name: Resolve updater release mode
-        id: updater_mode
-        shell: bash
-        run: |
-          if [ -n "${LIME_UPDATER_PUBLIC_KEY_RAW}" ] && [ -n "${TAURI_SIGNING_PRIVATE_KEY_RAW}" ] && [ -n "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD}" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "LIME_ENABLE_UPDATER_ARTIFACTS=true" >> "$GITHUB_ENV"
-            echo "Updater artifacts enabled"
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "LIME_ENABLE_UPDATER_ARTIFACTS=false" >> "$GITHUB_ENV"
-            echo "::error::Updater signing secrets are missing. Release must produce signed updater artifacts for Cloudflare R2 distribution."
-            exit 1
-          fi
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Normalize updater public key
-        if: steps.updater_mode.outputs.enabled == 'true'
-        shell: bash
-        run: |
-          python - <<'PY'
-          import base64
-          import binascii
-          import os
-
-          raw = os.environ.get("LIME_UPDATER_PUBLIC_KEY_RAW", "")
-          if not raw.strip():
-              raise SystemExit("LIME_UPDATER_PUBLIC_KEY secret is empty")
-
-          candidates = []
-
-          def add(value: str) -> None:
-              normalized = value.replace("\r\n", "\n")
-              if normalized and normalized not in candidates:
-                  candidates.append(normalized)
-
-          add(raw)
-          if "\\n" in raw and "\n" not in raw:
-              add(raw.replace("\\r\\n", "\n").replace("\\n", "\n"))
-
-          def to_tauri_pubkey(value: str) -> str:
-              text = value.strip()
-              compact = "".join(text.split())
-
-              # Tauri signer public key file content is already base64 encoded.
-              try:
-                  decoded = base64.b64decode(compact, validate=True).decode("utf-8")
-              except (binascii.Error, UnicodeDecodeError, ValueError):
-                  decoded = ""
-              if decoded:
-                  decoded_lines = [line.strip() for line in decoded.splitlines() if line.strip()]
-                  if len(decoded_lines) >= 2:
-                      return compact
-
-              # Also accept the decoded minisign public key file content.
-              lines = [line.strip() for line in text.splitlines() if line.strip()]
-              if len(lines) >= 2:
-                  normalized_text = "\n".join(lines[:2]) + "\n"
-                  return base64.b64encode(normalized_text.encode("utf-8")).decode("ascii")
-
-              # Some setups paste only the raw minisign public key line.
-              if len(compact) >= 40:
-                  try:
-                      key_bytes = base64.b64decode(compact, validate=True)
-                  except (binascii.Error, ValueError):
-                      key_bytes = b""
-                  if len(key_bytes) == 42:
-                      normalized_text = f"untrusted comment: minisign public key\n{compact}\n"
-                      return base64.b64encode(normalized_text.encode("utf-8")).decode("ascii")
-
-              return ""
-
-          normalized_key = next(
-              (
-                  key
-                  for candidate in candidates
-                  for key in [to_tauri_pubkey(candidate)]
-                  if key
-              ),
-              "",
-          )
-          if not normalized_key:
-              raise SystemExit(
-                  "Unable to normalize LIME_UPDATER_PUBLIC_KEY into Tauri updater pubkey content. "
-                  "Expected the public key value generated by `npx tauri signer generate --write-keys`."
-              )
-
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
-              env_file.write(f"LIME_UPDATER_PUBLIC_KEY={normalized_key}\n")
-
-          print("Normalized updater public key verified for Tauri config and runtime")
-          PY
-
-      - name: Sync version from tag to tauri configs
-        shell: bash
-        run: |
-          VERSION="${{ github.event.inputs.version || github.ref_name }}"
-          VERSION="${VERSION#v}"
-          echo "Syncing version to $VERSION"
-          cd src-tauri
-          node -e "
-            const fs = require('fs');
-            const updaterPublicKey = process.env.LIME_UPDATER_PUBLIC_KEY?.trim();
-            const createUpdaterArtifacts = process.env.LIME_ENABLE_UPDATER_ARTIFACTS === 'true';
-            if (createUpdaterArtifacts && !updaterPublicKey) {
-              throw new Error('LIME_UPDATER_PUBLIC_KEY is required when updater artifacts are enabled');
-            }
-            for (const file of ['tauri.conf.json', 'tauri.conf.headless.json']) {
-              const conf = JSON.parse(fs.readFileSync(file, 'utf8'));
-              conf.version = '$VERSION';
-              conf.bundle = conf.bundle || {};
-              conf.bundle.createUpdaterArtifacts = createUpdaterArtifacts;
-              if (createUpdaterArtifacts) {
-                conf.plugins = conf.plugins || {};
-                conf.plugins.updater = conf.plugins.updater || {};
-                conf.plugins.updater.pubkey = updaterPublicKey;
-              }
-              fs.writeFileSync(file, JSON.stringify(conf, null, 2) + '\n');
-            }
-          "
-          echo "tauri.conf.json version is now: $(node -e "console.log(JSON.parse(require('fs').readFileSync('tauri.conf.json','utf8')).version)")"
-          echo "tauri.conf.headless.json version is now: $(node -e "console.log(JSON.parse(require('fs').readFileSync('tauri.conf.headless.json','utf8')).version)")"
-          echo "createUpdaterArtifacts: $(node -e "console.log(JSON.parse(require('fs').readFileSync('tauri.conf.json','utf8')).bundle.createUpdaterArtifacts)")"
-
-      - name: Resolve updater endpoint
-        shell: bash
-        run: |
-          set -euo pipefail
-          BASE_URL="${LIME_UPDATES_BASE_URL:-https://updates.limecloud.com}"
-          BASE_URL="${BASE_URL%/}"
-          echo "LIME_UPDATER_ENDPOINT=${BASE_URL}/lime/stable/latest.json" >> "$GITHUB_ENV"
-          echo "Updater endpoint: ${BASE_URL}/lime/stable/latest.json"
-
-      - name: Resolve release channel
-        id: release_meta
-        shell: bash
-        run: |
-          TAG="${{ github.event.inputs.version || github.ref_name }}"
-          if [[ "$TAG" == *-* ]]; then
-            echo "::error::Stable updater release does not accept prerelease tag: $TAG"
-            exit 1
-          else
-            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
-            echo "Release channel: stable"
-          fi
-
-      - name: Load release notes
-        shell: bash
-        run: |
-          if [ -f RELEASE_NOTES.md ]; then
-            {
-              echo "RELEASE_BODY<<RELEASE_BODY_EOF"
-              cat RELEASE_NOTES.md
-              echo ""
-              echo "RELEASE_BODY_EOF"
-            } >> "$GITHUB_ENV"
-          else
-            # fallback: 从 git log 生成简单 changelog
-            TAG="${{ github.event.inputs.version || github.ref_name }}"
-            PREV_TAG=$(git tag --sort=-v:refname | grep -v "^${TAG}$" | head -n 1)
-            if [ -z "$PREV_TAG" ]; then
-              CHANGELOG=$(git log --pretty=format:"- %s (%h)" ${TAG} 2>/dev/null || git log --pretty=format:"- %s (%h)")
-            else
-              CHANGELOG=$(git log --pretty=format:"- %s (%h)" ${PREV_TAG}..${TAG} 2>/dev/null || git log --pretty=format:"- %s (%h)" ${PREV_TAG}..HEAD)
-            fi
-            {
-              echo "RELEASE_BODY<<RELEASE_BODY_EOF"
-              echo "## Lime ${TAG}"
-              echo ""
-              echo "### Changes"
-              echo "${CHANGELOG}"
-              echo "RELEASE_BODY_EOF"
-            } >> "$GITHUB_ENV"
-          fi
-
-      - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Ensure Tauri CLI native binding
+      - name: Validate Electron macOS signing secrets
         if: startsWith(matrix.platform, 'macos')
         shell: bash
-        run: |
-          set -euo pipefail
-          if node -e "require('@tauri-apps/cli')"; then
-            echo "Tauri CLI native binding is ready"
-            exit 0
-          fi
-
-          echo "::warning::Tauri CLI native binding missing after initial install; retrying clean install."
-          rm -rf node_modules
-          pnpm install --frozen-lockfile --force
-          node -e "require('@tauri-apps/cli')"
-
-      - name: Normalize updater signing key
-        if: steps.updater_mode.outputs.enabled == 'true'
-        shell: bash
-        run: |
-          python - <<'PY'
-          import base64
-          import binascii
-          import os
-          from pathlib import Path
-
-          raw = os.environ.get("TAURI_SIGNING_PRIVATE_KEY_RAW", "")
-          if not raw.strip():
-              raise SystemExit("TAURI_SIGNING_PRIVATE_KEY secret is empty")
-
-          candidates = []
-
-          def add(value: str) -> None:
-              normalized = value.replace("\r\n", "\n")
-              if normalized and normalized not in candidates:
-                  candidates.append(normalized)
-
-          add(raw)
-          if "\\n" in raw and "\n" not in raw:
-              add(raw.replace("\\r\\n", "\n").replace("\\n", "\n"))
-
-          def as_tauri_secret_key(value: str) -> str:
-              compact = "".join(value.split())
-              try:
-                  base64.b64decode(compact, validate=True)
-              except (binascii.Error, ValueError):
-                  return ""
-              return compact
-
-          normalized_key = next(
-              (
-                  key
-                  for candidate in candidates
-                  for key in [as_tauri_secret_key(candidate)]
-                  if key
-              ),
-              "",
-          )
-          if not normalized_key:
-              raise SystemExit(
-                  "Unable to normalize TAURI_SIGNING_PRIVATE_KEY into Tauri signer base64 key content. "
-                  "Expected the private key value generated by `npx tauri signer generate --write-keys`."
-              )
-
-          key_path = Path(os.environ["RUNNER_TEMP"]) / "tauri-updater.key"
-          key_path.write_text(normalized_key, encoding="utf-8")
-          key_path.chmod(0o600)
-
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
-              env_file.write(f"TAURI_SIGNING_PRIVATE_KEY={normalized_key}\n")
-
-          print(f"Normalized updater key verified and staged for Tauri signing from {key_path}")
-          PY
-
-      - name: Validate updater signing key
-        if: steps.updater_mode.outputs.enabled == 'true'
-        shell: bash
-        run: |
-          PROBE_FILE="$RUNNER_TEMP/tauri-signing-probe.txt"
-          printf 'lime-release-signing-probe\n' > "$PROBE_FILE"
-          npx tauri signer sign \
-            -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
-            "$PROBE_FILE" >/dev/null
-
-      # macOS 签名证书设置
-      - name: Import Apple Certificate
-        if: startsWith(matrix.platform, 'macos')
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-        run: |
-          # 创建临时 keychain
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          KEYCHAIN_PASSWORD=${{ secrets.KEYCHAIN_PASSWORD }}
-
-          # 解码证书
-          echo -n "$APPLE_CERTIFICATE" | base64 --decode > $RUNNER_TEMP/certificate.p12
-
-          # 创建 keychain
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
-          # 导入证书
-          security import $RUNNER_TEMP/certificate.p12 -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security list-keychain -d user -s $KEYCHAIN_PATH
-
-      - name: Validate macOS notarization prerequisites
-        if: startsWith(matrix.platform, 'macos')
-        shell: bash
-        env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
           missing=()
-          [ -n "${APPLE_SIGNING_IDENTITY:-}" ] || missing+=("APPLE_SIGNING_IDENTITY")
+          [ -n "${APPLE_CERTIFICATE:-}" ] || missing+=("APPLE_CERTIFICATE")
+          [ -n "${APPLE_CERTIFICATE_PASSWORD:-}" ] || missing+=("APPLE_CERTIFICATE_PASSWORD")
           [ -n "${APPLE_ID:-}" ] || missing+=("APPLE_ID")
           [ -n "${APPLE_PASSWORD:-}" ] || missing+=("APPLE_PASSWORD")
           [ -n "${APPLE_TEAM_ID:-}" ] || missing+=("APPLE_TEAM_ID")
-
           if [ "${#missing[@]}" -gt 0 ]; then
-            printf 'Missing macOS notarization secrets: %s\n' "${missing[*]}" >&2
+            printf 'Missing Electron macOS signing/notarization secrets: %s\n' "${missing[*]}" >&2
             exit 1
           fi
 
-      - name: Build Tauri app (Windows installer, stage only)
-        id: build_windows_stage
-        if: matrix.platform == 'windows-2022'
-        uses: tauri-apps/tauri-action@v0
-        env:
-          # 禁用 LTO 加速编译（正式发布可改为 thin）
-          CARGO_PROFILE_RELEASE_LTO: "off"
-          # 增加并行编译单元
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 32
-          CARGO_INCREMENTAL: 0
-          CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
-          SCCACHE_GHA_ENABLED: "true"
-          RUSTC_WRAPPER: sccache
-        with:
-          tauriScript: npx tauri
-          projectPath: src-tauri
-          includeUpdaterJson: ${{ steps.updater_mode.outputs.enabled == 'true' }}
-          # tauri-action@v0 使用 assetNamePattern，Windows 只保留单一 setup 安装包
-          assetNamePattern: "[name]_[version]_[arch][setup][ext]"
-          # 默认不启用 voice feature（包含 whisper-rs，编译很慢）
-          args: --target ${{ matrix.target }} --config tauri.windows.conf.json
-
-      - name: Stage Windows release assets
-        if: matrix.platform == 'windows-2022'
+      - name: Build Electron app
         shell: bash
         env:
-          ARTIFACT_PATHS_JSON: ${{ steps.build_windows_stage.outputs.artifactPaths }}
-          STAGING_DIR: release-assets/${{ matrix.target }}
-        run: |
-          set -euo pipefail
-          node - <<'NODE'
-          const fs = require('fs');
-          const path = require('path');
-
-          const raw = (process.env.ARTIFACT_PATHS_JSON || '').trim();
-          if (!raw) {
-            throw new Error('Windows artifactPaths 输出为空');
-          }
-
-          let artifacts;
-          try {
-            artifacts = JSON.parse(raw);
-          } catch (error) {
-            throw new Error(`Windows artifactPaths 不是合法 JSON: ${raw}\n${error}`);
-          }
-
-          if (!Array.isArray(artifacts) || artifacts.length === 0) {
-            throw new Error(`Windows artifactPaths 为空数组: ${raw}`);
-          }
-
-          const stagingDir = process.env.STAGING_DIR;
-          fs.mkdirSync(stagingDir, { recursive: true });
-
-          for (const artifact of artifacts) {
-            if (typeof artifact !== 'string' || !fs.existsSync(artifact) || !fs.statSync(artifact).isFile()) {
-              continue;
-            }
-            const stagedPath = path.join(stagingDir, path.basename(artifact));
-            fs.copyFileSync(artifact, stagedPath);
-            console.log(`Staged Windows asset: ${artifact} -> ${stagedPath}`);
-          }
-
-          const staged = fs.readdirSync(stagingDir).filter((name) => fs.statSync(path.join(stagingDir, name)).isFile());
-          if (staged.length === 0) {
-            throw new Error(`Windows 构建未生成可发布文件: ${raw}`);
-          }
-          NODE
-
-      - name: Build macOS app (attempt 1, verbose)
-        id: build_macos_primary
-        if: startsWith(matrix.platform, 'macos')
-        continue-on-error: true
-        shell: bash
-        env:
-          # 禁用 LTO 加速编译（正式发布可改为 thin）
           CARGO_PROFILE_RELEASE_LTO: "off"
-          # 增加并行编译单元
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 32
           CARGO_INCREMENTAL: 0
-          CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
-          RUSTFLAGS: "-C link-arg=-Wl,-rpath,@executable_path/../Frameworks"
+          CARGO_TARGET_DIR: ${{ github.workspace }}/lime-rs/target
           SCCACHE_GHA_ENABLED: "true"
           RUSTC_WRAPPER: sccache
-          # Apple 签名环境变量
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          # Apple 公证环境变量（解决 Gatekeeper 警告）
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_LINK: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_CERTIFICATE || '' }}
+          CSC_KEY_PASSWORD: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_ID: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_TEAM_ID || '' }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euxo pipefail
-          echo "macOS target: ${{ matrix.target }}"
-          echo "bundle candidates:"
-          echo " - src-tauri/target/${{ matrix.target }}/release/bundle"
-          echo " - src-tauri/src-tauri/target/${{ matrix.target }}/release/bundle"
-          echo " - target/${{ matrix.target }}/release/bundle"
-          pnpm tauri build --target "${{ matrix.target }}"
+          npm run electron:build
+          npx electron-builder ${{ matrix.electron_args }} --publish never
 
-      - name: Inspect macOS outputs after attempt 1
-        if: startsWith(matrix.platform, 'macos') && always()
+      - name: Verify Electron package resources
         shell: bash
         run: |
           set -euo pipefail
-          TARGET_TRIPLE="${{ matrix.target }}"
-          bundle_dirs=()
-          while IFS= read -r bundle_dir; do
-            [ -n "$bundle_dir" ] || continue
-            bundle_dirs+=("$bundle_dir")
-          done < <(find . -type d -path "*/target/${TARGET_TRIPLE}/release/bundle" | sort)
-          if [ "${#bundle_dirs[@]}" -eq 0 ]; then
-            echo "Bundle dir not created yet for ${TARGET_TRIPLE}"
-            exit 0
-          fi
+          node scripts/verify-electron-package-resources.mjs \
+            --package-root release-electron \
+            --platform "${{ matrix.host_platform }}" \
+            --arch "${{ matrix.arch }}"
 
-          printf 'Detected macOS bundle dirs after attempt 1:\n'
-          printf ' - %s\n' "${bundle_dirs[@]}"
-          for bundle_dir in "${bundle_dirs[@]}"; do
-            find "$bundle_dir" -maxdepth 4 -type f | sort
-          done
-
-      - name: Build macOS app (retry, verbose)
-        id: build_macos_retry
-        if: startsWith(matrix.platform, 'macos') && steps.build_macos_primary.outcome == 'failure'
-        continue-on-error: true
+      - name: Stage Electron release assets
         shell: bash
         env:
-          CARGO_PROFILE_RELEASE_LTO: "off"
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 32
-          CARGO_INCREMENTAL: 0
-          CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
-          RUSTFLAGS: "-C link-arg=-Wl,-rpath,@executable_path/../Frameworks"
-          SCCACHE_GHA_ENABLED: "true"
-          RUSTC_WRAPPER: sccache
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -euxo pipefail
-          echo "Retry macOS target: ${{ matrix.target }}"
-          pnpm tauri build --target "${{ matrix.target }}"
-
-      - name: Inspect macOS outputs after retry
-        if: startsWith(matrix.platform, 'macos') && steps.build_macos_primary.outcome == 'failure' && always()
-        shell: bash
+          RELEASE_TAG: ${{ github.event.inputs.version || github.ref_name }}
         run: |
           set -euo pipefail
-          TARGET_TRIPLE="${{ matrix.target }}"
-          bundle_dirs=()
-          while IFS= read -r bundle_dir; do
-            [ -n "$bundle_dir" ] || continue
-            bundle_dirs+=("$bundle_dir")
-          done < <(find . -type d -path "*/target/${TARGET_TRIPLE}/release/bundle" | sort)
-          if [ "${#bundle_dirs[@]}" -eq 0 ]; then
-            echo "Bundle dir not created yet for ${TARGET_TRIPLE}"
-            exit 0
-          fi
-
-          printf 'Detected macOS bundle dirs after retry:\n'
-          printf ' - %s\n' "${bundle_dirs[@]}"
-          for bundle_dir in "${bundle_dirs[@]}"; do
-            find "$bundle_dir" -maxdepth 4 -type f | sort
-          done
-
-      - name: Fail when macOS release build is unavailable
-        if: startsWith(matrix.platform, 'macos') && steps.build_macos_primary.outcome == 'failure' && steps.build_macos_retry.outcome == 'failure'
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "::error::macOS release build failed twice before a notarized artifact became available. See the previous build attempt logs for the actual error."
-          exit 1
-
-      - name: Resolve macOS bundle dir
-        id: resolve_macos_bundle_dir
-        if: startsWith(matrix.platform, 'macos') && (steps.build_macos_primary.outcome == 'success' || steps.build_macos_retry.outcome == 'success')
-        shell: bash
-        run: |
-          set -euo pipefail
-          TARGET_TRIPLE="${{ matrix.target }}"
-          candidates=(
-            "src-tauri/target/${TARGET_TRIPLE}/release/bundle"
-            "src-tauri/src-tauri/target/${TARGET_TRIPLE}/release/bundle"
-            "target/${TARGET_TRIPLE}/release/bundle"
-          )
-
-          bundle_dir=""
-          for candidate in "${candidates[@]}"; do
-            if [ -d "$candidate" ]; then
-              bundle_dir="$candidate"
-              break
-            fi
-          done
-
-          if [ -z "$bundle_dir" ]; then
-            bundle_dir="$(find . -type d -path "*/target/${TARGET_TRIPLE}/release/bundle" | sort | head -n 1)"
-          fi
-
-          if [ -z "$bundle_dir" ]; then
-            echo "Unable to resolve macOS bundle dir for ${TARGET_TRIPLE}" >&2
-            find . -type d -path "*/target/${TARGET_TRIPLE}/release*" | sort || true
-            exit 1
-          fi
-
-          echo "Resolved macOS bundle dir: $bundle_dir"
-          echo "bundle_dir=$bundle_dir" >> "$GITHUB_OUTPUT"
-
-      - name: Verify notarized macOS app bundle
-        if: startsWith(matrix.platform, 'macos') && (steps.build_macos_primary.outcome == 'success' || steps.build_macos_retry.outcome == 'success')
-        shell: bash
-        run: |
-          set -euo pipefail
-          BUNDLE_DIR="${{ steps.resolve_macos_bundle_dir.outputs.bundle_dir }}"
-          if [ -z "$BUNDLE_DIR" ] || [ ! -d "$BUNDLE_DIR" ]; then
-            echo "Expected bundle dir missing: $BUNDLE_DIR" >&2
-            exit 1
-          fi
-
-          app_bundle="$(find "$BUNDLE_DIR" -type d -name "*.app" | sort | head -n 1)"
-          if [ -z "$app_bundle" ] || [ ! -d "$app_bundle" ]; then
-            echo "No .app bundle found under $BUNDLE_DIR" >&2
-            find "$BUNDLE_DIR" -maxdepth 4 | sort || true
-            exit 1
-          fi
-
-          echo "Validating notarized app bundle: $app_bundle"
-          MAIN_BINARY="$app_bundle/Contents/MacOS/Lime"
-          if [ ! -f "$MAIN_BINARY" ]; then
-            MAIN_BINARY="$(find "$app_bundle/Contents/MacOS" -maxdepth 1 -type f | sort | head -n 1)"
-          fi
-          if [ -z "$MAIN_BINARY" ] || [ ! -f "$MAIN_BINARY" ]; then
-            echo "::error::Unable to resolve macOS app main binary under $app_bundle/Contents/MacOS"
-            exit 1
-          fi
-          spctl -a -vv "$app_bundle"
-          xcrun stapler validate "$app_bundle"
-
-      - name: Inspect final macOS outputs
-        if: startsWith(matrix.platform, 'macos') && always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          BUNDLE_DIR="${{ steps.resolve_macos_bundle_dir.outputs.bundle_dir }}"
-          if [ -z "$BUNDLE_DIR" ]; then
-            echo "Bundle dir missing for ${{ matrix.target }}"
-            exit 0
-          fi
-          if [ -d "$BUNDLE_DIR" ]; then
-            echo "Resolved bundle dir: $BUNDLE_DIR"
-            find "$BUNDLE_DIR" -maxdepth 4 -type f | sort
-          else
-            echo "Bundle dir missing: $BUNDLE_DIR"
-          fi
-
-      - name: Stage macOS release assets
-        if: startsWith(matrix.platform, 'macos') && (steps.build_macos_primary.outcome == 'success' || steps.build_macos_retry.outcome == 'success')
-        shell: bash
-        run: |
-          set -euo pipefail
-          BUNDLE_DIR="${{ steps.resolve_macos_bundle_dir.outputs.bundle_dir }}"
-          STAGING_DIR="release-assets/${{ matrix.target }}"
-
-          if [ -z "$BUNDLE_DIR" ] || [ ! -d "$BUNDLE_DIR" ]; then
-            echo "Expected bundle dir missing: $BUNDLE_DIR" >&2
-            exit 1
-          fi
-
-          assets=()
-          while IFS= read -r asset; do
-            [ -n "$asset" ] || continue
-            assets+=("$asset")
-          done < <(
-            find "$BUNDLE_DIR" -type f \
-              \( -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" -o -name "latest*.json" \) \
-              | sort
-          )
-
-          if [ "${#assets[@]}" -eq 0 ]; then
-            echo "No macOS release assets found under $BUNDLE_DIR" >&2
-            find "$BUNDLE_DIR" -maxdepth 4 -type f | sort || true
-            exit 1
-          fi
-
-          mkdir -p "$STAGING_DIR"
-          printf 'Staging macOS assets:\n'
-          printf ' - %s\n' "${assets[@]}"
-          for asset in "${assets[@]}"; do
-            cp "$asset" "$STAGING_DIR/$(basename "$asset")"
-          done
-
-          printf 'Staged macOS assets under %s:\n' "$STAGING_DIR"
-          find "$STAGING_DIR" -maxdepth 1 -type f | sort
+          node scripts/stage-electron-release-assets.mjs \
+            --builder-dir release-electron \
+            --out-dir "release-assets/${{ matrix.target }}" \
+            --target-triple "${{ matrix.target }}" \
+            --version "$RELEASE_TAG"
+          find "release-assets/${{ matrix.target }}" -maxdepth 1 -type f | sort
 
       - name: Upload staged release assets artifact
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: release-assets-${{ matrix.target }}
           path: release-assets
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 7
 
-      # 注意：移除了 Post-build cleanup 步骤
-      # 之前的清理会删除 deps/build/incremental 目录，导致缓存无法复用
-      # 保留这些文件可以让 rust-cache 更好地工作
-
       - name: Show sccache stats
+        if: always()
         run: sccache --show-stats
 
-      # 清理 keychain
-      - name: Cleanup Keychain
-        if: startsWith(matrix.platform, 'macos') && always()
-        run: |
-          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
-
   publish_release_assets:
-    name: Publish staged release assets
+    name: Publish Electron release assets
     needs: build
     if: needs.build.result == 'success'
     runs-on: ubuntu-22.04
@@ -802,82 +261,26 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Inspect staged release assets
+      - name: Inspect Electron release assets
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -d "release-assets" ]; then
-            echo "release-assets directory is missing" >&2
-            exit 1
-          fi
-
           assets=()
           while IFS= read -r asset; do
             [ -n "$asset" ] || continue
             assets+=("$asset")
           done < <(find "release-assets" -type f | sort)
-
           if [ "${#assets[@]}" -eq 0 ]; then
-            echo "No staged release assets found" >&2
+            echo "No staged Electron release assets found" >&2
             exit 1
           fi
-
-          printf 'Downloaded staged release assets:\n'
+          printf 'Downloaded Electron release assets:\n'
           printf ' - %s\n' "${assets[@]}"
-
-      - name: Prepare updater release notes
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.event.inputs.version || github.ref_name }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
-
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body > "$NOTES_FILE" && [ -s "$NOTES_FILE" ]; then
-            echo "Loaded release notes from GitHub Release"
-            exit 0
+          if find "release-assets" -type f \( -name "*.app.tar.gz" -o -name "*.sig" -o -name "latest.json" \) | grep -q .; then
+            echo "::error::Legacy updater assets must not be published by the Electron release workflow"
+            find "release-assets" -type f \( -name "*.app.tar.gz" -o -name "*.sig" -o -name "latest.json" \) | sort
+            exit 1
           fi
-
-          if [ -f RELEASE_NOTES.md ]; then
-            cp RELEASE_NOTES.md "$NOTES_FILE"
-            echo "Loaded release notes from RELEASE_NOTES.md"
-            exit 0
-          fi
-
-          PREV_TAG="$(git tag --sort=-v:refname | grep -v "^${RELEASE_TAG}$" | head -n 1)"
-          if [ -z "$PREV_TAG" ]; then
-            CHANGELOG="$(git log --pretty=format:"- %s (%h)" "${RELEASE_TAG}" 2>/dev/null || git log --pretty=format:"- %s (%h)")"
-          else
-            CHANGELOG="$(git log --pretty=format:"- %s (%h)" "${PREV_TAG}..${RELEASE_TAG}" 2>/dev/null || git log --pretty=format:"- %s (%h)" "${PREV_TAG}..HEAD")"
-          fi
-
-          {
-            echo "## Lime ${RELEASE_TAG}"
-            echo
-            echo "### Changes"
-            echo "${CHANGELOG}"
-          } > "$NOTES_FILE"
-          echo "Generated release notes from git history"
-
-      - name: Generate stable updater manifest
-        env:
-          LIME_UPDATES_BASE_URL: ${{ secrets.LIME_UPDATES_BASE_URL || vars.LIME_UPDATES_BASE_URL }}
-          RELEASE_TAG: ${{ github.event.inputs.version || github.ref_name }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          BASE_URL="${LIME_UPDATES_BASE_URL:-https://updates.limecloud.com}"
-          node scripts/release-updater-manifest.mjs \
-            --assets-dir release-assets \
-            --out-dir release-updater \
-            --version "$RELEASE_TAG" \
-            --base-url "$BASE_URL" \
-            --notes-file "$RUNNER_TEMP/release-notes.md" \
-            --channel stable
-
-          printf 'Generated updater manifest:\n'
-          cat release-updater/latest.json
 
       - name: Prepare GitHub release upload assets
         env:
@@ -888,30 +291,25 @@ jobs:
           node scripts/prepare-github-release-assets.mjs \
             --assets-dir release-assets \
             --out-dir release-github-assets \
-            --version "$RELEASE_TAG" \
-            --extra-asset release-updater/latest.json
+            --version "$RELEASE_TAG"
 
-      - name: Upload staged release assets to GitHub Release
+      - name: Upload Electron assets to GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
           TAG="${{ github.event.inputs.version || github.ref_name }}"
-
           assets=()
           while IFS= read -r -d '' asset; do
             assets+=("$asset")
           done < <(find "release-github-assets" -type f -print0 | sort -z)
-
           if [ "${#assets[@]}" -eq 0 ]; then
             echo "No prepared GitHub release assets found" >&2
             exit 1
           fi
-
           printf 'Uploading GitHub release assets:\n'
           printf ' - %s\n' "${assets[@]}"
-
           gh release upload "$TAG" "${assets[@]}" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
@@ -929,7 +327,7 @@ jobs:
             --latest
 
   publish_updater_assets_r2:
-    name: Publish updater assets to Cloudflare R2
+    name: Publish Electron updater assets to Cloudflare R2
     needs: publish_release_assets
     if: needs.publish_release_assets.result == 'success'
     continue-on-error: true
@@ -954,77 +352,31 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Prepare updater release notes
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.event.inputs.version || github.ref_name }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
-
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body > "$NOTES_FILE" && [ -s "$NOTES_FILE" ]; then
-            echo "Loaded release notes from GitHub Release"
-            exit 0
-          fi
-
-          if [ -f RELEASE_NOTES.md ]; then
-            cp RELEASE_NOTES.md "$NOTES_FILE"
-            echo "Loaded release notes from RELEASE_NOTES.md"
-            exit 0
-          fi
-
-          PREV_TAG="$(git tag --sort=-v:refname | grep -v "^${RELEASE_TAG}$" | head -n 1)"
-          if [ -z "$PREV_TAG" ]; then
-            CHANGELOG="$(git log --pretty=format:"- %s (%h)" "${RELEASE_TAG}" 2>/dev/null || git log --pretty=format:"- %s (%h)")"
-          else
-            CHANGELOG="$(git log --pretty=format:"- %s (%h)" "${PREV_TAG}..${RELEASE_TAG}" 2>/dev/null || git log --pretty=format:"- %s (%h)" "${PREV_TAG}..HEAD")"
-          fi
-
-          {
-            echo "## Lime ${RELEASE_TAG}"
-            echo
-            echo "### Changes"
-            echo "${CHANGELOG}"
-          } > "$NOTES_FILE"
-          echo "Generated release notes from git history"
-
-      - name: Generate stable updater manifest
-        env:
-          LIME_UPDATES_BASE_URL: ${{ secrets.LIME_UPDATES_BASE_URL || vars.LIME_UPDATES_BASE_URL }}
-          RELEASE_TAG: ${{ github.event.inputs.version || github.ref_name }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          BASE_URL="${LIME_UPDATES_BASE_URL:-https://updates.limecloud.com}"
-          node scripts/release-updater-manifest.mjs \
-            --assets-dir release-assets \
-            --out-dir release-updater \
-            --version "$RELEASE_TAG" \
-            --base-url "$BASE_URL" \
-            --notes-file "$RUNNER_TEMP/release-notes.md" \
-            --channel stable
-
-          printf 'Generated updater manifest for R2:\n'
-          cat release-updater/latest.json
-
-      - name: Upload updater assets to Cloudflare R2
+      - name: Upload Electron updater assets to Cloudflare R2
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           LIME_RELEASES_R2_BUCKET: ${{ secrets.LIME_RELEASES_R2_BUCKET }}
+          RELEASE_TAG: ${{ github.event.inputs.version || github.ref_name }}
         shell: bash
         run: |
           set -euo pipefail
           BUCKET="${LIME_RELEASES_R2_BUCKET:-lime-releases}"
+          PLAN="$RUNNER_TEMP/electron-r2-upload-plan.json"
+          node scripts/plan-electron-updater-r2-upload.mjs \
+            --assets-dir release-assets \
+            --bucket "$BUCKET" \
+            --channel stable \
+            --version "$RELEASE_TAG" \
+            --output "$PLAN"
 
-          BUCKET="$BUCKET" node - <<'NODE' > "$RUNNER_TEMP/r2-upload.sh"
+          node - "$PLAN" <<'NODE' > "$RUNNER_TEMP/electron-r2-upload.sh"
           const fs = require('fs');
-          const plan = JSON.parse(fs.readFileSync('release-updater/r2-upload-plan.json', 'utf8'));
+          const plan = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
           for (const item of plan) {
             const args = [
               'npx wrangler@latest r2 object put',
-              JSON.stringify(`${process.env.BUCKET}/${item.key}`),
+              JSON.stringify(`${item.bucket}/${item.key}`),
               '--remote',
               '--file',
               JSON.stringify(item.file),
@@ -1036,8 +388,7 @@ jobs:
             console.log(args.join(' '));
           }
           NODE
-
-          bash "$RUNNER_TEMP/r2-upload.sh"
+          bash "$RUNNER_TEMP/electron-r2-upload.sh"
 
       - name: Clean old updater assets from Cloudflare R2
         env:
@@ -1052,17 +403,14 @@ jobs:
           set -euo pipefail
           BUCKET="${LIME_RELEASES_R2_BUCKET:-lime-releases}"
           KEEP="${LIME_R2_KEEP_RELEASES:-3}"
-
           if ! npx wrangler@latest r2 object --help | grep -q "object list"; then
             echo "::warning::wrangler r2 object list is unavailable; skipping old R2 updater cleanup"
             exit 0
           fi
-
           npx wrangler@latest r2 object list "$BUCKET" \
             --remote \
             --prefix "lime/stable/v" \
             --json > "$RUNNER_TEMP/r2-objects.json"
-
           node scripts/plan-r2-release-cleanup.mjs \
             --input "$RUNNER_TEMP/r2-objects.json" \
             --output "$RUNNER_TEMP/r2-delete-keys.txt" \
@@ -1070,12 +418,10 @@ jobs:
             --keep "$KEEP" \
             --minimum "${LIME_MINIMUM_SUPPORTED_VERSION:-}" \
             --channel stable
-
           if [ ! -s "$RUNNER_TEMP/r2-delete-keys.txt" ]; then
             echo "No old R2 updater assets to delete"
             exit 0
           fi
-
           printf 'Deleting old R2 updater assets:\n'
           cat "$RUNNER_TEMP/r2-delete-keys.txt"
           while IFS= read -r key; do
@@ -1130,7 +476,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: lime-rs
           shared-key: "lime-cli-${{ matrix.target }}"
           cache-on-failure: true
           cache-all-crates: true
@@ -1142,12 +488,12 @@ jobs:
           CARGO_PROFILE_RELEASE_LTO: "off"
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 32
           CARGO_INCREMENTAL: 0
-          CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
+          CARGO_TARGET_DIR: ${{ github.workspace }}/lime-rs/target
           SCCACHE_GHA_ENABLED: "true"
           RUSTC_WRAPPER: sccache
         run: |
           set -euxo pipefail
-          cargo build --manifest-path src-tauri/Cargo.toml -p lime-cli --release --target "${{ matrix.target }}"
+          cargo build --manifest-path lime-rs/Cargo.toml -p lime-cli --release --target "${{ matrix.target }}"
 
       - name: Package lime-cli release asset
         id: package_lime_cli

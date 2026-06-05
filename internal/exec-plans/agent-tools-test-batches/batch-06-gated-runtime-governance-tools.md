@@ -37,13 +37,13 @@ runtime / platform / callback：
 
 建议认领：
 
-- `src-tauri/crates/aster-rust/crates/aster/src/tools/mod.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/tools/registry.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/tools/config_tool.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/tools/cron_tools.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/tools/remote_trigger_tool.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/tools/worktree_tools.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/tools/lsp.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/tools/mod.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/tools/registry.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/tools/config_tool.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/tools/cron_tools.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/tools/remote_trigger_tool.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/tools/worktree_tools.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/tools/lsp.rs`
 - `src/components/agent/chat/utils/toolDisplayInfo.ts`
 - `src/components/agent/chat/components/MessageList.test.tsx`
 
@@ -88,12 +88,12 @@ runtime / platform / callback：
 ## 建议测试入口
 
 ```bash
-cargo test --manifest-path "src-tauri/Cargo.toml" tools:: -- --nocapture
-cargo test --manifest-path "src-tauri/Cargo.toml" current_surface_tool_gates -- --nocapture
-cargo test --manifest-path "src-tauri/Cargo.toml" tools::cron_tools -- --nocapture
-cargo test --manifest-path "src-tauri/Cargo.toml" tools::remote_trigger_tool -- --nocapture
-cargo test --manifest-path "src-tauri/Cargo.toml" tools::worktree_tools -- --nocapture
-cargo test --manifest-path "src-tauri/Cargo.toml" tools::lsp -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" tools:: -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" current_surface_tool_gates -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" tools::cron_tools -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" tools::remote_trigger_tool -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" tools::worktree_tools -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" tools::lsp -- --nocapture
 ```
 
 前端：
@@ -145,8 +145,8 @@ npm test -- "src/components/agent/chat/utils/toolDisplayInfo.test.ts" "src/compo
   - `npm test -- "src/components/agent/chat/utils/toolProcessSummary.test.ts" "src/components/agent/chat/components/ToolCallDisplay.toolSearchActions.test.tsx" "src/components/agent/chat/utils/toolDisplayInfo.test.ts"`：3 files / 31 tests passed。
   - `npx eslint "src/components/agent/chat/utils/toolProcessSummary.test.ts" "src/components/agent/chat/components/ToolCallDisplay.toolSearchActions.test.tsx"`：passed。
 - Rust 验证状态：
-  - `cargo test --manifest-path "src-tauri/Cargo.toml" current_surface_tool_gates -- --nocapture`：退出码 0，但输出为 `running 0 tests`，筛选未命中有效测试，不能记为 Rust 通过证据。
-  - `cargo test --manifest-path "src-tauri/Cargo.toml" register_all_tools_with_cron_gate_without_scheduler -- --nocapture`：退出码 0，但输出为 `running 0 tests`，筛选未命中有效测试，不能记为 Rust 通过证据。
+  - `cargo test --manifest-path "lime-rs/Cargo.toml" current_surface_tool_gates -- --nocapture`：退出码 0，但输出为 `running 0 tests`，筛选未命中有效测试，不能记为 Rust 通过证据。
+  - `cargo test --manifest-path "lime-rs/Cargo.toml" register_all_tools_with_cron_gate_without_scheduler -- --nocapture`：退出码 0，但输出为 `running 0 tests`，筛选未命中有效测试，不能记为 Rust 通过证据。
   - 后续若要补有效 Rust 证据，应先确认目标测试所在 workspace / package，再使用能命中的 `-p ... <filter>` 入口；不要把 `0 tests` 当成通过。
 - 发现问题：
   - 组件列表层使用紧凑 headline，如 `已调整配置`、`已创建 daily-summary`，而 helper 层使用完整过程摘要，如 `已更新运行配置`；两层属于不同展示职责，测试已分别固定。

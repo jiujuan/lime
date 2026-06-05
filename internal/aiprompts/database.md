@@ -7,7 +7,7 @@
 ## 目录结构
 
 ```
-src-tauri/src/database/
+lime-rs/src/database/
 ├── mod.rs          # 模块入口
 ├── schema.rs       # 表结构定义
 ├── migrations.rs   # 数据库迁移
@@ -109,7 +109,7 @@ impl ApiKeyProviderDao {
 
 ## 旧凭证池表边界
 
-`provider_pool_credentials` 分类为 `deprecated` 存储边界：schema、历史迁移和启动期清理可以引用；运行时服务、Tauri 命令、前端 API 和旁路统计不得再读取它做凭证选择。
+`provider_pool_credentials` 分类为 `deprecated` 存储边界：schema、历史迁移和启动期清理可以引用；运行时服务、legacy adapter 命令、前端 API 和旁路统计不得再读取它做凭证选择。
 
 ## 数据库迁移
 

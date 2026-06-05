@@ -138,12 +138,12 @@ vi.mock("@/lib/api/appConfig", () => ({
   getDefaultProvider: mockGetDefaultProvider,
 }));
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  getTauriGlobal: vi.fn(() => null),
-  hasTauriEventCapability: vi.fn(() => true),
-  hasTauriEventListenerCapability: vi.fn(() => true),
-  hasTauriInvokeCapability: vi.fn(() => true),
-  hasTauriRuntimeMarkers: vi.fn(() => true),
+vi.mock("@/lib/desktop-runtime", () => ({
+  getLegacyDesktopHostGlobal: vi.fn(() => null),
+  hasDesktopHostEventCapability: vi.fn(() => true),
+  hasDesktopHostEventListenerCapability: vi.fn(() => true),
+  hasDesktopHostInvokeCapability: vi.fn(() => true),
+  hasDesktopHostRuntimeMarkers: vi.fn(() => true),
 }));
 
 vi.mock("@/lib/utils/scheduleMinimumDelayIdleTask", () => ({
@@ -4687,7 +4687,7 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
       await act(async () => {
         await harness
           .getValue()
-          .sendMessage("/review src-tauri", [], false, false, false, "react");
+          .sendMessage("/review lime-rs", [], false, false, false, "react");
       });
 
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
@@ -4698,7 +4698,7 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
       );
       expect(mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]).toEqual(
         expect.objectContaining({
-          message: expect.stringContaining("src-tauri"),
+          message: expect.stringContaining("lime-rs"),
         }),
       );
       expect(mockParseSkillSlashCommand).toHaveBeenCalledWith(

@@ -223,7 +223,7 @@ memory.soul.artifact_voice
 当前可扩展点：
 
 ```text
-src-tauri/src/services/memory_profile_prompt_service.rs
+lime-rs/src/services/memory_profile_prompt_service.rs
 ```
 
 后续演进：
@@ -253,9 +253,9 @@ src-tauri/src/services/memory_profile_prompt_service.rs
 ```text
 src/components/agent/chat/utils/artifactGenerationBriefMetadata.ts
 src/components/agent/chat/workspace/workspaceSendHelpers.ts
-src-tauri/src/services/artifact_generation_brief_boundary_service.rs
-src-tauri/src/services/artifact_request_metadata_service.rs
-src-tauri/src/services/artifact_prompt_service.rs
+lime-rs/src/services/artifact_generation_brief_boundary_service.rs
+lime-rs/src/services/artifact_request_metadata_service.rs
+lime-rs/src/services/artifact_prompt_service.rs
 ```
 
 当前落地状态：
@@ -293,7 +293,7 @@ src-tauri/src/services/artifact_prompt_service.rs
 src/features/experts/expertRuntimeBinding.ts
 src/components/experts/ExpertPlazaPage.tsx
 src/components/agent/chat/experts/ExpertInfoPanel.tsx
-src-tauri/src/commands/aster_agent_cmd/runtime_turn/request_metadata.rs
+lime-rs/src/commands/aster_agent_cmd/runtime_turn/request_metadata.rs
 ```
 
 当前落地状态：
@@ -317,8 +317,8 @@ src-tauri/src/commands/aster_agent_cmd/runtime_turn/request_metadata.rs
 这些路径共同构成 current 主链：
 
 1. `internal/roadmap/memory/make-next-generation-more-like-me.md`
-2. `src-tauri/src/services/memory_profile_prompt_service.rs`
-3. `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs`
+2. `lime-rs/src/services/memory_profile_prompt_service.rs`
+3. `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
 4. `src/lib/api/memoryRuntimeTypes.ts`
 5. `src/components/settings-v2/general/memory/index.tsx`
 6. `src/components/settings-v2/account/profile/index.tsx`

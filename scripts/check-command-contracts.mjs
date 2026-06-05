@@ -241,39 +241,24 @@ function extractBalancedBlock(sourceCode, startIndex, openChar, closeChar) {
   throw new Error(`无法提取 ${openChar}${closeChar} 平衡块`);
 }
 
-function collectRegisteredCommands() {
-  const runnerPath = path.join(repoRoot, "src-tauri/src/app/runner.rs");
-  const sourceCode = fs.readFileSync(runnerPath, "utf8");
-  const marker = "tauri::generate_handler![";
+function collectElectronHostCommands() {
+  const channelsPath = path.join(repoRoot, "electron/ipcChannels.ts");
+  const sourceCode = fs.readFileSync(channelsPath, "utf8");
+  const marker = "export const ELECTRON_HOST_COMMANDS = [";
   const markerIndex = sourceCode.indexOf(marker);
   if (markerIndex < 0) {
-    throw new Error("未找到 tauri::generate_handler! 注册块");
+    throw new Error("未找到 Electron host command 白名单");
   }
 
   const bracketStart = markerIndex + marker.length - 1;
-  const handlerBody = extractBalancedBlock(sourceCode, bracketStart, "[", "]");
-  const registeredCommands = new Set();
-  const withoutBlockComments = handlerBody.replace(/\/\*[\s\S]*?\*\//g, "");
+  const commandBody = extractBalancedBlock(sourceCode, bracketStart, "[", "]");
+  const commands = new Set();
 
-  for (const line of withoutBlockComments.split("\n")) {
-    const trimmedLine = line.replace(/\/\/.*$/, "").trim();
-    if (!trimmedLine) {
-      continue;
-    }
-
-    const match = trimmedLine.match(/^([A-Za-z0-9_:]+)\s*,?$/);
-    if (!match) {
-      continue;
-    }
-
-    const fullPath = match[1];
-    const command = fullPath.split("::").pop();
-    if (command) {
-      registeredCommands.add(command);
-    }
+  for (const match of commandBody.matchAll(/["'`]([^"'`]+)["'`]/g)) {
+    commands.add(match[1]);
   }
 
-  return registeredCommands;
+  return commands;
 }
 
 function collectMockPriorityCommands() {
@@ -297,12 +282,12 @@ function collectMockPriorityCommands() {
 }
 
 function collectDefaultMockCommands() {
-  const filePath = path.join(repoRoot, "src/lib/tauri-mock/core.ts");
+  const filePath = path.join(repoRoot, "src/lib/desktop-host/core.ts");
   const sourceCode = fs.readFileSync(filePath, "utf8");
   const marker = "const defaultMocks: Record<string, any> = {";
   const markerIndex = sourceCode.indexOf(marker);
   if (markerIndex < 0) {
-    throw new Error("未找到 tauri-mock defaultMocks 定义");
+    throw new Error("未找到 desktop-host defaultMocks 定义");
   }
 
   const braceStart = markerIndex + marker.length - 1;
@@ -344,7 +329,7 @@ function collectSpreadMockRegistryCommands(sourceCode, registryName) {
 
   const registrySourcePath = path.resolve(
     repoRoot,
-    "src/lib/tauri-mock",
+    "src/lib/desktop-host",
     `${importSource.replace(/^\.\//, "")}.ts`,
   );
   if (!fs.existsSync(registrySourcePath)) {
@@ -408,7 +393,7 @@ function main() {
     }
   }
   const frontendCommands = new Set(frontendUsage.keys());
-  const registeredCommands = collectRegisteredCommands();
+  const registeredCommands = collectElectronHostCommands();
   const mockPriorityCommands = collectMockPriorityCommands();
   const defaultMockCommands = collectDefaultMockCommands();
   const agentCommandCatalog = readAgentCommandCatalog();
@@ -460,7 +445,7 @@ function main() {
 
   console.log("[command-contracts] frontend commands:", frontendCommands.size);
   console.log(
-    "[command-contracts] rust registered commands:",
+    "[command-contracts] Electron host commands:",
     registeredCommands.size,
   );
   console.log(
@@ -486,11 +471,7 @@ function main() {
 
   if (missingRegistrations.size > 0) {
     hasError = true;
-    printCommandGroup(
-      "前端调用但未注册的命令",
-      missingRegistrations,
-      frontendUsage,
-    );
+    printCommandGroup("前端调用但 Electron host 未承接的命令", missingRegistrations, frontendUsage);
   }
 
   if (deprecatedCommandsStillUsed.size > 0) {
@@ -509,26 +490,17 @@ function main() {
 
   if (mockPriorityMissingRegistrations.size > 0) {
     hasError = true;
-    printCommandGroup(
-      "mock 优先命令缺少 Rust 注册",
-      mockPriorityMissingRegistrations,
-    );
+    printCommandGroup("mock 优先命令缺少 Electron host 承接", mockPriorityMissingRegistrations);
   }
 
   if (runtimeGatewayMissingRegistrations.size > 0) {
     hasError = true;
-    printCommandGroup(
-      "runtime gateway 命令缺少 Rust 注册",
-      runtimeGatewayMissingRegistrations,
-    );
+    printCommandGroup("runtime gateway 命令缺少 Electron host 承接", runtimeGatewayMissingRegistrations);
   }
 
   if (capabilityDraftMissingRegistrations.size > 0) {
     hasError = true;
-    printCommandGroup(
-      "capability draft 命令缺少 Rust 注册",
-      capabilityDraftMissingRegistrations,
-    );
+    printCommandGroup("capability draft 命令缺少 Electron host 承接", capabilityDraftMissingRegistrations);
   }
 
   if (hasError) {

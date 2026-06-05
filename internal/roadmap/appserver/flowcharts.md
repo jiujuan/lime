@@ -44,7 +44,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["现有 Tauri command runtime glue"] --> B["盘点 Tauri-only 依赖"]
+    A["legacy Tauri command runtime glue"] --> B["盘点 legacy Tauri-only 依赖"]
     B --> C{"是否依赖壳层对象?"}
     C -- 是 --> D["抽 HostAdapter / context / event sink"]
     C -- 否 --> E["判断公共 core 还是 backend"]
@@ -52,7 +52,7 @@ flowchart TD
     E --> F{"是否 Aster 私有逻辑?"}
     F -- 是 --> G["收进 AsterBackend"]
     F -- 否 --> H["下沉 RuntimeCore"]
-    G --> I["Tauri command 改为委托 RuntimeCore"]
+    G --> I["legacy Tauri adapter 改为委托 RuntimeCore"]
     H --> I
     I --> J["App Server 调用同一 RuntimeCore"]
     J --> K["合同测试对比输出"]
@@ -89,7 +89,7 @@ flowchart TB
     end
 
     subgraph ClientLayer["Client Layer"]
-        E["Tauri Adapter"]
+        E["Legacy Tauri Adapter<br/>compat"]
         F["Electron Main Client"]
         G["Generic App Client"]
     end

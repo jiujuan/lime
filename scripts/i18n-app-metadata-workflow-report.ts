@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { parse as parseYaml } from "yaml";
 
 export type AppMetadataWorkflowReportFormat = "text" | "json";
 
@@ -42,29 +43,27 @@ export interface AppMetadataWorkflowReport {
     name: string | null;
     version: string | null;
   };
-  headlessTauriConfig: {
-    identifier: string | null;
+  electronBuilderConfig: {
+    appId: string | null;
+    artifactName: string | null;
+    deepLinkSchemes: string[];
+    macIcon: string | null;
+    macTargets: string[];
+    outputDirectory: string | null;
     productName: string | null;
-    title: string | null;
+    winIcon: string | null;
+    winTargets: string[];
   };
   repoRoot: string;
   shellCapability: {
     description: string | null;
     identifier: string | null;
   };
-  srcTauriCargoToml: {
+  rustCargoToml: {
     description: string | null;
     homepage: string | null;
     packageVersion: string | null;
     workspaceVersion: string | null;
-  };
-  tauriConfig: {
-    bundleTargets: string | null;
-    deepLinkSchemes: string[];
-    identifier: string | null;
-    productName: string | null;
-    title: string | null;
-    updaterPubkeyPlaceholder: boolean;
   };
   schemaVersion: string;
   summary: {
@@ -95,15 +94,13 @@ const REPO_ROOT = path.resolve(__dirname, "..");
 const REVIEWED_METADATA_FIELDS = [
   { path: "package.json", field: "description" },
   { path: "package.json", field: "keywords" },
-  { path: "src-tauri/tauri.conf.json", field: "productName" },
-  { path: "src-tauri/tauri.conf.json", field: "identifier" },
-  { path: "src-tauri/tauri.conf.json", field: "app.windows[0].title" },
-  { path: "src-tauri/tauri.conf.json", field: "bundle.fileAssociations[0].name" },
-  { path: "src-tauri/tauri.conf.json", field: "bundle.fileAssociations[0].description" },
-  { path: "src-tauri/tauri.conf.headless.json", field: "productName" },
-  { path: "src-tauri/tauri.conf.headless.json", field: "identifier" },
-  { path: "src-tauri/tauri.conf.headless.json", field: "app.windows[0].title" },
-  { path: "src-tauri/capabilities/agent-app-shell.json", field: "description" },
+  { path: "electron-builder.yml", field: "productName" },
+  { path: "electron-builder.yml", field: "appId" },
+  { path: "electron-builder.yml", field: "artifactName" },
+  { path: "electron-builder.yml", field: "protocols[0].schemes" },
+  { path: "electron-builder.yml", field: "mac.icon" },
+  { path: "electron-builder.yml", field: "win.icon" },
+  { path: "lime-rs/capabilities/agent-app-shell.json", field: "description" },
 ] as const;
 
 function normalizePath(filePath: string): string {
@@ -120,9 +117,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function readJsonObject(filePath: string): Record<string, unknown> {
-  const parsed = JSON.parse(fs.readFileSync(filePath, "utf8")) as unknown;
+  const content = fs.readFileSync(filePath, "utf8");
+  const parsed = /\.ya?ml$/i.test(filePath)
+    ? (parseYaml(content) as unknown)
+    : (JSON.parse(content) as unknown);
   if (!isRecord(parsed)) {
-    throw new Error(`Expected JSON object: ${filePath}`);
+    throw new Error(`Expected structured object: ${filePath}`);
   }
   return parsed;
 }
@@ -215,18 +215,6 @@ function parseTomlSectionValue(
   return match ? match[1] ?? null : null;
 }
 
-function parseTauriBundleTargets(config: Record<string, unknown>): string | null {
-  const bundle = isRecord(config.bundle) ? config.bundle : null;
-  const targets = bundle?.targets;
-  if (typeof targets === "string") {
-    return targets;
-  }
-  if (Array.isArray(targets)) {
-    return targets.join(", ");
-  }
-  return null;
-}
-
 function readPackageJson(filePath: string): AppMetadataWorkflowReport["appPackageJson"] {
   if (!fileExists(filePath)) {
     return { description: null, name: null, version: null };
@@ -239,7 +227,7 @@ function readPackageJson(filePath: string): AppMetadataWorkflowReport["appPackag
   };
 }
 
-function readCargoToml(filePath: string): AppMetadataWorkflowReport["srcTauriCargoToml"] {
+function readCargoToml(filePath: string): AppMetadataWorkflowReport["rustCargoToml"] {
   if (!fileExists(filePath)) {
     return {
       description: null,
@@ -257,36 +245,53 @@ function readCargoToml(filePath: string): AppMetadataWorkflowReport["srcTauriCar
   };
 }
 
-function readTauriConfig(filePath: string): AppMetadataWorkflowReport["tauriConfig"] {
+function readTargetNames(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => {
+      if (typeof item === "string") {
+        return item;
+      }
+      return isRecord(item) && typeof item.target === "string" ? item.target : null;
+    })
+    .filter((item): item is string => Boolean(item));
+}
+
+function readElectronBuilderConfig(filePath: string): AppMetadataWorkflowReport["electronBuilderConfig"] {
   if (!fileExists(filePath)) {
     return {
-      bundleTargets: null,
       deepLinkSchemes: [],
-      identifier: null,
+      appId: null,
+      artifactName: null,
+      macIcon: null,
+      macTargets: [],
+      outputDirectory: null,
       productName: null,
-      title: null,
-      updaterPubkeyPlaceholder: false,
+      winIcon: null,
+      winTargets: [],
     };
   }
-  const json = readJsonObject(filePath);
-  const app = isRecord(json.app) ? json.app : null;
-  const windows = Array.isArray(app?.windows) ? app?.windows : [];
-  const firstWindow = windows.length > 0 && isRecord(windows[0]) ? windows[0] : null;
-  const bundle = isRecord(json.bundle) ? json.bundle : null;
-  const plugins = isRecord(json.plugins) ? json.plugins : null;
-  const updater = isRecord(plugins?.updater) ? plugins?.updater : null;
-  const deepLink = isRecord(plugins?.["deep-link"]) ? plugins?.["deep-link"] : null;
-  const desktop = isRecord(deepLink?.desktop) ? deepLink.desktop : null;
+  const config = readJsonObject(filePath);
+  const directories = isRecord(config.directories) ? config.directories : null;
+  const mac = isRecord(config.mac) ? config.mac : null;
+  const win = isRecord(config.win) ? config.win : null;
+  const protocols = Array.isArray(config.protocols) ? config.protocols : [];
+  const firstProtocol = protocols.length > 0 && isRecord(protocols[0]) ? protocols[0] : null;
 
   return {
-    bundleTargets: parseTauriBundleTargets(json),
-    deepLinkSchemes: Array.isArray(desktop?.schemes)
-      ? desktop.schemes.filter((value): value is string => typeof value === "string")
+    appId: readString(config.appId),
+    artifactName: readString(config.artifactName),
+    deepLinkSchemes: Array.isArray(firstProtocol?.schemes)
+      ? firstProtocol.schemes.filter((value): value is string => typeof value === "string")
       : [],
-    identifier: typeof json.identifier === "string" ? json.identifier : null,
-    productName: typeof json.productName === "string" ? json.productName : null,
-    title: typeof firstWindow?.title === "string" ? firstWindow.title : null,
-    updaterPubkeyPlaceholder: typeof updater?.pubkey === "string" && updater.pubkey.includes("placeholder"),
+    macIcon: readString(mac?.icon),
+    macTargets: readTargetNames(mac?.target),
+    outputDirectory: readString(directories?.output),
+    productName: readString(config.productName),
+    winIcon: readString(win?.icon),
+    winTargets: readTargetNames(win?.target),
   };
 }
 
@@ -392,12 +397,11 @@ export function analyzeAppMetadataWorkflowReport(
 ): AppMetadataWorkflowReport {
   const repoRoot = path.resolve(options.repoRoot || REPO_ROOT);
   const appPackageJsonPath = path.join(repoRoot, "package.json");
-  const cargoTomlPath = path.join(repoRoot, "src-tauri", "Cargo.toml");
-  const tauriConfigPath = path.join(repoRoot, "src-tauri", "tauri.conf.json");
-  const tauriHeadlessConfigPath = path.join(repoRoot, "src-tauri", "tauri.conf.headless.json");
+  const cargoTomlPath = path.join(repoRoot, "lime-rs", "Cargo.toml");
+  const electronBuilderConfigPath = path.join(repoRoot, "electron-builder.yml");
   const shellCapabilityPath = path.join(
     repoRoot,
-    "src-tauri",
+    "lime-rs",
     "capabilities",
     "agent-app-shell.json",
   );
@@ -419,8 +423,7 @@ export function analyzeAppMetadataWorkflowReport(
 
   const appPackageJson = readPackageJson(appPackageJsonPath);
   const cargoToml = readCargoToml(cargoTomlPath);
-  const tauriConfig = readTauriConfig(tauriConfigPath);
-  const headlessConfig = readTauriConfig(tauriHeadlessConfigPath);
+  const electronBuilderConfig = readElectronBuilderConfig(electronBuilderConfigPath);
   const shellCapability = readShellCapability(shellCapabilityPath);
   const appMetadataTranslationScope = analyzeMetadataTranslationScope(
     repoRoot,
@@ -445,10 +448,9 @@ export function analyzeAppMetadataWorkflowReport(
   const localizedMetadataFields = [
     appPackageJson.description,
     cargoToml.description,
-    tauriConfig.productName,
-    tauriConfig.title,
-    headlessConfig.productName,
-    headlessConfig.title,
+    electronBuilderConfig.productName,
+    electronBuilderConfig.appId,
+    electronBuilderConfig.artifactName,
     shellCapability.description,
   ].filter((value): value is string => Boolean(value && value.trim().length > 0));
   const appMetadataLocaleBuildManifestReady =
@@ -460,15 +462,10 @@ export function analyzeAppMetadataWorkflowReport(
     appMetadataTranslationScope,
     metadataFieldCoverage,
     appPackageJson,
-    headlessTauriConfig: {
-      identifier: headlessConfig.identifier,
-      productName: headlessConfig.productName,
-      title: headlessConfig.title,
-    },
+    electronBuilderConfig,
     repoRoot,
     shellCapability,
-    srcTauriCargoToml: cargoToml,
-    tauriConfig,
+    rustCargoToml: cargoToml,
     schemaVersion: "lime.i18n.appMetadataWorkflowReport.v1",
     summary: {
       appMetadataLocaleBuildManifestReady,
@@ -510,11 +507,13 @@ export function formatAppMetadataWorkflowReport(
     `locale-aware sources: ${report.summary.hasLocaleAwareMetadataSources ? "yes" : "no"}`,
     `package name/version: ${report.appPackageJson.name ?? "(missing)"} / ${report.appPackageJson.version ?? "(missing)"}`,
     `root description: ${report.appPackageJson.description ?? "(missing)"}`,
-    `tauri productName/title: ${report.tauriConfig.productName ?? "(missing)"} / ${report.tauriConfig.title ?? "(missing)"}`,
-    `tauri identifier: ${report.tauriConfig.identifier ?? "(missing)"}`,
-    `bundle targets: ${report.tauriConfig.bundleTargets ?? "(missing)"}`,
-    `deep link schemes: ${report.tauriConfig.deepLinkSchemes.join(", ") || "(none)"}`,
-    `headless productName/title: ${report.headlessTauriConfig.productName ?? "(missing)"} / ${report.headlessTauriConfig.title ?? "(missing)"}`,
+    `electron productName: ${report.electronBuilderConfig.productName ?? "(missing)"}`,
+    `electron appId: ${report.electronBuilderConfig.appId ?? "(missing)"}`,
+    `electron output: ${report.electronBuilderConfig.outputDirectory ?? "(missing)"}`,
+    `electron artifactName: ${report.electronBuilderConfig.artifactName ?? "(missing)"}`,
+    `deep link schemes: ${report.electronBuilderConfig.deepLinkSchemes.join(", ") || "(none)"}`,
+    `mac targets: ${report.electronBuilderConfig.macTargets.join(", ") || "(none)"}`,
+    `win targets: ${report.electronBuilderConfig.winTargets.join(", ") || "(none)"}`,
     `shell capability: ${report.shellCapability.identifier ?? "(missing)"}`,
   ];
 

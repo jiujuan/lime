@@ -1,4 +1,4 @@
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@/lib/desktop-host/event";
 import { parseAgentEvent } from "@/lib/api/agentProtocol";
 import type { AgentRuntimeEventSource } from "@/lib/api/agentRuntimeEvents";
 import { buildAgentUiProjectionEvents } from "../projection/agentUiEventProjection";

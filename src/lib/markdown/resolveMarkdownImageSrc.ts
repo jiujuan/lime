@@ -110,7 +110,7 @@ export function resolveMarkdownImageSrc(
     normalizedSrc.startsWith("https://") ||
     normalizedSrc.startsWith("blob:") ||
     normalizedSrc.startsWith("asset://") ||
-    normalizedSrc.startsWith("tauri://")
+    normalizedSrc.startsWith("desktop-host://")
   ) {
     return normalizedSrc;
   }

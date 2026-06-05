@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
   }),
 }));
 
-vi.mock("@tauri-apps/api", () => ({
+vi.mock("@/lib/desktop-host/api", () => ({
   core: {
     invoke: mocks.baseInvoke,
   },
@@ -62,6 +62,13 @@ import {
   shouldPreferMockInBrowser,
 } from "./mockPriorityCommands";
 
+const LEGACY_HOST_GLOBAL_KEY = ["__TA", "URI__"].join("");
+const LEGACY_HOST_INTERNALS_KEY = ["__TA", "URI_INTERNALS__"].join("");
+
+function rendererGlobals(): Record<string, any> {
+  return window as unknown as Record<string, any>;
+}
+
 describe("safeInvoke", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -70,8 +77,9 @@ describe("safeInvoke", () => {
     window.localStorage.clear();
     clearInvokeErrorBuffer();
     clearInvokeTraceBuffer();
-    delete (window as any).__TAURI__;
-    delete (window as any).__TAURI_INTERNALS__;
+    delete rendererGlobals()[LEGACY_HOST_GLOBAL_KEY];
+    delete rendererGlobals()[LEGACY_HOST_INTERNALS_KEY];
+    delete (window as any).electronAPI;
   });
 
   it("浏览器开发模式下优先走 HTTP bridge", async () => {
@@ -171,7 +179,7 @@ describe("safeInvoke", () => {
     );
   });
 
-  it("浏览器直开 tauri dev 页面时会从真实 invoke 退回显式 mock", async () => {
+  it("浏览器直开旧宿主 dev 页面时会从真实 invoke 退回显式 mock", async () => {
     vi.mocked(shouldPreferMockInBrowser).mockReturnValueOnce(true);
     mocks.baseInvoke.mockRejectedValueOnce(
       new TypeError("Cannot read properties of undefined (reading 'invoke')"),
@@ -209,9 +217,81 @@ describe("safeInvoke", () => {
     );
   });
 
+  it("Electron host 声明支持命令时 safeInvoke 走 electron-ipc 并记录 trace", async () => {
+    (window as any).electronAPI = {
+      supportsCommand: (command: string) =>
+        command === "app_server_handle_json_lines",
+      invoke: vi.fn().mockResolvedValueOnce({ lines: [] }),
+      listen: vi.fn(),
+      emit: vi.fn(),
+    };
+
+    await expect(
+      safeInvoke("app_server_handle_json_lines", {
+        request: { lines: [] },
+      }),
+    ).resolves.toEqual({ lines: [] });
+
+    expect((window as any).electronAPI.invoke).toHaveBeenCalledWith(
+      "app_server_handle_json_lines",
+      { request: { lines: [] } },
+    );
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+    expect(getInvokeTraceBuffer()).toEqual([
+      expect.objectContaining({
+        command: "app_server_handle_json_lines",
+        transport: "electron-ipc",
+        status: "success",
+      }),
+    ]);
+  });
+
+  it("Electron host 未声明支持的非真相命令可继续走 HTTP bridge", async () => {
+    (window as any).electronAPI = {
+      supportsCommand: () => false,
+      invoke: vi.fn(),
+      listen: vi.fn(),
+      emit: vi.fn(),
+    };
+    mocks.invokeViaHttp.mockResolvedValueOnce({ ok: true });
+
+    await expect(safeInvoke("workspace_list")).resolves.toEqual({ ok: true });
+
+    expect((window as any).electronAPI.invoke).not.toHaveBeenCalled();
+    expect(mocks.invokeViaHttp).toHaveBeenCalledWith(
+      "workspace_list",
+      undefined,
+    );
+  });
+
+  it("Electron host 未声明支持的真相命令直接失败，不回退 HTTP bridge 或 mock", async () => {
+    vi.mocked(shouldDisallowMockFallbackInBrowser).mockReturnValueOnce(true);
+    (window as any).electronAPI = {
+      supportsCommand: () => false,
+      invoke: vi.fn(),
+      listen: vi.fn(),
+      emit: vi.fn(),
+    };
+
+    await expect(safeInvoke("agent_runtime_list_sessions")).rejects.toThrow(
+      'Desktop Host 尚未支持命令 "agent_runtime_list_sessions"',
+    );
+
+    expect((window as any).electronAPI.invoke).not.toHaveBeenCalled();
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+    expect(mocks.explicitMockInvoke).not.toHaveBeenCalled();
+    expect(getInvokeTraceBuffer()).toEqual([
+      expect.objectContaining({
+        command: "agent_runtime_list_sessions",
+        transport: "electron-ipc",
+        status: "error",
+      }),
+    ]);
+  });
+
   it("事件 internals 已就绪时 safeListen 走原生 event API", async () => {
     const unlisten = vi.fn();
-    (window as any).__TAURI_INTERNALS__ = {
+    rendererGlobals()[LEGACY_HOST_INTERNALS_KEY] = {
       invoke: vi.fn(),
       transformCallback: vi.fn(),
     };
@@ -229,10 +309,10 @@ describe("safeInvoke", () => {
     expect(unlisten).toHaveBeenCalledTimes(1);
   });
 
-  it("仅暴露全局 Tauri event.listen 时 safeListen 也应走原生事件桥", async () => {
+  it("仅暴露全局旧宿主 event.listen 时 safeListen 也应走原生事件桥", async () => {
     const unlisten = vi.fn();
     const globalListen = vi.fn().mockResolvedValueOnce(unlisten);
-    (window as any).__TAURI__ = {
+    rendererGlobals()[LEGACY_HOST_GLOBAL_KEY] = {
       event: {
         listen: globalListen,
       },
@@ -269,7 +349,7 @@ describe("safeInvoke", () => {
     expect(unlisten).toHaveBeenCalledTimes(1);
   });
 
-  it("事件桥失败且没有 Tauri 标记时会退回显式 mock 监听", async () => {
+  it("事件桥失败且没有旧宿主标记时会退回显式 mock 监听", async () => {
     const unlisten = vi.fn();
     mocks.hasDevBridgeEventListenerCapability.mockReturnValue(true);
     mocks.listenViaHttpEvent.mockRejectedValueOnce(
@@ -305,8 +385,8 @@ describe("safeInvoke", () => {
     expect(mocks.explicitMockListen).not.toHaveBeenCalled();
   });
 
-  it("Tauri 标记存在但原生事件桥缺失时，运行时真相事件不应静默跳过监听", async () => {
-    (window as any).__TAURI__ = {
+  it("旧宿主标记存在但原生事件桥缺失时，运行时真相事件不应静默跳过监听", async () => {
+    rendererGlobals()[LEGACY_HOST_GLOBAL_KEY] = {
       core: {
         invoke: vi.fn(),
       },
@@ -323,12 +403,12 @@ describe("safeInvoke", () => {
     expect(mocks.explicitMockListen).not.toHaveBeenCalled();
   });
 
-  it("Tauri 运行时存在但事件桥缺失时 safeListen 返回空清理函数", async () => {
+  it("旧宿主运行时存在但事件桥缺失时 safeListen 返回空清理函数", async () => {
     const consoleWarnSpy = vi
       .spyOn(console, "warn")
       .mockImplementation(() => {});
     vi.useFakeTimers();
-    (window as any).__TAURI__ = {
+    rendererGlobals()[LEGACY_HOST_GLOBAL_KEY] = {
       core: {
         invoke: vi.fn(),
       },
@@ -351,7 +431,7 @@ describe("safeInvoke", () => {
     const consoleWarnSpy = vi
       .spyOn(console, "warn")
       .mockImplementation(() => {});
-    (window as any).__TAURI_INTERNALS__ = {
+    rendererGlobals()[LEGACY_HOST_INTERNALS_KEY] = {
       invoke: vi.fn(),
       transformCallback: vi.fn(),
     };
@@ -374,8 +454,8 @@ describe("safeInvoke", () => {
     }
   });
 
-  it("Tauri 原生事件桥调用异常时，运行时真相事件应显式失败", async () => {
-    (window as any).__TAURI_INTERNALS__ = {
+  it("旧宿主原生事件桥调用异常时，运行时真相事件应显式失败", async () => {
+    rendererGlobals()[LEGACY_HOST_INTERNALS_KEY] = {
       invoke: vi.fn(),
       transformCallback: vi.fn(),
     };

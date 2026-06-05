@@ -62,11 +62,11 @@ function resolveBinaryCandidates(meta, targetTriple, explicitBinary) {
   push(explicitBinary);
 
   if (targetTriple) {
-    push(path.join(REPO_ROOT, "src-tauri", "target", targetTriple, "release", meta.binaryName));
+    push(path.join(REPO_ROOT, "lime-rs", "target", targetTriple, "release", meta.binaryName));
     push(path.join(REPO_ROOT, "target", targetTriple, "release", meta.binaryName));
   }
 
-  push(path.join(REPO_ROOT, "src-tauri", "target", "release", meta.binaryName));
+  push(path.join(REPO_ROOT, "lime-rs", "target", "release", meta.binaryName));
   push(path.join(REPO_ROOT, "target", "release", meta.binaryName));
 
   return candidates;

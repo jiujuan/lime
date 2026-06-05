@@ -1,15 +1,15 @@
-# Tauri 命令边界
+# Desktop Host / App Server 命令边界
 
 ## 这份文档回答什么
 
-本文件用于说明 Lime 中 Tauri 命令的工程边界，主要回答：
+本文件用于说明 Lime 中 Electron Desktop Host、App Server JSON-RPC、前端网关、DevBridge mock 与 legacy Tauri adapter 的工程边界，主要回答：
 
 - 命令改动应该从哪里进入，而不是到处直接 `invoke`
 - 哪些文件共同构成命令契约的事实源
 - 新增、迁移、下线命令时，最低要同步哪些位置
 - 怎样避免 compat / deprecated 路径重新长出新表面
 
-如果本轮改动不仅涉及 Tauri 命令边界，还涉及 `@` / 产品型 `/`、聊天轻卡、右侧 viewer、`ServiceSkill` 场景或命令恢复主链，请同时阅读：
+如果本轮改动不仅涉及 Desktop Host / App Server 命令边界，还涉及 `@` / 产品型 `/`、聊天轻卡、右侧 viewer、`ServiceSkill` 场景或命令恢复主链，请同时阅读：
 
 - `internal/aiprompts/command-runtime.md`
 
@@ -19,16 +19,16 @@
 
 推荐路径是：
 
-`组件 / Hook -> src/lib/api/* 网关 -> safeInvoke -> Rust command`
+`组件 / Hook -> src/lib/api/* 网关 -> safeInvoke -> Electron IPC / App Server JSON-RPC / legacy adapter`
 
 新增命令和对应前端网关命名必须使用领域名，不要加 `Lime` / `lime_` / `lime-` 品牌前缀。例如 App Server 入口使用 `app_server_*`，不要写成带品牌前缀的命名。只有历史兼容、对外品牌标识或外部生态已固定的名字才允许例外，并在路线图或执行计划写明原因和退出条件。
 
-新增 AI Agent / runtime / host integration / 跨 App 复用能力默认走 App Server JSON-RPC current 主链。只有为 Lime Desktop 现有 GUI 做兼容适配时，才继续触碰 `agent_runtime_*` / Aster Tauri command；这类改动不能承接新业务逻辑，必须写清退出条件。
+新增 AI Agent / runtime / host integration / 跨 App 复用能力默认走 App Server JSON-RPC current 主链。Electron main / preload 只作为 Desktop host adapter，负责窗口、平台能力、sidecar 生命周期与白名单 IPC；只有为旧 GUI 做兼容适配时，才继续触碰 `agent_runtime_*` / Aster legacy command；这类改动不能承接新业务逻辑，必须写清退出条件。
 
 这样做的目的不是“多包一层”，而是为了保证：
 
 - 前端只有一个可治理的调用出口
-- Rust 命令可以按 `current / compat / deprecated / dead-candidate` 演进
+- Electron host、App Server、legacy adapter 可以按 `current / compat / deprecated / dead-candidate` 演进
 - 新旧命令并存时，迁移边界清晰，不会继续扩散
 - 契约检查脚本能稳定扫描并阻止回流
 
@@ -71,7 +71,7 @@
 
 - `get_model_registry_provider_ids`
 
-`src-tauri/resources/models` 本地模型 catalog 已下线；Provider 元信息以 `get_system_provider_catalog` 为事实源，模型列表以 Provider 实时 `/models` 接口和用户显式 `custom_models` 为事实源。Provider 实时 `/models` 的成功结果可以由 `ModelRegistryService` 持久化缓存 10 天，所有读取先查缓存再访问上游，但该缓存只保存真实接口结果，不得退化成本地 catalog 兜底。`get_model_registry_provider_ids` 仅作为兼容命令保留空结果，不应再读取本地资源、数据库或运行态缓存去“猜” provider 集合。
+`lime-rs/resources/models` 本地模型 catalog 已下线；Provider 元信息以 `get_system_provider_catalog` 为事实源，模型列表以 Provider 实时 `/models` 接口和用户显式 `custom_models` 为事实源。Provider 实时 `/models` 的成功结果可以由 `ModelRegistryService` 持久化缓存 10 天，所有读取先查缓存再访问上游，但该缓存只保存真实接口结果，不得退化成本地 catalog 兜底。`get_model_registry_provider_ids` 仅作为兼容命令保留空结果，不应再读取本地资源、数据库或运行态缓存去“猜” provider 集合。
 同理，聊天运行时初始化的 `aster_agent_init` 在浏览器 DevBridge 模式下也不能再被放进 `mockPriorityCommands`。只要桥接在线，它就必须优先读取后端真实 `provider_name / model_name`，让聊天入口拿到当前运行时模型。
 进一步地，围绕运行时模型解析的真相命令：`aster_agent_init`、`get_default_provider`、`get_api_key_providers`、`get_model_registry`、`get_provider_alias_config`、`fetch_provider_models_auto`、`get_model_registry_provider_ids`，在浏览器 DevBridge 模式下如果桥接失败，必须直接抛错，不能再通过 `safeInvoke` 静默退回 mock；否则前端会把“后端未连上 / 命令失败”误显示成假的 Provider / 模型列表。旧 `get_provider_pool_overview` 属于凭证池命令面，已随凭证池退役，不得重新作为运行时模型解析事实源。
 同时要明确，`aster_agent_init` 只负责初始化 Agent，并不保证已经完成 Provider 配置；当它未返回 `provider_name / model_name` 时，前端不得把本地硬编码默认值当作真实模型，而应继续回退到 `get_default_provider` + 已配置 Provider/模型注册表解析链，拿到当前工作区真正可用的 `provider/model`。
@@ -201,7 +201,7 @@ Skill Forge Capability Draft 命令链也必须停留在独立的生成 / 验证
 Skill Forge P3C runtime binding 第一刀必须回到 `agent_runtime_*` 主链：
 
 - 当前前端入口为 `src/lib/api/agentRuntime/inventoryClient.ts` 中的 `listWorkspaceSkillBindings`
-- 当前 Tauri 命令为 `agent_runtime_list_workspace_skill_bindings`
+- 当前兼容命令名为 `agent_runtime_list_workspace_skill_bindings`；新增 runtime / binding 能力应继续向 App Server JSON-RPC current 主链收敛
 - 该命令只做 `workspaceRoot -> P3B registered skills -> binding readiness / next gate` 的只读投影
 - 返回结果必须默认标记 `queryLoopVisible=false`、`toolRuntimeVisible=false`、`launchEnabled=false`，不能因为出现 `ready_for_manual_enable` 就把 skill 自动注入 Query Loop、SkillTool registry 或默认 tool surface
 - 它可以说明哪些 registered skill 已经具备后续接入候选资格，但真正执行仍只能通过后续 `agent_runtime_submit_turn -> Query Loop -> tool_runtime -> artifact/evidence` 完成
@@ -211,7 +211,7 @@ Skill Forge P3D Query Loop metadata 第一刀继续走 `agent_runtime_submit_tur
 
 - 当前 metadata contract 为 `request_metadata.harness.workspace_skill_bindings`，兼容读取 `workspaceSkillBindings`
 - 前端裁剪入口为 `src/components/agent/chat/utils/workspaceSkillBindingsMetadata.ts`；它只输出 snake_case metadata fragment，不写入 `allow_model_skills`
-- Rust prompt 投影入口为 `src-tauri/src/commands/aster_agent_cmd/workspace_skill_binding_prompt.rs`，在 full runtime prompt 的 `WorkspaceSkillBindings` stage 中执行
+- Rust prompt 投影入口为 `lime-rs/src/commands/aster_agent_cmd/workspace_skill_binding_prompt.rs`，在 full runtime prompt 的 `WorkspaceSkillBindings` stage 中执行
 - 该投影最多展示 5 个 binding，只用于说明候选能力、`binding_status`、`next_gate`、权限摘要和来源；不得把它当作 Query Loop 已启用工具清单
 - 当 `query_loop_visible=false`、`tool_runtime_visible=false` 或 `launch_enabled=false` 时，模型不得声称已运行、不得调用未授权 Skill、不得创建 automation / scheduler / job
 - P3D 不注入 `SkillTool` registry，不改变 `agent_runtime_submit_turn` 的默认 tool surface；真正执行仍必须等后续 `tool_runtime` 授权裁剪和 session 显式 enable
@@ -237,7 +237,7 @@ Skill Forge P3E tool_runtime authorization 第一刀仍继续走 `agent_runtime_
 - 如果 scene 缺少 URL、项目等必填输入，前端不应只 toast 结束；应打开统一 `scene gate`，由 `slotSchema` / `readinessRequirements` 驱动补参
 - 如果某个 scene 背后绑定的是 `site_adapter / browser_assist` 型技能，前端可以继续只暴露 `scene`，不必把底层 site skill 再平铺成首页目录项；但运行时解析 `scene -> linkedSkillId` 时必须能回退完整 `ServiceSkill` 目录，而不是只看首页可见 skill 列表，否则会出现目录可见但执行找不到 skill 的协议漂移
 - 如果某个 `site_adapter / browser_assist` scene 还声明了 `readinessRequirements.requiresProject=true`，或 `saveMode=project_resource` 需要真实项目目录，输入框 slash 发送时必须沿用当前选中的项目；若当前没有项目，前端必须通过 `scene gate` 收集项目，不能静默 `getOrCreateDefaultProject()` 把结果写进 default 项目
-- scene 或技能补参继续只声明 `slotSchema`；若后续要在 GUI 里补 `a2ui` 表单，也只能作为渲染层实现细节，不能把 `a2ui` 类型耦合进 `SkillCatalog`、`request_metadata.harness` 或 Tauri 命令契约
+- scene 或技能补参继续只声明 `slotSchema`；若后续要在 GUI 里补 `a2ui` 表单，也只能作为渲染层实现细节，不能把 `a2ui` 类型耦合进 `SkillCatalog`、`request_metadata.harness` 或宿主命令契约
 
 如果这轮改动触达了 `client/skills` 协议，不仅要改 Lime 前端 selector，还要同步检查 `limecore` 的：
 
@@ -246,17 +246,17 @@ Skill Forge P3E tool_runtime authorization 第一刀仍继续走 `agent_runtime_
 - `packages/api-client`
 - `control-plane-svc` skill catalog service 与路由测试
 
-媒体生成任务链路同样需要单一事实源。当前真正的事实源应收敛到标准 `.lime/tasks/<task_type>/*.json` artifact + 同一条 worker 执行链；CLI、Tauri 命令和 agent tool 都只能作为这条事实源的不同入口，不能各自演化协议。现有外部 CLI 入口至少覆盖：
+媒体生成任务链路同样需要单一事实源。当前真正的事实源应收敛到标准 `.lime/tasks/<task_type>/*.json` artifact + 同一条 worker 执行链；CLI、App Server / Desktop command 和 agent tool 都只能作为这条事实源的不同入口，不能各自演化协议。现有外部 CLI 入口至少覆盖：
 
 - `lime media image generate`
 - `lime media cover generate`
 - `lime media video generate`
 
-这些命令统一产出 `.lime/tasks/<task_type>/*.json` artifact 与稳定 JSON 输出。仓库内现有 `lime_create_*_generation_task`、`social_generate_cover_image` 与相关 Tauri / agent tool 入口在兼容期内允许保留，但也必须继续委托同一套任务文件与输出契约，不要再长出第三套“媒体任务协议”。
+这些命令统一产出 `.lime/tasks/<task_type>/*.json` artifact 与稳定 JSON 输出。仓库内现有 `lime_create_*_generation_task`、`social_generate_cover_image` 与相关 legacy adapter / agent tool 入口在兼容期内允许保留，但也必须继续委托同一套任务文件与输出契约，不要再长出第三套“媒体任务协议”。
 
 `Claw` 的图片任务当前已经收敛到同一条 current 主链：
 
-- Agent 驱动的图片命令与显式图片动作：`@配图` / `@修图` / `@重绘` / `@image` / `/image`，以及文稿 inline 配图、封面位、图片工作台编辑/变体、带引用图或带参考图的动作，都必须先进入 Agent turn。纯文本入口由 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 保留原始用户文本发送；显式动作则由 `src/components/agent/chat/workspace/useWorkspaceImageWorkbenchActionRuntime.ts` 组装同构的 `image_task` 上下文后，再复用统一发送主线。两类入口都会把结构化 `image_task` 写入 `request_metadata.harness.image_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/image_skill_launch.rs` 会物化 `skill-input-image://N` 引用，并给当前 turn 注入只允许首刀优先调用 `Skill(image_generate)` 的系统提示。当前图片 launch 还会在 session permission 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类偏航工具，并在当前 session registry 中直接移除这些 detour tools，避免模型把 `@配图` 卡死在“先搜工具目录”或把权限错误暴露给用户。统一目录显式声明的图片模型绑定标签，例如用户在“设置 -> AI 服务商”里从已配置 Provider 模型创建的 `@Nano Banana 2` / `@GPT Images 2`，或 Lime Cloud 下发的同构 command entry，也必须进入同一 `image_skill_launch -> Agent 首刀 Skill(image_generate)` 回合；这些标签只表示“用户指定了图片执行模型”，发送边界必须把 `entry_source / provider_id / model / executor_mode / modality_contract_key / runtime_contract / routing_slot` 作为路由上下文并入 `image_task`，不得绕过 Agent / Skill 编排去前端创建任务。未在 catalog 中声明的任意 `@模型名` 不得自动变成图片 API 入口。当前 `@配图` / `@海报` 的唯一 current 执行面仍是 `Skill(image_generate) -> lime_create_image_generation_task`；旧的 `Bash -> lime media image generate --json` 与 `lime task create image --json` 只允许停留在 compat 或人工 CLI 场景，不能再被 skill 当成首发路径。即使经过 compat 入口，最终也必须复用同一个 `image_generate` task artifact + worker 执行链，且忽略 `outputPath` 这类非标准落盘出口，最终仍只落到标准 task file。
+- Agent 驱动的图片命令与显式图片动作：`@配图` / `@修图` / `@重绘` / `@image` / `/image`，以及文稿 inline 配图、封面位、图片工作台编辑/变体、带引用图或带参考图的动作，都必须先进入 Agent turn。纯文本入口由 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 保留原始用户文本发送；显式动作则由 `src/components/agent/chat/workspace/useWorkspaceImageWorkbenchActionRuntime.ts` 组装同构的 `image_task` 上下文后，再复用统一发送主线。两类入口都会把结构化 `image_task` 写入 `request_metadata.harness.image_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/image_skill_launch.rs` 会物化 `skill-input-image://N` 引用，并给当前 turn 注入只允许首刀优先调用 `Skill(image_generate)` 的系统提示。当前图片 launch 还会在 session permission 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类偏航工具，并在当前 session registry 中直接移除这些 detour tools，避免模型把 `@配图` 卡死在“先搜工具目录”或把权限错误暴露给用户。统一目录显式声明的图片模型绑定标签，例如用户在“设置 -> AI 服务商”里从已配置 Provider 模型创建的 `@Nano Banana 2` / `@GPT Images 2`，或 Lime Cloud 下发的同构 command entry，也必须进入同一 `image_skill_launch -> Agent 首刀 Skill(image_generate)` 回合；这些标签只表示“用户指定了图片执行模型”，发送边界必须把 `entry_source / provider_id / model / executor_mode / modality_contract_key / runtime_contract / routing_slot` 作为路由上下文并入 `image_task`，不得绕过 Agent / Skill 编排去前端创建任务。未在 catalog 中声明的任意 `@模型名` 不得自动变成图片 API 入口。当前 `@配图` / `@海报` 的唯一 current 执行面仍是 `Skill(image_generate) -> lime_create_image_generation_task`；旧的 `Bash -> lime media image generate --json` 与 `lime task create image --json` 只允许停留在 compat 或人工 CLI 场景，不能再被 skill 当成首发路径。即使经过 compat 入口，最终也必须复用同一个 `image_generate` task artifact + worker 执行链，且忽略 `outputPath` 这类非标准落盘出口，最终仍只落到标准 task file。
 - 显式图片动作如果先在前端补好了 `image_skill_launch` metadata，也必须继续复用统一发送边界去绑定真实 `session_id`。不要在图片动作侧为了拿 `session_id` 再额外 `createFreshSession(...)`，否则一次 `@配图` 会被拆成两个对话；当前正确做法是允许 metadata 先带本地 draft key，再在发送前统一替换成真实会话 ID。
 - 图片结果展示固定继续走 `聊天轻卡 -> 图片工作台` 主链：通用 `tool_result` 只保留 timeline 与轻卡，不应把空内容的 `.jpg/.png/.webp` 二进制结果再镜像成通用 artifact 卡片；否则会出现重复 `output_image.jpg`、路径不一致导致去重失败、以及点击后无法在文本 workbench 打开的错误体验。
 - 通用 artifact 层对同一路径必须做等价归一：`basename / 相对路径 / 绝对路径` 在前端应视作同一文件；`tool_result` 来源的产物默认后台更新，不自动选中、不自动展开工作台，避免命令执行过程中抢焦点。
@@ -283,60 +283,60 @@ Skill 执行链路同样遵循单一命令边界。当前前端入口为 `src/li
 
 `Claw` 的纯文本封面命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的封面命令：`@封面` / `@cover` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `cover_task` 写入 `request_metadata.harness.cover_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/cover_skill_launch.rs` 会把当前 turn 固定为 workbench chat mode，并注入只允许首刀优先调用 `Skill(cover_generate)` 的系统提示；当前封面 launch 还会在 session permission 中显式压制 `ToolSearch / WebSearch / Read / Write / Edit / Bash / Glob / Grep / social_generate_cover_image / lime_create_image_generation_task` 这类偏航工具，并在当前 session registry 中直接移除这些 detour tools，避免模型在 `@封面` 首刀前先去搜索工具目录、生成 HTML/SVG 假封面，或把封面退回普通 image task。后续默认 skill 必须先进入 `cover_generate` 的 current binding，并通过 `lime_create_cover_generation_task` 回写标准 `cover_generate` task file；旧的自由 Bash / CLI 拼接只允许停留在人工 ops 或 compat 场景，不能再作为模型首发路径。
+- Agent 驱动的封面命令：`@封面` / `@cover` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `cover_task` 写入 `request_metadata.harness.cover_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/cover_skill_launch.rs` 会把当前 turn 固定为 workbench chat mode，并注入只允许首刀优先调用 `Skill(cover_generate)` 的系统提示；当前封面 launch 还会在 session permission 中显式压制 `ToolSearch / WebSearch / Read / Write / Edit / Bash / Glob / Grep / social_generate_cover_image / lime_create_image_generation_task` 这类偏航工具，并在当前 session registry 中直接移除这些 detour tools，避免模型在 `@封面` 首刀前先去搜索工具目录、生成 HTML/SVG 假封面，或把封面退回普通 image task。后续默认 skill 必须先进入 `cover_generate` 的 current binding，并通过 `lime_create_cover_generation_task` 回写标准 `cover_generate` task file；旧的自由 Bash / CLI 拼接只允许停留在人工 ops 或 compat 场景，不能再作为模型首发路径。
 
 `Claw` 的纯文本海报命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的海报命令：`@海报` / `@poster` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把解析后的平台、风格、尺寸 / 比例重新组装进 `request_metadata.harness.image_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`；它不是新的 `poster_task` 协议，而是继续委托 `Skill(image_generate)`。当前 `@海报` 会默认补齐“海报设计”语义，并将默认尺寸收敛为 `4:5 -> 864x1152`，同时把 `entry_source` 写为 `at_poster_command`。Rust 侧仍复用 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/image_skill_launch.rs`，继续压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类偏航工具。当前 skill 必须直接调用 `lime_create_image_generation_task`；旧的 Bash/CLI 图片入口只允许停留在 compat 或手工 CLI 场景，最终仍只允许落到标准 `image_generate` task file。
+- Agent 驱动的海报命令：`@海报` / `@poster` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把解析后的平台、风格、尺寸 / 比例重新组装进 `request_metadata.harness.image_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`；它不是新的 `poster_task` 协议，而是继续委托 `Skill(image_generate)`。当前 `@海报` 会默认补齐“海报设计”语义，并将默认尺寸收敛为 `4:5 -> 864x1152`，同时把 `entry_source` 写为 `at_poster_command`。Rust 侧仍复用 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/image_skill_launch.rs`，继续压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类偏航工具。当前 skill 必须直接调用 `lime_create_image_generation_task`；旧的 Bash/CLI 图片入口只允许停留在 compat 或手工 CLI 场景，最终仍只允许落到标准 `image_generate` task file。
 
 `Claw` 的纯文本视频命令也应沿相同心智收敛：
 
-- Agent 驱动的视频命令：`@视频` / `@video` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `video_task` 写入 `request_metadata.harness.video_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/video_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(video_generate)` 的系统提示；当前视频 launch 还会在 session permission 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类偏航工具，并在当前 session registry 中直接移除这些 detour tools，避免模型在 `@视频` 首刀前先去搜索工具目录。后续默认 skill 必须先进入 `video_generate` 的 current binding；若当前 binding family 被注册为 `typed local_cli`，则由 runtime 结构化组装 `lime media video generate --json`；若当前 binding family 仍是原生结构化 binding，则继续直接调用 `lime_create_video_generation_task` / `create_video_generation_task`。无论选择哪种 executor，最终仍只允许落到标准 `video_generate` 任务主链。
+- Agent 驱动的视频命令：`@视频` / `@video` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `video_task` 写入 `request_metadata.harness.video_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/video_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(video_generate)` 的系统提示；当前视频 launch 还会在 session permission 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类偏航工具，并在当前 session registry 中直接移除这些 detour tools，避免模型在 `@视频` 首刀前先去搜索工具目录。后续默认 skill 必须先进入 `video_generate` 的 current binding；若当前 binding family 被注册为 `typed local_cli`，则由 runtime 结构化组装 `lime media video generate --json`；若当前 binding family 仍是原生结构化 binding，则继续直接调用 `lime_create_video_generation_task` / `create_video_generation_task`。无论选择哪种 executor，最终仍只允许落到标准 `video_generate` 任务主链。
 - 前端消费层不再把 `@视频` 当成图片任务特判。当前聊天区通过统一 `taskPreview` 消费 `video_generate` 任务摘要，点击结果卡后直接复用现有 `VideoCanvas / VideoWorkspace` 打开右侧 viewer；运行中的视频任务则由 `useWorkspaceVideoTaskPreviewRuntime` 基于 `videoGenerationApi.getTask(...)` 轮询回流状态与结果 URL。
 
 `Claw` 的纯文本播报命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的播报命令：`@播报` / `@播客` / `@broadcast` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `broadcast_task` 写入 `request_metadata.harness.broadcast_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/broadcast_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(broadcast_generate)` 的系统提示；当前播报 launch 还会在 session permission 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类偏航工具，并在当前 session registry 中直接移除这些 detour tools，避免模型在 `@播报` 首刀前先去搜索工具目录。后续默认 skill 必须先进入 `broadcast_generate` 的 current binding；若当前 binding family 被注册为 `typed local_cli`，则由 runtime 结构化组装等价的 `lime` 播报任务命令；CLI 不可用时再回退 `lime_create_broadcast_generation_task`。无论选择哪种 executor，最终仍只允许落到标准 `broadcast_generate` task file；若当前上下文缺少待整理原文，允许 Agent 最多追问 1 个关键问题，但不能伪造“播报已完成”。
+- Agent 驱动的播报命令：`@播报` / `@播客` / `@broadcast` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `broadcast_task` 写入 `request_metadata.harness.broadcast_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/broadcast_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(broadcast_generate)` 的系统提示；当前播报 launch 还会在 session permission 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类偏航工具，并在当前 session registry 中直接移除这些 detour tools，避免模型在 `@播报` 首刀前先去搜索工具目录。后续默认 skill 必须先进入 `broadcast_generate` 的 current binding；若当前 binding family 被注册为 `typed local_cli`，则由 runtime 结构化组装等价的 `lime` 播报任务命令；CLI 不可用时再回退 `lime_create_broadcast_generation_task`。无论选择哪种 executor，最终仍只允许落到标准 `broadcast_generate` task file；若当前上下文缺少待整理原文，允许 Agent 最多追问 1 个关键问题，但不能伪造“播报已完成”。
 
 `Claw` 的纯文本素材命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的素材命令：`@素材` / `@资源` / `@resource` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `resource_search_task` 写入 `request_metadata.harness.resource_search_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/resource_search_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(modal_resource_search)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类 detour tools，避免模型卡在“先搜技能/工具目录”而不是立刻进素材技能主链。若 `resource_type=image` 且 query 明确，默认 skill 必须优先调用 `lime_search_web_images`，直接复用现有“设置 -> 系统 -> 网络搜索 -> Pexels API Key”返回候选，并保留真实 tool timeline；只有 `Pexels API Key` 未配置、无结果，或用户明确要求继续异步追踪时，才允许 runtime 进入 task 型执行 binding。对 `bgm / sfx / video` 等非图片素材，当前应直接走 `modal_resource_search` 的 task 主链；若该 binding family 被注册为 `typed local_cli`，则由 runtime 结构化组装 `lime task create resource-search --json`，CLI 不可用时再回退 `lime_create_modal_resource_search_task`。最终仍只允许落到标准 `modal_resource_search` task file；若当前上下文缺少明确资源类型或检索关键词，允许 Agent 最多追问 1 个关键问题，但不能伪造“素材已检索完成”。
+- Agent 驱动的素材命令：`@素材` / `@资源` / `@resource` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `resource_search_task` 写入 `request_metadata.harness.resource_search_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/resource_search_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(modal_resource_search)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类 detour tools，避免模型卡在“先搜技能/工具目录”而不是立刻进素材技能主链。若 `resource_type=image` 且 query 明确，默认 skill 必须优先调用 `lime_search_web_images`，直接复用现有“设置 -> 系统 -> 网络搜索 -> Pexels API Key”返回候选，并保留真实 tool timeline；只有 `Pexels API Key` 未配置、无结果，或用户明确要求继续异步追踪时，才允许 runtime 进入 task 型执行 binding。对 `bgm / sfx / video` 等非图片素材，当前应直接走 `modal_resource_search` 的 task 主链；若该 binding family 被注册为 `typed local_cli`，则由 runtime 结构化组装 `lime task create resource-search --json`，CLI 不可用时再回退 `lime_create_modal_resource_search_task`。最终仍只允许落到标准 `modal_resource_search` task file；若当前上下文缺少明确资源类型或检索关键词，允许 Agent 最多追问 1 个关键问题，但不能伪造“素材已检索完成”。
 
 `Claw` 的纯文本搜索命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的搜索命令：`@搜索` / `@search` / `@research` / `@调研` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `research_request` 写入 `request_metadata.harness.research_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/research_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(research)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / Read / Glob / Grep` 这类“工具目录发现/本地文件偏航”工具，避免模型在 `@搜索` 首刀前先去查工具名或误读本地文件，但会保留真实联网检索主链。后续默认 skill 必须沿 `research` prompt skill -> `search_query` / `WebSearch` 主链先真实联网检索，再输出结论、来源与建议；当前上下文缺少明确搜索主题时，允许 Agent 最多追问 1 个关键问题，但不能伪造“已完成搜索”，也不能直接凭记忆跳过检索。
+- Agent 驱动的搜索命令：`@搜索` / `@search` / `@research` / `@调研` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `research_request` 写入 `request_metadata.harness.research_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/research_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(research)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / Read / Glob / Grep` 这类“工具目录发现/本地文件偏航”工具，避免模型在 `@搜索` 首刀前先去查工具名或误读本地文件，但会保留真实联网检索主链。后续默认 skill 必须沿 `research` prompt skill -> `search_query` / `WebSearch` 主链先真实联网检索，再输出结论、来源与建议；当前上下文缺少明确搜索主题时，允许 Agent 最多追问 1 个关键问题，但不能伪造“已完成搜索”，也不能直接凭记忆跳过检索。
 
 `Claw` 的纯文本深搜命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的深搜命令：`@深搜` / `@deep` / `@deepsearch` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `deep_search_request` 写入 `request_metadata.harness.deep_search_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/deep_search_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(research)`、且至少执行多轮扩搜的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / Read / Glob / Grep` 这类“工具目录发现/本地文件偏航”工具，避免模型在 `@深搜` 首刀前先去查工具名或误读本地文件，但会保留真实联网检索主链。后续默认 skill 仍必须沿 `research` prompt skill -> `search_query` / `WebSearch` 主链先真实联网检索，再输出事实、推断与待确认项；当前上下文缺少明确搜索主题时，允许 Agent 最多追问 1 个关键问题，但不能伪造“已完成深搜”，也不能退化成只搜一次的普通搜索。
+- Agent 驱动的深搜命令：`@深搜` / `@deep` / `@deepsearch` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `deep_search_request` 写入 `request_metadata.harness.deep_search_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/deep_search_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(research)`、且至少执行多轮扩搜的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / Read / Glob / Grep` 这类“工具目录发现/本地文件偏航”工具，避免模型在 `@深搜` 首刀前先去查工具名或误读本地文件，但会保留真实联网检索主链。后续默认 skill 仍必须沿 `research` prompt skill -> `search_query` / `WebSearch` 主链先真实联网检索，再输出事实、推断与待确认项；当前上下文缺少明确搜索主题时，允许 Agent 最多追问 1 个关键问题，但不能伪造“已完成深搜”，也不能退化成只搜一次的普通搜索。
 
 `Claw` 的纯文本研报命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的研报命令：`@研报` / `@report` / `@research_report` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `report_request` 写入 `request_metadata.harness.report_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/report_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(report_generate)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / Read / Glob / Grep` 这类“工具目录发现/本地文件偏航”工具，避免模型在 `@研报` 首刀前先去查工具名或误读本地文件，但会保留真实联网检索主链。后续默认 skill 必须沿 `report_generate` prompt skill -> `search_query` / `WebSearch` 主链先真实联网检索，再写出结构化研究报告；当前上下文缺少明确研报主题时，允许 Agent 最多追问 1 个关键问题，但不能伪造“研报已完成”，也不能直接退回普通聊天长文。
+- Agent 驱动的研报命令：`@研报` / `@report` / `@research_report` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `report_request` 写入 `request_metadata.harness.report_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/report_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(report_generate)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / Read / Glob / Grep` 这类“工具目录发现/本地文件偏航”工具，避免模型在 `@研报` 首刀前先去查工具名或误读本地文件，但会保留真实联网检索主链。后续默认 skill 必须沿 `report_generate` prompt skill -> `search_query` / `WebSearch` 主链先真实联网检索，再写出结构化研究报告；当前上下文缺少明确研报主题时，允许 Agent 最多追问 1 个关键问题，但不能伪造“研报已完成”，也不能直接退回普通聊天长文。
 
 `Claw` 的纯文本竞品命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的竞品命令：`@竞品` / `@competitor` / `@competitive` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `report_request` 写入 `request_metadata.harness.report_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧仍复用 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/report_skill_launch.rs`，强约束首刀优先调用 `Skill(report_generate)`，并继续压制 `ToolSearch / Read / Glob / Grep` 这类本地偏航工具，保留真实联网检索主链。与 `@研报` 的差异只在用户侧语义层：`@竞品` 会默认补齐竞品分析的 `focus` 与 `output_format`，并将 `entry_source` 写为 `at_competitor_command`；它不是新的协议，也不能绕开 `report_generate -> search_query / WebSearch` 主链直接凭记忆生成所谓“竞品结论”。
+- Agent 驱动的竞品命令：`@竞品` / `@competitor` / `@competitive` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `report_request` 写入 `request_metadata.harness.report_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧仍复用 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/report_skill_launch.rs`，强约束首刀优先调用 `Skill(report_generate)`，并继续压制 `ToolSearch / Read / Glob / Grep` 这类本地偏航工具，保留真实联网检索主链。与 `@研报` 的差异只在用户侧语义层：`@竞品` 会默认补齐竞品分析的 `focus` 与 `output_format`，并将 `entry_source` 写为 `at_competitor_command`；它不是新的协议，也不能绕开 `report_generate -> search_query / WebSearch` 主链直接凭记忆生成所谓“竞品结论”。
 
 `Claw` 的纯文本站点搜索命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的站点搜索命令：`@站点搜索` / `@站点` / `@site_search` / `@site` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `site_search_request` 写入 `request_metadata.harness.site_search_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/site_search_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(site_search)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类通用搜索/本地文件偏航工具，同时拦住 `mcp__lime-browser__* / browser_* / mcp__playwright__*` 这类底层浏览器兼容面，避免模型在 `@站点搜索` 首刀前先去搜工具目录或退回浏览器底层执行。后续默认 skill 必须沿 `site_search` prompt skill -> `lime_site_info / lime_site_run / lime_site_search` 主链先执行真实站点适配器，再输出摘要与来源；当前上下文缺少明确站点或检索关键词时，允许 Agent 最多追问 1 个关键问题，但不能伪造“已完成站点搜索”，也不能先退回 `research / WebSearch`。
+- Agent 驱动的站点搜索命令：`@站点搜索` / `@站点` / `@site_search` / `@site` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `site_search_request` 写入 `request_metadata.harness.site_search_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/site_search_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(site_search)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类通用搜索/本地文件偏航工具，同时拦住 `mcp__lime-browser__* / browser_* / mcp__playwright__*` 这类底层浏览器兼容面，避免模型在 `@站点搜索` 首刀前先去搜工具目录或退回浏览器底层执行。后续默认 skill 必须沿 `site_search` prompt skill -> `lime_site_info / lime_site_run / lime_site_search` 主链先执行真实站点适配器，再输出摘要与来源；当前上下文缺少明确站点或检索关键词时，允许 Agent 最多追问 1 个关键问题，但不能伪造“已完成站点搜索”，也不能先退回 `research / WebSearch`。
 
 `Claw` 的纯文本读 PDF 命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的读 PDF 命令：`@读PDF` / `@pdf` / `@read_pdf` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `pdf_read_request` 写入 `request_metadata.harness.pdf_read_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/pdf_read_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(pdf_read)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Grep` 这类工具目录发现、联网搜索或内容检索偏航工具，但会保留 `Read / Glob` 这类本地 PDF 读取主链能力。后续默认 skill 必须沿 `pdf_read` prompt skill -> `list_directory / read_file` 主链先真实读取本地或工作区 PDF，再输出结构化解读结果；当前上下文只有远程 PDF URL 或缺少明确 PDF 来源时，允许 Agent 最多追问 1 个关键问题请求本地路径或导入路径，但不能伪造“PDF 已读完”，也不能退回普通聊天总结。
+- Agent 驱动的读 PDF 命令：`@读PDF` / `@pdf` / `@read_pdf` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `pdf_read_request` 写入 `request_metadata.harness.pdf_read_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/pdf_read_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(pdf_read)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Grep` 这类工具目录发现、联网搜索或内容检索偏航工具，但会保留 `Read / Glob` 这类本地 PDF 读取主链能力。后续默认 skill 必须沿 `pdf_read` prompt skill -> `list_directory / read_file` 主链先真实读取本地或工作区 PDF，再输出结构化解读结果；当前上下文只有远程 PDF URL 或缺少明确 PDF 来源时，允许 Agent 最多追问 1 个关键问题请求本地路径或导入路径，但不能伪造“PDF 已读完”，也不能退回普通聊天总结。
 
 `Claw` 的纯文本总结命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的总结命令：`@总结` / `@summary` / `@summarize` / `@摘要` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `summary_request` 写入 `request_metadata.harness.summary_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/summary_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(summary)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Grep` 这类工具目录发现、联网检索或内容检索 detour tools，但会保留 `Read / Glob` 这类显式路径读取主链能力。后续默认 skill 必须沿 `summary` prompt skill 主链先总结显式正文或当前对话相关上下文；只有当用户显式给出本地路径或目录时，才允许最小化使用 `list_directory / read_file` 读取必要内容并保留真实 tool timeline。当前上下文缺少显式正文时，允许 Agent 优先总结当前对话；只有在显式正文和对话上下文都不足时，才最多追问 1 个关键问题，但不能伪造“已完成总结”，也不能在前端直接生成摘要绕过 skill。
+- Agent 驱动的总结命令：`@总结` / `@summary` / `@summarize` / `@摘要` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `summary_request` 写入 `request_metadata.harness.summary_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/summary_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(summary)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Grep` 这类工具目录发现、联网检索或内容检索 detour tools，但会保留 `Read / Glob` 这类显式路径读取主链能力。后续默认 skill 必须沿 `summary` prompt skill 主链先总结显式正文或当前对话相关上下文；只有当用户显式给出本地路径或目录时，才允许最小化使用 `list_directory / read_file` 读取必要内容并保留真实 tool timeline。当前上下文缺少显式正文时，允许 Agent 优先总结当前对话；只有在显式正文和对话上下文都不足时，才最多追问 1 个关键问题，但不能伪造“已完成总结”，也不能在前端直接生成摘要绕过 skill。
 
 `Claw` 的纯文本翻译命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的翻译命令：`@翻译` / `@translate` / `@translation` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `translation_request` 写入 `request_metadata.harness.translation_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/translation_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(translation)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Grep` 这类工具目录发现、联网检索或内容检索 detour tools，但会保留 `Read / Glob` 这类显式路径读取主链能力。后续默认 skill 必须沿 `translation` prompt skill 主链先翻译显式正文或当前对话相关上下文；只有当用户显式给出本地路径或目录时，才允许最小化使用 `list_directory / read_file` 读取必要内容并保留真实 tool timeline。当前上下文缺少显式正文时，允许 Agent 优先翻译当前对话；只有在显式正文和对话上下文都不足时，才最多追问 1 个关键问题，但不能伪造“已完成翻译”，也不能在前端直接生成译文绕过 skill。
+- Agent 驱动的翻译命令：`@翻译` / `@translate` / `@translation` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `translation_request` 写入 `request_metadata.harness.translation_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/translation_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(translation)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Grep` 这类工具目录发现、联网检索或内容检索 detour tools，但会保留 `Read / Glob` 这类显式路径读取主链能力。后续默认 skill 必须沿 `translation` prompt skill 主链先翻译显式正文或当前对话相关上下文；只有当用户显式给出本地路径或目录时，才允许最小化使用 `list_directory / read_file` 读取必要内容并保留真实 tool timeline。当前上下文缺少显式正文时，允许 Agent 优先翻译当前对话；只有在显式正文和对话上下文都不足时，才最多追问 1 个关键问题，但不能伪造“已完成翻译”，也不能在前端直接生成译文绕过 skill。
 
 `Claw` 的纯文本分析命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的分析命令：`@分析` / `@analysis` / `@analyze` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `analysis_request` 写入 `request_metadata.harness.analysis_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/analysis_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(analysis)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Grep` 这类工具目录发现、联网检索或内容检索 detour tools，但会保留 `Read / Glob` 这类显式路径读取主链能力。后续默认 skill 必须沿 `analysis` prompt skill 主链先分析显式正文或当前对话相关上下文；只有当用户显式给出本地路径或目录时，才允许最小化使用 `list_directory / read_file` 读取必要内容并保留真实 tool timeline。当前上下文缺少显式正文时，允许 Agent 优先分析当前对话；只有在显式正文和对话上下文都不足时，才最多追问 1 个关键问题，但不能伪造“已完成分析”，也不能在前端直接生成分析结论绕过 skill。
+- Agent 驱动的分析命令：`@分析` / `@analysis` / `@analyze` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `analysis_request` 写入 `request_metadata.harness.analysis_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/analysis_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(analysis)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Grep` 这类工具目录发现、联网检索或内容检索 detour tools，但会保留 `Read / Glob` 这类显式路径读取主链能力。后续默认 skill 必须沿 `analysis` prompt skill 主链先分析显式正文或当前对话相关上下文；只有当用户显式给出本地路径或目录时，才允许最小化使用 `list_directory / read_file` 读取必要内容并保留真实 tool timeline。当前上下文缺少显式正文时，允许 Agent 优先分析当前对话；只有在显式正文和对话上下文都不足时，才最多追问 1 个关键问题，但不能伪造“已完成分析”，也不能在前端直接生成分析结论绕过 skill。
 
 `Claw` 的纯文本发布合规命令也应沿同一条分析主链收敛：
 
@@ -344,27 +344,27 @@ Skill 执行链路同样遵循单一命令边界。当前前端入口为 `src/li
 
 `Claw` 的纯文本转写命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的转写命令：`@转写` / `@transcribe` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `transcription_task` 写入 `request_metadata.harness.transcription_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/transcription_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(transcription_generate)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类 detour tools，避免模型在 `@转写` 首刀前先去搜工具目录、联网检索或误读本地文件。后续默认 skill 必须先进入 `transcription_generate` 的 current binding；若当前 binding family 被注册为 `typed local_cli`，则由 runtime 结构化组装 `lime task create transcription --json`；CLI 不可用时再回退 `lime_create_transcription_task`。最终仍只允许落到标准 `transcription_generate` task file；若当前上下文缺少 `source_url` / `source_path`，允许 Agent 最多追问 1 个关键问题，但不能伪造“已完成转写”。
+- Agent 驱动的转写命令：`@转写` / `@transcribe` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `transcription_task` 写入 `request_metadata.harness.transcription_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/transcription_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(transcription_generate)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类 detour tools，避免模型在 `@转写` 首刀前先去搜工具目录、联网检索或误读本地文件。后续默认 skill 必须先进入 `transcription_generate` 的 current binding；若当前 binding family 被注册为 `typed local_cli`，则由 runtime 结构化组装 `lime task create transcription --json`；CLI 不可用时再回退 `lime_create_transcription_task`。最终仍只允许落到标准 `transcription_generate` task file；若当前上下文缺少 `source_url` / `source_path`，允许 Agent 最多追问 1 个关键问题，但不能伪造“已完成转写”。
 
 `Claw` 的纯文本链接解析/网页抓取命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的链接解析/抓取/网页读取命令：`@链接解析` / `@链接` / `@url_parse` / `@抓取` / `@网页读取` / `@web_scrape` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `url_parse_task` 写入 `request_metadata.harness.url_parse_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/url_parse_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(url_parse)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类 detour tools，避免模型在 `@链接解析` / `@抓取` / `@网页读取` 首刀前先去搜工具目录、联网检索或误读本地文件。后续默认 skill 必须先进入 `url_parse` 的 current binding；若当前 binding family 被注册为 `typed local_cli`，则由 runtime 结构化组装 `lime task create url-parse --json`；CLI 不可用时再回退 `lime_create_url_parse_task`。最终仍只允许落到标准 `url_parse` task file；其中 `@抓取` 只是用户侧更偏正文抓取的入口，默认 `extract_goal = full_text`；`@网页读取` 是用户侧更偏阅读总结的入口，默认 `extract_goal = summary`；它们都不是新的 task 协议。若当前上下文缺少 URL，允许 Agent 最多追问 1 个关键问题，但不能伪造“链接已解析完成”“网页已抓取完成”或“网页已读取完成”。
+- Agent 驱动的链接解析/抓取/网页读取命令：`@链接解析` / `@链接` / `@url_parse` / `@抓取` / `@网页读取` / `@web_scrape` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `url_parse_task` 写入 `request_metadata.harness.url_parse_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/url_parse_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(url_parse)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类 detour tools，避免模型在 `@链接解析` / `@抓取` / `@网页读取` 首刀前先去搜工具目录、联网检索或误读本地文件。后续默认 skill 必须先进入 `url_parse` 的 current binding；若当前 binding family 被注册为 `typed local_cli`，则由 runtime 结构化组装 `lime task create url-parse --json`；CLI 不可用时再回退 `lime_create_url_parse_task`。最终仍只允许落到标准 `url_parse` task file；其中 `@抓取` 只是用户侧更偏正文抓取的入口，默认 `extract_goal = full_text`；`@网页读取` 是用户侧更偏阅读总结的入口，默认 `extract_goal = summary`；它们都不是新的 task 协议。若当前上下文缺少 URL，允许 Agent 最多追问 1 个关键问题，但不能伪造“链接已解析完成”“网页已抓取完成”或“网页已读取完成”。
 
 `Claw` 的纯文本排版命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的排版命令：`@排版` / `@typesetting` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `typesetting_task` 写入 `request_metadata.harness.typesetting_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/typesetting_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(typesetting)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类 detour tools，避免模型在 `@排版` 首刀前先去搜工具目录、联网检索或误读本地文件。后续默认 skill 必须先进入 `typesetting` 的 current binding；若当前 binding family 被注册为 `typed local_cli`，则由 runtime 结构化组装 `lime task create typesetting --json`；CLI 不可用时再回退 `lime_create_typesetting_task`。最终仍只允许落到标准 `typesetting` task file；若当前上下文缺少待排版正文，允许 Agent 最多追问 1 个关键问题，但不能伪造“排版已完成”。
+- Agent 驱动的排版命令：`@排版` / `@typesetting` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `typesetting_task` 写入 `request_metadata.harness.typesetting_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/typesetting_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(typesetting)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类 detour tools，避免模型在 `@排版` 首刀前先去搜工具目录、联网检索或误读本地文件。后续默认 skill 必须先进入 `typesetting` 的 current binding；若当前 binding family 被注册为 `typed local_cli`，则由 runtime 结构化组装 `lime task create typesetting --json`；CLI 不可用时再回退 `lime_create_typesetting_task`。最终仍只允许落到标准 `typesetting` task file；若当前上下文缺少待排版正文，允许 Agent 最多追问 1 个关键问题，但不能伪造“排版已完成”。
 
 `Claw` 的纯文本网页命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的网页命令：`@网页` / `@webpage` / `@landing` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `webpage_request` 写入 `request_metadata.harness.webpage_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/webpage_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(webpage_generate)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类 detour tools，避免模型在 `@网页` 首刀前先去搜工具目录、联网检索或误读本地文件。后续默认 skill 必须沿 `webpage_generate` prompt skill 主链直接产出单文件 HTML artifact，并通过 `<write_file>` 落到工作区；当前上下文缺少明确网页目标时，允许 Agent 最多追问 1 个关键问题，但不能只给口头方案、不能伪造“网页已生成”却没有真实 `.html` 文件。
+- Agent 驱动的网页命令：`@网页` / `@webpage` / `@landing` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `webpage_request` 写入 `request_metadata.harness.webpage_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/webpage_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(webpage_generate)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类 detour tools，避免模型在 `@网页` 首刀前先去搜工具目录、联网检索或误读本地文件。后续默认 skill 必须沿 `webpage_generate` prompt skill 主链直接产出单文件 HTML artifact，并通过 `<write_file>` 落到工作区；当前上下文缺少明确网页目标时，允许 Agent 最多追问 1 个关键问题，但不能只给口头方案、不能伪造“网页已生成”却没有真实 `.html` 文件。
 
 `Claw` 的纯文本 PPT 命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的演示稿命令：`@PPT` / `@ppt` / `@slides` / `@演示` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `presentation_request` 写入 `request_metadata.harness.presentation_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/presentation_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(presentation_generate)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类 detour tools，避免模型在 `@PPT` 首刀前先去搜工具目录、联网检索或误读本地文件。后续默认 skill 必须沿 `presentation_generate` prompt skill 主链直接产出单文件 Markdown 演示稿 artifact，并通过 `<write_file>` 落到工作区；当前上下文缺少明确演示目标时，允许 Agent 最多追问 1 个关键问题，但不能只给口头提纲、不能伪造“PPT 已生成”却没有真实演示稿文件。
+- Agent 驱动的演示稿命令：`@PPT` / `@ppt` / `@slides` / `@演示` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `presentation_request` 写入 `request_metadata.harness.presentation_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/presentation_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(presentation_generate)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类 detour tools，避免模型在 `@PPT` 首刀前先去搜工具目录、联网检索或误读本地文件。后续默认 skill 必须沿 `presentation_generate` prompt skill 主链直接产出单文件 Markdown 演示稿 artifact，并通过 `<write_file>` 落到工作区；当前上下文缺少明确演示目标时，允许 Agent 最多追问 1 个关键问题，但不能只给口头提纲、不能伪造“PPT 已生成”却没有真实演示稿文件。
 
 `Claw` 的纯文本表单命令也应沿同一条 current 主链收敛：
 
-- Agent 驱动的表单命令：`@表单` / `@form` / `@survey` / `@问卷` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `form_request` 写入 `request_metadata.harness.form_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/src/commands/aster_agent_cmd/form_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(form_generate)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类 detour tools，避免模型在 `@表单` 首刀前先去搜工具目录、联网检索或误读本地文件。后续默认 skill 必须沿 `form_generate` prompt skill 主链直接产出一份可被现有 A2UI parser 识别的 simple form JSON，并以 ` ```a2ui ` 代码块回到聊天流；current render contract 必须是 `form + json`，不能回退成单文件 HTML artifact，也不能再发明另一套表单 DSL。当前上下文缺少明确表单目标时，允许 Agent 最多追问 1 个关键问题，但不能只给口头字段建议、不能伪造“表单已生成”却没有真实 A2UI 表单结果。
+- Agent 驱动的表单命令：`@表单` / `@form` / `@survey` / `@问卷` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `form_request` 写入 `request_metadata.harness.form_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/form_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(form_generate)` 的系统提示，并在当前 session permission 与 registry 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类 detour tools，避免模型在 `@表单` 首刀前先去搜工具目录、联网检索或误读本地文件。后续默认 skill 必须沿 `form_generate` prompt skill 主链直接产出一份可被现有 A2UI parser 识别的 simple form JSON，并以 ` ```a2ui ` 代码块回到聊天流；current render contract 必须是 `form + json`，不能回退成单文件 HTML artifact，也不能再发明另一套表单 DSL。当前上下文缺少明确表单目标时，允许 Agent 最多追问 1 个关键问题，但不能只给口头字段建议、不能伪造“表单已生成”却没有真实 A2UI 表单结果。
 
 `Claw` 的自然语言编程能力应沿同一条 current 主链收敛：
 
@@ -392,7 +392,7 @@ Skill 执行链路同样遵循单一命令边界。当前前端入口为 `src/li
 
 - Agent 驱动的浏览器命令：`@浏览器` / `@browser` / `@browse` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界不会再改写成另一套 skill 或 scene，而是显式把 `browser_requirement`、`browser_requirement_reason` 与 `browser_launch_url` 写入 `request_metadata.harness`，同时关闭前端本轮 `webSearch` 偏好，确保后续请求优先走 Lime Browser Assist 与 `mcp__lime-browser__*` 工具，而不是退回 WebSearch 或普通聊天。若正文里出现平台后台、登录、扫码等受保护网页步骤，则继续沿用 `required_with_user_step`；否则默认要求 `required`，并把显式 URL 或搜索入口写入 launch URL。当前命令不应伪装成站点型 `service_skill_launch`，也不应重新造一套 browser task 协议。
 
-这些命令除了 Tauri `generate_handler!` 之外，也必须继续保持 DevBridge dispatcher 已桥接，避免浏览器模式、headless smoke 或 Playwright 续测时回退成 unknown command。
+这些命令如果仍处在 legacy adapter 兼容期，除了 `tauri::generate_handler!` 之外，也必须继续保持 DevBridge dispatcher 已桥接；current 新能力优先同步 Electron host / App Server JSON-RPC，避免浏览器模式、Electron smoke 或 Playwright 续测时回退成 unknown command。
 
 自动化设置链路同样遵循这条路径。当前主入口为 `src/lib/api/automation.ts`，统一承接：
 
@@ -422,26 +422,32 @@ Lime 主应用会在本地维护 `ws://127.0.0.1:45554/companion/pet` 的桌宠 
 
 如果 companion 协议继续扩展，也应优先延续“Lime 做宿主、桌宠只收脱敏派生状态”的边界。例如 provider 概览相关能力，允许 Lime 通过 `companion_send_pet_command` 下发诸如 `pet.provider_overview` 这类脱敏摘要，并允许桌宠通过 `pet.open_provider_settings` 请求 Lime 聚焦主窗口并跳到 `设置 -> AI 服务商`，或通过 `pet.request_provider_overview_sync` 请求 Lime 立即重发最新的脱敏摘要；桌宠交互增强能力也应继续走这条主链，例如双击 / 三击桌宠后发出 `pet.request_pet_cheer`、`pet.request_pet_next_step`，或通过 `pet.request_chat_reply` 携带用户输入文本，请求 Lime 代为调用当前可聊天模型，再统一回写 `pet.show_bubble`；但不允许桌宠直接读取凭证文件、数据库或已下线的完整凭证 HTTP 接口。
 
-## 命令契约的五个事实源
+## 命令契约的事实源
 
-命令边界不是单文件事实，至少要同时看下面五处：
+命令边界不是单文件事实，至少要同时看下面几处：
 
-1. **前端实际调用**  
+1. **前端实际调用**
    `src/` 下运行时代码里的 `safeInvoke(...)` / `invoke(...)`
 
-2. **Rust 实际注册**  
-   `src-tauri/src/app/runner.rs` 中的 `tauri::generate_handler![...]`
+2. **Electron host / preload 白名单**
+   `electron/`、`src/lib/desktop-host/` 与 `src/lib/electron-host.ts` 中的 IPC channel、preload facade 和 supported command map
 
-3. **治理目录册**  
+3. **App Server JSON-RPC 协议**
+   `lime-rs/crates/app-server-protocol/`、`lime-rs/crates/app-server/`、`packages/app-server-client/`
+
+4. **legacy Tauri adapter 注册**
+   仅当改动触碰兼容 adapter 时，检查 `lime-rs/src/app/runner.rs` 中的 `tauri::generate_handler![...]`
+
+5. **治理目录册**
    `src/lib/governance/agentCommandCatalog.json`
 
-4. **Bridge mock 优先集合**  
+6. **Bridge mock 优先集合**
    `src/lib/dev-bridge/mockPriorityCommands.ts`
 
-5. **默认 mock 实现**  
-   `src/lib/tauri-mock/core.ts` 中的 `defaultMocks`
+7. **默认 mock 实现**
+   `src/lib/desktop-host/` / legacy `src/lib/tauri-mock/core.ts` 中的 `defaultMocks`
 
-只看其中一侧都不够。只要能力仍然依赖命令边界，就至少要同时核对前端调用、Rust 注册、治理目录册、mock 集合这几面。
+只看其中一侧都不够。只要能力仍然依赖命令边界，就至少要同时核对前端调用、Electron host 或 App Server 协议、治理目录册、mock 集合这几面。legacy Tauri 注册只在兼容 adapter 被触碰时检查，不再是新增能力的默认事实源。
 
 对于 `agent_runtime_*` 这一组运行时主命令，当前还额外有一份结构合同事实源：
 
@@ -533,11 +539,12 @@ const diagnostics = await getServerDiagnostics();
 
 共享网关控制面已下线后，`start_server`、`stop_server`、`get_server_status`、`get_available_routes`、`get_route_curl_examples`、`test_api`、`get_network_info`，以及托盘残留 `sync_tray_state`、`update_tray_server_status`、`update_tray_credential_status`、`get_tray_state`、`refresh_tray_menu`、`refresh_tray_with_stats` 都应视为 `dead` 候选，不应重新接回前端主路径；server 兼容面 `/v1/routes`、`/{selector}/v1/messages`、`/{selector}/v1/chat/completions` 也应视为 `dead` 候选，不应重新接回本地共享网关主链；开发者诊断统一继续走 `get_server_diagnostics`，托盘只保留 `sync_tray_model_shortcuts`，server 只保留标准 `/v1/messages` 与 `/v1/chat/completions`。
 
-### 3. Rust 命令与注册表同步
+### 3. Electron / App Server / legacy adapter 同步
 
-- 在 `src-tauri/src/commands/` 下落到对应模块
-- 在 `src-tauri/src/app/runner.rs` 的 `tauri::generate_handler!` 中注册
-- 不要只写命令实现，不补注册
+- 新 Desktop host 能力优先在 Electron main / preload 白名单和 `src/lib/desktop-host/` 网关中同步
+- 新 Agent / runtime / 跨 App 复用能力优先在 `app-server-protocol`、`app-server`、`app-server-client` 中同步
+- 只有 legacy Tauri adapter 仍需兼容时，才在 `lime-rs/src/commands/` 与 `lime-rs/src/app/runner.rs` 的 `tauri::generate_handler!` 中同步注册
+- 不要只写一侧实现，不补对应 host / protocol / mock / governance 事实源
 
 ### 4. 治理目录册与 mock 同步
 
@@ -545,7 +552,7 @@ const diagnostics = await getServerDiagnostics();
 
 - `src/lib/governance/agentCommandCatalog.json`
 - `src/lib/dev-bridge/mockPriorityCommands.ts`
-- `src/lib/tauri-mock/core.ts`
+- `src/lib/desktop-host/` / legacy `src/lib/tauri-mock/core.ts`
 
 尤其是以下场景：
 

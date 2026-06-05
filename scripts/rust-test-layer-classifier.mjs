@@ -31,7 +31,7 @@ function walkFiles(dir, files = []) {
 }
 
 function parseWorkspaceMemberRoots(repoRoot) {
-  const cargoTomlPath = path.join(repoRoot, "src-tauri", "Cargo.toml");
+  const cargoTomlPath = path.join(repoRoot, "lime-rs", "Cargo.toml");
   const content = fs.readFileSync(cargoTomlPath, "utf8");
   const excludeBlock = content.match(/exclude\s*=\s*\[([\s\S]*?)\]/)?.[1] || "";
   const excludes = new Set(
@@ -41,9 +41,9 @@ function parseWorkspaceMemberRoots(repoRoot) {
   );
 
   const roots = new Map();
-  roots.set("src-tauri", { packageName: "lime", workspaceMember: true });
+  roots.set("lime-rs", { packageName: "lime", workspaceMember: true });
 
-  const cratesDir = path.join(repoRoot, "src-tauri", "crates");
+  const cratesDir = path.join(repoRoot, "lime-rs", "crates");
   if (!fs.existsSync(cratesDir)) {
     return roots;
   }
@@ -52,7 +52,7 @@ function parseWorkspaceMemberRoots(repoRoot) {
     if (!entry.isDirectory()) {
       continue;
     }
-    const relRoot = `src-tauri/crates/${entry.name}`;
+    const relRoot = `lime-rs/crates/${entry.name}`;
     const manifestPath = path.join(repoRoot, relRoot, "Cargo.toml");
     if (!fs.existsSync(manifestPath)) {
       continue;
@@ -88,7 +88,7 @@ function findPackageRoot(relFile, memberRoots) {
     }
   }
   return {
-    root: "src-tauri",
+    root: "lime-rs",
     packageName: "lime",
     workspaceMember: true,
   };
@@ -116,7 +116,7 @@ function classifyLayer(relFile, packageRoot, liveGated) {
 }
 
 export function collectRustTestFiles(repoRoot = process.cwd()) {
-  const root = path.join(repoRoot, "src-tauri");
+  const root = path.join(repoRoot, "lime-rs");
   if (!fs.existsSync(root)) {
     return [];
   }
@@ -173,7 +173,7 @@ export function classifyRustTestFiles(repoRoot = process.cwd(), files = null) {
 function buildReasons({ relFile, layer, liveGated, cargoScope, packageRoot }) {
   const reasons = [];
   if (cargoScope === "excluded-subcrate") {
-    reasons.push("excluded from src-tauri workspace manifest");
+    reasons.push("excluded from lime-rs workspace manifest");
   }
   if (liveGated) {
     reasons.push("live-gated ignored test");

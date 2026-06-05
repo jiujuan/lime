@@ -38,8 +38,8 @@ App Server + JSON-RPC Protocol + RuntimeCore + ExecutionBackend Adapters
 | `current` | `internal/roadmap/appserver/*` | App Server 路线图、PRD、架构和协议规划。 |
 | `current target` | `RuntimeCore` | 跨 App、跨执行后端复用的公共 runtime service 层。 |
 | `current target` | `ExecutionBackend` | Aster 和未来更多执行后端的适配接口。 |
-| `current reference` | `src-tauri/crates/agent` | 当前最接近 runtime core 的 crate，后续继续拆公共模型与服务。 |
-| `current reference` | `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 及相邻 service 逻辑 | Aster backend 的现有实现参考；不能继续被当作公共 runtime core。 |
+| `current reference` | `lime-rs/crates/agent` | 当前最接近 runtime core 的 crate，后续继续拆公共模型与服务。 |
+| `current reference` | `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 及相邻 service 逻辑 | Aster backend 的现有实现参考；不能继续被当作公共 runtime core。 |
 | `current client` | Lime Desktop / content-studio / 更多独立 App 的 app-server client | 独立 App 只通过协议消费 runtime，不直接 import Lime 内部实现。 |
 | `compat` | Tauri command 层 | 迁移期继续服务 Lime Desktop，但只能委托 App Server service，不继续拥有独立 runtime 事实。 |
 | `deprecated` | 壳层内直接拼接 runtime 业务逻辑 | 只允许迁移和下线，不允许新增能力。 |

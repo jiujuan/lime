@@ -126,7 +126,7 @@ export interface AudioDeviceInfo {
   is_default: boolean;
 }
 
-// ============ Tauri 命令封装 ============
+// ============ Desktop Host / App Server 命令封装 ============
 
 /** 获取所有可用的麦克风设备 */
 export async function listAudioDevices(): Promise<AudioDeviceInfo[]> {

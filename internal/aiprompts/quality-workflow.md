@@ -16,7 +16,7 @@
 遇到以下任一情况时，先读本文件：
 
 - 不确定本次改动最少该跑哪些校验
-- 修改了 GUI 壳、DevBridge、Workspace、Tauri 命令、前端主路径
+- 修改了 GUI 壳、Electron Desktop Host、DevBridge、Workspace、App Server JSON-RPC、legacy Tauri adapter 或前端主路径
 - 需要判断跑最小 smoke 还是交互型 E2E
 - 需要理解 `quality.yml` 为什么触发某些 CI 任务
 
@@ -40,8 +40,27 @@
 2. **边界变更已同步** - 命令、桥接、配置、版本等结构性改动完成成组更新
 3. **GUI 主路径可运行** - 涉及 GUI 壳、Bridge、Workspace、主页面路径时，最小冒烟通过
 4. **用户可见回归已补齐** - 用户可见 UI 改动有稳定断言或既有 snapshot 回归
-5. **全球本地化事实源正确** - 新增或改动的用户可见产品文案必须覆盖 Lime current 五语言 `zh-CN / zh-TW / en-US / ja-JP / ko-KR`；前端进入 key-based i18n resources，Rust / Tauri 导出 Markdown、copy prompt、artifact title 等 presentation 文案进入 locale copy service，不依赖 legacy DOM Patch 或中英双语兜底
+5. **全球本地化事实源正确** - 新增或改动的用户可见产品文案必须覆盖 Lime current 五语言 `zh-CN / zh-TW / en-US / ja-JP / ko-KR`；前端进入 key-based i18n resources，Rust / Electron host / App Server 导出 Markdown、copy prompt、artifact title 等 presentation 文案进入 locale copy service，不依赖 legacy DOM Patch 或中英双语兜底
 6. **文档与锁文件不掉队** - 相关文档、schema、锁文件与实际实现保持一致
+
+## 测试用例迁移口径
+
+测试用例需要全面更新口径，但不等于把所有测试一次性重写。
+
+默认事实源如下：
+
+- `current`：Electron Desktop Host、Electron preload / IPC 白名单、App Server JSON-RPC、`packages/app-server-client`、`src/lib/desktop-host/` mock、`npm run smoke:electron` / `npm run verify:gui-smoke`
+- `compat`：`safeInvoke` 兼容层、DevBridge 浏览器 fallback、旧 `agent_runtime_*` facade；测试只能证明它们委托 current 主链
+- `deprecated`：legacy Tauri adapter、`src/lib/tauri-mock/`、`tauri::generate_handler!`；测试只能证明旧入口被限制、未回流、未承接新业务逻辑
+- `dead`：旧 `src-tauri` 路径、旧 Tauri GUI smoke 和旧 Tauri-only E2E 口径；不得作为新改动的可交付证据
+
+新增或迁移测试时按下面顺序处理：
+
+1. 新 Agent / runtime / host integration / 跨 App 复用能力，优先补 App Server protocol / server / npm client / Electron host 测试。
+2. GUI 壳或桌面平台能力，优先补 Electron main / preload / IPC channel / `src/lib/desktop-host` 测试，再补 `npm run verify:gui-smoke` 或 Playwright 续测。
+3. 前端业务网关仍可测试 `safeInvoke` 接线，但断言应指向 Electron/App Server current 行为，不再把 Tauri mock 返回当真实产品行为。
+4. 保留的 Tauri / tauri-mock 测试只作为 legacy guard：证明旧 adapter 不接新命令、不伪造 current runtime、不成为 GUI 可交付证据。
+5. 删除或跳过旧测试前，先确认已有 current 测试覆盖同一用户风险；否则先迁移覆盖，再清退旧测试。
 
 ## 路线图任务防跑偏
 
@@ -86,7 +105,7 @@
 
 ### 1. 不要继续扩展 compat / deprecated 路径
 
-- 新 API、新 Tauri 命令、新前端入口默认落在当前 `current` 主路径
+- 新 API、新 Electron IPC channel、新 App Server 方法、新前端入口默认落在当前 `current` 主路径
 - 不要继续给 legacy / compat 网关长新表面
 - 如果发现能力已经存在多条路径，先读 `internal/aiprompts/governance.md`
 
@@ -95,7 +114,8 @@
 涉及命令或桥接协议时，至少检查：
 
 - 前端 `safeInvoke(...)` / `invoke(...)` 的实际调用
-- Rust `tauri::generate_handler!` 的实际注册
+- Electron host / preload 白名单或 App Server JSON-RPC 协议
+- legacy Tauri adapter 的 `tauri::generate_handler!` 实际注册（仅在触碰兼容 adapter 时）
 - `src/lib/governance/agentCommandCatalog.json` 的治理口径
 - `mockPriorityCommands` 与 `defaultMocks` 的同步状态
 
@@ -120,7 +140,7 @@
 如果本轮涉及 team runtime 工具面或主线程用户消息工具，还要同步检查 Rust catalog / inventory、runtime 注册、浏览器 fallback mock 与前端 tool display；`Agent / TeamCreate / TeamDelete / SendMessage / ListPeers` 必须保持同一组 current surface，`SendUserMessage` 也必须继续停留在 current 主线程工具面，不要把已删除的 `SubAgentTask` compat 工具重新接回 Rust catalog、runtime 注册、mock 或前端 tool display。
 
 如果本轮涉及 MCP bridge runtime tool surface、inventory 或 ToolSearch，还要同步检查 Rust extension 注入、inventory 快照、浏览器 fallback mock 与 GUI 面板命名；当前唯一命名事实源是 `mcp__<server>__<tool>`，对应 extension surface key 为 `mcp__<server>`，不要让 mock 或 UI 退回裸 `server__tool`。同时，Lime runtime 里的 `ToolSearch` 当前事实源必须是 `ToolSearchBridgeTool`；`aster-rust` 自带 `ToolSearchTool` 只能停留在 compat 存量，不允许再抢占当前 runtime surface。
-如果本轮还需要对子工作区单独跑 Rust 定向测试，例如 `src-tauri/crates/aster-rust`，必须确认产物仍落在统一的 `src-tauri/target`，不要重新写回子目录自己的 `target/`；否则 `tauri dev` 会把构建产物当成源码变化，反复触发重编译。
+如果本轮还需要对子工作区单独跑 Rust 定向测试，例如 `lime-rs/crates/aster-rust`，必须确认产物仍落在统一的 `lime-rs/target`，不要重新写回子目录自己的 `target/`；否则 `tauri dev` 会把构建产物当成源码变化，反复触发重编译。
 
 如果本轮涉及 `create_skill_scaffold_for_app`、`SkillsPage / SkillScaffoldDialog`，或“聊天结果 -> Skill 脚手架”沉淀闭环，还要同步检查前端网关、Rust 模板、DevBridge 分发与默认 mock 是否仍保持同一条主链；若新增了结构化骨架字段，至少要确认 `何时使用 / 输入 / 执行步骤 / 输出 / 失败回退` 能真实落进生成后的 `SKILL.md`。
 
@@ -128,16 +148,16 @@
 
 如果本轮涉及 `agent_runtime_list_workspace_skill_bindings`，还要同步检查 `src/lib/api/agentRuntime/inventoryClient.ts`、`src/lib/governance/agentRuntimeCommandSchema.json`、generated runtime command manifest、Rust `aster_agent_cmd` 注册、DevBridge dispatcher、治理目录册、`mockPriorityCommands` 与 `defaultMocks`；该命令只表示 P3B registered skill 的 runtime binding readiness projection，不能把 `ready_for_manual_enable` 当成“已注入 Query Loop / 已进入 SkillTool / 可自动执行”。最低校验至少包含 Rust runtime binding 定向测试、前端 API / UI 回归、`npm run generate:agent-runtime-clients` 或 `npm run check:agent-runtime-clients`、`npm run test:contracts`；若 Skills 工作台可见行为变化，再补 `npm run verify:gui-smoke`。
 
-如果本轮涉及 `request_metadata.harness.workspace_skill_bindings` / `workspaceSkillBindings` 的 Query Loop metadata 投影，还要同步检查 `src-tauri/src/commands/aster_agent_cmd/workspace_skill_binding_prompt.rs`、`src-tauri/crates/agent/src/turn_input_envelope.rs` 的 prompt stage contract、`src/components/agent/chat/utils/workspaceSkillBindingsMetadata.ts` 与 `buildHarnessRequestMetadata` 的裁剪边界；该 metadata 只表示 P3C readiness 的只读规划上下文，不能自动打开 `allow_model_skills`、不能注入 `SkillTool` registry、不能改变默认 tool surface。最低校验至少包含 Rust prompt 投影定向测试、前端 metadata builder 单测和 `npm run typecheck`；若同时改了 runtime command schema 或 command manifest，再补 `npm run test:contracts`。
+如果本轮涉及 `request_metadata.harness.workspace_skill_bindings` / `workspaceSkillBindings` 的 Query Loop metadata 投影，还要同步检查 `lime-rs/src/commands/aster_agent_cmd/workspace_skill_binding_prompt.rs`、`lime-rs/crates/agent/src/turn_input_envelope.rs` 的 prompt stage contract、`src/components/agent/chat/utils/workspaceSkillBindingsMetadata.ts` 与 `buildHarnessRequestMetadata` 的裁剪边界；该 metadata 只表示 P3C readiness 的只读规划上下文，不能自动打开 `allow_model_skills`、不能注入 `SkillTool` registry、不能改变默认 tool surface。最低校验至少包含 Rust prompt 投影定向测试、前端 metadata builder 单测和 `npm run typecheck`；若同时改了 runtime command schema 或 command manifest，再补 `npm run test:contracts`。
 
-如果本轮涉及 `request_metadata.harness.workspace_skill_runtime_enable` / `workspaceSkillRuntimeEnable` 的 Skill Forge P3E runtime enable，还要同步检查 `src-tauri/src/services/runtime_skill_binding_service.rs`、`src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs`、`src-tauri/src/commands/aster_agent_cmd/workspace_skill_binding_prompt.rs`、`src-tauri/crates/agent/src/tools/skill_tool_gate.rs`、`src/components/agent/chat/utils/workspaceSkillBindingsMetadata.ts` 与 `buildHarnessRequestMetadata`；该 metadata 只能在当前 session scope 内显式启用 P3C ready binding，并把 `SkillTool` 裁剪到 allowlist，不能复活 marketplace、scheduler 或绕过 `agent_runtime_submit_turn` 的平行执行命令。最低校验至少包含 Rust runtime binding / SkillTool gate 定向测试、Rust prompt 投影定向测试、前端 metadata builder 单测和 `npm run test:contracts`。
+如果本轮涉及 `request_metadata.harness.workspace_skill_runtime_enable` / `workspaceSkillRuntimeEnable` 的 Skill Forge P3E runtime enable，还要同步检查 `lime-rs/src/services/runtime_skill_binding_service.rs`、`lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`、`lime-rs/src/commands/aster_agent_cmd/workspace_skill_binding_prompt.rs`、`lime-rs/crates/agent/src/tools/skill_tool_gate.rs`、`src/components/agent/chat/utils/workspaceSkillBindingsMetadata.ts` 与 `buildHarnessRequestMetadata`；该 metadata 只能在当前 session scope 内显式启用 P3C ready binding，并把 `SkillTool` 裁剪到 allowlist，不能复活 marketplace、scheduler 或绕过 `agent_runtime_submit_turn` 的平行执行命令。最低校验至少包含 Rust runtime binding / SkillTool gate 定向测试、Rust prompt 投影定向测试、前端 metadata builder 单测和 `npm run test:contracts`。
 
-如果本轮涉及记忆主链，还要同步检查 `src/lib/api/memoryRuntime.ts`、`src-tauri/src/commands/memory_management_cmd.rs`、`runner.rs`、DevBridge dispatcher 与默认 mock 是否仍保持同一条 current surface；`rules / working / durable / team / compaction` 的产品分层可以在页面上拆开，但底层命令边界仍必须继续收敛到 `memory_runtime_*` 与 `unified_memory_*`。
+如果本轮涉及记忆主链，还要同步检查 `src/lib/api/memoryRuntime.ts`、`lime-rs/src/commands/memory_management_cmd.rs`、`runner.rs`、DevBridge dispatcher 与默认 mock 是否仍保持同一条 current surface；`rules / working / durable / team / compaction` 的产品分层可以在页面上拆开，但底层命令边界仍必须继续收敛到 `memory_runtime_*` 与 `unified_memory_*`。
 
 ### 3. 用户可见 UI 改动必须补稳定回归
 
 - 新增或改动的按钮、标题、空态、toast、confirm、prompt、placeholder、aria/title、错误提示、导出 Markdown / copy prompt / artifact title 等用户可见 presentation 文案，必须覆盖 Lime current 五语言：`zh-CN / zh-TW / en-US / ja-JP / ko-KR`
-- 前端文案必须走 current i18n：`useTranslation(ns)` / `Trans` + `src/i18n/resources/<locale>/<namespace>.json`；Rust / Tauri 导出文案必须走对应 locale copy service，不得只在业务逻辑里硬编码中文或英文
+- 前端文案必须走 current i18n：`useTranslation(ns)` / `Trans` + `src/i18n/resources/<locale>/<namespace>.json`；Rust / Electron host / App Server 导出文案必须走对应 locale copy service，不得只在业务逻辑里硬编码中文或英文
 - 只做中文 / 英文双语兜底不算全球本地化；确需临时例外时，必须写入对应路线图或执行计划，说明覆盖范围、原因和退出条件
 - legacy DOM Patch 只允许作为迁移期兜底，不允许成为新功能或新文案的本地化事实源；确需临时例外时，必须写入对应路线图或执行计划并说明退出条件
 - 动态用户可见文案使用 i18next interpolation / plural / context；日期、数字、相对时间、列表和排序优先复用 `src/i18n/format.ts`
@@ -153,7 +173,7 @@
 
 - 改配置结构时，要同步更新 schema、校验器、消费者与文档
 - 改版本结构时，要执行 `npm run verify:app-version`
-- 改依赖时，要同步提交对应锁文件，如 `package-lock.json`、`src-tauri/Cargo.lock`
+- 改依赖时，要同步提交对应锁文件，如 `package-lock.json`、`lime-rs/Cargo.lock`
 - 本仓库没有 Bazel，不适用 Bazel lockfile 规则
 
 ### 5. Rust 校验先小后大
@@ -161,8 +181,8 @@
 - 默认先跑受影响 crate、模块或定向测试
 - 再根据边界扩散决定是否执行全量 `cargo test`
 - 目标是尽快暴露问题，而不是一上来把所有测试都跑满
-- 在仓库根运行 Rust 校验必须显式带 `--manifest-path "src-tauri/Cargo.toml"`，或先 `cd src-tauri`；不要直接 `rustc src-tauri/src/*.rs` 编译主 crate，否则会绕过 workspace 依赖并产生 `can't find crate for lime_*` 误报
-- 如果定向测试来自 `src-tauri/crates/aster-rust` 这类被 Tauri watch 覆盖的子工作区，先确认其 Cargo `target-dir` 已统一回 `src-tauri/target`，避免 watch 风暴导致 dev 无法启动
+- 在仓库根运行 Rust 校验必须显式带 `--manifest-path "lime-rs/Cargo.toml"`，或先 `cd lime-rs`；不要直接 `rustc lime-rs/src/*.rs` 编译主 crate，否则会绕过 workspace 依赖并产生 `can't find crate for lime_*` 误报
+- 如果定向测试来自 `lime-rs/crates/aster-rust` 这类被 Tauri watch 覆盖的子工作区，先确认其 Cargo `target-dir` 已统一回 `lime-rs/target`，避免 watch 风暴导致 dev 无法启动
 
 ## 质量分层
 
@@ -204,7 +224,7 @@ npm run test:rust:layers:stats
 
 - `test:unit` 是本地和 AI TDD 的默认第一轮信号，优先覆盖 View Model / projection / selector / parser / formatter 等纯逻辑边界
 - `test:component` 覆盖 React/jsdom 组件接线和关键 UI 回归
-- `test:contract` 覆盖 DevBridge / Tauri mock / command catalog 一类轻量契约测试
+- `test:contract` 覆盖 DevBridge、desktop-host mock、App Server client / protocol、command catalog 一类轻量契约测试
 - `test:integration` 覆盖文件系统、子进程、本地 fixture server 和多模块脚本流程
 - `test:e2e` 覆盖 Vitest 内显式 E2E / smoke / live-gated 测试；真实产品主路径仍以 `verify:gui-smoke` / Playwright 为准
 - `test:layers:stats` 按同一分类事实源输出分层统计、默认可运行数、live-gated 数，以及 component 测试的 VM 迁移候选提示
@@ -219,11 +239,11 @@ npm run test:rust:layers:stats
 
 - `test:unit` 只证明快速逻辑回归，不等于可交付
 - `test:rust:unit` 也只证明后端快速逻辑回归；Rust 模块交付仍需按风险补受影响 crate、integration、workspace 或全量 `test:rust`
-- 显式后缀不能降低风险层级；`*.unit.test.*` 只在无 React/jsdom、DevBridge/Tauri、文件系统、网络、Playwright 等外部边界时进入 unit
+- 显式后缀不能降低风险层级；`*.unit.test.*` 只在无 React/jsdom、DevBridge/Desktop Host/App Server、文件系统、网络、Playwright 等外部边界时进入 unit
 - 新增或迁移 fast-check 属性测试时，优先用 `src/test/fastCheckRuns.ts` 的 `fastCheckRuns(100)` / `fastCheckRuns(50)` 包装 `numRuns`；本地 / AI TDD 默认降采样，CI 保持原始 runs，确需本地满量时设置 `LIME_FAST_CHECK_RUNS=100`
-- GUI 壳、Workspace、主页面路径、Tauri 命令和 Bridge 改动仍必须按后续 Layer 1-3 跑对应校验
+- GUI 壳、Workspace、主页面路径、Electron host、App Server、legacy Tauri adapter 和 Bridge 改动仍必须按后续 Layer 1-3 跑对应校验
 - 前端复杂 UI 逻辑应优先抽到 View Model / projection / selector 中做单元测试；组件测试只保留必要渲染和事件接线，核心用户流程交给 GUI smoke / E2E
-- 新增或重写前端测试时先做分层判断：筛选 / 分组 / formatter / request builder / 状态机 / reducer / runtime 参数投影等可纯化逻辑必须落到 `*.unit.test.ts`；只有 React 渲染、真实 DOM 事件、hook 生命周期、DevBridge/Tauri、文件系统、网络或端到端流程才进入 component / contract / integration / e2e
+- 新增或重写前端测试时先做分层判断：筛选 / 分组 / formatter / request builder / 状态机 / reducer / runtime 参数投影等可纯化逻辑必须落到 `*.unit.test.ts`；只有 React 渲染、真实 DOM 事件、hook 生命周期、DevBridge/Desktop Host/App Server、文件系统、网络或端到端流程才进入 component / contract / integration / e2e
 - 不允许为了“补回归”把大量业务分支继续加进 `*.test.tsx` 挂载测试。若当前逻辑暂时无法抽 VM，必须在路线图或执行计划记录原因、退出条件和后续迁移点，避免后续 Agent 把临时组件测试当作新规范
 
 ### Layer 1：本地统一入口
@@ -256,7 +276,7 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 
 作用：
 
-- 启动或复用 `headless Tauri`
+- 启动或复用 Electron GUI / Desktop Host
 - 等待 `DevBridge` 健康检查通过
 - 验证默认 workspace 的准备态可用
 - 验证 `browser runtime` 的启动、状态读取与审计主链可用
@@ -272,7 +292,7 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 
 这类问题 **单靠** `lint`、`typecheck`、`vitest` 无法覆盖。
 
-默认 `npm run verify:local`、`npm test`、`cargo test --manifest-path "src-tauri/Cargo.toml"` 与 `npm run verify:gui-smoke` 不允许消耗真实模型 / 图片 Provider 额度。会调用 `agent_runtime_submit_turn`、`test_api_key_provider_chat`、图片生成、embedding、ASR 或 live AgentRuntime transcript 的测试 / smoke，必须显式 opt-in：
+默认 `npm run verify:local`、`npm test`、`cargo test --manifest-path "lime-rs/Cargo.toml"` 与 `npm run verify:gui-smoke` 不允许消耗真实模型 / 图片 Provider 额度。会调用 `agent_runtime_submit_turn`、`test_api_key_provider_chat`、图片生成、embedding、ASR 或 live AgentRuntime transcript 的测试 / smoke，必须显式 opt-in：
 
 ```bash
 npm run verify:gui-smoke -- --include-live-provider-smokes
@@ -398,15 +418,15 @@ CI 里的 `.github/workflows/quality.yml` 结果摘要现在也会透出 `bridge
 - 修改 `@浏览器` parser、`useWorkspaceSendActions`、Browser Assist 直发策略、`browser_requirement` 推导或 `mcp__lime-browser__*` 浏览器工具接线，尤其是调整 `Claw @浏览器 -> harness.browser_requirement/browser_launch_url -> Browser Assist timeline` 主链
 - 修改 `/scene-key` 解析、`serviceSkillSceneLaunch`、`useWorkspaceSendActions`、`runtime_turn`、`prompt_context`、compat `lime_run_service_skill` 或 `client/skills` scene 目录协议，尤其是调整 `Claw /scene-key -> harness.service_scene_launch -> 本地 service-scene 直驱执行 -> 本地 ServiceSkill / tool timeline` 主链
 - 修改 `src/lib/dev-bridge/`
-- 修改 `src/lib/tauri-mock/`
-- 修改 `src-tauri/src/app/runner.rs`
-- 修改 `src-tauri/src/dev_bridge/`
+- 修改 `src/lib/desktop-host/` 或 legacy `src/lib/tauri-mock/`
+- 修改 `lime-rs/src/app/runner.rs`
+- 修改 `lime-rs/src/dev_bridge/`
 
 如果本轮修改了 `Claw @配图` 或图片任务 artifact 回填语义，最低校验至少包含：
 
 - `npm run test:contracts`
-- `cd src-tauri && cargo test test_merge_system_prompt_with_image_skill_launch_appends_prompt`
-- `cd src-tauri && cargo test test_append_image_skill_launch_session_permissions_blocks_detour_tools`
+- `cd lime-rs && cargo test test_merge_system_prompt_with_image_skill_launch_appends_prompt`
+- `cd lime-rs && cargo test test_append_image_skill_launch_session_permissions_blocks_detour_tools`
 - `imageWorkbenchCommand`、`useWorkspaceSendActions`、受影响 skill / image task Hook 单测，以及 `aster_agent_cmd` 图片主链定向测试
 - 如果本轮还改了显式图片动作入口，例如文稿 inline 配图、封面位或图片工作台编辑/重绘，额外覆盖 `useWorkspaceImageWorkbenchActionRuntime` 或对应发送桥接回归
 - 若本轮还改了显式 `execute_skill` 的 `images / requestContext` 透传或 compat 续接，额外覆盖 `skillCommand` 回归
@@ -642,7 +662,8 @@ npm run agent-qc:audit
 | 改动类型                            | 至少运行                                               | 额外要求                                    |
 | ----------------------------------- | ------------------------------------------------------ | ------------------------------------------- |
 | 普通前端改动                        | `npm run verify:local`                                 | 如有用户可见变化，补稳定回归                |
-| Tauri 命令 / Bridge / mock 改动     | `npm run verify:local`、`npm run test:contracts`       | 必要时补 `npm run governance:legacy-report` |
+| Electron IPC / App Server / Bridge / mock / legacy Tauri adapter 改动 | `npm run verify:local`、`npm run test:contracts`       | 必要时补 `npm run governance:legacy-report` |
+| Electron host / App Server current 测试迁移 | `npm run test:bridge`、`npm run test:contracts`、相关 `packages/app-server-client` / Rust 定向测试 | GUI 主路径受影响时补 `npm run verify:gui-smoke` |
 | GUI 壳 / Workspace / 页面主路径改动 | `npm run verify:local`、`npm run verify:gui-smoke`     | 必须补对应 UI 回归                          |
 | 运行时 handoff / 证据包导出改动     | `npm run test:contracts`、相关 `vitest`、Rust 定向测试 | 如入口落在工作台 UI，再补最小 GUI 续测      |
 | 配置结构改动                        | `npm run verify:local`                                 | 同步 schema、消费者、文档                   |
@@ -652,7 +673,7 @@ npm run agent-qc:audit
 
 补充说明：
 
-- 如果这次改动新增或调整公开 CLI，或改变某个能力的 `typed local_cli` binding（例如 `@lime/cli`、`lime media ...`），至少补受影响 crate 的定向测试；媒体 `Lime CLI` 主链当前最低建议为 `cargo test --manifest-path src-tauri/Cargo.toml -p lime-media-runtime -p lime-cli`。如果 CLI 结果会回流 Workbench/Agent，再补对应 Rust 或前端定向回归。
+- 如果这次改动新增或调整公开 CLI，或改变某个能力的 `typed local_cli` binding（例如 `@lime/cli`、`lime media ...`），至少补受影响 crate 的定向测试；媒体 `Lime CLI` 主链当前最低建议为 `cargo test --manifest-path lime-rs/Cargo.toml -p lime-media-runtime -p lime-cli`。如果 CLI 结果会回流 Workbench/Agent，再补对应 Rust 或前端定向回归。
 - 如果这次改动把 `ServiceSkill -> automation_job -> agent_turn` 接到 Artifact 主线，除了常规 `verify:local` / `test:contracts` 之外，还应至少补一条稳定回归，证明 `content_id + request_metadata.artifact` 没在表单编辑或执行链路里丢失。
 - 如果这次改动影响 `Claw` 与站点技能的直跑门禁，还应补回归证明：阻断停留在技能入口层，不再把浏览器准备态注入成对话里的继续执行确认。
 - 如果这次改动把 `content_id` steady-state 从“每回合显式提交”后移到 `session/runtime`，除了契约检查之外，还应补 Hook/UI 回归，证明：
@@ -755,8 +776,9 @@ npm run test:bridge
 npm run test:contracts
 npm run bridge:health -- --timeout-ms 120000
 
-# GUI / headless 调试
-npm run tauri:dev:headless
+# GUI / Electron 调试
+npm run electron:dev
+npm run verify:gui-smoke
 ```
 
 ## 相关文档

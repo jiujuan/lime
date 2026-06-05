@@ -112,7 +112,6 @@ const I18N_PATCH_RETIREMENT_FILES = new Set([
   "scripts/lib/i18n-patch-metrics-report-core.mjs",
   "scripts/lib/legacy-surface-report-core.mjs",
   "scripts/report-legacy-surfaces.mjs",
-  "scripts/verify-gui-smoke.mjs",
 ]);
 
 const I18N_RELEASE_DOCS_WORKFLOW_FILES = new Set([
@@ -167,10 +166,9 @@ const I18N_APP_METADATA_WORKFLOW_FILES = new Set([
   "scripts/i18n-app-metadata-locale-build-manifest.ts",
   "scripts/i18n-app-metadata-workflow-report.test.ts",
   "scripts/i18n-app-metadata-workflow-report.ts",
-  "src-tauri/Cargo.toml",
-  "src-tauri/capabilities/agent-app-shell.json",
-  "src-tauri/tauri.conf.headless.json",
-  "src-tauri/tauri.conf.json",
+  "lime-rs/Cargo.toml",
+  "lime-rs/capabilities/agent-app-shell.json",
+  "electron-builder.yml",
 ]);
 
 const I18N_RTL_READINESS_FILES = new Set([
@@ -245,6 +243,11 @@ const I18N_HARDCODED_SCAN_PREFIXES = [
 
 const BRIDGE_FILES = new Set([
   "vite.config.ts",
+  "electron/appServerHost.ts",
+  "electron/hostCommands.ts",
+  "electron/ipcChannels.ts",
+  "electron/main.ts",
+  "electron/preload.ts",
   "scripts/check-command-contracts.mjs",
   "scripts/check-generated-slop-report.mjs",
   "scripts/check-dev-bridge-health.mjs",
@@ -253,7 +256,6 @@ const BRIDGE_FILES = new Set([
   "scripts/report-generated-slop.mjs",
   "scripts/social-workbench-e2e-smoke.mjs",
   "scripts/chrome-bridge-e2e.mjs",
-  "scripts/verify-gui-smoke.mjs",
   "scripts/lib/generated-slop-report-core.mjs",
   "scripts/lib/harness-dashboard-core.mjs",
   "internal/aiprompts/playwright-e2e.md",
@@ -271,9 +273,8 @@ const HARNESS_CLEANUP_CONTRACT_FILES = new Set([
 const INTEGRITY_FILES = new Set([
   "package.json",
   "packages/lime-cli-npm/package.json",
-  "src-tauri/Cargo.toml",
-  "src-tauri/tauri.conf.json",
-  "src-tauri/tauri.conf.headless.json",
+  "lime-rs/Cargo.toml",
+  "electron-builder.yml",
   "scripts/check-app-version-consistency.mjs",
   "scripts/quality-task-planner.mjs",
   "scripts/quality-task-selector.mjs",
@@ -282,30 +283,34 @@ const INTEGRITY_FILES = new Set([
 const GUI_SMOKE_FILES = new Set([
   "src/App.tsx",
   "src/main.tsx",
-  "src-tauri/tauri.conf.json",
-  "src-tauri/tauri.conf.headless.json",
-  "src-tauri/src/app/runner.rs",
-  "src-tauri/src/commands/workspace_cmd.rs",
-  "src-tauri/src/workspace_support.rs",
+  "electron/appServerHost.ts",
+  "electron/hostCommands.ts",
+  "electron/ipcChannels.ts",
+  "electron/main.ts",
+  "electron/preload.ts",
+  "scripts/build-electron-renderer.mjs",
+  "scripts/build-electron.mjs",
   "scripts/check-dev-bridge-health.mjs",
-  "scripts/workspace-ready-smoke.mjs",
-  "scripts/verify-gui-smoke.mjs",
+  "scripts/copy-electron-desktop-assets.mjs",
+  "scripts/electron-smoke.mjs",
+  "scripts/run-electron-dev.mjs",
+  "scripts/run-electron-preview.mjs",
+  "src/lib/electron-host.ts",
+  "tsconfig.electron.json",
 ]);
 
 const GUI_SMOKE_PREFIXES = [
+  "electron/",
   "src/components/",
   "src/contexts/",
   "src/features/",
   "src/hooks/",
   "src/lib/dev-bridge/",
   "src/lib/navigation/",
-  "src/lib/tauri/",
-  "src/lib/tauri-mock/",
+  "src/lib/desktop-host/",
   "src/lib/workspace/",
   "src/pages/",
   "src/stores/",
-  "src-tauri/src/app/",
-  "src-tauri/src/dev_bridge/",
 ];
 
 const KNOWLEDGE_PRODUCT_E2E_FILES = new Set([
@@ -586,13 +591,13 @@ function isI18nHardcodedScanChange(file) {
 }
 
 function isRustChange(file) {
-  return file.startsWith("src-tauri/");
+  return file.startsWith("lime-rs/");
 }
 
 function isBridgeChange(file) {
   return (
     file.startsWith("src/lib/dev-bridge/") ||
-    file.startsWith("src/lib/tauri-mock/") ||
+    file.startsWith("src/lib/desktop-host/") ||
     BRIDGE_FILES.has(file)
   );
 }

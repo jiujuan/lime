@@ -147,7 +147,7 @@ async function waitForHealth(options) {
     }
   }
   throw new Error(
-    `DevBridge 未就绪，请先启动 npm run tauri:dev:headless。最后错误: ${
+    `DevBridge 未就绪，请先启动 npm run electron:dev。最后错误: ${
       lastError instanceof Error ? lastError.message : String(lastError)
     }`,
   );

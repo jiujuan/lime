@@ -42,7 +42,7 @@ function getEffectivePathname(location: Location): string {
 /**
  * 根据 URL 路径渲染对应的组件
  *
- * - /update-notification: 更新提醒悬浮窗口（独立 Tauri 窗口）
+ * - /update-notification: 更新提醒悬浮窗口（独立 Desktop Host 窗口）
  * - /browser-runtime-debugger: 浏览器运行时独立调试窗口
  * - /resource-manager: 独立资源管理器窗口
  * - /browser-connector-guide: 浏览器连接器独立引导窗口

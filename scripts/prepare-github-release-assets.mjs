@@ -33,12 +33,6 @@ function parseArgs(argv) {
   return args;
 }
 
-function normalizeVersion(value) {
-  return String(value || "")
-    .trim()
-    .replace(/^v/, "");
-}
-
 function listFilesRecursive(root) {
   if (!fs.existsSync(root)) {
     return [];
@@ -89,26 +83,6 @@ function duplicateTargetLabel(target) {
   return target.replace(/[^A-Za-z0-9._-]+/g, "-") || "asset";
 }
 
-function macUpdaterAssetName(basename, target, version) {
-  let arch = "";
-  if (target === "aarch64-apple-darwin") {
-    arch = "aarch64";
-  } else if (target === "x86_64-apple-darwin") {
-    arch = "x64";
-  }
-
-  if (!arch) {
-    return "";
-  }
-  if (basename === "Lime.app.tar.gz") {
-    return `Lime_${version}_${arch}.app.tar.gz`;
-  }
-  if (basename === "Lime.app.tar.gz.sig") {
-    return `Lime_${version}_${arch}.app.tar.gz.sig`;
-  }
-  return "";
-}
-
 function githubAssetName(filePath, context) {
   const basename = path.basename(filePath);
   const target = targetFromAssetPath(context.assetsDir, filePath);
@@ -118,25 +92,16 @@ function githubAssetName(filePath, context) {
     return basename;
   }
 
-  const macName = macUpdaterAssetName(basename, target, context.version);
-  if (macName) {
-    return macName;
-  }
-
   return `${duplicateTargetLabel(target)}-${basename}`;
 }
 
 function prepareGitHubReleaseAssets(options) {
   const assetsDir = path.resolve(options.assetsDir || "release-assets");
   const outDir = path.resolve(options.outDir || "release-github-assets");
-  const version = normalizeVersion(options.version);
   const extraAssets = (options.extraAssets || []).map((item) =>
     path.resolve(item),
   );
 
-  if (!version) {
-    throw new Error("version is required");
-  }
   if (!fs.existsSync(assetsDir)) {
     throw new Error(`assets directory is missing: ${assetsDir}`);
   }
@@ -167,7 +132,6 @@ function prepareGitHubReleaseAssets(options) {
     const name = githubAssetName(filePath, {
       assetsDir,
       basenameCounts,
-      version,
     });
     if (usedNames.has(name)) {
       throw new Error(`duplicate GitHub release asset name: ${name}`);
@@ -192,8 +156,6 @@ function main() {
     assetsDir: args["assets-dir"],
     extraAssets: args.extraAsset,
     outDir: args["out-dir"],
-    version:
-      args.version || process.env.RELEASE_TAG || process.env.GITHUB_REF_NAME,
   });
 
   console.log("Prepared GitHub release upload assets:");

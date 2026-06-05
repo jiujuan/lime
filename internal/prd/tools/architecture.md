@@ -15,7 +15,7 @@
 
 ### 2.1 统一元数据事实源
 
-路径：`src-tauri/crates/core/src/tool_calling.rs`
+路径：`lime-rs/crates/core/src/tool_calling.rs`
 
 负责：
 
@@ -31,7 +31,7 @@
 
 ### 2.2 native 目录事实源
 
-路径：`src-tauri/src/agent_tools/catalog.rs`
+路径：`lime-rs/src/agent_tools/catalog.rs`
 
 负责：
 
@@ -43,7 +43,7 @@
 
 ### 2.3 执行权限事实源
 
-路径：`src-tauri/src/agent_tools/execution.rs`
+路径：`lime-rs/src/agent_tools/execution.rs`
 
 负责：
 
@@ -56,7 +56,7 @@
 
 ### 2.4 MCP runtime 事实源
 
-路径：`src-tauri/crates/mcp/src/manager.rs`
+路径：`lime-rs/crates/mcp/src/manager.rs`
 
 负责：
 
@@ -69,7 +69,7 @@
 
 ### 2.5 Agent 注入事实源
 
-路径：`src-tauri/src/commands/aster_agent_cmd.rs`
+路径：`lime-rs/src/commands/aster_agent_cmd.rs`
 
 负责：
 
@@ -82,14 +82,14 @@
 
 路径：
 
-- `src-tauri/crates/agent/src/lib.rs`
-- `src-tauri/crates/agent/src/agent_tools/mod.rs`
+- `lime-rs/crates/agent/src/lib.rs`
+- `lime-rs/crates/agent/src/agent_tools/mod.rs`
 
 负责：
 
-- 把 `src-tauri/src/agent_tools/catalog.rs`
-- 把 `src-tauri/src/agent_tools/execution.rs`
-- 把 `src-tauri/src/agent_tools/inventory.rs`
+- 把 `lime-rs/src/agent_tools/catalog.rs`
+- 把 `lime-rs/src/agent_tools/execution.rs`
+- 把 `lime-rs/src/agent_tools/inventory.rs`
 
 以模块方式复用到 `lime-agent` crate 内，供纯逻辑单测执行。
 
@@ -332,8 +332,8 @@ MCP 不是 native tools 的附属物，也不是另起一套 Agent。
 
 以下路径当前不在主链路：
 
-- `src-tauri/crates/agent/src/tool_permissions.rs`
-- `src-tauri/crates/agent/src/shell_security.rs`
+- `lime-rs/crates/agent/src/tool_permissions.rs`
+- `lime-rs/crates/agent/src/shell_security.rs`
 
 状态建议：
 

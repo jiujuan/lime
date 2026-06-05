@@ -1,13 +1,20 @@
 # 前端切换到 Electron 方案
 
-> 状态：current planning source
-> 更新时间：2026-06-04
+> 状态：current implementation source
+> 更新时间：2026-06-05
 > 作用：定义 Lime 前端从 Tauri webview 切换到 Electron renderer 时的边界、改动点、阶段顺序和验收口径。
 > 关联：[architecture.md](./architecture.md)（`ElectronClient` 路径）、[consumer-integration.md](./consumer-integration.md)（Electron main 消费 sidecar）。
 
 ## 1. 结论
 
 前端**业务组件代码几乎不改**。Lime 前端从一开始就把 Tauri 隔离在一层抽象后面，Electron 化的工作集中在「重建后端桥接层」，不是「改 UI」。
+
+2026-06-05 起，本版本的 Lime Desktop GUI 宿主由 Electron 全面接管：
+
+1. `npm run dev / build / preview` 默认进入 Electron。
+2. `npm run verify:gui-smoke` 默认验证 Electron GUI。
+3. `tauri:*` npm 入口进入 deprecated gate，不再作为 GUI 主路径。
+4. `lime-rs/` 仍保留为 Rust Runtime / App Server workspace；它不是 Lime Desktop 前端宿主事实源。
 
 证据（已核实）：
 
@@ -20,9 +27,9 @@
 
 关键锚点：
 
-1. `vite.config.ts` 把 `@tauri-apps/api/core`、`/event`、`/window`、`plugin-dialog`、`plugin-shell`、`plugin-global-shortcut`、`plugin-deep-link` 全部 alias 重定向到 `src/lib/tauri-mock/`。前端写的 `@tauri-apps/...` 编译时连的是本仓库自己的桥接层，不是 Tauri。
-2. `src/lib/dev-bridge/safeInvoke.ts` 的 `safeInvoke()` 本身就是三通道设计：**Tauri IPC → HTTP Bridge → Mock**，天然支持「后端可替换」。
-3. `src/lib/tauri-mock/event.ts` 的 `listen / emit` 是统一事件入口，当前为内存模拟。
+1. `vite.config.ts` 把 `@tauri-apps/api/core`、`/event`、`/window`、`plugin-dialog`、`plugin-shell`、`plugin-global-shortcut`、`plugin-deep-link` 全部 alias 重定向到 `src/lib/desktop-host/`。前端写的 `@tauri-apps/...` 编译时连的是本仓库自己的 Desktop Host 兼容层，不是 Tauri GUI 宿主。
+2. `src/lib/dev-bridge/safeInvoke.ts` 的 `safeInvoke()` 已收敛为多通道设计：**Electron IPC → legacy Tauri IPC → HTTP Bridge → Desktop Host mock**，后续新增能力默认走 Electron/App Server current。
+3. `src/lib/desktop-host/event.ts` 的 `listen / emit` 是统一事件入口；legacy `tauri-mock` 只保留退役守卫语境。
 
 ## 2. 边界声明
 
@@ -30,16 +37,18 @@
 | --- | --- | --- |
 | `不改` | 业务组件、页面、hook、View Model | 只消费 `safeInvoke` 和封装后的 `listen` |
 | `小改` | `safeInvoke.ts` | 增加一条 Electron IPC 通道分支 |
-| `小改` | `tauri-mock/event.ts` | `listen / emit` 桥接到 `ipcRenderer` |
+| `小改` | `desktop-host/event.ts` | `listen / emit` 桥接到 `ipcRenderer` |
 | `新增` | Electron `main` + `preload` | 进程壳、IPC 转发、sidecar 生命周期 |
 | `重写` | `plugin-dialog / plugin-shell / plugin-global-shortcut / plugin-deep-link` | 用 Electron 原生 API 实现，接口契约复用现有 mock 文件 |
-| `下沉` | `src-tauri` Rust 业务命令 | 不重写，编译成 `app-server` sidecar，按 App Server roadmap 接入 |
+| `下沉` | `lime-rs` Rust 业务命令 | 不重写，编译成 `app-server` sidecar，按 App Server roadmap 接入 |
+| `deprecated` | Tauri GUI 宿主 npm 入口 | `tauri:*` 只输出下线提示，不再作为开发、构建或 smoke 主路径 |
 
 禁止方向：
 
 1. 不在 renderer 直接 `spawn` sidecar 或读写 stdout（见 [consumer-integration.md](./consumer-integration.md) §4）。
 2. 不在迁移期引入第二套 IPC 收口入口，所有命令仍只走 `safeInvoke`。
 3. 不把 Tauri plugin 的语义直接平移成 Electron 全局对象，必须保持现有 mock 文件暴露的函数签名。
+4. 不再用 Tauri GUI smoke 证明 Desktop 可交付；GUI 验收以 Electron smoke 为准。
 
 ## 3. 运行时路径
 
@@ -57,7 +66,7 @@ Renderer (React, 不变)
 与现有 Tauri 形态对照：
 
 ```text
-current (Tauri):
+legacy (Tauri GUI):
   Renderer -> safeInvoke -> window.__TAURI__.core.invoke -> Tauri command -> runtime
 
 target (Electron):
@@ -95,7 +104,7 @@ if (typeof window !== "undefined" && (window as any).electronAPI?.invoke) {
 2. transport 标签新增 `electron-ipc`，便于排障区分通道。
 3. HTTP Bridge 和 Mock 两条 fallback 保持不变，浏览器纯前端开发体验不受影响。
 
-### 4.2 `tauri-mock/event.ts`：桥接 Electron 事件
+### 4.2 `desktop-host/event.ts`：桥接 Electron 事件
 
 `listen / once / emit` 当前是 `Map` 内存模拟。Electron 下：
 
@@ -141,21 +150,23 @@ main 进程职责（与 [consumer-integration.md](./consumer-integration.md) §4
 
 | 能力 | 现有 mock 文件 | Electron 替换 |
 | --- | --- | --- |
-| 对话框 | `tauri-mock/plugin-dialog.ts` | `dialog.showOpenDialog / showSaveDialog / showMessageBox` |
-| 外部打开 / 命令 | `tauri-mock/plugin-shell.ts` | `shell.openExternal / openPath`，命令执行走 main |
-| 全局快捷键 | `tauri-mock/plugin-global-shortcut.ts` | `globalShortcut.register` |
-| 深链 | `tauri-mock/plugin-deep-link.ts` | `app.setAsDefaultProtocolClient` + `open-url` / `second-instance` |
-| 窗口 | `tauri-mock/window.ts` | `BrowserWindow` API |
-| 文件 URL | `convertFileSrc`（`tauri-mock/core.ts`） | 自定义 `app://` protocol 或 `file://` 映射 |
+| 对话框 | `desktop-host/plugin-dialog.ts` | `dialog.showOpenDialog / showSaveDialog / showMessageBox` |
+| 外部打开 / 命令 | `desktop-host/plugin-shell.ts` | `shell.openExternal / openPath`，命令执行走 main |
+| 全局快捷键 | `desktop-host/plugin-global-shortcut.ts` | `globalShortcut.register` |
+| 深链 | `desktop-host/plugin-deep-link.ts` | `app.setAsDefaultProtocolClient` + `open-url` / `second-instance` |
+| 窗口 | `desktop-host/window.ts` | `BrowserWindow` API |
+| 文件 URL | `convertFileSrc`（`desktop-host/core.ts`） | 自定义 `app://` protocol 或 `file://` 映射 |
 
 ## 5. 阶段顺序
 
 ```text
-阶段 A：前端壳替换（不依赖 roadmap 进度）
+阶段 A：前端壳替换（已作为默认宿主入口落地）
   - safeInvoke 增加 electron-ipc 分支
   - event.ts 桥接 ipcRenderer
-  - 新建 Electron main + preload，invoke 先转到 HTTP Bridge / mock
-  退出条件：Electron 窗口能完整渲染所有页面，命令走 mock 数据不报错
+  - 新建 Electron main + preload
+  - dev / build / preview / verify:gui-smoke 默认切到 Electron
+  - Tauri GUI npm 入口下线为 deprecated gate
+  退出条件：Electron 窗口能完整渲染所有页面，命令走 electron-ipc / HTTP Bridge / mock 数据不报错
 
 阶段 B：后端 sidecar 化（依赖 App Server P2-P4）
   - 等 RuntimeCore / app-server backend 脱离 Tauri host state
@@ -169,13 +180,13 @@ main 进程职责（与 [consumer-integration.md](./consumer-integration.md) §4
 
 ## 6. 当前阻塞点
 
-[consumer-integration.md](./consumer-integration.md) §3.1 已声明：standalone `app-server` binary **目前只支持 `mock` backend**，真实 Aster backend 仍依赖 Tauri host state，无法脱离 Tauri 进程独立启动。
+[consumer-integration.md](./consumer-integration.md) §3.1 后续已经推进 standalone external backend。Electron GUI 宿主不再依赖 Tauri webview，但真实 Aster backend 仍需要继续从 Desktop host state 中解耦；在配置 `APP_SERVER_BIN` 或 packaged resources 前，Electron renderer 的 App Server 命令会继续回到现有 HTTP Bridge / mock fallback，不伪造真实 Agent 完成。
 
 含义：
 
-1. 阶段 A 可立即开始，不被阻塞——前端壳 + mock / HTTP bridge 完全可跑。
-2. 阶段 B 的「真实 Agent 执行」必须等 App Server roadmap P2-P4 完成、backend 脱离 Tauri state 之后。
-3. 在此之前，Electron 形态只能视为 integration skeleton，不能作为真实 runtime 的交付判定。
+1. 阶段 A 已成为 Desktop GUI current 主路径。
+2. 阶段 B 的真实 Agent 执行优先走 App Server sidecar / external backend；AsterBackend 脱离旧 Desktop host state 仍是后续主缺口。
+3. Electron main 只接管宿主和 sidecar 生命周期，不把 runtime 业务逻辑复制进 main。
 
 ## 7. 验收口径
 
@@ -185,3 +196,4 @@ main 进程职责（与 [consumer-integration.md](./consumer-integration.md) §4
 4. event 双向打通：main 推送事件能被 renderer 现有 `listen` handler 收到。
 5. plugin 能力对齐：五类 Tauri plugin 能力在 Electron 下签名不变、行为对齐。
 6. 不 import Lime Rust crate：renderer 只消费 preload IPC projection（对齐 [consumer-integration.md](./consumer-integration.md) §12）。
+7. 默认 GUI 入口：`npm run dev / build / preview / verify:gui-smoke` 均不再启动 Tauri。

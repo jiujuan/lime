@@ -82,7 +82,7 @@
       "commands": [
         "npm run test:contracts"
       ],
-      "goal": "验证 safeInvoke/invoke、Rust generate_handler、agentCommandCatalog、mockPriorityCommands/defaultMocks 不漂移。",
+      "goal": "验证 safeInvoke/invoke、Electron host、App Server JSON-RPC、legacy adapter、agentCommandCatalog、mockPriorityCommands/defaultMocks 不漂移。",
       "verifier": "test:contracts 成功；失败时能指出具体缺失侧；不得出现新增 compat/dead 回流；若本轮没有命令面变更，checked surface counts + contract diff empty 可满足 surface evidence。",
       "evidenceRequired": [
         "contract command log",

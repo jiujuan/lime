@@ -298,7 +298,7 @@ describe("generated-slop-report-core", () => {
             id: "migration-setting-key-leak",
             classification: "deprecated",
             description: "migration keys",
-            references: ["src-tauri/crates/core/src/database/migration/foo.rs"],
+            references: ["lime-rs/crates/core/src/database/migration/foo.rs"],
             testReferences: [],
             violations: [],
           },

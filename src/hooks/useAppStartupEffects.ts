@@ -5,11 +5,11 @@ import { getWindowsStartupDiagnostics } from "@/lib/api/serverRuntime";
 import { ensureDefaultWorkspaceReady } from "@/lib/api/project";
 import { showRegistryLoadError } from "@/lib/utils/connectError";
 import { recordWorkspaceRepair } from "@/lib/workspaceHealthTelemetry";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import type { Page } from "@/types/page";
 
-function isTauriDesktopEnvironment(): boolean {
-  return hasTauriInvokeCapability();
+function isDesktopHostEnvironment(): boolean {
+  return hasDesktopHostInvokeCapability();
 }
 
 function isWindowsNavigatorPlatform(): boolean {
@@ -41,7 +41,7 @@ export function useAppStartupEffects({
   }, [registryError]);
 
   useEffect(() => {
-    if (!isTauriDesktopEnvironment() || !isWindowsNavigatorPlatform()) {
+    if (!isDesktopHostEnvironment() || !isWindowsNavigatorPlatform()) {
       return;
     }
 
@@ -72,7 +72,7 @@ export function useAppStartupEffects({
   }, [t]);
 
   useEffect(() => {
-    if (!isTauriDesktopEnvironment()) {
+    if (!isDesktopHostEnvironment()) {
       return;
     }
 

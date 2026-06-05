@@ -90,7 +90,7 @@
 
 ## Phase F：执行权限事实源收口（本轮完成）
 
-- [x] 新增 `src-tauri/src/agent_tools/execution.rs`
+- [x] 新增 `lime-rs/src/agent_tools/execution.rs`
 - [x] 把 workspace execution permission 模板从 `aster_agent_cmd.rs` 收回 `agent_tools` 边界
 - [x] 统一 `bash` / `Task` warning gate 语义
 - [x] 把 execution profile 暴露到 inventory / `agentRuntime.ts`
@@ -128,15 +128,15 @@
 
 ```bash
 # 轻量 Rust 纯逻辑测试
-cargo test --manifest-path "src-tauri/Cargo.toml" -p lime-agent \
+cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent \
   agent_tools::catalog::tests::test_tool_catalog_entries_for_surface_counts_and_lifecycle_boundaries -- --exact
 
-cargo test --manifest-path "src-tauri/Cargo.toml" -p lime-agent \
+cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent \
   agent_tools::inventory::tests::test_build_tool_inventory_marks_extension_sources_and_statuses -- --exact
 
 # MCP / Provider 定向测试
-cargo test --manifest-path "src-tauri/Cargo.toml" -p lime-mcp empty_query_prioritizes_always_visible_then_name -- --nocapture
-cargo test --manifest-path "src-tauri/Cargo.toml" -p lime-providers supports_x_lime_alias -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-mcp empty_query_prioritizes_always_visible_then_name -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-providers supports_x_lime_alias -- --nocapture
 
 # 前端契约与治理守卫
 npm test -- "src/lib/api/agent.test.ts"

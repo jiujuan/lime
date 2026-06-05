@@ -40,7 +40,7 @@
 
 - API Key Provider 中的 OpenAI、Anthropic、Gemini API Key、OpenRouter、GitHub、Azure 等配置
 - 模型名或模型系列中出现的 `codex`、`gemini`、`qwen` 等字符串
-- 协议转换器，尤其是 `src-tauri/crates/providers/src/converter/openai_to_antigravity.rs`
+- 协议转换器，尤其是 `lime-rs/crates/providers/src/converter/openai_to_antigravity.rs`
 - `lime_core::models::runtime_provider_model` 暴露的 `Runtime*` DTO；它只能承载 current API Key Provider 数据，`RuntimeProviderType` 也不得别名回含旧凭证池 Provider 的历史 `ProviderType`
 - API Key Provider 运行时凭证使用 `runtime-api-key-` 临时 UUID 前缀；不得恢复 `fallback-` 或 `[降级]` 这类旧凭证池选择语义
 - `retry.auto_switch_provider` 表示 current 的 Provider 自动切换，不代表旧凭证池 fallback；运行时文案不得再把它称为“自动降级”
@@ -66,6 +66,6 @@ npm run verify:gui-smoke
 ## 相关文档
 
 - [providers.md](providers.md) - Provider current 主路径
-- [commands.md](commands.md) - Tauri 命令边界
+- [commands.md](commands.md) - Desktop Host / App Server 命令边界
 - [database.md](database.md) - 数据库层与启动迁移
 - [converter.md](converter.md) - 协议转换

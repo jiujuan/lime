@@ -7,7 +7,7 @@ HTTP 服务器提供 OpenAI 和 Claude 兼容的 API 端点，支持流式响应
 ## 目录结构
 
 ```
-src-tauri/src/
+lime-rs/src/
 ├── server/
 │   ├── mod.rs              # 服务器入口
 │   ├── routes.rs           # 路由定义

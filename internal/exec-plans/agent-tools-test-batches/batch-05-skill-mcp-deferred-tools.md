@@ -97,10 +97,10 @@ npm test -- "src/components/agent/chat/projection/agentUiEventProjection.test.ts
 Rust 定向：
 
 ```bash
-cargo test --manifest-path "src-tauri/Cargo.toml" tools::tool_search_tool -- --nocapture
-cargo test --manifest-path "src-tauri/Cargo.toml" tools::mcp_resource_tools -- --nocapture
-cargo test --manifest-path "src-tauri/Cargo.toml" skills::tool -- --nocapture
-cargo test --manifest-path "src-tauri/Cargo.toml" tools::workflow_tool -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" tools::tool_search_tool -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" tools::mcp_resource_tools -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" skills::tool -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" tools::workflow_tool -- --nocapture
 ```
 
 ## GUI 验证

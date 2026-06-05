@@ -10,18 +10,38 @@ export const PROTOCOL_VERSION = "appserver.v0";
 export const SERVER_NAME = "app-server";
 export const DEFAULT_LISTEN_URL = "stdio://";
 export const DEFAULT_RELEASE_MANIFEST_NAME = "app-server.release.json";
+export const DEFAULT_PROTOCOL_SCHEMA_MANIFEST_NAME = "manifest.json";
 
 export const METHOD_INITIALIZE = "initialize";
 export const METHOD_INITIALIZED = "initialized";
 export const METHOD_CAPABILITY_LIST = "capability/list";
 export const METHOD_ARTIFACT_READ = "artifact/read";
 export const METHOD_EVIDENCE_EXPORT = "evidence/export";
+export const METHOD_AGENT_SESSION_LIST = "agentSession/list";
+export const METHOD_WORKSPACE_LIST = "workspace/list";
+export const METHOD_WORKSPACE_READ = "workspace/read";
+export const METHOD_WORKSPACE_BY_PATH_READ = "workspace/byPath/read";
+export const METHOD_WORKSPACE_DEFAULT_READ = "workspace/default/read";
+export const METHOD_WORKSPACE_DEFAULT_ENSURE = "workspace/default/ensure";
+export const METHOD_WORKSPACE_PROJECTS_ROOT_READ = "workspace/projectsRoot/read";
+export const METHOD_WORKSPACE_PROJECT_PATH_RESOLVE = "workspace/projectPath/resolve";
+export const METHOD_WORKSPACE_ENSURE_READY = "workspace/ensureReady";
+export const METHOD_SKILL_LIST = "skill/list";
+export const METHOD_SKILL_READ = "skill/read";
+export const METHOD_WORKSPACE_SKILL_BINDINGS_LIST = "workspaceSkillBindings/list";
 export const METHOD_AGENT_SESSION_START = "agentSession/start";
 export const METHOD_AGENT_SESSION_READ = "agentSession/read";
 export const METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start";
 export const METHOD_AGENT_SESSION_TURN_CANCEL = "agentSession/turn/cancel";
 export const METHOD_AGENT_SESSION_ACTION_RESPOND = "agentSession/action/respond";
 export const METHOD_AGENT_SESSION_EVENT = "agentSession/event";
+export const METHOD_MODEL_LIST = "model/list";
+export const METHOD_MODEL_PREFERENCES_LIST = "modelPreferences/list";
+export const METHOD_MODEL_SYNC_STATE_READ = "modelSyncState/read";
+export const METHOD_MODEL_PROVIDER_LIST = "modelProvider/list";
+export const METHOD_MODEL_PROVIDER_CATALOG_LIST = "modelProvider/catalog/list";
+export const METHOD_MODEL_PROVIDER_ALIAS_READ = "modelProviderAlias/read";
+export const METHOD_MODEL_PROVIDER_ALIAS_LIST = "modelProviderAlias/list";
 
 export type AppServerMethodKind = "request" | "notification";
 
@@ -36,6 +56,25 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_CAPABILITY_LIST, kind: "request" },
   { method: METHOD_ARTIFACT_READ, kind: "request" },
   { method: METHOD_EVIDENCE_EXPORT, kind: "request" },
+  { method: METHOD_AGENT_SESSION_LIST, kind: "request" },
+  { method: METHOD_WORKSPACE_LIST, kind: "request" },
+  { method: METHOD_WORKSPACE_READ, kind: "request" },
+  { method: METHOD_WORKSPACE_BY_PATH_READ, kind: "request" },
+  { method: METHOD_WORKSPACE_DEFAULT_READ, kind: "request" },
+  { method: METHOD_WORKSPACE_DEFAULT_ENSURE, kind: "request" },
+  { method: METHOD_WORKSPACE_PROJECTS_ROOT_READ, kind: "request" },
+  { method: METHOD_WORKSPACE_PROJECT_PATH_RESOLVE, kind: "request" },
+  { method: METHOD_WORKSPACE_ENSURE_READY, kind: "request" },
+  { method: METHOD_SKILL_LIST, kind: "request" },
+  { method: METHOD_SKILL_READ, kind: "request" },
+  { method: METHOD_WORKSPACE_SKILL_BINDINGS_LIST, kind: "request" },
+  { method: METHOD_MODEL_LIST, kind: "request" },
+  { method: METHOD_MODEL_PREFERENCES_LIST, kind: "request" },
+  { method: METHOD_MODEL_SYNC_STATE_READ, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_LIST, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_CATALOG_LIST, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_ALIAS_READ, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_ALIAS_LIST, kind: "request" },
   { method: METHOD_AGENT_SESSION_START, kind: "request" },
   { method: METHOD_AGENT_SESSION_READ, kind: "request" },
   { method: METHOD_AGENT_SESSION_TURN_START, kind: "request" },
@@ -257,6 +296,16 @@ export type AgentSessionStartParams = {
 
 export type AgentSessionReadParams = {
   sessionId: string;
+  historyLimit?: number;
+  historyOffset?: number;
+  historyBeforeMessageId?: number;
+};
+
+export type AgentSessionListParams = {
+  includeArchived?: boolean;
+  archivedOnly?: boolean;
+  workspaceId?: string;
+  limit?: number;
 };
 
 export type AgentInput = {
@@ -370,9 +419,88 @@ export type AgentSessionStartResponse = {
   session: AgentSession;
 };
 
+export type AgentSessionOverview = {
+  sessionId: string;
+  threadId?: string;
+  title?: string;
+  model: string;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt?: string;
+  workspaceId?: string;
+  workingDir?: string;
+  executionStrategy?: string;
+  messagesCount: number;
+};
+
+export type AgentSessionListResponse = {
+  sessions: AgentSessionOverview[];
+};
+
+export type WorkspaceReadParams = {
+  id: string;
+};
+
+export type WorkspacePathReadParams = {
+  rootPath: string;
+};
+
+export type WorkspaceProjectPathResolveParams = {
+  name: string;
+  parentRootPath?: string;
+};
+
+export type WorkspaceEnsureParams = {
+  id: string;
+};
+
+export type WorkspaceListResponse = {
+  workspaces: unknown[];
+};
+
+export type WorkspaceReadResponse = {
+  workspace?: unknown;
+};
+
+export type WorkspaceProjectsRootReadResponse = {
+  rootPath: string;
+};
+
+export type WorkspaceProjectPathResolveResponse = {
+  rootPath: string;
+};
+
+export type WorkspaceEnsureReadyResponse = {
+  result: unknown;
+};
+
+export type SkillReadParams = {
+  skillName: string;
+};
+
+export type SkillListResponse = {
+  skills: unknown[];
+};
+
+export type SkillReadResponse = {
+  skill: unknown;
+};
+
+export type WorkspaceSkillBindingsListParams = {
+  workspaceRoot: string;
+  caller?: string;
+  workbench?: boolean;
+  browserAssist?: boolean;
+};
+
+export type WorkspaceSkillBindingsListResponse = {
+  bindings: unknown;
+};
+
 export type AgentSessionReadResponse = {
   session: AgentSession;
   turns: AgentTurn[];
+  detail?: unknown;
 };
 
 export type AgentSessionTurnStartResponse = {
@@ -389,6 +517,43 @@ export type AgentSessionEventParams = {
 export type AgentSessionEventNotification = JsonRpcNotification & {
   method: typeof METHOD_AGENT_SESSION_EVENT;
   params: AgentSessionEventParams;
+};
+
+export type ModelListParams = {
+  providerId?: string;
+  tier?: string;
+};
+
+export type ModelListResponse = {
+  models: unknown[];
+};
+
+export type ModelPreferencesListResponse = {
+  preferences: unknown[];
+};
+
+export type ModelSyncStateReadResponse = {
+  syncState: unknown;
+};
+
+export type ModelProviderListResponse = {
+  providers: unknown[];
+};
+
+export type ModelProviderCatalogListResponse = {
+  providers: unknown[];
+};
+
+export type ModelProviderAliasReadParams = {
+  provider: string;
+};
+
+export type ModelProviderAliasReadResponse = {
+  config?: unknown;
+};
+
+export type ModelProviderAliasListResponse = {
+  configs: Record<string, unknown>;
 };
 
 export type SidecarLaunchConfig = {
@@ -529,6 +694,29 @@ export type AppServerRequestResult<T> = {
   messages: JsonRpcMessage[];
 };
 
+export class AppServerRequestError extends Error {
+  readonly id: RequestId;
+  readonly method: string;
+  readonly response: JsonRpcErrorResponse;
+  readonly notifications: JsonRpcNotification[];
+  readonly messages: JsonRpcMessage[];
+
+  constructor(
+    method: string,
+    response: JsonRpcErrorResponse,
+    notifications: JsonRpcNotification[],
+    messages: JsonRpcMessage[],
+  ) {
+    super(`${method} failed: ${response.error.message}`);
+    this.name = "AppServerRequestError";
+    this.id = response.id;
+    this.method = method;
+    this.response = response;
+    this.notifications = notifications;
+    this.messages = messages;
+  }
+}
+
 export type AppServerArtifactPlatform =
   | "darwin-arm64"
   | "darwin-x64"
@@ -546,6 +734,25 @@ export type AppServerReleaseManifest = {
   version: string;
   protocolVersion: string;
   artifacts: AppServerReleaseArtifact[];
+};
+
+export type ProtocolSchemaGroup = "jsonrpc" | "v0";
+
+export type AppServerProtocolSchemaManifest = {
+  protocolVersion: string;
+  methods: AppServerMethodSpec[];
+  jsonRpc: {
+    version: string;
+    sendsJsonRpcVersionField: boolean;
+    envelopes: string[];
+  };
+  schemas: Record<ProtocolSchemaGroup, string[]>;
+};
+
+export type ProtocolSchemaFile = {
+  group: ProtocolSchemaGroup;
+  typeName: string;
+  path: string;
 };
 
 export class AppServerClient {
@@ -567,6 +774,58 @@ export class AppServerClient {
     return this.request(METHOD_CAPABILITY_LIST, params);
   }
 
+  listSessions(params: AgentSessionListParams = {}): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_LIST, params);
+  }
+
+  listWorkspaces(): JsonRpcRequest {
+    return this.request(METHOD_WORKSPACE_LIST, {});
+  }
+
+  readWorkspace(params: WorkspaceReadParams): JsonRpcRequest {
+    return this.request(METHOD_WORKSPACE_READ, params);
+  }
+
+  readWorkspaceByPath(params: WorkspacePathReadParams): JsonRpcRequest {
+    return this.request(METHOD_WORKSPACE_BY_PATH_READ, params);
+  }
+
+  readDefaultWorkspace(): JsonRpcRequest {
+    return this.request(METHOD_WORKSPACE_DEFAULT_READ, {});
+  }
+
+  ensureDefaultWorkspace(): JsonRpcRequest {
+    return this.request(METHOD_WORKSPACE_DEFAULT_ENSURE, {});
+  }
+
+  readWorkspaceProjectsRoot(): JsonRpcRequest {
+    return this.request(METHOD_WORKSPACE_PROJECTS_ROOT_READ, {});
+  }
+
+  resolveWorkspaceProjectPath(
+    params: WorkspaceProjectPathResolveParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_WORKSPACE_PROJECT_PATH_RESOLVE, params);
+  }
+
+  ensureWorkspaceReady(params: WorkspaceEnsureParams): JsonRpcRequest {
+    return this.request(METHOD_WORKSPACE_ENSURE_READY, params);
+  }
+
+  listSkills(): JsonRpcRequest {
+    return this.request(METHOD_SKILL_LIST, {});
+  }
+
+  readSkill(params: SkillReadParams): JsonRpcRequest {
+    return this.request(METHOD_SKILL_READ, params);
+  }
+
+  listWorkspaceSkillBindings(
+    params: WorkspaceSkillBindingsListParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_WORKSPACE_SKILL_BINDINGS_LIST, params);
+  }
+
   readArtifacts(params: ArtifactReadParams): JsonRpcRequest {
     return this.request(METHOD_ARTIFACT_READ, params);
   }
@@ -581,6 +840,34 @@ export class AppServerClient {
 
   readSession(params: AgentSessionReadParams): JsonRpcRequest {
     return this.request(METHOD_AGENT_SESSION_READ, params);
+  }
+
+  listModels(params: ModelListParams = {}): JsonRpcRequest {
+    return this.request(METHOD_MODEL_LIST, params);
+  }
+
+  listModelPreferences(): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PREFERENCES_LIST, {});
+  }
+
+  readModelSyncState(): JsonRpcRequest {
+    return this.request(METHOD_MODEL_SYNC_STATE_READ, {});
+  }
+
+  listModelProviders(): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_LIST, {});
+  }
+
+  listModelProviderCatalog(): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_CATALOG_LIST, {});
+  }
+
+  readModelProviderAlias(params: ModelProviderAliasReadParams): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_ALIAS_READ, params);
+  }
+
+  listModelProviderAliases(): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_ALIAS_LIST, {});
   }
 
   startTurn(params: AgentSessionTurnStartParams): JsonRpcRequest {
@@ -643,6 +930,133 @@ export class AppServerConnection {
     );
   }
 
+  async listSessions(
+    params: AgentSessionListParams = {},
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionListResponse>> {
+    return await this.request<AgentSessionListResponse>(
+      this.client.listSessions(params),
+      METHOD_AGENT_SESSION_LIST,
+      options,
+    );
+  }
+
+  async listWorkspaces(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WorkspaceListResponse>> {
+    return await this.request<WorkspaceListResponse>(
+      this.client.listWorkspaces(),
+      METHOD_WORKSPACE_LIST,
+      options,
+    );
+  }
+
+  async readWorkspace(
+    params: WorkspaceReadParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WorkspaceReadResponse>> {
+    return await this.request<WorkspaceReadResponse>(
+      this.client.readWorkspace(params),
+      METHOD_WORKSPACE_READ,
+      options,
+    );
+  }
+
+  async readWorkspaceByPath(
+    params: WorkspacePathReadParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WorkspaceReadResponse>> {
+    return await this.request<WorkspaceReadResponse>(
+      this.client.readWorkspaceByPath(params),
+      METHOD_WORKSPACE_BY_PATH_READ,
+      options,
+    );
+  }
+
+  async readDefaultWorkspace(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WorkspaceReadResponse>> {
+    return await this.request<WorkspaceReadResponse>(
+      this.client.readDefaultWorkspace(),
+      METHOD_WORKSPACE_DEFAULT_READ,
+      options,
+    );
+  }
+
+  async ensureDefaultWorkspace(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WorkspaceReadResponse>> {
+    return await this.request<WorkspaceReadResponse>(
+      this.client.ensureDefaultWorkspace(),
+      METHOD_WORKSPACE_DEFAULT_ENSURE,
+      options,
+    );
+  }
+
+  async readWorkspaceProjectsRoot(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WorkspaceProjectsRootReadResponse>> {
+    return await this.request<WorkspaceProjectsRootReadResponse>(
+      this.client.readWorkspaceProjectsRoot(),
+      METHOD_WORKSPACE_PROJECTS_ROOT_READ,
+      options,
+    );
+  }
+
+  async resolveWorkspaceProjectPath(
+    params: WorkspaceProjectPathResolveParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WorkspaceProjectPathResolveResponse>> {
+    return await this.request<WorkspaceProjectPathResolveResponse>(
+      this.client.resolveWorkspaceProjectPath(params),
+      METHOD_WORKSPACE_PROJECT_PATH_RESOLVE,
+      options,
+    );
+  }
+
+  async ensureWorkspaceReady(
+    params: WorkspaceEnsureParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WorkspaceEnsureReadyResponse>> {
+    return await this.request<WorkspaceEnsureReadyResponse>(
+      this.client.ensureWorkspaceReady(params),
+      METHOD_WORKSPACE_ENSURE_READY,
+      options,
+    );
+  }
+
+  async listSkills(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillListResponse>> {
+    return await this.request<SkillListResponse>(
+      this.client.listSkills(),
+      METHOD_SKILL_LIST,
+      options,
+    );
+  }
+
+  async readSkill(
+    params: SkillReadParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillReadResponse>> {
+    return await this.request<SkillReadResponse>(
+      this.client.readSkill(params),
+      METHOD_SKILL_READ,
+      options,
+    );
+  }
+
+  async listWorkspaceSkillBindings(
+    params: WorkspaceSkillBindingsListParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WorkspaceSkillBindingsListResponse>> {
+    return await this.request<WorkspaceSkillBindingsListResponse>(
+      this.client.listWorkspaceSkillBindings(params),
+      METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
+      options,
+    );
+  }
+
   async readArtifacts(
     params: ArtifactReadParams,
     options: AppServerRequestOptions = {},
@@ -672,6 +1086,78 @@ export class AppServerConnection {
     return await this.request<AgentSessionReadResponse>(
       this.client.readSession(params),
       METHOD_AGENT_SESSION_READ,
+      options,
+    );
+  }
+
+  async listModels(
+    params: ModelListParams = {},
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ModelListResponse>> {
+    return await this.request<ModelListResponse>(
+      this.client.listModels(params),
+      METHOD_MODEL_LIST,
+      options,
+    );
+  }
+
+  async listModelPreferences(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ModelPreferencesListResponse>> {
+    return await this.request<ModelPreferencesListResponse>(
+      this.client.listModelPreferences(),
+      METHOD_MODEL_PREFERENCES_LIST,
+      options,
+    );
+  }
+
+  async readModelSyncState(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ModelSyncStateReadResponse>> {
+    return await this.request<ModelSyncStateReadResponse>(
+      this.client.readModelSyncState(),
+      METHOD_MODEL_SYNC_STATE_READ,
+      options,
+    );
+  }
+
+  async listModelProviders(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ModelProviderListResponse>> {
+    return await this.request<ModelProviderListResponse>(
+      this.client.listModelProviders(),
+      METHOD_MODEL_PROVIDER_LIST,
+      options,
+    );
+  }
+
+  async listModelProviderCatalog(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ModelProviderCatalogListResponse>> {
+    return await this.request<ModelProviderCatalogListResponse>(
+      this.client.listModelProviderCatalog(),
+      METHOD_MODEL_PROVIDER_CATALOG_LIST,
+      options,
+    );
+  }
+
+  async readModelProviderAlias(
+    params: ModelProviderAliasReadParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ModelProviderAliasReadResponse>> {
+    return await this.request<ModelProviderAliasReadResponse>(
+      this.client.readModelProviderAlias(params),
+      METHOD_MODEL_PROVIDER_ALIAS_READ,
+      options,
+    );
+  }
+
+  async listModelProviderAliases(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ModelProviderAliasListResponse>> {
+    return await this.request<ModelProviderAliasListResponse>(
+      this.client.listModelProviderAliases(),
+      METHOD_MODEL_PROVIDER_ALIAS_LIST,
       options,
     );
   }
@@ -738,7 +1224,7 @@ export class AppServerConnection {
         }
 
         if (isJsonRpcErrorResponse(message) && message.id === id) {
-          throw new Error(`${method} failed: ${message.error.message}`);
+          throw new AppServerRequestError(method, message, [...notifications], [...messages]);
         }
 
         if (isJsonRpcResponse(message) && message.id === id) {
@@ -871,6 +1357,12 @@ export function isAppServerNotificationMethod(method: string): boolean {
   return APP_SERVER_METHODS.some(
     (spec) => spec.kind === "notification" && spec.method === method,
   );
+}
+
+function normalizeMethodSpecs(methods: readonly AppServerMethodSpec[]): string[] {
+  return methods
+    .map((spec) => `${spec.kind}:${spec.method}`)
+    .sort((left, right) => left.localeCompare(right));
 }
 
 export function encodeMessage(message: JsonRpcMessage): string {
@@ -1041,6 +1533,12 @@ export async function readReleaseManifest(path: string): Promise<AppServerReleas
   return JSON.parse(await readFile(path, "utf8")) as AppServerReleaseManifest;
 }
 
+export async function readProtocolSchemaManifest(
+  manifestPath: string,
+): Promise<AppServerProtocolSchemaManifest> {
+  return JSON.parse(await readFile(manifestPath, "utf8")) as AppServerProtocolSchemaManifest;
+}
+
 export async function resolveSidecarFromReleaseManifestFile(
   manifestPath: string,
   options: ResolveSidecarFromManifestOptions = {},
@@ -1058,6 +1556,13 @@ export function defaultReleaseManifestPath(
   return path.join(resourcesPath, manifestRelativePath);
 }
 
+export function defaultProtocolSchemaManifestPath(
+  schemaJsonRoot: string,
+  manifestRelativePath = DEFAULT_PROTOCOL_SCHEMA_MANIFEST_NAME,
+): string {
+  return path.join(schemaJsonRoot, manifestRelativePath);
+}
+
 export function assertCompatibleManifest(
   manifest: AppServerReleaseManifest,
   expectedProtocolVersion = PROTOCOL_VERSION,
@@ -1067,6 +1572,49 @@ export function assertCompatibleManifest(
       `unsupported app-server protocol: expected ${expectedProtocolVersion}, got ${manifest.protocolVersion}`,
     );
   }
+}
+
+export function assertCompatibleProtocolSchemaManifest(
+  manifest: AppServerProtocolSchemaManifest,
+  expectedProtocolVersion = PROTOCOL_VERSION,
+  expectedMethods: readonly AppServerMethodSpec[] = APP_SERVER_METHODS,
+): void {
+  if (manifest.protocolVersion !== expectedProtocolVersion) {
+    throw new Error(
+      `unsupported app-server schema protocol: expected ${expectedProtocolVersion}, got ${manifest.protocolVersion}`,
+    );
+  }
+  if (manifest.jsonRpc.version !== JSONRPC_VERSION) {
+    throw new Error(
+      `unsupported JSON-RPC schema version: expected ${JSONRPC_VERSION}, got ${manifest.jsonRpc.version}`,
+    );
+  }
+  const actualMethods = normalizeMethodSpecs(manifest.methods);
+  const expectedMethodList = normalizeMethodSpecs(expectedMethods);
+  if (actualMethods.join("\n") !== expectedMethodList.join("\n")) {
+    throw new Error("app-server schema method catalog mismatch");
+  }
+}
+
+export function protocolSchemaFilePath(
+  schemaJsonRoot: string,
+  group: ProtocolSchemaGroup,
+  typeName: string,
+): string {
+  return path.join(schemaJsonRoot, group, `${typeName}.json`);
+}
+
+export function listProtocolSchemaFiles(
+  manifest: AppServerProtocolSchemaManifest,
+  schemaJsonRoot: string,
+): ProtocolSchemaFile[] {
+  return (["jsonrpc", "v0"] as const).flatMap((group) =>
+    (manifest.schemas[group] ?? []).map((typeName) => ({
+      group,
+      typeName,
+      path: protocolSchemaFilePath(schemaJsonRoot, group, typeName),
+    })),
+  );
 }
 
 export function sha256Hex(content: Buffer | Uint8Array | string): string {

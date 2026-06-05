@@ -15,7 +15,7 @@ vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
   saveConfig: mockSaveConfig,
 }));
-vi.mock("@tauri-apps/plugin-shell", () => ({
+vi.mock("@/lib/desktop-host/plugin-shell", () => ({
   open: mockOpen,
 }));
 

@@ -1,0 +1,120 @@
+{
+  "$defs": {
+    "AgentAttachment": {
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "metadata": true,
+        "uri": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "AgentInput": {
+      "properties": {
+        "attachments": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAttachment"
+          },
+          "type": "array"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "RuntimeOptions": {
+      "properties": {
+        "capabilityId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "eventName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "hostOptions": true,
+        "metadata": true,
+        "modelPreference": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "providerPreference": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "queuedTurnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "stream": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "input": {
+      "$ref": "#/$defs/AgentInput"
+    },
+    "queueIfBusy": {
+      "default": false,
+      "type": "boolean"
+    },
+    "runtimeOptions": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RuntimeOptions"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "skipPreSubmitResume": {
+      "default": false,
+      "type": "boolean"
+    },
+    "turnId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "input",
+    "sessionId"
+  ],
+  "title": "AgentSessionTurnStartParams",
+  "type": "object"
+}

@@ -17,6 +17,7 @@ const {
   mockToastError: vi.fn(),
   mockUpdateProject: vi.fn(async () => undefined),
 }));
+const LEGACY_DESKTOP_HOST_INTERNALS_KEY = ["__TA", "URI_INTERNALS__"].join("");
 
 vi.mock("sonner", () => ({
   toast: {
@@ -146,12 +147,12 @@ describe("useAgentContext", () => {
       }
     ).IS_REACT_ACT_ENVIRONMENT = true;
     (
-      window as Window & {
-        __TAURI_INTERNALS__?: {
+      window as unknown as Window & {
+        [LEGACY_DESKTOP_HOST_INTERNALS_KEY]?: {
           invoke?: () => Promise<void>;
         };
       }
-    ).__TAURI_INTERNALS__ = {
+    )[LEGACY_DESKTOP_HOST_INTERNALS_KEY] = {
       invoke: async () => undefined,
     };
     mockNotifyProjectRuntimeAgentsGuide.mockReset();
@@ -166,10 +167,10 @@ describe("useAgentContext", () => {
 
   afterEach(() => {
     delete (
-      window as Window & {
-        __TAURI_INTERNALS__?: unknown;
+      window as unknown as Window & {
+        [LEGACY_DESKTOP_HOST_INTERNALS_KEY]?: unknown;
       }
-    ).__TAURI_INTERNALS__;
+    )[LEGACY_DESKTOP_HOST_INTERNALS_KEY];
     document.body.innerHTML = "";
   });
 

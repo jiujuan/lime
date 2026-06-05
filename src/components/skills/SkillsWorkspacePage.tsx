@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   open as openDialog,
   save as saveDialog,
-} from "@tauri-apps/plugin-dialog";
+} from "@/lib/desktop-host/plugin-dialog";
 import {
   BookOpen,
   ChevronRight,
@@ -152,7 +152,7 @@ type InstalledSkillDetailContentState =
       message: string;
     };
 
-function svgToDataUri(svg?: string): string | null {
+function svgToDataUrl(svg?: string): string | null {
   const normalized = svg?.trim();
   if (!normalized || !normalized.startsWith("<svg")) {
     return null;
@@ -167,7 +167,7 @@ function resolveVisualAssetSource(
   if (url) {
     return url;
   }
-  return svgToDataUri(asset?.svg);
+  return svgToDataUrl(asset?.svg);
 }
 
 function SkillsHeroBannerSvg() {

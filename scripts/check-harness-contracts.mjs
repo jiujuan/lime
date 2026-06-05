@@ -143,7 +143,7 @@ function main() {
   const executionRuntimePath =
     "src/components/agent/chat/utils/sessionExecutionRuntime.ts";
   const requestMetadataPath =
-    "src-tauri/src/commands/aster_agent_cmd/run_metadata/request_metadata.rs";
+    "lime-rs/src/commands/aster_agent_cmd/run_metadata/request_metadata.rs";
 
   const harnessMetadataSource = readSource(harnessMetadataPath);
   const executionRuntimeSource = readSource(executionRuntimePath);

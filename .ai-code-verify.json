@@ -11,7 +11,7 @@
   ],
   "includePatterns": [
     "src/**/*.{ts,tsx,js,jsx}",
-    "src-tauri/**/*.rs"
+    "lime-rs/**/*.rs"
   ],
   "minScore": 60
 }

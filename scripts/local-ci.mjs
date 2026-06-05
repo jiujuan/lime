@@ -212,13 +212,13 @@ function runSelectedTasks(changedFiles, tasks) {
     runCommand(cargoCommand, [
       "test",
       "--manifest-path",
-      "src-tauri/Cargo.toml",
+      "lime-rs/Cargo.toml",
     ]);
     if (options.full) {
       runCommand(cargoCommand, [
         "clippy",
         "--manifest-path",
-        "src-tauri/Cargo.toml",
+        "lime-rs/Cargo.toml",
       ]);
     }
   }

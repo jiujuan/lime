@@ -71,6 +71,21 @@ function sha256(value) {
 }
 
 describe("agent-app standalone final release evidence", () => {
+  it("build evidence blocker 使用 standalone build 口径，不回流旧宿主 build 命名", () => {
+    const evidence = macosPkgEvidence();
+    delete evidence.buildEvidence;
+
+    const result = checkStandaloneReleaseEvidence(evidence);
+    const message = result.blockers.find(
+      (item) => item.code === "BUILD_EVIDENCE_MISSING",
+    )?.message;
+
+    expect(message).toBe(
+      "Final release requires completed standalone build evidence.",
+    );
+    expect(message).not.toMatch(/\bold\s+host\s+build\b/i);
+  });
+
   it("accepts complete macOS pkg final release evidence", () => {
     const result = checkStandaloneReleaseEvidence(macosPkgEvidence());
 

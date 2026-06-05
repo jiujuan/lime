@@ -108,18 +108,18 @@ describe("createAgentChatSendMessage", () => {
       notifySuccess: vi.fn(),
     });
 
-    await sendMessage("/review src-tauri", [], false, false, false);
+    await sendMessage("/review lime-rs", [], false, false, false);
 
     expect(rawSendMessage).toHaveBeenCalledTimes(1);
     expect(rawSendMessage.mock.calls[0]?.[0]).toContain(
       "请对以下对象进行代码审查",
     );
-    expect(rawSendMessage.mock.calls[0]?.[0]).toContain("src-tauri");
+    expect(rawSendMessage.mock.calls[0]?.[0]).toContain("lime-rs");
     expect(listSlashEntryUsage()).toEqual([
       expect.objectContaining({
         kind: "command",
         entryId: "review",
-        replayText: "src-tauri",
+        replayText: "lime-rs",
       }),
     ]);
   });

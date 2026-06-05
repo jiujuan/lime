@@ -33,7 +33,7 @@ async function loadConfig(): Promise<Config> {
       level: 0,
       enabled: true,
       ignorePatterns: ['node_modules', 'dist', 'build', '.git'],
-      includePatterns: ['src/**/*.{ts,tsx,js,jsx}', 'src-tauri/**/*.rs'],
+      includePatterns: ['src/**/*.{ts,tsx,js,jsx}', 'lime-rs/**/*.rs'],
     }
   }
 

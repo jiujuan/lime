@@ -317,7 +317,7 @@ P18.5.3 迁移应优先保持这 5 个业务侧导出稳定，避免同时改 UI
 
 1. 不改内容工厂业务流程、页面结构、文案和模型生成逻辑。
 2. 不改外部 package 的 `dist/*`，除非明确进入 verify / build 阶段。
-3. 不改 Lime `src-tauri/*`、AgentRuntime facade、GUI smoke 脚本。
+3. 不改 Lime `lime-rs/*`、AgentRuntime facade、GUI smoke 脚本。
 4. 不新增垂直 `content_factory_*` Lime command。
 5. 不把 `content-factory-app` 迁移成依赖 Lime internal path；App package 只能依赖 SDK facade。
 

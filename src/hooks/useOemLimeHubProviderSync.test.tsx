@@ -40,8 +40,8 @@ vi.mock("@/lib/api/oemCloudControlPlane", () => ({
     controlPlaneMocks.listClientProviderOfferModels,
 }));
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriInvokeCapability: () => true,
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostInvokeCapability: () => true,
 }));
 
 import { useOemLimeHubProviderSync } from "./useOemLimeHubProviderSync";

@@ -28,11 +28,11 @@ const {
   mockStartUpdateInstallSession: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/api/window", () => ({
+vi.mock("@/lib/desktop-host/window", () => ({
   getCurrentWindow: mockGetCurrentWindow,
 }));
 
-vi.mock("@tauri-apps/plugin-shell", () => ({
+vi.mock("@/lib/desktop-host/plugin-shell", () => ({
   open: mockShellOpen,
 }));
 

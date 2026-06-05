@@ -8,7 +8,7 @@ describe("legacy-surface-report-core", () => {
       repoRoot: "/tmp/lime",
       runtimeSources: [{ relativePath: "src/foo.ts" }],
       testSources: [{ relativePath: "src/foo.test.ts" }],
-      rustRuntimeSources: [{ relativePath: "src-tauri/src/lib.rs" }],
+      rustRuntimeSources: [{ relativePath: "lime-rs/src/lib.rs" }],
       rustTestSources: [],
       importResults: [],
       commandResults: [

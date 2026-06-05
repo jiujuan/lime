@@ -18,13 +18,15 @@ function baseRules({ channel, remoteUpload, updaterEnabled }) {
   if (updaterEnabled) {
     rules.push(
       secretRule({
-        key: "TAURI_SIGNING_PRIVATE_KEY",
-        aliases: ["TAURI_SIGNING_PRIVATE_KEY_RAW"],
+        key: "LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY",
+        aliases: [
+          "LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY_RAW",
+        ],
         category: "updater_signing",
         reason: "Updater artifacts must be signed before publishing manifests.",
       }),
       secretRule({
-        key: "TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
+        key: "LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY_PASSWORD",
         category: "updater_signing",
         reason: "Updater signing private key must be unlocked in CI.",
       }),

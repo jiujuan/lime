@@ -31,7 +31,7 @@
 - `src/lib/workspace/workbenchCanvas.ts`
 - `src/components/workspace/document/DocumentRenderer.tsx`
 - `src/components/workspace/document/editor/NotionEditor.tsx`
-- `src-tauri/src/services/agent_timeline_service.rs`
+- `lime-rs/src/services/agent_timeline_service.rs`
 
 从这些事实源可以确认：
 
@@ -637,7 +637,7 @@ Lime 是本地优先产品，Artifact 应支持落盘，但不能写死平台路
 
 ## 9.3 与 Timeline 的关系
 
-`src-tauri/src/services/agent_timeline_service.rs` 当前已能投影 `ArtifactSnapshot`。  
+`lime-rs/src/services/agent_timeline_service.rs` 当前已能投影 `ArtifactSnapshot`。  
 高配版建议扩展为：
 
 - timeline 记录过程
@@ -808,7 +808,7 @@ Lime 是本地优先产品，Artifact 应支持落盘，但不能写死平台路
 src/components/artifact-workbench/
 src/lib/artifact-document/
 src/lib/artifact-protocol/
-src-tauri/src/services/artifact_document_service.rs
+lime-rs/src/services/artifact_document_service.rs
 ```
 
 职责建议：
@@ -821,7 +821,7 @@ src-tauri/src/services/artifact_document_service.rs
 如果后续同步推进 `aster-rust`，则建议新增独立 runtime 模块，而不是继续堆进 `blueprint/`：
 
 ```text
-src-tauri/crates/aster-rust/crates/aster/src/runtime/
+lime-rs/crates/aster-rust/crates/aster/src/runtime/
 ```
 
 这部分是框架层远期方向，不覆盖 Lime 当前仓库已确定的运行时收口主计划。

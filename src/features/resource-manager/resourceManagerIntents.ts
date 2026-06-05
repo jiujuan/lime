@@ -3,7 +3,7 @@ import type {
   ResourceManagerKind,
   ResourceManagerSourceContext,
 } from "./types";
-import { hasTauriEventCapability } from "@/lib/tauri-runtime";
+import { hasDesktopHostEventCapability } from "@/lib/desktop-runtime";
 import { normalizeResourceManagerSourceContext } from "./resourceManagerSession";
 
 export const RESOURCE_MANAGER_NAVIGATION_INTENT_KEY =
@@ -198,17 +198,17 @@ export function readConsumedResourceManagerNavigationIntentId(
   }
 }
 
-function emitTauriResourceManagerNavigationIntent(
+function emitDesktopHostResourceManagerNavigationIntent(
   intent: ResourceManagerNavigationIntent,
 ): void {
-  if (!hasTauriEventCapability()) {
+  if (!hasDesktopHostEventCapability()) {
     return;
   }
 
-  void import("@tauri-apps/api/event")
+  void import("@/lib/desktop-host/event")
     .then(({ emit }) => emit(RESOURCE_MANAGER_NAVIGATION_INTENT_EVENT, intent))
     .catch(() => {
-      // Tauri 全局事件是独立窗口间通信增强，失败时仍保留 localStorage / postMessage 路径。
+      // Desktop Host 全局事件是独立窗口间通信增强，失败时仍保留 localStorage / postMessage 路径。
     });
 }
 
@@ -249,7 +249,7 @@ export function writeResourceManagerNavigationIntent(params: {
     ),
   );
 
-  emitTauriResourceManagerNavigationIntent(intent);
+  emitDesktopHostResourceManagerNavigationIntent(intent);
 
   try {
     window.opener?.postMessage(

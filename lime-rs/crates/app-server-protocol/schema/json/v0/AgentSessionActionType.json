@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "ask_user",
+    "elicitation",
+    "tool_confirmation"
+  ],
+  "title": "AgentSessionActionType",
+  "type": "string"
+}

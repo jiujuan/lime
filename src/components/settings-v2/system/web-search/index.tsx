@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
-import { open } from "@tauri-apps/plugin-shell";
+import { open } from "@/lib/desktop-host/plugin-shell";
 import { useTranslation } from "react-i18next";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";

@@ -82,7 +82,7 @@
 开始改动前，先盘点这项能力在 4 层中的分布：
 
 - 入口层：页面、组件、Hook、前端 API
-- 服务层：Tauri 命令、Service、Workflow、事件入口
+- 服务层：Electron host、App Server JSON-RPC、legacy Tauri adapter、Service、Workflow、事件入口
 - 存储层：表、DAO、Repository、缓存、迁移
 - 旁路层：统计、记忆、搜索、审计、报表、任务系统
 
@@ -162,12 +162,12 @@ npm run test:contracts
 
 - `governance:legacy-report`
   - 扫描已被判定为 `deprecated` / `dead-candidate` 的前端入口
-  - 检查旧 Tauri 命令是否仍被限制在指定 API 网关
+  - 检查旧 Tauri adapter 是否仍被限制在指定 API 网关，且没有重新承接 current 能力
   - 找出已经零引用、可进入删除候选的兼容壳
   - 规则事实源优先看 `src/lib/governance/legacySurfaceCatalog.json`
 - `test:contracts`
   - 检查前端 `safeInvoke(...)` / `invoke(...)` 的实际调用
-  - 检查 Rust `tauri::generate_handler!` 的实际注册
+  - 检查 Electron host / App Server JSON-RPC / legacy `tauri::generate_handler!` 的实际注册或协议
   - 检查 `src/lib/governance/agentCommandCatalog.json` 中的命令治理口径
   - 检查 `mockPriorityCommands` 与 `defaultMocks` 是否同步
 
@@ -215,13 +215,14 @@ npm run test:contracts
 
 ### 1. 命令边界
 
-只要改动涉及 Tauri 命令、Bridge、mock、前端 API 网关，至少同时看这几处：
+只要改动涉及 Electron IPC、App Server JSON-RPC、Bridge、mock、前端 API 网关或 legacy Tauri adapter，至少同时看这几处：
 
 - 前端 `safeInvoke(...)` / `invoke(...)`
-- Rust `tauri::generate_handler!`
+- Electron host / preload 白名单或 App Server JSON-RPC 协议
+- legacy Tauri adapter 的 `tauri::generate_handler!`（仅在触碰兼容 adapter 时）
 - `src/lib/governance/agentCommandCatalog.json`
 - `src/lib/dev-bridge/mockPriorityCommands.ts`
-- `src/lib/tauri-mock/core.ts`
+- `src/lib/desktop-host/` / legacy `src/lib/tauri-mock/core.ts`
 
 命令边界的详细规则，直接看：
 

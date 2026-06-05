@@ -6,7 +6,7 @@
 
 | 文件 | 说明 |
 |------|------|
-| `useSkillExecution.ts` | Skill 执行 Hook，监听 Tauri 事件并管理执行状态 |
+| `useSkillExecution.ts` | Skill 执行 Hook，监听 Desktop Host 事件并管理执行状态 |
 
 历史 `useUnifiedChat.ts` compat Hook 已删除。
 新 Agent / Codex 工作台统一走 `src/components/agent/chat/hooks/index.ts` 暴露的 `useAgentChatUnified`；
@@ -19,7 +19,7 @@
 
 ## useSkillExecution
 
-Skill 执行 Hook，提供 Skill 执行功能，监听 Tauri 事件并管理执行状态。
+Skill 执行 Hook，提供 Skill 执行功能，监听 Desktop Host 事件并管理执行状态。
 
 ### 使用示例
 

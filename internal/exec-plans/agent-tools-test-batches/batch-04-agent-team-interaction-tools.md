@@ -92,10 +92,10 @@ npm test -- "src/components/agent/chat/team-workspace-runtime/liveRuntimeProject
 Rust 定向：
 
 ```bash
-cargo test --manifest-path "src-tauri/Cargo.toml" tools::agent_control -- --nocapture
-cargo test --manifest-path "src-tauri/Cargo.toml" tools::team_tools -- --nocapture
-cargo test --manifest-path "src-tauri/Cargo.toml" tools::ask -- --nocapture
-cargo test --manifest-path "src-tauri/Cargo.toml" tools::plan_mode_tool -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" tools::agent_control -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" tools::team_tools -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" tools::ask -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" tools::plan_mode_tool -- --nocapture
 ```
 
 ## GUI 验证

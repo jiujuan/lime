@@ -162,7 +162,7 @@ GUI smoke：
   - `services::runtime_skill_binding_service::tests::`：7 个用例通过。
   - `services::capability_draft_service::tests::execute_capability_draft_controlled_get_returns_evidence_without_persisting_inputs`：通过。
   - `commands::aster_agent_cmd::workspace_skill_binding_prompt::tests::should_project_workspace_skill_runtime_enable_as_callable_scope`：通过。
-  - `lime-agent tools::skill_tool_gate::tests::`：编译 `aster-core` 阶段失败于 `No space left on device (os error 28)`；当前磁盘可用约 `797MiB`，`src-tauri/target` 约 `116G`。
+  - `lime-agent tools::skill_tool_gate::tests::`：编译 `aster-core` 阶段失败于 `No space left on device (os error 28)`；当前磁盘可用约 `797MiB`，`lime-rs/target` 约 `116G`。
 - 再次尝试单跑 `lime-agent tools::skill_tool_gate::tests::`：仍在构建 `libaster-*.rlib` 时失败于 `No space left on device (os error 28)`；失败后磁盘可用约 `809MiB`。
 - 早前同命令曾失败于本机 `~/.cargo` registry 中 `base64-0.22.1` 缺文件；本次复跑已越过该错误，剩余问题是 Rust smoke 阶段总耗时超过脚本上限。
 - 使用临时 `CARGO_HOME` 与独立 target 重跑：workspace ready、browser runtime、site adapters、Skill Forge 前端定向测试通过；Rust 冷编译超过 10 分钟超时，脚本已清理子进程。

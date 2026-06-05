@@ -2609,5 +2609,15 @@
   "settings.providers.setting.body.models.imageCommand.action.cancel": "취소",
   "settings.providers.setting.feedback.imageCommand.created": "{{trigger}}을 만들었습니다. {{model}}을 이미지 생성 모델로 사용합니다.",
   "settings.providers.setting.feedback.imageCommand.invalid": "올바른 @명령 이름을 입력하세요.",
-  "settings.experimental.crashReporting.dsn.placeholder": "https://xxx@o0.ingest.sentry.io/0"
+  "settings.experimental.crashReporting.dsn.placeholder": "https://xxx@o0.ingest.sentry.io/0",
+  "settings.voice.input.fn.activeKeyLabel": "🌐 Fn",
+  "settings.voice.input.fn.keyLabel": "Fn",
+  "settings.voice.model.senseVoice.label": "SenseVoice Small",
+  "settings.voice.model.test.resultMeta": "{{sampleRate}} Hz · {{duration}} · {{language}}",
+  "settings.voice.model.test.languageAuto": "auto",
+  "settings.chromeRelay.guide.extension.step3.connectorName": "Lime Browser Connector",
+  "settings.chromeRelay.guide.extension.step3.extensionsUrl": "chrome://extensions",
+  "settings.chromeRelay.guide.extension.sourceWarning.extensionPath": "extensions/lime-chrome",
+  "settings.chromeRelay.guide.extension.sourceWarning.configFile": "auto_config.json",
+  "settings.chromeRelay.guide.extension.sourceWarning.configKeys": "serverUrl / bridgeKey"
 }

@@ -70,23 +70,12 @@ describe("i18n app metadata locale build manifest", () => {
     );
     writeFile(
       root,
-      "src-tauri/tauri.conf.json",
-      JSON.stringify(
-        {
-          bundle: {
-            fileAssociations: [
-              {
-                description: "Lime Skill Package",
-                name: "Lime Skill Package",
-              },
-            ],
-          },
-          identifier: "com.limecloud.lime",
-          productName: "Lime",
-        },
-        null,
-        2,
-      ),
+      "electron-builder.yml",
+      [
+        "appId: com.limecloud.lime",
+        "productName: Lime",
+        "artifactName: ${productName}_${version}_${arch}.${ext}",
+      ].join("\n"),
     );
     writeScope(root, [
       {
@@ -101,11 +90,11 @@ describe("i18n app metadata locale build manifest", () => {
         priority: "required-before-multilingual-release",
       },
       {
-        consumer: "tauri-bundle",
+        consumer: "electron-builder",
         field: "productName",
         kind: "app-product-name",
         localization: "stable-brand",
-        path: "src-tauri/tauri.conf.json",
+        path: "electron-builder.yml",
         priority: "stable",
       },
       {

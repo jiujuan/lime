@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { localAppServerBinaryPath } from "./lib/electron-dev-sidecar.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -170,7 +171,7 @@ async function main() {
 async function resolveSourceBinaryPath() {
   const binaryPath =
     process.env.APP_SERVER_BIN ||
-    path.join(rootDir, "src-tauri", "target", "debug", sidecarBinaryName());
+    localAppServerBinaryPath({ repoRoot: rootDir });
   try {
     await access(binaryPath);
     return binaryPath;
@@ -178,7 +179,7 @@ async function resolveSourceBinaryPath() {
     throw new Error(
       [
         `app-server binary not found: ${binaryPath}`,
-        "先构建：cargo build --manifest-path \"src-tauri/Cargo.toml\" -p app-server",
+        "先构建：cargo build --manifest-path \"lime-rs/Cargo.toml\" -p app-server",
         "或设置：APP_SERVER_BIN=/path/to/app-server",
       ].join("\n"),
     );

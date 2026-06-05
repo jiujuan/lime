@@ -36,13 +36,13 @@ direct 内容生成工具：
 
 ## 当前事实源与分类
 
-事实源声明：Content Workbench current 主路径只允许向 `src-tauri/src/agent_tools/catalog.rs` 的 workbench catalog、`tool_runtime/creation_tools.rs` 的任务 artifact 写入、`media_cli_bridge.rs` 的任务 metadata、以及前端 Agent Chat inline process 展示收敛。
+事实源声明：Content Workbench current 主路径只允许向 `lime-rs/src/agent_tools/catalog.rs` 的 workbench catalog、`tool_runtime/creation_tools.rs` 的任务 artifact 写入、`media_cli_bridge.rs` 的任务 metadata、以及前端 Agent Chat inline process 展示收敛。
 
 - `current`
-  - `src-tauri/src/agent_tools/catalog.rs` 中的 `LIME_CREATE_*_TASK_TOOL_NAME`
-  - `src-tauri/src/commands/aster_agent_cmd/tool_runtime/creation_tools.rs`
-  - `src-tauri/src/commands/aster_agent_cmd/tool_runtime/media_cli_bridge.rs`
-  - `src-tauri/src/commands/aster_agent_cmd/tool_runtime/social_tools.rs` 的 `social_generate_cover_image`
+  - `lime-rs/src/agent_tools/catalog.rs` 中的 `LIME_CREATE_*_TASK_TOOL_NAME`
+  - `lime-rs/src/commands/aster_agent_cmd/tool_runtime/creation_tools.rs`
+  - `lime-rs/src/commands/aster_agent_cmd/tool_runtime/media_cli_bridge.rs`
+  - `lime-rs/src/commands/aster_agent_cmd/tool_runtime/social_tools.rs` 的 `social_generate_cover_image`
   - `src/components/agent/chat/utils/toolDisplayInfo.ts`
   - `src/components/agent/chat/utils/toolProcessSummary.ts`
   - `src/components/agent/chat/utils/limeTaskProtocolNoise.ts`

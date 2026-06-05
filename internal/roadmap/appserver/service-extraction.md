@@ -21,10 +21,10 @@
 | `RuntimeCore` | `current target` | 公共 session/thread/turn/task/run/action/event/artifact/evidence 事实源。 |
 | `ExecutionBackend` | `current target` | 后端适配接口，Aster 和未来后端都走这里。 |
 | `AsterBackend` | `current target` | 对现有 Aster runtime_turn/tool_runtime 的适配封装。 |
-| `src-tauri/crates/agent` | `current reference` | 当前最接近 core 的 crate，后续继续拆公共模型与服务。 |
-| `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` | `current reference` | Aster backend 实现参考，不直接成为公共 core。 |
-| `src-tauri/src/commands/aster_agent_cmd/tool_runtime/*` | `current reference` | Aster tool execution 参考，事件需转换为公共 tool facts。 |
-| `src-tauri/src/commands/aster_agent_cmd/command_api/*` | `compat` | 保留 Tauri command DTO / adapter，逐步委托 service。 |
+| `lime-rs/crates/agent` | `current reference` | 当前最接近 core 的 crate，后续继续拆公共模型与服务。 |
+| `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` | `current reference` | Aster backend 实现参考，不直接成为公共 core。 |
+| `lime-rs/src/commands/aster_agent_cmd/tool_runtime/*` | `current reference` | Aster tool execution 参考，事件需转换为公共 tool facts。 |
+| `lime-rs/src/commands/aster_agent_cmd/command_api/*` | `compat` | 保留 Tauri command DTO / adapter，逐步委托 service。 |
 | 前端 `safeInvoke` / `invoke` agent runtime API | `compat client` | Lime Desktop 迁移期继续保留，但可改为 app-server client。 |
 | `app-server-protocol` | `current target` | 定义 wire DTO 和 schema。 |
 | `app-server` crate 家族 | `current target` | 复刻 Codex 分层命名，提供 protocol / transport / server / client / daemon / test-client。 |

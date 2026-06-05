@@ -267,7 +267,7 @@ function resolveRepoRoot(targetPath) {
 
 function collectGovernanceFiles(repoRoot) {
   const records = [];
-  const roots = ["src", "src-tauri/src"];
+  const roots = ["src", "lime-rs/src"];
 
   for (const root of roots) {
     const absoluteRoot = path.join(repoRoot, root);
@@ -285,7 +285,7 @@ function collectGovernanceFiles(repoRoot) {
 
       const ext = path.extname(relativePath).toLowerCase();
       const language = ext === ".rs" ? "rs" : ext.replace(/^\./, "");
-      const layer = relativePath.startsWith("src-tauri/src/")
+      const layer = relativePath.startsWith("lime-rs/src/")
         ? "rust"
         : "frontend";
 
@@ -914,7 +914,7 @@ function buildDirectoryNodes(fileNodes) {
         label: segments[length - 1],
         path: currentPath,
         kind: "dir",
-        layer: currentPath.startsWith("src-tauri/") ? "rust" : "frontend",
+        layer: currentPath.startsWith("lime-rs/") ? "rust" : "frontend",
         parent:
           length > 1
             ? createDirNodeId(segments.slice(0, length - 1).join("/"))

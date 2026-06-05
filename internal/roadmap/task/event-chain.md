@@ -161,7 +161,7 @@ Lime 其实不是没有事件，而是已经有一条相当强的事件骨架。
 
 ### 4.1 运行时事件总线已经存在
 
-`src-tauri/crates/agent/src/protocol.rs` 里的 `AgentEvent` 已经覆盖：
+`lime-rs/crates/agent/src/protocol.rs` 里的 `AgentEvent` 已经覆盖：
 
 - `thread_started`
 - `turn_started`
@@ -183,7 +183,7 @@ Lime 其实不是没有事件，而是已经有一条相当强的事件骨架。
 
 ### 4.2 时间线投影也已经存在
 
-`src-tauri/src/services/agent_timeline_service.rs` 已经会把一部分 runtime event 投影进 timeline：
+`lime-rs/src/services/agent_timeline_service.rs` 已经会把一部分 runtime event 投影进 timeline：
 
 - turn 生命周期
 - item 生命周期
@@ -208,7 +208,7 @@ Lime 其实不是没有事件，而是已经有一条相当强的事件骨架。
 
 ### 4.4 Request telemetry 也已经存在
 
-`src-tauri/crates/infra/src/telemetry/types.rs` 中的 `RequestLog` 已经记录：
+`lime-rs/crates/infra/src/telemetry/types.rs` 中的 `RequestLog` 已经记录：
 
 - `session_id / thread_id / turn_id`
 - `provider / model`

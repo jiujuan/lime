@@ -20,7 +20,7 @@ import {
   OEM_LIME_HUB_PROVIDER_ID,
   resolveOemLimeHubProviderName,
 } from "@/lib/oemLimeHubProvider";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 
 const LEGACY_MANAGED_LIME_HUB_KEY_ALIAS = "Lime 云端模型";
 const MANAGED_LIME_HUB_KEY_MODELS_STATE =
@@ -233,7 +233,7 @@ export function useOemLimeHubProviderSync() {
     }),
     [t],
   );
-  const syncEnabled = hasTauriInvokeCapability();
+  const syncEnabled = hasDesktopHostInvokeCapability();
   const lastAppliedSignatureRef = useRef<string>("");
 
   useEffect(() => {

@@ -227,17 +227,35 @@ describe("quality-task-planner", () => {
     ]);
   });
 
-  it("installer / app metadata 改动应推荐刷新 app metadata evidence", () => {
-    const tasks = detectTasks(["src-tauri/tauri.conf.json"]);
+  it("Electron installer / app metadata 改动应推荐刷新 app metadata evidence", () => {
+    const tasks = detectTasks(["electron-builder.yml"]);
 
     expect(tasks.integrity).toBe(true);
-    expect(tasks.rust).toBe(true);
+    expect(tasks.rust).toBe(false);
+    expect(tasks.guiSmoke).toBe(false);
     expect(tasks.recommendedCommands).toEqual([
       "npm run i18n:app-metadata-locale-manifest:json -- --output internal/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json",
       "npm run i18n:app-metadata-report:json -- --output internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
       "npm run i18n:p4-readiness-report:json -- --output internal/roadmap/i18n/evidence/p4-readiness-report.json",
       "npm run i18n:roadmap-readiness-report:json -- --output internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
     ]);
+  });
+
+  it("Electron host 改动应触发 bridge 与 GUI smoke current 门禁", () => {
+    const tasks = detectTasks(["electron/ipcChannels.ts"]);
+
+    expect(tasks.bridge).toBe(true);
+    expect(tasks.bridgeReasons).toContain("bridge_runtime");
+    expect(tasks.guiSmoke).toBe(true);
+    expect(tasks.rust).toBe(false);
+  });
+
+  it("desktop-host mock 改动应触发 bridge 与 GUI smoke current 门禁", () => {
+    const tasks = detectTasks(["src/lib/desktop-host/core.ts"]);
+
+    expect(tasks.bridge).toBe(true);
+    expect(tasks.bridgeReasons).toContain("bridge_runtime");
+    expect(tasks.guiSmoke).toBe(true);
   });
 
   it("app metadata 翻译范围 manifest 改动应保持 docs-only 并推荐刷新 evidence", () => {

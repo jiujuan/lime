@@ -45,10 +45,10 @@
 
 来自以下文件：
 
-- `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs`
-- `src-tauri/src/commands/aster_agent_cmd/prompt_context.rs`
-- `src-tauri/src/services/memory_profile_prompt_service.rs`
-- `src-tauri/src/services/web_search_prompt_service.rs`
+- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
+- `lime-rs/src/commands/aster_agent_cmd/prompt_context.rs`
+- `lime-rs/src/services/memory_profile_prompt_service.rs`
+- `lime-rs/src/services/web_search_prompt_service.rs`
 - `src/components/agent/chat/hooks/agentRuntimeAdapter.ts`
 
 可确认：
@@ -62,10 +62,10 @@
 
 来自以下文件：
 
-- `src-tauri/crates/aster-rust/crates/aster/src/blueprint/README.md`
-- `src-tauri/crates/aster-rust/crates/aster/src/blueprint/types.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/blueprint/task_tree_manager.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/blueprint/worker_executor.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/blueprint/README.md`
+- `lime-rs/crates/aster-rust/crates/aster/src/blueprint/types.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/blueprint/task_tree_manager.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/blueprint/worker_executor.rs`
 
 可确认：
 

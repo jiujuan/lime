@@ -12,7 +12,7 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
-import { open as openExternal } from "@tauri-apps/plugin-shell";
+import { open as openExternal } from "@/lib/desktop-host/plugin-shell";
 import {
   ChevronDown,
   ChevronRight,

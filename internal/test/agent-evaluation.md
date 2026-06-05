@@ -254,7 +254,7 @@ fn test_no_infinite_retry_on_missing_file() {
 
 ```bash
 # 运行所有 Agent 评估
-cd src-tauri && cargo test agent::
+cd lime-rs && cargo test agent::
 
 # 运行能力评估
 cargo test agent::capability::

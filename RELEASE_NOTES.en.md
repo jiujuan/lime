@@ -9,7 +9,7 @@
 - Added App Server sidecar lifecycle support, including packaged resources manifests, platform artifact resolution, sha256 verification, initialize handshake, and event routing.
 - Added the standalone App Server app policy source so independent apps can inject scoped capabilities from a JSON policy manifest and constrain capability discovery with `--app-policy`.
 - Added the standalone external backend configuration path, allowing App Server to prototype host-independent turn, cancel, and action-response handling through an external backend process.
-- Started routing the Desktop Agent runtime main path through an in-process App Server adapter, allowing existing Tauri command compatibility entry points to submit Agent turns through JSON-RPC.
+- Started routing the Desktop Agent runtime main path through an in-process App Server adapter, allowing Electron Desktop Host entry points to submit Agent turns through JSON-RPC.
 - Added `capability/list`, `artifact/read`, `evidence/export`, and `agentSession/action/respond` protocol surfaces for capability discovery, artifact reading, evidence export, and approval responses from independent apps.
 
 ### Fixes
@@ -21,11 +21,11 @@
 
 ### Improvements And Refactors
 
-- Split Agent runtime service boundaries into `RuntimeCore`, `ExecutionBackend`, `AsterBackend`, and host adapters, reducing business logic growth inside Tauri command glue.
+- Split Agent runtime service boundaries into `RuntimeCore`, `ExecutionBackend`, `AsterBackend`, and host adapters, reducing business logic growth inside desktop host glue.
 - Added the `app-server-protocol`, `app-server-transport`, `app-server`, `app-server-client`, `app-server-daemon`, and `app-server-test-client` crate family to separate protocol, transport, server, client, and test boundaries.
 - Moved runtime queue, stream, projection, managed objective continuation, and event emission behind host ports so App Server and Desktop can share the same execution path.
 - Consolidated Desktop host dependencies for runtime turns into `RuntimeTurnHostContext`, reducing scattered AppHandle, database, config, and service-state parameter passing.
-- Kept the public `app-server` crate independent from Tauri and prevented Aster-private DTOs from becoming part of the public JSON-RPC protocol.
+- Kept the public `app-server` crate independent from desktop host shell internals and prevented Aster-private DTOs from becoming part of the public JSON-RPC protocol.
 
 ### Tests And Quality
 
@@ -35,7 +35,7 @@
 - Added `smoke:app-server-sidecar-lifecycle` to cover packaged manifests, sha256 verification, sidecar startup, connection, and lifecycle recovery.
 - Added Rust regressions for app policy manifests, external backends, standalone CLI arguments, and factory injection.
 - Added App Server Rust tests, a host boundary guard, TypeScript client tests, and renderer-safe API regressions.
-- Updated the root app, Tauri workspace, Tauri config, CLI npm package, Agent App runtime package, App Server client package, and lockfiles to `1.59.0`.
+- Updated the root app, Electron config, Rust workspace, CLI npm package, Agent App runtime package, App Server client package, and lockfiles to `1.59.0`.
 
 ### Documentation
 

@@ -89,14 +89,14 @@ describe("gui smoke run lock", () => {
       lockDir,
       waitTimeoutMs: 50,
       pollMs: 1,
-      owner: { pid: 2468, command: "node scripts/verify-gui-smoke.mjs" },
+      owner: { pid: 2468, command: "npm run smoke:electron" },
       isProcessAlive: () => false,
     });
 
     expect(readGuiSmokeRunLockOwner(lockDir)).toEqual(
       expect.objectContaining({
         pid: 2468,
-        command: "node scripts/verify-gui-smoke.mjs",
+        command: "npm run smoke:electron",
       }),
     );
 

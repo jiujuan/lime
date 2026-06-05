@@ -1,4 +1,4 @@
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import {
   buildResourceManagerSession,
   writeResourceManagerSession,
@@ -17,16 +17,16 @@ function openResourceManagerFallback(url: string): void {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
-async function openTauriResourceManagerWindow(params: {
+async function openDesktopHostResourceManagerWindow(params: {
   url: string;
   sessionId: string;
 }): Promise<boolean> {
-  if (!hasTauriInvokeCapability()) {
+  if (!hasDesktopHostInvokeCapability()) {
     return false;
   }
 
   try {
-    const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+    const { WebviewWindow } = await import("@/lib/desktop-host/webviewWindow");
     const existingWindow = await WebviewWindow.getByLabel(
       RESOURCE_MANAGER_WINDOW_LABEL,
     ).catch(() => null);
@@ -56,14 +56,14 @@ async function openTauriResourceManagerWindow(params: {
 
     await Promise.race([
       new Promise<void>((resolve) => {
-        void resourceWindow.once("tauri://created", () => resolve());
+        void resourceWindow.once("desktop-host://created", () => resolve());
       }),
       new Promise<void>((resolve) => window.setTimeout(resolve, 160)),
     ]);
     return true;
   } catch (error) {
     console.warn(
-      "[资源管理器] 打开 Tauri 独立窗口失败，回退到浏览器窗口:",
+      "[资源管理器] 打开 Desktop Host 独立窗口失败，回退到浏览器窗口:",
       error,
     );
     return false;
@@ -80,12 +80,12 @@ export async function openResourceManager(
 
   writeResourceManagerSession(session);
   const url = buildResourceManagerUrl(session.id);
-  const openedInTauri = await openTauriResourceManagerWindow({
+  const openedInDesktopHost = await openDesktopHostResourceManagerWindow({
     url,
     sessionId: session.id,
   });
 
-  if (!openedInTauri) {
+  if (!openedInDesktopHost) {
     openResourceManagerFallback(url);
   }
 

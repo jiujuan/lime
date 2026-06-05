@@ -5,12 +5,20 @@ import path from "node:path";
 import process from "node:process";
 
 const repoRoot = process.cwd();
+const rustProtocolFiles = [
+  "lime-rs/crates/app-server-protocol/src/lib.rs",
+  "lime-rs/crates/app-server-protocol/src/jsonrpc_lite.rs",
+  "lime-rs/crates/app-server-protocol/src/protocol/v0.rs",
+  "lime-rs/crates/app-server-protocol/src/schema_export.rs",
+  "lime-rs/crates/app-server-protocol/src/schema_fixtures.rs",
+];
 
 const checks = [
   {
     name: "Rust protocol exposes capability discovery request and response DTOs",
-    file: "src-tauri/crates/app-server-protocol/src/lib.rs",
+    files: rustProtocolFiles,
     snippets: [
+      "schemars::JsonSchema",
       "pub const METHOD_CAPABILITY_LIST: &str = \"capability/list\"",
       "pub struct CapabilityListParams",
       "pub app_id: Option<String>",
@@ -31,8 +39,29 @@ const checks = [
     ],
   },
   {
+    name: "Rust protocol exports JSON schema fixtures for JSON-RPC and appserver.v0 DTOs",
+    files: rustProtocolFiles,
+    snippets: [
+      "pub const JSONRPC_SCHEMA_TYPE_NAMES: &[&str]",
+      "pub const V0_SCHEMA_TYPE_NAMES: &[&str]",
+      "JsonRpcRequest",
+      "AgentSessionTurnStartParams",
+      "EvidenceExportResponse",
+      "RuntimeOptions",
+      "pub include_protocol_types: bool",
+      "fn jsonrpc_schemas() -> Vec<GeneratedJsonSchema>",
+      "fn v0_schemas() -> Vec<GeneratedJsonSchema>",
+      "typed_schema::<AgentSessionTurnStartParams>(\"AgentSessionTurnStartParams\")",
+      "PathBuf::from(\"json\")",
+      ".join(\"v0\")",
+      ".join(\"jsonrpc\")",
+      "\"schemas\": {",
+      "schema_registry_matches_declared_type_names",
+    ],
+  },
+  {
     name: "Rust protocol exposes agentSession/action/respond DTOs and method catalog",
-    file: "src-tauri/crates/app-server-protocol/src/lib.rs",
+    files: rustProtocolFiles,
     snippets: [
       "pub const METHOD_AGENT_SESSION_ACTION_RESPOND: &str = \"agentSession/action/respond\"",
       "pub enum AgentSessionActionType",
@@ -56,7 +85,7 @@ const checks = [
   },
   {
     name: "Rust protocol exposes artifact/read DTOs and method catalog",
-    file: "src-tauri/crates/app-server-protocol/src/lib.rs",
+    files: rustProtocolFiles,
     snippets: [
       "pub const METHOD_ARTIFACT_READ: &str = \"artifact/read\"",
       "pub struct ArtifactReadParams",
@@ -80,7 +109,7 @@ const checks = [
   },
   {
     name: "Rust protocol exposes evidence/export DTOs and method catalog",
-    file: "src-tauri/crates/app-server-protocol/src/lib.rs",
+    files: rustProtocolFiles,
     snippets: [
       "pub const METHOD_EVIDENCE_EXPORT: &str = \"evidence/export\"",
       "pub struct EvidenceExportParams",
@@ -115,7 +144,7 @@ const checks = [
   },
   {
     name: "Rust server initializes capability discovery and dispatches capability/list",
-    file: "src-tauri/crates/app-server/src/processor.rs",
+    file: "lime-rs/crates/app-server/src/processor.rs",
     snippets: [
       "METHOD_CAPABILITY_LIST => self.handle_capability_list(params)",
       "let params: CapabilityListParams = parse_params(params)?",
@@ -126,7 +155,7 @@ const checks = [
   },
   {
     name: "Rust JSON-RPC router dispatches agentSession/action/respond into RuntimeCore",
-    file: "src-tauri/crates/app-server/src/processor.rs",
+    file: "lime-rs/crates/app-server/src/processor.rs",
     snippets: [
       "METHOD_AGENT_SESSION_ACTION_RESPOND => self.handle_action_respond(params).await",
       "let params: AgentSessionActionRespondParams = parse_params(params)?",
@@ -136,7 +165,7 @@ const checks = [
   },
   {
     name: "Rust JSON-RPC router dispatches artifact/read into RuntimeCore",
-    file: "src-tauri/crates/app-server/src/processor.rs",
+    file: "lime-rs/crates/app-server/src/processor.rs",
     snippets: [
       "METHOD_ARTIFACT_READ => self.handle_artifact_read(params)",
       "fn handle_artifact_read(",
@@ -148,7 +177,7 @@ const checks = [
   },
   {
     name: "Rust JSON-RPC router dispatches evidence/export into RuntimeCore",
-    file: "src-tauri/crates/app-server/src/processor.rs",
+    file: "lime-rs/crates/app-server/src/processor.rs",
     snippets: [
       "METHOD_EVIDENCE_EXPORT => self.handle_evidence_export(params)",
       "fn handle_evidence_export(",
@@ -162,7 +191,7 @@ const checks = [
   },
   {
     name: "Rust capability module exposes host-independent inventory source",
-    file: "src-tauri/crates/app-server/src/capability.rs",
+    file: "lime-rs/crates/app-server/src/capability.rs",
     snippets: [
       "pub struct CapabilityInventoryRecord",
       "pub struct CapabilityInventorySource",
@@ -184,7 +213,7 @@ const checks = [
   },
   {
     name: "Rust runtime uses injected capability source",
-    file: "src-tauri/crates/app-server/src/runtime.rs",
+    file: "lime-rs/crates/app-server/src/runtime.rs",
     snippets: [
       "capability_source: Arc<dyn CapabilitySource>",
       "pub fn with_backend_and_capability_source(",
@@ -208,7 +237,7 @@ const checks = [
   },
   {
     name: "Rust runtime routes action responses through injected backend",
-    file: "src-tauri/crates/app-server/src/runtime.rs",
+    file: "lime-rs/crates/app-server/src/runtime.rs",
     snippets: [
       "pub struct ActionRespondRequest",
       "async fn respond_action(",
@@ -222,7 +251,7 @@ const checks = [
   },
   {
     name: "Rust runtime indexes artifact summaries from stored events",
-    file: "src-tauri/crates/app-server/src/runtime.rs",
+    file: "lime-rs/crates/app-server/src/runtime.rs",
     snippets: [
       "pub fn read_artifacts(",
       "params: ArtifactReadParams",
@@ -249,7 +278,7 @@ const checks = [
   },
   {
     name: "Rust runtime exports evidence snapshot from current session events",
-    file: "src-tauri/crates/app-server/src/runtime.rs",
+    file: "lime-rs/crates/app-server/src/runtime.rs",
     snippets: [
       "pub async fn export_evidence(",
       "params: EvidenceExportParams",
@@ -276,7 +305,7 @@ const checks = [
   },
   {
     name: "Rust Aster backend exposes host port for action responses",
-    file: "src-tauri/crates/app-server/src/aster_backend.rs",
+    file: "lime-rs/crates/app-server/src/aster_backend.rs",
     snippets: [
       "pub struct AsterBackendActionRespondRequest",
       "pub struct AsterBackendActionRespondResult",
@@ -289,8 +318,158 @@ const checks = [
     ],
   },
   {
+    name: "Desktop Aster adapter separates queued-turn mapping from host state",
+    file: "lime-rs/src/commands/aster_agent_cmd/app_server_host.rs",
+    snippets: [
+      "struct DesktopAsterQueuedTurn",
+      "fn desktop_aster_queued_turn_from_backend_request(",
+      "let runtime_request = aster_chat_request_from_backend_request(request)",
+      "let queued_task = build_queued_turn_task(runtime_request)?",
+      "queue_if_busy: request.queue_if_busy",
+      "skip_pre_submit_resume: request.skip_pre_submit_resume",
+      "desktop_aster_queued_turn_boundary_preserves_submit_mapping_without_host_state",
+      "queued_turn.queued_task.payload[\"metadata\"][\"app_server\"][\"client_name\"]",
+      "queued_turn.queued_task.payload[\"metadata\"][\"app_server\"][\"capability_id\"]",
+      "queued_turn: DesktopAsterQueuedTurn",
+      ".submit_runtime_turn(queued_turn)",
+      ".submit_runtime_turn(\n                queued_turn.queued_task,\n                queued_turn.queue_if_busy,\n                queued_turn.skip_pre_submit_resume,",
+    ],
+  },
+  {
+    name: "Desktop Aster adapter separates event bridge registration from backend request",
+    file: "lime-rs/src/commands/aster_agent_cmd/app_server_host.rs",
+    snippets: [
+      "struct DesktopAsterEventBridgeRegistration",
+      "fn desktop_aster_event_bridge_registration_from_backend_request(",
+      "let bridge_registration =",
+      "desktop_aster_event_bridge_registration_from_backend_request(&request)",
+      "self.event_subscriptions.register(&bridge_registration)",
+      "fn register(&self, registration: &DesktopAsterEventBridgeRegistration) -> Option<String>",
+      "registration.event_name.clone()",
+      "registration.session_id.clone()",
+      "registration.turn_id.clone()",
+      "desktop_aster_event_bridge_registration_maps_scope_without_runtime_context",
+      "let registration = desktop_aster_event_bridge_registration_from_backend_request(&request)",
+      "subscriptions.register(&registration)",
+    ],
+  },
+  {
+    name: "Desktop Aster adapter separates event bridge append from Desktop Host listener",
+    file: "lime-rs/src/commands/aster_agent_cmd/app_server_host.rs",
+    snippets: [
+      "struct DesktopAsterRuntimeEventBridgeAppend",
+      "fn desktop_aster_runtime_event_bridge_append_from_event(",
+      "fn append_desktop_aster_runtime_event_to_app_server_bridge(",
+      "let append = desktop_aster_runtime_event_bridge_append_from_event(",
+      "append_desktop_aster_runtime_event_to_app_server_bridge(app_server_bridge, append)",
+      "event.payload.pointer(\"/turn/id\")",
+      "event.payload.pointer(\"/turn/turn_id\")",
+      "event.payload.pointer(\"/turn/turnId\")",
+      "append_external_runtime_events(\n            &append.session_id,\n            append.turn_id.as_deref(),\n            vec![append.event],",
+      "desktop_aster_runtime_event_bridge_append_maps_event_without_bridge_state",
+      "desktop_aster_runtime_event_bridge_append_prefers_event_turn_id",
+      "assert_eq!(append.turn_id.as_deref(), Some(\"turn_payload\"))",
+      "assert!(append.should_close)",
+    ],
+  },
+  {
+    name: "Desktop Aster adapter separates session persistence input from runtime context",
+    file: "lime-rs/src/commands/aster_agent_cmd/app_server_host.rs",
+    snippets: [
+      "struct DesktopAsterSessionPersistenceInput",
+      "struct DesktopAsterSessionPersistenceRequest",
+      "enum DesktopAsterSessionPersistenceOperation",
+      "fn desktop_aster_session_persistence_request_from_backend_request(",
+      "fn desktop_aster_session_persistence_input_from_backend_request(",
+      "fn desktop_aster_session_persistence_operation_from_request(",
+      "async fn execute_desktop_aster_session_persistence_operation(",
+      "request: DesktopAsterSessionPersistenceRequest",
+      ".ensure_persisted_session(",
+      "desktop_aster_session_persistence_request_from_backend_request(&request)",
+      "DesktopAsterSessionPersistenceOperation::AlreadyPersisted",
+      "DesktopAsterSessionPersistenceOperation::Create",
+      "create_runtime_session_internal_with_runtime_and_session_id(",
+      "input.session_id",
+      "input.workspace_id",
+      "input.title",
+      "desktop_aster_session_persistence_input_keeps_request_identity_without_runtime_context",
+      "desktop_aster_session_persistence_input_requires_workspace_id_before_runtime_context",
+      "desktop_aster_session_persistence_request_keeps_session_id_before_create_input",
+      "desktop_aster_session_persistence_operation_skips_create_input_for_existing_session",
+      "desktop_aster_session_persistence_operation_requires_create_input_for_new_session",
+      "ensure_requests: Arc<Mutex<Vec<DesktopAsterSessionPersistenceRequest>>>",
+      "fn ensure_requests(&self) -> Vec<DesktopAsterSessionPersistenceRequest>",
+      "workspace_id 必填，请先选择项目工作区",
+    ],
+  },
+  {
+    name: "Desktop Aster adapter separates cancel operation from runtime context",
+    file: "lime-rs/src/commands/aster_agent_cmd/app_server_host.rs",
+    snippets: [
+      "struct DesktopAsterCancelInput",
+      "struct DesktopAsterCancelOperation",
+      "fn desktop_aster_cancel_input_from_backend_request(",
+      "fn desktop_aster_cancel_operation_from_input(",
+      "let input = desktop_aster_cancel_input_from_backend_request(&request)",
+      "let operation = desktop_aster_cancel_operation_from_input(&input)",
+      "cancel_turn(&operation)",
+      "execute_runtime_cancel_operation(&self.runtime, operation).await",
+      "async fn execute_runtime_cancel_operation(",
+      "finish_active_runtime_turn_if_matches_service(&operation.session_id, &operation.turn_id)",
+      "clear_runtime_queue(&operation.session_id)",
+      "desktop_aster_cancel_input_keeps_request_scope_without_runtime_context",
+      "desktop_aster_cancel_operation_maps_runtime_scope_without_protocol_event",
+      "cancel_operations: Arc<Mutex<Vec<DesktopAsterCancelOperation>>>",
+      "fn cancel_operations(&self) -> Vec<DesktopAsterCancelOperation>",
+      "assert_eq!(operations[0].interrupt_message, RUNTIME_INTERRUPT_MESSAGE)",
+    ],
+  },
+  {
+    name: "Desktop Aster adapter separates action response operation from runtime context",
+    file: "lime-rs/src/commands/aster_agent_cmd/app_server_host.rs",
+    snippets: [
+      "struct DesktopAsterActionResponseInput",
+      "struct DesktopAsterActionResponseOperation",
+      "fn desktop_aster_action_response_input_from_backend_request(",
+      "fn desktop_aster_action_response_operation_from_input(",
+      "let input = desktop_aster_action_response_input_from_backend_request(request)",
+      "let operation = desktop_aster_action_response_operation_from_input(input)",
+      "respond_action(operation)",
+      "fn runtime_action_request_from_desktop_aster_action_response_input(",
+      "async fn execute_desktop_aster_action_response_operation(",
+      "respond_runtime_action_internal(",
+      "runtime_action_request_from_desktop_aster_action_response_input(operation.input)",
+      "desktop_aster_action_response_input_maps_protocol_without_runtime_context",
+      "desktop_aster_action_response_operation_maps_runtime_input_without_context",
+      "desktop_aster_backend_host_respond_action_delegates_action_operation",
+      "action_operations: Arc<Mutex<Vec<DesktopAsterActionResponseOperation>>>",
+      "fn action_operations(&self) -> Vec<DesktopAsterActionResponseOperation>",
+    ],
+  },
+  {
+    name: "Standalone App Server local data source implements workspace and skill surfaces",
+    file: "lime-rs/crates/app-server/src/local_data_source.rs",
+    snippets: [
+      "pub struct LocalAppDataSource",
+      "impl AppDataSource for LocalAppDataSource",
+      "async fn list_workspaces(&self) -> Result<WorkspaceListResponse, RuntimeCoreError>",
+      "async fn read_workspace(",
+      "async fn read_workspace_by_path(",
+      "async fn ensure_workspace_ready(",
+      "async fn read_workspace_projects_root(",
+      "async fn resolve_workspace_project_path(",
+      "async fn list_skills(&self) -> Result<SkillListResponse, RuntimeCoreError>",
+      "async fn read_skill(",
+      "async fn list_workspace_skill_bindings(",
+      "fn row_to_workspace_value(row: &Row<'_>)",
+      "fn ensure_current_default_workspace(",
+      "fn list_workspace_skill_bindings_value(",
+      "\"当前只返回 workspace 本地注册 Skill 的只读 readiness；不会 reload Skill，也不会注入默认工具面。\"",
+    ],
+  },
+  {
     name: "Rust JSON-RPC router denies hidden capability ids before starting turns",
-    file: "src-tauri/crates/app-server/src/lib.rs",
+    file: "lime-rs/crates/app-server/src/lib.rs",
     snippets: [
       "turn_start_with_hidden_capability_returns_capability_denied_error",
       "capability_list_with_session_id_uses_stored_session_scope",
@@ -302,7 +481,7 @@ const checks = [
   },
   {
     name: "Rust JSON-RPC aster host test implements action response port",
-    file: "src-tauri/crates/app-server/src/lib.rs",
+    file: "lime-rs/crates/app-server/src/lib.rs",
     snippets: [
       "async fn respond_action(",
       "request: AsterBackendActionRespondRequest",
@@ -311,7 +490,7 @@ const checks = [
   },
   {
     name: "Rust JSON-RPC aster flow smoke covers artifact/read and action/respond",
-    file: "src-tauri/crates/app-server/src/lib.rs",
+    file: "lime-rs/crates/app-server/src/lib.rs",
     snippets: [
       "struct JsonRpcAsterAgentFlowSmokeHost",
       "submit_count: AtomicUsize",
@@ -334,7 +513,7 @@ const checks = [
   },
   {
     name: "Rust app-server facade reexports artifact/read protocol types",
-    file: "src-tauri/crates/app-server/src/lib.rs",
+    file: "lime-rs/crates/app-server/src/lib.rs",
     snippets: [
       "pub use app_server_protocol::ArtifactReadParams",
       "pub use app_server_protocol::ArtifactReadResponse",
@@ -351,7 +530,7 @@ const checks = [
   },
   {
     name: "Rust app-server factory exposes evidence pack provider seam",
-    file: "src-tauri/crates/app-server/src/runtime_factory.rs",
+    file: "lime-rs/crates/app-server/src/runtime_factory.rs",
     snippets: [
       "use crate::EvidenceExportProvider",
       "pub fn mock_runtime_core_with_sources_and_evidence_export_provider(",
@@ -362,7 +541,7 @@ const checks = [
   },
   {
     name: "Desktop evidence pack export helper is reused by App Server provider",
-    file: "src-tauri/src/commands/aster_agent_cmd/command_api/runtime_api.rs",
+    file: "lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs",
     snippets: [
       "pub(crate) async fn export_runtime_evidence_pack_for_runtime(",
       "load_runtime_export_context(runtime, session_id, action_label).await?",
@@ -372,8 +551,30 @@ const checks = [
     ],
   },
   {
+    name: "Desktop in-process App Server injects evidence pack provider",
+    file: "lime-rs/src/commands/aster_agent_cmd/app_server_host.rs",
+    snippets: [
+      "let evidence_export_provider = desktop_evidence_export_provider_with_runtime(&runtime)",
+      "AppServerRuntimeFactory::aster_runtime_core_with_sources_and_evidence_export_provider",
+      "struct DesktopEvidenceExportProvider",
+      "impl EvidenceExportProvider for DesktopEvidenceExportProvider",
+      "export_runtime_evidence_pack_for_runtime(",
+      "evidence_pack_summary_from_runtime_export(export)",
+      "struct ProbeEvidenceExportProvider",
+      "async fn app_server_aster_host_port_json_rpc_evidence_export_uses_injected_provider()",
+      "\"method\":\"evidence/export\"",
+      "\"includeEvidencePack\":true",
+      "evidence_result[\"evidencePack\"][\"completionAuditSummary\"][\"decision\"]",
+      "requests[0].turns[0].turn_id",
+      "event.event_type == \"message.delta\"",
+    ],
+    absentSnippets: [
+      "let server =\n            AppServer::with_runtime(AppServerRuntimeFactory::aster_runtime_core_with_sources(\n                host,\n                capability_source,\n                artifact_content_provider,\n            ));",
+    ],
+  },
+  {
     name: "Rust runtime factory can inject capability source without host dependencies",
-    file: "src-tauri/crates/app-server/src/runtime_factory.rs",
+    file: "lime-rs/crates/app-server/src/runtime_factory.rs",
     snippets: [
       "pub fn mock_runtime_core_with_capability_source(",
       "pub fn mock_app_server_with_capability_source(",
@@ -390,7 +591,7 @@ const checks = [
   },
   {
     name: "Rust app policy manifest builds standalone capability source",
-    file: "src-tauri/crates/app-server/src/capability.rs",
+    file: "lime-rs/crates/app-server/src/capability.rs",
     snippets: [
       "pub struct AppPolicyManifest",
       "pub struct AppPolicyCapability",
@@ -403,7 +604,7 @@ const checks = [
   },
   {
     name: "Rust app-server facade reexports app policy source types",
-    file: "src-tauri/crates/app-server/src/lib.rs",
+    file: "lime-rs/crates/app-server/src/lib.rs",
     snippets: [
       "pub use capability::capability_source_from_app_policy_json",
       "pub use capability::AppPolicyCapability",
@@ -414,7 +615,7 @@ const checks = [
   },
   {
     name: "Standalone App Server exposes explicit unavailable backend mode",
-    file: "src-tauri/crates/app-server/src/runtime_factory.rs",
+    file: "lime-rs/crates/app-server/src/runtime_factory.rs",
     snippets: [
       "pub enum AppServerBackendMode",
       "Unavailable",
@@ -427,16 +628,18 @@ const checks = [
   },
   {
     name: "Standalone App Server CLI accepts unavailable backend mode",
-    file: "src-tauri/crates/app-server/src/main.rs",
+    file: "lime-rs/crates/app-server/src/main.rs",
     snippets: [
       "let mut backend_mode = AppServerBackendMode::Unavailable",
       "parse_args_defaults_to_stdio_unavailable_backend",
-      "AppServerBackendMode::Unavailable =>",
-      "AppServerRuntimeFactory::unavailable_app_server()",
+      "(AppServerBackendMode::Unavailable, Some(capability_source))",
+      "AppServerRuntimeFactory::unavailable_runtime_core_with_capability_source(",
+      "AppServerRuntimeFactory::unavailable_runtime_core()",
       "--backend external|mock|unavailable",
       "--app-policy path",
       "app_policy_path: Option<String>",
-      "load_app_policy_source(path)?",
+      ".map(load_app_policy_source)",
+      ".transpose()?",
       "parse_args_accepts_app_policy_path",
       "load_app_policy_source_reads_scoped_capabilities",
       "parse_args_accepts_explicit_unavailable_backend",
@@ -445,9 +648,11 @@ const checks = [
   },
   {
     name: "Standalone App Server CLI accepts external backend launch options",
-    file: "src-tauri/crates/app-server/src/main.rs",
+    file: "lime-rs/crates/app-server/src/main.rs",
     snippets: [
-      "AppServerBackendMode::External =>",
+      "(AppServerBackendMode::External, Some(capability_source))",
+      "AppServerRuntimeFactory::external_runtime_core_with_capability_source(",
+      "AppServerRuntimeFactory::external_runtime_core(config.external_backend_config()?)",
       "external_backend_config",
       "--backend-command is required when --backend external",
       "ExternalBackendConfig::new(command.clone())",
@@ -465,7 +670,7 @@ const checks = [
   },
   {
     name: "Standalone App Server runtime exposes external backend mode",
-    file: "src-tauri/crates/app-server/src/runtime_factory.rs",
+    file: "lime-rs/crates/app-server/src/runtime_factory.rs",
     snippets: [
       "External",
       "Self::External => \"external\"",
@@ -478,7 +683,7 @@ const checks = [
   },
   {
     name: "Standalone App Server external backend keeps command args and timeout explicit",
-    file: "src-tauri/crates/app-server/src/external_backend.rs",
+    file: "lime-rs/crates/app-server/src/external_backend.rs",
     snippets: [
       "pub struct ExternalBackendConfig",
       "pub command: String",
@@ -487,8 +692,100 @@ const checks = [
       "pub const DEFAULT_EXTERNAL_BACKEND_TIMEOUT_MS",
       "pub fn with_args(",
       "pub fn with_timeout_ms(",
-      "external app-server backend timed out after {}ms",
+      "external app-server backend timed out after {timeout_ms}ms while {phase}",
+      "stdout_lines.next_line()",
+      "cleanup_external_backend_after_timeout(",
+      "let _ = child.start_kill()",
+      "let _ = child.wait().await",
+      "external_backend_stderr_summary(stderr_task).await",
+      "emit_external_backend_line(&line, sink)",
+      "fn emit_external_backend_line(",
       "external_backend_config_keeps_command_and_args_separate",
+      "external_backend_reads_jsonl_event_stream",
+      "external_backend_timeout_kills_process_and_reports_stderr_while_reading_stdout",
+      "external_backend_timeout_kills_process_and_reports_stderr_while_waiting_for_exit",
+    ],
+    absentSnippets: [
+      "child.wait_with_output()",
+    ],
+  },
+  {
+    name: "App Server stdio streams backend events before turn response",
+    files: [
+      "lime-rs/crates/app-server/src/lib.rs",
+      "lime-rs/crates/app-server/src/processor.rs",
+      "lime-rs/crates/app-server/src/runtime.rs",
+      "lime-rs/crates/app-server-transport/src/lib.rs",
+    ],
+    snippets: [
+      "pub use transport::start_stdio_connection",
+      "type StreamedTransportMessage",
+      "pub async fn handle_message_streaming",
+      "handle_request_streaming",
+      "start_turn_with_event_callback",
+      "AppendingRuntimeEventSink",
+      "fn emit_failure(&mut self, error: &RuntimeCoreError) -> Result<(), RuntimeCoreError>",
+      "\"turn.failed\"",
+      "mpsc::unbounded_channel::<StreamedTransportMessage>()",
+      "is_streaming_turn_start_request",
+      "METHOD_EVIDENCE_EXPORT",
+      "json_lines_loop_streams_external_backend_events_before_turn_response",
+      "json_lines_loop_streams_turn_failed_after_partial_external_backend_events",
+      "expected evidence export response after failed turn",
+      "\"includeEvents\": true",
+      "\"includeArtifacts\": true",
+      "external backend crashed after partial output",
+      "assert_scoped_agent_event_notification",
+    ],
+  },
+  {
+    name: "App Server stdio uses transport lifecycle and per-connection writer queues",
+    files: [
+      "lime-rs/crates/app-server/src/lib.rs",
+      "lime-rs/crates/app-server-transport/src/lib.rs",
+      "lime-rs/crates/app-server-transport/src/transport/stdio.rs",
+    ],
+    snippets: [
+      "pub use transport::start_stdio_connection",
+      "start_stdio_connection(transport_event_tx, reader, writer).await?",
+      "TransportEvent::ConnectionOpened",
+      "TransportEvent::StdioClientInitialized",
+      "TransportEvent::ConnectionClosed",
+      "TransportEvent::IncomingMessage",
+      "server.register_transport_writer(connection_id, writer)",
+      "server.unregister_transport_writer(connection_id)",
+      "send_to_transport_connection",
+      "QueuedOutgoingMessage::new(OutgoingMessage::from(message))",
+      "enqueue_transport_outbound_message(&self.transport_writers, message.clone())",
+      "tokio::spawn(async move",
+      ".send(QueuedOutgoingMessage::new(OutgoingMessage::from(message)))",
+      "stdio_connection_emits_lifecycle_events_and_writes_queue_messages",
+    ],
+    absentSnippets: [
+      "broadcast::error::RecvError::Lagged",
+      "try_send(QueuedOutgoingMessage",
+    ],
+  },
+  {
+    name: "App Server test client launch-stdio runs a real stdio smoke harness",
+    files: [
+      "lime-rs/crates/app-server-test-client/src/harness.rs",
+      "lime-rs/crates/app-server-test-client/src/lib.rs",
+      "lime-rs/crates/app-server-test-client/src/main.rs",
+    ],
+    snippets: [
+      "LaunchStdio {",
+      "extra_args: Vec<String>",
+      "pub struct StdioSmokeReport",
+      "pub fn run_stdio_smoke(",
+      "config\n        .command()",
+      ".spawn()",
+      "read_response(&mut stdout, RequestId::Integer(1))",
+      "read_response(&mut stdout, RequestId::Integer(2))",
+      "wait_for_exit(child, Duration::from_secs(2))",
+      "cleanup_child(&mut child)",
+      "run_stdio_smoke(config, &lines)",
+      "stdio_smoke_report_summary_is_stable",
     ],
   },
   {
@@ -524,7 +821,7 @@ const checks = [
   },
   {
     name: "RuntimeCore rolls back turn state when backend start fails",
-    file: "src-tauri/crates/app-server/src/runtime.rs",
+    file: "lime-rs/crates/app-server/src/runtime.rs",
     snippets: [
       "pub struct UnavailableBackend",
       "standalone app-server backend is not configured",
@@ -535,7 +832,7 @@ const checks = [
   },
   {
     name: "Desktop App Server adapter maps dynamic tool inventory into capability source",
-    file: "src-tauri/src/commands/aster_agent_cmd/app_server_host.rs",
+    file: "lime-rs/src/commands/aster_agent_cmd/app_server_host.rs",
     snippets: [
       "struct DesktopRuntimeCapabilitySource",
       "records: Arc<RwLock<Vec<CapabilityInventoryRecord>>>",
@@ -621,22 +918,25 @@ const checks = [
   },
   {
     name: "Desktop App Server adapter delegates action responses to runtime action helper",
-    file: "src-tauri/src/commands/aster_agent_cmd/app_server_host.rs",
+    file: "lime-rs/src/commands/aster_agent_cmd/app_server_host.rs",
     snippets: [
       "respond_runtime_action_internal",
       "async fn respond_action(",
       "request: AsterBackendActionRespondRequest",
-      "runtime_action_request_from_backend_action_request",
+      "desktop_aster_action_response_input_from_backend_request",
+      "desktop_aster_action_response_operation_from_input",
+      "runtime_action_request_from_desktop_aster_action_response_input",
+      "execute_desktop_aster_action_response_operation",
       "runtime_action_type_from_app_server",
       "runtime_action_scope_from_app_server_scope",
       "AgentRuntimeRespondActionRequest",
-      "action_requests: Arc<Mutex<Vec<AgentRuntimeRespondActionRequest>>>",
-      "tauri_aster_backend_host_respond_action_maps_protocol_params_to_runtime_request",
+      "action_operations: Arc<Mutex<Vec<DesktopAsterActionResponseOperation>>>",
+      "desktop_aster_backend_host_respond_action_delegates_action_operation",
     ],
   },
   {
     name: "Desktop compat action command stays a wrapper around shared helper",
-    file: "src-tauri/src/commands/aster_agent_cmd/action_runtime.rs",
+    file: "lime-rs/src/commands/aster_agent_cmd/action_runtime.rs",
     snippets: [
       "pub async fn agent_runtime_respond_action",
       "respond_runtime_action_internal(&app, state.inner(), db.inner(), request).await",
@@ -645,7 +945,7 @@ const checks = [
   },
   {
     name: "Runtime tool inventory command reuses collector for Desktop capability refresh",
-    file: "src-tauri/src/commands/aster_agent_cmd/command_api/runtime_api.rs",
+    file: "lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs",
     snippets: [
       "fn normalize_runtime_tool_inventory_request(",
       "pub(crate) async fn collect_runtime_tool_inventory(",
@@ -661,7 +961,7 @@ const checks = [
   },
   {
     name: "Shared agent tool inventory stays independent from App Server DTOs",
-    file: "src-tauri/src/agent_tools/inventory.rs",
+    file: "lime-rs/src/agent_tools/inventory.rs",
     snippets: [
       "pub fn build_tool_inventory(input: AgentToolInventoryBuildInput) -> AgentToolInventorySnapshot",
       "pub catalog_tools: Vec<ToolCatalogInventoryEntry>",
@@ -675,16 +975,16 @@ const checks = [
   },
   {
     name: "Rust app-server host boundary guard covers capability source",
-    file: "src-tauri/crates/app-server/tests/host_boundary_guard.rs",
+    file: "lime-rs/crates/app-server/tests/host_boundary_guard.rs",
     snippets: [
       "src/capability.rs",
-      "app-server crate 不能直接依赖 tauri",
+      "app-server crate 不能直接依赖桌面宿主壳层",
       "app-server 公共后端边界只能暴露 RuntimeEvent",
     ],
   },
   {
     name: "Rust client exposes typed capability/list helper",
-    file: "src-tauri/crates/app-server-client/src/lib.rs",
+    file: "lime-rs/crates/app-server-client/src/lib.rs",
     snippets: [
       "pub fn list_capabilities(",
       "params: CapabilityListParams",
@@ -698,7 +998,7 @@ const checks = [
   },
   {
     name: "Rust client exposes typed agentSession/action/respond helper",
-    file: "src-tauri/crates/app-server-client/src/lib.rs",
+    file: "lime-rs/crates/app-server-client/src/lib.rs",
     snippets: [
       "use app_server_protocol::AgentSessionActionRespondParams",
       "use app_server_protocol::METHOD_AGENT_SESSION_ACTION_RESPOND",
@@ -711,7 +1011,7 @@ const checks = [
   },
   {
     name: "Rust client exposes typed artifact/read helper",
-    file: "src-tauri/crates/app-server-client/src/lib.rs",
+    file: "lime-rs/crates/app-server-client/src/lib.rs",
     snippets: [
       "use app_server_protocol::ArtifactReadParams",
       "use app_server_protocol::METHOD_ARTIFACT_READ",
@@ -724,7 +1024,7 @@ const checks = [
   },
   {
     name: "Rust client exposes typed evidence/export helper",
-    file: "src-tauri/crates/app-server-client/src/lib.rs",
+    file: "lime-rs/crates/app-server-client/src/lib.rs",
     snippets: [
       "use app_server_protocol::EvidenceExportParams",
       "use app_server_protocol::METHOD_EVIDENCE_EXPORT",
@@ -748,6 +1048,11 @@ const checks = [
       "export function isAppServerRequestMethod(method: string): boolean",
       "export function isAppServerNotificationMethod(method: string): boolean",
       "capabilityDenied: -32020",
+      "export class AppServerRequestError extends Error",
+      "readonly response: JsonRpcErrorResponse",
+      "readonly notifications: JsonRpcNotification[]",
+      "readonly messages: JsonRpcMessage[]",
+      "throw new AppServerRequestError(method, message, [...notifications], [...messages])",
       "export type CapabilityListParams = {",
       "appId?: string",
       "workspaceId?: string",
@@ -844,6 +1149,10 @@ const checks = [
       "isAppServerRequestMethod(METHOD_AGENT_SESSION_TURN_START)",
       "isAppServerNotificationMethod(METHOD_AGENT_SESSION_EVENT)",
       "connection wraps capability list response",
+      "connection request errors preserve streamed notifications and response context",
+      "error instanceof AppServerRequestError",
+      "assert.equal(error.notifications[0].params.event.type, 'message.delta')",
+      "assert.equal(error.notifications[1].params.event.type, 'turn.failed')",
       "assert.deepEqual(capabilities.params, {})",
       "assert.deepEqual(scopedCapabilities.params, {",
       "appId: 'content-studio'",
@@ -1050,6 +1359,155 @@ const checks = [
     ],
   },
   {
+    name: "TypeScript client consumes Rust protocol schema manifest",
+    file: "packages/app-server-client/src/index.ts",
+    snippets: [
+      "export const DEFAULT_PROTOCOL_SCHEMA_MANIFEST_NAME = \"manifest.json\"",
+      "export type AppServerProtocolSchemaManifest = {",
+      "protocolVersion: string",
+      "methods: AppServerMethodSpec[]",
+      "schemas: Record<ProtocolSchemaGroup, string[]>",
+      "export async function readProtocolSchemaManifest(",
+      "export function assertCompatibleProtocolSchemaManifest(",
+      "manifest.protocolVersion !== expectedProtocolVersion",
+      "manifest.jsonRpc.version !== JSONRPC_VERSION",
+      "normalizeMethodSpecs(manifest.methods)",
+      "normalizeMethodSpecs(expectedMethods)",
+      "app-server schema method catalog mismatch",
+      "export function protocolSchemaFilePath(",
+      "export function listProtocolSchemaFiles(",
+      "([\"jsonrpc\", \"v0\"] as const).flatMap",
+    ],
+  },
+  {
+    name: "TypeScript client tests lock checked-in Rust schema consumption",
+    file: "packages/app-server-client/tests/client.test.mjs",
+    snippets: [
+      "DEFAULT_PROTOCOL_SCHEMA_MANIFEST_NAME",
+      "readProtocolSchemaManifest",
+      "assertCompatibleProtocolSchemaManifest",
+      "defaultProtocolSchemaManifestPath",
+      "protocolSchemaFilePath",
+      "listProtocolSchemaFiles",
+      "reads and validates protocol schema manifest metadata",
+      "consumes checked-in Rust protocol schema manifest",
+      "AgentSessionTurnStartParams",
+      "EvidenceExportResponse",
+      "JsonRpcRequest",
+      "schema method catalog mismatch",
+    ],
+  },
+  {
+    name: "Rust daemon probes stdio sidecar readiness before handing it to hosts",
+    file: "lime-rs/crates/app-server-daemon/src/lib.rs",
+    snippets: [
+      "pub fn probe_readiness(",
+      "pub struct SidecarReadinessReport",
+      "pub enum SidecarReadinessError",
+      "pub fn probe_sidecar_readiness(",
+      "initialize_probe_request(client_version)",
+      "initialized_notification()",
+      "probe_info_from_initialize_response(&message)",
+      "write_jsonrpc_line(stdin, &initialize)",
+      "write_jsonrpc_line(stdin, &initialized)",
+      "drop(child.stdin.take())",
+      "wait_for_sidecar_exit(child, Duration::from_secs(2))",
+      "drain_child_stderr(child, &stderr_log_file)",
+      "if result.is_err()",
+      "readiness_probe_drains_stderr_when_sidecar_exits_before_initialize_response",
+      "cleanup_sidecar_child(&mut child)",
+      "readiness_probe_rejects_sha256_mismatch_before_process_start",
+      "readiness_probe_smokes_real_app_server_when_env_is_set",
+    ],
+  },
+  {
+    name: "Rust daemon sidecar launch config mirrors standalone backend options",
+    files: [
+      "lime-rs/crates/app-server-daemon/src/lib.rs",
+      "lime-rs/crates/app-server-daemon/src/backend.rs",
+    ],
+    snippets: [
+      "pub enum SidecarBackendMode",
+      "External",
+      "Mock",
+      "Unavailable",
+      "pub backend_mode: SidecarBackendMode",
+      "pub backend_command: Option<String>",
+      "pub backend_args: Vec<String>",
+      "pub backend_timeout_ms: Option<u64>",
+      "pub app_policy_path: Option<PathBuf>",
+      "args.push(\"--backend\".to_string())",
+      "args.push(self.backend_mode.as_str().to_string())",
+      "args.push(\"--backend-command\".to_string())",
+      "args.push(\"--backend-arg\".to_string())",
+      "args.push(\"--backend-timeout-ms\".to_string())",
+      "args.push(\"--app-policy\".to_string())",
+      "release_manifest_resolution_preserves_backend_launch_options",
+      "sidecar_args_follow_standalone_backend_cli",
+    ],
+  },
+  {
+    name: "Rust daemon settings persist external backend launch options",
+    file: "lime-rs/crates/app-server-daemon/src/settings.rs",
+    snippets: [
+      "pub backend_mode: Option<String>",
+      "pub backend_command: Option<String>",
+      "pub backend_args: Vec<String>",
+      "pub backend_timeout_ms: Option<u64>",
+      "pub app_policy_path: Option<PathBuf>",
+      "value[\"backendCommand\"]",
+      "value[\"backendArgs\"][0]",
+      "value[\"backendTimeoutMs\"]",
+      "daemon_settings_round_trips_external_backend_launch_options",
+      "resources/app-server/backend/content-backend.mjs",
+    ],
+  },
+  {
+    name: "Rust daemon applies settings to sidecar launch resolution",
+    file: "lime-rs/crates/app-server-daemon/src/lib.rs",
+    snippets: [
+      "pub fn apply_daemon_settings(&mut self, settings: &DaemonSettings) -> Result<(), String>",
+      "pub fn with_daemon_settings(mut self, settings: &DaemonSettings) -> Result<Self, String>",
+      "pub fn with_daemon_state_paths(",
+      "let settings = DaemonSettings::load(&state_paths.settings_file)?",
+      "self.allow_env_override = settings.allow_env_override",
+      "self.resource_relative_path = settings.resource_relative_path.clone()",
+      "self.backend_mode = SidecarBackendMode::parse(backend_mode.trim())?",
+      "self.backend_command = settings.backend_command.clone()",
+      "self.backend_args = settings.backend_args.clone()",
+      "self.backend_timeout_ms = settings.backend_timeout_ms",
+      "self.app_policy_path = settings.app_policy_path.clone()",
+      "pub fn resolve_sidecar_from_release_manifest_path_with_daemon_state(",
+      "options.with_daemon_state_paths(state_paths)?",
+      "daemon_settings_apply_to_sidecar_binary_options_and_manifest_resolution",
+      "with_daemon_state_paths_loads_settings_file_into_manifest_resolution",
+      "with_daemon_state_paths_missing_settings_uses_default_resolution",
+      "daemon_settings_reject_unsupported_backend_mode_before_launch_resolution",
+    ],
+  },
+  {
+    name: "Rust daemon lifecycle keeps operation lock and pid backend explicit",
+    files: [
+      "lime-rs/crates/app-server-daemon/src/backend.rs",
+      "lime-rs/crates/app-server-daemon/src/lifecycle.rs",
+    ],
+    snippets: [
+      "pub fn is_supported(self) -> bool",
+      "matches!(self, Self::Sidecar)",
+      "pub fn unsupported_reason(self) -> Option<&'static str>",
+      "pid backend is not supported until local socket lifecycle is enabled",
+      "pub struct OperationLock",
+      "File::options()",
+      ".create_new(true)",
+      "OperationLockError::AlreadyLocked",
+      "impl Drop for OperationLock",
+      "fs::remove_file(&self.path)",
+      "pub fn acquire_operation_lock(",
+      "pid_backend_is_explicitly_unsupported_until_local_socket_lifecycle_exists",
+      "operation_lock_serializes_lifecycle_actions_and_releases_on_drop",
+    ],
+  },
+  {
     name: "TypeScript client exposes sidecar lifecycle backoff",
     file: "packages/app-server-client/src/index.ts",
     snippets: [
@@ -1181,8 +1639,53 @@ const checks = [
     ],
   },
   {
+    name: "Packaged sidecar failure smoke preserves streamed failure evidence",
+    file: "scripts/app-server-packaged-external-backend-failure-smoke.mjs",
+    snippets: [
+      "[smoke:app-server-packaged-external-backend-failure] ok",
+      "startPackagedAppServerSidecar",
+      "AppServerRequestError",
+      "backendMode: \"external\"",
+      "backendCommand: process.execPath",
+      "backendArgs: [backendPath]",
+      "writeFailingExternalBackend(backendPath)",
+      "packaged external backend crashed after partial output",
+      "agentEventsFromNotifications(turnResult.error.notifications)",
+      "assertFailureEvents(clientEvents, \"client streamed events\")",
+      "connection.exportEvidence",
+      "assertFailureEvents(evidenceEvents, \"evidence events\")",
+      "clientEvents=${clientEvents.map((event) => event.type).join(\",\")}",
+      "evidenceEvents=${evidenceEvents.map((event) => event.type).join(\",\")}",
+    ],
+  },
+  {
+    name: "Root package gate runs packaged external backend failure smoke",
+    file: "package.json",
+    snippets: [
+      "\"smoke:app-server-packaged-external-backend-failure\"",
+      "scripts/app-server-packaged-external-backend-failure-smoke.mjs",
+      "npm --prefix \\\"packages/app-server-client\\\" run build",
+      "\"electron:package:dir\"",
+      "node scripts/run-electron-package-dir.mjs",
+      "\"electron:verify:package\"",
+      "scripts/verify-electron-package-resources.mjs && npm run smoke:app-server-packaged-external-backend-failure",
+    ],
+  },
+  {
+    name: "Electron directory package disables local signing identity discovery",
+    file: "scripts/run-electron-package-dir.mjs",
+    snippets: [
+      "CSC_IDENTITY_AUTO_DISCOVERY: \"false\"",
+      "\"electron-builder\"",
+      "\"--dir\"",
+      "\"--publish\"",
+      "\"never\"",
+      "shell: process.platform === \"win32\"",
+    ],
+  },
+  {
     name: "Rust turn start params expose caller supplied turn_id",
-    file: "src-tauri/crates/app-server-protocol/src/lib.rs",
+    files: rustProtocolFiles,
     snippets: [
       "pub struct AgentSessionTurnStartParams",
       "pub turn_id: Option<String>",
@@ -1192,7 +1695,7 @@ const checks = [
   },
   {
     name: "Rust runtime options expose host-local and queue metadata",
-    file: "src-tauri/crates/app-server-protocol/src/lib.rs",
+    files: rustProtocolFiles,
     snippets: [
       "pub struct RuntimeOptions",
       "pub event_name: Option<String>",
@@ -1277,16 +1780,19 @@ const checks = [
 const failures = [];
 
 for (const check of checks) {
-  const filePath = path.join(repoRoot, check.file);
-  const content = fs.readFileSync(filePath, "utf8");
+  const files = check.files ?? [check.file];
+  const location = files.join(", ");
+  const content = files
+    .map((file) => fs.readFileSync(path.join(repoRoot, file), "utf8"))
+    .join("\n");
   for (const snippet of check.snippets) {
     if (!content.includes(snippet)) {
-      failures.push(`${check.name}: missing ${JSON.stringify(snippet)} in ${check.file}`);
+      failures.push(`${check.name}: missing ${JSON.stringify(snippet)} in ${location}`);
     }
   }
   for (const snippet of check.absentSnippets ?? []) {
     if (content.includes(snippet)) {
-      failures.push(`${check.name}: forbidden ${JSON.stringify(snippet)} in ${check.file}`);
+      failures.push(`${check.name}: forbidden ${JSON.stringify(snippet)} in ${location}`);
     }
   }
 }

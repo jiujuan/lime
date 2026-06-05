@@ -16,9 +16,9 @@ const systemBrowserMocks = vi.hoisted(() => ({
   openExternalUrlWithSystemBrowser: vi.fn(),
   startOemCloudOAuthCallbackBridge: vi.fn(),
 }));
-const tauriRuntimeMocks = vi.hoisted(() => ({
-  hasTauriInvokeCapability: vi.fn(),
-  hasTauriRuntimeMarkers: vi.fn(),
+const desktopRuntimeMocks = vi.hoisted(() => ({
+  hasDesktopHostInvokeCapability: vi.fn(),
+  hasDesktopHostRuntimeMarkers: vi.fn(),
 }));
 const devBridgeMocks = vi.hoisted(() => ({
   isDevBridgeAvailable: vi.fn(),
@@ -38,7 +38,7 @@ vi.mock("@/lib/api/oemCloudControlPlane", async (importOriginal) => {
   };
 });
 
-vi.mock("@tauri-apps/plugin-shell", () => ({
+vi.mock("@/lib/desktop-host/plugin-shell", () => ({
   open: shellOpenMock,
 }));
 
@@ -50,9 +50,9 @@ vi.mock("@/lib/api/externalUrl", () => ({
     systemBrowserMocks.startOemCloudOAuthCallbackBridge,
 }));
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriInvokeCapability: tauriRuntimeMocks.hasTauriInvokeCapability,
-  hasTauriRuntimeMarkers: tauriRuntimeMocks.hasTauriRuntimeMarkers,
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostInvokeCapability: desktopRuntimeMocks.hasDesktopHostInvokeCapability,
+  hasDesktopHostRuntimeMarkers: desktopRuntimeMocks.hasDesktopHostRuntimeMarkers,
 }));
 
 vi.mock("@/lib/dev-bridge", async (importOriginal) => {
@@ -96,10 +96,10 @@ describe("oemCloudLoginLauncher", () => {
     });
     controlPlaneMocks.createClientDesktopAuthSession.mockReset();
     controlPlaneMocks.pollClientDesktopAuthSession.mockReset();
-    tauriRuntimeMocks.hasTauriInvokeCapability.mockReset();
-    tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReset();
-    tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(false);
-    tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(false);
+    desktopRuntimeMocks.hasDesktopHostInvokeCapability.mockReset();
+    desktopRuntimeMocks.hasDesktopHostRuntimeMarkers.mockReset();
+    desktopRuntimeMocks.hasDesktopHostInvokeCapability.mockReturnValue(false);
+    desktopRuntimeMocks.hasDesktopHostRuntimeMarkers.mockReturnValue(false);
     devBridgeMocks.isDevBridgeAvailable.mockReset();
     devBridgeMocks.isDevBridgeAvailable.mockReturnValue(false);
     devBridgeMocks.safeListen.mockReset();
@@ -115,9 +115,9 @@ describe("oemCloudLoginLauncher", () => {
     vi.restoreAllMocks();
   });
 
-  it("Tauri 可用时应优先通过 native 命令打开系统浏览器", async () => {
-    tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(true);
-    tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(true);
+  it("Desktop Host 可用时应优先通过 native 命令打开系统浏览器", async () => {
+    desktopRuntimeMocks.hasDesktopHostInvokeCapability.mockReturnValue(true);
+    desktopRuntimeMocks.hasDesktopHostRuntimeMarkers.mockReturnValue(true);
     const browserTarget = {
       navigate: vi.fn(),
       close: vi.fn(),
@@ -133,9 +133,9 @@ describe("oemCloudLoginLauncher", () => {
     expect(browserTarget.navigate).not.toHaveBeenCalled();
   });
 
-  it("native 打开命令不可用时应回退到 Tauri shell open", async () => {
-    tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(true);
-    tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(true);
+  it("native 打开命令不可用时应回退到 Desktop Host shell open", async () => {
+    desktopRuntimeMocks.hasDesktopHostInvokeCapability.mockReturnValue(true);
+    desktopRuntimeMocks.hasDesktopHostRuntimeMarkers.mockReturnValue(true);
     systemBrowserMocks.openExternalUrlWithSystemBrowser.mockRejectedValue(
       new Error("unknown command"),
     );
@@ -145,9 +145,9 @@ describe("oemCloudLoginLauncher", () => {
     expect(shellOpenMock).toHaveBeenCalledWith("https://user.limeai.run/login");
   });
 
-  it("Tauri shell open 失败时应抛错且不回退成假成功", async () => {
-    tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(true);
-    tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(true);
+  it("Desktop Host shell open 失败时应抛错且不回退成假成功", async () => {
+    desktopRuntimeMocks.hasDesktopHostInvokeCapability.mockReturnValue(true);
+    desktopRuntimeMocks.hasDesktopHostRuntimeMarkers.mockReturnValue(true);
     systemBrowserMocks.openExternalUrlWithSystemBrowser.mockRejectedValue(
       new Error("native denied"),
     );
@@ -194,9 +194,9 @@ describe("oemCloudLoginLauncher", () => {
     expect(windowOpenSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("Tauri 桌面登录应启动本机回调桥并把 callbackUrl 传给 desktop auth session", async () => {
-    tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(true);
-    tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(true);
+  it("Desktop Host 桌面登录应启动本机回调桥并把 callbackUrl 传给 desktop auth session", async () => {
+    desktopRuntimeMocks.hasDesktopHostInvokeCapability.mockReturnValue(true);
+    desktopRuntimeMocks.hasDesktopHostRuntimeMarkers.mockReturnValue(true);
     controlPlaneMocks.createClientDesktopAuthSession.mockResolvedValue({
       authSessionId: "auth-session-001",
       deviceCode: "device-001",
@@ -332,8 +332,8 @@ describe("oemCloudLoginLauncher", () => {
   });
 
   it("桌面 OAuth 回调返回内部租户 ID 且本地会话 slug 命中时应完成登录", async () => {
-    tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(true);
-    tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(true);
+    desktopRuntimeMocks.hasDesktopHostInvokeCapability.mockReturnValue(true);
+    desktopRuntimeMocks.hasDesktopHostRuntimeMarkers.mockReturnValue(true);
     controlPlaneMocks.createClientDesktopAuthSession.mockResolvedValue({
       authSessionId: "auth-session-001",
       deviceCode: "device-001",
@@ -396,8 +396,8 @@ describe("oemCloudLoginLauncher", () => {
   });
 
   it("桌面 OAuth 可只等待浏览器打开并在后台继续同步登录", async () => {
-    tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(true);
-    tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(true);
+    desktopRuntimeMocks.hasDesktopHostInvokeCapability.mockReturnValue(true);
+    desktopRuntimeMocks.hasDesktopHostRuntimeMarkers.mockReturnValue(true);
     controlPlaneMocks.createClientDesktopAuthSession.mockResolvedValue({
       authSessionId: "auth-session-001",
       deviceCode: "device-001",
@@ -460,8 +460,8 @@ describe("oemCloudLoginLauncher", () => {
   });
 
   it("requestLogin fallback 打开普通登录页后应等待本机回调完成", async () => {
-    tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(true);
-    tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(true);
+    desktopRuntimeMocks.hasDesktopHostInvokeCapability.mockReturnValue(true);
+    desktopRuntimeMocks.hasDesktopHostRuntimeMarkers.mockReturnValue(true);
     controlPlaneMocks.createClientDesktopAuthSession.mockRejectedValue(
       new Error("desktop client not found"),
     );

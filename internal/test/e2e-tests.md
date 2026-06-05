@@ -7,9 +7,10 @@
 ### current
 
 - `internal/aiprompts/playwright-e2e.md`：浏览器续测、Playwright MCP 交互、DevBridge 排障的唯一详细事实源
-- `npm run tauri:dev:headless`：当前浏览器模式启动入口
+- `npm run electron:dev`：当前 Electron GUI 开发启动入口
 - `npm run bridge:health -- --timeout-ms 120000`：当前 DevBridge 就绪检查入口
 - `npm run test:bridge`：当前浏览器桥接最小自动校验入口
+- `npm run smoke:electron`：当前 Electron GUI 最小 smoke 入口
 - `npm run smoke:workspace-ready`：当前自包含 smoke，覆盖 DevBridge 就绪与默认 workspace 基础链路
 - `npm run smoke:browser-runtime`：当前自包含 smoke，覆盖 browser runtime 的启动、状态读取、最小动作与审计关联键
 - `npm run smoke:site-adapters`：当前自包含 smoke，覆盖站点适配器目录状态、列表、推荐与检索主链
@@ -23,6 +24,7 @@
 
 ### deprecated
 
+- `npm run tauri:dev:headless`：旧 Tauri headless 启动口径，不再作为 current GUI 验证入口
 - `tauri-driver`：不再是当前仓库推荐的 E2E 方案
 - `npm run test:e2e`：当前仓库已不存在，不应继续作为执行入口
 
@@ -46,13 +48,13 @@
 ### 第 1 步：启动浏览器模式
 
 ```bash
-npm run tauri:dev:headless
+npm run electron:dev
 ```
 
 用途：
 
 - 启动前端 dev server
-- 启动 Tauri headless 环境
+- 启动 Electron Desktop Host
 - 启动 DevBridge
 - 让 Playwright MCP 可访问 `http://127.0.0.1:1420/`
 
@@ -91,9 +93,10 @@ npm run bridge:health -- --timeout-ms 120000
 
 | 目标                   | 命令 / 入口                                    | 角色       | 说明                                            |
 | ---------------------- | ---------------------------------------------- | ---------- | ----------------------------------------------- |
-| 启动浏览器模式         | `npm run tauri:dev:headless`                   | current    | 当前标准启动命令                                |
+| 启动 Electron GUI      | `npm run electron:dev`                         | current    | 当前标准启动命令                                |
 | 等待 Bridge 就绪       | `npm run bridge:health -- --timeout-ms 120000` | current    | 当前标准健康检查                                |
-| 校验桥接基础能力       | `npm run test:bridge`                          | current    | `safeInvoke` / mock / tauri-mock 最小自动校验   |
+| 校验桥接基础能力       | `npm run test:bridge`                          | compat     | `safeInvoke` / DevBridge fallback 最小自动校验，不能单独证明 GUI current 可交付 |
+| Electron GUI smoke     | `npm run smoke:electron`                       | current    | Electron Desktop Host 最小可用性验证            |
 | Workspace 自包含 smoke | `npm run smoke:workspace-ready`                | current    | 验证 DevBridge、默认 workspace、路径回查链路    |
 | Browser Runtime smoke  | `npm run smoke:browser-runtime`                | current    | 验证 browser runtime 最短主链与审计关联键       |
 | Site Adapter smoke     | `npm run smoke:site-adapters`                  | current    | 验证站点适配器目录、推荐与检索最短主链          |
@@ -103,6 +106,7 @@ npm run bridge:health -- --timeout-ms 120000
 | 浏览器续测细则         | `internal/aiprompts/playwright-e2e.md`             | current    | Playwright MCP 唯一详细事实源                   |
 | 专项 bridge 排障       | `npm run bridge:e2e`                           | supplement | 适合排障，不是统一门禁                          |
 | 社媒内容专项 smoke     | `npm run smoke:social-workbench`               | supplement | 仍非自包含，不应冒充标准 E2E                    |
+| 旧 Tauri headless      | `npm run tauri:dev:headless`                   | deprecated | 只用于 legacy adapter 排障，不作为 current 证据 |
 | 旧 E2E 命令            | `npm run test:e2e`                             | deprecated | 当前仓库不存在                                  |
 
 ## 5. 当前验证标准
@@ -119,6 +123,7 @@ npm run bridge:health -- --timeout-ms 120000
 
 - 假设仓库已接入本地 Playwright 测试目录与统一 `test:e2e` 命令
 - 假设 `tauri-driver` 仍是推荐路径
+- 假设 Tauri headless smoke 仍能证明 Electron GUI current 可交付
 - 假设浏览器 E2E 已进入 CI 标准门禁
 
 当前浏览器最小 smoke 基线已经具备；后续是否继续补 terminal / server / 专项 smoke，以 `internal/test/testing-strategy-2026.md` 的剩余优先级为准。

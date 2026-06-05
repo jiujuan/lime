@@ -1,8 +1,8 @@
 /**
  * Webview 管理 API
  *
- * 提供与 Tauri 后端 webview 命令交互的 TypeScript 接口。
- * 使用 Tauri 2.x 的 multiwebview 功能创建独立的浏览器窗口。
+ * 提供与 Desktop Host / legacy webview adapter 命令交互的 TypeScript 接口。
+ * current 主路径应收敛到 Electron Desktop Host，旧 webview 命令仅作兼容适配。
  *
  * @module lib/webview-api
  */
@@ -1273,7 +1273,7 @@ export async function getBrowserActionAuditLogs(
  * 关闭 webview 面板
  *
  * 尝试多种方法关闭 webview：
- * 1. 使用 Tauri JavaScript API 直接关闭
+ * 1. 使用 Desktop Host JavaScript API 直接关闭
  * 2. 使用后端命令关闭
  *
  * @param panelId - 面板 ID
@@ -1282,7 +1282,7 @@ export async function getBrowserActionAuditLogs(
 export async function closeWebviewPanel(panelId: string): Promise<boolean> {
   console.log("[webview-api] 尝试关闭 webview:", panelId);
 
-  // 统一走后端命令，避免前端在启动期提前加载 Tauri webview/window/event 链路。
+  // 统一走后端命令，避免前端在启动期提前加载 legacy webview/window/event 链路。
   try {
     const result = await safeInvoke<boolean>("close_webview_panel", {
       panelId,

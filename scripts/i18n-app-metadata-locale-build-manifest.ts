@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { parse as parseYaml } from "yaml";
 
 export type AppMetadataLocaleBuildManifestFormat = "text" | "json";
 
@@ -96,11 +97,14 @@ function fileExists(filePath: string): boolean {
   return fs.existsSync(filePath) && fs.statSync(filePath).isFile();
 }
 
-function readJsonObject(filePath: string): Record<string, unknown> | null {
+function readStructuredObject(filePath: string): Record<string, unknown> | null {
   if (!fileExists(filePath)) {
     return null;
   }
-  const parsed = JSON.parse(fs.readFileSync(filePath, "utf8")) as unknown;
+  const content = fs.readFileSync(filePath, "utf8");
+  const parsed = /\.ya?ml$/i.test(filePath)
+    ? (parseYaml(content) as unknown)
+    : (JSON.parse(content) as unknown);
   return isRecord(parsed) ? parsed : null;
 }
 
@@ -178,8 +182,8 @@ function readSourceValue(
   field: string,
 ): unknown {
   const filePath = path.join(repoRoot, sourcePath);
-  const json = readJsonObject(filePath);
-  return json ? readFieldPath(json, field) : undefined;
+  const source = readStructuredObject(filePath);
+  return source ? readFieldPath(source, field) : undefined;
 }
 
 function resolveTarget(
@@ -227,7 +231,7 @@ export function buildAppMetadataLocaleBuildManifest(
 ): AppMetadataLocaleBuildManifest {
   const repoRoot = path.resolve(options.repoRoot || DEFAULT_REPO_ROOT);
   const scopePath = path.join(repoRoot, DEFAULT_SCOPE_PATH);
-  const scope = readJsonObject(scopePath);
+  const scope = readStructuredObject(scopePath);
   const sourceLocale = readString(scope?.sourceLocale);
   const targetLocales = readStringArray(scope?.targetLocales);
   const manifestGenerationAllowed = scope
@@ -342,7 +346,7 @@ function printHelp(): void {
   console.log(`Usage: tsx scripts/i18n-app-metadata-locale-build-manifest.ts [options]
 
 生成 installer / app metadata locale build manifest，用于发布前审阅元数据本地化。
-该脚本不会写入 tauri.conf、package.json 或平台安装器配置。
+该脚本不会写入 electron-builder.yml、package.json 或平台安装器配置。
 
 Options:
   --format json|text   输出格式，默认 text

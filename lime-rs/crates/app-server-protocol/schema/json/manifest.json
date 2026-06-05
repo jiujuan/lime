@@ -1,0 +1,214 @@
+{
+  "jsonRpc": {
+    "envelopes": [
+      "error",
+      "notification",
+      "request",
+      "response"
+    ],
+    "sendsJsonRpcVersionField": false,
+    "version": "2.0"
+  },
+  "methods": [
+    {
+      "kind": "request",
+      "method": "agentSession/action/respond"
+    },
+    {
+      "kind": "notification",
+      "method": "agentSession/event"
+    },
+    {
+      "kind": "request",
+      "method": "agentSession/list"
+    },
+    {
+      "kind": "request",
+      "method": "agentSession/read"
+    },
+    {
+      "kind": "request",
+      "method": "agentSession/start"
+    },
+    {
+      "kind": "request",
+      "method": "agentSession/turn/cancel"
+    },
+    {
+      "kind": "request",
+      "method": "agentSession/turn/start"
+    },
+    {
+      "kind": "request",
+      "method": "artifact/read"
+    },
+    {
+      "kind": "request",
+      "method": "capability/list"
+    },
+    {
+      "kind": "request",
+      "method": "evidence/export"
+    },
+    {
+      "kind": "request",
+      "method": "initialize"
+    },
+    {
+      "kind": "notification",
+      "method": "initialized"
+    },
+    {
+      "kind": "request",
+      "method": "model/list"
+    },
+    {
+      "kind": "request",
+      "method": "modelPreferences/list"
+    },
+    {
+      "kind": "request",
+      "method": "modelProvider/catalog/list"
+    },
+    {
+      "kind": "request",
+      "method": "modelProvider/list"
+    },
+    {
+      "kind": "request",
+      "method": "modelProviderAlias/list"
+    },
+    {
+      "kind": "request",
+      "method": "modelProviderAlias/read"
+    },
+    {
+      "kind": "request",
+      "method": "modelSyncState/read"
+    },
+    {
+      "kind": "request",
+      "method": "skill/list"
+    },
+    {
+      "kind": "request",
+      "method": "skill/read"
+    },
+    {
+      "kind": "request",
+      "method": "workspace/byPath/read"
+    },
+    {
+      "kind": "request",
+      "method": "workspace/default/ensure"
+    },
+    {
+      "kind": "request",
+      "method": "workspace/default/read"
+    },
+    {
+      "kind": "request",
+      "method": "workspace/ensureReady"
+    },
+    {
+      "kind": "request",
+      "method": "workspace/list"
+    },
+    {
+      "kind": "request",
+      "method": "workspace/projectPath/resolve"
+    },
+    {
+      "kind": "request",
+      "method": "workspace/projectsRoot/read"
+    },
+    {
+      "kind": "request",
+      "method": "workspace/read"
+    },
+    {
+      "kind": "request",
+      "method": "workspaceSkillBindings/list"
+    }
+  ],
+  "protocolVersion": "appserver.v0",
+  "schemas": {
+    "jsonrpc": [
+      "JsonRpcError",
+      "JsonRpcErrorResponse",
+      "JsonRpcMessage",
+      "JsonRpcNotification",
+      "JsonRpcRequest",
+      "JsonRpcResponse",
+      "RequestId"
+    ],
+    "v0": [
+      "AgentAttachment",
+      "AgentEvent",
+      "AgentInput",
+      "AgentSession",
+      "AgentSessionActionRespondParams",
+      "AgentSessionActionRespondResponse",
+      "AgentSessionActionScope",
+      "AgentSessionActionType",
+      "AgentSessionEventParams",
+      "AgentSessionListParams",
+      "AgentSessionListResponse",
+      "AgentSessionOverview",
+      "AgentSessionReadParams",
+      "AgentSessionReadResponse",
+      "AgentSessionStartParams",
+      "AgentSessionStartResponse",
+      "AgentSessionStatus",
+      "AgentSessionTurnCancelParams",
+      "AgentSessionTurnCancelResponse",
+      "AgentSessionTurnStartParams",
+      "AgentSessionTurnStartResponse",
+      "AgentTurn",
+      "AgentTurnStatus",
+      "ArtifactContentStatus",
+      "ArtifactReadParams",
+      "ArtifactReadResponse",
+      "ArtifactSummary",
+      "BusinessObjectRef",
+      "CapabilityDescriptor",
+      "CapabilityListParams",
+      "CapabilityListResponse",
+      "ClientCapabilities",
+      "ClientInfo",
+      "EvidenceExportParams",
+      "EvidenceExportResponse",
+      "EvidencePackArtifact",
+      "EvidencePackSummary",
+      "InitializeParams",
+      "InitializeResponse",
+      "ModelListParams",
+      "ModelListResponse",
+      "ModelPreferencesListResponse",
+      "ModelProviderAliasListResponse",
+      "ModelProviderAliasReadParams",
+      "ModelProviderAliasReadResponse",
+      "ModelProviderCatalogListResponse",
+      "ModelProviderListResponse",
+      "ModelSyncStateReadResponse",
+      "PlatformInfo",
+      "RuntimeOptions",
+      "ServerCapabilities",
+      "ServerInfo",
+      "SkillListResponse",
+      "SkillReadParams",
+      "SkillReadResponse",
+      "WorkspaceEnsureParams",
+      "WorkspaceEnsureReadyResponse",
+      "WorkspaceListResponse",
+      "WorkspacePathReadParams",
+      "WorkspaceProjectPathResolveParams",
+      "WorkspaceProjectPathResolveResponse",
+      "WorkspaceProjectsRootReadResponse",
+      "WorkspaceReadParams",
+      "WorkspaceReadResponse",
+      "WorkspaceSkillBindingsListParams",
+      "WorkspaceSkillBindingsListResponse"
+    ]
+  }
+}

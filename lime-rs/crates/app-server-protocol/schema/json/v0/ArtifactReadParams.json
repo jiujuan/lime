@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "artifactRef": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "cursor": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "includeContent": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "limit": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "sessionId"
+  ],
+  "title": "ArtifactReadParams",
+  "type": "object"
+}

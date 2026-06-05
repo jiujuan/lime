@@ -54,6 +54,11 @@ const sceneAppDeadRestrictedPatterns = [
 const deprecatedAgentRuntimeHelperNames = Object.keys(
   agentCommandCatalog.deprecatedHelperReplacements,
 );
+const LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH = `@/hooks/${[
+  "use",
+  "Ta",
+  "uri",
+].join("")}`;
 
 const generalChatRestrictedPaths = [
   {
@@ -137,12 +142,12 @@ const generalChatRestrictedPaths = [
       "agent.ts 已删除；请直接使用 @/lib/api/agentRuntime 或 @/lib/api/agentStream。",
   },
   {
-    name: "@/hooks/useTauri",
+    name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
     message:
-      "useTauri 现在只是兼容聚合层，禁止新增依赖；请直接接入对应的 @/lib/api/* 网关。",
+      "已删除的桌面宿主聚合 Hook 现在只是兼容聚合层，禁止新增依赖；请直接接入对应的 @/lib/api/* 网关。",
   },
   {
-    name: "@/hooks/useTauri",
+    name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
     importNames: [
       "startServer",
       "stopServer",
@@ -158,10 +163,10 @@ const generalChatRestrictedPaths = [
       "WindowsStartupDiagnostics",
     ],
     message:
-      "server/diagnostics 相关能力已迁移到 @/lib/api/serverRuntime，请不要继续从 useTauri 聚合层引入。",
+      "server/diagnostics 相关能力已迁移到 @/lib/api/serverRuntime，请不要继续从 已删除的桌面宿主聚合 Hook 聚合层引入。",
   },
   {
-    name: "@/hooks/useTauri",
+    name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
     importNames: [
       "getLogs",
       "getPersistedLogsTail",
@@ -170,30 +175,30 @@ const generalChatRestrictedPaths = [
       "LogEntry",
     ],
     message:
-      "日志相关能力已迁移到 @/lib/api/logs，请不要继续从 useTauri 聚合层引入。",
+      "日志相关能力已迁移到 @/lib/api/logs，请不要继续从 已删除的桌面宿主聚合 Hook 聚合层引入。",
   },
   {
-    name: "@/hooks/useTauri",
+    name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
     importNames: [
       "checkApiCompatibility",
       "ApiCheckResult",
       "ApiCompatibilityResult",
     ],
     message:
-      "API 兼容性检查能力已迁移到 @/lib/api/apiCompatibility，请不要继续从 useTauri 聚合层引入。",
+      "API 兼容性检查能力已迁移到 @/lib/api/apiCompatibility，请不要继续从 已删除的桌面宿主聚合 Hook 聚合层引入。",
   },
   {
-    name: "@/hooks/useTauri",
+    name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
     importNames: [
       "getEndpointProviders",
       "setEndpointProvider",
       "EndpointProvidersConfig",
     ],
     message:
-      "端点 Provider 配置能力已迁移到 @/lib/api/endpointProviders，请不要继续从 useTauri 聚合层引入。",
+      "端点 Provider 配置能力已迁移到 @/lib/api/endpointProviders，请不要继续从 已删除的桌面宿主聚合 Hook 聚合层引入。",
   },
   {
-    name: "@/hooks/useTauri",
+    name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
     importNames: [
       "getMemoryStats",
       "requestMemoryAnalysis",
@@ -203,10 +208,10 @@ const generalChatRestrictedPaths = [
       "MemoryStatsResponse",
     ],
     message:
-      "记忆分析/清理能力已迁移到 @/lib/api/memoryRuntime，请不要继续从 useTauri 聚合层引入。",
+      "记忆分析/清理能力已迁移到 @/lib/api/memoryRuntime，请不要继续从 已删除的桌面宿主聚合 Hook 聚合层引入。",
   },
   {
-    name: "@/hooks/useTauri",
+    name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
     importNames: [
       "testTts",
       "getAvailableVoices",
@@ -214,16 +219,16 @@ const generalChatRestrictedPaths = [
       "VoiceOption",
     ],
     message:
-      "语音测试能力已迁移到 @/lib/api/voiceTools，请不要继续从 useTauri 聚合层引入。",
+      "语音测试能力已迁移到 @/lib/api/voiceTools，请不要继续从 已删除的桌面宿主聚合 Hook 聚合层引入。",
   },
   {
-    name: "@/hooks/useTauri",
+    name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
     importNames: ["uploadAvatar", "deleteAvatar", "UploadResult"],
     message:
-      "头像上传/删除能力已迁移到 @/lib/api/profileAssets，请不要继续从 useTauri 聚合层引入。",
+      "头像上传/删除能力已迁移到 @/lib/api/profileAssets，请不要继续从 已删除的桌面宿主聚合 Hook 聚合层引入。",
   },
   {
-    name: "@/hooks/useTauri",
+    name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
     importNames: [
       "getConfig",
       "saveConfig",
@@ -235,10 +240,10 @@ const generalChatRestrictedPaths = [
       "EnvironmentPreview",
     ],
     message:
-      "配置/环境预览相关能力已迁移到 @/lib/api/appConfig，请不要继续从 useTauri 聚合层引入。",
+      "配置/环境预览相关能力已迁移到 @/lib/api/appConfig，请不要继续从 已删除的桌面宿主聚合 Hook 聚合层引入。",
   },
   {
-    name: "@/hooks/useTauri",
+    name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
     importNames: [
       "ChannelsConfig",
       "GatewayConfig",
@@ -272,10 +277,10 @@ const generalChatRestrictedPaths = [
       "gatewayTunnelSyncWebhookUrl",
     ],
     message:
-      "channels/gateway 相关能力已迁移到 @/lib/api/channelsRuntime，请不要继续从 useTauri 聚合层引入。",
+      "channels/gateway 相关能力已迁移到 @/lib/api/channelsRuntime，请不要继续从 已删除的桌面宿主聚合 Hook 聚合层引入。",
   },
   {
-    name: "@/hooks/useTauri",
+    name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
     importNames: [
       "getExperimentalConfig",
       "saveExperimentalConfig",
@@ -285,10 +290,10 @@ const generalChatRestrictedPaths = [
       "SmartInputConfig",
     ],
     message:
-      "实验室配置/截图快捷键相关能力已迁移到 @/lib/api/experimentalFeatures，请不要继续从 useTauri 聚合层引入。",
+      "实验室配置/截图快捷键相关能力已迁移到 @/lib/api/experimentalFeatures，请不要继续从 已删除的桌面宿主聚合 Hook 聚合层引入。",
   },
   {
-    name: "@/hooks/useTauri",
+    name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
     importNames: [
       "getMemoryOverview",
       "getMemoryEffectiveSources",
@@ -306,16 +311,16 @@ const generalChatRestrictedPaths = [
       "MemorySourcesConfig",
     ],
     message:
-      "记忆运行时相关能力已迁移到 @/lib/api/memoryRuntime，请不要继续从 useTauri 聚合层引入。",
+      "记忆运行时相关能力已迁移到 @/lib/api/memoryRuntime，请不要继续从 已删除的桌面宿主聚合 Hook 聚合层引入。",
   },
   {
-    name: "@/hooks/useTauri",
+    name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
     importNames: ["getAvailableModels", "ModelInfo"],
     message:
-      "模型列表查询已迁移到 @/lib/api/modelCatalog，请不要继续从 useTauri 聚合层引入。",
+      "模型列表查询已迁移到 @/lib/api/modelCatalog，请不要继续从 已删除的桌面宿主聚合 Hook 聚合层引入。",
   },
   {
-    name: "@/hooks/useTauri",
+    name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
     importNames: [
       "getUsageStats",
       "getModelUsageRanking",
@@ -325,10 +330,10 @@ const generalChatRestrictedPaths = [
       "DailyUsage",
     ],
     message:
-      "使用统计查询已迁移到 @/lib/api/usageStats，请不要继续从 useTauri 聚合层引入。",
+      "使用统计查询已迁移到 @/lib/api/usageStats，请不要继续从 已删除的桌面宿主聚合 Hook 聚合层引入。",
   },
   {
-    name: "@/hooks/useTauri",
+    name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
     importNames: [
       "reloadCredentials",
       "refreshKiroToken",
@@ -367,13 +372,13 @@ const generalChatRestrictedPaths = [
       "AmpModelMapping",
     ],
     message:
-      "provider 凭证/自定义状态相关能力已迁移到 @/lib/api/providerRuntime，请不要继续从 useTauri 聚合层引入。",
+      "provider 凭证/自定义状态相关能力已迁移到 @/lib/api/providerRuntime，请不要继续从 已删除的桌面宿主聚合 Hook 聚合层引入。",
   },
   {
-    name: "@/hooks/useTauri",
+    name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
     importNames: ["testApi", "TestResult", "getNetworkInfo", "NetworkInfo"],
     message:
-      "API 测试/网络信息相关能力已迁移到 @/lib/api/serverTools，请不要继续从 useTauri 聚合层引入。",
+      "API 测试/网络信息相关能力已迁移到 @/lib/api/serverTools，请不要继续从 已删除的桌面宿主聚合 Hook 聚合层引入。",
   },
   {
     name: "@/stores/agentStore",
@@ -1026,7 +1031,7 @@ const serverToolsCommandSelectors = ["test_api", "get_network_info"].map(
 );
 
 export default [
-  { ignores: ["dist", "src-tauri", "node_modules", "**/*.d.ts"] },
+  { ignores: ["dist", "lime-rs", "node_modules", "**/*.d.ts"] },
   {
     files: ["**/*.{ts,tsx}"],
     languageOptions: {

@@ -581,9 +581,9 @@ npm run agent-qc:release-summary -- --evidence ./.lime/qc/agent-qc-evidence.isol
 | active GUI smoke | `1` | 只有 PID `59011` 的 `npm run smoke:design-canvas ...` 仍是重型 GUI owner |
 | stale active GUI smoke | `1` | PID `59011` 已运行约 `7h`，超过默认 `30min` stale 阈值 |
 | active qcloop worker | `0` | 旧 qcloop serve 进程被归为 passive server，不再误判为 active worker |
-| active Cargo / Rust build | `0` | `tauri dev` runtime 被归为 passive runtime，不再误判为 Cargo build owner |
+| active Cargo / Rust build | `0` | desktop runtime 被归为 passive runtime，不再误判为 Cargo build owner |
 | passive qcloop server | `6` | 仅说明历史隔离 server 仍在，不代表 active P0 worker |
-| passive Tauri runtime | `4` | 仅说明当前 GUI runtime 仍在，不代表正在编译 |
+| passive desktop runtime | `4` | 仅说明 Electron dev host / legacy Tauri runtime 仍在，不代表正在编译 |
 | observer process | `2` | 只读 `ps` / `rg` watcher，不再计入阻断 owner |
 
 最新 sidecar：`.lime/qc/gui-process-owner-current.json` / `.md`。当前 `ownerIntervention.status=requires_owner_confirmation`，确认文本为：
@@ -592,7 +592,7 @@ npm run agent-qc:release-summary -- --evidence ./.lime/qc/agent-qc-evidence.isol
 确认处理 stale raw GUI owner PID 59011，可以终止这些进程并记录 sidecar。
 ```
 
-确认前仍不执行 kill / pause / interrupt，也不启动完整 `verify:local` 或新的 full GUI P0。该修正只消除 idle qcloop serve、Tauri runtime 和观察脚本的误报；真实阻断仍是 stale `smoke:design-canvas` owner。
+确认前仍不执行 kill / pause / interrupt，也不启动完整 `verify:local` 或新的 full GUI P0。该修正只消除 idle qcloop serve、passive desktop runtime 和观察脚本的误报；真实阻断仍是 stale `smoke:design-canvas` owner。
 
 ### 5.18 stale raw GUI owner 处置请求（2026-05-11 02:51）
 
@@ -619,7 +619,7 @@ node --check scripts/agent-qc-process-owner-check.mjs
 npx vitest run scripts/lib/agent-qc-process-owner-core.test.ts scripts/lib/agent-qc-completion-audit-core.test.ts
 ```
 
-结果：`21 tests` 全部通过。最新 `agent-qc:process-owner-check --check` 仍按预期失败：`activeGuiSmoke=1`、`cargoOrRust=0`、`qcloopRelated=0`、`staleActiveGuiSmoke=1`、`passiveQcloopServer=6`、`passiveTauriRuntime=4`、`observer=2`。因此门禁没有被放宽，仍卡在 PID `59011` 的 stale `smoke:design-canvas`。
+结果：`21 tests` 全部通过。最新 `agent-qc:process-owner-check --check` 仍按预期失败：`activeGuiSmoke=1`、`cargoOrRust=0`、`qcloopRelated=0`、`staleActiveGuiSmoke=1`、`passiveQcloopServer=6`、`passiveDesktopRuntime=4`、`observer=2`。因此门禁没有被放宽，仍卡在 PID `59011` 的 stale `smoke:design-canvas`。
 
 ### 5.20 objective checklist sidecar（2026-05-11 02:59）
 
@@ -658,7 +658,7 @@ npx vitest run scripts/lib/agent-qc-objective-checklist-core.test.ts scripts/lib
 
 ### 5.24 raw GUI owner post-confirmation runbook（2026-05-11 03:09）
 
-`internal/tests/lime-agent-qc-stale-owner-intervention.md` 新增第 8 节，专门覆盖 `gui-owner-check` 已通过但 `process-owner-check` 仍因 raw GUI smoke stale 的场景。该 runbook 明确：确认前不处理进程；确认后只处理 owner 明确确认的 PID / PGID；不得顺手清理 passive qcloop serve、passive Tauri runtime 或 observer shell；处理后必须先通过 `agent-qc:process-owner-check -- --check` 与 `agent-qc:gui-owner-check -- --check`，再跑完整 `verify:local`。
+`internal/tests/lime-agent-qc-stale-owner-intervention.md` 新增第 8 节，专门覆盖 `gui-owner-check` 已通过但 `process-owner-check` 仍因 raw GUI smoke stale 的场景。该 runbook 明确：确认前不处理进程；确认后只处理 owner 明确确认的 PID / PGID；不得顺手清理 passive qcloop serve、passive desktop runtime 或 observer shell；处理后必须先通过 `agent-qc:process-owner-check -- --check` 与 `agent-qc:gui-owner-check -- --check`，再跑完整 `verify:local`。
 
 ### 5.25 local verify gate 已关闭（2026-05-11 03:11）
 

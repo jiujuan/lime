@@ -14,8 +14,8 @@
 - 该文档同时规定：`@` 命令、场景启动、service skill 等专题能力只能在提交前补 `request_metadata.harness.*`，不能绕开 submit turn 新建第二条执行链。
 - 前端集中构造入口是 `src/components/agent/chat/utils/harnessRequestMetadata.ts` 的 `buildHarnessRequestMetadata()`；`src/components/agent/chat/workspace/workspaceSendHelpers.ts` 会把它包装成最终 `requestMetadata.harness`。
 - `src/components/agent/chat/AgentChatWorkspace.tsx` 当前生成 steady-state harness metadata，`src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 在发送前合并 command / skill / fast response metadata。
-- Rust 归一化边界是 `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 的 `normalize_runtime_turn_request_metadata(...)` 与 `build_full_runtime_system_prompt(...)`。
-- `src-tauri/crates/agent/src/turn_input_envelope.rs` 的 `TurnInputEnvelope` 已能快照最终 system prompt、prompt augmentation stages 与 turn context metadata。
+- Rust 归一化边界是 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 的 `normalize_runtime_turn_request_metadata(...)` 与 `build_full_runtime_system_prompt(...)`。
+- `lime-rs/crates/agent/src/turn_input_envelope.rs` 的 `TurnInputEnvelope` 已能快照最终 system prompt、prompt augmentation stages 与 turn context metadata。
 - `internal/roadmap/i18n/language-boundary-evaluation.md` 已确认当前不能复用 `Config.language` 作为 AI response language 或内容产物语言事实源。
 
 ## 事实源边界

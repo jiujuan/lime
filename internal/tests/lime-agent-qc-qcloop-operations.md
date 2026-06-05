@@ -40,7 +40,7 @@ npm run agent-qc:qcloop-status -- \
 
 ## 3. qcloop server 启动环境
 
-GUI / DevBridge / browser runtime 场景要求宿主机先有健康的 `127.0.0.1:3030` DevBridge listener，然后 qcloop worker 里的 Codex 也能访问该 listener。如果宿主 shell 自己也无法访问 `http://127.0.0.1:3030/health`，先恢复 DevBridge / headless Tauri，不要误判为 qcloop sandbox。只有宿主 shell 可访问而 worker 内失败时，才优先检查 qcloop serve 进程是否显式配置 Codex sandbox；这类失败表现为 worker 内 `fetch failed` / `Operation not permitted`。出现这种状态时，不要继续提交完整 P0 GUI 批次；先用只读 worker preflight 证明权限恢复。
+GUI / DevBridge / browser runtime 场景要求宿主机先有健康的 `127.0.0.1:3030` DevBridge listener，然后 qcloop worker 里的 Codex 也能访问该 listener。如果宿主 shell 自己也无法访问 `http://127.0.0.1:3030/health`，先通过 Electron current 开发宿主恢复 DevBridge，不要误判为 qcloop sandbox。只有宿主 shell 可访问而 worker 内失败时，才优先检查 qcloop serve 进程是否显式配置 Codex sandbox；这类失败表现为 worker 内 `fetch failed` / `Operation not permitted`。出现这种状态时，不要继续提交完整 P0 GUI 批次；先用只读 worker preflight 证明权限恢复。
 
 只读检查当前 qcloop serve 环境：
 

@@ -9,9 +9,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { safeInvoke, safeListen } from "@/lib/dev-bridge";
-import type { UnlistenFn } from "@tauri-apps/api/event";
-import { getCurrent } from "@tauri-apps/plugin-deep-link";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import type { UnlistenFn } from "@/lib/desktop-host/event";
+import { getCurrent } from "@/lib/desktop-host/plugin-deep-link";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import {
   completeOemCloudDesktopOAuthLogin,
   parseOemCloudDesktopOAuthCallbackUrl,
@@ -240,7 +240,7 @@ function parseBrowserConnectorDeepLink(
 /**
  * Deep Link 事件处理 Hook
  *
- * 监听来自 Tauri 后端的 deep-link-connect 事件，管理 Connect 弹窗状态。
+ * 监听来自 Desktop Host deep-link-connect 事件，管理 Connect 弹窗状态。
  *
  * ## 功能
  *
@@ -621,7 +621,7 @@ export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
   useEffect(() => {
     // 浏览器开发模式下 deep-link 事件不属于当前聊天主链，
     // 跳过这些 SSE 监听以避免占满 DevBridge 连接槽位。
-    if (!hasTauriInvokeCapability()) {
+    if (!hasDesktopHostInvokeCapability()) {
       return;
     }
 

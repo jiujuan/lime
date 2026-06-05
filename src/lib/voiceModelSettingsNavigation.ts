@@ -91,7 +91,7 @@ export function listenOpenVoiceModelSettingsRequest(
   handler: (detail: VoiceModelSettingsNavigationDetail) => void,
 ): () => void {
   let disposed = false;
-  let tauriUnlisten: (() => void) | null = null;
+  let desktopHostUnlisten: (() => void) | null = null;
 
   const handleWindowEvent = (event: Event) => {
     if (!(event instanceof CustomEvent)) {
@@ -118,7 +118,7 @@ export function listenOpenVoiceModelSettingsRequest(
         unlisten();
         return;
       }
-      tauriUnlisten = unlisten;
+      desktopHostUnlisten = unlisten;
     })
     .catch((error) => {
       console.warn("[语音模型] 监听设置页跳转事件失败:", error);
@@ -130,6 +130,6 @@ export function listenOpenVoiceModelSettingsRequest(
       OPEN_VOICE_MODEL_SETTINGS_EVENT,
       handleWindowEvent,
     );
-    tauriUnlisten?.();
+    desktopHostUnlisten?.();
   };
 }

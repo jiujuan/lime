@@ -8,7 +8,7 @@ import {
   classifyRustTestFiles,
 } from "./rust-test-layer-classifier.mjs";
 
-const MANIFEST_PATH = "src-tauri/Cargo.toml";
+const MANIFEST_PATH = "lime-rs/Cargo.toml";
 const CARGO_OPTIONS_WITH_VALUE = new Set([
   "-j",
   "-p",

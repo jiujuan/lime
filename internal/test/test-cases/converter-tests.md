@@ -256,5 +256,5 @@ fn test_large_message() {
 ## 运行测试
 
 ```bash
-cd src-tauri && cargo test converter::
+cd lime-rs && cargo test converter::
 ```

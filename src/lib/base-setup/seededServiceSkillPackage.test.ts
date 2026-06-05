@@ -25,7 +25,7 @@ describe("seededServiceSkillPackage", () => {
             Lime_knowledge_pack_type: "personal-profile",
             Lime_agent_knowledge_runtime_mode: "persona",
             Lime_skill_bundle_path:
-              "src-tauri/resources/default-skills/personal-ip-knowledge-builder",
+              "lime-rs/resources/default-skills/personal-ip-knowledge-builder",
           }),
         }),
         expect.objectContaining({
@@ -36,7 +36,7 @@ describe("seededServiceSkillPackage", () => {
             Lime_knowledge_pack_type: "brand-persona",
             Lime_agent_knowledge_runtime_mode: "persona",
             Lime_skill_bundle_path:
-              "src-tauri/resources/default-skills/brand-persona-knowledge-builder",
+              "lime-rs/resources/default-skills/brand-persona-knowledge-builder",
           }),
         }),
         expect.objectContaining({
@@ -47,7 +47,7 @@ describe("seededServiceSkillPackage", () => {
             Lime_knowledge_pack_type: "content-operations",
             Lime_agent_knowledge_runtime_mode: "data",
             Lime_skill_bundle_path:
-              "src-tauri/resources/default-skills/content-operations-knowledge-builder",
+              "lime-rs/resources/default-skills/content-operations-knowledge-builder",
           }),
         }),
         expect.objectContaining({
@@ -58,7 +58,7 @@ describe("seededServiceSkillPackage", () => {
             Lime_knowledge_pack_type: "brand-product",
             Lime_agent_knowledge_runtime_mode: "data",
             Lime_skill_bundle_path:
-              "src-tauri/resources/default-skills/brand-product-knowledge-builder",
+              "lime-rs/resources/default-skills/brand-product-knowledge-builder",
           }),
         }),
       ]),

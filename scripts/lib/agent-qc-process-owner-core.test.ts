@@ -23,7 +23,7 @@ describe("agent-qc-process-owner-core", () => {
     );
   });
 
-  it("区分 active owner、passive runtime 与 observer", () => {
+  it("区分 active owner、Electron passive runtime 与 observer", () => {
     const report = createAgentQcProcessOwnerReport(
       [
         {
@@ -43,12 +43,12 @@ describe("agent-qc-process-owner-core", () => {
           command: "./qcloop --db .lime/qc/example.db serve --addr 127.0.0.1:18080 --workers 1",
         },
         {
-          pid: 30,
+          pid: 35,
           ppid: 1,
-          pgid: 30,
+          pgid: 35,
           stat: "S",
           etime: "10:00:00",
-          command: "node node_modules/.bin/tauri dev --config src-tauri/tauri.conf.headless.json",
+          command: "node scripts/run-electron-dev.mjs",
         },
         {
           pid: 40,
@@ -66,10 +66,12 @@ describe("agent-qc-process-owner-core", () => {
     expect(report.activeGuiSmokeProcesses.map((entry) => entry.pid)).toEqual([10]);
     expect(report.staleActiveGuiSmokeProcesses.map((entry) => entry.pid)).toEqual([10]);
     expect(report.passiveQcloopServerProcesses.map((entry) => entry.pid)).toEqual([20]);
-    expect(report.passiveTauriRuntimeProcesses.map((entry) => entry.pid)).toEqual([30]);
+    expect(report.passiveElectronRuntimeProcesses.map((entry) => entry.pid)).toEqual([35]);
+    expect(report.passiveDesktopRuntimeProcesses.map((entry) => entry.pid)).toEqual([35]);
     expect(report.observerProcesses.map((entry) => entry.pid)).toEqual([40]);
     expect(report.qcloopProcesses).toHaveLength(0);
     expect(report.cargoProcesses).toHaveLength(0);
+    expect(report.verdict.summary).toContain("passiveDesktopRuntime=1");
     expect(report.ownerIntervention.status).toBe("requires_owner_confirmation");
   });
 
@@ -90,7 +92,7 @@ describe("agent-qc-process-owner-core", () => {
           pgid: 60,
           stat: "S",
           etime: "00:05:00",
-          command: "cargo test --manifest-path src-tauri/Cargo.toml",
+          command: "cargo test --manifest-path lime-rs/Cargo.toml",
         },
       ],
       { generatedAt: "2026-05-11T00:00:00.000Z", platform: "darwin" },
@@ -101,4 +103,5 @@ describe("agent-qc-process-owner-core", () => {
     expect(report.cargoProcesses.map((entry) => entry.pid)).toEqual([60]);
     expect(report.ownerIntervention.status).toBe("not_required");
   });
+
 });

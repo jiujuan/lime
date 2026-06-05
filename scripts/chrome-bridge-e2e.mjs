@@ -169,7 +169,7 @@ async function waitForHealth(options) {
       ? lastError.message
       : String(lastError || "unknown error");
   throw new Error(
-    `[E2E] DevBridge 未就绪，请先启动 npm run tauri:dev 或 npm run tauri:dev:headless。最后错误: ${detail}`,
+    `[E2E] DevBridge 未就绪，请先启动 npm run electron:dev。最后错误: ${detail}`,
   );
 }
 

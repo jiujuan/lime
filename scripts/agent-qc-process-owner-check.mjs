@@ -197,8 +197,10 @@ function renderMarkdown(report) {
   appendProcessList(lines, report.cargoProcesses);
   lines.push("", "## Passive qcloop serve processes", "");
   appendProcessList(lines, report.passiveQcloopServerProcesses);
-  lines.push("", "## Passive Tauri dev runtime processes", "");
-  appendProcessList(lines, report.passiveTauriRuntimeProcesses);
+  lines.push("", "## Passive Electron dev runtime processes", "");
+  appendProcessList(lines, report.passiveElectronRuntimeProcesses);
+  lines.push("", "## Passive desktop runtime processes", "");
+  appendProcessList(lines, report.passiveDesktopRuntimeProcesses);
   lines.push("", "## Observer processes", "");
   appendProcessList(lines, report.observerProcesses);
   if (report.ownerIntervention.status === "requires_owner_confirmation") {
@@ -256,7 +258,8 @@ function createWatchHistoryEntry(report) {
     qcloopRelatedCount: report.qcloopProcesses.length,
     cargoOrRustCount: report.cargoProcesses.length,
     passiveQcloopServerCount: report.passiveQcloopServerProcesses.length,
-    passiveTauriRuntimeCount: report.passiveTauriRuntimeProcesses.length,
+    passiveElectronRuntimeCount: report.passiveElectronRuntimeProcesses.length,
+    passiveDesktopRuntimeCount: report.passiveDesktopRuntimeProcesses.length,
     observerCount: report.observerProcesses.length,
     activeGuiSmokeProcesses: report.activeGuiSmokeProcesses.map((entry) => ({
       pid: entry.pid,

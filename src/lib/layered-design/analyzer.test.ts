@@ -435,7 +435,7 @@ describe("LayeredDesign structured analyzer adapter", () => {
     expect(browserDetect).not.toHaveBeenCalled();
     expect(result.analysis).toMatchObject({
       analyzer: {
-        label: "本地 heuristic analyzer + Tauri native OCR",
+        label: "本地 heuristic analyzer + Desktop Host native OCR",
       },
       outputs: {
         ocrText: true,

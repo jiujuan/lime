@@ -111,7 +111,7 @@ import {
 import type { AgentAccessMode } from "./agentChatStorage";
 import { hasRecoverableSilentTurnActivity } from "./agentSilentTurnRecovery";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import { useTranslation } from "react-i18next";
 import {
   buildSessionDetailHydrationOptions,
@@ -1658,7 +1658,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           getCurrentRequestVersion: () =>
             sessionSwitchRequestVersionRef.current,
           getCurrentSessionId: () => sessionIdRef.current,
-          hasRuntimeInvokeCapability: hasTauriInvokeCapability(),
+          hasRuntimeInvokeCapability: hasDesktopHostInvokeCapability(),
           idleTimeoutMs: SESSION_METADATA_SYNC_IDLE_TIMEOUT_MS,
           minimumDelayMs: SESSION_METADATA_SYNC_DELAY_MS,
           onError: (error) => {

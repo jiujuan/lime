@@ -45,11 +45,11 @@ describe("governance-graph-core", () => {
 
   it("应解析 crate/self/super Rust use 到文件路径", () => {
     const moduleIndex = buildRustModuleIndex([
-      "src-tauri/src/app/mod.rs",
-      "src-tauri/src/app/bootstrap.rs",
-      "src-tauri/src/commands/mod.rs",
-      "src-tauri/src/commands/agent_cmd.rs",
-      "src-tauri/src/commands/internal/helper.rs",
+      "lime-rs/src/app/mod.rs",
+      "lime-rs/src/app/bootstrap.rs",
+      "lime-rs/src/commands/mod.rs",
+      "lime-rs/src/commands/agent_cmd.rs",
+      "lime-rs/src/commands/internal/helper.rs",
     ]);
 
     expect(
@@ -58,7 +58,7 @@ describe("governance-graph-core", () => {
         "commands::agent_cmd",
         "crate::app::bootstrap::boot",
       ),
-    ).toBe("src-tauri/src/app/bootstrap.rs");
+    ).toBe("lime-rs/src/app/bootstrap.rs");
 
     expect(
       resolveRustUseToFile(
@@ -66,7 +66,7 @@ describe("governance-graph-core", () => {
         "commands::internal::helper",
         "super::super::agent_cmd::run_agent",
       ),
-    ).toBe("src-tauri/src/commands/agent_cmd.rs");
+    ).toBe("lime-rs/src/commands/agent_cmd.rs");
 
     expect(
       resolveRustUseToFile(
@@ -74,6 +74,6 @@ describe("governance-graph-core", () => {
         "commands::internal::helper",
         "self::helper",
       ),
-    ).toBe("src-tauri/src/commands/internal/helper.rs");
+    ).toBe("lime-rs/src/commands/internal/helper.rs");
   });
 });

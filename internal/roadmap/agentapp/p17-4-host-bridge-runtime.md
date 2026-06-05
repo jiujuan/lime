@@ -306,7 +306,7 @@ P17.4 已完成当前 production hardening 闭环：`AgentAppHostBridge`、`capa
 | `nice -n 10 npm run verify:gui-smoke -- --reuse-running --timeout-ms 300000`                                                       | 未通过：第一次在 `smoke:agent-service-skill-entry` 因 Cargo artifact lock / 编译超时；第二次在 `smoke:claw-chat-ready-streaming` 阶段出现 provider detail `fetch failed`，随后 DevBridge 不可用。 |
 | `nice -n 10 npm run verify:gui-smoke -- --timeout-ms 300000`                                                                       | 未通过：检测到已有前端 dev server，尝试拉起独立 headless Tauri；Rust 编译完成后 headless Tauri 父进程 exitCode=0，但 DevBridge 在 30s 内仍未就绪。                                                |
 | `curl http://127.0.0.1:3030/health` / `lsof -nP -iTCP:3030 -sTCP:LISTEN` / `lsof -nP -iTCP:1420 -sTCP:LISTEN` / `ps ... tauri dev` | 3030 无监听，1420 前端仍在；存在外部 `pnpm run tauri dev` 进程但没有健康 DevBridge 后端。                                                                                                         |
-| `rg -n "port\|3030\|1420\|health-url\|invoke-url" scripts/verify-gui-smoke.mjs src-tauri`                                          | 已确认 smoke 脚本可替换 health / invoke URL，但当前 DevBridge 端口仍由 Tauri 后端固定为 3030；没有不碰现有 Tauri dev 的隔离端口路径。                                                             |
+| `rg -n "port\|3030\|1420\|health-url\|invoke-url" scripts/verify-gui-smoke.mjs lime-rs`                                          | 已确认 smoke 脚本可替换 health / invoke URL，但当前 DevBridge 端口仍由 Tauri 后端固定为 3030；没有不碰现有 Tauri dev 的隔离端口路径。                                                             |
 
 阻塞判断：
 

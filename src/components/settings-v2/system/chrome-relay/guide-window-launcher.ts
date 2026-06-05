@@ -2,7 +2,7 @@ import {
   openBrowserConnectorGuideWindow as openBrowserConnectorGuideWindowCommand,
   type BrowserConnectorGuideMode,
 } from "@/lib/webview-api";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 
 export type { BrowserConnectorGuideMode };
 
@@ -48,7 +48,7 @@ export async function openBrowserConnectorGuideWindow({
 }: {
   mode: BrowserConnectorGuideMode;
 }): Promise<void> {
-  if (hasTauriInvokeCapability()) {
+  if (hasDesktopHostInvokeCapability()) {
     await openBrowserConnectorGuideWindowCommand({ mode });
     return;
   }

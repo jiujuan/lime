@@ -26,11 +26,11 @@ Automation job command
 
 | 路径 | 责任 |
 | --- | --- |
-| `src-tauri/src/commands/agent_app_runtime_cmd.rs` | Agent App runtime Tauri command 外壳，只做参数反序列化和 state 注入。 |
-| `src-tauri/src/services/agent_app_runtime_service.rs` | App task facade：校验 appId / entryKey / manifest capability / provenance，组装 surface request。 |
-| `src-tauri/src/services/agent_runtime_surface_service.rs` | 多 surface 共享入口：把 Chat、Claw、Agent App、Automation 输入转换成 runtime turn。 |
-| `src-tauri/src/services/agent_app_runtime_capability_catalog_service.rs` | Agent App -> Claw capability catalog 第一刀：声明 capabilityId / alias / launch metadata contract，并由 runtime facade 复用。 |
-| `src-tauri/src/services/agent_runtime_capability_catalog_service.rs` | 后续多 surface capability catalog：声明 capabilityId、metadata contract、tool surface、artifact/evidence policy。 |
+| `lime-rs/src/commands/agent_app_runtime_cmd.rs` | Agent App runtime Tauri command 外壳，只做参数反序列化和 state 注入。 |
+| `lime-rs/src/services/agent_app_runtime_service.rs` | App task facade：校验 appId / entryKey / manifest capability / provenance，组装 surface request。 |
+| `lime-rs/src/services/agent_runtime_surface_service.rs` | 多 surface 共享入口：把 Chat、Claw、Agent App、Automation 输入转换成 runtime turn。 |
+| `lime-rs/src/services/agent_app_runtime_capability_catalog_service.rs` | Agent App -> Claw capability catalog 第一刀：声明 capabilityId / alias / launch metadata contract，并由 runtime facade 复用。 |
+| `lime-rs/src/services/agent_runtime_capability_catalog_service.rs` | 后续多 surface capability catalog：声明 capabilityId、metadata contract、tool surface、artifact/evidence policy。 |
 
 `agent_app_runtime_cmd.rs` 已作为 P1/P2 最小 facade 落地；首批 capability hint -> Claw skill launch metadata 映射已从 command 文件拆到 `agent_app_runtime_capability_catalog_service.rs`。Host Bridge subscription 已补 runtime event listen 和终态 artifact replay 短轮询：订阅 `lime.agent` task 时会监听 `agent_app_runtime:{appId}:{taskId}`，把 Tauri / DevBridge runtime event 推回 iframe，同时继续用 `getTask` 轮询兜底 snapshot / artifact replay。AgentRuntime profile event 现在会在同名 event bus 主动追加 `agent_app_runtime:profileProjection` payload，把 `turn.* / tool.* / action.* / routing.* / model.*` 投影成 App canonical `taskEvents`；高价值 `RuntimeAgentEvent` 也会追加 `agent_app_runtime:runtimeEventProjection`，其中 artifact 事件可直接携带 workspace patch，runtime event / timeline metadata 中显式存在的 `evidenceRefs / verificationOutcomes` 会通过 `runtime_evidence_projection_service` 主动投影为 `evidence:recorded / evidence:verified`。前端 Host facade 也能从 `threadRead.artifacts` 补投 `artifact:created` payload；Host dispatcher 已补 high-level manifest capability gate，未声明 `lime.agent` 等 Host capability 会被拒绝。Claw capability hint 会进一步校验 App manifest 的 `toolRefs[].capabilities` allowlist，避免只声明 catalog tool 后任意启动 Claw 能力。Rust facade 现在会把多个 capability hint 去重后写入 `agent_app_runtime.capability_workflow` 与 `harness.agent_app_runtime_capability_workflow`；内容工厂这类带 output contract 的复合任务使用 `metadata_only`，不会被强行改写成单一 `research_skill_launch` 或 `image_skill_launch`。本轮已补 Evidence Pack / analysis / review / save review 导出结果的后端主动 translator：导出成功后会基于 `runtime_summary.surface=agent_app` 和 `appId/taskId` emit `agent_app_runtime:harnessExportProjection`。后续仍要补后端/cross-surface capability policy owner、真正的多能力执行编排，以及跨 surface catalog 合并。实现时必须同步命令治理四侧：前端 gateway、Rust handler、`agentCommandCatalog`、mock / DevBridge。
 

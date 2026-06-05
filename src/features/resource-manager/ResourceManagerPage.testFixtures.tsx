@@ -29,9 +29,9 @@ vi.mock("@/lib/api/fileBrowser", () => ({
   readFilePreview: hoistedMocks.mockReadFilePreview,
 }));
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriEventCapability: () => false,
-  hasTauriInvokeCapability: () => false,
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostEventCapability: () => false,
+  hasDesktopHostInvokeCapability: () => false,
 }));
 
 vi.mock("@/components/agent/chat/components/MarkdownRenderer", () => ({

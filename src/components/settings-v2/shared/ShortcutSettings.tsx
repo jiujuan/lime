@@ -35,7 +35,7 @@ export interface ShortcutSettingsProps {
 // ============================================================
 
 /**
- * 将 KeyboardEvent 转换为 Tauri 快捷键格式
+ * 将 KeyboardEvent 转换为 Desktop Host 快捷键格式
  */
 function keyEventToShortcut(e: KeyboardEvent): string | null {
   const modifiers: string[] = [];
@@ -94,7 +94,7 @@ function keyEventToShortcut(e: KeyboardEvent): string | null {
 }
 
 /**
- * 格式化快捷键显示（将 Tauri 格式转换为用户友好格式）
+ * 格式化快捷键显示（将 Desktop Host 格式转换为用户友好格式）
  */
 function formatShortcutDisplay(shortcut: string): string {
   return shortcut

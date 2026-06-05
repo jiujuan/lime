@@ -154,7 +154,7 @@ export function buildStandaloneReleasePipelinePlan(
     blockers.push(
       blocker(
         "BUILD_EVIDENCE_MISSING",
-        "Standalone release requires Tauri build evidence before signing or publishing.",
+        "Standalone release requires production artifact build evidence before signing or publishing.",
         "artifact_build",
       ),
     );
@@ -162,7 +162,7 @@ export function buildStandaloneReleasePipelinePlan(
     blockers.push(
       blocker(
         "BUILD_NOT_COMPLETED",
-        "Standalone release requires a completed Tauri build before signing or publishing.",
+        "Standalone release requires a completed production artifact build before signing or publishing.",
         "artifact_build",
         { status: input.buildEvidence.status },
       ),

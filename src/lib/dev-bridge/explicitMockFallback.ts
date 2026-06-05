@@ -1,18 +1,18 @@
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@/lib/desktop-host/event";
 
-let mockCoreModulePromise: Promise<typeof import("../tauri-mock/core")> | null =
+let mockCoreModulePromise: Promise<typeof import("../desktop-host/core")> | null =
   null;
 let mockEventModulePromise: Promise<
-  typeof import("../tauri-mock/event")
+  typeof import("../desktop-host/event")
 > | null = null;
 
 function loadMockCoreModule() {
-  mockCoreModulePromise ??= import("../tauri-mock/core");
+  mockCoreModulePromise ??= import("../desktop-host/core");
   return mockCoreModulePromise;
 }
 
 function loadMockEventModule() {
-  mockEventModulePromise ??= import("../tauri-mock/event");
+  mockEventModulePromise ??= import("../desktop-host/event");
   return mockEventModulePromise;
 }
 
@@ -29,7 +29,5 @@ export async function listenExplicitMock<T>(
   handler: (event: { payload: T }) => void,
 ): Promise<UnlistenFn> {
   const { listen } = await loadMockEventModule();
-  return listen<T>(event, (payload) => {
-    handler({ payload });
-  });
+  return listen<T>(event, handler);
 }

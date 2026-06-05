@@ -113,4 +113,4 @@ return {
 ## 相关文档
 
 - [components.md](components.md) - 组件系统
-- [commands.md](commands.md) - Tauri 命令
+- [commands.md](commands.md) - Desktop Host / App Server 命令边界

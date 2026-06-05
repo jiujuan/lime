@@ -14,7 +14,7 @@ import {
 import { safeListen } from "@/lib/dev-bridge";
 import { apiKeyProviderApi } from "@/lib/api/apiKeyProvider";
 import { subscribeProviderDataChanged } from "@/lib/providerDataEvents";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import { SettingsTabs } from "@/types/settings";
 
 vi.mock("@/lib/api/companion", () => ({
@@ -40,8 +40,8 @@ vi.mock("@/lib/providerDataEvents", () => ({
   subscribeProviderDataChanged: vi.fn(),
 }));
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriInvokeCapability: vi.fn(() => true),
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostInvokeCapability: vi.fn(() => true),
 }));
 
 type HookProps = Parameters<typeof useCompanionProviderBridge>[0];
@@ -143,7 +143,7 @@ describe("useCompanionProviderBridge", () => {
     ]);
     vi.mocked(subscribeProviderDataChanged).mockReturnValue(vi.fn());
     vi.mocked(safeListen).mockResolvedValue(vi.fn());
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(true);
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -187,7 +187,7 @@ describe("useCompanionProviderBridge", () => {
   });
 
   it("浏览器开发模式下不应注册桌宠事件桥", async () => {
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(false);
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(false);
 
     const { render } = renderHook();
     await render();

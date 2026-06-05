@@ -85,7 +85,7 @@ describe("SplashScreen", () => {
     expect(container.textContent).not.toContain("成稿、成图");
   });
 
-  it("首帧布局完成后应请求展示隐藏的 Tauri 主窗口", () => {
+  it("首帧布局完成后应请求展示隐藏的 Desktop Host 主窗口", () => {
     renderSplash();
 
     expect(

@@ -267,7 +267,7 @@ extraResources:
 推荐：
 
 ```bash
-APP_SERVER_BIN=/Users/coso/Documents/dev/ai/aiclientproxy/lime/src-tauri/target/debug/app-server
+APP_SERVER_BIN=/Users/coso/Documents/dev/ai/aiclientproxy/lime/lime-rs/target/debug/app-server
 ```
 
 TS client 本地调试可以用：
@@ -311,11 +311,11 @@ content-studio CI 必须：
 Lime 当前已提供本地 smoke 入口：
 
 ```bash
-cargo build --manifest-path "src-tauri/Cargo.toml" -p app-server
+cargo build --manifest-path "lime-rs/Cargo.toml" -p app-server
 npm --prefix "packages/app-server-client" test
 npm run smoke:app-server-stdio
 npm run app-server:manifest:test
-npm run app-server:manifest -- --binary "src-tauri/target/debug/app-server" --url "https://example/app-server-darwin-arm64.tar.gz" --platform "darwin-arm64" --out "/tmp/app-server-manifest.json"
+npm run app-server:manifest -- --binary "lime-rs/target/debug/app-server" --url "https://example/app-server-darwin-arm64.tar.gz" --platform "darwin-arm64" --out "/tmp/app-server-manifest.json"
 ```
 
 该 smoke 使用 `app-server-client` 启动 `app-server --stdio`，验证 `initialize -> initialized -> agentSession/start -> agentSession/turn/start -> agentSession/event`。独立 App 后续应复用同一 client 能力，但把 binary path 解析替换为自己的 packaged resources。

@@ -493,7 +493,7 @@ describe("useWorkspaceArtifactPreviewActions", () => {
     );
   });
 
-  it("通用模式打开真实 HTML 路径时应读取文件并保留 sourcePath 供 Tauri 预览", async () => {
+  it("通用模式打开真实 HTML 路径时应读取文件并保留 sourcePath 供 Desktop Host 预览", async () => {
     const readFilePreviewSpy = vi
       .spyOn(fileBrowserModule, "readFilePreview")
       .mockResolvedValue({

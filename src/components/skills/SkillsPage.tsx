@@ -5,7 +5,7 @@ import {
   useImperativeHandle,
   useRef,
 } from "react";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog } from "@/lib/desktop-host/plugin-dialog";
 import {
   ChevronDown,
   Cloud,

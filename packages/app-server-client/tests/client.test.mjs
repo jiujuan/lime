@@ -1,20 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { chmod, copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import {
   APP_SERVER_METHODS,
   AppServerAgentEventRouter,
   AppServerSidecarLifecycle,
   DEFAULT_LISTEN_URL,
+  DEFAULT_PROTOCOL_SCHEMA_MANIFEST_NAME,
   DEFAULT_RELEASE_MANIFEST_NAME,
   ERROR_CODES,
   AppServerConnection,
   AppServerClient,
+  AppServerRequestError,
   DEFAULT_STANDALONE_BACKEND_MODE,
   METHOD_AGENT_SESSION_ACTION_RESPOND,
   METHOD_AGENT_SESSION_EVENT,
+  METHOD_AGENT_SESSION_LIST,
   METHOD_AGENT_SESSION_READ,
   METHOD_AGENT_SESSION_START,
   METHOD_AGENT_SESSION_TURN_CANCEL,
@@ -24,14 +28,34 @@ import {
   METHOD_EVIDENCE_EXPORT,
   METHOD_INITIALIZED,
   METHOD_INITIALIZE,
+  METHOD_MODEL_LIST,
+  METHOD_MODEL_PREFERENCES_LIST,
+  METHOD_MODEL_PROVIDER_ALIAS_LIST,
+  METHOD_MODEL_PROVIDER_ALIAS_READ,
+  METHOD_MODEL_PROVIDER_CATALOG_LIST,
+  METHOD_MODEL_PROVIDER_LIST,
+  METHOD_MODEL_SYNC_STATE_READ,
   PROTOCOL_VERSION,
+  METHOD_SKILL_LIST,
+  METHOD_SKILL_READ,
+  METHOD_WORKSPACE_BY_PATH_READ,
+  METHOD_WORKSPACE_DEFAULT_ENSURE,
+  METHOD_WORKSPACE_DEFAULT_READ,
+  METHOD_WORKSPACE_ENSURE_READY,
+  METHOD_WORKSPACE_LIST,
+  METHOD_WORKSPACE_PROJECTS_ROOT_READ,
+  METHOD_WORKSPACE_PROJECT_PATH_RESOLVE,
+  METHOD_WORKSPACE_READ,
+  METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
   assertCompatibleManifest,
+  assertCompatibleProtocolSchemaManifest,
   assertSha256,
   assertSidecarFileSha256,
   agentSessionEventNotification,
   connectAppServerSidecar,
   decodeMessage,
   defaultReleaseManifestPath,
+  defaultProtocolSchemaManifestPath,
   encodeMessage,
   findReleaseArtifact,
   defaultPackagedSidecarRelativePath,
@@ -40,9 +64,12 @@ import {
   isAppServerRequestMethod,
   isAgentSessionEventNotification,
   readReleaseManifest,
+  readProtocolSchemaManifest,
+  listProtocolSchemaFiles,
   resolveSidecarBinaryPath,
   resolveSidecarFromReleaseManifest,
   resolveSidecarFromReleaseManifestFile,
+  protocolSchemaFilePath,
   sha256Hex,
   sha256File,
   sidecarArgs,
@@ -54,6 +81,8 @@ import {
   stdioSidecar,
   sidecarRestartDelayMs,
 } from '../dist/index.js';
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 test('builds initialize and caller supplied session start requests', () => {
   const client = new AppServerClient();
@@ -103,6 +132,74 @@ test('builds capability list requests with empty params', () => {
     sessionId: 'sess_external',
     cursor: '2',
     limit: 25,
+  });
+});
+
+test('builds workspace and skill read requests with current methods', () => {
+  const client = new AppServerClient();
+
+  const sessions = client.listSessions({
+    includeArchived: true,
+    workspaceId: 'workspace-main',
+    limit: 20,
+  });
+  const workspaces = client.listWorkspaces();
+  const workspace = client.readWorkspace({ id: 'workspace-main' });
+  const workspaceByPath = client.readWorkspaceByPath({
+    rootPath: '/workspace/project',
+  });
+  const defaultWorkspace = client.readDefaultWorkspace();
+  const ensuredDefault = client.ensureDefaultWorkspace();
+  const projectsRoot = client.readWorkspaceProjectsRoot();
+  const projectPath = client.resolveWorkspaceProjectPath({
+    name: 'content-studio',
+    parentRootPath: '/workspace',
+  });
+  const ready = client.ensureWorkspaceReady({ id: 'workspace-main' });
+  const skills = client.listSkills();
+  const skill = client.readSkill({ skillName: 'article-writer' });
+  const bindings = client.listWorkspaceSkillBindings({
+    workspaceRoot: '/workspace/project',
+    caller: 'agent-chat',
+    workbench: true,
+    browserAssist: false,
+  });
+
+  assert.equal(sessions.method, METHOD_AGENT_SESSION_LIST);
+  assert.deepEqual(sessions.params, {
+    includeArchived: true,
+    workspaceId: 'workspace-main',
+    limit: 20,
+  });
+  assert.equal(workspaces.method, METHOD_WORKSPACE_LIST);
+  assert.deepEqual(workspaces.params, {});
+  assert.equal(workspace.method, METHOD_WORKSPACE_READ);
+  assert.deepEqual(workspace.params, { id: 'workspace-main' });
+  assert.equal(workspaceByPath.method, METHOD_WORKSPACE_BY_PATH_READ);
+  assert.deepEqual(workspaceByPath.params, {
+    rootPath: '/workspace/project',
+  });
+  assert.equal(defaultWorkspace.method, METHOD_WORKSPACE_DEFAULT_READ);
+  assert.deepEqual(defaultWorkspace.params, {});
+  assert.equal(ensuredDefault.method, METHOD_WORKSPACE_DEFAULT_ENSURE);
+  assert.equal(projectsRoot.method, METHOD_WORKSPACE_PROJECTS_ROOT_READ);
+  assert.equal(projectPath.method, METHOD_WORKSPACE_PROJECT_PATH_RESOLVE);
+  assert.deepEqual(projectPath.params, {
+    name: 'content-studio',
+    parentRootPath: '/workspace',
+  });
+  assert.equal(ready.method, METHOD_WORKSPACE_ENSURE_READY);
+  assert.deepEqual(ready.params, { id: 'workspace-main' });
+  assert.equal(skills.method, METHOD_SKILL_LIST);
+  assert.deepEqual(skills.params, {});
+  assert.equal(skill.method, METHOD_SKILL_READ);
+  assert.deepEqual(skill.params, { skillName: 'article-writer' });
+  assert.equal(bindings.method, METHOD_WORKSPACE_SKILL_BINDINGS_LIST);
+  assert.deepEqual(bindings.params, {
+    workspaceRoot: '/workspace/project',
+    caller: 'agent-chat',
+    workbench: true,
+    browserAssist: false,
   });
 });
 
@@ -159,6 +256,25 @@ test('exports app-server method catalog with request and notification kinds', ()
     { method: METHOD_CAPABILITY_LIST, kind: 'request' },
     { method: METHOD_ARTIFACT_READ, kind: 'request' },
     { method: METHOD_EVIDENCE_EXPORT, kind: 'request' },
+    { method: METHOD_AGENT_SESSION_LIST, kind: 'request' },
+    { method: METHOD_WORKSPACE_LIST, kind: 'request' },
+    { method: METHOD_WORKSPACE_READ, kind: 'request' },
+    { method: METHOD_WORKSPACE_BY_PATH_READ, kind: 'request' },
+    { method: METHOD_WORKSPACE_DEFAULT_READ, kind: 'request' },
+    { method: METHOD_WORKSPACE_DEFAULT_ENSURE, kind: 'request' },
+    { method: METHOD_WORKSPACE_PROJECTS_ROOT_READ, kind: 'request' },
+    { method: METHOD_WORKSPACE_PROJECT_PATH_RESOLVE, kind: 'request' },
+    { method: METHOD_WORKSPACE_ENSURE_READY, kind: 'request' },
+    { method: METHOD_SKILL_LIST, kind: 'request' },
+    { method: METHOD_SKILL_READ, kind: 'request' },
+    { method: METHOD_WORKSPACE_SKILL_BINDINGS_LIST, kind: 'request' },
+    { method: METHOD_MODEL_LIST, kind: 'request' },
+    { method: METHOD_MODEL_PREFERENCES_LIST, kind: 'request' },
+    { method: METHOD_MODEL_SYNC_STATE_READ, kind: 'request' },
+    { method: METHOD_MODEL_PROVIDER_LIST, kind: 'request' },
+    { method: METHOD_MODEL_PROVIDER_CATALOG_LIST, kind: 'request' },
+    { method: METHOD_MODEL_PROVIDER_ALIAS_READ, kind: 'request' },
+    { method: METHOD_MODEL_PROVIDER_ALIAS_LIST, kind: 'request' },
     { method: METHOD_AGENT_SESSION_START, kind: 'request' },
     { method: METHOD_AGENT_SESSION_READ, kind: 'request' },
     { method: METHOD_AGENT_SESSION_TURN_START, kind: 'request' },
@@ -169,6 +285,9 @@ test('exports app-server method catalog with request and notification kinds', ()
   assert.equal(isAppServerRequestMethod(METHOD_INITIALIZE), true);
   assert.equal(isAppServerRequestMethod(METHOD_ARTIFACT_READ), true);
   assert.equal(isAppServerRequestMethod(METHOD_EVIDENCE_EXPORT), true);
+  assert.equal(isAppServerRequestMethod(METHOD_WORKSPACE_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_SKILL_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_WORKSPACE_SKILL_BINDINGS_LIST), true);
   assert.equal(isAppServerRequestMethod(METHOD_AGENT_SESSION_TURN_START), true);
   assert.equal(isAppServerRequestMethod(METHOD_AGENT_SESSION_ACTION_RESPOND), true);
   assert.equal(isAppServerRequestMethod(METHOD_INITIALIZED), false);
@@ -309,6 +428,87 @@ test('connection wraps request response flow and keeps async notifications', asy
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].method, METHOD_AGENT_SESSION_EVENT);
   assert.equal(result.notifications[0].params.event.payload.text, 'delta');
+});
+
+test('connection request errors preserve streamed notifications and response context', async () => {
+  const sent = [];
+  const inbound = [
+    {
+      method: METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: 'evt-1',
+          sequence: 1,
+          sessionId: 'sess_external',
+          turnId: 'turn_external',
+          type: 'message.delta',
+          timestamp: '2026-06-04T00:00:00Z',
+          payload: {
+            text: 'partial',
+          },
+        },
+      },
+    },
+    {
+      method: METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: 'evt-2',
+          sequence: 2,
+          sessionId: 'sess_external',
+          turnId: 'turn_external',
+          type: 'turn.failed',
+          timestamp: '2026-06-04T00:00:01Z',
+          payload: {
+            message: 'external backend crashed after partial output',
+          },
+        },
+      },
+    },
+    {
+      id: 1,
+      error: {
+        code: ERROR_CODES.runtimeError,
+        message: 'external backend crashed after partial output',
+      },
+    },
+  ];
+  const connection = new AppServerConnection({
+    send(message) {
+      sent.push(message);
+    },
+    async nextMessage() {
+      const message = inbound.shift();
+      if (!message) {
+        throw new Error('empty transport');
+      }
+      return message;
+    },
+  });
+
+  await assert.rejects(
+    connection.startTurn({
+      sessionId: 'sess_external',
+      turnId: 'turn_external',
+      input: {
+        text: 'draft',
+      },
+    }),
+    (error) => {
+      assert.equal(error instanceof AppServerRequestError, true);
+      assert.equal(error.method, METHOD_AGENT_SESSION_TURN_START);
+      assert.equal(error.response.error.code, ERROR_CODES.runtimeError);
+      assert.equal(error.notifications.length, 2);
+      assert.equal(error.notifications[0].params.event.type, 'message.delta');
+      assert.equal(error.notifications[1].params.event.type, 'turn.failed');
+      assert.match(error.notifications[1].params.event.payload.message, /partial output/);
+      assert.equal(error.messages.length, 3);
+      assert.equal(error.messages[2].error.message, 'external backend crashed after partial output');
+      return true;
+    },
+  );
+
+  assert.equal(sent[0].method, METHOD_AGENT_SESSION_TURN_START);
 });
 
 test('connection wraps capability list response', async () => {
@@ -1180,6 +1380,90 @@ test('verifies release artifact sha256 before sidecar launch', async () => {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('reads and validates protocol schema manifest metadata', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'app-server-schema-'));
+  const schemaRoot = join(dir, 'schema', 'json');
+  const manifestPath = defaultProtocolSchemaManifestPath(schemaRoot);
+  const manifest = {
+    protocolVersion: PROTOCOL_VERSION,
+    jsonRpc: {
+      version: '2.0',
+      sendsJsonRpcVersionField: false,
+      envelopes: ['request', 'notification', 'response', 'error'],
+    },
+    methods: [...APP_SERVER_METHODS].reverse(),
+    schemas: {
+      jsonrpc: ['JsonRpcRequest'],
+      v0: ['AgentSessionTurnStartParams', 'RuntimeOptions'],
+    },
+  };
+
+  try {
+    await mkdir(schemaRoot, { recursive: true });
+    await writeFile(manifestPath, JSON.stringify(manifest));
+
+    assert.equal(DEFAULT_PROTOCOL_SCHEMA_MANIFEST_NAME, 'manifest.json');
+    assert.equal(defaultProtocolSchemaManifestPath(schemaRoot), join(schemaRoot, 'manifest.json'));
+    assert.equal(
+      protocolSchemaFilePath(schemaRoot, 'v0', 'AgentSessionTurnStartParams'),
+      join(schemaRoot, 'v0', 'AgentSessionTurnStartParams.json'),
+    );
+
+    const loaded = await readProtocolSchemaManifest(manifestPath);
+    assert.doesNotThrow(() => assertCompatibleProtocolSchemaManifest(loaded));
+    assert.deepEqual(listProtocolSchemaFiles(loaded, schemaRoot), [
+      {
+        group: 'jsonrpc',
+        typeName: 'JsonRpcRequest',
+        path: join(schemaRoot, 'jsonrpc', 'JsonRpcRequest.json'),
+      },
+      {
+        group: 'v0',
+        typeName: 'AgentSessionTurnStartParams',
+        path: join(schemaRoot, 'v0', 'AgentSessionTurnStartParams.json'),
+      },
+      {
+        group: 'v0',
+        typeName: 'RuntimeOptions',
+        path: join(schemaRoot, 'v0', 'RuntimeOptions.json'),
+      },
+    ]);
+
+    assert.throws(
+      () => assertCompatibleProtocolSchemaManifest({ ...loaded, protocolVersion: 'appserver.v9' }),
+      /unsupported app-server schema protocol/,
+    );
+    assert.throws(
+      () =>
+        assertCompatibleProtocolSchemaManifest({
+          ...loaded,
+          methods: loaded.methods.filter((spec) => spec.method !== METHOD_CAPABILITY_LIST),
+        }),
+      /schema method catalog mismatch/,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('consumes checked-in Rust protocol schema manifest', async () => {
+  const schemaRoot = join(repoRoot, 'lime-rs', 'crates', 'app-server-protocol', 'schema', 'json');
+  const manifest = await readProtocolSchemaManifest(defaultProtocolSchemaManifestPath(schemaRoot));
+
+  assert.doesNotThrow(() => assertCompatibleProtocolSchemaManifest(manifest));
+  assert.ok(manifest.schemas.v0.includes('AgentSessionTurnStartParams'));
+  assert.ok(manifest.schemas.v0.includes('EvidenceExportResponse'));
+  assert.ok(manifest.schemas.jsonrpc.includes('JsonRpcRequest'));
+  assert.ok(
+    listProtocolSchemaFiles(manifest, schemaRoot).some(
+      (entry) =>
+        entry.group === 'v0' &&
+        entry.typeName === 'AgentSessionTurnStartParams' &&
+        entry.path.endsWith(join('v0', 'AgentSessionTurnStartParams.json')),
+    ),
+  );
 });
 
 test('spawns stdio sidecar and exchanges JSON-RPC lines', async () => {

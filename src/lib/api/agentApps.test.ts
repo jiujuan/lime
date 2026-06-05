@@ -698,7 +698,7 @@ describe("agentApps API", () => {
     );
   });
 
-  it("Agent App 宿主目录选择网关应走 current Tauri 命令", async () => {
+  it("Agent App 宿主目录选择网关应走 current Desktop Host 命令", async () => {
     vi.mocked(safeInvoke).mockResolvedValue({
       path: LOCAL_APP_DIR,
       cancelled: false,

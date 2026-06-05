@@ -1,0 +1,101 @@
+{
+  "$defs": {
+    "AgentSession": {
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "businessObjectRef": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BusinessObjectRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/AgentSessionStatus"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "appId",
+        "createdAt",
+        "sessionId",
+        "status",
+        "threadId",
+        "updatedAt"
+      ],
+      "type": "object"
+    },
+    "AgentSessionStatus": {
+      "enum": [
+        "canceled",
+        "completed",
+        "failed",
+        "idle",
+        "running",
+        "waitingAction"
+      ],
+      "type": "string"
+    },
+    "BusinessObjectRef": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "metadata": true,
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "uri": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "session": {
+      "$ref": "#/$defs/AgentSession"
+    }
+  },
+  "required": [
+    "session"
+  ],
+  "title": "AgentSessionStartResponse",
+  "type": "object"
+}

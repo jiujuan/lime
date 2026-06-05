@@ -1,6 +1,6 @@
 /**
  * @file Skill 执行 API 模块
- * @description 封装 Skill 执行相关的 Tauri 命令调用
+ * @description 封装 Skill 执行相关的 Desktop Host / App Server 命令调用
  *
  * 提供以下功能：
  * - executeSkill: 执行指定的 Skill
@@ -135,7 +135,7 @@ export interface SkillExecutionImageInput {
 }
 
 // ============================================================================
-// Tauri 事件 Payload 类型
+// Desktop Host 事件 Payload 类型
 // ============================================================================
 
 /**
@@ -207,10 +207,10 @@ export interface ExecutionCompletePayload {
 }
 
 // ============================================================================
-// Tauri 事件名常量
+// Desktop Host 事件名常量
 // ============================================================================
 
-/** Skill 执行相关的 Tauri 事件名 */
+/** Skill 执行相关的 Desktop Host 事件名 */
 export const SKILL_EVENTS = {
   /** 步骤开始事件 */
   STEP_START: "skill:step_start",
@@ -229,7 +229,7 @@ export const SKILL_EVENTS = {
 /**
  * Skill 执行 API
  *
- * 封装 Skill 执行相关的 Tauri 命令调用
+ * 封装 Skill 执行相关的 Desktop Host / App Server 命令调用
  */
 export const skillExecutionApi = {
   /**

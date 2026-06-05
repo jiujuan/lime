@@ -382,7 +382,7 @@ describe("ToolCallDisplay command output", () => {
           "*** Update File: src/components/Panel.tsx",
           "@@",
           "+export const ready = true;",
-          "*** Update File: src-tauri/src/app/runner.rs",
+          "*** Update File: lime-rs/src/app/runner.rs",
           "@@",
           '-let mode = "legacy";',
           '+let mode = "current";',
@@ -425,7 +425,7 @@ describe("ToolCallDisplay command output", () => {
       scopeItems.some((item) => item.textContent?.includes("src/components")),
     ).toBe(true);
     expect(
-      scopeItems.some((item) => item.textContent?.includes("src-tauri/src")),
+      scopeItems.some((item) => item.textContent?.includes("lime-rs/src")),
     ).toBe(true);
     expect(
       scopeItems.some((item) => item.textContent?.includes("仓库根目录")),
@@ -437,7 +437,7 @@ describe("ToolCallDisplay command output", () => {
     ).toBe(true);
     expect(
       scopeItems.some((item) =>
-        item.textContent?.includes("src-tauri/src1 个文件+2-1"),
+        item.textContent?.includes("lime-rs/src1 个文件+2-1"),
       ),
     ).toBe(true);
     expect(

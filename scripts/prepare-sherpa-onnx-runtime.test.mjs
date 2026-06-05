@@ -36,11 +36,11 @@ version = "1.13.0"
       "libsherpa-onnx-c-api.dylib",
     ]);
     expect(plan.releaseDir).toBe(
-      "/repo/src-tauri/target/aarch64-apple-darwin/release",
+      "/repo/lime-rs/target/aarch64-apple-darwin/release",
     );
     expect(plan.debugDirs).toEqual([
-      "/repo/src-tauri/target/debug",
-      "/repo/src-tauri/target/aarch64-apple-darwin/debug",
+      "/repo/lime-rs/target/debug",
+      "/repo/lime-rs/target/aarch64-apple-darwin/debug",
     ]);
   });
 
@@ -55,5 +55,21 @@ version = "1.13.0"
       "sherpa-onnx-v1.13.0-win-x64-shared-MT-Release-lib.tar.bz2",
     );
     expect(plan.libs).toEqual(["onnxruntime.dll", "sherpa-onnx-c-api.dll"]);
+  });
+
+  it("支持显式 Rust workspace 目录，不再暴露旧目录参数口径", () => {
+    const plan = resolveSherpaRuntimePlan({
+      repoRoot: "/repo",
+      rustWorkspaceDir: "runtime-rs",
+      targetTriple: "x86_64-apple-darwin",
+      version: "1.13.0",
+    });
+
+    expect(plan.releaseDir).toBe(
+      "/repo/runtime-rs/target/x86_64-apple-darwin/release",
+    );
+    expect(plan.runtimeLibDir).toBe(
+      "/repo/runtime-rs/.release-runtime-libs/x86_64-apple-darwin",
+    );
   });
 });

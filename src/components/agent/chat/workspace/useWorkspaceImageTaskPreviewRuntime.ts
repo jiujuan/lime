@@ -13,9 +13,9 @@ import {
 } from "@/lib/api/mediaTasks";
 import { safeListen } from "@/lib/dev-bridge";
 import {
-  hasTauriInvokeCapability,
-  hasTauriRuntimeMarkers,
-} from "@/lib/tauri-runtime";
+  hasDesktopHostInvokeCapability,
+  hasDesktopHostRuntimeMarkers,
+} from "@/lib/desktop-runtime";
 import { resolveAbsoluteWorkspacePath } from "./workspacePath";
 import {
   buildImageTaskLookupRequest,
@@ -3473,7 +3473,7 @@ export function useWorkspaceImageTaskPreviewRuntime({
   useEffect(() => {
     const shouldRestoreWorkspaceTaskCatalog =
       restoreFromWorkspace &&
-      (hasTauriInvokeCapability() || hasTauriRuntimeMarkers());
+      (hasDesktopHostInvokeCapability() || hasDesktopHostRuntimeMarkers());
 
     const trackedTasks = trackedTasksRef.current;
     trackedTasks.forEach((trackedTask) => {

@@ -5,16 +5,16 @@ import {
   startWindowDragFromMouseEvent,
 } from "./windowDrag";
 
-const { mockHasTauriInvokeCapability, mockStartDragging } = vi.hoisted(() => ({
-  mockHasTauriInvokeCapability: vi.fn(() => true),
+const { mockHasDesktopHostInvokeCapability, mockStartDragging } = vi.hoisted(() => ({
+  mockHasDesktopHostInvokeCapability: vi.fn(() => true),
   mockStartDragging: vi.fn(),
 }));
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriInvokeCapability: mockHasTauriInvokeCapability,
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostInvokeCapability: mockHasDesktopHostInvokeCapability,
 }));
 
-vi.mock("@tauri-apps/api/window", () => ({
+vi.mock("@/lib/desktop-host/window", () => ({
   getCurrentWindow: () => ({
     startDragging: mockStartDragging,
   }),
@@ -38,7 +38,7 @@ function buildMouseEventLike(params: {
 
 describe("windowDrag", () => {
   beforeEach(() => {
-    mockHasTauriInvokeCapability.mockReturnValue(true);
+    mockHasDesktopHostInvokeCapability.mockReturnValue(true);
     mockStartDragging.mockReset();
     mockStartDragging.mockResolvedValue(undefined);
   });
@@ -54,8 +54,8 @@ describe("windowDrag", () => {
     expect(mockStartDragging).toHaveBeenCalledTimes(1);
   });
 
-  it("非 Tauri 环境不应启动窗口拖拽", async () => {
-    mockHasTauriInvokeCapability.mockReturnValue(false);
+  it("非 Desktop Host 环境不应启动窗口拖拽", async () => {
+    mockHasDesktopHostInvokeCapability.mockReturnValue(false);
     const event = buildMouseEventLike({});
 
     await expect(startWindowDragFromMouseEvent(event)).resolves.toBe(false);

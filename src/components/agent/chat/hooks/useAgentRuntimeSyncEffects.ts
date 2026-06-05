@@ -8,7 +8,7 @@ import {
   dedupeAgentRuntimeEventNames,
   getAgentSubagentStatusEventName,
 } from "@/lib/api/agentRuntimeEvents";
-import { hasTauriEventListenerCapability } from "@/lib/tauri-runtime";
+import { hasDesktopHostEventListenerCapability } from "@/lib/desktop-runtime";
 import type { AgentThreadTurn } from "../types";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 
@@ -94,10 +94,10 @@ export function useAgentRuntimeSyncEffects(
   } = options;
   const lastIsSendingRef = useRef(isSending);
   const normalizedParentSessionId = parentSessionId?.trim() || null;
-  const hasTauriRuntimeEventListenerCapability =
-    hasTauriEventListenerCapability();
+  const hasDesktopRuntimeEventListenerCapability =
+    hasDesktopHostEventListenerCapability();
   const hasRuntimeEventListenerCapability =
-    hasTauriRuntimeEventListenerCapability ||
+    hasDesktopRuntimeEventListenerCapability ||
     hasDevBridgeEventListenerCapability();
   const hasActiveRuntimeWork = shouldPollRecoveredRuntimeWork({
     threadReadStatus,
@@ -111,7 +111,7 @@ export function useAgentRuntimeSyncEffects(
     !hasRuntimeEventListenerCapability;
   const shouldSubscribeTeamEvents =
     Boolean(sessionId) &&
-    (hasTauriRuntimeEventListenerCapability ||
+    (hasDesktopRuntimeEventListenerCapability ||
       isSending ||
       hasActiveRuntimeWork ||
       Boolean(normalizedParentSessionId));

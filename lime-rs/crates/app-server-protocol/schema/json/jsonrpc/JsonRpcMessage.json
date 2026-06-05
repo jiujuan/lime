@@ -1,0 +1,104 @@
+{
+  "$defs": {
+    "JsonRpcError": {
+      "properties": {
+        "code": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "data": true,
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "JsonRpcErrorResponse": {
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/JsonRpcError"
+        },
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        }
+      },
+      "required": [
+        "error",
+        "id"
+      ],
+      "type": "object"
+    },
+    "JsonRpcNotification": {
+      "properties": {
+        "method": {
+          "type": "string"
+        },
+        "params": true
+      },
+      "required": [
+        "method"
+      ],
+      "type": "object"
+    },
+    "JsonRpcRequest": {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "type": "string"
+        },
+        "params": true
+      },
+      "required": [
+        "id",
+        "method"
+      ],
+      "type": "object"
+    },
+    "JsonRpcResponse": {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "result": true
+      },
+      "required": [
+        "id",
+        "result"
+      ],
+      "type": "object"
+    },
+    "RequestId": {
+      "anyOf": [
+        {
+          "format": "int64",
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/JsonRpcRequest"
+    },
+    {
+      "$ref": "#/$defs/JsonRpcNotification"
+    },
+    {
+      "$ref": "#/$defs/JsonRpcResponse"
+    },
+    {
+      "$ref": "#/$defs/JsonRpcErrorResponse"
+    }
+  ],
+  "title": "JsonRpcMessage"
+}

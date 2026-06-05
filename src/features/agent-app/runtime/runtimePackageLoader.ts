@@ -32,7 +32,7 @@ export interface AgentAppRuntimePackagePolicyEvidence {
   rawWorkerAllowed: false;
   networkAllowed: false;
   fileSystemAllowed: false;
-  rawTauriAllowed: false;
+  rawHostApiAllowed: false;
   nodeApiAllowed: false;
   sandboxPolicy: AgentAppUiSandboxPolicy;
 }
@@ -80,7 +80,7 @@ function buildPolicyEvidence(): AgentAppRuntimePackagePolicyEvidence {
     rawWorkerAllowed: false,
     networkAllowed: false,
     fileSystemAllowed: false,
-    rawTauriAllowed: false,
+    rawHostApiAllowed: false,
     nodeApiAllowed: false,
     sandboxPolicy: agentAppUiSandboxPolicy,
   };

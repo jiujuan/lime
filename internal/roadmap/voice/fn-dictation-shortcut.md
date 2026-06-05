@@ -23,7 +23,7 @@ P0 目标：
 
 ## 2. 现有实现边界
 
-当前语音快捷键在 `src-tauri/src/voice/shortcut.rs` 中实现：
+当前语音快捷键在 `lime-rs/src/voice/shortcut.rs` 中实现：
 
 1. 使用 `tauri_plugin_global_shortcut`。
 2. 通过字符串解析 `Shortcut`。
@@ -83,7 +83,7 @@ pub struct VoiceInputConfig {
 
 2026-04-30 已落地第一刀：
 
-1. `src-tauri/src/voice/fn_shortcut.rs` 通过 macOS `NSEventMaskFlagsChanged` 监听 Fn 修饰键状态。
+1. `lime-rs/src/voice/fn_shortcut.rs` 通过 macOS `NSEventMaskFlagsChanged` 监听 Fn 修饰键状态。
 2. Fn 按下复用 `open_floating_window_with_voice`，Fn 松开复用 `send_voice_stop_event`，不新增第二套语音窗口流程。
 3. 监听随语音输入启用/停用注册和注销；普通语音快捷键仍作为 fallback 保留。
 4. 运行时状态已接入 `get_voice_shortcut_runtime_status` 和设置页 Fn 状态展示。
@@ -94,7 +94,7 @@ pub struct VoiceInputConfig {
 新增 macOS-only 模块，例如：
 
 ```text
-src-tauri/src/voice/fn_shortcut_macos.rs
+lime-rs/src/voice/fn_shortcut_macos.rs
 ```
 
 职责：
@@ -141,7 +141,7 @@ Fn 不可用时：
 
 ## 5. 普通快捷键兼容
 
-`src-tauri/src/voice/shortcut.rs` 继续负责普通快捷键。
+`lime-rs/src/voice/shortcut.rs` 继续负责普通快捷键。
 
 需要调整：
 

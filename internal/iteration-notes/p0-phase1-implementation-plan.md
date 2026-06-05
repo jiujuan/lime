@@ -16,7 +16,7 @@
 
 ### 1.1 创建 AI 摘要服务
 
-创建新文件：`src-tauri/crates/services/src/ai_summary_service.rs`
+创建新文件：`lime-rs/crates/services/src/ai_summary_service.rs`
 
 ```rust
 //! AI 驱动的会话摘要服务

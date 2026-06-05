@@ -233,7 +233,7 @@ async function waitForHealth(options) {
       ? lastError.message
       : String(lastError || "unknown error");
   throw new Error(
-    `[smoke:browser-runtime] DevBridge 未就绪，请先启动 npm run tauri:dev:headless。最后错误: ${detail}`,
+    `[smoke:browser-runtime] DevBridge 未就绪，请先启动 npm run electron:dev。最后错误: ${detail}`,
   );
 }
 

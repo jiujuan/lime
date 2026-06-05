@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "appId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "cursor": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "limit": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "sessionId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "workspaceId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "title": "CapabilityListParams",
+  "type": "object"
+}

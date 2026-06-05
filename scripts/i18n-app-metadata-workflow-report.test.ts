@@ -42,6 +42,7 @@ describe("i18n app metadata workflow report", () => {
           name: "lime",
           version: "1.47.0",
           description: "AI content workspace for Chinese creators.",
+          keywords: ["ai", "lime"],
         },
         null,
         2,
@@ -49,7 +50,7 @@ describe("i18n app metadata workflow report", () => {
     );
     writeFile(
       root,
-      "src-tauri/Cargo.toml",
+      "lime-rs/Cargo.toml",
       [
         '[workspace.package]',
         'version = "1.47.0"',
@@ -63,47 +64,35 @@ describe("i18n app metadata workflow report", () => {
     );
     writeFile(
       root,
-      "src-tauri/tauri.conf.json",
-      JSON.stringify(
-        {
-          productName: "Lime",
-          identifier: "com.limecloud.lime",
-          app: { windows: [{ title: "Lime" }] },
-          bundle: {
-            fileAssociations: [
-              {
-                description: "Lime Skill Package",
-                name: "Lime Skill Package",
-              },
-            ],
-            targets: "all",
-          },
-          plugins: { updater: { pubkey: "lime-dev-placeholder" }, "deep-link": { desktop: { schemes: ["lime"] } } },
-        },
-        null,
-        2,
-      ),
+      "electron-builder.yml",
+      [
+        "appId: com.limecloud.lime",
+        "productName: Lime",
+        "directories:",
+        "  output: release-electron",
+        "artifactName: ${productName}_${version}_${arch}.${ext}",
+        "protocols:",
+        "  - name: Lime URL",
+        "    schemes:",
+        "      - lime",
+        "mac:",
+        "  icon: lime-rs/icons/icon.icns",
+        "  target:",
+        "    - target: dmg",
+        "    - target: zip",
+        "win:",
+        "  icon: lime-rs/icons/icon.ico",
+        "  target:",
+        "    - target: nsis",
+      ].join("\n"),
     );
     writeFile(
       root,
-      "src-tauri/tauri.conf.headless.json",
-      JSON.stringify(
-        {
-          productName: "Lime",
-          identifier: "com.limecloud.lime.headless",
-          app: { windows: [{ title: "Lime" }] },
-        },
-        null,
-        2,
-      ),
-    );
-    writeFile(
-      root,
-      "src-tauri/capabilities/agent-app-shell.json",
+      "lime-rs/capabilities/agent-app-shell.json",
       JSON.stringify(
         {
           identifier: "agent-app-shell",
-          description: "Agent App 独立 Shell 只允许使用 Tauri IPC 调用 Lime 宿主封装能力。",
+          description: "Agent App 独立 Shell 只允许使用 Desktop Host IPC 调用宿主封装能力。",
         },
         null,
         2,
@@ -149,55 +138,49 @@ describe("i18n app metadata workflow report", () => {
               priority: "required-before-multilingual-release",
             },
             {
-              path: "src-tauri/tauri.conf.json",
+              path: "package.json",
+              field: "keywords",
+              localization: "source-only",
+              priority: "source-only",
+            },
+            {
+              path: "electron-builder.yml",
               field: "productName",
               localization: "stable-brand",
               priority: "stable",
             },
             {
-              path: "src-tauri/tauri.conf.json",
-              field: "identifier",
+              path: "electron-builder.yml",
+              field: "appId",
               localization: "stable-identifier",
               priority: "stable",
             },
             {
-              path: "src-tauri/tauri.conf.json",
-              field: "app.windows[0].title",
-              localization: "stable-brand",
-              priority: "stable",
+              path: "electron-builder.yml",
+              field: "artifactName",
+              localization: "source-only",
+              priority: "source-only",
             },
             {
-              path: "src-tauri/tauri.conf.json",
-              field: "bundle.fileAssociations[0].name",
-              localization: "stable-brand",
-              priority: "stable",
-            },
-            {
-              path: "src-tauri/tauri.conf.json",
-              field: "bundle.fileAssociations[0].description",
-              localization: "translatable",
-              priority: "required-before-multilingual-release",
-            },
-            {
-              path: "src-tauri/tauri.conf.headless.json",
-              field: "productName",
-              localization: "stable-brand",
-              priority: "stable",
-            },
-            {
-              path: "src-tauri/tauri.conf.headless.json",
-              field: "identifier",
+              path: "electron-builder.yml",
+              field: "protocols[0].schemes",
               localization: "stable-identifier",
               priority: "stable",
             },
             {
-              path: "src-tauri/tauri.conf.headless.json",
-              field: "app.windows[0].title",
-              localization: "stable-brand",
-              priority: "stable",
+              path: "electron-builder.yml",
+              field: "mac.icon",
+              localization: "source-only",
+              priority: "source-only",
             },
             {
-              path: "src-tauri/capabilities/agent-app-shell.json",
+              path: "electron-builder.yml",
+              field: "win.icon",
+              localization: "source-only",
+              priority: "source-only",
+            },
+            {
+              path: "lime-rs/capabilities/agent-app-shell.json",
               field: "description",
               localization: "internal-source-only",
               priority: "source-only",
@@ -219,23 +202,23 @@ describe("i18n app metadata workflow report", () => {
     expect(report.summary.hasLocalizedAppMetadataArtifacts).toBe(true);
     expect(report.summary.hasLocaleAwareMetadataSources).toBe(true);
     expect(report.summary.metadataMissingScopedFieldCount).toBe(0);
-    expect(report.summary.metadataReviewedFieldCount).toBe(10);
-    expect(report.summary.metadataScopeItemCount).toBe(10);
-    expect(report.summary.metadataTranslatableFieldCount).toBe(2);
+    expect(report.summary.metadataReviewedFieldCount).toBe(9);
+    expect(report.summary.metadataScopeItemCount).toBe(9);
+    expect(report.summary.metadataTranslatableFieldCount).toBe(1);
     expect(report.summary.metadataUnscopedFieldCount).toBe(0);
     expect(report.appMetadataTranslationScope).toEqual(
       expect.objectContaining({
         generatedMetadataAllowed: false,
         manifestGenerationAllowed: true,
-        itemCount: 10,
+        itemCount: 9,
         owner: "release",
-        requiredBeforeMultilingualReleaseCount: 2,
+        requiredBeforeMultilingualReleaseCount: 1,
         schemaVersion: "lime.i18n.appMetadataTranslationScope.v1",
         sourceLocale: "zh-CN",
-        sourceOnlyFieldCount: 1,
-        stableFieldCount: 7,
+        sourceOnlyFieldCount: 5,
+        stableFieldCount: 3,
         targetLocales: ["en-US"],
-        translatableFieldCount: 2,
+        translatableFieldCount: 1,
         workflowStatus: "ready",
       }),
     );
@@ -254,8 +237,11 @@ describe("i18n app metadata workflow report", () => {
         unscopedMetadataFields: [],
       }),
     );
-    expect(report.tauriConfig.productName).toBe("Lime");
-    expect(report.tauriConfig.deepLinkSchemes).toEqual(["lime"]);
+    expect(report.electronBuilderConfig.productName).toBe("Lime");
+    expect(report.electronBuilderConfig.appId).toBe("com.limecloud.lime");
+    expect(report.electronBuilderConfig.deepLinkSchemes).toEqual(["lime"]);
+    expect(report.electronBuilderConfig.macTargets).toEqual(["dmg", "zip"]);
+    expect(report.electronBuilderConfig.winTargets).toEqual(["nsis"]);
     expect(formatAppMetadataWorkflowReport(report, "text")).toContain(
       "[i18n:app-metadata] workflow inventory",
     );
@@ -282,36 +268,19 @@ describe("i18n app metadata workflow report", () => {
         2,
       ),
     );
-    writeFile(root, "src-tauri/Cargo.toml", '[package]\nname = "lime"\nversion = "1.47.0"\n');
+    writeFile(root, "lime-rs/Cargo.toml", '[package]\nname = "lime"\nversion = "1.47.0"\n');
     writeFile(
       root,
-      "src-tauri/tauri.conf.json",
-      JSON.stringify(
-        {
-          productName: "Lime",
-          identifier: "com.limecloud.lime",
-          app: { windows: [{ title: "Lime" }] },
-          bundle: {
-            fileAssociations: [
-              {
-                description: "Lime Skill Package",
-                name: "Lime Skill Package",
-              },
-            ],
-          },
-        },
-        null,
-        2,
-      ),
+      "electron-builder.yml",
+      [
+        "appId: com.limecloud.lime",
+        "productName: Lime",
+        "artifactName: ${productName}_${version}_${arch}.${ext}",
+      ].join("\n"),
     );
     writeFile(
       root,
-      "src-tauri/tauri.conf.headless.json",
-      JSON.stringify({ productName: "Lime" }, null, 2),
-    );
-    writeFile(
-      root,
-      "src-tauri/capabilities/agent-app-shell.json",
+      "lime-rs/capabilities/agent-app-shell.json",
       JSON.stringify({ identifier: "agent-app-shell" }, null, 2),
     );
     writeFile(
@@ -333,8 +302,8 @@ describe("i18n app metadata workflow report", () => {
               priority: "required-before-multilingual-release",
             },
             {
-              path: "src-tauri/tauri.conf.json",
-              field: "bundle.fileAssociations[1].description",
+              path: "electron-builder.yml",
+              field: "protocols[1].schemes",
               localization: "translatable",
               priority: "required-before-multilingual-release",
             },
@@ -351,27 +320,23 @@ describe("i18n app metadata workflow report", () => {
     expect(report.summary.hasAppMetadataLocaleBuildManifest).toBe(false);
     expect(report.summary.appMetadataLocaleBuildManifestReady).toBe(false);
     expect(report.summary.metadataMissingScopedFieldCount).toBe(1);
-    expect(report.summary.metadataUnscopedFieldCount).toBe(6);
+    expect(report.summary.metadataUnscopedFieldCount).toBe(3);
     expect(report.metadataFieldCoverage.missingScopedFields).toEqual([
-      "src-tauri/tauri.conf.json#bundle.fileAssociations[1].description",
+      "electron-builder.yml#protocols[1].schemes",
     ]);
     expect(report.metadataFieldCoverage.unscopedMetadataFields).toEqual([
-      "src-tauri/tauri.conf.headless.json#productName",
-      "src-tauri/tauri.conf.json#app.windows[0].title",
-      "src-tauri/tauri.conf.json#bundle.fileAssociations[0].description",
-      "src-tauri/tauri.conf.json#bundle.fileAssociations[0].name",
-      "src-tauri/tauri.conf.json#identifier",
-      "src-tauri/tauri.conf.json#productName",
+      "electron-builder.yml#appId",
+      "electron-builder.yml#artifactName",
+      "electron-builder.yml#productName",
     ]);
   });
 
   it("应支持 CLI 写出 JSON", () => {
     const root = createTempDir();
     writeFile(root, "package.json", JSON.stringify({ name: "lime", version: "1.47.0" }, null, 2));
-    writeFile(root, "src-tauri/Cargo.toml", '[package]\nname = "lime"\nversion = "1.47.0"\n');
-    writeFile(root, "src-tauri/tauri.conf.json", JSON.stringify({ productName: "Lime" }, null, 2));
-    writeFile(root, "src-tauri/tauri.conf.headless.json", JSON.stringify({ productName: "Lime" }, null, 2));
-    writeFile(root, "src-tauri/capabilities/agent-app-shell.json", JSON.stringify({ identifier: "agent-app-shell" }, null, 2));
+    writeFile(root, "lime-rs/Cargo.toml", '[package]\nname = "lime"\nversion = "1.47.0"\n');
+    writeFile(root, "electron-builder.yml", "productName: Lime\n");
+    writeFile(root, "lime-rs/capabilities/agent-app-shell.json", JSON.stringify({ identifier: "agent-app-shell" }, null, 2));
 
     const outFile = path.join(root, "report.json");
     const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);

@@ -1,6 +1,6 @@
 /**
  * @file API Key Provider API 模块
- * @description 封装 API Key Provider 相关的 Tauri 命令调用
+ * @description 封装 API Key Provider 相关的 Desktop Host / App Server 命令调用
  * @module lib/api/apiKeyProvider
  *
  * **Feature: provider-ui-refactor**

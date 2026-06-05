@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useDeepLink } from "./useDeepLink";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import { safeInvoke, safeListen } from "@/lib/dev-bridge";
-import { getCurrent } from "@tauri-apps/plugin-deep-link";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import { getCurrent } from "@/lib/desktop-host/plugin-deep-link";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import {
   completeOemCloudDesktopOAuthLogin,
   parseOemCloudDesktopOAuthCallbackUrl,
@@ -35,12 +35,12 @@ vi.mock("@/lib/dev-bridge", () => ({
   safeListen: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/plugin-deep-link", () => ({
+vi.mock("@/lib/desktop-host/plugin-deep-link", () => ({
   getCurrent: vi.fn(),
 }));
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriInvokeCapability: vi.fn(() => true),
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostInvokeCapability: vi.fn(() => true),
 }));
 
 vi.mock("./useConnectCallback", () => ({
@@ -111,7 +111,7 @@ describe("useDeepLink", () => {
         IS_REACT_ACT_ENVIRONMENT?: boolean;
       }
     ).IS_REACT_ACT_ENVIRONMENT = true;
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(true);
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(true);
     vi.mocked(safeListen).mockResolvedValue(vi.fn());
     vi.mocked(safeInvoke).mockResolvedValue({});
     vi.mocked(getCurrent).mockResolvedValue([]);
@@ -140,7 +140,7 @@ describe("useDeepLink", () => {
   });
 
   it("浏览器开发模式下不应注册 deep-link 事件桥", async () => {
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(false);
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(false);
 
     await renderHook();
 

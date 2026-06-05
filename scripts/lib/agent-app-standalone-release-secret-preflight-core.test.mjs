@@ -25,14 +25,16 @@ describe("agent-app standalone release secret preflight", () => {
       missingSecrets: expect.arrayContaining([
         expect.objectContaining({ key: "APPLE_CERTIFICATE" }),
         expect.objectContaining({ key: "APPLE_INSTALLER_SIGNING_IDENTITY" }),
-        expect.objectContaining({ key: "TAURI_SIGNING_PRIVATE_KEY" }),
+        expect.objectContaining({
+          key: "LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY",
+        }),
         expect.objectContaining({ key: "LIME_AGENT_APP_RELEASE_UPLOAD_TOKEN" }),
       ]),
     });
     expect(JSON.stringify(result)).not.toContain("secret-value");
   });
 
-  it("接受现有 release workflow 的 TAURI_SIGNING_PRIVATE_KEY_RAW alias", () => {
+  it("接受 Electron updater signing secret", () => {
     const result = buildStandaloneReleaseSecretPreflight({
       channel: "beta",
       env: {
@@ -43,8 +45,8 @@ describe("agent-app standalone release secret preflight", () => {
         APPLE_SIGNING_IDENTITY:
           "Developer ID Application: Lime Cloud (TEAMID1234)",
         APPLE_TEAM_ID: "TEAMID1234",
-        TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "secret-value",
-        TAURI_SIGNING_PRIVATE_KEY_RAW: "secret-value",
+        LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY_PASSWORD: "secret-value",
+        LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY_RAW: "secret-value",
       },
       packageFormat: "dmg",
       platform: "macos",
@@ -56,8 +58,8 @@ describe("agent-app standalone release secret preflight", () => {
       missingSecrets: [],
       presentSecretKeys: expect.arrayContaining([
         expect.objectContaining({
-          key: "TAURI_SIGNING_PRIVATE_KEY_RAW",
-          canonicalKey: "TAURI_SIGNING_PRIVATE_KEY",
+          key: "LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY_RAW",
+          canonicalKey: "LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY",
         }),
       ]),
     });
@@ -68,8 +70,8 @@ describe("agent-app standalone release secret preflight", () => {
     const result = buildStandaloneReleaseSecretPreflight({
       channel: "dev",
       env: {
-        TAURI_SIGNING_PRIVATE_KEY: "secret-value",
-        TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "secret-value",
+        LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY: "secret-value",
+        LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY_PASSWORD: "secret-value",
       },
       platform: "windows",
     });
@@ -137,8 +139,8 @@ describe("agent-app standalone release secret preflight", () => {
             "Developer ID Application: Lime Cloud (TEAMID1234)",
           APPLE_TEAM_ID: "TEAMID1234",
           PATH: process.env.PATH,
-          TAURI_SIGNING_PRIVATE_KEY: "secret-value",
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "secret-value",
+          LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY: "secret-value",
+          LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY_PASSWORD: "secret-value",
         },
       },
     );

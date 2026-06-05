@@ -5,8 +5,8 @@
  */
 
 import { safeListen } from "@/lib/dev-bridge";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
+import type { UnlistenFn } from "@/lib/desktop-host/event";
 
 /** 配置变更来源 */
 export type ConfigChangeSource =
@@ -95,12 +95,12 @@ export type ConfigChangeEvent =
 /** 事件回调类型 */
 type ConfigEventCallback = (event: ConfigChangeEvent) => void;
 
-/** Tauri 事件名称 */
+/** Desktop Host 事件名称 */
 const CONFIG_CHANGED_EVENT = "config-changed";
 
 export interface ConfigEventManagerDependencies {
   safeListen?: typeof safeListen;
-  hasTauriInvokeCapability?: typeof hasTauriInvokeCapability;
+  hasDesktopHostInvokeCapability?: typeof hasDesktopHostInvokeCapability;
 }
 
 /**
@@ -118,12 +118,12 @@ export class ConfigEventManager {
   private lastEvent: ConfigChangeEvent | null = null;
   private error: string | null = null;
   private readonly safeListen: typeof safeListen;
-  private readonly hasTauriInvokeCapability: typeof hasTauriInvokeCapability;
+  private readonly hasDesktopHostInvokeCapability: typeof hasDesktopHostInvokeCapability;
 
   constructor(dependencies: ConfigEventManagerDependencies = {}) {
     this.safeListen = dependencies.safeListen ?? safeListen;
-    this.hasTauriInvokeCapability =
-      dependencies.hasTauriInvokeCapability ?? hasTauriInvokeCapability;
+    this.hasDesktopHostInvokeCapability =
+      dependencies.hasDesktopHostInvokeCapability ?? hasDesktopHostInvokeCapability;
   }
 
   static getInstance(): ConfigEventManager {
@@ -143,7 +143,7 @@ export class ConfigEventManager {
 
     // 浏览器开发模式下优先让出 DevBridge 事件连接给聊天主链，
     // 配置热更新监听不再默认占用一个长期 SSE 连接。
-    if (!this.hasTauriInvokeCapability()) {
+    if (!this.hasDesktopHostInvokeCapability()) {
       this.error = null;
       return;
     }
@@ -153,7 +153,7 @@ export class ConfigEventManager {
     const generation = ++this.subscriptionGeneration;
 
     try {
-      // 监听 Tauri 配置变更事件
+      // 监听 Desktop Host 配置变更事件
       const unlisten = await this.safeListen<ConfigChangeEvent>(
         CONFIG_CHANGED_EVENT,
         (event) => {
@@ -163,7 +163,7 @@ export class ConfigEventManager {
 
       if (
         generation !== this.subscriptionGeneration ||
-        !this.hasTauriInvokeCapability()
+        !this.hasDesktopHostInvokeCapability()
       ) {
         unlisten();
         if (generation === this.subscriptionGeneration) {

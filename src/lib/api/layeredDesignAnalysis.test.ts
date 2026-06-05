@@ -14,7 +14,7 @@ describe("layeredDesignAnalysis API", () => {
     vi.clearAllMocks();
   });
 
-  it("应通过 current Tauri 命令代理图层设计 OCR", async () => {
+  it("应通过 current Desktop Host 命令代理图层设计 OCR", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       supported: true,
       engine: "mock-native-ocr",
@@ -57,14 +57,14 @@ describe("layeredDesignAnalysis API", () => {
     });
   });
 
-  it("应通过 current Tauri 命令代理扁平图 structured analyzer", async () => {
+  it("应通过 current Desktop Host 命令代理扁平图 structured analyzer", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       supported: true,
       engine: "native_heuristic_analyzer",
       result: {
         analyzer: {
           kind: "local_heuristic",
-          label: "Tauri native heuristic analyzer",
+          label: "Desktop Host native heuristic analyzer",
         },
         generatedAt: "2026-05-07T00:00:00.000Z",
         candidates: [],
@@ -90,7 +90,7 @@ describe("layeredDesignAnalysis API", () => {
         engine: "native_heuristic_analyzer",
         result: expect.objectContaining({
           analyzer: expect.objectContaining({
-            label: "Tauri native heuristic analyzer",
+            label: "Desktop Host native heuristic analyzer",
           }),
         }),
       }),

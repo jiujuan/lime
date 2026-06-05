@@ -84,6 +84,35 @@ function buildReleasePlan() {
 }
 
 describe("Agent App standalone release pipeline", () => {
+  it("build evidence blocker 使用 production artifact build 口径", () => {
+    const releasePlan = buildReleasePlan();
+
+    const missingBuildEvidence = buildStandaloneReleasePipelinePlan({
+      releasePlan,
+    });
+    const incompleteBuildEvidence = buildStandaloneReleasePipelinePlan({
+      releasePlan,
+      buildEvidence: {
+        status: "blocked",
+        artifactRefs: [],
+      },
+    });
+
+    const missingMessage = missingBuildEvidence.blockers.find(
+      (item) => item.code === "BUILD_EVIDENCE_MISSING",
+    )?.message;
+    const incompleteMessage = incompleteBuildEvidence.blockers.find(
+      (item) => item.code === "BUILD_NOT_COMPLETED",
+    )?.message;
+
+    expect(missingMessage).toBe(
+      "Standalone release requires production artifact build evidence before signing or publishing.",
+    );
+    expect(incompleteMessage).toBe(
+      "Standalone release requires a completed production artifact build before signing or publishing.",
+    );
+  });
+
   it("缺少 build artifact refs 时必须阻断发布", () => {
     const releasePlan = buildReleasePlan();
 

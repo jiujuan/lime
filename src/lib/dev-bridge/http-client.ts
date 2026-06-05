@@ -1,14 +1,18 @@
 /**
  * 开发桥接 HTTP 客户端
  *
- * 在开发模式下，当 Tauri IPC 不可用时（浏览器环境），
- * 通过 HTTP 与运行中的 Tauri 后端通信。
+ * 在开发模式下，当 Desktop Host IPC 不可用时，
+ * 通过 HTTP 与运行中的 DevBridge 通信。
  */
 
 import {
-  hasTauriInvokeCapability,
-  hasTauriRuntimeMarkers,
-} from "@/lib/tauri-runtime";
+  hasDesktopHostInvokeCapability,
+  hasDesktopHostRuntimeMarkers,
+} from "@/lib/desktop-runtime";
+import {
+  getElectronHostBridge,
+  isElectronDevBridgeFallbackAvailable,
+} from "@/lib/electron-host";
 import { shouldDisallowMockFallbackInBrowser } from "./mockPriorityCommands";
 
 const BRIDGE_URL = "http://127.0.0.1:3030/invoke";
@@ -381,7 +385,7 @@ export function normalizeDevBridgeError(cmd: string, error: unknown): Error {
 
   if (isBridgeConnectionError(message)) {
     return new Error(
-      `[DevBridge] 浏览器模式无法连接后端桥接，命令 "${cmd}" 执行失败。请先启动 Tauri 开发后端（例如 npm run tauri:dev 或 npm run tauri:dev:headless），并确认 http://127.0.0.1:3030 可访问。原始错误: ${message}`,
+      `[DevBridge] 浏览器模式无法连接后端桥接，命令 "${cmd}" 执行失败。请先启动 Electron 开发入口（npm run dev），并确认桌面宿主桥接可用。原始错误: ${message}`,
     );
   }
 
@@ -393,18 +397,21 @@ export function normalizeDevBridgeError(cmd: string, error: unknown): Error {
 /**
  * 检查开发桥接是否可用
  *
- * @returns true 如果在 dev 模式且 Tauri 不可用
+ * @returns true 如果在 dev 模式且 Desktop Host IPC 不可用
  */
 export function isDevBridgeAvailable(): boolean {
   if (isTestEnvironment()) {
     return false;
   }
+  if (getElectronHostBridge()) {
+    return isElectronDevBridgeFallbackAvailable();
+  }
 
-  // 检查是否在浏览器环境（非 Tauri webview）
+  // 检查是否在浏览器环境（非 Desktop Host webview）
   const isBrowser =
     typeof window !== "undefined" &&
-    !hasTauriRuntimeMarkers() &&
-    !hasTauriInvokeCapability() &&
+    !hasDesktopHostRuntimeMarkers() &&
+    !hasDesktopHostInvokeCapability() &&
     // 进一步检查是否在开发模式
     (import.meta.env.DEV ||
       location.hostname === "localhost" ||
@@ -708,7 +715,7 @@ export async function listenViaHttpEvent<T = unknown>(
 }
 
 /**
- * 通过 HTTP 桥接调用 Tauri 命令
+ * 通过 HTTP 桥接调用 Desktop Host 命令
  *
  * @param cmd - 命令名称
  * @param args - 命令参数
@@ -812,19 +819,20 @@ export function __resetDevBridgeHttpStateForTests(): void {
 export interface BridgeStatus {
   available: boolean;
   connected: boolean;
-  mode: "tauri" | "http" | "mock";
+  mode: "desktop-host" | "http" | "mock";
 }
 
 /**
  * 获取当前桥接状态
  */
 export function getBridgeStatus(): BridgeStatus {
-  const hasTauri = hasTauriInvokeCapability() || hasTauriRuntimeMarkers();
+  const hasDesktopHost =
+    hasDesktopHostInvokeCapability() || hasDesktopHostRuntimeMarkers();
   const devAvailable = isDevBridgeAvailable();
 
   return {
-    available: hasTauri || devAvailable,
-    connected: hasTauri, // Tauri 总是连接的，HTTP 需要运行时检查
-    mode: hasTauri ? "tauri" : devAvailable ? "http" : "mock",
+    available: hasDesktopHost || devAvailable,
+    connected: hasDesktopHost,
+    mode: hasDesktopHost ? "desktop-host" : devAvailable ? "http" : "mock",
   };
 }

@@ -69,14 +69,14 @@ interface CliOptions {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const REPO_ROOT = path.resolve(__dirname, "..");
-const DEFAULT_SOURCE_DIRS = ["src", "src-tauri"];
+const DEFAULT_SOURCE_DIRS = ["src", "lime-rs"];
 const SOURCE_EXTENSIONS = new Set([".rs", ".ts", ".tsx", ".js", ".jsx"]);
 const SKIP_SEGMENTS = [
   "/node_modules/",
   "/src/i18n/resources/",
   "/src/i18n/legacy-patch/",
-  "/src-tauri/target/",
-  "/src-tauri/crates/aster-rust/",
+  "/lime-rs/target/",
+  "/lime-rs/crates/aster-rust/",
   "/target/",
 ];
 

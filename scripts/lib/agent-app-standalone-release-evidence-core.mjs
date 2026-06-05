@@ -225,7 +225,7 @@ export function checkStandaloneReleaseEvidence(input = {}, options = {}) {
     blockers.push(
       blocker(
         "BUILD_EVIDENCE_MISSING",
-        "Final release requires completed Tauri build evidence.",
+        "Final release requires completed standalone build evidence.",
         "build",
       ),
     );

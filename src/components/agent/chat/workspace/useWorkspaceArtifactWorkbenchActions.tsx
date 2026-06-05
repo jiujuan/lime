@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { save as saveDialog } from "@/lib/desktop-host/plugin-dialog";
 import { toast } from "sonner";
 import { saveExportedDocument } from "@/lib/api/document-export";
 import type { ArtifactDocumentV1 } from "@/lib/artifact-document";

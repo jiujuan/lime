@@ -8,7 +8,7 @@ const mockIsDevBridgeAvailable = vi.hoisted(() => vi.fn(() => false));
 const mockHasDevBridgeEventListenerCapability = vi.hoisted(() =>
   vi.fn(() => false),
 );
-const mockHasTauriEventListenerCapability = vi.hoisted(() => vi.fn(() => true));
+const mockHasDesktopHostEventListenerCapability = vi.hoisted(() => vi.fn(() => true));
 const mockSafeListen = vi.hoisted(() => vi.fn(async () => () => {}));
 
 vi.mock("@/lib/dev-bridge", () => ({
@@ -17,8 +17,8 @@ vi.mock("@/lib/dev-bridge", () => ({
   safeListen: mockSafeListen,
 }));
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriEventListenerCapability: mockHasTauriEventListenerCapability,
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostEventListenerCapability: mockHasDesktopHostEventListenerCapability,
 }));
 
 type HookProps = Parameters<typeof useAgentRuntimeSyncEffects>[0];
@@ -114,7 +114,7 @@ describe("useAgentRuntimeSyncEffects", () => {
     vi.setSystemTime(new Date("2026-03-29T00:05:00.000Z"));
     mockIsDevBridgeAvailable.mockReturnValue(false);
     mockHasDevBridgeEventListenerCapability.mockReturnValue(false);
-    mockHasTauriEventListenerCapability.mockReturnValue(true);
+    mockHasDesktopHostEventListenerCapability.mockReturnValue(true);
     mockSafeListen.mockResolvedValue(() => {});
   });
 
@@ -280,7 +280,7 @@ describe("useAgentRuntimeSyncEffects", () => {
 
   it("浏览器 DevBridge 发送中但无原生事件能力时，应轮询刷新当前会话详情", async () => {
     mockIsDevBridgeAvailable.mockReturnValue(true);
-    mockHasTauriEventListenerCapability.mockReturnValue(false);
+    mockHasDesktopHostEventListenerCapability.mockReturnValue(false);
     mockHasDevBridgeEventListenerCapability.mockReturnValue(false);
 
     const refreshSessionDetail = vi.fn(async () => true);
@@ -314,7 +314,7 @@ describe("useAgentRuntimeSyncEffects", () => {
 
   it("浏览器 DevBridge 已接通事件桥时，不应再轮询刷新当前会话详情", async () => {
     mockIsDevBridgeAvailable.mockReturnValue(true);
-    mockHasTauriEventListenerCapability.mockReturnValue(false);
+    mockHasDesktopHostEventListenerCapability.mockReturnValue(false);
     mockHasDevBridgeEventListenerCapability.mockReturnValue(true);
 
     const refreshSessionDetail = vi.fn(async () => true);
@@ -343,7 +343,7 @@ describe("useAgentRuntimeSyncEffects", () => {
   });
 
   it("浏览器桥接下无活跃工作时不应订阅 team 事件，避免旧会话占满 SSE 连接", async () => {
-    mockHasTauriEventListenerCapability.mockReturnValue(false);
+    mockHasDesktopHostEventListenerCapability.mockReturnValue(false);
     mockHasDevBridgeEventListenerCapability.mockReturnValue(true);
     const runtime = {
       listenToTeamEvents: vi.fn(async () => () => {}),
@@ -364,7 +364,7 @@ describe("useAgentRuntimeSyncEffects", () => {
   });
 
   it("浏览器桥接下存在活跃工作时仍应订阅 team 事件", async () => {
-    mockHasTauriEventListenerCapability.mockReturnValue(false);
+    mockHasDesktopHostEventListenerCapability.mockReturnValue(false);
     mockHasDevBridgeEventListenerCapability.mockReturnValue(true);
     const runtime = {
       listenToTeamEvents: vi.fn(async () => () => {}),

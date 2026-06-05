@@ -6,13 +6,13 @@
  * - 工具列表和调用
  * - 提示词列表和获取
  * - 资源列表和读取
- * - Tauri 事件监听
+ * - Desktop Host 事件监听
  *
  * @module hooks/useMcp
  */
 
 import { useState, useEffect, useCallback } from "react";
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@/lib/desktop-host/event";
 import {
   mcpApi,
   McpServerInfo,

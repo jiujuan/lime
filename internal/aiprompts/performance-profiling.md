@@ -6,16 +6,16 @@ Lime 的卡顿来源通常不是单点：
 
 - Rust 后端 CPU 热点
 - Tokio 异步任务等待、锁竞争或阻塞
-- Tauri 命令边界过慢
+- Electron IPC / App Server / legacy adapter 边界过慢
 - React / WebView 主线程重渲染或长任务
 
 因此仓库内采用分层诊断，而不是只依赖单一火焰图工具。
 
 ## 当前内置能力
 
-所有内置 profiling 能力都只面向开发环境：
+所有内置 profiling 能力都只面向开发环境。当前文档中的 Tauri profiling 命令属于 legacy profiling 口径；Electron profiling 入口补齐前，不得把旧脚本当成 current Electron 证据。
 
-- 只建议通过 `npm run tauri:dev:profile:*` 这组命令启用
+- legacy Tauri profiling 只建议通过 `npm run tauri:dev:profile:*` 这组命令启用
 - release / 生产构建默认不启用这些 feature
 - 即使手动设置 `LIME_PROFILE=*`，release / 生产构建也会忽略这些开发诊断开关
 
@@ -37,7 +37,7 @@ Lime 的卡顿来源通常不是单点：
 
 ### 3. 前端 Invoke User Timing
 
-`safeInvoke` 会在浏览器 Performance 面板中写入 `lime:safeInvoke:*` 的 User Timing 条目，便于把前端交互和 Tauri 命令耗时对齐。
+`safeInvoke` 会在浏览器 Performance 面板中写入 `lime:safeInvoke:*` 的 User Timing 条目，便于把前端交互和 Electron IPC / App Server / legacy adapter 耗时对齐。
 
 ### 4. 关键慢链路 Span
 

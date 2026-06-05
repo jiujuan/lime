@@ -47,10 +47,10 @@
 ### 1. 来源链与自动记忆 control plane
 
 - `src/lib/api/memoryRuntime.ts`
-- `src-tauri/src/commands/memory_management_cmd.rs`
-- `src-tauri/src/services/memory_source_resolver_service.rs`
-- `src-tauri/src/services/auto_memory_service.rs`
-- `src-tauri/src/services/runtime_agents_template_service.rs`
+- `lime-rs/src/commands/memory_management_cmd.rs`
+- `lime-rs/src/services/memory_source_resolver_service.rs`
+- `lime-rs/src/services/auto_memory_service.rs`
+- `lime-rs/src/services/runtime_agents_template_service.rs`
 
 当前这里负责：
 
@@ -98,9 +98,9 @@
 
 ### 3. Query Loop 集成与压缩执行
 
-- `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs`
-- `src-tauri/src/commands/aster_agent_cmd/command_api/runtime_api.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/agents/agent.rs`
+- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
+- `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/agents/agent.rs`
 
 当前这里负责：
 
@@ -121,8 +121,8 @@
 ### 4. 持久记忆 current surface
 
 - `src/lib/api/unifiedMemory.ts`
-- `src-tauri/src/commands/unified_memory_cmd.rs`
-- `src-tauri/src/commands/memory_search_cmd.rs`
+- `lime-rs/src/commands/unified_memory_cmd.rs`
+- `lime-rs/src/commands/memory_search_cmd.rs`
 
 当前这里负责：
 
@@ -142,10 +142,10 @@
 - `src/components/settings-v2/general/memory/index.tsx`
 - `src/components/agent/chat/components/AgentThreadMemoryPrefetchPreview.tsx`
 - `src/components/agent/chat/components/AgentThreadReliabilityPanel.tsx`
-- `src-tauri/src/dev_bridge/dispatcher/memory_runtime.rs`
-- `src-tauri/src/dev_bridge/dispatcher/memory.rs`
+- `lime-rs/src/dev_bridge/dispatcher/memory_runtime.rs`
+- `lime-rs/src/dev_bridge/dispatcher/memory.rs`
 - `src/lib/dev-bridge/mockPriorityCommands.ts`
-- `src/lib/tauri-mock/core.ts`
+- `src/lib/desktop-host/core.ts`
 
 当前这里负责：
 
@@ -167,24 +167,24 @@
 
 - `internal/aiprompts/memory-compaction.md`
 - `src/lib/api/memoryRuntime.ts`
-- `src-tauri/src/commands/memory_management_cmd.rs`
-- `src-tauri/src/services/memory_source_resolver_service.rs`
-- `src-tauri/src/services/auto_memory_service.rs`
-- `src-tauri/src/services/runtime_agents_template_service.rs`
-- `src-tauri/src/commands/aster_agent_cmd/command_api/runtime_api.rs` 的 `agent_runtime_compact_session`
-- `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/agents/agent.rs` 的 `compact_session`
+- `lime-rs/src/commands/memory_management_cmd.rs`
+- `lime-rs/src/services/memory_source_resolver_service.rs`
+- `lime-rs/src/services/auto_memory_service.rs`
+- `lime-rs/src/services/runtime_agents_template_service.rs`
+- `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs` 的 `agent_runtime_compact_session`
+- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/agents/agent.rs` 的 `compact_session`
 - `src/lib/api/unifiedMemory.ts`
-- `src-tauri/src/commands/unified_memory_cmd.rs`
-- `src-tauri/src/commands/memory_search_cmd.rs`
+- `lime-rs/src/commands/unified_memory_cmd.rs`
+- `lime-rs/src/commands/memory_search_cmd.rs`
 - `src/components/memory/MemoryPage.tsx`
 - `src/components/settings-v2/general/memory/index.tsx`
 - `src/components/agent/chat/components/AgentThreadMemoryPrefetchPreview.tsx`
 - `src/components/agent/chat/components/AgentThreadReliabilityPanel.tsx`
-- `src-tauri/src/dev_bridge/dispatcher/memory_runtime.rs`
-- `src-tauri/src/dev_bridge/dispatcher/memory.rs`
+- `lime-rs/src/dev_bridge/dispatcher/memory_runtime.rs`
+- `lime-rs/src/dev_bridge/dispatcher/memory.rs`
 - `src/lib/dev-bridge/mockPriorityCommands.ts`
-- `src/lib/tauri-mock/core.ts`
+- `src/lib/desktop-host/core.ts`
 
 这些路径共同构成当前记忆 / 压缩主链：
 
@@ -197,7 +197,7 @@
 ### `compat`
 
 - `src/lib/api/memory.ts`
-- `src-tauri/src/commands/memory_cmd.rs`
+- `lime-rs/src/commands/memory_cmd.rs`
 - `src/lib/workspace/projectPrompt.ts`
 - `src/components/agent/chat/AgentChatWorkspace.tsx`
 
@@ -213,7 +213,7 @@
 
 ### `deprecated`
 
-- `src-tauri/src/commands/memory_feedback_cmd.rs`
+- `lime-rs/src/commands/memory_feedback_cmd.rs`
 - `unified_memory_feedback`
 - `get_memory_feedback_stats`
 - 任何重新恢复独立 `memory feedback` 前端页或 API 网关的新实现
@@ -230,7 +230,7 @@
 
 ### `dead`
 
-- `src-tauri/src/commands/memory_search_cmd.rs.bak`
+- `lime-rs/src/commands/memory_search_cmd.rs.bak`
 
 它只是本地备份残留，不属于任何 current / compat / deprecated 运行面，也不能再被当成实现事实源。
 

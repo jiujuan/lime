@@ -92,7 +92,7 @@ describe("EntryRuntimeGuard P14", () => {
         rawWorkerAllowed: false,
         networkAllowed: false,
         fileSystemAllowed: false,
-        rawTauriAllowed: false,
+        rawHostApiAllowed: false,
         nodeApiAllowed: false,
       },
       runtimeProfile: {

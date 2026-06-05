@@ -54,12 +54,12 @@
 
 建议产物：
 
-1. `src-tauri/crates/app-server-protocol`
-2. `src-tauri/crates/app-server-transport`
-3. `src-tauri/crates/app-server`
-4. `src-tauri/crates/app-server-client`
-5. `src-tauri/crates/app-server-daemon`
-6. `src-tauri/crates/app-server-test-client`
+1. `lime-rs/crates/app-server-protocol`
+2. `lime-rs/crates/app-server-transport`
+3. `lime-rs/crates/app-server`
+4. `lime-rs/crates/app-server-client`
+5. `lime-rs/crates/app-server-daemon`
+6. `lime-rs/crates/app-server-test-client`
 
 退出条件：
 
@@ -231,9 +231,9 @@
 建议优先：
 
 ```bash
-cargo test --manifest-path "src-tauri/Cargo.toml" -p app-server-protocol
-cargo test --manifest-path "src-tauri/Cargo.toml" -p app-server
-cargo test --manifest-path "src-tauri/Cargo.toml" -p lime-agent
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server-protocol
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server
+cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent
 ```
 
 实际 crate 名称以后续实现为准。

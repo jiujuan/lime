@@ -4,8 +4,8 @@ import {
   revealStartupWindowWhenReady,
 } from "./startupWindowReveal";
 
-const tauriRuntimeMock = vi.hoisted(() => ({
-  hasTauriInvokeCapability: vi.fn(() => true),
+const desktopRuntimeMock = vi.hoisted(() => ({
+  hasDesktopHostInvokeCapability: vi.fn(() => true),
 }));
 
 const currentWindowMock = vi.hoisted(() => ({
@@ -15,9 +15,9 @@ const currentWindowMock = vi.hoisted(() => ({
   setFocus: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("@/lib/tauri-runtime", () => tauriRuntimeMock);
+vi.mock("@/lib/desktop-runtime", () => desktopRuntimeMock);
 
-vi.mock("@tauri-apps/api/window", () => ({
+vi.mock("@/lib/desktop-host/window", () => ({
   getCurrentWindow: () => currentWindowMock,
 }));
 
@@ -45,7 +45,7 @@ describe("revealStartupWindowWhenReady", () => {
         return window.setTimeout(() => callback(performance.now()), 0);
       },
     );
-    tauriRuntimeMock.hasTauriInvokeCapability.mockReturnValue(true);
+    desktopRuntimeMock.hasDesktopHostInvokeCapability.mockReturnValue(true);
   });
 
   afterEach(() => {

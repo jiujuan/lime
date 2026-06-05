@@ -26,8 +26,8 @@
 
 处理结果：
 
-- `src-tauri/crates/aster-rust/crates/aster/src/providers/formats/openai.rs`：生产路径不再直接 `choices[0]`；空 `choices` 只保留 usage 并继续等待 tool chunk；空 `data:` heartbeat 跳过；空 content 的结束包带 usage 时继续向上产出 usage。
-- `src-tauri/src/commands/aster_agent_cmd/request_model_resolution/tests.rs`：OpenAI-compatible provider fixture 改为中性 provider/model/host，移除真实外部 URL 与固定第三方 provider 名。
+- `lime-rs/crates/aster-rust/crates/aster/src/providers/formats/openai.rs`：生产路径不再直接 `choices[0]`；空 `choices` 只保留 usage 并继续等待 tool chunk；空 `data:` heartbeat 跳过；空 content 的结束包带 usage 时继续向上产出 usage。
+- `lime-rs/src/commands/aster_agent_cmd/request_model_resolution/tests.rs`：OpenAI-compatible provider fixture 改为中性 provider/model/host，移除真实外部 URL 与固定第三方 provider 名。
 - `agentui-stream-latency-map-20260509.svg`：更新到 v7，图上同时标注工具流 panic 修复、TTFT 矩阵、contracts、GUI / Playwright MCP 复测和剩余全量 GUI smoke 阻塞。
 
 追加验证：
@@ -50,7 +50,7 @@
 剩余缺口：
 
 - `npm run verify:gui-smoke -- --reuse-running --timeout-ms 300000 --interval-ms 1000` 未全绿：前置 workspace / browser runtime / site adapters / Skill Forge 前端与多段 Rust 定向通过，但聚合流程在 `smoke:agent-service-skill-entry` 的 `tools::skill_tool_gate::tests::` 段超过 330s 后被脚本清理。
-- 本机磁盘剩余约 2.9GiB，`/tmp/lime-aster-target` 约 11GiB，`src-tauri/target` 约 121GiB，且当时存在其它 Cargo / Clippy 构建进程。全量 GUI smoke 需要释放 target/磁盘或等待构建结束后复跑。
+- 本机磁盘剩余约 2.9GiB，`/tmp/lime-aster-target` 约 11GiB，`lime-rs/target` 约 121GiB，且当时存在其它 Cargo / Clippy 构建进程。全量 GUI smoke 需要释放 target/磁盘或等待构建结束后复跑。
 
 ## 可复跑导出工具
 

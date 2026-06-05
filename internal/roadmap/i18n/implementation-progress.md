@@ -35,7 +35,7 @@
 本轮完成：
 
 - 新增 `scripts/i18n-app-metadata-locale-build-manifest.ts` 与测试 `scripts/i18n-app-metadata-locale-build-manifest.test.ts`，把 `app-metadata-translation-scope.json` 转成 build-time locale manifest；它只读提取 app / installer metadata 字段，检查 required localized value，不写回 `package.json`、`tauri.conf*.json` 或平台安装器配置。
-- `internal/roadmap/i18n/app-metadata-translation-scope.json` 已把 `workflowStatus` 更新为 `ready`，新增 `manifestGenerationAllowed=true`，并为两个 `translatable` 字段补齐 `en-US` localized value：`package.json#description` 与 `src-tauri/tauri.conf.json#bundle.fileAssociations[0].description`。
+- `internal/roadmap/i18n/app-metadata-translation-scope.json` 已把 `workflowStatus` 更新为 `ready`，新增 `manifestGenerationAllowed=true`，并为两个 `translatable` 字段补齐 `en-US` localized value：`package.json#description` 与 `lime-rs/tauri.conf.json#bundle.fileAssociations[0].description`。
 - `package.json` 新增 `i18n:app-metadata-locale-manifest` / `i18n:app-metadata-locale-manifest:json` / `i18n:app-metadata-locale-manifest:check`，用于发布前生成和检查 metadata locale manifest。
 - `scripts/i18n-app-metadata-workflow-report.ts` 已消费 `app-metadata-locale-build-manifest.json`，当前 `appMetadataLocaleBuildManifestReady=true`、`hasInstallerLocalizationWorkflow=true`；`generatedConfigEmissionAllowed=false` 保持不变，避免把 manifest 误报成真实平台安装包配置生成。
 - `scripts/quality-task-planner.mjs` / `scripts/quality-task-planner.test.ts` 已把 app metadata locale manifest 接入推荐命令；metadata scope、Tauri config、package metadata 或相关脚本变化后，会提示先刷新 `app-metadata-locale-build-manifest.json`，再刷新 inventory / P4 / roadmap readiness。
@@ -103,16 +103,16 @@
 
 本轮完成：
 
-- `src-tauri/src/services/artifact_document_validator.rs` 不再把显式 `document.language` 固定覆盖成 `zh-CN`；当模型或上游协议给出 `en-US` 等文档级语言元数据时，validator 会保留该值。
+- `lime-rs/src/services/artifact_document_validator.rs` 不再把显式 `document.language` 固定覆盖成 `zh-CN`；当模型或上游协议给出 `en-US` 等文档级语言元数据时，validator 会保留该值。
 - Artifact document 缺失或空 `language` 时仍回退 `zh-CN`，并记录修复 issue，保持历史默认行为可追踪。
-- `src-tauri/src/services/artifact_output_schema_service.rs` 新增 content target language 读取：当 request metadata 显式提供 `target_language` / `targetLanguage` / `artifact_language` / `artifactLanguage` / `content_target_language` / `contentTargetLanguage` 时，stage2 document schema 的 `language.enum` 收窄到该内容目标语言；未提供时继续默认 `zh-CN`。
+- `lime-rs/src/services/artifact_output_schema_service.rs` 新增 content target language 读取：当 request metadata 显式提供 `target_language` / `targetLanguage` / `artifact_language` / `artifactLanguage` / `content_target_language` / `contentTargetLanguage` 时，stage2 document schema 的 `language.enum` 收窄到该内容目标语言；未提供时继续默认 `zh-CN`。
 - 这条 runtime 证据把 PRD P2 验收“Artifact 目标语言不因 UI 切换而改变”推进到 Artifact document 主链：语言事实源来自文档 / turn metadata 的 content target language，而不是 UI locale。
 
 验证：
 
-- `cargo test --manifest-path "src-tauri/Cargo.toml" validate_or_fallback_should_accept_plain_document_json` 通过。
-- `cargo test --manifest-path "src-tauri/Cargo.toml" validate_or_fallback_should_default_missing_document_language` 通过。
-- `cargo test --manifest-path "src-tauri/Cargo.toml" stage2_should_narrow_document_language_to_content_target_language` 通过。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" validate_or_fallback_should_accept_plain_document_json` 通过。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" validate_or_fallback_should_default_missing_document_language` 通过。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" stage2_should_narrow_document_language_to_content_target_language` 通过。
 
 ## 2026-05-24：P2 Service Skill 导出目标语言反向回归
 
@@ -280,7 +280,7 @@
 
 本轮完成：
 
-- 新增 `scripts/i18n-app-metadata-workflow-report.ts` 与测试 `scripts/i18n-app-metadata-workflow-report.test.ts`，把 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`、`src-tauri/tauri.conf.headless.json` 与 `src-tauri/capabilities/agent-app-shell.json` 的 app / installer 元数据事实源做成可重复 inventory 报告。
+- 新增 `scripts/i18n-app-metadata-workflow-report.ts` 与测试 `scripts/i18n-app-metadata-workflow-report.test.ts`，把 `package.json`、`lime-rs/Cargo.toml`、`lime-rs/tauri.conf.json`、`lime-rs/tauri.conf.headless.json` 与 `lime-rs/capabilities/agent-app-shell.json` 的 app / installer 元数据事实源做成可重复 inventory 报告。
 - 通过 `npm run i18n:app-metadata-report -- --format json --output "internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json"` 落盘库存报告，确认当前这些元数据仍是单语事实源，没有独立 installer 翻译工作流。
 - 新增 `internal/roadmap/i18n/app-metadata-workflow-evaluation.md`，把 installer / app metadata 的边界判断、建议工作流和重新评估条件写成可引用的 roadmap 工件。
 - 报告结论保持不变：app / installer 元数据现在只有单一文本事实源，没有 `zh-CN / en-US` 之类的专门翻译链路；如果后续要做，必须先定义 source locale、metadata ownership 和发布约束，再补 workflow。
@@ -683,16 +683,16 @@ benchmark 摘要：
 本轮继续完成：
 
 - 新增 `internal/roadmap/i18n/response-language-injection-evaluation.md`，把 PRD P2 的 “AI response language 设置与 request metadata 注入” 先落成 Query Loop 边界评估，避免直接复用 UI `Config.language`。
-- 读回 `internal/aiprompts/query-loop.md`、`internal/aiprompts/commands.md`、`src/components/agent/chat/utils/harnessRequestMetadata.ts`、`src/components/agent/chat/workspace/workspaceSendHelpers.ts`、`src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/crates/agent/src/turn_input_envelope.rs`，确认正确扩展点是 `request_metadata.harness.*`、`runtime_turn.rs` prompt augmentation 与 `TurnInputEnvelope` 快照。
+- 读回 `internal/aiprompts/query-loop.md`、`internal/aiprompts/commands.md`、`src/components/agent/chat/utils/harnessRequestMetadata.ts`、`src/components/agent/chat/workspace/workspaceSendHelpers.ts`、`lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/crates/agent/src/turn_input_envelope.rs`，确认正确扩展点是 `request_metadata.harness.*`、`runtime_turn.rs` prompt augmentation 与 `TurnInputEnvelope` 快照。
 - 结论收紧为：current 写入命名应使用 `agent_response_language`，不要写泛名 `language`；`response_language` 最多作为短期兼容读取 alias；`Config.language`、Browser Environment `Accept-Language`、Artifact / media `target_language` 与 ASR `language` 均不能直接复用。
 - `src/components/agent/chat/utils/harnessRequestMetadata.ts` 已给 `BuildHarnessRequestMetadataOptions` 增加 `agentResponseLanguage?: string | null`，并在 harness metadata 中 current 写入 `agent_response_language`。
 - `buildHarnessRequestMetadata()` 会兼容读取已有 `agent_response_language` / `agentResponseLanguage` / `response_language` / `responseLanguage`，但不会写入泛名 `language`，也不会从 UI locale 自动派生。
 - `src/components/agent/chat/utils/harnessRequestMetadata.test.ts` 新增回归，锁住显式 `agentResponseLanguage` 优先级、alias 兼容和 current snake_case 写入。
 - `src/components/settings-v2/general/appearance/index.tsx` 新增“回复语言”表单块，持久化到 `workspace_preferences.agent_response_language`；`AgentChatWorkspace` / `useWorkspaceSendActions` / `workspaceSendHelpers` / `useServiceModelsConfig` 全链路消费同一偏好并写入 `request_metadata.harness.agent_response_language`。
-- `src/lib/api/appConfigTypes.ts` 与 `src-tauri/crates/core/src/config/types.rs` 已同步新增 `workspace_preferences.agent_response_language`，并将 workspace preferences schema_version 升到 3；Rust roundtrip 测试覆盖该字段。
-- `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 新增 `ResponseLanguage` prompt stage，并把 `request_metadata.harness.agent_response_language` 注入到 system prompt；`src-tauri/crates/agent/src/turn_input_envelope.rs` 同步阶段枚举。
+- `src/lib/api/appConfigTypes.ts` 与 `lime-rs/crates/core/src/config/types.rs` 已同步新增 `workspace_preferences.agent_response_language`，并将 workspace preferences schema_version 升到 3；Rust roundtrip 测试覆盖该字段。
+- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 新增 `ResponseLanguage` prompt stage，并把 `request_metadata.harness.agent_response_language` 注入到 system prompt；`lime-rs/crates/agent/src/turn_input_envelope.rs` 同步阶段枚举。
 - `runtime_turn.rs` 新增 response language helper tests，覆盖显式 locale 与 `auto` 两条路径，确认 prompt 约束不会退回到 UI locale 派生。
-- `src-tauri/crates/agent/src/session_execution_runtime.rs` 继续把 `harness.agent_response_language` 投影进 `recent_response_language`，让 evidence / replay / review 继续沿 `SessionExecutionRuntime` 这条现成 runtime 事实链观察该偏好。
+- `lime-rs/crates/agent/src/session_execution_runtime.rs` 继续把 `harness.agent_response_language` 投影进 `recent_response_language`，让 evidence / replay / review 继续沿 `SessionExecutionRuntime` 这条现成 runtime 事实链观察该偏好。
 - 下一刀实现顺序调整为：继续评估是否把 `agent_response_language` 暴露到更多设置入口，或者转去收紧其它 P2/P3 主缺口；避免继续扩散 schema。
 
 验证：
@@ -701,7 +701,7 @@ benchmark 摘要：
 - `npm test -- "src/components/agent/chat/utils/harnessRequestMetadata.test.ts"` 通过，覆盖 17 个用例。
 - `npx eslint --max-warnings 0 "src/components/agent/chat/utils/harnessRequestMetadata.ts" "src/components/agent/chat/utils/harnessRequestMetadata.test.ts"` 通过。
 - `npm run typecheck -- --pretty false` 通过。
-- `cargo test --manifest-path "src-tauri/Cargo.toml" merge_system_prompt_with_response_language -- --nocapture` 通过，覆盖 2 个新 Rust 测试。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" merge_system_prompt_with_response_language -- --nocapture` 通过，覆盖 2 个新 Rust 测试。
 - `git diff --check -- "src/components/agent/chat/utils/harnessRequestMetadata.ts" "src/components/agent/chat/utils/harnessRequestMetadata.test.ts" "internal/roadmap/i18n/response-language-injection-evaluation.md" "internal/roadmap/i18n/implementation-progress.md"` 通过。
 
 ## 2026-05-23：P2 chrome relay 语言语义收口
@@ -839,9 +839,9 @@ benchmark 摘要：
 
 验证：
 
-- `cargo test --manifest-path "src-tauri/Cargo.toml" create_audio_generation_task_artifact_inner_should_write_voice_contract_payload` 通过。
-- `cargo test --manifest-path "src-tauri/Cargo.toml" complete_audio_generation_task_artifact_inner_should_write_audio_output_result`、`execute_audio_generation_task_should_mark_provider_resolver_unavailable_without_fabricated_audio`、`execute_audio_generation_task_with_openai_compatible_provider_should_write_audio_output` 通过。
-- `cargo test --manifest-path "src-tauri/Cargo.toml" create_transcription_task_artifact_inner_should_write_audio_transcription_contract_payload`、`execute_audio_transcription_task_with_openai_compatible_provider_should_write_transcript_output` 通过。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" create_audio_generation_task_artifact_inner_should_write_voice_contract_payload` 通过。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" complete_audio_generation_task_artifact_inner_should_write_audio_output_result`、`execute_audio_generation_task_should_mark_provider_resolver_unavailable_without_fabricated_audio`、`execute_audio_generation_task_with_openai_compatible_provider_should_write_audio_output` 通过。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" create_transcription_task_artifact_inner_should_write_audio_transcription_contract_payload`、`execute_audio_transcription_task_with_openai_compatible_provider_should_write_transcript_output` 通过。
 - `npm test -- "src/lib/tauri-mock/core.test.ts" "src/lib/api/mediaTasks.test.ts"`、`npm run typecheck -- --pretty false`、`npm run i18n:check`、`npm run test:contracts` 通过。
 - `npm run i18n:language-boundary-report:json -- --category contentTargetLanguage --output "internal/roadmap/i18n/evidence/content-target-language-boundary-report.json"` 与全量 `npm run i18n:language-boundary-report:json -- --output "internal/roadmap/i18n/evidence/language-boundary-report.json"` 通过。
 
@@ -1017,7 +1017,7 @@ benchmark 摘要：
 本轮继续完成：
 
 - `scripts/quality-task-planner.mjs` 将发布材料 / 官网文档 / 帮助文档事实源变更映射到 `i18n:release-docs-report:json` 推荐命令；docs-only 变更仍跳过代码校验，但会保留 evidence 刷新建议。
-- installer / app metadata 相关的 `package.json`、`src-tauri/Cargo.toml`、`tauri.conf*.json` 与 `agent-app-shell.json` 变更现在会推荐刷新 `app-metadata-workflow-inventory.json`。
+- installer / app metadata 相关的 `package.json`、`lime-rs/Cargo.toml`、`tauri.conf*.json` 与 `agent-app-shell.json` 变更现在会推荐刷新 `app-metadata-workflow-inventory.json`。
 - RTL 方向基础与 readiness inventory 审计过的设置页、侧栏、Workspace、弹窗和 Knowledge 主路径 surface 变更，会推荐刷新 `rtl-readiness-inventory.json`；布局敏感 surface 同时推荐 `npm run i18n:rtl-smoke`。
 - `scripts/local-ci.mjs` 调整 docs-only 摘要输出顺序，确保 docs-only 仍跳过本地代码校验，但不会吞掉 P4 evidence 推荐命令。
 
@@ -1181,7 +1181,7 @@ benchmark 摘要：
 本轮继续完成：
 
 - `scripts/i18n-app-metadata-workflow-report.ts` 新增 `metadataFieldCoverage`，把真实 app / installer metadata 字段与 `app-metadata-translation-scope.json` 做双向比对：真实字段未入 scope 会进入 `unscopedMetadataFields`，scope 引用失效字段会进入 `missingScopedFields`。
-- `internal/roadmap/i18n/app-metadata-translation-scope.json` 补入 `src-tauri/tauri.conf.json#bundle.fileAssociations[0].name`，将 Skill Package 文件关联类型名归为稳定品牌字段，避免 file association 只审计 description 而漏掉 name。
+- `internal/roadmap/i18n/app-metadata-translation-scope.json` 补入 `lime-rs/tauri.conf.json#bundle.fileAssociations[0].name`，将 Skill Package 文件关联类型名归为稳定品牌字段，避免 file association 只审计 description 而漏掉 name。
 - 刷新 `internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json` 后，当前审计字段 `11` 个，`metadataUnscopedFieldCount=0`、`metadataMissingScopedFieldCount=0`；`hasInstallerLocalizationWorkflow` 仍为 `false`，不误判为多语言 installer workflow 已完成。
 - `internal/roadmap/i18n/app-metadata-workflow-evaluation.md` 已同步说明：在 `generatedMetadataAllowed=false` 期间，不新增平行 locale 配置，只用 scope + inventory 管住发布元数据漂移。
 

@@ -52,7 +52,7 @@ npm run agent-qc:payload-coverage -- \
 通过条件：
 
 - `gui-owner-current.json` 没有 active / stale GUI qcloop owner。
-- `gui-process-owner-current.json` 没有 active raw GUI smoke、qcloop worker、Cargo / Rust 构建 owner；passive qcloop serve、passive Tauri runtime 和 observer shell 只作为上下文，不单独阻断。
+- `gui-process-owner-current.json` 没有 active raw GUI smoke、qcloop worker、Cargo / Rust 构建 owner；passive qcloop serve、passive desktop runtime（Electron dev host / legacy Tauri runtime）和 observer shell 只作为上下文，不单独阻断。
 - `qcloop-db-lease-current.json` 没有 running item、续约 lock 或 no-output active attempt。
 - `qcloop-p0-single-owner-ready-coverage-current.json` 对 manifest P0 场景 `missing=[]`、`extra=[]`、`coverage.passed=true`。
 - DevBridge preflight 通过：`npm run agent-qc:qcloop-preflight -- --require-devbridge --check`。
@@ -61,7 +61,7 @@ npm run agent-qc:payload-coverage -- \
 
 - 存在 stale qcloop worker 且仍在续约 DB lease。
 - 存在长时间 `smoke:*` 或 `verify:gui-smoke` 进程。
-- 存在 Cargo / Rust 编译 owner，可能抢占 target；`tauri dev` runtime 只有在被归类为 active owner 时才阻断。
+- 存在 Cargo / Rust 编译 owner，可能抢占 target；Electron dev host / legacy `tauri dev` 只有在被归类为 active owner 时才阻断。
 - ready payload 与 manifest P0 不一致，或 payload coverage 仍未生成。
 - 官方 `.lime/qc/agent-qc-evidence.json` 不是同一批次 8/8 P0 pass。
 

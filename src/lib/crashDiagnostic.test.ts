@@ -25,8 +25,8 @@ const payload = {
   user_agent: "Lime-Test",
   locale: "zh-CN",
   timezone: "Asia/Shanghai",
-  page_url: "tauri://localhost/settings",
-  runtime: "tauri" as const,
+  page_url: "desktop-host://localhost/settings",
+  runtime: "desktop-host" as const,
   crash_reporting: {
     enabled: true,
     dsn: null,
@@ -224,7 +224,7 @@ describe("buildCrashDiagnosticPayload", () => {
         {
           timestamp: "2026-03-09T01:02:03.000Z",
           command: "get_config",
-          transport: "tauri-ipc",
+          transport: "desktop-host-ipc",
           status: "success",
           duration_ms: 12,
         },
@@ -594,7 +594,7 @@ describe("buildCrashDiagnosticPayload", () => {
         {
           timestamp: "2026-03-09T01:02:03.000Z",
           command: "get_config",
-          transport: "tauri-ipc",
+          transport: "desktop-host-ipc",
           status: "success",
           duration_ms: 12,
         },

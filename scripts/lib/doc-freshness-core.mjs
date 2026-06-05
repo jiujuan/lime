@@ -81,12 +81,12 @@ export const DOC_FRESHNESS_SPECS = [
 
 const LOCAL_LINK_PATTERN = /\[[^\]]+\]\(([^)]+)\)/g;
 const REPO_PATH_TOKEN_PATTERN =
-  /(^|[\s("'`])((?:docs|scripts|src|src-tauri|\.github)\/[A-Za-z0-9._/-]+(?:\.[A-Za-z0-9]+)?)/gm;
+  /(^|[\s("'`])((?:docs|scripts|src|lime-rs|\.github)\/[A-Za-z0-9._/-]+(?:\.[A-Za-z0-9]+)?)/gm;
 const REPO_ROOT_RELATIVE_PREFIXES = [
   "docs/",
   "scripts/",
   "src/",
-  "src-tauri/",
+  "lime-rs/",
   ".github/",
 ];
 

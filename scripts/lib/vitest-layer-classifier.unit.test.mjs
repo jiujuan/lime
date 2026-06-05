@@ -175,7 +175,7 @@ describe("vitest-layer-classifier unit boundary", () => {
     });
   });
 
-  it("Tauri / bridge / command catalog 测试应归为 contract", () => {
+  it("Desktop Host / bridge / command catalog 测试应归为 contract", () => {
     expect(
       classifyVitestTestFile({
         filePath: "src/lib/api/agent.test.ts",
@@ -188,6 +188,17 @@ describe("vitest-layer-classifier unit boundary", () => {
       }),
     ).toMatchObject({
       layer: "contract",
+      reasons: ["safeInvoke", "dev-bridge"],
+    });
+
+    expect(
+      classifyVitestTestFile({
+        filePath: "src/lib/desktop-host/core.test.ts",
+        source: "import { describe, expect, it } from 'vitest';",
+      }),
+    ).toMatchObject({
+      layer: "contract",
+      reasons: ["desktop-host-api"],
     });
 
     expect(
@@ -200,6 +211,34 @@ describe("vitest-layer-classifier unit boundary", () => {
       }),
     ).toMatchObject({
       layer: "contract",
+      reasons: ["command-catalog"],
+    });
+  });
+
+  it("legacy desktop host API 测试只能作为旧宿主 contract 信号", () => {
+    const legacyHostPackage = ["@", "ta", "uri-apps/api/core"].join("");
+    const legacyHostGlobal = ["__TA", "URI__"].join("");
+
+    expect(
+      classifyVitestTestFile({
+        filePath: "src/lib/legacy-host/adapter.test.ts",
+        source: sample(
+          `import { invoke } from '${legacyHostPackage}';`,
+        ),
+      }),
+    ).toMatchObject({
+      layer: "contract",
+      reasons: ["legacy-desktop-host-api"],
+    });
+
+    expect(
+      classifyVitestTestFile({
+        filePath: "src/lib/legacy-host/window.test.ts",
+        source: `expect(globalThis.${legacyHostGlobal}).toBeDefined();`,
+      }),
+    ).toMatchObject({
+      layer: "contract",
+      reasons: ["legacy-desktop-host-api"],
     });
   });
 

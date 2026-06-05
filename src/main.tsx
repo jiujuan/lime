@@ -2,8 +2,8 @@ import ReactDOM from "react-dom/client";
 import { RootRouter } from "./RootRouter";
 import "./index.css";
 
-// Initialize Tauri mock for web mode
-import "./lib/tauri-mock/index";
+// Initialize Desktop Host fallback for web mode
+import "./lib/desktop-host/index";
 
 // Initialize i18n configuration
 import "./i18n/config";

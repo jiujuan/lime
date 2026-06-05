@@ -19,7 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const ICON_SIZE = 32;
-const OUTPUT_DIR = join(__dirname, '..', 'src-tauri', 'icons', 'tray');
+const OUTPUT_DIR = join(__dirname, '..', 'lime-rs', 'icons', 'tray');
 
 // 确保输出目录存在
 if (!existsSync(OUTPUT_DIR)) {

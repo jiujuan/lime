@@ -1,0 +1,40 @@
+{
+  "$defs": {
+    "AgentAttachment": {
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "metadata": true,
+        "uri": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "attachments": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/AgentAttachment"
+      },
+      "type": "array"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "title": "AgentInput",
+  "type": "object"
+}

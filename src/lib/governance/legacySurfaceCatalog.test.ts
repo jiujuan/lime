@@ -288,7 +288,7 @@ describe("legacySurfaceCatalog", () => {
       (entry) => entry.id === "sceneapps-independent-page-surface",
     );
     const commandMonitor = legacySurfaceCatalogJson.commands.find(
-      (entry) => entry.id === "sceneapp-tauri-command-surface",
+      (entry) => entry.id === "sceneapp-legacy-desktop-host-command-surface",
     );
     const frontendMonitor = legacySurfaceCatalogJson.frontendText.find(
       (entry) => entry.id === "sceneapps-page-route-frontend-surface",
@@ -524,9 +524,9 @@ describe("legacySurfaceCatalog", () => {
     ]);
   });
 
-  it("应禁止 tauri-mock/index 恢复旧 mock 聚合导出", () => {
+  it("应禁止 desktop-host/index 恢复旧 mock 聚合导出", () => {
     const monitor = legacySurfaceCatalogJson.frontendText.find(
-      (entry) => entry.id === "tauri-mock-index-legacy-barrel-exports",
+      (entry) => entry.id === "desktop-host-index-legacy-barrel-exports",
     );
 
     expect(monitor).toBeTruthy();
@@ -539,7 +539,7 @@ describe("legacySurfaceCatalog", () => {
       "openShell",
     ]);
     expect(monitor?.includePathPrefixes).toEqual([
-      "src/lib/tauri-mock/index.ts",
+      "src/lib/desktop-host/index.ts",
     ]);
   });
 
@@ -576,8 +576,8 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor?.classification).toBe("dead-candidate");
     expect(monitor?.allowedPaths).toEqual([]);
     expect(monitor?.targets).toEqual([
-      "src-tauri/src/commands/subagent_cmd.rs",
-      "src-tauri/src/agent/subagent_scheduler.rs",
+      "lime-rs/src/commands/subagent_cmd.rs",
+      "lime-rs/src/agent/subagent_scheduler.rs",
     ]);
   });
 
@@ -619,11 +619,11 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor?.classification).toBe("deprecated");
     expect(monitor?.patterns).toEqual(["resolve_subagent_session_metadata("]);
     expect(monitor?.allowedPaths).toEqual([
-      "src-tauri/crates/agent/src/session_query.rs",
-      "src-tauri/crates/agent/src/session_store.rs",
-      "src-tauri/crates/agent/src/session_store_subagent_context.rs",
-      "src-tauri/crates/aster-rust/crates/aster/src/session/query.rs",
-      "src-tauri/crates/aster-rust/crates/aster/src/session/subagent.rs",
+      "lime-rs/crates/agent/src/session_query.rs",
+      "lime-rs/crates/agent/src/session_store.rs",
+      "lime-rs/crates/agent/src/session_store_subagent_context.rs",
+      "lime-rs/crates/aster-rust/crates/aster/src/session/query.rs",
+      "lime-rs/crates/aster-rust/crates/aster/src/session/subagent.rs",
     ]);
   });
 
@@ -1163,8 +1163,8 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor?.allowedPaths).toEqual([]);
     expect(monitor?.targets).toEqual([
       "src/lib/notifications.ts",
-      "src/lib/tauri-event.ts",
-      "src/lib/tauri-event.test.ts",
+      "src/lib/legacy-desktop-host-event.ts",
+      "src/lib/legacy-desktop-host-event.test.ts",
       "src/lib/utils/syntaxHighlight.ts",
     ]);
   });
@@ -1253,7 +1253,7 @@ describe("legacySurfaceCatalog", () => {
       "src/components/openclaw/OpenClawPage.tsx",
     );
     expect(monitor?.targets).toContain(
-      "src-tauri/src/commands/openclaw_cmd.rs",
+      "lime-rs/src/commands/openclaw_cmd.rs",
     );
   });
 
@@ -2936,7 +2936,7 @@ describe("legacySurfaceCatalog", () => {
 
     expect(rustMonitor).toBeTruthy();
     expect(rustMonitor?.allowedPaths).toEqual([
-      "src-tauri/crates/core/src/database/schema.rs",
+      "lime-rs/crates/core/src/database/schema.rs",
     ]);
     expect(rustMonitor?.patterns).toEqual(
       expect.arrayContaining([

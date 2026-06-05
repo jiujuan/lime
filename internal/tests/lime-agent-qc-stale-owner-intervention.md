@@ -222,7 +222,7 @@ npm run agent-qc:objective-checklist -- \
 
 1. 再次运行 `agent-qc:process-owner-check`，确认 PID、PGID、命令和 `etime`。
 2. 记录 before sidecar，包含 PID、PGID、命令、确认文本和禁止动作清单。
-3. 只处理 owner 明确确认的 PID / 进程组；不要顺手清理 passive qcloop serve、passive Tauri runtime 或 observer shell。
+3. 只处理 owner 明确确认的 PID / 进程组；不要顺手清理 passive qcloop serve、passive desktop runtime（Electron dev host / legacy Tauri runtime）或 observer shell。
 4. 处理后立即运行：
 
 ```bash
@@ -258,6 +258,6 @@ rootPgid=59011
 processGroupPids=59011,59100
 ```
 
-则确认后的默认动作是只处理该已确认 process group；递归树中属于子 shell / browser helper 的 PID 只作为佐证，不允许额外扩大到 passive qcloop serve、passive Tauri runtime、系统 Chrome 或其他 observer shell。
+则确认后的默认动作是只处理该已确认 process group；递归树中属于子 shell / browser helper 的 PID 只作为佐证，不允许额外扩大到 passive qcloop serve、passive desktop runtime、系统 Chrome 或其他 observer shell。
 
 处置前必须重新生成 `recursive-tree-current` 和 `intervention-plan-current`，以防 PID / PGID 被系统复用或子进程已自然退出。若最新计划与确认文本中的 PID 不一致，停止并重新请求 owner 确认。

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriInvokeCapability: vi.fn(() => false),
-  hasTauriRuntimeMarkers: vi.fn(() => false),
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostInvokeCapability: vi.fn(() => false),
+  hasDesktopHostRuntimeMarkers: vi.fn(() => false),
 }));
 
 import {

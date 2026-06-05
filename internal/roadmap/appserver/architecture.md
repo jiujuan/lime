@@ -9,7 +9,7 @@
 1. App Server 成为跨 App 的 Agent runtime 服务边界。
 2. RuntimeCore 成为公共事实源，壳层只做 client / adapter。
 3. Aster 只是第一个 ExecutionBackend，不再等同于公共 runtime。
-4. Tauri command 逐步退回 thin adapter，不继续拥有业务执行逻辑。
+4. legacy Tauri command adapter 逐步退回 thin adapter，不继续拥有业务执行逻辑。
 5. 独立 App 通过 JSON-RPC client 复用 Agent 能力。
 6. Tool / action / artifact / evidence / workspace / skill capability 不在 App 侧复制。
 
@@ -24,7 +24,7 @@ flowchart TB
     end
 
     subgraph Clients["App Server Clients"]
-        TauriAdapter["Tauri Command Adapter<br/>compat"]
+        LegacyTauriAdapter["Legacy Tauri Command Adapter<br/>compat / deprecated"]
         ElectronClient["Electron Main Client"]
         GenericClient["Generic TS / Rust Client"]
     end
@@ -54,9 +54,12 @@ flowchart TB
         Future["Future Backends"]
     end
 
-    Desktop --> TauriAdapter --> Transport
-    ContentStudio --> ElectronClient --> Transport
-    OtherApps --> GenericClient --> Transport
+    Desktop --> ElectronClient
+    ContentStudio --> ElectronClient
+    OtherApps --> GenericClient
+    ElectronClient --> Transport
+    GenericClient --> Transport
+    LegacyTauriAdapter -. "compat only" .-> Transport
     Transport --> Router --> Protocol --> ServiceFacade
     ServiceFacade --> Session
     ServiceFacade --> Run
@@ -78,7 +81,7 @@ flowchart TB
 
 | 层 | 名称 | 负责 | 不负责 |
 | --- | --- | --- | --- |
-| 协议层 | `app-server-protocol` | JSON-RPC DTO、稳定 wire schema、错误码、事件 envelope | Aster 内部类型、Tauri DTO |
+| 协议层 | `app-server-protocol` | JSON-RPC DTO、稳定 wire schema、错误码、事件 envelope | Aster 内部类型、legacy Tauri DTO |
 | 服务核心 | `RuntimeCore` | session/thread/turn/task/run/action/event/artifact/evidence 的事实源和调度合同 | 具体模型循环实现、GUI 事件名 |
 | 后端适配 | `ExecutionBackend` | 把 core 的 turn/run 请求交给 Aster 或未来后端执行，并回传标准事件 | 定义公共协议、管理 App 生命周期 |
 
@@ -119,7 +122,7 @@ App request
 
 1. App UI state 反向成为 runtime truth。
 2. 独立 App 直接 import Lime 内部 runtime 模块。
-3. Tauri command 和 App Server 各自实现一套 turn execution。
+3. legacy Tauri command adapter 和 App Server 各自实现一套 turn execution。
 4. Aster 私有 DTO 穿透到 App Server 协议。
 5. Artifact / Evidence 在 App 侧重新判定完成状态。
 
@@ -136,7 +139,7 @@ App process
 
 选择 stdio 的原因：
 
-1. Electron / Tauri / CLI 都容易启动。
+1. Electron / legacy Tauri adapter / CLI 都容易启动。
 2. 不需要端口管理。
 3. 适合本地 sidecar。
 4. 容易做 fixture 和 contract test。
@@ -144,9 +147,9 @@ App process
 当前实现约束：
 
 1. standalone `app-server` binary 只支持 `mock` backend，用于协议、client、packaging 和独立 App 消费链验证。
-2. 真实 Aster backend 需要 Tauri host state，只能由 Lime Desktop in-process adapter 注入 `AsterBackendHost`，不能通过 standalone CLI 直接开启。
+2. 真实 Aster backend 仍依赖 host state，只能由 Lime Desktop in-process adapter 注入 `AsterBackendHost`，不能通过 standalone CLI 直接开启。
 3. `AppServerRuntimeFactory` 是 runtime 组装事实源；不要在 `main.rs`、JSON-RPC router 或 protocol DTO 中直接拼 backend 细节。
-4. `--backend aster` 必须失败，直到 Aster host 脱离 Tauri state 并具备独立进程启动条件。
+4. `--backend aster` 必须失败，直到 Aster host 脱离 legacy Tauri state 并具备独立进程启动条件。
 
 ### 5.2 P2：本地控制 socket
 
@@ -191,28 +194,29 @@ flowchart LR
     EvidenceSvc --> Evidence["Evidence Export"]
 ```
 
-## 7. Tauri 替换边界
+## 7. legacy Tauri adapter 替换边界
 
-服务化不是一次性替换 Lime Desktop，而是把 runtime owner 从 Tauri command 下沉到 service。
+服务化不是一次性替换 Lime Desktop，而是把 runtime owner 从 legacy Tauri command glue 下沉到 service。Electron Desktop Host 是 GUI current，legacy Tauri adapter 只保留兼容委托语境。
 
 ```text
-current:
-  Tauri command -> Aster runtime glue -> runtime service fragments
+legacy compat:
+  legacy Tauri command adapter -> Aster runtime glue -> runtime service fragments
 
 target:
-  Tauri command -> App Server client or RuntimeCore facade
+  Electron Desktop Host -> App Server client or RuntimeCore facade
+  legacy Tauri command adapter -> App Server client or RuntimeCore facade
   App Server -> RuntimeCore facade
   RuntimeCore facade -> ExecutionBackend -> Aster / future backend
 ```
 
 迁移原则：
 
-1. 先抽 service，后改 command。
-2. command 保留原命令名和 GUI 合同，内部只委托。
-3. App Server 与 command 共享 RuntimeCore，不共享壳层对象。
+1. 先抽 service，后改 legacy adapter。
+2. legacy command 保留原命令名和兼容合同，内部只委托。
+3. App Server 与 legacy adapter 共享 RuntimeCore，不共享壳层对象。
 4. Aster 逻辑先收进 `AsterBackend`，不要上浮成公共协议。
-5. 新能力只加到 core / backend / protocol，不再加到 command glue。
-6. backend mode 由 runtime factory 声明；standalone binary 默认 `mock`，Tauri adapter 注入 `AsterBackendHost`。
+5. 新能力只加到 core / backend / protocol，不再加到 legacy command glue。
+6. backend mode 由 runtime factory 声明；standalone binary 默认 `mock`，legacy Tauri adapter 如保留只负责注入 `AsterBackendHost`。
 
 ## 8. 独立 App 集成边界
 
@@ -240,7 +244,7 @@ Capability 只表达：
 Capability 不暴露：
 
 1. Rust 模块路径。
-2. Tauri command 名。
+2. legacy Tauri command 名。
 3. 内部 prompt 拼装细节。
 4. 私有文件路径。
 
@@ -274,13 +278,13 @@ Capability 不暴露：
 
 1. 同步 request 内产生的 events，随 response 后追加 notification。
 2. 外部 Query Loop / host listener 产生的异步 events，必须先进入 `RuntimeCore::append_external_runtime_events(...)`，再由 App Server outbound channel 写出 notification。
-3. In-process Tauri adapter 只能持有 `AppServerEventBridge` 这类轻量追加出口，不能持有完整 `AppServer`，避免 backend host 与 server 形成强引用环。
-4. Tauri event、JSON-RPC notification 和测试 sink 都必须从同一公共 `RuntimeEvent` 派生，不能各自重新解释 Aster 私有事件。
+3. In-process legacy Tauri adapter 只能持有 `AppServerEventBridge` 这类轻量追加出口，不能持有完整 `AppServer`，避免 backend host 与 server 形成强引用环。
+4. legacy Tauri event、JSON-RPC notification 和测试 sink 都必须从同一公共 `RuntimeEvent` 派生，不能各自重新解释 Aster 私有事件。
 
 ## 11. 架构验收
 
-1. App Server 和 Tauri command 可同时调用同一 service。
-2. App Server 不依赖 Tauri `AppHandle`、`Emitter`、`State`。
+1. App Server 和 legacy Tauri adapter 可同时调用同一 service。
+2. App Server 不依赖 legacy Tauri `AppHandle`、`Emitter`、`State`。
 3. 独立 App 不需要链接 Lime Rust crate。
 4. JSON-RPC fixture 能覆盖主请求和事件。
 5. Tool / action / artifact / evidence 事件能从同一 runtime facts 派生。

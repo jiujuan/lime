@@ -283,7 +283,7 @@ P0 推理仍是 non-streaming decode。实时录音体验通过“增量片段 +
 
 已落地护栏：
 
-1. `src-tauri/crates/voice-core/src/threaded_recorder.rs` 在开始录音后按采样率预分配 `30s` sample buffer，callback 内直接 downmix + PCM16 转换并写入同一 buffer。
+1. `lime-rs/crates/voice-core/src/threaded_recorder.rs` 在开始录音后按采样率预分配 `30s` sample buffer，callback 内直接 downmix + PCM16 转换并写入同一 buffer。
 2. callback 内不再为每个音频块创建中间 `Vec`；仅做 RMS、采样转换和一次短锁写入。
 3. 单次录音最多保留 `300s` mono PCM，防止长期录音或异常状态导致内存无界增长。
 4. `get_recording_segment` 不传 `max_duration_secs` 时默认只返回 `1.25s`，并把显式请求限制在 `2s` 内。

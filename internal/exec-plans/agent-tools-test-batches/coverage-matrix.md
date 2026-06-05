@@ -4,7 +4,7 @@
 
 本矩阵用于判断“所有批次任务”是否已经覆盖到当前事实源，而不是只凭批次数量判断完成。事实源优先级：
 
-1. `src-tauri/src/agent_tools/catalog.rs`
+1. `lime-rs/src/agent_tools/catalog.rs`
 2. `src/lib/tauri-mock/runtimeToolInventoryMocks.ts`
 3. `src/components/agent/chat/utils/toolDisplayInfo.ts`
 4. 已落地的批次文档与验证记录

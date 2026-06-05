@@ -674,7 +674,7 @@ structured evidenceRefs missing=command-bridge-contract, harness-replay-regressi
 
 2026-05-10 21:38 追加只读排查：`git status` 显示 `src/components/settings-v2/system/channels/ChannelLogTailPanel.test.tsx` 是 untracked，相关 `ChannelLogTailPanel.tsx` 已 modified；失败行是 `vi.spyOn(window, "setInterval").mockReturnValue(0);`。由于该文件不属于本轮 Agent QC docs / scripts 修改范围，且当前工作树存在其他活动变更，本轮仍未修改。sidecar 见 `.lime/qc/verify-local-channel-log-tail-investigation.md`。
 
-2026-05-10 21:48 追加版本变更只读观察：npm 输出显示当前包版本为 `lime@1.33.0`。只读检查显示 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` 均为 `1.33.0`，且 `package-lock.json` / `src-tauri/Cargo.lock` 也处于 modified 状态。`npm run verify:app-version` 通过，版本一致性为 `1.33.0`。本轮未修改版本文件；sidecar 见 `.lime/qc/version-change-observation-2026-05-10-2148.md`。
+2026-05-10 21:48 追加版本变更只读观察：npm 输出显示当前包版本为 `lime@1.33.0`。只读检查显示 `package.json`、`lime-rs/Cargo.toml`、`lime-rs/tauri.conf.json` 均为 `1.33.0`，且 `package-lock.json` / `lime-rs/Cargo.lock` 也处于 modified 状态。`npm run verify:app-version` 通过，版本一致性为 `1.33.0`。本轮未修改版本文件；sidecar 见 `.lime/qc/version-change-observation-2026-05-10-2148.md`。
 
 2026-05-10 21:52 追加 local verify gate：`.lime/qc/verify-local-current.json` 记录 `npm run verify:local` 当前为 `fail`，失败阶段 `typecheck`。`agent-qc:audit` 现在新增 `local-verify-gate`，要求仓库统一本地校验为 pass；定向测试 `npx vitest run scripts/lib/agent-qc-completion-audit-core.test.ts scripts/lib/agent-qc-gui-owner-core.test.ts` 通过 `23/23`。当前 completion audit 变为 `16/18`，缺口为 `real-qcloop-evidence` 与 `local-verify-gate`。
 
@@ -773,7 +773,7 @@ structured evidenceRefs missing=command-bridge-contract, harness-replay-regressi
 ### 2026-05-10 23:40 补充审计记录：verify:local 新一轮仍在运行
 
 - 当前存在一轮新的 `npm run verify:local` wrapper 正在运行，未结束，因此 `.lime/qc/verify-local-current.json` 仍是 22:39 的旧 fail 结果；completion audit 继续显示 `status=incomplete`、`16/18`。
-- 新一轮已通过 `verify:app-version`、`lint`、`typecheck`、前端 Vitest 批次、`test:contracts`、`cargo test --manifest-path src-tauri/Cargo.toml` 主库测试，以及 `verify:gui-smoke` 中的 `workspace-ready` / `browser-runtime` / `site-adapters` / Skill Forge 前端 smoke。
+- 新一轮已通过 `verify:app-version`、`lint`、`typecheck`、前端 Vitest 批次、`test:contracts`、`cargo test --manifest-path lime-rs/Cargo.toml` 主库测试，以及 `verify:gui-smoke` 中的 `workspace-ready` / `browser-runtime` / `site-adapters` / Skill Forge 前端 smoke。
 - 当前停在 `smoke:agent-service-skill-entry` 的 Rust 定向测试 `register_capability_draft_persists_readonly_http_preflight_provenance`；日志最后显示 cargo artifact lock 与后续编译，相关 `rustc` 仍有 CPU 活动。为避免和隔壁 v0.6 / qcloop worker 冲突，本轮没有中断任何进程。
 - Running snapshot：`.lime/qc/verify-local-2026-05-10-2340-running.md`。
 - qcloop 官方证据仍未完成：`.lime/qc/qcloop-status.isolated-p0-full-v1-current.json` 仍 `verdict=stale`，job `1778405842243079000` 为 `4 success / 1 running / 3 pending / 1 stale`；`.lime/qc/gui-owner-current.json` 仍 `blocked`。

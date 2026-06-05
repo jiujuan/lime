@@ -1,5 +1,5 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import { getCurrentWindow } from "@/lib/desktop-host/window";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 
 const WINDOW_DRAG_INTERACTIVE_SELECTOR = [
   "a",
@@ -19,7 +19,6 @@ const WINDOW_DRAG_INTERACTIVE_SELECTOR = [
   "[role='slider']",
   "[role='switch']",
   "[tabindex]:not([tabindex='-1'])",
-  "[data-tauri-no-drag]",
   "[data-lime-no-window-drag]",
 ].join(",");
 
@@ -60,7 +59,7 @@ export function shouldStartWindowDragFromMouseEvent(
   event: WindowDragMouseEventLike,
   options: StartWindowDragOptions = {},
 ): boolean {
-  if (!hasTauriInvokeCapability() || event.defaultPrevented) {
+  if (!hasDesktopHostInvokeCapability() || event.defaultPrevented) {
     return false;
   }
 

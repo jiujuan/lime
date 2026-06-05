@@ -9,8 +9,8 @@
 2. **先读对应文档再改代码** - 尤其是命令边界、GUI 主路径、迁移收口、Provider 与凭证
 3. **GUI 改动优先看质量链路** - Lime 是 GUI 桌面产品，先看 `quality-workflow.md` 与 `playwright-e2e.md`
 4. **新旧并存问题先看治理文档** - 避免在 compat / deprecated 路径上继续长新表面
-5. **新增命名不要加品牌前缀** - 新程序、目录、crate/package、Tauri 命令、API 网关、类型、模块和脚本默认使用领域名，不要加 `Lime` / `lime_` / `lime-`；只有对外品牌、历史兼容或生态固定命名才例外，并在计划里说明
-6. **新增 Agent 逻辑默认走 App Server** - 新 AI Agent、runtime、host integration、跨 App 复用能力先落到 `app-server` crates、JSON-RPC 协议和 App Server adapter；`agent_runtime_*` / Aster Tauri command 只作为 Lime Desktop 兼容适配层
+5. **新增命名不要加品牌前缀** - 新程序、目录、crate/package、Electron IPC channel、App Server 方法、API 网关、类型、模块和脚本默认使用领域名，不要加 `Lime` / `lime_` / `lime-`；只有对外品牌、历史兼容或生态固定命名才例外，并在计划里说明
+6. **新增 Agent 逻辑默认走 App Server** - 新 AI Agent、runtime、host integration、跨 App 复用能力先落到 `app-server` crates、JSON-RPC 协议和 App Server adapter；`agent_runtime_*` / Aster 旧命令只作为 Lime Desktop 兼容适配层
 
 ## 按场景导航
 
@@ -52,7 +52,7 @@
 
 ### 后端与运行时
 
-- `commands.md` - Tauri 命令边界、协议同步点
+- `commands.md` - Electron Desktop Host、App Server JSON-RPC、legacy Tauri adapter 与前端网关协议同步点
 - `services.md` - Rust 服务层
 - `server.md` - HTTP Server 与接口边界
 - `mcp.md` - MCP 服务器与工具管理
@@ -78,7 +78,7 @@
 - **改记忆来源链 / working memory / durable memory / Team Memory / compaction**：先读 `memory-compaction.md`
 - **改 FileArtifact / artifact sidecar / versions / file checkpoint / evidence 中的文件快照**：先读 `persistence-map.md`
 - **改 session detail / thread read / requestTelemetry / evidence / history-record**：先读 `state-history-telemetry.md`
-- **改 Tauri 命令 / Bridge / mock**：先读 `commands.md`，再看 `quality-workflow.md`
+- **改 Electron IPC / App Server / Bridge / mock / legacy Tauri adapter**：先读 `commands.md`，再看 `quality-workflow.md`
 - **改 `@` / `/` / 轻卡 / viewer / ServiceSkill 场景**：先读 `command-runtime.md`
 - **改 Claw 技能 / Service Skill / 统一 Skills 标准**：先读 `skill-standard.md`
 - **改站点适配器 / 导入外部 adapter**：先读 `site-adapter-standard.md`，再看 `web-browser-scene-skill.md` 与 `quality-workflow.md`

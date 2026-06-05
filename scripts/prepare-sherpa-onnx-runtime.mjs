@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-const DEFAULT_SRC_TAURI_DIR = "src-tauri";
+const DEFAULT_RUST_WORKSPACE_DIR = "lime-rs";
 const SHERPA_RELEASE_BASE_URL =
   "https://github.com/k2-fsa/sherpa-onnx/releases/download";
 
@@ -46,7 +46,7 @@ export function resolveSherpaOnnxSysVersion(lockText) {
 
 export function resolveSherpaRuntimePlan({
   repoRoot = process.cwd(),
-  srcTauriDir = DEFAULT_SRC_TAURI_DIR,
+  rustWorkspaceDir = DEFAULT_RUST_WORKSPACE_DIR,
   targetTriple,
   version,
 }) {
@@ -85,23 +85,28 @@ export function resolveSherpaRuntimePlan({
       fail(`Unsupported sherpa-onnx release target: ${targetTriple}`);
   }
 
-  const srcTauriRoot = path.resolve(repoRoot, srcTauriDir);
+  const rustWorkspaceRoot = path.resolve(repoRoot, rustWorkspaceDir);
   const archiveStem = archiveName.replace(/\.tar\.bz2$/, "");
   const prebuiltRoot = path.join(
-    srcTauriRoot,
+    rustWorkspaceRoot,
     "target",
     "sherpa-onnx-prebuilt",
   );
   const archivePath = path.join(prebuiltRoot, archiveName);
   const extractedDir = path.join(prebuiltRoot, archiveStem);
   const libDir = path.join(extractedDir, "lib");
-  const releaseDir = path.join(srcTauriRoot, "target", targetTriple, "release");
+  const releaseDir = path.join(
+    rustWorkspaceRoot,
+    "target",
+    targetTriple,
+    "release",
+  );
   const debugDirs = [
-    path.join(srcTauriRoot, "target", "debug"),
-    path.join(srcTauriRoot, "target", targetTriple, "debug"),
+    path.join(rustWorkspaceRoot, "target", "debug"),
+    path.join(rustWorkspaceRoot, "target", targetTriple, "debug"),
   ];
   const runtimeLibDir = path.join(
-    srcTauriRoot,
+    rustWorkspaceRoot,
     ".release-runtime-libs",
     targetTriple,
   );
@@ -245,16 +250,16 @@ function copyRuntimeLibraries(plan) {
 
 export function prepareSherpaOnnxRuntime({
   repoRoot = process.cwd(),
-  srcTauriDir = DEFAULT_SRC_TAURI_DIR,
+  rustWorkspaceDir = DEFAULT_RUST_WORKSPACE_DIR,
   targetTriple,
 } = {}) {
-  const lockPath = path.resolve(repoRoot, srcTauriDir, "Cargo.lock");
+  const lockPath = path.resolve(repoRoot, rustWorkspaceDir, "Cargo.lock");
   const version = resolveSherpaOnnxSysVersion(
     fs.readFileSync(lockPath, "utf8"),
   );
   const plan = resolveSherpaRuntimePlan({
     repoRoot,
-    srcTauriDir,
+    rustWorkspaceDir,
     targetTriple,
     version,
   });
@@ -282,8 +287,8 @@ function parseArgs(argv) {
     if (arg === "--target") {
       options.targetTriple = argv[index + 1];
       index += 1;
-    } else if (arg === "--src-tauri-dir") {
-      options.srcTauriDir = argv[index + 1];
+    } else if (arg === "--lime-rs-dir") {
+      options.rustWorkspaceDir = argv[index + 1];
       index += 1;
     } else {
       fail(`Unknown argument: ${arg}`);

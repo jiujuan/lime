@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Dispatch, SetStateAction } from "react";
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@/lib/desktop-host/event";
 import type { Message } from "../types";
 import { listSlashEntryUsage } from "../skill-selection/slashEntryUsage";
 

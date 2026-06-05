@@ -91,9 +91,9 @@ npm test -- "src/components/agent/chat/utils/toolBatchGrouping.test.ts"
 Rust 定向：
 
 ```bash
-cargo test --manifest-path "src-tauri/Cargo.toml" tools::bash -- --nocapture
-cargo test --manifest-path "src-tauri/Cargo.toml" tools::task_output_tool -- --nocapture
-cargo test --manifest-path "src-tauri/Cargo.toml" tools::task_stop_tool -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" tools::bash -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" tools::task_output_tool -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" tools::task_stop_tool -- --nocapture
 ```
 
 ## GUI 验证

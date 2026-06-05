@@ -15,9 +15,9 @@ import {
 } from "@/lib/api/mediaTasks";
 import { safeListen } from "@/lib/dev-bridge";
 import {
-  hasTauriInvokeCapability,
-  hasTauriRuntimeMarkers,
-} from "@/lib/tauri-runtime";
+  hasDesktopHostInvokeCapability,
+  hasDesktopHostRuntimeMarkers,
+} from "@/lib/desktop-runtime";
 import type { Message } from "../types";
 import {
   createInitialSessionImageWorkbenchState,
@@ -42,9 +42,9 @@ vi.mock("@/lib/api/mediaTasks", () => ({
   listMediaTaskArtifacts: vi.fn(),
 }));
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriInvokeCapability: vi.fn(() => true),
-  hasTauriRuntimeMarkers: vi.fn(() => true),
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostInvokeCapability: vi.fn(() => true),
+  hasDesktopHostRuntimeMarkers: vi.fn(() => true),
 }));
 
 type HookProps = Parameters<typeof useWorkspaceImageTaskPreviewRuntime>[0];
@@ -285,8 +285,8 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     ).IS_REACT_ACT_ENVIRONMENT = true;
     vi.resetAllMocks();
     vi.useFakeTimers();
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(true);
-    vi.mocked(hasTauriRuntimeMarkers).mockReturnValue(true);
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(true);
+    vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(true);
     vi.mocked(safeListen).mockResolvedValue(vi.fn());
     vi.mocked(getMediaTaskArtifact).mockRejectedValue(
       new Error("task artifact unavailable"),
@@ -1764,8 +1764,8 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
 
   it("历史消息已带 taskId 时，应直接按 taskId 走媒体任务接口恢复图片结果", async () => {
     const taskId = "task-image-history-direct-1";
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(false);
-    vi.mocked(hasTauriRuntimeMarkers).mockReturnValue(false);
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(false);
+    vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(false);
     vi.mocked(getMediaTaskArtifact).mockResolvedValueOnce(
       createArtifactOutput({
         task_id: taskId,
@@ -1835,8 +1835,8 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
   });
 
   it("发送中的草稿图片轻卡不应按真实 taskId 查询 artifact", async () => {
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(false);
-    vi.mocked(hasTauriRuntimeMarkers).mockReturnValue(false);
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(false);
+    vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(false);
 
     const { render, getValue } = renderHook(
       {},
@@ -1939,8 +1939,8 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
 
   it("应从 task artifact 恢复多模态合同路由阻止状态", async () => {
     const taskId = "task-image-contract-blocked-1";
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(false);
-    vi.mocked(hasTauriRuntimeMarkers).mockReturnValue(false);
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(false);
+    vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(false);
     vi.mocked(getMediaTaskArtifact).mockResolvedValueOnce(
       createArtifactOutput({
         task_id: taskId,
@@ -2113,8 +2113,8 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
   it("历史消息里的陈旧非终态图片任务不应恢复为轮询任务", async () => {
     vi.setSystemTime(new Date("2026-04-27T00:00:00Z"));
     const taskId = "task-image-history-stale-pending-1";
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(false);
-    vi.mocked(hasTauriRuntimeMarkers).mockReturnValue(false);
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(false);
+    vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(false);
     vi.mocked(getMediaTaskArtifact).mockResolvedValueOnce(
       createArtifactOutput({
         task_id: taskId,
@@ -2190,8 +2190,8 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       "/Users/youmin/.lime/tasks/image_generate/task-image-history-absolute-1.json";
     const artifactPath =
       ".lime/tasks/image_generate/task-image-history-absolute-1.json";
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(false);
-    vi.mocked(hasTauriRuntimeMarkers).mockReturnValue(false);
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(false);
+    vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(false);
     vi.mocked(getMediaTaskArtifact).mockResolvedValueOnce(
       createArtifactOutput({
         task_id: taskId,
@@ -2350,8 +2350,8 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
   });
 
   it("浏览器开发模式下不应触发工作区级图片任务全量恢复", async () => {
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(false);
-    vi.mocked(hasTauriRuntimeMarkers).mockReturnValue(false);
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(false);
+    vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(false);
 
     const { render, getValue } = renderHook();
     await render();
@@ -2370,8 +2370,8 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
 
   it("浏览器开发模式下事件丢失时，应按当前会话补捞最近的图片任务卡", async () => {
     vi.setSystemTime(new Date("2026-04-04T11:06:00Z"));
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(false);
-    vi.mocked(hasTauriRuntimeMarkers).mockReturnValue(false);
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(false);
+    vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(false);
     vi.mocked(listMediaTaskArtifacts).mockResolvedValueOnce({
       success: true,
       workspace_root: DEFAULT_PROJECT_ROOT_PATH,
@@ -2486,8 +2486,8 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
 
   it("浏览器开发模式下历史回复只有旧提交模板时，也应补捞并合并图片轻卡", async () => {
     vi.setSystemTime(new Date("2026-04-04T11:08:00Z"));
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(false);
-    vi.mocked(hasTauriRuntimeMarkers).mockReturnValue(false);
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(false);
+    vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(false);
     vi.mocked(listMediaTaskArtifacts).mockResolvedValueOnce({
       success: true,
       workspace_root: DEFAULT_PROJECT_ROOT_PATH,

@@ -1,0 +1,98 @@
+{
+  "$defs": {
+    "ArtifactContentStatus": {
+      "enum": [
+        "available",
+        "notRequested",
+        "unavailable"
+      ],
+      "type": "string"
+    },
+    "ArtifactSummary": {
+      "properties": {
+        "artifactId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "artifactRef": {
+          "type": "string"
+        },
+        "content": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "contentStatus": {
+          "$ref": "#/$defs/ArtifactContentStatus",
+          "default": "notRequested"
+        },
+        "eventId": {
+          "type": "string"
+        },
+        "kind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "metadata": true,
+        "path": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sequence": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "status": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "turnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "artifactRef",
+        "eventId",
+        "sequence"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "artifacts": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ArtifactSummary"
+      },
+      "type": "array"
+    },
+    "nextCursor": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "title": "ArtifactReadResponse",
+  "type": "object"
+}

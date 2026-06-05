@@ -2,23 +2,23 @@
  * withI18nPatch Higher-Order Component
  *
  * HOC that wraps a component with I18nPatchProvider.
- * Loads the language config from Tauri and passes it to the provider.
+ * Loads the language config from the Desktop Host and passes it to the provider.
  *
  * This HOC is used to wrap the root App component, enabling
  * the Patch Layer architecture for the entire application.
  *
  * Features:
- * - Loads language config from Tauri backend
+ * - Loads language config from Desktop Host backend
  * - Handles loading state
  * - Applies fade-in transition to prevent text flashing
- * - Falls back to default language in non-Tauri environments
+ * - Falls back to default language in non-Desktop Host environments
  */
 
 import React, { useEffect, useState } from "react";
 import { getConfig, type Config } from "@/lib/api/appConfig";
 import { I18nPatchProvider } from "./legacy-patch/I18nPatchProvider";
 import { StartupLoadingScreen } from "./StartupLoadingScreen";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import { changeLimeLocale } from "./createI18n";
 import { toLegacyPatchLanguage } from "./locales";
 
@@ -26,10 +26,10 @@ const CONFIG_LOAD_TIMEOUT_MS = 2500;
 const READY_COMMIT_TIMEOUT_MS = 48;
 
 /**
- * 检查是否在 Tauri 环境中运行
+ * 检查是否在 Desktop Host 环境中运行
  */
-function isTauriEnvironment(): boolean {
-  return hasTauriInvokeCapability();
+function isDesktopHostEnvironment(): boolean {
+  return hasDesktopHostInvokeCapability();
 }
 
 interface WithI18nPatchOptions {
@@ -119,8 +119,8 @@ export function withI18nPatch<P extends object>(
         void applyConfig({ language: "zh-CN" } as Config);
       };
 
-      // 如果不在 Tauri 环境，使用默认配置
-      if (!isTauriEnvironment()) {
+      // 如果不在 Desktop Host 环境，使用默认配置
+      if (!isDesktopHostEnvironment()) {
         void applyConfig({ language: "zh-CN" } as Config);
         return () => {
           cancelled = true;

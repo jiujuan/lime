@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/browser";
 import {
   getConfig,
   type Config,
-  type CrashReportingConfig as TauriCrashReportingConfig,
+  type CrashReportingConfig as DesktopHostCrashReportingConfig,
 } from "@/lib/api/appConfig";
 import { reportFrontendCrash as reportFrontendCrashToBackend } from "@/lib/api/frontendCrash";
 import { configEventManager } from "@/lib/configEventManager";
@@ -117,7 +117,7 @@ export function sanitizeCrashValue(value: unknown, depth = 0): unknown {
 function resolveCrashReportingConfig(
   config: Config | null,
 ): ResolvedCrashReportingConfig {
-  const crashConfig: TauriCrashReportingConfig | undefined =
+  const crashConfig: DesktopHostCrashReportingConfig | undefined =
     config?.crash_reporting;
 
   const dsnCandidate =
@@ -438,7 +438,7 @@ export async function initCrashReporting(): Promise<void> {
 }
 
 export async function applyCrashReportingSettings(
-  crashConfig?: TauriCrashReportingConfig | null,
+  crashConfig?: DesktopHostCrashReportingConfig | null,
 ): Promise<void> {
   const pseudoConfig = { crash_reporting: crashConfig ?? undefined } as Config;
   const resolved = resolveCrashReportingConfig(pseudoConfig);

@@ -1,4 +1,4 @@
-import { save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { save as saveDialog } from "@/lib/desktop-host/plugin-dialog";
 import { saveExportedDocument } from "@/lib/api/document-export";
 import type { ExportFormat } from "../types";
 import { markdownToHtml } from "../editor/utils/markdown";

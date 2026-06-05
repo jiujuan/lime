@@ -72,7 +72,7 @@ src/features/agent-app/
     └── content-factory-app.json
 ```
 
-P0 如果能全部在前端完成，就不增加 Tauri command。只有本地 package hash、文件枚举或 app data 路径必须走系统能力时，才增加 `src-tauri/src/agent_app/`。
+P0 如果能全部在前端完成，就不增加 Tauri command。只有本地 package hash、文件枚举或 app data 路径必须走系统能力时，才增加 `lime-rs/src/agent_app/`。
 
 ## Feature Flag
 

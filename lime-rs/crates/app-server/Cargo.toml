@@ -1,0 +1,39 @@
+[package]
+name = "app-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "app-server"
+path = "src/main.rs"
+
+[lib]
+name = "app_server"
+path = "src/lib.rs"
+doctest = false
+
+[features]
+default = []
+aster-backend = []
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+app-server-protocol.workspace = true
+app-server-transport.workspace = true
+lime-core.workspace = true
+lime-skills.workspace = true
+lime-services.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile.workspace = true

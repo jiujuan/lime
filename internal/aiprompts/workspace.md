@@ -76,7 +76,7 @@ Workspace 是 Lime 应用层的概念，用于组织和管理 AI Agent 的工作
 ### Workspace 类型定义
 
 ```rust
-// lime/src-tauri/src/workspace/types.rs
+// lime/lime-rs/src/workspace/types.rs
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -141,7 +141,7 @@ CREATE INDEX idx_workspaces_root_path ON workspaces(root_path);
 ### WorkspaceManager
 
 ```rust
-// lime/src-tauri/src/workspace/manager.rs
+// lime/lime-rs/src/workspace/manager.rs
 
 impl WorkspaceManager {
     /// 创建新 workspace
@@ -196,10 +196,10 @@ impl WorkspaceManager {
 }
 ```
 
-### Tauri 命令
+### legacy adapter 命令
 
 ```rust
-// lime/src-tauri/src/commands/workspace_cmd.rs
+// lime/lime-rs/src/commands/workspace_cmd.rs
 
 #[tauri::command]
 pub async fn workspace_create(name: String, root_path: String) -> Result<Workspace, String>;
@@ -299,7 +299,7 @@ export function WorkspaceSelector() {
 ### Phase 1: 基础功能
 1. 数据库 schema 迁移
 2. WorkspaceManager 核心 CRUD
-3. Tauri 命令实现
+3. legacy adapter 命令实现
 4. WorkspaceSelector 组件
 
 ### Phase 2: 集成功能

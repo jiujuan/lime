@@ -1,0 +1,31 @@
+{
+  "$defs": {
+    "RequestId": {
+      "anyOf": [
+        {
+          "format": "int64",
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "id": {
+      "$ref": "#/$defs/RequestId"
+    },
+    "method": {
+      "type": "string"
+    },
+    "params": true
+  },
+  "required": [
+    "id",
+    "method"
+  ],
+  "title": "JsonRpcRequest",
+  "type": "object"
+}

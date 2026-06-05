@@ -140,7 +140,7 @@ Lime 内部适配器标准至少包含以下字段语义：
 
 现有实现的主承载结构为：
 
-- `src-tauri/src/services/site_adapter_registry.rs` 中的 `SiteAdapterSpec`
+- `lime-rs/src/services/site_adapter_registry.rs` 中的 `SiteAdapterSpec`
 
 如果未来字段扩展，仍然必须收敛到 Lime 自己的标准模型，而不是向外部项目的原始结构靠拢。
 

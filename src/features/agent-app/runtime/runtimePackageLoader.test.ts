@@ -50,7 +50,7 @@ describe("RuntimePackageLoader P13", () => {
         rawWorkerAllowed: false,
         networkAllowed: false,
         fileSystemAllowed: false,
-        rawTauriAllowed: false,
+        rawHostApiAllowed: false,
         nodeApiAllowed: false,
       },
     });
@@ -155,13 +155,13 @@ describe("RuntimePackageLoader P13", () => {
       entryKey: "dashboard",
       fallback: "lab-projection",
       sandboxPolicy: {
-        allowRawTauriApi: false,
+        allowRawHostApi: false,
         allowNodeApi: false,
         allowNetworkAccess: false,
       },
       sdkBridge: {
         bridgeKind: "injected-sdk",
-        rawTauriApi: false,
+        rawHostApi: false,
         nodeApi: false,
       },
     });

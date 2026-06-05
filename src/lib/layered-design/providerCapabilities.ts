@@ -212,9 +212,9 @@ export const LAYERED_DESIGN_BUILT_IN_PROVIDER_CAPABILITIES: readonly LayeredDesi
     },
     {
       kind: "text_ocr",
-      label: "Tauri native OCR provider",
+      label: "Desktop Host native OCR provider",
       execution: "native_command",
-      modelId: "tauri_native_ocr",
+      modelId: "desktop_host_native_ocr",
       supports: {
         dataUrlPng: true,
         textGeometry: true,
@@ -281,7 +281,7 @@ function formatExecution(
     case "browser_worker":
       return "Browser Worker";
     case "native_command":
-      return "Tauri native command";
+      return "Desktop Host native command";
     case "remote_model":
       return "Remote model";
     case "local_heuristic":

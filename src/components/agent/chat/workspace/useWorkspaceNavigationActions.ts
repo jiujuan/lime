@@ -1,6 +1,6 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { toast } from "sonner";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog } from "@/lib/desktop-host/plugin-dialog";
 import { updateProject as updateProjectById } from "@/lib/api/project";
 import { notifyProjectRuntimeAgentsGuide } from "@/components/workspace/services/runtimeAgentsGuideService";
 import type { MemoryPageParams, Page, PageParams } from "@/types/page";

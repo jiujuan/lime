@@ -10,15 +10,15 @@ const projectRoot = path.resolve(process.cwd());
 const repoRootMarker = path.join(projectRoot, "package.json");
 const nestedRepoRootMarker = path.join(projectRoot, "..", "package.json");
 
-const runningInsideSrcTauri =
-  path.basename(projectRoot) === "src-tauri" &&
+const runningInsideRustWorkspace =
+  path.basename(projectRoot) === "lime-rs" &&
   fs.existsSync(nestedRepoRootMarker);
 
-if (runningInsideSrcTauri) {
-  console.error("[lime] 检测到在 src-tauri 子目录启动开发脚本。");
-  console.error("[lime] 请回到仓库根目录执行：npm run tauri:dev");
+if (runningInsideRustWorkspace) {
+  console.error("[lime] 检测到在 lime-rs 子目录启动开发脚本。");
+  console.error("[lime] 请回到仓库根目录执行：npm run dev");
   console.error(
-    "[lime] 这样可以避免生成 src-tauri/src-tauri/target 目录。",
+    "[lime] 这样可以避免生成 lime-rs/lime-rs/target 目录。",
   );
   process.exit(1);
 }

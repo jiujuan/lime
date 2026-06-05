@@ -7,7 +7,7 @@ MCP (Model Context Protocol) 服务器管理模块。
 ## 目录结构
 
 ```
-src-tauri/src/services/
+lime-rs/src/services/
 ├── mcp_service.rs      # MCP 服务管理
 └── mcp_sync.rs         # 配置同步
 
@@ -69,9 +69,10 @@ impl McpService {
 }
 ```
 
-## Tauri 命令
+## Desktop Host / App Server 边界
 
 ```rust
+// legacy adapter 示例；新能力默认走 App Server JSON-RPC 或 Electron IPC。
 #[tauri::command]
 async fn mcp_list_servers() -> Result<Vec<McpServerInfo>, String>;
 
@@ -91,4 +92,4 @@ async fn mcp_call_tool(server: String, tool: String, args: Value) -> Result<Valu
 ## 相关文档
 
 - [services.md](services.md) - 业务服务
-- [commands.md](commands.md) - Tauri 命令
+- [commands.md](commands.md) - Desktop Host / App Server 命令边界

@@ -72,7 +72,7 @@
 
 ### 1. 提交入口
 
-- `src-tauri/src/commands/aster_agent_cmd/command_api/runtime_api.rs`
+- `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs`
   - `agent_runtime_submit_turn`
   - `agent_runtime_interrupt_turn`
   - `agent_runtime_compact_session`
@@ -88,8 +88,8 @@
 
 ### 2. turn 归一化与输入组装
 
-- `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs`
-- `src-tauri/crates/agent/src/turn_input_envelope.rs`
+- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
+- `lime-rs/crates/agent/src/turn_input_envelope.rs`
 
 当前 `runtime_turn.rs` 负责的关键步骤：
 
@@ -131,7 +131,7 @@
 
 ### 3. queue 与恢复
 
-- `src-tauri/crates/agent/src/runtime_queue.rs`
+- `lime-rs/crates/agent/src/runtime_queue.rs`
 
 当前 queue 主链固定为：
 
@@ -151,7 +151,7 @@
 
 ### 4. 工具面与沙箱
 
-- `src-tauri/src/commands/aster_agent_cmd/tool_runtime.rs`
+- `lime-rs/src/commands/aster_agent_cmd/tool_runtime.rs`
 
 当前这里负责：
 
@@ -168,7 +168,7 @@
 
 ### 5. 流式执行与主回合副作用
 
-- `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs`
+- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
 
 主回合执行当前固定通过：
 
@@ -192,9 +192,9 @@
 - `agent_runtime_compact_session`
 - `agent_runtime_get_session`
 - `agent_runtime_get_thread_read`
-- `src-tauri/src/services/runtime_evidence_pack_service.rs`
-- `src-tauri/src/services/runtime_replay_case_service.rs`
-- `src-tauri/src/services/runtime_review_decision_service.rs`
+- `lime-rs/src/services/runtime_evidence_pack_service.rs`
+- `lime-rs/src/services/runtime_replay_case_service.rs`
+- `lime-rs/src/services/runtime_review_decision_service.rs`
 
 固定规则：
 
@@ -237,7 +237,7 @@
 - `tool_runtime.rs`
 - `agent_runtime_get_session / get_thread_read`
 - `agent_runtime_compact_session`
-- `src-tauri/src/commands/aster_agent_cmd/action_runtime.rs::agent_runtime_respond_action`
+- `lime-rs/src/commands/aster_agent_cmd/action_runtime.rs::agent_runtime_respond_action`
 - `runtime_evidence_pack_service.rs`
 - `runtime_replay_case_service.rs`
 - `runtime_review_decision_service.rs`
@@ -245,9 +245,9 @@
 ### `compat`
 
 - `internal/roadmap/lime-aster-codex-alignment-roadmap.md`
-- `src-tauri/src/commands/agent_cmd.rs::agent_generate_title`
-- `src-tauri/src/commands/persona_cmd.rs::generate_persona`
-- `src-tauri/src/commands/theme_context_cmd.rs::aster_agent_theme_context_search`
+- `lime-rs/src/commands/agent_cmd.rs::agent_generate_title`
+- `lime-rs/src/commands/persona_cmd.rs::generate_persona`
+- `lime-rs/src/commands/theme_context_cmd.rs::aster_agent_theme_context_search`
 
 这份历史档案与专用命令仍可保留各自职责，但不再承担 Query Loop 唯一事实源职责。
 这三条命令属于专用一次性会话能力：允许显式拼自己的临时 `SessionConfig`，但不能参与 submit turn、runtime queue 或 evidence 真相定义。
@@ -259,7 +259,7 @@
 - 让任何 `@` 场景、slash scene 或 viewer 自己维护执行状态
 - 在 UI、专题 service 或证据导出层重新拼装“真实模型输入”
 - 绕开 `agent_runtime_submit_turn` 直接定义第二条主回合执行链
-- 在 Tauri 命令层继续新增未分类的原始 `agent.reply(...)` / `stream_reply_with_policy(...)` 调用
+- 在 Desktop Host / legacy adapter 命令层继续新增未分类的原始 `agent.reply(...)` / `stream_reply_with_policy(...)` 调用
 
 ## 最低验证要求
 

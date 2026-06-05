@@ -863,7 +863,7 @@ export interface AgentAppUiSandboxPolicy {
     allowForms: boolean;
     allowPopups: boolean;
     allowDownloads: boolean;
-    allowRawTauriApi: boolean;
+    allowRawHostApi: boolean;
     allowNodeApi: boolean;
     allowNetworkAccess: boolean;
 }
@@ -877,7 +877,7 @@ export interface AgentAppUiSdkBridgeDescriptor {
     entryKey: string;
     allowedCapabilities: string[];
     blockedCapabilities: AgentAppUiBridgeBlockedCapability[];
-    rawTauriApi: false;
+    rawHostApi: false;
     nodeApi: false;
 }
 export interface AgentAppUiMountResult {

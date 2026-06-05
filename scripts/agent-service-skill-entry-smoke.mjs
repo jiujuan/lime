@@ -81,7 +81,7 @@ function runCargoTestGroup(label, { packageName, testFilter, expectedTests }) {
       "--test-threads=1",
     ],
     {
-      cwd: path.join(rootDir, "src-tauri"),
+      cwd: path.join(rootDir, "lime-rs"),
       encoding: "utf8",
       env: process.env,
     },

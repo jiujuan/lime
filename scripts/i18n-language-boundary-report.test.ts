@@ -36,7 +36,7 @@ describe("i18n language boundary report", () => {
     writeFile(root, "src/i18n/createI18n.ts", "i18n.language;\n");
     writeFile(
       root,
-      "src-tauri/src/services/browser_environment_service.rs",
+      "lime-rs/src/services/browser_environment_service.rs",
       "pub accept_language: Option<String>,\n",
     );
     writeFile(
@@ -51,7 +51,7 @@ describe("i18n language boundary report", () => {
     );
     writeFile(
       root,
-      "src-tauri/src/commands/voice_model_cmd.rs",
+      "lime-rs/src/commands/voice_model_cmd.rs",
       'let preferredLanguage = "auto";\n',
     );
     writeFile(
@@ -71,13 +71,13 @@ describe("i18n language boundary report", () => {
     );
     writeFile(
       root,
-      "src-tauri/src/commands/media_task_cmd.rs",
+      "lime-rs/src/commands/media_task_cmd.rs",
       "pub language: Option<String>,\n",
     );
 
     const report = analyzeI18nLanguageBoundaryReport({
       rootDir: root,
-      sourceDirs: ["src", "src-tauri"],
+      sourceDirs: ["src", "lime-rs"],
     });
 
     expect(report.schemaVersion).toBe("lime.i18n.languageBoundaryReport.v1");
@@ -95,7 +95,7 @@ describe("i18n language boundary report", () => {
       expect.arrayContaining([
         {
           count: 1,
-          file: "src-tauri/src/commands/media_task_cmd.rs",
+          file: "lime-rs/src/commands/media_task_cmd.rs",
         },
       ]),
     );

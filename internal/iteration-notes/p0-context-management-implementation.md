@@ -4,17 +4,17 @@
 
 ### 代码结构
 
-1. **session_context_service.rs** (src-tauri/crates/services/src/)
+1. **session_context_service.rs** (lime-rs/crates/services/src/)
    - 负责 general 模式的上下文管理
    - 使用本地关键词提取生成摘要（第 355-463 行）
    - 支持配置：max_messages、max_characters、summary_threshold
 
-2. **SessionConfigBuilder** (src-tauri/crates/agent/src/aster_state_support.rs)
+2. **SessionConfigBuilder** (lime-rs/crates/agent/src/aster_state_support.rs)
    - 用于构建 aster Agent 的会话配置
    - 当前字段：id、max_turns、system_prompt、include_context_trace
    - 缺少上下文压缩相关配置
 
-3. **AsterAgentWrapper** (src-tauri/src/agent/aster_agent.rs)
+3. **AsterAgentWrapper** (lime-rs/src/agent/aster_agent.rs)
    - 在第 48-50 行创建 SessionConfig
    - 只设置了 `include_context_trace(true)`
 
@@ -136,8 +136,8 @@
 ## 参考资料
 
 - 研究报告：Lime AI Agent 改进研究报告
-- 当前内置路径：`src-tauri/crates/aster-rust/`
+- 当前内置路径：`lime-rs/crates/aster-rust/`
 - 相关文件：
-  - src-tauri/crates/services/src/session_context_service.rs
-  - src-tauri/crates/agent/src/aster_state_support.rs
-  - src-tauri/src/agent/aster_agent.rs
+  - lime-rs/crates/services/src/session_context_service.rs
+  - lime-rs/crates/agent/src/aster_state_support.rs
+  - lime-rs/src/agent/aster_agent.rs

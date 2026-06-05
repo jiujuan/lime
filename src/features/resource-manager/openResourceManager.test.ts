@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockHasTauriInvokeCapability, mockWebviewWindow, mockGetByLabel } =
+const { mockHasDesktopHostInvokeCapability, mockWebviewWindow, mockGetByLabel } =
   vi.hoisted(() => {
     const ctor = vi.fn().mockImplementation(function (
       this: {
@@ -20,17 +20,17 @@ const { mockHasTauriInvokeCapability, mockWebviewWindow, mockGetByLabel } =
     });
 
     return {
-      mockHasTauriInvokeCapability: vi.fn(),
+      mockHasDesktopHostInvokeCapability: vi.fn(),
       mockWebviewWindow: ctor,
       mockGetByLabel: vi.fn(),
     };
   });
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriInvokeCapability: mockHasTauriInvokeCapability,
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostInvokeCapability: mockHasDesktopHostInvokeCapability,
 }));
 
-vi.mock("@tauri-apps/api/webviewWindow", () => ({
+vi.mock("@/lib/desktop-host/webviewWindow", () => ({
   WebviewWindow: Object.assign(mockWebviewWindow, {
     getByLabel: mockGetByLabel,
   }),
@@ -54,7 +54,7 @@ describe("openResourceManager", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    mockHasTauriInvokeCapability.mockReturnValue(false);
+    mockHasDesktopHostInvokeCapability.mockReturnValue(false);
     mockGetByLabel.mockResolvedValue(null);
     vi.spyOn(window, "open").mockImplementation(() => null);
   });
@@ -91,8 +91,8 @@ describe("openResourceManager", () => {
     );
   });
 
-  it("Tauri 环境应创建独立 resource-manager 窗口", async () => {
-    mockHasTauriInvokeCapability.mockReturnValue(true);
+  it("Desktop Host 环境应创建独立 resource-manager 窗口", async () => {
+    mockHasDesktopHostInvokeCapability.mockReturnValue(true);
 
     const sessionId = await openResourceManager({
       items: [{ src: "https://example.com/a.png", kind: "image" }],
@@ -110,7 +110,7 @@ describe("openResourceManager", () => {
   });
 
   it("已有资源管理器窗口时应发送会话切换事件并聚焦", async () => {
-    mockHasTauriInvokeCapability.mockReturnValue(true);
+    mockHasDesktopHostInvokeCapability.mockReturnValue(true);
     const existingWindow = {
       emit: vi.fn().mockResolvedValue(undefined),
       show: vi.fn().mockResolvedValue(undefined),

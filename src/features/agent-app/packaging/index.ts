@@ -12,9 +12,9 @@ export {
 export { buildNativeShellRegistrationPlan } from "./nativeShellRegistration";
 export { buildStandaloneReleasePlan } from "./releasePlan";
 export { buildStandaloneReleasePipelinePlan } from "./releasePipeline";
-export { materializeStandaloneTauriConfig } from "./tauriConfigMaterializer";
-export { buildStandaloneTauriConfigWritePlan } from "./tauriConfigWritePlan";
-export { executeStandaloneTauriConfigWritePlan } from "./tauriConfigWriter";
+export { materializeStandaloneNativeShellConfig } from "./nativeShellConfigMaterializer";
+export { buildStandaloneNativeShellConfigWritePlan } from "./nativeShellConfigWritePlan";
+export { executeStandaloneNativeShellConfigWritePlan } from "./nativeShellConfigWriter";
 export { validatePackageTarget } from "./validatePackageTarget";
 export type {
   AgentAppStandaloneArtifactBuildBlocker,
@@ -22,7 +22,7 @@ export type {
   AgentAppProductionArtifactBuilderPort,
   AgentAppStandaloneArtifactBuildInput,
   AgentAppStandaloneArtifactBuildPlan,
-  AgentAppStandaloneTauriConfigBuildStep,
+  AgentAppStandaloneNativeShellConfigBuildStep,
 } from "./artifactBuilder";
 export type {
   MacOsIdentityValidationIssue,
@@ -42,28 +42,28 @@ export type {
   AgentAppNativeShellRegistrationPlan,
 } from "./nativeShellRegistration";
 export type {
-  AgentAppStandaloneTauriConfigMaterializerBlocker,
-  AgentAppStandaloneTauriConfigMaterializerInput,
-  AgentAppStandaloneTauriConfigMaterializerResult,
-} from "./tauriConfigMaterializer";
+  AgentAppStandaloneNativeShellConfigMaterializerBlocker,
+  AgentAppStandaloneNativeShellConfigMaterializerInput,
+  AgentAppStandaloneNativeShellConfigMaterializerResult,
+} from "./nativeShellConfigMaterializer";
 export type {
-  AgentAppStandaloneTauriConfigWriteBlocker,
-  AgentAppStandaloneTauriConfigWriteBlockerCode,
-  AgentAppStandaloneTauriConfigWriteFile,
-  AgentAppStandaloneTauriConfigWriteFileKind,
-  AgentAppStandaloneTauriConfigWritePlan,
-  AgentAppStandaloneTauriConfigWritePlanInput,
-} from "./tauriConfigWritePlan";
+  AgentAppStandaloneNativeShellConfigWriteBlocker,
+  AgentAppStandaloneNativeShellConfigWriteBlockerCode,
+  AgentAppStandaloneNativeShellConfigWriteFile,
+  AgentAppStandaloneNativeShellConfigWriteFileKind,
+  AgentAppStandaloneNativeShellConfigWritePlan,
+  AgentAppStandaloneNativeShellConfigWritePlanInput,
+} from "./nativeShellConfigWritePlan";
 export type {
-  AgentAppStandaloneTauriConfigFileSystemPort,
-  AgentAppStandaloneTauriConfigWriteExecutionInput,
-  AgentAppStandaloneTauriConfigWriteExecutionResult,
-  AgentAppStandaloneTauriConfigWriterBlocker,
-  AgentAppStandaloneTauriConfigWriterBlockerCode,
-  AgentAppStandaloneTauriConfigWriterFailure,
-  AgentAppStandaloneTauriConfigWriterFailureCode,
-  AgentAppStandaloneTauriConfigWrittenFileRef,
-} from "./tauriConfigWriter";
+  AgentAppStandaloneNativeShellConfigFileSystemPort,
+  AgentAppStandaloneNativeShellConfigWriteExecutionInput,
+  AgentAppStandaloneNativeShellConfigWriteExecutionResult,
+  AgentAppStandaloneNativeShellConfigWriterBlocker,
+  AgentAppStandaloneNativeShellConfigWriterBlockerCode,
+  AgentAppStandaloneNativeShellConfigWriterFailure,
+  AgentAppStandaloneNativeShellConfigWriterFailureCode,
+  AgentAppStandaloneNativeShellConfigWrittenFileRef,
+} from "./nativeShellConfigWriter";
 export type {
   AgentAppReleaseChannel,
   AgentAppStandaloneReleaseGate,

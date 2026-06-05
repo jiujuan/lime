@@ -2,12 +2,12 @@
 
 ## 概述
 
-业务服务层封装核心业务逻辑，被 Tauri 命令调用。
+业务服务层封装核心业务逻辑，被 Electron Desktop Host、App Server JSON-RPC 或 legacy adapter 调用。
 
 ## 目录结构
 
 ```
-src-tauri/src/services/
+lime-rs/src/services/
 ├── mod.rs                      # 模块入口
 ├── api_key_provider_service.rs # API Key Provider 服务
 ├── model_registry_service.rs   # 模型注册表服务
@@ -61,5 +61,5 @@ impl McpService {
 
 ## 相关文档
 
-- [commands.md](commands.md) - Tauri 命令
+- [commands.md](commands.md) - Desktop Host / App Server 命令边界
 - [credential-pool.md](credential-pool.md) - 凭证池退役说明

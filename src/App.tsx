@@ -52,7 +52,7 @@ import {
 import { installOfficialMarketplaceSkill } from "./lib/api/officialSkillMarketplace";
 import { toast } from "sonner";
 import { SettingsTabs } from "./types/settings";
-import { hasTauriInvokeCapability } from "./lib/tauri-runtime";
+import { hasDesktopHostInvokeCapability } from "./lib/desktop-runtime";
 import { shouldReserveMacWindowControls } from "./lib/windowControls";
 import { startWindowDragFromMouseEvent } from "./lib/windowDrag";
 import {
@@ -136,7 +136,7 @@ function AppContent() {
   startupTracker.mark("AppContent: render start");
 
   const { t } = useTranslation("common");
-  const hasTauriDesktopRuntime = hasTauriInvokeCapability();
+  const hasDesktopHostRuntime = hasDesktopHostInvokeCapability();
   const reserveMacWindowControls = shouldReserveMacWindowControls();
   const [showSplash, setShowSplash] = useState(true);
   const {
@@ -364,7 +364,7 @@ function AppContent() {
   });
 
   const { error: registryError, refresh: _refreshRegistry } = useRelayRegistry({
-    autoLoad: hasTauriDesktopRuntime,
+    autoLoad: hasDesktopHostRuntime,
   });
   useAppStartupEffects({
     currentPage,
@@ -417,23 +417,20 @@ function AppContent() {
     <SoundProvider>
       <ComponentDebugProvider>
         <AppContainer>
-          {hasTauriDesktopRuntime ? (
+          {hasDesktopHostRuntime ? (
             <WindowDragLayer aria-hidden="true">
               <WindowTopDragRegion
                 $reserveMacWindowControls={reserveMacWindowControls}
-                data-tauri-drag-region
                 data-lime-window-drag-region
                 onMouseDown={handleWindowDragStart}
               />
               <WindowSideDragRegion
                 $side="left"
-                data-tauri-drag-region
                 data-lime-window-drag-region
                 onMouseDown={handleWindowDragStart}
               />
               <WindowSideDragRegion
                 $side="right"
-                data-tauri-drag-region
                 data-lime-window-drag-region
                 onMouseDown={handleWindowDragStart}
               />

@@ -294,7 +294,7 @@ export interface CanvasState {
   language?: string;
   /** 文件名 */
   filename?: string;
-  /** 真实源文件路径，用于 Tauri WebView 以受控文件 URL 预览 */
+  /** 真实源文件路径，用于 Desktop Host WebView 以受控文件 URL 预览 */
   sourcePath?: string;
   /** 是否处于编辑模式 */
   isEditing: boolean;

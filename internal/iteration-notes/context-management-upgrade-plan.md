@@ -22,7 +22,7 @@
 
 ### 阶段 1：扩展 SessionConfigBuilder
 
-在 `src-tauri/crates/agent/src/aster_state_support.rs` 中扩展 `SessionConfigBuilder`：
+在 `lime-rs/crates/agent/src/aster_state_support.rs` 中扩展 `SessionConfigBuilder`：
 
 ```rust
 pub struct SessionConfigBuilder {

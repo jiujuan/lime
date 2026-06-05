@@ -12,10 +12,10 @@
 
 ## 当前事实
 
-- 根级 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`、`src-tauri/tauri.conf.headless.json` 与 `src-tauri/capabilities/agent-app-shell.json` 都存在稳定文本字段。
+- 根级 `package.json`、`lime-rs/Cargo.toml`、`lime-rs/tauri.conf.json`、`lime-rs/tauri.conf.headless.json` 与 `lime-rs/capabilities/agent-app-shell.json` 都存在稳定文本字段。
 - 这些字段的真实配置目前仍是单语事实源；多语言发布前的审阅链路现在由 metadata translation scope 与 build-time locale manifest 承担。
-- `src-tauri/tauri.conf.json` 与 `src-tauri/tauri.conf.headless.json` 的 `productName`、窗口标题和 identifier 都是固定值。
-- `package.json` 与 `src-tauri/Cargo.toml` 的 description 仍是单一英文描述，不是分 locale 的 metadata bundle。
+- `lime-rs/tauri.conf.json` 与 `lime-rs/tauri.conf.headless.json` 的 `productName`、窗口标题和 identifier 都是固定值。
+- `package.json` 与 `lime-rs/Cargo.toml` 的 description 仍是单一英文描述，不是分 locale 的 metadata bundle。
 - `agent-app-shell.json` 的 description 仍是单一中文说明，没有 companion 版本。
 - `internal/roadmap/i18n/app-metadata-translation-scope.json` 已定义 installer / app metadata 的最小 ownership 与字段分类：`productName`、窗口标题和 bundle identifier 属于稳定品牌 / 标识字段，`package.json.description` 与 Tauri file association description 属于多语言发布前需要处理的 translatable 字段。
 - `internal/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json` 已把 scope 转成 build-time locale manifest；当前 `workflowStatus=ready`，11 个 metadata entry 中 2 个 localized entry、7 个 stable entry、2 个 source-only entry，missing field 与 required localized missing 均为 `0`。
@@ -57,7 +57,7 @@
 - [app-metadata-locale-build-manifest.json](</Users/coso/Documents/dev/ai/aiclientproxy/lime/internal/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json>)
 - [app-metadata-workflow-inventory.json](</Users/coso/Documents/dev/ai/aiclientproxy/lime/internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json>)
 - [package.json](</Users/coso/Documents/dev/ai/aiclientproxy/lime/package.json>)
-- [src-tauri/Cargo.toml](</Users/coso/Documents/dev/ai/aiclientproxy/lime/src-tauri/Cargo.toml>)
-- [src-tauri/tauri.conf.json](</Users/coso/Documents/dev/ai/aiclientproxy/lime/src-tauri/tauri.conf.json>)
-- [src-tauri/tauri.conf.headless.json](</Users/coso/Documents/dev/ai/aiclientproxy/lime/src-tauri/tauri.conf.headless.json>)
-- [src-tauri/capabilities/agent-app-shell.json](</Users/coso/Documents/dev/ai/aiclientproxy/lime/src-tauri/capabilities/agent-app-shell.json>)
+- [lime-rs/Cargo.toml](</Users/coso/Documents/dev/ai/aiclientproxy/lime/lime-rs/Cargo.toml>)
+- [lime-rs/tauri.conf.json](</Users/coso/Documents/dev/ai/aiclientproxy/lime/lime-rs/tauri.conf.json>)
+- [lime-rs/tauri.conf.headless.json](</Users/coso/Documents/dev/ai/aiclientproxy/lime/lime-rs/tauri.conf.headless.json>)
+- [lime-rs/capabilities/agent-app-shell.json](</Users/coso/Documents/dev/ai/aiclientproxy/lime/lime-rs/capabilities/agent-app-shell.json>)

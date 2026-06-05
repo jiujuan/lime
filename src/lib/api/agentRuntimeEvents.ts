@@ -1,5 +1,5 @@
 import { safeListen } from "@/lib/dev-bridge";
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@/lib/desktop-host/event";
 import type { AgentEvent } from "@/lib/api/agentProtocol";
 
 export type AgentRuntimeEventHandler<TPayload = AgentEvent | unknown> =

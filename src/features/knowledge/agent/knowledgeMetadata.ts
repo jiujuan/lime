@@ -86,7 +86,7 @@ export function resolveKnowledgeBuilderSkill(params: {
       family: "persona",
       runtimeMode: "persona",
       bundlePath:
-        "src-tauri/resources/default-skills/personal-ip-knowledge-builder",
+        "lime-rs/resources/default-skills/personal-ip-knowledge-builder",
       deprecated: false,
     };
   }
@@ -102,7 +102,7 @@ export function resolveKnowledgeBuilderSkill(params: {
       limeTemplate: normalized.limeTemplate,
       family: "persona",
       runtimeMode: "persona",
-      bundlePath: `src-tauri/resources/default-skills/${builtinPersonaSkillName}`,
+      bundlePath: `lime-rs/resources/default-skills/${builtinPersonaSkillName}`,
       deprecated: false,
     };
   }
@@ -119,7 +119,7 @@ export function resolveKnowledgeBuilderSkill(params: {
       limeTemplate: normalized.limeTemplate,
       family: "data",
       runtimeMode: "data",
-      bundlePath: `src-tauri/resources/default-skills/${builtinDataSkillName}`,
+      bundlePath: `lime-rs/resources/default-skills/${builtinDataSkillName}`,
       deprecated: false,
     };
   }

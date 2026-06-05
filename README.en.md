@@ -15,7 +15,7 @@ Desktop writing, research, prompt management, knowledge base, and multi-model wo
 <p>
   <a href="https://github.com/limecloud/lime/releases"><img src="https://img.shields.io/github/v/release/limecloud/lime?label=release" alt="Lime GitHub Release" /></a>
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-246B45" alt="Lime supports macOS and Windows" />
-  <img src="https://img.shields.io/badge/desktop-Tauri-24C8DB" alt="Lime is a Tauri desktop app" />
+  <img src="https://img.shields.io/badge/desktop-Electron-24C8DB" alt="Lime is an Electron desktop app" />
   <img src="https://img.shields.io/badge/license-GPLv3-2F4F4F" alt="Lime GPLv3 license" />
 </p>
 
@@ -50,7 +50,7 @@ Lime keeps references, ideas, generation, revision, and review in one place, so 
 
 ## What is Lime?
 
-Lime is an open-source Tauri desktop AI workspace for Chinese creators, brand operators, research writers, and small teams. It brings AI writing, topic research, reference management, prompt reuse, knowledge organization, and multi-model workflows into one local desktop product.
+Lime is an open-source Electron desktop AI workspace for Chinese creators, brand operators, research writers, and small teams. It brings AI writing, topic research, reference management, prompt reuse, knowledge organization, and multi-model workflows into one local desktop product.
 
 Think of Lime as an AI workspace for long-running content projects:
 
@@ -201,7 +201,7 @@ brew install --cask lime
 
 ## Tech Stack and Platforms
 
-- Desktop framework: Tauri 2, Rust
+- Desktop framework: Electron, Rust App Server
 - Frontend: React, TypeScript, Vite
 - Supported platforms: macOS, Windows
 - License: GPLv3

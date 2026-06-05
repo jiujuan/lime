@@ -1,6 +1,6 @@
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc } from "@/lib/desktop-host/core";
 import { safeInvoke } from "@/lib/dev-bridge";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 
 export async function revealPathInFinder(path: string): Promise<void> {
   await safeInvoke("reveal_in_finder", { path });
@@ -51,12 +51,12 @@ export async function openHtmlPreviewWindow(
   path: string,
   options?: { title?: string },
 ): Promise<boolean> {
-  if (!hasTauriInvokeCapability()) {
+  if (!hasDesktopHostInvokeCapability()) {
     return false;
   }
 
   try {
-    const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+    const { WebviewWindow } = await import("@/lib/desktop-host/webviewWindow");
     const url = convertLocalFileSrc(path);
     const label = `html-preview-${hashPathForWindowLabel(path)}`;
     const existingWindow = await WebviewWindow.getByLabel(label).catch(
@@ -85,17 +85,17 @@ export async function openHtmlPreviewWindow(
 
     return await Promise.race([
       new Promise<boolean>((resolve) => {
-        void previewWindow.once("tauri://created", () => resolve(true));
+        void previewWindow.once("desktop-host://created", () => resolve(true));
       }),
       new Promise<boolean>((resolve) => {
-        void previewWindow.once("tauri://error", () => resolve(false));
+        void previewWindow.once("desktop-host://error", () => resolve(false));
       }),
       new Promise<boolean>((resolve) =>
         window.setTimeout(() => resolve(true), 160),
       ),
     ]);
   } catch (error) {
-    console.warn("[HTML 预览] 打开 Tauri 独立窗口失败:", error);
+    console.warn("[HTML 预览] 打开 Desktop Host 独立窗口失败:", error);
     return false;
   }
 }

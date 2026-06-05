@@ -99,7 +99,7 @@ function requiredOption(value, name) {
 function printUsage() {
   console.log(`Usage:
   node scripts/app-server-release-manifest.mjs \\
-    --binary src-tauri/target/debug/app-server \\
+    --binary lime-rs/target/debug/app-server \\
     --url https://example/app-server-darwin-arm64.tar.gz \\
     [--platform darwin-arm64] [--version 1.59.0] [--out dist/app-server/manifest.json]`);
 }

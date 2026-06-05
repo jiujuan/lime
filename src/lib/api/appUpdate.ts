@@ -1,4 +1,4 @@
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@/lib/desktop-host/event";
 import { safeInvoke, safeListen } from "@/lib/dev-bridge";
 
 export const UPDATE_INSTALL_SESSION_EVENT = "app-update://session";

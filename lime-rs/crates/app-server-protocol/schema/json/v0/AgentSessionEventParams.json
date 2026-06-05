@@ -1,0 +1,58 @@
+{
+  "$defs": {
+    "AgentEvent": {
+      "properties": {
+        "eventId": {
+          "type": "string"
+        },
+        "payload": true,
+        "sequence": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "eventId",
+        "payload",
+        "sequence",
+        "sessionId",
+        "timestamp",
+        "type"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "event": {
+      "$ref": "#/$defs/AgentEvent"
+    }
+  },
+  "required": [
+    "event"
+  ],
+  "title": "AgentSessionEventParams",
+  "type": "object"
+}

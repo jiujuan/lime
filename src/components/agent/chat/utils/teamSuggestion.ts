@@ -98,7 +98,7 @@ const COMPLEXITY_PATTERNS = [
   /前端/,
   /后端/,
   /rust/i,
-  /tauri/i,
+  /electron/i,
   /react/i,
   /gui/i,
   /ui/i,
@@ -170,7 +170,7 @@ function inferSuggestedRoles(
   }
 
   if (
-    /bug|报错|修复|代码|工程|仓库|repo|前端|后端|rust|react|tauri|测试|联调|重构/i.test(
+    /bug|报错|修复|代码|工程|仓库|repo|前端|后端|rust|react|electron|测试|联调|重构/i.test(
       normalizedInput,
     )
   ) {
@@ -194,7 +194,7 @@ function inferSuggestedPresetId(
 ): string {
   void activeTheme;
   if (
-    /bug|报错|修复|代码|工程|仓库|repo|前端|后端|rust|react|tauri|测试|联调|重构/i.test(
+    /bug|报错|修复|代码|工程|仓库|repo|前端|后端|rust|react|electron|测试|联调|重构/i.test(
       normalizedInput,
     )
   ) {

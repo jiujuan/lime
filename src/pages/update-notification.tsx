@@ -6,12 +6,12 @@
  *
  * input: URL 参数（current, latest, download_url）
  * output: 更新提醒 UI
- * pos: pages 层，独立 Tauri 窗口
+ * pos: pages 层，独立 Desktop Host 窗口
  */
 
 import { useEffect, useState, useCallback, type MouseEvent } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open as shellOpen } from "@tauri-apps/plugin-shell";
+import { getCurrentWindow } from "@/lib/desktop-host/window";
+import { open as shellOpen } from "@/lib/desktop-host/plugin-shell";
 import {
   closeUpdateWindow,
   dismissUpdateNotification,

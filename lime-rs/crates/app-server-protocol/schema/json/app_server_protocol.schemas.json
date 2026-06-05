@@ -1,0 +1,3185 @@
+{
+  "$defs": {
+    "AgentAttachment": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "metadata": true,
+        "uri": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "AgentAttachment",
+      "type": "object"
+    },
+    "AgentEvent": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "eventId": {
+          "type": "string"
+        },
+        "payload": true,
+        "sequence": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "eventId",
+        "payload",
+        "sequence",
+        "sessionId",
+        "timestamp",
+        "type"
+      ],
+      "title": "AgentEvent",
+      "type": "object"
+    },
+    "AgentInput": {
+      "$defs": {
+        "AgentAttachment": {
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "metadata": true,
+            "uri": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "attachments": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAttachment"
+          },
+          "type": "array"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "AgentInput",
+      "type": "object"
+    },
+    "AgentSession": {
+      "$defs": {
+        "AgentSessionStatus": {
+          "enum": [
+            "canceled",
+            "completed",
+            "failed",
+            "idle",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        },
+        "BusinessObjectRef": {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "metadata": true,
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "uri": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "businessObjectRef": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BusinessObjectRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/AgentSessionStatus"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "appId",
+        "createdAt",
+        "sessionId",
+        "status",
+        "threadId",
+        "updatedAt"
+      ],
+      "title": "AgentSession",
+      "type": "object"
+    },
+    "AgentSessionActionRespondParams": {
+      "$defs": {
+        "AgentSessionActionScope": {
+          "properties": {
+            "sessionId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "threadId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "turnId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "AgentSessionActionType": {
+          "enum": [
+            "ask_user",
+            "elicitation",
+            "tool_confirmation"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "actionScope": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentSessionActionScope"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "actionType": {
+          "$ref": "#/$defs/AgentSessionActionType"
+        },
+        "confirmed": {
+          "type": "boolean"
+        },
+        "eventName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "metadata": true,
+        "requestId": {
+          "type": "string"
+        },
+        "response": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "userData": true
+      },
+      "required": [
+        "actionType",
+        "confirmed",
+        "requestId",
+        "sessionId"
+      ],
+      "title": "AgentSessionActionRespondParams",
+      "type": "object"
+    },
+    "AgentSessionActionRespondResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "AgentSessionActionRespondResponse",
+      "type": "object"
+    },
+    "AgentSessionActionScope": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "turnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "AgentSessionActionScope",
+      "type": "object"
+    },
+    "AgentSessionActionType": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "ask_user",
+        "elicitation",
+        "tool_confirmation"
+      ],
+      "title": "AgentSessionActionType",
+      "type": "string"
+    },
+    "AgentSessionEventParams": {
+      "$defs": {
+        "AgentEvent": {
+          "properties": {
+            "eventId": {
+              "type": "string"
+            },
+            "payload": true,
+            "sequence": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "threadId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "timestamp": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "eventId",
+            "payload",
+            "sequence",
+            "sessionId",
+            "timestamp",
+            "type"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "event": {
+          "$ref": "#/$defs/AgentEvent"
+        }
+      },
+      "required": [
+        "event"
+      ],
+      "title": "AgentSessionEventParams",
+      "type": "object"
+    },
+    "AgentSessionListParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "archivedOnly": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "includeArchived": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "AgentSessionListParams",
+      "type": "object"
+    },
+    "AgentSessionListResponse": {
+      "$defs": {
+        "AgentSessionOverview": {
+          "properties": {
+            "archivedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "executionStrategy": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "messagesCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "model": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "threadId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "workingDir": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "createdAt",
+            "messagesCount",
+            "model",
+            "sessionId",
+            "updatedAt"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentSessionOverview"
+          },
+          "type": "array"
+        }
+      },
+      "title": "AgentSessionListResponse",
+      "type": "object"
+    },
+    "AgentSessionOverview": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "archivedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "executionStrategy": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "messagesCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "workingDir": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "createdAt",
+        "messagesCount",
+        "model",
+        "sessionId",
+        "updatedAt"
+      ],
+      "title": "AgentSessionOverview",
+      "type": "object"
+    },
+    "AgentSessionReadParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "historyBeforeMessageId": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "historyLimit": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "historyOffset": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "AgentSessionReadParams",
+      "type": "object"
+    },
+    "AgentSessionReadResponse": {
+      "$defs": {
+        "AgentSession": {
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "businessObjectRef": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BusinessObjectRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/AgentSessionStatus"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "appId",
+            "createdAt",
+            "sessionId",
+            "status",
+            "threadId",
+            "updatedAt"
+          ],
+          "type": "object"
+        },
+        "AgentSessionStatus": {
+          "enum": [
+            "canceled",
+            "completed",
+            "failed",
+            "idle",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        },
+        "AgentTurn": {
+          "properties": {
+            "completedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "startedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "status": {
+              "$ref": "#/$defs/AgentTurnStatus"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId",
+            "status",
+            "threadId",
+            "turnId"
+          ],
+          "type": "object"
+        },
+        "AgentTurnStatus": {
+          "enum": [
+            "accepted",
+            "canceled",
+            "completed",
+            "failed",
+            "queued",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        },
+        "BusinessObjectRef": {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "metadata": true,
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "uri": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "detail": true,
+        "session": {
+          "$ref": "#/$defs/AgentSession"
+        },
+        "turns": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentTurn"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "session"
+      ],
+      "title": "AgentSessionReadResponse",
+      "type": "object"
+    },
+    "AgentSessionStartParams": {
+      "$defs": {
+        "BusinessObjectRef": {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "metadata": true,
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "uri": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "businessObjectRef": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BusinessObjectRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "locale": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "appId"
+      ],
+      "title": "AgentSessionStartParams",
+      "type": "object"
+    },
+    "AgentSessionStartResponse": {
+      "$defs": {
+        "AgentSession": {
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "businessObjectRef": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BusinessObjectRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/AgentSessionStatus"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "appId",
+            "createdAt",
+            "sessionId",
+            "status",
+            "threadId",
+            "updatedAt"
+          ],
+          "type": "object"
+        },
+        "AgentSessionStatus": {
+          "enum": [
+            "canceled",
+            "completed",
+            "failed",
+            "idle",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        },
+        "BusinessObjectRef": {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "metadata": true,
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "uri": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "session": {
+          "$ref": "#/$defs/AgentSession"
+        }
+      },
+      "required": [
+        "session"
+      ],
+      "title": "AgentSessionStartResponse",
+      "type": "object"
+    },
+    "AgentSessionStatus": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "canceled",
+        "completed",
+        "failed",
+        "idle",
+        "running",
+        "waitingAction"
+      ],
+      "title": "AgentSessionStatus",
+      "type": "string"
+    },
+    "AgentSessionTurnCancelParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId",
+        "turnId"
+      ],
+      "title": "AgentSessionTurnCancelParams",
+      "type": "object"
+    },
+    "AgentSessionTurnCancelResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "AgentSessionTurnCancelResponse",
+      "type": "object"
+    },
+    "AgentSessionTurnStartParams": {
+      "$defs": {
+        "AgentAttachment": {
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "metadata": true,
+            "uri": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        "AgentInput": {
+          "properties": {
+            "attachments": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/AgentAttachment"
+              },
+              "type": "array"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "type": "object"
+        },
+        "RuntimeOptions": {
+          "properties": {
+            "capabilityId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "eventName": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "hostOptions": true,
+            "metadata": true,
+            "modelPreference": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "providerPreference": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "queuedTurnId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "stream": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "input": {
+          "$ref": "#/$defs/AgentInput"
+        },
+        "queueIfBusy": {
+          "default": false,
+          "type": "boolean"
+        },
+        "runtimeOptions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RuntimeOptions"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "skipPreSubmitResume": {
+          "default": false,
+          "type": "boolean"
+        },
+        "turnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "input",
+        "sessionId"
+      ],
+      "title": "AgentSessionTurnStartParams",
+      "type": "object"
+    },
+    "AgentSessionTurnStartResponse": {
+      "$defs": {
+        "AgentTurn": {
+          "properties": {
+            "completedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "startedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "status": {
+              "$ref": "#/$defs/AgentTurnStatus"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId",
+            "status",
+            "threadId",
+            "turnId"
+          ],
+          "type": "object"
+        },
+        "AgentTurnStatus": {
+          "enum": [
+            "accepted",
+            "canceled",
+            "completed",
+            "failed",
+            "queued",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "turn": {
+          "$ref": "#/$defs/AgentTurn"
+        }
+      },
+      "required": [
+        "turn"
+      ],
+      "title": "AgentSessionTurnStartResponse",
+      "type": "object"
+    },
+    "AgentTurn": {
+      "$defs": {
+        "AgentTurnStatus": {
+          "enum": [
+            "accepted",
+            "canceled",
+            "completed",
+            "failed",
+            "queued",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "completedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "startedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/AgentTurnStatus"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId",
+        "status",
+        "threadId",
+        "turnId"
+      ],
+      "title": "AgentTurn",
+      "type": "object"
+    },
+    "AgentTurnStatus": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "accepted",
+        "canceled",
+        "completed",
+        "failed",
+        "queued",
+        "running",
+        "waitingAction"
+      ],
+      "title": "AgentTurnStatus",
+      "type": "string"
+    },
+    "ArtifactContentStatus": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "available",
+        "notRequested",
+        "unavailable"
+      ],
+      "title": "ArtifactContentStatus",
+      "type": "string"
+    },
+    "ArtifactReadParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "artifactRef": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "cursor": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "includeContent": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "ArtifactReadParams",
+      "type": "object"
+    },
+    "ArtifactReadResponse": {
+      "$defs": {
+        "ArtifactContentStatus": {
+          "enum": [
+            "available",
+            "notRequested",
+            "unavailable"
+          ],
+          "type": "string"
+        },
+        "ArtifactSummary": {
+          "properties": {
+            "artifactId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "artifactRef": {
+              "type": "string"
+            },
+            "content": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "contentStatus": {
+              "$ref": "#/$defs/ArtifactContentStatus",
+              "default": "notRequested"
+            },
+            "eventId": {
+              "type": "string"
+            },
+            "kind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "metadata": true,
+            "path": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sequence": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "status": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "turnId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "artifactRef",
+            "eventId",
+            "sequence"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "artifacts": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ArtifactSummary"
+          },
+          "type": "array"
+        },
+        "nextCursor": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "ArtifactReadResponse",
+      "type": "object"
+    },
+    "ArtifactSummary": {
+      "$defs": {
+        "ArtifactContentStatus": {
+          "enum": [
+            "available",
+            "notRequested",
+            "unavailable"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "artifactId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "artifactRef": {
+          "type": "string"
+        },
+        "content": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "contentStatus": {
+          "$ref": "#/$defs/ArtifactContentStatus",
+          "default": "notRequested"
+        },
+        "eventId": {
+          "type": "string"
+        },
+        "kind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "metadata": true,
+        "path": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sequence": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "status": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "turnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "artifactRef",
+        "eventId",
+        "sequence"
+      ],
+      "title": "ArtifactSummary",
+      "type": "object"
+    },
+    "BusinessObjectRef": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "metadata": true,
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "uri": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind"
+      ],
+      "title": "BusinessObjectRef",
+      "type": "object"
+    },
+    "CapabilityDescriptor": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "description": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "methods": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "title": "CapabilityDescriptor",
+      "type": "object"
+    },
+    "CapabilityListParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "cursor": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "CapabilityListParams",
+      "type": "object"
+    },
+    "CapabilityListResponse": {
+      "$defs": {
+        "CapabilityDescriptor": {
+          "properties": {
+            "description": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "methods": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "capabilities": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CapabilityDescriptor"
+          },
+          "type": "array"
+        },
+        "nextCursor": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "CapabilityListResponse",
+      "type": "object"
+    },
+    "ClientCapabilities": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "eventMethods": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "experimental": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "ClientCapabilities",
+      "type": "object"
+    },
+    "ClientInfo": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "version": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ClientInfo",
+      "type": "object"
+    },
+    "EvidenceExportParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "includeArtifacts": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "includeEvents": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "includeEvidencePack": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "EvidenceExportParams",
+      "type": "object"
+    },
+    "EvidenceExportResponse": {
+      "$defs": {
+        "AgentEvent": {
+          "properties": {
+            "eventId": {
+              "type": "string"
+            },
+            "payload": true,
+            "sequence": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "threadId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "timestamp": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "eventId",
+            "payload",
+            "sequence",
+            "sessionId",
+            "timestamp",
+            "type"
+          ],
+          "type": "object"
+        },
+        "AgentSession": {
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "businessObjectRef": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BusinessObjectRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/AgentSessionStatus"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "appId",
+            "createdAt",
+            "sessionId",
+            "status",
+            "threadId",
+            "updatedAt"
+          ],
+          "type": "object"
+        },
+        "AgentSessionStatus": {
+          "enum": [
+            "canceled",
+            "completed",
+            "failed",
+            "idle",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        },
+        "AgentTurn": {
+          "properties": {
+            "completedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "startedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "status": {
+              "$ref": "#/$defs/AgentTurnStatus"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId",
+            "status",
+            "threadId",
+            "turnId"
+          ],
+          "type": "object"
+        },
+        "AgentTurnStatus": {
+          "enum": [
+            "accepted",
+            "canceled",
+            "completed",
+            "failed",
+            "queued",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        },
+        "ArtifactContentStatus": {
+          "enum": [
+            "available",
+            "notRequested",
+            "unavailable"
+          ],
+          "type": "string"
+        },
+        "ArtifactSummary": {
+          "properties": {
+            "artifactId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "artifactRef": {
+              "type": "string"
+            },
+            "content": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "contentStatus": {
+              "$ref": "#/$defs/ArtifactContentStatus",
+              "default": "notRequested"
+            },
+            "eventId": {
+              "type": "string"
+            },
+            "kind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "metadata": true,
+            "path": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sequence": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "status": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "turnId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "artifactRef",
+            "eventId",
+            "sequence"
+          ],
+          "type": "object"
+        },
+        "BusinessObjectRef": {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "metadata": true,
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "uri": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
+        },
+        "EvidencePackArtifact": {
+          "properties": {
+            "absolutePath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "bytes": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "relativePath": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "bytes",
+            "kind",
+            "relativePath",
+            "title"
+          ],
+          "type": "object"
+        },
+        "EvidencePackSummary": {
+          "properties": {
+            "artifacts": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/EvidencePackArtifact"
+              },
+              "type": "array"
+            },
+            "completionAuditSummary": true,
+            "exportedAt": {
+              "type": "string"
+            },
+            "itemCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "knownGaps": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "latestTurnStatus": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "observabilitySummary": true,
+            "packAbsoluteRoot": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "packRelativeRoot": {
+              "type": "string"
+            },
+            "pendingRequestCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "queuedTurnCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "recentArtifactCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "threadStatus": {
+              "type": "string"
+            },
+            "turnCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "exportedAt",
+            "itemCount",
+            "packRelativeRoot",
+            "pendingRequestCount",
+            "queuedTurnCount",
+            "recentArtifactCount",
+            "threadStatus",
+            "turnCount"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "artifacts": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ArtifactSummary"
+          },
+          "type": "array"
+        },
+        "events": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentEvent"
+          },
+          "type": "array"
+        },
+        "evidencePack": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EvidencePackSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exportedAt": {
+          "type": "string"
+        },
+        "session": {
+          "$ref": "#/$defs/AgentSession"
+        },
+        "turns": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentTurn"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "exportedAt",
+        "session"
+      ],
+      "title": "EvidenceExportResponse",
+      "type": "object"
+    },
+    "EvidencePackArtifact": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "absolutePath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "bytes": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "relativePath": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "bytes",
+        "kind",
+        "relativePath",
+        "title"
+      ],
+      "title": "EvidencePackArtifact",
+      "type": "object"
+    },
+    "EvidencePackSummary": {
+      "$defs": {
+        "EvidencePackArtifact": {
+          "properties": {
+            "absolutePath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "bytes": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "relativePath": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "bytes",
+            "kind",
+            "relativePath",
+            "title"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "artifacts": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/EvidencePackArtifact"
+          },
+          "type": "array"
+        },
+        "completionAuditSummary": true,
+        "exportedAt": {
+          "type": "string"
+        },
+        "itemCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "knownGaps": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "latestTurnStatus": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "observabilitySummary": true,
+        "packAbsoluteRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "packRelativeRoot": {
+          "type": "string"
+        },
+        "pendingRequestCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "queuedTurnCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "recentArtifactCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "threadStatus": {
+          "type": "string"
+        },
+        "turnCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "exportedAt",
+        "itemCount",
+        "packRelativeRoot",
+        "pendingRequestCount",
+        "queuedTurnCount",
+        "recentArtifactCount",
+        "threadStatus",
+        "turnCount"
+      ],
+      "title": "EvidencePackSummary",
+      "type": "object"
+    },
+    "InitializeParams": {
+      "$defs": {
+        "ClientCapabilities": {
+          "properties": {
+            "eventMethods": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "experimental": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "ClientInfo": {
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "version": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "capabilities": {
+          "$ref": "#/$defs/ClientCapabilities",
+          "default": {
+            "eventMethods": [],
+            "experimental": false
+          }
+        },
+        "clientInfo": {
+          "$ref": "#/$defs/ClientInfo"
+        }
+      },
+      "required": [
+        "clientInfo"
+      ],
+      "title": "InitializeParams",
+      "type": "object"
+    },
+    "InitializeResponse": {
+      "$defs": {
+        "PlatformInfo": {
+          "properties": {
+            "family": {
+              "type": "string"
+            },
+            "os": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "family",
+            "os"
+          ],
+          "type": "object"
+        },
+        "ServerCapabilities": {
+          "properties": {
+            "agentSession": {
+              "type": "boolean"
+            },
+            "artifact": {
+              "type": "boolean"
+            },
+            "capabilityDiscovery": {
+              "type": "boolean"
+            },
+            "evidence": {
+              "type": "boolean"
+            },
+            "workspace": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "agentSession",
+            "artifact",
+            "capabilityDiscovery",
+            "evidence",
+            "workspace"
+          ],
+          "type": "object"
+        },
+        "ServerInfo": {
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "protocolVersion": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "protocolVersion",
+            "version"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "capabilities": {
+          "$ref": "#/$defs/ServerCapabilities"
+        },
+        "platform": {
+          "$ref": "#/$defs/PlatformInfo"
+        },
+        "serverInfo": {
+          "$ref": "#/$defs/ServerInfo"
+        }
+      },
+      "required": [
+        "capabilities",
+        "platform",
+        "serverInfo"
+      ],
+      "title": "InitializeResponse",
+      "type": "object"
+    },
+    "JsonRpcError": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "code": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "data": true,
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "JsonRpcError",
+      "type": "object"
+    },
+    "JsonRpcErrorResponse": {
+      "$defs": {
+        "JsonRpcError": {
+          "properties": {
+            "code": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "data": true,
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "RequestId": {
+          "anyOf": [
+            {
+              "format": "int64",
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/JsonRpcError"
+        },
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        }
+      },
+      "required": [
+        "error",
+        "id"
+      ],
+      "title": "JsonRpcErrorResponse",
+      "type": "object"
+    },
+    "JsonRpcMessage": {
+      "$defs": {
+        "JsonRpcError": {
+          "properties": {
+            "code": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "data": true,
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "JsonRpcErrorResponse": {
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/JsonRpcError"
+            },
+            "id": {
+              "$ref": "#/$defs/RequestId"
+            }
+          },
+          "required": [
+            "error",
+            "id"
+          ],
+          "type": "object"
+        },
+        "JsonRpcNotification": {
+          "properties": {
+            "method": {
+              "type": "string"
+            },
+            "params": true
+          },
+          "required": [
+            "method"
+          ],
+          "type": "object"
+        },
+        "JsonRpcRequest": {
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/RequestId"
+            },
+            "method": {
+              "type": "string"
+            },
+            "params": true
+          },
+          "required": [
+            "id",
+            "method"
+          ],
+          "type": "object"
+        },
+        "JsonRpcResponse": {
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/RequestId"
+            },
+            "result": true
+          },
+          "required": [
+            "id",
+            "result"
+          ],
+          "type": "object"
+        },
+        "RequestId": {
+          "anyOf": [
+            {
+              "format": "int64",
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/JsonRpcRequest"
+        },
+        {
+          "$ref": "#/$defs/JsonRpcNotification"
+        },
+        {
+          "$ref": "#/$defs/JsonRpcResponse"
+        },
+        {
+          "$ref": "#/$defs/JsonRpcErrorResponse"
+        }
+      ],
+      "title": "JsonRpcMessage"
+    },
+    "JsonRpcNotification": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "method": {
+          "type": "string"
+        },
+        "params": true
+      },
+      "required": [
+        "method"
+      ],
+      "title": "JsonRpcNotification",
+      "type": "object"
+    },
+    "JsonRpcRequest": {
+      "$defs": {
+        "RequestId": {
+          "anyOf": [
+            {
+              "format": "int64",
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "type": "string"
+        },
+        "params": true
+      },
+      "required": [
+        "id",
+        "method"
+      ],
+      "title": "JsonRpcRequest",
+      "type": "object"
+    },
+    "JsonRpcResponse": {
+      "$defs": {
+        "RequestId": {
+          "anyOf": [
+            {
+              "format": "int64",
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "result": true
+      },
+      "required": [
+        "id",
+        "result"
+      ],
+      "title": "JsonRpcResponse",
+      "type": "object"
+    },
+    "ModelListParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "providerId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "tier": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "ModelListParams",
+      "type": "object"
+    },
+    "ModelListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "models": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "title": "ModelListResponse",
+      "type": "object"
+    },
+    "ModelPreferencesListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "preferences": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "title": "ModelPreferencesListResponse",
+      "type": "object"
+    },
+    "ModelProviderAliasListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "configs": {
+          "additionalProperties": true,
+          "default": {},
+          "type": "object"
+        }
+      },
+      "title": "ModelProviderAliasListResponse",
+      "type": "object"
+    },
+    "ModelProviderAliasReadParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "provider": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "title": "ModelProviderAliasReadParams",
+      "type": "object"
+    },
+    "ModelProviderAliasReadResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "config": true
+      },
+      "title": "ModelProviderAliasReadResponse",
+      "type": "object"
+    },
+    "ModelProviderCatalogListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "providers": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "title": "ModelProviderCatalogListResponse",
+      "type": "object"
+    },
+    "ModelProviderListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "providers": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "title": "ModelProviderListResponse",
+      "type": "object"
+    },
+    "ModelSyncStateReadResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "syncState": true
+      },
+      "required": [
+        "syncState"
+      ],
+      "title": "ModelSyncStateReadResponse",
+      "type": "object"
+    },
+    "PlatformInfo": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "family": {
+          "type": "string"
+        },
+        "os": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "family",
+        "os"
+      ],
+      "title": "PlatformInfo",
+      "type": "object"
+    },
+    "RequestId": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "format": "int64",
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "title": "RequestId"
+    },
+    "RuntimeOptions": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "capabilityId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "eventName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "hostOptions": true,
+        "metadata": true,
+        "modelPreference": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "providerPreference": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "queuedTurnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "stream": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "RuntimeOptions",
+      "type": "object"
+    },
+    "ServerCapabilities": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "agentSession": {
+          "type": "boolean"
+        },
+        "artifact": {
+          "type": "boolean"
+        },
+        "capabilityDiscovery": {
+          "type": "boolean"
+        },
+        "evidence": {
+          "type": "boolean"
+        },
+        "workspace": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "agentSession",
+        "artifact",
+        "capabilityDiscovery",
+        "evidence",
+        "workspace"
+      ],
+      "title": "ServerCapabilities",
+      "type": "object"
+    },
+    "ServerInfo": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "protocolVersion": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "protocolVersion",
+        "version"
+      ],
+      "title": "ServerInfo",
+      "type": "object"
+    },
+    "SkillListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "skills": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "title": "SkillListResponse",
+      "type": "object"
+    },
+    "SkillReadParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "skillName": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "skillName"
+      ],
+      "title": "SkillReadParams",
+      "type": "object"
+    },
+    "SkillReadResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "skill": true
+      },
+      "required": [
+        "skill"
+      ],
+      "title": "SkillReadResponse",
+      "type": "object"
+    },
+    "WorkspaceEnsureParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "WorkspaceEnsureParams",
+      "type": "object"
+    },
+    "WorkspaceEnsureReadyResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "result": true
+      },
+      "required": [
+        "result"
+      ],
+      "title": "WorkspaceEnsureReadyResponse",
+      "type": "object"
+    },
+    "WorkspaceListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "workspaces": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "title": "WorkspaceListResponse",
+      "type": "object"
+    },
+    "WorkspacePathReadParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "rootPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "rootPath"
+      ],
+      "title": "WorkspacePathReadParams",
+      "type": "object"
+    },
+    "WorkspaceProjectPathResolveParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "parentRootPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "WorkspaceProjectPathResolveParams",
+      "type": "object"
+    },
+    "WorkspaceProjectPathResolveResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "rootPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "rootPath"
+      ],
+      "title": "WorkspaceProjectPathResolveResponse",
+      "type": "object"
+    },
+    "WorkspaceProjectsRootReadResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "rootPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "rootPath"
+      ],
+      "title": "WorkspaceProjectsRootReadResponse",
+      "type": "object"
+    },
+    "WorkspaceReadParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "WorkspaceReadParams",
+      "type": "object"
+    },
+    "WorkspaceReadResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "workspace": true
+      },
+      "title": "WorkspaceReadResponse",
+      "type": "object"
+    },
+    "WorkspaceSkillBindingsListParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "browserAssist": {
+          "default": false,
+          "type": "boolean"
+        },
+        "caller": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workbench": {
+          "default": false,
+          "type": "boolean"
+        },
+        "workspaceRoot": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspaceRoot"
+      ],
+      "title": "WorkspaceSkillBindingsListParams",
+      "type": "object"
+    },
+    "WorkspaceSkillBindingsListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "bindings": true
+      },
+      "required": [
+        "bindings"
+      ],
+      "title": "WorkspaceSkillBindingsListResponse",
+      "type": "object"
+    },
+    "jsonRpcError": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "integer"
+            },
+            "data": true,
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "id": {
+          "$ref": "#/$defs/requestId"
+        }
+      },
+      "required": [
+        "error",
+        "id"
+      ],
+      "type": "object"
+    },
+    "jsonRpcNotification": {
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "type": "string"
+        },
+        "params": true
+      },
+      "required": [
+        "method"
+      ],
+      "type": "object"
+    },
+    "jsonRpcRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/requestId"
+        },
+        "method": {
+          "type": "string"
+        },
+        "params": true
+      },
+      "required": [
+        "id",
+        "method"
+      ],
+      "type": "object"
+    },
+    "jsonRpcResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/requestId"
+        },
+        "result": true
+      },
+      "required": [
+        "id",
+        "result"
+      ],
+      "type": "object"
+    },
+    "methods": {
+      "additionalProperties": false,
+      "properties": {
+        "notifications": {
+          "items": {
+            "enum": [
+              "agentSession/event",
+              "initialized"
+            ]
+          },
+          "type": "array"
+        },
+        "requests": {
+          "items": {
+            "enum": [
+              "agentSession/action/respond",
+              "agentSession/list",
+              "agentSession/read",
+              "agentSession/start",
+              "agentSession/turn/cancel",
+              "agentSession/turn/start",
+              "artifact/read",
+              "capability/list",
+              "evidence/export",
+              "initialize",
+              "model/list",
+              "modelPreferences/list",
+              "modelProvider/catalog/list",
+              "modelProvider/list",
+              "modelProviderAlias/list",
+              "modelProviderAlias/read",
+              "modelSyncState/read",
+              "skill/list",
+              "skill/read",
+              "workspace/byPath/read",
+              "workspace/default/ensure",
+              "workspace/default/read",
+              "workspace/ensureReady",
+              "workspace/list",
+              "workspace/projectPath/resolve",
+              "workspace/projectsRoot/read",
+              "workspace/read",
+              "workspaceSkillBindings/list"
+            ]
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "notifications",
+        "requests"
+      ],
+      "type": "object"
+    },
+    "requestId": {
+      "oneOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$id": "app-server-protocol",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Generated by app-server-protocol. Do not edit by hand.",
+  "jsonRpcVersion": "2.0",
+  "protocolVersion": "appserver.v0",
+  "title": "App Server Protocol",
+  "type": "object"
+}

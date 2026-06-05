@@ -1,8 +1,8 @@
 /**
  * 开发桥接 HTTP 客户端
  *
- * 在开发模式下，当 Tauri IPC 不可用时（浏览器环境），
- * 通过 HTTP 与运行中的 Tauri 后端通信。
+ * 在开发模式下，当 Desktop Host IPC 不可用时，
+ * 通过 HTTP 与运行中的 DevBridge 通信。
  */
 export interface InvokeRequest {
     cmd: string;
@@ -17,7 +17,7 @@ export declare function normalizeDevBridgeError(cmd: string, error: unknown): Er
 /**
  * 检查开发桥接是否可用
  *
- * @returns true 如果在 dev 模式且 Tauri 不可用
+ * @returns true 如果在 dev 模式且 Desktop Host IPC 不可用
  */
 export declare function isDevBridgeAvailable(): boolean;
 export declare function hasDevBridgeEventListenerCapability(): boolean;
@@ -25,7 +25,7 @@ export declare function listenViaHttpEvent<T = unknown>(event: string, handler: 
     payload: T;
 }) => void): Promise<() => void>;
 /**
- * 通过 HTTP 桥接调用 Tauri 命令
+ * 通过 HTTP 桥接调用 Desktop Host / App Server 命令
  *
  * @param cmd - 命令名称
  * @param args - 命令参数
@@ -46,7 +46,7 @@ export declare function __resetDevBridgeHttpStateForTests(): void;
 export interface BridgeStatus {
     available: boolean;
     connected: boolean;
-    mode: "tauri" | "http" | "mock";
+    mode: "desktop-host" | "http" | "mock";
 }
 /**
  * 获取当前桥接状态

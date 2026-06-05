@@ -5,7 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open } from "@/lib/desktop-host/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import {
   CheckCircle2,
@@ -511,24 +511,42 @@ function BrowserConnectorGuideContent() {
             >
               <p>
                 {t("settings.chromeRelay.guide.extension.step3.prefix")}{" "}
-                <strong>Lime Browser Connector</strong>{" "}
+                <strong>
+                  {t(
+                    "settings.chromeRelay.guide.extension.step3.connectorName",
+                  )}
+                </strong>{" "}
                 {t("settings.chromeRelay.guide.extension.step3.middle")}{" "}
                 <code className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-700">
-                  chrome://extensions
+                  {t(
+                    "settings.chromeRelay.guide.extension.step3.extensionsUrl",
+                  )}
                 </code>{" "}
                 {t("settings.chromeRelay.guide.extension.step3.suffix")}
               </p>
               <p className="mt-3 rounded-[14px] border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
                 {t("settings.chromeRelay.guide.extension.sourceWarning.prefix")}{" "}
-                <code>extensions/lime-chrome</code>
+                <code>
+                  {t(
+                    "settings.chromeRelay.guide.extension.sourceWarning.extensionPath",
+                  )}
+                </code>
                 {t(
                   "settings.chromeRelay.guide.extension.sourceWarning.middle",
                 )}{" "}
-                <code>auto_config.json</code>
+                <code>
+                  {t(
+                    "settings.chromeRelay.guide.extension.sourceWarning.configFile",
+                  )}
+                </code>
                 {t(
                   "settings.chromeRelay.guide.extension.sourceWarning.suffix",
                 )}{" "}
-                <code>serverUrl / bridgeKey</code>
+                <code>
+                  {t(
+                    "settings.chromeRelay.guide.extension.sourceWarning.configKeys",
+                  )}
+                </code>
                 {t(
                   "settings.chromeRelay.guide.extension.sourceWarning.afterKeys",
                 )}

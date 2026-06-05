@@ -27,7 +27,7 @@ function releaseInput(outputDir) {
         platform: "macos",
         path: path.join(outputDir, "Content Factory.signed.pkg"),
         contentHash: "sha256:pkg",
-        updaterSignature: "tauri-signature:pkg",
+        updaterSignature: "electron-signature:pkg",
         notarized: true,
         size: 1234,
       },
@@ -65,7 +65,7 @@ describe("agent-app standalone updater publisher", () => {
     });
     expect(plan.latest.artifacts[0]).toMatchObject({
       contentHash: "sha256:pkg",
-      signature: "tauri-signature:pkg",
+      signature: "electron-signature:pkg",
       url: "https://updates.limecloud.example/agent-apps/content-factory-app/stable/0.8.0/Content%20Factory.signed.pkg",
     });
   });
@@ -124,7 +124,7 @@ describe("agent-app standalone updater publisher", () => {
     ).toMatchObject({
       appId: "content-factory-app",
       artifacts: [
-        expect.objectContaining({ signature: "tauri-signature:pkg" }),
+        expect.objectContaining({ signature: "electron-signature:pkg" }),
       ],
     });
   });

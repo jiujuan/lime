@@ -10,18 +10,18 @@ import {
 import { changeLimeLocale } from "@/i18n/createI18n";
 import "@/i18n/config";
 
-const { mockGetConfig, mockHasTauriInvokeCapability } = vi.hoisted(() => ({
+const { mockGetConfig, mockHasDesktopHostInvokeCapability } = vi.hoisted(() => ({
   mockGetConfig: vi.fn(),
-  mockHasTauriInvokeCapability: vi.fn(),
+  mockHasDesktopHostInvokeCapability: vi.fn(),
 }));
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: (...args: unknown[]) => mockGetConfig(...args),
 }));
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriInvokeCapability: (...args: unknown[]) =>
-    mockHasTauriInvokeCapability(...args),
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostInvokeCapability: (...args: unknown[]) =>
+    mockHasDesktopHostInvokeCapability(...args),
 }));
 
 import { withI18nPatch } from "./withI18nPatch";
@@ -42,7 +42,7 @@ describe("withI18nPatch", () => {
       callback: (time: number) => void,
     ) =>
       window.setTimeout(() => callback(0), 0)) as typeof requestAnimationFrame);
-    mockHasTauriInvokeCapability.mockReturnValue(true);
+    mockHasDesktopHostInvokeCapability.mockReturnValue(true);
   });
 
   afterEach(() => {

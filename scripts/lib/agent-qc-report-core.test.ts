@@ -11,7 +11,8 @@ const packageJson = {
   scripts: {
     "verify:local": "node scripts/local-ci.mjs",
     "test:contracts": "node scripts/check-command-contracts.mjs",
-    "verify:gui-smoke": "node scripts/verify-gui-smoke.mjs",
+    "verify:gui-smoke": "npm run smoke:electron",
+    "smoke:electron": "node scripts/electron-smoke.mjs",
   },
 };
 
@@ -99,6 +100,14 @@ describe("agent-qc-report-core", () => {
 
     expect(result.valid).toBe(true);
     expect(result.issues.filter((issue) => issue.severity === "error")).toEqual([]);
+  });
+
+  it("GUI smoke fixture 应保持 Electron current 口径", () => {
+    expect(packageJson.scripts["verify:gui-smoke"]).toBe("npm run smoke:electron");
+    expect(packageJson.scripts["smoke:electron"]).toContain("scripts/electron-smoke.mjs");
+    expect(packageJson.scripts["verify:gui-smoke"]).not.toContain(
+      "scripts/verify-gui-smoke.mjs",
+    );
   });
 
   it("应阻止 qcloop verifier 缺少 worker stdout 占位符", () => {

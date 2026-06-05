@@ -43,6 +43,7 @@ import {
   getWorkspaceRepairHistory,
   type WorkspaceRepairRecord,
 } from "@/lib/workspaceHealthTelemetry";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 
 export interface CrashDiagnosticPayload {
   generated_at: string;
@@ -52,7 +53,7 @@ export interface CrashDiagnosticPayload {
   locale: string;
   timezone: string;
   page_url: string;
-  runtime: "tauri" | "browser";
+  runtime: "desktop-host" | "browser";
   crash_reporting: CrashReportingConfig;
   frontend_crash_logs: LogEntry[];
   frontend_crash_buffer?: FrontendCrashBufferEntry[];
@@ -607,7 +608,7 @@ export function buildCrashDiagnosticPayload(
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown",
     page_url:
       (typeof window !== "undefined" && window.location?.href) || "unknown",
-    runtime: isTauriRuntime() ? "tauri" : "browser",
+    runtime: isDesktopRuntime() ? "desktop-host" : "browser",
     crash_reporting: {
       ...normalizeCrashReportingConfig(crashConfig),
       dsn: maskCrashReportingDsn(crashConfig.dsn),
@@ -728,7 +729,7 @@ export async function copyTextToClipboard(
     return;
   }
 
-  if (await copyTextViaTauriClipboard(text)) {
+  if (await copyTextViaDesktopHostClipboard(text)) {
     return;
   }
 
@@ -1232,7 +1233,7 @@ export function buildCrashDiagnosticFileName(
 }
 
 export async function openCrashDiagnosticDownloadDirectory(): Promise<OpenDownloadDirectoryResult> {
-  if (!isTauriRuntime()) {
+  if (!isDesktopRuntime()) {
     throw new Error(
       translateCrashDiagnostic(
         "errors.crashDiagnostic.downloadDirectory.unsupportedRuntime",
@@ -1263,8 +1264,8 @@ export async function openCrashDiagnosticDownloadDirectory(): Promise<OpenDownlo
   );
 }
 
-async function copyTextViaTauriClipboard(text: string): Promise<boolean> {
-  if (!isTauriRuntime()) {
+async function copyTextViaDesktopHostClipboard(text: string): Promise<boolean> {
+  if (!isDesktopRuntime()) {
     return false;
   }
 
@@ -1285,12 +1286,8 @@ async function copyTextViaTauriClipboard(text: string): Promise<boolean> {
   }
 }
 
-function isTauriRuntime(): boolean {
-  return Boolean(
-    typeof window !== "undefined" &&
-    ((window as any).__TAURI__?.core?.invoke ||
-      (window as any).__TAURI__?.invoke),
-  );
+function isDesktopRuntime(): boolean {
+  return hasDesktopHostInvokeCapability();
 }
 
 function getDefaultDownloadDirectoryHint(): string {

@@ -1,23 +1,23 @@
 import {
-  hasTauriInvokeCapability,
-  hasTauriRuntimeMarkers,
-} from "@/lib/tauri-runtime";
+  hasDesktopHostInvokeCapability,
+  hasDesktopHostRuntimeMarkers,
+} from "@/lib/desktop-runtime";
 import { reportFrontendDebugLog } from "@/lib/api/frontendDebug";
 
 /**
- * Tauri WebView 在生产构建下偶发 CSSOM 注入失效；
+ * Desktop Host WebView 在生产构建下偶发 CSSOM 注入失效；
  * 切回文本注入可以避开 styled-components #17 启动崩溃。
  */
 export function shouldDisableStyledCssomInjection(): boolean {
-  return hasTauriRuntimeMarkers() || hasTauriInvokeCapability();
+  return hasDesktopHostRuntimeMarkers() || hasDesktopHostInvokeCapability();
 }
 
 interface StyledRuntimeSnapshot {
   phase: string;
   protocol: string;
   readyState: string;
-  tauriRuntimeMarkers: boolean;
-  tauriInvokeCapability: boolean;
+  desktopHostRuntimeMarkers: boolean;
+  desktopHostInvokeCapability: boolean;
   scDisableSpeedyType: string;
   scDisableSpeedyValue: unknown;
   styledTagCount: number;
@@ -245,8 +245,8 @@ function collectStyledRuntimeSnapshot(
     phase,
     protocol: window.location.protocol,
     readyState: document.readyState,
-    tauriRuntimeMarkers: hasTauriRuntimeMarkers(),
-    tauriInvokeCapability: hasTauriInvokeCapability(),
+    desktopHostRuntimeMarkers: hasDesktopHostRuntimeMarkers(),
+    desktopHostInvokeCapability: hasDesktopHostInvokeCapability(),
     scDisableSpeedyType: typeof runtimeWindow.SC_DISABLE_SPEEDY,
     scDisableSpeedyValue:
       runtimeWindow.SC_DISABLE_SPEEDY === undefined
