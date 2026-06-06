@@ -8,6 +8,12 @@ export function appServerBinaryName(platform = process.platform) {
   return platform === "win32" ? "app-server.exe" : "app-server";
 }
 
+export function appServerAgentBackendBinaryName(platform = process.platform) {
+  return platform === "win32"
+    ? "app-server-agent-backend.exe"
+    : "app-server-agent-backend";
+}
+
 export function localAppServerBinaryPath({
   repoRoot = process.cwd(),
   platform = process.platform,
@@ -17,6 +23,18 @@ export function localAppServerBinaryPath({
     targetDirectory,
     "debug",
     appServerBinaryName(platform),
+  );
+}
+
+export function localAppServerAgentBackendBinaryPath({
+  repoRoot = process.cwd(),
+  platform = process.platform,
+  targetDirectory = resolveCargoTargetDirectory({ repoRoot, platform }),
+} = {}) {
+  return path.resolve(
+    targetDirectory,
+    "debug",
+    appServerAgentBackendBinaryName(platform),
   );
 }
 
@@ -136,6 +154,69 @@ export function resolveDevAppServerBinary({
   return binaryPath;
 }
 
+export function resolveDevAppServerAgentBackendBinary({
+  env = process.env,
+  repoRoot = process.cwd(),
+  platform = process.platform,
+  targetDirectory,
+  exists = existsSync,
+  build = buildLocalAppServer,
+  forceBuild = false,
+} = {}) {
+  const envBinary = env.APP_SERVER_BACKEND_COMMAND?.trim();
+  if (envBinary) {
+    return envBinary;
+  }
+
+  const binaryPath = localAppServerAgentBackendBinaryPath({
+    repoRoot,
+    platform,
+    ...(targetDirectory ? { targetDirectory } : {}),
+  });
+  if (forceBuild || !exists(binaryPath)) {
+    build({ repoRoot, platform });
+  }
+
+  if (!exists(binaryPath)) {
+    throw new Error(
+      `app-server-agent-backend binary was not created: ${binaryPath}`,
+    );
+  }
+
+  return binaryPath;
+}
+
+export function shouldUseDevAppServerExternalBackend({ env = process.env } = {}) {
+  const requestedMode = env.APP_SERVER_BACKEND_MODE?.trim();
+  return !requestedMode || requestedMode === "external";
+}
+
+export function resolveDevAppServerBackendEnv({
+  env = process.env,
+  backendCommand,
+  defaultTimeoutMs = 120_000,
+} = {}) {
+  if (!shouldUseDevAppServerExternalBackend({ env })) {
+    return {};
+  }
+
+  const resolvedBackendCommand =
+    env.APP_SERVER_BACKEND_COMMAND?.trim() || String(backendCommand || "").trim();
+  if (!resolvedBackendCommand) {
+    return {};
+  }
+
+  return {
+    APP_SERVER_BACKEND_MODE: "external",
+    ...(env.APP_SERVER_BACKEND_COMMAND?.trim()
+      ? {}
+      : { APP_SERVER_BACKEND_COMMAND: resolvedBackendCommand }),
+    ...(env.APP_SERVER_BACKEND_TIMEOUT_MS?.trim()
+      ? {}
+      : { APP_SERVER_BACKEND_TIMEOUT_MS: String(defaultTimeoutMs) }),
+  };
+}
+
 export function cargoBuildAppServerArgs({ repoRoot = process.cwd() } = {}) {
   return [
     "build",
@@ -145,6 +226,10 @@ export function cargoBuildAppServerArgs({ repoRoot = process.cwd() } = {}) {
     "app-server",
     "--bin",
     "app-server",
+    "-p",
+    "app-server-agent-backend",
+    "--bin",
+    "app-server-agent-backend",
   ];
 }
 

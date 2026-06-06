@@ -1353,6 +1353,7 @@ export function handleTurnStreamEvent({
       });
       break;
 
+    case "done":
     case "final_done": {
       clearQueuedDraftCleanupTimer();
       flushPendingTextRender();

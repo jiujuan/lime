@@ -1300,6 +1300,10 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
               void saveVideoToResource(task);
             }
           }
+        } catch (error) {
+          if (active) {
+            console.error("[VideoWorkspace] 刷新视频任务状态失败:", error);
+          }
         } finally {
           pollingGuard.current = false;
         }
@@ -2301,7 +2305,15 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
 
                             <TaskBottomRow>
                               <TaskMetaRow>
-                                <span>ID {task.id}</span>
+                                <span>
+                                  {t(
+                                    "workspace.video.workspace.recentTasks.taskId",
+                                    {
+                                      defaultValue: "任务 ID {{id}}",
+                                      id: task.id,
+                                    },
+                                  )}
+                                </span>
                               </TaskMetaRow>
                               {task.resultUrl ? (
                                 <TaskActionButton

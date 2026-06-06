@@ -26,6 +26,7 @@ import {
   Mail,
   FileText,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import type { VoiceInstruction } from "./types";
 import {
@@ -169,6 +170,7 @@ function ShortcutRecorder({
   onChange,
   disabled,
 }: ShortcutRecorderProps) {
+  const { t } = useTranslation("settings");
   const [isRecording, setIsRecording] = useState(false);
   const inputRef = useRef<HTMLDivElement>(null);
 
@@ -223,11 +225,15 @@ function ShortcutRecorder({
         )}
       >
         {isRecording ? (
-          <span className="text-muted-foreground">按下快捷键...</span>
+          <span className="text-muted-foreground">
+            {t("settings.voice.processing.instructionEditor.shortcut.recording")}
+          </span>
         ) : value ? (
           <span>{formatShortcutDisplay(value)}</span>
         ) : (
-          <span className="text-muted-foreground">点击设置快捷键</span>
+          <span className="text-muted-foreground">
+            {t("settings.voice.processing.instructionEditor.shortcut.empty")}
+          </span>
         )}
       </div>
       {value && !isRecording && (
@@ -235,7 +241,9 @@ function ShortcutRecorder({
           onClick={() => onChange("")}
           disabled={disabled}
           className="p-2 rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-          title="清除快捷键"
+          title={t(
+            "settings.voice.processing.instructionEditor.shortcut.clear",
+          )}
         >
           <X className="h-4 w-4" />
         </button>
@@ -244,7 +252,7 @@ function ShortcutRecorder({
         <button
           onClick={() => setIsRecording(false)}
           className="p-2 rounded text-muted-foreground hover:bg-muted"
-          title="取消"
+          title={t("settings.voice.processing.instructionEditor.action.cancel")}
         >
           <X className="h-4 w-4" />
         </button>
@@ -274,6 +282,8 @@ function InstructionCard({
   onSetDefault,
   disabled,
 }: InstructionCardProps) {
+  const { t } = useTranslation("settings");
+
   return (
     <div
       className={cn(
@@ -301,12 +311,16 @@ function InstructionCard({
               <span className="font-medium truncate">{instruction.name}</span>
               {instruction.is_preset && (
                 <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                  预设
+                  {t(
+                    "settings.voice.processing.instructionEditor.badge.preset",
+                  )}
                 </span>
               )}
               {isDefault && (
                 <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
-                  默认
+                  {t(
+                    "settings.voice.processing.instructionEditor.badge.default",
+                  )}
                 </span>
               )}
             </div>
@@ -333,7 +347,9 @@ function InstructionCard({
               onClick={onSetDefault}
               disabled={disabled}
               className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
-              title="设为默认"
+              title={t(
+                "settings.voice.processing.instructionEditor.action.setDefault",
+              )}
             >
               <Check className="h-4 w-4" />
             </button>
@@ -342,7 +358,7 @@ function InstructionCard({
             onClick={onEdit}
             disabled={disabled}
             className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
-            title="编辑"
+            title={t("settings.voice.processing.instructionEditor.action.edit")}
           >
             <Pencil className="h-4 w-4" />
           </button>
@@ -351,7 +367,9 @@ function InstructionCard({
               onClick={onDelete}
               disabled={disabled}
               className="rounded-lg p-2 text-muted-foreground hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950 disabled:opacity-50"
-              title="删除"
+              title={t(
+                "settings.voice.processing.instructionEditor.action.delete",
+              )}
             >
               <Trash2 className="h-4 w-4" />
             </button>
@@ -361,7 +379,9 @@ function InstructionCard({
 
       {/* Prompt 预览 */}
       <div className="mt-3 rounded bg-muted/50 p-2 text-xs text-muted-foreground">
-        <span className="font-medium">Prompt: </span>
+        <span className="font-medium">
+          {t("settings.voice.processing.instructionEditor.promptLabel")}
+        </span>
         <span className="line-clamp-2">{instruction.prompt}</span>
       </div>
     </div>
@@ -389,6 +409,7 @@ function EditForm({
   saving,
   error,
 }: EditFormProps) {
+  const { t } = useTranslation("settings");
   const isNew = !instruction.id;
   const isValid = instruction.name.trim() && instruction.prompt.trim();
 
@@ -396,12 +417,16 @@ function EditForm({
     <div className="rounded-lg border border-primary bg-card p-4 space-y-4">
       <div className="flex items-center justify-between">
         <h4 className="font-medium">
-          {isNew ? "添加指令" : instruction.isPreset ? "查看指令" : "编辑指令"}
+          {isNew
+            ? t("settings.voice.processing.instructionEditor.form.title.add")
+            : instruction.isPreset
+              ? t("settings.voice.processing.instructionEditor.form.title.view")
+              : t("settings.voice.processing.instructionEditor.form.title.edit")}
         </h4>
         <button
           onClick={onCancel}
           className="rounded-lg p-1 hover:bg-muted"
-          title="取消"
+          title={t("settings.voice.processing.instructionEditor.action.cancel")}
         >
           <X className="h-4 w-4" />
         </button>
@@ -416,20 +441,28 @@ function EditForm({
 
       {/* 名称 */}
       <div>
-        <label className="block text-sm font-medium mb-1">名称</label>
+        <label className="block text-sm font-medium mb-1">
+          {t("settings.voice.processing.instructionEditor.field.name.label")}
+        </label>
         <input
           type="text"
           value={instruction.name}
           onChange={(e) => onChange({ ...instruction, name: e.target.value })}
           disabled={instruction.isPreset}
-          placeholder="指令名称"
+          placeholder={t(
+            "settings.voice.processing.instructionEditor.field.name.placeholder",
+          )}
           className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:opacity-50"
         />
       </div>
 
       {/* 描述 */}
       <div>
-        <label className="block text-sm font-medium mb-1">描述（可选）</label>
+        <label className="block text-sm font-medium mb-1">
+          {t(
+            "settings.voice.processing.instructionEditor.field.description.label",
+          )}
+        </label>
         <input
           type="text"
           value={instruction.description}
@@ -437,37 +470,49 @@ function EditForm({
             onChange({ ...instruction, description: e.target.value })
           }
           disabled={instruction.isPreset}
-          placeholder="简短描述"
+          placeholder={t(
+            "settings.voice.processing.instructionEditor.field.description.placeholder",
+          )}
           className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:opacity-50"
         />
       </div>
 
       {/* Prompt 模板 */}
       <div>
-        <label className="block text-sm font-medium mb-1">Prompt 模板</label>
+        <label className="block text-sm font-medium mb-1">
+          {t("settings.voice.processing.instructionEditor.field.prompt.label")}
+        </label>
         <textarea
           value={instruction.prompt}
           onChange={(e) => onChange({ ...instruction, prompt: e.target.value })}
           disabled={instruction.isPreset}
-          placeholder="输入 AI 润色的 Prompt 模板..."
+          placeholder={t(
+            "settings.voice.processing.instructionEditor.field.prompt.placeholder",
+          )}
           rows={4}
           className="w-full rounded-lg border bg-background px-3 py-2 text-sm resize-none disabled:opacity-50"
         />
         <p className="mt-1 text-xs text-muted-foreground">
-          AI 将使用此 Prompt 对语音识别结果进行润色处理
+          {t("settings.voice.processing.instructionEditor.field.prompt.help")}
         </p>
       </div>
 
       {/* 快捷键 */}
       <div>
-        <label className="block text-sm font-medium mb-1">快捷键（可选）</label>
+        <label className="block text-sm font-medium mb-1">
+          {t(
+            "settings.voice.processing.instructionEditor.field.shortcut.label",
+          )}
+        </label>
         <ShortcutRecorder
           value={instruction.shortcut}
           onChange={(shortcut) => onChange({ ...instruction, shortcut })}
           disabled={instruction.isPreset}
         />
         <p className="mt-1 text-xs text-muted-foreground">
-          设置快捷键可快速切换到此指令模式
+          {t(
+            "settings.voice.processing.instructionEditor.field.shortcut.help",
+          )}
         </p>
       </div>
 
@@ -477,7 +522,7 @@ function EditForm({
           onClick={onCancel}
           className="rounded-lg border px-4 py-2 text-sm hover:bg-muted"
         >
-          取消
+          {t("settings.voice.processing.instructionEditor.action.cancel")}
         </button>
         {!instruction.isPreset && (
           <button
@@ -485,7 +530,11 @@ function EditForm({
             disabled={!isValid || saving}
             className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
-            {saving ? "保存中..." : isNew ? "添加" : "保存"}
+            {saving
+              ? t("settings.voice.processing.instructionEditor.action.saving")
+              : isNew
+                ? t("settings.voice.processing.instructionEditor.action.add")
+                : t("settings.voice.processing.instructionEditor.action.save")}
           </button>
         )}
       </div>
@@ -503,6 +552,7 @@ export function InstructionEditor({
   onInstructionsChange,
   disabled = false,
 }: InstructionEditorProps) {
+  const { t } = useTranslation("settings");
   // 状态
   const [instructions, setInstructions] = useState<VoiceInstruction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -526,11 +576,15 @@ export function InstructionEditor({
       setInstructions(list);
       onInstructionsChangeRef.current?.(list);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "加载失败");
+      setError(
+        e instanceof Error
+          ? e.message
+          : t("settings.voice.processing.instructionEditor.message.loadFailed"),
+      );
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadInstructions();
@@ -591,25 +645,39 @@ export function InstructionEditor({
       await loadInstructions();
       setEditingInstruction(null);
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : "保存失败");
+      setSaveError(
+        e instanceof Error
+          ? e.message
+          : t("settings.voice.processing.instructionEditor.message.saveFailed"),
+      );
     } finally {
       setSaving(false);
     }
-  }, [editingInstruction, loadInstructions]);
+  }, [editingInstruction, loadInstructions, t]);
 
   // 删除指令
   const handleDelete = useCallback(
     async (id: string) => {
-      if (!confirm("确定要删除此指令吗？")) return;
+      if (
+        !confirm(t("settings.voice.processing.instructionEditor.confirm.delete"))
+      ) {
+        return;
+      }
 
       try {
         await deleteVoiceInstruction(id);
         await loadInstructions();
       } catch (e) {
-        setError(e instanceof Error ? e.message : "删除失败");
+        setError(
+          e instanceof Error
+            ? e.message
+            : t(
+                "settings.voice.processing.instructionEditor.message.deleteFailed",
+              ),
+        );
       }
     },
-    [loadInstructions],
+    [loadInstructions, t],
   );
 
   // 设为默认
@@ -642,7 +710,7 @@ export function InstructionEditor({
           onClick={loadInstructions}
           className="ml-auto text-red-600 hover:underline"
         >
-          重试
+          {t("settings.voice.processing.instructionEditor.action.retry")}
         </button>
       </div>
     );
@@ -653,9 +721,11 @@ export function InstructionEditor({
       {/* 标题和添加按钮 */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold">自定义指令</h3>
+          <h3 className="text-lg font-semibold">
+            {t("settings.voice.processing.instructionEditor.title")}
+          </h3>
           <p className="text-sm text-muted-foreground">
-            管理语音输入的 AI 润色指令
+            {t("settings.voice.processing.instructionEditor.description")}
           </p>
         </div>
         <button
@@ -664,7 +734,7 @@ export function InstructionEditor({
           className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >
           <Plus className="h-4 w-4" />
-          添加指令
+          {t("settings.voice.processing.instructionEditor.action.addInstruction")}
         </button>
       </div>
 
@@ -684,7 +754,7 @@ export function InstructionEditor({
       {presetInstructions.length > 0 && (
         <div className="space-y-3">
           <h4 className="text-sm font-medium text-muted-foreground">
-            预设指令
+            {t("settings.voice.processing.instructionEditor.section.preset")}
           </h4>
           <div className="space-y-2">
             {presetInstructions.map((instruction) => (
@@ -705,7 +775,7 @@ export function InstructionEditor({
       {/* 自定义指令 */}
       <div className="space-y-3">
         <h4 className="text-sm font-medium text-muted-foreground">
-          自定义指令
+          {t("settings.voice.processing.instructionEditor.section.custom")}
         </h4>
         {customInstructions.length > 0 ? (
           <div className="space-y-2">
@@ -725,14 +795,16 @@ export function InstructionEditor({
           <div className="rounded-lg border border-dashed p-6 text-center">
             <Sparkles className="mx-auto h-8 w-8 text-muted-foreground/50" />
             <p className="mt-2 text-sm text-muted-foreground">
-              还没有自定义指令
+              {t("settings.voice.processing.instructionEditor.empty.title")}
             </p>
             <button
               onClick={handleAdd}
               disabled={disabled || !!editingInstruction}
               className="mt-3 text-sm text-primary hover:underline disabled:opacity-50"
             >
-              创建第一个指令
+              {t(
+                "settings.voice.processing.instructionEditor.empty.createFirst",
+              )}
             </button>
           </div>
         )}

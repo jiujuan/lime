@@ -1293,6 +1293,7 @@ export function handleArtifactSnapshotEvent({
   onWriteFile,
   setMessages,
   assistantMsgId,
+  activeSessionId,
 }: BaseProcessorContext &
   ArtifactWriteOptions & {
     data: AgentEventArtifactSnapshot;
@@ -1320,12 +1321,20 @@ export function handleArtifactSnapshotEvent({
     source: "artifact_snapshot",
     sourceMessageId: assistantMsgId,
     status: "streaming",
-    metadata: buildWriteMetadata(metadata, {
-      source: "artifact_snapshot",
-      phase: metadata?.complete === false ? "streaming" : "persisted",
-      content: snapshotContent,
-      isPartial: metadata?.complete === false,
-    }),
+    metadata: buildWriteMetadata(
+      {
+        ...(metadata || {}),
+        sessionId: activeSessionId,
+        artifactId: data.artifact.artifactId,
+        artifactRef: data.artifact.artifactId || artifactPath,
+      },
+      {
+        source: "artifact_snapshot",
+        phase: metadata?.complete === false ? "streaming" : "persisted",
+        content: snapshotContent,
+        isPartial: metadata?.complete === false,
+      },
+    ),
   };
   const nextArtifact = upsertAssistantWriteArtifact({
     assistantMsgId,

@@ -1,5 +1,8 @@
 /**
- * Mock for @/lib/desktop-host/event
+ * Desktop Host event bridge.
+ *
+ * 生产路径只能委托 Electron Desktop Host 事件桥。
+ * 内存事件夹具只允许测试环境使用。
  */
 
 import { getElectronHostBridge } from "@/lib/electron-host";
@@ -15,6 +18,19 @@ type UnlistenFn = () => void;
 const listeners = new Map<string, Set<EventCallback<any>>>();
 const shouldLogMockEventInfo = import.meta.env.MODE !== "test";
 
+function isTestEnvironment(): boolean {
+  return Boolean(import.meta.env?.MODE === "test" || import.meta.env?.VITEST);
+}
+
+function assertTestEventFixture(apiName: string): void {
+  if (isTestEnvironment()) {
+    return;
+  }
+  throw new Error(
+    `[Mock] ${apiName} 只能在测试环境使用；生产事件必须进入 Electron Desktop Host IPC。`,
+  );
+}
+
 function logMockEventInfo(...args: Parameters<typeof console.log>) {
   if (!shouldLogMockEventInfo) {
     return;
@@ -22,9 +38,6 @@ function logMockEventInfo(...args: Parameters<typeof console.log>) {
   console.log(...args);
 }
 
-/**
- * Mock listen function
- */
 export async function listen<T = any>(
   event: string,
   handler: EventCallback<T>,
@@ -38,6 +51,7 @@ export async function listen<T = any>(
     }
   }
 
+  assertTestEventFixture("listen");
   logMockEventInfo(`[Mock] listen: ${event}`);
 
   if (!listeners.has(event)) {
@@ -59,36 +73,32 @@ export async function listen<T = any>(
   };
 }
 
-/**
- * Mock once function
- */
 export async function once<T = any>(
   event: string,
   handler: EventCallback<T>,
 ): Promise<UnlistenFn> {
-  logMockEventInfo(`[Mock] once: ${event}`);
+  let unlisten: UnlistenFn | null = null;
 
   const wrappedHandler = (data: DesktopHostEvent<T>) => {
     handler(data);
-    // 自动移除监听器
-    const set = listeners.get(event);
-    if (set) {
-      set.delete(wrappedHandler);
-    }
+    unlisten?.();
   };
 
-  return listen(event, wrappedHandler);
+  unlisten = await listen(event, wrappedHandler);
+  return unlisten;
 }
 
-/**
- * Mock emit function - 用于触发事件
- */
 export async function emit(event: string, payload?: any): Promise<void> {
   const electronHost = getElectronHostBridge();
-  if (electronHost) {
+  if (electronHost?.emit) {
     return electronHost.emit(event, payload);
   }
+  if (electronHost?.send) {
+    electronHost.send(event, payload);
+    return;
+  }
 
+  assertTestEventFixture("emit");
   logMockEventInfo(`[Mock] emit: ${event}`, payload);
 
   const set = listeners.get(event);
@@ -107,6 +117,7 @@ export async function emit(event: string, payload?: any): Promise<void> {
  * 手动触发一个事件（用于测试）
  */
 export function triggerEvent(event: string, payload?: any) {
+  assertTestEventFixture("triggerEvent");
   emit(event, payload);
 }
 
@@ -114,6 +125,7 @@ export function triggerEvent(event: string, payload?: any) {
  * 清除所有事件监听器
  */
 export function clearAllListeners() {
+  assertTestEventFixture("clearAllListeners");
   listeners.clear();
 }
 

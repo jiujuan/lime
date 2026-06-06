@@ -20,6 +20,13 @@ const deprecatedAgentCommandMocks = Object.fromEntries(
   ),
 ) as Record<string, () => never>;
 
+const createAppServerSessionCurrentMock =
+  (command: string, method: string) => () => {
+    throw new Error(
+      `命令 ${command} 已迁移到 App Server JSON-RPC ${method}，Mock 不再为旧 session 链路伪造成功结果。`,
+    );
+  };
+
 type MockReviewDecisionRequest = {
   session_id?: string;
   sessionId?: string;
@@ -119,13 +126,18 @@ export const agentRuntimeMocks: Record<string, (args?: any) => any> = {
     initialized: true,
     provider_configured: true,
   }),
-  app_server_handle_json_lines: () => ({ lines: [] }),
-  app_server_drain_events: () => ({ lines: [] }),
-  agent_runtime_submit_turn: () => ({}),
-  agent_runtime_interrupt_turn: () => true,
-  agent_runtime_create_session: () => "mock-aster-session",
-  agent_runtime_list_sessions: () => [],
-  agent_runtime_get_session: () => ({ id: "mock", messages: [] }),
+  agent_runtime_create_session: createAppServerSessionCurrentMock(
+    "agent_runtime_create_session",
+    "agentSession/start",
+  ),
+  agent_runtime_list_sessions: createAppServerSessionCurrentMock(
+    "agent_runtime_list_sessions",
+    "agentSession/list",
+  ),
+  agent_runtime_get_session: createAppServerSessionCurrentMock(
+    "agent_runtime_get_session",
+    "agentSession/read",
+  ),
   agent_runtime_list_file_checkpoints: () => ({
     session_id: "mock-session",
     thread_id: "mock-thread",
@@ -656,5 +668,4 @@ export const agentRuntimeMocks: Record<string, (args?: any) => any> = {
   }),
   agent_runtime_update_session: () => ({}),
   agent_runtime_delete_session: () => ({}),
-  agent_runtime_respond_action: () => ({}),
 };

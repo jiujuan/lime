@@ -3,14 +3,27 @@ import {
   type AgentRuntimeCommandInvoke,
   type AgentRuntimeTransportDeps,
 } from "./transport";
+import type { AppServerSessionRpcClient } from "./appServerSessionClient";
+import type { AgentRuntimeEvidenceExportAppServerClient } from "./exportClient";
+import type { AgentRuntimeWorkspaceSkillBindingsAppServerClient } from "./inventoryClient";
+import type { AgentRuntimeThreadClientDeps } from "./threadClient";
+export type AgentRuntimeAppServerClient =
+  AgentRuntimeThreadClientDeps["appServerClient"] &
+    AppServerSessionRpcClient &
+    AgentRuntimeEvidenceExportAppServerClient &
+    AgentRuntimeWorkspaceSkillBindingsAppServerClient;
 export interface AgentRuntimeClientDeps extends AgentRuntimeTransportDeps {
   bridgeInvoke?: AgentRuntimeBridgeInvoke;
   invokeCommand?: AgentRuntimeCommandInvoke;
+  appServerClient?: AgentRuntimeAppServerClient;
+  isAppServerTurnLifecycleAvailable?: AgentRuntimeThreadClientDeps["isAppServerTurnLifecycleAvailable"];
 }
 export declare function createAgentRuntimeClient({
+  appServerClient,
   bridgeInvoke,
   invoke,
   invokeCommand,
+  isAppServerTurnLifecycleAvailable,
 }?: AgentRuntimeClientDeps): {
   compactAgentRuntimeSession: (
     request: import("./types").AgentRuntimeCompactSessionRequest,

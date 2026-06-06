@@ -5,5 +5,11 @@
 pub mod manager;
 pub mod types;
 
+use crate::database::DbConnection;
+
 pub use manager::MemoryManager;
 pub use types::*;
+
+pub fn read_project_memory(db: DbConnection, project_id: &str) -> Result<ProjectMemory, String> {
+    MemoryManager::new(db).get_project_memory(project_id)
+}

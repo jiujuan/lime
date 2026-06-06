@@ -175,7 +175,10 @@ function writeEvidenceWithFallback(outputPath, evidence) {
     if (outputPath !== DEFAULT_OUTPUT) {
       throw error;
     }
-    const fallbackPath = path.join(os.tmpdir(), "lime-runtime-approval-sandbox-smoke.json");
+    const fallbackPath = path.join(
+      os.tmpdir(),
+      "lime-runtime-approval-sandbox-smoke.json",
+    );
     const writtenPath = writeEvidence(fallbackPath, evidence);
     console.warn(
       `[smoke:agent-runtime-approval-sandbox] 默认 evidence 写入失败，已回退到 ${writtenPath}: ${error.message}`,
@@ -251,8 +254,9 @@ async function invoke(options, cmd, args, timeoutMs = options.timeoutMs) {
 }
 
 function normalizeProviderId(provider) {
-  return String(provider?.id || provider?.provider_id || provider?.providerId || "")
-    .trim();
+  return String(
+    provider?.id || provider?.provider_id || provider?.providerId || "",
+  ).trim();
 }
 
 function providerEnabled(provider) {
@@ -283,14 +287,20 @@ function pickProvider(providers, preferredProviderId) {
   const enabled = providers.filter((provider) => providerEnabled(provider));
   if (preferredProviderId) {
     return (
-      enabled.find((provider) => normalizeProviderId(provider) === preferredProviderId) ||
-      providers.find((provider) => normalizeProviderId(provider) === preferredProviderId) ||
+      enabled.find(
+        (provider) => normalizeProviderId(provider) === preferredProviderId,
+      ) ||
+      providers.find(
+        (provider) => normalizeProviderId(provider) === preferredProviderId,
+      ) ||
       null
     );
   }
 
   for (const providerId of PROVIDER_PICK_ORDER) {
-    const match = enabled.find((provider) => normalizeProviderId(provider) === providerId);
+    const match = enabled.find(
+      (provider) => normalizeProviderId(provider) === providerId,
+    );
     if (match) {
       return match;
     }
@@ -311,7 +321,10 @@ async function resolveProviderPreference(options) {
   }
 
   const providers = await invoke(options, "get_api_key_providers", {}, 30_000);
-  const selected = pickProvider(Array.isArray(providers) ? providers : [], explicitProvider);
+  const selected = pickProvider(
+    Array.isArray(providers) ? providers : [],
+    explicitProvider,
+  );
   const providerId = normalizeProviderId(selected);
   if (!providerId) {
     throw new Error(
@@ -322,8 +335,12 @@ async function resolveProviderPreference(options) {
   let providerDetail = selected;
   try {
     providerDetail =
-      (await invoke(options, "get_api_key_provider", { id: providerId }, 30_000)) ||
-      selected;
+      (await invoke(
+        options,
+        "get_api_key_provider",
+        { id: providerId },
+        30_000,
+      )) || selected;
   } catch (error) {
     console.warn(
       `[smoke:agent-runtime-approval-sandbox] 读取 provider 详情失败，使用列表摘要继续: ${error.message}`,
@@ -340,7 +357,10 @@ async function resolveProviderPreference(options) {
   return {
     providerPreference: providerId,
     modelPreference,
-    source: explicitProvider || explicitModel ? "partial-explicit" : "auto-enabled-provider",
+    source:
+      explicitProvider || explicitModel
+        ? "partial-explicit"
+        : "auto-enabled-provider",
   };
 }
 
@@ -399,7 +419,8 @@ function summarizeThreadRead(threadRead) {
       "confirmationSource",
     ),
     askProfileKeys:
-      permissionField(permissionState, "ask_profile_keys", "askProfileKeys") || [],
+      permissionField(permissionState, "ask_profile_keys", "askProfileKeys") ||
+      [],
     requiredProfileKeys:
       permissionField(
         permissionState,
@@ -452,7 +473,12 @@ function buildRuntimeContractMetadata() {
   };
 }
 
-async function runPermissionDecisionFlow(options, workspaceId, providerPreference, decision) {
+async function runPermissionDecisionFlow(
+  options,
+  workspaceId,
+  providerPreference,
+  decision,
+) {
   const confirmed = decision === "resolved";
   const responseLabel = confirmed ? "允许本次执行" : "拒绝";
   const submittedStrategy = "react";
@@ -461,6 +487,13 @@ async function runPermissionDecisionFlow(options, workspaceId, providerPreferenc
     name: `Agent QC approval ${decision} ${Date.now()}`,
     executionStrategy: submittedStrategy,
     runStartHooks: false,
+    metadata: {
+      harness: {
+        hiddenFromUserRecents: true,
+        source: "smoke:agent-runtime-approval-sandbox",
+        decision,
+      },
+    },
   });
   const turnId = `qc-approval-${decision}-${Date.now()}-${process.pid}`;
   const eventName = `aster_stream_${sessionId}_${turnId}`;
@@ -740,7 +773,9 @@ async function main() {
 
   if (options.write) {
     const evidencePath = writeEvidenceWithFallback(options.output, evidence);
-    console.log(`\n[smoke:agent-runtime-approval-sandbox] evidence: ${evidencePath}`);
+    console.log(
+      `\n[smoke:agent-runtime-approval-sandbox] evidence: ${evidencePath}`,
+    );
   }
 
   console.log("\n[smoke:agent-runtime-approval-sandbox] 通过");

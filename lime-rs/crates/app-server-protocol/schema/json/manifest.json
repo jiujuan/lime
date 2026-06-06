@@ -12,6 +12,10 @@
   "methods": [
     {
       "kind": "request",
+      "method": "agentAppInstalled/list"
+    },
+    {
+      "kind": "request",
       "method": "agentSession/action/respond"
     },
     {
@@ -44,6 +48,10 @@
     },
     {
       "kind": "request",
+      "method": "automationJob/list"
+    },
+    {
+      "kind": "request",
       "method": "capability/list"
     },
     {
@@ -57,6 +65,10 @@
     {
       "kind": "notification",
       "method": "initialized"
+    },
+    {
+      "kind": "request",
+      "method": "knowledgePack/list"
     },
     {
       "kind": "request",
@@ -85,6 +97,10 @@
     {
       "kind": "request",
       "method": "modelSyncState/read"
+    },
+    {
+      "kind": "request",
+      "method": "projectMemory/read"
     },
     {
       "kind": "request",
@@ -143,6 +159,7 @@
       "RequestId"
     ],
     "v0": [
+      "AgentAppInstalledListResponse",
       "AgentAttachment",
       "AgentEvent",
       "AgentInput",
@@ -170,6 +187,7 @@
       "ArtifactReadParams",
       "ArtifactReadResponse",
       "ArtifactSummary",
+      "AutomationJobListResponse",
       "BusinessObjectRef",
       "CapabilityDescriptor",
       "CapabilityListParams",
@@ -182,6 +200,8 @@
       "EvidencePackSummary",
       "InitializeParams",
       "InitializeResponse",
+      "KnowledgeListPacksParams",
+      "KnowledgeListPacksResponse",
       "ModelListParams",
       "ModelListResponse",
       "ModelPreferencesListResponse",
@@ -192,6 +212,8 @@
       "ModelProviderListResponse",
       "ModelSyncStateReadResponse",
       "PlatformInfo",
+      "ProjectMemoryReadParams",
+      "ProjectMemoryReadResponse",
       "RuntimeOptions",
       "ServerCapabilities",
       "ServerInfo",

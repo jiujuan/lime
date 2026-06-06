@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AGENT_APP_HOST_FLAGS_STORAGE_KEY,
   resolveAgentAppHostFlags,
@@ -6,7 +6,12 @@ import {
 
 describe("Agent App feature flags", () => {
   beforeEach(() => {
+    vi.unstubAllEnvs();
     window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("默认关闭 Lab 和所有运行能力", () => {
@@ -54,8 +59,32 @@ describe("Agent App feature flags", () => {
     });
   });
 
+  it("生产构建不能通过 override、env 或 localStorage 启用 mock SDK", () => {
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("MODE", "production");
+    vi.stubEnv("VITEST", "");
+    vi.stubEnv("VITE_LIME_AGENT_APP_MOCK_SDK", "1");
+    window.localStorage.setItem(
+      AGENT_APP_HOST_FLAGS_STORAGE_KEY,
+      JSON.stringify({
+        mockSdkEnabled: true,
+      }),
+    );
+
+    expect(resolveAgentAppHostFlags({ mockSdkEnabled: true })).toMatchObject({
+      labEnabled: false,
+      mockSdkEnabled: false,
+      localStorageEnabled: false,
+      realAdapterEnabled: false,
+      uiRuntimeEnabled: false,
+      workerRuntimeEnabled: false,
+    });
+  });
+
   it("开启 realAdapterEnabled 时应进入 P2 adapter 链路但仍不启用 UI/worker runtime", () => {
-    expect(resolveAgentAppHostFlags({ realAdapterEnabled: true })).toMatchObject({
+    expect(
+      resolveAgentAppHostFlags({ realAdapterEnabled: true }),
+    ).toMatchObject({
       labEnabled: true,
       localPackageEnabled: true,
       projectionEnabled: true,
@@ -84,7 +113,9 @@ describe("Agent App feature flags", () => {
   });
 
   it("开启 workerRuntimeEnabled 时应进入 P4.2 workflow runtime 但不自动启用 adapter", () => {
-    expect(resolveAgentAppHostFlags({ workerRuntimeEnabled: true })).toMatchObject({
+    expect(
+      resolveAgentAppHostFlags({ workerRuntimeEnabled: true }),
+    ).toMatchObject({
       labEnabled: true,
       localPackageEnabled: true,
       projectionEnabled: true,
@@ -99,7 +130,9 @@ describe("Agent App feature flags", () => {
   });
 
   it("开启 cloudBootstrapEnabled 时只进入 P5 bootstrap 输入层，不自动运行 App", () => {
-    expect(resolveAgentAppHostFlags({ cloudBootstrapEnabled: true })).toMatchObject({
+    expect(
+      resolveAgentAppHostFlags({ cloudBootstrapEnabled: true }),
+    ).toMatchObject({
       labEnabled: true,
       localPackageEnabled: true,
       projectionEnabled: true,

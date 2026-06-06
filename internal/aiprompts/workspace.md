@@ -196,35 +196,25 @@ impl WorkspaceManager {
 }
 ```
 
-### legacy adapter 命令
+### Desktop Host / App Server 边界
 
-```rust
-// lime/lime-rs/src/commands/workspace_cmd.rs
+Workspace 数据读取默认走 App Server JSON-RPC；Electron Desktop Host 只保留窗口、对话框、托盘、Dock、updater 和 sidecar 生命周期等桌面壳能力。
 
-#[tauri::command]
-pub async fn workspace_create(name: String, root_path: String) -> Result<Workspace, String>;
+```typescript
+// packages/app-server-client / src/lib/api/appServer.ts
 
-#[tauri::command]
-pub async fn workspace_list() -> Result<Vec<Workspace>, String>;
+const workspaceListRequest = {
+  method: "workspace/list",
+  params: {},
+};
 
-#[tauri::command]
-pub async fn workspace_get(id: String) -> Result<Workspace, String>;
-
-#[tauri::command]
-pub async fn workspace_update(id: String, updates: WorkspaceUpdate) -> Result<Workspace, String>;
-
-#[tauri::command]
-pub async fn workspace_delete(id: String) -> Result<(), String>;
-
-#[tauri::command]
-pub async fn workspace_set_default(id: String) -> Result<(), String>;
-
-#[tauri::command]
-pub async fn workspace_list_sessions(workspace_id: String) -> Result<Vec<SessionInfo>, String>;
-
-#[tauri::command]
-pub async fn workspace_create_session(workspace_id: String, name: String) -> Result<String, String>;
+const sessionListRequest = {
+  method: "agentSession/list",
+  params: { workspaceId: "workspace-main" },
+};
 ```
+
+旧 workspace 桥接入口只允许作为 compat facade 委托 current 数据源，不得承接新业务逻辑或作为新测试的可交付证据。
 
 
 

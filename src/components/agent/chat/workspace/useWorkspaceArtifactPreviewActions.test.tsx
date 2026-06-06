@@ -6,6 +6,17 @@ import type { Artifact } from "@/lib/artifact/types";
 import * as fileBrowserModule from "@/lib/api/fileBrowser";
 import { useWorkspaceArtifactPreviewActions } from "./useWorkspaceArtifactPreviewActions";
 
+const { mockHasArtifactPreviewScope, mockReadArtifactPreviewContent } =
+  vi.hoisted(() => ({
+    mockHasArtifactPreviewScope: vi.fn(),
+    mockReadArtifactPreviewContent: vi.fn(),
+  }));
+
+vi.mock("@/lib/api/agentRuntime/appServerArtifactClient", () => ({
+  hasAgentRuntimeArtifactPreviewScope: mockHasArtifactPreviewScope,
+  readAgentRuntimeArtifactPreviewContent: mockReadArtifactPreviewContent,
+}));
+
 vi.mock("../hooks/useArtifactAutoPreviewSync", () => ({
   useArtifactAutoPreviewSync: vi.fn(),
 }));
@@ -105,6 +116,9 @@ beforeEach(() => {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  mockHasArtifactPreviewScope.mockReset();
+  mockHasArtifactPreviewScope.mockReturnValue(false);
+  mockReadArtifactPreviewContent.mockReset();
 });
 
 async function flushAsyncWork(times = 4) {
@@ -312,6 +326,106 @@ describe("useWorkspaceArtifactPreviewActions", () => {
     });
     expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
     expect(setGeneralCanvasState).toHaveBeenCalledTimes(1);
+  });
+
+  it("读取带 App Server scope 的 artifact 时应走 artifact/read current 主链", async () => {
+    const readFilePreviewSpy = vi.spyOn(fileBrowserModule, "readFilePreview");
+    mockHasArtifactPreviewScope.mockReturnValue(true);
+    mockReadArtifactPreviewContent.mockResolvedValueOnce({
+      artifactRef: "artifact-report",
+      artifactId: "artifact-report",
+      filePath: ".app-server/artifacts/report.md",
+      content: "# App Server 正文",
+    });
+    const artifact = createArtifact({
+      id: "artifact-report",
+      content: "",
+      meta: {
+        filePath: ".app-server/artifacts/report.md",
+        filename: "report.md",
+        sessionId: "session-1",
+        turnId: "turn-1",
+        artifactRef: "artifact-report",
+      },
+    });
+    const { render, getValue } = renderHook();
+
+    await render();
+
+    const preview = await getValue().handleHarnessLoadFilePreview(
+      ".app-server/artifacts/report.md",
+      artifact,
+    );
+
+    expect(mockHasArtifactPreviewScope).toHaveBeenCalledWith(
+      artifact,
+      ".app-server/artifacts/report.md",
+    );
+    expect(mockReadArtifactPreviewContent).toHaveBeenCalledWith(
+      artifact,
+      ".app-server/artifacts/report.md",
+    );
+    expect(readFilePreviewSpy).not.toHaveBeenCalled();
+    expect(preview).toEqual({
+      path: ".app-server/artifacts/report.md",
+      content: "# App Server 正文",
+      isBinary: false,
+      size: "# App Server 正文".length,
+      error: null,
+    });
+  });
+
+  it("带 App Server scope 的 artifact 内容不可用时不应回退旧文件预览", async () => {
+    const readFilePreviewSpy = vi.spyOn(fileBrowserModule, "readFilePreview");
+    mockHasArtifactPreviewScope.mockReturnValue(true);
+    mockReadArtifactPreviewContent.mockResolvedValueOnce(null);
+    const artifact = createArtifact({
+      id: "artifact-report",
+      content: "",
+      meta: {
+        filePath: "report.md",
+        filename: "report.md",
+        sessionId: "session-1",
+        artifactRef: "artifact-report",
+      },
+    });
+    const { render, getValue } = renderHook({
+      taskFiles: [
+        {
+          id: "task-report",
+          name: "report.md",
+          type: "document",
+          content: "# 旧任务文件",
+          version: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+
+    await render();
+
+    const preview = await getValue().handleHarnessLoadFilePreview(
+      "report.md",
+      artifact,
+    );
+
+    expect(mockHasArtifactPreviewScope).toHaveBeenCalledWith(
+      artifact,
+      "report.md",
+    );
+    expect(mockReadArtifactPreviewContent).toHaveBeenCalledWith(
+      artifact,
+      "report.md",
+    );
+    expect(readFilePreviewSpy).not.toHaveBeenCalled();
+    expect(preview).toEqual({
+      path: "report.md",
+      content: null,
+      isBinary: false,
+      size: 0,
+      error: "App Server artifact 内容不可用",
+    });
   });
 
   it("读取带目录的真实结果路径时不应回退到同名裸任务文件", async () => {

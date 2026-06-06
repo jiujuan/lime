@@ -4,8 +4,13 @@
  * 提供角色、世界观、大纲的 CRUD 操作
  */
 
-import { safeInvoke } from "@/lib/dev-bridge";
 import { logAgentDebug } from "@/lib/agentDebug";
+import { AppServerClient } from "@/lib/api/appServer";
+import { safeInvoke } from "@/lib/dev-bridge";
+import {
+  METHOD_PROJECT_MEMORY_READ,
+  type ProjectMemoryReadResponse as AppServerProjectMemoryReadResponse,
+} from "../../../packages/app-server-client/src/protocol";
 
 const PROJECT_MEMORY_CACHE_TTL_MS = 30_000;
 const projectMemoryCache = new Map<
@@ -13,6 +18,15 @@ const projectMemoryCache = new Map<
   { loadedAt: number; memory: ProjectMemory }
 >();
 const projectMemoryInflight = new Map<string, Promise<ProjectMemory>>();
+
+export type ProjectMemoryAppServerClient = Pick<AppServerClient, "request">;
+
+type ProjectMemoryReadResponse = Omit<
+  AppServerProjectMemoryReadResponse,
+  "memory"
+> & {
+  memory?: ProjectMemory | null;
+};
 
 function clearProjectMemoryCache(): void {
   projectMemoryCache.clear();
@@ -260,16 +274,26 @@ export async function deleteOutlineNode(id: string): Promise<boolean> {
 /** 获取项目完整记忆 */
 export async function getProjectMemory(
   projectId: string,
+  options: { appServerClient?: ProjectMemoryAppServerClient } = {},
 ): Promise<ProjectMemory> {
-  const cached = projectMemoryCache.get(projectId);
+  const normalizedProjectId = projectId.trim();
+  if (!normalizedProjectId) {
+    throw new Error("projectId is required to read App Server project memory");
+  }
+
+  const cached = projectMemoryCache.get(normalizedProjectId);
   if (cached && Date.now() - cached.loadedAt < PROJECT_MEMORY_CACHE_TTL_MS) {
-    logAgentDebug("AgentApi", "projectMemoryGet.cacheHit", { projectId });
+    logAgentDebug("AgentApi", "projectMemoryGet.cacheHit", {
+      projectId: normalizedProjectId,
+    });
     return cached.memory;
   }
 
-  const inflight = projectMemoryInflight.get(projectId);
+  const inflight = projectMemoryInflight.get(normalizedProjectId);
   if (inflight) {
-    logAgentDebug("AgentApi", "projectMemoryGet.inflightHit", { projectId });
+    logAgentDebug("AgentApi", "projectMemoryGet.inflightHit", {
+      projectId: normalizedProjectId,
+    });
     return inflight;
   }
 
@@ -286,10 +310,10 @@ export async function getProjectMemory(
             "projectMemoryGet.slow",
             {
               elapsedMs: Date.now() - startedAt,
-              projectId,
+              projectId: normalizedProjectId,
             },
             {
-              dedupeKey: `projectMemoryGet.slow:${projectId}`,
+              dedupeKey: `projectMemoryGet.slow:${normalizedProjectId}`,
               level: "info",
               throttleMs: 1000,
             },
@@ -297,27 +321,35 @@ export async function getProjectMemory(
         }, 1000)
       : null;
 
-  logAgentDebug("AgentApi", "projectMemoryGet.start", { projectId });
+  logAgentDebug("AgentApi", "projectMemoryGet.start", {
+    projectId: normalizedProjectId,
+  });
 
   const request = (async () => {
-    const memory = await safeInvoke<ProjectMemory>("project_memory_get", {
-      projectId,
-    });
+    const appServerClient = options.appServerClient ?? new AppServerClient();
+    const response = await appServerClient.request<ProjectMemoryReadResponse>(
+      METHOD_PROJECT_MEMORY_READ,
+      { projectId: normalizedProjectId },
+    );
+    const memory = response.result.memory;
+    if (!memory) {
+      throw new Error("App Server projectMemory/read did not return memory");
+    }
     settled = true;
     logAgentDebug("AgentApi", "projectMemoryGet.success", {
       charactersCount: memory.characters.length,
       durationMs: Date.now() - startedAt,
       hasWorldBuilding: Boolean(memory.world_building),
       outlineCount: memory.outline.length,
-      projectId,
+      projectId: normalizedProjectId,
     });
-    projectMemoryCache.set(projectId, {
+    projectMemoryCache.set(normalizedProjectId, {
       loadedAt: Date.now(),
       memory,
     });
     return memory;
   })();
-  projectMemoryInflight.set(projectId, request);
+  projectMemoryInflight.set(normalizedProjectId, request);
 
   try {
     return await request;
@@ -329,13 +361,13 @@ export async function getProjectMemory(
       {
         durationMs: Date.now() - startedAt,
         error,
-        projectId,
+        projectId: normalizedProjectId,
       },
       { level: "error" },
     );
     throw error;
   } finally {
-    projectMemoryInflight.delete(projectId);
+    projectMemoryInflight.delete(normalizedProjectId);
     if (slowTimer !== null) {
       clearTimeout(slowTimer);
     }

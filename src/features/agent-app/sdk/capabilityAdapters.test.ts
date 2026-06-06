@@ -11,9 +11,9 @@ import type {
 import {
   buildLimeCapabilityInvokeProvenance,
   createLimeCapabilityInvoker,
-  createMockLimeCapabilityTransport,
   type LimeCapabilityInvokeRequest,
 } from "./capabilityContract";
+import { createMockLimeCapabilityTransport } from "./__tests__/testFixtures";
 import {
   createLimeCoreCapabilityAdapters,
   LimeCapabilityAdapterError,

@@ -102,7 +102,9 @@ export interface WorkspacePreferencesConfig {
   service_models?: ServiceModelsConfig;
 }
 
-export type NavigationEnabledItemId = "automation" | "channels" | "companion";
+export const CURRENT_SIDEBAR_NAV_SCHEMA_VERSION = 3;
+
+export type NavigationEnabledItemId = "companion";
 
 export interface NavigationConfig {
   schema_version?: number;

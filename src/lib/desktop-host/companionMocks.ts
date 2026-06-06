@@ -3,7 +3,7 @@ import type { CompanionPetStatus } from "../api/companion";
 function createDefaultCompanionPetStatus(): CompanionPetStatus {
   return {
     endpoint: "ws://127.0.0.1:45554/companion/pet",
-    server_listening: true,
+    server_listening: false,
     connected: false,
     client_id: null,
     platform: null,

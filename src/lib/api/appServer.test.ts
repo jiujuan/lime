@@ -3,6 +3,7 @@ import { safeInvoke } from "@/lib/dev-bridge";
 import {
   APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
   APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+  APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
   APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
   APP_SERVER_METHOD_ARTIFACT_READ,
   APP_SERVER_METHOD_CAPABILITY_LIST,
@@ -318,11 +319,16 @@ describe("App Server API", () => {
     expect(result.result.artifacts[0].artifactRef).toBe("artifact-report");
     expect(result.result.artifacts[0].contentStatus).toBe("notRequested");
     expect(result.result.exportedAt).toBe("2026-06-05T00:00:02.000Z");
-    expect((result.result as { threadStatus?: string }).threadStatus).toBeUndefined();
+    expect(
+      (result.result as { threadStatus?: string }).threadStatus,
+    ).toBeUndefined();
     expect(result.result.evidencePack?.threadStatus).toBe("running");
     expect(
-      (result.result.evidencePack?.completionAuditSummary as { decision?: string })
-        ?.decision,
+      (
+        result.result.evidencePack?.completionAuditSummary as {
+          decision?: string;
+        }
+      )?.decision,
     ).toBe("in_progress");
     expect(safeInvoke).toHaveBeenCalledWith("app_server_handle_json_lines", {
       request: {
@@ -424,6 +430,39 @@ describe("App Server API", () => {
     });
   });
 
+  it("cancelTurn 应通过 App Server JSON-RPC 取消指定 turn", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      lines: [
+        line({
+          id: 8,
+          result: {},
+        }),
+      ],
+    });
+
+    const client = new AppServerClient({ initialRequestId: 8 });
+    const result = await client.cancelTurn({
+      sessionId: "session-1",
+      turnId: "turn-1",
+    });
+
+    expect(result.result).toEqual({});
+    expect(safeInvoke).toHaveBeenCalledWith("app_server_handle_json_lines", {
+      request: {
+        lines: [
+          line({
+            id: 8,
+            method: APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
+            params: {
+              sessionId: "session-1",
+              turnId: "turn-1",
+            },
+          }),
+        ],
+      },
+    });
+  });
+
   it("respondAction 应通过 App Server JSON-RPC 响应 action.required", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       lines: [
@@ -485,6 +524,22 @@ describe("App Server API", () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       lines: [
         line({
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-error-1",
+              sequence: 1,
+              sessionId: "session-1",
+              turnId: "turn-1",
+              type: "turn.failed",
+              timestamp: "2026-06-06T00:00:00.000Z",
+              payload: {
+                message: "session not found",
+              },
+            },
+          },
+        }),
+        line({
           id: 1,
           error: {
             code: -32010,
@@ -498,12 +553,37 @@ describe("App Server API", () => {
     });
 
     const client = new AppServerClient();
-    await expect(client.readSession({ sessionId: "missing" })).rejects.toMatchObject({
+    await expect(
+      client.readSession({ sessionId: "missing" }),
+    ).rejects.toMatchObject({
       name: "AppServerRpcError",
       code: -32010,
       data: {
         sessionId: "missing",
       },
+      response: {
+        id: 1,
+        error: {
+          code: -32010,
+          message: "session not found",
+        },
+      },
+      notifications: [
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        },
+      ],
+      messages: [
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        },
+        {
+          id: 1,
+          error: {
+            message: "session not found",
+          },
+        },
+      ],
     });
   });
 

@@ -1,12 +1,20 @@
 import electronPath from "electron";
 import { spawn } from "node:child_process";
+import { resolveElectronLaunchPath } from "./lib/electron-launcher.mjs";
 import {
   buildLocalAppServerAsync,
+  resolveDevAppServerBackendEnv,
+  resolveDevAppServerAgentBackendBinary,
   resolveDevAppServerBinary,
+  shouldUseDevAppServerExternalBackend,
   watchAppServerSources,
 } from "./lib/electron-dev-sidecar.mjs";
 
 const appServerBin = resolveDevAppServerBinary({ forceBuild: true });
+const appServerAgentBackendBin = shouldUseDevAppServerExternalBackend()
+  ? resolveDevAppServerAgentBackendBinary()
+  : null;
+const electronLaunchPath = resolveElectronLaunchPath({ electronPath });
 const rendererDevServerUrl = "http://127.0.0.1:1420";
 
 const existingRenderer = await isHttpHealthy(rendererDevServerUrl);
@@ -22,7 +30,7 @@ if (existingRenderer) {
     `[electron-dev] reusing existing renderer dev server at ${rendererDevServerUrl}`,
   );
 } else {
-  vite = spawn("npm", ["run", "dev:renderer"], {
+  vite = spawn("npm", ["run", "dev:renderer", "--", "--force"], {
     env: {
       ...process.env,
       LIME_ELECTRON_RENDERER: "1",
@@ -67,13 +75,18 @@ const watcher =
 
 function startElectron(reason) {
   console.log(`[electron-dev] starting Electron (${reason})`);
-  electron = spawn(electronPath, ["."], {
+  electron = spawn(electronLaunchPath, ["."], {
     env: {
       ...process.env,
       ...(appServerBin ? { APP_SERVER_BIN: appServerBin } : {}),
+      ...resolveDevAppServerBackendEnv({
+        env: process.env,
+        backendCommand: appServerAgentBackendBin,
+      }),
       VITE_DEV_SERVER_URL: rendererDevServerUrl,
     },
     stdio: "inherit",
+    shell: process.platform === "win32",
   });
 
   const child = electron;

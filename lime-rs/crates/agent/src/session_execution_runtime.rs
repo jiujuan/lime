@@ -1709,10 +1709,7 @@ mod tests {
             SessionExecutionRuntimeSource::RuntimeSnapshot
         );
         assert_eq!(runtime.latest_turn_id.as_deref(), Some("turn-code"));
-        assert_eq!(
-            runtime.execution_strategy.as_deref(),
-            Some("react")
-        );
+        assert_eq!(runtime.execution_strategy.as_deref(), Some("react"));
     }
 
     #[test]

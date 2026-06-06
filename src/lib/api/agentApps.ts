@@ -1,3 +1,4 @@
+import { AppServerClient } from "@/lib/api/appServer";
 import { safeInvoke } from "@/lib/dev-bridge";
 import {
   getClientAgentApps,
@@ -39,6 +40,10 @@ import type {
   InstalledAgentAppState,
   PackageSourceKind,
 } from "@/features/agent-app/types";
+import {
+  METHOD_AGENT_APP_INSTALLED_LIST,
+  type AgentAppInstalledListResponse,
+} from "../../../packages/app-server-client/src/protocol";
 
 export const AGENT_APPS_CHANGED_EVENT = "lime:agent-apps-changed";
 
@@ -280,6 +285,37 @@ function unwrapEnvelope<T>(payload: unknown): T {
   return payload as T;
 }
 
+type AgentAppInstalledListAppServerClient = Pick<AppServerClient, "request">;
+
+function normalizeInstalledAgentAppListResponse(
+  response: AgentAppInstalledListResponse | null | undefined,
+): InstalledAgentAppStateListResult {
+  if (
+    !response ||
+    typeof response !== "object" ||
+    !Array.isArray(response.states)
+  ) {
+    throw new Error("App Server agentAppInstalled/list did not return states");
+  }
+  if (!Array.isArray(response.issues)) {
+    throw new Error("App Server agentAppInstalled/list did not return issues");
+  }
+  return {
+    issues: response.issues as InstalledAgentAppStateListResult["issues"],
+    states: response.states as InstalledAgentAppState[],
+  };
+}
+
+async function requestAgentAppInstalledListAppServer(
+  appServerClient: AgentAppInstalledListAppServerClient = new AppServerClient(),
+): Promise<InstalledAgentAppStateListResult> {
+  const response = await appServerClient.request<AgentAppInstalledListResponse>(
+    METHOD_AGENT_APP_INSTALLED_LIST,
+    {},
+  );
+  return normalizeInstalledAgentAppListResponse(response.result);
+}
+
 function extractFrontmatter(markdown: string): Record<string, unknown> {
   const normalized = markdown.replace(/^\uFEFF/, "");
   const match = /^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/.exec(normalized);
@@ -339,7 +375,8 @@ function normalizeCloudCatalogPayload(value: unknown): CloudBootstrapPayload {
     return parseCloudBootstrapPayload({
       schemaVersion: "agent-app-cloud-bootstrap/v1",
       tenantId: typeof data.tenantId === "string" ? data.tenantId : undefined,
-      generatedAt: typeof data.generatedAt === "string" ? data.generatedAt : undefined,
+      generatedAt:
+        typeof data.generatedAt === "string" ? data.generatedAt : undefined,
       apps: data.items,
     });
   }
@@ -408,7 +445,7 @@ export async function selectLocalAgentAppDirectory(
 }
 
 export async function listInstalledAgentApps(): Promise<InstalledAgentAppStateListResult> {
-  return safeInvoke<InstalledAgentAppStateListResult>("agent_app_list_installed");
+  return requestAgentAppInstalledListAppServer();
 }
 
 export async function saveInstalledAgentAppState(
@@ -422,11 +459,14 @@ export async function saveInstalledAgentAppState(
 export async function fetchCloudAgentAppPackage(
   descriptor: CloudBootstrapReleaseDescriptor,
 ): Promise<AgentAppPackageCacheEntry> {
-  return safeInvoke<AgentAppPackageCacheEntry>("agent_app_fetch_cloud_package", {
-    request: {
-      descriptor,
-    } satisfies AgentAppFetchCloudPackageRequest,
-  });
+  return safeInvoke<AgentAppPackageCacheEntry>(
+    "agent_app_fetch_cloud_package",
+    {
+      request: {
+        descriptor,
+      } satisfies AgentAppFetchCloudPackageRequest,
+    },
+  );
 }
 
 export async function reviewLocalAgentAppPackage(params: {
@@ -512,7 +552,11 @@ async function assertLocalAgentAppRegistrationAllowed(
 
   const catalog = await getAgentAppCloudCatalog();
   const app = catalog.payload.apps.find((item) => item.appId === manifest.name);
-  if (!app || app.registrationRequired !== true || app.registrationState !== "active") {
+  if (
+    !app ||
+    app.registrationRequired !== true ||
+    app.registrationState !== "active"
+  ) {
     throw new AgentAppRegistrationRequiredError();
   }
 }
@@ -545,9 +589,13 @@ export async function submitAgentAppRegistrationCode(
     throw new Error("Agent App 注册需要先登录 Lime 云端账号。");
   }
   return {
-    payload: await submitClientAgentAppRegistrationCode(runtime.tenantId, appId, {
-      code,
-    }),
+    payload: await submitClientAgentAppRegistrationCode(
+      runtime.tenantId,
+      appId,
+      {
+        code,
+      },
+    ),
     source: "remote",
   };
 }
@@ -558,12 +606,8 @@ export async function installCloudAgentAppRelease(params: {
   actualPackageHash?: string;
   actualManifestHash?: string;
   packageCacheEntry?: AgentAppPackageCacheEntry;
-  resolveCachedPackage?: AgentAppCloudReleasePackageAcquisitionOptions[
-    "resolveCachedPackage"
-  ];
-  fetchCloudPackage?: AgentAppCloudReleasePackageAcquisitionOptions[
-    "fetchCloudPackage"
-  ];
+  resolveCachedPackage?: AgentAppCloudReleasePackageAcquisitionOptions["resolveCachedPackage"];
+  fetchCloudPackage?: AgentAppCloudReleasePackageAcquisitionOptions["fetchCloudPackage"];
   skipPackageFetch?: boolean;
   profile?: HostCapabilityProfile;
 }): Promise<InstalledAgentAppState> {
@@ -639,12 +683,8 @@ export async function reviewCloudAgentAppRelease(params: {
   actualPackageHash?: string;
   actualManifestHash?: string;
   packageCacheEntry?: AgentAppPackageCacheEntry;
-  resolveCachedPackage?: AgentAppCloudReleasePackageAcquisitionOptions[
-    "resolveCachedPackage"
-  ];
-  fetchCloudPackage?: AgentAppCloudReleasePackageAcquisitionOptions[
-    "fetchCloudPackage"
-  ];
+  resolveCachedPackage?: AgentAppCloudReleasePackageAcquisitionOptions["resolveCachedPackage"];
+  fetchCloudPackage?: AgentAppCloudReleasePackageAcquisitionOptions["fetchCloudPackage"];
   skipPackageFetch?: boolean;
   profile?: HostCapabilityProfile;
   installed?: InstalledAgentAppState[];
@@ -705,9 +745,12 @@ export async function reviewCloudAgentAppRelease(params: {
 export async function setAgentAppDisabled(
   request: AgentAppDisabledRequest,
 ): Promise<InstalledAgentAppStateListResult> {
-  return safeInvoke<InstalledAgentAppStateListResult>("agent_app_set_disabled", {
-    request,
-  });
+  return safeInvoke<InstalledAgentAppStateListResult>(
+    "agent_app_set_disabled",
+    {
+      request,
+    },
+  );
 }
 
 export async function previewAgentAppUninstall(
@@ -739,9 +782,12 @@ export async function startAgentAppUiRuntime(
 export async function getAgentAppUiRuntimeStatus(
   request: AgentAppUiRuntimeStatusRequest,
 ): Promise<AgentAppUiRuntimeStatus> {
-  return safeInvoke<AgentAppUiRuntimeStatus>("agent_app_get_ui_runtime_status", {
-    request,
-  });
+  return safeInvoke<AgentAppUiRuntimeStatus>(
+    "agent_app_get_ui_runtime_status",
+    {
+      request,
+    },
+  );
 }
 
 export async function stopAgentAppUiRuntime(
@@ -755,9 +801,12 @@ export async function stopAgentAppUiRuntime(
 export async function selectAgentAppDirectory(
   request: AgentAppSelectDirectoryRequest = {},
 ): Promise<AgentAppSelectDirectoryResult> {
-  return safeInvoke<AgentAppSelectDirectoryResult>("agent_app_select_directory", {
-    request,
-  });
+  return safeInvoke<AgentAppSelectDirectoryResult>(
+    "agent_app_select_directory",
+    {
+      request,
+    },
+  );
 }
 
 export async function launchAgentAppShell(

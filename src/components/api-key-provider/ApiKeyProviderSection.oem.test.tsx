@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderWithKeysDisplay } from "@/lib/api/apiKeyProvider";
+import { METHOD_MODEL_PROVIDER_LIST } from "../../../packages/app-server-client/src/protocol";
 
 const { mockSafeInvoke } = vi.hoisted(() => ({
   mockSafeInvoke: vi.fn(),
@@ -90,8 +91,8 @@ describe("ApiKeyProviderSection OEM 登录提示", () => {
     mockSafeInvoke.mockImplementation(
       async (command: string, payload?: Record<string, unknown>) => {
         switch (command) {
-          case "get_api_key_providers":
-            return providers;
+          case "app_server_handle_json_lines":
+            return handleAppServerJsonLines(payload, providers);
           case "get_provider_ui_state":
             return payload?.key === "selected_provider" ? "openai" : null;
           case "set_provider_ui_state":
@@ -135,3 +136,29 @@ describe("ApiKeyProviderSection OEM 登录提示", () => {
     expect(persistedSelections).not.toContain("openai");
   });
 });
+
+function handleAppServerJsonLines(
+  payload: Record<string, unknown> | undefined,
+  providers: ProviderWithKeysDisplay[],
+): { lines: string[] } {
+  const request = payload?.request as { lines?: string[] } | undefined;
+  const messages = request?.lines?.map((line) => JSON.parse(line)) ?? [];
+  const lines = messages.map((message) => {
+    if (message.method === METHOD_MODEL_PROVIDER_LIST) {
+      return `${JSON.stringify({
+        id: message.id,
+        result: { providers },
+      })}\n`;
+    }
+
+    return `${JSON.stringify({
+      id: message.id,
+      error: {
+        code: -32601,
+        message: `未处理的 App Server 方法：${message.method}`,
+      },
+    })}\n`;
+  });
+
+  return { lines };
+}

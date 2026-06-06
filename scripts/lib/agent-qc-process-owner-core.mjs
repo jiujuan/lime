@@ -59,6 +59,8 @@ const PASSIVE_ELECTRON_RUNTIME_PATTERNS = [
   "node_modules/.bin/electron .",
   "node_modules/electron/dist/electron .",
   "node_modules/electron/dist/electron.app/",
+  ".lime/electron-dev-host/lime.app/",
+  ".lime/electron-dev-host/lime-dev.app/",
 ];
 
 function parseEtimeSeconds(value) {

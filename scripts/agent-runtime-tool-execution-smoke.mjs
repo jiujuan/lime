@@ -52,10 +52,7 @@ const SAFE_FILE_TOOLS = ["Read", "Edit", "Write", "Glob", "Grep"];
 const MEDIA_NOTEBOOK_SHELL_TOOLS = ["view_image", "NotebookEdit", "Bash"];
 const TASK_BOARD_TOOLS = ["TaskCreate", "TaskGet", "TaskUpdate", "TaskList"];
 const BACKGROUND_TASK_TOOLS = ["Bash", "TaskOutput", "TaskStop"];
-const RUNTIME_INTROSPECTION_TOOLS = [
-  "ToolSearch",
-  "SendUserMessage",
-];
+const RUNTIME_INTROSPECTION_TOOLS = ["ToolSearch", "SendUserMessage"];
 const WEB_TOOLS = ["WebFetch", "WebSearch"];
 const AGENT_CONTROL_TOOLS = [
   "TeamCreate",
@@ -351,7 +348,9 @@ function extractTaskBoardIdFromContext(context) {
 function extractBackgroundTaskIdFromContext(context) {
   const text = requestTextFromFixtureContext(context);
   const metadataMatch = text.match(/"task_id"\s*:\s*"([^"]+)"/);
-  const outputMatch = text.match(/Background task started with ID:\s*([^\s\n]+)/);
+  const outputMatch = text.match(
+    /Background task started with ID:\s*([^\s\n]+)/,
+  );
   const taskId = (metadataMatch?.[1] || outputMatch?.[1] || "").trim();
   if (!taskId) {
     throw new Error(
@@ -521,7 +520,8 @@ function buildWebFixtureResponses() {
   return [
     toolCall("WebFetch", "call-tool-exec-web-fetch", {
       url: "https://example.com/",
-      prompt: "Return the page title and mention LIME_TOOL_EXECUTION_WEBFETCH_OK.",
+      prompt:
+        "Return the page title and mention LIME_TOOL_EXECUTION_WEBFETCH_OK.",
       focus_query: "Example Domain",
       dynamic_filter: true,
       max_chars: 2000,
@@ -621,11 +621,15 @@ function buildAskLspFixtureResponses() {
 
 function buildCreationTaskFixtureResponses({ audioPath }) {
   return [
-    toolCall("lime_create_audio_generation_task", "call-tool-exec-create-audio", {
-      sourceText: "LIME_TOOL_EXECUTION_AUDIO_TASK_OK",
-      title: "Audio task smoke",
-      outputPath: outputPathFor("audio"),
-    }),
+    toolCall(
+      "lime_create_audio_generation_task",
+      "call-tool-exec-create-audio",
+      {
+        sourceText: "LIME_TOOL_EXECUTION_AUDIO_TASK_OK",
+        title: "Audio task smoke",
+        outputPath: outputPathFor("audio"),
+      },
+    ),
     toolCall(
       "lime_create_broadcast_generation_task",
       "call-tool-exec-create-broadcast",
@@ -635,16 +639,24 @@ function buildCreationTaskFixtureResponses({ audioPath }) {
         outputPath: outputPathFor("broadcast"),
       },
     ),
-    toolCall("lime_create_cover_generation_task", "call-tool-exec-create-cover", {
-      prompt: "LIME_TOOL_EXECUTION_COVER_TASK_OK",
-      title: "Cover task smoke",
-      outputPath: outputPathFor("cover"),
-    }),
-    toolCall("lime_create_image_generation_task", "call-tool-exec-create-image", {
-      prompt: "LIME_TOOL_EXECUTION_IMAGE_TASK_OK",
-      title: "Image task smoke",
-      output_path: outputPathFor("image"),
-    }),
+    toolCall(
+      "lime_create_cover_generation_task",
+      "call-tool-exec-create-cover",
+      {
+        prompt: "LIME_TOOL_EXECUTION_COVER_TASK_OK",
+        title: "Cover task smoke",
+        outputPath: outputPathFor("cover"),
+      },
+    ),
+    toolCall(
+      "lime_create_image_generation_task",
+      "call-tool-exec-create-image",
+      {
+        prompt: "LIME_TOOL_EXECUTION_IMAGE_TASK_OK",
+        title: "Image task smoke",
+        output_path: outputPathFor("image"),
+      },
+    ),
     toolCall(
       "lime_create_modal_resource_search_task",
       "call-tool-exec-create-resource-search",
@@ -680,14 +692,18 @@ function buildCreationTaskFixtureResponses({ audioPath }) {
       summary: "LIME_TOOL_EXECUTION_URL_PARSE_TASK_OK",
       outputPath: outputPathFor("url-parse"),
     }),
-    toolCall("lime_create_video_generation_task", "call-tool-exec-create-video", {
-      projectId: "lime-tool-smoke-project",
-      providerId: "fixture-openai",
-      model: "lime-fixture-video",
-      prompt: "LIME_TOOL_EXECUTION_VIDEO_TASK_OK",
-      aspectRatio: "16:9",
-      duration: 5,
-    }),
+    toolCall(
+      "lime_create_video_generation_task",
+      "call-tool-exec-create-video",
+      {
+        projectId: "lime-tool-smoke-project",
+        providerId: "fixture-openai",
+        model: "lime-fixture-video",
+        prompt: "LIME_TOOL_EXECUTION_VIDEO_TASK_OK",
+        aspectRatio: "16:9",
+        duration: 5,
+      },
+    ),
     {
       type: "text",
       content: "AGENT_RUNTIME_CREATION_TASK_TOOLS_DONE",
@@ -822,8 +838,9 @@ function buildBatchScenario(batchId, fixtureFiles) {
             "Message delivered to user",
           ),
           evidencePackMentionsRuntimeIntrospection:
-            evidencePackText.includes("LIME_TOOL_EXECUTION_SEND_USER_MESSAGE_OK") ||
-            evidencePackText.includes("runtime-introspection-tools"),
+            evidencePackText.includes(
+              "LIME_TOOL_EXECUTION_SEND_USER_MESSAGE_OK",
+            ) || evidencePackText.includes("runtime-introspection-tools"),
         };
       },
     };
@@ -1094,10 +1111,7 @@ function requestToolNames(body) {
   return body.tools
     .map((tool) =>
       String(
-        tool?.function?.name ||
-          tool?.name ||
-          tool?.tool?.function?.name ||
-          "",
+        tool?.function?.name || tool?.name || tool?.tool?.function?.name || "",
       ).trim(),
     )
     .filter(Boolean);
@@ -1155,7 +1169,9 @@ function toolName(toolCall) {
 }
 
 function toolStatus(toolCall) {
-  return String(toolCall?.status || "").trim().toLowerCase();
+  return String(toolCall?.status || "")
+    .trim()
+    .toLowerCase();
 }
 
 function toolOutput(toolCall) {
@@ -1196,9 +1212,7 @@ function allTargetToolsCompleted(matrix) {
   return Object.fromEntries(
     matrix.map((entry) => [
       entry.tool,
-      entry.executed &&
-        entry.status === "completed" &&
-        entry.success !== false,
+      entry.executed && entry.status === "completed" && entry.success !== false,
     ]),
   );
 }
@@ -1268,9 +1282,11 @@ function runtimeTurnObserved(threadRead, fixture) {
 }
 
 function uniqueSorted(values) {
-  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))].sort(
-    (left, right) => left.localeCompare(right),
-  );
+  return [
+    ...new Set(
+      values.map((value) => String(value || "").trim()).filter(Boolean),
+    ),
+  ].sort((left, right) => left.localeCompare(right));
 }
 
 function runtimeToolsFromInventory(inventory) {
@@ -1290,7 +1306,9 @@ function inventoryToolVisible(tool) {
 }
 
 function inventoryRuntimeToolNames(inventory) {
-  return uniqueSorted(runtimeToolsFromInventory(inventory).map(inventoryToolName));
+  return uniqueSorted(
+    runtimeToolsFromInventory(inventory).map(inventoryToolName),
+  );
 }
 
 function inventoryVisibleRuntimeToolNames(inventory) {
@@ -1349,12 +1367,14 @@ function buildInventoryCoverage(inventories, matrix, targetTools) {
   const uncoveredVisibleRuntimeTools = visibleToolNames.filter(
     (tool) => !allScenarioTargets.includes(tool),
   );
-  const optionalUncoveredVisibleRuntimeTools = uncoveredVisibleRuntimeTools.filter(
-    (tool) => OPTIONAL_RUNTIME_COVERAGE_TOOLS.includes(tool),
-  );
-  const requiredUncoveredVisibleRuntimeTools = uncoveredVisibleRuntimeTools.filter(
-    (tool) => !OPTIONAL_RUNTIME_COVERAGE_TOOLS.includes(tool),
-  );
+  const optionalUncoveredVisibleRuntimeTools =
+    uncoveredVisibleRuntimeTools.filter((tool) =>
+      OPTIONAL_RUNTIME_COVERAGE_TOOLS.includes(tool),
+    );
+  const requiredUncoveredVisibleRuntimeTools =
+    uncoveredVisibleRuntimeTools.filter(
+      (tool) => !OPTIONAL_RUNTIME_COVERAGE_TOOLS.includes(tool),
+    );
   const extraScenarioToolsNotVisible = allScenarioTargets.filter(
     (tool) => !visibleToolNames.includes(tool),
   );
@@ -1381,7 +1401,8 @@ function buildInventoryCoverage(inventories, matrix, targetTools) {
       (tool) => !runtimeToolNames.includes(tool),
     ),
     hiddenTargetToolsInInventory: targetTools.filter(
-      (tool) => runtimeToolNames.includes(tool) && !visibleToolNames.includes(tool),
+      (tool) =>
+        runtimeToolNames.includes(tool) && !visibleToolNames.includes(tool),
     ),
     executedTargets: executedTools,
     completedTargets: completedTools,
@@ -1408,7 +1429,8 @@ function normalizeActionType(requestType) {
 }
 
 function buildActionScope(sessionId, request, fallbackTurnId) {
-  const scope = request?.scope && typeof request.scope === "object" ? request.scope : {};
+  const scope =
+    request?.scope && typeof request.scope === "object" ? request.scope : {};
   return {
     session_id: scope.session_id || scope.sessionId || sessionId,
     thread_id:
@@ -1467,7 +1489,8 @@ async function respondPendingRequests(
   seenRequestIds,
 ) {
   const pendingRequests = pendingRequestsFromThreadRead(threadRead).filter(
-    (request) => String(request?.status || "pending").toLowerCase() === "pending",
+    (request) =>
+      String(request?.status || "pending").toLowerCase() === "pending",
   );
   let respondedCount = 0;
   for (const request of pendingRequests) {
@@ -1476,7 +1499,9 @@ async function respondPendingRequests(
       continue;
     }
     seenRequestIds.add(requestId);
-    const actionType = normalizeActionType(request?.request_type || request?.requestType);
+    const actionType = normalizeActionType(
+      request?.request_type || request?.requestType,
+    );
     const userData = buildUserResponseForRequest(request);
     await invokeDevBridge(options, "agent_runtime_respond_action", {
       request: {
@@ -1590,7 +1615,8 @@ async function waitForRuntimeCompletion(
     const matrix = buildToolExecutionMatrix(threadRead, targetTools);
     const turnObserved = runtimeTurnObserved(threadRead, fixture);
     const pendingRequests = pendingRequestsFromThreadRead(threadRead).filter(
-      (request) => String(request?.status || "pending").toLowerCase() === "pending",
+      (request) =>
+        String(request?.status || "pending").toLowerCase() === "pending",
     );
     lastSnapshot = {
       threadRead: summarizeThreadRead(threadRead),
@@ -1666,7 +1692,11 @@ async function runSmoke(options) {
   );
   const workspaceId = workspaceIdFromDefaultProject(workspace);
   assertSmoke(workspaceId, "默认 workspace 缺少 id");
-  const workspaceRoot = await resolveWorkspaceRoot(options, workspace, workspaceId);
+  const workspaceRoot = await resolveWorkspaceRoot(
+    options,
+    workspace,
+    workspaceId,
+  );
   const fixtureFiles = prepareFixtureFiles(workspaceRoot);
   const scenario = buildBatchScenario(options.batch, fixtureFiles);
   const scriptedResponses = scenario.scriptedResponses;
@@ -1686,15 +1716,28 @@ async function runSmoke(options) {
   const fixture = await startOpenAiCompatibleFixtureServer({
     scriptedResponses,
   });
-  console.log(`${LOG_PREFIX} provider=localhost-fixture baseUrl=${fixture.baseUrl}`);
+  console.log(
+    `${LOG_PREFIX} provider=localhost-fixture baseUrl=${fixture.baseUrl}`,
+  );
 
   try {
     console.log(`${LOG_PREFIX} stage=session`);
-    const sessionId = await invokeDevBridge(options, "agent_runtime_create_session", {
-      workspaceId,
-      name: `Tool execution fixture ${scenario.id} ${new Date().toISOString()}`,
-      runStartHooks: false,
-    });
+    const sessionId = await invokeDevBridge(
+      options,
+      "agent_runtime_create_session",
+      {
+        workspaceId,
+        name: `Tool execution fixture ${scenario.id} ${new Date().toISOString()}`,
+        runStartHooks: false,
+        metadata: {
+          harness: {
+            hiddenFromUserRecents: true,
+            source: "smoke:agent-runtime-tool-execution",
+            scenarioId: scenario.id,
+          },
+        },
+      },
+    );
     assertSmoke(sessionId, "agent_runtime_create_session 未返回 sessionId");
 
     await invokeDevBridge(options, "agent_runtime_update_session", {
@@ -1748,15 +1791,19 @@ async function runSmoke(options) {
 
     const providerRequests = providerRequestSummaries(fixture.requests);
     const matrix = buildToolExecutionMatrix(finalState.threadRead, targetTools);
-    const providerToolPresence =
-      allTargetToolsPresentInProviderRequests(providerRequests, targetTools);
+    const providerToolPresence = allTargetToolsPresentInProviderRequests(
+      providerRequests,
+      targetTools,
+    );
     const completedTools = allTargetToolsCompleted(matrix);
     const inventoryCoverage = buildInventoryCoverage(
       inventories,
       matrix,
       targetTools,
     );
-    const firstUserRequestText = requestUserMessagesText(fixture.requests[0]?.body);
+    const firstUserRequestText = requestUserMessagesText(
+      fixture.requests[0]?.body,
+    );
     const detailText = JSON.stringify(finalState.sessionDetail || {});
     const evidencePackText = JSON.stringify(evidencePack || {});
     const evidenceToolPresence = evidencePackToolPresence(
@@ -1785,9 +1832,8 @@ async function runSmoke(options) {
         firstUserRequestText.includes(scenario.promptNeedle) &&
         !firstUserRequestText.trimStart().startsWith("@") &&
         !firstUserRequestText.includes("code_command"),
-      allTargetToolsPresentInProviderRequests: Object.values(
-        providerToolPresence,
-      ).every(Boolean),
+      allTargetToolsPresentInProviderRequests:
+        Object.values(providerToolPresence).every(Boolean),
       allTargetToolsPresentInRuntimeInventory:
         inventoryCoverage.missingTargetToolsInInventory.length === 0,
       allTargetToolsCompleted: Object.values(completedTools).every(Boolean),
@@ -1822,7 +1868,8 @@ async function runSmoke(options) {
         batchId: scenario.id,
         targetTools,
         allScenarioTargetTools: inventoryCoverage.allScenarioTargetTools,
-        coveredVisibleRuntimeTools: inventoryCoverage.coveredVisibleRuntimeTools,
+        coveredVisibleRuntimeTools:
+          inventoryCoverage.coveredVisibleRuntimeTools,
         uncoveredVisibleRuntimeTools:
           inventoryCoverage.uncoveredVisibleRuntimeTools,
         requiredUncoveredVisibleRuntimeTools:

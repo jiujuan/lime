@@ -12,7 +12,7 @@ export interface InvokeResponse {
     result?: unknown;
     error?: string;
 }
-export declare function resolveBridgeRequestTimeoutMs(cmd: string): number;
+export declare function resolveBridgeRequestTimeoutMs(cmd: string, args?: unknown): number;
 export declare function normalizeDevBridgeError(cmd: string, error: unknown): Error;
 /**
  * 检查开发桥接是否可用

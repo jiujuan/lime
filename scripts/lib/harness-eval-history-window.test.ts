@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const repoRoot = process.cwd();
 const tempRoots: string[] = [];
+const NODE_SCRIPT_TIMEOUT_MS = 45_000;
 
 function createTempRoot() {
   const tempRoot = fs.mkdtempSync(
@@ -147,14 +148,29 @@ function runNodeScript(scriptRelativePath: string, args: string[]) {
       {
         cwd: repoRoot,
         encoding: "utf8",
+        killSignal: "SIGKILL",
+        timeout: NODE_SCRIPT_TIMEOUT_MS,
       },
-      (error, stdout) => {
+      (error, stdout, stderr) => {
         if (error) {
           reject(error);
           return;
         }
 
-        resolve(JSON.parse(stdout));
+        try {
+          resolve(JSON.parse(stdout));
+        } catch (parseError) {
+          reject(
+            new Error(
+              [
+                `无法解析 ${scriptRelativePath} 的 JSON 输出。`,
+                `stdout: ${stdout.slice(0, 500)}`,
+                `stderr: ${stderr.slice(0, 500)}`,
+                `error: ${String(parseError)}`,
+              ].join("\n"),
+            ),
+          );
+        }
       },
     );
   });
@@ -187,6 +203,7 @@ describe("Harness eval history window", () => {
       historyDir,
       "--retain",
       "2",
+      "--skip-cleanup",
     ]);
     await delayMs(10);
     await runNodeScript("scripts/harness-eval-history-record.mjs", [
@@ -198,6 +215,7 @@ describe("Harness eval history window", () => {
       historyDir,
       "--retain",
       "2",
+      "--skip-cleanup",
     ]);
     await delayMs(10);
     await runNodeScript("scripts/harness-eval-history-record.mjs", [
@@ -209,6 +227,7 @@ describe("Harness eval history window", () => {
       historyDir,
       "--retain",
       "2",
+      "--skip-cleanup",
     ]);
 
     const historyFiles = fs

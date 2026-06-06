@@ -76,6 +76,7 @@ function renderHook(props?: Partial<HookProps>) {
   }
 
   const defaultProps: HookProps = {
+    enabled: true,
     onNavigate: vi.fn(),
   };
 
@@ -184,6 +185,17 @@ describe("useCompanionProviderBridge", () => {
         needs_attention_provider_count: 0,
       },
     });
+  });
+
+  it("默认未启用桌宠入口时，不应读取桌宠状态", async () => {
+    const { render } = renderHook({ enabled: false });
+
+    await render();
+
+    expect(getCompanionPetStatus).not.toHaveBeenCalled();
+    expect(listenCompanionPetStatus).not.toHaveBeenCalled();
+    expect(safeListen).not.toHaveBeenCalled();
+    expect(subscribeProviderDataChanged).not.toHaveBeenCalled();
   });
 
   it("浏览器开发模式下不应注册桌宠事件桥", async () => {

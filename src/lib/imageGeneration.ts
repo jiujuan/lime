@@ -84,25 +84,27 @@ export function isImageProvider(
 }
 
 export function findImageProviderById<T extends ImageProviderCandidate>(
-  providers: T[],
+  providers: T[] | null | undefined,
   providerId?: string | null,
 ): T | null {
   const normalizedProviderId = providerId?.trim().toLowerCase();
   if (!normalizedProviderId) {
     return null;
   }
+  const safeProviders = Array.isArray(providers) ? providers : [];
 
   return (
-    providers.find(
+    safeProviders.find(
       (provider) => provider.id.trim().toLowerCase() === normalizedProviderId,
     ) ?? null
   );
 }
 
 export function findImageProviderForSelection<T extends ImageProviderCandidate>(
-  providers: T[],
+  providers: T[] | null | undefined,
   modelType: ImageModelPreset,
 ): T | null {
+  const safeProviders = Array.isArray(providers) ? providers : [];
   const preferredKeywords: string[] =
     modelType === "jimeng"
       ? ["doubao", "volc"]
@@ -111,7 +113,7 @@ export function findImageProviderForSelection<T extends ImageProviderCandidate>(
         : ["new-api", "openai", "dashscope", "alibaba", "qwen"];
 
   for (const keyword of preferredKeywords) {
-    const matched = providers.find((provider) =>
+    const matched = safeProviders.find((provider) =>
       normalizeProviderSignature(provider.id, provider.type).includes(keyword),
     );
     if (matched) {
@@ -119,7 +121,7 @@ export function findImageProviderForSelection<T extends ImageProviderCandidate>(
     }
   }
 
-  return providers[0] ?? null;
+  return safeProviders[0] ?? null;
 }
 
 export function pickImageModelBySelection(

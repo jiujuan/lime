@@ -32,6 +32,7 @@ import {
   buildAgentAppTaskRecord,
   buildRetryAgentAppTaskRecord,
 } from "./agentTaskRuntime";
+import { assertTestMockSdkEnvironment } from "./mockEnvironment";
 import { buildAgentAppProvenance } from "./provenance";
 import { matchesAgentAppProvenanceQuery } from "./provenanceQuery";
 
@@ -82,6 +83,7 @@ export class MockCapabilityHost implements CapabilityHost {
   private taskCounter = 0;
 
   constructor(options: MockCapabilityHostOptions) {
+    assertTestMockSdkEnvironment("MockCapabilityHost");
     this.preview = options.preview;
     this.mockSdkEnabled = options.mockSdkEnabled ?? true;
     this.now = options.now ?? (() => new Date().toISOString());
@@ -395,7 +397,8 @@ export class MockCapabilityHost implements CapabilityHost {
         return record ? [...record.events] : [];
       },
       getTask: async (task) =>
-        this.tasks.find((item) => item.taskId === readTaskLookupId(task)) ?? null,
+        this.tasks.find((item) => item.taskId === readTaskLookupId(task)) ??
+        null,
       cancelTask: async (taskLookup) => {
         const taskId = readTaskLookupId(taskLookup);
         const index = this.tasks.findIndex((task) => task.taskId === taskId);

@@ -6,6 +6,7 @@ import {
   type RefObject,
 } from "react";
 import { safeInvoke } from "@/lib/dev-bridge";
+import { isOptionalLegacyUxCommandAvailable } from "@/lib/dev-bridge/commandPolicy";
 
 export interface HintRouteItem {
   hint: string;
@@ -24,6 +25,10 @@ export function useHintRoutes({ setInput, textareaRef }: UseHintRoutesParams) {
   const [hintIndex, setHintIndex] = useState(0);
 
   useEffect(() => {
+    if (!isOptionalLegacyUxCommandAvailable("get_hint_routes")) {
+      return;
+    }
+
     safeInvoke<HintRouteItem[]>("get_hint_routes")
       .then((routes) => {
         if (routes?.length > 0) {

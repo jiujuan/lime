@@ -3,6 +3,7 @@ use crate::CapabilityInventorySource;
 use crate::CapabilityListContext;
 use crate::CapabilitySource;
 use app_server_protocol::error_codes;
+use app_server_protocol::AgentAppInstalledListResponse;
 use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentSession;
 use app_server_protocol::AgentSessionActionRespondParams;
@@ -27,6 +28,7 @@ use app_server_protocol::ArtifactContentStatus;
 use app_server_protocol::ArtifactReadParams;
 use app_server_protocol::ArtifactReadResponse;
 use app_server_protocol::ArtifactSummary;
+use app_server_protocol::AutomationJobListResponse;
 use app_server_protocol::CapabilityListParams;
 use app_server_protocol::CapabilityListResponse;
 use app_server_protocol::ClientInfo;
@@ -34,6 +36,8 @@ use app_server_protocol::EvidenceExportParams;
 use app_server_protocol::EvidenceExportResponse;
 use app_server_protocol::EvidencePackSummary;
 use app_server_protocol::JsonRpcError;
+use app_server_protocol::KnowledgeListPacksParams;
+use app_server_protocol::KnowledgeListPacksResponse;
 use app_server_protocol::ModelListParams;
 use app_server_protocol::ModelListResponse;
 use app_server_protocol::ModelPreferencesListResponse;
@@ -43,6 +47,8 @@ use app_server_protocol::ModelProviderAliasReadResponse;
 use app_server_protocol::ModelProviderCatalogListResponse;
 use app_server_protocol::ModelProviderListResponse;
 use app_server_protocol::ModelSyncStateReadResponse;
+use app_server_protocol::ProjectMemoryReadParams;
+use app_server_protocol::ProjectMemoryReadResponse;
 use app_server_protocol::SkillListResponse;
 use app_server_protocol::SkillReadParams;
 use app_server_protocol::SkillReadResponse;
@@ -231,6 +237,22 @@ pub trait AppDataSource: Send + Sync {
         &self,
         params: WorkspaceSkillBindingsListParams,
     ) -> Result<WorkspaceSkillBindingsListResponse, RuntimeCoreError>;
+
+    async fn list_agent_app_installed(
+        &self,
+    ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError>;
+
+    async fn list_knowledge_packs(
+        &self,
+        params: KnowledgeListPacksParams,
+    ) -> Result<KnowledgeListPacksResponse, RuntimeCoreError>;
+
+    async fn list_automation_jobs(&self) -> Result<AutomationJobListResponse, RuntimeCoreError>;
+
+    async fn read_project_memory(
+        &self,
+        params: ProjectMemoryReadParams,
+    ) -> Result<ProjectMemoryReadResponse, RuntimeCoreError>;
 
     async fn list_models(
         &self,
@@ -428,6 +450,30 @@ impl AppDataSource for NoopAppDataSource {
                 "bindings": []
             }),
         })
+    }
+
+    async fn list_agent_app_installed(
+        &self,
+    ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError> {
+        Ok(AgentAppInstalledListResponse::default())
+    }
+
+    async fn list_knowledge_packs(
+        &self,
+        _params: KnowledgeListPacksParams,
+    ) -> Result<KnowledgeListPacksResponse, RuntimeCoreError> {
+        Ok(KnowledgeListPacksResponse::default())
+    }
+
+    async fn list_automation_jobs(&self) -> Result<AutomationJobListResponse, RuntimeCoreError> {
+        Ok(AutomationJobListResponse::default())
+    }
+
+    async fn read_project_memory(
+        &self,
+        _params: ProjectMemoryReadParams,
+    ) -> Result<ProjectMemoryReadResponse, RuntimeCoreError> {
+        Ok(ProjectMemoryReadResponse::default())
     }
 
     async fn list_models(
@@ -711,6 +757,34 @@ fn stored_session_to_overview(stored: &StoredSession) -> AgentSessionOverview {
     }
 }
 
+fn stored_session_hidden_from_user_recents(stored: &StoredSession) -> bool {
+    stored
+        .session
+        .business_object_ref
+        .as_ref()
+        .and_then(|reference| reference.metadata.as_ref())
+        .is_some_and(metadata_hidden_from_user_recents)
+}
+
+fn metadata_hidden_from_user_recents(metadata: &serde_json::Value) -> bool {
+    metadata_bool(metadata, "hiddenFromUserRecents")
+        .or_else(|| metadata_bool(metadata, "hidden_from_user_recents"))
+        .or_else(|| metadata_nested_bool(metadata, "harness", "hiddenFromUserRecents"))
+        .or_else(|| metadata_nested_bool(metadata, "harness", "hidden_from_user_recents"))
+        .unwrap_or(false)
+}
+
+fn metadata_bool(metadata: &serde_json::Value, key: &str) -> Option<bool> {
+    metadata.get(key).and_then(serde_json::Value::as_bool)
+}
+
+fn metadata_nested_bool(metadata: &serde_json::Value, parent: &str, key: &str) -> Option<bool> {
+    metadata
+        .get(parent)
+        .and_then(|value| value.get(key))
+        .and_then(serde_json::Value::as_bool)
+}
+
 fn metadata_string(metadata: Option<&serde_json::Value>, key: &str) -> Option<String> {
     metadata?
         .get(key)
@@ -820,6 +894,7 @@ impl RuntimeCore {
         state
             .sessions
             .values()
+            .filter(|stored| !stored_session_hidden_from_user_recents(stored))
             .filter(|stored| {
                 workspace_id
                     .map(|workspace_id| {
@@ -996,6 +1071,32 @@ impl RuntimeCore {
         self.app_data_source
             .list_workspace_skill_bindings(params)
             .await
+    }
+
+    pub async fn list_agent_app_installed(
+        &self,
+    ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError> {
+        self.app_data_source.list_agent_app_installed().await
+    }
+
+    pub async fn list_knowledge_packs(
+        &self,
+        params: KnowledgeListPacksParams,
+    ) -> Result<KnowledgeListPacksResponse, RuntimeCoreError> {
+        self.app_data_source.list_knowledge_packs(params).await
+    }
+
+    pub async fn list_automation_jobs(
+        &self,
+    ) -> Result<AutomationJobListResponse, RuntimeCoreError> {
+        self.app_data_source.list_automation_jobs().await
+    }
+
+    pub async fn read_project_memory(
+        &self,
+        params: ProjectMemoryReadParams,
+    ) -> Result<ProjectMemoryReadResponse, RuntimeCoreError> {
+        self.app_data_source.read_project_memory(params).await
     }
 
     pub async fn list_models(
@@ -1304,11 +1405,36 @@ impl RuntimeCore {
                 sink.into_events(),
             )?
         };
+        let response_turn = self
+            .stored_turn(&session.session_id, &turn.turn_id)?
+            .unwrap_or(turn);
 
         Ok(RuntimeCoreOutput {
-            response: AgentSessionTurnStartResponse { turn },
+            response: AgentSessionTurnStartResponse {
+                turn: response_turn,
+            },
             events,
         })
+    }
+
+    fn stored_turn(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+    ) -> Result<Option<AgentTurn>, RuntimeCoreError> {
+        let state = self
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned");
+        let stored = state
+            .sessions
+            .get(session_id)
+            .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.to_string()))?;
+        Ok(stored
+            .turns
+            .iter()
+            .find(|turn| turn.turn_id == turn_id)
+            .cloned())
     }
 
     fn rollback_started_turn(
@@ -1493,6 +1619,7 @@ impl RuntimeCore {
         append_runtime_events_to_state(&self.state, session_id, thread_id, turn_id, runtime_events)
     }
 
+    #[allow(dead_code)]
     fn ensure_capability_allowed(
         &self,
         session_id: &str,
@@ -1612,6 +1739,7 @@ fn append_runtime_events_to_state(
         .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.to_string()))?;
     let mut events = Vec::with_capacity(runtime_events.len());
     for runtime_event in runtime_events {
+        apply_runtime_event_state_transition(stored, turn_id, &runtime_event);
         let event = AgentEvent {
             event_id: new_id("evt"),
             sequence: stored.events.len() as u64 + 1,
@@ -1626,6 +1754,58 @@ fn append_runtime_events_to_state(
         events.push(event);
     }
     Ok(events)
+}
+
+fn apply_runtime_event_state_transition(
+    stored: &mut StoredSession,
+    turn_id: Option<&str>,
+    runtime_event: &RuntimeEvent,
+) {
+    let Some(turn_id) = turn_id else {
+        return;
+    };
+    let Some(next_status) = turn_status_from_runtime_event(runtime_event.event_type.as_str())
+    else {
+        return;
+    };
+    let completed_at = matches!(
+        next_status,
+        AgentTurnStatus::Completed | AgentTurnStatus::Failed | AgentTurnStatus::Canceled
+    )
+    .then(timestamp);
+
+    if let Some(turn) = stored.turns.iter_mut().find(|turn| turn.turn_id == turn_id) {
+        turn.status = next_status;
+        if let Some(completed_at) = completed_at.clone() {
+            turn.completed_at = Some(completed_at);
+        }
+    }
+
+    stored.session.status = session_status_from_turn_status(next_status);
+    stored.session.updated_at = completed_at.unwrap_or_else(timestamp);
+}
+
+fn turn_status_from_runtime_event(event_type: &str) -> Option<AgentTurnStatus> {
+    match event_type {
+        "turn.started" => Some(AgentTurnStatus::Running),
+        "turn.done" | "turn.final_done" | "turn.completed" => Some(AgentTurnStatus::Completed),
+        "turn.failed" | "runtime.error" => Some(AgentTurnStatus::Failed),
+        "turn.canceled" | "turn.cancelled" => Some(AgentTurnStatus::Canceled),
+        "action.required" => Some(AgentTurnStatus::WaitingAction),
+        "action.resolved" => Some(AgentTurnStatus::Running),
+        _ => None,
+    }
+}
+
+fn session_status_from_turn_status(turn_status: AgentTurnStatus) -> AgentSessionStatus {
+    match turn_status {
+        AgentTurnStatus::Accepted | AgentTurnStatus::Queued => AgentSessionStatus::Running,
+        AgentTurnStatus::Running => AgentSessionStatus::Running,
+        AgentTurnStatus::WaitingAction => AgentSessionStatus::WaitingAction,
+        AgentTurnStatus::Completed => AgentSessionStatus::Completed,
+        AgentTurnStatus::Failed => AgentSessionStatus::Failed,
+        AgentTurnStatus::Canceled => AgentSessionStatus::Canceled,
+    }
 }
 
 #[derive(Default)]
@@ -1933,6 +2113,40 @@ mod tests {
     use std::sync::atomic::AtomicUsize;
     use std::sync::atomic::Ordering;
 
+    struct FinalDoneBackend;
+
+    #[async_trait]
+    impl ExecutionBackend for FinalDoneBackend {
+        async fn start_turn(
+            &self,
+            _request: ExecutionRequest,
+            sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
+            sink.emit(RuntimeEvent::new(
+                "message.delta",
+                json!({ "text": "你好！有什么可以帮你的吗？" }),
+            ))?;
+            sink.emit(RuntimeEvent::new("turn.final_done", json!({})))
+        }
+
+        async fn cancel_turn(
+            &self,
+            _request: CancelExecutionRequest,
+            _sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            Ok(())
+        }
+
+        async fn respond_action(
+            &self,
+            _request: ActionRespondRequest,
+            _sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            Ok(())
+        }
+    }
+
     struct TestCapabilitySource;
 
     impl CapabilitySource for TestCapabilitySource {
@@ -2070,6 +2284,76 @@ mod tests {
             response.sessions[0].execution_strategy.as_deref(),
             Some("runtime-core")
         );
+    }
+
+    #[tokio::test]
+    async fn list_agent_sessions_excludes_hidden_runtime_core_sessions() {
+        let core = RuntimeCore::default();
+        core.start_session(AgentSessionStartParams {
+            session_id: Some("sess_hidden".to_string()),
+            thread_id: Some("thread_hidden".to_string()),
+            app_id: "desktop".to_string(),
+            workspace_id: Some("workspace-current".to_string()),
+            business_object_ref: Some(app_server_protocol::BusinessObjectRef {
+                kind: "agent.session".to_string(),
+                id: "hidden".to_string(),
+                title: Some("Internal Smoke Session".to_string()),
+                uri: None,
+                metadata: Some(json!({
+                    "harness": {
+                        "hiddenFromUserRecents": true,
+                        "source": "unit"
+                    },
+                    "model": "gpt-test"
+                })),
+            }),
+            locale: None,
+        })
+        .expect("hidden session");
+        core.start_session(AgentSessionStartParams {
+            session_id: Some("sess_visible".to_string()),
+            thread_id: Some("thread_visible".to_string()),
+            app_id: "desktop".to_string(),
+            workspace_id: Some("workspace-current".to_string()),
+            business_object_ref: Some(app_server_protocol::BusinessObjectRef {
+                kind: "agent.session".to_string(),
+                id: "visible".to_string(),
+                title: Some("Visible Session".to_string()),
+                uri: None,
+                metadata: Some(json!({
+                    "model": "gpt-test"
+                })),
+            }),
+            locale: None,
+        })
+        .expect("visible session");
+
+        let response = core
+            .list_agent_sessions(AgentSessionListParams {
+                workspace_id: Some("workspace-current".to_string()),
+                limit: Some(20),
+                ..AgentSessionListParams::default()
+            })
+            .await
+            .expect("list sessions");
+
+        let ids = response
+            .sessions
+            .iter()
+            .map(|session| session.session_id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(ids, vec!["sess_visible"]);
+
+        let hidden = core
+            .read_session_current(AgentSessionReadParams {
+                session_id: "sess_hidden".to_string(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .await
+            .expect("hidden session remains readable by id");
+        assert_eq!(hidden.session.session_id, "sess_hidden");
     }
 
     #[tokio::test]
@@ -2859,6 +3143,56 @@ mod tests {
         assert_eq!(events[0].event_type, "turn.accepted");
         assert_eq!(events[0].payload["backend"], "mock");
         assert_eq!(events[0].payload["clientName"], "test-client");
+    }
+
+    #[tokio::test]
+    async fn final_done_runtime_event_marks_turn_completed() {
+        let core = RuntimeCore::with_backend(Arc::new(FinalDoneBackend));
+        let session = core
+            .start_session(AgentSessionStartParams {
+                session_id: Some("sess_final_done".to_string()),
+                thread_id: Some("thread_final_done".to_string()),
+                app_id: "content-studio".to_string(),
+                workspace_id: Some("default".to_string()),
+                business_object_ref: None,
+                locale: None,
+            })
+            .expect("session")
+            .session;
+
+        let output = core
+            .start_turn(
+                AgentSessionTurnStartParams {
+                    session_id: session.session_id.clone(),
+                    turn_id: Some("turn_final_done".to_string()),
+                    input: AgentInput {
+                        text: "hello".to_string(),
+                        attachments: Vec::new(),
+                    },
+                    runtime_options: None,
+                    queue_if_busy: false,
+                    skip_pre_submit_resume: false,
+                },
+                RuntimeHostContext::default(),
+            )
+            .await
+            .expect("turn");
+
+        assert_eq!(output.response.turn.status, AgentTurnStatus::Completed);
+        assert!(output.response.turn.completed_at.is_some());
+
+        let read = core
+            .read_session(AgentSessionReadParams {
+                session_id: session.session_id,
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .expect("read session");
+        assert_eq!(read.session.status, AgentSessionStatus::Completed);
+        assert_eq!(read.turns.len(), 1);
+        assert_eq!(read.turns[0].status, AgentTurnStatus::Completed);
+        assert!(read.turns[0].completed_at.is_some());
     }
 
     #[tokio::test]

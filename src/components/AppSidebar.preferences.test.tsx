@@ -83,6 +83,7 @@ describe("AppSidebar preferences", () => {
   it("显式开启后应显示可选系统扩展入口", async () => {
     mockGetConfig.mockResolvedValue({
       navigation: {
+        schema_version: 3,
         enabled_items: ["companion"],
       },
     });
@@ -118,11 +119,13 @@ describe("AppSidebar preferences", () => {
     mockGetConfig
       .mockResolvedValueOnce({
         navigation: {
+          schema_version: 3,
           enabled_items: [],
         },
       })
       .mockResolvedValueOnce({
         navigation: {
+          schema_version: 3,
           enabled_items: ["companion"],
         },
       });
@@ -167,6 +170,36 @@ describe("AppSidebar preferences", () => {
       '[data-testid="app-sidebar-account-menu"]',
     );
     expect(accountMenu?.textContent).toContain("桌宠");
+  });
+
+  it("旧 schema 中的桌宠入口不应默认显示", async () => {
+    mockGetConfig.mockResolvedValue({
+      navigation: {
+        schema_version: 2,
+        enabled_items: ["companion"],
+      },
+    });
+
+    const container = mountSidebarContainer({
+      currentPageParams: {
+        agentEntry: "new-task",
+      } as AgentPageParams,
+    });
+    await flushEffects(2);
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="app-sidebar-account-button"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+
+    const accountMenu = container.querySelector(
+      '[data-testid="app-sidebar-account-menu"]',
+    );
+    expect(accountMenu?.textContent).not.toContain("桌宠");
   });
 
   it("点击当前已激活的Skills入口时不应重复导航", async () => {
@@ -381,6 +414,7 @@ describe("AppSidebar preferences", () => {
   it("桌宠入口开启后，进入 companion 视图应高亮桌宠", async () => {
     mockGetConfig.mockResolvedValue({
       navigation: {
+        schema_version: 3,
         enabled_items: ["companion"],
       },
     });

@@ -1,16 +1,15 @@
 import electronPath from "electron";
-import { spawn } from "node:child_process";
+import { spawnElectron } from "./lib/electron-launcher.mjs";
 import { resolveElectronAppServerRuntimeEnv } from "./lib/electron-app-server-assets.mjs";
 
 const appServerEnv = resolveElectronAppServerRuntimeEnv();
 
-const electron = spawn(electronPath, ["."], {
+const electron = spawnElectron({
+  electronPath,
   env: {
     ...process.env,
     ...appServerEnv,
   },
-  stdio: "inherit",
-  shell: process.platform === "win32",
 });
 
 electron.once("exit", (code) => {

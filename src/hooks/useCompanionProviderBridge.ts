@@ -17,6 +17,7 @@ import type { Page, PageParams } from "@/types/page";
 import { SettingsTabs } from "@/types/settings";
 
 interface UseCompanionProviderBridgeOptions {
+  enabled?: boolean;
   onNavigate: (page: Page, params?: PageParams) => void;
 }
 
@@ -30,6 +31,7 @@ function supportsProviderOverview(
 }
 
 export function useCompanionProviderBridge({
+  enabled = false,
   onNavigate,
 }: UseCompanionProviderBridgeOptions): void {
   const statusRef = useRef<CompanionPetStatus | null>(null);
@@ -39,7 +41,7 @@ export function useCompanionProviderBridge({
   useEffect(() => {
     // 浏览器开发模式下 DevBridge 事件桥会占用有限的同源连接槽位，
     // companion 事件不属于聊天主链，优先跳过以避免阻塞 /invoke。
-    if (!hasDesktopHostInvokeCapability()) {
+    if (!enabled || !hasDesktopHostInvokeCapability()) {
       return;
     }
 
@@ -187,5 +189,5 @@ export function useCompanionProviderBridge({
         requestProviderSyncUnlisten();
       }
     };
-  }, [onNavigate]);
+  }, [enabled, onNavigate]);
 }

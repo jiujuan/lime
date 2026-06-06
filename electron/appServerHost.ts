@@ -20,6 +20,10 @@ import { app } from "electron";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+const DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS = 30_000;
+const APP_SERVER_BACKEND_TIMEOUT_GRACE_MS = 30_000;
+const APP_SERVER_TURN_START_METHOD = "agentSession/turn/start";
+
 type ElectronAppServerLaunchConfig = {
   config: SidecarLaunchConfig;
   verifySha256?: boolean;
@@ -46,7 +50,9 @@ export class ElectronAppServerHost {
   async request<T>(method: string, params: unknown = {}): Promise<T> {
     const connected = await this.#connect();
     const request = connected.client.request(method, params ?? {});
-    const response = await connected.connection.request<T>(request, method);
+    const response = await connected.connection.request<T>(request, method, {
+      timeoutMs: resolveAppServerRequestTimeoutMs(method),
+    });
     return response.result;
   }
 
@@ -56,41 +62,27 @@ export class ElectronAppServerHost {
     const connected = await this.#connect();
     const messages = request.lines.map(decodeMessage);
     const responses: JsonRpcMessage[] = [];
-    const passthroughLines: string[] = [];
-    const pendingResponseIds = new Set(
-      messages
-        .filter(isJsonRpcRequestLike)
-        .filter((message) => {
-          if (message.method === METHOD_INITIALIZE) {
-            responses.push(initializeResponseMessage(message, connected.initializeResponse));
-            return false;
-          }
-          return true;
-        })
-        .map((message) => message.id),
-    );
 
-    for (const line of request.lines) {
-      const message = decodeMessage(line);
+    for (const message of messages) {
       if (isInitializedNotification(message)) {
         continue;
       }
       if (isJsonRpcRequestLike(message) && message.method === METHOD_INITIALIZE) {
+        responses.push(initializeResponseMessage(message, connected.initializeResponse));
         continue;
       }
-      passthroughLines.push(line);
-    }
-
-    for (const line of passthroughLines) {
-      connected.sidecar.sendLine(ensureLineBreak(line));
-    }
-
-    while (pendingResponseIds.size > 0) {
-      const message = await connected.sidecar.nextMessage();
-      responses.push(message);
-      if ("id" in message) {
-        pendingResponseIds.delete(message.id);
+      if (isJsonRpcRequestLike(message)) {
+        const result = await connected.connection.request<unknown>(
+          message,
+          message.method,
+          {
+            timeoutMs: resolveAppServerRequestTimeoutMs(message.method),
+          },
+        );
+        responses.push(...result.messages);
+        continue;
       }
+      connected.connection.transport.send(message);
     }
 
     return {
@@ -105,10 +97,7 @@ export class ElectronAppServerHost {
 
     for (let index = 0; index < limit; index += 1) {
       try {
-        const message = await connected.sidecar.nextMessage(25);
-        if (isJsonRpcNotification(message)) {
-          drained.push(message);
-        }
+        drained.push(await connected.connection.nextNotification(25));
       } catch {
         break;
       }
@@ -177,7 +166,13 @@ export class ElectronAppServerHost {
 async function resolveLaunchConfig(): Promise<ElectronAppServerLaunchConfig> {
   const envBinary = process.env.APP_SERVER_BIN?.trim();
   if (envBinary) {
-    return { config: stdioSidecar(envBinary, process.env.APP_SERVER_POLICY_PATH) };
+    return {
+      config: stdioSidecarWithRuntimeBackend(
+        envBinary,
+        process.env.APP_SERVER_POLICY_PATH,
+        "unavailable",
+      ),
+    };
   }
 
   const resourcesPath = process.resourcesPath;
@@ -193,7 +188,13 @@ async function resolveLaunchConfig(): Promise<ElectronAppServerLaunchConfig> {
   }
 
   const devBinaryPath = resolveDevAppServerBinaryPath(app.getAppPath());
-  return { config: stdioSidecar(devBinaryPath, process.env.APP_SERVER_POLICY_PATH) };
+  return {
+    config: stdioSidecarWithRuntimeBackend(
+      devBinaryPath,
+      process.env.APP_SERVER_POLICY_PATH,
+      "unavailable",
+    ),
+  };
 }
 
 async function resolveResourceLaunchConfig(
@@ -206,7 +207,7 @@ async function resolveResourceLaunchConfig(
       allowEnvOverride: false,
       resourcesPath,
       appPolicyPath: process.env.APP_SERVER_POLICY_PATH,
-      backendMode: "mock",
+      ...resolveRuntimeBackendLaunchOptions("unavailable"),
     });
     if (resolved) {
       return {
@@ -226,6 +227,102 @@ function shouldVerifyResourceSha256(resourcesPath: string): boolean {
   }
 
   return path.resolve(resourcesPath) !== path.resolve(process.resourcesPath);
+}
+
+function stdioSidecarWithRuntimeBackend(
+  binaryPath: string,
+  appPolicyPath: string | undefined,
+  defaultBackendMode: NonNullable<SidecarLaunchConfig["backendMode"]>,
+): SidecarLaunchConfig {
+  return {
+    ...stdioSidecar(binaryPath, appPolicyPath),
+    ...resolveRuntimeBackendLaunchOptions(defaultBackendMode),
+  };
+}
+
+function resolveRuntimeBackendLaunchOptions(
+  defaultBackendMode: NonNullable<SidecarLaunchConfig["backendMode"]>,
+): Pick<
+  SidecarLaunchConfig,
+  "backendMode" | "backendCommand" | "backendArgs" | "backendTimeoutMs"
+> {
+  const backendMode = resolveBackendMode(
+    process.env.APP_SERVER_BACKEND_MODE,
+    defaultBackendMode,
+  );
+  const config: Pick<
+    SidecarLaunchConfig,
+    "backendMode" | "backendCommand" | "backendArgs" | "backendTimeoutMs"
+  > = {
+    backendMode,
+  };
+
+  if (backendMode === "external") {
+    const backendCommand = process.env.APP_SERVER_BACKEND_COMMAND?.trim();
+    if (backendCommand) {
+      config.backendCommand = backendCommand;
+    }
+    const backendArgs = parseBackendArgs(process.env.APP_SERVER_BACKEND_ARGS);
+    if (backendArgs.length > 0) {
+      config.backendArgs = backendArgs;
+    }
+    const backendTimeoutMs = parsePositiveInteger(
+      process.env.APP_SERVER_BACKEND_TIMEOUT_MS,
+    );
+    if (backendTimeoutMs !== undefined) {
+      config.backendTimeoutMs = backendTimeoutMs;
+    }
+  }
+
+  return config;
+}
+
+function resolveBackendMode(
+  value: string | undefined,
+  fallback: NonNullable<SidecarLaunchConfig["backendMode"]>,
+): NonNullable<SidecarLaunchConfig["backendMode"]> {
+  const normalized = value?.trim();
+  if (normalized === "mock") {
+    throw new Error(
+      "Electron App Server host does not allow APP_SERVER_BACKEND_MODE=mock. Use APP_SERVER_BACKEND_MODE=external with APP_SERVER_BACKEND_COMMAND, or leave it unavailable.",
+    );
+  }
+  if (normalized === "unavailable" || normalized === "external") {
+    return normalized;
+  }
+  return fallback;
+}
+
+function parseBackendArgs(value: string | undefined): string[] {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((entry): entry is string => typeof entry === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function parsePositiveInteger(value: string | undefined): number | undefined {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function resolveAppServerRequestTimeoutMs(method: string): number {
+  if (method !== APP_SERVER_TURN_START_METHOD) {
+    return DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS;
+  }
+  const backendTimeoutMs = parsePositiveInteger(
+    process.env.APP_SERVER_BACKEND_TIMEOUT_MS,
+  );
+  return backendTimeoutMs
+    ? backendTimeoutMs + APP_SERVER_BACKEND_TIMEOUT_GRACE_MS
+    : DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS;
 }
 
 function resolveDevAppServerBinaryPath(appPath: string): string {
@@ -257,10 +354,6 @@ function isJsonRpcRequestLike(
   message: JsonRpcMessage,
 ): message is JsonRpcRequest {
   return "id" in message && "method" in message;
-}
-
-function ensureLineBreak(line: string): string {
-  return line.endsWith("\n") ? line : `${line}\n`;
 }
 
 function isInitializedNotification(message: JsonRpcMessage): boolean {

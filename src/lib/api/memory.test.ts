@@ -15,6 +15,8 @@ import {
   updateCharacter,
   updateOutlineNode,
   updateWorldBuilding,
+  type ProjectMemory,
+  type ProjectMemoryAppServerClient,
 } from "./memory";
 
 vi.mock("@/lib/dev-bridge", () => ({
@@ -33,6 +35,14 @@ function createDeferred<T>() {
     promise,
     reject,
     resolve,
+  };
+}
+
+function createProjectMemoryClient(
+  memory: ProjectMemory | null,
+): ProjectMemoryAppServerClient {
+  return {
+    request: vi.fn().mockResolvedValue({ result: { memory } }),
   };
 }
 
@@ -108,16 +118,16 @@ describe("memory API", () => {
   });
 
   it("应代理大纲与项目记忆命令", async () => {
+    const appServerClient = createProjectMemoryClient({
+      characters: [],
+      outline: [],
+    });
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce([{ id: "n1", title: "第一章", order: 1 }])
       .mockResolvedValueOnce({ id: "n1", title: "第一章", order: 1 })
       .mockResolvedValueOnce({ id: "n2", title: "第二章", order: 2 })
       .mockResolvedValueOnce({ id: "n2", title: "第二章-修订", order: 2 })
-      .mockResolvedValueOnce(true)
-      .mockResolvedValueOnce({
-        characters: [],
-        outline: [],
-      });
+      .mockResolvedValueOnce(true);
 
     await expect(listOutlineNodes("project-1")).resolves.toEqual([
       expect.objectContaining({ id: "n1" }),
@@ -132,7 +142,9 @@ describe("memory API", () => {
       updateOutlineNode("n2", { title: "第二章-修订" }),
     ).resolves.toEqual(expect.objectContaining({ id: "n2" }));
     await expect(deleteOutlineNode("n2")).resolves.toBe(true);
-    await expect(getProjectMemory("project-1")).resolves.toEqual(
+    await expect(
+      getProjectMemory("project-1", { appServerClient }),
+    ).resolves.toEqual(
       expect.objectContaining({ characters: [], outline: [] }),
     );
 
@@ -152,29 +164,41 @@ describe("memory API", () => {
     expect(safeInvoke).toHaveBeenNthCalledWith(5, "outline_node_delete", {
       id: "n2",
     });
-    expect(safeInvoke).toHaveBeenNthCalledWith(6, "project_memory_get", {
+    expect(safeInvoke).toHaveBeenCalledTimes(5);
+    expect(appServerClient.request).toHaveBeenCalledWith("projectMemory/read", {
       projectId: "project-1",
     });
   });
 
-  it("并发读取同一项目记忆时应复用同一个 project_memory_get", async () => {
+  it("并发读取同一项目记忆时应复用同一个 projectMemory/read", async () => {
     const deferred = createDeferred<{
-      characters: [];
-      outline: [];
+      result: {
+        memory: ProjectMemory;
+      };
     }>();
-    vi.mocked(safeInvoke).mockReturnValueOnce(deferred.promise);
+    const appServerClient: ProjectMemoryAppServerClient = {
+      request: vi.fn().mockReturnValueOnce(deferred.promise),
+    };
 
-    const first = getProjectMemory("project-memory-dedupe");
-    const second = getProjectMemory("project-memory-dedupe");
+    const first = getProjectMemory("project-memory-dedupe", {
+      appServerClient,
+    });
+    const second = getProjectMemory("project-memory-dedupe", {
+      appServerClient,
+    });
 
-    expect(safeInvoke).toHaveBeenCalledTimes(1);
-    expect(safeInvoke).toHaveBeenCalledWith("project_memory_get", {
+    expect(appServerClient.request).toHaveBeenCalledTimes(1);
+    expect(appServerClient.request).toHaveBeenCalledWith("projectMemory/read", {
       projectId: "project-memory-dedupe",
     });
 
     deferred.resolve({
-      characters: [],
-      outline: [],
+      result: {
+        memory: {
+          characters: [],
+          outline: [],
+        },
+      },
     });
 
     await expect(Promise.all([first, second])).resolves.toEqual([
@@ -184,21 +208,62 @@ describe("memory API", () => {
   });
 
   it("短时间重复读取同一项目记忆时应命中本地缓存", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
+    const appServerClient = createProjectMemoryClient({
       characters: [],
       outline: [],
     });
 
-    await expect(getProjectMemory("project-memory-cache")).resolves.toEqual({
+    await expect(
+      getProjectMemory("project-memory-cache", { appServerClient }),
+    ).resolves.toEqual({
       characters: [],
       outline: [],
     });
-    await expect(getProjectMemory("project-memory-cache")).resolves.toEqual({
+    await expect(
+      getProjectMemory("project-memory-cache", { appServerClient }),
+    ).resolves.toEqual({
       characters: [],
       outline: [],
     });
 
-    expect(safeInvoke).toHaveBeenCalledTimes(1);
+    expect(appServerClient.request).toHaveBeenCalledTimes(1);
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "project_memory_get",
+      expect.anything(),
+    );
+  });
+
+  it("项目记忆读取缺少 projectId 时应 fail closed", async () => {
+    const appServerClient = createProjectMemoryClient({
+      characters: [],
+      outline: [],
+    });
+
+    await expect(getProjectMemory("   ", { appServerClient })).rejects.toThrow(
+      "projectId is required to read App Server project memory",
+    );
+
+    expect(appServerClient.request).not.toHaveBeenCalled();
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "project_memory_get",
+      expect.anything(),
+    );
+  });
+
+  it("App Server 未返回 memory 时不应回退 legacy project_memory_get", async () => {
+    const appServerClient = createProjectMemoryClient(null);
+
+    await expect(
+      getProjectMemory("project-memory-empty", { appServerClient }),
+    ).rejects.toThrow("App Server projectMemory/read did not return memory");
+
+    expect(appServerClient.request).toHaveBeenCalledWith("projectMemory/read", {
+      projectId: "project-memory-empty",
+    });
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "project_memory_get",
+      expect.anything(),
+    );
   });
 
   it("应按父子关系和顺序构建大纲树", () => {

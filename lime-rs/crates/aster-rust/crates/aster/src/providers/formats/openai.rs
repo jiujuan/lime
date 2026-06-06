@@ -107,9 +107,10 @@ fn split_openai_reasoning_effort_suffix(model_name: &str) -> (String, Option<Str
     };
 
     match *last_part {
-        "low" | "medium" | "high" if parts.len() > 1 => {
-            (parts[..parts.len() - 1].join("-"), Some(last_part.to_string()))
-        }
+        "low" | "medium" | "high" if parts.len() > 1 => (
+            parts[..parts.len() - 1].join("-"),
+            Some(last_part.to_string()),
+        ),
         _ => (model_name.to_string(), None),
     }
 }
@@ -131,7 +132,10 @@ fn resolve_openai_reasoning_effort(
         if explicit_effort.is_some() {
             return (model_name, explicit_effort);
         }
-        return (model_name, Some(suffix_effort.unwrap_or_else(|| "medium".to_string())));
+        return (
+            model_name,
+            Some(suffix_effort.unwrap_or_else(|| "medium".to_string())),
+        );
     }
 
     (model_config.model_name.to_string(), explicit_effort)
@@ -1011,8 +1015,7 @@ pub fn create_request_with_system_prompt_role_policy(
 
     let is_ox_model = is_openai_reasoning_chat_model(&model_config.model_name);
 
-    let (model_name, reasoning_effort) =
-        resolve_openai_reasoning_effort(model_config, is_ox_model);
+    let (model_name, reasoning_effort) = resolve_openai_reasoning_effort(model_config, is_ox_model);
 
     let system_message = json!({
         "role": system_prompt_role_for_model(system_prompt_role_policy, &model_config.model_name),

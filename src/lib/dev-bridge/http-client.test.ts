@@ -31,6 +31,21 @@ function createHardConnectionFailure(message = "Failed to fetch") {
   return vi.fn<typeof fetch>().mockRejectedValue(new TypeError(message));
 }
 
+function electronHostHealthResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      status: "ok",
+      transport: "electron-host",
+    }),
+    {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    },
+  );
+}
+
 describe("http-client", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -61,11 +76,36 @@ describe("http-client", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("桥健康探测必须校验 Electron Host 身份，不能误连旧 Tauri DevBridge", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          status: "ok",
+          service: "DevBridge",
+          version: "1.0.0",
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(healthCheck()).resolves.toBe(false);
+    await expect(invokeViaHttp("get_api_key_providers")).rejects.toThrow(
+      "bridge cooldown active",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("旧会话恢复命令应允许绕过短退避重新探测，避免恢复时卡在 cooldown", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -108,7 +148,7 @@ describe("http-client", () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ result: [{ id: "session-1" }] }), {
           status: 200,
@@ -136,7 +176,7 @@ describe("http-client", () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ result: { id: "workspace-default" } }), {
           status: 200,
@@ -163,7 +203,7 @@ describe("http-client", () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockImplementationOnce(firstHealthTimeout)
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ result: ["project-a"] }), {
           status: 200,
@@ -192,7 +232,7 @@ describe("http-client", () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockImplementationOnce(firstHealthTimeout)
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ result: { id: "default-project" } }), {
           status: 200,
@@ -227,7 +267,7 @@ describe("http-client", () => {
   it("桥健康时会复用短期健康缓存，避免每次调用都重复探测", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ result: ["project-a"] }), {
           status: 200,
@@ -262,7 +302,7 @@ describe("http-client", () => {
   it("桥已健康后，健康探测短暂超时不应立刻进入 cooldown", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ result: ["project-a"] }), {
           status: 200,
@@ -300,7 +340,7 @@ describe("http-client", () => {
   it("agent runtime 提交命令应保留长请求超时窗口", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockImplementationOnce(createAbortablePendingFetch());
     vi.stubGlobal("fetch", fetchMock);
 
@@ -325,10 +365,48 @@ describe("http-client", () => {
     });
   });
 
+  it("App Server turn/start JSON-RPC 请求应保留真实运行时超时窗口", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(electronHostHealthResponse())
+      .mockImplementationOnce(createAbortablePendingFetch());
+    vi.stubGlobal("fetch", fetchMock);
+
+    let settled = false;
+    const invokePromise = invokeViaHttp("app_server_handle_json_lines", {
+      request: {
+        lines: [
+          JSON.stringify({
+            id: 1,
+            method: "agentSession/turn/start",
+            params: {},
+          }),
+        ],
+      },
+    }).then(
+      () => ({ ok: true as const }),
+      (error) => ({ ok: false as const, error }),
+    );
+    invokePromise.finally(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(90000);
+    await expect(invokePromise).resolves.toMatchObject({
+      ok: false,
+      error: expect.objectContaining({
+        message: expect.stringContaining("timeout after 150000ms"),
+      }),
+    });
+  });
+
   it("会话列表读取命令应使用较短超时，避免恢复链路卡住 60 秒", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockImplementationOnce(createAbortablePendingFetch());
     vi.stubGlobal("fetch", fetchMock);
 
@@ -352,9 +430,9 @@ describe("http-client", () => {
   it("旧会话读取命令硬连接失败后应强制健康探测并重试一次", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -393,7 +471,7 @@ describe("http-client", () => {
   it("会话后台回填命令应快速超时，避免占用旧会话恢复通道", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockImplementationOnce(createAbortablePendingFetch());
     vi.stubGlobal("fetch", fetchMock);
 
@@ -416,7 +494,7 @@ describe("http-client", () => {
   it("agent 标题生成命令应使用 agent 长超时窗口", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockImplementationOnce(createAbortablePendingFetch());
     vi.stubGlobal("fetch", fetchMock);
 
@@ -446,7 +524,7 @@ describe("http-client", () => {
   it("Agent App UI runtime 启动命令应覆盖后端冷启动等待窗口", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockImplementationOnce(createAbortablePendingFetch());
     vi.stubGlobal("fetch", fetchMock);
 
@@ -479,7 +557,7 @@ describe("http-client", () => {
   it("bridge 真相命令应使用 5000ms 的请求超时窗口", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockImplementationOnce(createAbortablePendingFetch());
     vi.stubGlobal("fetch", fetchMock);
 
@@ -540,12 +618,38 @@ describe("http-client", () => {
     expect(resolveBridgeRequestTimeoutMs("list_executable_skills")).toBe(5000);
     expect(resolveBridgeRequestTimeoutMs("get_skill_detail")).toBe(5000);
     expect(resolveBridgeRequestTimeoutMs("execute_skill")).toBe(300000);
+    expect(
+      resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: 1,
+              method: "agentSession/turn/start",
+              params: {},
+            }),
+          ],
+        },
+      }),
+    ).toBe(150000);
+    expect(
+      resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: 2,
+              method: "agentSession/read",
+              params: {},
+            }),
+          ],
+        },
+      }),
+    ).toBe(5000);
   });
 
   it("图层设计工程落盘命令应使用长请求窗口", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockImplementationOnce(createAbortablePendingFetch());
     vi.stubGlobal("fetch", fetchMock);
 
@@ -579,7 +683,7 @@ describe("http-client", () => {
   it("Knowledge Pack 整理命令应保留 Builder Skill 长请求窗口", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockImplementationOnce(createAbortablePendingFetch());
     vi.stubGlobal("fetch", fetchMock);
 
@@ -612,7 +716,7 @@ describe("http-client", () => {
   it("语音模型下载命令应保留长下载窗口", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockImplementationOnce(createAbortablePendingFetch());
     vi.stubGlobal("fetch", fetchMock);
 
@@ -642,7 +746,7 @@ describe("http-client", () => {
   it("Provider 模型探测命令应使用更长的请求超时窗口", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockImplementationOnce(createAbortablePendingFetch());
     vi.stubGlobal("fetch", fetchMock);
 
@@ -718,7 +822,7 @@ describe("http-client", () => {
 
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(new Response(null, { status: 200 }));
+      .mockResolvedValue(electronHostHealthResponse());
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal(
       "EventSource",
@@ -784,7 +888,7 @@ describe("http-client", () => {
 
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(new Response(null, { status: 200 }));
+      .mockResolvedValue(electronHostHealthResponse());
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal(
       "EventSource",
@@ -818,7 +922,7 @@ describe("http-client", () => {
 
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(new Response(null, { status: 200 }));
+      .mockResolvedValue(electronHostHealthResponse());
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal(
       "EventSource",
@@ -859,7 +963,7 @@ describe("http-client", () => {
 
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(new Response(null, { status: 200 }));
+      .mockResolvedValue(electronHostHealthResponse());
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal(
       "EventSource",
@@ -906,7 +1010,7 @@ describe("http-client", () => {
 
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(new Response(null, { status: 200 }));
+      .mockResolvedValue(electronHostHealthResponse());
     const debugSpy = vi.mocked(console.debug);
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal(
@@ -970,7 +1074,7 @@ describe("http-client", () => {
 
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(electronHostHealthResponse())
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ result: ["project-a"] }), {
           status: 200,

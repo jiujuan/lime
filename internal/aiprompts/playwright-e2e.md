@@ -50,7 +50,7 @@ npm run electron:dev
 
 - 启动前端 dev server
 - 启动 Electron Desktop host 调试环境
-- 启动浏览器模式所需的 DevBridge / Electron host adapter
+- 启动浏览器模式所需的 DevBridge / Electron Host bridge
 
 ### 桥接健康检查
 
@@ -73,9 +73,9 @@ npm run test:contracts
 适用时机：
 
 - 修改了 `safeInvoke`
-- 修改了 `src/lib/desktop-host/` 或 legacy `src/lib/tauri-mock/`
+- 修改了 `src/lib/desktop-host/` 或 legacy mock path
 - 修改了浏览器模式 bridge/mock 优先级
-- 修改了 Electron IPC、App Server 或 legacy Tauri adapter 边界
+- 修改了 Electron IPC、App Server 或 legacy desktop facade 边界
 
 ### 项目资料产品 E2E
 
@@ -197,7 +197,7 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 4. 同时确认主线程 current 工具面包含 `SendUserMessage`，且 tool display 不会退回通用图标或泛化文案
 5. 如果页面当前走的是浏览器 fallback mock，也要确认 fallback inventory 与 tool display 仍显示同一组工具，而不是只出现一部分协作工具或退回通用图标
 6. 如果页面同时展示 MCP bridge 工具，确认 current 命名为 `mcp__<server>__<tool>`，对应 extension surface key 为 `mcp__<server>`；若仍出现裸 `server__tool`、混合前缀或 extension/tool 各自一套命名，判定为协议漂移
-7. 如出现缺失、重复图标或文案回退，优先检查 Rust catalog、runtime 注册、`src/lib/desktop-host/` / legacy `src/lib/tauri-mock/core.ts` 与 `toolDisplayInfo.ts` 是否同步
+7. 如出现缺失、重复图标或文案回退，优先检查 Rust catalog、runtime 注册、`src/lib/desktop-host/` / legacy mock path 与 `toolDisplayInfo.ts` 是否同步
 
 ### Claw 站点技能直跑门禁验证
 

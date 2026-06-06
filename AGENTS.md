@@ -30,7 +30,7 @@
 6. **优先平台无关入口** - 优先复用 `npm`、`cargo`、Electron / App Server 命令和仓库脚本，不新增只适用于 Bash/zsh 的流程
 7. **未验证的平台假设要显式说明** - 涉及文件系统、进程、终端、快捷键、窗口、托盘、权限时尤其如此
 8. **新增命名禁止品牌前缀** - 新程序、目录、crate/package、Electron IPC channel、App Server 方法、API 网关、类型、模块和脚本默认不得添加 `Lime` / `lime_` / `lime-` 品牌前缀；直接使用领域名，如 `app_server_*`、`app-server`。只有对外发布品牌标识、历史兼容或第三方生态已固定命名时才允许保留，并在执行计划说明原因
-9. **新增 Agent 逻辑默认走 App Server** - 新 AI Agent、runtime、host integration、跨 App 复用能力默认落到 `app-server` crates、JSON-RPC 协议和 App Server adapter；`agent_runtime_*` / Aster 旧命令只作为 Desktop 兼容适配层，不再直接承接新业务逻辑，除非执行计划明确说明过渡原因和退出条件
+9. **新增 Agent 逻辑默认走 App Server** - 新 AI Agent、runtime、host integration、跨 App 复用能力默认落到 `app-server` crates、JSON-RPC 协议、client 与 RuntimeCore；Electron 只作为 Desktop Host bridge，负责 IPC、窗口、托盘、Dock、updater 和 sidecar 生命周期，不是第二套后端或业务 adapter；`agent_runtime_*` / Aster 旧命令只作为 Desktop 兼容 facade，不再直接承接新业务逻辑，除非执行计划明确说明过渡原因和退出条件
 10. **不要继续扩展 compat / deprecated 路径** - 新 API、新命令、新前端入口默认落在当前 `current` 主路径
 11. **规划改了且明确无需兼容时，优先删旧实现** - 如果用户已明确“上一版无人使用 / 不用兼容 / 旧实现阻碍主线”，旧实现默认按 `dead` 或带退出条件的 `deprecated` 处理，不要继续修补、包裹或平移
 12. **`legacy current reference` 不是续命许可** - 旧路线图、旧实现锚点只用于理解现状与迁移，不等于允许继续往旧页面、旧命令、旧协议上加功能
@@ -39,12 +39,12 @@
 
 1. **默认统一校验入口** - 提交前默认执行 `npm run verify:local`
 2. **版本改动必须校验一致性** - 改 `package.json`、`package-lock.json`、Electron 配置、`lime-rs/Cargo.toml` 或 App Server release manifest 时执行 `npm run verify:app-version`
-3. **协议改动必须同步四侧** - Electron IPC / preload 白名单、App Server JSON-RPC 协议、前端 `safeInvoke(...)` / API 网关、`agentCommandCatalog`、`mockPriorityCommands` / `defaultMocks` 必须保持一致，并执行 `npm run test:contracts`；只有触碰 legacy Tauri adapter 时才额外同步 `tauri::generate_handler!`
+3. **协议改动必须同步四侧** - Electron Desktop Host bridge / preload 白名单、App Server JSON-RPC 协议、前端 `safeInvoke(...)` / API 网关、`agentCommandCatalog`、`mockPriorityCommands` / `defaultMocks` 必须保持一致，并执行 `npm run test:contracts`；只有触碰 legacy desktop facade 时才额外检查 legacy host 注册，新增 current 能力不得把旧注册表作为事实源。生产路径禁止 mock：`safeInvoke` / `invoke` / Electron Host / App Server / GUI smoke 不能回退 `mockPriorityCommands`、`defaultMocks`、`invokeMockOnly` 或 mock backend；这些只允许测试夹具显式使用
 4. **Lime 是 GUI 桌面产品** - 不能只以 `lint`、`typecheck`、单测通过作为“可交付”判断
 5. **高风险 GUI 改动必须做最小冒烟** - 涉及 GUI 壳、DevBridge、Workspace、主路径时执行 `npm run verify:gui-smoke`
 6. **Playwright 续测优先稳定桌面 Chrome 会话** - 真实交互验证优先复用已有 Lime 页签；需要新启浏览器时走持久化 Chrome 上下文，避免本地桌面出现自动化横幅或 `--no-sandbox` 安全横幅，细则见 `internal/aiprompts/playwright-e2e.md`
 7. **用户可见 UI 改动必须补稳定回归** - 优先补现有 `*.test.tsx` 或 snapshot 断言
-8. **测试用例必须迁到 current 事实源** - 新增或迁移测试默认覆盖 Electron Desktop Host、App Server JSON-RPC、`src/lib/desktop-host/` mock 与 `packages/app-server-client`；Tauri / `src/lib/tauri-mock` / `tauri::generate_handler!` 测试只允许证明 legacy adapter 未回流，不得作为 GUI 产品可交付证据
+8. **测试用例必须迁到 current 事实源** - 新增或迁移测试默认覆盖 Electron Desktop Host bridge、App Server JSON-RPC、`src/lib/desktop-host/` mock 与 `packages/app-server-client`；legacy host / legacy mock path / legacy host 注册测试只允许证明 legacy facade 未回流，不得作为 GUI 产品可交付证据
 9. **前端新代码先守住测试分层** - 新增或重写复杂 UI / hook 逻辑时，先抽到 View Model / projection / selector / reducer 并用 `*.unit.test.ts` 覆盖；`*.test.tsx` / component 测试只保留渲染、事件接线和少量关键回归。禁止把业务状态机、筛选/分组/格式化、运行时参数拼装等可纯化分支继续塞进 React 挂载测试；确实不能纯化时，必须在对应路线图或执行计划说明原因、风险层级和验证入口
 10. **用户可见文案必须全球本地化** - 新增或改动的按钮、标题、空态、toast、confirm、prompt、placeholder、aria/title、错误提示、导出 Markdown / copy prompt / artifact title 等 presentation 文案，必须覆盖 Lime current 五语言 `zh-CN / zh-TW / en-US / ja-JP / ko-KR`；前端走 key-based resources，Rust / Electron host / App Server 导出走 locale copy service；禁止只做中文 / 英文双语兜底，除非路线图明确写出临时例外和退出条件
 11. **配置与依赖改动要成组更新** - schema、校验器、消费者、文档、锁文件保持同步

@@ -1,8 +1,16 @@
 import { app } from "electron";
 import {
+  METHOD_AGENT_APP_INSTALLED_LIST,
   METHOD_AGENT_SESSION_LIST,
+  METHOD_AGENT_SESSION_ACTION_RESPOND,
   METHOD_AGENT_SESSION_READ,
+  METHOD_AGENT_SESSION_START,
+  METHOD_AGENT_SESSION_TURN_CANCEL,
+  METHOD_AGENT_SESSION_TURN_START,
+  METHOD_AUTOMATION_JOB_LIST,
   METHOD_CAPABILITY_LIST,
+  METHOD_EVIDENCE_EXPORT,
+  METHOD_KNOWLEDGE_PACK_LIST,
   METHOD_MODEL_LIST,
   METHOD_MODEL_PREFERENCES_LIST,
   METHOD_MODEL_PROVIDER_ALIAS_LIST,
@@ -10,6 +18,7 @@ import {
   METHOD_MODEL_PROVIDER_CATALOG_LIST,
   METHOD_MODEL_PROVIDER_LIST,
   METHOD_MODEL_SYNC_STATE_READ,
+  METHOD_PROJECT_MEMORY_READ,
   METHOD_SKILL_LIST,
   METHOD_SKILL_READ,
   METHOD_WORKSPACE_BY_PATH_READ,
@@ -21,11 +30,20 @@ import {
   METHOD_WORKSPACE_PROJECT_PATH_RESOLVE,
   METHOD_WORKSPACE_READ,
   METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
+  type AgentAttachment,
   type AgentSessionListResponse,
   type AgentSessionOverview,
   type AgentSessionReadResponse,
+  type AgentSessionStartResponse,
+  type AgentSessionTurnCancelResponse,
+  type AgentSessionTurnStartResponse,
+  type AgentAppInstalledListResponse,
+  type ArtifactSummary,
+  type AutomationJobListResponse,
   type CapabilityDescriptor,
   type CapabilityListResponse,
+  type EvidenceExportResponse,
+  type KnowledgeListPacksResponse,
   type ModelListResponse,
   type ModelPreferencesListResponse,
   type ModelProviderAliasListResponse,
@@ -33,6 +51,7 @@ import {
   type ModelProviderCatalogListResponse,
   type ModelProviderListResponse,
   type ModelSyncStateReadResponse,
+  type ProjectMemoryReadResponse,
   type SkillListResponse,
   type SkillReadResponse,
   type WorkspaceEnsureReadyResponse,
@@ -55,7 +74,10 @@ export class ElectronHostCommands {
   readonly #appServerHost: ElectronAppServerHost;
   readonly #userDataDir: string;
 
-  constructor(appServerHost: ElectronAppServerHost, userDataDir = app.getPath("userData")) {
+  constructor(
+    appServerHost: ElectronAppServerHost,
+    userDataDir = app.getPath("userData"),
+  ) {
     this.#appServerHost = appServerHost;
     this.#userDataDir = userDataDir;
   }
@@ -70,10 +92,28 @@ export class ElectronHostCommands {
         return await this.#initAgentRuntime();
       case "get_default_provider":
         return await this.#getDefaultProvider();
+      case "get_provider_ui_state":
+        return await this.#getProviderUiState(args);
+      case "set_provider_ui_state":
+        return await this.#setProviderUiState(args);
       case "agent_runtime_list_sessions":
         return await this.#listAgentRuntimeSessions(args);
       case "agent_runtime_get_session":
         return await this.#getAgentRuntimeSession(args);
+      case "agent_runtime_create_session":
+        return await this.#createAgentRuntimeSession(args);
+      case "agent_runtime_submit_turn":
+        return await this.#submitAgentRuntimeTurn(args);
+      case "agent_runtime_interrupt_turn":
+        return await this.#interruptAgentRuntimeTurn(args);
+      case "agent_runtime_update_session":
+        return await this.#updateAgentRuntimeSession(args);
+      case "agent_runtime_respond_action":
+        return await this.#respondAgentRuntimeAction(args);
+      case "agent_runtime_get_thread_read":
+        return await this.#getAgentRuntimeThreadRead(args);
+      case "agent_runtime_export_evidence_pack":
+        return await this.#exportAgentRuntimeEvidencePack(args);
       case "agent_runtime_get_tool_inventory":
         return await this.#getAgentRuntimeToolInventory(args);
       case "agent_runtime_list_workspace_skill_bindings":
@@ -94,6 +134,8 @@ export class ElectronHostCommands {
         return await this.#listModelsForProvider(args);
       case "get_models_by_tier":
         return await this.#listModelsByTier(args);
+      case "fetch_provider_models_auto":
+        return await this.#fetchProviderModelsAuto(args);
       case "get_provider_alias_config":
         return await this.#readProviderAliasConfig(args);
       case "get_all_alias_configs":
@@ -122,21 +164,29 @@ export class ElectronHostCommands {
         return await this.#ensureWorkspaceReady(args);
       case "list_executable_skills":
         return await this.#listExecutableSkills();
+      case "get_local_skills_for_app":
+        return await this.#listLocalSkillsForApp(args);
       case "get_skill_detail":
         return await this.#readSkillDetail(args);
+      case "get_automation_scheduler_config":
+        return await this.#getAutomationSchedulerConfig();
+      case "get_automation_status":
+        return this.#getAutomationStatus();
+      case "get_automation_health":
+        return await this.#getAutomationHealth();
+      case "get_automation_jobs":
+        return await this.#listAutomationJobs();
+      case "project_memory_get":
+        return await this.#readProjectMemory(args);
       case "agent_app_list_installed":
-        return { states: [], issues: [] };
+        return await this.#listAgentAppInstalled();
       case "agent_app_get_ui_runtime_status":
       case "agent_app_stop_ui_runtime":
-        return this.#agentAppRuntimeStopped(args);
+        return this.#throwMissingAppServerMethod(command);
       case "agent_app_start_ui_runtime":
-        return {
-          ...this.#agentAppRuntimeStopped(args),
-          status: "failed",
-          message: "Agent App UI runtime is not available in Electron host.",
-        };
+        return this.#throwMissingAppServerMethod(command);
       case "knowledge_list_packs":
-        return this.#listKnowledgePacks(args);
+        return await this.#listKnowledgePacks(args);
       case "report_frontend_debug_log":
         this.#reportFrontendDebugLog(args);
         return null;
@@ -165,13 +215,16 @@ export class ElectronHostCommands {
       this.#listModels().catch(() => []),
     ]);
     const selectedProvider =
-      findProvider(providers, defaultProvider) ?? providers.find(isConfiguredProvider);
-    const selectedProviderId = readString(selectedProvider, "id") ?? defaultProvider;
-    const selectedModel = models.find((model) => {
-      const providerId =
-        readString(model, "provider_id") ?? readString(model, "providerId");
-      return providerId === selectedProviderId;
-    }) ?? models[0];
+      findProvider(providers, defaultProvider) ??
+      providers.find(isConfiguredProvider);
+    const selectedProviderId =
+      readString(selectedProvider, "id") ?? defaultProvider;
+    const selectedModel =
+      models.find((model) => {
+        const providerId =
+          readString(model, "provider_id") ?? readString(model, "providerId");
+        return providerId === selectedProviderId;
+      }) ?? models[0];
     const modelName =
       readString(selectedModel, "id") ??
       readString(selectedModel, "model_id") ??
@@ -179,7 +232,9 @@ export class ElectronHostCommands {
 
     return {
       initialized: true,
-      provider_configured: selectedProvider ? isConfiguredProvider(selectedProvider) : false,
+      provider_configured: selectedProvider
+        ? isConfiguredProvider(selectedProvider)
+        : false,
       provider_name: readString(selectedProvider, "name") ?? selectedProviderId,
       provider_selector: selectedProviderId || undefined,
       model_name: modelName ?? undefined,
@@ -192,6 +247,36 @@ export class ElectronHostCommands {
     return typeof defaultProvider === "string" && defaultProvider.trim()
       ? defaultProvider.trim()
       : "";
+  }
+
+  async #getProviderUiState(args: HostArgs): Promise<string | null> {
+    const key = readString(args, "key") ?? readString(readRequest(args), "key");
+    if (!key) {
+      return null;
+    }
+    const state = toRecord((await this.#readConfig()).provider_ui_state);
+    const value = state?.[key];
+    return typeof value === "string" ? value : null;
+  }
+
+  async #setProviderUiState(args: HostArgs): Promise<void> {
+    const request = readRequest(args);
+    const key = readString(request, "key");
+    if (!key) {
+      throw new Error("set_provider_ui_state requires key");
+    }
+    const value = readString(request, "value") ?? "";
+    const config = await this.#readConfig();
+    const state = {
+      ...(toRecord(config.provider_ui_state) ?? {}),
+      [key]: value,
+    };
+    await this.#saveConfig({
+      config: {
+        ...config,
+        provider_ui_state: state,
+      },
+    });
   }
 
   async #listAgentRuntimeSessions(args: HostArgs): Promise<unknown[]> {
@@ -211,7 +296,8 @@ export class ElectronHostCommands {
 
   async #getAgentRuntimeSession(args: HostArgs): Promise<unknown> {
     const request = readRequest(args);
-    const sessionId = readString(request, "sessionId") ?? readString(request, "session_id");
+    const sessionId =
+      readString(request, "sessionId") ?? readString(request, "session_id");
     if (!sessionId) {
       throw new Error("agent_runtime_get_session requires sessionId");
     }
@@ -238,6 +324,211 @@ export class ElectronHostCommands {
     return response.detail ?? sessionReadToLegacy(response);
   }
 
+  async #createAgentRuntimeSession(args: HostArgs): Promise<string> {
+    const request = readRequest(args);
+    const workspaceId =
+      readString(request, "workspaceId") ?? readString(request, "workspace_id");
+    if (!workspaceId) {
+      throw new Error("agent_runtime_create_session requires workspaceId");
+    }
+    const name = readString(request, "name") ?? "新对话";
+    const optionMetadata = readRecord(request, "metadata") ?? {};
+    const executionStrategy =
+      readString(request, "executionStrategy") ??
+      readString(request, "execution_strategy") ??
+      undefined;
+    const response = await this.#appServerRequest<AgentSessionStartResponse>(
+      METHOD_AGENT_SESSION_START,
+      {
+        appId: "desktop",
+        workspaceId,
+        businessObjectRef: {
+          kind: "agent.session",
+          id: `agent-session:${workspaceId}:${Date.now()}`,
+          title: name,
+          metadata: {
+            ...optionMetadata,
+            title: name,
+            executionStrategy,
+            ...(readBoolean(request, "runStartHooks") === false
+              ? { runStartHooks: false }
+              : {}),
+          },
+        },
+      },
+    );
+    return response.session.sessionId;
+  }
+
+  async #submitAgentRuntimeTurn(args: HostArgs): Promise<void> {
+    const request = readRequest(args);
+    const sessionId =
+      readString(request, "session_id") ?? readString(request, "sessionId");
+    const message = readString(request, "message") ?? "";
+    if (!sessionId) {
+      throw new Error("agent_runtime_submit_turn requires session_id");
+    }
+    if (!message.trim()) {
+      throw new Error("agent_runtime_submit_turn requires message");
+    }
+
+    const turnConfig =
+      readRecord(request, "turn_config") ?? readRecord(request, "turnConfig");
+    const metadata = readRecord(turnConfig, "metadata") ?? undefined;
+    const providerPreference =
+      readString(turnConfig, "provider_preference") ??
+      readString(turnConfig, "providerPreference") ??
+      undefined;
+    const modelPreference =
+      readString(turnConfig, "model_preference") ??
+      readString(turnConfig, "modelPreference") ??
+      undefined;
+    await this.#appServerRequest<AgentSessionTurnStartResponse>(
+      METHOD_AGENT_SESSION_TURN_START,
+      {
+        sessionId,
+        ...readStringParam(request, "turn_id", "turnId"),
+        ...readStringParam(request, "turnId", "turnId"),
+        input: {
+          text: message,
+          attachments: normalizeAgentAttachments(readArray(request, "images")),
+        },
+        runtimeOptions: {
+          stream: true,
+          eventName:
+            readString(request, "event_name") ??
+            readString(request, "eventName") ??
+            `agentSession/event/${sessionId}`,
+          providerPreference,
+          modelPreference,
+          metadata,
+          queuedTurnId:
+            readString(request, "queued_turn_id") ??
+            readString(request, "queuedTurnId") ??
+            undefined,
+          hostOptions: {
+            agentRuntimeSubmitTurnRequest: request,
+          },
+        },
+        queueIfBusy:
+          readBoolean(request, "queue_if_busy") ??
+          readBoolean(request, "queueIfBusy") ??
+          false,
+        skipPreSubmitResume:
+          readBoolean(request, "skip_pre_submit_resume") ??
+          readBoolean(request, "skipPreSubmitResume") ??
+          false,
+      },
+    );
+  }
+
+  async #interruptAgentRuntimeTurn(args: HostArgs): Promise<boolean> {
+    const request = readRequest(args);
+    const sessionId =
+      readString(request, "session_id") ?? readString(request, "sessionId");
+    const turnId =
+      readString(request, "turn_id") ?? readString(request, "turnId");
+    if (!sessionId || !turnId) {
+      throw new Error(
+        "agent_runtime_interrupt_turn requires session_id and turn_id",
+      );
+    }
+    await this.#appServerRequest<AgentSessionTurnCancelResponse>(
+      METHOD_AGENT_SESSION_TURN_CANCEL,
+      { sessionId, turnId },
+    );
+    return true;
+  }
+
+  async #updateAgentRuntimeSession(args: HostArgs): Promise<void> {
+    const request = readRequest(args);
+    const sessionId =
+      readString(request, "session_id") ?? readString(request, "sessionId");
+    if (!sessionId) {
+      throw new Error("agent_runtime_update_session requires session_id");
+    }
+    await this.#appServerRequest<AgentSessionReadResponse>(
+      METHOD_AGENT_SESSION_READ,
+      { sessionId },
+    );
+  }
+
+  async #respondAgentRuntimeAction(args: HostArgs): Promise<void> {
+    const request = readRequest(args);
+    const sessionId =
+      readString(request, "session_id") ?? readString(request, "sessionId");
+    const requestId =
+      readString(request, "request_id") ?? readString(request, "requestId");
+    const actionType =
+      readString(request, "action_type") ??
+      readString(request, "actionType") ??
+      "tool_confirmation";
+    if (!sessionId || !requestId) {
+      throw new Error(
+        "agent_runtime_respond_action requires session_id and request_id",
+      );
+    }
+    await this.#appServerRequest(METHOD_AGENT_SESSION_ACTION_RESPOND, {
+      sessionId,
+      requestId,
+      actionType,
+      confirmed: readBoolean(request, "confirmed") ?? false,
+      ...readStringParam(request, "response", "response"),
+      userData: request.user_data ?? request.userData,
+      metadata: request.metadata,
+      ...readStringParam(request, "event_name", "eventName"),
+      ...readStringParam(request, "eventName", "eventName"),
+      actionScope: request.action_scope ?? request.actionScope,
+    });
+  }
+
+  async #getAgentRuntimeThreadRead(
+    args: HostArgs,
+  ): Promise<Record<string, unknown>> {
+    const request = readRequest(args);
+    const sessionId =
+      readString(request, "sessionId") ?? readString(request, "session_id");
+    if (!sessionId) {
+      throw new Error("agent_runtime_get_thread_read requires sessionId");
+    }
+    const response = await this.#appServerRequest<AgentSessionReadResponse>(
+      METHOD_AGENT_SESSION_READ,
+      { sessionId },
+    );
+    return {
+      session_id: response.session.sessionId,
+      thread_id: response.session.threadId,
+      turns: response.turns,
+      pending_requests: [],
+      queued_turns: [],
+      diagnostics: null,
+    };
+  }
+
+  async #exportAgentRuntimeEvidencePack(
+    args: HostArgs,
+  ): Promise<Record<string, unknown>> {
+    const request = readRequest(args);
+    const sessionId =
+      readString(request, "sessionId") ?? readString(request, "session_id");
+    if (!sessionId) {
+      throw new Error("agent_runtime_export_evidence_pack requires sessionId");
+    }
+    const turnId =
+      readString(request, "turnId") ?? readString(request, "turn_id");
+    const response = await this.#appServerRequest<EvidenceExportResponse>(
+      METHOD_EVIDENCE_EXPORT,
+      {
+        sessionId,
+        ...(turnId ? { turnId } : {}),
+        includeEvents: true,
+        includeArtifacts: true,
+        includeEvidencePack: true,
+      },
+    );
+    return evidenceExportToLegacy(response);
+  }
+
   async #listModelProviders(): Promise<unknown[]> {
     const response = await this.#appServerRequest<ModelProviderListResponse>(
       METHOD_MODEL_PROVIDER_LIST,
@@ -246,9 +537,10 @@ export class ElectronHostCommands {
   }
 
   async #listModelProviderCatalog(): Promise<unknown[]> {
-    const response = await this.#appServerRequest<ModelProviderCatalogListResponse>(
-      METHOD_MODEL_PROVIDER_CATALOG_LIST,
-    );
+    const response =
+      await this.#appServerRequest<ModelProviderCatalogListResponse>(
+        METHOD_MODEL_PROVIDER_CATALOG_LIST,
+      );
     return response.providers;
   }
 
@@ -300,27 +592,53 @@ export class ElectronHostCommands {
     return await this.#listModels({ tier });
   }
 
+  async #fetchProviderModelsAuto(
+    args: HostArgs,
+  ): Promise<Record<string, unknown>> {
+    const request = readRequest(args);
+    const providerId =
+      readString(request, "providerId") ?? readString(request, "provider_id");
+    if (!providerId) {
+      throw new Error("fetch_provider_models_auto requires providerId");
+    }
+    return {
+      models: [],
+      source: "Error",
+      error: "实时 Provider 模型接口尚未迁入 App Server。",
+      request_url: null,
+      diagnostic_hint:
+        "当前 Electron Desktop Host 不能把 App Server model/list 快照伪装成实时 /models 结果；请先手动添加模型 ID，后续应补 App Server Provider 实时探测方法。",
+      error_kind: "other",
+      should_prompt_error: true,
+      from_cache: false,
+    };
+  }
+
   async #readProviderAliasConfig(args: HostArgs): Promise<unknown | null> {
     const request = readRequest(args);
     const provider = readString(request, "provider");
     if (!provider) {
       return null;
     }
-    const response = await this.#appServerRequest<ModelProviderAliasReadResponse>(
-      METHOD_MODEL_PROVIDER_ALIAS_READ,
-      { provider },
-    );
+    const response =
+      await this.#appServerRequest<ModelProviderAliasReadResponse>(
+        METHOD_MODEL_PROVIDER_ALIAS_READ,
+        { provider },
+      );
     return response.config ?? null;
   }
 
   async #listProviderAliasConfigs(): Promise<Record<string, unknown>> {
-    const response = await this.#appServerRequest<ModelProviderAliasListResponse>(
-      METHOD_MODEL_PROVIDER_ALIAS_LIST,
-    );
+    const response =
+      await this.#appServerRequest<ModelProviderAliasListResponse>(
+        METHOD_MODEL_PROVIDER_ALIAS_LIST,
+      );
     return response.configs;
   }
 
-  async #getAgentRuntimeToolInventory(args: HostArgs): Promise<Record<string, unknown>> {
+  async #getAgentRuntimeToolInventory(
+    args: HostArgs,
+  ): Promise<Record<string, unknown>> {
     const request = readRequest(args);
     const caller = readString(request, "caller") ?? "assistant";
     const surface = {
@@ -399,27 +717,30 @@ export class ElectronHostCommands {
   }
 
   async #readWorkspaceProjectsRoot(): Promise<string> {
-    const response = await this.#appServerRequest<WorkspaceProjectsRootReadResponse>(
-      METHOD_WORKSPACE_PROJECTS_ROOT_READ,
-    );
+    const response =
+      await this.#appServerRequest<WorkspaceProjectsRootReadResponse>(
+        METHOD_WORKSPACE_PROJECTS_ROOT_READ,
+      );
     return response.rootPath;
   }
 
   async #resolveWorkspaceProjectPath(args: HostArgs): Promise<string> {
     const request = readRequest(args);
-    const name = readString(request, "name") ?? readString(args, "name") ?? "untitled";
+    const name =
+      readString(request, "name") ?? readString(args, "name") ?? "untitled";
     const parentRootPath =
       readString(request, "parentRootPath") ??
       readString(request, "parent_root_path") ??
       readString(args, "parentRootPath") ??
       readString(args, "parent_root_path");
-    const response = await this.#appServerRequest<WorkspaceProjectPathResolveResponse>(
-      METHOD_WORKSPACE_PROJECT_PATH_RESOLVE,
-      {
-        name,
-        ...(parentRootPath ? { parentRootPath } : {}),
-      },
-    );
+    const response =
+      await this.#appServerRequest<WorkspaceProjectPathResolveResponse>(
+        METHOD_WORKSPACE_PROJECT_PATH_RESOLVE,
+        {
+          name,
+          ...(parentRootPath ? { parentRootPath } : {}),
+        },
+      );
     return response.rootPath;
   }
 
@@ -450,10 +771,20 @@ export class ElectronHostCommands {
   }
 
   async #listExecutableSkills(): Promise<unknown[]> {
-    const response = await this.#appServerRequest<SkillListResponse>(
-      METHOD_SKILL_LIST,
-    );
+    const response =
+      await this.#appServerRequest<SkillListResponse>(METHOD_SKILL_LIST);
     return response.skills;
+  }
+
+  async #listLocalSkillsForApp(args: HostArgs): Promise<unknown[]> {
+    const request = readRequest(args);
+    const appName = readString(request, "app") ?? "lime";
+    if (appName !== "lime") {
+      return [];
+    }
+    const response =
+      await this.#appServerRequest<SkillListResponse>(METHOD_SKILL_LIST);
+    return response.skills.map(skillToLocalSkill);
   }
 
   async #readSkillDetail(args: HostArgs): Promise<unknown> {
@@ -481,7 +812,9 @@ export class ElectronHostCommands {
       readString(args, "workspaceRoot") ??
       readString(args, "workspace_root");
     if (!workspaceRoot) {
-      throw new Error("agent_runtime_list_workspace_skill_bindings requires workspaceRoot");
+      throw new Error(
+        "agent_runtime_list_workspace_skill_bindings requires workspaceRoot",
+      );
     }
     const response =
       await this.#appServerRequest<WorkspaceSkillBindingsListResponse>(
@@ -495,6 +828,106 @@ export class ElectronHostCommands {
         },
       );
     return response.bindings;
+  }
+
+  async #listAgentAppInstalled(): Promise<unknown> {
+    return await this.#appServerRequest<AgentAppInstalledListResponse>(
+      METHOD_AGENT_APP_INSTALLED_LIST,
+    );
+  }
+
+  async #listKnowledgePacks(args: HostArgs): Promise<unknown> {
+    const request = readRequest(args);
+    const workingDir =
+      readString(request, "workingDir") ??
+      readString(request, "working_dir") ??
+      readString(args, "workingDir") ??
+      readString(args, "working_dir");
+    if (!workingDir) {
+      throw new Error("knowledge_list_packs requires workingDir");
+    }
+    return await this.#appServerRequest<KnowledgeListPacksResponse>(
+      METHOD_KNOWLEDGE_PACK_LIST,
+      {
+        workingDir,
+        includeArchived:
+          readBoolean(request, "includeArchived") ??
+          readBoolean(request, "include_archived") ??
+          false,
+      },
+    );
+  }
+
+  async #listAutomationJobs(): Promise<unknown[]> {
+    const response = await this.#appServerRequest<AutomationJobListResponse>(
+      METHOD_AUTOMATION_JOB_LIST,
+    );
+    return response.jobs;
+  }
+
+  async #getAutomationSchedulerConfig(): Promise<Record<string, unknown>> {
+    const config = await this.#readConfig();
+    const automationConfig = toRecord(config.automation);
+    return {
+      enabled: readBoolean(automationConfig, "enabled") ?? false,
+      poll_interval_secs:
+        readNumber(automationConfig, "poll_interval_secs") ?? 30,
+      enable_history: readBoolean(automationConfig, "enable_history") ?? true,
+    };
+  }
+
+  #getAutomationStatus(): Record<string, unknown> {
+    return {
+      running: false,
+      last_polled_at: null,
+      next_poll_at: null,
+      last_job_count: 0,
+      total_executions: 0,
+      active_job_id: null,
+      active_job_name: null,
+    };
+  }
+
+  async #getAutomationHealth(): Promise<Record<string, unknown>> {
+    const jobs = await this.#listAutomationJobs();
+    return {
+      total_jobs: jobs.length,
+      enabled_jobs: jobs.filter((job) => readBoolean(job, "enabled") ?? false)
+        .length,
+      pending_jobs: 0,
+      running_jobs: jobs.filter(
+        (job) => readString(job, "last_status") === "running",
+      ).length,
+      failed_jobs: jobs.filter((job) =>
+        ["error", "timeout"].includes(readString(job, "last_status") ?? ""),
+      ).length,
+      cooldown_jobs: jobs.filter((job) =>
+        Boolean(readString(job, "auto_disabled_until")),
+      ).length,
+      stale_running_jobs: 0,
+      failed_last_24h: 0,
+      failure_trend_24h: [],
+      alerts: [],
+      risky_jobs: [],
+      generated_at: new Date().toISOString(),
+    };
+  }
+
+  async #readProjectMemory(args: HostArgs): Promise<unknown> {
+    const request = readRequest(args);
+    const projectId =
+      readString(request, "projectId") ??
+      readString(request, "project_id") ??
+      readString(args, "projectId") ??
+      readString(args, "project_id");
+    if (!projectId) {
+      throw new Error("project_memory_get requires projectId");
+    }
+    const response = await this.#appServerRequest<ProjectMemoryReadResponse>(
+      METHOD_PROJECT_MEMORY_READ,
+      { projectId },
+    );
+    return response.memory;
   }
 
   async #readConfig(): Promise<Record<string, unknown>> {
@@ -511,36 +944,18 @@ export class ElectronHostCommands {
   async #saveConfig(args: HostArgs): Promise<{ success: true }> {
     const config = readRecord(args, "config") ?? args ?? {};
     await mkdir(this.#userDataDir, { recursive: true });
-    await writeFile(this.#configPath(), JSON.stringify(config, null, 2), "utf8");
+    await writeFile(
+      this.#configPath(),
+      JSON.stringify(config, null, 2),
+      "utf8",
+    );
     return { success: true };
   }
 
-  #agentAppRuntimeStopped(args: HostArgs): {
-    appId: string;
-    status: "stopped";
-    entryKey?: string;
-  } {
-    const request = readRecord(args, "request") ?? args;
-    return {
-      appId: readString(request, "appId") ?? "",
-      status: "stopped",
-      entryKey: readString(request, "entryKey") ?? undefined,
-    };
-  }
-
-  #listKnowledgePacks(args: HostArgs): {
-    workingDir: string;
-    rootPath: string;
-    packs: unknown[];
-  } {
-    const request = readRecord(args, "request") ?? args;
-    const workingDir =
-      readString(request, "workingDir") ?? path.join(this.#userDataDir, "workspaces", "default");
-    return {
-      workingDir,
-      rootPath: path.join(workingDir, ".lime", "knowledge", "packs"),
-      packs: [],
-    };
+  #throwMissingAppServerMethod(command: string): never {
+    throw new Error(
+      `${command} has no Electron current adapter because no App Server JSON-RPC method is defined for it yet. Electron Host must not return synthetic empty data.`,
+    );
   }
 
   #reportFrontendDebugLog(args: HostArgs): void {
@@ -573,6 +988,12 @@ function readRequest(value: unknown): Record<string, unknown> {
   return readRecord(value, "request") ?? toRecord(value) ?? {};
 }
 
+function readArray(value: unknown, key: string): unknown[] | undefined {
+  const record = toRecord(value);
+  const next = record?.[key];
+  return Array.isArray(next) ? next : undefined;
+}
+
 function readString(value: unknown, key: string): string | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -587,6 +1008,12 @@ function readBoolean(value: unknown, key: string): boolean | null {
     return null;
   }
   return record[key];
+}
+
+function readNumber(value: unknown, key: string): number | null {
+  const record = toRecord(value);
+  const next = record?.[key];
+  return typeof next === "number" && Number.isFinite(next) ? next : null;
 }
 
 function readBooleanParam(
@@ -626,14 +1053,18 @@ function readNumberParam(
   return { [outputKey]: Math.trunc(next) };
 }
 
-function sessionOverviewToLegacy(session: AgentSessionOverview): Record<string, unknown> {
+function sessionOverviewToLegacy(
+  session: AgentSessionOverview,
+): Record<string, unknown> {
   return {
     id: session.sessionId,
     thread_id: session.threadId ?? session.sessionId,
     name: session.title ?? undefined,
     created_at: timestampMillis(session.createdAt),
     updated_at: timestampMillis(session.updatedAt),
-    archived_at: session.archivedAt ? timestampMillis(session.archivedAt) : null,
+    archived_at: session.archivedAt
+      ? timestampMillis(session.archivedAt)
+      : null,
     model: session.model,
     workspace_id: session.workspaceId,
     working_dir: session.workingDir,
@@ -642,7 +1073,9 @@ function sessionOverviewToLegacy(session: AgentSessionOverview): Record<string, 
   };
 }
 
-function sessionReadToLegacy(response: AgentSessionReadResponse): Record<string, unknown> {
+function sessionReadToLegacy(
+  response: AgentSessionReadResponse,
+): Record<string, unknown> {
   return {
     id: response.session.sessionId,
     thread_id: response.session.threadId,
@@ -676,23 +1109,121 @@ function timestampMillis(value: string | undefined): number {
   return Date.now();
 }
 
-function findProvider(providers: unknown[], providerId: string): Record<string, unknown> | null {
+function normalizeAgentAttachments(
+  images?: unknown[],
+): AgentAttachment[] | undefined {
+  if (!images?.length) {
+    return undefined;
+  }
+
+  const attachments = images
+    .map((image, index): AgentAttachment | null => {
+      const record = toRecord(image);
+      if (!record) {
+        return null;
+      }
+      const uri = readString(record, "data") ?? readString(record, "uri");
+      if (!uri) {
+        return null;
+      }
+      return {
+        kind: "image",
+        uri,
+        metadata: {
+          mediaType:
+            readString(record, "media_type") ?? readString(record, "mediaType"),
+          index,
+        },
+      };
+    })
+    .filter((attachment): attachment is AgentAttachment => attachment !== null);
+
+  return attachments.length > 0 ? attachments : undefined;
+}
+
+function evidenceExportToLegacy(
+  response: EvidenceExportResponse,
+): Record<string, unknown> {
+  const pack = response.evidencePack;
+  const latestTurn =
+    response.turns.length > 0
+      ? response.turns[response.turns.length - 1]
+      : undefined;
+  const workspaceRoot =
+    readString(
+      toRecord(response.session.businessObjectRef?.metadata),
+      "workspaceRoot",
+    ) ??
+    readString(
+      toRecord(response.session.businessObjectRef?.metadata),
+      "workspace_root",
+    ) ??
+    "";
+
+  return {
+    sessionId: response.session.sessionId,
+    threadId: response.session.threadId,
+    workspaceId: response.session.workspaceId,
+    workspaceRoot,
+    packRelativeRoot: pack?.packRelativeRoot ?? "",
+    packAbsoluteRoot: pack?.packAbsoluteRoot ?? "",
+    exportedAt: pack?.exportedAt ?? response.exportedAt,
+    threadStatus: pack?.threadStatus ?? response.session.status,
+    latestTurnStatus: pack?.latestTurnStatus ?? latestTurn?.status,
+    turnCount: pack?.turnCount ?? response.turns.length,
+    itemCount: pack?.itemCount ?? response.events.length,
+    pendingRequestCount: pack?.pendingRequestCount ?? 0,
+    queuedTurnCount:
+      pack?.queuedTurnCount ??
+      response.turns.filter((turn) => turn.status === "queued").length,
+    recentArtifactCount: pack?.recentArtifactCount ?? response.artifacts.length,
+    knownGaps: pack?.knownGaps ?? [],
+    observabilitySummary: pack?.observabilitySummary,
+    completionAuditSummary: pack?.completionAuditSummary,
+    artifacts:
+      pack?.artifacts ??
+      response.artifacts.map(artifactSummaryToEvidenceArtifact),
+  };
+}
+
+function artifactSummaryToEvidenceArtifact(
+  artifact: ArtifactSummary,
+): Record<string, unknown> {
+  const relativePath = artifact.path ?? artifact.artifactRef;
+  return {
+    kind: artifact.kind ?? "artifacts",
+    title: artifact.title ?? artifact.artifactId ?? artifact.artifactRef,
+    relativePath,
+    absolutePath: "",
+    bytes:
+      typeof artifact.content === "string"
+        ? Buffer.byteLength(artifact.content)
+        : 0,
+  };
+}
+
+function findProvider(
+  providers: unknown[],
+  providerId: string,
+): Record<string, unknown> | null {
   if (!providerId) {
     return null;
   }
   return (
-    providers.find((provider) => {
+    (providers.find((provider) => {
       const record = toRecord(provider);
       return (
         record &&
         (readString(record, "id") === providerId ||
           readString(record, "name") === providerId)
       );
-    }) as Record<string, unknown> | undefined
-  ) ?? null;
+    }) as Record<string, unknown> | undefined) ?? null
+  );
 }
 
-function isConfiguredProvider(provider: unknown): provider is Record<string, unknown> {
+function isConfiguredProvider(
+  provider: unknown,
+): provider is Record<string, unknown> {
   const record = toRecord(provider);
   if (!record) {
     return false;
@@ -700,6 +1231,42 @@ function isConfiguredProvider(provider: unknown): provider is Record<string, unk
   const enabled = record.enabled !== false;
   const apiKeyCount = record.api_key_count;
   return enabled && typeof apiKeyCount === "number" && apiKeyCount > 0;
+}
+
+function skillToLocalSkill(skill: unknown): Record<string, unknown> {
+  const record = toRecord(skill) ?? {};
+  const directory =
+    readString(record, "directory") ??
+    readString(record, "name") ??
+    readString(record, "skill_name") ??
+    "app-server-skill";
+  const name =
+    readString(record, "display_name") ??
+    readString(record, "displayName") ??
+    readString(record, "name") ??
+    readString(record, "skill_name") ??
+    directory;
+  return {
+    key: directory,
+    name,
+    description: readString(record, "description") ?? "",
+    directory,
+    installed: true,
+    sourceKind: "builtin",
+    catalogSource: "project",
+    metadata: {},
+    allowedTools: [],
+    resourceSummary: {
+      hasScripts: false,
+      hasReferences: false,
+      hasAssets: false,
+    },
+    standardCompliance: {
+      isStandard: true,
+      validationErrors: [],
+      deprecatedFields: [],
+    },
+  };
 }
 
 function toRecord(value: unknown): Record<string, unknown> | null {
@@ -811,13 +1378,18 @@ function buildDefaultConfig(): Record<string, unknown> {
       dynamic_filtering: true,
       native_input_examples: false,
     },
+    automation: {
+      enabled: false,
+      poll_interval_secs: 30,
+      enable_history: true,
+    },
     workspace_preferences: {
-      schema_version: 2,
+      schema_version: 3,
       media_defaults: {},
       companion_defaults: {},
       service_models: {},
     },
-    navigation: { schema_version: 2, enabled_items: [] },
+    navigation: { schema_version: 3, enabled_items: [] },
     crash_reporting: {
       enabled: true,
       dsn: null,

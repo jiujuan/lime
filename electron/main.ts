@@ -14,6 +14,7 @@ import {
   type ElectronInvokeResponse,
 } from "./ipcChannels";
 import { ElectronAppServerHost } from "./appServerHost";
+import { ElectronDevHttpBridge } from "./devHttpBridge";
 import { ElectronHostCommands } from "./hostCommands";
 import { ElectronUpdateHost } from "./updateHost";
 import {
@@ -32,6 +33,8 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  session,
+  type MenuItemConstructorOptions,
   type OpenDialogOptions,
   shell,
   type SaveDialogOptions,
@@ -46,16 +49,42 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appServerHost = new ElectronAppServerHost();
 const hostCommands = new ElectronHostCommands(appServerHost);
 const updateHost = new ElectronUpdateHost(broadcast);
+let devHttpBridge: ElectronDevHttpBridge | null = null;
 const pendingDeepLinks: string[] = [];
+const pendingSkillPackageOpenPaths: string[] = [];
 const APP_NAME = "Lime";
+const APP_BUNDLE_IDENTIFIER = "com.limecloud.lime";
 const APP_ICON_SOURCE = "lime-rs/icons/icon.png";
 const APP_ICON_PACKAGED_NAME = "icon.png";
+const SKILL_PACKAGE_OPEN_EVENT = "skill-package://open";
+const TRAY_MODEL_SELECTED_EVENT = "tray-model-selected";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
+let trayModelShortcutsState: TrayModelShortcutsState | null = null;
 
 app.setName(APP_NAME);
+
+interface TrayQuickModelItem {
+  provider_type: string;
+  provider_label: string;
+  model: string;
+}
+
+interface TrayQuickModelGroup {
+  provider_type: string;
+  provider_label: string;
+  models: TrayQuickModelItem[];
+}
+
+interface TrayModelShortcutsState {
+  currentModelProviderType: string;
+  currentModelProviderLabel: string;
+  currentModel: string;
+  currentThemeLabel: string;
+  quickModelGroups: TrayQuickModelGroup[];
+}
 
 function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -80,8 +109,14 @@ function createMainWindow(): BrowserWindow {
 
   const devServerUrl = process.env.VITE_DEV_SERVER_URL?.trim();
   installMainWindowNavigationGuard(window, devServerUrl);
+  installDevRendererContextMenu(window, devServerUrl);
+  installDevRendererShortcuts(window, devServerUrl);
   if (devServerUrl) {
-    void window.loadURL(devServerUrl);
+    void clearDevRendererCache().then(() => {
+      if (!window.isDestroyed()) {
+        void window.loadURL(devServerUrl);
+      }
+    });
     if (process.env.LIME_ELECTRON_OPEN_DEVTOOLS === "1") {
       window.webContents.openDevTools({ mode: "detach" });
     }
@@ -93,7 +128,7 @@ function createMainWindow(): BrowserWindow {
     window.webContents.once("did-finish-load", () => {
       void runElectronSmokeChecks()
         .then(() => {
-          app.quit();
+          void exitElectronSmoke(0);
         })
         .catch((error) => {
           console.error(
@@ -101,14 +136,12 @@ function createMainWindow(): BrowserWindow {
               error instanceof Error ? error.message : String(error)
             }`,
           );
-          process.exitCode = 1;
-          app.quit();
+          void exitElectronSmoke(1);
         });
     });
     window.webContents.once("did-fail-load", (_event, code, description) => {
       console.error(`[electron-smoke] renderer failed: ${code} ${description}`);
-      process.exitCode = 1;
-      app.quit();
+      void exitElectronSmoke(1);
     });
   }
 
@@ -127,6 +160,22 @@ function createMainWindow(): BrowserWindow {
 
   mainWindow = window;
   return window;
+}
+
+async function clearDevRendererCache(): Promise<void> {
+  if (process.env.LIME_ELECTRON_CLEAR_RENDERER_CACHE === "0") {
+    return;
+  }
+
+  try {
+    await session.defaultSession.clearCache();
+  } catch (error) {
+    console.warn(
+      `[electron-host] failed to clear dev renderer cache: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
 }
 
 async function runElectronSmokeChecks(): Promise<void> {
@@ -169,6 +218,27 @@ async function runElectronSmokeChecks(): Promise<void> {
   );
 }
 
+async function exitElectronSmoke(exitCode: number): Promise<void> {
+  process.exitCode = exitCode;
+  isQuitting = true;
+  globalShortcut.unregisterAll();
+  tray?.destroy();
+  tray = null;
+  devHttpBridge?.stop();
+  devHttpBridge = null;
+  try {
+    await appServerHost.stop();
+  } catch (error) {
+    console.warn(
+      `[electron-smoke] app-server stop failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  } finally {
+    app.exit(exitCode);
+  }
+}
+
 function installMainWindowNavigationGuard(
   window: BrowserWindow,
   devServerUrl?: string,
@@ -189,6 +259,100 @@ function installMainWindowNavigationGuard(
       return { action: "deny" };
     }
     return { action: "deny" };
+  });
+}
+
+function installDevRendererContextMenu(
+  window: BrowserWindow,
+  devServerUrl?: string,
+): void {
+  if (!devServerUrl || process.env.LIME_ELECTRON_DEV_CONTEXT_MENU === "0") {
+    return;
+  }
+
+  window.webContents.on("context-menu", (_event, params) => {
+    const template: MenuItemConstructorOptions[] = [];
+
+    if (params.isEditable) {
+      template.push(
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        { role: "selectAll" },
+        { type: "separator" },
+      );
+    } else if (params.selectionText.trim()) {
+      template.push({ role: "copy" }, { type: "separator" });
+    }
+
+    template.push(
+      { role: "reload" },
+      { role: "forceReload" },
+      { type: "separator" },
+      { role: "toggleDevTools" },
+      {
+        label: "检查元素",
+        click: () => {
+          if (!window.isDestroyed()) {
+            window.webContents.inspectElement(params.x, params.y);
+          }
+        },
+      },
+    );
+
+    Menu.buildFromTemplate(template).popup({
+      window,
+      frame: params.frame ?? undefined,
+      x: params.x,
+      y: params.y,
+      sourceType: params.menuSourceType,
+    });
+  });
+}
+
+function installDevRendererShortcuts(
+  window: BrowserWindow,
+  devServerUrl?: string,
+): void {
+  if (!devServerUrl || process.env.LIME_ELECTRON_DEV_SHORTCUTS === "0") {
+    return;
+  }
+
+  window.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") {
+      return;
+    }
+
+    const key = input.key.toLowerCase();
+    const commandOrControl =
+      process.platform === "darwin" ? input.meta : input.control;
+    const reloadRequested = key === "f5" || (commandOrControl && key === "r");
+    const devToolsRequested =
+      key === "f12" ||
+      (commandOrControl && input.shift && key === "i") ||
+      (process.platform === "darwin" && input.meta && input.alt && key === "i");
+
+    if (reloadRequested) {
+      event.preventDefault();
+      if (input.shift) {
+        window.webContents.reloadIgnoringCache();
+      } else {
+        window.webContents.reload();
+      }
+      return;
+    }
+
+    if (devToolsRequested) {
+      event.preventDefault();
+      if (window.webContents.isDevToolsOpened()) {
+        window.webContents.closeDevTools();
+      } else {
+        window.webContents.openDevTools({ mode: "detach" });
+      }
+    }
   });
 }
 
@@ -224,7 +388,7 @@ function createTray(): Tray | null {
 }
 
 function buildTrayMenu(): Menu {
-  return Menu.buildFromTemplate([
+  const template: MenuItemConstructorOptions[] = [
     {
       label: `显示 ${APP_NAME}`,
       click: () => showMainWindow(),
@@ -241,7 +405,70 @@ function buildTrayMenu(): Menu {
         app.quit();
       },
     },
-  ]);
+  ];
+
+  const shortcutItems = buildTrayModelShortcutMenuItems();
+  if (shortcutItems.length > 0) {
+    template.splice(2, 0, { type: "separator" }, ...shortcutItems);
+  }
+
+  return Menu.buildFromTemplate(template);
+}
+
+function buildTrayModelShortcutMenuItems(): MenuItemConstructorOptions[] {
+  const state = trayModelShortcutsState;
+  if (!state || !state.currentModel.trim()) {
+    return [];
+  }
+
+  const currentLabel = [
+    state.currentModelProviderLabel || state.currentModelProviderType,
+    state.currentModel,
+  ]
+    .filter(Boolean)
+    .join(" / ");
+  const items: MenuItemConstructorOptions[] = [
+    {
+      label: currentLabel,
+      enabled: false,
+    },
+  ];
+
+  if (state.currentThemeLabel) {
+    items.push({
+      label: state.currentThemeLabel,
+      enabled: false,
+    });
+  }
+
+  const groups = state.quickModelGroups.filter(
+    (group) => group.provider_type && group.models.length > 0,
+  );
+  if (groups.length === 0) {
+    return items;
+  }
+
+  items.push({ type: "separator" });
+  for (const group of groups) {
+    items.push({
+      label: group.provider_label || group.provider_type,
+      submenu: group.models.map((item) => ({
+        label: item.model,
+        type: "checkbox",
+        checked:
+          item.provider_type === state.currentModelProviderType &&
+          item.model === state.currentModel,
+        click: () => {
+          broadcast(TRAY_MODEL_SELECTED_EVENT, {
+            providerType: item.provider_type,
+            model: item.model,
+          });
+        },
+      })),
+    });
+  }
+
+  return items;
 }
 
 function showMainWindow(): void {
@@ -274,6 +501,7 @@ function broadcast(event: string, payload?: unknown): void {
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send(`evt:${event}`, { event, payload });
   }
+  devHttpBridge?.broadcast(event, payload);
 }
 
 function currentWindow(event: IpcMainInvokeEvent): BrowserWindow | null {
@@ -310,14 +538,14 @@ function registerIpcHandlers(): void {
     }
     return normalizedOptions.multipleSelection
       ? result.filePaths
-      : result.filePaths[0] ?? null;
+      : (result.filePaths[0] ?? null);
   });
 
   ipcMain.handle(IPC_DIALOG_SAVE_CHANNEL, async (_event, options) => {
     const result = await dialog.showSaveDialog({
       ...normalizeSaveDialogOptions(options),
     });
-    return result.canceled ? null : result.filePath ?? null;
+    return result.canceled ? null : (result.filePath ?? null);
   });
 
   ipcMain.handle(IPC_SHELL_OPEN_CHANNEL, async (_event, target: string) => {
@@ -373,6 +601,13 @@ async function handleHostInvoke(
         ? (request as { limit?: number })
         : {},
     );
+  }
+  if (command === "sync_tray_model_shortcuts") {
+    syncTrayModelShortcuts(args);
+    return null;
+  }
+  if (command === "take_pending_skill_package_open_requests") {
+    return takePendingSkillPackageOpenRequests();
   }
   if (isElectronUpdateCommand(command)) {
     return await updateHost.invoke(command);
@@ -510,9 +745,150 @@ function handleGlobalShortcutCommand(
   }
 }
 
+function syncTrayModelShortcuts(args?: Record<string, unknown>): void {
+  trayModelShortcutsState = normalizeTrayModelShortcutsState(args);
+  tray?.setContextMenu(buildTrayMenu());
+}
+
+function normalizeTrayModelShortcutsState(
+  args?: Record<string, unknown>,
+): TrayModelShortcutsState {
+  const groups = Array.isArray(args?.quickModelGroups)
+    ? args.quickModelGroups
+    : [];
+
+  return {
+    currentModelProviderType: normalizeString(args?.currentModelProviderType),
+    currentModelProviderLabel: normalizeString(args?.currentModelProviderLabel),
+    currentModel: normalizeString(args?.currentModel),
+    currentThemeLabel: normalizeString(args?.currentThemeLabel),
+    quickModelGroups: groups
+      .map(normalizeTrayQuickModelGroup)
+      .filter((group): group is TrayQuickModelGroup => group !== null),
+  };
+}
+
+function normalizeTrayQuickModelGroup(
+  value: unknown,
+): TrayQuickModelGroup | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const input = value as Record<string, unknown>;
+  const providerType = normalizeString(input.provider_type);
+  const providerLabel = normalizeString(input.provider_label) || providerType;
+  const models = Array.isArray(input.models) ? input.models : [];
+  const normalizedModels = models
+    .map((item) =>
+      normalizeTrayQuickModelItem(item, providerType, providerLabel),
+    )
+    .filter((item): item is TrayQuickModelItem => item !== null);
+
+  if (!providerType || normalizedModels.length === 0) {
+    return null;
+  }
+
+  return {
+    provider_type: providerType,
+    provider_label: providerLabel,
+    models: normalizedModels,
+  };
+}
+
+function normalizeTrayQuickModelItem(
+  value: unknown,
+  fallbackProviderType: string,
+  fallbackProviderLabel: string,
+): TrayQuickModelItem | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const input = value as Record<string, unknown>;
+  const providerType =
+    normalizeString(input.provider_type) || fallbackProviderType;
+  const model = normalizeString(input.model);
+  if (!providerType || !model) {
+    return null;
+  }
+
+  return {
+    provider_type: providerType,
+    provider_label:
+      normalizeString(input.provider_label) ||
+      fallbackProviderLabel ||
+      providerType,
+    model,
+  };
+}
+
+function normalizeString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 function handleDeepLink(url: string): void {
   pendingDeepLinks.push(url);
   broadcast("deep-link-open-url", [url]);
+}
+
+function collectSkillPackageOpenPaths(values: string[]): string[] {
+  const paths: string[] = [];
+  for (const value of values) {
+    const normalized = normalizeSkillPackageOpenPath(value);
+    if (normalized && !paths.includes(normalized)) {
+      paths.push(normalized);
+    }
+  }
+  return paths;
+}
+
+function normalizeSkillPackageOpenPath(value: string): string | null {
+  const trimmed = value.trim().replace(/^["']|["']$/g, "");
+  if (!trimmed) {
+    return null;
+  }
+
+  let resolved = trimmed;
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol === "file:") {
+      resolved = decodeURIComponent(url.pathname);
+      if (process.platform === "win32" && url.hostname) {
+        resolved = `\\\\${url.hostname}${resolved.replace(/\//g, "\\")}`;
+      }
+      if (process.platform === "win32" && /^\/[A-Za-z]:/.test(resolved)) {
+        resolved = resolved.slice(1);
+      }
+    } else if (!/^[A-Za-z]:$/.test(url.protocol)) {
+      return null;
+    }
+  } catch {
+    // 普通文件路径。
+  }
+
+  const extension = path.extname(resolved).toLowerCase();
+  if (extension !== ".skill" && extension !== ".skills") {
+    return null;
+  }
+  return resolved;
+}
+
+function recordSkillPackageOpenPaths(paths: string[]): void {
+  const newPaths = paths.filter(
+    (pathValue) => !pendingSkillPackageOpenPaths.includes(pathValue),
+  );
+  if (newPaths.length === 0) {
+    return;
+  }
+
+  pendingSkillPackageOpenPaths.push(...newPaths);
+  if (app.isReady()) {
+    showMainWindow();
+    broadcast(SKILL_PACKAGE_OPEN_EVENT, newPaths);
+  }
+}
+
+function takePendingSkillPackageOpenRequests(): string[] {
+  return pendingSkillPackageOpenPaths.splice(0);
 }
 
 app.setAsDefaultProtocolClient("lime");
@@ -520,6 +896,11 @@ app.on("open-url", (event, url) => {
   event.preventDefault();
   handleDeepLink(url);
 });
+app.on("open-file", (event, filePath) => {
+  event.preventDefault();
+  recordSkillPackageOpenPaths(collectSkillPackageOpenPaths([filePath]));
+});
+recordSkillPackageOpenPaths(collectSkillPackageOpenPaths(process.argv));
 
 const singleInstanceLock =
   process.env.LIME_ELECTRON_E2E === "1" ||
@@ -534,17 +915,13 @@ if (!singleInstanceLock) {
     if (url) {
       handleDeepLink(url);
     }
+    recordSkillPackageOpenPaths(collectSkillPackageOpenPaths(argv));
   });
 
   app.whenReady().then(() => {
-    app.setName(APP_NAME);
-    const dockIcon = nativeImage.createFromPath(
-      resolveDesktopAsset(APP_ICON_SOURCE, APP_ICON_PACKAGED_NAME),
-    );
-    if (process.platform === "darwin" && !dockIcon.isEmpty()) {
-      app.dock?.setIcon(dockIcon);
-    }
+    configureApplicationIdentity();
     registerIpcHandlers();
+    devHttpBridge = startDevHttpBridge();
     tray = createTray();
     void warmupAppServer();
     createMainWindow();
@@ -568,6 +945,8 @@ app.on("before-quit", () => {
   globalShortcut.unregisterAll();
   tray?.destroy();
   tray = null;
+  devHttpBridge?.stop();
+  devHttpBridge = null;
   void appServerHost.stop();
 });
 
@@ -586,8 +965,15 @@ async function warmupAppServer(): Promise<void> {
   }
 }
 
-function resolveDesktopAsset(sourceRelativePath: string, packagedName: string): string {
-  const packagedPath = path.join(process.resourcesPath, "desktop-assets", packagedName);
+function resolveDesktopAsset(
+  sourceRelativePath: string,
+  packagedName: string,
+): string {
+  const packagedPath = path.join(
+    process.resourcesPath,
+    "desktop-assets",
+    packagedName,
+  );
   if (existsSync(packagedPath)) {
     return packagedPath;
   }
@@ -608,4 +994,52 @@ function resolveDesktopAsset(sourceRelativePath: string, packagedName: string): 
   }
 
   return path.resolve(process.cwd(), sourceRelativePath);
+}
+
+function configureApplicationIdentity(): void {
+  app.setName(APP_NAME);
+  if (process.platform === "win32") {
+    app.setAppUserModelId(APP_BUNDLE_IDENTIFIER);
+  }
+
+  const appIconPath = resolveDesktopAsset(
+    APP_ICON_SOURCE,
+    APP_ICON_PACKAGED_NAME,
+  );
+  const appIcon = nativeImage.createFromPath(appIconPath);
+  if (process.platform === "darwin") {
+    if (!appIcon.isEmpty()) {
+      app.dock?.setIcon(appIcon);
+    }
+    app.setAboutPanelOptions({
+      applicationName: APP_NAME,
+      applicationVersion: app.getVersion(),
+      copyright: "Copyright © Lime",
+      iconPath: appIconPath,
+    });
+  }
+}
+
+function startDevHttpBridge(): ElectronDevHttpBridge | null {
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL?.trim();
+  if (!devServerUrl || process.env.LIME_ELECTRON_DEV_HTTP_BRIDGE === "0") {
+    return null;
+  }
+
+  const bridge = new ElectronDevHttpBridge({
+    invoke: handleHostInvoke,
+    host: process.env.LIME_ELECTRON_DEV_HTTP_BRIDGE_HOST?.trim() || undefined,
+    port: parseDevHttpBridgePort(
+      process.env.LIME_ELECTRON_DEV_HTTP_BRIDGE_PORT,
+    ),
+  });
+  bridge.start();
+  return bridge;
+}
+
+function parseDevHttpBridgePort(value: string | undefined): number | undefined {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 && parsed < 65536
+    ? parsed
+    : undefined;
 }

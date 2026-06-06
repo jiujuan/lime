@@ -7,61 +7,30 @@ import {
 } from "./mockPriorityCommands";
 
 describe("mockPriorityCommands", () => {
-  it("工作台阶段缺失桥接命令优先走 mock", () => {
-    expect(
-      shouldPreferMockInBrowser("execution_run_get_general_workbench_state"),
-    ).toBe(true);
-    expect(shouldPreferMockInBrowser("get_hint_routes")).toBe(true);
-    expect(shouldPreferMockInBrowser("memory_cleanup_memdir")).toBe(true);
-    expect(shouldPreferMockInBrowser("aster_agent_init")).toBe(false);
-    expect(shouldPreferMockInBrowser("agent_runtime_get_tool_inventory")).toBe(
-      false,
-    );
-    expect(shouldPreferMockInBrowser("list_dir")).toBe(false);
-    expect(shouldPreferMockInBrowser("get_file_manager_locations")).toBe(false);
-    expect(shouldPreferMockInBrowser("content_workflow_get_by_content")).toBe(
-      false,
-    );
-    expect(shouldPreferMockInBrowser("close_webview_panel")).toBe(true);
-    expect(shouldPreferMockInBrowser("agent_app_list_installed")).toBe(false);
-    expect(shouldPreferMockInBrowser("agent_app_inspect_local_package")).toBe(
-      false,
-    );
-    expect(shouldPreferMockInBrowser("agent_app_start_ui_runtime")).toBe(false);
-    expect(shouldPreferMockInBrowser("agent_app_get_ui_runtime_status")).toBe(
-      false,
-    );
-    expect(shouldPreferMockInBrowser("agent_app_stop_ui_runtime")).toBe(false);
-    expect(
-      shouldPreferMockInBrowser("start_oem_cloud_oauth_callback_bridge"),
-    ).toBe(false);
-    expect(
-      shouldDisallowMockFallbackInBrowser(
-        "start_oem_cloud_oauth_callback_bridge",
-      ),
-    ).toBe(true);
-  });
-
-  it("更新提醒命令在浏览器模式不应阻塞默认主页面", () => {
-    const updateCommands = [
+  it("产品路径命令不再允许浏览器模式优先走 mock", () => {
+    const commands = [
+      "execution_run_get_general_workbench_state",
+      "get_hint_routes",
+      "memory_cleanup_memdir",
+      "close_webview_panel",
       "check_for_updates",
       "download_update",
-      "get_update_check_settings",
-      "set_update_check_settings",
-      "get_update_notification_metrics",
-      "get_update_install_session",
-      "start_update_install_session",
-      "close_update_window",
-      "dismiss_update_notification",
-      "record_update_notification_action",
-      "remind_update_later",
-      "skip_update_version",
-      "test_update_window",
+      "companion_get_pet_status",
+      "workspace_list",
+      "aster_agent_init",
+      "agent_runtime_get_tool_inventory",
+      "agent_app_list_installed",
+      "agent_app_start_ui_runtime",
+      "get_model_registry",
+      "knowledge_list_packs",
+      "get_automation_jobs",
+      "project_memory_get",
+      "list_dir",
+      "session_files_save_file",
     ];
 
-    for (const command of updateCommands) {
-      expect(shouldPreferMockInBrowser(command)).toBe(true);
-      expect(shouldDisallowMockFallbackInBrowser(command)).toBe(false);
+    for (const command of commands) {
+      expect(shouldPreferMockInBrowser(command)).toBe(false);
     }
   });
 
@@ -111,6 +80,15 @@ describe("mockPriorityCommands", () => {
     expect(
       shouldDisallowMockFallbackInBrowser("agent_app_list_installed"),
     ).toBe(true);
+    expect(
+      shouldDisallowMockFallbackInBrowser("knowledge_list_packs"),
+    ).toBe(true);
+    expect(shouldDisallowMockFallbackInBrowser("get_automation_jobs")).toBe(
+      true,
+    );
+    expect(shouldDisallowMockFallbackInBrowser("project_memory_get")).toBe(
+      true,
+    );
     expect(
       shouldDisallowMockFallbackInBrowser("agent_app_start_ui_runtime"),
     ).toBe(true);

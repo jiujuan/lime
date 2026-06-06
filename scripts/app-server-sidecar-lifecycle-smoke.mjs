@@ -13,7 +13,6 @@ const rootDir = path.resolve(__dirname, "..");
 const clientDistPath = path.join(rootDir, "packages", "app-server-client", "dist", "index.js");
 
 const {
-  AppServerAgentEventRouter,
   METHOD_AGENT_SESSION_EVENT,
   PROTOCOL_VERSION,
   defaultReleaseManifestPath,
@@ -65,7 +64,7 @@ async function main() {
       },
       {
         resourcesPath,
-        backendMode: "mock",
+        backendMode: "unavailable",
         initializeTimeoutMs: 5_000,
         expectedProtocolVersion: PROTOCOL_VERSION,
         restartPolicy: {
@@ -87,11 +86,6 @@ async function main() {
     );
     const connected = started.connected;
     const connection = connected.connection;
-    const eventRouter = new AppServerAgentEventRouter();
-    const projectedEvents = [];
-    eventRouter.subscribe((event) => {
-      projectedEvents.push(event);
-    });
     const sessionId = "appserver_lifecycle_smoke_session";
     const threadId = "appserver_lifecycle_smoke_thread";
 
@@ -119,10 +113,31 @@ async function main() {
     assertEqual(sessionResult.result.session.sessionId, sessionId, "session id");
     assertEqual(sessionResult.result.session.threadId, threadId, "thread id");
 
-    const idleNotificationPromise = connection.nextNotification(5_000);
-    await Promise.resolve();
+    await expectStartTurnFailClosed(connection, sessionId);
 
-    const turnResult = await connection.startTurn(
+    await lifecycle.stop();
+
+    console.log(
+      [
+        "[smoke:app-server-sidecar-lifecycle] ok",
+        `source=${sourceBinaryPath}`,
+        `packaged=${packagedBinaryPath}`,
+        `protocol=${connected.initializeResponse.serverInfo.protocolVersion}`,
+        `capabilities=${capabilityIds.join(",")}`,
+        "backend=unavailable",
+        "turn=fail-closed",
+        `scheduledRestarts=${scheduledRestarts.length}`,
+      ].join(" "),
+    );
+  } finally {
+    await lifecycle?.stop().catch(() => undefined);
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function expectStartTurnFailClosed(connection, sessionId) {
+  try {
+    await connection.startTurn(
       {
         sessionId,
         input: {
@@ -134,38 +149,15 @@ async function main() {
       },
       { timeoutMs: 5_000 },
     );
-    assertEqual(turnResult.result.turn.sessionId, sessionId, "turn session id");
-    assertEqual(turnResult.result.turn.status, "accepted", "turn status");
-
-    for (const notification of turnResult.notifications) {
-      await eventRouter.dispatch(notification);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("standalone app-server backend is not configured")) {
+      return;
     }
-
-    const notification = await idleNotificationPromise;
-    await eventRouter.dispatch(notification);
-    assertEqual(notification.method, METHOD_AGENT_SESSION_EVENT, "event method");
-    assertEqual(notification.params.event.sessionId, sessionId, "event session id");
-    assertEqual(notification.params.event.type, "turn.accepted", "event type");
-    assertEqual(projectedEvents.length, 1, "projected event count");
-    assertEqual(projectedEvents[0].sessionId, sessionId, "projected event session id");
-
-    await lifecycle.stop();
-
-    console.log(
-      [
-        "[smoke:app-server-sidecar-lifecycle] ok",
-        `source=${sourceBinaryPath}`,
-        `packaged=${packagedBinaryPath}`,
-        `protocol=${connected.initializeResponse.serverInfo.protocolVersion}`,
-        `capabilities=${capabilityIds.join(",")}`,
-        `projectedEvents=${projectedEvents.length}`,
-        `scheduledRestarts=${scheduledRestarts.length}`,
-      ].join(" "),
-    );
-  } finally {
-    await lifecycle?.stop().catch(() => undefined);
-    await rm(tempDir, { recursive: true, force: true });
+    throw new Error(`unexpected fail-closed turn error: ${message}`);
   }
+
+  throw new Error("expected agentSession/turn/start to fail when backend is unavailable");
 }
 
 async function resolveSourceBinaryPath() {

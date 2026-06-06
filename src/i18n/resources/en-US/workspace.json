@@ -694,6 +694,7 @@
   "workspace.video.workspace.recentTasks.tipAria": "Recent tasks guidance",
   "workspace.video.workspace.recentTasks.tipContent": "Shows the newest video tasks in reverse chronological order so you can switch previews and investigate failures.",
   "workspace.video.workspace.recentTasks.count": "{{value}} item(s)",
+  "workspace.video.workspace.recentTasks.taskId": "Task ID {{id}}",
   "workspace.video.workspace.recentTasks.empty": "No task records to show yet. Submit a video generation once, and the result will land here automatically.",
   "workspace.video.workspace.recentTasks.action.currentPreview": "Current preview",
   "workspace.video.workspace.recentTasks.action.switchPreview": "Switch preview",

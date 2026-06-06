@@ -28,8 +28,20 @@ function retiredHostGlobalName() {
   return ["__TA", "URI__"].join("");
 }
 
+function retiredHostInternalsName() {
+  return ["__TA", "URI_INTERNALS__"].join("");
+}
+
 function retiredHostMockDir() {
   return ["src/lib/", "ta", "uri-mock"].join("");
+}
+
+function retiredHostPackagePatternSource() {
+  return '["@", "ta", "uri-apps", "\\\\/api"].join("")';
+}
+
+function retiredHostGlobalPatternSource() {
+  return '["__TA", "URI__"].join("")';
 }
 
 describe("Electron current repository rules guard", () => {
@@ -108,10 +120,22 @@ describe("Electron current repository rules guard", () => {
     expect(content).toContain('reason: "desktop-host-api"');
     expect(content).toContain("desktop-host|DesktopHost");
     expect(content).toContain('reason: "legacy-desktop-host-api"');
-    expect(content).toContain(retiredHostPackageName());
-    expect(content).toContain(retiredHostGlobalName());
+    expect(content).toContain(retiredHostPackagePatternSource());
+    expect(content).toContain(retiredHostGlobalPatternSource());
+    expect(content).not.toContain(retiredHostPackageName());
+    expect(content).not.toContain(retiredHostGlobalName());
     expect(content).not.toContain(
       `reason: "desktop-host-api", pattern: /${retiredHostPackageName()}`,
     );
+  });
+
+  it("keeps renderer HTML entrypoint free of retired desktop host probes", () => {
+    const content = readFile("index.html");
+
+    expect(content).not.toContain(retiredHostPackageName());
+    expect(content).not.toContain(retiredHostGlobalName());
+    expect(content).not.toContain(retiredHostInternalsName());
+    expect(content).not.toContain(retiredHostMockDir());
+    expect(content).not.toContain("SC_DISABLE_SPEEDY");
   });
 });

@@ -2,13 +2,13 @@
 
 ## 概述
 
-Lime 是一个以创作为中心的本地优先 AI Agent 交互工作台，当前 Desktop host 主路径基于 Electron，AI Agent / runtime / 跨 App 复用能力收敛到 App Server JSON-RPC，面向创作者、内容团队与轻知识工作者。系统由 Workspace、Skills 编排层、MCP 标准能力层、Claw 渠道层、Artifact 交付层与多模型接入能力共同组成。
+Lime 是一个以创作为中心的本地优先 AI Agent 交互工作台，当前 Desktop host 主路径基于 Electron。Electron 只作为 Desktop Host bridge，负责 IPC 与桌面壳能力；AI Agent / runtime / 跨 App 复用能力收敛到 App Server JSON-RPC 与 RuntimeCore，面向创作者、内容团队与轻知识工作者。系统由 Workspace、Skills 编排层、MCP 标准能力层、Claw 渠道层、Artifact 交付层与多模型接入能力共同组成。
 
 可以把它理解为三层结构：
 
 1. **产品层**：Workspace、通用工作区 / Harness、Agent 对话、Skills、Artifact/Canvas、记忆与风格
 2. **能力层**：MCP、浏览器运行时、终端、插件、批量/心跳、Claw 渠道
-3. **基础设施层**：Aster Agent、API Key Provider、模型注册表、协议兼容、路由、服务器、数据库与监控
+3. **基础设施层**：App Server / RuntimeCore、ExecutionBackend、API Key Provider、模型注册表、协议兼容、路由、服务器、数据库与监控
 
 其中，Provider 接入、协议兼容与运行时服务共同构成底层能力底座。
 
@@ -47,10 +47,13 @@ lime/
 │   ├── hooks/           # React Hooks
 │   ├── lib/             # 工具库
 │   └── stores/          # 状态管理
-├── electron/          # Electron main / preload / Desktop host adapter
-├── lime-rs/           # Rust App Server 与 legacy adapter workspace
+├── electron/          # Electron main / preload / Desktop Host bridge
+├── lime-rs/           # Rust App Server 与 legacy facade workspace
+│   ├── crates/
+│   │   ├── app-server* # App Server protocol / server / client / transport current crates
+│   │   └── agent       # RuntimeCore 当前参考 crate，后续继续拆公共模型与服务
 │   └── src/
-│       ├── commands/    # legacy Tauri adapter 命令，仅用于兼容迁移
+│       ├── commands/    # legacy desktop facade 命令，仅用于兼容迁移
 │       ├── providers/   # Provider 实现
 │       ├── services/    # 业务服务
 │       ├── converter/   # 协议转换
@@ -89,7 +92,9 @@ lime/
 
 | 模块 | 说明 |
 |------|------|
-| `lime-rs/src/agent/` | Aster Agent 集成、会话历史、线程读模型、工具注册与流式桥接 |
+| `lime-rs/crates/app-server*` | App Server protocol / server / client / transport current crates，承接跨 App JSON-RPC 事实源 |
+| `lime-rs/crates/agent` | RuntimeCore 当前参考 crate，承接 session / thread / turn / event 等公共 facts 的拆分方向 |
+| `lime-rs/src/agent/` | Aster execution backend 的历史实现参考；只作为 ExecutionBackend 迁移来源，不再是公共 runtime owner |
 | `providers/` | LLM Provider API 实现与协议兼容 |
 | `services/` | 业务服务层 |
 | `converter/` | 协议转换与兼容层 |
@@ -104,7 +109,7 @@ lime/
 
 | 模块 | 说明 |
 |------|------|
-| `agent/` | Aster Agent 运行时桥接、会话管理与状态读模型装配 |
+| `agent/` | Aster execution backend 迁移参考、会话历史与状态读模型装配 |
 | `skills/` | Skills 标准集成、动态加载与执行回调 |
 | `providers/` | 多 Provider 认证与请求发送 |
 | `services/` | 心跳、浏览器窗口、MCP 等业务服务 |
@@ -150,10 +155,10 @@ lime/
           │
           ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Agent Runtime                               │
+│              App Server / RuntimeCore                            │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
-│  │ Aster Agent │  │ Session     │  │ Stream / Action         │  │
-│  │ 执行        │  │ 状态        │  │ Request                 │  │
+│  │ RuntimeCore │  │ Session     │  │ Stream / Action         │  │
+│  │ facts       │  │ 状态        │  │ Request                 │  │
 │  └──────┬──────┘  └──────┬──────┘  └───────────┬─────────────┘  │
 └─────────┼────────────────┼─────────────────────┼────────────────┘
           │                │                     │
@@ -212,7 +217,8 @@ lime/
 - 支持远程触发、异步协作、消息回流与外部入口接入
 
 ### 5. Agent Runtime
-- 基于 Aster Agent，支持会话、流式事件、工具调用与多模型配置
+- Runtime facts 由 App Server / RuntimeCore 拥有；Aster 只是第一个 `ExecutionBackend`
+- 支持会话、流式事件、工具调用与多模型配置
 - 支持任务接力、会话持续化、步骤可观测与长期运行
 
 ### 6. Artifact First
@@ -252,7 +258,7 @@ lime/
 - [lib.md](lib.md) - 工具库
 
 ### 配置、服务与数据
-- [commands.md](commands.md) - Electron Desktop Host / App Server / legacy adapter 命令边界
+- [commands.md](commands.md) - Electron Desktop Host bridge / App Server / legacy facade 命令边界
 - [command-runtime.md](command-runtime.md) - 命令运行时、`@` / `/`、轻卡与 viewer 实施规则
 - [site-adapter-standard.md](site-adapter-standard.md) - 站点适配器标准与外部来源接入边界
 - [services.md](services.md) - 业务服务

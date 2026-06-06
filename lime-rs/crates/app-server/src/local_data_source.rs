@@ -1,5 +1,6 @@
 use crate::AppDataSource;
 use crate::RuntimeCoreError;
+use app_server_protocol::AgentAppInstalledListResponse;
 use app_server_protocol::AgentSession;
 use app_server_protocol::AgentSessionListParams;
 use app_server_protocol::AgentSessionListResponse;
@@ -9,7 +10,10 @@ use app_server_protocol::AgentSessionReadResponse;
 use app_server_protocol::AgentSessionStatus;
 use app_server_protocol::AgentTurn;
 use app_server_protocol::AgentTurnStatus;
+use app_server_protocol::AutomationJobListResponse;
 use app_server_protocol::BusinessObjectRef;
+use app_server_protocol::KnowledgeListPacksParams;
+use app_server_protocol::KnowledgeListPacksResponse;
 use app_server_protocol::ModelListParams;
 use app_server_protocol::ModelListResponse;
 use app_server_protocol::ModelPreferencesListResponse;
@@ -19,6 +23,8 @@ use app_server_protocol::ModelProviderAliasReadResponse;
 use app_server_protocol::ModelProviderCatalogListResponse;
 use app_server_protocol::ModelProviderListResponse;
 use app_server_protocol::ModelSyncStateReadResponse;
+use app_server_protocol::ProjectMemoryReadParams;
+use app_server_protocol::ProjectMemoryReadResponse;
 use app_server_protocol::SkillListResponse;
 use app_server_protocol::SkillReadParams;
 use app_server_protocol::SkillReadResponse;
@@ -44,6 +50,7 @@ use lime_core::database::dao::agent_timeline::AgentThreadTurnStatus;
 use lime_core::database::dao::agent_timeline::AgentTimelineDao;
 use lime_core::database::dao::api_key_provider::ApiKeyEntry;
 use lime_core::database::dao::api_key_provider::ProviderWithKeys;
+use lime_core::database::dao::automation_job::AutomationJobDao;
 use lime_core::database::system_providers::get_system_providers;
 use lime_core::database::system_providers::SystemProviderDef;
 use lime_core::database::DbConnection;
@@ -72,6 +79,8 @@ const CURRENT_TIMELINE_HISTORY_MAX_LIMIT: usize = 1_000;
 const APP_ID_AGENT_RUNTIME: &str = "agent-runtime";
 const LEGACY_DEFAULT_WORKSPACE_ID: &str = "workspace-default";
 const DEFAULT_PROJECT_NAME: &str = "默认项目";
+const AGENT_APP_DATA_DIR: &str = "agent-apps";
+const INSTALLED_AGENT_APP_STATE_SCHEMA_VERSION: u64 = 1;
 
 pub struct LocalAppDataSource {
     db: DbConnection,
@@ -100,14 +109,16 @@ impl AppDataSource for LocalAppDataSource {
         params: AgentSessionListParams,
     ) -> Result<AgentSessionListResponse, RuntimeCoreError> {
         let workspace_id = normalize_workspace_filter(params.workspace_id.as_deref());
+        let include_archived = params.include_archived.unwrap_or(false);
+        let archived_only = params.archived_only.unwrap_or(false);
         let limit = params
             .limit
             .map(|value| (value as usize).min(CURRENT_TIMELINE_LIST_MAX_LIMIT));
         let conn = database::lock_db(&self.db).map_err(data_error)?;
         let sessions = query_current_timeline_session_overviews(
             &conn,
-            params.include_archived.unwrap_or(false),
-            params.archived_only.unwrap_or(false),
+            include_archived,
+            archived_only,
             workspace_id,
             limit,
         )
@@ -124,54 +135,62 @@ impl AppDataSource for LocalAppDataSource {
             .map(|value| (value as usize).min(CURRENT_TIMELINE_HISTORY_MAX_LIMIT))
             .unwrap_or(CURRENT_TIMELINE_HISTORY_DEFAULT_LIMIT);
         let history_offset = params.history_offset.unwrap_or(0) as usize;
-        let conn = database::lock_db(&self.db).map_err(data_error)?;
-        let Some(session) =
-            query_current_timeline_session(&conn, &params.session_id).map_err(data_error)?
-        else {
-            return Ok(None);
+        let current_response = {
+            let conn = database::lock_db(&self.db).map_err(data_error)?;
+            let Some(session) =
+                query_current_timeline_session(&conn, &params.session_id).map_err(data_error)?
+            else {
+                return Ok(None);
+            };
+            let has_timeline = current_timeline_session_has_entries(&conn, &params.session_id)
+                .map_err(data_error)?;
+            if !has_timeline {
+                return Ok(None);
+            } else {
+                let timeline_turns = AgentTimelineDao::list_turns_by_thread_tail_page(
+                    &conn,
+                    &params.session_id,
+                    history_limit,
+                    history_offset,
+                )
+                .map_err(data_error)?;
+                let turns = timeline_turns
+                    .iter()
+                    .cloned()
+                    .into_iter()
+                    .map(agent_thread_turn_to_protocol)
+                    .collect::<Vec<_>>();
+                let items = AgentTimelineDao::list_items_by_thread_tail_page(
+                    &conn,
+                    &params.session_id,
+                    history_limit,
+                    history_offset,
+                )
+                .map_err(data_error)?;
+                let messages_count =
+                    current_timeline_item_count(&conn, &params.session_id).map_err(data_error)?;
+                let detail = current_timeline_detail_value(
+                    &session,
+                    &timeline_turns,
+                    &items,
+                    messages_count,
+                    history_limit,
+                    history_offset,
+                )?;
+
+                Some(AgentSessionReadResponse {
+                    session: current_timeline_session_to_protocol(&session),
+                    turns,
+                    detail: Some(detail),
+                })
+            }
         };
-        let has_timeline =
-            current_timeline_session_has_entries(&conn, &params.session_id).map_err(data_error)?;
-        if !has_timeline {
-            return Ok(None);
+
+        if let Some(response) = current_response {
+            return Ok(Some(response));
         }
 
-        let timeline_turns = AgentTimelineDao::list_turns_by_thread_tail_page(
-            &conn,
-            &params.session_id,
-            history_limit,
-            history_offset,
-        )
-        .map_err(data_error)?;
-        let turns = timeline_turns
-            .iter()
-            .cloned()
-            .into_iter()
-            .map(agent_thread_turn_to_protocol)
-            .collect::<Vec<_>>();
-        let items = AgentTimelineDao::list_items_by_thread_tail_page(
-            &conn,
-            &params.session_id,
-            history_limit,
-            history_offset,
-        )
-        .map_err(data_error)?;
-        let messages_count =
-            current_timeline_item_count(&conn, &params.session_id).map_err(data_error)?;
-        let detail = current_timeline_detail_value(
-            &session,
-            &timeline_turns,
-            &items,
-            messages_count,
-            history_limit,
-            history_offset,
-        )?;
-
-        Ok(Some(AgentSessionReadResponse {
-            session: current_timeline_session_to_protocol(&session),
-            turns,
-            detail: Some(detail),
-        }))
+        Ok(None)
     }
 
     async fn list_workspaces(&self) -> Result<WorkspaceListResponse, RuntimeCoreError> {
@@ -330,6 +349,48 @@ impl AppDataSource for LocalAppDataSource {
         })
     }
 
+    async fn list_agent_app_installed(
+        &self,
+    ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError> {
+        list_agent_app_installed_state().map_err(data_error)
+    }
+
+    async fn list_knowledge_packs(
+        &self,
+        params: KnowledgeListPacksParams,
+    ) -> Result<KnowledgeListPacksResponse, RuntimeCoreError> {
+        let response =
+            lime_knowledge::list_knowledge_packs(lime_knowledge::KnowledgeListPacksRequest {
+                working_dir: params.working_dir,
+                include_archived: params.include_archived,
+            })
+            .map_err(data_error)?;
+        Ok(KnowledgeListPacksResponse {
+            working_dir: response.working_dir,
+            root_path: response.root_path,
+            packs: values_from_serializable_vec(response.packs)?,
+        })
+    }
+
+    async fn list_automation_jobs(&self) -> Result<AutomationJobListResponse, RuntimeCoreError> {
+        let conn = database::lock_db(&self.db).map_err(data_error)?;
+        let jobs = AutomationJobDao::list(&conn).map_err(data_error)?;
+        Ok(AutomationJobListResponse {
+            jobs: values_from_serializable_vec(jobs)?,
+        })
+    }
+
+    async fn read_project_memory(
+        &self,
+        params: ProjectMemoryReadParams,
+    ) -> Result<ProjectMemoryReadResponse, RuntimeCoreError> {
+        let memory = lime_core::memory::read_project_memory(self.db.clone(), &params.project_id)
+            .map_err(data_error)?;
+        Ok(ProjectMemoryReadResponse {
+            memory: serde_json::to_value(memory).map_err(data_error)?,
+        })
+    }
+
     async fn list_models(
         &self,
         params: ModelListParams,
@@ -427,6 +488,8 @@ struct CurrentTimelineSessionRow {
     archived_at: Option<String>,
     working_dir: Option<String>,
     execution_strategy: Option<String>,
+    session_type: String,
+    extension_data_json: String,
     workspace_id: Option<String>,
     timeline_item_count: usize,
     timeline_turn_count: usize,
@@ -477,6 +540,8 @@ fn query_current_timeline_session_overviews(
                 s.archived_at,
                 s.working_dir,
                 s.execution_strategy,
+                s.session_type,
+                s.extension_data_json,
                 w.id AS workspace_id,
                 (SELECT COUNT(1) FROM agent_thread_items i WHERE i.session_id = s.id)
                     AS timeline_item_count,
@@ -499,6 +564,18 @@ fn query_current_timeline_session_overviews(
                AND (
                     EXISTS (SELECT 1 FROM agent_thread_turns t WHERE t.session_id = s.id)
                     OR EXISTS (SELECT 1 FROM agent_thread_items i WHERE i.session_id = s.id)
+                )
+               AND NOT (
+                    s.model = 'lime-fixture-chat'
+                    OR s.title LIKE 'Agent QC approval %'
+                    OR s.title LIKE 'Code runtime fixture %'
+                    OR s.title LIKE 'Tool execution fixture %'
+                    OR CASE
+                        WHEN json_valid(s.extension_data_json) THEN
+                            COALESCE(json_extract(s.extension_data_json, '$.\"lime_harness.v0\".hiddenFromUserRecents') = 1, 0)
+                            OR COALESCE(json_extract(s.extension_data_json, '$.\"lime_harness.v0\".hidden_from_user_recents') = 1, 0)
+                        ELSE 0
+                    END
                 )
              ORDER BY updated_at DESC, s.id DESC
              LIMIT ?4",
@@ -546,6 +623,8 @@ fn query_current_timeline_session(
             s.archived_at,
             s.working_dir,
             s.execution_strategy,
+            s.session_type,
+            s.extension_data_json,
             w.id AS workspace_id,
             (SELECT COUNT(1) FROM agent_thread_items i WHERE i.session_id = s.id)
                 AS timeline_item_count,
@@ -572,19 +651,19 @@ fn current_timeline_session_row(
     row: &Row<'_>,
 ) -> Result<CurrentTimelineSessionRow, rusqlite::Error> {
     let latest_turn_status = row
-        .get::<_, Option<String>>(11)?
+        .get::<_, Option<String>>(13)?
         .as_deref()
         .map(AgentThreadTurnStatus::try_from)
         .transpose()
         .map_err(|_| {
             rusqlite::Error::InvalidColumnType(
-                11,
+                13,
                 "latest_turn_status".into(),
                 rusqlite::types::Type::Text,
             )
         })?;
-    let timeline_item_count = row.get::<_, i64>(9)?.max(0) as usize;
-    let timeline_turn_count = row.get::<_, i64>(10)?.max(0) as usize;
+    let timeline_item_count = row.get::<_, i64>(11)?.max(0) as usize;
+    let timeline_turn_count = row.get::<_, i64>(12)?.max(0) as usize;
 
     Ok(CurrentTimelineSessionRow {
         id: row.get(0)?,
@@ -595,7 +674,9 @@ fn current_timeline_session_row(
         archived_at: row.get(5)?,
         working_dir: row.get(6)?,
         execution_strategy: row.get(7)?,
-        workspace_id: row.get(8)?,
+        session_type: row.get(8)?,
+        extension_data_json: row.get(9)?,
+        workspace_id: row.get(10)?,
         timeline_item_count,
         timeline_turn_count,
         latest_turn_status,
@@ -660,6 +741,8 @@ fn current_timeline_session_to_protocol(row: &CurrentTimelineSessionRow) -> Agen
         "model": row.model,
         "workingDir": row.working_dir,
         "executionStrategy": row.execution_strategy,
+        "sessionType": row.session_type,
+        "extensionData": extension_data_json_value(&row.extension_data_json),
         "timelineItemCount": row.timeline_item_count,
         "timelineTurnCount": row.timeline_turn_count,
     });
@@ -679,6 +762,10 @@ fn current_timeline_session_to_protocol(row: &CurrentTimelineSessionRow) -> Agen
         created_at: row.created_at.clone(),
         updated_at: row.updated_at.clone(),
     }
+}
+
+fn extension_data_json_value(value: &str) -> Value {
+    serde_json::from_str(value).unwrap_or_else(|_| json!({}))
 }
 
 fn current_timeline_session_status(status: Option<&AgentThreadTurnStatus>) -> AgentSessionStatus {
@@ -1164,6 +1251,97 @@ fn values_from_serializable_vec<T: serde::Serialize>(
         .collect()
 }
 
+fn list_agent_app_installed_state() -> Result<AgentAppInstalledListResponse, String> {
+    let installed_dir = app_paths::preferred_data_dir()?
+        .join(AGENT_APP_DATA_DIR)
+        .join("installed");
+    fs::create_dir_all(&installed_dir)
+        .map_err(|error| format!("创建 Agent App installed 目录失败: {error}"))?;
+
+    let mut states = Vec::new();
+    let mut issues = Vec::new();
+    let entries = fs::read_dir(&installed_dir)
+        .map_err(|error| format!("读取 Agent App installed 目录失败: {error}"))?;
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                issues.push(agent_app_persistence_issue(
+                    "READ_FAILED",
+                    installed_dir.to_string_lossy(),
+                    format!("读取 installed 条目失败: {error}"),
+                    None,
+                ));
+                continue;
+            }
+        };
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        match read_agent_app_installed_state_path(&path) {
+            Ok(Some(state)) => states.push(state),
+            Ok(None) => {}
+            Err(error) => issues.push(agent_app_persistence_issue(
+                "PARSE_FAILED",
+                path.to_string_lossy(),
+                error,
+                None,
+            )),
+        }
+    }
+
+    states.sort_by(|left, right| {
+        read_json_string(left, &["appId"])
+            .unwrap_or_default()
+            .cmp(&read_json_string(right, &["appId"]).unwrap_or_default())
+    });
+
+    Ok(AgentAppInstalledListResponse { states, issues })
+}
+
+fn read_agent_app_installed_state_path(path: &Path) -> Result<Option<Value>, String> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let content =
+        fs::read_to_string(path).map_err(|error| format!("读取 installed state 失败: {error}"))?;
+    let envelope: Value = serde_json::from_str(&content)
+        .map_err(|error| format!("解析 installed state 失败: {error}"))?;
+    let schema_version = envelope
+        .get("schemaVersion")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "Installed Agent App state 缺少 schemaVersion。".to_string())?;
+    if schema_version != INSTALLED_AGENT_APP_STATE_SCHEMA_VERSION {
+        return Err(format!(
+            "不支持的 Agent App installed state schemaVersion: {schema_version}",
+        ));
+    }
+    Ok(envelope.get("state").cloned())
+}
+
+fn agent_app_persistence_issue(
+    code: impl Into<String>,
+    path: impl ToString,
+    message: impl Into<String>,
+    app_id: Option<String>,
+) -> Value {
+    json!({
+        "code": code.into(),
+        "path": path.to_string(),
+        "message": message.into(),
+        "appId": app_id,
+    })
+}
+
+fn read_json_string(value: &Value, path: &[&str]) -> Option<String> {
+    let mut current = value;
+    for key in path {
+        current = current.get(*key)?;
+    }
+    current.as_str().map(str::to_string)
+}
+
 fn provider_with_keys_to_value(
     provider_with_keys: &ProviderWithKeys,
     service: &ApiKeyProviderService,
@@ -1390,6 +1568,61 @@ mod tests {
         .expect("insert agent item");
     }
 
+    fn insert_hidden_harness_timeline_session(conn: &Connection) {
+        insert_session(
+            conn,
+            "hidden-harness-session",
+            "内部 Smoke 会话",
+            "2026-03-13T01:00:04Z",
+        );
+        conn.execute(
+            "UPDATE agent_sessions
+             SET extension_data_json = ?1
+             WHERE id = 'hidden-harness-session'",
+            params![json!({
+                "lime_harness.v0": {
+                    "hiddenFromUserRecents": true,
+                    "source": "smoke-fixture"
+                }
+            })
+            .to_string()],
+        )
+        .expect("mark hidden harness session");
+        let turn = AgentThreadTurn {
+            id: "turn-hidden-harness".to_string(),
+            thread_id: "hidden-harness-session".to_string(),
+            prompt_text: "内部 smoke".to_string(),
+            status: AgentThreadTurnStatus::Completed,
+            started_at: "2026-03-13T01:00:04Z".to_string(),
+            completed_at: Some("2026-03-13T01:00:05Z".to_string()),
+            error_message: None,
+            created_at: "2026-03-13T01:00:04Z".to_string(),
+            updated_at: "2026-03-13T01:00:05Z".to_string(),
+        };
+        AgentTimelineDao::create_turn(conn, &turn).expect("insert hidden turn");
+    }
+
+    fn insert_smoke_title_timeline_session(conn: &Connection) {
+        insert_session(
+            conn,
+            "smoke-title-session",
+            "Code runtime fixture 2026-03-13T01:00:06Z",
+            "2026-03-13T01:00:06Z",
+        );
+        let turn = AgentThreadTurn {
+            id: "turn-smoke-title".to_string(),
+            thread_id: "smoke-title-session".to_string(),
+            prompt_text: "历史 smoke 标题".to_string(),
+            status: AgentThreadTurnStatus::Completed,
+            started_at: "2026-03-13T01:00:06Z".to_string(),
+            completed_at: Some("2026-03-13T01:00:07Z".to_string()),
+            error_message: None,
+            created_at: "2026-03-13T01:00:06Z".to_string(),
+            updated_at: "2026-03-13T01:00:07Z".to_string(),
+        };
+        AgentTimelineDao::create_turn(conn, &turn).expect("insert smoke title turn");
+    }
+
     #[tokio::test]
     async fn list_current_timeline_sessions_excludes_legacy_message_only_sessions() {
         let data_source = setup_data_source();
@@ -1485,7 +1718,7 @@ mod tests {
 
         let response = data_source
             .list_current_timeline_sessions(AgentSessionListParams {
-                workspace_id: Some(WORKSPACE_ID.to_string()),
+                workspace_id: None,
                 limit: Some(20),
                 ..AgentSessionListParams::default()
             })
@@ -1497,6 +1730,45 @@ mod tests {
             "older-metadata-newer-timeline"
         );
         assert_eq!(response.sessions[0].updated_at, "2026-03-13T02:00:01Z");
+    }
+
+    #[tokio::test]
+    async fn list_current_timeline_sessions_excludes_harness_hidden_sessions() {
+        let data_source = setup_data_source();
+        {
+            let conn = database::lock_db(&data_source.db).expect("lock db");
+            insert_current_timeline_session(&conn);
+            insert_hidden_harness_timeline_session(&conn);
+            insert_smoke_title_timeline_session(&conn);
+        }
+
+        let response = data_source
+            .list_current_timeline_sessions(AgentSessionListParams {
+                workspace_id: Some(WORKSPACE_ID.to_string()),
+                limit: Some(20),
+                ..AgentSessionListParams::default()
+            })
+            .await
+            .expect("list sessions");
+
+        let ids = response
+            .sessions
+            .iter()
+            .map(|session| session.session_id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(ids, vec!["current-session"]);
+
+        let hidden = data_source
+            .read_current_timeline_session(AgentSessionReadParams {
+                session_id: "hidden-harness-session".to_string(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .await
+            .expect("read hidden session")
+            .expect("hidden session remains readable by id");
+        assert_eq!(hidden.session.session_id, "hidden-harness-session");
     }
 
     #[tokio::test]

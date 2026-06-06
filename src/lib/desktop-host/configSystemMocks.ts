@@ -87,13 +87,13 @@ export const configSystemMocks: Record<string, (args?: any) => any> = {
       image_search_pixabay_api_key: "",
     },
     workspace_preferences: {
-      schema_version: 2,
+      schema_version: 3,
       media_defaults: {},
       companion_defaults: {},
       service_models: {},
     },
     navigation: {
-      schema_version: 2,
+      schema_version: 3,
       enabled_items: [],
     },
     crash_reporting: {

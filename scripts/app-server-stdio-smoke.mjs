@@ -32,7 +32,7 @@ async function main() {
   const connected = await connectAppServerSidecar(
     {
       ...stdioSidecar(binaryPath),
-      backendMode: "mock",
+      backendMode: "unavailable",
     },
     {
       clientInfo: {
@@ -75,20 +75,15 @@ async function main() {
     });
     connected.sidecar.send(turnRequest);
     const turnResponse = await connected.sidecar.nextMessage(5_000);
-    const turnResult = expectResponseResult(turnResponse, turnRequest.id, "agentSession/turn/start");
-    assertEqual(turnResult.turn.sessionId, sessionId, "turn session id");
-    assertEqual(turnResult.turn.status, "accepted", "turn status");
-
-    const eventNotification = await connected.sidecar.nextMessage(5_000);
-    if (eventNotification.method !== METHOD_AGENT_SESSION_EVENT) {
-      throw new Error(`expected ${METHOD_AGENT_SESSION_EVENT}, got ${eventNotification.method ?? "unknown"}`);
-    }
-    assertEqual(eventNotification.params.event.sessionId, sessionId, "event session id");
-    assertEqual(eventNotification.params.event.threadId, threadId, "event thread id");
-    assertEqual(eventNotification.params.event.type, "turn.accepted", "event type");
+    expectResponseError(
+      turnResponse,
+      turnRequest.id,
+      "agentSession/turn/start",
+      "standalone app-server backend is not configured",
+    );
 
     console.log(
-      `[smoke:app-server-stdio] ok binary=${binaryPath} source=${binaryResolution.source} protocol=${connected.initializeResponse.serverInfo.protocolVersion} session=${sessionId} event=turn.accepted`,
+      `[smoke:app-server-stdio] ok binary=${binaryPath} source=${binaryResolution.source} protocol=${connected.initializeResponse.serverInfo.protocolVersion} session=${sessionId} backend=unavailable turn=fail-closed`,
     );
   } finally {
     await connected.sidecar.close();
@@ -117,6 +112,19 @@ function expectResponseResult(message, id, label) {
     throw new Error(`expected ${label} response for request ${String(id)}`);
   }
   return message.result;
+}
+
+function expectResponseError(message, id, label, expectedMessage) {
+  if (!message || message.id !== id || !("error" in message)) {
+    throw new Error(`expected ${label} error response for request ${String(id)}`);
+  }
+  const actualMessage = String(message.error?.message ?? "");
+  if (!actualMessage.includes(expectedMessage)) {
+    throw new Error(
+      `unexpected ${label} error: expected "${expectedMessage}", got "${actualMessage}"`,
+    );
+  }
+  return message.error;
 }
 
 function assertEqual(actual, expected, label) {

@@ -1,560 +1,132 @@
-import { spawn, type ChildProcessWithoutNullStreams, type SpawnOptionsWithoutStdio } from "node:child_process";
+import {
+  spawn,
+  type ChildProcessWithoutNullStreams,
+  type SpawnOptionsWithoutStdio,
+} from "node:child_process";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { createInterface, type Interface as ReadlineInterface } from "node:readline";
+import {
+  createInterface,
+  type Interface as ReadlineInterface,
+} from "node:readline";
 
-export const JSONRPC_VERSION = "2.0";
-export const PROTOCOL_VERSION = "appserver.v0";
-export const SERVER_NAME = "app-server";
+import {
+  APP_SERVER_METHODS,
+  JSONRPC_VERSION,
+  METHOD_AGENT_APP_INSTALLED_LIST,
+  METHOD_AGENT_SESSION_ACTION_RESPOND,
+  METHOD_AGENT_SESSION_EVENT,
+  METHOD_AGENT_SESSION_LIST,
+  METHOD_AGENT_SESSION_READ,
+  METHOD_AGENT_SESSION_START,
+  METHOD_AGENT_SESSION_TURN_CANCEL,
+  METHOD_AGENT_SESSION_TURN_START,
+  METHOD_ARTIFACT_READ,
+  METHOD_AUTOMATION_JOB_LIST,
+  METHOD_CAPABILITY_LIST,
+  METHOD_EVIDENCE_EXPORT,
+  METHOD_INITIALIZE,
+  METHOD_INITIALIZED,
+  METHOD_KNOWLEDGE_PACK_LIST,
+  METHOD_MODEL_LIST,
+  METHOD_MODEL_PREFERENCES_LIST,
+  METHOD_MODEL_PROVIDER_ALIAS_LIST,
+  METHOD_MODEL_PROVIDER_ALIAS_READ,
+  METHOD_MODEL_PROVIDER_CATALOG_LIST,
+  METHOD_MODEL_PROVIDER_LIST,
+  METHOD_MODEL_SYNC_STATE_READ,
+  METHOD_PROJECT_MEMORY_READ,
+  METHOD_SKILL_LIST,
+  METHOD_SKILL_READ,
+  METHOD_WORKSPACE_BY_PATH_READ,
+  METHOD_WORKSPACE_DEFAULT_ENSURE,
+  METHOD_WORKSPACE_DEFAULT_READ,
+  METHOD_WORKSPACE_ENSURE_READY,
+  METHOD_WORKSPACE_LIST,
+  METHOD_WORKSPACE_PROJECTS_ROOT_READ,
+  METHOD_WORKSPACE_PROJECT_PATH_RESOLVE,
+  METHOD_WORKSPACE_READ,
+  METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
+  PROTOCOL_VERSION,
+  agentSessionEventNotification,
+  decodeMessage,
+  encodeMessage,
+  isJsonRpcErrorResponse,
+  isJsonRpcNotification,
+  isJsonRpcResponse,
+  notification,
+  request,
+  type AgentEvent,
+  type AgentSessionActionRespondParams,
+  type AgentSessionActionRespondResponse,
+  type AgentSessionEventNotification,
+  type AgentSessionListParams,
+  type AgentSessionListResponse,
+  type AgentSessionReadParams,
+  type AgentSessionReadResponse,
+  type AgentSessionStartParams,
+  type AgentSessionStartResponse,
+  type AgentSessionTurnCancelParams,
+  type AgentSessionTurnCancelResponse,
+  type AgentSessionTurnStartParams,
+  type AgentSessionTurnStartResponse,
+  type AgentAppInstalledListResponse,
+  type AppServerMethodSpec,
+  type AppServerProtocolSchemaManifest,
+  type ArtifactReadParams,
+  type ArtifactReadResponse,
+  type ArtifactSummary,
+  type AutomationJobListResponse,
+  type CapabilityListParams,
+  type CapabilityListResponse,
+  type EvidenceExportParams,
+  type EvidenceExportResponse,
+  type InitializeParams,
+  type InitializeResponse,
+  type JsonRpcErrorResponse,
+  type JsonRpcMessage,
+  type JsonRpcNotification,
+  type JsonRpcRequest,
+  type JsonRpcResponse,
+  type KnowledgeListPacksParams,
+  type KnowledgeListPacksResponse,
+  type ModelListParams,
+  type ModelListResponse,
+  type ModelPreferencesListResponse,
+  type ModelProviderAliasListResponse,
+  type ModelProviderAliasReadParams,
+  type ModelProviderAliasReadResponse,
+  type ModelProviderCatalogListResponse,
+  type ModelProviderListResponse,
+  type ModelSyncStateReadResponse,
+  type ProtocolSchemaFile,
+  type ProtocolSchemaGroup,
+  type ProjectMemoryReadParams,
+  type ProjectMemoryReadResponse,
+  type RequestId,
+  type SkillListResponse,
+  type SkillReadParams,
+  type SkillReadResponse,
+  type WorkspaceEnsureParams,
+  type WorkspaceEnsureReadyResponse,
+  type WorkspaceListResponse,
+  type WorkspacePathReadParams,
+  type WorkspaceProjectPathResolveParams,
+  type WorkspaceProjectPathResolveResponse,
+  type WorkspaceProjectsRootReadResponse,
+  type WorkspaceReadParams,
+  type WorkspaceReadResponse,
+  type WorkspaceSkillBindingsListParams,
+  type WorkspaceSkillBindingsListResponse,
+} from "./protocol.js";
+
+export * from "./protocol.js";
+
 export const DEFAULT_LISTEN_URL = "stdio://";
 export const DEFAULT_RELEASE_MANIFEST_NAME = "app-server.release.json";
 export const DEFAULT_PROTOCOL_SCHEMA_MANIFEST_NAME = "manifest.json";
-
-export const METHOD_INITIALIZE = "initialize";
-export const METHOD_INITIALIZED = "initialized";
-export const METHOD_CAPABILITY_LIST = "capability/list";
-export const METHOD_ARTIFACT_READ = "artifact/read";
-export const METHOD_EVIDENCE_EXPORT = "evidence/export";
-export const METHOD_AGENT_SESSION_LIST = "agentSession/list";
-export const METHOD_WORKSPACE_LIST = "workspace/list";
-export const METHOD_WORKSPACE_READ = "workspace/read";
-export const METHOD_WORKSPACE_BY_PATH_READ = "workspace/byPath/read";
-export const METHOD_WORKSPACE_DEFAULT_READ = "workspace/default/read";
-export const METHOD_WORKSPACE_DEFAULT_ENSURE = "workspace/default/ensure";
-export const METHOD_WORKSPACE_PROJECTS_ROOT_READ = "workspace/projectsRoot/read";
-export const METHOD_WORKSPACE_PROJECT_PATH_RESOLVE = "workspace/projectPath/resolve";
-export const METHOD_WORKSPACE_ENSURE_READY = "workspace/ensureReady";
-export const METHOD_SKILL_LIST = "skill/list";
-export const METHOD_SKILL_READ = "skill/read";
-export const METHOD_WORKSPACE_SKILL_BINDINGS_LIST = "workspaceSkillBindings/list";
-export const METHOD_AGENT_SESSION_START = "agentSession/start";
-export const METHOD_AGENT_SESSION_READ = "agentSession/read";
-export const METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start";
-export const METHOD_AGENT_SESSION_TURN_CANCEL = "agentSession/turn/cancel";
-export const METHOD_AGENT_SESSION_ACTION_RESPOND = "agentSession/action/respond";
-export const METHOD_AGENT_SESSION_EVENT = "agentSession/event";
-export const METHOD_MODEL_LIST = "model/list";
-export const METHOD_MODEL_PREFERENCES_LIST = "modelPreferences/list";
-export const METHOD_MODEL_SYNC_STATE_READ = "modelSyncState/read";
-export const METHOD_MODEL_PROVIDER_LIST = "modelProvider/list";
-export const METHOD_MODEL_PROVIDER_CATALOG_LIST = "modelProvider/catalog/list";
-export const METHOD_MODEL_PROVIDER_ALIAS_READ = "modelProviderAlias/read";
-export const METHOD_MODEL_PROVIDER_ALIAS_LIST = "modelProviderAlias/list";
-
-export type AppServerMethodKind = "request" | "notification";
-
-export type AppServerMethodSpec = {
-  method: string;
-  kind: AppServerMethodKind;
-};
-
-export const APP_SERVER_METHODS = [
-  { method: METHOD_INITIALIZE, kind: "request" },
-  { method: METHOD_INITIALIZED, kind: "notification" },
-  { method: METHOD_CAPABILITY_LIST, kind: "request" },
-  { method: METHOD_ARTIFACT_READ, kind: "request" },
-  { method: METHOD_EVIDENCE_EXPORT, kind: "request" },
-  { method: METHOD_AGENT_SESSION_LIST, kind: "request" },
-  { method: METHOD_WORKSPACE_LIST, kind: "request" },
-  { method: METHOD_WORKSPACE_READ, kind: "request" },
-  { method: METHOD_WORKSPACE_BY_PATH_READ, kind: "request" },
-  { method: METHOD_WORKSPACE_DEFAULT_READ, kind: "request" },
-  { method: METHOD_WORKSPACE_DEFAULT_ENSURE, kind: "request" },
-  { method: METHOD_WORKSPACE_PROJECTS_ROOT_READ, kind: "request" },
-  { method: METHOD_WORKSPACE_PROJECT_PATH_RESOLVE, kind: "request" },
-  { method: METHOD_WORKSPACE_ENSURE_READY, kind: "request" },
-  { method: METHOD_SKILL_LIST, kind: "request" },
-  { method: METHOD_SKILL_READ, kind: "request" },
-  { method: METHOD_WORKSPACE_SKILL_BINDINGS_LIST, kind: "request" },
-  { method: METHOD_MODEL_LIST, kind: "request" },
-  { method: METHOD_MODEL_PREFERENCES_LIST, kind: "request" },
-  { method: METHOD_MODEL_SYNC_STATE_READ, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_LIST, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_CATALOG_LIST, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_ALIAS_READ, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_ALIAS_LIST, kind: "request" },
-  { method: METHOD_AGENT_SESSION_START, kind: "request" },
-  { method: METHOD_AGENT_SESSION_READ, kind: "request" },
-  { method: METHOD_AGENT_SESSION_TURN_START, kind: "request" },
-  { method: METHOD_AGENT_SESSION_TURN_CANCEL, kind: "request" },
-  { method: METHOD_AGENT_SESSION_ACTION_RESPOND, kind: "request" },
-  { method: METHOD_AGENT_SESSION_EVENT, kind: "notification" },
-] as const satisfies readonly AppServerMethodSpec[];
-
-export const ERROR_CODES = {
-  parseError: -32700,
-  invalidRequest: -32600,
-  methodNotFound: -32601,
-  invalidParams: -32602,
-  runtimeError: -32000,
-  notInitialized: -32002,
-  alreadyInitialized: -32003,
-  sessionNotFound: -32010,
-  turnNotActive: -32011,
-  sessionAlreadyExists: -32013,
-  capabilityDenied: -32020,
-} as const;
-
-export type RequestId = number | string;
-export type RpcResult = unknown;
-export type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | JsonValue[]
-  | { [key: string]: JsonValue };
-
-export type JsonRpcRequest = {
-  id: RequestId;
-  method: string;
-  params?: unknown;
-};
-
-export type JsonRpcNotification = {
-  method: string;
-  params?: unknown;
-};
-
-export type JsonRpcResponse = {
-  id: RequestId;
-  result: RpcResult;
-};
-
-export type JsonRpcError = {
-  code: number;
-  message: string;
-  data?: unknown;
-};
-
-export type JsonRpcErrorResponse = {
-  id: RequestId;
-  error: JsonRpcError;
-};
-
-export type JsonRpcMessage =
-  | JsonRpcRequest
-  | JsonRpcNotification
-  | JsonRpcResponse
-  | JsonRpcErrorResponse;
-
-export type ClientInfo = {
-  name: string;
-  title?: string;
-  version?: string;
-};
-
-export type ClientCapabilities = {
-  eventMethods?: string[];
-  experimental?: boolean;
-};
-
-export type InitializeParams = {
-  clientInfo: ClientInfo;
-  capabilities?: ClientCapabilities;
-};
-
-export type InitializeResponse = {
-  serverInfo: ServerInfo;
-  platform: PlatformInfo;
-  capabilities: ServerCapabilities;
-};
-
-export type ServerInfo = {
-  name: string;
-  version: string;
-  protocolVersion: string;
-};
-
-export type PlatformInfo = {
-  family: string;
-  os: string;
-};
-
-export type ServerCapabilities = {
-  agentSession: boolean;
-  capabilityDiscovery: boolean;
-  artifact: boolean;
-  evidence: boolean;
-  workspace: boolean;
-};
-
-export type CapabilityListParams = {
-  appId?: string;
-  workspaceId?: string;
-  sessionId?: string;
-  cursor?: string;
-  limit?: number;
-};
-
-export type CapabilityDescriptor = {
-  id: string;
-  title: string;
-  description?: string;
-  methods: string[];
-};
-
-export type CapabilityListResponse = {
-  capabilities: CapabilityDescriptor[];
-  nextCursor?: string;
-};
-
-export type ArtifactReadParams = {
-  sessionId: string;
-  turnId?: string;
-  artifactRef?: string;
-  includeContent?: boolean;
-  cursor?: string;
-  limit?: number;
-};
-
-export type ArtifactContentStatus =
-  | "notRequested"
-  | "available"
-  | "unavailable";
-
-export type ArtifactSummary = {
-  artifactRef: string;
-  eventId: string;
-  sequence: number;
-  turnId?: string;
-  artifactId?: string;
-  path?: string;
-  title?: string;
-  kind?: string;
-  status?: string;
-  content?: string;
-  contentStatus: ArtifactContentStatus;
-  metadata?: unknown;
-};
-
-export type ArtifactReadResponse = {
-  artifacts: ArtifactSummary[];
-  nextCursor?: string;
-};
-
-export type EvidenceExportParams = {
-  sessionId: string;
-  turnId?: string;
-  includeEvents?: boolean;
-  includeArtifacts?: boolean;
-  includeEvidencePack?: boolean;
-};
-
-export type EvidenceExportResponse = {
-  session: AgentSession;
-  turns: AgentTurn[];
-  events: AgentEvent[];
-  artifacts: ArtifactSummary[];
-  exportedAt: string;
-  evidencePack?: EvidencePackSummary;
-};
-
-export type EvidencePackSummary = {
-  packRelativeRoot: string;
-  packAbsoluteRoot?: string;
-  exportedAt: string;
-  threadStatus: string;
-  latestTurnStatus?: string;
-  turnCount: number;
-  itemCount: number;
-  pendingRequestCount: number;
-  queuedTurnCount: number;
-  recentArtifactCount: number;
-  knownGaps: string[];
-  observabilitySummary?: unknown;
-  completionAuditSummary?: unknown;
-  artifacts: EvidencePackArtifact[];
-};
-
-export type EvidencePackArtifact = {
-  kind: string;
-  title: string;
-  relativePath: string;
-  absolutePath?: string;
-  bytes: number;
-};
-
-export type BusinessObjectRef = {
-  kind: string;
-  id: string;
-  title?: string;
-  uri?: string;
-  metadata?: unknown;
-};
-
-export type AgentSessionStartParams = {
-  sessionId?: string;
-  threadId?: string;
-  appId: string;
-  workspaceId?: string;
-  businessObjectRef?: BusinessObjectRef;
-  locale?: string;
-};
-
-export type AgentSessionReadParams = {
-  sessionId: string;
-  historyLimit?: number;
-  historyOffset?: number;
-  historyBeforeMessageId?: number;
-};
-
-export type AgentSessionListParams = {
-  includeArchived?: boolean;
-  archivedOnly?: boolean;
-  workspaceId?: string;
-  limit?: number;
-};
-
-export type AgentInput = {
-  text: string;
-  attachments?: AgentAttachment[];
-};
-
-export type AgentAttachment = {
-  kind: string;
-  uri?: string;
-  metadata?: unknown;
-};
-
-export type RuntimeOptions = {
-  capabilityId?: string;
-  stream?: boolean;
-  eventName?: string;
-  providerPreference?: string;
-  modelPreference?: string;
-  metadata?: unknown;
-  queuedTurnId?: string;
-  hostOptions?: unknown;
-};
-
-export type AgentSessionTurnStartParams = {
-  sessionId: string;
-  turnId?: string;
-  input: AgentInput;
-  runtimeOptions?: RuntimeOptions;
-  queueIfBusy?: boolean;
-  skipPreSubmitResume?: boolean;
-};
-
-export type AgentSessionTurnCancelParams = {
-  sessionId: string;
-  turnId: string;
-};
-
-export type AgentSessionActionType =
-  | "tool_confirmation"
-  | "ask_user"
-  | "elicitation";
-
-export type AgentSessionActionScope = {
-  sessionId?: string;
-  threadId?: string;
-  turnId?: string;
-};
-
-export type AgentSessionActionRespondParams = {
-  sessionId: string;
-  requestId: string;
-  actionType: AgentSessionActionType;
-  confirmed: boolean;
-  response?: string;
-  userData?: unknown;
-  metadata?: unknown;
-  eventName?: string;
-  actionScope?: AgentSessionActionScope;
-};
-
-export type AgentSessionStatus =
-  | "idle"
-  | "running"
-  | "waitingAction"
-  | "completed"
-  | "failed"
-  | "canceled";
-
-export type AgentSession = {
-  sessionId: string;
-  threadId: string;
-  appId: string;
-  workspaceId?: string;
-  businessObjectRef?: BusinessObjectRef;
-  status: AgentSessionStatus;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type AgentTurnStatus =
-  | "accepted"
-  | "queued"
-  | "running"
-  | "waitingAction"
-  | "completed"
-  | "failed"
-  | "canceled";
-
-export type AgentTurn = {
-  turnId: string;
-  sessionId: string;
-  threadId: string;
-  status: AgentTurnStatus;
-  startedAt?: string;
-  completedAt?: string;
-};
-
-export type AgentEvent = {
-  eventId: string;
-  sequence: number;
-  sessionId: string;
-  threadId?: string;
-  turnId?: string;
-  type: string;
-  timestamp: string;
-  payload: unknown;
-};
-
-export type AgentSessionStartResponse = {
-  session: AgentSession;
-};
-
-export type AgentSessionOverview = {
-  sessionId: string;
-  threadId?: string;
-  title?: string;
-  model: string;
-  createdAt: string;
-  updatedAt: string;
-  archivedAt?: string;
-  workspaceId?: string;
-  workingDir?: string;
-  executionStrategy?: string;
-  messagesCount: number;
-};
-
-export type AgentSessionListResponse = {
-  sessions: AgentSessionOverview[];
-};
-
-export type WorkspaceReadParams = {
-  id: string;
-};
-
-export type WorkspacePathReadParams = {
-  rootPath: string;
-};
-
-export type WorkspaceProjectPathResolveParams = {
-  name: string;
-  parentRootPath?: string;
-};
-
-export type WorkspaceEnsureParams = {
-  id: string;
-};
-
-export type WorkspaceListResponse = {
-  workspaces: unknown[];
-};
-
-export type WorkspaceReadResponse = {
-  workspace?: unknown;
-};
-
-export type WorkspaceProjectsRootReadResponse = {
-  rootPath: string;
-};
-
-export type WorkspaceProjectPathResolveResponse = {
-  rootPath: string;
-};
-
-export type WorkspaceEnsureReadyResponse = {
-  result: unknown;
-};
-
-export type SkillReadParams = {
-  skillName: string;
-};
-
-export type SkillListResponse = {
-  skills: unknown[];
-};
-
-export type SkillReadResponse = {
-  skill: unknown;
-};
-
-export type WorkspaceSkillBindingsListParams = {
-  workspaceRoot: string;
-  caller?: string;
-  workbench?: boolean;
-  browserAssist?: boolean;
-};
-
-export type WorkspaceSkillBindingsListResponse = {
-  bindings: unknown;
-};
-
-export type AgentSessionReadResponse = {
-  session: AgentSession;
-  turns: AgentTurn[];
-  detail?: unknown;
-};
-
-export type AgentSessionTurnStartResponse = {
-  turn: AgentTurn;
-};
-
-export type AgentSessionTurnCancelResponse = Record<string, never>;
-export type AgentSessionActionRespondResponse = Record<string, never>;
-
-export type AgentSessionEventParams = {
-  event: AgentEvent;
-};
-
-export type AgentSessionEventNotification = JsonRpcNotification & {
-  method: typeof METHOD_AGENT_SESSION_EVENT;
-  params: AgentSessionEventParams;
-};
-
-export type ModelListParams = {
-  providerId?: string;
-  tier?: string;
-};
-
-export type ModelListResponse = {
-  models: unknown[];
-};
-
-export type ModelPreferencesListResponse = {
-  preferences: unknown[];
-};
-
-export type ModelSyncStateReadResponse = {
-  syncState: unknown;
-};
-
-export type ModelProviderListResponse = {
-  providers: unknown[];
-};
-
-export type ModelProviderCatalogListResponse = {
-  providers: unknown[];
-};
-
-export type ModelProviderAliasReadParams = {
-  provider: string;
-};
-
-export type ModelProviderAliasReadResponse = {
-  config?: unknown;
-};
-
-export type ModelProviderAliasListResponse = {
-  configs: Record<string, unknown>;
-};
 
 export type SidecarLaunchConfig = {
   binaryPath: string;
@@ -586,15 +158,16 @@ export type ResolveSidecarBinaryPathOptions = {
   arch?: NodeJS.Architecture | string;
 };
 
-export type ResolveSidecarFromManifestOptions = ResolveSidecarBinaryPathOptions & {
-  listenUrl?: string;
-  backendMode?: SidecarLaunchConfig["backendMode"];
-  backendCommand?: string;
-  backendArgs?: string[];
-  backendTimeoutMs?: number;
-  appPolicyPath?: string;
-  expectedProtocolVersion?: string;
-};
+export type ResolveSidecarFromManifestOptions =
+  ResolveSidecarBinaryPathOptions & {
+    listenUrl?: string;
+    backendMode?: SidecarLaunchConfig["backendMode"];
+    backendCommand?: string;
+    backendArgs?: string[];
+    backendTimeoutMs?: number;
+    appPolicyPath?: string;
+    expectedProtocolVersion?: string;
+  };
 
 export const DEFAULT_STANDALONE_BACKEND_MODE: NonNullable<
   SidecarLaunchConfig["backendMode"]
@@ -736,25 +309,6 @@ export type AppServerReleaseManifest = {
   artifacts: AppServerReleaseArtifact[];
 };
 
-export type ProtocolSchemaGroup = "jsonrpc" | "v0";
-
-export type AppServerProtocolSchemaManifest = {
-  protocolVersion: string;
-  methods: AppServerMethodSpec[];
-  jsonRpc: {
-    version: string;
-    sendsJsonRpcVersionField: boolean;
-    envelopes: string[];
-  };
-  schemas: Record<ProtocolSchemaGroup, string[]>;
-};
-
-export type ProtocolSchemaFile = {
-  group: ProtocolSchemaGroup;
-  typeName: string;
-  path: string;
-};
-
 export class AppServerClient {
   #nextRequestId: number;
 
@@ -824,6 +378,22 @@ export class AppServerClient {
     params: WorkspaceSkillBindingsListParams,
   ): JsonRpcRequest {
     return this.request(METHOD_WORKSPACE_SKILL_BINDINGS_LIST, params);
+  }
+
+  listAgentAppInstalled(): JsonRpcRequest {
+    return this.request(METHOD_AGENT_APP_INSTALLED_LIST, {});
+  }
+
+  listKnowledgePacks(params: KnowledgeListPacksParams): JsonRpcRequest {
+    return this.request(METHOD_KNOWLEDGE_PACK_LIST, params);
+  }
+
+  listAutomationJobs(): JsonRpcRequest {
+    return this.request(METHOD_AUTOMATION_JOB_LIST, {});
+  }
+
+  readProjectMemory(params: ProjectMemoryReadParams): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_MEMORY_READ, params);
   }
 
   readArtifacts(params: ArtifactReadParams): JsonRpcRequest {
@@ -1057,6 +627,48 @@ export class AppServerConnection {
     );
   }
 
+  async listAgentAppInstalled(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentAppInstalledListResponse>> {
+    return await this.request<AgentAppInstalledListResponse>(
+      this.client.listAgentAppInstalled(),
+      METHOD_AGENT_APP_INSTALLED_LIST,
+      options,
+    );
+  }
+
+  async listKnowledgePacks(
+    params: KnowledgeListPacksParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<KnowledgeListPacksResponse>> {
+    return await this.request<KnowledgeListPacksResponse>(
+      this.client.listKnowledgePacks(params),
+      METHOD_KNOWLEDGE_PACK_LIST,
+      options,
+    );
+  }
+
+  async listAutomationJobs(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AutomationJobListResponse>> {
+    return await this.request<AutomationJobListResponse>(
+      this.client.listAutomationJobs(),
+      METHOD_AUTOMATION_JOB_LIST,
+      options,
+    );
+  }
+
+  async readProjectMemory(
+    params: ProjectMemoryReadParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectMemoryReadResponse>> {
+    return await this.request<ProjectMemoryReadResponse>(
+      this.client.readProjectMemory(params),
+      METHOD_PROJECT_MEMORY_READ,
+      options,
+    );
+  }
+
   async readArtifacts(
     params: ArtifactReadParams,
     options: AppServerRequestOptions = {},
@@ -1211,11 +823,10 @@ export class AppServerConnection {
   ): Promise<AppServerRequestResult<T>> {
     const messages: JsonRpcMessage[] = [];
     const notifications: JsonRpcNotification[] = [];
-    const deferredMessages: JsonRpcMessage[] = [];
 
     try {
       for (;;) {
-        const message = await this.nextMessage(options.timeoutMs);
+        const message = await this.#nextMessageForRequest(id, options.timeoutMs);
         messages.push(message);
 
         if (isJsonRpcNotification(message)) {
@@ -1224,11 +835,15 @@ export class AppServerConnection {
         }
 
         if (isJsonRpcErrorResponse(message) && message.id === id) {
-          throw new AppServerRequestError(method, message, [...notifications], [...messages]);
+          throw new AppServerRequestError(
+            method,
+            message,
+            [...notifications],
+            [...messages],
+          );
         }
 
         if (isJsonRpcResponse(message) && message.id === id) {
-          this.#prependBufferedMessages(deferredMessages);
           return {
             id,
             result: message.result as T,
@@ -1237,11 +852,8 @@ export class AppServerConnection {
             messages,
           };
         }
-
-        deferredMessages.push(message);
       }
     } catch (error) {
-      this.#prependBufferedMessages(deferredMessages);
       throw error;
     }
   }
@@ -1277,11 +889,73 @@ export class AppServerConnection {
     );
   }
 
+  async #nextMessageForRequest(
+    id: RequestId,
+    timeoutMs?: number,
+  ): Promise<JsonRpcMessage> {
+    const startedAt = Date.now();
+
+    for (;;) {
+      const buffered = this.#shiftBufferedRequestMessage(id);
+      if (buffered) {
+        return buffered;
+      }
+
+      const remainingTimeoutMs =
+        timeoutMs === undefined
+          ? undefined
+          : Math.max(1, timeoutMs - (Date.now() - startedAt));
+      const message = await this.#withTransportRead<JsonRpcMessage | undefined>(
+        remainingTimeoutMs,
+        () => this.#shiftBufferedRequestMessage(id),
+        (incoming) => {
+          if (
+            isJsonRpcNotification(incoming) ||
+            (isJsonRpcResponse(incoming) && incoming.id === id) ||
+            (isJsonRpcErrorResponse(incoming) && incoming.id === id)
+          ) {
+            return incoming;
+          }
+          this.#prependBufferedMessages([incoming]);
+          return undefined;
+        },
+      );
+
+      if (message) {
+        return message;
+      }
+
+      await this.#yieldReadTurn();
+    }
+  }
+
   #prependBufferedMessages(messages: JsonRpcMessage[]): void {
     if (messages.length === 0) {
       return;
     }
     this.#bufferedMessages = [...messages, ...this.#bufferedMessages];
+  }
+
+  #shiftBufferedRequestMessage(id: RequestId): JsonRpcMessage | undefined {
+    const notificationIndex = this.#bufferedMessages.findIndex(
+      isJsonRpcNotification,
+    );
+    if (notificationIndex >= 0) {
+      const [message] = this.#bufferedMessages.splice(notificationIndex, 1);
+      return message;
+    }
+
+    const responseIndex = this.#bufferedMessages.findIndex((message) => {
+      return (
+        (isJsonRpcResponse(message) || isJsonRpcErrorResponse(message)) &&
+        message.id === id
+      );
+    });
+    if (responseIndex < 0) {
+      return undefined;
+    }
+    const [message] = this.#bufferedMessages.splice(responseIndex, 1);
+    return message;
   }
 
   #shiftBufferedNotification(): JsonRpcNotification | undefined {
@@ -1315,6 +989,12 @@ export class AppServerConnection {
       releaseRead();
     }
   }
+
+  async #yieldReadTurn(): Promise<void> {
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
+  }
 }
 
 export class AppServerAgentEventRouter {
@@ -1339,45 +1019,17 @@ export class AppServerAgentEventRouter {
   }
 }
 
-export function request(id: RequestId, method: string, params?: unknown): JsonRpcRequest {
-  return compactParams({ id, method, params });
-}
-
-export function notification(method: string, params?: unknown): JsonRpcNotification {
-  return compactParams({ method, params });
-}
-
-export function isAppServerRequestMethod(method: string): boolean {
-  return APP_SERVER_METHODS.some(
-    (spec) => spec.kind === "request" && spec.method === method,
-  );
-}
-
-export function isAppServerNotificationMethod(method: string): boolean {
-  return APP_SERVER_METHODS.some(
-    (spec) => spec.kind === "notification" && spec.method === method,
-  );
-}
-
-function normalizeMethodSpecs(methods: readonly AppServerMethodSpec[]): string[] {
+function normalizeMethodSpecs(
+  methods: readonly AppServerMethodSpec[],
+): string[] {
   return methods
     .map((spec) => `${spec.kind}:${spec.method}`)
     .sort((left, right) => left.localeCompare(right));
 }
 
-export function encodeMessage(message: JsonRpcMessage): string {
-  return `${JSON.stringify(message)}\n`;
-}
-
-export function decodeMessage(line: string): JsonRpcMessage {
-  const trimmed = line.trim();
-  if (trimmed.length === 0) {
-    throw new Error("empty JSON-RPC line");
-  }
-  return JSON.parse(trimmed) as JsonRpcMessage;
-}
-
-export function sidecarBinaryName(platform: NodeJS.Platform | string = process.platform): string {
+export function sidecarBinaryName(
+  platform: NodeJS.Platform | string = process.platform,
+): string {
   return platform === "win32" ? "app-server.exe" : "app-server";
 }
 
@@ -1385,7 +1037,11 @@ export function defaultPackagedSidecarRelativePath(
   platform: NodeJS.Platform | string = process.platform,
   arch: NodeJS.Architecture | string = process.arch,
 ): string {
-  return path.join("app-server", platformKey(platform, arch), sidecarBinaryName(platform));
+  return path.join(
+    "app-server",
+    platformKey(platform, arch),
+    sidecarBinaryName(platform),
+  );
 }
 
 export function resolveSidecarBinaryPath(
@@ -1424,7 +1080,10 @@ export function resolveSidecarBinaryPath(
   return undefined;
 }
 
-export function stdioSidecar(binaryPath: string, appPolicyPath?: string): SidecarLaunchConfig {
+export function stdioSidecar(
+  binaryPath: string,
+  appPolicyPath?: string,
+): SidecarLaunchConfig {
   return {
     binaryPath,
     listenUrl: DEFAULT_LISTEN_URL,
@@ -1459,10 +1118,15 @@ export function sidecarArgs(config: SidecarLaunchConfig): string[] {
   if (config.backendMode === "external" && config.backendCommand) {
     args.push("--backend-command", config.backendCommand);
   }
-  for (const backendArg of config.backendMode === "external" ? config.backendArgs ?? [] : []) {
+  for (const backendArg of config.backendMode === "external"
+    ? (config.backendArgs ?? [])
+    : []) {
     args.push("--backend-arg", backendArg);
   }
-  if (config.backendMode === "external" && config.backendTimeoutMs !== undefined) {
+  if (
+    config.backendMode === "external" &&
+    config.backendTimeoutMs !== undefined
+  ) {
     args.push("--backend-timeout-ms", String(config.backendTimeoutMs));
   }
   if (config.appPolicyPath) {
@@ -1501,8 +1165,14 @@ export function resolveSidecarFromReleaseManifest(
   manifest: AppServerReleaseManifest,
   options: ResolveSidecarFromManifestOptions = {},
 ): ResolvedSidecarLaunchConfig | undefined {
-  assertCompatibleManifest(manifest, options.expectedProtocolVersion ?? PROTOCOL_VERSION);
-  const artifact = findReleaseArtifact(manifest, platformKey(options.platform, options.arch));
+  assertCompatibleManifest(
+    manifest,
+    options.expectedProtocolVersion ?? PROTOCOL_VERSION,
+  );
+  const artifact = findReleaseArtifact(
+    manifest,
+    platformKey(options.platform, options.arch),
+  );
   if (!artifact) {
     return undefined;
   }
@@ -1517,11 +1187,18 @@ export function resolveSidecarFromReleaseManifest(
       binaryPath: binaryPath.binaryPath,
       listenUrl: options.listenUrl ?? DEFAULT_LISTEN_URL,
       backendMode: options.backendMode ?? DEFAULT_STANDALONE_BACKEND_MODE,
-      ...(options.backendCommand ? { backendCommand: options.backendCommand } : {}),
+      ...(options.backendCommand
+        ? { backendCommand: options.backendCommand }
+        : {}),
       ...(options.backendArgs ? { backendArgs: options.backendArgs } : {}),
-      ...(options.backendTimeoutMs !== undefined ? { backendTimeoutMs: options.backendTimeoutMs } : {}),
-      ...(options.appPolicyPath ? { appPolicyPath: options.appPolicyPath } : {}),
-      expectedSha256: binaryPath.source === "resources" ? artifact.sha256 : undefined,
+      ...(options.backendTimeoutMs !== undefined
+        ? { backendTimeoutMs: options.backendTimeoutMs }
+        : {}),
+      ...(options.appPolicyPath
+        ? { appPolicyPath: options.appPolicyPath }
+        : {}),
+      expectedSha256:
+        binaryPath.source === "resources" ? artifact.sha256 : undefined,
       artifact,
     },
     artifact,
@@ -1529,14 +1206,18 @@ export function resolveSidecarFromReleaseManifest(
   };
 }
 
-export async function readReleaseManifest(path: string): Promise<AppServerReleaseManifest> {
+export async function readReleaseManifest(
+  path: string,
+): Promise<AppServerReleaseManifest> {
   return JSON.parse(await readFile(path, "utf8")) as AppServerReleaseManifest;
 }
 
 export async function readProtocolSchemaManifest(
   manifestPath: string,
 ): Promise<AppServerProtocolSchemaManifest> {
-  return JSON.parse(await readFile(manifestPath, "utf8")) as AppServerProtocolSchemaManifest;
+  return JSON.parse(
+    await readFile(manifestPath, "utf8"),
+  ) as AppServerProtocolSchemaManifest;
 }
 
 export async function resolveSidecarFromReleaseManifestFile(
@@ -1625,13 +1306,18 @@ export async function sha256File(path: string): Promise<string> {
   return sha256Hex(await readFile(path));
 }
 
-export function assertSha256(actualSha256: string, expectedSha256: string): void {
+export function assertSha256(
+  actualSha256: string,
+  expectedSha256: string,
+): void {
   if (normalizeSha256(actualSha256) !== normalizeSha256(expectedSha256)) {
     throw new Error("app-server sha256 mismatch");
   }
 }
 
-export async function assertSidecarFileSha256(config: SidecarLaunchConfig): Promise<void> {
+export async function assertSidecarFileSha256(
+  config: SidecarLaunchConfig,
+): Promise<void> {
   if (!config.expectedSha256) {
     throw new Error("sidecar expectedSha256 is required");
   }
@@ -1667,7 +1353,9 @@ export async function connectAppServerSidecar(
   try {
     const initializeRequest = client.initialize(initializeParams);
     sidecar.send(initializeRequest);
-    const initializeMessage = await sidecar.nextMessage(options.initializeTimeoutMs);
+    const initializeMessage = await sidecar.nextMessage(
+      options.initializeTimeoutMs,
+    );
     const initializeResponse = expectResponseResult<InitializeResponse>(
       initializeMessage,
       initializeRequest.id,
@@ -1697,7 +1385,10 @@ export async function startPackagedAppServerSidecar(
 ): Promise<StartedPackagedAppServerSidecar> {
   const manifestPath =
     options.manifestPath ??
-    defaultReleaseManifestPath(options.resourcesPath, options.manifestRelativePath);
+    defaultReleaseManifestPath(
+      options.resourcesPath,
+      options.manifestRelativePath,
+    );
   const resolved = await resolveSidecarFromReleaseManifestFile(manifestPath, {
     ...options,
     allowEnvOverride: options.allowEnvOverride ?? false,
@@ -1802,7 +1493,10 @@ export class AppServerSidecarLifecycle {
         attempt: retryAttempt,
         error,
       });
-      if (this.#stopped || !shouldRestartSidecar(retryAttempt, this.#options.restartPolicy)) {
+      if (
+        this.#stopped ||
+        !shouldRestartSidecar(retryAttempt, this.#options.restartPolicy)
+      ) {
         throw error;
       }
       await this.#waitBeforeRestart({
@@ -1863,7 +1557,10 @@ export class AppServerSidecarLifecycle {
   }
 
   async #waitBeforeRestart(event: SidecarExitEvent): Promise<void> {
-    const delayMs = sidecarRestartDelayMs(event.attempt, this.#options.restartPolicy);
+    const delayMs = sidecarRestartDelayMs(
+      event.attempt,
+      this.#options.restartPolicy,
+    );
     this.#options.onRestartScheduled?.({ ...event, delayMs });
     await (this.#options.sleep ?? sleep)(delayMs);
   }
@@ -1902,7 +1599,11 @@ export class AppServerSidecar {
     child.once("exit", (code, signal) => {
       this.#closed = true;
       if (this.#waiters.length > 0) {
-        this.#rejectWaiters(new Error(`app-server exited before next message: code=${code}, signal=${signal}`));
+        this.#rejectWaiters(
+          new Error(
+            `app-server exited before next message: code=${code}, signal=${signal}`,
+          ),
+        );
       }
     });
   }
@@ -1929,8 +1630,14 @@ export class AppServerSidecar {
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.#waiters = this.#waiters.filter((waiter) => waiter.timer !== timer);
-        reject(new Error(`timed out waiting for app-server message after ${timeoutMs}ms`));
+        this.#waiters = this.#waiters.filter(
+          (waiter) => waiter.timer !== timer,
+        );
+        reject(
+          new Error(
+            `timed out waiting for app-server message after ${timeoutMs}ms`,
+          ),
+        );
       }, timeoutMs);
       this.#waiters.push({ resolve, reject, timer });
     });
@@ -1940,10 +1647,17 @@ export class AppServerSidecar {
     if (this.child.exitCode !== null || this.child.signalCode !== null) {
       return;
     }
-    await withTimeout(once(this.child, "exit"), timeoutMs, "timed out waiting for app-server exit");
+    await withTimeout(
+      once(this.child, "exit"),
+      timeoutMs,
+      "timed out waiting for app-server exit",
+    );
   }
 
-  async close(signal: NodeJS.Signals = "SIGTERM", timeoutMs = 5_000): Promise<void> {
+  async close(
+    signal: NodeJS.Signals = "SIGTERM",
+    timeoutMs = 5_000,
+  ): Promise<void> {
     if (this.child.exitCode === null && this.child.signalCode === null) {
       this.child.kill(signal);
       try {
@@ -1964,7 +1678,9 @@ export class AppServerSidecar {
     try {
       message = decodeMessage(line);
     } catch (error) {
-      this.#rejectWaiters(error instanceof Error ? error : new Error(String(error)));
+      this.#rejectWaiters(
+        error instanceof Error ? error : new Error(String(error)),
+      );
       return;
     }
 
@@ -1985,14 +1701,6 @@ export class AppServerSidecar {
   }
 }
 
-function compactParams<T extends { params?: unknown }>(value: T): T {
-  if (value.params === undefined) {
-    const { params: _params, ...rest } = value;
-    return rest as T;
-  }
-  return value;
-}
-
 function normalizeSha256(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -2011,41 +1719,6 @@ function expectResponseResult<T>(
   return message.result as T;
 }
 
-export function isJsonRpcNotification(
-  message: JsonRpcMessage,
-): message is JsonRpcNotification {
-  return "method" in message && !("id" in message);
-}
-
-export function isAgentSessionEventNotification(
-  message: JsonRpcMessage,
-): message is AgentSessionEventNotification {
-  return Boolean(agentSessionEventNotification(message));
-}
-
-export function agentSessionEventNotification(
-  message: JsonRpcMessage,
-): AgentSessionEventNotification | undefined {
-  if (!isJsonRpcNotification(message) || message.method !== METHOD_AGENT_SESSION_EVENT) {
-    return undefined;
-  }
-  const params = message.params as Partial<AgentSessionEventParams> | undefined;
-  if (!params || !params.event) {
-    return undefined;
-  }
-  return message as AgentSessionEventNotification;
-}
-
-export function isJsonRpcResponse(message: JsonRpcMessage): message is JsonRpcResponse {
-  return "id" in message && "result" in message;
-}
-
-export function isJsonRpcErrorResponse(
-  message: JsonRpcMessage,
-): message is JsonRpcErrorResponse {
-  return "id" in message && "error" in message;
-}
-
 function assertInitializeResponseProtocol(
   response: InitializeResponse,
   expectedProtocolVersion: string,
@@ -2057,7 +1730,11 @@ function assertInitializeResponseProtocol(
   }
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   try {
     return await Promise.race([

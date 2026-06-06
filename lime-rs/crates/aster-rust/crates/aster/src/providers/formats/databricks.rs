@@ -511,9 +511,10 @@ fn split_reasoning_effort_suffix(model_name: &str) -> (String, Option<String>) {
     };
 
     match *last_part {
-        "low" | "medium" | "high" if parts.len() > 1 => {
-            (parts[..parts.len() - 1].join("-"), Some(last_part.to_string()))
-        }
+        "low" | "medium" | "high" if parts.len() > 1 => (
+            parts[..parts.len() - 1].join("-"),
+            Some(last_part.to_string()),
+        ),
         _ => (model_name.to_string(), None),
     }
 }
@@ -534,7 +535,10 @@ fn resolve_reasoning_effort(
         if explicit_effort.is_some() {
             return (model_name, explicit_effort);
         }
-        return (model_name, Some(suffix_effort.unwrap_or_else(|| "medium".to_string())));
+        return (
+            model_name,
+            Some(suffix_effort.unwrap_or_else(|| "medium".to_string())),
+        );
     }
 
     (model_config.model_name.to_string(), explicit_effort)

@@ -4,7 +4,8 @@ export const IPC_DIALOG_OPEN_CHANNEL = "app:dialog:open";
 export const IPC_DIALOG_SAVE_CHANNEL = "app:dialog:save";
 export const IPC_SHELL_OPEN_CHANNEL = "app:shell:open";
 export const IPC_WINDOW_COMMAND_CHANNEL = "app:window:command";
-export const IPC_GLOBAL_SHORTCUT_COMMAND_CHANNEL = "app:global-shortcut:command";
+export const IPC_GLOBAL_SHORTCUT_COMMAND_CHANNEL =
+  "app:global-shortcut:command";
 export const IPC_DEEP_LINK_GET_URLS_CHANNEL = "app:deep-link:get-urls";
 export const IPC_DEEP_LINK_GET_CURRENT_CHANNEL = "app:deep-link:get-current";
 
@@ -12,6 +13,15 @@ export const ELECTRON_HOST_COMMANDS = [
   "app_server_handle_json_lines",
   "app_server_drain_events",
   "aster_agent_init",
+  "sync_tray_model_shortcuts",
+  "take_pending_skill_package_open_requests",
+  "agent_runtime_create_session",
+  "agent_runtime_submit_turn",
+  "agent_runtime_interrupt_turn",
+  "agent_runtime_update_session",
+  "agent_runtime_respond_action",
+  "agent_runtime_get_thread_read",
+  "agent_runtime_export_evidence_pack",
   "agent_runtime_get_tool_inventory",
   "agent_runtime_list_sessions",
   "agent_runtime_get_session",
@@ -20,10 +30,16 @@ export const ELECTRON_HOST_COMMANDS = [
   "agent_app_get_ui_runtime_status",
   "agent_app_start_ui_runtime",
   "agent_app_stop_ui_runtime",
+  "fetch_provider_models_auto",
   "get_api_key_providers",
+  "get_automation_health",
+  "get_automation_jobs",
+  "get_automation_scheduler_config",
+  "get_automation_status",
   "get_config",
   "get_default_provider",
   "get_all_alias_configs",
+  "get_local_skills_for_app",
   "get_model_preferences",
   "get_model_registry",
   "get_model_registry_provider_ids",
@@ -32,12 +48,15 @@ export const ELECTRON_HOST_COMMANDS = [
   "get_models_for_provider",
   "get_or_create_default_project",
   "get_provider_alias_config",
+  "get_provider_ui_state",
   "get_system_provider_catalog",
   "get_skill_detail",
   "knowledge_list_packs",
   "list_executable_skills",
+  "project_memory_get",
   "report_frontend_debug_log",
   "save_config",
+  "set_provider_ui_state",
   "workspace_ensure_default_ready",
   "workspace_ensure_ready",
   "workspace_get",
@@ -72,15 +91,29 @@ export const ELECTRON_APP_SERVER_COMMANDS = [
 export type ElectronAppServerCommand =
   (typeof ELECTRON_APP_SERVER_COMMANDS)[number];
 
-export const ELECTRON_APP_SERVER_TRUTH_ADAPTER_COMMANDS = [
+export const ELECTRON_APP_SERVER_TRUTH_BRIDGE_COMMANDS = [
   "aster_agent_init",
+  "agent_app_list_installed",
+  "agent_runtime_create_session",
+  "agent_runtime_submit_turn",
+  "agent_runtime_interrupt_turn",
+  "agent_runtime_update_session",
+  "agent_runtime_respond_action",
+  "agent_runtime_get_thread_read",
+  "agent_runtime_export_evidence_pack",
   "agent_runtime_get_tool_inventory",
   "agent_runtime_list_sessions",
   "agent_runtime_get_session",
   "agent_runtime_list_workspace_skill_bindings",
+  "fetch_provider_models_auto",
   "get_api_key_providers",
   "get_all_alias_configs",
+  "get_automation_health",
+  "get_automation_jobs",
+  "get_automation_scheduler_config",
+  "get_automation_status",
   "get_default_provider",
+  "get_local_skills_for_app",
   "get_model_preferences",
   "get_model_registry",
   "get_model_registry_provider_ids",
@@ -90,7 +123,9 @@ export const ELECTRON_APP_SERVER_TRUTH_ADAPTER_COMMANDS = [
   "get_provider_alias_config",
   "get_system_provider_catalog",
   "get_skill_detail",
+  "knowledge_list_packs",
   "list_executable_skills",
+  "project_memory_get",
   "workspace_ensure_default_ready",
   "workspace_ensure_ready",
   "workspace_get",
@@ -101,8 +136,8 @@ export const ELECTRON_APP_SERVER_TRUTH_ADAPTER_COMMANDS = [
   "workspace_resolve_project_path",
 ] as const;
 
-export type ElectronAppServerTruthAdapterCommand =
-  (typeof ELECTRON_APP_SERVER_TRUTH_ADAPTER_COMMANDS)[number];
+export type ElectronAppServerTruthBridgeCommand =
+  (typeof ELECTRON_APP_SERVER_TRUTH_BRIDGE_COMMANDS)[number];
 
 export const ELECTRON_UPDATE_COMMANDS = [
   "check_for_updates",

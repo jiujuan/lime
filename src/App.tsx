@@ -31,6 +31,7 @@ import { useAppNavigation } from "./hooks/useAppNavigation";
 import { useAppShellLayout } from "./hooks/useAppShellLayout";
 import { useAppStartupEffects } from "./hooks/useAppStartupEffects";
 import { useCompanionProviderBridge } from "./hooks/useCompanionProviderBridge";
+import { useCompanionEntryEnabled } from "./hooks/useCompanionEntryEnabled";
 import { useGlobalTrayModelSync } from "./hooks/useGlobalTrayModelSync";
 import { useOemLimeHubProviderSync } from "./hooks/useOemLimeHubProviderSync";
 import { useSkillPackageOpenRequests } from "./hooks/useSkillPackageOpenRequests";
@@ -137,6 +138,7 @@ function AppContent() {
 
   const { t } = useTranslation("common");
   const hasDesktopHostRuntime = hasDesktopHostInvokeCapability();
+  const companionEntryEnabled = useCompanionEntryEnabled();
   const reserveMacWindowControls = shouldReserveMacWindowControls();
   const [showSplash, setShowSplash] = useState(true);
   const {
@@ -189,6 +191,7 @@ function AppContent() {
     pageParams,
   });
   useCompanionProviderBridge({
+    enabled: companionEntryEnabled,
     onNavigate: handleNavigate,
   });
   useSkillPackageOpenRequests({
@@ -364,7 +367,7 @@ function AppContent() {
   });
 
   const { error: registryError, refresh: _refreshRegistry } = useRelayRegistry({
-    autoLoad: hasDesktopHostRuntime,
+    autoLoad: false,
   });
   useAppStartupEffects({
     currentPage,

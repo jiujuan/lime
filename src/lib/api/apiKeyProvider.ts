@@ -7,15 +7,34 @@
  * **Validates: Requirements 9.1**
  */
 
+import { AppServerClient } from "@/lib/api/appServer";
 import { safeInvoke } from "@/lib/dev-bridge";
 import type { ProviderDeclaredPromptCacheMode } from "@/lib/types/provider";
+import {
+  METHOD_MODEL_PROVIDER_CATALOG_LIST,
+  METHOD_MODEL_PROVIDER_LIST,
+  type ModelProviderCatalogListResponse as AppServerModelProviderCatalogListResponse,
+  type ModelProviderListResponse as AppServerModelProviderListResponse,
+} from "../../../packages/app-server-client/src/protocol";
+
+type ApiKeyProviderAppServerClient = Pick<AppServerClient, "request">;
 
 interface ProviderQueryOptions {
   forceRefresh?: boolean;
+  appServerClient?: ApiKeyProviderAppServerClient;
 }
 
 let providersCache: ProviderWithKeysDisplay[] | null = null;
 let providersLoadingPromise: Promise<ProviderWithKeysDisplay[]> | null = null;
+
+async function requestApiKeyProviderAppServer<T>(
+  method: string,
+  params: unknown,
+  appServerClient: ApiKeyProviderAppServerClient = new AppServerClient(),
+): Promise<T> {
+  const response = await appServerClient.request<T>(method, params);
+  return response.result;
+}
 
 function cloneProviderList(
   providers: ProviderWithKeysDisplay[],
@@ -30,6 +49,38 @@ function cloneProviderList(
       : [],
     prompt_cache_mode: provider.prompt_cache_mode ?? null,
   }));
+}
+
+function normalizeModelProviderListResponse(
+  response: AppServerModelProviderListResponse | null | undefined,
+): ProviderWithKeysDisplay[] {
+  if (!response || typeof response !== "object") {
+    throw new Error("App Server modelProvider/list did not return providers");
+  }
+
+  if (!Array.isArray(response.providers)) {
+    throw new Error("App Server modelProvider/list did not return providers");
+  }
+
+  return response.providers as ProviderWithKeysDisplay[];
+}
+
+function normalizeModelProviderCatalogListResponse(
+  response: AppServerModelProviderCatalogListResponse | null | undefined,
+): SystemProviderCatalogItem[] {
+  if (!response || typeof response !== "object") {
+    throw new Error(
+      "App Server modelProvider/catalog/list did not return providers",
+    );
+  }
+
+  if (!Array.isArray(response.providers)) {
+    throw new Error(
+      "App Server modelProvider/catalog/list did not return providers",
+    );
+  }
+
+  return response.providers as SystemProviderCatalogItem[];
 }
 
 export function invalidateApiKeyProviderCache(): void {
@@ -49,16 +100,20 @@ async function loadProviders(
   }
 
   if (!providersLoadingPromise) {
-    providersLoadingPromise = safeInvoke<ProviderWithKeysDisplay[]>(
-      "get_api_key_providers",
-    )
-      .then((providers) => {
-        providersCache = cloneProviderList(providers);
-        return providersCache;
-      })
-      .finally(() => {
-        providersLoadingPromise = null;
-      });
+    providersLoadingPromise =
+      requestApiKeyProviderAppServer<AppServerModelProviderListResponse>(
+        METHOD_MODEL_PROVIDER_LIST,
+        {},
+        options.appServerClient,
+      )
+        .then(normalizeModelProviderListResponse)
+        .then((providers) => {
+          providersCache = cloneProviderList(providers);
+          return providersCache;
+        })
+        .finally(() => {
+          providersLoadingPromise = null;
+        });
   }
 
   return cloneProviderList(await providersLoadingPromise);
@@ -217,7 +272,12 @@ export const apiKeyProviderApi = {
    * 获取系统 Provider Catalog
    */
   async getSystemProviderCatalog(): Promise<SystemProviderCatalogItem[]> {
-    return safeInvoke("get_system_provider_catalog");
+    const response =
+      await requestApiKeyProviderAppServer<AppServerModelProviderCatalogListResponse>(
+        METHOD_MODEL_PROVIDER_CATALOG_LIST,
+        {},
+      );
+    return normalizeModelProviderCatalogListResponse(response);
   },
 
   /**

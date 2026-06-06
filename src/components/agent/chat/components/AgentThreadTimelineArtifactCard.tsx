@@ -14,6 +14,10 @@ import {
   resolveArtifactProtocolDocumentPayload,
   resolveArtifactProtocolPreviewText,
 } from "@/lib/artifact-protocol";
+import {
+  readAgentRuntimeTimelineArtifactContent,
+  type AgentRuntimeTimelineArtifactContent,
+} from "@/lib/api/agentRuntime/appServerArtifactClient";
 import type { AgentThreadItem } from "../types";
 import {
   resolveTimelineArtifactNavigation,
@@ -32,6 +36,9 @@ interface AgentThreadTimelineArtifactCardProps {
   timestamp?: string | null;
   onFileClick?: (fileName: string, content: string) => void;
   onOpenArtifactFromTimeline?: (target: ArtifactTimelineOpenTarget) => void;
+  readTimelineArtifactContent?: (
+    item: Extract<AgentThreadItem, { type: "file_artifact" }>,
+  ) => Promise<AgentRuntimeTimelineArtifactContent | null>;
   sourceMessageId?: string;
   onSaveFileArtifactAsKnowledge?: (source: {
     messageId: string;
@@ -110,7 +117,11 @@ function readMetadataArray(
 }
 
 function resolveVersionDiffChangedBlockCount(
-  diff: ArtifactDocumentVersionDiff | Record<string, unknown> | null | undefined,
+  diff:
+    | ArtifactDocumentVersionDiff
+    | Record<string, unknown>
+    | null
+    | undefined,
 ): number {
   const record = asRecord(diff);
   if (!record) {
@@ -327,6 +338,7 @@ export function AgentThreadTimelineArtifactCard({
   timestamp,
   onFileClick,
   onOpenArtifactFromTimeline,
+  readTimelineArtifactContent = readAgentRuntimeTimelineArtifactContent,
   sourceMessageId,
   onSaveFileArtifactAsKnowledge,
 }: AgentThreadTimelineArtifactCardProps) {
@@ -424,10 +436,8 @@ export function AgentThreadTimelineArtifactCard({
       "validationIssueCount",
       "validation_issue_count",
     ]) ||
-    readMetadataArray(metadata, [
-      "validationIssues",
-      "validation_issues",
-    ])?.length ||
+    readMetadataArray(metadata, ["validationIssues", "validation_issues"])
+      ?.length ||
     0;
   const metadataPreview = readMetadataText(metadata, [
     "previewText",
@@ -458,7 +468,9 @@ export function AgentThreadTimelineArtifactCard({
     currentVersion?.status || document?.status || metadataStatus,
   );
   const versionNo = currentVersion?.versionNo || metadataVersionNo;
-  const hasCheckpointFact = Boolean(snapshotPath || versionNo || metadataVersionId);
+  const hasCheckpointFact = Boolean(
+    snapshotPath || versionNo || metadataVersionId,
+  );
   const blockCount = document?.blocks.length || 0;
   const sourceCount = document?.sources.length || 0;
   const knowledgeDocumentSource = resolveKnowledgeDocumentSource({
@@ -469,6 +481,30 @@ export function AgentThreadTimelineArtifactCard({
   const canSaveAsKnowledge = Boolean(
     onSaveFileArtifactAsKnowledge && sourceMessageId && knowledgeDocumentSource,
   );
+  const resolveOpenTarget = async (
+    target: ArtifactTimelineOpenTarget,
+  ): Promise<ArtifactTimelineOpenTarget> => {
+    if (target.content.trim()) {
+      return target;
+    }
+
+    const artifactContent = await readTimelineArtifactContent(item);
+    if (!artifactContent?.content.trim()) {
+      return target;
+    }
+
+    return {
+      ...target,
+      artifactId: artifactContent.artifactId || target.artifactId,
+      content: artifactContent.content,
+      filePath: artifactContent.filePath || target.filePath,
+    };
+  };
+
+  const openTimelineTarget = async (target: ArtifactTimelineOpenTarget) => {
+    const resolvedTarget = await resolveOpenTarget(target).catch(() => target);
+    onOpenArtifactFromTimeline?.(resolvedTarget);
+  };
 
   return (
     <div className="py-1.5">
@@ -489,7 +525,7 @@ export function AgentThreadTimelineArtifactCard({
           }
           onClick={() => {
             if (onOpenArtifactFromTimeline && navigation) {
-              onOpenArtifactFromTimeline(
+              void openTimelineTarget(
                 shouldOpenFocusedBlock
                   ? blockTargets[0]
                   : navigation.rootTarget,
@@ -497,7 +533,21 @@ export function AgentThreadTimelineArtifactCard({
               return;
             }
 
-            onFileClick?.(item.path, item.content || "");
+            if (item.content?.trim()) {
+              onFileClick?.(item.path, item.content);
+              return;
+            }
+
+            void readTimelineArtifactContent(item)
+              .then((artifactContent) => {
+                onFileClick?.(
+                  artifactContent?.filePath || item.path,
+                  artifactContent?.content || "",
+                );
+              })
+              .catch(() => {
+                onFileClick?.(item.path, "");
+              });
           }}
         >
           <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-600">
@@ -670,7 +720,7 @@ export function AgentThreadTimelineArtifactCard({
               key={`${item.id}:${target.blockId}`}
               type="button"
               className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
-              onClick={() => onOpenArtifactFromTimeline(target)}
+              onClick={() => void openTimelineTarget(target)}
             >
               {t("agentChat.messageList.artifact.locateBlock", {
                 label: resolveBlockLabel(document, target.blockId || ""),

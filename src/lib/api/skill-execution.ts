@@ -11,7 +11,25 @@
  * @requirements 3.1, 4.1, 5.1
  */
 
+import { AppServerClient } from "@/lib/api/appServer";
 import { safeInvoke } from "@/lib/dev-bridge";
+import {
+  METHOD_SKILL_LIST,
+  METHOD_SKILL_READ,
+  type SkillListResponse as AppServerSkillListResponse,
+  type SkillReadResponse as AppServerSkillReadResponse,
+} from "../../../packages/app-server-client/src/protocol";
+
+type SkillExecutionAppServerClient = Pick<AppServerClient, "request">;
+
+async function requestSkillExecutionAppServer<T>(
+  method: string,
+  params: unknown,
+  appServerClient: SkillExecutionAppServerClient = new AppServerClient(),
+): Promise<T> {
+  const response = await appServerClient.request<T>(method, params);
+  return response.result;
+}
 
 // ============================================================================
 // 类型定义
@@ -69,6 +87,30 @@ export interface SkillDetailInfo extends ExecutableSkillInfo {
   allowed_tools?: string[];
   /** 使用场景说明（可选） */
   when_to_use?: string;
+}
+
+function normalizeSkillListResponse(
+  response: AppServerSkillListResponse | null | undefined,
+): ExecutableSkillInfo[] {
+  if (!response || typeof response !== "object") {
+    throw new Error("App Server skill/list did not return skills");
+  }
+
+  if (!Array.isArray(response.skills)) {
+    throw new Error("App Server skill/list did not return skills");
+  }
+
+  return response.skills as ExecutableSkillInfo[];
+}
+
+function normalizeSkillReadResponse(
+  response: AppServerSkillReadResponse | null | undefined,
+): SkillDetailInfo {
+  if (!response || typeof response !== "object" || !response.skill) {
+    throw new Error("App Server skill/read did not return skill");
+  }
+
+  return response.skill as SkillDetailInfo;
 }
 
 /**
@@ -259,7 +301,12 @@ export const skillExecutionApi = {
    * @requirements 4.1, 4.2, 4.3, 4.4
    */
   async listExecutableSkills(): Promise<ExecutableSkillInfo[]> {
-    return safeInvoke("list_executable_skills");
+    const response =
+      await requestSkillExecutionAppServer<AppServerSkillListResponse>(
+        METHOD_SKILL_LIST,
+        {},
+      );
+    return normalizeSkillListResponse(response);
   },
 
   /**
@@ -272,6 +319,11 @@ export const skillExecutionApi = {
    * @requirements 5.1, 5.2, 5.3, 5.4
    */
   async getSkillDetail(skillName: string): Promise<SkillDetailInfo> {
-    return safeInvoke("get_skill_detail", { skillName });
+    const response =
+      await requestSkillExecutionAppServer<AppServerSkillReadResponse>(
+        METHOD_SKILL_READ,
+        { skillName },
+      );
+    return normalizeSkillReadResponse(response);
   },
 };

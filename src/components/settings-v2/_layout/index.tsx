@@ -25,6 +25,7 @@ import { shouldReserveMacWindowControls } from "@/lib/windowControls";
 import { SettingsHomePage } from "../home";
 import { resolveOemCloudRuntimeContext } from "@/lib/api/oemCloudRuntime";
 import { Home } from "lucide-react";
+import { useCompanionEntryEnabled } from "@/hooks/useCompanionEntryEnabled";
 
 const SETTINGS_SIDEBAR_WIDTH_PX = 240;
 
@@ -534,6 +535,7 @@ export function SettingsLayoutV2({
   initialProviderView,
 }: SettingsLayoutV2Props) {
   const { t } = useTranslation("settings");
+  const companionEntryEnabled = useCompanionEntryEnabled();
   const [activeTab, setActiveTab] = useState<SettingsTabs>(
     resolveActiveSettingsTab(initialTab),
   );
@@ -639,7 +641,7 @@ export function SettingsLayoutV2({
               handleTabPrefetch,
               onNavigate,
               activeProviderView,
-              handleOpenCompanion,
+              companionEntryEnabled ? handleOpenCompanion : undefined,
               activeDeveloperLabTab,
             )}
           </ContentWrapper>

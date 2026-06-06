@@ -1,18 +1,12 @@
 /**
  * @file Safe Desktop Host Invoke 封装
- * @description 提供安全的 Desktop Host 调用，支持多层 fallback：
- *   1. Electron IPC (current Desktop Host)
- *   2. legacy Desktop Host IPC (兼容 adapter)
- *   3. HTTP Bridge (开发模式)
- *   4. Mock (仅测试/非浏览器调试场景)
+ * @description 提供安全的 Desktop Host 调用。current 主链固定为：
+ *   前端 -> Electron IPC -> App Server JSON-RPC -> RuntimeCore / backend。
+ *   HTTP Bridge 仅保留为浏览器开发诊断通道，失败时不再回退 mock。
  *
  * @module dev-bridge/safeInvoke
  */
 
-import {
-  core as desktopHostCore,
-  event as desktopHostEvent,
-} from "@/lib/desktop-host/api";
 import type { UnlistenFn } from "@/lib/desktop-host/event";
 import {
   hasDevBridgeEventListenerCapability,
@@ -20,33 +14,18 @@ import {
   isDevBridgeAvailable,
   listenViaHttpEvent,
   normalizeDevBridgeError,
+  resolveBridgeRequestTimeoutMs,
 } from "./http-client";
-import { invokeExplicitMock, listenExplicitMock } from "./explicitMockFallback";
-import {
-  shouldDisallowMockEventFallbackInBrowser,
-  shouldDisallowMockFallbackInBrowser,
-  shouldPreferMockInBrowser,
-} from "./mockPriorityCommands";
-import {
-  getLegacyDesktopHostGlobal,
-  hasDesktopHostEventCapability,
-  hasDesktopHostEventListenerCapability,
-  hasDesktopHostInvokeCapability,
-  hasDesktopHostRuntimeMarkers,
-} from "@/lib/desktop-runtime";
+import { shouldDisallowMockEventFallbackInBrowser } from "./mockPriorityCommands";
 import {
   getElectronHostBridge,
-  isElectronDevBridgeFallbackAvailable,
   isElectronHostCommandAvailable,
 } from "@/lib/electron-host";
-
-const { invoke: baseInvoke } = desktopHostCore;
-const { listen: baseListen, emit: baseEmit } = desktopHostEvent;
 
 export interface InvokeErrorBufferEntry {
   timestamp: string;
   command: string;
-  transport: "legacy-ipc" | "electron-ipc" | "http-bridge" | "fallback-invoke";
+  transport: "electron-ipc" | "http-bridge" | "unavailable";
   error: string;
   args_preview?: Record<string, unknown>;
 }
@@ -54,7 +33,7 @@ export interface InvokeErrorBufferEntry {
 export interface InvokeTraceBufferEntry {
   timestamp: string;
   command: string;
-  transport: "legacy-ipc" | "electron-ipc" | "http-bridge" | "fallback-invoke";
+  transport: "electron-ipc" | "http-bridge" | "unavailable";
   status: "success" | "error";
   duration_ms: number;
   error?: string;
@@ -141,48 +120,6 @@ function sanitizeTimingLabel(input: string): string {
   return normalized || "invoke";
 }
 
-function canUseExplicitBrowserMockFallback(): boolean {
-  return typeof window !== "undefined" && !hasDesktopHostRuntimeMarkers();
-}
-
-async function invokeFallbackTransport<T>(
-  cmd: string,
-  args?: Record<string, unknown>,
-): Promise<T> {
-  try {
-    return (await baseInvoke(cmd, args)) as T;
-  } catch (error) {
-    if (!canUseExplicitBrowserMockFallback()) {
-      throw error;
-    }
-    return invokeExplicitMock<T>(cmd, args);
-  }
-}
-
-async function invokeBrowserMockFallbackTransport<T>(
-  cmd: string,
-  args?: Record<string, unknown>,
-): Promise<T> {
-  if (canUseExplicitBrowserMockFallback()) {
-    return invokeExplicitMock<T>(cmd, args);
-  }
-  return invokeFallbackTransport<T>(cmd, args);
-}
-
-async function listenFallbackTransport<T>(
-  event: string,
-  handler: (event: { payload: T }) => void,
-): Promise<UnlistenFn> {
-  try {
-    return createSafeUnlisten(await baseListen(event, handler));
-  } catch (error) {
-    if (!canUseExplicitBrowserMockFallback()) {
-      throw error;
-    }
-    return createSafeUnlisten(await listenExplicitMock(event, handler));
-  }
-}
-
 function createSafeUnlisten(unlisten: UnlistenFn): UnlistenFn {
   let active = true;
 
@@ -212,45 +149,52 @@ function normalizeDesktopHostListenError(event: string, error: unknown): Error {
   );
 }
 
-function getLegacyDesktopHostGlobalEventListen():
-  | ((event: string, handler: (event: { payload: unknown }) => void) => unknown)
-  | null {
-  const legacyHostGlobal = getLegacyDesktopHostGlobal() as {
-    event?: {
-      listen?: unknown;
-    };
-  } | null;
-
-  return typeof legacyHostGlobal?.event?.listen === "function"
-    ? (legacyHostGlobal.event.listen as (
-        event: string,
-        handler: (event: { payload: unknown }) => void,
-      ) => unknown)
-    : null;
-}
-
 function shouldFailClosedOnMissingNativeEventBridge(event: string): boolean {
   return shouldDisallowMockEventFallbackInBrowser(event);
 }
 
-function shouldUseElectronDevBridgeForCommand(command: string): boolean {
-  return (
-    isElectronDevBridgeFallbackAvailable() &&
-    !isElectronHostCommandAvailable(command)
-  );
-}
-
-function shouldUseElectronDevBridgeForEvent(event: string): boolean {
-  return (
-    isElectronDevBridgeFallbackAvailable() &&
-    shouldDisallowMockEventFallbackInBrowser(event)
-  );
-}
-
 function electronUnsupportedCommandError(command: string): Error {
   return new Error(
-    `[Electron] Desktop Host 尚未支持命令 "${command}"。该命令不能回退到 legacy DevBridge 或 mock；请迁移到 App Server current 主链或补齐 Electron host adapter。`,
+    `[Electron] Desktop Host 尚未支持命令 "${command}"。该命令不能回退到 legacy desktop host、DevBridge mock 或 renderer mock；请经 Electron Desktop Host bridge 迁移到 App Server JSON-RPC。`,
   );
+}
+
+function electronHostUnavailableError(command: string): Error {
+  return new Error(
+    `[Electron] Desktop Host IPC 不可用，命令 "${command}" 无法进入 App Server JSON-RPC 主链。请通过 Electron 桌面入口运行，或启动开发 HTTP bridge 诊断通道。`,
+  );
+}
+
+function electronInvokeTimeoutError(command: string, timeoutMs: number): Error {
+  return new Error(
+    `[Electron] Desktop Host IPC 命令 "${command}" 在 ${timeoutMs}ms 内未返回，已按 fail-closed 结束；该命令不能回退到 legacy desktop host、DevBridge mock 或 renderer mock。`,
+  );
+}
+
+async function invokeElectronHostWithTimeout<T>(
+  invoke: () => Promise<T>,
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  const timeoutMs = resolveBridgeRequestTimeoutMs(command, args);
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return await invoke();
+  }
+
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = globalThis.setTimeout(() => {
+      reject(electronInvokeTimeoutError(command, timeoutMs));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([invoke(), timeoutPromise]);
+  } finally {
+    if (timeoutId !== undefined) {
+      globalThis.clearTimeout(timeoutId);
+    }
+  }
 }
 
 function startInvokeTiming(command: string): string | null {
@@ -466,9 +410,8 @@ export function clearInvokeTraceBuffer(): void {
 
 /**
  * 安全的 Desktop Host invoke 封装
- * 支持多种模式：Electron IPC -> legacy Desktop Host IPC -> HTTP Bridge -> Mock。
- * 在浏览器开发模式下，模型 / Provider / Agent 运行时等真相命令
- * 若 HTTP Bridge 失败，会直接报错；其余非真相命令才允许回退到 mock。
+ * current 主链：Electron IPC -> App Server JSON-RPC。
+ * 浏览器开发态可走 HTTP Bridge，失败时直接抛出，不再回退 mock 或 legacy desktop host。
  */
 export async function safeInvoke<T = any>(
   cmd: string,
@@ -480,7 +423,11 @@ export async function safeInvoke<T = any>(
   const electronHost = getElectronHostBridge();
   if (electronHost && isElectronHostCommandAvailable(cmd)) {
     try {
-      const result = await electronHost.invoke<T>(cmd, args);
+      const result = await invokeElectronHostWithTimeout(
+        () => electronHost.invoke<T>(cmd, args),
+        cmd,
+        args,
+      );
       recordInvokeTrace(cmd, args, "electron-ipc", "success", startedAt);
       finishInvokeTiming(timingId, cmd, "electron-ipc", "success");
       return result;
@@ -491,7 +438,7 @@ export async function safeInvoke<T = any>(
       throw error;
     }
   }
-  if (electronHost && shouldDisallowMockFallbackInBrowser(cmd)) {
+  if (electronHost) {
     const error = electronUnsupportedCommandError(cmd);
     recordInvokeError(cmd, args, error, "electron-ipc");
     recordInvokeTrace(cmd, args, "electron-ipc", "error", startedAt, error);
@@ -499,78 +446,8 @@ export async function safeInvoke<T = any>(
     throw error;
   }
 
-  const legacyHostGlobal = getLegacyDesktopHostGlobal() as {
-    core?: { invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
-    invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
-  } | null;
-
-  if (typeof legacyHostGlobal?.core?.invoke === "function") {
-    try {
-      const result = (await legacyHostGlobal.core.invoke(cmd, args)) as T;
-      recordInvokeTrace(cmd, args, "legacy-ipc", "success", startedAt);
-      finishInvokeTiming(timingId, cmd, "legacy-ipc", "success");
-      return result;
-    } catch (error) {
-      recordInvokeError(cmd, args, error, "legacy-ipc");
-      recordInvokeTrace(cmd, args, "legacy-ipc", "error", startedAt, error);
-      finishInvokeTiming(timingId, cmd, "legacy-ipc", "error");
-      throw error;
-    }
-  }
-
-  if (typeof legacyHostGlobal?.invoke === "function") {
-    try {
-      const result = (await legacyHostGlobal.invoke(cmd, args)) as T;
-      recordInvokeTrace(cmd, args, "legacy-ipc", "success", startedAt);
-      finishInvokeTiming(timingId, cmd, "legacy-ipc", "success");
-      return result;
-    } catch (error) {
-      recordInvokeError(cmd, args, error, "legacy-ipc");
-      recordInvokeTrace(cmd, args, "legacy-ipc", "error", startedAt, error);
-      finishInvokeTiming(timingId, cmd, "legacy-ipc", "error");
-      throw error;
-    }
-  }
-
-  // legacy Desktop Host IPC 尚未就绪时不再轮询等待，直接 fall through 到后续通道。
-  if (hasDesktopHostInvokeCapability()) {
-    try {
-      const result = (await baseInvoke(cmd, args)) as T;
-      recordInvokeTrace(cmd, args, "legacy-ipc", "success", startedAt);
-      finishInvokeTiming(timingId, cmd, "legacy-ipc", "success");
-      return result;
-    } catch (error) {
-      recordInvokeError(cmd, args, error, "legacy-ipc");
-      recordInvokeTrace(cmd, args, "legacy-ipc", "error", startedAt, error);
-      finishInvokeTiming(timingId, cmd, "legacy-ipc", "error");
-      throw error;
-    }
-  }
-
-  // 2. 浏览器开发模式下，部分原生/非关键命令直接优先走 mock。
-  if (isDevBridgeAvailable() && shouldPreferMockInBrowser(cmd)) {
-    try {
-      const result = await invokeFallbackTransport<T>(cmd, args);
-      recordInvokeTrace(cmd, args, "fallback-invoke", "success", startedAt);
-      finishInvokeTiming(timingId, cmd, "fallback-invoke", "success");
-      return result;
-    } catch (error) {
-      recordInvokeError(cmd, args, error, "fallback-invoke");
-      recordInvokeTrace(
-        cmd,
-        args,
-        "fallback-invoke",
-        "error",
-        startedAt,
-        error,
-      );
-      finishInvokeTiming(timingId, cmd, "fallback-invoke", "error");
-      throw error;
-    }
-  }
-
-  // 3. Dev 模式下尝试 HTTP 桥接。
-  if (isDevBridgeAvailable() || shouldUseElectronDevBridgeForCommand(cmd)) {
+  // 浏览器开发模式下尝试 HTTP 桥接。失败时直接暴露真实错误。
+  if (isDevBridgeAvailable()) {
     try {
       const result = await invokeViaHttp(cmd, args);
       recordInvokeTrace(cmd, args, "http-bridge", "success", startedAt);
@@ -588,44 +465,16 @@ export async function safeInvoke<T = any>(
         normalizedError,
       );
 
-      if (shouldDisallowMockFallbackInBrowser(cmd)) {
-        finishInvokeTiming(timingId, cmd, "http-bridge", "error");
-        throw normalizedError;
-      }
-
-      try {
-        const result = await invokeBrowserMockFallbackTransport<T>(cmd, args);
-        recordInvokeTrace(cmd, args, "fallback-invoke", "success", startedAt);
-        finishInvokeTiming(timingId, cmd, "fallback-invoke", "success");
-        return result;
-      } catch (fallbackError) {
-        recordInvokeError(cmd, args, fallbackError, "fallback-invoke");
-        recordInvokeTrace(
-          cmd,
-          args,
-          "fallback-invoke",
-          "error",
-          startedAt,
-          fallbackError,
-        );
-        finishInvokeTiming(timingId, cmd, "fallback-invoke", "error");
-        throw normalizedError;
-      }
+      finishInvokeTiming(timingId, cmd, "http-bridge", "error");
+      throw normalizedError;
     }
   }
 
-  // 4. Fallback 到 desktop-host mock。
-  try {
-    const result = await invokeFallbackTransport<T>(cmd, args);
-    recordInvokeTrace(cmd, args, "fallback-invoke", "success", startedAt);
-    finishInvokeTiming(timingId, cmd, "fallback-invoke", "success");
-    return result;
-  } catch (error) {
-    recordInvokeError(cmd, args, error, "fallback-invoke");
-    recordInvokeTrace(cmd, args, "fallback-invoke", "error", startedAt, error);
-    finishInvokeTiming(timingId, cmd, "fallback-invoke", "error");
-    throw error;
-  }
+  const error = electronHostUnavailableError(cmd);
+  recordInvokeError(cmd, args, error, "unavailable");
+  recordInvokeTrace(cmd, args, "unavailable", "error", startedAt, error);
+  finishInvokeTiming(timingId, cmd, "unavailable", "error");
+  throw error;
 }
 
 /**
@@ -636,53 +485,7 @@ export async function safeListen<T = any>(
   event: string,
   handler: (event: { payload: T }) => void,
 ): Promise<UnlistenFn> {
-  const legacyHostGlobalListen = getLegacyDesktopHostGlobalEventListen();
-  if (legacyHostGlobalListen) {
-    try {
-      const unlisten = await legacyHostGlobalListen(event, handler as never);
-      return createSafeUnlisten(
-        typeof unlisten === "function" ? (unlisten as UnlistenFn) : () => {},
-      );
-    } catch (error) {
-      if (shouldFailClosedOnMissingNativeEventBridge(event)) {
-        throw normalizeDesktopHostListenError(event, error);
-      }
-      console.warn(
-        `[safeListen] Desktop Host 全局事件桥调用失败，跳过监听: ${event}`,
-        error,
-      );
-      return () => {};
-    }
-  }
-
-  // 同步检查即可，不轮询等待，避免首屏并发监听全部阻塞
-  if (hasDesktopHostEventListenerCapability()) {
-    try {
-      return createSafeUnlisten(await baseListen(event, handler));
-    } catch (error) {
-      if (hasDesktopHostRuntimeMarkers()) {
-        if (shouldFailClosedOnMissingNativeEventBridge(event)) {
-          throw normalizeDesktopHostListenError(event, error);
-        }
-        console.warn(
-          `[safeListen] Desktop Host 事件桥调用失败，跳过监听: ${event}`,
-          error,
-        );
-        return () => {};
-      }
-      throw error;
-    }
-  }
-
   const electronHost = getElectronHostBridge();
-  if (electronHost && shouldUseElectronDevBridgeForEvent(event)) {
-    try {
-      return createSafeUnlisten(await listenViaHttpEvent(event, handler));
-    } catch (error) {
-      throw normalizeDevBridgeListenError(event, error);
-    }
-  }
-
   if (electronHost) {
     try {
       const listen = electronHost.listen ?? electronHost.on;
@@ -706,33 +509,19 @@ export async function safeListen<T = any>(
     try {
       return createSafeUnlisten(await listenViaHttpEvent(event, handler));
     } catch (error) {
-      if (!hasDesktopHostRuntimeMarkers()) {
-        if (shouldDisallowMockEventFallbackInBrowser(event)) {
-          throw normalizeDevBridgeListenError(event, error);
-        }
-        return createSafeUnlisten(await listenExplicitMock(event, handler));
-      }
-      console.warn(
-        `[safeListen] DevBridge 事件流调用失败，跳过监听: ${event}`,
-        error,
-      );
-      return () => {};
+      throw normalizeDevBridgeListenError(event, error);
     }
   }
 
-  if (hasDesktopHostRuntimeMarkers()) {
-    if (shouldFailClosedOnMissingNativeEventBridge(event)) {
-      throw normalizeDesktopHostListenError(event, new Error("Desktop Host 事件桥未就绪"));
-    }
-    console.warn(`[safeListen] Desktop Host 事件桥未就绪，跳过监听: ${event}`);
-    return () => {};
-  }
-
-  return listenFallbackTransport(event, handler);
+  throw normalizeDesktopHostListenError(
+    event,
+    new Error("Electron IPC 事件桥未就绪"),
+  );
 }
 
 export function hasNativeDesktopHostEventSupport(): boolean {
-  return hasDesktopHostEventListenerCapability();
+  const electronHost = getElectronHostBridge();
+  return Boolean(electronHost?.listen || electronHost?.on);
 }
 
 /**
@@ -743,30 +532,12 @@ export async function safeEmit(
   event: string,
   payload?: unknown,
 ): Promise<void> {
-  const legacyHostGlobal = getLegacyDesktopHostGlobal() as {
-    event?: {
-      emit?: (event: string, payload?: unknown) => Promise<void>;
-    };
-  } | null;
-
-  if (typeof legacyHostGlobal?.event?.emit === "function") {
-    return legacyHostGlobal.event.emit(event, payload);
-  }
-
-  // 同步检查，不轮询
-  if (hasDesktopHostEventCapability()) {
-    return baseEmit(event, payload);
-  }
-
   const electronHost = getElectronHostBridge();
   if (electronHost) {
     return electronHost.emit(event, payload);
   }
 
-  if (hasDesktopHostRuntimeMarkers()) {
-    console.warn(`[safeEmit] Desktop Host 事件桥未就绪，跳过发送: ${event}`);
-    return;
-  }
-
-  return baseEmit(event, payload);
+  throw new Error(
+    `[Electron] Desktop Host IPC 不可用，事件 "${event}" 无法发送。`,
+  );
 }

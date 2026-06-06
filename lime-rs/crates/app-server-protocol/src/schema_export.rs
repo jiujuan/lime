@@ -1,3 +1,4 @@
+use crate::AgentAppInstalledListResponse;
 use crate::AgentAttachment;
 use crate::AgentEvent;
 use crate::AgentInput;
@@ -26,6 +27,7 @@ use crate::ArtifactContentStatus;
 use crate::ArtifactReadParams;
 use crate::ArtifactReadResponse;
 use crate::ArtifactSummary;
+use crate::AutomationJobListResponse;
 use crate::BusinessObjectRef;
 use crate::CapabilityDescriptor;
 use crate::CapabilityListParams;
@@ -44,6 +46,8 @@ use crate::JsonRpcMessage;
 use crate::JsonRpcNotification;
 use crate::JsonRpcRequest;
 use crate::JsonRpcResponse;
+use crate::KnowledgeListPacksParams;
+use crate::KnowledgeListPacksResponse;
 use crate::ModelListParams;
 use crate::ModelListResponse;
 use crate::ModelPreferencesListResponse;
@@ -54,6 +58,8 @@ use crate::ModelProviderCatalogListResponse;
 use crate::ModelProviderListResponse;
 use crate::ModelSyncStateReadResponse;
 use crate::PlatformInfo;
+use crate::ProjectMemoryReadParams;
+use crate::ProjectMemoryReadResponse;
 use crate::RequestId;
 use crate::RuntimeOptions;
 use crate::ServerCapabilities;
@@ -236,6 +242,12 @@ fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<SkillReadResponse>("SkillReadResponse"),
         typed_schema::<WorkspaceSkillBindingsListParams>("WorkspaceSkillBindingsListParams"),
         typed_schema::<WorkspaceSkillBindingsListResponse>("WorkspaceSkillBindingsListResponse"),
+        typed_schema::<AgentAppInstalledListResponse>("AgentAppInstalledListResponse"),
+        typed_schema::<KnowledgeListPacksParams>("KnowledgeListPacksParams"),
+        typed_schema::<KnowledgeListPacksResponse>("KnowledgeListPacksResponse"),
+        typed_schema::<AutomationJobListResponse>("AutomationJobListResponse"),
+        typed_schema::<ProjectMemoryReadParams>("ProjectMemoryReadParams"),
+        typed_schema::<ProjectMemoryReadResponse>("ProjectMemoryReadResponse"),
         typed_schema::<ModelListParams>("ModelListParams"),
         typed_schema::<ModelListResponse>("ModelListResponse"),
         typed_schema::<ModelPreferencesListResponse>("ModelPreferencesListResponse"),

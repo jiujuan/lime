@@ -40,6 +40,15 @@ function createModel(
 }
 
 describe("modelThemePolicy", () => {
+  it("模型列表短暂缺失时应返回空结果而不是崩溃", () => {
+    expect(filterModelsByTheme("general", undefined)).toEqual({
+      models: [],
+      usedFallback: false,
+      filteredOutCount: 0,
+      policyName: "none",
+    });
+  });
+
   it("general 主题应保留聊天模型，并过滤掉图片模型", () => {
     const models = [
       createModel("gemini-3-pro-image-preview"),

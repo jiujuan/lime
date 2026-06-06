@@ -37,7 +37,6 @@ export {
   createLimeCapabilityErrorResponse,
   createLimeCapabilityInvoker,
   createLimeCapabilitySuccessResponse,
-  createMockLimeCapabilityTransport,
 } from "./capabilityContract";
 export type {
   BuildLimeCapabilityInvokeRequestParams,
@@ -48,8 +47,6 @@ export type {
   LimeCapabilityInvokeResponse,
   LimeCapabilityInvoker,
   LimeCapabilityMethod,
-  LimeCapabilityMockHandler,
-  LimeCapabilityMockHandlers,
   LimeCapabilityName,
   LimeCapabilityTransport,
   LimeCapabilityValue,
@@ -124,7 +121,6 @@ export type {
   LimeHostThemeSnapshot,
   SyncLimeHostThemeOptions,
 } from "./hostBridgeClient";
-export { MockCapabilityHost } from "./MockCapabilityHost";
 export type {
   CapabilityHost,
   LimeAgentCapability,

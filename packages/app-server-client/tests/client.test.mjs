@@ -1,9 +1,9 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
 import { chmod, copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { test } from 'vitest';
 import {
   APP_SERVER_METHODS,
   AppServerAgentEventRouter,
@@ -16,6 +16,7 @@ import {
   AppServerClient,
   AppServerRequestError,
   DEFAULT_STANDALONE_BACKEND_MODE,
+  METHOD_AGENT_APP_INSTALLED_LIST,
   METHOD_AGENT_SESSION_ACTION_RESPOND,
   METHOD_AGENT_SESSION_EVENT,
   METHOD_AGENT_SESSION_LIST,
@@ -24,10 +25,12 @@ import {
   METHOD_AGENT_SESSION_TURN_CANCEL,
   METHOD_AGENT_SESSION_TURN_START,
   METHOD_ARTIFACT_READ,
+  METHOD_AUTOMATION_JOB_LIST,
   METHOD_CAPABILITY_LIST,
   METHOD_EVIDENCE_EXPORT,
   METHOD_INITIALIZED,
   METHOD_INITIALIZE,
+  METHOD_KNOWLEDGE_PACK_LIST,
   METHOD_MODEL_LIST,
   METHOD_MODEL_PREFERENCES_LIST,
   METHOD_MODEL_PROVIDER_ALIAS_LIST,
@@ -35,6 +38,7 @@ import {
   METHOD_MODEL_PROVIDER_CATALOG_LIST,
   METHOD_MODEL_PROVIDER_LIST,
   METHOD_MODEL_SYNC_STATE_READ,
+  METHOD_PROJECT_MEMORY_READ,
   PROTOCOL_VERSION,
   METHOD_SKILL_LIST,
   METHOD_SKILL_READ,
@@ -203,6 +207,34 @@ test('builds workspace and skill read requests with current methods', () => {
   });
 });
 
+test('builds app data surface requests with current methods', () => {
+  const client = new AppServerClient();
+
+  const installed = client.listAgentAppInstalled();
+  const knowledge = client.listKnowledgePacks({
+    workingDir: '/workspace/project',
+    includeArchived: true,
+  });
+  const jobs = client.listAutomationJobs();
+  const memory = client.readProjectMemory({
+    projectId: 'workspace-main',
+  });
+
+  assert.equal(installed.method, METHOD_AGENT_APP_INSTALLED_LIST);
+  assert.deepEqual(installed.params, {});
+  assert.equal(knowledge.method, METHOD_KNOWLEDGE_PACK_LIST);
+  assert.deepEqual(knowledge.params, {
+    workingDir: '/workspace/project',
+    includeArchived: true,
+  });
+  assert.equal(jobs.method, METHOD_AUTOMATION_JOB_LIST);
+  assert.deepEqual(jobs.params, {});
+  assert.equal(memory.method, METHOD_PROJECT_MEMORY_READ);
+  assert.deepEqual(memory.params, {
+    projectId: 'workspace-main',
+  });
+});
+
 test('builds artifact read requests with optional content lookup', () => {
   const client = new AppServerClient();
 
@@ -268,6 +300,10 @@ test('exports app-server method catalog with request and notification kinds', ()
     { method: METHOD_SKILL_LIST, kind: 'request' },
     { method: METHOD_SKILL_READ, kind: 'request' },
     { method: METHOD_WORKSPACE_SKILL_BINDINGS_LIST, kind: 'request' },
+    { method: METHOD_AGENT_APP_INSTALLED_LIST, kind: 'request' },
+    { method: METHOD_KNOWLEDGE_PACK_LIST, kind: 'request' },
+    { method: METHOD_AUTOMATION_JOB_LIST, kind: 'request' },
+    { method: METHOD_PROJECT_MEMORY_READ, kind: 'request' },
     { method: METHOD_MODEL_LIST, kind: 'request' },
     { method: METHOD_MODEL_PREFERENCES_LIST, kind: 'request' },
     { method: METHOD_MODEL_SYNC_STATE_READ, kind: 'request' },
@@ -288,6 +324,10 @@ test('exports app-server method catalog with request and notification kinds', ()
   assert.equal(isAppServerRequestMethod(METHOD_WORKSPACE_LIST), true);
   assert.equal(isAppServerRequestMethod(METHOD_SKILL_LIST), true);
   assert.equal(isAppServerRequestMethod(METHOD_WORKSPACE_SKILL_BINDINGS_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_AGENT_APP_INSTALLED_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_KNOWLEDGE_PACK_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_AUTOMATION_JOB_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_PROJECT_MEMORY_READ), true);
   assert.equal(isAppServerRequestMethod(METHOD_AGENT_SESSION_TURN_START), true);
   assert.equal(isAppServerRequestMethod(METHOD_AGENT_SESSION_ACTION_RESPOND), true);
   assert.equal(isAppServerRequestMethod(METHOD_INITIALIZED), false);
@@ -893,6 +933,79 @@ test('connection buffers request responses read by idle notification loop', asyn
   ]);
   assert.equal(result.result.turn.turnId, 'turn-1');
   assert.equal(notification.method, METHOD_AGENT_SESSION_EVENT);
+});
+
+test('connection resolves short concurrent request before long turn response', async () => {
+  const sent = [];
+  const inbound = [];
+  const waiters = [];
+  const connection = new AppServerConnection({
+    send(message) {
+      sent.push(message);
+    },
+    nextMessage() {
+      const message = inbound.shift();
+      if (message) {
+        return Promise.resolve(message);
+      }
+      return new Promise((resolve) => {
+        waiters.push(resolve);
+      });
+    },
+  });
+
+  const turnPromise = connection.startTurn(
+    {
+      sessionId: 'sess_external',
+      input: {
+        text: 'draft',
+      },
+    },
+    { timeoutMs: 1_000 },
+  );
+  await waitFor(() => sent.length === 1 && waiters.length === 1);
+
+  const workspacePromise = connection.readWorkspace(
+    { id: 'workspace-1' },
+    { timeoutMs: 1_000 },
+  );
+  await waitFor(() => sent.length === 2);
+
+  waiters.shift()({
+    id: 2,
+    result: {
+      workspace: {
+        id: 'workspace-1',
+        kind: 'project',
+        name: 'Workspace',
+        rootPath: '/tmp/workspace',
+        isDefault: true,
+        createdAt: '2026-06-06T00:00:00.000Z',
+        updatedAt: '2026-06-06T00:00:00.000Z',
+      },
+    },
+  });
+
+  const workspace = await workspacePromise;
+  assert.equal(workspace.id, 2);
+  assert.equal(workspace.result.workspace.id, 'workspace-1');
+
+  await waitFor(() => waiters.length === 1);
+  waiters.shift()({
+    id: 1,
+    result: {
+      turn: {
+        turnId: 'turn-1',
+        sessionId: 'sess_external',
+        threadId: 'thread_external',
+        status: 'accepted',
+      },
+    },
+  });
+
+  const turn = await turnPromise;
+  assert.equal(turn.id, 1);
+  assert.equal(turn.result.turn.turnId, 'turn-1');
 });
 
 test('encodes one JSON-RPC message per line', () => {

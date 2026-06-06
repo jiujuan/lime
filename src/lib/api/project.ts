@@ -4,9 +4,51 @@
  * 提供项目（Project）和内容（Content）的 CRUD 操作
  */
 
+import { AppServerClient } from "@/lib/api/appServer";
 import { safeInvoke } from "@/lib/dev-bridge";
 import { normalizeThemeType } from "@/lib/workspace/workbenchContract";
 import type { WorkspaceSettings } from "@/types/workspace";
+import {
+  METHOD_WORKSPACE_BY_PATH_READ,
+  METHOD_WORKSPACE_DEFAULT_ENSURE,
+  METHOD_WORKSPACE_DEFAULT_READ,
+  METHOD_WORKSPACE_ENSURE_READY,
+  METHOD_WORKSPACE_LIST,
+  METHOD_WORKSPACE_PROJECTS_ROOT_READ,
+  METHOD_WORKSPACE_PROJECT_PATH_RESOLVE,
+  METHOD_WORKSPACE_READ,
+} from "../../../packages/app-server-client/src/protocol";
+
+type ProjectAppServerClient = Pick<AppServerClient, "request">;
+
+type WorkspaceListAppServerResponse = {
+  workspaces?: RawProject[] | null;
+};
+
+type WorkspaceReadAppServerResponse = {
+  workspace?: RawProject | null;
+};
+
+type WorkspaceProjectsRootAppServerResponse = {
+  rootPath?: string | null;
+};
+
+type WorkspaceProjectPathResolveAppServerResponse = {
+  rootPath?: string | null;
+};
+
+type WorkspaceEnsureReadyAppServerResponse = {
+  result?: WorkspaceEnsureResult | null;
+};
+
+async function requestProjectAppServer<T>(
+  method: string,
+  params?: unknown,
+  appServerClient: ProjectAppServerClient = new AppServerClient(),
+): Promise<T> {
+  const response = await appServerClient.request<T>(method, params);
+  return response.result;
+}
 
 // ==================== 类型定义 ====================
 
@@ -165,6 +207,7 @@ function invalidateProjectDetailCache(id: string): void {
 export function clearProjectDetailCacheForTests(): void {
   projectDetailCache.clear();
   projectDetailInflight.clear();
+  resetDefaultProjectCache();
 }
 
 /** 内容列表项 */
@@ -277,7 +320,17 @@ export async function createProject(
 
 /** 获取统一 workspace 项目根目录 */
 export async function getWorkspaceProjectsRoot(): Promise<string> {
-  return safeInvoke<string>("workspace_get_projects_root");
+  const response =
+    await requestProjectAppServer<WorkspaceProjectsRootAppServerResponse>(
+      METHOD_WORKSPACE_PROJECTS_ROOT_READ,
+      {},
+    );
+  if (!response.rootPath) {
+    throw new Error(
+      "App Server workspace/projectsRoot/read did not return rootPath",
+    );
+  }
+  return response.rootPath;
 }
 
 /** 按项目名称和父目录解析最终项目目录 */
@@ -291,12 +344,27 @@ export async function resolveProjectRootPath(
     request.parentRootPath = normalizedParentRootPath;
   }
 
-  return safeInvoke<string>("workspace_resolve_project_path", request);
+  const response =
+    await requestProjectAppServer<WorkspaceProjectPathResolveAppServerResponse>(
+      METHOD_WORKSPACE_PROJECT_PATH_RESOLVE,
+      request,
+    );
+  if (!response.rootPath) {
+    throw new Error(
+      "App Server workspace/projectPath/resolve did not return rootPath",
+    );
+  }
+  return response.rootPath;
 }
 
 /** 获取项目列表 */
 export async function listProjects(): Promise<Project[]> {
-  const projects = await safeInvoke<RawProject[]>("workspace_list");
+  const response =
+    await requestProjectAppServer<WorkspaceListAppServerResponse>(
+      METHOD_WORKSPACE_LIST,
+      {},
+    );
+  const projects = response.workspaces;
   // 防御性编程：确保返回数组
   if (!Array.isArray(projects)) {
     console.warn("listProjects 返回非数组值:", projects);
@@ -307,7 +375,12 @@ export async function listProjects(): Promise<Project[]> {
 
 /** 获取默认项目 */
 export async function getDefaultProject(): Promise<Project | null> {
-  const project = await safeInvoke<RawProject | null>("workspace_get_default");
+  const response =
+    await requestProjectAppServer<WorkspaceReadAppServerResponse>(
+      METHOD_WORKSPACE_DEFAULT_READ,
+      {},
+    );
+  const project = response.workspace;
   return project ? normalizeProject(project) : null;
 }
 
@@ -334,14 +407,53 @@ export async function requireDefaultProjectId(
 export async function ensureWorkspaceReady(
   id: string,
 ): Promise<WorkspaceEnsureResult> {
-  return safeInvoke<WorkspaceEnsureResult>("workspace_ensure_ready", { id });
+  const normalizedId = id.trim();
+  if (!normalizedId) {
+    throw new Error("workspace id is required to ensure App Server workspace");
+  }
+  const response =
+    await requestProjectAppServer<WorkspaceEnsureReadyAppServerResponse>(
+      METHOD_WORKSPACE_ENSURE_READY,
+      { id: normalizedId },
+    );
+  if (!response.result) {
+    throw new Error("App Server workspace/ensureReady did not return result");
+  }
+  return response.result;
 }
 
 /** 确保默认工作区目录就绪 */
 export async function ensureDefaultWorkspaceReady(): Promise<WorkspaceEnsureResult | null> {
-  return safeInvoke<WorkspaceEnsureResult | null>(
-    "workspace_ensure_default_ready",
-  );
+  const defaultWorkspace =
+    await requestProjectAppServer<WorkspaceReadAppServerResponse>(
+      METHOD_WORKSPACE_DEFAULT_ENSURE,
+      {},
+    );
+  const workspaceId = readProjectId(defaultWorkspace.workspace);
+  if (!workspaceId) {
+    return null;
+  }
+  return ensureWorkspaceReady(workspaceId);
+}
+
+function readProjectId(project: RawProject | null | undefined): string | null {
+  const id = project?.id?.trim();
+  return id || null;
+}
+
+async function ensureDefaultProjectThroughAppServer(): Promise<Project> {
+  const response =
+    await requestProjectAppServer<WorkspaceReadAppServerResponse>(
+      METHOD_WORKSPACE_DEFAULT_ENSURE,
+      {},
+    );
+  const project = response.workspace;
+  if (!project) {
+    throw new Error(
+      "App Server workspace/default/ensure did not return workspace",
+    );
+  }
+  return normalizeProject(project);
 }
 
 /** 设置默认项目 */
@@ -363,6 +475,14 @@ let defaultProjectCache: {
 
 const DEFAULT_PROJECT_CACHE_TTL_MS = 5_000; // 5秒缓存
 
+function resetDefaultProjectCache(): void {
+  defaultProjectCache = {
+    value: null,
+    expiresAt: 0,
+    promise: null,
+  };
+}
+
 export async function getOrCreateDefaultProject(): Promise<Project> {
   // 检查缓存
   if (defaultProjectCache.value && defaultProjectCache.expiresAt > Date.now()) {
@@ -375,9 +495,8 @@ export async function getOrCreateDefaultProject(): Promise<Project> {
   }
 
   // 创建新请求
-  const promise = safeInvoke<RawProject>("get_or_create_default_project")
-    .then((project) => {
-      const normalized = normalizeProject(project);
+  const promise = ensureDefaultProjectThroughAppServer()
+    .then((normalized) => {
       // 更新缓存
       defaultProjectCache = {
         value: normalized,
@@ -410,9 +529,12 @@ export function preloadDefaultProject(): void {
 export async function getProjectByRootPath(
   rootPath: string,
 ): Promise<Project | null> {
-  const project = await safeInvoke<RawProject | null>("workspace_get_by_path", {
-    rootPath,
-  });
+  const response =
+    await requestProjectAppServer<WorkspaceReadAppServerResponse>(
+      METHOD_WORKSPACE_BY_PATH_READ,
+      { rootPath },
+    );
+  const project = response.workspace;
   return project ? normalizeProject(project) : null;
 }
 
@@ -429,9 +551,14 @@ export async function getProject(id: string): Promise<Project | null> {
     return cloneProject(await inflight);
   }
 
-  const request = safeInvoke<RawProject | null>("workspace_get", { id })
+  const request = requestProjectAppServer<WorkspaceReadAppServerResponse>(
+    METHOD_WORKSPACE_READ,
+    { id },
+  )
     .then((project) => {
-      const normalized = project ? normalizeProject(project) : null;
+      const normalized = project.workspace
+        ? normalizeProject(project.workspace)
+        : null;
       writeCachedProjectDetail(cacheKey, normalized);
       return normalized;
     })

@@ -2,7 +2,7 @@
 
 ## 这份文档回答什么
 
-本文件用于说明 Lime 中 Electron Desktop Host、App Server JSON-RPC、前端网关、DevBridge mock 与 legacy Tauri adapter 的工程边界，主要回答：
+本文件用于说明 Lime 中 Electron Desktop Host bridge、App Server JSON-RPC、前端网关、DevBridge 诊断通道、测试 mock 与 legacy desktop facade 的工程边界，主要回答：
 
 - 命令改动应该从哪里进入，而不是到处直接 `invoke`
 - 哪些文件共同构成命令契约的事实源
@@ -19,16 +19,20 @@
 
 推荐路径是：
 
-`组件 / Hook -> src/lib/api/* 网关 -> safeInvoke -> Electron IPC / App Server JSON-RPC / legacy adapter`
+`组件 / Hook -> src/lib/api/* 网关 -> safeInvoke -> Electron Desktop Host bridge -> App Server JSON-RPC -> RuntimeCore / backend`
+
+这条路径是 current 事实源。Electron 只负责 Desktop Host bridge：preload / IPC 白名单、窗口、托盘、Dock、菜单、updater、签名发布、sidecar 生命周期和少量 renderer-safe projection。Electron 不是第二套后端，也不要把它命名成后端适配层；App Server JSON-RPC 才是 backend 事实入口。
+
+生产路径不能 mock。`safeInvoke` / `invoke`、Electron Host、App Server sidecar、GUI smoke 和业务 E2E 必须进入真实 Electron Desktop Host IPC / App Server JSON-RPC；无真实通道时 fail-closed。`mockPriorityCommands`、`defaultMocks`、`invokeMockOnly`、`explicitMockFallback`、内存事件 / 窗口 / 快捷键夹具和 mock backend 只允许测试文件或显式测试夹具使用，不能作为产品降级、浏览器模式兜底或交付证据。
 
 新增命令和对应前端网关命名必须使用领域名，不要加 `Lime` / `lime_` / `lime-` 品牌前缀。例如 App Server 入口使用 `app_server_*`，不要写成带品牌前缀的命名。只有历史兼容、对外品牌标识或外部生态已固定的名字才允许例外，并在路线图或执行计划写明原因和退出条件。
 
-新增 AI Agent / runtime / host integration / 跨 App 复用能力默认走 App Server JSON-RPC current 主链。Electron main / preload 只作为 Desktop host adapter，负责窗口、平台能力、sidecar 生命周期与白名单 IPC；只有为旧 GUI 做兼容适配时，才继续触碰 `agent_runtime_*` / Aster legacy command；这类改动不能承接新业务逻辑，必须写清退出条件。
+新增 AI Agent / runtime / host integration / 跨 App 复用能力默认走 App Server JSON-RPC current 主链。Electron main / preload 只作为 Desktop Host bridge，负责桌面壳能力、sidecar 生命周期与白名单 IPC；只有为旧 GUI 做兼容适配时，才继续触碰 `agent_runtime_*` / Aster legacy command facade；这类改动不能承接新业务逻辑，必须写清退出条件。
 
 这样做的目的不是“多包一层”，而是为了保证：
 
 - 前端只有一个可治理的调用出口
-- Electron host、App Server、legacy adapter 可以按 `current / compat / deprecated / dead-candidate` 演进
+- Electron Host bridge、App Server、legacy desktop facade 可以按 `current / compat / deprecated / dead-candidate` 演进
 - 新旧命令并存时，迁移边界清晰，不会继续扩散
 - 契约检查脚本能稳定扫描并阻止回流
 
@@ -52,7 +56,7 @@
 
 旧 onboarding 插件安装流与 Provider Switch 命令链也已经下线。`get_switch_providers`、`get_current_switch_provider`、`add_switch_provider`、`update_switch_provider`、`delete_switch_provider`、`switch_provider`、`import_default_config`、`read_live_provider_settings`、`check_config_sync_status`、`sync_from_external_config` 都应视为 `dead`；初装引导当前只保留语音体验流程，不再允许通过 `config-switch`、插件推荐或配置切换 UI 重新接回这条旧链。
 
-插件中心与桌面插件安装 / 管理命令族已经下线。`get_plugin_status`、`get_plugins`、`get_plugin_info`、`enable_plugin`、`disable_plugin`、`update_plugin_config`、`get_plugin_config`、`reload_plugins`、`unload_plugin`、`get_plugins_dir`、`list_plugin_tasks`、`get_plugin_task`、`cancel_plugin_task`、`get_plugin_queue_stats`、`install_plugin_from_file`、`install_plugin_from_url`、`uninstall_plugin`、`list_installed_plugins`、`get_installed_plugin`、`is_plugin_installed`、`get_plugins_with_ui`、`get_plugin_ui`、`handle_plugin_action`、`read_plugin_manifest_cmd`、`launch_plugin_ui`、`frontend_debug_log`、`plugin_rpc_connect`、`plugin_rpc_disconnect`、`plugin_rpc_call` 都应视为 `dead`；不得重新接回前端插件中心、DevBridge、mock 或 `tauri::generate_handler!`。
+插件中心与桌面插件安装 / 管理命令族已经下线。`get_plugin_status`、`get_plugins`、`get_plugin_info`、`enable_plugin`、`disable_plugin`、`update_plugin_config`、`get_plugin_config`、`reload_plugins`、`unload_plugin`、`get_plugins_dir`、`list_plugin_tasks`、`get_plugin_task`、`cancel_plugin_task`、`get_plugin_queue_stats`、`install_plugin_from_file`、`install_plugin_from_url`、`uninstall_plugin`、`list_installed_plugins`、`get_installed_plugin`、`is_plugin_installed`、`get_plugins_with_ui`、`get_plugin_ui`、`handle_plugin_action`、`read_plugin_manifest_cmd`、`launch_plugin_ui`、`frontend_debug_log`、`plugin_rpc_connect`、`plugin_rpc_disconnect`、`plugin_rpc_call` 都应视为 `dead`；不得重新接回前端插件中心、DevBridge、mock 或 legacy host 注册。
 
 图库素材链路也遵循同一原则。当前主入口为 `src/lib/api/galleryMaterials.ts`，统一承接：
 
@@ -98,7 +102,7 @@ AI 图层化设计扁平图 OCR 分析同样继续走 current `LayeredDesignDocu
 - `analyze_layered_design_flat_image`
 
 `recognize_layered_design_text` 只服务 `analyzeLayeredDesignFlatImage` 的 OCR provider seam，把 native OCR 结果投影成可编辑 `TextLayer` 候选；非支持平台、非 `data:image/*;base64` 来源或无结果必须返回 unsupported/fallback，不应让拆层任务整体失败。
-`analyze_layered_design_flat_image` 只服务 structured analyzer provider seam，把 native / Tauri 侧的 image / mask / clean plate 结构化结果投影回同一份 `LayeredDesignDocument.extraction`；不支持的来源必须返回 unsupported/fallback，不应绕过 `canvas:design -> DesignCanvas` 主链。它们都不是 provider adapter、不是旧 poster 协议，也不应回流 `poster_generate / canvas:poster / ImageTaskViewer`。
+`analyze_layered_design_flat_image` 只服务 structured analyzer provider seam，把 native host 侧的 image / mask / clean plate 结构化结果投影回同一份 `LayeredDesignDocument.extraction`；不支持的来源必须返回 unsupported/fallback，不应绕过 `canvas:design -> DesignCanvas` 主链。它们都不是 provider adapter、不是旧 poster 协议，也不应回流 `poster_generate / canvas:poster / ImageTaskViewer`。
 
 命令目录与输入补全链路同样需要单一事实源。当前前端主入口为 `src/lib/api/skillCatalog.ts`，统一承接：
 
@@ -158,13 +162,13 @@ Agent App current 安装 / package / runtime 主链不得在页面或 feature is
 - `agent_app_runtime_get_task`
 - `agent_app_runtime_submit_host_response`
 
-`agent_app_launch_shell` 是 Agent App v2 App Shell dev adapter 的 current 命令入口：前端只能经由 `src/lib/api/agentApps.ts -> launchAgentAppShell` 提交 `ShellDescriptor`；Rust 侧必须先校验 installed state、package / manifest hash、install mode、runtime profile shell kind 与只读隔离策略，再复用 current UI runtime 启动 dev shell，并通过 `agent_app_shell_window` 打开独立 Tauri WebviewWindow。浏览器 DevBridge smoke 也必须桥接到同一个 Rust application service，不得落回 mock 或平行 shell launcher。它不是第二套 Runtime，也不得让 Standalone App 绕过 `@lime/app-sdk`、Host Bridge、policy 或 evidence 主链。
+`agent_app_launch_shell` 是 Agent App v2 App Shell dev bridge 的 current 命令入口：前端只能经由 `src/lib/api/agentApps.ts -> launchAgentAppShell` 提交 `ShellDescriptor`；Rust 侧必须先校验 installed state、package / manifest hash、install mode、runtime profile shell kind 与只读隔离策略，再复用 current UI runtime 启动 dev shell，并通过 `agent_app_shell_window` 打开独立 desktop WebviewWindow。浏览器 DevBridge smoke 也必须桥接到同一个 Rust application service，不得落回 mock 或平行 shell launcher。它不是第二套 Runtime，也不得让 Standalone App 绕过 `@lime/app-sdk`、Host Bridge、policy 或 evidence 主链。
 
 `agent_app_fetch_cloud_package` 只负责 `packageUrl -> staging/cache -> APP.md manifest extraction -> sha256 package / manifest verification`，不生成 projection、不写 installed state、不绕过 P17.2 install review；Cloud / LimeCore 仍只提供 release metadata。
 
 `agent_app_start_ui_runtime` 启动 App UI 子进程时只能注入 Lime 本机 Gateway 的短期 Agent App scoped token；不得把上游 Provider API Key 或全局 `server.api_key` 原样下发给 App。当前 token scope 固定为 `model-generation`，只允许 App 侧通过 `LIME_GATEWAY_BASE / LIME_ACCESS_TOKEN` 调 Lime Gateway 标准 `/v1/chat/completions` 或 `/v1/messages` 生成端点；图片、count tokens、Gemini 原生和其他控制面端点仍只接受全局 Gateway key。
 
-`agent_app_runtime_*` 是 Agent App 进入 App Server / AgentRuntime 主链的 Desktop facade：`agent_app_runtime_start_task` 必须经 App Server JSON-RPC `agentSession/turn/start` 进入 `RuntimeCore -> AsterBackend -> TauriAsterBackendHost`，不能再直接复制 `AsterChatRequest -> build_queued_turn_task` 提交流程。cancel / read / host response 在 App Server protocol 覆盖前可继续作为 Desktop compat 适配到既有 `agent_runtime_*` 读写命令，但不得复制 Claw `*_skill_launch.rs`、不得新增垂直 `content_factory_*` Agent 命令，也不得把 `LIME_GATEWAY_*` 直接模型调用宣称为完整 Agent 能力。
+`agent_app_runtime_*` 是 Agent App 进入 App Server / AgentRuntime 主链的 Desktop facade：`agent_app_runtime_start_task` 必须经 App Server JSON-RPC `agentSession/turn/start` 进入 `RuntimeCore -> AsterBackend -> backend host`，不能再直接复制 `AsterChatRequest -> build_queued_turn_task` 提交流程。cancel / read / host response 在 App Server protocol 覆盖前可继续作为 Desktop compat 适配到既有 `agent_runtime_*` 读写命令，但不得复制 Claw `*_skill_launch.rs`、不得新增垂直 `content_factory_*` Agent 命令，也不得把 `LIME_GATEWAY_*` 直接模型调用宣称为完整 Agent 能力。
 
 P17.3 之前禁止真实删除 Agent App 本地数据：`agent_app_uninstall_rehearsal` 只生成 keep-data / delete-data 演练，`agent_app_uninstall` 只能返回同一演练摘要和未删除的 installed list，不得执行 `remove_file` / `remove_dir_all` 或移除 installed state。真实 delete-data 必须等后续路线图单独打开并补齐 evidence / residual audit / confirmation gate。
 
@@ -392,7 +396,7 @@ Skill 执行链路同样遵循单一命令边界。当前前端入口为 `src/li
 
 - Agent 驱动的浏览器命令：`@浏览器` / `@browser` / `@browse` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界不会再改写成另一套 skill 或 scene，而是显式把 `browser_requirement`、`browser_requirement_reason` 与 `browser_launch_url` 写入 `request_metadata.harness`，同时关闭前端本轮 `webSearch` 偏好，确保后续请求优先走 Lime Browser Assist 与 `mcp__lime-browser__*` 工具，而不是退回 WebSearch 或普通聊天。若正文里出现平台后台、登录、扫码等受保护网页步骤，则继续沿用 `required_with_user_step`；否则默认要求 `required`，并把显式 URL 或搜索入口写入 launch URL。当前命令不应伪装成站点型 `service_skill_launch`，也不应重新造一套 browser task 协议。
 
-这些命令如果仍处在 legacy adapter 兼容期，除了 `tauri::generate_handler!` 之外，也必须继续保持 DevBridge dispatcher 已桥接；current 新能力优先同步 Electron host / App Server JSON-RPC，避免浏览器模式、Electron smoke 或 Playwright 续测时回退成 unknown command。
+这些命令如果仍处在 legacy desktop facade 兼容期，也必须继续保持 DevBridge dispatcher 已桥接；current 新能力优先同步 Electron Desktop Host bridge / App Server JSON-RPC，避免浏览器模式、Electron smoke 或 Playwright 续测时回退成 unknown command。
 
 自动化设置链路同样遵循这条路径。当前主入口为 `src/lib/api/automation.ts`，统一承接：
 
@@ -429,14 +433,14 @@ Lime 主应用会在本地维护 `ws://127.0.0.1:45554/companion/pet` 的桌宠 
 1. **前端实际调用**
    `src/` 下运行时代码里的 `safeInvoke(...)` / `invoke(...)`
 
-2. **Electron host / preload 白名单**
+2. **Electron Desktop Host bridge / preload 白名单**
    `electron/`、`src/lib/desktop-host/` 与 `src/lib/electron-host.ts` 中的 IPC channel、preload facade 和 supported command map
 
 3. **App Server JSON-RPC 协议**
    `lime-rs/crates/app-server-protocol/`、`lime-rs/crates/app-server/`、`packages/app-server-client/`
 
-4. **legacy Tauri adapter 注册**
-   仅当改动触碰兼容 adapter 时，检查 `lime-rs/src/app/runner.rs` 中的 `tauri::generate_handler![...]`
+4. **legacy desktop facade 注册**
+   仅当改动触碰兼容 facade 时，检查 legacy host 注册表；新增 current 能力不得把这层作为事实源
 
 5. **治理目录册**
    `src/lib/governance/agentCommandCatalog.json`
@@ -445,9 +449,9 @@ Lime 主应用会在本地维护 `ws://127.0.0.1:45554/companion/pet` 的桌宠 
    `src/lib/dev-bridge/mockPriorityCommands.ts`
 
 7. **默认 mock 实现**
-   `src/lib/desktop-host/` / legacy `src/lib/tauri-mock/core.ts` 中的 `defaultMocks`
+   `src/lib/desktop-host/` / legacy mock path 中的 `defaultMocks`
 
-只看其中一侧都不够。只要能力仍然依赖命令边界，就至少要同时核对前端调用、Electron host 或 App Server 协议、治理目录册、mock 集合这几面。legacy Tauri 注册只在兼容 adapter 被触碰时检查，不再是新增能力的默认事实源。
+只看其中一侧都不够。只要能力仍然依赖命令边界，就至少要同时核对前端调用、Electron Desktop Host bridge 或 App Server 协议、治理目录册、mock 集合这几面。mock 集合只服务测试夹具和契约守卫，不能成为生产 fallback。legacy desktop facade 注册只在兼容层被触碰时检查，不再是新增能力的默认事实源。
 
 对于 `agent_runtime_*` 这一组运行时主命令，当前还额外有一份结构合同事实源：
 
@@ -539,11 +543,11 @@ const diagnostics = await getServerDiagnostics();
 
 共享网关控制面已下线后，`start_server`、`stop_server`、`get_server_status`、`get_available_routes`、`get_route_curl_examples`、`test_api`、`get_network_info`，以及托盘残留 `sync_tray_state`、`update_tray_server_status`、`update_tray_credential_status`、`get_tray_state`、`refresh_tray_menu`、`refresh_tray_with_stats` 都应视为 `dead` 候选，不应重新接回前端主路径；server 兼容面 `/v1/routes`、`/{selector}/v1/messages`、`/{selector}/v1/chat/completions` 也应视为 `dead` 候选，不应重新接回本地共享网关主链；开发者诊断统一继续走 `get_server_diagnostics`，托盘只保留 `sync_tray_model_shortcuts`，server 只保留标准 `/v1/messages` 与 `/v1/chat/completions`。
 
-### 3. Electron / App Server / legacy adapter 同步
+### 3. Electron Host Bridge / App Server / legacy facade 同步
 
-- 新 Desktop host 能力优先在 Electron main / preload 白名单和 `src/lib/desktop-host/` 网关中同步
+- 新 Desktop host 能力优先在 Electron main / preload 白名单和 `src/lib/desktop-host/` 网关中同步；这层只能做 host bridge，不承接后端业务事实
 - 新 Agent / runtime / 跨 App 复用能力优先在 `app-server-protocol`、`app-server`、`app-server-client` 中同步
-- 只有 legacy Tauri adapter 仍需兼容时，才在 `lime-rs/src/commands/` 与 `lime-rs/src/app/runner.rs` 的 `tauri::generate_handler!` 中同步注册
+- 只有 legacy desktop facade 仍需兼容时，才同步 legacy host 注册；这层只允许委托和投影，不允许新增业务逻辑
 - 不要只写一侧实现，不补对应 host / protocol / mock / governance 事实源
 
 ### 4. 治理目录册与 mock 同步
@@ -552,7 +556,7 @@ const diagnostics = await getServerDiagnostics();
 
 - `src/lib/governance/agentCommandCatalog.json`
 - `src/lib/dev-bridge/mockPriorityCommands.ts`
-- `src/lib/desktop-host/` / legacy `src/lib/tauri-mock/core.ts`
+- `src/lib/desktop-host/` / legacy mock path
 
 尤其是以下场景：
 
@@ -560,6 +564,8 @@ const diagnostics = await getServerDiagnostics();
 - 旧命令进入 `deprecated`
 - 旧 helper 被替换
 - Bridge 优先命令需要本地 mock
+
+同步 mock 不表示生产可回退 mock。新增或迁移命令时，生产入口必须走真实 Electron Desktop Host IPC / App Server JSON-RPC；测试 mock 只能在 `*.test.*`、测试夹具或显式 `invokeMockOnly` 边界中验证形态。
 
 ### 5. 文档同步
 
@@ -632,7 +638,7 @@ npm run verify:local
 
 以下是仓库当前已经明确收敛的几个方向：
 
-- **新增 Agent / Codex 服务化能力主链**：继续收敛到 App Server JSON-RPC；`agent_runtime_*` 只作为 Lime Desktop 现有 GUI 的兼容适配入口，其中 `agent_runtime_submit_turn` 内部必须走 App Server JSON-RPC `agentSession/turn/start`，旧 queue 提交只允许留在 `TauriAsterBackendHost` adapter 内
+- **新增 Agent / Codex 服务化能力主链**：继续收敛到 App Server JSON-RPC；`agent_runtime_*` 只作为 Lime Desktop 现有 GUI 的兼容 facade，其中 `agent_runtime_submit_turn` 内部必须走 App Server JSON-RPC `agentSession/turn/start`，旧 queue 提交只允许留在 legacy backend host 内
 - **子代理运行时主链**：继续收敛到 `agent_runtime_spawn_subagent`；当前 request surface 使用 `name / teamName / runInBackground / mode / isolation / cwd` 等字段，其中 `teamName` 需要与 `name` 搭配并依附现有 Team 上下文，`cwd` 必须是绝对目录，并稳定投影到 child session 的 `working_dir` 与 Team 成员展示；当前 runtime 仍会明确拒绝非空 `mode / isolation`
 - **Team runtime 工具主链**：当前协作工具面继续收敛到 `Agent / TeamCreate / TeamDelete / SendMessage / ListPeers`；不要把已删除的 `SubAgentTask` compat 工具重新接回新的多代理主路径
 - **用户可见消息工具主链**：继续收敛到 `SendUserMessage`，用于把回复、进度同步、主动提醒和附件送到用户主可见消息面；不要再把这类能力拆到其它平行工具名或旁路协议里

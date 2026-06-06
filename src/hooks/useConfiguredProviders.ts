@@ -207,22 +207,23 @@ export function buildConfiguredProviders(
 }
 
 export function findConfiguredProviderBySelection(
-  providers: ConfiguredProvider[],
+  providers: ConfiguredProvider[] | null | undefined,
   selection?: string | null,
 ): ConfiguredProvider | null {
   const normalizedSelection = normalizeConfiguredProviderSelector(selection);
   if (!normalizedSelection) {
     return null;
   }
+  const safeProviders = Array.isArray(providers) ? providers : [];
 
   const keyMatch =
-    providers.find(
+    safeProviders.find(
       (provider) =>
         normalizeConfiguredProviderSelector(provider.key) ===
         normalizedSelection,
     ) ?? null;
   const providerIdMatch =
-    providers.find(
+    safeProviders.find(
       (provider) =>
         normalizeConfiguredProviderSelector(provider.providerId) ===
         normalizedSelection,
@@ -238,7 +239,7 @@ export function findConfiguredProviderBySelection(
 }
 
 export function resolveConfiguredProviderPromptCacheSupportNotice(
-  providers: ConfiguredProvider[],
+  providers: ConfiguredProvider[] | null | undefined,
   selection?: string | null,
 ) {
   const selectedProvider = findConfiguredProviderBySelection(

@@ -47,12 +47,18 @@ const LONG_PROMPT = [
   "如果收到停止请求应立即停止，不要补完剩余行。",
 ].join("\n");
 const RECOVERY_EXPECTED_TEXT = "复原完成";
-const RECOVERY_PROMPT =
-  `停止后恢复测试：这是一个新的独立回合，请忽略上一条输出 ${LONG_TURN_LINE_COUNT} 行的要求。只输出“复原完成”这四个字，不要输出行号、解释或其他内容。`;
+const RECOVERY_PROMPT = `停止后恢复测试：这是一个新的独立回合，请忽略上一条输出 ${LONG_TURN_LINE_COUNT} 行的要求。只输出“复原完成”这四个字，不要输出行号、解释或其他内容。`;
 const MODEL_AVAILABILITY_PROMPT = "请只回复 QC_OK。";
 const MAX_MODEL_AVAILABILITY_CANDIDATES = 12;
 const FAST_RESPONSE_MODE_STORAGE_KEY = "lime:agent-fast-response-mode";
 const TASK_CENTER_OPEN_TASK_EVENT = "lime:task-center:open-task";
+const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read";
+const APP_SERVER_METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start";
+const APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL = "agentSession/turn/cancel";
+const APP_SERVER_METHOD_AGENT_SESSION_EVENT = "agentSession/event";
+
+let appServerSmokeRequestId = 1;
 
 function printHelp() {
   console.log(`
@@ -175,9 +181,7 @@ function logStage(label) {
 }
 
 function readConsoleText(consoleMessages) {
-  return consoleMessages
-    .map((item) => String(item?.text || ""))
-    .join("\n");
+  return consoleMessages.map((item) => String(item?.text || "")).join("\n");
 }
 
 async function waitForHealth(options) {
@@ -233,6 +237,386 @@ async function invoke(options, cmd, args, timeoutMs = options.timeoutMs) {
   }
 
   return payload?.result;
+}
+
+function parseJsonRpcLine(line) {
+  const trimmed = String(line || "").trim();
+  if (!trimmed) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(trimmed);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function decodeJsonRpcLines(lines) {
+  return Array.isArray(lines)
+    ? lines.map(parseJsonRpcLine).filter(Boolean)
+    : [];
+}
+
+function attachAppServerRequestMessages(entry) {
+  if (entry?.cmd !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
+    return entry;
+  }
+  entry.appServer = {
+    ...(entry.appServer || {}),
+    requestMessages: decodeJsonRpcLines(entry.args?.request?.lines),
+  };
+  return entry;
+}
+
+function attachAppServerResponsePayload(entry, payload) {
+  if (entry?.cmd !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
+    return entry;
+  }
+  entry.appServer = {
+    ...(entry.appServer || {}),
+    responseMessages: decodeJsonRpcLines(payload?.result?.lines),
+  };
+  return entry;
+}
+
+function appServerMethodRecords(invokes, method, options = {}) {
+  const direction = options.direction || "any";
+  const records = [];
+  for (const [invokeIndex, entry] of invokes.entries()) {
+    if (entry?.cmd !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
+      continue;
+    }
+    const groups = [
+      ["request", entry.appServer?.requestMessages || []],
+      ["response", entry.appServer?.responseMessages || []],
+    ];
+    for (const [messageDirection, messages] of groups) {
+      if (direction !== "any" && direction !== messageDirection) {
+        continue;
+      }
+      for (const [messageIndex, message] of messages.entries()) {
+        if (message?.method !== method) {
+          continue;
+        }
+        records.push({
+          entry,
+          invokeIndex,
+          messageIndex,
+          direction: messageDirection,
+          message,
+          params: message.params || {},
+        });
+      }
+    }
+  }
+  return records;
+}
+
+function findAppServerMethodRecord(invokes, method, predicate, options = {}) {
+  return (
+    appServerMethodRecords(invokes, method, options).find((record) =>
+      predicate ? predicate(record) : true,
+    ) || null
+  );
+}
+
+function appServerParamSessionId(params) {
+  return String(params?.sessionId || params?.session_id || "");
+}
+
+function appServerParamTurnId(params) {
+  return String(params?.turnId || params?.turn_id || "");
+}
+
+function appServerTurnInputText(params) {
+  return String(params?.input?.text || params?.message || "");
+}
+
+function appServerRuntimeOptions(params) {
+  return params?.runtimeOptions || params?.runtime_options || {};
+}
+
+function legacyTurnConfigFromAppServerParams(params) {
+  const runtimeOptions = appServerRuntimeOptions(params);
+  return {
+    provider_preference:
+      runtimeOptions.providerPreference ||
+      runtimeOptions.provider_preference ||
+      "",
+    model_preference:
+      runtimeOptions.modelPreference || runtimeOptions.model_preference || "",
+    metadata: runtimeOptions.metadata,
+  };
+}
+
+function appServerTurnEvidenceFromRecord(record) {
+  const params = record?.params || {};
+  return {
+    method: record?.message?.method || "",
+    sessionId: appServerParamSessionId(params),
+    turnId: appServerParamTurnId(params),
+    eventName: appServerRuntimeOptions(params).eventName || null,
+    providerPreference:
+      legacyTurnConfigFromAppServerParams(params).provider_preference,
+    modelPreference:
+      legacyTurnConfigFromAppServerParams(params).model_preference,
+  };
+}
+
+function appServerMethodSeen(invokes, method, options = {}) {
+  return appServerMethodRecords(invokes, method, options).length > 0;
+}
+
+function isSmokeDiagnosticJsonRpcId(id) {
+  return String(id || "").startsWith("smoke-");
+}
+
+function appServerResponseForRequestRecord(record) {
+  const requestId = record?.message?.id;
+  if (requestId === undefined || requestId === null) {
+    return null;
+  }
+
+  return (
+    (record.entry?.appServer?.responseMessages || []).find(
+      (message) => message?.id === requestId && "result" in message,
+    ) || null
+  );
+}
+
+function appServerEventSessionId(params) {
+  const event = params?.event || params?.payload || {};
+  return String(
+    event?.sessionId ||
+      event?.session_id ||
+      params?.sessionId ||
+      params?.session_id ||
+      "",
+  );
+}
+
+function appServerEventTurnId(params) {
+  const event = params?.event || params?.payload || {};
+  return String(
+    event?.turnId || event?.turn_id || params?.turnId || params?.turn_id || "",
+  );
+}
+
+function appServerReadResponseHasSessionTurn(response, sessionId, turnId) {
+  if (!response?.result) {
+    return false;
+  }
+
+  const detail = appServerSessionDetailFromRead(response.result);
+  if (sessionId && detail.session_id && detail.session_id !== sessionId) {
+    return false;
+  }
+  if (!turnId) {
+    return true;
+  }
+
+  return (detail.turns || []).some((turn) => turn?.id === turnId);
+}
+
+function appServerSessionReadAfterEventEvidence(
+  invokes,
+  { sessionId, turnId },
+) {
+  const eventRecords = appServerMethodRecords(
+    invokes,
+    APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+    { direction: "response" },
+  ).filter((record) => {
+    const params = record.params || {};
+    const eventSessionId = appServerEventSessionId(params);
+    const eventTurnId = appServerEventTurnId(params);
+    return (
+      (!sessionId || !eventSessionId || eventSessionId === sessionId) &&
+      (!turnId || !eventTurnId || eventTurnId === turnId)
+    );
+  });
+  const readRecords = appServerMethodRecords(
+    invokes,
+    APP_SERVER_METHOD_AGENT_SESSION_READ,
+    { direction: "request" },
+  ).filter((record) => {
+    const params = record.params || {};
+    return (
+      !isSmokeDiagnosticJsonRpcId(record.message?.id) &&
+      (!sessionId || appServerParamSessionId(params) === sessionId)
+    );
+  });
+
+  for (const eventRecord of eventRecords) {
+    for (const readRecord of readRecords) {
+      if (readRecord.invokeIndex <= eventRecord.invokeIndex) {
+        continue;
+      }
+      const response = appServerResponseForRequestRecord(readRecord);
+      if (!appServerReadResponseHasSessionTurn(response, sessionId, turnId)) {
+        continue;
+      }
+      return {
+        sessionId,
+        turnId,
+        eventInvokeIndex: eventRecord.invokeIndex,
+        eventMessageIndex: eventRecord.messageIndex,
+        readInvokeIndex: readRecord.invokeIndex,
+        readMessageIndex: readRecord.messageIndex,
+        readRequestId: String(readRecord.message?.id || ""),
+        source: "gui-network-after-event",
+      };
+    }
+  }
+
+  return null;
+}
+
+async function appServerRpc(
+  options,
+  method,
+  params,
+  timeoutMs = options.timeoutMs,
+) {
+  const id = `smoke-${appServerSmokeRequestId++}`;
+  const request =
+    params === undefined ? { id, method } : { id, method, params };
+  const result = await invoke(
+    options,
+    APP_SERVER_HANDLE_JSON_LINES_COMMAND,
+    {
+      request: {
+        lines: [`${JSON.stringify(request)}\n`],
+      },
+    },
+    timeoutMs,
+  );
+  const messages = decodeJsonRpcLines(result?.lines);
+  const error = messages.find((message) => message?.id === id && message.error);
+  if (error) {
+    throw new Error(String(error.error?.message || "App Server RPC error"));
+  }
+  const response = messages.find(
+    (message) => message?.id === id && "result" in message,
+  );
+  if (!response) {
+    throw new Error(`App Server RPC ${method} 缺少响应`);
+  }
+  return {
+    result: response.result,
+    response,
+    notifications: messages.filter(
+      (message) => message?.method && !("id" in message),
+    ),
+    messages,
+  };
+}
+
+function normalizeAppServerTurn(turn) {
+  if (!turn || typeof turn !== "object") {
+    return null;
+  }
+  return {
+    ...turn,
+    id: turn.id || turn.turnId || turn.turn_id || "",
+    status: turn.status || "",
+  };
+}
+
+function appServerSessionDetailFromRead(readResult) {
+  const detail =
+    readResult?.detail && typeof readResult.detail === "object"
+      ? readResult.detail
+      : {};
+  const turns = Array.isArray(detail.turns)
+    ? detail.turns.map(normalizeAppServerTurn).filter(Boolean)
+    : Array.isArray(readResult?.turns)
+      ? readResult.turns.map(normalizeAppServerTurn).filter(Boolean)
+      : [];
+  return {
+    ...detail,
+    session_id:
+      detail.session_id ||
+      detail.sessionId ||
+      readResult?.session?.sessionId ||
+      readResult?.session?.session_id ||
+      "",
+    turns,
+  };
+}
+
+function appServerThreadReadFromSessionRead(readResult) {
+  const detail = appServerSessionDetailFromRead(readResult);
+  const turns = Array.isArray(detail.turns) ? detail.turns : [];
+  const activeTurn =
+    turns.find((turn) =>
+      [
+        "accepted",
+        "queued",
+        "running",
+        "waitingAction",
+        "waiting_action",
+      ].includes(String(turn?.status || "")),
+    ) || null;
+  const latestTurn = turns.at(-1) || null;
+  const latestTurnStatus = latestTurn?.status || null;
+  return {
+    source: APP_SERVER_METHOD_AGENT_SESSION_READ,
+    session_id: detail.session_id || "",
+    active_turn_id: activeTurn?.id || null,
+    status: activeTurn ? "running" : "idle",
+    queued_turns: Array.isArray(detail.queued_turns)
+      ? detail.queued_turns
+      : Array.isArray(detail.queuedTurns)
+        ? detail.queuedTurns
+        : [],
+    diagnostics: {
+      latest_turn_status: latestTurnStatus,
+    },
+    runtime_summary: {
+      latestTurnStatus,
+    },
+    model_routing: detail.execution_runtime?.routing_decision || null,
+  };
+}
+
+async function readAppServerSession(options, sessionId, timeoutMs = 20_000) {
+  const response = await appServerRpc(
+    options,
+    APP_SERVER_METHOD_AGENT_SESSION_READ,
+    { sessionId },
+    timeoutMs,
+  );
+  return appServerSessionDetailFromRead(response.result);
+}
+
+async function readAppServerThreadRead(options, sessionId, timeoutMs = 20_000) {
+  const response = await appServerRpc(
+    options,
+    APP_SERVER_METHOD_AGENT_SESSION_READ,
+    { sessionId },
+    timeoutMs,
+  );
+  return appServerThreadReadFromSessionRead(response.result);
+}
+
+async function cancelAppServerTurn(
+  options,
+  sessionId,
+  turnId,
+  timeoutMs = 20_000,
+) {
+  if (!sessionId || !turnId) {
+    return false;
+  }
+  await appServerRpc(
+    options,
+    APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
+    { sessionId, turnId },
+    timeoutMs,
+  );
+  return true;
 }
 
 async function restoreOriginalProviderConfig(
@@ -690,10 +1074,20 @@ function latestTurnStatusFromThreadRead(threadRead) {
   );
 }
 
+function isTerminalTurnStatus(status) {
+  return ["aborted", "canceled", "completed", "failed"].includes(
+    String(status || ""),
+  );
+}
+
+function isInterruptedTurnStatus(status) {
+  return ["aborted", "canceled"].includes(String(status || ""));
+}
+
 function syntheticInterruptedTurn(turnId, threadRead) {
   return {
     id: turnId,
-    status: "aborted",
+    status: "canceled",
     synthetic: true,
     source: "thread-read-idle-after-interrupt",
     threadStatus: latestTurnStatusFromThreadRead(threadRead),
@@ -714,7 +1108,9 @@ function interruptDrainedWithoutRecordedTurn({
     queuedTurnCount(session) === 0 &&
     queuedTurnCount(threadRead) === 0 &&
     !activeTurnIdFromThreadRead(threadRead) &&
-    (threadStatus === "idle" || threadStatus === "aborted") &&
+    (threadStatus === "idle" ||
+      threadStatus === "aborted" ||
+      threadStatus === "canceled") &&
     snapshot &&
     !snapshot.stopVisible &&
     !snapshot.finalLineSeen
@@ -1120,6 +1516,7 @@ async function main() {
   let submittedLongTurnId = "";
   let submittedFollowSessionId = "";
   let submittedFollowTurnId = "";
+  const invokeEntryByRequest = new WeakMap();
 
   try {
     const scopedProviderKey = `agent_pref_provider_${workspaceId}`;
@@ -1172,17 +1569,52 @@ async function main() {
       }
       try {
         const parsed = JSON.parse(postData);
-        invokes.push({
+        const entry = attachAppServerRequestMessages({
           at: new Date().toISOString(),
           cmd: parsed.cmd,
           args: parsed.args,
         });
+        invokes.push(entry);
+        invokeEntryByRequest.set(request, entry);
       } catch {
-        invokes.push({
+        const entry = {
           at: new Date().toISOString(),
           cmd: "<parse-error>",
           raw: postData,
-        });
+        };
+        invokes.push(entry);
+        invokeEntryByRequest.set(request, entry);
+      }
+    });
+    page.on("response", async (response) => {
+      const request = response.request();
+      const requestUrl = request.url();
+      if (
+        request.method() !== "POST" ||
+        (requestUrl !== options.invokeUrl && !requestUrl.endsWith("/invoke"))
+      ) {
+        return;
+      }
+      const entry = invokeEntryByRequest.get(request);
+      if (!entry) {
+        return;
+      }
+      try {
+        const text = await response.text();
+        const payload = text ? JSON.parse(text) : null;
+        entry.response = {
+          at: new Date().toISOString(),
+          status: response.status(),
+          ok: response.ok(),
+        };
+        attachAppServerResponsePayload(entry, payload);
+      } catch (error) {
+        entry.response = {
+          at: new Date().toISOString(),
+          status: response.status(),
+          ok: response.ok(),
+          error: error instanceof Error ? error.message : String(error),
+        };
       }
     });
     page.on("requestfailed", (request) => {
@@ -1227,7 +1659,9 @@ async function main() {
       "等待默认工作区完成加载",
       () => {
         const consoleText = readConsoleText(consoleMessages);
-        if (consoleText.includes("AgentChatPage.loadData.projectOnlyComplete")) {
+        if (
+          consoleText.includes("AgentChatPage.loadData.projectOnlyComplete")
+        ) {
           return "AgentChatPage.loadData.projectOnlyComplete";
         }
         if (consoleText.includes("AgentChatPage.loadData.projectLoaded")) {
@@ -1254,21 +1688,24 @@ async function main() {
     await textarea.fill(LONG_PROMPT);
     await clickLastEnabledButton(page, "发送");
     const longSubmit = await waitForCondition(
-      "等待长 turn submit",
+      "等待长 turn App Server submit",
       () =>
-        invokes
-          .slice(longSubmitStart)
-          .find(
-            (item) =>
-              item.cmd === "agent_runtime_submit_turn" &&
-              String(item.args?.request?.message || "").includes(
-                "E2E 中断测试",
-              ),
-          ) || null,
+        findAppServerMethodRecord(
+          invokes.slice(longSubmitStart),
+          APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+          (record) =>
+            appServerTurnInputText(record.params).includes("E2E 中断测试"),
+          { direction: "request" },
+        ),
       30_000,
       250,
     );
-    const longRequest = longSubmit.args?.request || {};
+    const longParams = longSubmit.params || {};
+    const longRequest = {
+      session_id: appServerParamSessionId(longParams),
+      turn_id: appServerParamTurnId(longParams),
+      turn_config: legacyTurnConfigFromAppServerParams(longParams),
+    };
     const sessionId = String(longRequest.session_id || "");
     const longTurnId = String(longRequest.turn_id || "");
     assert(sessionId, "长 turn 缺少 session_id");
@@ -1277,6 +1714,7 @@ async function main() {
     submittedLongTurnId = longTurnId;
     summary.sessionId = sessionId;
     summary.longTurnId = longTurnId;
+    summary.longSubmitAppServer = appServerTurnEvidenceFromRecord(longSubmit);
     summary.longSubmitTurnConfig = longRequest.turn_config || null;
     summary.longTurnOpenDispatches = [
       await dispatchTaskCenterOpenTask(page, sessionId, workspaceId),
@@ -1316,10 +1754,9 @@ async function main() {
             await dispatchTaskCenterOpenTask(page, sessionId, workspaceId),
           );
         }
-        const session = await invoke(
+        const session = await readAppServerSession(
           options,
-          "agent_runtime_get_session",
-          { sessionId },
+          sessionId,
           20_000,
         ).catch(() => null);
         const turn = findTurn(session, longTurnId);
@@ -1368,20 +1805,28 @@ async function main() {
     const interruptStart = invokes.length;
     await clickLastEnabledButton(page, "停止");
     const interruptInvoke = await waitForCondition(
-      "等待 interrupt invoke",
+      "等待 App Server turn cancel invoke",
       () =>
-        invokes
-          .slice(interruptStart)
-          .find(
-            (item) =>
-              item.cmd === "agent_runtime_interrupt_turn" &&
-              String(item.args?.request?.session_id || "") === sessionId,
-          ) || null,
+        findAppServerMethodRecord(
+          invokes.slice(interruptStart),
+          APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
+          (record) => appServerParamSessionId(record.params) === sessionId,
+          { direction: "request" },
+        ),
       30_000,
       250,
     );
-    const interruptRequest = interruptInvoke.args?.request || {};
+    const interruptParams = interruptInvoke.params || {};
+    const interruptRequest = {
+      session_id: appServerParamSessionId(interruptParams),
+      turn_id: appServerParamTurnId(interruptParams),
+    };
     summary.interruptRequest = interruptRequest;
+    summary.interruptAppServer = {
+      method: interruptInvoke.message?.method || "",
+      sessionId: interruptRequest.session_id,
+      turnId: interruptRequest.turn_id,
+    };
     summary.interruptHasTurnScope =
       interruptRequest.session_id === sessionId &&
       interruptRequest.turn_id === longTurnId;
@@ -1395,22 +1840,12 @@ async function main() {
       "等待 turn 中断完成",
       async () => {
         const [session, threadRead, snapshot] = await Promise.all([
-          invoke(
-            options,
-            "agent_runtime_get_session",
-            { sessionId },
-            20_000,
-          ).catch(() => null),
-          invoke(
-            options,
-            "agent_runtime_get_thread_read",
-            { sessionId },
-            20_000,
-          ).catch(() => null),
+          readAppServerSession(options, sessionId, 20_000).catch(() => null),
+          readAppServerThreadRead(options, sessionId, 20_000).catch(() => null),
           readPageSnapshot(page),
         ]);
         const turn = findTurn(session, longTurnId);
-        if (turn && ["aborted", "failed", "completed"].includes(turn.status)) {
+        if (turn && isTerminalTurnStatus(turn.status)) {
           return { turn, session, threadRead, snapshot };
         }
         if (
@@ -1491,21 +1926,24 @@ async function main() {
     await textarea.fill(RECOVERY_PROMPT);
     await clickLastEnabledButton(page, "发送");
     const followSubmit = await waitForCondition(
-      "等待恢复 turn submit",
+      "等待恢复 turn App Server submit",
       () =>
-        invokes
-          .slice(followSubmitStart)
-          .find(
-            (item) =>
-              item.cmd === "agent_runtime_submit_turn" &&
-              String(item.args?.request?.message || "").includes(
-                "停止后恢复测试",
-              ),
-          ) || null,
+        findAppServerMethodRecord(
+          invokes.slice(followSubmitStart),
+          APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+          (record) =>
+            appServerTurnInputText(record.params).includes("停止后恢复测试"),
+          { direction: "request" },
+        ),
       30_000,
       250,
     );
-    const followRequest = followSubmit.args?.request || {};
+    const followParams = followSubmit.params || {};
+    const followRequest = {
+      session_id: appServerParamSessionId(followParams),
+      turn_id: appServerParamTurnId(followParams),
+      turn_config: legacyTurnConfigFromAppServerParams(followParams),
+    };
     const followSessionId = String(followRequest.session_id || sessionId);
     const followTurnId = String(followRequest.turn_id || "");
     assert(followSessionId, "恢复 turn 缺少 session_id");
@@ -1515,72 +1953,26 @@ async function main() {
     summary.followSessionId = followSessionId;
     summary.followTurnId = followTurnId;
     summary.followUsesOriginalSession = followSessionId === sessionId;
+    summary.followSubmitAppServer =
+      appServerTurnEvidenceFromRecord(followSubmit);
     summary.followSubmitTurnConfig = followRequest.turn_config || null;
 
-    let followCompleted = await waitForCondition(
+    const followCompleted = await waitForCondition(
       "等待恢复 turn 完成",
       async () => {
-        const session = await invoke(
+        const session = await readAppServerSession(
           options,
-          "agent_runtime_get_session",
-          { sessionId: followSessionId },
+          followSessionId,
           20_000,
         ).catch(() => null);
         const turn = findTurn(session, followTurnId);
-        return turn && ["completed", "failed", "aborted"].includes(turn.status)
+        return turn && isTerminalTurnStatus(turn.status)
           ? { turn, session }
           : null;
       },
-      20_000,
+      120_000,
       1_000,
-    ).catch((error) => {
-      summary.followCompletionInitialWait = {
-        passed: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
-      return null;
-    });
-    if (!followCompleted) {
-      logStage("promote-queued-recovery-turn");
-      const promoted = await invoke(
-        options,
-        "agent_runtime_promote_queued_turn",
-        {
-          request: {
-            session_id: followSessionId,
-            queued_turn_id: followTurnId,
-          },
-        },
-        20_000,
-      ).catch((error) => ({
-        __error: error instanceof Error ? error.message : String(error),
-      }));
-      summary.followQueuedPromotion = {
-        attempted: true,
-        promoted: promoted === true,
-        error:
-          promoted && typeof promoted === "object" && "__error" in promoted
-            ? promoted.__error
-            : null,
-      };
-      followCompleted = await waitForCondition(
-        "等待恢复 turn 完成",
-        async () => {
-          const session = await invoke(
-            options,
-            "agent_runtime_get_session",
-            { sessionId: followSessionId },
-            20_000,
-          ).catch(() => null);
-          const turn = findTurn(session, followTurnId);
-          return turn && ["completed", "failed", "aborted"].includes(turn.status)
-            ? { turn, session }
-            : null;
-        },
-        120_000,
-        1_000,
-      );
-    }
+    );
     latestSession = followCompleted.session || latestSession;
     summary.followTurn = followCompleted.turn;
     summary.followTurnStatus = followCompleted.turn?.status || null;
@@ -1590,8 +1982,9 @@ async function main() {
     ]
       .filter(Boolean)
       .join("\n");
-    summary.followPersistedRecoveryBeforeGuiWait =
-      followAssistantText.includes(RECOVERY_EXPECTED_TEXT);
+    summary.followPersistedRecoveryBeforeGuiWait = followAssistantText.includes(
+      RECOVERY_EXPECTED_TEXT,
+    );
     let recoverySnapshot = null;
     try {
       recoverySnapshot = await waitForCondition(
@@ -1618,12 +2011,9 @@ async function main() {
         error: recoveryWaitMessage,
       };
       latestSession =
-        (await invoke(
-          options,
-          "agent_runtime_get_session",
-          { sessionId: followSessionId },
-          20_000,
-        ).catch(() => null)) || latestSession;
+        (await readAppServerSession(options, followSessionId, 20_000).catch(
+          () => null,
+        )) || latestSession;
       const persistedAssistantText = [
         allAssistantText(latestSession),
         allAgentItemText(latestSession),
@@ -1684,10 +2074,9 @@ async function main() {
     });
 
     logStage("collect-runtime-evidence");
-    const threadRead = await invoke(
+    const threadRead = await readAppServerThreadRead(
       options,
-      "agent_runtime_get_thread_read",
-      { sessionId: followSessionId },
+      followSessionId,
       20_000,
     ).catch((error) => ({
       __error: error instanceof Error ? error.message : String(error),
@@ -1719,7 +2108,9 @@ async function main() {
     summary.threadRead = threadRead?.__error
       ? { error: threadRead.__error }
       : threadRead;
-    summary.threadReadStatus = latestTurnStatusFromThreadRead(summary.threadRead);
+    summary.threadReadStatus = latestTurnStatusFromThreadRead(
+      summary.threadRead,
+    );
     const latestRuntimeRouting =
       latestSession?.execution_runtime?.routing_decision ||
       threadRead?.model_routing ||
@@ -1752,8 +2143,9 @@ async function main() {
     summary.runtimeStreamLineCount = (
       assistantText.match(/中断测试第\s*\d+\s*行/g) || []
     ).length;
-    summary.interruptedAssistantContainsFinalLine =
-      assistantText.includes(`中断测试第 ${LONG_TURN_LINE_COUNT} 行`);
+    summary.interruptedAssistantContainsFinalLine = assistantText.includes(
+      `中断测试第 ${LONG_TURN_LINE_COUNT} 行`,
+    );
     summary.consoleErrorCount = consoleErrors.length;
     summary.blockingConsoleErrorCount = blockingConsoleErrors.length;
     summary.benignConsoleErrorCount = benignConsoleErrors.length;
@@ -1761,6 +2153,50 @@ async function main() {
     summary.networkErrorCount = failedRequests.length;
     summary.networkErrorTop = networkErrorTop;
     summary.devBridgeCommands = [...new Set(invokes.map((item) => item.cmd))];
+    const appServerReadAfterEvent =
+      appServerSessionReadAfterEventEvidence(invokes, {
+        sessionId: followSessionId,
+        turnId: followTurnId,
+      }) ||
+      appServerSessionReadAfterEventEvidence(invokes, {
+        sessionId,
+        turnId: longTurnId,
+      });
+    summary.appServerMethods = [
+      ...new Set(
+        invokes.flatMap((item) =>
+          [
+            ...(item.appServer?.requestMessages || []),
+            ...(item.appServer?.responseMessages || []),
+          ]
+            .map((message) => message?.method)
+            .filter(Boolean),
+        ),
+      ),
+    ];
+    summary.appServerEvidence = {
+      turnStartCount: appServerMethodRecords(
+        invokes,
+        APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+        { direction: "request" },
+      ).length,
+      turnCancelCount: appServerMethodRecords(
+        invokes,
+        APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
+        { direction: "request" },
+      ).length,
+      sessionReadCount: appServerMethodRecords(
+        invokes,
+        APP_SERVER_METHOD_AGENT_SESSION_READ,
+        { direction: "request" },
+      ).length,
+      eventNotificationCount: appServerMethodRecords(
+        invokes,
+        APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        { direction: "response" },
+      ).length,
+      readAfterEvent: appServerReadAfterEvent,
+    };
     summary.mockFallbackLines = mockFallbackLines;
     summary.assertions = {
       workspaceReady: Boolean(readySnapshot?.ready),
@@ -1774,11 +2210,31 @@ async function main() {
         summary.runtimeStreamLineCount >=
           Number(firstDelta?.streamLineCount || 1),
       stopButtonVisible: Boolean(firstDelta?.stopVisible),
-      interruptCommandSeen: summary.devBridgeCommands.includes(
-        "agent_runtime_interrupt_turn",
+      appServerTurnStartSeen: appServerMethodSeen(
+        invokes,
+        APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+        { direction: "request" },
       ),
+      appServerTurnCancelSeen: appServerMethodSeen(
+        invokes,
+        APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
+        { direction: "request" },
+      ),
+      appServerSessionReadSeen: appServerMethodSeen(
+        invokes,
+        APP_SERVER_METHOD_AGENT_SESSION_READ,
+        { direction: "request" },
+      ),
+      appServerEventSeen: appServerMethodSeen(
+        invokes,
+        APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        { direction: "response" },
+      ),
+      appServerSessionReadAfterEventSeen: Boolean(appServerReadAfterEvent),
       interruptScopedToLongTurn: Boolean(summary.interruptHasTurnScope),
-      interruptedTurnAborted: summary.interruptedTurnStatus === "aborted",
+      interruptedTurnCanceled: isInterruptedTurnStatus(
+        summary.interruptedTurnStatus,
+      ),
       recoveryTurnCompleted: summary.followTurnStatus === "completed",
       recoveryPersistedInRuntime: summary.assistantContainsRecovery,
       recoveryVisibleInGui: Boolean(recoverySnapshot?.recoveryVisible),
@@ -1834,9 +2290,13 @@ async function main() {
       summary.assertions.streamFirstDeltaSeen &&
       summary.assertions.streamGrowthObserved &&
       summary.assertions.stopButtonVisible &&
-      summary.assertions.interruptCommandSeen &&
+      summary.assertions.appServerTurnStartSeen &&
+      summary.assertions.appServerTurnCancelSeen &&
+      summary.assertions.appServerSessionReadSeen &&
+      summary.assertions.appServerEventSeen &&
+      summary.assertions.appServerSessionReadAfterEventSeen &&
       summary.assertions.interruptScopedToLongTurn &&
-      summary.assertions.interruptedTurnAborted &&
+      summary.assertions.interruptedTurnCanceled &&
       summary.assertions.recoveryTurnCompleted &&
       summary.assertions.recoveryPersistedInRuntime &&
       summary.assertions.recoveryVisibleInGui &&
@@ -1905,17 +2365,24 @@ async function main() {
     summary.networkErrorCount = failedRequests.length;
     summary.networkErrorTop = failureConsoleNetwork.networkErrorTop;
     summary.devBridgeCommands = [...new Set(invokes.map((item) => item.cmd))];
+    summary.appServerMethods = [
+      ...new Set(
+        invokes.flatMap((item) =>
+          [
+            ...(item.appServer?.requestMessages || []),
+            ...(item.appServer?.responseMessages || []),
+          ]
+            .map((message) => message?.method)
+            .filter(Boolean),
+        ),
+      ),
+    ];
 
     if (submittedSessionId) {
-      summary.failureCleanupInterrupt = await invoke(
+      summary.failureCleanupInterrupt = await cancelAppServerTurn(
         options,
-        "agent_runtime_interrupt_turn",
-        {
-          request: {
-            session_id: submittedSessionId,
-            ...(submittedLongTurnId ? { turn_id: submittedLongTurnId } : {}),
-          },
-        },
+        submittedSessionId,
+        submittedLongTurnId,
         20_000,
       )
         .then(() => ({ attempted: true, status: "sent" }))
@@ -1932,17 +2399,10 @@ async function main() {
         (submittedFollowSessionId !== submittedSessionId ||
           submittedFollowTurnId !== submittedLongTurnId)
       ) {
-        summary.failureCleanupFollowInterrupt = await invoke(
+        summary.failureCleanupFollowInterrupt = await cancelAppServerTurn(
           options,
-          "agent_runtime_interrupt_turn",
-          {
-            request: {
-              session_id: submittedFollowSessionId,
-              ...(submittedFollowTurnId
-                ? { turn_id: submittedFollowTurnId }
-                : {}),
-            },
-          },
+          submittedFollowSessionId,
+          submittedFollowTurnId,
           20_000,
         )
           .then(() => ({ attempted: true, status: "sent" }))
@@ -1955,10 +2415,9 @@ async function main() {
                 : String(interruptError),
           }));
       }
-      const failureSession = await invoke(
+      const failureSession = await readAppServerSession(
         options,
-        "agent_runtime_get_session",
-        { sessionId: submittedFollowSessionId || submittedSessionId },
+        submittedFollowSessionId || submittedSessionId,
         20_000,
       ).catch((sessionError) => ({
         __error:
@@ -1966,10 +2425,9 @@ async function main() {
             ? sessionError.message
             : String(sessionError),
       }));
-      const failureThreadRead = await invoke(
+      const failureThreadRead = await readAppServerThreadRead(
         options,
-        "agent_runtime_get_thread_read",
-        { sessionId: submittedFollowSessionId || submittedSessionId },
+        submittedFollowSessionId || submittedSessionId,
         20_000,
       ).catch((threadError) => ({
         __error:

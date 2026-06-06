@@ -16,10 +16,7 @@ import { openUrl } from "@/lib/openUrl";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOemCloudAccess } from "@/hooks/useOemCloudAccess";
 import { formatDate } from "@/i18n/format";
-import {
-  getConfig,
-  subscribeAppConfigChanged,
-} from "@/lib/api/appConfig";
+import { getConfig, subscribeAppConfigChanged } from "@/lib/api/appConfig";
 import {
   getCompanionPetStatus,
   launchCompanionPet,
@@ -1244,6 +1241,7 @@ export function CloudProviderSettings(props: CloudProviderSettingsProps) {
         setCompanionEntryEnabled(
           resolveEnabledSidebarNavItems(
             config.navigation?.enabled_items,
+            config.navigation?.schema_version,
           ).includes(COMPANION_NAV_ITEM_ID),
         );
       } catch (error) {
@@ -1365,12 +1363,12 @@ export function CloudProviderSettings(props: CloudProviderSettingsProps) {
       }}
     />
   );
-  const companionContent = (
+  const companionContent = companionEntryEnabled ? (
     <div className="space-y-5">
       <CompanionProviderBridgeCard />
       <CompanionCapabilityPreferencesCard />
     </div>
-  );
+  ) : null;
 
   return (
     <div className="space-y-4">
@@ -1432,9 +1430,11 @@ export function CloudProviderSettings(props: CloudProviderSettingsProps) {
           </TabsContent>
         ) : null}
 
-        <TabsContent value="companion" className="mt-0">
-          {companionContent}
-        </TabsContent>
+        {companionEntryEnabled ? (
+          <TabsContent value="companion" className="mt-0">
+            {companionContent}
+          </TabsContent>
+        ) : null}
       </Tabs>
     </div>
   );

@@ -694,6 +694,7 @@
   "workspace.video.workspace.recentTasks.tipAria": "最近のタスクの説明",
   "workspace.video.workspace.recentTasks.tipContent": "最新の動画タスクを時系列の降順で表示し、プレビュー切り替えや失敗原因の確認に使えます。",
   "workspace.video.workspace.recentTasks.count": "{{value}} 件",
+  "workspace.video.workspace.recentTasks.taskId": "タスク ID {{id}}",
   "workspace.video.workspace.recentTasks.empty": "表示できるタスク記録はまだありません。動画生成を一度送信すると、結果が自動的にここへ保存されます。",
   "workspace.video.workspace.recentTasks.action.currentPreview": "現在のプレビュー",
   "workspace.video.workspace.recentTasks.action.switchPreview": "プレビューを切り替え",

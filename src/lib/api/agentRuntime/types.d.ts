@@ -1093,6 +1093,7 @@ export interface AgentRuntimeSubmitTurnRequest {
 }
 export interface AgentRuntimeCreateSessionOptions {
   runStartHooks?: boolean;
+  metadata?: Record<string, unknown>;
 }
 export interface AgentRuntimeInterruptTurnRequest {
   session_id: string;

@@ -1404,7 +1404,10 @@ mod tests {
             )
             .await
             .expect("snake_case dependency update should succeed");
-        assert_eq!(update_result.metadata["task"]["activeForm"], json!("等待前置任务完成"));
+        assert_eq!(
+            update_result.metadata["task"]["activeForm"],
+            json!("等待前置任务完成")
+        );
         assert_eq!(update_result.metadata["task"]["blockedBy"], json!(["1"]));
 
         let list_result = list_tool

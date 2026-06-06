@@ -132,16 +132,17 @@ export function resolveMediaGenerationPreference(
 }
 
 export function findMediaProviderById<T extends MediaProviderCandidate>(
-  providers: T[],
+  providers: T[] | null | undefined,
   providerId?: string | null,
 ): T | null {
   const normalizedProviderId = providerId?.trim().toLowerCase();
   if (!normalizedProviderId) {
     return null;
   }
+  const safeProviders = Array.isArray(providers) ? providers : [];
 
   return (
-    providers.find(
+    safeProviders.find(
       (provider) => provider.id.trim().toLowerCase() === normalizedProviderId,
     ) ?? null
   );
@@ -190,9 +191,10 @@ export function getVideoModelsForProvider(
 }
 
 export function findVideoProviderForSelection<T extends MediaProviderCandidate>(
-  providers: T[],
+  providers: T[] | null | undefined,
   modelType: VideoModelPreset,
 ): T | null {
+  const safeProviders = Array.isArray(providers) ? providers : [];
   const preferredKeywords: string[] =
     modelType === "keling"
       ? ["kling", "hailuo", "minimax"]
@@ -201,7 +203,7 @@ export function findVideoProviderForSelection<T extends MediaProviderCandidate>(
         : ["dashscope", "alibaba", "qwen"];
 
   for (const keyword of preferredKeywords) {
-    const matched = providers.find((provider) =>
+    const matched = safeProviders.find((provider) =>
       provider.id.toLowerCase().includes(keyword),
     );
     if (matched) {
@@ -209,7 +211,7 @@ export function findVideoProviderForSelection<T extends MediaProviderCandidate>(
     }
   }
 
-  return providers[0] ?? null;
+  return safeProviders[0] ?? null;
 }
 
 export function pickVideoModelByVersion(
@@ -256,18 +258,19 @@ export function isTtsProvider(
 }
 
 export function findTtsProviderForSelection<T extends MediaProviderCandidate>(
-  providers: T[],
+  providers: T[] | null | undefined,
 ): T | null {
+  const safeProviders = Array.isArray(providers) ? providers : [];
   const preferredKeywords = ["openai", "new-api", "azure", "google", "tts"];
   for (const keyword of preferredKeywords) {
-    const matched = providers.find((provider) =>
+    const matched = safeProviders.find((provider) =>
       `${provider.id}:${provider.type ?? ""}`.toLowerCase().includes(keyword),
     );
     if (matched) {
       return matched;
     }
   }
-  return providers[0] ?? null;
+  return safeProviders[0] ?? null;
 }
 
 export function getTtsModelsForProvider(customModels?: string[]): string[] {

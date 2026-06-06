@@ -17,6 +17,8 @@
 
 其余实现必须被明确归类。
 
+生产路径不能 mock。mock 只允许作为测试夹具、契约守卫或已标明测试场景的本地 fixture；如果生产入口需要靠 `defaultMocks`、`mockPriorityCommands`、`invokeMockOnly`、renderer mock fallback 或 App Server mock backend 才能跑通，该入口应判为阻塞缺口，而不是可交付降级。
+
 ## 无历史包袱原则
 
 如果用户已经明确下面任一前提：
@@ -82,7 +84,7 @@
 开始改动前，先盘点这项能力在 4 层中的分布：
 
 - 入口层：页面、组件、Hook、前端 API
-- 服务层：Electron host、App Server JSON-RPC、legacy Tauri adapter、Service、Workflow、事件入口
+- 服务层：Electron Desktop Host bridge、App Server JSON-RPC、legacy desktop facade、Service、Workflow、事件入口
 - 存储层：表、DAO、Repository、缓存、迁移
 - 旁路层：统计、记忆、搜索、审计、报表、任务系统
 
@@ -162,14 +164,15 @@ npm run test:contracts
 
 - `governance:legacy-report`
   - 扫描已被判定为 `deprecated` / `dead-candidate` 的前端入口
-  - 检查旧 Tauri adapter 是否仍被限制在指定 API 网关，且没有重新承接 current 能力
+  - 检查 legacy desktop facade 是否仍被限制在指定 API 网关，且没有重新承接 current 能力
   - 找出已经零引用、可进入删除候选的兼容壳
   - 规则事实源优先看 `src/lib/governance/legacySurfaceCatalog.json`
 - `test:contracts`
   - 检查前端 `safeInvoke(...)` / `invoke(...)` 的实际调用
-  - 检查 Electron host / App Server JSON-RPC / legacy `tauri::generate_handler!` 的实际注册或协议
+  - 检查 Electron Host bridge / App Server JSON-RPC / legacy host 的实际注册或协议
   - 检查 `src/lib/governance/agentCommandCatalog.json` 中的命令治理口径
   - 检查 `mockPriorityCommands` 与 `defaultMocks` 是否同步
+  - 检查 mock 是否只停留在测试夹具 / 契约守卫；生产入口不得把 mock 当 fallback
 
 原则只有一句：
 
@@ -215,14 +218,14 @@ npm run test:contracts
 
 ### 1. 命令边界
 
-只要改动涉及 Electron IPC、App Server JSON-RPC、Bridge、mock、前端 API 网关或 legacy Tauri adapter，至少同时看这几处：
+只要改动涉及 Electron IPC、App Server JSON-RPC、Bridge、mock、前端 API 网关或 legacy desktop facade，至少同时看这几处：
 
 - 前端 `safeInvoke(...)` / `invoke(...)`
-- Electron host / preload 白名单或 App Server JSON-RPC 协议
-- legacy Tauri adapter 的 `tauri::generate_handler!`（仅在触碰兼容 adapter 时）
+- Electron Desktop Host bridge / preload 白名单或 App Server JSON-RPC 协议
+- legacy desktop facade 注册（仅在触碰兼容层时）
 - `src/lib/governance/agentCommandCatalog.json`
 - `src/lib/dev-bridge/mockPriorityCommands.ts`
-- `src/lib/desktop-host/` / legacy `src/lib/tauri-mock/core.ts`
+- `src/lib/desktop-host/` / legacy mock path
 
 命令边界的详细规则，直接看：
 
@@ -271,7 +274,7 @@ npm run test:contracts
 遇到 Agent / 聊天 / 会话相关新旧并存时，至少问这几个问题：
 
 - 前端唯一入口是不是已经收敛到现役 API 网关
-- 新增服务化能力是不是已经收敛到 App Server JSON-RPC；旧 `agent_runtime_*` 是否只作为 Desktop 兼容适配入口
+- 新增服务化能力是不是已经收敛到 App Server JSON-RPC；旧 `agent_runtime_*` 是否只作为 Desktop 兼容 facade 入口
 - 旧 `chat_*`、`general_chat_*`、历史 helper 是否还在继续长逻辑
 - 命令契约五个事实源之间有没有漂移
 

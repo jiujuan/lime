@@ -1,3 +1,4 @@
+import { AppServerClient } from "@/lib/api/appServer";
 import { safeInvoke } from "@/lib/dev-bridge";
 import type { AgentRun } from "@/lib/api/executionRun";
 import type { BrowserStreamMode } from "@/lib/webview-api";
@@ -5,6 +6,10 @@ import type {
   AsterApprovalPolicy,
   AsterSandboxPolicy,
 } from "@/lib/api/agentRuntime";
+import {
+  METHOD_AUTOMATION_JOB_LIST,
+  type AutomationJobListResponse as AppServerAutomationJobListResponse,
+} from "../../../packages/app-server-client/src/protocol";
 
 export type TaskSchedule =
   | { kind: "every"; every_secs: number }
@@ -121,6 +126,31 @@ export interface AutomationJobRecord {
   updated_at: string;
 }
 
+type AutomationAppServerClient = Pick<AppServerClient, "request">;
+
+async function requestAutomationAppServer<T>(
+  method: string,
+  params: unknown,
+  appServerClient: AutomationAppServerClient = new AppServerClient(),
+): Promise<T> {
+  const response = await appServerClient.request<T>(method, params);
+  return response.result;
+}
+
+function normalizeAutomationJobListResponse(
+  response: AppServerAutomationJobListResponse | null | undefined,
+): AutomationJobRecord[] {
+  if (!response || typeof response !== "object") {
+    throw new Error("App Server automationJob/list did not return jobs");
+  }
+
+  if (!Array.isArray(response.jobs)) {
+    throw new Error("App Server automationJob/list did not return jobs");
+  }
+
+  return response.jobs as AutomationJobRecord[];
+}
+
 export interface AutomationJobRequest {
   name: string;
   description?: string | null;
@@ -224,7 +254,12 @@ export async function getAutomationStatus(): Promise<AutomationStatus> {
 }
 
 export async function getAutomationJobs(): Promise<AutomationJobRecord[]> {
-  return safeInvoke("get_automation_jobs");
+  const response =
+    await requestAutomationAppServer<AppServerAutomationJobListResponse>(
+      METHOD_AUTOMATION_JOB_LIST,
+      {},
+    );
+  return normalizeAutomationJobListResponse(response);
 }
 
 export async function getAutomationJob(

@@ -8,10 +8,24 @@ type WebviewWindowOptions = WindowOptions & {
 
 const windows = new Map<string, WebviewWindow>();
 
+function isTestEnvironment(): boolean {
+  return Boolean(import.meta.env?.MODE === "test" || import.meta.env?.VITEST);
+}
+
+function assertTestWebviewWindowFixture(): void {
+  if (isTestEnvironment()) {
+    return;
+  }
+  throw new Error(
+    "[Mock] WebviewWindow 只能在测试环境使用；生产独立窗口必须进入 Electron Desktop Host IPC。",
+  );
+}
+
 export class WebviewWindow extends MockWindow {
   readonly url?: string;
 
   constructor(label: string, options: WebviewWindowOptions = {}) {
+    assertTestWebviewWindowFixture();
     super(label, options);
     this.url = options.url;
     windows.set(label, this);

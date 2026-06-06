@@ -377,8 +377,8 @@ export declare const AGENT_RUNTIME_COMMAND_DESCRIPTORS: readonly [
     readonly domain: "inventory";
     readonly requestType: "AgentRuntimeListWorkspaceSkillBindingsRequest";
     readonly responseType: "AgentRuntimeWorkspaceSkillBindings";
-    readonly lifecycle: "current";
-    readonly mockStrategy: "mock-priority";
+    readonly lifecycle: "compat";
+    readonly mockStrategy: "bridge-only";
     readonly docsSection: "agent-runtime.inventory";
   },
   {

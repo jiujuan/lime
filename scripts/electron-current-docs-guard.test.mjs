@@ -21,11 +21,108 @@ function retiredCliCommandPattern() {
   return new RegExp(["\\b", "ta", "uri dev\\b"].join(""), "i");
 }
 
+function retiredHostTerms() {
+  return [
+    ["ta", "uri:"].join(""),
+    ["src-", "ta", "uri"].join(""),
+    ["@", "ta", "uri-apps"].join(""),
+    ["__TA", "URI__"].join(""),
+    ["TA", "URI_"].join(""),
+    ["#[", "ta", "uri::command]"].join(""),
+    "SC_DISABLE_SPEEDY",
+  ];
+}
+
 function expectNoRetiredGuiStartupReference(content, label) {
   expect(content, label).not.toMatch(retiredGuiCommandPattern());
   expect(content, label).not.toMatch(retiredCliCommandPattern());
   expect(content, label).not.toContain(["headless ", "Ta", "uri"].join(""));
   expect(content, label).not.toContain(["验证 ", "Ta", "uri 壳"].join(""));
+}
+
+function expectNoRetiredCurrentHostReference(content, label) {
+  expectNoRetiredGuiStartupReference(content, label);
+  for (const term of retiredHostTerms()) {
+    expect(content, label).not.toContain(term);
+  }
+}
+
+function listMarkdownFiles(root) {
+  const entries = fs.readdirSync(root, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const path = `${root}/${entry.name}`;
+    if (entry.isDirectory()) {
+      files.push(...listMarkdownFiles(path));
+    } else if (entry.isFile() && entry.name.endsWith(".md")) {
+      files.push(path);
+    }
+  }
+  return files;
+}
+
+function splitSentences(content) {
+  return content
+    .split(/(?<=[。！？!?])|\n+/u)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+}
+
+function hasCodexReference(sentence) {
+  return (
+    sentence.includes("/Users/coso/Documents/dev/rust/codex") ||
+    sentence.includes("codex-rs") ||
+    sentence.includes("Codex CLI")
+  );
+}
+
+function hasRetiredCodexAppTarget(sentence) {
+  return [
+    "Codex App UI",
+    "Codex App 前端",
+    "Electron shell",
+    "tray",
+    "托盘",
+    "Dock",
+    "updater",
+    "桌面壳",
+  ].some((term) => sentence.includes(term));
+}
+
+function hasReferenceVerb(sentence) {
+  return ["参考", "借鉴", "复用", "覆盖", "推断"].some((term) =>
+    sentence.includes(term),
+  );
+}
+
+function isNegatedReference(sentence) {
+  return [
+    "不参考",
+    "不得把",
+    "不得作为",
+    "不覆盖",
+    "不包含",
+    "没有",
+    "不能",
+    "不是",
+    "不从",
+    "禁止",
+  ].some((term) => sentence.includes(term));
+}
+
+function expectNoPositiveCodexAppUiReference(content, label) {
+  const offendingSentences = splitSentences(content).filter(
+    (sentence) =>
+      hasCodexReference(sentence) &&
+      hasRetiredCodexAppTarget(sentence) &&
+      hasReferenceVerb(sentence) &&
+      !isNegatedReference(sentence),
+  );
+
+  expect(
+    offendingSentences,
+    `${label} must not treat Codex CLI/codex-rs as Codex App UI or desktop shell reference`,
+  ).toEqual([]);
 }
 
 describe("Electron current testing docs guard", () => {
@@ -46,7 +143,9 @@ describe("Electron current testing docs guard", () => {
       expectNoRetiredGuiStartupReference(readFile(path), path);
     }
 
-    const qcloopOperations = readFile("internal/tests/lime-agent-qc-qcloop-operations.md");
+    const qcloopOperations = readFile(
+      "internal/tests/lime-agent-qc-qcloop-operations.md",
+    );
     const currentStartupSection = sectionBetween(
       qcloopOperations,
       "## 3. qcloop server 启动环境",
@@ -60,7 +159,9 @@ describe("Electron current testing docs guard", () => {
   });
 
   it("keeps GUI smoke fixtures on Electron current commands", () => {
-    const agentQcReportTest = readFile("scripts/lib/agent-qc-report-core.test.ts");
+    const agentQcReportTest = readFile(
+      "scripts/lib/agent-qc-report-core.test.ts",
+    );
     expect(agentQcReportTest).toContain(
       '"verify:gui-smoke": "npm run smoke:electron"',
     );
@@ -141,5 +242,254 @@ describe("Electron current testing docs guard", () => {
       strategyCurrentSection,
       "internal/test/testing-strategy-2026.md#current",
     );
+  });
+
+  it("keeps high-weight current guidance free of retired host examples", () => {
+    const currentGuides = [
+      "AGENTS.md",
+      "internal/aiprompts/README.md",
+      "internal/aiprompts/commands.md",
+      "internal/aiprompts/governance.md",
+      "internal/aiprompts/hooks.md",
+      "internal/aiprompts/mcp.md",
+      "internal/aiprompts/overview.md",
+      "internal/aiprompts/performance-profiling.md",
+      "internal/aiprompts/playwright-e2e.md",
+      "internal/aiprompts/quality-workflow.md",
+      "internal/aiprompts/workspace.md",
+      ".codex/skills/lime-command-boundary/SKILL.md",
+      ".codex/skills/lime-governance/SKILL.md",
+      ".codex/skills/lime-quality-workflow/SKILL.md",
+      ".codex/skills/lime-playwright-e2e/SKILL.md",
+      "internal/roadmap/appserver/README.md",
+      "internal/roadmap/appserver/architecture.md",
+      "internal/roadmap/appserver/consumer-integration.md",
+      "internal/roadmap/appserver/flowcharts.md",
+      "internal/roadmap/appserver/frontend-electron-migration.md",
+      "internal/roadmap/appserver/frontend-integration-matrix.md",
+      "internal/roadmap/appserver/implementation-plan.md",
+      "internal/roadmap/appserver/prd.md",
+      "internal/roadmap/appserver/protocol.md",
+      "internal/roadmap/appserver/release-updater.md",
+      "internal/roadmap/appserver/sequences.md",
+      "internal/roadmap/appserver/service-extraction.md",
+      "index.html",
+    ];
+
+    for (const filePath of currentGuides) {
+      expectNoRetiredCurrentHostReference(readFile(filePath), filePath);
+    }
+  });
+
+  it("documents the codex-rs reference boundary without treating Codex CLI as Codex App UI", () => {
+    const roadmap = readFile("internal/roadmap/appserver/README.md");
+    expect(roadmap).toContain("/Users/coso/Documents/dev/rust/codex");
+    expect(roadmap).toContain("codex-rs");
+    expect(roadmap).toContain("Codex CLI");
+    expect(roadmap).toContain("不包含 Codex App 前端实现");
+    expect(roadmap).toContain("不得把它当作 Codex App UI");
+    expect(roadmap).toContain("Electron shell、托盘、Dock、updater");
+
+    const architecture = readFile("internal/roadmap/appserver/architecture.md");
+    expect(architecture).toContain("Codex CLI");
+    expect(architecture).toContain("Codex CLI 版本代码");
+    expect(architecture).toContain("codex-rs");
+    expect(architecture).toContain("不包含 Codex App 前端实现");
+    expect(architecture).toContain("不参考 Codex App UI 或桌面壳实现");
+
+    const implementationPlan = readFile(
+      "internal/roadmap/appserver/implementation-plan.md",
+    );
+    expect(implementationPlan).toContain("Codex CLI");
+    expect(implementationPlan).toContain("codex-rs");
+    expect(implementationPlan).toContain("不覆盖 Codex App UI 或桌面壳实现");
+    expect(implementationPlan).toContain(
+      "Rust App Server / protocol / client / daemon",
+    );
+
+    const execPlan = readFile(
+      "internal/exec-plans/app-server-implementation-plan.md",
+    );
+    const referenceScope = sectionBetween(
+      execPlan,
+      "## 2. 参考 Codex 的范围",
+      "\n## 3.",
+    );
+    expect(referenceScope).toContain("Codex CLI");
+    expect(referenceScope).toContain("Codex CLI 版本代码");
+    expect(referenceScope).toContain("codex-rs");
+    expect(referenceScope).toContain("不包含 Codex App 前端实现");
+    expect(referenceScope).toContain("不参考 Codex App UI");
+    expect(referenceScope).toContain("Electron shell、tray、Dock、updater");
+    expect(referenceScope).not.toContain("Codex App 前端参考");
+    expect(referenceScope).not.toContain("Codex App UI 参考");
+  });
+
+  it("blocks positive Codex App UI or desktop shell references in current docs", () => {
+    const scannedFiles = [
+      ...listMarkdownFiles("internal/roadmap/appserver"),
+      ...listMarkdownFiles("internal/aiprompts"),
+      "internal/exec-plans/app-server-implementation-plan.md",
+      "scripts/electron-current-docs-guard.test.mjs",
+    ];
+
+    for (const filePath of scannedFiles) {
+      expectNoPositiveCodexAppUiReference(readFile(filePath), filePath);
+    }
+  });
+
+  it("keeps Electron release and updater docs aligned with current packaging", () => {
+    const releaseUpdater = readFile(
+      "internal/roadmap/appserver/release-updater.md",
+    );
+    expect(releaseUpdater).toContain("electron-builder.yml");
+    expect(releaseUpdater).toContain("electron/updateHost.ts");
+    expect(releaseUpdater).toContain("electron-updater");
+    expect(releaseUpdater).toContain("ElectronUpdateHost");
+    expect(releaseUpdater).toContain("LIME_ELECTRON_UPDATES_URL");
+    expect(releaseUpdater).toContain("latest-mac.yml");
+    expect(releaseUpdater).toContain("latest.yml");
+    expect(releaseUpdater).toContain("darwin-arm64");
+    expect(releaseUpdater).toContain("darwin-x64");
+    expect(releaseUpdater).toContain("win32-x64");
+    expect(releaseUpdater).toContain("Cloudflare R2");
+    expect(releaseUpdater).toContain("CSC_LINK");
+    expect(releaseUpdater).toContain("APPLE_APP_SPECIFIC_PASSWORD");
+    expect(releaseUpdater).toContain("app-server.release.json");
+    expect(releaseUpdater).toContain("不进入 App Server JSON-RPC");
+    expect(releaseUpdater).toContain("不从 Codex App UI 推断");
+    expectNoRetiredCurrentHostReference(
+      releaseUpdater,
+      "internal/roadmap/appserver/release-updater.md",
+    );
+
+    const electronBuilder = readFile("electron-builder.yml");
+    expect(electronBuilder).toContain("appId: com.limecloud.lime");
+    expect(electronBuilder).toContain("productName: Lime");
+    expect(electronBuilder).toContain("provider: generic");
+    expect(electronBuilder).toContain("url: ${env.LIME_ELECTRON_UPDATES_URL}");
+    expect(electronBuilder).toContain("app-server.release.json");
+    expect(electronBuilder).toContain("app-server");
+
+    const updateHost = readFile("electron/updateHost.ts");
+    expect(updateHost).toContain(
+      'import electronUpdater, { type ProgressInfo, type UpdateInfo } from "electron-updater"',
+    );
+    expect(updateHost).toContain(
+      'autoUpdater.setFeedURL({ provider: "generic", url: feedUrl })',
+    );
+    expect(updateHost).toContain("LIME_ELECTRON_ENABLE_DEV_UPDATER");
+    expect(updateHost).toContain("check_for_updates");
+    expect(updateHost).toContain("download_update");
+    expect(updateHost).toContain("start_update_install_session");
+
+    const releaseWorkflow = readFile(".github/workflows/release.yml");
+    expect(releaseWorkflow).toContain("Build Electron");
+    expect(releaseWorkflow).toContain("npx electron-builder");
+    expect(releaseWorkflow).toContain("LIME_ELECTRON_UPDATES_URL");
+    expect(releaseWorkflow).toContain(
+      "Validate Electron macOS signing secrets",
+    );
+    expect(releaseWorkflow).toContain("CSC_LINK");
+    expect(releaseWorkflow).toContain("APPLE_APP_SPECIFIC_PASSWORD");
+    expect(releaseWorkflow).toContain(
+      "Publish Electron updater assets to Cloudflare R2",
+    );
+    expect(releaseWorkflow).toContain("plan-electron-updater-r2-upload.mjs");
+    expect(releaseWorkflow).toContain(
+      "Legacy updater assets must not be published by the Electron release workflow",
+    );
+
+    const uploadPlan = readFile("scripts/plan-electron-updater-r2-upload.mjs");
+    expect(uploadPlan).toContain('"aarch64-apple-darwin": "darwin-arm64"');
+    expect(uploadPlan).toContain('"x86_64-apple-darwin": "darwin-x64"');
+    expect(uploadPlan).toContain('"x86_64-pc-windows-msvc": "win32-x64"');
+    expect(uploadPlan).toContain("latest(?:-mac)?");
+    expect(uploadPlan).toContain("legacy updater assets are not allowed");
+  });
+
+  it("keeps Electron frontend host docs as current contract, not a future migration", () => {
+    const frontendHost = readFile(
+      "internal/roadmap/appserver/frontend-electron-migration.md",
+    );
+    expect(frontendHost).toContain("Electron Desktop Host Current");
+    expect(frontendHost).toContain("已经由 Electron 全面接管");
+    expect(frontendHost).toContain("不是“后续切换”计划，而是 current 契约");
+    expect(frontendHost).toContain("Frontend");
+    expect(frontendHost).toContain("Electron Desktop Host bridge");
+    expect(frontendHost).toContain("app_server_handle_json_lines");
+    expect(frontendHost).toContain("App Server JSON-RPC");
+    expect(frontendHost).toContain("Electron 只负责 Desktop Host bridge");
+    expect(frontendHost).toContain("不是第二套后端");
+    expect(frontendHost).toContain("不是 Agent runtime adapter");
+    expect(frontendHost).toContain("Lime 不参考 Codex App UI 或桌面壳实现");
+    expect(frontendHost).toContain("生产路径不能靠 mock 成功");
+    expect(frontendHost).toContain("npm run verify:gui-smoke");
+    expectNoRetiredCurrentHostReference(
+      frontendHost,
+      "internal/roadmap/appserver/frontend-electron-migration.md",
+    );
+
+    const roadmap = readFile("internal/roadmap/appserver/README.md");
+    expect(roadmap).toContain("Electron Desktop Host current 契约");
+    expect(roadmap).not.toContain("Lime 前端切换到 Electron Desktop Host");
+  });
+
+  it("keeps i18n app metadata workflow on Electron Builder current sources", () => {
+    const evaluation = readFile(
+      "internal/roadmap/i18n/app-metadata-workflow-evaluation.md",
+    );
+    expect(evaluation).toContain("electron-builder.yml");
+    expect(evaluation).toContain("当前 Electron 发布元数据事实源");
+    expect(evaluation).toContain("Electron Builder / 平台发布链路");
+    expect(evaluation).toContain("deprecated cleanup candidate");
+    expect(evaluation).toContain(
+      "不是 current app metadata、installer、release、updater、签名或版本同步事实源",
+    );
+    expect(evaluation).not.toContain("Tauri file association");
+    expect(evaluation).not.toContain("真实 Tauri");
+    expect(evaluation).not.toContain("手工复制多份 Tauri 配置");
+
+    const progress = readFile(
+      "internal/roadmap/i18n/implementation-progress.md",
+    );
+    const currentSection = sectionBetween(
+      progress,
+      "## 2026-05-27：P0-P4 全路线图 readiness 审计",
+      "\n## 2026-05-27：P4 Chrome extension standard locale decision 收口",
+    );
+    expect(currentSection).toContain("Electron Builder / installer 配置");
+    expect(currentSection).toContain("electron-builder.yml");
+    expect(currentSection).toContain("Electron Builder 配置");
+    expect(currentSection).not.toContain("真实 Tauri");
+    expect(currentSection).not.toContain("tauri.conf");
+  });
+
+  it("keeps App Server protocol aligned with codex-rs initialize and in-process boundaries", () => {
+    const protocol = readFile("internal/roadmap/appserver/protocol.md");
+    expect(protocol).toContain("JSON-RPC-like");
+    expect(protocol).toContain('不要求也不发送 `"jsonrpc":"2.0"` header');
+    expect(protocol).toContain("experimentalApi");
+    expect(protocol).toContain("optOutNotificationMethods");
+    expect(protocol).toContain("stable / experimental schema");
+    expect(protocol).not.toContain("eventMethods");
+    expect(protocol).not.toMatch(/"experimental"\s*:/);
+
+    const consumerIntegration = readFile(
+      "internal/roadmap/appserver/consumer-integration.md",
+    );
+    expect(consumerIntegration).toContain("experimentalApi");
+    expect(consumerIntegration).toContain("optOutNotificationMethods");
+    expect(consumerIntegration).not.toContain("eventMethods");
+
+    const architecture = readFile("internal/roadmap/appserver/architecture.md");
+    expect(architecture).toContain("不引入第二响应合同");
+    expect(architecture).toContain("App Server JSON-RPC result envelope");
+
+    const frontendMatrix = readFile(
+      "internal/roadmap/appserver/frontend-integration-matrix.md",
+    );
+    expect(frontendMatrix).toContain("不得引入第二响应合同");
+    expect(frontendMatrix).toContain("不得引入第二响应合同、第二 read model");
   });
 });

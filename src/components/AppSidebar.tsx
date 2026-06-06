@@ -2633,6 +2633,7 @@ export function AppSidebar({
         const config = await getConfig();
         const resolvedItems = resolveEnabledSidebarNavItems(
           config.navigation?.enabled_items,
+          config.navigation?.schema_version,
         );
         setEnabledNavItems(resolvedItems);
         setLanguageState(normalizeLocalePreference(config.language));

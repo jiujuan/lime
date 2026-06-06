@@ -207,7 +207,12 @@ function listSmokeScripts() {
   const scriptsDir = path.join(process.cwd(), "scripts");
   return fs
     .readdirSync(scriptsDir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".mjs"))
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        entry.name.endsWith(".mjs") &&
+        !entry.name.startsWith("check-"),
+    )
     .map((entry) => {
       const filePath = path.join(scriptsDir, entry.name);
       return {

@@ -403,6 +403,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     sessionIdRef,
     sessionId: session.sessionId,
     parentSessionId: session.subagentParentContext?.parent_session_id,
+    currentTurnEventName: currentStreamingEventNameRef.current,
     isSending: stream.isSending,
     threadReadStatus: session.threadRead?.status,
     queuedTurnCount: session.queuedTurns.length,

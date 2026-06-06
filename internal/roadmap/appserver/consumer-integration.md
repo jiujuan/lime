@@ -74,9 +74,9 @@ app-server-client
 7. 已提供 `npm run app-server:manifest`，可从本地 sidecar binary 生成 release manifest。
 8. 已提供 `AppServerConnection`，封装 `startSession / readSession / startTurn / cancelTurn`、request/response 等待、同批 notification 收集和异步 notification 读取。
 9. `agentSession/turn/start` 已支持 `queueIfBusy` 与 `skipPreSubmitResume`，独立 App 不需要回退到旧 `agent_runtime_*` 命令来表达排队策略。
-10. `agentSession/turn/start` 已支持 caller-supplied `turnId`，Rust protocol、TS client 和 Desktop adapter 均通过同一字段保持 turn id 稳定。
+10. `agentSession/turn/start` 已支持 caller-supplied `turnId`，Rust protocol、TS client 和 Desktop bridge 均通过同一字段保持 turn id 稳定。
 11. 当前 standalone `app-server` binary 仅支持 `mock` backend；它只能验证协议、client、打包和 sidecar lifecycle，不能完成真实 Agent turn。
-12. content-studio 生产集成不得依赖 Lime Desktop in-process Tauri adapter；真实 runtime 必须等待 host-agnostic backend sidecar mode。
+12. content-studio 生产集成不得依赖 Lime Desktop in-process legacy desktop facade；真实 runtime 必须等待 host-agnostic backend sidecar mode。
 13. `APP_SERVER_BIN` 只允许本地开发覆盖；生产必须从 manifest 选择 artifact、校验 sha256，并从 packaged resources 启动。`resolveSidecarFromReleaseManifest(...)` 生产调用应传 `allowEnvOverride: false`。
 14. P4 完成前，content-studio 只能把该路径视为 integration skeleton；完成标准是真实 sidecar Agent flow、事件投影、cancel/shutdown、stderr 日志、crash/backoff 均跑通。
 15. 尚未实现 release artifact 下载、schema 自动生成、重启 backoff 或生产级日志路由。
@@ -86,7 +86,7 @@ app-server-client
 
 1. Rust 源码。
 2. Aster 私有类型。
-3. Lime Desktop Tauri command。
+3. Lime Desktop legacy desktop command facade。
 4. App 业务 UI。
 
 ### 3.2 Sidecar binary
@@ -193,7 +193,8 @@ const { connection, sidecar } = await connectAppServerSidecar(resolved.config, {
     version: app.getVersion(),
   },
   capabilities: {
-    eventMethods: ["agentSession/event"],
+    experimentalApi: false,
+    optOutNotificationMethods: [],
   },
 });
 
@@ -332,7 +333,8 @@ client 和 server 通过 `initialize` 握手判断兼容：
   },
   "capabilities": {
     "requiredProtocol": "appserver.v0",
-    "eventMethods": ["agentSession/event"]
+    "experimentalApi": false,
+    "optOutNotificationMethods": []
   }
 }
 ```
@@ -354,7 +356,7 @@ server 返回：
 1. patch version 可以自动升级。
 2. minor version 必须通过 capability flags。
 3. major / protocol mismatch 必须阻止启动。
-4. experimental method 必须显式 opt-in。
+4. experimental method 必须通过 `experimentalApi` 显式 opt-in。
 5. TS client 的 request builder 必须跟 Rust protocol fixture 对齐，至少覆盖 `sessionId / threadId / turnId / runtimeOptions / queueIfBusy / skipPreSubmitResume`。
 
 ## 9. 独立库边界

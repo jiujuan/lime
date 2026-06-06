@@ -2226,9 +2226,13 @@ impl Config {
     pub fn normalize_workspace_preferences(&mut self) -> bool {
         let mut changed = false;
         let current_version = current_workspace_preferences_schema_version();
+        let is_legacy_navigation_schema = self.navigation.schema_version < current_version;
 
-        let normalized_navigation_items =
-            normalize_navigation_enabled_items(&self.navigation.enabled_items);
+        let normalized_navigation_items = if is_legacy_navigation_schema {
+            Vec::new()
+        } else {
+            normalize_navigation_enabled_items(&self.navigation.enabled_items)
+        };
         if self.navigation.enabled_items != normalized_navigation_items {
             self.navigation.enabled_items = normalized_navigation_items;
             changed = true;
@@ -2983,7 +2987,7 @@ mod unit_tests {
     }
 
     #[test]
-    fn test_normalize_workspace_preferences_preserves_current_custom_values() {
+    fn test_normalize_workspace_preferences_clears_legacy_companion_default() {
         let mut config = Config::default();
         config.workspace_preferences.schema_version = 0;
         config.navigation.schema_version = 0;
@@ -3000,6 +3004,17 @@ mod unit_tests {
             config.navigation.schema_version,
             current_workspace_preferences_schema_version()
         );
+        assert!(config.navigation.enabled_items.is_empty());
+    }
+
+    #[test]
+    fn test_normalize_workspace_preferences_preserves_current_custom_values() {
+        let mut config = Config::default();
+        config.navigation.enabled_items = vec!["plugins".to_string(), "companion".to_string()];
+
+        let changed = config.normalize_workspace_preferences();
+
+        assert!(!changed);
         assert_eq!(
             config.navigation.enabled_items,
             vec!["plugins".to_string(), "companion".to_string()]

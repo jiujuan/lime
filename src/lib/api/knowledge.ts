@@ -1,4 +1,56 @@
+import { AppServerClient } from "@/lib/api/appServer";
 import { safeInvoke } from "@/lib/dev-bridge";
+import {
+  METHOD_KNOWLEDGE_PACK_LIST,
+  type KnowledgeListPacksResponse as AppServerKnowledgeListPacksResponse,
+} from "../../../packages/app-server-client/src/protocol";
+
+export type KnowledgeAppServerClient = Pick<AppServerClient, "request">;
+
+export interface KnowledgeListPacksOptions {
+  appServerClient?: KnowledgeAppServerClient;
+}
+
+async function requestKnowledgeAppServer<T>(
+  method: string,
+  params?: unknown,
+  appServerClient: KnowledgeAppServerClient = new AppServerClient(),
+): Promise<T> {
+  const response = await appServerClient.request<T>(method, params);
+  return response.result;
+}
+
+function requireAppServerString(value: unknown, message: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(message);
+  }
+
+  return value;
+}
+
+function normalizeKnowledgeListPacksResponse(
+  response: AppServerKnowledgeListPacksResponse | null | undefined,
+): KnowledgeListPacksResponse {
+  if (!response || typeof response !== "object") {
+    throw new Error("App Server knowledgePack/list did not return packs");
+  }
+
+  if (!Array.isArray(response.packs)) {
+    throw new Error("App Server knowledgePack/list did not return packs");
+  }
+
+  return {
+    workingDir: requireAppServerString(
+      response.workingDir,
+      "App Server knowledgePack/list did not return workingDir",
+    ),
+    rootPath: requireAppServerString(
+      response.rootPath,
+      "App Server knowledgePack/list did not return rootPath",
+    ),
+    packs: response.packs as KnowledgePackSummary[],
+  };
+}
 
 export type KnowledgePackStatus =
   | "draft"
@@ -187,10 +239,27 @@ export interface KnowledgeValidateContextRunResponse {
   warnings: string[];
 }
 
-export function listKnowledgePacks(
+export async function listKnowledgePacks(
   request: KnowledgeListPacksRequest,
+  options: KnowledgeListPacksOptions = {},
 ): Promise<KnowledgeListPacksResponse> {
-  return safeInvoke("knowledge_list_packs", { request });
+  const normalizedWorkingDir = request.workingDir.trim();
+  if (!normalizedWorkingDir) {
+    throw new Error(
+      "workingDir is required to list App Server knowledge packs",
+    );
+  }
+
+  const response =
+    await requestKnowledgeAppServer<AppServerKnowledgeListPacksResponse>(
+      METHOD_KNOWLEDGE_PACK_LIST,
+      {
+        workingDir: normalizedWorkingDir,
+        includeArchived: request.includeArchived ?? false,
+      },
+      options.appServerClient,
+    );
+  return normalizeKnowledgeListPacksResponse(response);
 }
 
 export function getKnowledgePack(

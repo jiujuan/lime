@@ -694,6 +694,7 @@
   "workspace.video.workspace.recentTasks.tipAria": "最近任務說明",
   "workspace.video.workspace.recentTasks.tipContent": "按時間倒序顯示最新影片任務，方便切換預覽與排查失敗原因。",
   "workspace.video.workspace.recentTasks.count": "{{value}} 筆",
+  "workspace.video.workspace.recentTasks.taskId": "任務 ID {{id}}",
   "workspace.video.workspace.recentTasks.empty": "目前還沒有可顯示的任務記錄。先提交一次影片生成，結果會自動沉澱到這裡。",
   "workspace.video.workspace.recentTasks.action.currentPreview": "目前預覽",
   "workspace.video.workspace.recentTasks.action.switchPreview": "切換預覽",

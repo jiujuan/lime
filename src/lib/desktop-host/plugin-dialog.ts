@@ -1,7 +1,3 @@
-/**
- * Mock for @/lib/desktop-host/plugin-dialog
- */
-
 import { getElectronHostBridge } from "@/lib/electron-host";
 
 export interface OpenDialogOptions {
@@ -20,18 +16,24 @@ export interface SaveDialogOptions {
 }
 
 type OpenDialog = {
-  (
-    options?: OpenDialogOptions & { multiple: true },
-  ): Promise<string[] | null>;
-  (
-    options?: OpenDialogOptions & { multiple?: false },
-  ): Promise<string | null>;
+  (options?: OpenDialogOptions & { multiple: true }): Promise<string[] | null>;
+  (options?: OpenDialogOptions & { multiple?: false }): Promise<string | null>;
   (options?: OpenDialogOptions): Promise<string | string[] | null>;
 };
 
-/**
- * Mock open function (file picker)
- */
+function isTestEnvironment(): boolean {
+  return Boolean(import.meta.env?.MODE === "test" || import.meta.env?.VITEST);
+}
+
+function assertTestDialogFixture(apiName: string): void {
+  if (isTestEnvironment()) {
+    return;
+  }
+  throw new Error(
+    `[Mock] ${apiName} 只能在测试环境使用；生产 Dialog 能力必须进入 Electron Desktop Host IPC。`,
+  );
+}
+
 const openDialog = async (
   options?: OpenDialogOptions,
 ): Promise<string | string[] | null> => {
@@ -40,6 +42,7 @@ const openDialog = async (
     return electronHost.dialog.open(options);
   }
 
+  assertTestDialogFixture("dialog.open");
   console.log("[Mock] Dialog open:", options);
 
   // 浏览器预览拿不到本机绝对目录路径；不能伪造目录，否则会让发布链路误以为已选中真实目录。
@@ -69,6 +72,7 @@ export async function save(
     return electronHost.dialog.save(options);
   }
 
+  assertTestDialogFixture("dialog.save");
   console.log("[Mock] Dialog save:", options);
   const hasSkillPackageFilter = options?.filters?.some((filter) =>
     filter.extensions.some(

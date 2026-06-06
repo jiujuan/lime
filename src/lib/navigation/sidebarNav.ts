@@ -12,6 +12,7 @@ import {
   Workflow,
   type LucideIcon,
 } from "lucide-react";
+import { CURRENT_SIDEBAR_NAV_SCHEMA_VERSION } from "@/lib/api/appConfigTypes";
 import { type AgentPageParams, type Page, type PageParams } from "@/types/page";
 import { SettingsTabs } from "@/types/settings";
 import { resolveAgentAppHostFlags } from "@/features/agent-app/featureFlag";
@@ -202,7 +203,14 @@ function normalizeEnabledSidebarNavItems(items: string[]): string[] {
   );
 }
 
-export function resolveEnabledSidebarNavItems(savedItems?: string[]): string[] {
+export function resolveEnabledSidebarNavItems(
+  savedItems?: string[],
+  schemaVersion = CURRENT_SIDEBAR_NAV_SCHEMA_VERSION,
+): string[] {
+  if (schemaVersion < CURRENT_SIDEBAR_NAV_SCHEMA_VERSION) {
+    return [...DEFAULT_ENABLED_SIDEBAR_NAV_ITEM_IDS];
+  }
+
   if (!savedItems || savedItems.length === 0) {
     return [...DEFAULT_ENABLED_SIDEBAR_NAV_ITEM_IDS];
   }

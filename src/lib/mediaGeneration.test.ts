@@ -26,6 +26,7 @@ describe("mediaGeneration", () => {
       "doubao-video",
     );
     expect(findMediaProviderById(providers, "missing")).toBeNull();
+    expect(findMediaProviderById(undefined, "doubao-video")).toBeNull();
   });
 
   it("应识别视频和语音 Provider", () => {
@@ -59,6 +60,8 @@ describe("mediaGeneration", () => {
       "doubao-video",
     );
     expect(findTtsProviderForSelection([providers[1]])?.id).toBe("openai-tts");
+    expect(findVideoProviderForSelection(undefined, "jimeng")).toBeNull();
+    expect(findTtsProviderForSelection(undefined)).toBeNull();
   });
 
   it("应优先使用项目覆盖，否则回退到全局默认", () => {

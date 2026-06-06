@@ -1,17 +1,16 @@
 import electronPath from "electron";
-import { spawn } from "node:child_process";
+import { spawnElectron } from "./lib/electron-launcher.mjs";
 import { resolveElectronAppServerRuntimeEnv } from "./lib/electron-app-server-assets.mjs";
 
 const appServerEnv = resolveElectronAppServerRuntimeEnv();
 
-const child = spawn(electronPath, ["."], {
+const child = spawnElectron({
+  electronPath,
   env: {
     ...process.env,
     ...appServerEnv,
     LIME_ELECTRON_SMOKE: "1",
   },
-  stdio: "inherit",
-  shell: process.platform === "win32",
 });
 
 const timeout = setTimeout(() => {

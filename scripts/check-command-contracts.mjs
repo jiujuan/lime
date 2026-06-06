@@ -7,6 +7,7 @@ import process from "node:process";
 const repoRoot = process.cwd();
 
 const sourceRoots = ["src"];
+const productionRuntimeRoots = ["src", "electron", "packages"];
 const sourceExtensions = new Set([".ts", ".tsx", ".js", ".jsx"]);
 const ignoredDirectories = new Set([
   ".git",
@@ -26,6 +27,181 @@ const frontendCommandPatterns = [
 ];
 
 const knownDeferredRegistrationReasons = new Map();
+
+function addDeferredCommands(commands, reason) {
+  for (const command of commands) {
+    knownDeferredRegistrationReasons.set(command, reason);
+  }
+}
+
+const currentElectronHostRequiredCommands = new Set([
+  "app_server_handle_json_lines",
+  "app_server_drain_events",
+  "aster_agent_init",
+  "agent_runtime_create_session",
+  "agent_runtime_submit_turn",
+  "agent_runtime_interrupt_turn",
+  "agent_runtime_update_session",
+  "agent_runtime_respond_action",
+  "agent_runtime_get_thread_read",
+  "agent_runtime_export_evidence_pack",
+  "agent_runtime_get_tool_inventory",
+  "agent_runtime_list_sessions",
+  "agent_runtime_get_session",
+  "agent_runtime_list_workspace_skill_bindings",
+  "agent_app_list_installed",
+  "agent_app_get_ui_runtime_status",
+  "agent_app_start_ui_runtime",
+  "agent_app_stop_ui_runtime",
+  "get_api_key_providers",
+  "get_all_alias_configs",
+  "get_automation_jobs",
+  "get_default_provider",
+  "get_model_preferences",
+  "get_model_registry",
+  "get_model_registry_provider_ids",
+  "get_model_sync_state",
+  "get_models_by_tier",
+  "get_models_for_provider",
+  "get_provider_alias_config",
+  "get_system_provider_catalog",
+  "get_skill_detail",
+  "knowledge_list_packs",
+  "list_executable_skills",
+  "project_memory_get",
+  "workspace_ensure_default_ready",
+  "workspace_ensure_ready",
+  "workspace_get",
+  "workspace_get_by_path",
+  "workspace_get_default",
+  "workspace_get_projects_root",
+  "workspace_list",
+  "workspace_resolve_project_path",
+]);
+
+const currentDevBridgeTruthRequiredCommands = new Set([
+  "agent_app_list_installed",
+  "knowledge_list_packs",
+  "get_automation_jobs",
+  "project_memory_get",
+]);
+
+addDeferredCommands(
+  [
+    "agent_start_process",
+    "agent_stop_process",
+    "agent_get_process_status",
+    "agent_generate_title",
+    "aster_agent_status",
+    "aster_agent_configure_provider",
+    "aster_agent_reset",
+    "agent_runtime_compact_session",
+    "agent_runtime_resume_thread",
+    "agent_runtime_replay_request",
+    "agent_runtime_get_objective",
+    "agent_runtime_set_objective",
+    "agent_runtime_update_objective_status",
+    "agent_runtime_clear_objective",
+    "agent_runtime_continue_objective",
+    "agent_runtime_audit_objective",
+    "agent_runtime_list_file_checkpoints",
+    "agent_runtime_get_file_checkpoint",
+    "agent_runtime_diff_file_checkpoint",
+    "agent_runtime_restore_file_checkpoint",
+    "agent_runtime_promote_queued_turn",
+    "agent_runtime_remove_queued_turn",
+    "agent_runtime_delete_session",
+    "agent_runtime_export_analysis_handoff",
+    "agent_runtime_export_handoff_bundle",
+    "agent_runtime_export_review_decision_template",
+    "agent_runtime_save_review_decision",
+    "agent_runtime_export_replay_case",
+    "agent_runtime_spawn_subagent",
+    "agent_runtime_send_subagent_input",
+    "agent_runtime_wait_subagents",
+    "agent_runtime_resume_subagent",
+    "agent_runtime_close_subagent",
+  ],
+  "compat: agent_runtime legacy/side-effect commands remain behind the existing runtime adapter until App Server JSON-RPC methods land.",
+);
+
+addDeferredCommands(
+  [
+    "agent_app_inspect_local_package",
+    "agent_app_fetch_cloud_package",
+    "agent_app_save_installed_state",
+    "agent_app_set_disabled",
+    "agent_app_uninstall_rehearsal",
+    "agent_app_uninstall",
+    "agent_app_select_directory",
+    "agent_app_launch_shell",
+    "agent_app_runtime_start_task",
+    "agent_app_runtime_cancel_task",
+    "agent_app_runtime_get_task",
+    "agent_app_runtime_submit_host_response",
+    "execute_skill",
+    "inspect_local_skill_detail_for_app",
+    "reveal_local_skill_for_app",
+    "rename_local_skill_for_app",
+    "replace_local_skill_package_for_app",
+    "inspect_local_skill_package_for_app",
+    "install_local_skill_package_for_app",
+    "export_local_skill_package_for_app",
+    "take_pending_skill_package_open_requests",
+    "get_skill_package_file_association_status",
+    "set_skill_package_file_association_default",
+    "install_marketplace_skill_for_app",
+    "install_skill_from_download_url_for_app",
+  ],
+  "compat: Agent App and skill package commands are native feature surfaces; do not bulk-register them as Electron App Server truth bridge commands.",
+);
+
+addDeferredCommands(
+  [
+    "knowledge_import_source",
+    "knowledge_compile_pack",
+    "knowledge_get_pack",
+    "knowledge_set_default_pack",
+    "knowledge_update_pack_status",
+    "knowledge_resolve_context",
+    "knowledge_validate_context_run",
+    "gateway_channel_status",
+    "wechat_channel_list_accounts",
+    "site_list_adapters",
+    "site_recommend_adapters",
+    "site_search_adapters",
+    "site_get_adapter_info",
+    "site_get_adapter_launch_readiness",
+    "site_get_adapter_catalog_status",
+    "site_apply_adapter_catalog_bootstrap",
+    "site_clear_adapter_catalog_cache",
+    "site_import_adapter_yaml_bundle",
+    "site_run_adapter",
+    "site_debug_run_adapter",
+    "site_save_adapter_result",
+    "create_image_generation_task_artifact",
+    "create_audio_generation_task_artifact",
+    "complete_audio_generation_task_artifact",
+    "get_media_task_artifact",
+    "list_media_task_artifacts",
+    "cancel_media_task_artifact",
+  ],
+  "compat: feature-specific native commands await dedicated current App Server protocol coverage before Electron host registration.",
+);
+
+addDeferredCommands(
+  [
+    "capability_draft_create",
+    "capability_draft_list",
+    "capability_draft_get",
+    "capability_draft_verify",
+    "capability_draft_register",
+    "capability_draft_list_registered_skills",
+    "capability_draft_submit_approval_session_inputs",
+    "capability_draft_execute_controlled_get",
+  ],
+  "compat: Capability Draft remains a gated native feature surface; keep it out of the App Server truth bridge until runtime binding is current.",
+);
 
 function normalizePath(filePath) {
   return filePath.split(path.sep).join("/");
@@ -281,80 +457,19 @@ function collectMockPriorityCommands() {
   return commands;
 }
 
-function collectDefaultMockCommands() {
-  const filePath = path.join(repoRoot, "src/lib/desktop-host/core.ts");
+function collectBridgeTruthCommands() {
+  const filePath = path.join(repoRoot, "src/lib/dev-bridge/commandPolicy.ts");
   const sourceCode = fs.readFileSync(filePath, "utf8");
-  const marker = "const defaultMocks: Record<string, any> = {";
-  const markerIndex = sourceCode.indexOf(marker);
-  if (markerIndex < 0) {
-    throw new Error("未找到 desktop-host defaultMocks 定义");
-  }
-
-  const braceStart = markerIndex + marker.length - 1;
-  const objectBody = extractBalancedBlock(sourceCode, braceStart, "{", "}");
-  const mockCommands = new Set();
-
-  for (const match of objectBody.matchAll(/^  ([A-Za-z0-9_]+)\s*:/gm)) {
-    mockCommands.add(match[1]);
-  }
-  for (const spreadMatch of objectBody.matchAll(
-    /^  \.\.\.([A-Za-z0-9_]+),/gm,
-  )) {
-    const registryName = spreadMatch[1];
-    for (const command of collectSpreadMockRegistryCommands(
-      sourceCode,
-      registryName,
-    )) {
-      mockCommands.add(command);
-    }
-  }
-
-  return mockCommands;
-}
-
-function collectSpreadMockRegistryCommands(sourceCode, registryName) {
-  const importPattern =
-    /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+["'`]([^"'`]+)["'`]/g;
-  let importSource;
-  for (const importMatch of sourceCode.matchAll(importPattern)) {
-    const namedImports = importMatch[1];
-    if (new RegExp(`\\b${registryName}\\b`).test(namedImports)) {
-      importSource = importMatch[2];
-      break;
-    }
-  }
-  if (!importSource?.startsWith("./")) {
-    return [];
-  }
-
-  const registrySourcePath = path.resolve(
-    repoRoot,
-    "src/lib/desktop-host",
-    `${importSource.replace(/^\.\//, "")}.ts`,
+  const match = sourceCode.match(
+    /const bridgeTruthCommands = new Set<string>\(\[([\s\S]*?)\]\);/,
   );
-  if (!fs.existsSync(registrySourcePath)) {
-    throw new Error(`未找到 spread mock registry 文件: ${registrySourcePath}`);
+  if (!match) {
+    throw new Error("未找到 bridgeTruthCommands 定义");
   }
 
-  const registrySourceCode = fs.readFileSync(registrySourcePath, "utf8");
-  const markerPattern = new RegExp(
-    `export\\s+const\\s+${registryName}\\b[\\s\\S]*?=\\s*\\{`,
-  );
-  const markerMatch = markerPattern.exec(registrySourceCode);
-  if (!markerMatch) {
-    throw new Error(`未找到 spread mock registry 定义: ${registryName}`);
-  }
-
-  const braceStart = markerMatch.index + markerMatch[0].length - 1;
-  const registryBody = extractBalancedBlock(
-    registrySourceCode,
-    braceStart,
-    "{",
-    "}",
-  );
-  const commands = [];
-  for (const match of registryBody.matchAll(/^  ([A-Za-z0-9_]+)\s*:/gm)) {
-    commands.push(match[1]);
+  const commands = new Set();
+  for (const stringMatch of match[1].matchAll(/["'`]([^"'`]+)["'`]/g)) {
+    commands.add(stringMatch[1]);
   }
   return commands;
 }
@@ -371,6 +486,19 @@ function sortCommands(commands) {
   return [...commands].sort((left, right) => left.localeCompare(right));
 }
 
+function readSource(relativePath) {
+  return fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
+}
+
+function isAllowedTestMockFixtureSource(relativePath) {
+  return (
+    relativePath === "src/lib/dev-bridge/explicitMockFallback.ts" ||
+    relativePath === "src/lib/desktop-host/core.ts" ||
+    relativePath === "src/lib/desktop-host/event.ts" ||
+    /^src\/lib\/desktop-host\/[A-Za-z0-9_-]+Mocks\.ts$/.test(relativePath)
+  );
+}
+
 function printCommandGroup(title, commands, usageMap) {
   console.error(`\n## ${title}`);
   for (const command of sortCommands(commands)) {
@@ -381,6 +509,526 @@ function printCommandGroup(title, commands, usageMap) {
         console.error(`  - ${file}`);
       }
     }
+  }
+}
+
+function addForbiddenSubstringFailures(
+  failures,
+  relativePath,
+  sourceCode,
+  rules,
+) {
+  for (const rule of rules) {
+    if (sourceCode.includes(rule.substring)) {
+      failures.push({
+        file: relativePath,
+        message: rule.message,
+        token: rule.substring,
+      });
+    }
+  }
+}
+
+function addRequiredSubstringFailures(
+  failures,
+  relativePath,
+  sourceCode,
+  rules,
+) {
+  for (const rule of rules) {
+    if (!sourceCode.includes(rule.substring)) {
+      failures.push({
+        file: relativePath,
+        message: rule.message,
+        token: rule.substring,
+      });
+    }
+  }
+}
+
+function extractNamedFunctionBody(sourceCode, marker) {
+  const markerIndex = sourceCode.indexOf(marker);
+  if (markerIndex < 0) {
+    throw new Error(`未找到函数定义: ${marker}`);
+  }
+  const braceStart = sourceCode.indexOf("{", markerIndex);
+  if (braceStart < 0) {
+    throw new Error(`未找到函数体: ${marker}`);
+  }
+  return extractBalancedBlock(sourceCode, braceStart, "{", "}");
+}
+
+function collectProductionMockOnlyUsageFailures() {
+  const failures = [];
+  const forbiddenCallPatterns = [
+    {
+      pattern: /\binvokeMockOnly\s*\(/,
+      token: "invokeMockOnly(",
+      message: "生产源码不能调用测试 mock invoke 入口",
+    },
+    {
+      pattern: /\bmockCommand\s*\(/,
+      token: "mockCommand(",
+      message: "生产源码不能注册 renderer mock command",
+    },
+    {
+      pattern: /\bclearMocks\s*\(/,
+      token: "clearMocks(",
+      message: "生产源码不能清理测试 mock command",
+    },
+    {
+      pattern: /\binvokeExplicitMock\s*\(/,
+      token: "invokeExplicitMock(",
+      message: "生产源码不能调用显式 renderer mock fallback",
+    },
+    {
+      pattern: /\blistenExplicitMock\s*\(/,
+      token: "listenExplicitMock(",
+      message: "生产源码不能调用显式 renderer event mock fallback",
+    },
+  ];
+  const forbiddenMockOnlyImports = [
+    "invokeMockOnly",
+    "mockCommand",
+    "clearMocks",
+  ];
+
+  for (const root of productionRuntimeRoots) {
+    const absoluteRoot = path.join(repoRoot, root);
+    for (const relativePath of walkDirectory(absoluteRoot)) {
+      if (isAllowedTestMockFixtureSource(relativePath)) {
+        continue;
+      }
+
+      const sourceCode = readSource(relativePath);
+      if (
+        /from\s+["'`](?:@\/lib\/dev-bridge\/explicitMockFallback|\.{1,2}\/[^"'`]*explicitMockFallback|\.\/explicitMockFallback)["'`]/.test(
+          sourceCode,
+        )
+      ) {
+        failures.push({
+          file: relativePath,
+          message: "生产源码不能导入显式 renderer mock fallback",
+          token: "explicitMockFallback",
+        });
+      }
+
+      if (
+        /from\s+["'`](?:\.\/__tests__\/testFixtures|\.\/testFixtures|\.{1,2}\/[^"'`]*\/testFixtures)["'`]/.test(
+          sourceCode,
+        )
+      ) {
+        failures.push({
+          file: relativePath,
+          message: "生产源码不能导入 Agent App mock SDK 测试夹具",
+          token: "testFixtures",
+        });
+      }
+
+      if (
+        /from\s+["'`](?:\.\/MockCapabilityHost|\.\/mockCapabilityProfile|\.{1,2}\/[^"'`]*(?:MockCapabilityHost|mockCapabilityProfile))["'`]/.test(
+          sourceCode,
+        )
+      ) {
+        failures.push({
+          file: relativePath,
+          message: "生产源码不能导入 Agent App mock SDK host/profile",
+          token: "MockCapabilityHost/mockCapabilityProfile",
+        });
+      }
+
+      const desktopHostCoreImportPattern =
+        /import\s+\{([^}]*)\}\s+from\s+["'`](?:@\/lib\/desktop-host\/core|\.\.?\/[^"'`]*desktop-host\/core|\.\/core)["'`]/g;
+      for (const importMatch of sourceCode.matchAll(
+        desktopHostCoreImportPattern,
+      )) {
+        const namedImports = importMatch[1]
+          .split(",")
+          .map((item) =>
+            item
+              .trim()
+              .split(/\s+as\s+/)[0]
+              ?.trim(),
+          )
+          .filter(Boolean);
+        for (const importName of namedImports) {
+          if (forbiddenMockOnlyImports.includes(importName)) {
+            failures.push({
+              file: relativePath,
+              message: "生产源码不能导入 desktop-host 测试 mock 入口",
+              token: importName,
+            });
+          }
+        }
+      }
+
+      for (const rule of forbiddenCallPatterns) {
+        if (rule.pattern.test(sourceCode)) {
+          failures.push({
+            file: relativePath,
+            message: rule.message,
+            token: rule.token,
+          });
+        }
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectProductionBridgeGuardFailures() {
+  const failures = [];
+
+  const safeInvokePath = "src/lib/dev-bridge/safeInvoke.ts";
+  const safeInvokeSource = readSource(safeInvokePath);
+  addForbiddenSubstringFailures(failures, safeInvokePath, safeInvokeSource, [
+    {
+      substring: "@/lib/desktop-host/api",
+      message: "safeInvoke 不能再导入 legacy desktop-host api",
+    },
+    {
+      substring: "./explicitMockFallback",
+      message: "safeInvoke 不能再导入显式 renderer mock fallback",
+    },
+    {
+      substring: "invokeExplicitMock",
+      message: "safeInvoke 不能再调用显式 invoke mock",
+    },
+    {
+      substring: "listenExplicitMock",
+      message: "safeInvoke 不能再调用显式 event mock",
+    },
+    {
+      substring: "getLegacyDesktopHostGlobal",
+      message: "safeInvoke 不能再读取 legacy Tauri 全局对象",
+    },
+    {
+      substring: "hasDesktopHostInvokeCapability",
+      message: "safeInvoke 不能再探测 legacy Tauri invoke 能力",
+    },
+    {
+      substring: "hasDesktopHostRuntimeMarkers",
+      message: "safeInvoke 不能再依赖 legacy Tauri runtime marker",
+    },
+    {
+      substring: "shouldPreferMockInBrowser",
+      message: "safeInvoke 不能再按命令优先走 browser mock",
+    },
+    {
+      substring: "shouldDisallowMockFallbackInBrowser",
+      message: "safeInvoke 不应再保留 mock fallback 分流",
+    },
+    {
+      substring: "fallback-invoke",
+      message: "safeInvoke trace 不能再出现 fallback-invoke transport",
+    },
+    {
+      substring: "legacy-ipc",
+      message: "safeInvoke trace 不能再出现 legacy-ipc transport",
+    },
+  ]);
+
+  const desktopHostPath = "src/lib/desktop-host/core.ts";
+  const desktopHostSource = readSource(desktopHostPath);
+  const invokeBody = extractNamedFunctionBody(
+    desktopHostSource,
+    "export async function invoke<T = any>",
+  );
+  addForbiddenSubstringFailures(failures, desktopHostPath, invokeBody, [
+    {
+      substring: "invokeDefaultMock",
+      message: "生产 invoke 不能回退 invokeDefaultMock",
+    },
+    {
+      substring: "loadDefaultMocks",
+      message: "生产 invoke 不能加载 default mocks",
+    },
+    {
+      substring: "mockCommands",
+      message: "生产 invoke 不能读取测试 mockCommands",
+    },
+    {
+      substring: "invokeMockOnly",
+      message: "生产 invoke 不能委托测试夹具入口",
+    },
+  ]);
+  if (!invokeBody.includes("getElectronHostBridge()")) {
+    failures.push({
+      file: desktopHostPath,
+      message: "生产 invoke 必须优先检查 Electron Desktop Host IPC",
+      token: "getElectronHostBridge()",
+    });
+  }
+  if (!invokeBody.includes("invokeViaHttp<T>")) {
+    failures.push({
+      file: desktopHostPath,
+      message: "生产 invoke 仅允许在 DevBridge 可用时走 HTTP bridge 诊断通道",
+      token: "invokeViaHttp<T>",
+    });
+  }
+  if (!invokeBody.includes("throw new Error(")) {
+    failures.push({
+      file: desktopHostPath,
+      message: "生产 invoke 缺少无真实通道时的 fail-closed 错误",
+      token: "throw new Error(",
+    });
+  }
+
+  const appServerHostPath = "electron/appServerHost.ts";
+  const appServerHostSource = readSource(appServerHostPath);
+  if (/backendMode:\s*["'`]mock["'`]/.test(appServerHostSource)) {
+    failures.push({
+      file: appServerHostPath,
+      message: "Electron App Server host 不能配置 mock backend",
+      token: 'backendMode: "mock"',
+    });
+  }
+  const resolveBackendModeBody = extractNamedFunctionBody(
+    appServerHostSource,
+    "function resolveBackendMode",
+  );
+  if (
+    !resolveBackendModeBody.includes('normalized === "mock"') ||
+    !resolveBackendModeBody.includes("throw new Error(")
+  ) {
+    failures.push({
+      file: appServerHostPath,
+      message: "APP_SERVER_BACKEND_MODE=mock 必须显式失败",
+      token: 'normalized === "mock"',
+    });
+  }
+  const runtimeBackendLaunchBody = extractNamedFunctionBody(
+    appServerHostSource,
+    "function resolveRuntimeBackendLaunchOptions",
+  );
+  for (const snippet of [
+    "process.env.APP_SERVER_BACKEND_COMMAND?.trim()",
+    "parseBackendArgs(process.env.APP_SERVER_BACKEND_ARGS)",
+    "parsePositiveInteger(",
+  ]) {
+    if (!runtimeBackendLaunchBody.includes(snippet)) {
+      failures.push({
+        file: appServerHostPath,
+        message: "Electron App Server host 必须保留 external backend env 投影",
+        token: snippet,
+      });
+    }
+  }
+  const runtimeRequestTimeoutBody = extractNamedFunctionBody(
+    appServerHostSource,
+    "function resolveAppServerRequestTimeoutMs",
+  );
+  for (const snippet of [
+    "method !== APP_SERVER_TURN_START_METHOD",
+    "process.env.APP_SERVER_BACKEND_TIMEOUT_MS",
+    "APP_SERVER_BACKEND_TIMEOUT_GRACE_MS",
+    "DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS",
+  ]) {
+    if (!runtimeRequestTimeoutBody.includes(snippet)) {
+      failures.push({
+        file: appServerHostPath,
+        message:
+          "Electron App Server host 必须让长回合请求等待预算跟随 external backend timeout",
+        token: snippet,
+      });
+    }
+  }
+
+  const devSidecarPath = "scripts/lib/electron-dev-sidecar.mjs";
+  const devSidecarSource = readSource(devSidecarPath);
+  for (const snippet of [
+    "appServerAgentBackendBinaryName",
+    "localAppServerAgentBackendBinaryPath",
+    "resolveDevAppServerAgentBackendBinary",
+    "shouldUseDevAppServerExternalBackend",
+    "resolveDevAppServerBackendEnv",
+    'APP_SERVER_BACKEND_MODE: "external"',
+    "APP_SERVER_BACKEND_COMMAND",
+    "app-server-agent-backend",
+  ]) {
+    if (!devSidecarSource.includes(snippet)) {
+      failures.push({
+        file: devSidecarPath,
+        message:
+          "Electron dev 必须默认接入真实 App Server external agent backend",
+        token: snippet,
+      });
+    }
+  }
+  if (/APP_SERVER_BACKEND_MODE:\s*["'`]mock["'`]/.test(devSidecarSource)) {
+    failures.push({
+      file: devSidecarPath,
+      message: "Electron dev 不能注入 mock App Server backend",
+      token: 'APP_SERVER_BACKEND_MODE: "mock"',
+    });
+  }
+
+  const runElectronDevPath = "scripts/run-electron-dev.mjs";
+  const runElectronDevSource = readSource(runElectronDevPath);
+  for (const snippet of [
+    "resolveDevAppServerAgentBackendBinary",
+    "resolveDevAppServerBackendEnv",
+    "shouldUseDevAppServerExternalBackend",
+    "backendCommand: appServerAgentBackendBin",
+  ]) {
+    if (!runElectronDevSource.includes(snippet)) {
+      failures.push({
+        file: runElectronDevPath,
+        message: "Electron dev 启动必须成组注入 App Server external backend",
+        token: snippet,
+      });
+    }
+  }
+
+  for (const smokePath of [
+    "scripts/app-server-stdio-smoke.mjs",
+    "scripts/app-server-sidecar-lifecycle-smoke.mjs",
+  ]) {
+    const smokeSource = readSource(smokePath);
+    if (/backendMode:\s*["'`]mock["'`]/.test(smokeSource)) {
+      failures.push({
+        file: smokePath,
+        message: "App Server smoke 不能用 mock backend 伪造 turn 成功",
+        token: 'backendMode: "mock"',
+      });
+    }
+  }
+
+  failures.push(...collectProductionMockOnlyUsageFailures());
+
+  const explicitMockFallbackPath = "src/lib/dev-bridge/explicitMockFallback.ts";
+  const explicitMockFallbackSource = readSource(explicitMockFallbackPath);
+  for (const snippet of [
+    "assertExplicitMockFallbackTestEnvironment",
+    'import.meta.env?.MODE === "test"',
+    "invokeExplicitMock",
+    "listenExplicitMock",
+  ]) {
+    if (!explicitMockFallbackSource.includes(snippet)) {
+      failures.push({
+        file: explicitMockFallbackPath,
+        message: "显式 renderer mock fallback 必须只允许测试环境使用",
+        token: snippet,
+      });
+    }
+  }
+
+  const agentAppFeatureFlagPath = "src/features/agent-app/featureFlag.ts";
+  const agentAppFeatureFlagSource = readSource(agentAppFeatureFlagPath);
+  addRequiredSubstringFailures(
+    failures,
+    agentAppFeatureFlagPath,
+    agentAppFeatureFlagSource,
+    [
+      {
+        substring: "function isTestEnvironment()",
+        message: "Agent App mock SDK flag 必须只允许测试环境启用",
+      },
+      {
+        substring: "!import.meta.env?.PROD",
+        message: "Agent App mock SDK flag 必须在生产构建中硬关闭",
+      },
+      {
+        substring: 'import.meta.env?.MODE === "test"',
+        message: "Agent App mock SDK flag 只能接受测试 mode",
+      },
+      {
+        substring: "import.meta.env?.VITEST",
+        message: "Agent App mock SDK flag 只能接受 Vitest 测试夹具",
+      },
+      {
+        substring: "const mockSdkEnabled = isTestEnvironment()",
+        message:
+          "Agent App mockSdkEnabled 不能由生产 env/localStorage 直接打开",
+      },
+    ],
+  );
+
+  const agentAppMockEnvironmentPath =
+    "src/features/agent-app/sdk/mockEnvironment.ts";
+  const agentAppMockEnvironmentSource = readSource(agentAppMockEnvironmentPath);
+  addRequiredSubstringFailures(
+    failures,
+    agentAppMockEnvironmentPath,
+    agentAppMockEnvironmentSource,
+    [
+      {
+        substring: "assertTestMockSdkEnvironment",
+        message: "Agent App mock SDK 必须有统一测试环境断言",
+      },
+      {
+        substring: "!import.meta.env?.PROD",
+        message: "Agent App mock SDK 断言必须在生产构建中硬关闭",
+      },
+      {
+        substring:
+          "生产路径必须进入 Electron Desktop Host IPC / App Server JSON-RPC",
+        message: "Agent App mock SDK 非测试环境必须说明真实生产主链",
+      },
+    ],
+  );
+
+  for (const [mockPath, snippet] of [
+    [
+      "src/features/agent-app/sdk/mockCapabilityProfile.ts",
+      'assertTestMockSdkEnvironment("buildMockCapabilityProfile")',
+    ],
+    [
+      "src/features/agent-app/sdk/MockCapabilityHost.ts",
+      'assertTestMockSdkEnvironment("MockCapabilityHost")',
+    ],
+    [
+      "src/features/agent-app/sdk/__tests__/testFixtures.ts",
+      'assertTestMockSdkEnvironment("createMockLimeCapabilityTransport")',
+    ],
+  ]) {
+    const mockSource = readSource(mockPath);
+    addRequiredSubstringFailures(failures, mockPath, mockSource, [
+      {
+        substring: snippet,
+        message: "Agent App mock SDK 出口必须只允许测试环境使用",
+      },
+    ]);
+  }
+
+  const agentAppSdkPublicPaths = [
+    "src/features/agent-app/sdk/index.ts",
+    "src/features/agent-app/index.ts",
+    "src/features/agent-app/sdk/capabilityContract.ts",
+    "src/features/agent-app/sdk/index.d.ts",
+    "src/features/agent-app/sdk/capabilityContract.d.ts",
+  ];
+  for (const sdkPath of agentAppSdkPublicPaths) {
+    const sdkSource = readSource(sdkPath);
+    addForbiddenSubstringFailures(failures, sdkPath, sdkSource, [
+      {
+        substring: "createMockLimeCapabilityTransport",
+        message: "Agent App public SDK / contract 不能导出 mock transport",
+      },
+      {
+        substring: "MockCapabilityHost",
+        message: "Agent App public SDK 不能导出 mock host",
+      },
+      {
+        substring: "buildMockCapabilityProfile",
+        message: "Agent App public SDK 不能导出 mock capability profile",
+      },
+      {
+        substring: "LimeCapabilityMock",
+        message: "Agent App public SDK / contract 不能导出 mock handler 类型",
+      },
+    ]);
+  }
+
+  return failures;
+}
+
+function printGuardFailures(title, failures) {
+  console.error(`\n## ${title}`);
+  for (const failure of failures) {
+    console.error(`- ${failure.file}: ${failure.message}`);
+    console.error(`  - ${failure.token}`);
   }
 }
 
@@ -395,8 +1043,9 @@ function main() {
   const frontendCommands = new Set(frontendUsage.keys());
   const registeredCommands = collectElectronHostCommands();
   const mockPriorityCommands = collectMockPriorityCommands();
-  const defaultMockCommands = collectDefaultMockCommands();
+  const bridgeTruthCommands = collectBridgeTruthCommands();
   const agentCommandCatalog = readAgentCommandCatalog();
+  const productionBridgeGuardFailures = collectProductionBridgeGuardFailures();
 
   const deprecatedCommands = new Set(
     Object.keys(agentCommandCatalog.deprecatedCommandReplacements ?? {}),
@@ -409,31 +1058,36 @@ function main() {
   );
 
   const deferredCommands = new Set(knownDeferredRegistrationReasons.keys());
+  const currentDeferredConflicts = new Set(
+    [...currentElectronHostRequiredCommands].filter((command) =>
+      deferredCommands.has(command),
+    ),
+  );
 
-  const missingRegistrations = new Set(
-    [...frontendCommands].filter(
-      (command) =>
-        !registeredCommands.has(command) && !deferredCommands.has(command),
+  const missingCurrentRegistrations = new Set(
+    [...currentElectronHostRequiredCommands].filter(
+      (command) => !registeredCommands.has(command),
+    ),
+  );
+  const missingDevBridgeTruthCommands = new Set(
+    [...currentDevBridgeTruthRequiredCommands].filter(
+      (command) => !bridgeTruthCommands.has(command),
     ),
   );
   const deprecatedCommandsStillUsed = new Set(
     [...frontendCommands].filter((command) => deprecatedCommands.has(command)),
   );
-  const mockPriorityMissingMocks = new Set(
-    [...mockPriorityCommands].filter(
-      (command) => !defaultMockCommands.has(command),
-    ),
-  );
-  const mockPriorityMissingRegistrations = new Set(
-    [...mockPriorityCommands].filter(
-      (command) =>
-        !registeredCommands.has(command) && !deferredCommands.has(command),
-    ),
-  );
   const runtimeGatewayMissingRegistrations = new Set(
     [...runtimeGatewayCommands].filter(
       (command) =>
         !registeredCommands.has(command) && !deferredCommands.has(command),
+    ),
+  );
+  const unclassifiedRuntimeGatewayCommands = new Set(
+    [...runtimeGatewayCommands].filter(
+      (command) =>
+        !currentElectronHostRequiredCommands.has(command) &&
+        !deferredCommands.has(command),
     ),
   );
   const capabilityDraftMissingRegistrations = new Set(
@@ -453,8 +1107,8 @@ function main() {
     mockPriorityCommands.size,
   );
   console.log(
-    "[command-contracts] default mock commands:",
-    defaultMockCommands.size,
+    "[command-contracts] DevBridge truth commands:",
+    bridgeTruthCommands.size,
   );
 
   if (knownDeferredRegistrationReasons.size > 0) {
@@ -469,9 +1123,38 @@ function main() {
 
   let hasError = false;
 
-  if (missingRegistrations.size > 0) {
+  if (currentDeferredConflicts.size > 0) {
     hasError = true;
-    printCommandGroup("前端调用但 Electron host 未承接的命令", missingRegistrations, frontendUsage);
+    printCommandGroup(
+      "命令不能同时标记为 current 与 compat/deferred",
+      currentDeferredConflicts,
+    );
+  }
+
+  if (missingCurrentRegistrations.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "current Electron/App Server 命令缺少 Electron host 承接",
+      missingCurrentRegistrations,
+      frontendUsage,
+    );
+  }
+
+  if (missingDevBridgeTruthCommands.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "current App Server 数据面命令缺少 DevBridge truth 分类",
+      missingDevBridgeTruthCommands,
+      frontendUsage,
+    );
+  }
+
+  if (productionBridgeGuardFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "生产桥接路径不能回退 legacy Tauri / renderer mock / mock backend",
+      productionBridgeGuardFailures,
+    );
   }
 
   if (deprecatedCommandsStillUsed.size > 0) {
@@ -483,24 +1166,28 @@ function main() {
     );
   }
 
-  if (mockPriorityMissingMocks.size > 0) {
-    hasError = true;
-    printCommandGroup("mock 优先命令缺少 mock 实现", mockPriorityMissingMocks);
-  }
-
-  if (mockPriorityMissingRegistrations.size > 0) {
-    hasError = true;
-    printCommandGroup("mock 优先命令缺少 Electron host 承接", mockPriorityMissingRegistrations);
-  }
-
   if (runtimeGatewayMissingRegistrations.size > 0) {
     hasError = true;
-    printCommandGroup("runtime gateway 命令缺少 Electron host 承接", runtimeGatewayMissingRegistrations);
+    printCommandGroup(
+      "runtime gateway 命令缺少 Electron host 承接",
+      runtimeGatewayMissingRegistrations,
+    );
+  }
+
+  if (unclassifiedRuntimeGatewayCommands.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "runtime gateway 命令未分类为 current 或 compat/deferred",
+      unclassifiedRuntimeGatewayCommands,
+    );
   }
 
   if (capabilityDraftMissingRegistrations.size > 0) {
     hasError = true;
-    printCommandGroup("capability draft 命令缺少 Electron host 承接", capabilityDraftMissingRegistrations);
+    printCommandGroup(
+      "capability draft 命令缺少 Electron host 承接",
+      capabilityDraftMissingRegistrations,
+    );
   }
 
   if (hasError) {

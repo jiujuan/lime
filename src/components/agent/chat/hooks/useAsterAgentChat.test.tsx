@@ -156,6 +156,7 @@ vi.mock("../utils/clawWorkspaceProviderSelection", () => ({
 }));
 
 import { useAsterAgentChat } from "./useAsterAgentChat";
+import { publishAgentRuntimeEvent } from "@/lib/api/agentRuntimeEvents";
 import {
   clearAllAgentStreamTextOverlays,
   getAgentStreamTextOverlay,
@@ -284,12 +285,76 @@ function captureRuntimeStream(matcher: (eventName: unknown) => boolean) {
 
   return {
     emit(payload: unknown) {
+      const eventName = resolveCapturedRuntimeEventName({
+        activeEventName,
+        matcher,
+      });
+      if (eventName) {
+        publishAgentRuntimeEvent(eventName, payload);
+        return;
+      }
       streamHandler?.({ payload });
     },
     getEventName() {
-      return activeEventName;
+      return resolveCapturedRuntimeEventName({
+        activeEventName,
+        matcher,
+      });
     },
   };
+}
+
+function resolveCapturedRuntimeEventName({
+  activeEventName,
+  matcher,
+}: {
+  activeEventName: string | null;
+  matcher: (eventName: unknown) => boolean;
+}) {
+  if (activeEventName && matcher(activeEventName)) {
+    return activeEventName;
+  }
+
+  const runtimeCalls = [
+    ...collectRuntimeEventNameCalls(mockSubmitAgentRuntimeTurn),
+    ...collectRuntimeEventNameCalls(mockCompactAgentRuntimeSession),
+  ].sort((left, right) => right.order - left.order);
+
+  for (const call of runtimeCalls) {
+    const eventName = readRuntimeEventNameFromCall(call.args);
+    if (eventName && matcher(eventName)) {
+      return eventName;
+    }
+  }
+
+  return null;
+}
+
+function collectRuntimeEventNameCalls(
+  mock: typeof mockSubmitAgentRuntimeTurn,
+) {
+  return mock.mock.calls.map((args, index) => ({
+    args,
+    order: mock.mock.invocationCallOrder[index] ?? index,
+  }));
+}
+
+function readRuntimeEventNameFromCall(args: unknown[]) {
+  const request = args[0];
+  if (!request || typeof request !== "object" || Array.isArray(request)) {
+    return null;
+  }
+  const eventName = (request as { event_name?: unknown; eventName?: unknown })
+    .event_name;
+  if (typeof eventName === "string" && eventName.trim()) {
+    return eventName;
+  }
+  const camelEventName = (
+    request as { event_name?: unknown; eventName?: unknown }
+  ).eventName;
+  return typeof camelEventName === "string" && camelEventName.trim()
+    ? camelEventName
+    : null;
 }
 
 function seedSession(workspaceId: string, sessionId: string) {
@@ -4494,7 +4559,6 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
       expect(harness.getValue().turns).toEqual([]);
       expect(harness.getValue().threadItems).toEqual([]);
       expect(harness.getValue().isSending).toBe(false);
-      expect(stream.getEventName()).toBeNull();
 
       await act(async () => {
         stream.emit({

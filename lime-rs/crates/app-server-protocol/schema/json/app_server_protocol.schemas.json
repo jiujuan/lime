@@ -1,5 +1,22 @@
 {
   "$defs": {
+    "AgentAppInstalledListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "issues": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "states": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "title": "AgentAppInstalledListResponse",
+      "type": "object"
+    },
     "AgentAttachment": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -1441,6 +1458,18 @@
       "title": "ArtifactSummary",
       "type": "object"
     },
+    "AutomationJobListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "jobs": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "title": "AutomationJobListResponse",
+      "type": "object"
+    },
     "BusinessObjectRef": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -2613,6 +2642,45 @@
       "title": "JsonRpcResponse",
       "type": "object"
     },
+    "KnowledgeListPacksParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "includeArchived": {
+          "default": false,
+          "type": "boolean"
+        },
+        "workingDir": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workingDir"
+      ],
+      "title": "KnowledgeListPacksParams",
+      "type": "object"
+    },
+    "KnowledgeListPacksResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "packs": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "rootPath": {
+          "type": "string"
+        },
+        "workingDir": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "rootPath",
+        "workingDir"
+      ],
+      "title": "KnowledgeListPacksResponse",
+      "type": "object"
+    },
     "ModelListParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -2739,6 +2807,30 @@
         "os"
       ],
       "title": "PlatformInfo",
+      "type": "object"
+    },
+    "ProjectMemoryReadParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "projectId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "projectId"
+      ],
+      "title": "ProjectMemoryReadParams",
+      "type": "object"
+    },
+    "ProjectMemoryReadResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "memory": true
+      },
+      "required": [
+        "memory"
+      ],
+      "title": "ProjectMemoryReadResponse",
       "type": "object"
     },
     "RequestId": {
@@ -3125,6 +3217,7 @@
         "requests": {
           "items": {
             "enum": [
+              "agentAppInstalled/list",
               "agentSession/action/respond",
               "agentSession/list",
               "agentSession/read",
@@ -3132,9 +3225,11 @@
               "agentSession/turn/cancel",
               "agentSession/turn/start",
               "artifact/read",
+              "automationJob/list",
               "capability/list",
               "evidence/export",
               "initialize",
+              "knowledgePack/list",
               "model/list",
               "modelPreferences/list",
               "modelProvider/catalog/list",
@@ -3142,6 +3237,7 @@
               "modelProviderAlias/list",
               "modelProviderAlias/read",
               "modelSyncState/read",
+              "projectMemory/read",
               "skill/list",
               "skill/read",
               "workspace/byPath/read",

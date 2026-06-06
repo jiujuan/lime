@@ -39,6 +39,12 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "SkillReadResponse",
     "WorkspaceSkillBindingsListParams",
     "WorkspaceSkillBindingsListResponse",
+    "AgentAppInstalledListResponse",
+    "KnowledgeListPacksParams",
+    "KnowledgeListPacksResponse",
+    "AutomationJobListResponse",
+    "ProjectMemoryReadParams",
+    "ProjectMemoryReadResponse",
     "ModelListParams",
     "ModelListResponse",
     "ModelPreferencesListResponse",
@@ -89,6 +95,10 @@ pub const METHOD_WORKSPACE_ENSURE_READY: &str = "workspace/ensureReady";
 pub const METHOD_SKILL_LIST: &str = "skill/list";
 pub const METHOD_SKILL_READ: &str = "skill/read";
 pub const METHOD_WORKSPACE_SKILL_BINDINGS_LIST: &str = "workspaceSkillBindings/list";
+pub const METHOD_AGENT_APP_INSTALLED_LIST: &str = "agentAppInstalled/list";
+pub const METHOD_KNOWLEDGE_PACK_LIST: &str = "knowledgePack/list";
+pub const METHOD_AUTOMATION_JOB_LIST: &str = "automationJob/list";
+pub const METHOD_PROJECT_MEMORY_READ: &str = "projectMemory/read";
 pub const METHOD_MODEL_LIST: &str = "model/list";
 pub const METHOD_MODEL_PREFERENCES_LIST: &str = "modelPreferences/list";
 pub const METHOD_MODEL_SYNC_STATE_READ: &str = "modelSyncState/read";
@@ -184,6 +194,22 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     },
     AppServerMethodSpec {
         method: METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_APP_INSTALLED_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_KNOWLEDGE_PACK_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AUTOMATION_JOB_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_PROJECT_MEMORY_READ,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -607,6 +633,51 @@ pub struct WorkspaceSkillBindingsListParams {
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceSkillBindingsListResponse {
     pub bindings: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppInstalledListResponse {
+    #[serde(default)]
+    pub states: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub issues: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeListPacksParams {
+    pub working_dir: String,
+    #[serde(default)]
+    pub include_archived: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeListPacksResponse {
+    pub working_dir: String,
+    pub root_path: String,
+    #[serde(default)]
+    pub packs: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationJobListResponse {
+    #[serde(default)]
+    pub jobs: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectMemoryReadParams {
+    pub project_id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectMemoryReadResponse {
+    pub memory: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -1592,6 +1663,10 @@ mod tests {
                 METHOD_SKILL_LIST,
                 METHOD_SKILL_READ,
                 METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
+                METHOD_AGENT_APP_INSTALLED_LIST,
+                METHOD_KNOWLEDGE_PACK_LIST,
+                METHOD_AUTOMATION_JOB_LIST,
+                METHOD_PROJECT_MEMORY_READ,
                 METHOD_MODEL_LIST,
                 METHOD_MODEL_PREFERENCES_LIST,
                 METHOD_MODEL_SYNC_STATE_READ,

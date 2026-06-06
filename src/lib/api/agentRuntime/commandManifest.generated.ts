@@ -377,8 +377,8 @@ export const AGENT_RUNTIME_COMMAND_DESCRIPTORS = [
     domain: "inventory",
     requestType: "AgentRuntimeListWorkspaceSkillBindingsRequest",
     responseType: "AgentRuntimeWorkspaceSkillBindings",
-    lifecycle: "current",
-    mockStrategy: "mock-priority",
+    lifecycle: "compat",
+    mockStrategy: "bridge-only",
     docsSection: "agent-runtime.inventory",
   },
   {

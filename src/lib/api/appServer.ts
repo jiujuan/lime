@@ -1,23 +1,91 @@
 import { safeInvoke } from "@/lib/dev-bridge";
+import {
+  JSONRPC_VERSION,
+  METHOD_AGENT_SESSION_ACTION_RESPOND,
+  METHOD_AGENT_SESSION_EVENT,
+  METHOD_AGENT_SESSION_READ,
+  METHOD_AGENT_SESSION_START,
+  METHOD_AGENT_SESSION_TURN_CANCEL,
+  METHOD_AGENT_SESSION_TURN_START,
+  METHOD_ARTIFACT_READ,
+  METHOD_CAPABILITY_LIST,
+  METHOD_EVIDENCE_EXPORT,
+  METHOD_INITIALIZE,
+  METHOD_INITIALIZED,
+  PROTOCOL_VERSION,
+  SERVER_NAME,
+  decodeMessage,
+  decodeMessages,
+  encodeMessage,
+  isJsonRpcErrorResponse,
+  isJsonRpcNotification,
+  isJsonRpcResponse,
+  request as createProtocolRequest,
+  notification as createProtocolNotification,
+  type AgentAttachment,
+  type AgentEvent,
+  type AgentInput,
+  type AgentSession,
+  type AgentSessionActionRespondParams,
+  type AgentSessionActionRespondResponse,
+  type AgentSessionActionScope,
+  type AgentSessionActionType,
+  type AgentSessionReadParams,
+  type AgentSessionReadResponse,
+  type AgentSessionStartParams,
+  type AgentSessionStartResponse,
+  type AgentSessionStatus,
+  type AgentSessionTurnCancelParams,
+  type AgentSessionTurnCancelResponse,
+  type AgentSessionTurnStartParams,
+  type AgentSessionTurnStartResponse,
+  type AgentTurn,
+  type AgentTurnStatus,
+  type ArtifactContentStatus,
+  type ArtifactReadParams,
+  type ArtifactReadResponse,
+  type ArtifactSummary,
+  type BusinessObjectRef,
+  type CapabilityDescriptor,
+  type CapabilityListParams,
+  type CapabilityListResponse,
+  type ClientCapabilities,
+  type ClientInfo,
+  type EvidenceExportParams,
+  type EvidenceExportResponse,
+  type EvidencePackArtifact,
+  type EvidencePackSummary,
+  type InitializeParams,
+  type InitializeResponse,
+  type JsonRpcError,
+  type JsonRpcErrorResponse,
+  type JsonRpcMessage,
+  type JsonRpcNotification,
+  type JsonRpcRequest,
+  type JsonRpcResponse,
+  type JsonValue,
+  type RequestId,
+  type RuntimeOptions,
+} from "../../../packages/app-server-client/src/protocol";
 
-export const APP_SERVER_JSONRPC_VERSION = "2.0";
-export const APP_SERVER_PROTOCOL_VERSION = "appserver.v0";
-export const APP_SERVER_NAME = "app-server";
+export const APP_SERVER_JSONRPC_VERSION = JSONRPC_VERSION;
+export const APP_SERVER_PROTOCOL_VERSION = PROTOCOL_VERSION;
+export const APP_SERVER_NAME = SERVER_NAME;
 
-export const APP_SERVER_METHOD_INITIALIZE = "initialize";
-export const APP_SERVER_METHOD_INITIALIZED = "initialized";
-export const APP_SERVER_METHOD_CAPABILITY_LIST = "capability/list";
-export const APP_SERVER_METHOD_ARTIFACT_READ = "artifact/read";
-export const APP_SERVER_METHOD_EVIDENCE_EXPORT = "evidence/export";
-export const APP_SERVER_METHOD_AGENT_SESSION_START = "agentSession/start";
-export const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read";
+export const APP_SERVER_METHOD_INITIALIZE = METHOD_INITIALIZE;
+export const APP_SERVER_METHOD_INITIALIZED = METHOD_INITIALIZED;
+export const APP_SERVER_METHOD_CAPABILITY_LIST = METHOD_CAPABILITY_LIST;
+export const APP_SERVER_METHOD_ARTIFACT_READ = METHOD_ARTIFACT_READ;
+export const APP_SERVER_METHOD_EVIDENCE_EXPORT = METHOD_EVIDENCE_EXPORT;
+export const APP_SERVER_METHOD_AGENT_SESSION_START = METHOD_AGENT_SESSION_START;
+export const APP_SERVER_METHOD_AGENT_SESSION_READ = METHOD_AGENT_SESSION_READ;
 export const APP_SERVER_METHOD_AGENT_SESSION_TURN_START =
-  "agentSession/turn/start";
+  METHOD_AGENT_SESSION_TURN_START;
 export const APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL =
-  "agentSession/turn/cancel";
+  METHOD_AGENT_SESSION_TURN_CANCEL;
 export const APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND =
-  "agentSession/action/respond";
-export const APP_SERVER_METHOD_AGENT_SESSION_EVENT = "agentSession/event";
+  METHOD_AGENT_SESSION_ACTION_RESPOND;
+export const APP_SERVER_METHOD_AGENT_SESSION_EVENT = METHOD_AGENT_SESSION_EVENT;
 
 export type AppServerHandleJsonLinesRequest = {
   lines: string[];
@@ -35,323 +103,55 @@ export type AppServerDrainEventsResult = {
   lines: string[];
 };
 
-export type AppServerRequestId = number | string;
-
-export type AppServerJsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | AppServerJsonValue[]
-  | { [key: string]: AppServerJsonValue };
-
-export type AppServerJsonRpcRequest = {
-  id: AppServerRequestId;
-  method: string;
-  params?: unknown;
-};
-
-export type AppServerJsonRpcNotification = {
-  method: string;
-  params?: unknown;
-};
-
-export type AppServerJsonRpcResponse<T = unknown> = {
-  id: AppServerRequestId;
-  result: T;
-};
-
-export type AppServerJsonRpcError = {
-  code: number;
-  message: string;
-  data?: unknown;
-};
-
-export type AppServerJsonRpcErrorResponse = {
-  id: AppServerRequestId;
-  error: AppServerJsonRpcError;
-};
-
-export type AppServerJsonRpcMessage<T = unknown> =
-  | AppServerJsonRpcRequest
-  | AppServerJsonRpcNotification
-  | AppServerJsonRpcResponse<T>
-  | AppServerJsonRpcErrorResponse;
-
-export type AppServerClientInfo = {
-  name: string;
-  title?: string;
-  version?: string;
-};
-
-export type AppServerClientCapabilities = {
-  eventMethods?: string[];
-  experimental?: boolean;
-};
-
-export type AppServerInitializeParams = {
-  clientInfo: AppServerClientInfo;
-  capabilities?: AppServerClientCapabilities;
-};
-
-export type AppServerInitializeResponse = {
-  serverInfo: {
-    name: string;
-    version: string;
-    protocolVersion: string;
-  };
-  platform: {
-    family: string;
-    os: string;
-  };
-  capabilities: {
-    agentSession: boolean;
-    capabilityDiscovery: boolean;
-    artifact: boolean;
-    evidence: boolean;
-    workspace: boolean;
-  };
-};
-
-export type AppServerBusinessObjectRef = {
-  kind: string;
-  id: string;
-  title?: string;
-  uri?: string;
-  metadata?: unknown;
-};
-
-export type AppServerCapabilityListParams = {
-  appId?: string;
-  workspaceId?: string;
-  sessionId?: string;
-  cursor?: string;
-  limit?: number;
-};
-
-export type AppServerCapabilityDescriptor = {
-  id: string;
-  title: string;
-  description?: string;
-  methods: string[];
-};
-
-export type AppServerCapabilityListResponse = {
-  capabilities: AppServerCapabilityDescriptor[];
-  nextCursor?: string;
-};
-
-export type AppServerArtifactReadParams = {
-  sessionId: string;
-  turnId?: string;
-  artifactRef?: string;
-  includeContent?: boolean;
-  cursor?: string;
-  limit?: number;
-};
-
-export type AppServerArtifactContentStatus =
-  | "notRequested"
-  | "available"
-  | "unavailable";
-
-export type AppServerArtifactSummary = {
-  artifactRef: string;
-  eventId: string;
-  sequence: number;
-  turnId?: string;
-  artifactId?: string;
-  path?: string;
-  title?: string;
-  kind?: string;
-  status?: string;
-  content?: string;
-  contentStatus: AppServerArtifactContentStatus;
-  metadata?: unknown;
-};
-
-export type AppServerArtifactReadResponse = {
-  artifacts: AppServerArtifactSummary[];
-  nextCursor?: string;
-};
-
-export type AppServerEvidenceExportParams = {
-  sessionId: string;
-  turnId?: string;
-  includeEvents?: boolean;
-  includeArtifacts?: boolean;
-  includeEvidencePack?: boolean;
-};
-
-export type AppServerEvidenceExportResponse = {
-  session: AppServerAgentSession;
-  turns: AppServerAgentTurn[];
-  events: AppServerAgentEvent[];
-  artifacts: AppServerArtifactSummary[];
-  exportedAt: string;
-  evidencePack?: AppServerEvidencePackSummary;
-};
-
-export type AppServerEvidencePackSummary = {
-  packRelativeRoot: string;
-  packAbsoluteRoot?: string;
-  exportedAt: string;
-  threadStatus: string;
-  latestTurnStatus?: string;
-  turnCount: number;
-  itemCount: number;
-  pendingRequestCount: number;
-  queuedTurnCount: number;
-  recentArtifactCount: number;
-  knownGaps: string[];
-  observabilitySummary?: unknown;
-  completionAuditSummary?: unknown;
-  artifacts: AppServerEvidencePackArtifact[];
-};
-
-export type AppServerEvidencePackArtifact = {
-  kind: string;
-  title: string;
-  relativePath: string;
-  absolutePath?: string;
-  bytes: number;
-};
-
-export type AppServerAgentSessionStartParams = {
-  sessionId?: string;
-  threadId?: string;
-  appId: string;
-  workspaceId?: string;
-  businessObjectRef?: AppServerBusinessObjectRef;
-  locale?: string;
-};
-
-export type AppServerAgentSessionReadParams = {
-  sessionId: string;
-};
-
-export type AppServerAgentInput = {
-  text: string;
-  attachments?: AppServerAgentAttachment[];
-};
-
-export type AppServerAgentAttachment = {
-  kind: string;
-  uri?: string;
-  metadata?: unknown;
-};
-
-export type AppServerRuntimeOptions = {
-  capabilityId?: string;
-  stream?: boolean;
-  eventName?: string;
-  providerPreference?: string;
-  modelPreference?: string;
-  metadata?: unknown;
-  queuedTurnId?: string;
-  hostOptions?: unknown;
-};
-
-export type AppServerAgentSessionTurnStartParams = {
-  sessionId: string;
-  turnId?: string;
-  input: AppServerAgentInput;
-  runtimeOptions?: AppServerRuntimeOptions;
-  queueIfBusy?: boolean;
-  skipPreSubmitResume?: boolean;
-};
-
-export type AppServerAgentSessionTurnCancelParams = {
-  sessionId: string;
-  turnId: string;
-};
-
-export type AppServerAgentSessionActionType =
-  | "tool_confirmation"
-  | "ask_user"
-  | "elicitation";
-
-export type AppServerAgentSessionActionScope = {
-  sessionId?: string;
-  threadId?: string;
-  turnId?: string;
-};
-
-export type AppServerAgentSessionActionRespondParams = {
-  sessionId: string;
-  requestId: string;
-  actionType: AppServerAgentSessionActionType;
-  confirmed: boolean;
-  response?: string;
-  userData?: unknown;
-  metadata?: unknown;
-  eventName?: string;
-  actionScope?: AppServerAgentSessionActionScope;
-};
-
-export type AppServerAgentSessionStatus =
-  | "idle"
-  | "running"
-  | "waitingAction"
-  | "completed"
-  | "failed"
-  | "canceled";
-
-export type AppServerAgentSession = {
-  sessionId: string;
-  threadId: string;
-  appId: string;
-  workspaceId?: string;
-  businessObjectRef?: AppServerBusinessObjectRef;
-  status: AppServerAgentSessionStatus;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type AppServerAgentTurnStatus =
-  | "accepted"
-  | "queued"
-  | "running"
-  | "waitingAction"
-  | "completed"
-  | "failed"
-  | "canceled";
-
-export type AppServerAgentTurn = {
-  turnId: string;
-  sessionId: string;
-  threadId: string;
-  status: AppServerAgentTurnStatus;
-  startedAt?: string;
-  completedAt?: string;
-};
-
-export type AppServerAgentEvent = {
-  eventId: string;
-  sequence: number;
-  sessionId: string;
-  threadId?: string;
-  turnId?: string;
-  type: string;
-  timestamp: string;
-  payload: unknown;
-};
-
-export type AppServerAgentSessionStartResponse = {
-  session: AppServerAgentSession;
-};
-
-export type AppServerAgentSessionReadResponse = {
-  session: AppServerAgentSession;
-  turns: AppServerAgentTurn[];
-};
-
-export type AppServerAgentSessionTurnStartResponse = {
-  turn: AppServerAgentTurn;
-};
-
-export type AppServerAgentSessionTurnCancelResponse = Record<string, never>;
-export type AppServerAgentSessionActionRespondResponse = Record<string, never>;
+export type AppServerRequestId = RequestId;
+export type AppServerJsonValue = JsonValue;
+export type AppServerJsonRpcRequest = JsonRpcRequest;
+export type AppServerJsonRpcNotification = JsonRpcNotification;
+export type AppServerJsonRpcResponse<T = unknown> = JsonRpcResponse<T>;
+export type AppServerJsonRpcError = JsonRpcError;
+export type AppServerJsonRpcErrorResponse = JsonRpcErrorResponse;
+export type AppServerJsonRpcMessage<T = unknown> = JsonRpcMessage<T>;
+export type AppServerClientInfo = ClientInfo;
+export type AppServerClientCapabilities = ClientCapabilities;
+export type AppServerInitializeParams = InitializeParams;
+export type AppServerInitializeResponse = InitializeResponse;
+export type AppServerBusinessObjectRef = BusinessObjectRef;
+export type AppServerCapabilityListParams = CapabilityListParams;
+export type AppServerCapabilityDescriptor = CapabilityDescriptor;
+export type AppServerCapabilityListResponse = CapabilityListResponse;
+export type AppServerArtifactReadParams = ArtifactReadParams;
+export type AppServerArtifactContentStatus = ArtifactContentStatus;
+export type AppServerArtifactSummary = ArtifactSummary;
+export type AppServerArtifactReadResponse = ArtifactReadResponse;
+export type AppServerEvidenceExportParams = EvidenceExportParams;
+export type AppServerEvidenceExportResponse = EvidenceExportResponse;
+export type AppServerEvidencePackSummary = EvidencePackSummary;
+export type AppServerEvidencePackArtifact = EvidencePackArtifact;
+export type AppServerAgentSessionStartParams = AgentSessionStartParams;
+export type AppServerAgentSessionReadParams = AgentSessionReadParams;
+export type AppServerAgentInput = AgentInput;
+export type AppServerAgentAttachment = AgentAttachment;
+export type AppServerRuntimeOptions = RuntimeOptions;
+export type AppServerAgentSessionTurnStartParams = AgentSessionTurnStartParams;
+export type AppServerAgentSessionTurnCancelParams =
+  AgentSessionTurnCancelParams;
+export type AppServerAgentSessionActionType = AgentSessionActionType;
+export type AppServerAgentSessionActionScope = AgentSessionActionScope;
+export type AppServerAgentSessionActionRespondParams =
+  AgentSessionActionRespondParams;
+export type AppServerAgentSessionStatus = AgentSessionStatus;
+export type AppServerAgentSession = AgentSession;
+export type AppServerAgentTurnStatus = AgentTurnStatus;
+export type AppServerAgentTurn = AgentTurn;
+export type AppServerAgentEvent = AgentEvent;
+export type AppServerAgentSessionStartResponse = AgentSessionStartResponse;
+export type AppServerAgentSessionReadResponse = AgentSessionReadResponse;
+export type AppServerAgentSessionTurnStartResponse =
+  AgentSessionTurnStartResponse;
+export type AppServerAgentSessionTurnCancelResponse =
+  AgentSessionTurnCancelResponse;
+export type AppServerAgentSessionActionRespondResponse =
+  AgentSessionActionRespondResponse;
 
 export type AppServerRequestResult<T> = {
   id: AppServerRequestId;
@@ -364,12 +164,22 @@ export type AppServerRequestResult<T> = {
 export class AppServerRpcError extends Error {
   readonly code: number;
   readonly data?: unknown;
+  readonly response: AppServerJsonRpcErrorResponse;
+  readonly notifications: AppServerJsonRpcNotification[];
+  readonly messages: AppServerJsonRpcMessage[];
 
-  constructor(error: AppServerJsonRpcError) {
-    super(error.message);
+  constructor(
+    response: AppServerJsonRpcErrorResponse,
+    notifications: AppServerJsonRpcNotification[] = [],
+    messages: AppServerJsonRpcMessage[] = [],
+  ) {
+    super(response.error.message);
     this.name = "AppServerRpcError";
-    this.code = error.code;
-    this.data = error.data;
+    this.code = response.error.code;
+    this.data = response.error.data;
+    this.response = response;
+    this.notifications = notifications;
+    this.messages = messages;
   }
 }
 
@@ -396,34 +206,30 @@ export function createAppServerRequest(
   method: string,
   params?: unknown,
 ): AppServerJsonRpcRequest {
-  return compactParams({ id, method, params });
+  return createProtocolRequest(id, method, params);
 }
 
 export function createAppServerNotification(
   method: string,
   params?: unknown,
 ): AppServerJsonRpcNotification {
-  return compactParams({ method, params });
+  return createProtocolNotification(method, params);
 }
 
 export function encodeAppServerMessage(
   message: AppServerJsonRpcMessage,
 ): string {
-  return `${JSON.stringify(message)}\n`;
+  return encodeMessage(message);
 }
 
 export function decodeAppServerMessage(line: string): AppServerJsonRpcMessage {
-  const trimmed = line.trim();
-  if (!trimmed) {
-    throw new Error("empty App Server JSON-RPC line");
-  }
-  return JSON.parse(trimmed) as AppServerJsonRpcMessage;
+  return decodeMessage(line);
 }
 
 export function decodeAppServerMessages(
   lines: string[],
 ): AppServerJsonRpcMessage[] {
-  return lines.map(decodeAppServerMessage);
+  return decodeMessages(lines);
 }
 
 export class AppServerClient {
@@ -516,7 +322,9 @@ export class AppServerClient {
 
   async respondAction(
     params: AppServerAgentSessionActionRespondParams,
-  ): Promise<AppServerRequestResult<AppServerAgentSessionActionRespondResponse>> {
+  ): Promise<
+    AppServerRequestResult<AppServerAgentSessionActionRespondResponse>
+  > {
     return await this.request<AppServerAgentSessionActionRespondResponse>(
       APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
       params,
@@ -586,7 +394,11 @@ export function expectAppServerResponse<T>(
     },
   );
   if (error) {
-    throw new AppServerRpcError(error.error);
+    throw new AppServerRpcError(
+      error,
+      messages.filter(isAppServerJsonRpcNotification),
+      messages,
+    );
   }
 
   throw new Error(
@@ -597,19 +409,19 @@ export function expectAppServerResponse<T>(
 export function isAppServerJsonRpcNotification(
   message: AppServerJsonRpcMessage,
 ): message is AppServerJsonRpcNotification {
-  return "method" in message && !("id" in message);
+  return isJsonRpcNotification(message);
 }
 
 export function isAppServerJsonRpcResponse<T = unknown>(
   message: AppServerJsonRpcMessage,
 ): message is AppServerJsonRpcResponse<T> {
-  return "id" in message && "result" in message;
+  return isJsonRpcResponse<T>(message);
 }
 
 export function isAppServerJsonRpcErrorResponse(
   message: AppServerJsonRpcMessage,
 ): message is AppServerJsonRpcErrorResponse {
-  return "id" in message && "error" in message;
+  return isJsonRpcErrorResponse(message);
 }
 
 function assertAppServerProtocol(response: AppServerInitializeResponse): void {
@@ -618,12 +430,4 @@ function assertAppServerProtocol(response: AppServerInitializeResponse): void {
       `unsupported app-server protocol: expected ${APP_SERVER_PROTOCOL_VERSION}, got ${response.serverInfo.protocolVersion}`,
     );
   }
-}
-
-function compactParams<T extends { params?: unknown }>(value: T): T {
-  if (value.params === undefined) {
-    const { params: _params, ...rest } = value;
-    return rest as T;
-  }
-  return value;
 }

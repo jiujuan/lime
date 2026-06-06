@@ -27,7 +27,10 @@ import {
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { cn } from "@/lib/utils";
 import { getConfig, saveConfig, type Config } from "@/lib/api/appConfig";
-import type { NavigationEnabledItemId } from "@/lib/api/appConfigTypes";
+import {
+  CURRENT_SIDEBAR_NAV_SCHEMA_VERSION,
+  type NavigationEnabledItemId,
+} from "@/lib/api/appConfigTypes";
 import { useI18nPatch } from "@/i18n/legacy-patch/I18nPatchProvider";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import {
@@ -191,7 +194,10 @@ function resolveResponseLanguageOptionLabel(
   t: ReturnType<typeof useTranslation<"settings">>["t"],
 ): string {
   if (preference === "auto") {
-    return t("settings.appearance.responseLanguage.options.auto.label", "自动判断");
+    return t(
+      "settings.appearance.responseLanguage.options.auto.label",
+      "自动判断",
+    );
   }
 
   return resolveLocaleOptionLabel(preference);
@@ -375,7 +381,11 @@ export function AppearanceSettings() {
   );
 
   const enabledNavigationItems = useMemo(
-    () => resolveEnabledSidebarNavItems(config?.navigation?.enabled_items),
+    () =>
+      resolveEnabledSidebarNavItems(
+        config?.navigation?.enabled_items,
+        config?.navigation?.schema_version,
+      ),
     [config],
   );
 
@@ -576,6 +586,7 @@ export function AppearanceSettings() {
         ...config,
         navigation: {
           ...(config.navigation || {}),
+          schema_version: CURRENT_SIDEBAR_NAV_SCHEMA_VERSION,
           enabled_items: nextEnabledItems,
         },
       };
@@ -1044,7 +1055,6 @@ export function AppearanceSettings() {
             </div>
           </div>
         </SurfacePanel>
-
       </section>
 
       <SurfacePanel

@@ -17,21 +17,45 @@ vi.mock("../dev-bridge/http-client", () => ({
   normalizeDevBridgeError: mocks.normalizeDevBridgeError,
 }));
 
-vi.mock("../dev-bridge/mockPriorityCommands", () => ({
-  shouldPreferMockInBrowser: vi.fn(() => false),
-}));
+import {
+  clearMocks,
+  convertFileSrc,
+  invoke,
+  invokeMockOnly,
+  mockCommand,
+} from "./core";
 
-import { shouldPreferMockInBrowser } from "../dev-bridge/mockPriorityCommands";
-import { clearMocks, invoke, invokeMockOnly } from "./core";
+function clearElectronBridge(): void {
+  delete (window as any).electronAPI;
+}
 
 describe("desktop-host/core invoke", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearMocks();
     mocks.isDevBridgeAvailable.mockReturnValue(true);
+    clearElectronBridge();
   });
 
-  it("浏览器模式下 direct invoke 走 HTTP bridge", async () => {
+  it("Electron host 可用时 production invoke 走 Desktop Host IPC", async () => {
+    const electronInvoke = vi.fn().mockResolvedValueOnce("/real/electron/root");
+    (window as any).electronAPI = {
+      invoke: electronInvoke,
+      listen: vi.fn(),
+      emit: vi.fn(),
+    };
+
+    const result = await invoke<string>("workspace_get_projects_root");
+
+    expect(result).toBe("/real/electron/root");
+    expect(electronInvoke).toHaveBeenCalledWith(
+      "workspace_get_projects_root",
+      undefined,
+    );
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
+  it("无 Electron host 时 production invoke 走 HTTP bridge", async () => {
     mocks.invokeViaHttp.mockResolvedValueOnce("/real/backend/root");
 
     const result = await invoke<string>("workspace_get_projects_root");
@@ -43,10 +67,52 @@ describe("desktop-host/core invoke", () => {
     );
   });
 
-  it("mock 优先命令直接返回默认 mock，不访问 bridge", async () => {
-    vi.mocked(shouldPreferMockInBrowser).mockReturnValueOnce(true);
+  it("HTTP bridge 失败时 production invoke 直接抛出规范化错误", async () => {
+    mocks.invokeViaHttp.mockRejectedValueOnce(new Error("Failed to fetch"));
 
-    await expect(invoke("companion_get_pet_status")).resolves.toEqual(
+    await expect(invoke("workspace_get_projects_root")).rejects.toThrow(
+      "[workspace_get_projects_root] Failed to fetch",
+    );
+
+    expect(mocks.normalizeDevBridgeError).toHaveBeenCalledWith(
+      "workspace_get_projects_root",
+      expect.any(Error),
+    );
+  });
+
+  it("无 Electron host 且无 HTTP bridge 时 production invoke fail-closed", async () => {
+    mocks.isDevBridgeAvailable.mockReturnValue(false);
+
+    await expect(invoke("workspace_get_projects_root")).rejects.toThrow(
+      'Desktop Host IPC 不可用，命令 "workspace_get_projects_root" 无法进入 App Server JSON-RPC 主链',
+    );
+
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
+  it("convertFileSrc 只委托 Electron host", () => {
+    (window as any).electronAPI = {
+      invoke: vi.fn(),
+      listen: vi.fn(),
+      emit: vi.fn(),
+      convertFileSrc: vi.fn(() => "app://asset/example.png"),
+    };
+
+    expect(convertFileSrc("/tmp/example.png")).toBe("app://asset/example.png");
+    expect((window as any).electronAPI.convertFileSrc).toHaveBeenCalledWith(
+      "/tmp/example.png",
+      undefined,
+    );
+  });
+
+  it("convertFileSrc 无 Electron host 时 fail-closed", () => {
+    expect(() => convertFileSrc("/tmp/example.png")).toThrow(
+      "Desktop Host IPC 不可用，本地文件路径无法转换",
+    );
+  });
+
+  it("显式 mock 入口可返回默认 mock，不访问 bridge", async () => {
+    await expect(invokeMockOnly("companion_get_pet_status")).resolves.toEqual(
       expect.objectContaining({ connected: false }),
     );
 
@@ -63,6 +129,26 @@ describe("desktop-host/core invoke", () => {
     );
 
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
+  it("显式 mock API 在非测试环境必须 fail-closed", async () => {
+    vi.stubEnv("MODE", "production");
+    vi.stubEnv("VITEST", "");
+
+    try {
+      await expect(invokeMockOnly("get_config")).rejects.toThrow(
+        "invokeMockOnly 只能在测试环境使用",
+      );
+      expect(() => mockCommand("get_config", vi.fn())).toThrow(
+        "mockCommand 只能在测试环境使用",
+      );
+      expect(() => clearMocks()).toThrow(
+        "clearMocks 只能在测试环境使用",
+      );
+      expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("默认项目 mock 应返回可规范化的工作区对象", async () => {
@@ -999,11 +1085,9 @@ describe("desktop-host/core invoke", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
-  it("知识库 mock 应保持导入后的列表与详情一致", async () => {
-    vi.mocked(shouldPreferMockInBrowser).mockReturnValue(true);
-
+  it("知识库显式 mock 应保持导入后的列表与详情一致", async () => {
     await expect(
-      invoke("knowledge_list_packs", {
+      invokeMockOnly("knowledge_list_packs", {
         request: {
           workingDir: "/tmp/lime-knowledge-e2e",
         },
@@ -1015,7 +1099,7 @@ describe("desktop-host/core invoke", () => {
     );
 
     await expect(
-      invoke("knowledge_import_source", {
+      invokeMockOnly("knowledge_import_source", {
         request: {
           workingDir: "/tmp/lime-knowledge-e2e",
           packName: "brand-product-demo",
@@ -1042,7 +1126,7 @@ describe("desktop-host/core invoke", () => {
     );
 
     await expect(
-      invoke("knowledge_list_packs", {
+      invokeMockOnly("knowledge_list_packs", {
         request: {
           workingDir: "/tmp/lime-knowledge-e2e",
         },
@@ -1061,7 +1145,7 @@ describe("desktop-host/core invoke", () => {
     );
 
     await expect(
-      invoke("knowledge_get_pack", {
+      invokeMockOnly("knowledge_get_pack", {
         request: {
           workingDir: "/tmp/lime-knowledge-e2e",
           name: "brand-product-demo",
@@ -1083,7 +1167,7 @@ describe("desktop-host/core invoke", () => {
     );
 
     await expect(
-      invoke("knowledge_update_pack_status", {
+      invokeMockOnly("knowledge_update_pack_status", {
         request: {
           workingDir: "/tmp/lime-knowledge-e2e",
           name: "brand-product-demo",
@@ -1104,7 +1188,7 @@ describe("desktop-host/core invoke", () => {
     );
 
     await expect(
-      invoke("knowledge_resolve_context", {
+      invokeMockOnly("knowledge_resolve_context", {
         request: {
           workingDir: "/tmp/lime-knowledge-e2e",
           name: "brand-product-demo",
@@ -1124,7 +1208,7 @@ describe("desktop-host/core invoke", () => {
     );
 
     await expect(
-      invoke("knowledge_validate_context_run", {
+      invokeMockOnly("knowledge_validate_context_run", {
         request: {
           workingDir: "/tmp/lime-knowledge-e2e",
           name: "brand-product-demo",
@@ -1139,7 +1223,7 @@ describe("desktop-host/core invoke", () => {
     );
 
     await expect(
-      invoke("knowledge_set_default_pack", {
+      invokeMockOnly("knowledge_set_default_pack", {
         request: {
           workingDir: "/tmp/lime-knowledge-e2e",
           name: "brand-product-demo",
@@ -1154,147 +1238,139 @@ describe("desktop-host/core invoke", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
-  it("工具库存 fallback mock 不应再返回空壳清单", async () => {
-    mocks.invokeViaHttp.mockRejectedValueOnce(new Error("Failed to fetch"));
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockImplementation(() => {});
+  it("工具库存显式 mock 不应返回空壳清单", async () => {
+    const result = await invokeMockOnly("agent_runtime_get_tool_inventory", {
+      request: {
+        caller: "assistant",
+        browserAssist: true,
+      },
+    });
 
-    try {
-      const result = await invoke("agent_runtime_get_tool_inventory", {
-        request: {
+    expect(result).toEqual(
+      expect.objectContaining({
+        request: expect.objectContaining({
           caller: "assistant",
-          browserAssist: true,
-        },
-      });
-
-      expect(result).toEqual(
-        expect.objectContaining({
-          request: expect.objectContaining({
-            caller: "assistant",
-            surface: expect.objectContaining({
-              browser_assist: true,
-            }),
+          surface: expect.objectContaining({
+            browser_assist: true,
           }),
-          default_allowed_tools: expect.arrayContaining([
-            "ToolSearch",
-            "ListMcpResourcesTool",
-            "ReadMcpResourceTool",
-            "WebSearch",
-            "AskUserQuestion",
-            "SendUserMessage",
-            "Agent",
-            "SendMessage",
-            "TeamCreate",
-            "TeamDelete",
-            "ListPeers",
-            "TaskCreate",
-            "Workflow",
-            "lime_site_recommend",
-            "lime_site_run",
-          ]),
-          counts: expect.objectContaining({
-            catalog_total: 46,
-            registry_visible_total: expect.any(Number),
-            extension_tool_total: 20,
-            extension_tool_visible_total: 1,
-            mcp_tool_total: 20,
-            mcp_tool_visible_total: 1,
-          }),
-          catalog_tools: expect.arrayContaining([
-            expect.objectContaining({ name: "ToolSearch" }),
-            expect.objectContaining({ name: "ListMcpResourcesTool" }),
-            expect.objectContaining({
-              name: "Bash",
-              permission_plane: "parameter_restricted",
-              workspace_default_allow: false,
-            }),
-            expect.objectContaining({ name: "WebSearch" }),
-            expect.objectContaining({
-              name: "WebFetch",
-              permission_plane: "parameter_restricted",
-              workspace_default_allow: false,
-            }),
-            expect.objectContaining({ name: "SendUserMessage" }),
-            expect.objectContaining({
-              name: "StructuredOutput",
-              permission_plane: "session_allowlist",
-              workspace_default_allow: false,
-            }),
-            expect.objectContaining({ name: "RemoteTrigger" }),
-            expect.objectContaining({ name: "CronCreate" }),
-            expect.objectContaining({ name: "lime_site_list" }),
-            expect.objectContaining({ name: "lime_site_run" }),
-            expect.objectContaining({
-              name: "mcp__lime-browser__",
-              source: "browser_compatibility",
-              permission_plane: "caller_filtered",
-              workspace_default_allow: false,
-            }),
-          ]),
-          extension_surfaces: expect.arrayContaining([
-            expect.objectContaining({
-              extension_name: "mcp__lime-browser",
-              available_tools: expect.arrayContaining([
-                "navigate",
-                "click",
-                "read_page",
-                "get_page_text",
-              ]),
-              loaded_tools: ["mcp__lime-browser__navigate"],
-              searchable_tools: expect.arrayContaining([
-                "mcp__lime-browser__navigate",
-                "mcp__lime-browser__click",
-              ]),
-            }),
-          ]),
-          registry_tools: expect.arrayContaining([
-            expect.objectContaining({ name: "AskUserQuestion" }),
-            expect.objectContaining({ name: "SendUserMessage" }),
-            expect.objectContaining({ name: "StructuredOutput" }),
-            expect.objectContaining({ name: "ReadMcpResourceTool" }),
-            expect.objectContaining({ name: "EnterPlanMode" }),
-            expect.objectContaining({ name: "SendMessage" }),
-            expect.objectContaining({ name: "TeamCreate" }),
-            expect.objectContaining({ name: "TeamDelete" }),
-            expect.objectContaining({ name: "ListPeers" }),
-            expect.objectContaining({ name: "CronList" }),
-            expect.objectContaining({ name: "TaskOutput" }),
-            expect.objectContaining({ name: "ExitWorktree" }),
-            expect.objectContaining({ name: "lime_site_search" }),
-          ]),
-          extension_tools: expect.arrayContaining([
-            expect.objectContaining({
-              name: "mcp__lime-browser__navigate",
-              status: "loaded",
-              visible_in_context: true,
-            }),
-            expect.objectContaining({
-              name: "mcp__lime-browser__click",
-              status: "deferred",
-              visible_in_context: false,
-            }),
-          ]),
-          mcp_tools: expect.arrayContaining([
-            expect.objectContaining({
-              name: "mcp__lime-browser__navigate",
-              always_visible: true,
-              visible_in_context: true,
-              tags: ["browser", "write"],
-            }),
-            expect.objectContaining({
-              name: "mcp__lime-browser__click",
-              deferred_loading: true,
-              visible_in_context: false,
-              tags: ["browser", "write"],
-            }),
-          ]),
         }),
-      );
-      expect(result.default_allowed_tools).not.toContain("StructuredOutput");
-    } finally {
-      consoleWarnSpy.mockRestore();
-    }
+        default_allowed_tools: expect.arrayContaining([
+          "ToolSearch",
+          "ListMcpResourcesTool",
+          "ReadMcpResourceTool",
+          "WebSearch",
+          "AskUserQuestion",
+          "SendUserMessage",
+          "Agent",
+          "SendMessage",
+          "TeamCreate",
+          "TeamDelete",
+          "ListPeers",
+          "TaskCreate",
+          "Workflow",
+          "lime_site_recommend",
+          "lime_site_run",
+        ]),
+        counts: expect.objectContaining({
+          catalog_total: 46,
+          registry_visible_total: expect.any(Number),
+          extension_tool_total: 20,
+          extension_tool_visible_total: 1,
+          mcp_tool_total: 20,
+          mcp_tool_visible_total: 1,
+        }),
+        catalog_tools: expect.arrayContaining([
+          expect.objectContaining({ name: "ToolSearch" }),
+          expect.objectContaining({ name: "ListMcpResourcesTool" }),
+          expect.objectContaining({
+            name: "Bash",
+            permission_plane: "parameter_restricted",
+            workspace_default_allow: false,
+          }),
+          expect.objectContaining({ name: "WebSearch" }),
+          expect.objectContaining({
+            name: "WebFetch",
+            permission_plane: "parameter_restricted",
+            workspace_default_allow: false,
+          }),
+          expect.objectContaining({ name: "SendUserMessage" }),
+          expect.objectContaining({
+            name: "StructuredOutput",
+            permission_plane: "session_allowlist",
+            workspace_default_allow: false,
+          }),
+          expect.objectContaining({ name: "RemoteTrigger" }),
+          expect.objectContaining({ name: "CronCreate" }),
+          expect.objectContaining({ name: "lime_site_list" }),
+          expect.objectContaining({ name: "lime_site_run" }),
+          expect.objectContaining({
+            name: "mcp__lime-browser__",
+            source: "browser_compatibility",
+            permission_plane: "caller_filtered",
+            workspace_default_allow: false,
+          }),
+        ]),
+        extension_surfaces: expect.arrayContaining([
+          expect.objectContaining({
+            extension_name: "mcp__lime-browser",
+            available_tools: expect.arrayContaining([
+              "navigate",
+              "click",
+              "read_page",
+              "get_page_text",
+            ]),
+            loaded_tools: ["mcp__lime-browser__navigate"],
+            searchable_tools: expect.arrayContaining([
+              "mcp__lime-browser__navigate",
+              "mcp__lime-browser__click",
+            ]),
+          }),
+        ]),
+        registry_tools: expect.arrayContaining([
+          expect.objectContaining({ name: "AskUserQuestion" }),
+          expect.objectContaining({ name: "SendUserMessage" }),
+          expect.objectContaining({ name: "StructuredOutput" }),
+          expect.objectContaining({ name: "ReadMcpResourceTool" }),
+          expect.objectContaining({ name: "EnterPlanMode" }),
+          expect.objectContaining({ name: "SendMessage" }),
+          expect.objectContaining({ name: "TeamCreate" }),
+          expect.objectContaining({ name: "TeamDelete" }),
+          expect.objectContaining({ name: "ListPeers" }),
+          expect.objectContaining({ name: "CronList" }),
+          expect.objectContaining({ name: "TaskOutput" }),
+          expect.objectContaining({ name: "ExitWorktree" }),
+          expect.objectContaining({ name: "lime_site_search" }),
+        ]),
+        extension_tools: expect.arrayContaining([
+          expect.objectContaining({
+            name: "mcp__lime-browser__navigate",
+            status: "loaded",
+            visible_in_context: true,
+          }),
+          expect.objectContaining({
+            name: "mcp__lime-browser__click",
+            status: "deferred",
+            visible_in_context: false,
+          }),
+        ]),
+        mcp_tools: expect.arrayContaining([
+          expect.objectContaining({
+            name: "mcp__lime-browser__navigate",
+            always_visible: true,
+            visible_in_context: true,
+            tags: ["browser", "write"],
+          }),
+          expect.objectContaining({
+            name: "mcp__lime-browser__click",
+            deferred_loading: true,
+            visible_in_context: false,
+            tags: ["browser", "write"],
+          }),
+        ]),
+      }),
+    );
+    expect(result.default_allowed_tools).not.toContain("StructuredOutput");
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
   it("review decision mock 应阻止 denied 权限确认保存为 accepted", async () => {
@@ -1409,219 +1485,195 @@ describe("desktop-host/core invoke", () => {
     );
   });
 
-  it("工具库存 fallback mock 应按 workbench + browser surface 补齐当前工具面", async () => {
-    mocks.invokeViaHttp.mockRejectedValueOnce(new Error("Failed to fetch"));
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockImplementation(() => {});
+  it("工具库存显式 mock 应按 workbench + browser surface 补齐当前工具面", async () => {
+    const result = await invokeMockOnly("agent_runtime_get_tool_inventory", {
+      request: {
+        caller: "assistant",
+        workbench: true,
+        browserAssist: true,
+      },
+    });
 
-    try {
-      const result = await invoke("agent_runtime_get_tool_inventory", {
+    expect(result.request.surface).toEqual(
+      expect.objectContaining({
+        workbench: true,
+        browser_assist: true,
+      }),
+    );
+    expect(result.counts.catalog_total).toBe(58);
+    expect(result.default_allowed_tools).toEqual(
+      expect.arrayContaining([
+        "social_generate_cover_image",
+        "lime_create_image_generation_task",
+        "lime_create_audio_generation_task",
+        "lime_create_transcription_task",
+        "lime_run_service_skill",
+        "lime_site_recommend",
+        "lime_site_run",
+      ]),
+    );
+    expect(result.default_allowed_tools).not.toContain("mcp__lime-browser__");
+    expect(result.catalog_tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "social_generate_cover_image" }),
+        expect.objectContaining({
+          name: "lime_create_image_generation_task",
+        }),
+        expect.objectContaining({
+          name: "lime_create_audio_generation_task",
+        }),
+        expect.objectContaining({ name: "lime_run_service_skill" }),
+        expect.objectContaining({ name: "lime_site_recommend" }),
+        expect.objectContaining({ name: "mcp__lime-browser__" }),
+      ]),
+    );
+    expect(result.registry_tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "social_generate_cover_image" }),
+        expect.objectContaining({ name: "lime_search_web_images" }),
+        expect.objectContaining({ name: "lime_create_typesetting_task" }),
+        expect.objectContaining({ name: "lime_site_info" }),
+      ]),
+    );
+    expect(result.counts.mcp_tool_total).toBe(20);
+    expect(result.mcp_tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "mcp__lime-browser__navigate" }),
+        expect.objectContaining({ name: "mcp__lime-browser__read_page" }),
+        expect.objectContaining({ name: "mcp__lime-browser__click" }),
+      ]),
+    );
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
+  it("显式 mock 入口可返回默认工作区数据", async () => {
+    await expect(invokeMockOnly("workspace_get_projects_root")).resolves.toBe(
+      "/mock/workspace/projects",
+    );
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
+  it("媒体任务显式 mock 应返回统一 task file 协议", async () => {
+    await expect(
+      invokeMockOnly("list_media_task_artifacts", {
         request: {
-          caller: "assistant",
-          workbench: true,
-          browserAssist: true,
+          projectRootPath: "/mock/workspace",
+          taskFamily: "image",
+          threadId: "thread-image-mock-1",
+          turnId: "turn-image-mock-1",
+          contentId: "content-image-mock-1",
+          model: "gpt-image-1",
+          costState: { status: "estimated", estimatedCostClass: "low" },
+          limitState: { status: "within_limit" },
+          limitEvent: { eventKind: "quota_low" },
         },
-      });
-
-      expect(result.request.surface).toEqual(
-        expect.objectContaining({
-          workbench: true,
-          browser_assist: true,
-        }),
-      );
-      expect(result.counts.catalog_total).toBe(58);
-      expect(result.default_allowed_tools).toEqual(
-        expect.arrayContaining([
-          "social_generate_cover_image",
-          "lime_create_image_generation_task",
-          "lime_create_audio_generation_task",
-          "lime_create_transcription_task",
-          "lime_run_service_skill",
-          "lime_site_recommend",
-          "lime_site_run",
-        ]),
-      );
-      expect(result.default_allowed_tools).not.toContain("mcp__lime-browser__");
-      expect(result.catalog_tools).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ name: "social_generate_cover_image" }),
-          expect.objectContaining({
-            name: "lime_create_image_generation_task",
-          }),
-          expect.objectContaining({
-            name: "lime_create_audio_generation_task",
-          }),
-          expect.objectContaining({ name: "lime_run_service_skill" }),
-          expect.objectContaining({ name: "lime_site_recommend" }),
-          expect.objectContaining({ name: "mcp__lime-browser__" }),
-        ]),
-      );
-      expect(result.registry_tools).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ name: "social_generate_cover_image" }),
-          expect.objectContaining({ name: "lime_search_web_images" }),
-          expect.objectContaining({ name: "lime_create_typesetting_task" }),
-          expect.objectContaining({ name: "lime_site_info" }),
-        ]),
-      );
-      expect(result.counts.mcp_tool_total).toBe(20);
-      expect(result.mcp_tools).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ name: "mcp__lime-browser__navigate" }),
-          expect.objectContaining({ name: "mcp__lime-browser__read_page" }),
-          expect.objectContaining({ name: "mcp__lime-browser__click" }),
-        ]),
-      );
-    } finally {
-      consoleWarnSpy.mockRestore();
-    }
-  });
-
-  it("bridge 失败且命令存在 mock 时回退默认 mock 数据", async () => {
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockImplementation(() => {});
-    mocks.invokeViaHttp.mockRejectedValueOnce(new Error("Failed to fetch"));
-
-    try {
-      await expect(invoke("workspace_get_projects_root")).resolves.toBe(
-        "/mock/workspace/projects",
-      );
-    } finally {
-      consoleWarnSpy.mockRestore();
-    }
-  });
-
-  it("媒体任务命令在 bridge 失败时应回退统一 task file mock 协议", async () => {
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockImplementation(() => {});
-    mocks.invokeViaHttp.mockRejectedValueOnce(new Error("Failed to fetch"));
-
-    try {
-      await expect(
-        invoke("list_media_task_artifacts", {
-          request: {
-            projectRootPath: "/mock/workspace",
-            taskFamily: "image",
-            threadId: "thread-image-mock-1",
-            turnId: "turn-image-mock-1",
-            contentId: "content-image-mock-1",
-            model: "gpt-image-1",
-            costState: { status: "estimated", estimatedCostClass: "low" },
-            limitState: { status: "within_limit" },
-            limitEvent: { eventKind: "quota_low" },
-          },
-        }),
-      ).resolves.toEqual(
-        expect.objectContaining({
-          success: true,
-          total: 1,
-          modality_runtime_contracts: expect.objectContaining({
-            snapshot_count: 1,
-            contract_keys: ["image_generation"],
-            entry_keys: ["at_image_command"],
-            thread_ids: ["thread-image-mock-1"],
-            turn_ids: ["turn-image-mock-1"],
-            content_ids: ["content-image-mock-1"],
-            modalities: ["image"],
-            skill_ids: ["image_generate"],
-            model_ids: ["gpt-image-1"],
-            cost_states: ["estimated"],
-            limit_states: ["within_limit"],
-            estimated_cost_classes: ["low"],
-            limit_event_kinds: ["quota_low"],
-            quota_low_count: 1,
-            execution_profile_keys: ["image_generation_profile"],
-            executor_adapter_keys: ["skill:image_generate"],
-            executor_kinds: ["skill"],
-            executor_binding_keys: ["image_generate"],
-            limecore_policy_refs: [
-              "model_catalog",
-              "provider_offer",
-              "tenant_feature_flags",
-            ],
-            limecore_policy_snapshot_count: 1,
-            limecore_policy_decisions: ["allow"],
-            limecore_policy_decision_sources: ["local_default_policy"],
-            limecore_policy_unresolved_refs: [
-              "model_catalog",
-              "provider_offer",
-              "tenant_feature_flags",
-            ],
-            limecore_policy_missing_inputs: [
-              "model_catalog",
-              "provider_offer",
-              "tenant_feature_flags",
-            ],
-            limecore_policy_pending_hit_refs: [
-              "model_catalog",
-              "provider_offer",
-              "tenant_feature_flags",
-            ],
-            limecore_policy_value_hit_count: 0,
-            snapshots: expect.arrayContaining([
-              expect.objectContaining({
-                entry_key: "at_image_command",
-                thread_id: "thread-image-mock-1",
-                turn_id: "turn-image-mock-1",
-                content_id: "content-image-mock-1",
-                modality: "image",
-                skill_id: "image_generate",
-                model_id: "gpt-image-1",
-                cost_state: "estimated",
-                limit_state: "within_limit",
-                estimated_cost_class: "low",
-                limit_event_kind: "quota_low",
-                quota_low: true,
-                executor_kind: "skill",
-                executor_binding_key: "image_generate",
-                limecore_policy_refs: [
-                  "model_catalog",
-                  "provider_offer",
-                  "tenant_feature_flags",
-                ],
-                limecore_policy_snapshot_status: "local_defaults_evaluated",
-                limecore_policy_decision_source: "local_default_policy",
-                limecore_policy_missing_inputs: [
-                  "model_catalog",
-                  "provider_offer",
-                  "tenant_feature_flags",
-                ],
-                limecore_policy_pending_hit_refs: [
-                  "model_catalog",
-                  "provider_offer",
-                  "tenant_feature_flags",
-                ],
-                limecore_policy_value_hits: [],
-                limecore_policy_value_hit_count: 0,
-              }),
-            ]),
-          }),
-          tasks: expect.arrayContaining([
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        success: true,
+        total: 1,
+        modality_runtime_contracts: expect.objectContaining({
+          snapshot_count: 1,
+          contract_keys: ["image_generation"],
+          entry_keys: ["at_image_command"],
+          thread_ids: ["thread-image-mock-1"],
+          turn_ids: ["turn-image-mock-1"],
+          content_ids: ["content-image-mock-1"],
+          modalities: ["image"],
+          skill_ids: ["image_generate"],
+          model_ids: ["gpt-image-1"],
+          cost_states: ["estimated"],
+          limit_states: ["within_limit"],
+          estimated_cost_classes: ["low"],
+          limit_event_kinds: ["quota_low"],
+          quota_low_count: 1,
+          execution_profile_keys: ["image_generation_profile"],
+          executor_adapter_keys: ["skill:image_generate"],
+          executor_kinds: ["skill"],
+          executor_binding_keys: ["image_generate"],
+          limecore_policy_refs: [
+            "model_catalog",
+            "provider_offer",
+            "tenant_feature_flags",
+          ],
+          limecore_policy_snapshot_count: 1,
+          limecore_policy_decisions: ["allow"],
+          limecore_policy_decision_sources: ["local_default_policy"],
+          limecore_policy_unresolved_refs: [
+            "model_catalog",
+            "provider_offer",
+            "tenant_feature_flags",
+          ],
+          limecore_policy_missing_inputs: [
+            "model_catalog",
+            "provider_offer",
+            "tenant_feature_flags",
+          ],
+          limecore_policy_pending_hit_refs: [
+            "model_catalog",
+            "provider_offer",
+            "tenant_feature_flags",
+          ],
+          limecore_policy_value_hit_count: 0,
+          snapshots: expect.arrayContaining([
             expect.objectContaining({
-              task_type: "image_generate",
-              task_family: "image",
+              entry_key: "at_image_command",
+              thread_id: "thread-image-mock-1",
+              turn_id: "turn-image-mock-1",
+              content_id: "content-image-mock-1",
+              modality: "image",
+              skill_id: "image_generate",
+              model_id: "gpt-image-1",
+              cost_state: "estimated",
+              limit_state: "within_limit",
+              estimated_cost_class: "low",
+              limit_event_kind: "quota_low",
+              quota_low: true,
+              executor_kind: "skill",
+              executor_binding_key: "image_generate",
+              limecore_policy_refs: [
+                "model_catalog",
+                "provider_offer",
+                "tenant_feature_flags",
+              ],
+              limecore_policy_snapshot_status: "local_defaults_evaluated",
+              limecore_policy_decision_source: "local_default_policy",
+              limecore_policy_missing_inputs: [
+                "model_catalog",
+                "provider_offer",
+                "tenant_feature_flags",
+              ],
+              limecore_policy_pending_hit_refs: [
+                "model_catalog",
+                "provider_offer",
+                "tenant_feature_flags",
+              ],
+              limecore_policy_value_hits: [],
+              limecore_policy_value_hit_count: 0,
             }),
           ]),
         }),
-      );
-    } finally {
-      consoleWarnSpy.mockRestore();
-    }
+        tasks: expect.arrayContaining([
+          expect.objectContaining({
+            task_type: "image_generate",
+            task_family: "image",
+          }),
+        ]),
+      }),
+    );
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
   it("媒体任务 mock 在 taskRef 为绝对 task file 时也应保持稳定 task_id", async () => {
     mocks.isDevBridgeAvailable.mockReturnValue(false);
 
-    const directResult = await invoke("get_media_task_artifact", {
+    const directResult = await invokeMockOnly("get_media_task_artifact", {
       request: {
         projectRootPath: "/mock/workspace",
         taskRef: "task-image-mock-1",
       },
     });
-    const absolutePathResult = await invoke("get_media_task_artifact", {
+    const absolutePathResult = await invokeMockOnly("get_media_task_artifact", {
       request: {
         projectRootPath: "/mock/workspace",
         taskRef:
@@ -1643,11 +1695,9 @@ describe("desktop-host/core invoke", () => {
     );
   });
 
-  it("音频任务命令在 bridge 失败时应回退 voice_generation task file mock 协议", async () => {
-    mocks.isDevBridgeAvailable.mockReturnValue(false);
-
+  it("音频任务显式 mock 应返回 voice_generation task file 协议", async () => {
     await expect(
-      invoke("create_audio_generation_task_artifact", {
+      invokeMockOnly("create_audio_generation_task_artifact", {
         request: {
           projectRootPath: "/mock/workspace",
           sourceText: "请生成温暖旁白",
@@ -1676,7 +1726,7 @@ describe("desktop-host/core invoke", () => {
     );
 
     await expect(
-      invoke("list_media_task_artifacts", {
+      invokeMockOnly("list_media_task_artifacts", {
         request: {
           projectRootPath: "/mock/workspace",
           taskFamily: "audio",
@@ -1741,7 +1791,7 @@ describe("desktop-host/core invoke", () => {
     );
 
     await expect(
-      invoke("complete_audio_generation_task_artifact", {
+      invokeMockOnly("complete_audio_generation_task_artifact", {
         request: {
           projectRootPath: "/mock/workspace",
           taskRef: "task-audio-mock-1",
@@ -1778,10 +1828,10 @@ describe("desktop-host/core invoke", () => {
   it("旧 Agent 命令别名应直接报废弃错误，不再静默返回 mock 成功结果", async () => {
     mocks.isDevBridgeAvailable.mockReturnValue(false);
 
-    await expect(invoke("list_agent_sessions")).rejects.toThrow(
+    await expect(invokeMockOnly("list_agent_sessions")).rejects.toThrow(
       "命令 list_agent_sessions 已废弃，请迁移到 agent_runtime_list_sessions",
     );
-    await expect(invoke("get_agent_process_status")).rejects.toThrow(
+    await expect(invokeMockOnly("get_agent_process_status")).rejects.toThrow(
       "命令 get_agent_process_status 已废弃，请迁移到 agent_get_process_status",
     );
   });

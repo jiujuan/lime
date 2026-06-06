@@ -251,6 +251,67 @@ describe("AppSidebar conversations", () => {
     expect(recentConversationList?.textContent).not.toContain("Ran into");
   });
 
+  it("最近对话和归档加载失败时应退出加载态并保留工作区查询参数", async () => {
+    localStorage.setItem("agent_last_project_id", JSON.stringify("project-1"));
+    const warnSpy = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
+    const errorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    mockListAgentRuntimeSessions.mockImplementation(async (options?: {
+      archivedOnly?: boolean;
+      includeArchived?: boolean;
+      limit?: number;
+      workspaceId?: string;
+    }) => {
+      throw new Error(
+        options?.archivedOnly ? "archived failed" : "recent failed",
+      );
+    });
+
+    try {
+      const container = mountSidebarContainer({
+        currentPage: "settings",
+      });
+      await flushEffects(3);
+
+      const recentConversationList = container.querySelector(
+        '[data-testid="app-sidebar-recent-conversations"]',
+      );
+      expect(recentConversationList?.textContent).not.toContain("正在加载对话");
+      expect(recentConversationList?.textContent).toContain("还没有开始对话");
+      expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+        limit: 11,
+        workspaceId: "project-1",
+      });
+
+      await act(async () => {
+        container
+          .querySelector<HTMLButtonElement>('button[aria-expanded="false"]')
+          ?.click();
+        await Promise.resolve();
+      });
+      await flushEffects(3);
+
+      const archivedConversationList = container.querySelector(
+        '[data-testid="app-sidebar-archived-conversations"]',
+      );
+      expect(archivedConversationList?.textContent).not.toContain(
+        "正在加载归档",
+      );
+      expect(archivedConversationList?.textContent).toContain("暂无归档内容");
+      expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+        archivedOnly: true,
+        limit: 9,
+        workspaceId: "project-1",
+      });
+    } finally {
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
   it("没有当前工作区时不应加载全局最近对话", async () => {
     const container = mountSidebarContainer({
       currentPage: "agent",

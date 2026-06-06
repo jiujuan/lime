@@ -13,7 +13,11 @@ import {
   getElectronHostBridge,
   isElectronDevBridgeFallbackAvailable,
 } from "@/lib/electron-host";
-import { shouldDisallowMockFallbackInBrowser } from "./mockPriorityCommands";
+import {
+  resolveDevBridgeCommandTimeoutProfile,
+  shouldBypassDevBridgeCooldown,
+  shouldRetryDevBridgeReadCommand,
+} from "./commandPolicy";
 
 const BRIDGE_URL = "http://127.0.0.1:3030/invoke";
 const BRIDGE_HEALTH_URL = "http://127.0.0.1:3030/health";
@@ -25,6 +29,7 @@ const DEV_BRIDGE_STARTUP_TRUTH_COMMAND_TIMEOUT_MS = 30000;
 const DEV_BRIDGE_KNOWLEDGE_COMPILE_TIMEOUT_MS = 180000;
 const DEV_BRIDGE_VOICE_MODEL_DOWNLOAD_TIMEOUT_MS = 30 * 60 * 1000;
 const DEV_BRIDGE_AGENT_RUNTIME_TIMEOUT_MS = 60000;
+const DEV_BRIDGE_APP_SERVER_TURN_START_TIMEOUT_MS = 150000;
 const DEV_BRIDGE_AGENT_APP_PACKAGE_COMMAND_TIMEOUT_MS = 60000;
 const DEV_BRIDGE_AGENT_APP_UI_RUNTIME_START_TIMEOUT_MS = 150000;
 const DEV_BRIDGE_SKILL_EXECUTION_TIMEOUT_MS = 5 * 60 * 1000;
@@ -37,59 +42,6 @@ const DEV_BRIDGE_PROVIDER_PROBE_TIMEOUT_MS = 30000;
 const DEV_BRIDGE_HEALTH_TIMEOUT_MS = 3000;
 const DEV_BRIDGE_HEALTH_CACHE_MS = 10000;
 const DEV_BRIDGE_FAILURE_COOLDOWN_MS = 3000;
-
-const DEV_BRIDGE_PROVIDER_PROBE_COMMANDS = new Set([
-  "fetch_provider_models_auto",
-  "test_api_key_provider_connection",
-  "test_api_key_provider_chat",
-]);
-
-const DEV_BRIDGE_AGENT_LONG_RUNNING_COMMANDS = new Set([
-  "agent_generate_title",
-]);
-
-const DEV_BRIDGE_AGENT_APP_UI_RUNTIME_START_COMMANDS = new Set([
-  "agent_app_start_ui_runtime",
-]);
-
-const DEV_BRIDGE_AGENT_APP_PACKAGE_COMMANDS = new Set([
-  "agent_app_inspect_local_package",
-]);
-
-const DEV_BRIDGE_SKILL_EXECUTION_COMMANDS = new Set(["execute_skill"]);
-
-const DEV_BRIDGE_LAYERED_DESIGN_PROJECT_COMMANDS = new Set([
-  "save_layered_design_project_export",
-  "read_layered_design_project_export",
-]);
-
-const DEV_BRIDGE_COOLDOWN_BYPASS_COMMANDS = new Set([
-  "agent_runtime_get_session",
-  "agent_runtime_list_sessions",
-  "agent_runtime_submit_turn",
-  "agent_runtime_create_session",
-  "agent_runtime_send_subagent_input",
-  "list_executable_skills",
-  "get_skill_detail",
-  "execute_skill",
-  "get_or_create_default_project",
-  "workspace_get",
-  "workspace_get_default",
-  "workspace_list",
-  "workspace_ensure_ready",
-  "workspace_ensure_default_ready",
-]);
-
-const DEV_BRIDGE_READ_RETRY_COMMANDS = new Set([
-  "agent_runtime_get_session",
-  "agent_runtime_list_sessions",
-]);
-
-const DEV_BRIDGE_STARTUP_TRUTH_COMMANDS = new Set([
-  "aster_agent_init",
-  "workspace_ensure_ready",
-  "workspace_ensure_default_ready",
-]);
 
 export interface InvokeRequest {
   cmd: string;
@@ -114,6 +66,11 @@ interface BridgeEventMessage<T = unknown> {
   payload: T;
 }
 
+interface DevBridgeHealthResponse {
+  status?: unknown;
+  transport?: unknown;
+}
+
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchOptions = NonNullable<Parameters<typeof fetch>[1]>;
 
@@ -127,55 +84,44 @@ let bridgeLastHealthyAt = 0;
 let bridgeConnectionBackoffUntil = 0;
 let bridgeHealthProbePromise: Promise<boolean> | null = null;
 
-export function resolveBridgeRequestTimeoutMs(cmd: string): number {
-  if (DEV_BRIDGE_STARTUP_TRUTH_COMMANDS.has(cmd)) {
-    return DEV_BRIDGE_STARTUP_TRUTH_COMMAND_TIMEOUT_MS;
+export function resolveBridgeRequestTimeoutMs(
+  cmd: string,
+  args?: unknown,
+): number {
+  switch (resolveDevBridgeCommandTimeoutProfile(cmd, args)) {
+    case "startup-truth":
+      return DEV_BRIDGE_STARTUP_TRUTH_COMMAND_TIMEOUT_MS;
+    case "agent-session-get":
+      return DEV_BRIDGE_AGENT_SESSION_GET_TIMEOUT_MS;
+    case "agent-session-list":
+      return DEV_BRIDGE_AGENT_SESSION_LIST_TIMEOUT_MS;
+    case "agent-session-patch":
+      return DEV_BRIDGE_AGENT_SESSION_PATCH_TIMEOUT_MS;
+    case "agent-session-create":
+      return DEV_BRIDGE_AGENT_SESSION_CREATE_TIMEOUT_MS;
+    case "app-server-turn-start":
+      return DEV_BRIDGE_APP_SERVER_TURN_START_TIMEOUT_MS;
+    case "agent-runtime":
+      return DEV_BRIDGE_AGENT_RUNTIME_TIMEOUT_MS;
+    case "agent-app-ui-runtime-start":
+      return DEV_BRIDGE_AGENT_APP_UI_RUNTIME_START_TIMEOUT_MS;
+    case "agent-app-package":
+      return DEV_BRIDGE_AGENT_APP_PACKAGE_COMMAND_TIMEOUT_MS;
+    case "skill-execution":
+      return DEV_BRIDGE_SKILL_EXECUTION_TIMEOUT_MS;
+    case "provider-probe":
+      return DEV_BRIDGE_PROVIDER_PROBE_TIMEOUT_MS;
+    case "knowledge-compile":
+      return DEV_BRIDGE_KNOWLEDGE_COMPILE_TIMEOUT_MS;
+    case "voice-model-download":
+      return DEV_BRIDGE_VOICE_MODEL_DOWNLOAD_TIMEOUT_MS;
+    case "layered-design-project":
+      return DEV_BRIDGE_LAYERED_DESIGN_PROJECT_TIMEOUT_MS;
+    case "truth":
+      return DEV_BRIDGE_TRUTH_COMMAND_TIMEOUT_MS;
+    case "default":
+      return DEV_BRIDGE_REQUEST_TIMEOUT_MS;
   }
-
-  if (cmd === "agent_runtime_get_session") {
-    return DEV_BRIDGE_AGENT_SESSION_GET_TIMEOUT_MS;
-  }
-  if (cmd === "agent_runtime_list_sessions") {
-    return DEV_BRIDGE_AGENT_SESSION_LIST_TIMEOUT_MS;
-  }
-  if (cmd === "agent_runtime_update_session") {
-    return DEV_BRIDGE_AGENT_SESSION_PATCH_TIMEOUT_MS;
-  }
-  if (cmd === "agent_runtime_create_session") {
-    return DEV_BRIDGE_AGENT_SESSION_CREATE_TIMEOUT_MS;
-  }
-  if (
-    cmd.startsWith("agent_app_runtime_") ||
-    cmd.startsWith("agent_runtime_") ||
-    DEV_BRIDGE_AGENT_LONG_RUNNING_COMMANDS.has(cmd)
-  ) {
-    return DEV_BRIDGE_AGENT_RUNTIME_TIMEOUT_MS;
-  }
-  if (DEV_BRIDGE_AGENT_APP_UI_RUNTIME_START_COMMANDS.has(cmd)) {
-    return DEV_BRIDGE_AGENT_APP_UI_RUNTIME_START_TIMEOUT_MS;
-  }
-  if (DEV_BRIDGE_AGENT_APP_PACKAGE_COMMANDS.has(cmd)) {
-    return DEV_BRIDGE_AGENT_APP_PACKAGE_COMMAND_TIMEOUT_MS;
-  }
-  if (DEV_BRIDGE_SKILL_EXECUTION_COMMANDS.has(cmd)) {
-    return DEV_BRIDGE_SKILL_EXECUTION_TIMEOUT_MS;
-  }
-  if (DEV_BRIDGE_PROVIDER_PROBE_COMMANDS.has(cmd)) {
-    return DEV_BRIDGE_PROVIDER_PROBE_TIMEOUT_MS;
-  }
-  if (cmd === "knowledge_compile_pack") {
-    return DEV_BRIDGE_KNOWLEDGE_COMPILE_TIMEOUT_MS;
-  }
-  if (cmd === "voice_models_download") {
-    return DEV_BRIDGE_VOICE_MODEL_DOWNLOAD_TIMEOUT_MS;
-  }
-  if (DEV_BRIDGE_LAYERED_DESIGN_PROJECT_COMMANDS.has(cmd)) {
-    return DEV_BRIDGE_LAYERED_DESIGN_PROJECT_TIMEOUT_MS;
-  }
-  if (shouldDisallowMockFallbackInBrowser(cmd)) {
-    return DEV_BRIDGE_TRUTH_COMMAND_TIMEOUT_MS;
-  }
-  return DEV_BRIDGE_REQUEST_TIMEOUT_MS;
 }
 
 function resolveEventSourceConstructor(): typeof EventSource | null {
@@ -268,6 +214,18 @@ function createBridgeConnectionFailureError(reason: string): Error {
   return new Error(`Failed to fetch (${reason})`);
 }
 
+async function isElectronHostBridgeHealthResponse(
+  response: Response,
+): Promise<boolean> {
+  let payload: DevBridgeHealthResponse;
+  try {
+    payload = (await response.json()) as DevBridgeHealthResponse;
+  } catch {
+    return false;
+  }
+  return payload.status === "ok" && payload.transport === "electron-host";
+}
+
 async function fetchWithTimeout(
   input: FetchInput,
   init: FetchOptions,
@@ -294,12 +252,12 @@ async function fetchWithTimeout(
 }
 
 function shouldBypassBridgeCooldown(cmd: string): boolean {
-  return DEV_BRIDGE_COOLDOWN_BYPASS_COMMANDS.has(cmd);
+  return shouldBypassDevBridgeCooldown(cmd);
 }
 
 function shouldRetryBridgeInvoke(cmd: string, message: string): boolean {
   return (
-    DEV_BRIDGE_READ_RETRY_COMMANDS.has(cmd) &&
+    shouldRetryDevBridgeReadCommand(cmd) &&
     isBridgeConnectionError(message) &&
     !isBridgeTimeoutError(message)
   );
@@ -333,6 +291,10 @@ async function ensureBridgeReachable(options?: {
           DEV_BRIDGE_HEALTH_TIMEOUT_MS,
         );
         if (!response.ok) {
+          markBridgeUnavailable();
+          return false;
+        }
+        if (!(await isElectronHostBridgeHealthResponse(response))) {
           markBridgeUnavailable();
           return false;
         }
@@ -726,7 +688,7 @@ export async function invokeViaHttp<T = unknown>(
   args?: unknown,
 ): Promise<T> {
   console.log(`[DevBridge] HTTP 调用: ${cmd}`, args);
-  const timeoutMs = resolveBridgeRequestTimeoutMs(cmd);
+  const timeoutMs = resolveBridgeRequestTimeoutMs(cmd, args);
   const bypassCooldown = shouldBypassBridgeCooldown(cmd);
 
   try {

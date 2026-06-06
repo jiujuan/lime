@@ -1,5 +1,6 @@
 pub use app_server_protocol::is_app_server_notification_method;
 pub use app_server_protocol::is_app_server_request_method;
+pub use app_server_protocol::AgentAppInstalledListResponse;
 pub use app_server_protocol::AgentSessionActionRespondParams;
 pub use app_server_protocol::AgentSessionListParams;
 pub use app_server_protocol::AgentSessionReadParams;
@@ -9,6 +10,7 @@ pub use app_server_protocol::AgentSessionTurnStartParams;
 pub use app_server_protocol::AppServerMethodKind;
 pub use app_server_protocol::AppServerMethodSpec;
 pub use app_server_protocol::ArtifactReadParams;
+pub use app_server_protocol::AutomationJobListResponse;
 pub use app_server_protocol::CapabilityListParams;
 pub use app_server_protocol::EvidenceExportParams;
 pub use app_server_protocol::InitializeParams;
@@ -17,8 +19,12 @@ use app_server_protocol::JsonRpcMessage;
 use app_server_protocol::JsonRpcNotification;
 use app_server_protocol::JsonRpcRequest;
 use app_server_protocol::JsonRpcResponse;
+pub use app_server_protocol::KnowledgeListPacksParams;
+pub use app_server_protocol::KnowledgeListPacksResponse;
 pub use app_server_protocol::ModelListParams;
 pub use app_server_protocol::ModelProviderAliasReadParams;
+pub use app_server_protocol::ProjectMemoryReadParams;
+pub use app_server_protocol::ProjectMemoryReadResponse;
 use app_server_protocol::RequestId;
 pub use app_server_protocol::SkillListResponse;
 pub use app_server_protocol::SkillReadParams;
@@ -35,6 +41,7 @@ pub use app_server_protocol::WorkspaceReadResponse;
 pub use app_server_protocol::WorkspaceSkillBindingsListParams;
 pub use app_server_protocol::WorkspaceSkillBindingsListResponse;
 pub use app_server_protocol::APP_SERVER_METHODS;
+pub use app_server_protocol::METHOD_AGENT_APP_INSTALLED_LIST;
 pub use app_server_protocol::METHOD_AGENT_SESSION_ACTION_RESPOND;
 pub use app_server_protocol::METHOD_AGENT_SESSION_EVENT;
 pub use app_server_protocol::METHOD_AGENT_SESSION_LIST;
@@ -43,10 +50,12 @@ pub use app_server_protocol::METHOD_AGENT_SESSION_START;
 pub use app_server_protocol::METHOD_AGENT_SESSION_TURN_CANCEL;
 pub use app_server_protocol::METHOD_AGENT_SESSION_TURN_START;
 pub use app_server_protocol::METHOD_ARTIFACT_READ;
+pub use app_server_protocol::METHOD_AUTOMATION_JOB_LIST;
 pub use app_server_protocol::METHOD_CAPABILITY_LIST;
 pub use app_server_protocol::METHOD_EVIDENCE_EXPORT;
 pub use app_server_protocol::METHOD_INITIALIZE;
 pub use app_server_protocol::METHOD_INITIALIZED;
+pub use app_server_protocol::METHOD_KNOWLEDGE_PACK_LIST;
 pub use app_server_protocol::METHOD_MODEL_LIST;
 pub use app_server_protocol::METHOD_MODEL_PREFERENCES_LIST;
 pub use app_server_protocol::METHOD_MODEL_PROVIDER_ALIAS_LIST;
@@ -54,6 +63,7 @@ pub use app_server_protocol::METHOD_MODEL_PROVIDER_ALIAS_READ;
 pub use app_server_protocol::METHOD_MODEL_PROVIDER_CATALOG_LIST;
 pub use app_server_protocol::METHOD_MODEL_PROVIDER_LIST;
 pub use app_server_protocol::METHOD_MODEL_SYNC_STATE_READ;
+pub use app_server_protocol::METHOD_PROJECT_MEMORY_READ;
 pub use app_server_protocol::METHOD_SKILL_LIST;
 pub use app_server_protocol::METHOD_SKILL_READ;
 pub use app_server_protocol::METHOD_WORKSPACE_BY_PATH_READ;
@@ -241,6 +251,28 @@ impl AppServerClient {
         self.typed_request(typed::list_workspace_skill_bindings(params))
     }
 
+    pub fn list_agent_app_installed(&mut self) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::list_agent_app_installed())
+    }
+
+    pub fn list_knowledge_packs(
+        &mut self,
+        params: KnowledgeListPacksParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::list_knowledge_packs(params))
+    }
+
+    pub fn list_automation_jobs(&mut self) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::list_automation_jobs())
+    }
+
+    pub fn read_project_memory(
+        &mut self,
+        params: ProjectMemoryReadParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::read_project_memory(params))
+    }
+
     pub fn list_models(&mut self, params: ModelListParams) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::list_models(params))
     }
@@ -420,6 +452,26 @@ pub mod typed {
         params: WorkspaceSkillBindingsListParams,
     ) -> TypedRequest<WorkspaceSkillBindingsListParams> {
         TypedRequest::new(METHOD_WORKSPACE_SKILL_BINDINGS_LIST, params)
+    }
+
+    pub fn list_agent_app_installed() -> TypedRequest<serde_json::Value> {
+        TypedRequest::new(METHOD_AGENT_APP_INSTALLED_LIST, serde_json::json!({}))
+    }
+
+    pub fn list_knowledge_packs(
+        params: KnowledgeListPacksParams,
+    ) -> TypedRequest<KnowledgeListPacksParams> {
+        TypedRequest::new(METHOD_KNOWLEDGE_PACK_LIST, params)
+    }
+
+    pub fn list_automation_jobs() -> TypedRequest<serde_json::Value> {
+        TypedRequest::new(METHOD_AUTOMATION_JOB_LIST, serde_json::json!({}))
+    }
+
+    pub fn read_project_memory(
+        params: ProjectMemoryReadParams,
+    ) -> TypedRequest<ProjectMemoryReadParams> {
+        TypedRequest::new(METHOD_PROJECT_MEMORY_READ, params)
     }
 
     pub fn list_models(params: ModelListParams) -> TypedRequest<ModelListParams> {
@@ -741,6 +793,45 @@ mod tests {
     }
 
     #[test]
+    fn app_data_surface_helpers_use_current_methods() {
+        let mut client = AppServerClient::new();
+
+        let installed = client
+            .list_agent_app_installed()
+            .expect("installed agent apps");
+        let knowledge = client
+            .list_knowledge_packs(KnowledgeListPacksParams {
+                working_dir: "/workspace/project".to_string(),
+                include_archived: true,
+            })
+            .expect("knowledge packs");
+        let jobs = client.list_automation_jobs().expect("automation jobs");
+        let memory = client
+            .read_project_memory(ProjectMemoryReadParams {
+                project_id: "workspace-main".to_string(),
+            })
+            .expect("project memory");
+
+        assert_eq!(installed.method, METHOD_AGENT_APP_INSTALLED_LIST);
+        assert_eq!(installed.params.expect("params"), json!({}));
+        assert_eq!(knowledge.method, METHOD_KNOWLEDGE_PACK_LIST);
+        assert_eq!(
+            knowledge.params.expect("params"),
+            json!({
+                "workingDir": "/workspace/project",
+                "includeArchived": true,
+            })
+        );
+        assert_eq!(jobs.method, METHOD_AUTOMATION_JOB_LIST);
+        assert_eq!(jobs.params.expect("params"), json!({}));
+        assert_eq!(memory.method, METHOD_PROJECT_MEMORY_READ);
+        assert_eq!(
+            memory.params.expect("params"),
+            json!({ "projectId": "workspace-main" })
+        );
+    }
+
+    #[test]
     fn read_artifacts_preserves_filter_and_stable_method() {
         let mut client = AppServerClient::new();
 
@@ -934,12 +1025,22 @@ mod tests {
         assert!(methods.contains(&METHOD_SKILL_LIST));
         assert!(methods.contains(&METHOD_SKILL_READ));
         assert!(methods.contains(&METHOD_WORKSPACE_SKILL_BINDINGS_LIST));
+        assert!(methods.contains(&METHOD_AGENT_APP_INSTALLED_LIST));
+        assert!(methods.contains(&METHOD_KNOWLEDGE_PACK_LIST));
+        assert!(methods.contains(&METHOD_AUTOMATION_JOB_LIST));
+        assert!(methods.contains(&METHOD_PROJECT_MEMORY_READ));
         assert!(methods.contains(&METHOD_AGENT_SESSION_EVENT));
         assert!(is_app_server_request_method(METHOD_CAPABILITY_LIST));
         assert!(is_app_server_request_method(METHOD_ARTIFACT_READ));
         assert!(is_app_server_request_method(METHOD_EVIDENCE_EXPORT));
         assert!(is_app_server_request_method(METHOD_WORKSPACE_LIST));
         assert!(is_app_server_request_method(METHOD_SKILL_LIST));
+        assert!(is_app_server_request_method(
+            METHOD_AGENT_APP_INSTALLED_LIST
+        ));
+        assert!(is_app_server_request_method(METHOD_KNOWLEDGE_PACK_LIST));
+        assert!(is_app_server_request_method(METHOD_AUTOMATION_JOB_LIST));
+        assert!(is_app_server_request_method(METHOD_PROJECT_MEMORY_READ));
         assert!(is_app_server_request_method(
             METHOD_AGENT_SESSION_TURN_CANCEL
         ));

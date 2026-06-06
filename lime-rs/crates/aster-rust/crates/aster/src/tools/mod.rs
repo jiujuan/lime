@@ -958,8 +958,10 @@ mod tests {
             );
         }
 
-        let explicit_truthy_env =
-            HashMap::from([(CURRENT_SURFACE_POWERSHELL_ENV.to_string(), "true".to_string())]);
+        let explicit_truthy_env = HashMap::from([(
+            CURRENT_SURFACE_POWERSHELL_ENV.to_string(),
+            "true".to_string(),
+        )]);
         assert!(current_surface_tool_gates_from_env_map(&explicit_truthy_env, true).powershell);
         assert!(!current_surface_tool_gates_from_env_map(&explicit_truthy_env, false).powershell);
     }

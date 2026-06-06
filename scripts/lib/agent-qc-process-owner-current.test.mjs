@@ -41,7 +41,7 @@ describe("agent-qc-process-owner Electron current runtime", () => {
           pgid: 20,
           stat: "S",
           etime: "01:00:00",
-          command: "./node_modules/electron/dist/Electron.app/Contents/MacOS/Electron .",
+          command: ".lime/electron-dev-host/Lime-dev.app/Contents/MacOS/Electron .",
         },
       ],
       { generatedAt: "2026-06-06T00:00:00.000Z", platform: "darwin" },
@@ -54,5 +54,25 @@ describe("agent-qc-process-owner Electron current runtime", () => {
     expect(report.passiveDesktopRuntimeProcesses.map((entry) => entry.pid)).toEqual([20, 21]);
     expect(report.verdict.summary).toContain("passiveElectronRuntime=2");
     expect(report.verdict.summary).toContain("passiveDesktopRuntime=2");
+  });
+
+  it("仍把官方 Electron 二进制样例识别为 passive runtime，兼容旧进程快照", () => {
+    const report = createAgentQcProcessOwnerReport(
+      [
+        {
+          pid: 30,
+          ppid: 1,
+          pgid: 30,
+          stat: "S",
+          etime: "00:10:00",
+          command: "./node_modules/electron/dist/Electron.app/Contents/MacOS/Electron .",
+        },
+      ],
+      { generatedAt: "2026-06-06T00:00:00.000Z", platform: "darwin" },
+    );
+
+    expect(report.verdict.status).toBe("pass");
+    expect(report.passiveElectronRuntimeProcesses.map((entry) => entry.pid)).toEqual([30]);
+    expect(report.passiveDesktopRuntimeProcesses.map((entry) => entry.pid)).toEqual([30]);
   });
 });

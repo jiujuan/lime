@@ -8,6 +8,10 @@ import { toast } from "sonner";
 import { createInitialDocumentState } from "@/lib/workspace/workbenchCanvas";
 import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
 import type { LayoutMode, ThemeType } from "@/lib/workspace/workbenchContract";
+import {
+  hasAgentRuntimeArtifactPreviewScope,
+  readAgentRuntimeArtifactPreviewContent,
+} from "@/lib/api/agentRuntime/appServerArtifactClient";
 import { readFilePreview } from "@/lib/api/fileBrowser";
 import type { SessionFile } from "@/lib/api/session-files";
 import type { Artifact } from "@/lib/artifact/types";
@@ -144,6 +148,7 @@ interface UseWorkspaceArtifactPreviewActionsParams {
 interface WorkspaceArtifactPreviewActionsResult {
   handleHarnessLoadFilePreview: (
     path: string,
+    artifact?: Artifact,
   ) => Promise<HarnessFilePreviewResult>;
   handleArtifactClick: (artifact: Artifact) => void;
   handleFileClick: (fileName: string, content: string) => void;
@@ -176,7 +181,10 @@ export function useWorkspaceArtifactPreviewActions({
   setCanvasState,
 }: UseWorkspaceArtifactPreviewActionsParams): WorkspaceArtifactPreviewActionsResult {
   const handleHarnessLoadFilePreview = useCallback(
-    async (path: string): Promise<HarnessFilePreviewResult> => {
+    async (
+      path: string,
+      artifact?: Artifact,
+    ): Promise<HarnessFilePreviewResult> => {
       const normalizedPath = path.trim();
       const createFallbackResult = (
         overrides: Partial<HarnessFilePreviewResult> = {},
@@ -191,6 +199,33 @@ export function useWorkspaceArtifactPreviewActions({
 
       if (!normalizedPath) {
         return createFallbackResult({ error: "文件路径为空" });
+      }
+
+      if (
+        artifact &&
+        hasAgentRuntimeArtifactPreviewScope(artifact, normalizedPath)
+      ) {
+        try {
+          const appServerContent = await readAgentRuntimeArtifactPreviewContent(
+            artifact,
+            normalizedPath,
+          );
+          if (!appServerContent) {
+            return createFallbackResult({
+              error: "App Server artifact 内容不可用",
+            });
+          }
+
+          return createFallbackResult({
+            path: appServerContent.filePath || normalizedPath,
+            content: appServerContent.content,
+            size: appServerContent.content.length,
+          });
+        } catch (error) {
+          return createFallbackResult({
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
 
       const matchedTaskFile = taskFiles.find((file) =>
@@ -267,7 +302,10 @@ export function useWorkspaceArtifactPreviewActions({
       const shouldLoadPreview = artifact.content.length === 0 && artifactPath;
 
       if (shouldLoadPreview) {
-        const preview = await handleHarnessLoadFilePreview(artifactPath);
+        const preview = await handleHarnessLoadFilePreview(
+          artifactPath,
+          artifact,
+        );
         if (preview.error) {
           toast.error(`读取产物失败: ${preview.error}`);
         } else if (preview.isBinary) {

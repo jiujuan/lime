@@ -3,6 +3,11 @@ import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics"
 import { normalizeLegacyThreadItem } from "../agentTextNormalization";
 import type { AgentThreadItem } from "../agentProtocol";
 import { normalizeQueuedTurnSnapshots } from "../queuedTurn";
+import {
+  createAppServerSessionClient,
+  type AppServerSessionClient,
+  type AppServerSessionRpcClient,
+} from "./appServerSessionClient";
 import { AGENT_RUNTIME_COMMANDS } from "./commandManifest.generated";
 import {
   normalizeSubagentParentContext,
@@ -23,17 +28,6 @@ import type {
   AgentRuntimeUpdateSessionRequest,
 } from "./types";
 
-const requireWorkspaceId = (
-  workspaceId?: string,
-  fallbackWorkspaceId?: string,
-): string => {
-  const resolvedWorkspaceId = (workspaceId ?? fallbackWorkspaceId)?.trim();
-  if (!resolvedWorkspaceId) {
-    throw new Error("workspaceId 不能为空，请先选择项目工作区");
-  }
-  return resolvedWorkspaceId;
-};
-
 function isTransientSessionReadError(error: unknown): boolean {
   const message =
     error instanceof Error ? error.message : String(error || "Unknown error");
@@ -52,9 +46,13 @@ function isTransientSessionReadError(error: unknown): boolean {
 
 export interface AgentRuntimeSessionClientDeps {
   invokeCommand?: AgentRuntimeCommandInvoke;
+  appServerClient?: AppServerSessionRpcClient;
+  appServerSessionClient?: AppServerSessionClient;
 }
 
 export function createSessionClient({
+  appServerClient,
+  appServerSessionClient = createAppServerSessionClient({ appServerClient }),
   invokeCommand = invokeAgentRuntimeCommand,
 }: AgentRuntimeSessionClientDeps = {}) {
   async function createAgentRuntimeSession(
@@ -63,12 +61,12 @@ export function createSessionClient({
     executionStrategy?: AsterExecutionStrategy,
     options?: AgentRuntimeCreateSessionOptions,
   ): Promise<string> {
-    return await invokeCommand<string>(AGENT_RUNTIME_COMMANDS.createSession, {
-      workspaceId: requireWorkspaceId(workspaceId),
+    return await appServerSessionClient.createAgentRuntimeSession(
+      workspaceId,
       name,
       executionStrategy,
-      ...(options?.runStartHooks === false ? { runStartHooks: false } : {}),
-    });
+      options,
+    );
   }
 
   async function listAgentRuntimeSessions(
@@ -120,20 +118,12 @@ export function createSessionClient({
     logAgentDebug("AgentApi", "runtimeListSessions.start", listMetricContext);
 
     try {
-      const request = {
-        ...(includeArchived ? { include_archived: true } : {}),
-        ...(archivedOnly ? { archived_only: true } : {}),
-        ...(workspaceId ? { workspace_id: workspaceId } : {}),
-        ...(typeof limit === "number" ? { limit } : {}),
-      };
-      const sessions = await invokeCommand<AsterSessionInfo[]>(
-        AGENT_RUNTIME_COMMANDS.listSessions,
-        Object.keys(request).length > 0
-          ? {
-              request,
-            }
-          : undefined,
-      );
+      const sessions = await appServerSessionClient.listAgentRuntimeSessions({
+        includeArchived,
+        archivedOnly,
+        workspaceId,
+        limit,
+      });
       settled = true;
       recordAgentUiPerformanceMetric("agentRuntime.listSessions.success", {
         ...listMetricContext,
@@ -245,10 +235,9 @@ export function createSessionClient({
     );
 
     try {
-      const detail = await invokeCommand<AsterSessionDetail>(
-        AGENT_RUNTIME_COMMANDS.getSession,
+      const detail = await appServerSessionClient.getAgentRuntimeSession(
+        sessionId,
         {
-          sessionId,
           ...(resumeSessionStartHooks ? { resumeSessionStartHooks: true } : {}),
           ...(typeof historyLimit === "number" ? { historyLimit } : {}),
           ...(typeof historyOffset === "number" ? { historyOffset } : {}),

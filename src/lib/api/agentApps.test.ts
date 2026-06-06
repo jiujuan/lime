@@ -13,6 +13,7 @@ import {
   getAgentAppCloudCatalog,
   installLocalAgentAppPackage,
   launchAgentAppShell,
+  listInstalledAgentApps,
   reviewCloudAgentAppRelease,
   reviewLocalAgentAppPackage,
   selectAgentAppDirectory,
@@ -24,6 +25,14 @@ import {
 
 const LOCAL_APP_DIR = "/tmp/lime/content-factory-app";
 
+const appServerRequestMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/api/appServer", () => ({
+  AppServerClient: vi.fn(() => ({
+    request: appServerRequestMock,
+  })),
+}));
+
 vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
 }));
@@ -33,7 +42,9 @@ const PACKAGE_HASH =
 const MANIFEST_HASH =
   "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
-function buildCloudApp(overrides: Partial<CloudBootstrapApp> = {}): CloudBootstrapApp {
+function buildCloudApp(
+  overrides: Partial<CloudBootstrapApp> = {},
+): CloudBootstrapApp {
   return {
     appId: "content-factory-app",
     displayName: "内容工厂",
@@ -65,6 +76,7 @@ function buildCloudApp(overrides: Partial<CloudBootstrapApp> = {}): CloudBootstr
 describe("agentApps API", () => {
   beforeEach(() => {
     vi.mocked(safeInvoke).mockReset();
+    appServerRequestMock.mockReset();
     delete window.__LIME_BOOTSTRAP__;
     delete window.__LIME_OEM_CLOUD__;
     delete window.__LIME_SESSION_TOKEN__;
@@ -89,6 +101,61 @@ describe("agentApps API", () => {
     expect(safeInvoke).toHaveBeenCalledWith("agent_app_select_directory", {
       request: { title: "选择 Agent App 目录" },
     });
+  });
+
+  it("已安装 Agent App 列表应通过 App Server agentAppInstalled/list 读取", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        states: [
+          {
+            appId: "content-factory-app",
+            disabled: false,
+          },
+        ],
+        issues: [],
+      },
+    });
+
+    await expect(listInstalledAgentApps()).resolves.toEqual({
+      states: [
+        expect.objectContaining({
+          appId: "content-factory-app",
+          disabled: false,
+        }),
+      ],
+      issues: [],
+    });
+
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "agentAppInstalled/list",
+      {},
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith("agent_app_list_installed");
+  });
+
+  it("已安装 Agent App 列表缺少必需 result 时不应回退 legacy", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        issues: [],
+      },
+    });
+
+    await expect(listInstalledAgentApps()).rejects.toThrow(
+      "App Server agentAppInstalled/list did not return states",
+    );
+
+    appServerRequestMock.mockReset();
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        states: [],
+      },
+    });
+
+    await expect(listInstalledAgentApps()).rejects.toThrow(
+      "App Server agentAppInstalled/list did not return issues",
+    );
+
+    expect(safeInvoke).not.toHaveBeenCalledWith("agent_app_list_installed");
   });
 
   it("安装本地非企业定制 Agent App 时应保存 resolved setup 后的可启动 readiness", async () => {
@@ -284,9 +351,11 @@ describe("agentApps API", () => {
   it("审查 Cloud release 时应通过集中命令 fetch package 并生成 review", async () => {
     vi.mocked(safeInvoke).mockImplementation(async (command, args) => {
       if (command === "agent_app_fetch_cloud_package") {
-        const descriptor = (args as {
-          request: { descriptor: CloudBootstrapReleaseDescriptor };
-        }).request.descriptor;
+        const descriptor = (
+          args as {
+            request: { descriptor: CloudBootstrapReleaseDescriptor };
+          }
+        ).request.descriptor;
         return buildAgentAppPackageCacheEntry({
           identity: descriptor.identity,
           manifestSnapshot: contentFactoryFixture,
@@ -687,15 +756,11 @@ describe("agentApps API", () => {
         },
       },
     );
-    expect(safeInvoke).toHaveBeenNthCalledWith(
-      2,
-      "agent_app_stop_ui_runtime",
-      {
-        request: {
-          appId: "content-factory-app",
-        },
+    expect(safeInvoke).toHaveBeenNthCalledWith(2, "agent_app_stop_ui_runtime", {
+      request: {
+        appId: "content-factory-app",
       },
-    );
+    });
   });
 
   it("Agent App 宿主目录选择网关应走 current Desktop Host 命令", async () => {

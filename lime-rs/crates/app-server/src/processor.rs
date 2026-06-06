@@ -19,9 +19,11 @@ use app_server_protocol::JsonRpcMessage;
 use app_server_protocol::JsonRpcNotification;
 use app_server_protocol::JsonRpcRequest;
 use app_server_protocol::JsonRpcResponse;
+use app_server_protocol::KnowledgeListPacksParams;
 use app_server_protocol::ModelListParams;
 use app_server_protocol::ModelProviderAliasReadParams;
 use app_server_protocol::PlatformInfo;
+use app_server_protocol::ProjectMemoryReadParams;
 use app_server_protocol::ServerCapabilities;
 use app_server_protocol::ServerInfo;
 use app_server_protocol::SkillReadParams;
@@ -30,6 +32,7 @@ use app_server_protocol::WorkspacePathReadParams;
 use app_server_protocol::WorkspaceProjectPathResolveParams;
 use app_server_protocol::WorkspaceReadParams;
 use app_server_protocol::WorkspaceSkillBindingsListParams;
+use app_server_protocol::METHOD_AGENT_APP_INSTALLED_LIST;
 use app_server_protocol::METHOD_AGENT_SESSION_ACTION_RESPOND;
 use app_server_protocol::METHOD_AGENT_SESSION_EVENT;
 use app_server_protocol::METHOD_AGENT_SESSION_LIST;
@@ -38,10 +41,12 @@ use app_server_protocol::METHOD_AGENT_SESSION_START;
 use app_server_protocol::METHOD_AGENT_SESSION_TURN_CANCEL;
 use app_server_protocol::METHOD_AGENT_SESSION_TURN_START;
 use app_server_protocol::METHOD_ARTIFACT_READ;
+use app_server_protocol::METHOD_AUTOMATION_JOB_LIST;
 use app_server_protocol::METHOD_CAPABILITY_LIST;
 use app_server_protocol::METHOD_EVIDENCE_EXPORT;
 use app_server_protocol::METHOD_INITIALIZE;
 use app_server_protocol::METHOD_INITIALIZED;
+use app_server_protocol::METHOD_KNOWLEDGE_PACK_LIST;
 use app_server_protocol::METHOD_MODEL_LIST;
 use app_server_protocol::METHOD_MODEL_PREFERENCES_LIST;
 use app_server_protocol::METHOD_MODEL_PROVIDER_ALIAS_LIST;
@@ -49,6 +54,7 @@ use app_server_protocol::METHOD_MODEL_PROVIDER_ALIAS_READ;
 use app_server_protocol::METHOD_MODEL_PROVIDER_CATALOG_LIST;
 use app_server_protocol::METHOD_MODEL_PROVIDER_LIST;
 use app_server_protocol::METHOD_MODEL_SYNC_STATE_READ;
+use app_server_protocol::METHOD_PROJECT_MEMORY_READ;
 use app_server_protocol::METHOD_SKILL_LIST;
 use app_server_protocol::METHOD_SKILL_READ;
 use app_server_protocol::METHOD_WORKSPACE_BY_PATH_READ;
@@ -127,9 +133,7 @@ impl RequestProcessor {
             METHOD_WORKSPACE_BY_PATH_READ => self.handle_workspace_by_path_read(params).await,
             METHOD_WORKSPACE_DEFAULT_READ => self.handle_workspace_default_read().await,
             METHOD_WORKSPACE_DEFAULT_ENSURE => self.handle_workspace_default_ensure().await,
-            METHOD_WORKSPACE_PROJECTS_ROOT_READ => {
-                self.handle_workspace_projects_root_read().await
-            }
+            METHOD_WORKSPACE_PROJECTS_ROOT_READ => self.handle_workspace_projects_root_read().await,
             METHOD_WORKSPACE_PROJECT_PATH_RESOLVE => {
                 self.handle_workspace_project_path_resolve(params).await
             }
@@ -139,6 +143,10 @@ impl RequestProcessor {
             METHOD_WORKSPACE_SKILL_BINDINGS_LIST => {
                 self.handle_workspace_skill_bindings_list(params).await
             }
+            METHOD_AGENT_APP_INSTALLED_LIST => self.handle_agent_app_installed_list().await,
+            METHOD_KNOWLEDGE_PACK_LIST => self.handle_knowledge_pack_list(params).await,
+            METHOD_AUTOMATION_JOB_LIST => self.handle_automation_job_list().await,
+            METHOD_PROJECT_MEMORY_READ => self.handle_project_memory_read(params).await,
             METHOD_MODEL_LIST => self.handle_model_list(params).await,
             METHOD_MODEL_PREFERENCES_LIST => self.handle_model_preferences_list().await,
             METHOD_MODEL_SYNC_STATE_READ => self.handle_model_sync_state_read().await,
@@ -364,6 +372,54 @@ impl RequestProcessor {
         let response = self
             .runtime
             .list_workspace_skill_bindings(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_agent_app_installed_list(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .list_agent_app_installed()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_knowledge_pack_list(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: KnowledgeListPacksParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .list_knowledge_packs(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_automation_job_list(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .list_automation_jobs()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_project_memory_read(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ProjectMemoryReadParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_project_memory(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

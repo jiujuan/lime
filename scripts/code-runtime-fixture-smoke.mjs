@@ -156,7 +156,10 @@ function writeEvidenceWithFallback(outputPath, evidence) {
     if (outputPath !== DEFAULT_OUTPUT) {
       throw error;
     }
-    const fallbackPath = path.join(os.tmpdir(), "code-runtime-fixture-smoke.json");
+    const fallbackPath = path.join(
+      os.tmpdir(),
+      "code-runtime-fixture-smoke.json",
+    );
     const writtenPath = writeEvidence(fallbackPath, evidence);
     console.warn(
       `${LOG_PREFIX} default evidence write failed, fallback=${writtenPath}: ${error.message}`,
@@ -302,7 +305,9 @@ function checkpointIdFromList(checkpointList) {
         checkpoint?.path === FIXTURE_RELATIVE_PATH &&
         (checkpoint?.version_id || checkpoint?.versionId || checkpoint?.kind),
     ) ||
-    checkpoints.find((checkpoint) => checkpoint?.path === FIXTURE_RELATIVE_PATH) ||
+    checkpoints.find(
+      (checkpoint) => checkpoint?.path === FIXTURE_RELATIVE_PATH,
+    ) ||
     checkpoints[0];
   return String(match?.checkpoint_id || match?.checkpointId || "").trim();
 }
@@ -331,7 +336,12 @@ function summarizeCheckpointList(checkpointList) {
   };
 }
 
-async function waitForRuntimeCompletion(options, sessionId, fixture, targetPath) {
+async function waitForRuntimeCompletion(
+  options,
+  sessionId,
+  fixture,
+  targetPath,
+) {
   const startedAt = Date.now();
   let lastSnapshot = null;
 
@@ -352,7 +362,9 @@ async function waitForRuntimeCompletion(options, sessionId, fixture, targetPath)
       session: {
         id: sessionDetail?.id || null,
         executionStrategy:
-          sessionDetail?.execution_strategy || sessionDetail?.executionStrategy || null,
+          sessionDetail?.execution_strategy ||
+          sessionDetail?.executionStrategy ||
+          null,
         itemCount: Array.isArray(sessionDetail?.items)
           ? sessionDetail.items.length
           : 0,
@@ -394,7 +406,9 @@ async function runSmoke(options) {
   const fixture = await startOpenAiCompatibleFixtureServer({
     scriptedResponses: buildFixtureResponses(),
   });
-  console.log(`${LOG_PREFIX} provider=localhost-fixture baseUrl=${fixture.baseUrl}`);
+  console.log(
+    `${LOG_PREFIX} provider=localhost-fixture baseUrl=${fixture.baseUrl}`,
+  );
 
   try {
     console.log(`${LOG_PREFIX} stage=workspace`);
@@ -406,15 +420,29 @@ async function runSmoke(options) {
     );
     const workspaceId = workspaceIdFromDefaultProject(workspace);
     assertSmoke(workspaceId, "默认 workspace 缺少 id");
-    const workspaceRoot = await resolveWorkspaceRoot(options, workspace, workspaceId);
+    const workspaceRoot = await resolveWorkspaceRoot(
+      options,
+      workspace,
+      workspaceId,
+    );
     const targetPath = prepareFixtureFile(workspaceRoot);
 
     console.log(`${LOG_PREFIX} stage=session`);
-    const sessionId = await invokeDevBridge(options, "agent_runtime_create_session", {
-      workspaceId,
-      name: `Code runtime fixture ${new Date().toISOString()}`,
-      runStartHooks: false,
-    });
+    const sessionId = await invokeDevBridge(
+      options,
+      "agent_runtime_create_session",
+      {
+        workspaceId,
+        name: `Code runtime fixture ${new Date().toISOString()}`,
+        runStartHooks: false,
+        metadata: {
+          harness: {
+            hiddenFromUserRecents: true,
+            source: "smoke:code-runtime-fixture",
+          },
+        },
+      },
+    );
     assertSmoke(sessionId, "agent_runtime_create_session 未返回 sessionId");
 
     await invokeDevBridge(options, "agent_runtime_update_session", {
@@ -521,11 +549,16 @@ async function runSmoke(options) {
       workspaceFileUpdated: finalContent.includes("Hello Lime Runtime"),
       checkpointCreated:
         Number(
-          checkpointList?.checkpoint_count ?? checkpointList?.checkpointCount ?? 0,
+          checkpointList?.checkpoint_count ??
+            checkpointList?.checkpointCount ??
+            0,
         ) > 0,
-      checkpointDiffAvailable: checkpointDiffContainsExpectedChange(checkpointDiff),
+      checkpointDiffAvailable:
+        checkpointDiffContainsExpectedChange(checkpointDiff),
       evidencePackExported: Boolean(evidencePack),
-      evidencePackMentionsCodeFile: evidencePackText.includes(FIXTURE_RELATIVE_PATH),
+      evidencePackMentionsCodeFile: evidencePackText.includes(
+        FIXTURE_RELATIVE_PATH,
+      ),
     };
 
     for (const [key, passed] of Object.entries(assertions)) {

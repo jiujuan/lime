@@ -1611,12 +1611,11 @@ mod tests {
             turn_id: Some("turn-title-1".to_string()),
         };
 
-        let summary = crate::session_context::with_runtime_scope(
-            scope,
-            Some(turn_context),
-            async { summarize_request_log_input(&json!({ "model": "gpt-5.5" })) },
-        )
-        .await;
+        let summary =
+            crate::session_context::with_runtime_scope(scope, Some(turn_context), async {
+                summarize_request_log_input(&json!({ "model": "gpt-5.5" }))
+            })
+            .await;
 
         assert_eq!(
             summary.pointer("/runtime_context/session_id"),
