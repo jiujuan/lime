@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open } from "@/lib/desktop-host/plugin-dialog";
+import { useTranslation } from "react-i18next";
 import {
   ArrowRight,
   ArrowUp,
@@ -80,42 +81,16 @@ interface ResourcesPageProps {
   pageParams?: ResourcesPageParams;
 }
 
-const kindLabelMap: Record<ResourceItem["kind"], string> = {
-  folder: "文件夹",
-  document: "文档",
-  file: "文件",
-};
-
-const sourceLabelMap: Record<ResourceItem["sourceType"], string> = {
-  content: "内容",
-  material: "素材",
-};
-
 const resourceCategoryItems: Array<{
   key: ResourceViewCategory;
-  label: string;
   icon: typeof FileText;
 }> = [
-  { key: "all", label: "全部", icon: Library },
-  { key: "document", label: "文档", icon: FileText },
-  { key: "image", label: "图片", icon: ImageIcon },
-  { key: "audio", label: "语音", icon: Music2 },
-  { key: "video", label: "视频", icon: Video },
+  { key: "all", icon: Library },
+  { key: "document", icon: FileText },
+  { key: "image", icon: ImageIcon },
+  { key: "audio", icon: Music2 },
+  { key: "video", icon: Video },
 ];
-
-const resourceCategoryLabelMap: Record<ResourceViewCategory, string> = {
-  all: "全部",
-  document: "文档",
-  image: "图片",
-  audio: "语音",
-  video: "视频",
-};
-
-const mediaCategoryLabelMap: Record<"image" | "audio" | "video", string> = {
-  image: "图片",
-  audio: "语音",
-  video: "视频",
-};
 
 const resourceCategoryIconMap: Record<ResourceViewCategory, LucideIcon> = {
   all: Library,
@@ -123,17 +98,6 @@ const resourceCategoryIconMap: Record<ResourceViewCategory, LucideIcon> = {
   image: ImageIcon,
   audio: Music2,
   video: Video,
-};
-
-const sortFieldLabelMap: Record<ResourceSortField, string> = {
-  updatedAt: "更新时间",
-  createdAt: "创建时间",
-  name: "名称",
-};
-
-const sortDirectionLabelMap: Record<ResourceSortDirection, string> = {
-  asc: "升序",
-  desc: "降序",
 };
 
 const RESOURCE_PAGE_SIZE = 20;
@@ -201,6 +165,7 @@ function buildResourceManagerItemInput(
 }
 
 export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
+  const { t, i18n } = useTranslation("workspace");
   const {
     projects,
     defaultProject,
@@ -588,6 +553,30 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
     [deleteById],
   );
 
+  const getKindLabel = useCallback(
+    (kind: ResourceItem["kind"]) => t(`workspace.resources.kind.${kind}`),
+    [t],
+  );
+  const getSourceLabel = useCallback(
+    (sourceType: ResourceItem["sourceType"]) =>
+      t(`workspace.resources.source.${sourceType}`),
+    [t],
+  );
+  const getCategoryLabel = useCallback(
+    (category: ResourceViewCategory) =>
+      t(`workspace.resources.category.${category}`),
+    [t],
+  );
+  const getSortFieldLabel = useCallback(
+    (field: ResourceSortField) => t(`workspace.resources.sort.${field}`),
+    [t],
+  );
+  const getSortDirectionLabel = useCallback(
+    (direction: ResourceSortDirection) =>
+      t(`workspace.resources.sortDirection.${direction}`),
+    [t],
+  );
+
   const handleOpenFile = useCallback(
     async (item: ResourceItem) => {
       if (!item.filePath) {
@@ -604,7 +593,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
         sourceItems.findIndex((candidate) => candidate.id === item.id),
       );
       const sessionId = await openResourceManager({
-        sourceLabel: resourceCategoryLabelMap[viewCategory],
+        sourceLabel: getCategoryLabel(viewCategory),
         initialIndex,
         items: sourceItems.map((candidate) =>
           buildResourceManagerItemInput(candidate, null, {
@@ -617,7 +606,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
         toast.error("该文件缺少可预览地址，无法打开资源管理器");
       }
     },
-    [displayItems, viewCategory],
+    [displayItems, getCategoryLabel, viewCategory],
   );
 
   const handleOpenDocument = useCallback(
@@ -681,7 +670,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
         }
 
         const sessionId = await openResourceManager({
-          sourceLabel: "项目资料",
+          sourceLabel: t("workspace.resources.title"),
           initialIndex,
           items: resolvedItems,
         });
@@ -696,7 +685,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
         );
       }
     },
-    [displayItems, viewCategory],
+    [displayItems, t, viewCategory],
   );
 
   const handleOpenResource = useCallback(
@@ -727,7 +716,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
     onNavigate?.("memory");
   }, [onNavigate]);
 
-  const activeCategoryLabel = resourceCategoryLabelMap[viewCategory];
+  const activeCategoryLabel = getCategoryLabel(viewCategory);
   const ActiveCategoryIcon = resourceCategoryIconMap[viewCategory];
 
   const projectSummary = useMemo(
@@ -737,35 +726,46 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
 
   const defaultScopeStatusDescription = useMemo(() => {
     if (!projectId) {
-      return "先在左侧选择一个项目。";
+      return t("workspace.resources.scope.noProject");
     }
     if (!isFolderMode) {
-      return `跨目录查看当前项目里的${activeCategoryLabel}内容。`;
+      return t("workspace.resources.scope.categoryDescription", {
+        label: activeCategoryLabel,
+      });
     }
     if (currentFolder && breadcrumbs.length > 0) {
-      return `路径：根目录 / ${breadcrumbs.map((folder) => folder.name).join(" / ")}`;
+      return t("workspace.resources.scope.path", {
+        path: breadcrumbs.map((folder) => folder.name).join(" / "),
+      });
     }
-    return "当前位于根目录，可继续进入子文件夹浏览。";
+    return t("workspace.resources.scope.rootDescription");
   }, [
     activeCategoryLabel,
     breadcrumbs,
     currentFolder,
     isFolderMode,
     projectId,
+    t,
   ]);
 
   const scopeModeLabel = isFolderMode
-    ? "目录浏览"
-    : `${activeCategoryLabel}分类`;
+    ? t("workspace.resources.scope.folderMode")
+    : t("workspace.resources.scope.categoryMode", {
+        label: activeCategoryLabel,
+      });
 
   const scopeStatusDescription = useMemo(() => {
     if (!crossProjectMediaHint) {
       return defaultScopeStatusDescription;
     }
 
-    const categoryLabel = mediaCategoryLabelMap[crossProjectMediaHint.category];
-    return `当前项目暂无${categoryLabel}，检测到「${crossProjectMediaHint.projectName}」包含 ${crossProjectMediaHint.count} 个${categoryLabel}。`;
-  }, [crossProjectMediaHint, defaultScopeStatusDescription]);
+    const categoryLabel = getCategoryLabel(crossProjectMediaHint.category);
+    return t("workspace.resources.scope.crossProjectHint", {
+      category: categoryLabel,
+      count: crossProjectMediaHint.count,
+      projectName: crossProjectMediaHint.projectName,
+    });
+  }, [crossProjectMediaHint, defaultScopeStatusDescription, getCategoryLabel, t]);
 
   const projectSummaryLabel = useMemo(() => {
     if (!projectId) {
@@ -774,11 +774,18 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
 
     const latestUpdateLabel =
       projectSummary.latestUpdatedAt === null
-        ? "暂无更新"
-        : formatTime(projectSummary.latestUpdatedAt);
+        ? t("workspace.resources.summary.noUpdates")
+        : new Date(projectSummary.latestUpdatedAt).toLocaleString(
+            i18n.language,
+            { hour12: false },
+          );
 
-    return `${projectSummary.folderCount} 个文件夹 · ${projectSummary.contentItemCount} 个内容项 · 最近更新 ${latestUpdateLabel}`;
-  }, [projectId, projectSummary]);
+    return t("workspace.resources.summary.project", {
+      contentItemCount: projectSummary.contentItemCount,
+      folderCount: projectSummary.folderCount,
+      latestUpdateLabel,
+    });
+  }, [i18n.language, projectId, projectSummary, t]);
 
   const showEmptyState = projectId && !loading && displayItems.length === 0;
   const focusStatusTitle =
@@ -790,7 +797,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
       <div className="border-b border-slate-200/70 bg-white">
         <div className="mx-auto w-full max-w-[1480px] px-4 py-3 lg:px-6">
           <CanvasBreadcrumbHeader
-            label="项目资料"
+            label={t("workspace.resources.title")}
             onBackHome={handleBackHome}
           />
         </div>
@@ -802,11 +809,11 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
             <div className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-                  项目资料
+                  {t("workspace.resources.title")}
                 </h1>
                 <WorkbenchInfoTip
-                  ariaLabel="项目资料页说明"
-                  content="集中查看当前项目里的文档、图片和导入内容；继续开工时回生成，需要沉淀线索时去灵感库。"
+                  ariaLabel={t("workspace.resources.hero.tipAria")}
+                  content={t("workspace.resources.hero.tip")}
                   tone="mint"
                 />
                 <span
@@ -820,7 +827,9 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                   {saving && (
                     <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                   )}
-                  {saving ? "同步中" : "已就绪"}
+                  {saving
+                    ? t("workspace.resources.status.syncing")
+                    : t("workspace.resources.status.ready")}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -828,7 +837,8 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                   variant="outline"
                   className="rounded-full border-slate-200 bg-slate-50 px-3 py-1 text-slate-700"
                 >
-                  {selectedProject?.name ?? "未选择项目"}
+                  {selectedProject?.name ??
+                    t("workspace.resources.project.unselected")}
                 </Badge>
                 {projectSummaryLabel && (
                   <Badge
@@ -849,7 +859,12 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                     )}
                     data-testid="resources-focus-status"
                   >
-                    {focusedItem ? "已定位" : "正在定位"}：{focusStatusTitle}
+                    {t(
+                      focusedItem
+                        ? "workspace.resources.focus.located"
+                        : "workspace.resources.focus.locating",
+                      { title: focusStatusTitle },
+                    )}
                   </Badge>
                 ) : null}
                 {searchQuery.trim() ? (
@@ -857,15 +872,19 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                     variant="outline"
                     className="rounded-full border-sky-200 bg-sky-50 px-3 py-1 text-sky-700"
                   >
-                    搜索：{searchQuery.trim()}
+                    {t("workspace.resources.search.badge", {
+                      query: searchQuery.trim(),
+                    })}
                   </Badge>
                 ) : (
                   <Badge
                     variant="outline"
                     className="rounded-full border-slate-200 bg-white px-3 py-1 text-slate-500"
                   >
-                    {sortFieldLabelMap[sortField]} ·{" "}
-                    {sortDirectionLabelMap[sortDirection]}
+                    {t("workspace.resources.sort.status", {
+                      direction: getSortDirectionLabel(sortDirection),
+                      field: getSortFieldLabel(sortField),
+                    })}
                   </Badge>
                 )}
               </div>
@@ -880,14 +899,14 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
               <div className="space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center rounded-full border border-sky-200 bg-white px-2.5 py-1 text-[11px] font-medium text-sky-700">
-                    当前定位
+                    {t("workspace.resources.callout.badge")}
                   </span>
                   <h2 className="text-base font-semibold text-slate-900">
-                    项目资料只负责浏览、补图和整理
+                    {t("workspace.resources.callout.title")}
                   </h2>
                 </div>
                 <p className="text-sm leading-6 text-slate-600">
-                  继续开工时回生成，需要沉淀线索时去灵感库；这里专注当前项目内容的查看与切换。
+                  {t("workspace.resources.callout.description")}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -897,7 +916,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                   className="rounded-2xl border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900"
                   onClick={handleBackHome}
                 >
-                  回生成
+                  {t("workspace.resources.action.backToGenerate")}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
                 {onNavigate ? (
@@ -907,7 +926,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                     className="rounded-2xl border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900"
                     onClick={handleOpenInspiration}
                   >
-                    去灵感库
+                    {t("workspace.resources.action.openInspiration")}
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
                 ) : null}
@@ -920,17 +939,19 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
               <section className="rounded-[26px] border border-slate-200/80 bg-white/90 p-4 shadow-sm shadow-slate-950/5">
                 <div className="px-1">
                   <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">
-                    <span>内容分类</span>
+                    <span>{t("workspace.resources.category.title")}</span>
                     <WorkbenchInfoTip
-                      ariaLabel="内容分类说明"
-                      content="在目录浏览和跨目录分类视图之间切换，快速定位不同类型内容。"
+                      ariaLabel={t("workspace.resources.category.tipAria")}
+                      content={t("workspace.resources.category.tip")}
                       tone="slate"
                     />
                   </div>
                 </div>
 
                 <div className="mt-4 space-y-2">
-                  {resourceCategoryItems.map(({ key, label, icon: Icon }) => (
+                  {resourceCategoryItems.map(({ key, icon: Icon }) => {
+                    const label = getCategoryLabel(key);
+                    return (
                     <button
                       key={key}
                       type="button"
@@ -963,8 +984,10 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                             )}
                           >
                             {key === "all"
-                              ? "按目录查看完整项目内容"
-                              : `聚合查看${label}内容`}
+                              ? t("workspace.resources.category.allHint")
+                              : t("workspace.resources.category.kindHint", {
+                                  label,
+                                })}
                           </span>
                         </span>
                       </span>
@@ -979,22 +1002,25 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                         {categoryCounts[key]}
                       </span>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
 
               <section className="rounded-[26px] border border-slate-200/80 bg-white/90 p-4 shadow-sm shadow-slate-950/5">
                 <div className="px-1">
                   <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">
-                    <span>项目切换</span>
+                    <span>{t("workspace.resources.projectSwitcher.title")}</span>
                     <WorkbenchInfoTip
-                      ariaLabel="项目切换说明"
-                      content="这里负责切换当前项目并查看内容；继续开工请回生成或灵感库。"
+                      ariaLabel={t(
+                        "workspace.resources.projectSwitcher.tipAria",
+                      )}
+                      content={t("workspace.resources.projectSwitcher.tip")}
                       tone="slate"
                     />
                   </div>
                   <p className="mt-1 text-xs leading-5 text-slate-500">
-                    按项目切换当前内容视图；继续开工请回生成或灵感库。
+                    {t("workspace.resources.projectSwitcher.description")}
                   </p>
                 </div>
 
@@ -1002,11 +1028,11 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                   <div className="space-y-2">
                     {projectsLoading ? (
                       <div className="rounded-2xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">
-                        项目加载中...
+                        {t("workspace.resources.project.loading")}
                       </div>
                     ) : availableProjects.length === 0 ? (
                       <div className="rounded-2xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">
-                        暂无可用项目
+                        {t("workspace.resources.project.empty")}
                       </div>
                     ) : (
                       availableProjects.map((project) => (
@@ -1031,7 +1057,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                             </div>
                             {project.id === projectId && (
                               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700">
-                                当前
+                                {t("workspace.resources.project.current")}
                               </span>
                             )}
                           </div>
@@ -1053,8 +1079,8 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                       onChange={(event) => setSearchQuery(event.target.value)}
                       placeholder={
                         isFolderMode
-                          ? "按名称、描述或标签搜索"
-                          : "搜索当前分类内容"
+                          ? t("workspace.resources.search.folderPlaceholder")
+                          : t("workspace.resources.search.categoryPlaceholder")
                       }
                       className="h-11 rounded-xl border-slate-200 bg-slate-50/80 pl-10 shadow-none focus-visible:ring-slate-300"
                     />
@@ -1068,12 +1094,18 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                       }
                     >
                       <SelectTrigger className="h-11 w-[160px] rounded-xl border-slate-200 bg-white text-slate-700 shadow-none">
-                        <span>{sortFieldLabelMap[sortField]}</span>
+                        <span>{getSortFieldLabel(sortField)}</span>
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="updatedAt">更新时间</SelectItem>
-                        <SelectItem value="createdAt">创建时间</SelectItem>
-                        <SelectItem value="name">名称</SelectItem>
+                        <SelectItem value="updatedAt">
+                          {t("workspace.resources.sort.updatedAt")}
+                        </SelectItem>
+                        <SelectItem value="createdAt">
+                          {t("workspace.resources.sort.createdAt")}
+                        </SelectItem>
+                        <SelectItem value="name">
+                          {t("workspace.resources.sort.name")}
+                        </SelectItem>
                       </SelectContent>
                     </Select>
 
@@ -1086,7 +1118,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                         )
                       }
                     >
-                      {sortDirectionLabelMap[sortDirection]}
+                      {getSortDirectionLabel(sortDirection)}
                     </Button>
 
                     <Button
@@ -1101,7 +1133,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                           loading && "animate-spin",
                         )}
                       />
-                      刷新
+                      {t("workspace.resources.action.refresh")}
                     </Button>
                     <Button
                       variant="outline"
@@ -1110,7 +1142,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                       disabled={!projectId || !isFolderMode || !canNavigateUp}
                     >
                       <ArrowUp className="mr-2 h-4 w-4" />
-                      返回上级
+                      {t("workspace.resources.action.backFolder")}
                     </Button>
                   </div>
                 </div>
@@ -1141,7 +1173,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                               : "text-emerald-600",
                           )}
                         />
-                        <span>当前范围</span>
+                        <span>{t("workspace.resources.scope.title")}</span>
                         <Badge
                           variant="outline"
                           className={cn(
@@ -1177,7 +1209,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                             setProjectId(crossProjectMediaHint.projectId)
                           }
                         >
-                          切换查看
+                          {t("workspace.resources.scope.switchProject")}
                         </Button>
                       ) : isFolderMode ? (
                         <>
@@ -1191,7 +1223,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                             onClick={() => setCurrentFolderId(null)}
                             type="button"
                           >
-                            根目录
+                            {t("workspace.resources.scope.root")}
                           </button>
                           {breadcrumbs.map((folder) => (
                             <button
@@ -1211,7 +1243,9 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                         </>
                       ) : (
                         <span className="rounded-full border border-sky-200 bg-white px-3 py-1.5 text-sm text-sky-700">
-                          {activeCategoryLabel}分类视图
+                          {t("workspace.resources.scope.categoryView", {
+                            label: activeCategoryLabel,
+                          })}
                         </span>
                       )}
                     </div>
@@ -1237,11 +1271,11 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                 <div className="border-b border-slate-200/80 px-5 py-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-lg font-semibold tracking-tight text-slate-900">
-                      内容列表
+                      {t("workspace.resources.list.title")}
                     </h3>
                     <WorkbenchInfoTip
-                      ariaLabel="内容列表说明"
-                      content="按当前目录或分类范围展示内容，支持直接打开、重命名、删除与移动内容。"
+                      ariaLabel={t("workspace.resources.list.tipAria")}
+                      content={t("workspace.resources.list.tip")}
                       tone="slate"
                     />
                   </div>
@@ -1250,11 +1284,11 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                 <div className="p-5">
                   {!projectId ? (
                     <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/80 p-10 text-center text-sm text-slate-500">
-                      请先在左侧选择项目
+                      {t("workspace.resources.empty.selectProject")}
                     </div>
                   ) : loading ? (
                     <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/80 p-10 text-center text-sm text-slate-500">
-                      资料加载中...
+                      {t("workspace.resources.empty.loading")}
                     </div>
                   ) : showEmptyState ? (
                     <div className="flex min-h-[320px] flex-col items-center justify-center rounded-[24px] border border-dashed border-slate-300 bg-[linear-gradient(135deg,rgba(248,250,252,0.98)_0%,rgba(243,249,247,0.96)_100%)] px-6 py-12 text-center">
@@ -1262,10 +1296,10 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                         <FileText className="h-7 w-7" />
                       </div>
                       <h3 className="mt-6 text-2xl font-semibold tracking-tight text-slate-900">
-                        当前范围内暂无内容
+                        {t("workspace.resources.empty.title")}
                       </h3>
                       <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
-                        这里当前只负责切换、浏览和补图。若要继续开工，请回生成或灵感库；其他内容请回对应项目处理。
+                        {t("workspace.resources.empty.description")}
                       </p>
                     </div>
                   ) : (
@@ -1274,19 +1308,19 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                         <TableHeader className="bg-slate-50/90">
                           <TableRow className="hover:bg-slate-50/90">
                             <TableHead className="text-slate-500">
-                              名称
+                              {t("workspace.resources.table.name")}
                             </TableHead>
                             <TableHead className="w-[120px] text-slate-500">
-                              类型
+                              {t("workspace.resources.table.type")}
                             </TableHead>
                             <TableHead className="w-[120px] text-slate-500">
-                              来源
+                              {t("workspace.resources.table.source")}
                             </TableHead>
                             <TableHead className="w-[220px] text-slate-500">
-                              更新时间
+                              {t("workspace.resources.table.updatedAt")}
                             </TableHead>
                             <TableHead className="w-[80px] text-right text-slate-500">
-                              操作
+                              {t("workspace.resources.table.actions")}
                             </TableHead>
                           </TableRow>
                         </TableHeader>
@@ -1328,9 +1362,13 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                                       </span>
                                       <span className="mt-0.5 block text-xs text-slate-500">
                                         {item.kind === "folder"
-                                          ? "继续进入查看子目录与内容"
+                                          ? t(
+                                              "workspace.resources.item.folderDescription",
+                                            )
                                           : item.description?.trim() ||
-                                            "点击打开查看详情或使用系统默认应用打开"}
+                                            t(
+                                              "workspace.resources.item.fileDescription",
+                                            )}
                                       </span>
                                     </span>
                                   </button>
@@ -1348,7 +1386,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                                         "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-50",
                                     )}
                                   >
-                                    {kindLabelMap[item.kind]}
+                                    {getKindLabel(item.kind)}
                                   </Badge>
                                 </TableCell>
                                 <TableCell>
@@ -1356,7 +1394,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                                     variant="secondary"
                                     className="rounded-full bg-slate-100 text-slate-700"
                                   >
-                                    {sourceLabelMap[item.sourceType]}
+                                    {getSourceLabel(item.sourceType)}
                                   </Badge>
                                 </TableCell>
                                 <TableCell className="text-slate-500">
@@ -1380,8 +1418,10 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                                         }}
                                       >
                                         {item.kind === "folder"
-                                          ? "进入文件夹"
-                                          : "打开"}
+                                          ? t(
+                                              "workspace.resources.action.openFolder",
+                                            )
+                                          : t("workspace.resources.action.open")}
                                       </DropdownMenuItem>
                                       <DropdownMenuItem
                                         onClick={() => {
@@ -1389,7 +1429,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                                         }}
                                       >
                                         <Pencil className="mr-2 h-4 w-4" />
-                                        重命名
+                                        {t("workspace.resources.action.rename")}
                                       </DropdownMenuItem>
                                       {item.sourceType === "content" &&
                                         item.parentId && (
@@ -1399,7 +1439,9 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                                             }}
                                           >
                                             <ArrowUp className="mr-2 h-4 w-4" />
-                                            移动到根目录
+                                            {t(
+                                              "workspace.resources.action.moveRoot",
+                                            )}
                                           </DropdownMenuItem>
                                         )}
                                       <DropdownMenuItem
@@ -1409,7 +1451,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                                         }}
                                       >
                                         <Trash2 className="mr-2 h-4 w-4" />
-                                        删除
+                                        {t("workspace.resources.action.delete")}
                                       </DropdownMenuItem>
                                     </DropdownMenuContent>
                                   </DropdownMenu>
@@ -1423,11 +1465,16 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                       <div className="flex flex-col gap-3 border-t border-slate-200/80 bg-slate-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
                           <span>
-                            显示第 {pageRangeStart}-{pageRangeEnd} 条，共{" "}
-                            {displayItems.length} 条
+                            {t("workspace.resources.pagination.range", {
+                              end: pageRangeEnd,
+                              start: pageRangeStart,
+                              total: displayItems.length,
+                            })}
                           </span>
                           <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600">
-                            每页 {RESOURCE_PAGE_SIZE} 条
+                            {t("workspace.resources.pagination.pageSize", {
+                              count: RESOURCE_PAGE_SIZE,
+                            })}
                           </span>
                         </div>
 
@@ -1444,10 +1491,13 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                               )
                             }
                           >
-                            上一页
+                            {t("workspace.resources.pagination.previous")}
                           </Button>
                           <span className="min-w-[88px] text-center text-sm text-slate-600">
-                            第 {safeCurrentPage} / {totalPages} 页
+                            {t("workspace.resources.pagination.current", {
+                              current: safeCurrentPage,
+                              total: totalPages,
+                            })}
                           </span>
                           <Button
                             type="button"
@@ -1461,7 +1511,7 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                               )
                             }
                           >
-                            下一页
+                            {t("workspace.resources.pagination.next")}
                           </Button>
                         </div>
                       </div>

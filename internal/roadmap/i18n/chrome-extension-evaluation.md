@@ -16,7 +16,7 @@
 - 语言集合是扩展自管的 `zh / en / de / es / fr / pt`，并通过 `navigator.language` 或 `?lang=` 推导。
 - options 页当前只开放 `en / zh` 选择；安装引导页 registry 继续覆盖 `zh / en / de / es / fr / pt`。
 - 页面里的不少文案本身就是安装引导、比较说明、诊断提示，且混合了少量 HTML 片段。
-- `scripts/i18n-chrome-extension-workflow-report.ts` 已把 manifest、`_locales`、`InstallI18n` registry、`data-i18n` 属性和核心术语做成可重复 inventory；当前证据落在 `internal/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json`。
+- `scripts/i18n/i18n-chrome-extension-workflow-report.ts` 已把 manifest、`_locales`、`InstallI18n` registry、`data-i18n` 属性和核心术语做成可重复 inventory；当前证据落在 `internal/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json`。
 - Inventory 已新增 registry drift 检测：`InstallI18n` 的 `SUPPORTED` 与页面注册 locale 双向比对，options 页的 `SUPPORTED_LANGUAGES` 与 `OPTIONS_TRANSLATIONS` 双向比对；当前 `installI18nLocaleDriftCount=0`、`optionsLanguageDriftCount=0`。
 - Inventory 现在显式记录标准 Chrome locale 决策：`standardChromeLocaleDecisionRecorded=true`、`standardChromeLocaleWorkflowRequired=false`、`decision.status=deferred`。这表示“当前不迁移 `_locales/messages.json`”是已完成的 P4 评估结论，而不是未处理缺口。
 

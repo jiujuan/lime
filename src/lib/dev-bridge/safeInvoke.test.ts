@@ -1,36 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  baseInvoke: vi.fn(),
-  baseListen: vi.fn(),
-  baseEmit: vi.fn(),
-  explicitMockInvoke: vi.fn(),
-  explicitMockListen: vi.fn(),
   listenViaHttpEvent: vi.fn(),
   hasDevBridgeEventListenerCapability: vi.fn(),
   invokeViaHttp: vi.fn(),
   isDevBridgeAvailable: vi.fn(),
+  resolveBridgeRequestTimeoutMs: vi.fn(() => 1800),
   normalizeDevBridgeError: vi.fn((cmd: string, error: unknown) => {
     if (error instanceof Error) {
       return new Error(`[${cmd}] ${error.message}`);
     }
     return new Error(`[${cmd}] ${String(error)}`);
   }),
-}));
-
-vi.mock("@tauri-apps/api", () => ({
-  core: {
-    invoke: mocks.baseInvoke,
-  },
-  event: {
-    listen: mocks.baseListen,
-    emit: mocks.baseEmit,
-  },
-}));
-
-vi.mock("./explicitMockFallback", () => ({
-  invokeExplicitMock: mocks.explicitMockInvoke,
-  listenExplicitMock: mocks.explicitMockListen,
 }));
 
 vi.mock("./http-client", () => ({
@@ -40,12 +21,11 @@ vi.mock("./http-client", () => ({
   isDevBridgeAvailable: mocks.isDevBridgeAvailable,
   listenViaHttpEvent: mocks.listenViaHttpEvent,
   normalizeDevBridgeError: mocks.normalizeDevBridgeError,
+  resolveBridgeRequestTimeoutMs: mocks.resolveBridgeRequestTimeoutMs,
 }));
 
 vi.mock("./mockPriorityCommands", () => ({
-  shouldPreferMockInBrowser: vi.fn(() => false),
   shouldDisallowMockEventFallbackInBrowser: vi.fn(() => false),
-  shouldDisallowMockFallbackInBrowser: vi.fn(() => false),
 }));
 
 import {
@@ -53,28 +33,31 @@ import {
   clearInvokeTraceBuffer,
   getInvokeErrorBuffer,
   getInvokeTraceBuffer,
-  safeListen,
+  hasNativeDesktopHostEventSupport,
+  safeEmit,
   safeInvoke,
+  safeListen,
 } from "./safeInvoke";
-import {
-  shouldDisallowMockEventFallbackInBrowser,
-  shouldDisallowMockFallbackInBrowser,
-  shouldPreferMockInBrowser,
-} from "./mockPriorityCommands";
+import { shouldDisallowMockEventFallbackInBrowser } from "./mockPriorityCommands";
+
+function clearElectronBridge(): void {
+  delete (window as any).electronAPI;
+  delete (window as any).__LIME_ELECTRON__;
+}
 
 describe("safeInvoke", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.isDevBridgeAvailable.mockReturnValue(true);
     mocks.hasDevBridgeEventListenerCapability.mockReturnValue(false);
+    mocks.resolveBridgeRequestTimeoutMs.mockReturnValue(1800);
     window.localStorage.clear();
     clearInvokeErrorBuffer();
     clearInvokeTraceBuffer();
-    delete (window as any).__TAURI__;
-    delete (window as any).__TAURI_INTERNALS__;
+    clearElectronBridge();
   });
 
-  it("浏览器开发模式下优先走 HTTP bridge", async () => {
+  it("无 Electron host 时浏览器开发模式走 HTTP bridge", async () => {
     mocks.invokeViaHttp.mockResolvedValueOnce({ ok: true });
 
     const result = await safeInvoke("workspace_list");
@@ -84,8 +67,6 @@ describe("safeInvoke", () => {
       "workspace_list",
       undefined,
     );
-    expect(mocks.baseInvoke).not.toHaveBeenCalled();
-
     expect(getInvokeTraceBuffer()).toEqual([
       expect.objectContaining({
         command: "workspace_list",
@@ -95,19 +76,17 @@ describe("safeInvoke", () => {
     ]);
   });
 
-  it("HTTP bridge 失败时会直接回退到显式 mock，避免二次探测 HTTP", async () => {
+  it("HTTP bridge 失败时直接抛出规范化错误，不回退 renderer mock", async () => {
     mocks.invokeViaHttp.mockRejectedValueOnce(new Error("Failed to fetch"));
-    mocks.explicitMockInvoke.mockResolvedValueOnce(["mocked"]);
 
-    await expect(safeInvoke("workspace_list")).resolves.toEqual(["mocked"]);
-
-    expect(mocks.normalizeDevBridgeError).toHaveBeenCalled();
-    expect(mocks.baseInvoke).not.toHaveBeenCalled();
-    expect(mocks.explicitMockInvoke).toHaveBeenCalledWith(
-      "workspace_list",
-      undefined,
+    await expect(safeInvoke("workspace_list")).rejects.toThrow(
+      "[workspace_list] Failed to fetch",
     );
 
+    expect(mocks.normalizeDevBridgeError).toHaveBeenCalledWith(
+      "workspace_list",
+      expect.any(Error),
+    );
     expect(getInvokeErrorBuffer()).toEqual([
       expect.objectContaining({
         command: "workspace_list",
@@ -120,122 +99,177 @@ describe("safeInvoke", () => {
         transport: "http-bridge",
         status: "error",
       }),
-      expect.objectContaining({
-        command: "workspace_list",
-        transport: "fallback-invoke",
-        status: "success",
-      }),
     ]);
   });
 
-  it("模型与运行时真相命令在 bridge 失败时不应静默退回 mock", async () => {
-    vi.mocked(shouldDisallowMockFallbackInBrowser).mockReturnValueOnce(true);
-    mocks.invokeViaHttp.mockRejectedValueOnce(new Error("Failed to fetch"));
+  it("无 Electron host 且无 HTTP bridge 时 fail-closed", async () => {
+    mocks.isDevBridgeAvailable.mockReturnValue(false);
 
-    await expect(safeInvoke("aster_agent_init")).rejects.toThrow(
-      "[aster_agent_init] Failed to fetch",
+    await expect(safeInvoke("workspace_list")).rejects.toThrow(
+      'Desktop Host IPC 不可用，命令 "workspace_list" 无法进入 App Server JSON-RPC 主链',
     );
 
-    expect(mocks.baseInvoke).not.toHaveBeenCalled();
-    expect(mocks.explicitMockInvoke).not.toHaveBeenCalled();
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
     expect(getInvokeTraceBuffer()).toEqual([
       expect.objectContaining({
-        command: "aster_agent_init",
-        transport: "http-bridge",
+        command: "workspace_list",
+        transport: "unavailable",
         status: "error",
       }),
     ]);
   });
 
-  it("mock 优先命令会直接走 fallback invoke", async () => {
-    vi.mocked(shouldPreferMockInBrowser).mockReturnValueOnce(true);
-    mocks.baseInvoke.mockResolvedValueOnce(["mock-first"]);
+  it("Electron host 声明支持命令时走 electron-ipc", async () => {
+    const invoke = vi.fn().mockResolvedValueOnce({ lines: [] });
+    (window as any).electronAPI = {
+      supportsCommand: (command: string) =>
+        command === "app_server_handle_json_lines",
+      invoke,
+      listen: vi.fn(),
+      emit: vi.fn(),
+    };
 
-    await expect(safeInvoke("companion_get_pet_status")).resolves.toEqual([
-      "mock-first",
-    ]);
+    await expect(
+      safeInvoke("app_server_handle_json_lines", {
+        request: { lines: [] },
+      }),
+    ).resolves.toEqual({ lines: [] });
 
+    expect(invoke).toHaveBeenCalledWith("app_server_handle_json_lines", {
+      request: { lines: [] },
+    });
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
-    expect(mocks.baseInvoke).toHaveBeenCalledWith(
-      "companion_get_pet_status",
-      undefined,
-    );
+    expect(getInvokeTraceBuffer()).toEqual([
+      expect.objectContaining({
+        command: "app_server_handle_json_lines",
+        transport: "electron-ipc",
+        status: "success",
+      }),
+    ]);
   });
 
-  it("HTTP bridge 与 mock 都失败时抛出 bridge 错误", async () => {
-    mocks.invokeViaHttp.mockRejectedValueOnce(new Error("Failed to fetch"));
-    mocks.explicitMockInvoke.mockRejectedValueOnce(new Error("mock failed"));
+  it("Electron host 未声明支持命令时直接失败，不绕到 HTTP bridge", async () => {
+    const invoke = vi.fn();
+    (window as any).electronAPI = {
+      supportsCommand: () => false,
+      invoke,
+      listen: vi.fn(),
+      emit: vi.fn(),
+    };
+
+    await expect(safeInvoke("agent_runtime_list_sessions")).rejects.toThrow(
+      'Desktop Host 尚未支持命令 "agent_runtime_list_sessions"',
+    );
+
+    expect(invoke).not.toHaveBeenCalled();
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+    expect(getInvokeTraceBuffer()).toEqual([
+      expect.objectContaining({
+        command: "agent_runtime_list_sessions",
+        transport: "electron-ipc",
+        status: "error",
+      }),
+    ]);
+  });
+
+  it("Electron invoke 失败时记录 electron-ipc 错误", async () => {
+    (window as any).electronAPI = {
+      supportsCommand: () => true,
+      invoke: vi.fn().mockRejectedValueOnce(new Error("backend failed")),
+      listen: vi.fn(),
+      emit: vi.fn(),
+    };
 
     await expect(safeInvoke("workspace_list")).rejects.toThrow(
-      "[workspace_list] Failed to fetch",
+      "backend failed",
     );
+
+    expect(getInvokeErrorBuffer()).toEqual([
+      expect.objectContaining({
+        command: "workspace_list",
+        transport: "electron-ipc",
+        error: "backend failed",
+      }),
+    ]);
   });
 
-  it("浏览器直开 tauri dev 页面时会从真实 invoke 退回显式 mock", async () => {
-    vi.mocked(shouldPreferMockInBrowser).mockReturnValueOnce(true);
-    mocks.baseInvoke.mockRejectedValueOnce(
-      new TypeError("Cannot read properties of undefined (reading 'invoke')"),
-    );
-    mocks.explicitMockInvoke.mockResolvedValueOnce({ connected: false });
+  it("Electron invoke 长时间不返回时按命令超时 fail-closed", async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.resolveBridgeRequestTimeoutMs.mockReturnValueOnce(8000);
+      const invoke = vi.fn(() => new Promise<never>(() => {}));
+      (window as any).electronAPI = {
+        supportsCommand: () => true,
+        invoke,
+        listen: vi.fn(),
+        emit: vi.fn(),
+      };
 
-    await expect(safeInvoke("companion_get_pet_status")).resolves.toEqual({
-      connected: false,
-    });
+      const invokePromise = safeInvoke("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: 1,
+              method: "agentSession/list",
+              params: { limit: 10 },
+            }),
+          ],
+        },
+      });
+      const timeoutExpectation = expect(invokePromise).rejects.toThrow(
+        'Desktop Host IPC 命令 "app_server_handle_json_lines" 在 8000ms 内未返回',
+      );
 
-    expect(mocks.baseInvoke).toHaveBeenCalledWith(
-      "companion_get_pet_status",
-      undefined,
-    );
-    expect(mocks.explicitMockInvoke).toHaveBeenCalledWith(
-      "companion_get_pet_status",
-      undefined,
-    );
+      await vi.advanceTimersByTimeAsync(8000);
+      await timeoutExpectation;
+
+      expect(invoke).toHaveBeenCalledWith("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: 1,
+              method: "agentSession/list",
+              params: { limit: 10 },
+            }),
+          ],
+        },
+      });
+      expect(getInvokeErrorBuffer()).toEqual([
+        expect.objectContaining({
+          command: "app_server_handle_json_lines",
+          transport: "electron-ipc",
+          error: expect.stringContaining("8000ms"),
+        }),
+      ]);
+      expect(getInvokeTraceBuffer()).toEqual([
+        expect.objectContaining({
+          command: "app_server_handle_json_lines",
+          transport: "electron-ipc",
+          status: "error",
+          error: expect.stringContaining("8000ms"),
+        }),
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("safeListen / safeEmit", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.isDevBridgeAvailable.mockReturnValue(false);
+    mocks.hasDevBridgeEventListenerCapability.mockReturnValue(false);
+    clearElectronBridge();
   });
 
-  it("HTTP bridge 失败后不会再调用真实 invoke 探测", async () => {
-    mocks.invokeViaHttp.mockRejectedValueOnce(new Error("Failed to fetch"));
-    mocks.explicitMockInvoke.mockResolvedValueOnce([]);
-
-    await expect(safeInvoke("workspace_list")).resolves.toEqual([]);
-
-    expect(mocks.invokeViaHttp).toHaveBeenCalledWith(
-      "workspace_list",
-      undefined,
-    );
-    expect(mocks.baseInvoke).not.toHaveBeenCalled();
-    expect(mocks.explicitMockInvoke).toHaveBeenCalledWith(
-      "workspace_list",
-      undefined,
-    );
-  });
-
-  it("事件 internals 已就绪时 safeListen 走原生 event API", async () => {
+  it("Electron event listen 可用时返回幂等 unlisten", async () => {
     const unlisten = vi.fn();
-    (window as any).__TAURI_INTERNALS__ = {
+    const listen = vi.fn().mockResolvedValueOnce(unlisten);
+    (window as any).electronAPI = {
       invoke: vi.fn(),
-      transformCallback: vi.fn(),
-    };
-    mocks.baseListen.mockResolvedValueOnce(unlisten);
-
-    const safeUnlisten = await safeListen("config-changed", vi.fn());
-
-    safeUnlisten();
-    safeUnlisten();
-
-    expect(mocks.baseListen).toHaveBeenCalledWith(
-      "config-changed",
-      expect.any(Function),
-    );
-    expect(unlisten).toHaveBeenCalledTimes(1);
-  });
-
-  it("仅暴露全局 Tauri event.listen 时 safeListen 也应走原生事件桥", async () => {
-    const unlisten = vi.fn();
-    const globalListen = vi.fn().mockResolvedValueOnce(unlisten);
-    (window as any).__TAURI__ = {
-      event: {
-        listen: globalListen,
-      },
+      listen,
+      emit: vi.fn(),
     };
 
     const safeUnlisten = await safeListen("config-changed", vi.fn());
@@ -243,15 +277,45 @@ describe("safeInvoke", () => {
     safeUnlisten();
     safeUnlisten();
 
-    expect(globalListen).toHaveBeenCalledWith(
-      "config-changed",
-      expect.any(Function),
-    );
-    expect(mocks.baseListen).not.toHaveBeenCalled();
+    expect(listen).toHaveBeenCalledWith("config-changed", expect.any(Function));
     expect(unlisten).toHaveBeenCalledTimes(1);
   });
 
-  it("浏览器开发模式下 safeListen 优先走 HTTP 事件桥", async () => {
+  it("Electron 事件桥调用失败时真相事件必须失败", async () => {
+    vi.mocked(shouldDisallowMockEventFallbackInBrowser).mockReturnValueOnce(
+      true,
+    );
+    (window as any).electronAPI = {
+      invoke: vi.fn(),
+      listen: vi.fn().mockRejectedValueOnce(new Error("event bridge failed")),
+      emit: vi.fn(),
+    };
+
+    await expect(safeListen("aster_stream_session-1", vi.fn())).rejects.toThrow(
+      '事件 "aster_stream_session-1" 监听失败',
+    );
+  });
+
+  it("Electron 事件桥调用失败时非真相事件返回空清理函数", async () => {
+    const consoleWarnSpy = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => {});
+    (window as any).electronAPI = {
+      invoke: vi.fn(),
+      listen: vi.fn().mockRejectedValueOnce(new Error("event bridge failed")),
+      emit: vi.fn(),
+    };
+
+    try {
+      const unlisten = await safeListen("config-changed", vi.fn());
+      expect(typeof unlisten).toBe("function");
+      unlisten();
+    } finally {
+      consoleWarnSpy.mockRestore();
+    }
+  });
+
+  it("无 Electron 事件桥但 HTTP event bridge 可用时走 HTTP 事件通道", async () => {
     const unlisten = vi.fn();
     mocks.hasDevBridgeEventListenerCapability.mockReturnValue(true);
     mocks.listenViaHttpEvent.mockResolvedValueOnce(unlisten);
@@ -265,131 +329,54 @@ describe("safeInvoke", () => {
       "config-changed",
       expect.any(Function),
     );
-    expect(mocks.baseListen).not.toHaveBeenCalled();
     expect(unlisten).toHaveBeenCalledTimes(1);
   });
 
-  it("事件桥失败且没有 Tauri 标记时会退回显式 mock 监听", async () => {
-    const unlisten = vi.fn();
+  it("HTTP event bridge 失败时直接抛错，不回退 mock event", async () => {
     mocks.hasDevBridgeEventListenerCapability.mockReturnValue(true);
     mocks.listenViaHttpEvent.mockRejectedValueOnce(
       new Error("connection failed"),
     );
-    mocks.explicitMockListen.mockResolvedValueOnce(unlisten);
 
-    const safeUnlisten = await safeListen("companion-pet-status", vi.fn());
-
-    safeUnlisten();
-    safeUnlisten();
-
-    expect(mocks.explicitMockListen).toHaveBeenCalledWith(
-      "companion-pet-status",
-      expect.any(Function),
+    await expect(safeListen("config-changed", vi.fn())).rejects.toThrow(
+      '事件 "config-changed" 监听失败',
     );
-    expect(unlisten).toHaveBeenCalledTimes(1);
   });
 
-  it("运行时真相事件在事件桥失败时不应静默退回显式 mock", async () => {
-    mocks.hasDevBridgeEventListenerCapability.mockReturnValue(true);
-    mocks.listenViaHttpEvent.mockRejectedValueOnce(
-      new Error("connection failed"),
+  it("无任何事件桥时 fail-closed", async () => {
+    await expect(safeListen("config-changed", vi.fn())).rejects.toThrow(
+      '事件 "config-changed" 监听失败',
     );
-    vi.mocked(shouldDisallowMockEventFallbackInBrowser).mockReturnValueOnce(
-      true,
-    );
-
-    await expect(safeListen("aster_stream_session-1", vi.fn())).rejects.toThrow(
-      '事件 "aster_stream_session-1" 监听失败',
-    );
-
-    expect(mocks.explicitMockListen).not.toHaveBeenCalled();
   });
 
-  it("Tauri 标记存在但原生事件桥缺失时，运行时真相事件不应静默跳过监听", async () => {
-    (window as any).__TAURI__ = {
-      core: {
-        invoke: vi.fn(),
-      },
-    };
-    vi.mocked(shouldDisallowMockEventFallbackInBrowser).mockReturnValueOnce(
-      true,
-    );
+  it("hasNativeDesktopHostEventSupport 只认 Electron 事件桥", () => {
+    expect(hasNativeDesktopHostEventSupport()).toBe(false);
 
-    await expect(safeListen("aster_stream_session-1", vi.fn())).rejects.toThrow(
-      '事件 "aster_stream_session-1" 监听失败',
-    );
-
-    expect(mocks.baseListen).not.toHaveBeenCalled();
-    expect(mocks.explicitMockListen).not.toHaveBeenCalled();
-  });
-
-  it("Tauri 运行时存在但事件桥缺失时 safeListen 返回空清理函数", async () => {
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockImplementation(() => {});
-    vi.useFakeTimers();
-    (window as any).__TAURI__ = {
-      core: {
-        invoke: vi.fn(),
-      },
-    };
-
-    try {
-      const promise = safeListen("config-changed", vi.fn());
-      await vi.advanceTimersByTimeAsync(3000);
-      const unlisten = await promise;
-
-      expect(typeof unlisten).toBe("function");
-      expect(mocks.baseListen).not.toHaveBeenCalled();
-    } finally {
-      consoleWarnSpy.mockRestore();
-      vi.useRealTimers();
-    }
-  });
-
-  it("事件桥调用异常时 safeListen 降级为空清理函数", async () => {
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockImplementation(() => {});
-    (window as any).__TAURI_INTERNALS__ = {
+    (window as any).electronAPI = {
       invoke: vi.fn(),
-      transformCallback: vi.fn(),
+      listen: vi.fn(),
+      emit: vi.fn(),
     };
-    mocks.baseListen.mockRejectedValueOnce(
-      new TypeError(
-        "Cannot read properties of undefined (reading 'transformCallback')",
-      ),
-    );
 
-    try {
-      const unlisten = await safeListen("companion-pet-status", vi.fn());
-
-      expect(typeof unlisten).toBe("function");
-      expect(mocks.baseListen).toHaveBeenCalledWith(
-        "companion-pet-status",
-        expect.any(Function),
-      );
-    } finally {
-      consoleWarnSpy.mockRestore();
-    }
+    expect(hasNativeDesktopHostEventSupport()).toBe(true);
   });
 
-  it("Tauri 原生事件桥调用异常时，运行时真相事件应显式失败", async () => {
-    (window as any).__TAURI_INTERNALS__ = {
+  it("safeEmit 只通过 Electron host 发送事件", async () => {
+    const emit = vi.fn().mockResolvedValueOnce(undefined);
+    (window as any).electronAPI = {
       invoke: vi.fn(),
-      transformCallback: vi.fn(),
+      listen: vi.fn(),
+      emit,
     };
-    vi.mocked(shouldDisallowMockEventFallbackInBrowser).mockReturnValueOnce(
-      true,
-    );
-    mocks.baseListen.mockRejectedValueOnce(
-      new TypeError(
-        "Cannot read properties of undefined (reading 'transformCallback')",
-      ),
-    );
 
-    await expect(safeListen("aster_stream_session-1", vi.fn())).rejects.toThrow(
-      '事件 "aster_stream_session-1" 监听失败',
+    await safeEmit("config-changed", { ok: true });
+
+    expect(emit).toHaveBeenCalledWith("config-changed", { ok: true });
+  });
+
+  it("safeEmit 无 Electron host 时 fail-closed", async () => {
+    await expect(safeEmit("config-changed")).rejects.toThrow(
+      'Desktop Host IPC 不可用，事件 "config-changed" 无法发送',
     );
   });
 });

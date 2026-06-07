@@ -15,7 +15,7 @@
 
 ## 覆盖工具
 
-native 注册事实源：`src-tauri/crates/aster-rust/crates/aster/src/tools/mod.rs`
+native 注册事实源：`lime-rs/crates/aster-rust/crates/aster/src/tools/mod.rs`
 
 - `TaskCreate`
 - `TaskList`
@@ -40,7 +40,7 @@ native 注册事实源：`src-tauri/crates/aster-rust/crates/aster/src/tools/mod
 
 建议认领：
 
-- `src-tauri/crates/aster-rust/crates/aster/src/tools/task_list_tools.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/tools/task_list_tools.rs`
 - `src/components/agent/chat/components/MessageList.test.tsx`
 - `src/components/agent/chat/components/StreamingRenderer.test.tsx`
 - `src/components/agent/chat/components/messageListItemProjection.unit.test.ts`
@@ -93,8 +93,8 @@ native 注册事实源：`src-tauri/crates/aster-rust/crates/aster/src/tools/mod
 ## 建议测试入口
 
 ```bash
-cargo test --manifest-path "src-tauri/Cargo.toml" task_list_tools -- --nocapture
-cargo test --manifest-path "src-tauri/Cargo.toml" test_register_default_tools -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" task_list_tools -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" test_register_default_tools -- --nocapture
 ```
 
 前端：
@@ -138,7 +138,7 @@ npm run bridge:health -- --timeout-ms 120000
 ## Batch 07 结果
 
 - 进程/认领人：当前 Codex 进程。本轮窄写集限定在任务板 Rust 工具、任务板前端过程渲染、历史投影回归和本批次文档；因发现展开态会走 raw JSON 兜底，额外认领 `InlineToolProcessStep.tsx` 作为直接阻塞修复点。
-- 当前 git 状态：工作区全局很脏，本轮只修改相关文件：`src-tauri/crates/aster-rust/crates/aster/src/tools/task_list_tools.rs`、`src/components/agent/chat/components/InlineToolProcessStep.tsx`、`src/components/agent/chat/components/StreamingRenderer.test.tsx`、`src/components/agent/chat/components/messageListItemProjection.unit.test.ts`、本文件。`internal/exec-plans/` 目录当前为未跟踪状态，属于既有执行计划产物。
+- 当前 git 状态：工作区全局很脏，本轮只修改相关文件：`lime-rs/crates/aster-rust/crates/aster/src/tools/task_list_tools.rs`、`src/components/agent/chat/components/InlineToolProcessStep.tsx`、`src/components/agent/chat/components/StreamingRenderer.test.tsx`、`src/components/agent/chat/components/messageListItemProjection.unit.test.ts`、本文件。`internal/exec-plans/` 目录当前为未跟踪状态，属于既有执行计划产物。
 - 覆盖工具：`TaskCreateTool`、`TaskListTool`、`TaskGetTool`、`TaskUpdateTool`，并覆盖 native 等价名的归一化路径。
 - 任务板状态证据：
   - Rust 新增 `test_task_board_input_aliases_deserialize_to_current_fields`，覆盖 `active_form`、`task_id`、`add_blocks`、`add_blocked_by` alias。
@@ -158,11 +158,11 @@ npm run bridge:health -- --timeout-ms 120000
 - 已执行验证：
   - `npm test -- "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/components/messageListItemProjection.unit.test.ts" "src/components/agent/chat/utils/toolProcessSummary.test.ts"`：3 files / 74 tests passed。
   - `npx eslint "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/components/messageListItemProjection.unit.test.ts" "src/components/agent/chat/components/InlineToolProcessStep.tsx"`：passed。
-  - `CARGO_TARGET_DIR="/Users/coso/Documents/dev/ai/aiclientproxy/lime/src-tauri/target" cargo test --manifest-path "src-tauri/crates/aster-rust/Cargo.toml" -p aster-core task_list_tools -- --nocapture`：`task_list_tools` 15 tests passed；其余 test targets 在同一 filter 下为 0 tests。
+  - `CARGO_TARGET_DIR="/Users/coso/Documents/dev/ai/aiclientproxy/lime/lime-rs/target" cargo test --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" -p aster-core task_list_tools -- --nocapture`：`task_list_tools` 15 tests passed；其余 test targets 在同一 filter 下为 0 tests。
 - GUI 截图/快照：本轮未跑 Playwright / GUI。原因是 Batch 07 的风险已由 deterministic contentParts fixture、历史 projection fixture 和 Rust task board 单测覆盖；真实 GUI 任务板工具需要安全 runtime fixture 或模型驱动触发，当前不应为了证据让模型真实创建/更新任务。
 - 控制台状态：未进入浏览器页面，因此无新增控制台 error / warning 采样。
 - 发现问题：
-  - `cargo test --manifest-path "src-tauri/Cargo.toml" -p aster-core ...` 不可用，因为 `aster-core` 被 `src-tauri` workspace exclude；正确入口是 `src-tauri/crates/aster-rust/Cargo.toml`，并显式设置 `CARGO_TARGET_DIR` 到 `src-tauri/target`。
+  - `cargo test --manifest-path "lime-rs/Cargo.toml" -p aster-core ...` 不可用，因为 `aster-core` 被 `lime-rs` workspace exclude；正确入口是 `lime-rs/crates/aster-rust/Cargo.toml`，并显式设置 `CARGO_TARGET_DIR` 到 `lime-rs/target`。
   - Rust 重跑期间曾被已有 `tauri dev` / `cargo run` 占用 artifact lock；最终等待释放后通过。
   - 当前仍有 `worktree_tools.rs` 的 `SessionManager` unused import warning，属于 Batch 06 / worktree 写集残留，本轮不夹写。
 - 是否需要业务修复：已完成必要业务修复。否则任务板工具展开态会泄露结构 JSON，直接违背本批次“工具结果不串正文、不 raw JSON 展示”的验收口径。

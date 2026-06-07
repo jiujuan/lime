@@ -138,11 +138,13 @@ const mockStreamingRenderer = vi.fn(
     markdownRenderMode,
     readOnlyA2UI,
     readOnlyActionRequests,
+    isStreaming,
   }: {
     content: string;
     contentParts?: unknown[];
     thinkingContent?: string;
     toolCalls?: unknown[];
+    isStreaming?: boolean;
     renderA2UIInline?: boolean;
     suppressedActionRequestId?: string | null;
     suppressProcessFlow?: boolean;
@@ -173,6 +175,7 @@ const mockStreamingRenderer = vi.fn(
       data-markdown-render-mode={markdownRenderMode || "standard"}
       data-read-only-a2ui={readOnlyA2UI ? "yes" : "no"}
       data-read-only-action-requests={readOnlyActionRequests ? "yes" : "no"}
+      data-is-streaming={isStreaming ? "yes" : "no"}
     >
       {content || "<empty-assistant>"}
     </div>
@@ -2184,6 +2187,123 @@ describe("MessageList", () => {
     ).toBeNull();
   });
 
+  it("远端 failed runtimeStatus 应终止消息级正在输出指示", () => {
+    const now = new Date("2026-06-07T09:30:00.000Z");
+    const messages: Message[] = [
+      {
+        id: "msg-user-news",
+        role: "user",
+        content: "整理今天的国际新闻",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-news-failed",
+        role: "assistant",
+        content:
+          "执行失败：Request failed: failed to connect to token-plan-cn.xiaomimimo.com",
+        contentParts: [
+          {
+            type: "text",
+            text: "执行失败：Request failed: failed to connect to token-plan-cn.xiaomimimo.com",
+          },
+        ],
+        timestamp: new Date("2026-06-07T09:30:12.000Z"),
+        isThinking: true,
+        runtimeStatus: {
+          phase: "failed",
+          title: "当前处理失败",
+          detail:
+            "Request failed: failed to connect to token-plan-cn.xiaomimimo.com",
+        },
+      },
+    ];
+
+    const container = render(messages, {
+      isSending: true,
+    });
+
+    expect(container.textContent).toContain("整理今天的国际新闻");
+    expect(container.textContent).toContain("当前处理失败");
+    expect(
+      container.querySelector('[data-testid="assistant-streaming-inline-indicator"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="message-runtime-status-pill"]'),
+    ).not.toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="streaming-renderer"]')
+        ?.getAttribute("data-is-streaming"),
+    ).toBe("no");
+  });
+
+  it("完成态 assistant 有正文时不应被旧 running 工具状态拖回正在输出", () => {
+    const now = new Date("2026-06-07T10:34:44.000Z");
+    const messages: Message[] = [
+      {
+        id: "msg-user-news-complete",
+        role: "user",
+        content: "整理今天的国际新闻",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-news-complete",
+        role: "assistant",
+        content:
+          "根据多源检索结果，以下是 2026年6月7日 的主要国际新闻整理。",
+        contentParts: [
+          {
+            type: "text",
+            text: "我来搜索今天（2026年6月7日）的国际新闻。",
+          },
+          {
+            type: "tool_use",
+            toolCall: {
+              id: "tool-web-search-stale-running",
+              name: "WebSearch",
+              arguments: "{\"query\":\"2026年6月7日 国际新闻\"}",
+              status: "running",
+              startTime: now,
+            },
+          },
+          {
+            type: "text",
+            text: "根据多源检索结果，以下是 2026年6月7日 的主要国际新闻整理。",
+          },
+        ],
+        toolCalls: [
+          {
+            id: "tool-web-search-stale-running",
+            name: "WebSearch",
+            arguments: "{\"query\":\"2026年6月7日 国际新闻\"}",
+            status: "running",
+            startTime: now,
+          },
+        ],
+        timestamp: new Date("2026-06-07T10:34:45.000Z"),
+        isThinking: false,
+      },
+    ];
+
+    const container = render(messages, {
+      isSending: false,
+    });
+
+    expect(container.textContent).toContain("整理今天的国际新闻");
+    expect(container.textContent).toContain("主要国际新闻整理");
+    expect(
+      container.querySelector('[data-testid="assistant-streaming-inline-indicator"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="message-runtime-status-pill"]'),
+    ).toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="streaming-renderer"]')
+        ?.getAttribute("data-is-streaming"),
+    ).toBe("no");
+  });
+
   it("首个文本分片到来前，不应把运行态当作 assistant 回复渲染", () => {
     const now = new Date();
     const messages: Message[] = [
@@ -2411,6 +2531,64 @@ describe("MessageList", () => {
       "The runtime has started processing and is waiting for the first output.",
     );
     expect(container.textContent).not.toContain("直接回答优先");
+  });
+
+  it("首字前等待态遇到提前完成的 turn 时，不应在消息尾部显示已完成", async () => {
+    const now = new Date("2026-06-07T10:00:00.000Z");
+    const messages: Message[] = [
+      {
+        id: "msg-user-first-token-completed-turn",
+        role: "user",
+        content: "请用一句话解释启动状态",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-first-token-completed-turn",
+        role: "assistant",
+        content: "",
+        timestamp: new Date(now.getTime() + 1000),
+        isThinking: true,
+        runtimeStatus: {
+          phase: "routing",
+          title: "正在生成回复",
+          detail: "运行时已开始处理，等待首个输出。",
+        },
+      },
+    ];
+
+    const container = await renderZh(messages, {
+      currentTurnId: "turn-first-token-completed",
+      isSending: true,
+      threadRead: {
+        thread_id: "thread-first-token-completed",
+        status: "completed",
+      },
+      turns: [
+        {
+          id: "turn-first-token-completed",
+          thread_id: "thread-first-token-completed",
+          prompt_text: "请用一句话解释启动状态",
+          status: "completed",
+          started_at: "2026-06-07T10:00:00.000Z",
+          completed_at: "2026-06-07T10:00:12.000Z",
+          created_at: "2026-06-07T10:00:00.000Z",
+          updated_at: "2026-06-07T10:00:12.000Z",
+        },
+      ],
+    });
+
+    expect(
+      container.querySelector(
+        '[data-testid="assistant-first-token-runtime-status"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="inputbar-runtime-status-line"]'),
+    ).toBeNull();
+    expect(container.textContent).toContain("正在生成回复");
+    expect(container.textContent).toContain("等待首个输出");
+    expect(container.textContent).not.toContain("已完成");
+    expect(container.textContent).not.toContain("00:12");
   });
 
   it("当前回合运行且只有执行轨迹时，应在消息结算区显示小型输出提示", () => {
@@ -8007,13 +8185,19 @@ describe("MessageList", () => {
     const assistantRenderer = container.querySelector(
       '[data-testid="streaming-renderer"]',
     );
-    const statusLine = container.querySelector(
-      '[data-testid="inputbar-runtime-status-line"]',
+    const metaFooter = container.querySelector(
+      '[data-testid="assistant-message-meta-footer"]',
+    );
+    const statusPill = container.querySelector(
+      '[data-testid="message-runtime-status-pill"]',
     );
 
     expect(assistantRenderer?.textContent).toBe("<empty-assistant>");
-    expect(statusLine?.textContent).toContain("失败");
-    expect(statusLine?.textContent).toContain("00:09");
-    expect(statusLine?.textContent).not.toContain(detail);
+    expect(
+      container.querySelector('[data-testid="inputbar-runtime-status-line"]'),
+    ).toBeNull();
+    expect(statusPill?.textContent).toContain("当前处理失败");
+    expect(statusPill?.textContent).not.toContain(detail);
+    expect(metaFooter?.textContent).not.toContain(detail);
   });
 });

@@ -1,0 +1,49 @@
+{
+  "$defs": {
+    "ConnectCallbackStatus": {
+      "enum": [
+        "cancelled",
+        "error",
+        "success"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "apiKey": {
+      "type": "string"
+    },
+    "errorCode": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "errorMessage": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "refCode": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "relayId": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/ConnectCallbackStatus"
+    }
+  },
+  "required": [
+    "apiKey",
+    "relayId",
+    "status"
+  ],
+  "title": "ConnectCallbackSendParams",
+  "type": "object"
+}

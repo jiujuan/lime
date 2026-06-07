@@ -1191,11 +1191,11 @@ function extractImageUrlFromText(content: string): string | null {
     return markdownValue;
   }
 
-  const dataUriMatch = normalizedContent.match(
+  const dataUrlMatch = normalizedContent.match(
     /data:image\/[\w.+-]+;base64,[A-Za-z0-9+/=]+/,
   );
-  if (dataUriMatch) {
-    return dataUriMatch[0];
+  if (dataUrlMatch) {
+    return dataUrlMatch[0];
   }
 
   const plainUrlMatch = normalizedContent.match(/https?:\/\/[^\s"'`<>]+/);

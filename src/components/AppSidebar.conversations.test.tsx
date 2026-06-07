@@ -15,7 +15,7 @@ import {
   mountSidebar,
   mountSidebarContainer,
   openConversationMenu,
-  resetAppSidebarTest
+  resetAppSidebarTest,
 } from "./AppSidebar.testFixtures";
 import type { AgentPageParams } from "./AppSidebar.testFixtures";
 
@@ -119,8 +119,11 @@ describe("AppSidebar conversations", () => {
     }
   });
 
-  it("一级导航下方应继续展示最近对话与归档，并对归档列表懒加载", async () => {
-    localStorage.setItem("agent_last_project_id", JSON.stringify("project-1"));
+  it("一级导航下方应继续展示最近对话与归档，记忆项目不应作为 App Server 过滤参数", async () => {
+    localStorage.setItem(
+      "agent_last_project_id",
+      JSON.stringify("stale-project"),
+    );
     mockListAgentRuntimeSessions.mockImplementation(
       async (options?: {
         archivedOnly?: boolean;
@@ -130,25 +133,25 @@ describe("AppSidebar conversations", () => {
       }) =>
         options?.archivedOnly
           ? [
-            {
-              id: "session-archived",
-              name: "归档会话",
-              created_at: 1713000000,
-              updated_at: 1713000600,
-              archived_at: 1713003600,
-              workspace_id: "project-1",
-            },
-          ]
+              {
+                id: "session-archived",
+                name: "归档会话",
+                created_at: 1713000000,
+                updated_at: 1713000600,
+                archived_at: 1713003600,
+                workspace_id: "project-1",
+              },
+            ]
           : [
-            {
-              id: "session-recent",
-              name: "最近会话",
-              created_at: 1714000000,
-              updated_at: 1714000600,
-              archived_at: null,
-              workspace_id: "project-1",
-            },
-          ],
+              {
+                id: "session-recent",
+                name: "最近会话",
+                created_at: 1714000000,
+                updated_at: 1714000600,
+                archived_at: null,
+                workspace_id: "project-1",
+              },
+            ],
     );
 
     const container = mountSidebarContainer({
@@ -163,14 +166,13 @@ describe("AppSidebar conversations", () => {
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(1);
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
       limit: 11,
-      workspaceId: "project-1",
     });
     expect(mockRecordAgentUiPerformanceMetric).toHaveBeenCalledWith(
       "appSidebar.recentConversations.loadBreakdown",
       expect.objectContaining({
         limit: 11,
         sessionsCount: 1,
-        workspaceId: "project-1",
+        workspaceId: null,
       }),
     );
 
@@ -200,7 +202,7 @@ describe("AppSidebar conversations", () => {
         conversationShelf &&
         (mainNav.compareDocumentPosition(conversationShelf) &
           Node.DOCUMENT_POSITION_FOLLOWING) !==
-        0,
+          0,
       ),
     ).toBe(true);
 
@@ -221,7 +223,6 @@ describe("AppSidebar conversations", () => {
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
       archivedOnly: true,
       limit: 9,
-      workspaceId: "project-1",
     });
   });
 
@@ -249,6 +250,67 @@ describe("AppSidebar conversations", () => {
 
     expect(recentConversationList?.textContent).toContain("未命名对话");
     expect(recentConversationList?.textContent).not.toContain("Ran into");
+  });
+
+  it("最近对话和归档加载失败时不应让记忆项目污染 App Server 查询参数", async () => {
+    localStorage.setItem("agent_last_project_id", JSON.stringify("project-1"));
+    const warnSpy = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
+    const errorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    mockListAgentRuntimeSessions.mockImplementation(
+      async (options?: {
+        archivedOnly?: boolean;
+        includeArchived?: boolean;
+        limit?: number;
+        workspaceId?: string;
+      }) => {
+        throw new Error(
+          options?.archivedOnly ? "archived failed" : "recent failed",
+        );
+      },
+    );
+
+    try {
+      const container = mountSidebarContainer({
+        currentPage: "settings",
+      });
+      await flushEffects(3);
+
+      const recentConversationList = container.querySelector(
+        '[data-testid="app-sidebar-recent-conversations"]',
+      );
+      expect(recentConversationList?.textContent).not.toContain("正在加载对话");
+      expect(recentConversationList?.textContent).toContain("还没有开始对话");
+      expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+        limit: 11,
+      });
+
+      await act(async () => {
+        container
+          .querySelector<HTMLButtonElement>('button[aria-expanded="false"]')
+          ?.click();
+        await Promise.resolve();
+      });
+      await flushEffects(3);
+
+      const archivedConversationList = container.querySelector(
+        '[data-testid="app-sidebar-archived-conversations"]',
+      );
+      expect(archivedConversationList?.textContent).not.toContain(
+        "正在加载归档",
+      );
+      expect(archivedConversationList?.textContent).toContain("暂无归档内容");
+      expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+        archivedOnly: true,
+        limit: 9,
+      });
+    } finally {
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
   });
 
   it("没有当前工作区时不应加载全局最近对话", async () => {
@@ -296,7 +358,6 @@ describe("AppSidebar conversations", () => {
     );
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
       limit: 11,
-      workspaceId: "project-1",
     });
   });
 
@@ -494,6 +555,12 @@ describe("AppSidebar conversations", () => {
     expect(menu?.textContent).toContain("归档");
     expect(menu?.textContent).toContain("多选");
     expect(menu?.textContent).toContain("删除");
+    const archiveMenuItem = document.body.querySelector<HTMLElement>(
+      '[data-testid="app-sidebar-conversation-menu-archive"]',
+    );
+    expect(archiveMenuItem).not.toBeNull();
+    expect(getComputedStyle(archiveMenuItem as Element).fontSize).toBe("13px");
+    expect(getComputedStyle(archiveMenuItem as Element).minHeight).toBe("36px");
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
       limit: 11,
       workspaceId: "project-1",
@@ -517,15 +584,15 @@ describe("AppSidebar conversations", () => {
       }) =>
         options?.archivedOnly
           ? [
-            {
-              id: "session-archived",
-              name: "归档会话",
-              created_at: 1713000000,
-              updated_at: 1713000600,
-              archived_at: 1713003600,
-              workspace_id: "project-1",
-            },
-          ]
+              {
+                id: "session-archived",
+                name: "归档会话",
+                created_at: 1713000000,
+                updated_at: 1713000600,
+                archived_at: 1713003600,
+                workspace_id: "project-1",
+              },
+            ]
           : [],
     );
 

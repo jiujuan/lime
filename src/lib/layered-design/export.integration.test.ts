@@ -1433,7 +1433,7 @@ describe("layered-design export", () => {
     );
   });
 
-  it("应生成可交给 Tauri 落盘的工程目录文件列表", () => {
+  it("应生成可交给 Desktop Host 落盘的工程目录文件列表", () => {
     const bundle = createLayeredDesignExportBundle(createExportDocument(), {
       exportedAt: "2026-05-05T03:00:00.000Z",
       baseName: "coffee-cover",

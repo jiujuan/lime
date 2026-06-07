@@ -27,6 +27,7 @@
 - 路线图：`../internal/roadmap/`
 - 测试与质量资料：`../internal/test/`、`../internal/tests/`、`../internal/testing/`
 - 研究、PRD、技术专题：`../internal/research/`、`../internal/prd/`、`../internal/tech/`
+- Electron 打包 / 发布 / updater 规则：`../AGENTS.md`、`../internal/aiprompts/quality-workflow.md`、`../internal/roadmap/appserver/release-updater.md`；current 打包事实源是 `forge.config.mjs` 与 Electron Forge。
 
 ## 维护规则
 

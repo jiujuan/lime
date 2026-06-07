@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   open as openDialog,
   save as saveDialog,
-} from "@tauri-apps/plugin-dialog";
+} from "@/lib/desktop-host/plugin-dialog";
 import {
   BookOpen,
   ChevronRight,
@@ -26,12 +26,14 @@ import {
   type LocalSkillPackageFileEntry,
   type Skill,
 } from "@/lib/api/skills";
+import { getOrCreateDefaultProject } from "@/lib/api/project";
 import type {
   Page,
   PageParams,
   SkillScaffoldDraft,
   SkillsPageParams,
 } from "@/types/page";
+import { WorkspaceRegisteredSkillsPanel } from "@/features/capability-drafts";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -82,10 +84,7 @@ import {
   renderSkillMarkdown,
   stripSkillFrontmatter,
 } from "./skillMarkdownPreview";
-import {
-  SkillFileContentPreview,
-  SkillFileTree,
-} from "./skillFilePreview";
+import { SkillFileContentPreview, SkillFileTree } from "./skillFilePreview";
 import {
   getDefaultSkillFilePath,
   getSkillFilePreviewContent,
@@ -152,7 +151,7 @@ type InstalledSkillDetailContentState =
       message: string;
     };
 
-function svgToDataUri(svg?: string): string | null {
+function svgToDataUrl(svg?: string): string | null {
   const normalized = svg?.trim();
   if (!normalized || !normalized.startsWith("<svg")) {
     return null;
@@ -167,7 +166,7 @@ function resolveVisualAssetSource(
   if (url) {
     return url;
   }
-  return svgToDataUri(asset?.svg);
+  return svgToDataUrl(asset?.svg);
 }
 
 function SkillsHeroBannerSvg() {
@@ -675,6 +674,17 @@ export function SkillsWorkspacePage({
   >(null);
   const [selectingLocalSkillPackage, setSelectingLocalSkillPackage] =
     useState(false);
+  const [defaultProjectState, setDefaultProjectState] = useState<{
+    id: string | null;
+    rootPath: string | null;
+    pending: boolean;
+    error: string | null;
+  }>({
+    id: null,
+    rootPath: null,
+    pending: false,
+    error: null,
+  });
   const [
     highlightedInstalledSkillDirectory,
     setHighlightedInstalledSkillDirectory,
@@ -747,6 +757,56 @@ export function SkillsWorkspacePage({
       setActiveView("store");
     }
   }, [pageParams?.initialView]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadDefaultProject = async () => {
+      if (activeView !== "installed") {
+        setDefaultProjectState({
+          id: null,
+          rootPath: null,
+          pending: false,
+          error: null,
+        });
+        return;
+      }
+
+      setDefaultProjectState((previous) => ({
+        ...previous,
+        pending: true,
+        error: null,
+      }));
+      try {
+        const project = await getOrCreateDefaultProject();
+        if (cancelled) {
+          return;
+        }
+        setDefaultProjectState({
+          id: project.id,
+          rootPath: project.rootPath,
+          pending: false,
+          error: null,
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        setDefaultProjectState({
+          id: null,
+          rootPath: null,
+          pending: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    };
+
+    void loadDefaultProject();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeView]);
 
   useEffect(() => {
     const requestKey = pageParams?.initialScaffoldRequestKey ?? null;
@@ -2227,6 +2287,13 @@ export function SkillsWorkspacePage({
                 className="space-y-3"
                 data-testid="skills-installed-view"
               >
+                <WorkspaceRegisteredSkillsPanel
+                  workspaceRoot={defaultProjectState.rootPath}
+                  workspaceId={defaultProjectState.id}
+                  projectPending={defaultProjectState.pending}
+                  projectError={defaultProjectState.error}
+                />
+
                 <div>
                   <h2 className="text-xs font-semibold text-slate-700">
                     {t("skills.workspace.installed.title")}
@@ -2458,7 +2525,9 @@ export function SkillsWorkspacePage({
                                 )}
                               />
                             ) : (
-                              renderSkillMarkdown(contentState.content || fallback)
+                              renderSkillMarkdown(
+                                contentState.content || fallback,
+                              )
                             )}
                           </div>
                         </div>

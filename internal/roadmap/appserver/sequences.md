@@ -1,8 +1,8 @@
 # App Server 时序图
 
 > 状态：current planning source
-> 更新时间：2026-06-04
-> 作用：固定 App Server 初始化、会话执行、工具审批、Tauri 替换和独立 App 复用的关键时序。
+> 更新时间：2026-06-06
+> 作用：固定 App Server 初始化、会话执行、工具审批、Desktop Host bridge 替换和独立 App 复用的关键时序。
 
 ## 1. 独立 App 启动 App Server
 
@@ -132,21 +132,25 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant FE as Lime Frontend
-    participant Cmd as Tauri Command Adapter
+    participant Host as Electron Desktop Host Bridge
+    participant Rpc as App Server JSON-RPC
     participant Service as RuntimeCore
     participant Backend as AsterBackend
-    participant Sink as TauriEventSink
+    participant Sink as DesktopEventSink
 
-    FE->>Cmd: safeInvoke(agent_runtime_submit_turn)
-    Cmd->>Service: start_turn(mapped params, TauriEventSink)
-    Service-->>Cmd: accepted turn
-    Cmd-->>FE: existing response shape
+    FE->>Host: app_server_handle_json_lines(agentSession/turn/start)
+    Host->>Rpc: forward JSON-RPC request
+    Rpc->>Service: start_turn(mapped params, DesktopEventSink)
+    Service-->>Rpc: accepted turn
+    Rpc-->>Host: result + agentSession/event
+    Host-->>FE: renderer-safe projection
     Service->>Backend: execute turn
     Backend->>Sink: runtime events
-    Sink-->>FE: existing GUI events
+    Sink-->>Host: Desktop runtime events
+    Host-->>FE: App Server events / read model refresh
 ```
 
-目标：前端合同不先大改，command 内部逐步退回 adapter。
+目标：Electron Desktop Host bridge 全面接管 GUI current 路径；legacy desktop facade 如仍存在，只能作为 compat 委托 App Server / RuntimeCore，不能成为新增业务事实源。
 
 ## 7. content-studio 复用时序
 

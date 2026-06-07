@@ -37,6 +37,12 @@ const DEFAULT_INVOKE_URL = "http://127.0.0.1:3030/invoke";
 const DEFAULT_TIMEOUT_MS = 180_000;
 const DEFAULT_INTERVAL_MS = 1_000;
 const LOG_PREFIX = "[smoke:code-runtime-fixture]";
+const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+const APP_SERVER_METHOD_AGENT_SESSION_START = "agentSession/start";
+const APP_SERVER_METHOD_AGENT_SESSION_UPDATE = "agentSession/update";
+const APP_SERVER_METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start";
+const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read";
+const APP_SERVER_METHOD_EVIDENCE_EXPORT = "evidence/export";
 const FIXTURE_RELATIVE_PATH = ".lime/qc/code-runtime-fixture/src/greeting.ts";
 const INITIAL_CONTENT = [
   "export function greeting() {",
@@ -156,13 +162,82 @@ function writeEvidenceWithFallback(outputPath, evidence) {
     if (outputPath !== DEFAULT_OUTPUT) {
       throw error;
     }
-    const fallbackPath = path.join(os.tmpdir(), "code-runtime-fixture-smoke.json");
+    const fallbackPath = path.join(
+      os.tmpdir(),
+      "code-runtime-fixture-smoke.json",
+    );
     const writtenPath = writeEvidence(fallbackPath, evidence);
     console.warn(
       `${LOG_PREFIX} default evidence write failed, fallback=${writtenPath}: ${error.message}`,
     );
     return writtenPath;
   }
+}
+
+let appServerRequestId = 1;
+
+function parseJsonRpcLine(line) {
+  const trimmed = String(line || "").trim();
+  if (!trimmed) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(trimmed);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function decodeJsonRpcLines(lines) {
+  return Array.isArray(lines)
+    ? lines.map(parseJsonRpcLine).filter(Boolean)
+    : [];
+}
+
+async function invokeAppServer(
+  options,
+  method,
+  params = {},
+  timeoutMs = options.timeoutMs,
+) {
+  const id = `code-runtime-fixture-${appServerRequestId++}`;
+  const response = await invokeDevBridge(
+    options,
+    APP_SERVER_HANDLE_JSON_LINES_COMMAND,
+    {
+      request: {
+        lines: [
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id,
+            method,
+            params,
+          }),
+        ],
+      },
+    },
+    timeoutMs,
+  );
+  const messages = decodeJsonRpcLines(response?.lines);
+  const error = messages.find((message) => message?.id === id && message.error);
+  if (error) {
+    throw new Error(`${method} failed: ${JSON.stringify(error.error)}`);
+  }
+  const result = messages.find(
+    (message) => message?.id === id && "result" in message,
+  );
+  if (!result) {
+    throw new Error(`${method} did not return a JSON-RPC response`);
+  }
+  return {
+    result: result.result,
+    response: result,
+    notifications: messages.filter(
+      (message) => message?.method && !("id" in message),
+    ),
+    messages,
+  };
 }
 
 function resolveWorkspaceRelativePath(relativePath) {
@@ -302,7 +377,9 @@ function checkpointIdFromList(checkpointList) {
         checkpoint?.path === FIXTURE_RELATIVE_PATH &&
         (checkpoint?.version_id || checkpoint?.versionId || checkpoint?.kind),
     ) ||
-    checkpoints.find((checkpoint) => checkpoint?.path === FIXTURE_RELATIVE_PATH) ||
+    checkpoints.find(
+      (checkpoint) => checkpoint?.path === FIXTURE_RELATIVE_PATH,
+    ) ||
     checkpoints[0];
   return String(match?.checkpoint_id || match?.checkpointId || "").trim();
 }
@@ -331,19 +408,182 @@ function summarizeCheckpointList(checkpointList) {
   };
 }
 
-async function waitForRuntimeCompletion(options, sessionId, fixture, targetPath) {
+function asRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : null;
+}
+
+function normalizeAppServerTurn(turn) {
+  if (!turn || typeof turn !== "object") {
+    return null;
+  }
+  return {
+    ...turn,
+    id: turn.id || turn.turnId || turn.turn_id || "",
+    status: turn.status || "",
+  };
+}
+
+function appServerSessionDetailFromRead(readResult) {
+  const detail = asRecord(readResult?.detail) || {};
+  const session = asRecord(readResult?.session) || {};
+  const businessObjectRef = asRecord(session.businessObjectRef) || {};
+  const metadata = asRecord(businessObjectRef.metadata) || {};
+  const turns = Array.isArray(detail.turns)
+    ? detail.turns.map(normalizeAppServerTurn).filter(Boolean)
+    : Array.isArray(readResult?.turns)
+      ? readResult.turns.map(normalizeAppServerTurn).filter(Boolean)
+      : [];
+  return {
+    ...detail,
+    id: detail.id || detail.session_id || detail.sessionId || session.sessionId,
+    session_id:
+      detail.session_id ||
+      detail.sessionId ||
+      session.sessionId ||
+      session.session_id ||
+      "",
+    thread_id: detail.thread_id || detail.threadId || session.threadId || "",
+    workspace_id:
+      detail.workspace_id || detail.workspaceId || session.workspaceId || "",
+    execution_strategy:
+      detail.execution_strategy ||
+      detail.executionStrategy ||
+      metadata.executionStrategy ||
+      null,
+    turns,
+  };
+}
+
+function appServerThreadReadFromSessionRead(readResult) {
+  const detail = appServerSessionDetailFromRead(readResult);
+  const detailThreadRead =
+    asRecord(detail.thread_read) || asRecord(detail.threadRead);
+  if (detailThreadRead) {
+    return detailThreadRead;
+  }
+
+  const turns = Array.isArray(detail.turns) ? detail.turns : [];
+  const activeTurn =
+    turns.find((turn) =>
+      [
+        "accepted",
+        "queued",
+        "running",
+        "waitingAction",
+        "waiting_action",
+      ].includes(String(turn?.status || "")),
+    ) || null;
+  const latestTurn = turns.at(-1) || null;
+  const latestTurnStatus = latestTurn?.status || null;
+  return {
+    source: APP_SERVER_METHOD_AGENT_SESSION_READ,
+    session_id: detail.session_id || "",
+    active_turn_id: activeTurn?.id || activeTurn?.turnId || null,
+    status: activeTurn ? "running" : "idle",
+    turns,
+    queued_turns: Array.isArray(detail.queued_turns)
+      ? detail.queued_turns
+      : Array.isArray(detail.queuedTurns)
+        ? detail.queuedTurns
+        : [],
+    diagnostics: {
+      latest_turn_status: latestTurnStatus,
+    },
+    runtime_summary: {
+      latestTurnStatus,
+    },
+    model_routing: detail.execution_runtime?.routing_decision || null,
+  };
+}
+
+function appServerEvidenceSummary(evidenceExport) {
+  if (!evidenceExport) {
+    return null;
+  }
+  const events = Array.isArray(evidenceExport.events)
+    ? evidenceExport.events
+    : [];
+  const artifacts = Array.isArray(evidenceExport.artifacts)
+    ? evidenceExport.artifacts
+    : [];
+  const turns = Array.isArray(evidenceExport.turns) ? evidenceExport.turns : [];
+  return {
+    sessionId: evidenceExport.session?.sessionId || null,
+    exportedAt: evidenceExport.exportedAt || null,
+    turnCount: turns.length,
+    eventCount: events.length,
+    artifactCount: artifacts.length,
+    evidencePack: summarizeEvidencePack(evidenceExport.evidencePack),
+  };
+}
+
+function buildAsterChatRequest({
+  fixture,
+  message,
+  sessionId,
+  turnId,
+  workspaceId,
+}) {
+  const turnConfig = {
+    provider_config: fixture.provider.providerConfig,
+    provider_preference: fixture.provider.providerName,
+    model_preference: fixture.provider.modelPreference,
+    approval_policy: "never",
+    sandbox_policy: "danger-full-access",
+    execution_strategy: "react",
+    metadata: {
+      harness: {
+        access_mode: "full-access",
+        skip_mcp_prewarm: true,
+        code_runtime_fixture: {
+          scenario_id: "natural-language-code-runtime-fixture",
+          source: "smoke:code-runtime-fixture",
+        },
+      },
+    },
+  };
+  return {
+    message,
+    session_id: sessionId,
+    event_name: `code_runtime_fixture_${turnId}`,
+    provider_config: turnConfig.provider_config,
+    provider_preference: fixture.provider.providerPreference,
+    model_preference: turnConfig.model_preference,
+    approval_policy: turnConfig.approval_policy,
+    sandbox_policy: turnConfig.sandbox_policy,
+    workspace_id: workspaceId,
+    execution_strategy: turnConfig.execution_strategy,
+    metadata: turnConfig.metadata,
+    turn_config: turnConfig,
+    turn_id: turnId,
+    queue_if_busy: false,
+  };
+}
+
+async function waitForRuntimeCompletion(
+  options,
+  sessionId,
+  fixture,
+  targetPath,
+) {
   const startedAt = Date.now();
   let lastSnapshot = null;
 
   while (Date.now() - startedAt < options.timeoutMs) {
-    const [threadRead, sessionDetail] = await Promise.all([
-      invokeDevBridge(options, "agent_runtime_get_thread_read", { sessionId }),
-      invokeDevBridge(options, "agent_runtime_get_session", {
+    const sessionReadResponse = await invokeAppServer(
+      options,
+      APP_SERVER_METHOD_AGENT_SESSION_READ,
+      {
         sessionId,
-        resumeSessionStartHooks: false,
         historyLimit: 50,
-      }),
-    ]);
+      },
+      30_000,
+    );
+    const sessionRead = sessionReadResponse.result;
+    const threadRead = appServerThreadReadFromSessionRead(sessionRead);
+    const sessionDetail = appServerSessionDetailFromRead(sessionRead);
     const fileContent = fs.existsSync(targetPath)
       ? fs.readFileSync(targetPath, "utf8")
       : "";
@@ -352,7 +592,9 @@ async function waitForRuntimeCompletion(options, sessionId, fixture, targetPath)
       session: {
         id: sessionDetail?.id || null,
         executionStrategy:
-          sessionDetail?.execution_strategy || sessionDetail?.executionStrategy || null,
+          sessionDetail?.execution_strategy ||
+          sessionDetail?.executionStrategy ||
+          null,
         itemCount: Array.isArray(sessionDetail?.items)
           ? sessionDetail.items.length
           : 0,
@@ -369,7 +611,12 @@ async function waitForRuntimeCompletion(options, sessionId, fixture, targetPath)
       lastSnapshot.fileUpdated &&
       threadSettled(threadRead)
     ) {
-      return { threadRead, sessionDetail, snapshot: lastSnapshot };
+      return {
+        threadRead,
+        sessionDetail,
+        sessionRead,
+        snapshot: lastSnapshot,
+      };
     }
 
     await sleep(options.intervalMs);
@@ -394,7 +641,9 @@ async function runSmoke(options) {
   const fixture = await startOpenAiCompatibleFixtureServer({
     scriptedResponses: buildFixtureResponses(),
   });
-  console.log(`${LOG_PREFIX} provider=localhost-fixture baseUrl=${fixture.baseUrl}`);
+  console.log(
+    `${LOG_PREFIX} provider=localhost-fixture baseUrl=${fixture.baseUrl}`,
+  );
 
   try {
     console.log(`${LOG_PREFIX} stage=workspace`);
@@ -406,56 +655,92 @@ async function runSmoke(options) {
     );
     const workspaceId = workspaceIdFromDefaultProject(workspace);
     assertSmoke(workspaceId, "默认 workspace 缺少 id");
-    const workspaceRoot = await resolveWorkspaceRoot(options, workspace, workspaceId);
+    const workspaceRoot = await resolveWorkspaceRoot(
+      options,
+      workspace,
+      workspaceId,
+    );
     const targetPath = prepareFixtureFile(workspaceRoot);
 
     console.log(`${LOG_PREFIX} stage=session`);
-    const sessionId = await invokeDevBridge(options, "agent_runtime_create_session", {
-      workspaceId,
-      name: `Code runtime fixture ${new Date().toISOString()}`,
-      runStartHooks: false,
-    });
-    assertSmoke(sessionId, "agent_runtime_create_session 未返回 sessionId");
+    const sessionName = `Code runtime fixture ${new Date().toISOString()}`;
+    const requestedSessionId = `code-runtime-fixture-${Date.now()}-${process.pid}`;
+    const sessionResult = await invokeAppServer(
+      options,
+      APP_SERVER_METHOD_AGENT_SESSION_START,
+      {
+        sessionId: requestedSessionId,
+        appId: "desktop",
+        workspaceId,
+        businessObjectRef: {
+          kind: "agent.session",
+          id: `agent-session:${workspaceId}:${requestedSessionId}`,
+          title: sessionName,
+          metadata: {
+            title: sessionName,
+            executionStrategy: "react",
+            runStartHooks: false,
+            harness: {
+              hiddenFromUserRecents: true,
+              source: "smoke:code-runtime-fixture",
+            },
+          },
+        },
+      },
+      30_000,
+    );
+    const sessionId = sessionResult.result?.session?.sessionId;
+    assertSmoke(sessionId, "agentSession/start 未返回 sessionId");
 
-    await invokeDevBridge(options, "agent_runtime_update_session", {
-      request: {
+    await invokeAppServer(
+      options,
+      APP_SERVER_METHOD_AGENT_SESSION_UPDATE,
+      {
         sessionId,
         providerSelector: fixture.provider.providerPreference,
         providerName: fixture.provider.providerName,
         modelName: fixture.provider.modelPreference,
+        executionStrategy: "react",
       },
-    });
+      30_000,
+    );
 
     console.log(`${LOG_PREFIX} stage=submit-turn session=${sessionId}`);
     const turnId = `code-runtime-fixture-${Date.now()}-${process.pid}`;
-    await invokeDevBridge(options, "agent_runtime_submit_turn", {
-      request: {
-        message:
-          "请修复这个 TypeScript fixture，让 greeting() 返回 Hello Lime Runtime，然后运行一个最小校验命令。",
+    const turnMessage =
+      "请修复这个 TypeScript fixture，让 greeting() 返回 Hello Lime Runtime，然后运行一个最小校验命令。";
+    const asterChatRequest = buildAsterChatRequest({
+      fixture,
+      message: turnMessage,
+      sessionId,
+      turnId,
+      workspaceId,
+    });
+    const turnResult = await invokeAppServer(
+      options,
+      APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+      {
         sessionId,
-        workspaceId,
-        eventName: `code_runtime_fixture_${turnId}`,
         turnId,
-        turnConfig: {
-          providerPreference: fixture.provider.providerPreference,
-          modelPreference: fixture.provider.modelPreference,
-          providerConfig: fixture.provider.providerConfig,
-          approvalPolicy: "never",
-          sandboxPolicy: "danger-full-access",
-          metadata: {
-            harness: {
-              access_mode: "full-access",
-              skip_mcp_prewarm: true,
-              code_runtime_fixture: {
-                scenario_id: "natural-language-code-runtime-fixture",
-                source: "smoke:code-runtime-fixture",
-              },
-            },
+        input: {
+          text: turnMessage,
+        },
+        runtimeOptions: {
+          stream: true,
+          eventName: asterChatRequest.event_name,
+          metadata: asterChatRequest.metadata,
+          hostOptions: {
+            asterChatRequest,
           },
         },
+        queueIfBusy: false,
         skipPreSubmitResume: true,
       },
-    });
+    );
+    assertSmoke(
+      turnResult.result?.turn?.turnId === turnId,
+      "agentSession/turn/start 未返回同一 turnId",
+    );
 
     console.log(`${LOG_PREFIX} stage=wait-runtime`);
     const finalState = await waitForRuntimeCompletion(
@@ -486,21 +771,37 @@ async function runSmoke(options) {
       },
     );
 
-    console.log(`${LOG_PREFIX} stage=export-evidence-pack`);
-    const evidencePack = await invokeDevBridge(
+    console.log(`${LOG_PREFIX} stage=export-evidence`);
+    const evidenceExportResult = await invokeAppServer(
       options,
-      "agent_runtime_export_evidence_pack",
-      { sessionId },
+      APP_SERVER_METHOD_EVIDENCE_EXPORT,
+      {
+        sessionId,
+        turnId,
+        includeEvents: true,
+        includeArtifacts: true,
+        includeEvidencePack: true,
+      },
+      30_000,
     );
+    const evidenceExport = evidenceExportResult.result;
 
     const finalContent = fs.readFileSync(targetPath, "utf8");
     const fixtureBodyText = requestBodyText(fixture.requests);
     const firstRequestText = requestMessagesText(fixture.requests[0]?.body);
     const detailText = JSON.stringify(finalState.sessionDetail || {});
     const threadReadText = JSON.stringify(finalState.threadRead || {});
-    const evidencePackText = JSON.stringify(evidencePack || {});
+    const sessionReadText = JSON.stringify(finalState.sessionRead || {});
+    const evidenceExportText = JSON.stringify(evidenceExport || {});
     const checkpointDiffText = JSON.stringify(checkpointDiff || {});
     const assertions = {
+      appServerJsonRpcSubmitTurn:
+        turnResult.result?.turn?.sessionId === sessionId &&
+        turnResult.result?.turn?.turnId === turnId,
+      appServerSessionReadObserved:
+        finalState.sessionRead?.session?.sessionId === sessionId,
+      appServerEvidenceExportObserved:
+        evidenceExport?.session?.sessionId === sessionId,
       fixtureProviderUsed: fixtureChatRequestCount(fixture.requests) >= 4,
       naturalLanguageWithoutAtCode:
         firstRequestText.includes("Hello Lime Runtime") &&
@@ -510,22 +811,36 @@ async function runSmoke(options) {
       sessionDefaultedToReact:
         finalState.sessionDetail?.execution_strategy === "react" ||
         finalState.sessionDetail?.executionStrategy === "react",
-      currentAgentRuntimeObserved:
+      appServerRuntimeObserved:
         detailText.includes('"execution_strategy":"react"') ||
         detailText.includes('"executionStrategy":"react"') ||
         threadReadText.includes('"execution_strategy":"react"') ||
         threadReadText.includes('"executionStrategy":"react"'),
-      readToolObserved: valueContains(finalState.sessionDetail, "Read"),
-      writeToolObserved: valueContains(finalState.sessionDetail, "Write"),
-      bashToolObserved: valueContains(finalState.sessionDetail, "Bash"),
+      readToolObserved:
+        valueContains(finalState.sessionDetail, "Read") ||
+        sessionReadText.includes("Read") ||
+        evidenceExportText.includes("Read"),
+      writeToolObserved:
+        valueContains(finalState.sessionDetail, "Write") ||
+        sessionReadText.includes("Write") ||
+        evidenceExportText.includes("Write"),
+      bashToolObserved:
+        valueContains(finalState.sessionDetail, "Bash") ||
+        sessionReadText.includes("Bash") ||
+        evidenceExportText.includes("Bash"),
       workspaceFileUpdated: finalContent.includes("Hello Lime Runtime"),
       checkpointCreated:
         Number(
-          checkpointList?.checkpoint_count ?? checkpointList?.checkpointCount ?? 0,
+          checkpointList?.checkpoint_count ??
+            checkpointList?.checkpointCount ??
+            0,
         ) > 0,
-      checkpointDiffAvailable: checkpointDiffContainsExpectedChange(checkpointDiff),
-      evidencePackExported: Boolean(evidencePack),
-      evidencePackMentionsCodeFile: evidencePackText.includes(FIXTURE_RELATIVE_PATH),
+      checkpointDiffAvailable:
+        checkpointDiffContainsExpectedChange(checkpointDiff),
+      evidenceExported: Boolean(evidenceExport),
+      evidenceMentionsCodeFile: evidenceExportText.includes(
+        FIXTURE_RELATIVE_PATH,
+      ),
     };
 
     for (const [key, passed] of Object.entries(assertions)) {
@@ -539,14 +854,17 @@ async function runSmoke(options) {
       generatedAt: new Date().toISOString(),
       command: "smoke:code-runtime-fixture",
       coverage: {
-        usesCurrentRuntimeSubmitTurn: true,
+        usesAppServerJsonRpcSubmitTurn: true,
+        usesAppServerSessionRead: true,
+        usesAppServerEvidenceExport: true,
+        usesFileCheckpointCompat: true,
         usesDefaultReactExecutionStrategy: true,
         usesLocalhostFixtureProvider: true,
         avoidsAtCodeCommandRoute: true,
         verifiesReadWriteBashTools: true,
         verifiesWorkspaceFileMutation: true,
         verifiesCheckpointDiff: true,
-        verifiesEvidencePack: true,
+        verifiesEvidenceExport: true,
       },
       devBridge: {
         healthStatus: health?.status || null,
@@ -570,7 +888,7 @@ async function runSmoke(options) {
         checkpointId,
         checkpointDiff,
       },
-      evidencePack: summarizeEvidencePack(evidencePack),
+      evidenceExport: appServerEvidenceSummary(evidenceExport),
       assertions,
     };
 

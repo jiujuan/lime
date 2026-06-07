@@ -528,23 +528,35 @@ export function useInputbarDictation({
 
     void onVoiceStartRecording(async () => {
       await startDictation();
-    }).then((unlisten) => {
-      if (disposed) {
-        unlisten();
-        return;
-      }
-      unlistenStart = unlisten;
-    });
+    })
+      .then((unlisten) => {
+        if (disposed) {
+          unlisten();
+          return;
+        }
+        unlistenStart = unlisten;
+      })
+      .catch((error) => {
+        if (!disposed) {
+          console.warn("[输入栏] 注册语音开始快捷键失败:", error);
+        }
+      });
 
     void onVoiceStopRecording(async () => {
       await finishDictation();
-    }).then((unlisten) => {
-      if (disposed) {
-        unlisten();
-        return;
-      }
-      unlistenStop = unlisten;
-    });
+    })
+      .then((unlisten) => {
+        if (disposed) {
+          unlisten();
+          return;
+        }
+        unlistenStop = unlisten;
+      })
+      .catch((error) => {
+        if (!disposed) {
+          console.warn("[输入栏] 注册语音停止快捷键失败:", error);
+        }
+      });
 
     return () => {
       disposed = true;

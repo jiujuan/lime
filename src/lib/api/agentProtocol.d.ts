@@ -264,6 +264,8 @@ export interface AgentEventItemCompleted {
 export interface AgentEventTurnCompleted {
     type: "turn_completed";
     turn: AgentThreadTurn;
+    text?: string;
+    usage?: AgentTokenUsage;
 }
 export interface AgentEventTurnFailed {
     type: "turn_failed";
@@ -570,6 +572,7 @@ export interface AgentUserPreferences {
     providerConfig?: AsterProviderConfig;
     providerPreference?: string;
     modelPreference?: string;
+    reasoningEffort?: string;
     thinking?: boolean;
     webSearch?: boolean;
     searchMode?: AgentRuntimeWebSearchMode;

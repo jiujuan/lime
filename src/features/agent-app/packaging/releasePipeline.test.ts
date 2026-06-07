@@ -51,11 +51,10 @@ function buildReleasePlan() {
     target: {
       kind: "standalone",
       platform: "macos",
-      packageFormat: "pkg",
+      packageFormat: "dmg",
       macosIdentity: buildMacOsStandaloneIdentity({
         teamId: "TEAMID1234",
         bundleId: "com.limecloud.agentapp.contentfactory",
-        installerCertificateKind: "developer_id_installer",
       }),
       productionReady: false,
     },
@@ -66,13 +65,11 @@ function buildReleasePlan() {
     channel: "stable",
     signing: {
       applicationCertificateKind: "developer_id_application",
-      installerCertificateKind: "developer_id_installer",
       notarizationConfigured: true,
       notarizationProfileRef: "notarytool:lime-prod",
     },
     updater: {
       enabled: true,
-      pubkey: "lime-prod-updater-pubkey",
       endpoint: "https://updates.limecloud.example/content-factory",
     },
     rollback: {
@@ -84,6 +81,35 @@ function buildReleasePlan() {
 }
 
 describe("Agent App standalone release pipeline", () => {
+  it("build evidence blocker 使用 production artifact build 口径", () => {
+    const releasePlan = buildReleasePlan();
+
+    const missingBuildEvidence = buildStandaloneReleasePipelinePlan({
+      releasePlan,
+    });
+    const incompleteBuildEvidence = buildStandaloneReleasePipelinePlan({
+      releasePlan,
+      buildEvidence: {
+        status: "blocked",
+        artifactRefs: [],
+      },
+    });
+
+    const missingMessage = missingBuildEvidence.blockers.find(
+      (item) => item.code === "BUILD_EVIDENCE_MISSING",
+    )?.message;
+    const incompleteMessage = incompleteBuildEvidence.blockers.find(
+      (item) => item.code === "BUILD_NOT_COMPLETED",
+    )?.message;
+
+    expect(missingMessage).toBe(
+      "Standalone release requires production artifact build evidence before signing or publishing.",
+    );
+    expect(incompleteMessage).toBe(
+      "Standalone release requires a completed production artifact build before signing or publishing.",
+    );
+  });
+
   it("缺少 build artifact refs 时必须阻断发布", () => {
     const releasePlan = buildReleasePlan();
 
@@ -122,9 +148,9 @@ describe("Agent App standalone release pipeline", () => {
             contentHash: "sha256:app",
           },
           {
-            kind: "pkg",
-            path: "dist/Content Factory.pkg",
-            contentHash: "sha256:pkg",
+            kind: "dmg",
+            path: "dist/Content Factory.dmg",
+            contentHash: "sha256:dmg",
           },
         ],
       },
@@ -135,7 +161,6 @@ describe("Agent App standalone release pipeline", () => {
         expect.objectContaining({
           code: "APPLICATION_ARTIFACT_SIGNING_MISSING",
         }),
-        expect.objectContaining({ code: "INSTALLER_ARTIFACT_SIGNING_MISSING" }),
         expect.objectContaining({ code: "NOTARIZATION_EVIDENCE_MISSING" }),
         expect.objectContaining({ code: "UPDATER_MANIFEST_MISSING" }),
       ]),
@@ -157,9 +182,9 @@ describe("Agent App standalone release pipeline", () => {
             signed: true,
           },
           {
-            kind: "pkg",
-            path: "dist/Content Factory.pkg",
-            contentHash: "sha256:pkg",
+            kind: "dmg",
+            path: "dist/Content Factory.dmg",
+            contentHash: "sha256:dmg",
             signed: true,
             notarized: true,
             stapled: true,
@@ -168,17 +193,16 @@ describe("Agent App standalone release pipeline", () => {
       },
       signingEvidence: {
         applicationSignedArtifactRefs: ["sha256:app"],
-        installerSignedArtifactRefs: ["sha256:pkg"],
         evidenceRef: ".lime/agent-apps/signing.json",
       },
       notarizationEvidence: {
-        acceptedArtifactRefs: ["sha256:pkg"],
-        stapledArtifactRefs: ["sha256:pkg"],
+        acceptedArtifactRefs: ["sha256:dmg"],
+        stapledArtifactRefs: ["sha256:dmg"],
         logRef: ".lime/agent-apps/notarization.json",
       },
       updaterEvidence: {
         manifestRef: ".lime/agent-apps/latest.json",
-        artifactRefs: ["sha256:pkg"],
+        artifactRefs: ["sha256:dmg"],
       },
       rollbackEvidence: {
         manifestRef: ".lime/agent-apps/rollback.json",

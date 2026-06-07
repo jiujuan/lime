@@ -8,10 +8,7 @@ import {
   buildRustLayerReport,
   classifyRustTestFiles,
 } from "./rust-test-layer-classifier.mjs";
-import {
-  filterEntriesForCargoArgs,
-  parseArgs,
-} from "./run-rust-layer.mjs";
+import { filterEntriesForCargoArgs, parseArgs } from "./run-rust-layer.mjs";
 
 let tempRoot = null;
 
@@ -24,19 +21,15 @@ function writeFile(relPath, content) {
 function createFixtureRepo() {
   tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "lime-rust-layers-"));
   writeFile(
-    "src-tauri/Cargo.toml",
+    "lime-rs/Cargo.toml",
     `
 [workspace]
 members = ["crates/*"]
 exclude = ["crates/aster-rust"]
-
-[package]
-name = "lime"
-version = "0.0.0"
 `,
   );
   writeFile(
-    "src-tauri/src/lib.rs",
+    "lime-rs/src/lib.rs",
     `
 #[cfg(test)]
 mod tests {
@@ -46,21 +39,21 @@ mod tests {
 `,
   );
   writeFile(
-    "src-tauri/src/commands/foo/tests/projection.rs",
+    "lime-rs/src/commands/foo/tests/projection.rs",
     `
 #[tokio::test]
 async fn module_level_unit() {}
 `,
   );
   writeFile(
-    "src-tauri/tests/provider_contract.rs",
+    "lime-rs/tests/provider_contract.rs",
     `
 #[tokio::test]
 async fn provider_contract() {}
 `,
   );
   writeFile(
-    "src-tauri/tests/real_web_search.rs",
+    "lime-rs/tests/real_web_search.rs",
     `
 #[tokio::test]
 #[ignore = "真实联网测试：设置 LIME_REAL_API_TEST=1 后执行"]
@@ -70,7 +63,7 @@ async fn real_web_search() {
 `,
   );
   writeFile(
-    "src-tauri/crates/agent/Cargo.toml",
+    "lime-rs/crates/agent/Cargo.toml",
     `
 [package]
 name = "lime-agent"
@@ -78,14 +71,14 @@ version = "0.0.0"
 `,
   );
   writeFile(
-    "src-tauri/crates/agent/tests/protocol.rs",
+    "lime-rs/crates/agent/tests/protocol.rs",
     `
 #[test]
 fn protocol_guard() {}
 `,
   );
   writeFile(
-    "src-tauri/crates/services/Cargo.toml",
+    "lime-rs/crates/services/Cargo.toml",
     `
 [package]
 name = "lime-services"
@@ -93,7 +86,7 @@ version = "0.0.0"
 `,
   );
   writeFile(
-    "src-tauri/crates/services/src/skill_service.rs",
+    "lime-rs/crates/services/src/skill_service.rs",
     `
 #[cfg(test)]
 mod tests {
@@ -107,7 +100,7 @@ mod tests {
 `,
   );
   writeFile(
-    "src-tauri/crates/aster-rust/Cargo.toml",
+    "lime-rs/crates/aster-rust/Cargo.toml",
     `
 [package]
 name = "aster-rust"
@@ -115,7 +108,7 @@ version = "0.0.0"
 `,
   );
   writeFile(
-    "src-tauri/crates/aster-rust/tests/agent.rs",
+    "lime-rs/crates/aster-rust/tests/agent.rs",
     `
 #[test]
 fn excluded_agent_test() {}
@@ -139,36 +132,42 @@ describe("rust-test-layer-classifier", () => {
   it("按 Cargo 边界区分 unit、integration、e2e 和 excluded subcrate", () => {
     const repoRoot = createFixtureRepo();
     const entries = classifyRustTestFiles(repoRoot);
-    const byFile = Object.fromEntries(entries.map((entry) => [entry.file, entry]));
+    const byFile = Object.fromEntries(
+      entries.map((entry) => [entry.file, entry]),
+    );
 
-    expect(byFile["src-tauri/src/lib.rs"]).toMatchObject({
+    expect(byFile["lime-rs/src/lib.rs"]).toMatchObject({
       layer: "unit",
-      cargoScope: "workspace",
-      runnableByDefault: true,
+      cargoScope: "unmanaged-root",
+      packageName: "workspace-root",
+      runnableByDefault: false,
     });
     expect(
-      byFile["src-tauri/src/commands/foo/tests/projection.rs"],
+      byFile["lime-rs/src/commands/foo/tests/projection.rs"],
     ).toMatchObject({
       layer: "unit",
-      cargoScope: "workspace",
-      runnableByDefault: true,
+      cargoScope: "unmanaged-root",
+      runnableByDefault: false,
     });
-    expect(byFile["src-tauri/tests/provider_contract.rs"]).toMatchObject({
+    expect(byFile["lime-rs/tests/provider_contract.rs"]).toMatchObject({
       layer: "integration",
-      cargoScope: "workspace",
-      runnableByDefault: true,
+      cargoScope: "unmanaged-root",
+      runnableByDefault: false,
     });
-    expect(byFile["src-tauri/tests/real_web_search.rs"]).toMatchObject({
+    expect(byFile["lime-rs/tests/real_web_search.rs"]).toMatchObject({
       layer: "e2e",
       liveGated: true,
       runnableByDefault: false,
+      cargoScope: "unmanaged-root",
     });
-    expect(byFile["src-tauri/crates/agent/tests/protocol.rs"]).toMatchObject({
+    expect(byFile["lime-rs/crates/agent/tests/protocol.rs"]).toMatchObject({
       layer: "integration",
       packageName: "lime-agent",
       cargoScope: "workspace",
     });
-    expect(byFile["src-tauri/crates/services/src/skill_service.rs"]).toMatchObject({
+    expect(
+      byFile["lime-rs/crates/services/src/skill_service.rs"],
+    ).toMatchObject({
       layer: "unit",
       packageName: "lime-services",
       liveGated: true,
@@ -176,7 +175,7 @@ describe("rust-test-layer-classifier", () => {
       ignoredCount: 1,
       runnableByDefault: true,
     });
-    expect(byFile["src-tauri/crates/aster-rust/tests/agent.rs"]).toMatchObject({
+    expect(byFile["lime-rs/crates/aster-rust/tests/agent.rs"]).toMatchObject({
       layer: "integration",
       cargoScope: "excluded-subcrate",
       ignoredCount: 1,
@@ -195,28 +194,28 @@ describe("rust-test-layer-classifier", () => {
     expect(report.layers.integration.ignored).toBe(1);
     expect(report.liveGated).toBe(2);
     expect(report.excludedSubcrateFiles).toBe(1);
-    expect(report.runnableByDefault).toBe(5);
+    expect(report.unmanagedRootFiles).toBe(4);
+    expect(report.runnableByDefault).toBe(2);
   });
 });
 
 describe("run-rust-layer 参数解析", () => {
   it("保留 Cargo package 参数和测试过滤器", () => {
-    expect(parseArgs(["unit", "-p", "lime-agent", "request_tool_policy"]))
-      .toMatchObject({
-        layer: "unit",
-        cargoArgs: ["-p", "lime-agent", "request_tool_policy"],
-        testArgs: [],
-      });
+    expect(
+      parseArgs(["unit", "-p", "lime-agent", "request_tool_policy"]),
+    ).toMatchObject({
+      layer: "unit",
+      cargoArgs: ["-p", "lime-agent", "request_tool_policy"],
+      testArgs: [],
+    });
   });
 
   it("把分隔符后的参数透传给 Rust test binary", () => {
-    expect(parseArgs(["e2e", "--", "--ignored", "--nocapture"])).toMatchObject(
-      {
-        layer: "e2e",
-        cargoArgs: [],
-        testArgs: ["--ignored", "--nocapture"],
-      },
-    );
+    expect(parseArgs(["e2e", "--", "--ignored", "--nocapture"])).toMatchObject({
+      layer: "e2e",
+      cargoArgs: [],
+      testArgs: ["--ignored", "--nocapture"],
+    });
   });
 
   it("列表按 Cargo package scope 过滤", () => {
@@ -226,22 +225,21 @@ describe("run-rust-layer 参数解析", () => {
     const defaultFiles = filterEntriesForCargoArgs(entries, []).map(
       (entry) => entry.file,
     );
-    expect(defaultFiles).toContain("src-tauri/src/lib.rs");
-    expect(defaultFiles).not.toContain(
-      "src-tauri/crates/agent/tests/protocol.rs",
+    expect(defaultFiles).not.toContain("lime-rs/src/lib.rs");
+    expect(defaultFiles).toContain("lime-rs/crates/agent/tests/protocol.rs");
+    expect(defaultFiles).toContain(
+      "lime-rs/crates/services/src/skill_service.rs",
     );
 
     const workspaceFiles = filterEntriesForCargoArgs(entries, [
       "--workspace",
     ]).map((entry) => entry.file);
-    expect(workspaceFiles).toContain(
-      "src-tauri/crates/agent/tests/protocol.rs",
-    );
+    expect(workspaceFiles).toContain("lime-rs/crates/agent/tests/protocol.rs");
 
     const agentFiles = filterEntriesForCargoArgs(entries, [
       "-p",
       "lime-agent",
     ]).map((entry) => entry.file);
-    expect(agentFiles).toEqual(["src-tauri/crates/agent/tests/protocol.rs"]);
+    expect(agentFiles).toEqual(["lime-rs/crates/agent/tests/protocol.rs"]);
   });
 });

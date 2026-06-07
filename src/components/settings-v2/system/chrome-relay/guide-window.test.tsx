@@ -15,7 +15,7 @@ const {
   mockOpenBrowserExtensionsPage,
   mockOpenBrowserRemoteDebuggingPage,
   mockOpenBrowserConnectorGuideWindowCommand,
-  mockHasTauriInvokeCapability,
+  mockHasDesktopHostInvokeCapability,
 } = vi.hoisted(() => {
   return {
     mockOpenDialog: vi.fn(),
@@ -29,11 +29,11 @@ const {
     mockOpenBrowserExtensionsPage: vi.fn(),
     mockOpenBrowserRemoteDebuggingPage: vi.fn(),
     mockOpenBrowserConnectorGuideWindowCommand: vi.fn(),
-    mockHasTauriInvokeCapability: vi.fn(),
+    mockHasDesktopHostInvokeCapability: vi.fn(),
   };
 });
 
-vi.mock("@tauri-apps/plugin-dialog", () => ({
+vi.mock("@/lib/desktop-host/plugin-dialog", () => ({
   open: (...args: unknown[]) => mockOpenDialog(...args),
 }));
 
@@ -42,8 +42,8 @@ vi.mock("@/lib/api/fileSystem", () => ({
     mockOpenPathWithDefaultApp(...args),
 }));
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriInvokeCapability: mockHasTauriInvokeCapability,
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostInvokeCapability: mockHasDesktopHostInvokeCapability,
 }));
 
 vi.mock("@/lib/webview-api", async () => {
@@ -124,7 +124,7 @@ beforeEach(async () => {
   mockWriteClipboardText.mockResolvedValue(undefined);
   mockOpenDialog.mockResolvedValue("/Users/test/connectors");
   mockOpenPathWithDefaultApp.mockResolvedValue(undefined);
-  mockHasTauriInvokeCapability.mockReturnValue(false);
+  mockHasDesktopHostInvokeCapability.mockReturnValue(false);
   mockGetBrowserConnectorSettings.mockResolvedValue({
     enabled: true,
     install_root_dir: "/Users/test/connectors",
@@ -304,7 +304,7 @@ describe("BrowserConnectorGuideWindow", () => {
     );
   });
 
-  it("非 Tauri 环境打开引导时应回退到浏览器窗口", async () => {
+  it("非 Desktop Host 环境打开引导时应回退到浏览器窗口", async () => {
     const mockWindowOpen = vi
       .spyOn(window, "open")
       .mockImplementation(() => null);
@@ -320,7 +320,7 @@ describe("BrowserConnectorGuideWindow", () => {
     mockWindowOpen.mockRestore();
   });
 
-  it("Tauri 独立窗口内部切换模式时应保持 index.html 壳入口", () => {
+  it("Desktop Host 独立窗口内部切换模式时应保持 index.html 壳入口", () => {
     window.history.pushState(
       {},
       "",
@@ -335,11 +335,11 @@ describe("BrowserConnectorGuideWindow", () => {
     );
   });
 
-  it("Tauri 环境打开引导时应走 Rust 开窗命令", async () => {
+  it("Desktop Host 环境打开引导时应走 Desktop Host 开窗命令", async () => {
     const mockWindowOpen = vi
       .spyOn(window, "open")
       .mockImplementation(() => null);
-    mockHasTauriInvokeCapability.mockReturnValue(true);
+    mockHasDesktopHostInvokeCapability.mockReturnValue(true);
 
     await openBrowserConnectorGuideWindow({ mode: "cdp" });
 

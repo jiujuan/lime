@@ -14,14 +14,22 @@ export interface MessageTurnTimeline {
   items: AgentThreadItem[];
 }
 
+function normalizeSortString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function compareStableString(left: unknown, right: unknown): number {
+  return normalizeSortString(left).localeCompare(normalizeSortString(right));
+}
+
 export function compareThreadTurns(
   left: AgentThreadTurn,
   right: AgentThreadTurn,
 ): number {
   if (left.started_at !== right.started_at) {
-    return left.started_at.localeCompare(right.started_at);
+    return compareStableString(left.started_at, right.started_at);
   }
-  return left.id.localeCompare(right.id);
+  return compareStableString(left.id, right.id);
 }
 
 export function compareThreadItems(
@@ -29,12 +37,12 @@ export function compareThreadItems(
   right: AgentThreadItem,
 ): number {
   if (left.started_at !== right.started_at) {
-    return left.started_at.localeCompare(right.started_at);
+    return compareStableString(left.started_at, right.started_at);
   }
   if (left.sequence !== right.sequence) {
     return left.sequence - right.sequence;
   }
-  return left.id.localeCompare(right.id);
+  return compareStableString(left.id, right.id);
 }
 
 function normalizeThreadWarningCode(value?: string | null): string | null {
@@ -71,12 +79,14 @@ function readMetadataString(
 }
 
 function shouldHideConversationThreadTurn(turn: AgentThreadTurn): boolean {
-  const normalizedId = turn.id.trim().toLowerCase();
+  const normalizedId =
+    typeof turn.id === "string" ? turn.id.trim().toLowerCase() : "";
   if (normalizedId.startsWith(HIDDEN_CONVERSATION_AUXILIARY_TURN_ID_PREFIX)) {
     return true;
   }
 
-  const normalizedPrompt = turn.prompt_text.trim();
+  const normalizedPrompt =
+    typeof turn.prompt_text === "string" ? turn.prompt_text.trim() : "";
   return (
     normalizedPrompt.startsWith("辅助标题生成") ||
     normalizedPrompt.startsWith("辅助人设生成")

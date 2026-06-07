@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { safeInvoke } from "@/lib/dev-bridge";
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import { convertFileSrc } from "@/lib/desktop-host/core";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import {
   convertLocalFileSrc,
   isAbsoluteLocalFilePath,
@@ -39,24 +39,24 @@ vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/api/core", () => ({
+vi.mock("@/lib/desktop-host/core", () => ({
   convertFileSrc: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/api/webviewWindow", () => ({
+vi.mock("@/lib/desktop-host/webviewWindow", () => ({
   WebviewWindow: Object.assign(mockWebviewWindow, {
     getByLabel: mockGetByLabel,
   }),
 }));
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriInvokeCapability: vi.fn(),
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostInvokeCapability: vi.fn(),
 }));
 
 describe("fileSystem API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(false);
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(false);
     vi.mocked(convertFileSrc).mockImplementation((path: string) => {
       return `asset://${path}`;
     });
@@ -118,8 +118,8 @@ describe("fileSystem API", () => {
     expect(resolveLocalFilePreviewUrl("/tmp/demo.html")).toBeNull();
   });
 
-  it("Tauri 环境应使用 WebviewWindow 打开 HTML 预览", async () => {
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(true);
+  it("Desktop Host 环境应使用 WebviewWindow 打开 HTML 预览", async () => {
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(true);
 
     await expect(
       openHtmlPreviewWindow("/tmp/lime/prototype.html"),
@@ -136,7 +136,7 @@ describe("fileSystem API", () => {
   });
 
   it("已有 HTML 预览窗口时应复用并聚焦", async () => {
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(true);
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(true);
     const existingWindow = {
       show: vi.fn().mockResolvedValue(undefined),
       setFocus: vi.fn().mockResolvedValue(undefined),
@@ -152,8 +152,8 @@ describe("fileSystem API", () => {
     expect(mockWebviewWindow).not.toHaveBeenCalled();
   });
 
-  it("非 Tauri 环境不应创建 HTML 预览窗口", async () => {
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(false);
+  it("非 Desktop Host 环境不应创建 HTML 预览窗口", async () => {
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(false);
 
     await expect(
       openHtmlPreviewWindow("/tmp/lime/prototype.html"),

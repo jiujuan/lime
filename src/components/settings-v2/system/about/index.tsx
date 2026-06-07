@@ -116,12 +116,6 @@ export function AboutSection() {
     const loadCurrentVersion = async () => {
       try {
         const result = await checkForUpdates();
-        if (result.error) {
-          console.warn(
-            "Update check returned a diagnostic error:",
-            result.error,
-          );
-        }
         setVersionInfo({
           ...result,
           downloadUrl: result.downloadUrl || FALLBACK_RELEASES_URL,
@@ -191,9 +185,6 @@ export function AboutSection() {
     setInstallStartFailed(false);
     try {
       const result = await checkForUpdates();
-      if (result.error) {
-        console.warn("Update check returned a diagnostic error:", result.error);
-      }
       setVersionInfo({
         ...result,
         downloadUrl: result.downloadUrl || FALLBACK_RELEASES_URL,
@@ -256,7 +247,8 @@ export function AboutSection() {
   const updateStatus = useMemo(() => {
     if (installingUpdate) {
       return {
-        label: installStatusLabel || t("settings.about.update.progress.checking"),
+        label:
+          installStatusLabel || t("settings.about.update.progress.checking"),
         className: "border-sky-200 bg-sky-50 text-sky-700",
       };
     }

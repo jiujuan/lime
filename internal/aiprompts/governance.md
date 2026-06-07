@@ -17,6 +17,8 @@
 
 其余实现必须被明确归类。
 
+生产路径不能 mock。mock 只允许作为测试夹具、契约守卫或已标明测试场景的本地 fixture；如果生产入口需要靠 `defaultMocks`、`mockPriorityCommands`、`invokeMockOnly`、renderer mock fallback 或 App Server mock backend 才能跑通，该入口应判为阻塞缺口，而不是可交付降级。
+
 ## 无历史包袱原则
 
 如果用户已经明确下面任一前提：
@@ -82,7 +84,7 @@
 开始改动前，先盘点这项能力在 4 层中的分布：
 
 - 入口层：页面、组件、Hook、前端 API
-- 服务层：Tauri 命令、Service、Workflow、事件入口
+- 服务层：Electron Desktop Host bridge、App Server JSON-RPC、legacy desktop facade、Service、Workflow、事件入口
 - 存储层：表、DAO、Repository、缓存、迁移
 - 旁路层：统计、记忆、搜索、审计、报表、任务系统
 
@@ -162,14 +164,15 @@ npm run test:contracts
 
 - `governance:legacy-report`
   - 扫描已被判定为 `deprecated` / `dead-candidate` 的前端入口
-  - 检查旧 Tauri 命令是否仍被限制在指定 API 网关
+  - 检查 legacy desktop facade 是否仍被限制在指定 API 网关，且没有重新承接 current 能力
   - 找出已经零引用、可进入删除候选的兼容壳
   - 规则事实源优先看 `src/lib/governance/legacySurfaceCatalog.json`
 - `test:contracts`
   - 检查前端 `safeInvoke(...)` / `invoke(...)` 的实际调用
-  - 检查 Rust `tauri::generate_handler!` 的实际注册
+  - 检查 Electron Host bridge / App Server JSON-RPC / legacy host 的实际注册或协议
   - 检查 `src/lib/governance/agentCommandCatalog.json` 中的命令治理口径
   - 检查 `mockPriorityCommands` 与 `defaultMocks` 是否同步
+  - 检查 mock 是否只停留在测试夹具 / 契约守卫；生产入口不得把 mock 当 fallback
 
 原则只有一句：
 
@@ -211,23 +214,54 @@ npm run test:contracts
 - 旁路系统已经迁完
 - 边界检查与定向验证通过
 
-## Lime 特别关注的三类边界
+## Lime 特别关注的边界
 
-### 1. 命令边界
+### 0. `scripts/` 目录治理
 
-只要改动涉及 Tauri 命令、Bridge、mock、前端 API 网关，至少同时看这几处：
+`scripts/` 根目录是冻结的历史入口区，不再作为新增脚本默认落点。
+
+- `current`：`scripts/lib/` 共享实现、`scripts/<domain>/` 领域脚本、被 `package.json` / CI 明确引用且仍在基线内的根入口脚本
+- `compat`：仍在根目录、但后续需要按领域迁移的历史入口脚本
+- `deprecated`：只服务旧迁移、旧发布或旧宿主证据的脚本，只能下线或并入 current 入口
+- `dead`：已删除脚本、旧产物路径、只允许作为 fail-fast fixture 出现的旧脚本名
+
+新增可执行脚本默认放到 `scripts/<domain>/`、`scripts/lib/` 或所属 package。只有公开稳定入口且无法归入领域子目录时，才允许新增根脚本例外；例外必须同步 `scripts/README.md`、`scripts/script-root-governance-baseline.json` 与执行计划退出条件。
+
+根目录回流守卫：
+
+```bash
+npm run governance:scripts
+```
+
+该守卫用冻结基线拒绝新增 tracked 根脚本；未跟踪根脚本只作为并行工作区警告，不得直接写入基线。
+
+### 1. Electron 打包事实源
+
+Electron packaging / installer / signing / notarization / updater metadata 只能继续向 `forge.config.mjs`、`electron-forge package`、`electron-forge make` 与 Forge 官方 maker 收敛。
+
+- `current`：`forge.config.mjs`、`electron/forge/*`、Forge CLI、release workflow、staging / verifier / docs / contract guards
+- `current`：`electron/updateHost.ts` + Electron 内置 `autoUpdater`，只负责运行时更新检查、下载和安装会话
+- `current`：macOS `MakerDMG` / `MakerZIP` 产物与 `RELEASES.json`，Windows `MakerSquirrel` 产物与 `RELEASES` / `.nupkg` / Setup
+- `dead`：旧 builder 配置 / CLI、自定义 Windows installer maker、旧 YAML / blockmap updater metadata、把旧打包链当 current 的文档或 i18n evidence
+
+发现新引用旧 builder 配置 / CLI、自定义 Windows installer maker、旧 YAML / blockmap updater metadata 时，默认先判为旧路回流，而不是新增 compat。
+
+### 2. 命令边界
+
+只要改动涉及 Electron IPC、App Server JSON-RPC、Bridge、mock、前端 API 网关或 legacy desktop facade，至少同时看这几处：
 
 - 前端 `safeInvoke(...)` / `invoke(...)`
-- Rust `tauri::generate_handler!`
+- Electron Desktop Host bridge / preload 白名单或 App Server JSON-RPC 协议
+- legacy desktop facade 注册（仅在触碰兼容层时）
 - `src/lib/governance/agentCommandCatalog.json`
 - `src/lib/dev-bridge/mockPriorityCommands.ts`
-- `src/lib/tauri-mock/core.ts`
+- `src/lib/desktop-host/` / legacy mock path
 
 命令边界的详细规则，直接看：
 
 - `internal/aiprompts/commands.md`
 
-### 2. 运行时路径边界
+### 3. 运行时路径边界
 
 涉及用户数据、日志、缓存、凭证、workspace、历史目录兼容时，优先收口到统一路径入口，例如 `app_paths` 或等价边界。
 
@@ -239,7 +273,7 @@ npm run test:contracts
 
 路径兼容是边界问题，不应该变成业务层到处散落的字符串问题。
 
-### 3. 数据迁移与语义暴露
+### 4. 数据迁移与语义暴露
 
 一旦历史数据迁移已接入启动流程：
 
@@ -270,7 +304,7 @@ npm run test:contracts
 遇到 Agent / 聊天 / 会话相关新旧并存时，至少问这几个问题：
 
 - 前端唯一入口是不是已经收敛到现役 API 网关
-- 新增服务化能力是不是已经收敛到 App Server JSON-RPC；旧 `agent_runtime_*` 是否只作为 Desktop 兼容适配入口
+- 新增服务化能力是不是已经收敛到 App Server JSON-RPC；旧 `agent_runtime_*` 是否只作为 Desktop 兼容 facade 入口
 - 旧 `chat_*`、`general_chat_*`、历史 helper 是否还在继续长逻辑
 - 命令契约五个事实源之间有没有漂移
 

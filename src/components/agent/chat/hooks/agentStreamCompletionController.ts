@@ -191,6 +191,46 @@ function isProcessBoundaryContentPart(
   );
 }
 
+function completeRunningToolCallOnFinalDone(
+  toolCall: NonNullable<Message["toolCalls"]>[number],
+  completedAt: Date,
+): NonNullable<Message["toolCalls"]>[number] {
+  if (toolCall.status !== "running") {
+    return toolCall;
+  }
+
+  return {
+    ...toolCall,
+    status: "completed",
+    endTime: completedAt,
+    result: toolCall.result ?? {
+      success: true,
+      output: "",
+    },
+  };
+}
+
+function completeRunningToolCallsOnFinalDone(
+  parts: Message["contentParts"],
+  completedAt: Date,
+): Message["contentParts"] {
+  if (!parts) {
+    return parts;
+  }
+
+  return parts.map((part) =>
+    part.type === "tool_use"
+      ? {
+          ...part,
+          toolCall: completeRunningToolCallOnFinalDone(
+            part.toolCall,
+            completedAt,
+          ),
+        }
+      : part,
+  );
+}
+
 export function reconcileAgentStreamFinalContentParts(params: {
   parts: Message["contentParts"];
   finalContent: string;
@@ -381,10 +421,11 @@ export function buildAgentStreamCompletedAssistantMessagePatch(params: {
   rawContent: string;
   surfaceThinkingDeltas: boolean;
   thinkingContent?: string;
+  toolCalls?: Message["toolCalls"];
   usage?: Message["usage"];
 }): Pick<Message, "content" | "contentParts" | "isThinking" | "runtimeStatus"> &
   Partial<Pick<Message, "thinkingContent">> &
-  Partial<Pick<Message, "usage">> {
+  Partial<Pick<Message, "toolCalls" | "usage">> {
   const retainedThinkingContent = params.surfaceThinkingDeltas
     ? params.thinkingContent?.trim() || undefined
     : undefined;
@@ -392,17 +433,24 @@ export function buildAgentStreamCompletedAssistantMessagePatch(params: {
     finalContent: params.finalContent,
     previousContent: params.previousContent,
   });
+  const completedAt = new Date();
 
   return {
     isThinking: false,
     content: finalContent,
     thinkingContent: retainedThinkingContent,
-    contentParts: reconcileAgentStreamFinalContentParts({
-      parts: params.parts,
-      finalContent,
-      rawContent: params.rawContent,
-      surfaceThinkingDeltas: params.surfaceThinkingDeltas,
-    }),
+    contentParts: completeRunningToolCallsOnFinalDone(
+      reconcileAgentStreamFinalContentParts({
+        parts: params.parts,
+        finalContent,
+        rawContent: params.rawContent,
+        surfaceThinkingDeltas: params.surfaceThinkingDeltas,
+      }),
+      completedAt,
+    ),
+    toolCalls: params.toolCalls?.map((toolCall) =>
+      completeRunningToolCallOnFinalDone(toolCall, completedAt),
+    ),
     runtimeStatus: undefined,
     ...(params.usage !== undefined ? { usage: params.usage } : {}),
   };

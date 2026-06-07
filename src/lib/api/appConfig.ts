@@ -1,5 +1,9 @@
 import { safeInvoke } from "@/lib/dev-bridge";
-import type { Config, EnvironmentPreview } from "./appConfigTypes";
+import {
+  CURRENT_SIDEBAR_NAV_SCHEMA_VERSION,
+  type Config,
+  type EnvironmentPreview,
+} from "./appConfigTypes";
 
 const APP_CONFIG_CHANGE_STAMP_KEY = "lime.app-config.changed-at";
 const APP_CONFIG_CHANGED_EVENT = "lime:app-config-changed";
@@ -43,6 +47,24 @@ function cloneConfig(config: Config): Config {
     return structuredClone(config);
   }
   return JSON.parse(JSON.stringify(config)) as Config;
+}
+
+function normalizeConfig(config: Config): Config {
+  const nextConfig = cloneConfig(config);
+  const navigation = nextConfig.navigation;
+
+  if (
+    navigation &&
+    (navigation.schema_version ?? 0) < CURRENT_SIDEBAR_NAV_SCHEMA_VERSION
+  ) {
+    nextConfig.navigation = {
+      ...navigation,
+      schema_version: CURRENT_SIDEBAR_NAV_SCHEMA_VERSION,
+      enabled_items: [],
+    };
+  }
+
+  return nextConfig;
 }
 
 function readAppConfigChangeStamp(): string | null {
@@ -129,7 +151,7 @@ export async function getConfig(
   if (!configLoadingPromise) {
     configLoadingPromise = safeInvoke<Config>("get_config")
       .then((config) => {
-        configCache = cloneConfig(config);
+        configCache = normalizeConfig(config);
         configCacheStamp = readAppConfigChangeStamp();
         return configCache;
       })

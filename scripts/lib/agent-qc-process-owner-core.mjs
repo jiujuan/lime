@@ -1,5 +1,8 @@
 const GUI_OWNER_PATTERNS = [
   "verify:gui-smoke",
+  "smoke:electron",
+  "scripts/electron/smoke.mjs",
+  "electron-smoke.mjs",
   "smoke:workspace-ready",
   "smoke:browser-runtime",
   "smoke:site-adapters",
@@ -13,13 +16,7 @@ const GUI_OWNER_PATTERNS = [
   "release-package-startup-smoke",
 ];
 
-const CARGO_OWNER_PATTERNS = [
-  "cargo ",
-  "cargo-fmt",
-  "rustc ",
-  "clippy-driver",
-  "tauri dev",
-];
+const CARGO_OWNER_PATTERNS = ["cargo ", "cargo-fmt", "rustc ", "clippy-driver"];
 
 const QCLOOP_OWNER_PATTERNS = [
   "qcloop --db",
@@ -51,7 +48,16 @@ const ACTIVE_QCLOOP_WORKER_PATTERNS = [
   "只读执行 lime agent qc p0",
 ];
 
-const PASSIVE_TAURI_RUNTIME_PATTERNS = ["tauri dev"];
+const PASSIVE_ELECTRON_RUNTIME_PATTERNS = [
+  "electron:dev",
+  "run-electron-dev.mjs",
+  "scripts/electron/run-dev.mjs",
+  "node_modules/.bin/electron .",
+  "node_modules/electron/dist/electron .",
+  "node_modules/electron/dist/electron.app/",
+  ".lime/electron-dev-host/lime.app/",
+  ".lime/electron-dev-host/lime-dev.app/",
+];
 
 function parseEtimeSeconds(value) {
   const text = String(value || "").trim();
@@ -80,7 +86,10 @@ function parseEtimeSeconds(value) {
 function sanitizeProcessCommand(command) {
   return String(command || "")
     .replace(/(--api-key(?:=|\s+))(?:"[^"]+"|'[^']+'|\S+)/gi, "$1<redacted>")
-    .replace(/(api[_-]?key(?:=|:|\s+))(?:"[^"]+"|'[^']+'|\S+)/gi, "$1<redacted>")
+    .replace(
+      /(api[_-]?key(?:=|:|\s+))(?:"[^"]+"|'[^']+'|\S+)/gi,
+      "$1<redacted>",
+    )
     .replace(/ctx7sk-[A-Za-z0-9-]+/g, "ctx7sk-***")
     .replace(/sk-[A-Za-z0-9_-]{12,}/g, "sk-***");
 }
@@ -101,8 +110,12 @@ function isPassiveQcloopServer(entry) {
   );
 }
 
-function isPassiveTauriRuntime(entry) {
-  return commandHasAny(entry?.command, PASSIVE_TAURI_RUNTIME_PATTERNS);
+function isPassiveElectronRuntime(entry) {
+  return commandHasAny(entry?.command, PASSIVE_ELECTRON_RUNTIME_PATTERNS);
+}
+
+function isPassiveDesktopRuntime(entry) {
+  return isPassiveElectronRuntime(entry);
 }
 
 function uniqueByPid(entries) {
@@ -132,36 +145,54 @@ function normalizeProcessEntry(entry) {
   };
 }
 
-function createAgentQcProcessOwnerReport(processes, {
-  generatedAt = new Date().toISOString(),
-  platform = process.platform,
-  maxActiveGuiSmoke = 0,
-  maxCargoOrRust = 0,
-  maxQcloopRelated = 0,
-  staleMinutes = 30,
-} = {}) {
+function createAgentQcProcessOwnerReport(
+  processes,
+  {
+    generatedAt = new Date().toISOString(),
+    platform = process.platform,
+    maxActiveGuiSmoke = 0,
+    maxCargoOrRust = 0,
+    maxQcloopRelated = 0,
+    staleMinutes = 30,
+  } = {},
+) {
   const normalizedProcesses = processes
     .map(normalizeProcessEntry)
     .filter((entry) => entry.pid > 0 && entry.command.length > 0);
-  const observerProcesses = uniqueByPid(normalizedProcesses.filter(isObserverProcess));
-  const ownerCandidateProcesses = normalizedProcesses.filter((entry) => !isObserverProcess(entry));
+  const observerProcesses = uniqueByPid(
+    normalizedProcesses.filter(isObserverProcess),
+  );
+  const ownerCandidateProcesses = normalizedProcesses.filter(
+    (entry) => !isObserverProcess(entry),
+  );
   const passiveQcloopServerProcesses = uniqueByPid(
     ownerCandidateProcesses.filter(isPassiveQcloopServer),
   );
-  const passiveTauriRuntimeProcesses = uniqueByPid(
-    ownerCandidateProcesses.filter(isPassiveTauriRuntime),
+  const passiveElectronRuntimeProcesses = uniqueByPid(
+    ownerCandidateProcesses.filter(isPassiveElectronRuntime),
+  );
+  const passiveDesktopRuntimeProcesses = uniqueByPid(
+    ownerCandidateProcesses.filter(isPassiveDesktopRuntime),
   );
   const activeGuiSmokeProcesses = uniqueByPid(
-    ownerCandidateProcesses.filter((entry) => commandHasAny(entry.command, GUI_OWNER_PATTERNS)),
+    ownerCandidateProcesses.filter(
+      (entry) =>
+        commandHasAny(entry.command, GUI_OWNER_PATTERNS) &&
+        !isPassiveDesktopRuntime(entry),
+    ),
   );
   const qcloopProcesses = uniqueByPid(
     ownerCandidateProcesses.filter(
-      (entry) => commandHasAny(entry.command, QCLOOP_OWNER_PATTERNS) && !isPassiveQcloopServer(entry),
+      (entry) =>
+        commandHasAny(entry.command, QCLOOP_OWNER_PATTERNS) &&
+        !isPassiveQcloopServer(entry),
     ),
   );
   const cargoProcesses = uniqueByPid(
     ownerCandidateProcesses.filter(
-      (entry) => commandHasAny(entry.command, CARGO_OWNER_PATTERNS) && !isPassiveTauriRuntime(entry),
+      (entry) =>
+        commandHasAny(entry.command, CARGO_OWNER_PATTERNS) &&
+        !isPassiveDesktopRuntime(entry),
     ),
   );
   const staleThresholdSeconds = Math.max(0, Number(staleMinutes) || 0) * 60;
@@ -177,7 +208,8 @@ function createAgentQcProcessOwnerReport(processes, {
     qcloopRelated: qcloopProcesses.length,
     staleActiveGuiSmoke: staleActiveGuiSmokeProcesses.length,
     passiveQcloopServer: passiveQcloopServerProcesses.length,
-    passiveTauriRuntime: passiveTauriRuntimeProcesses.length,
+    passiveElectronRuntime: passiveElectronRuntimeProcesses.length,
+    passiveDesktopRuntime: passiveDesktopRuntimeProcesses.length,
     observer: observerProcesses.length,
   };
   const busy =
@@ -195,7 +227,7 @@ function createAgentQcProcessOwnerReport(processes, {
     staleMinutes,
     verdict: {
       status: busy ? "busy" : "pass",
-      summary: `activeGuiSmoke=${counts.activeGuiSmoke}, cargoOrRust=${counts.cargoOrRust}, qcloopRelated=${counts.qcloopRelated}, staleActiveGuiSmoke=${counts.staleActiveGuiSmoke}, passiveQcloopServer=${counts.passiveQcloopServer}, passiveTauriRuntime=${counts.passiveTauriRuntime}, observer=${counts.observer}`,
+      summary: `activeGuiSmoke=${counts.activeGuiSmoke}, cargoOrRust=${counts.cargoOrRust}, qcloopRelated=${counts.qcloopRelated}, staleActiveGuiSmoke=${counts.staleActiveGuiSmoke}, passiveQcloopServer=${counts.passiveQcloopServer}, passiveElectronRuntime=${counts.passiveElectronRuntime}, passiveDesktopRuntime=${counts.passiveDesktopRuntime}, observer=${counts.observer}`,
       nextAction: busy
         ? "Do not start full verify:local or another GUI P0 batch while these owners are active; continue read-only observation or wait for natural completion."
         : "No active raw GUI smoke, Cargo/Rust, or qcloop owner was observed; heavy gates may run if qcloop GUI owner and release evidence gates are also clear.",
@@ -219,14 +251,17 @@ function createAgentQcProcessOwnerReport(processes, {
           processIds: [],
           requiredConfirmationText: "",
           prohibitedUntilConfirmed: [],
-          nextAction: busy ? "等待 active owner 自然释放。" : "无需 stale raw owner 处置。",
+          nextAction: busy
+            ? "等待 active owner 自然释放。"
+            : "无需 stale raw owner 处置。",
         },
     activeGuiSmokeProcesses,
     qcloopProcesses,
     cargoProcesses,
     staleActiveGuiSmokeProcesses,
     passiveQcloopServerProcesses,
-    passiveTauriRuntimeProcesses,
+    passiveElectronRuntimeProcesses,
+    passiveDesktopRuntimeProcesses,
     observerProcesses,
     guardrails: [
       "best-effort process snapshot only",

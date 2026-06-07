@@ -19,7 +19,7 @@ src/hooks/
 ## 治理约束
 
 - 新的前端能力优先落在 `src/lib/api/*`，再由 Hook 或组件消费。
-- 历史 `useTauri.ts` 兼容聚合层已删除，不要重新引入新的“大一统 API Hook”。
+- 历史桌面宿主兼容聚合层已删除，不要重新引入新的“大一统 API Hook”。
 - Agent 工作台统一走 `src/components/agent/chat/hooks/index.ts` 暴露的 `useAgentChatUnified`，底层实现委托 `useAsterAgentChat`。
 - 历史 `@/hooks/useUnifiedChat` 与 `src/lib/api/unified-chat.ts` 已删除，不要重建 compat Hook / API。
 - 凭证池 Hook `useProviderPool` 已删除；Provider 配置只允许走 API Key Provider / configured providers 主路径。
@@ -31,7 +31,7 @@ src/hooks/
 现役 Agent / Codex 工作台事实源：
 
 - `useAgentChatUnified -> useAsterAgentChat -> useAgentContext / useAgentSession / useAgentTools / useAgentStream`
-- 命令主链：`agent_runtime_submit_turn -> runtime items(plan / runtime_status / artifact / tool / action) -> action_required -> respond_action`
+- 命令主链：`agentSession/turn/start -> agentSession/event -> runtime items(plan / runtime_status / artifact / tool / action) -> action_required -> agentSession/action/respond`
 - 适用场景：Agent 工作台、任务执行、工具审批、timeline 渲染
 
 **相关文件**：
@@ -113,4 +113,4 @@ return {
 ## 相关文档
 
 - [components.md](components.md) - 组件系统
-- [commands.md](commands.md) - Tauri 命令
+- [commands.md](commands.md) - Desktop Host / App Server 命令边界

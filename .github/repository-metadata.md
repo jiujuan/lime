@@ -26,7 +26,7 @@ https://github.com/limecloud/lime
 ai
 llm
 desktop-app
-tauri
+electron
 react
 typescript
 content-creation

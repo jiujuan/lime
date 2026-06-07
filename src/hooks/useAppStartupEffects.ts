@@ -3,13 +3,12 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { getWindowsStartupDiagnostics } from "@/lib/api/serverRuntime";
 import { ensureDefaultWorkspaceReady } from "@/lib/api/project";
-import { showRegistryLoadError } from "@/lib/utils/connectError";
 import { recordWorkspaceRepair } from "@/lib/workspaceHealthTelemetry";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import type { Page } from "@/types/page";
 
-function isTauriDesktopEnvironment(): boolean {
-  return hasTauriInvokeCapability();
+function isDesktopHostEnvironment(): boolean {
+  return hasDesktopHostInvokeCapability();
 }
 
 function isWindowsNavigatorPlatform(): boolean {
@@ -24,24 +23,15 @@ function isWindowsNavigatorPlatform(): boolean {
 
 interface UseAppStartupEffectsOptions {
   currentPage: Page;
-  registryError: { message: string } | null;
 }
 
 export function useAppStartupEffects({
   currentPage,
-  registryError,
 }: UseAppStartupEffectsOptions): void {
   const { t } = useTranslation("common");
 
   useEffect(() => {
-    if (registryError) {
-      console.warn("[App] Registry 加载失败:", registryError);
-      showRegistryLoadError(registryError.message);
-    }
-  }, [registryError]);
-
-  useEffect(() => {
-    if (!isTauriDesktopEnvironment() || !isWindowsNavigatorPlatform()) {
+    if (!isDesktopHostEnvironment() || !isWindowsNavigatorPlatform()) {
       return;
     }
 
@@ -72,7 +62,7 @@ export function useAppStartupEffects({
   }, [t]);
 
   useEffect(() => {
-    if (!isTauriDesktopEnvironment()) {
+    if (!isDesktopHostEnvironment()) {
       return;
     }
 

@@ -1,3 +1,8 @@
+import {
+  AppServerClient,
+  type AppServerFileSystemDirectoryListing,
+  type AppServerFileSystemFilePreview,
+} from "@/lib/api/appServer";
 import { safeInvoke } from "@/lib/dev-bridge";
 
 export interface FileEntry {
@@ -44,8 +49,38 @@ export interface FileManagerLocation {
     | string;
 }
 
+export type FileBrowserAppServerClient = Pick<
+  AppServerClient,
+  "listDirectory" | "readFilePreview"
+>;
+
+function createFileBrowserAppServerClient(): FileBrowserAppServerClient {
+  return new AppServerClient();
+}
+
+function normalizeDirectoryListing(
+  listing: AppServerFileSystemDirectoryListing,
+): DirectoryListing {
+  return {
+    ...listing,
+    entries: listing.entries.map((entry) => ({
+      ...entry,
+      iconDataUrl: entry.iconDataUrl ?? null,
+    })),
+  };
+}
+
+function normalizeFilePreview(
+  preview: AppServerFileSystemFilePreview,
+): FilePreview {
+  return preview;
+}
+
 export async function listDirectory(path: string): Promise<DirectoryListing> {
-  return safeInvoke<DirectoryListing>("list_dir", { path });
+  const response = await createFileBrowserAppServerClient().listDirectory({
+    path,
+  });
+  return normalizeDirectoryListing(response.result);
 }
 
 export async function getFileManagerLocations(): Promise<
@@ -62,7 +97,11 @@ export async function readFilePreview(
   path: string,
   maxSize: number,
 ): Promise<FilePreview> {
-  return safeInvoke<FilePreview>("read_file_preview_cmd", { path, maxSize });
+  const response = await createFileBrowserAppServerClient().readFilePreview({
+    path,
+    maxSize,
+  });
+  return normalizeFilePreview(response.result);
 }
 
 export async function createFileAtPath(path: string): Promise<void> {

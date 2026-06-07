@@ -96,14 +96,14 @@ lime doctor
 1. 先构建对应目标平台的 `lime-cli`：
 
 ```bash
-cargo build --manifest-path "../../src-tauri/Cargo.toml" -p lime-cli --release
+cargo build --manifest-path "../../lime-rs/Cargo.toml" -p lime-cli --release
 ```
 
 2. 生成和 npm wrapper 约定一致的 release asset：
 
 ```bash
 npm run build:release -- \
-  --binary "../../src-tauri/target/release/lime" \
+  --binary "../../lime-rs/target/release/lime" \
   --out-dir "./dist"
 ```
 

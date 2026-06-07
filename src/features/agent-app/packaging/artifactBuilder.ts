@@ -2,20 +2,18 @@ import type {
   AgentAppStandaloneReleaseGate,
   AgentAppStandaloneReleasePlan,
 } from "./releasePlan";
-import { buildStandaloneTauriConfigWritePlan } from "./tauriConfigWritePlan";
-import type { AgentAppStandaloneTauriConfigMaterializerResult } from "./tauriConfigMaterializer";
-import type { AgentAppStandaloneTauriConfigWritePlan } from "./tauriConfigWritePlan";
+import { buildStandaloneNativeShellConfigWritePlan } from "./nativeShellConfigWritePlan";
+import type { AgentAppStandaloneNativeShellConfigMaterializerResult } from "./nativeShellConfigMaterializer";
+import type { AgentAppStandaloneNativeShellConfigWritePlan } from "./nativeShellConfigWritePlan";
 
 export type AgentAppProductionArtifactAdapterKind =
   | "app_bundle_builder"
+  | "electron_artifact_builder"
   | "macos_application_signer"
   | "macos_dmg_builder"
-  | "macos_installer_signer"
   | "macos_notarization_submitter"
-  | "macos_pkg_builder"
+  | "native_shell_config_writer"
   | "rollback_manifest_writer"
-  | "tauri_build_runner"
-  | "tauri_config_writer"
   | "updater_manifest_writer"
   | "windows_installer_builder"
   | "windows_signer";
@@ -24,8 +22,8 @@ export type AgentAppStandaloneArtifactBuildBlocker =
   | AgentAppStandaloneReleaseGate
   | {
       code:
-        | "TAURI_CONFIG_MATERIALIZATION_BLOCKED"
-        | "TAURI_CONFIG_WRITE_PLAN_BLOCKED";
+        | "NATIVE_SHELL_CONFIG_MATERIALIZATION_BLOCKED"
+        | "NATIVE_SHELL_CONFIG_WRITE_PLAN_BLOCKED";
       message: string;
       severity: "blocker";
       details?: unknown;
@@ -34,26 +32,26 @@ export type AgentAppStandaloneArtifactBuildBlocker =
 export interface AgentAppStandaloneArtifactBuildInput {
   releasePlan: AgentAppStandaloneReleasePlan;
   outputDirectory: string;
-  tauriConfig?: {
-    materializerResult: AgentAppStandaloneTauriConfigMaterializerResult;
+  nativeShellConfig?: {
+    materializerResult: AgentAppStandaloneNativeShellConfigMaterializerResult;
     configOutputPath: string;
     envOutputPath: string;
   };
 }
 
-type AgentAppStandaloneTauriRuntimeEnv = Extract<
-  AgentAppStandaloneTauriConfigMaterializerResult,
+type AgentAppStandaloneNativeShellRuntimeEnv = Extract<
+  AgentAppStandaloneNativeShellConfigMaterializerResult,
   { status: "ready" }
 >["runtimeEnv"];
 
-export type AgentAppStandaloneTauriConfigBuildStep =
+export type AgentAppStandaloneNativeShellConfigBuildStep =
   | {
       status: "ready";
       configOutputPath: string;
       envOutputPath: string;
-      runtimeEnv: AgentAppStandaloneTauriRuntimeEnv;
+      runtimeEnv: AgentAppStandaloneNativeShellRuntimeEnv;
       writePlan: Extract<
-        AgentAppStandaloneTauriConfigWritePlan,
+        AgentAppStandaloneNativeShellConfigWritePlan,
         { status: "ready" }
       >;
     }
@@ -73,7 +71,7 @@ export interface AgentAppStandaloneArtifactBuildPlan {
   readyToBuild: false;
   requiredAdapters: AgentAppProductionArtifactAdapterKind[];
   blockers: AgentAppStandaloneArtifactBuildBlocker[];
-  tauriConfig: AgentAppStandaloneTauriConfigBuildStep;
+  nativeShellConfig: AgentAppStandaloneNativeShellConfigBuildStep;
   artifactRefs: [];
 }
 
@@ -87,17 +85,14 @@ function requiredAdaptersForReleasePlan(
   releasePlan: AgentAppStandaloneReleasePlan,
 ): AgentAppProductionArtifactAdapterKind[] {
   const adapters: AgentAppProductionArtifactAdapterKind[] = [
-    "tauri_config_writer",
-    "tauri_build_runner",
+    "native_shell_config_writer",
+    "electron_artifact_builder",
   ];
   const target = releasePlan.target;
   if (target.platform === "macos") {
     adapters.push("app_bundle_builder", "macos_application_signer");
     if (target.packageFormat === "dmg") {
       adapters.push("macos_dmg_builder");
-    }
-    if (target.packageFormat === "pkg") {
-      adapters.push("macos_pkg_builder", "macos_installer_signer");
     }
     adapters.push("macos_notarization_submitter");
   } else if (target.platform === "windows") {
@@ -112,39 +107,39 @@ function requiredAdaptersForReleasePlan(
   return [...new Set(adapters)];
 }
 
-function buildTauriConfigStep(input: AgentAppStandaloneArtifactBuildInput): {
-  step: AgentAppStandaloneTauriConfigBuildStep;
+function buildNativeShellConfigStep(input: AgentAppStandaloneArtifactBuildInput): {
+  step: AgentAppStandaloneNativeShellConfigBuildStep;
   blocker?: AgentAppStandaloneArtifactBuildBlocker;
 } {
-  const tauriConfigInput = input.tauriConfig;
-  const materializerResult = tauriConfigInput?.materializerResult;
+  const nativeShellConfigInput = input.nativeShellConfig;
+  const materializerResult = nativeShellConfigInput?.materializerResult;
   if (
-    !tauriConfigInput ||
+    !nativeShellConfigInput ||
     !materializerResult ||
     materializerResult.status !== "ready"
   ) {
     const blockerCodes = materializerResult?.blockers.map(
       (blocker) => blocker.code,
-    ) ?? ["TAURI_CONFIG_MATERIALIZER_MISSING"];
+    ) ?? ["NATIVE_SHELL_CONFIG_MATERIALIZER_MISSING"];
     return {
       step: {
         status: "blocked",
         blockerCodes,
       },
       blocker: {
-        code: "TAURI_CONFIG_MATERIALIZATION_BLOCKED",
+        code: "NATIVE_SHELL_CONFIG_MATERIALIZATION_BLOCKED",
         message:
-          "Standalone production artifact build requires a ready materialized Tauri config.",
+          "Standalone production artifact build requires a ready materialized native shell config.",
         severity: "blocker",
         details: materializerResult?.blockers ?? blockerCodes,
       },
     };
   }
 
-  const writePlan = buildStandaloneTauriConfigWritePlan({
+  const writePlan = buildStandaloneNativeShellConfigWritePlan({
     materializerResult,
-    configOutputPath: tauriConfigInput.configOutputPath,
-    envOutputPath: tauriConfigInput.envOutputPath,
+    configOutputPath: nativeShellConfigInput.configOutputPath,
+    envOutputPath: nativeShellConfigInput.envOutputPath,
   });
   if (writePlan.status !== "ready") {
     return {
@@ -153,9 +148,9 @@ function buildTauriConfigStep(input: AgentAppStandaloneArtifactBuildInput): {
         blockerCodes: writePlan.blockers.map((blocker) => blocker.code),
       },
       blocker: {
-        code: "TAURI_CONFIG_WRITE_PLAN_BLOCKED",
+        code: "NATIVE_SHELL_CONFIG_WRITE_PLAN_BLOCKED",
         message:
-          "Standalone production artifact build requires a deterministic Tauri config write plan.",
+          "Standalone production artifact build requires a deterministic native shell config write plan.",
         severity: "blocker",
         details: writePlan.blockers,
       },
@@ -165,8 +160,8 @@ function buildTauriConfigStep(input: AgentAppStandaloneArtifactBuildInput): {
   return {
     step: {
       status: "ready",
-      configOutputPath: tauriConfigInput.configOutputPath,
-      envOutputPath: tauriConfigInput.envOutputPath,
+      configOutputPath: nativeShellConfigInput.configOutputPath,
+      envOutputPath: nativeShellConfigInput.envOutputPath,
       runtimeEnv: materializerResult.runtimeEnv,
       writePlan,
     },
@@ -177,12 +172,12 @@ export function buildStandaloneArtifactBuildPlan(
   input: AgentAppStandaloneArtifactBuildInput,
 ): AgentAppStandaloneArtifactBuildPlan {
   const { releasePlan } = input;
-  const tauriConfig = buildTauriConfigStep(input);
+  const nativeShellConfig = buildNativeShellConfigStep(input);
   const blockers: AgentAppStandaloneArtifactBuildBlocker[] = [
     ...releasePlan.blockers,
   ];
-  if (tauriConfig.blocker) {
-    blockers.push(tauriConfig.blocker);
+  if (nativeShellConfig.blocker) {
+    blockers.push(nativeShellConfig.blocker);
   }
   return {
     schemaVersion: 1,
@@ -195,7 +190,7 @@ export function buildStandaloneArtifactBuildPlan(
     readyToBuild: false,
     requiredAdapters: requiredAdaptersForReleasePlan(releasePlan),
     blockers,
-    tauriConfig: tauriConfig.step,
+    nativeShellConfig: nativeShellConfig.step,
     artifactRefs: [],
   };
 }

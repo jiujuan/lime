@@ -1,7 +1,15 @@
-import { mapQCLoopItemStatus, parseScenarioId } from "./agent-qc-evidence-core.mjs";
+import {
+  mapQCLoopItemStatus,
+  parseScenarioId,
+} from "./agent-qc-evidence-core.mjs";
 
 const TERMINAL_ITEM_STATUSES = new Set(["success", "failed", "exhausted"]);
-const TERMINAL_JOB_STATUSES = new Set(["completed", "failed", "canceled", "cancelled"]);
+const TERMINAL_JOB_STATUSES = new Set([
+  "completed",
+  "failed",
+  "canceled",
+  "cancelled",
+]);
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -47,7 +55,9 @@ function durationSeconds(startedAt, finishedAt, nowMs) {
 
 function latestEntry(entries) {
   const normalizedEntries = asArray(entries).filter(Boolean);
-  return normalizedEntries.length > 0 ? normalizedEntries[normalizedEntries.length - 1] : null;
+  return normalizedEntries.length > 0
+    ? normalizedEntries[normalizedEntries.length - 1]
+    : null;
 }
 
 function summarizeLatestWorker(item, nowMs) {
@@ -73,8 +83,16 @@ function summarizeLatestWorker(item, nowMs) {
     exitCode: latestAttempt.exit_code ?? null,
     startedAt: latestAttempt.started_at ?? null,
     finishedAt: latestAttempt.finished_at ?? null,
-    durationMinutes: durationMinutes(latestAttempt.started_at, latestAttempt.finished_at, nowMs),
-    durationSeconds: durationSeconds(latestAttempt.started_at, latestAttempt.finished_at, nowMs),
+    durationMinutes: durationMinutes(
+      latestAttempt.started_at,
+      latestAttempt.finished_at,
+      nowMs,
+    ),
+    durationSeconds: durationSeconds(
+      latestAttempt.started_at,
+      latestAttempt.finished_at,
+      nowMs,
+    ),
     stdoutLength,
     stderrLength,
     outputLength: stdoutLength + stderrLength,
@@ -110,8 +128,14 @@ function classifyItemStaleness(item, worker, { staleMinutes = 30 } = {}) {
     reasons.push("running item 缺少 worker started_at，无法判断进度");
   }
 
-  if (worker.durationMinutes !== null && worker.durationMinutes >= staleMinutes && worker.outputLength === 0) {
-    reasons.push(`worker 运行 ${worker.durationMinutes} 分钟且 stdout/stderr 为空`);
+  if (
+    worker.durationMinutes !== null &&
+    worker.durationMinutes >= staleMinutes &&
+    worker.outputLength === 0
+  ) {
+    reasons.push(
+      `worker 运行 ${worker.durationMinutes} 分钟且 stdout/stderr 为空`,
+    );
   }
 
   return {
@@ -180,48 +204,72 @@ function countByStatus(items) {
 
 function buildVerdict(job, items, counts) {
   const jobStatus = normalizeStatus(job?.status);
-  const terminalProblemItems = items.filter((item) => item.qcloopStatus === "failed" || item.qcloopStatus === "exhausted");
-  const terminalBlockedItems = terminalProblemItems.filter((item) => item.evidenceStatus === "blocked");
-  const terminalFailedItems = terminalProblemItems.filter((item) => item.evidenceStatus === "fail");
+  const terminalProblemItems = items.filter(
+    (item) =>
+      item.qcloopStatus === "failed" || item.qcloopStatus === "exhausted",
+  );
+  const terminalBlockedItems = terminalProblemItems.filter(
+    (item) => item.evidenceStatus === "blocked",
+  );
+  const terminalFailedItems = terminalProblemItems.filter(
+    (item) => item.evidenceStatus === "fail",
+  );
   if (counts.stale > 0) {
     return {
       status: "stale",
       summary: `qcloop job ${job?.id || "unknown"} 仍在运行，${counts.stale} 个 item 疑似无进度。`,
-      nextAction: "不要中断进程；先导出 sidecar、记录卡点，等当前 worker 结束后再提交修正后的重跑 payload。",
+      nextAction:
+        "不要中断进程；先导出 sidecar、记录卡点，等当前 worker 结束后再提交修正后的重跑 payload。",
     };
   }
-  if (counts.running > 0 || counts.pending > 0 || !TERMINAL_JOB_STATUSES.has(jobStatus)) {
+  if (
+    counts.running > 0 ||
+    counts.pending > 0 ||
+    !TERMINAL_JOB_STATUSES.has(jobStatus)
+  ) {
     return {
       status: "running",
       summary: `qcloop job ${job?.id || "unknown"} 尚未进入终态，running=${counts.running} pending=${counts.pending}。`,
-      nextAction: "继续观察 job/items；如果需要证据，只导出 sidecar，不覆盖官方 Evidence Pack。",
+      nextAction:
+        "继续观察 job/items；如果需要证据，只导出 sidecar，不覆盖官方 Evidence Pack。",
     };
   }
-  if (terminalFailedItems.length > 0 || (jobStatus === "failed" && terminalBlockedItems.length === 0)) {
+  if (
+    terminalFailedItems.length > 0 ||
+    (jobStatus === "failed" && terminalBlockedItems.length === 0)
+  ) {
     return {
       status: "fail",
       summary: `qcloop job ${job?.id || "unknown"} 已终止但仍有 failed/exhausted item。`,
-      nextAction: "修复失败项或补足 verifier 可审查证据后，发起新的 qcloop 批次。",
+      nextAction:
+        "修复失败项或补足 verifier 可审查证据后，发起新的 qcloop 批次。",
     };
   }
   if (terminalBlockedItems.length > 0) {
     return {
       status: "blocked",
       summary: `qcloop job ${job?.id || "unknown"} 已终止但 ${terminalBlockedItems.length} 个 item 明确报告 worker 环境阻断。`,
-      nextAction: "先修复 qcloop worker 环境或权限，再用新批次重跑被阻断场景；不要覆盖官方 Evidence Pack。",
+      nextAction:
+        "先修复 qcloop worker 环境或权限，再用新批次重跑被阻断场景；不要覆盖官方 Evidence Pack。",
     };
   }
-  if (items.length > 0 && counts.success === items.length && jobStatus === "completed") {
+  if (
+    items.length > 0 &&
+    counts.success === items.length &&
+    jobStatus === "completed"
+  ) {
     return {
       status: "complete",
       summary: `qcloop job ${job?.id || "unknown"} 已完成，全部 item success。`,
-      nextAction: "可导出官方 Evidence Pack，并运行 release summary 与 completion audit。",
+      nextAction:
+        "可导出官方 Evidence Pack，并运行 release summary 与 completion audit。",
     };
   }
   return {
     status: "needs-human-review",
     summary: `qcloop job ${job?.id || "unknown"} 状态无法自动归类。`,
-    nextAction: "人工审查 qcloop job/items 原始 JSON，再决定是否重跑或补 exporter 规则。",
+    nextAction:
+      "人工审查 qcloop job/items 原始 JSON，再决定是否重跑或补 exporter 规则。",
   };
 }
 
@@ -229,7 +277,9 @@ function buildQCLoopStatusReport({ job, items, options = {} }) {
   const generatedAt = options.generatedAt || new Date().toISOString();
   const nowMs = parseTimestampMs(generatedAt) ?? Date.now();
   const parsedStaleMinutes = Number(options.staleMinutes ?? 30);
-  const staleMinutes = Number.isFinite(parsedStaleMinutes) ? parsedStaleMinutes : 30;
+  const staleMinutes = Number.isFinite(parsedStaleMinutes)
+    ? parsedStaleMinutes
+    : 30;
   const itemSummaries = asArray(items).map((item) =>
     summarizeItem(item, {
       nowMs,

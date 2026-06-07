@@ -42,6 +42,7 @@ describe("imageGeneration", () => {
   it("应按项目配置优先匹配指定 Provider", () => {
     expect(findImageProviderById(providers, "doubao-image")?.name).toBe("即梦");
     expect(findImageProviderById(providers, "missing-provider")).toBeNull();
+    expect(findImageProviderById(undefined, "doubao-image")).toBeNull();
   });
 
   it("应按预设模型偏好自动选择 Provider", () => {
@@ -52,6 +53,7 @@ describe("imageGeneration", () => {
       "doubao-image",
     );
     expect(findImageProviderForSelection(providers, "kling")?.id).toBe("kling");
+    expect(findImageProviderForSelection(undefined, "basic")).toBeNull();
   });
 
   it("应按预设模型偏好自动选择模型", () => {

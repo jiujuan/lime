@@ -20,70 +20,22 @@ if (!process.env.VITE_APP_VERSION && cargoWorkspaceVersion) {
   process.env.VITE_APP_VERSION = cargoWorkspaceVersion;
 }
 
-// 获取 Tauri mock 目录路径
-const tauriMockDir = path.resolve(__dirname, "./src/lib/tauri-mock");
-const sharedTauriOptimizeDepsExclude = ["@tauri-apps/plugin-deep-link"];
-
 function isTruthyEnv(value: string | undefined): boolean {
   return /^(1|true|yes|on)$/i.test(String(value || "").trim());
 }
 
-export default defineConfig(({ mode }) => {
-  const browserBridgeFlag =
-    process.env.LIME_BROWSER_BRIDGE ?? process.env.PROXYCAST_BROWSER_BRIDGE;
+export default defineConfig(({ command, mode }) => {
   const forceOptimizeDeps =
     process.env.LIME_VITE_FORCE_OPTIMIZE_DEPS?.trim() === "1";
-  // 检查是否在 Tauri 环境中运行（通过环境变量判断）
-  const isTauri =
-    process.env.TAURI_ENV_PLATFORM !== undefined && browserBridgeFlag !== "1";
-  // 避免 Tauri/非 Tauri 共享同一份 optimize deps 缓存导致 chunk 丢失
-  const cacheDir = isTauri
-    ? "node_modules/.vite-tauri"
+  const isElectronRenderer =
+    process.env.LIME_ELECTRON_RENDERER?.trim() === "1" ||
+    process.env.VITE_DEV_SERVER_URL !== undefined;
+  const cacheDir = isElectronRenderer
+    ? "node_modules/.vite-electron"
     : "node_modules/.vite-web";
 
-  // 只在非 Tauri 环境（纯浏览器开发）下使用 mock
-  const tauriAliases = isTauri
-    ? []
-    : [
-        {
-          find: /^@tauri-apps\/api\/core$/,
-          replacement: path.resolve(tauriMockDir, "core.ts"),
-        },
-        {
-          find: /^@tauri-apps\/api\/event$/,
-          replacement: path.resolve(tauriMockDir, "event.ts"),
-        },
-        {
-          find: /^@tauri-apps\/api\/window$/,
-          replacement: path.resolve(tauriMockDir, "window.ts"),
-        },
-        {
-          find: /^@tauri-apps\/api\/app$/,
-          replacement: path.resolve(tauriMockDir, "window.ts"),
-        },
-        {
-          find: /^@tauri-apps\/api\/path$/,
-          replacement: path.resolve(tauriMockDir, "window.ts"),
-        },
-        {
-          find: /^@tauri-apps\/plugin-dialog$/,
-          replacement: path.resolve(tauriMockDir, "plugin-dialog.ts"),
-        },
-        {
-          find: /^@tauri-apps\/plugin-shell$/,
-          replacement: path.resolve(tauriMockDir, "plugin-shell.ts"),
-        },
-        {
-          find: /^@tauri-apps\/plugin-deep-link$/,
-          replacement: path.resolve(tauriMockDir, "plugin-deep-link.ts"),
-        },
-        {
-          find: /^@tauri-apps\/plugin-global-shortcut$/,
-          replacement: path.resolve(tauriMockDir, "plugin-global-shortcut.ts"),
-        },
-      ];
-
   return {
+    base: command === "build" && isElectronRenderer ? "./" : undefined,
     cacheDir,
     define: {
       "import.meta.env.VITE_APP_VERSION": JSON.stringify(appVersion),
@@ -104,22 +56,10 @@ export default defineConfig(({ mode }) => {
           find: "@",
           replacement: path.resolve(__dirname, "./src"),
         },
-        ...tauriAliases,
       ],
     },
     optimizeDeps: {
-      // 仅在显式要求时强制重建依赖预构建，避免 Tauri 冷启动长期卡在入口模块首个请求。
       force: forceOptimizeDeps,
-      // deep-link 在 Tauri 模式下会命中本地 event shim，交给 Vite 常规模块解析更稳
-      exclude: isTauri
-        ? sharedTauriOptimizeDepsExclude
-        : [
-            "@tauri-apps/api",
-            "@tauri-apps/plugin-dialog",
-            "@tauri-apps/plugin-shell",
-            "@tauri-apps/plugin-global-shortcut",
-            ...sharedTauriOptimizeDepsExclude,
-          ],
     },
     build: {
       chunkSizeWarningLimit: 12000,
@@ -143,7 +83,7 @@ export default defineConfig(({ mode }) => {
       port: 1420,
       strictPort: true,
       watch: {
-        ignored: ["**/src-tauri/**"],
+        ignored: ["**/lime-rs/**"],
       },
     },
     test: {
@@ -154,7 +94,7 @@ export default defineConfig(({ mode }) => {
         "**/node_modules/**",
         "**/tmp/lime-pnpm-frozen-node_modules/**",
         "**/dist/**",
-        "**/src-tauri/target/**",
+        "**/lime-rs/target/**",
         ...(liveProviderSmokeAllowed ? [] : ["**/*.live.test.*"]),
       ],
     },

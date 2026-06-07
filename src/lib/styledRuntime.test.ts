@@ -1,35 +1,35 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriInvokeCapability: vi.fn(() => false),
-  hasTauriRuntimeMarkers: vi.fn(() => false),
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostInvokeCapability: vi.fn(() => false),
+  hasDesktopHostRuntimeMarkers: vi.fn(() => false),
 }));
 
 import {
-  hasTauriInvokeCapability,
-  hasTauriRuntimeMarkers,
-} from "@/lib/tauri-runtime";
+  hasDesktopHostInvokeCapability,
+  hasDesktopHostRuntimeMarkers,
+} from "@/lib/desktop-runtime";
 import { shouldDisableStyledCssomInjection } from "./styledRuntime";
 
 describe("shouldDisableStyledCssomInjection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(false);
-    vi.mocked(hasTauriRuntimeMarkers).mockReturnValue(false);
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(false);
+    vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(false);
   });
 
   it("浏览器模式下应保持 CSSOM 注入开启", () => {
     expect(shouldDisableStyledCssomInjection()).toBe(false);
   });
 
-  it("检测到 Tauri runtime marker 时应关闭 CSSOM 注入", () => {
-    vi.mocked(hasTauriRuntimeMarkers).mockReturnValue(true);
+  it("检测到 Desktop Host runtime marker 时应关闭 CSSOM 注入", () => {
+    vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(true);
 
     expect(shouldDisableStyledCssomInjection()).toBe(true);
   });
 
-  it("检测到 Tauri invoke 能力时应关闭 CSSOM 注入", () => {
-    vi.mocked(hasTauriInvokeCapability).mockReturnValue(true);
+  it("检测到 Desktop Host invoke 能力时应关闭 CSSOM 注入", () => {
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(true);
 
     expect(shouldDisableStyledCssomInjection()).toBe(true);
   });

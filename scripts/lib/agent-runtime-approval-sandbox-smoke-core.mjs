@@ -112,8 +112,7 @@ function createTranscriptSteps() {
           "[AsterChat] 首个运行时事件暂未到达，已基于提交派发继续等待后续进度: event-a",
           "[AsterChat] 运行时事件静默，已降级切换为会话快照同步: event-a",
         ],
-        failureMessage:
-          "执行已中断：运行时长时间没有返回新进度，请重试。",
+        failureMessage: "执行已中断：运行时长时间没有返回新进度，请重试。",
       },
       sourceRefs: [
         "src/components/agent/chat/hooks/agentStreamInactivityController.test.ts:1",
@@ -193,11 +192,11 @@ function liveRuntimeTranscriptSatisfiesReleaseGate(liveRuntimeTranscript) {
   const assertions = liveRuntimeTranscript?.assertions;
   return Boolean(
     assertions?.devBridgeHealthy &&
-      assertions?.permissionRequestCreatedBeforeModel &&
-      assertions?.deniedDecisionClearsPendingRequest &&
-      assertions?.resolvedDecisionClearsPendingRequest &&
-      assertions?.approvalPolicySubmitted &&
-      assertions?.sandboxPolicySubmitted,
+    assertions?.permissionRequestCreatedBeforeModel &&
+    assertions?.deniedDecisionClearsPendingRequest &&
+    assertions?.resolvedDecisionClearsPendingRequest &&
+    assertions?.approvalPolicySubmitted &&
+    assertions?.sandboxPolicySubmitted,
   );
 }
 
@@ -207,12 +206,12 @@ function devBridgeDeniedRuntimeTranscriptSatisfiesGate(
   const assertions = devBridgeDeniedRuntimeTranscript?.assertions;
   return Boolean(
     assertions?.devBridgeHealthy &&
-      assertions?.permissionRequestCreatedBeforeModel &&
-      assertions?.deniedDecisionClearsPendingRequest &&
-      assertions?.approvalPolicySubmitted &&
-      assertions?.sandboxPolicySubmitted &&
-      assertions?.reactRuntimeSubmitted &&
-      assertions?.providerNotRequired,
+    assertions?.permissionRequestCreatedBeforeModel &&
+    assertions?.deniedDecisionClearsPendingRequest &&
+    assertions?.approvalPolicySubmitted &&
+    assertions?.sandboxPolicySubmitted &&
+    assertions?.reactRuntimeSubmitted &&
+    assertions?.providerNotRequired,
   );
 }
 
@@ -258,7 +257,8 @@ function buildApprovalSandboxSmokeEvidence({
       permissionRecoveryUi: true,
       harnessPermissionInventory: true,
       runtimeTranscriptSummary: true,
-      devBridgeDeniedRuntimeTranscript: devBridgeDeniedRuntimeTranscriptVerified,
+      devBridgeDeniedRuntimeTranscript:
+        devBridgeDeniedRuntimeTranscriptVerified,
       liveRuntimeTranscript: liveRuntimeTranscriptVerified,
     },
     devBridgeDeniedRuntimeTranscript,

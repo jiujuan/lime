@@ -346,4 +346,37 @@ describe("WorkspaceConversationScene", () => {
       }),
     );
   });
+
+  it("inline 输入区应留在聊天 flex 栈内，避免矮窗口被父级 overflow 裁切", () => {
+    const container = renderScene({
+      contextWorkspaceEnabled: false,
+      shouldHideGeneralWorkbenchInputForTheme: false,
+      showFloatingInputOverlay: false,
+      inputbarNode: (
+        <textarea
+          data-testid="workspace-inline-inputbar"
+          defaultValue="整理今天的国际新闻"
+        />
+      ),
+    });
+
+    const messageList = container.querySelector(
+      '[data-testid="message-list-stub"]',
+    );
+    const inputSlot = container.querySelector(
+      '[data-testid="workspace-inline-input-slot"]',
+    );
+    const inputbar = container.querySelector(
+      '[data-testid="workspace-inline-inputbar"]',
+    );
+
+    expect(messageList).not.toBeNull();
+    expect(inputSlot).not.toBeNull();
+    expect(inputbar).not.toBeNull();
+    expect(inputSlot?.parentElement?.contains(messageList)).toBe(true);
+    expect(inputSlot?.parentElement?.lastElementChild).toBe(inputSlot);
+    expect(
+      mockWorkspaceMainArea.mock.calls.at(-1)?.[0]?.showFloatingInputOverlay,
+    ).toBe(false);
+  });
 });

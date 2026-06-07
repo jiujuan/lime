@@ -90,13 +90,17 @@ describe("useWorkspaceProjectSelection", () => {
 
     try {
       expect(harness.getValue().projectId).toBe("project-local");
+      expect(harness.getValue().projectSelectionSource).toBe("remembered");
       expect(harness.getValue().shouldDisableSessionRestore).toBe(true);
 
       act(() => {
         harness.getValue().markNewChatRequestHandled("123");
       });
 
+      expect(harness.getValue().hasHandledNewChatRequest("123")).toBe(true);
+      expect(harness.getValue().shouldDisableSessionRestore).toBe(false);
       expect(harness.getValue().projectId).toBe("project-local");
+      expect(harness.getValue().projectSelectionSource).toBe("remembered");
     } finally {
       harness.unmount();
     }
@@ -106,11 +110,14 @@ describe("useWorkspaceProjectSelection", () => {
     const harness = mountHook();
 
     try {
+      expect(harness.getValue().projectSelectionSource).toBe("none");
+
       act(() => {
         harness.getValue().applyProjectSelection("project-a");
       });
 
       expect(harness.getValue().projectId).toBe("project-a");
+      expect(harness.getValue().projectSelectionSource).toBe("manual");
       expect(harness.getValue().getRememberedProjectId()).toBe("project-a");
 
       act(() => {
@@ -118,6 +125,7 @@ describe("useWorkspaceProjectSelection", () => {
       });
 
       expect(harness.getValue().projectId).toBeUndefined();
+      expect(harness.getValue().projectSelectionSource).toBe("none");
       expect(harness.getValue().getRememberedProjectId()).toBe("project-a");
     } finally {
       harness.unmount();
@@ -132,6 +140,7 @@ describe("useWorkspaceProjectSelection", () => {
 
     try {
       expect(harness.getValue().projectId).toBe("project-local");
+      expect(harness.getValue().projectSelectionSource).toBe("remembered");
       expect(harness.getValue().shouldDisableSessionRestore).toBe(true);
     } finally {
       harness.unmount();
@@ -147,6 +156,7 @@ describe("useWorkspaceProjectSelection", () => {
 
     try {
       expect(harness.getValue().projectId).toBe("project-session");
+      expect(harness.getValue().projectSelectionSource).toBe("initial-session");
       expect(harness.getValue().getRememberedProjectId()).toBe(
         "project-session",
       );
@@ -171,6 +181,7 @@ describe("useWorkspaceProjectSelection", () => {
       });
 
       expect(harness.getValue().projectId).toBe("project-session");
+      expect(harness.getValue().projectSelectionSource).toBe("initial-session");
       expect(harness.getValue().getRememberedProjectId()).toBe(
         "project-session",
       );
@@ -188,6 +199,7 @@ describe("useWorkspaceProjectSelection", () => {
       });
 
       expect(harness.getValue().projectId).toBeUndefined();
+      expect(harness.getValue().projectSelectionSource).toBe("none");
       expect(harness.getValue().getRememberedProjectId()).toBeNull();
     } finally {
       harness.unmount();
@@ -208,6 +220,7 @@ describe("useWorkspaceProjectSelection", () => {
       });
 
       expect(harness.getValue().projectId).toBe("project-target");
+      expect(harness.getValue().projectSelectionSource).toBe("topic-switch");
       expect(
         harness.getValue().consumePendingTopicSwitch("project-other"),
       ).toBeNull();
@@ -233,12 +246,14 @@ describe("useWorkspaceProjectSelection", () => {
 
     try {
       expect(harness.getValue().projectId).toBe("project-external");
+      expect(harness.getValue().projectSelectionSource).toBe("external");
 
       act(() => {
         harness.getValue().applyProjectSelection("project-local");
       });
 
       expect(harness.getValue().projectId).toBe("project-external");
+      expect(harness.getValue().projectSelectionSource).toBe("external");
       expect(harness.getValue().getRememberedProjectId()).toBeNull();
     } finally {
       harness.unmount();

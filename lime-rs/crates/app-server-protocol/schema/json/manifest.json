@@ -1,0 +1,304 @@
+{
+  "jsonRpc": {
+    "envelopes": [
+      "error",
+      "notification",
+      "request",
+      "response"
+    ],
+    "sendsJsonRpcVersionField": false,
+    "version": "2.0"
+  },
+  "methods": [
+    {
+      "kind": "request",
+      "method": "agentAppInstalled/list"
+    },
+    {
+      "kind": "request",
+      "method": "agentAppUiRuntime/start"
+    },
+    {
+      "kind": "request",
+      "method": "agentAppUiRuntime/status"
+    },
+    {
+      "kind": "request",
+      "method": "agentAppUiRuntime/stop"
+    },
+    {
+      "kind": "request",
+      "method": "agentSession/action/respond"
+    },
+    {
+      "kind": "notification",
+      "method": "agentSession/event"
+    },
+    {
+      "kind": "request",
+      "method": "agentSession/list"
+    },
+    {
+      "kind": "request",
+      "method": "agentSession/read"
+    },
+    {
+      "kind": "request",
+      "method": "agentSession/start"
+    },
+    {
+      "kind": "request",
+      "method": "agentSession/turn/cancel"
+    },
+    {
+      "kind": "request",
+      "method": "agentSession/turn/start"
+    },
+    {
+      "kind": "request",
+      "method": "agentSession/update"
+    },
+    {
+      "kind": "request",
+      "method": "artifact/read"
+    },
+    {
+      "kind": "request",
+      "method": "automationJob/list"
+    },
+    {
+      "kind": "request",
+      "method": "capability/list"
+    },
+    {
+      "kind": "request",
+      "method": "connectCallback/send"
+    },
+    {
+      "kind": "request",
+      "method": "connectDeepLink/resolve"
+    },
+    {
+      "kind": "request",
+      "method": "connectOpenDeepLink/resolve"
+    },
+    {
+      "kind": "request",
+      "method": "connectRelayApiKey/save"
+    },
+    {
+      "kind": "request",
+      "method": "evidence/export"
+    },
+    {
+      "kind": "request",
+      "method": "fileSystem/listDirectory"
+    },
+    {
+      "kind": "request",
+      "method": "fileSystem/readFilePreview"
+    },
+    {
+      "kind": "request",
+      "method": "initialize"
+    },
+    {
+      "kind": "notification",
+      "method": "initialized"
+    },
+    {
+      "kind": "request",
+      "method": "knowledgePack/list"
+    },
+    {
+      "kind": "request",
+      "method": "model/list"
+    },
+    {
+      "kind": "request",
+      "method": "modelPreferences/list"
+    },
+    {
+      "kind": "request",
+      "method": "modelProvider/catalog/list"
+    },
+    {
+      "kind": "request",
+      "method": "modelProvider/list"
+    },
+    {
+      "kind": "request",
+      "method": "modelProviderAlias/list"
+    },
+    {
+      "kind": "request",
+      "method": "modelProviderAlias/read"
+    },
+    {
+      "kind": "request",
+      "method": "modelSyncState/read"
+    },
+    {
+      "kind": "request",
+      "method": "projectMemory/read"
+    },
+    {
+      "kind": "request",
+      "method": "skill/list"
+    },
+    {
+      "kind": "request",
+      "method": "skill/read"
+    },
+    {
+      "kind": "request",
+      "method": "workspace/byPath/read"
+    },
+    {
+      "kind": "request",
+      "method": "workspace/default/ensure"
+    },
+    {
+      "kind": "request",
+      "method": "workspace/default/read"
+    },
+    {
+      "kind": "request",
+      "method": "workspace/ensureReady"
+    },
+    {
+      "kind": "request",
+      "method": "workspace/list"
+    },
+    {
+      "kind": "request",
+      "method": "workspace/projectPath/resolve"
+    },
+    {
+      "kind": "request",
+      "method": "workspace/projectsRoot/read"
+    },
+    {
+      "kind": "request",
+      "method": "workspace/read"
+    },
+    {
+      "kind": "request",
+      "method": "workspaceRegisteredSkills/list"
+    },
+    {
+      "kind": "request",
+      "method": "workspaceSkillBindings/list"
+    }
+  ],
+  "protocolVersion": "appserver.v0",
+  "schemas": {
+    "jsonrpc": [
+      "JsonRpcError",
+      "JsonRpcErrorResponse",
+      "JsonRpcMessage",
+      "JsonRpcNotification",
+      "JsonRpcRequest",
+      "JsonRpcResponse",
+      "RequestId"
+    ],
+    "v0": [
+      "AgentAppInstalledListResponse",
+      "AgentAppUiRuntimeStartParams",
+      "AgentAppUiRuntimeStatusParams",
+      "AgentAppUiRuntimeStatusResponse",
+      "AgentAppUiRuntimeStopParams",
+      "AgentAttachment",
+      "AgentEvent",
+      "AgentInput",
+      "AgentSession",
+      "AgentSessionActionRespondParams",
+      "AgentSessionActionRespondResponse",
+      "AgentSessionActionScope",
+      "AgentSessionActionType",
+      "AgentSessionEventParams",
+      "AgentSessionListParams",
+      "AgentSessionListResponse",
+      "AgentSessionOverview",
+      "AgentSessionReadParams",
+      "AgentSessionReadResponse",
+      "AgentSessionStartParams",
+      "AgentSessionStartResponse",
+      "AgentSessionStatus",
+      "AgentSessionTurnCancelParams",
+      "AgentSessionTurnCancelResponse",
+      "AgentSessionTurnStartParams",
+      "AgentSessionTurnStartResponse",
+      "AgentSessionUpdateParams",
+      "AgentSessionUpdateResponse",
+      "AgentTurn",
+      "AgentTurnStatus",
+      "ArtifactContentStatus",
+      "ArtifactReadParams",
+      "ArtifactReadResponse",
+      "ArtifactSummary",
+      "AutomationJobListResponse",
+      "BusinessObjectRef",
+      "CapabilityDescriptor",
+      "CapabilityListParams",
+      "CapabilityListResponse",
+      "ClientCapabilities",
+      "ClientInfo",
+      "ConnectCallbackSendParams",
+      "ConnectCallbackSendResponse",
+      "ConnectCallbackStatus",
+      "ConnectDeepLinkResolveParams",
+      "ConnectDeepLinkResolveResponse",
+      "ConnectOpenDeepLinkResolveParams",
+      "ConnectOpenDeepLinkResolveResponse",
+      "ConnectPayload",
+      "ConnectRelayApiKeySaveParams",
+      "ConnectRelayApiKeySaveResponse",
+      "EvidenceExportParams",
+      "EvidenceExportResponse",
+      "EvidencePackArtifact",
+      "EvidencePackSummary",
+      "FileSystemDirectoryListing",
+      "FileSystemFileEntry",
+      "FileSystemFilePreview",
+      "FileSystemListDirectoryParams",
+      "FileSystemReadFilePreviewParams",
+      "InitializeParams",
+      "InitializeResponse",
+      "KnowledgeListPacksParams",
+      "KnowledgeListPacksResponse",
+      "ModelListParams",
+      "ModelListResponse",
+      "ModelPreferencesListResponse",
+      "ModelProviderAliasListResponse",
+      "ModelProviderAliasReadParams",
+      "ModelProviderAliasReadResponse",
+      "ModelProviderCatalogListResponse",
+      "ModelProviderListResponse",
+      "ModelSyncStateReadResponse",
+      "OpenDeepLinkPayload",
+      "PlatformInfo",
+      "ProjectMemoryReadParams",
+      "ProjectMemoryReadResponse",
+      "RuntimeOptions",
+      "ServerCapabilities",
+      "ServerInfo",
+      "SkillListResponse",
+      "SkillReadParams",
+      "SkillReadResponse",
+      "WorkspaceEnsureParams",
+      "WorkspaceEnsureReadyResponse",
+      "WorkspaceListResponse",
+      "WorkspacePathReadParams",
+      "WorkspaceProjectPathResolveParams",
+      "WorkspaceProjectPathResolveResponse",
+      "WorkspaceProjectsRootReadResponse",
+      "WorkspaceReadParams",
+      "WorkspaceReadResponse",
+      "WorkspaceRegisteredSkillsListParams",
+      "WorkspaceRegisteredSkillsListResponse",
+      "WorkspaceSkillBindingsListParams",
+      "WorkspaceSkillBindingsListResponse"
+    ]
+  }
+}

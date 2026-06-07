@@ -19,9 +19,11 @@ function blocker(code, message, source, details = undefined) {
   return { code, message, source, details };
 }
 
-function expectedDistributableKind({ packageFormat = "app", platform = "macos" }) {
+function expectedDistributableKind({
+  packageFormat = "app",
+  platform = "macos",
+}) {
   if (platform === "windows") return "windows_installer";
-  if (packageFormat === "pkg") return "pkg";
   if (packageFormat === "dmg") return "dmg";
   return "app_bundle";
 }
@@ -29,7 +31,6 @@ function expectedDistributableKind({ packageFormat = "app", platform = "macos" }
 function expectedInstallerVerificationCommandIds({ packageFormat, platform }) {
   if (platform === "windows") return ["signtool-verify-installer"];
   const ids = ["codesign-verify-app", "spctl-assess-app", "stapler-validate"];
-  if (packageFormat === "pkg") ids.splice(2, 0, "pkgutil-check-signature");
   if (packageFormat === "dmg") ids.splice(2, 0, "hdiutil-verify-dmg");
   return ids;
 }
@@ -40,15 +41,15 @@ function installerVerificationCommandIds(evidence) {
 
 function hasRemoteUploadEvidence(evidence, artifact) {
   if (!evidence) return false;
-  const hasManifest = Boolean(evidence.manifestRef || evidence.uploadedManifestRef);
+  const hasManifest = Boolean(
+    evidence.manifestRef || evidence.uploadedManifestRef,
+  );
   const uploadedRefs = evidence.uploadedArtifactRefs ?? evidence.artifactRefs;
   const artifactUploaded = hasRef(uploadedRefs, artifact);
   if (!hasManifest || !artifactUploaded) return false;
   if (evidence.remoteUploaded === true) return true;
   if (evidence.status === "uploaded") return true;
-  return Boolean(
-    evidence.uploadedManifestRef && evidence.uploadedArtifactRefs,
-  );
+  return Boolean(evidence.uploadedManifestRef && evidence.uploadedArtifactRefs);
 }
 
 function hasRollbackEvidence(evidence) {
@@ -91,13 +92,19 @@ function expectedSha256(contentHash) {
 }
 
 function fileSha256(filePath) {
-  return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+  return crypto
+    .createHash("sha256")
+    .update(fs.readFileSync(filePath))
+    .digest("hex");
 }
 
 function verifyArtifactFiles({ artifactRoot, artifacts }) {
   if (!String(artifactRoot ?? "").trim()) return [];
   const blockers = [];
-  if (!fs.existsSync(artifactRoot) || !fs.statSync(artifactRoot).isDirectory()) {
+  if (
+    !fs.existsSync(artifactRoot) ||
+    !fs.statSync(artifactRoot).isDirectory()
+  ) {
     return [
       blocker(
         "ARTIFACT_ROOT_MISSING",
@@ -158,7 +165,7 @@ function verifyArtifactFiles({ artifactRoot, artifacts }) {
 
     const stat = fs.statSync(resolvedPath);
     const hash = expectedSha256(artifact.contentHash);
-    if (["dmg", "pkg", "windows_installer"].includes(artifact.kind)) {
+    if (["dmg", "windows_installer"].includes(artifact.kind)) {
       if (!stat.isFile()) {
         blockers.push(
           blocker(
@@ -203,6 +210,16 @@ export function checkStandaloneReleaseEvidence(input = {}, options = {}) {
   const channel = input.channel ?? "stable";
   const artifacts = asArray(input.buildEvidence?.artifactRefs);
   const blockers = [];
+  if (platform === "macos" && !["app", "dmg"].includes(packageFormat)) {
+    blockers.push(
+      blocker(
+        "PACKAGE_FORMAT_UNSUPPORTED",
+        "macOS final release evidence only supports Forge app or dmg package formats.",
+        "build",
+        { packageFormat },
+      ),
+    );
+  }
   blockers.push(
     ...verifyArtifactFiles({
       artifactRoot: options.artifactRoot,
@@ -225,7 +242,7 @@ export function checkStandaloneReleaseEvidence(input = {}, options = {}) {
     blockers.push(
       blocker(
         "BUILD_EVIDENCE_MISSING",
-        "Final release requires completed Tauri build evidence.",
+        "Final release requires completed standalone build evidence.",
         "build",
       ),
     );
@@ -240,8 +257,13 @@ export function checkStandaloneReleaseEvidence(input = {}, options = {}) {
     );
   }
 
-  const appBundle = artifacts.find((artifact) => artifact?.kind === "app_bundle");
-  const distributableKind = expectedDistributableKind({ packageFormat, platform });
+  const appBundle = artifacts.find(
+    (artifact) => artifact?.kind === "app_bundle",
+  );
+  const distributableKind = expectedDistributableKind({
+    packageFormat,
+    platform,
+  });
   const distributable = artifacts.find(
     (artifact) => artifact?.kind === distributableKind,
   );
@@ -267,10 +289,9 @@ export function checkStandaloneReleaseEvidence(input = {}, options = {}) {
   }
 
   if (platform === "macos" && appBundle) {
-    const applicationSigned = Boolean(appBundle.signed) || hasRef(
-      input.signingEvidence?.applicationSignedArtifactRefs,
-      appBundle,
-    );
+    const applicationSigned =
+      Boolean(appBundle.signed) ||
+      hasRef(input.signingEvidence?.applicationSignedArtifactRefs, appBundle);
     if (!applicationSigned) {
       blockers.push(
         blocker(
@@ -283,27 +304,10 @@ export function checkStandaloneReleaseEvidence(input = {}, options = {}) {
     }
   }
 
-  if (platform === "macos" && packageFormat === "pkg" && distributable) {
-    const installerSigned =
-      Boolean(distributable.signed) ||
-      hasRef(input.signingEvidence?.installerSignedArtifactRefs, distributable);
-    if (!installerSigned) {
-      blockers.push(
-        blocker(
-          "INSTALLER_SIGNING_MISSING",
-          "pkg final release requires Developer ID Installer signing evidence.",
-          "signing",
-          { artifact: artifactKey(distributable) },
-        ),
-      );
-    }
-  }
-
   if (platform === "windows" && distributable) {
     const windowsSigned =
       Boolean(distributable.signed) ||
-      hasRef(input.signingEvidence?.windowsSignedArtifactRefs, distributable) ||
-      hasRef(input.signingEvidence?.installerSignedArtifactRefs, distributable);
+      hasRef(input.signingEvidence?.windowsSignedArtifactRefs, distributable);
     if (!windowsSigned) {
       blockers.push(
         blocker(
@@ -383,7 +387,10 @@ export function checkStandaloneReleaseEvidence(input = {}, options = {}) {
     }
   }
 
-  if (distributable && !hasRemoteUploadEvidence(input.updaterPublishEvidence, distributable)) {
+  if (
+    distributable &&
+    !hasRemoteUploadEvidence(input.updaterPublishEvidence, distributable)
+  ) {
     blockers.push(
       blocker(
         "UPDATER_REMOTE_UPLOAD_MISSING",

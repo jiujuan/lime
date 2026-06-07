@@ -21,7 +21,7 @@ const sourceExtensions = new Set([
   ".mjs",
   ".cjs",
 ]);
-const rustSourceRoots = ["src-tauri/src", "src-tauri/crates"];
+const rustSourceRoots = ["lime-rs/src", "lime-rs/crates"];
 const rustSourceExtensions = new Set([".rs"]);
 const ignoredDirs = new Set([
   "node_modules",

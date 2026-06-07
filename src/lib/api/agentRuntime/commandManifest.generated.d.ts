@@ -257,7 +257,7 @@ export declare const AGENT_RUNTIME_COMMAND_DESCRIPTORS: readonly [
     readonly domain: "session";
     readonly requestType: "{ workspaceId: string; name?: string; executionStrategy?: AsterExecutionStrategy }";
     readonly responseType: "string";
-    readonly lifecycle: "current";
+    readonly lifecycle: "compat";
     readonly mockStrategy: "bridge-only";
     readonly docsSection: "agent-runtime.session";
   },
@@ -267,7 +267,7 @@ export declare const AGENT_RUNTIME_COMMAND_DESCRIPTORS: readonly [
     readonly domain: "session";
     readonly requestType: "{ includeArchived?: boolean; archivedOnly?: boolean; workspaceId?: string; limit?: number } | void";
     readonly responseType: "AsterSessionInfo[]";
-    readonly lifecycle: "current";
+    readonly lifecycle: "compat";
     readonly mockStrategy: "bridge-only";
     readonly docsSection: "agent-runtime.session";
   },
@@ -277,7 +277,7 @@ export declare const AGENT_RUNTIME_COMMAND_DESCRIPTORS: readonly [
     readonly domain: "session";
     readonly requestType: "{ sessionId: string; resumeSessionStartHooks?: boolean; historyLimit?: number; historyOffset?: number; historyBeforeMessageId?: number }";
     readonly responseType: "AsterSessionDetail";
-    readonly lifecycle: "current";
+    readonly lifecycle: "compat";
     readonly mockStrategy: "bridge-only";
     readonly docsSection: "agent-runtime.session";
   },
@@ -287,7 +287,7 @@ export declare const AGENT_RUNTIME_COMMAND_DESCRIPTORS: readonly [
     readonly domain: "session";
     readonly requestType: "AgentRuntimeUpdateSessionRequest";
     readonly responseType: "void";
-    readonly lifecycle: "current";
+    readonly lifecycle: "compat";
     readonly mockStrategy: "bridge-only";
     readonly docsSection: "agent-runtime.session";
   },
@@ -297,7 +297,7 @@ export declare const AGENT_RUNTIME_COMMAND_DESCRIPTORS: readonly [
     readonly domain: "session";
     readonly requestType: "{ sessionId: string }";
     readonly responseType: "void";
-    readonly lifecycle: "current";
+    readonly lifecycle: "compat";
     readonly mockStrategy: "bridge-only";
     readonly docsSection: "agent-runtime.session";
   },
@@ -377,8 +377,8 @@ export declare const AGENT_RUNTIME_COMMAND_DESCRIPTORS: readonly [
     readonly domain: "inventory";
     readonly requestType: "AgentRuntimeListWorkspaceSkillBindingsRequest";
     readonly responseType: "AgentRuntimeWorkspaceSkillBindings";
-    readonly lifecycle: "current";
-    readonly mockStrategy: "mock-priority";
+    readonly lifecycle: "compat";
+    readonly mockStrategy: "bridge-only";
     readonly docsSection: "agent-runtime.inventory";
   },
   {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { safeListen } from "@/lib/dev-bridge";
 import { SKILL_PACKAGE_OPEN_EVENT, skillsApi } from "@/lib/api/skills";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import type { Page, PageParams, SkillsPageParams } from "@/types/page";
 
 interface UseSkillPackageOpenRequestsOptions {
@@ -78,7 +78,7 @@ export function useSkillPackageOpenRequests({
   );
 
   useEffect(() => {
-    if (!hasTauriInvokeCapability()) {
+    if (!hasDesktopHostInvokeCapability()) {
       return;
     }
 

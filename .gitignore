@@ -3,8 +3,13 @@ node_modules/
 
 # Build
 dist/
+dist-electron/
+release-electron/
+release-assets/
+release-github-assets/
+windows-test-package/
 .cargo/
-src-tauri/.cargo/
+lime-rs/.cargo/
 *.exe
 *.pdb
 output/
@@ -39,6 +44,10 @@ internal/prd/skills/**
 !internal/prd/tools/
 internal/prd/tools/**
 !internal/prd/tools/*.md
+!internal/prd/next/
+internal/prd/next/**
+!internal/prd/next/*.md
+!internal/prd/next/*.html
 
 # Internal roadmap&gongzonghao (private)
 internal/exec-plans/
@@ -123,10 +132,7 @@ internal/knowledge
 internal/knowledge/*
 !internal/knowledge/README.md
 internal/research/**
-!internal/research/
-!internal/research/skill-forge/
-internal/research/skill-forge/**
-!internal/research/skill-forge/*.md
+
 
 # Issues tracking (internal use only)
 .issues/
@@ -139,7 +145,7 @@ internal/research/skill-forge/**
 **/.conda/
 
 # 生成物
-src-tauri/gen
+lime-rs/gen
 
 # Local env files
 .env
@@ -159,9 +165,9 @@ nul
 openspec
 
 # Build artifacts (alternate cargo target dirs)
-src-tauri/target*/
-src-tauri/.release-runtime-libs/
-src-tauri/.codex*
+**/target*/
+lime-rs/.release-runtime-libs/
+lime-rs/.codex*
 
 logo-lime.png
 lime-claw.png
@@ -174,14 +180,13 @@ target-codex*
 .lime/
 
 tmp/
+.tmp/
 
 governance/
 !src/lib/governance/
 !src/lib/governance/*.json
 !src/lib/governance/*.mjs
 !src/lib/governance/*.test.ts
-
-src-tauri/crates/aster-rust/target/
 
 playwright*
 !internal/aiprompts/playwright-e2e.md

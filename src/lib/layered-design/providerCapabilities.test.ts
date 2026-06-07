@@ -27,7 +27,7 @@ describe("layered-design analyzer provider capabilities", () => {
       findLayeredDesignProviderCapabilities(registry, "text_ocr").map(
         (capability) => capability.label,
       ),
-    ).toContain("Tauri native OCR provider");
+    ).toContain("Desktop Host native OCR provider");
   });
 
   it("应为 clean plate 选择支持 PNG data URL、mask 输入和 clean plate 输出的 Worker provider", () => {
@@ -85,7 +85,7 @@ describe("layered-design analyzer provider capabilities", () => {
         supports: { textGeometry: true },
       }),
     ).toMatchObject({
-      label: "Tauri native OCR provider",
+      label: "Desktop Host native OCR provider",
     });
   });
 

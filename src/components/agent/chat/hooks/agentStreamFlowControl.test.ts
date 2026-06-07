@@ -183,7 +183,13 @@ describe("agentStreamFlowControl", () => {
     });
 
     expect(removeStreamListener).toHaveBeenCalledWith("stream-1");
-    expect(interruptTurn).toHaveBeenCalledWith("session-1", "turn-runtime-1");
+    expect(interruptTurn).toHaveBeenCalledWith(
+      "session-1",
+      "turn-runtime-1",
+      "stream-1",
+    );
+    await Promise.resolve();
+    await Promise.resolve();
     expect(refreshSessionReadModel).toHaveBeenCalledWith("session-1");
     expect(queuedTurns).toEqual([]);
     expect(threadItems).toEqual([]);
@@ -207,6 +213,103 @@ describe("agentStreamFlowControl", () => {
     }
     expect(activeStream).toBeNull();
     expect(notify.info).toHaveBeenCalledWith("已停止生成");
+  });
+
+  it("stopActiveAgentStream 不应等待 cancel 后端返回才解除 UI 停止态", async () => {
+    let resolveInterrupt!: (value: boolean) => void;
+    const interruptPromise = new Promise<boolean>((resolve) => {
+      resolveInterrupt = resolve;
+    });
+    let activeStream: ActiveStreamState | null = {
+      assistantMsgId: "assistant-1",
+      eventName: "stream-slow-cancel",
+      sessionId: "session-1",
+      turnId: "turn-runtime-1",
+      pendingTurnKey: "pending-turn:1",
+      pendingItemKey: "pending-item:1",
+    };
+    let messages: Message[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-03-29T00:00:00.000Z"),
+        isThinking: true,
+      },
+    ];
+    let queuedTurns: QueuedTurnSnapshot[] = [];
+    let threadItems: AgentThreadItem[] = [];
+    let threadTurns: AgentThreadTurn[] = [];
+    let currentTurnId: string | null = null;
+    const interruptTurn = vi.fn(() => interruptPromise);
+    const refreshSessionReadModel = vi.fn(async () => true);
+    const notify = {
+      info: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const stopPromise = stopActiveAgentStream({
+      activeStream,
+      sessionIdRef: { current: "session-1" },
+      runtime: {
+        interruptTurn,
+      } as never,
+      removeStreamListener: vi.fn(),
+      refreshSessionReadModel,
+      setQueuedTurns: createStateSetter(
+        () => queuedTurns,
+        (value) => {
+          queuedTurns = value;
+        },
+      ),
+      setThreadItems: createStateSetter(
+        () => threadItems,
+        (value) => {
+          threadItems = value;
+        },
+      ),
+      setThreadTurns: createStateSetter(
+        () => threadTurns,
+        (value) => {
+          threadTurns = value;
+        },
+      ),
+      setCurrentTurnId: createStateSetter(
+        () => currentTurnId,
+        (value) => {
+          currentTurnId = value;
+        },
+      ),
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      setActiveStream: (next) => {
+        activeStream = next;
+      },
+      notify,
+    });
+
+    await stopPromise;
+
+    expect(interruptTurn).toHaveBeenCalledWith(
+      "session-1",
+      "turn-runtime-1",
+      "stream-slow-cancel",
+    );
+    expect(activeStream).toBeNull();
+    expect(messages[0]?.content).toBe("(已停止)");
+    expect(messages[0]?.isThinking).toBe(false);
+    expect(refreshSessionReadModel).not.toHaveBeenCalled();
+    expect(notify.info).toHaveBeenCalledWith("已停止生成");
+
+    resolveInterrupt(true);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(refreshSessionReadModel).toHaveBeenCalledWith("session-1");
   });
 
   it("settleInterruptedMessageProcess 应把运行中工具标记为本轮已中止", () => {

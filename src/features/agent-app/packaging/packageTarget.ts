@@ -10,7 +10,7 @@ export type AgentAppPackageTargetKind = Extract<
 export interface AgentAppPackageTarget {
   kind: AgentAppPackageTargetKind;
   platform?: AgentAppInstallPlatform;
-  packageFormat?: "app" | "dmg" | "pkg";
+  packageFormat?: "app" | "dmg";
   macosIdentity?: MacOsStandaloneIdentity;
   productionReady: false;
 }

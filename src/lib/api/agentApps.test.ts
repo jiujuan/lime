@@ -13,16 +13,26 @@ import {
   getAgentAppCloudCatalog,
   installLocalAgentAppPackage,
   launchAgentAppShell,
+  listInstalledAgentApps,
   reviewCloudAgentAppRelease,
   reviewLocalAgentAppPackage,
   selectAgentAppDirectory,
   selectLocalAgentAppDirectory,
+  getAgentAppUiRuntimeStatus,
   startAgentAppUiRuntime,
   stopAgentAppUiRuntime,
   submitAgentAppRegistrationCode,
 } from "./agentApps";
 
 const LOCAL_APP_DIR = "/tmp/lime/content-factory-app";
+
+const appServerRequestMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/api/appServer", () => ({
+  AppServerClient: vi.fn(() => ({
+    request: appServerRequestMock,
+  })),
+}));
 
 vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
@@ -33,7 +43,9 @@ const PACKAGE_HASH =
 const MANIFEST_HASH =
   "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
-function buildCloudApp(overrides: Partial<CloudBootstrapApp> = {}): CloudBootstrapApp {
+function buildCloudApp(
+  overrides: Partial<CloudBootstrapApp> = {},
+): CloudBootstrapApp {
   return {
     appId: "content-factory-app",
     displayName: "内容工厂",
@@ -65,6 +77,7 @@ function buildCloudApp(overrides: Partial<CloudBootstrapApp> = {}): CloudBootstr
 describe("agentApps API", () => {
   beforeEach(() => {
     vi.mocked(safeInvoke).mockReset();
+    appServerRequestMock.mockReset();
     delete window.__LIME_BOOTSTRAP__;
     delete window.__LIME_OEM_CLOUD__;
     delete window.__LIME_SESSION_TOKEN__;
@@ -89,6 +102,61 @@ describe("agentApps API", () => {
     expect(safeInvoke).toHaveBeenCalledWith("agent_app_select_directory", {
       request: { title: "选择 Agent App 目录" },
     });
+  });
+
+  it("已安装 Agent App 列表应通过 App Server agentAppInstalled/list 读取", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        states: [
+          {
+            appId: "content-factory-app",
+            disabled: false,
+          },
+        ],
+        issues: [],
+      },
+    });
+
+    await expect(listInstalledAgentApps()).resolves.toEqual({
+      states: [
+        expect.objectContaining({
+          appId: "content-factory-app",
+          disabled: false,
+        }),
+      ],
+      issues: [],
+    });
+
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "agentAppInstalled/list",
+      {},
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith("agent_app_list_installed");
+  });
+
+  it("已安装 Agent App 列表缺少必需 result 时不应回退 legacy", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        issues: [],
+      },
+    });
+
+    await expect(listInstalledAgentApps()).rejects.toThrow(
+      "App Server agentAppInstalled/list did not return states",
+    );
+
+    appServerRequestMock.mockReset();
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        states: [],
+      },
+    });
+
+    await expect(listInstalledAgentApps()).rejects.toThrow(
+      "App Server agentAppInstalled/list did not return issues",
+    );
+
+    expect(safeInvoke).not.toHaveBeenCalledWith("agent_app_list_installed");
   });
 
   it("安装本地非企业定制 Agent App 时应保存 resolved setup 后的可启动 readiness", async () => {
@@ -284,9 +352,11 @@ describe("agentApps API", () => {
   it("审查 Cloud release 时应通过集中命令 fetch package 并生成 review", async () => {
     vi.mocked(safeInvoke).mockImplementation(async (command, args) => {
       if (command === "agent_app_fetch_cloud_package") {
-        const descriptor = (args as {
-          request: { descriptor: CloudBootstrapReleaseDescriptor };
-        }).request.descriptor;
+        const descriptor = (
+          args as {
+            request: { descriptor: CloudBootstrapReleaseDescriptor };
+          }
+        ).request.descriptor;
         return buildAgentAppPackageCacheEntry({
           identity: descriptor.identity,
           manifestSnapshot: contentFactoryFixture,
@@ -643,26 +713,31 @@ describe("agentApps API", () => {
     expect(result.payload.apps[0]?.releaseId).toBe("release-bootstrap");
   });
 
-  it("Agent App UI runtime 网关应使用嵌套 request 调用 current 命令", async () => {
-    vi.mocked(safeInvoke).mockImplementation(async (command) => {
-      if (command === "agent_app_start_ui_runtime") {
-        return {
+  it("Agent App UI runtime 网关应直连 App Server current 命令", async () => {
+    appServerRequestMock
+      .mockResolvedValueOnce({
+        result: {
           appId: "content-factory-app",
           status: "running",
           baseUrl: "http://127.0.0.1:4199",
           entryUrl: "http://127.0.0.1:4199/dashboard",
           entryKey: "dashboard",
           route: "/dashboard",
-        };
-      }
-      if (command === "agent_app_stop_ui_runtime") {
-        return {
+        },
+      })
+      .mockResolvedValueOnce({
+        result: {
+          appId: "content-factory-app",
+          status: "running",
+          entryUrl: "http://127.0.0.1:4199/dashboard",
+        },
+      })
+      .mockResolvedValueOnce({
+        result: {
           appId: "content-factory-app",
           status: "stopped",
-        };
-      }
-      throw new Error(`unexpected command ${command}`);
-    });
+        },
+      });
 
     await expect(
       startAgentAppUiRuntime({
@@ -674,31 +749,42 @@ describe("agentApps API", () => {
       entryUrl: "http://127.0.0.1:4199/dashboard",
     });
     await expect(
+      getAgentAppUiRuntimeStatus({ appId: "content-factory-app" }),
+    ).resolves.toMatchObject({ status: "running" });
+    await expect(
       stopAgentAppUiRuntime({ appId: "content-factory-app" }),
     ).resolves.toMatchObject({ status: "stopped" });
 
-    expect(safeInvoke).toHaveBeenNthCalledWith(
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(
       1,
-      "agent_app_start_ui_runtime",
+      "agentAppUiRuntime/start",
       {
-        request: {
-          appId: "content-factory-app",
-          entryKey: "dashboard",
-        },
+        appId: "content-factory-app",
+        entryKey: "dashboard",
       },
     );
-    expect(safeInvoke).toHaveBeenNthCalledWith(
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(
       2,
-      "agent_app_stop_ui_runtime",
+      "agentAppUiRuntime/status",
       {
-        request: {
-          appId: "content-factory-app",
-        },
+        appId: "content-factory-app",
       },
     );
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(
+      3,
+      "agentAppUiRuntime/stop",
+      {
+        appId: "content-factory-app",
+      },
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith("agent_app_start_ui_runtime");
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "agent_app_get_ui_runtime_status",
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith("agent_app_stop_ui_runtime");
   });
 
-  it("Agent App 宿主目录选择网关应走 current Tauri 命令", async () => {
+  it("Agent App 宿主目录选择网关应走 current Desktop Host 命令", async () => {
     vi.mocked(safeInvoke).mockResolvedValue({
       path: LOCAL_APP_DIR,
       cancelled: false,

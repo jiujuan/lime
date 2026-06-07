@@ -1,187 +1,161 @@
-# 前端切换到 Electron 方案
+# Electron Desktop Host Current 方案
 
-> 状态：current planning source
-> 更新时间：2026-06-04
-> 作用：定义 Lime 前端从 Tauri webview 切换到 Electron renderer 时的边界、改动点、阶段顺序和验收口径。
-> 关联：[architecture.md](./architecture.md)（`ElectronClient` 路径）、[consumer-integration.md](./consumer-integration.md)（Electron main 消费 sidecar）。
+> 状态：current implementation source
+> 更新时间：2026-06-06
+> 作用：固定 Lime Desktop 前端宿主由 Electron 全面接管后的 renderer、Desktop Host bridge、App Server sidecar、桌面壳能力和验收口径。
+> 关联：[architecture.md](./architecture.md)、[frontend-integration-matrix.md](./frontend-integration-matrix.md)、[release-updater.md](./release-updater.md)、[consumer-integration.md](./consumer-integration.md)。
 
 ## 1. 结论
 
-前端**业务组件代码几乎不改**。Lime 前端从一开始就把 Tauri 隔离在一层抽象后面，Electron 化的工作集中在「重建后端桥接层」，不是「改 UI」。
+本版本的 Lime Desktop GUI 宿主已经由 Electron 全面接管。这里不是“后续切换”计划，而是 current 契约：
 
-证据（已核实）：
+1. `npm run dev / build / preview` 默认进入 Electron。
+2. `npm run verify:gui-smoke` 默认验证 Electron GUI。
+3. 前端生产入口只允许经 Electron Desktop Host IPC 与 App Server JSON-RPC 进入后端事实源。
+4. `lime-rs/` 是 Rust Runtime / App Server workspace，不是前端宿主事实源。
+5. Codex CLI / `codex-rs` 只提供 App Server protocol、client、transport、daemon 和 runtime 分层参考；Lime 不参考 Codex App UI 或桌面壳实现。
 
-| 检查项 | 实际情况 | 含义 |
-| --- | --- | --- |
-| 直接 `import { invoke } from "@tauri-apps/api/core"` 的组件 | `0` 个 | 没有任何业务代码裸调 Tauri |
-| 全部 IPC 调用 | `187` 处，全部走 `safeInvoke()` | 单一收口入口 |
-| `@tauri-apps/*` 子包 import | `82` 个文件，但被 vite alias 重定向 | 编译期不直连 Tauri |
-| event 通道 | 统一走封装的 `listen / emit` | 已抽象 |
-
-关键锚点：
-
-1. `vite.config.ts` 把 `@tauri-apps/api/core`、`/event`、`/window`、`plugin-dialog`、`plugin-shell`、`plugin-global-shortcut`、`plugin-deep-link` 全部 alias 重定向到 `src/lib/tauri-mock/`。前端写的 `@tauri-apps/...` 编译时连的是本仓库自己的桥接层，不是 Tauri。
-2. `src/lib/dev-bridge/safeInvoke.ts` 的 `safeInvoke()` 本身就是三通道设计：**Tauri IPC → HTTP Bridge → Mock**，天然支持「后端可替换」。
-3. `src/lib/tauri-mock/event.ts` 的 `listen / emit` 是统一事件入口，当前为内存模拟。
-
-## 2. 边界声明
-
-| 分类 | 对象 | 说明 |
-| --- | --- | --- |
-| `不改` | 业务组件、页面、hook、View Model | 只消费 `safeInvoke` 和封装后的 `listen` |
-| `小改` | `safeInvoke.ts` | 增加一条 Electron IPC 通道分支 |
-| `小改` | `tauri-mock/event.ts` | `listen / emit` 桥接到 `ipcRenderer` |
-| `新增` | Electron `main` + `preload` | 进程壳、IPC 转发、sidecar 生命周期 |
-| `重写` | `plugin-dialog / plugin-shell / plugin-global-shortcut / plugin-deep-link` | 用 Electron 原生 API 实现，接口契约复用现有 mock 文件 |
-| `下沉` | `src-tauri` Rust 业务命令 | 不重写，编译成 `app-server` sidecar，按 App Server roadmap 接入 |
-
-禁止方向：
-
-1. 不在 renderer 直接 `spawn` sidecar 或读写 stdout（见 [consumer-integration.md](./consumer-integration.md) §4）。
-2. 不在迁移期引入第二套 IPC 收口入口，所有命令仍只走 `safeInvoke`。
-3. 不把 Tauri plugin 的语义直接平移成 Electron 全局对象，必须保持现有 mock 文件暴露的函数签名。
-
-## 3. 运行时路径
+当前主链固定为：
 
 ```text
-目标形态：
-Renderer (React, 不变)
-  -> safeInvoke / listen        前端唯一入口
-  -> window.electronAPI         preload 注入的 IPC 投影
-  -> Electron main
-  -> AppServerClient
-  -> app-server sidecar --stdio
-  -> RuntimeCore -> ExecutionBackend
+Frontend
+  -> safeInvoke / desktop-host API
+  -> Electron Desktop Host bridge
+  -> app_server_handle_json_lines
+  -> App Server JSON-RPC
+  -> RuntimeCore / ExecutionBackend
 ```
 
-与现有 Tauri 形态对照：
+Electron 只负责 Desktop Host bridge、preload / IPC 白名单、窗口、托盘、Dock、菜单、updater、签名发布和 sidecar 生命周期；它不是第二套后端，也不是 Agent runtime adapter。
+
+## 2. 事实源分类
+
+| 分类         | 对象                                                                                             | 说明                                                                                         |
+| ------------ | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `current`    | `electron/main.ts`、`electron/preload.ts`、`electron/hostCommands.ts`、`electron/ipcChannels.ts` | Desktop Host bridge、白名单 IPC、窗口与 sidecar 生命周期                                     |
+| `current`    | `src/lib/dev-bridge/safeInvoke.ts`                                                               | renderer 命令唯一收口，生产优先 Electron IPC，失败即显式报错                                 |
+| `current`    | `src/lib/desktop-host/*`                                                                         | renderer-safe 桌面能力 API，生产走 Electron bridge，测试夹具显式注入                         |
+| `current`    | `src/lib/api/appServer.ts`、`packages/app-server-client/src/protocol.ts`                         | renderer 侧 App Server JSON-RPC gateway 与协议事实源                                         |
+| `current`    | `electron/updateHost.ts`、`forge.config.mjs`、`.github/workflows/release.yml`                    | updater、签名、公证和发布包事实源                                                            |
+| `compat`     | legacy desktop facade                                                                            | 只允许迁移期委托和投影，不继续承接新业务逻辑                                                 |
+| `deprecated` | `lime-rs/` 下仍被 git 跟踪的旧宿主配置文件                                                       | 仅作为物理清理候选保留；不得作为 package scripts、Electron Forge、updater、CI 或版本同步输入 |
+| `dead`       | 旧 builder 配置 / CLI、自定义 Windows installer maker、旧 YAML / blockmap updater metadata       | 不得作为 release、updater、签名、公证、CI、i18n app metadata 或版本同步输入                  |
+| `dead`       | 生产 mock fallback                                                                               | 生产路径不能靠 mock 成功；mock 只允许测试夹具和契约守卫                                      |
+
+旧宿主配置的 current 封禁规则：
+
+1. `package.json` scripts 不得重新引用旧宿主 CLI、旧宿主配置或旧 workspace 名。
+2. `forge.config.mjs` 只允许消费 Electron Forge 配置、Electron desktop assets 与 App Server packaged resources。
+3. `scripts/check-app-version-consistency.mjs` 只以 `lime-rs/Cargo.toml`、根 `package.json` 和 CLI npm package 版本为事实源。
+4. 当前仍被 git 跟踪的旧宿主配置文件后续应单独删除或迁移；在删除前只能标记为 `deprecated cleanup candidate`，不能作为 current release、updater、签名、公证或开发入口证据。
+5. 旧 builder 配置 / CLI、自定义 Windows installer maker 与旧 updater metadata 已进入 `dead`，不能作为 Electron current 打包、发布或 metadata 事实源。
+
+## 3. Renderer 契约
+
+业务组件、页面、hook 和 View Model 不直接碰桌面 IPC。推荐路径是：
 
 ```text
-current (Tauri):
-  Renderer -> safeInvoke -> window.__TAURI__.core.invoke -> Tauri command -> runtime
-
-target (Electron):
-  Renderer -> safeInvoke -> window.electronAPI.invoke -> Electron main -> app-server sidecar -> runtime
+组件 / Hook
+  -> src/lib/api/* 或 src/lib/desktop-host/*
+  -> safeInvoke
+  -> Electron Desktop Host bridge
+  -> App Server JSON-RPC 或桌面壳能力
 ```
 
-`safeInvoke` 已经为这种切换留好了位置：它先探测 `window.__TAURI__`，探测不到再走后续通道。Electron 分支只需插在同一探测链上。
+约束：
 
-## 4. 改动点明细
+1. 前端业务代码不直接 import host 私有对象，不直接 spawn sidecar，不读写 sidecar stdout。
+2. Agent runtime / session / turn / event / artifact / evidence 默认走 `src/lib/api/appServer.ts`。
+3. 窗口、对话框、shell、快捷键、deep link、tray、Dock、updater 等桌面壳能力走 `src/lib/desktop-host/*` 或对应 API 网关。
+4. 生产无 Electron bridge 时 fail-closed；开发 HTTP bridge 只服务本地调试和 smoke 证据，不作为发布包降级。
+5. `invokeMockOnly`、explicit mock fallback、内存事件 / 窗口 / 对话框夹具只允许测试文件或显式测试夹具使用。
 
-### 4.1 `safeInvoke.ts`：增加 Electron IPC 分支
+## 4. Electron Host 契约
 
-当前 `safeInvoke()` 第一段探测 `window.__TAURI__?.core?.invoke`。Electron 下在其之前（或并列）增加：
+Electron main / preload 的职责：
 
-```ts
-// Electron renderer：preload 注入的 IPC
-if (typeof window !== "undefined" && (window as any).electronAPI?.invoke) {
-  try {
-    const result = (await (window as any).electronAPI.invoke(cmd, args)) as T;
-    recordInvokeTrace(cmd, args, "electron-ipc", "success", startedAt);
-    finishInvokeTiming(timingId, cmd, "electron-ipc", "success");
-    return result;
-  } catch (error) {
-    recordInvokeError(cmd, args, error, "electron-ipc");
-    recordInvokeTrace(cmd, args, "electron-ipc", "error", startedAt, error);
-    finishInvokeTiming(timingId, cmd, "electron-ipc", "error");
-    throw error;
-  }
-}
-```
+1. 暴露最小 `window.electronAPI`，不暴露完整 `ipcRenderer`。
+2. 通过白名单 IPC 接收 renderer 请求。
+3. 启动、握手、重启和关闭 App Server sidecar。
+4. 把 App Server JSON-RPC lines 透传为 `app_server_handle_json_lines` / `app_server_drain_events`。
+5. 将 sidecar notification fanout 到 renderer event router。
+6. 管理窗口、菜单、托盘、Dock、deep link、global shortcut、dialog、shell 和 updater。
+7. 打包时携带 `app-server.release.json` 与 `app-server/` packaged resource。
 
-要点：
+Electron main 禁止：
 
-1. 复用现有 trace / error / timing 记录，保持可观测性一致。
-2. transport 标签新增 `electron-ipc`，便于排障区分通道。
-3. HTTP Bridge 和 Mock 两条 fallback 保持不变，浏览器纯前端开发体验不受影响。
+1. 复制 RuntimeCore 业务逻辑。
+2. 自建第二套 session / thread / turn read model。
+3. 在桌面壳层判断 Agent 执行完成。
+4. 用 mock backend 证明生产 GUI 可交付。
 
-### 4.2 `tauri-mock/event.ts`：桥接 Electron 事件
+## 5. App Server 契约
 
-`listen / once / emit` 当前是 `Map` 内存模拟。Electron 下：
-
-1. `listen(event, handler)`：在内存订阅之外，同时 `window.electronAPI.on(event, handler)`，返回的 unlisten 同步解绑两侧。
-2. `emit`：renderer 主动 emit 的场景转发到 `window.electronAPI.send`，由 main 决定是否广播。
-3. 后端推送的事件由 main `webContents.send(event, payload)`，preload 收下后调用已注册的内存 handler，复用现有分发逻辑。
-
-保持现有导出签名（`listen / once / emit / UnlistenFn`），业务侧调用不变。
-
-### 4.3 Electron `preload`：注入 `electronAPI`
-
-```ts
-import { contextBridge, ipcRenderer } from "electron";
-
-contextBridge.exposeInMainWorld("electronAPI", {
-  invoke: (cmd: string, args?: Record<string, unknown>) =>
-    ipcRenderer.invoke("app:invoke", cmd, args),
-  on: (event: string, handler: (payload: any) => void) => {
-    const listener = (_e: unknown, payload: any) => handler({ event, payload });
-    ipcRenderer.on(`evt:${event}`, listener);
-    return () => ipcRenderer.removeListener(`evt:${event}`, listener);
-  },
-  send: (event: string, payload?: unknown) =>
-    ipcRenderer.send("app:emit", event, payload),
-});
-```
-
-约束：开启 `contextIsolation`，不暴露完整 `ipcRenderer`，只暴露白名单方法。
-
-### 4.4 Electron `main`：命令转发与 sidecar 生命周期
-
-main 进程职责（与 [consumer-integration.md](./consumer-integration.md) §4 一致）：
-
-1. `resolve binary path`（复用 `app-server-client::resolveSidecarBinaryPath`）。
-2. `spawn` sidecar、`initialize / initialized` 握手。
-3. `ipcMain.handle("app:invoke", ...)` 把命令转成 App Server JSON-RPC。
-4. notification fanout：sidecar 事件 → `webContents.send("evt:<name>", payload)`。
-5. crash / restart / backoff、stderr 日志路由。
-
-### 4.5 Tauri plugin 能力重写
-
-下列能力没有 Rust runtime，靠 Tauri plugin 提供，Electron 下需原生重写。接口契约直接照现有 mock 文件：
-
-| 能力 | 现有 mock 文件 | Electron 替换 |
-| --- | --- | --- |
-| 对话框 | `tauri-mock/plugin-dialog.ts` | `dialog.showOpenDialog / showSaveDialog / showMessageBox` |
-| 外部打开 / 命令 | `tauri-mock/plugin-shell.ts` | `shell.openExternal / openPath`，命令执行走 main |
-| 全局快捷键 | `tauri-mock/plugin-global-shortcut.ts` | `globalShortcut.register` |
-| 深链 | `tauri-mock/plugin-deep-link.ts` | `app.setAsDefaultProtocolClient` + `open-url` / `second-instance` |
-| 窗口 | `tauri-mock/window.ts` | `BrowserWindow` API |
-| 文件 URL | `convertFileSrc`（`tauri-mock/core.ts`） | 自定义 `app://` protocol 或 `file://` 映射 |
-
-## 5. 阶段顺序
+App Server 是后端事实源：
 
 ```text
-阶段 A：前端壳替换（不依赖 roadmap 进度）
-  - safeInvoke 增加 electron-ipc 分支
-  - event.ts 桥接 ipcRenderer
-  - 新建 Electron main + preload，invoke 先转到 HTTP Bridge / mock
-  退出条件：Electron 窗口能完整渲染所有页面，命令走 mock 数据不报错
-
-阶段 B：后端 sidecar 化（依赖 App Server P2-P4）
-  - 等 RuntimeCore / app-server backend 脱离 Tauri host state
-  - main 通过 app-server-client spawn sidecar，真实 session / turn / event 打通
-  退出条件：真实 Agent flow、事件投影、cancel / shutdown、crash / backoff 跑通
-
-阶段 C：平台能力补齐
-  - dialog / shell / global-shortcut / deep-link / window / convertFileSrc 原生重写
-  退出条件：五类 plugin 能力在 Electron 下行为对齐，回归测试通过
+Electron Desktop Host bridge
+  -> App Server JSON-RPC
+  -> RuntimeCore
+  -> ExecutionBackend
+  -> AsterBackend / future backend
 ```
 
-## 6. 当前阻塞点
+固定约束：
 
-[consumer-integration.md](./consumer-integration.md) §3.1 已声明：standalone `app-server` binary **目前只支持 `mock` backend**，真实 Aster backend 仍依赖 Tauri host state，无法脱离 Tauri 进程独立启动。
+1. in-process App Server 或 typed channel 只允许去掉进程边界，不允许引入第二响应合同。
+2. JSON-RPC result envelope 与 `agentSession/event` notification 是 renderer / Electron / App Server 的共同合同。
+3. `agentSession/turn/start`、`agentSession/turn/cancel`、`agentSession/read`、`agentSession/event` 是 Agent 主链 current 证据。
+4. `agent_runtime_*` 只允许作为迁移期 compat facade，不得重新成为前端事实源。
+5. `mock backend` 只能作为协议、client、packaging 或测试夹具，不是生产降级。
 
-含义：
+## 6. 桌面壳能力
 
-1. 阶段 A 可立即开始，不被阻塞——前端壳 + mock / HTTP bridge 完全可跑。
-2. 阶段 B 的「真实 Agent 执行」必须等 App Server roadmap P2-P4 完成、backend 脱离 Tauri state 之后。
-3. 在此之前，Electron 形态只能视为 integration skeleton，不能作为真实 runtime 的交付判定。
+| 能力               | current owner                     | 前端入口                                             |
+| ------------------ | --------------------------------- | ---------------------------------------------------- |
+| 对话框             | Electron `dialog`                 | `src/lib/desktop-host/plugin-dialog.ts`              |
+| 外部打开 / 路径    | Electron `shell`                  | `src/lib/desktop-host/plugin-shell.ts`               |
+| 全局快捷键         | Electron `globalShortcut`         | `src/lib/desktop-host/plugin-global-shortcut.ts`     |
+| 深链               | Electron `app` protocol handlers  | `src/lib/desktop-host/plugin-deep-link.ts`           |
+| 窗口               | Electron `BrowserWindow`          | `src/lib/desktop-host/window.ts`、`webviewWindow.ts` |
+| 更新               | Electron 内置 `autoUpdater`       | `electron/updateHost.ts` 与更新 API 网关             |
+| 托盘 / Dock / 菜单 | Electron main                     | Electron host commands / lifecycle                   |
+| App Server sidecar | Electron main + app-server-client | `app_server_handle_json_lines`                       |
 
-## 7. 验收口径
+这些能力属于 Desktop Host bridge。除非是测试夹具，renderer 不能用浏览器 API 或 mock 状态伪造桌面壳结果。
 
-1. 业务组件零改动：`git diff` 不触及 `src/components`、`src/pages` 的命令调用逻辑。
-2. IPC 单一入口：仍然 `0` 个组件直接 import Tauri `invoke`，全部走 `safeInvoke`。
-3. `safeInvoke` 通道完整：`electron-ipc → http-bridge → mock` 三级 fallback 可用，trace 能区分通道。
-4. event 双向打通：main 推送事件能被 renderer 现有 `listen` handler 收到。
-5. plugin 能力对齐：五类 Tauri plugin 能力在 Electron 下签名不变、行为对齐。
-6. 不 import Lime Rust crate：renderer 只消费 preload IPC projection（对齐 [consumer-integration.md](./consumer-integration.md) §12）。
+## 7. 当前完成态
+
+已完成：
+
+1. 默认开发、预览、构建和 GUI smoke 入口进入 Electron。
+2. Electron smoke 已证明 renderer 加载、Electron Desktop Host bridge 和 App Server `initialize` 可用。
+3. Agent session create / list / read、thread read model、turn start / cancel、action respond 已经迁到 App Server JSON-RPC 前端 gateway。
+4. `src/lib/desktop-host/*` 生产路径已按 Electron bridge 优先、无 bridge fail-closed、测试显式 mock 的规则收口。
+5. release / updater / signing / notarization 已由 Electron Forge 和 Electron updater 文档锁定。
+
+仍需继续推进：
+
+1. 真实 GUI 发送后的 `agentSession/event -> read model refresh -> timeline` 业务 E2E。
+2. artifact / evidence UI gateway 继续迁到 App Server。
+3. 更宽的 legacy command facade 退场审计。
+4. 低并发环境下持续验证 `electron:package:dir && electron:verify:package`。
+
+## 8. 验收口径
+
+最小 current 验收：
+
+```bash
+npm run test:contracts
+npm run verify:gui-smoke
+```
+
+涉及 Electron host、updater、发布包、sidecar 或桌面壳能力时，追加：
+
+```bash
+npm run typecheck:electron
+npm test -- "scripts/electron/current-docs-guard.test.mjs"
+npm run electron:verify:package
+```
+
+涉及真实用户路径时，还必须跑业务 GUI E2E 或 Playwright 续测。只通过 lint、typecheck、Rust 单测或 mock 单测，不等于 Lime Desktop GUI 可交付。

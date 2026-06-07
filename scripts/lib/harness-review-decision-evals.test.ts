@@ -266,7 +266,7 @@ describe("Harness review decision / eval integration", () => {
       }),
     );
 
-    const result = runNodeScript("scripts/harness-replay-promote.mjs", [
+    const result = runNodeScript("scripts/harness/replay-promote.mjs", [
       "--workspace-root",
       workspaceRoot,
       "--session-id",
@@ -336,7 +336,7 @@ describe("Harness review decision / eval integration", () => {
       }),
     );
 
-    const summary = runNodeScript("scripts/harness-eval-runner.mjs", [
+    const summary = runNodeScript("scripts/harness/eval-runner.mjs", [
       "--format",
       "json",
       "--manifest",
@@ -421,9 +421,9 @@ describe("Harness review decision / eval integration", () => {
         }),
       ]),
     );
-    expect(summary.breakdowns.degradedObservabilityVerificationOutcomes).toEqual(
-      [],
-    );
+    expect(
+      summary.breakdowns.degradedObservabilityVerificationOutcomes,
+    ).toEqual([]);
     expect(summary.suites[0].cases[0]).toMatchObject({
       reviewDecisionStatus: "accepted",
       reviewRiskLevel: "high",
@@ -592,7 +592,7 @@ describe("Harness review decision / eval integration", () => {
       suites: [],
     });
 
-    const report = runNodeScript("scripts/harness-eval-trend-report.mjs", [
+    const report = runNodeScript("scripts/harness/eval-trend-report.mjs", [
       "--format",
       "json",
       "--input",
@@ -646,9 +646,11 @@ describe("Harness review decision / eval integration", () => {
     expect(
       report.classificationDeltas.observabilitySignals.find(
         (entry) => entry.name === "requestTelemetry:known_gap",
-        ),
+      ),
     ).toBeUndefined();
-    expect(report.classificationDeltas.observabilityVerificationOutcomes).toEqual(
+    expect(
+      report.classificationDeltas.observabilityVerificationOutcomes,
+    ).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           name: "browserVerification:failure",
@@ -831,7 +833,7 @@ describe("Harness review decision / eval integration", () => {
       suites: [],
     });
 
-    const report = runNodeScript("scripts/harness-eval-trend-report.mjs", [
+    const report = runNodeScript("scripts/harness/eval-trend-report.mjs", [
       "--format",
       "json",
       "--input",
@@ -843,7 +845,8 @@ describe("Harness review decision / eval integration", () => {
     expect(report.latest.totals.currentRecoveredVerificationCaseCount).toBe(3);
     expect(report.delta.currentRecoveredVerificationCaseCount).toBe(2);
     expect(
-      report.classificationDeltas.currentRecoveredObservabilityVerificationOutcomes,
+      report.classificationDeltas
+        .currentRecoveredObservabilityVerificationOutcomes,
     ).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

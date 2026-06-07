@@ -23,7 +23,9 @@ describe("agent-runtime-approval-sandbox-smoke-core", () => {
         "recovery action",
       ]),
     );
-    expect(evidence.evidenceChecks.every((entry) => entry.satisfied)).toBe(true);
+    expect(evidence.evidenceChecks.every((entry) => entry.satisfied)).toBe(
+      true,
+    );
     expect(evidence.failureModeCoverage.map((entry) => entry.id)).toEqual(
       expect.arrayContaining([
         "approval bypass",

@@ -1,18 +1,18 @@
 # App Server 协议草案
 
 > 状态：current planning source
-> 更新时间：2026-06-04
+> 更新时间：2026-06-06
 > 作用：定义 App Server 的 JSON-RPC 协议形态、命名、对象模型、事件和错误。
 
 ## 1. 协议原则
 
-1. 使用 JSON-RPC 2.0 语义，wire 上采用 newline-delimited JSON。
-2. 方法名使用 `<resource>/<method>`。
-3. wire 字段使用 `camelCase`。
+1. 使用 JSON-RPC-like / JSON-RPC 2.0 语义，wire 上采用 newline-delimited JSON；和 codex-rs app-server 一样，wire 不要求也不发送 `"jsonrpc":"2.0"` header。
+2. 方法名使用 `<resource>/<method>`；新增 resource 默认用 singular 命名。`agentSession/*` 是 Lime v0 为兼容既有 session 语义保留的 resource 名，后续新面不得再发明平级命名。
+3. wire 字段使用 `camelCase`；config mirror 类 payload 如确需 snake_case，必须在协议说明中单独列为例外。
 4. 协议版本显式放入 `initialize` 响应。
-5. 所有业务事件通过 server notification 发出。
-6. 初始化前拒绝业务方法。
-7. request / response / notification 都必须可 fixture 化。
+5. 业务进度首期通过 server notification 发出；需要 client 响应的审批 / 人工输入首期用 `action.required` + `agentSession/action/respond`，不伪装成已完成事件。若后续引入 server-initiated request，必须单独补 request / response fixture 和 client handling contract。
+6. 初始化前拒绝业务方法，重复 `initialize` 也必须拒绝。
+7. request / response / notification 都必须可 fixture 化，且 stable / experimental schema 必须分别可校验。
 
 ## 2. Transport
 
@@ -31,10 +31,13 @@ wire 示例：
 {"id":3,"method":"agentSession/start","params":{"sessionId":"sess_external_01","threadId":"thread_external_01","appId":"content-studio","workspaceId":"default"}}
 ```
 
-后续 transport：
+transport 规则：
 
-1. `unix://` 或 Windows named pipe。
-2. `ws://127.0.0.1:<port>` 仅作为调试或受控本地连接。
+1. `stdio` 是首期默认 transport，一行一个 JSON object。
+2. `unix://` 或 Windows named pipe 只作为本地 control-plane transport，不作为业务 UI 直连绕过 Electron Desktop Host bridge 的理由。
+3. `ws://127.0.0.1:<port>` 仅允许实验 / 调试；生产不可把 websocket 当稳定外部 API。若启用本地 HTTP health probe，带 `Origin` header 的请求必须拒绝，避免被浏览器页面跨源探测。
+4. tracing / log 输出走 `stderr`；需要机器消费时使用 JSON log format，不能混进 stdout JSONL。
+5. transport ingress、request processing 和 outbound 写出都必须有 bounded queue；队列饱和时返回 `-32001 Server overloaded`，客户端按 retryable 错误处理并使用 exponential backoff + jitter。
 
 ## 3. 初始化
 
@@ -53,8 +56,8 @@ Request:
       "version": "0.1.0"
     },
     "capabilities": {
-      "eventMethods": ["agentSession/event"],
-      "experimental": false
+      "experimentalApi": false,
+      "optOutNotificationMethods": ["agentSession/event"]
     }
   }
 }
@@ -94,7 +97,25 @@ Notification:
 {"method":"initialized","params":{}}
 ```
 
+初始化规则：
+
+1. 每个 transport connection 只能成功 `initialize` 一次，随后客户端必须发送 `initialized` notification。
+2. `capabilities.experimentalApi` 只在初始化时协商一次；未声明时视为 `false`。
+3. `capabilities.optOutNotificationMethods` 使用精确 method name 匹配，不支持 wildcard / prefix；未知 method name 可接受并忽略。
+4. 初始化前发业务 method 返回 `Not initialized`；重复初始化返回 `Already initialized`。
+5. `clientInfo.name` 必须由接入方显式提供，用于审计和日志，不得由 Electron Host bridge 猜测业务 App 身份。
+
 ## 4. 核心对象
+
+Codex-rs app-server 的核心对象是 `Thread / Turn / Item`。Lime v0 保留 `AgentSession / AgentTurn / AgentEvent` 命名，是为了兼容现有 Lime session、thread read model 和 GUI 事件投影；语义映射必须固定：
+
+| Lime v0 | Codex-rs 参考语义 | 说明 |
+| --- | --- | --- |
+| `AgentSession` | `Thread` + app binding projection | 一段可恢复的 Agent 会话，同时携带 `appId / workspaceId / businessObjectRef`。 |
+| `AgentTurn` | `Turn` | 一次用户输入到终态的执行回合。 |
+| `AgentEvent` | `Item` lifecycle / turn notification projection | `message.delta`、tool、artifact、action、terminal status 都必须从 RuntimeCore facts 派生，不由 UI 猜测。 |
+
+后续如果引入分页历史，应优先映射到 `thread/turns/list` 风格的 read model，而不是让 App UI 直接读取 runtime DB。
 
 ### 4.1 `AgentSession`
 
@@ -197,9 +218,9 @@ Request:
 字段规则：
 
 1. `sessionId` / `threadId` 可选；缺省时由 App Server 生成。
-2. 外部 App 已有持久化业务 session，或 Lime Tauri adapter 需要绑定现有 Aster session 时，可以传入稳定 `sessionId` / `threadId`。
+2. 外部 App 已有持久化业务 session，或 Lime legacy desktop facade 需要绑定现有 Aster session 时，可以传入稳定 `sessionId` / `threadId`。
 3. 同一个 `sessionId` 重复 start 必须返回 `Session already exists`，不能覆盖已有 read model。
-4. `sessionId` / `threadId` 仍是公共协议字段，不允许携带 Aster、Tauri command 或数据库私有类型。
+4. `sessionId` / `threadId` 仍是公共协议字段，不允许携带 Aster、legacy desktop command 或数据库私有类型。
 
 Response:
 
@@ -269,7 +290,7 @@ agentSession/event
 投递规则：
 
 1. 同步 `turn/start` 或 `turn/cancel` 产生的 backend events，随同一次 JSON-RPC request 的 response 后追加 notification。
-2. Query Loop、Tauri host listener 或未来 backend worker 产生的外部异步 runtime events，先追加到 `RuntimeCore` read model，再经 App Server outbound channel 写出同样的 notification。
+2. Query Loop、legacy host listener 或未来 backend worker 产生的外部异步 runtime events，先追加到 `RuntimeCore` read model，再经 App Server outbound channel 写出同样的 notification。
 3. 客户端只按 `agentSession/event` 消费事件；不得区分事件来自同步 request 还是异步外部出口。
 
 示例：
@@ -349,8 +370,10 @@ agentSession/event
 1. `protocolVersion` 使用 `appserver.v0`、`appserver.v1`。
 2. 破坏性字段变化必须提升 major。
 3. 新增 optional 字段不提升 major。
-4. 实验方法必须在 `capabilities.experimental` 下显式启用。
+4. 实验方法或字段必须在 `capabilities.experimentalApi` 下显式启用；stable schema 默认不包含 experimental surface。
 5. TypeScript schema 和 Rust DTO 必须同源生成或由合同测试校验一致。
+6. schema fixture 至少分 stable 与 experimental 两组；协议 DTO、TS client method catalog 和 schema fixture 不得漂移。
+7. fixture 必须证明 wire 不要求 `"jsonrpc":"2.0"` header。
 
 ## 10. 协议验收
 

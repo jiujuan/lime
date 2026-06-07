@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useMemo } from "react";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog } from "@/lib/desktop-host/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import {
   Dialog,

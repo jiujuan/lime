@@ -33,6 +33,14 @@ const {
   mockUseTopicBranchBoard,
   mockUseTeamWorkspaceRuntime,
   mockUseSessionFiles,
+  mockUseTrayModelShortcuts,
+  mockSafeListen,
+  mockUseSessionRecentMetadataSyncRuntime,
+  mockUseWorkspaceKnowledgeRuntime,
+  mockUseGlobalMediaGenerationDefaults,
+  mockUseServiceModelsConfig,
+  mockUseSoulArtifactVoiceGenerationBrief,
+  mockUseImageGen,
   mockGetProject,
   mockGetDefaultProject,
   mockGetOrCreateDefaultProject,
@@ -79,6 +87,14 @@ const {
   mockUseTopicBranchBoard: vi.fn(),
   mockUseTeamWorkspaceRuntime: vi.fn(),
   mockUseSessionFiles: vi.fn(),
+  mockUseTrayModelShortcuts: vi.fn(),
+  mockSafeListen: vi.fn(),
+  mockUseSessionRecentMetadataSyncRuntime: vi.fn(),
+  mockUseWorkspaceKnowledgeRuntime: vi.fn(),
+  mockUseGlobalMediaGenerationDefaults: vi.fn(),
+  mockUseServiceModelsConfig: vi.fn(),
+  mockUseSoulArtifactVoiceGenerationBrief: vi.fn(),
+  mockUseImageGen: vi.fn(),
   mockGetProject: vi.fn(),
   mockGetDefaultProject: vi.fn(),
   mockGetOrCreateDefaultProject: vi.fn(),
@@ -222,6 +238,14 @@ export function getIndexTestMocks() {
     mockUseTopicBranchBoard,
     mockUseTeamWorkspaceRuntime,
     mockUseSessionFiles,
+    mockUseTrayModelShortcuts,
+    mockSafeListen,
+    mockUseSessionRecentMetadataSyncRuntime,
+    mockUseWorkspaceKnowledgeRuntime,
+    mockUseGlobalMediaGenerationDefaults,
+    mockUseServiceModelsConfig,
+    mockUseSoulArtifactVoiceGenerationBrief,
+    mockUseImageGen,
     mockGetProject,
     mockGetDefaultProject,
     mockGetOrCreateDefaultProject,
@@ -267,6 +291,15 @@ vi.mock("sonner", () => ({
   toast: mockToast,
 }));
 
+vi.mock("@/lib/dev-bridge", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/dev-bridge")>();
+  return {
+    ...actual,
+    safeListen: mockSafeListen,
+  };
+});
+
 vi.mock("./hooks", () => ({
   useAgentChatUnified: mockUseAgentChatUnified,
   useArtifactAutoPreviewSync: mockUseArtifactAutoPreviewSync,
@@ -281,6 +314,46 @@ vi.mock("@/hooks/useDeveloperFeatureFlags", () => ({
 
 vi.mock("./hooks/useSessionFiles", () => ({
   useSessionFiles: mockUseSessionFiles,
+}));
+
+vi.mock("./hooks/useTrayModelShortcuts", () => ({
+  useTrayModelShortcuts: mockUseTrayModelShortcuts,
+}));
+
+vi.mock("./workspace/useSessionRecentMetadataSyncRuntime", () => ({
+  useSessionRecentMetadataSyncRuntime: mockUseSessionRecentMetadataSyncRuntime,
+}));
+
+vi.mock("./workspace/knowledge/useWorkspaceKnowledgeRuntime", () => ({
+  useWorkspaceKnowledgeRuntime: mockUseWorkspaceKnowledgeRuntime,
+}));
+
+vi.mock("@/hooks/useGlobalMediaGenerationDefaults", () => ({
+  useGlobalMediaGenerationDefaults: mockUseGlobalMediaGenerationDefaults,
+}));
+
+vi.mock("@/hooks/useServiceModelsConfig", () => ({
+  useServiceModelsConfig: mockUseServiceModelsConfig,
+}));
+
+vi.mock("@/hooks/useSoulArtifactVoiceGenerationBrief", () => ({
+  useSoulArtifactVoiceGenerationBrief: mockUseSoulArtifactVoiceGenerationBrief,
+}));
+
+vi.mock("@/components/image-gen/useImageGen", () => ({
+  useImageGen: mockUseImageGen,
+}));
+
+vi.mock("./workspace/useWorkspaceImageTaskPreviewRuntime", () => ({
+  useWorkspaceImageTaskPreviewRuntime: vi.fn(),
+}));
+
+vi.mock("./workspace/useWorkspaceAudioTaskPreviewRuntime", () => ({
+  useWorkspaceAudioTaskPreviewRuntime: vi.fn(),
+}));
+
+vi.mock("./workspace/useWorkspaceTranscriptionTaskPreviewRuntime", () => ({
+  useWorkspaceTranscriptionTaskPreviewRuntime: vi.fn(),
 }));
 
 vi.mock("./hooks/useContentSync", () => ({
@@ -849,8 +922,8 @@ export function buildMockProviderModel(
   return {
     id: "mock-model",
     display_name: "Mock Model",
-    provider_id: "kiro",
-    provider_name: "Kiro",
+    provider_id: "openai",
+    provider_name: "OpenAI",
     family: "mock-model",
     tier: "pro" as const,
     capabilities: {
@@ -1082,7 +1155,7 @@ export function createMockAgentChatUnifiedState(
   overrides: Record<string, unknown> = {},
 ) {
   return {
-    providerType: "kiro",
+    providerType: "openai",
     setProviderType: vi.fn(),
     model: "mock-model",
     setModel: vi.fn(),
@@ -1367,10 +1440,10 @@ beforeEach(() => {
     "loadConfiguredProviders",
   ).mockResolvedValue([
     {
-      key: "kiro",
-      label: "Kiro",
-      registryId: "kiro",
-      type: "kiro",
+      key: "openai",
+      label: "OpenAI",
+      registryId: "openai",
+      type: "openai",
     },
   ]);
   vi.spyOn(providerModelsModule, "loadProviderModels").mockResolvedValue([
@@ -1395,6 +1468,74 @@ beforeEach(() => {
   );
   mockUseDeveloperFeatureFlags.mockReturnValue({
     workspaceHarnessEnabled: true,
+  });
+  mockSafeListen.mockResolvedValue(vi.fn());
+  mockUseTrayModelShortcuts.mockReturnValue(undefined);
+  const sessionRecentMetadataActiveSessionRef: { current: string | null } = {
+    current: null,
+  };
+  mockUseSessionRecentMetadataSyncRuntime.mockReturnValue({
+    activeSessionIdRef: sessionRecentMetadataActiveSessionRef,
+    chatToolPreferenceSessionSync: {
+      getSessionId: () => sessionRecentMetadataActiveSessionRef.current,
+      setSessionRecentPreferences: vi.fn(async () => undefined),
+    },
+    deferSessionRecentMetadataSyncForNavigation: vi.fn(),
+    selectedTeamSessionSync: {
+      getSessionId: () => sessionRecentMetadataActiveSessionRef.current,
+      setSessionRecentTeamSelection: vi.fn(async () => undefined),
+    },
+    syncSessionRecentPreferences: vi.fn(async () => undefined),
+  });
+  mockUseWorkspaceKnowledgeRuntime.mockReturnValue({
+    knowledgePackSelection: null,
+    knowledgePackOptions: [],
+    onToggleKnowledgePack: vi.fn(),
+    onSelectKnowledgePack: vi.fn(),
+    onToggleKnowledgeCompanionPack: vi.fn(),
+    onStartKnowledgeOrganize: vi.fn(),
+    onManageKnowledgePacks: vi.fn(),
+    onImportPathReferenceAsKnowledge: vi.fn(),
+    onImportTextAsKnowledge: vi.fn(),
+  });
+  mockUseGlobalMediaGenerationDefaults.mockReturnValue({
+    mediaDefaults: {},
+    loading: false,
+  });
+  mockUseServiceModelsConfig.mockReturnValue({
+    serviceModels: {},
+    agentResponseLanguage: undefined,
+    loading: false,
+  });
+  mockUseSoulArtifactVoiceGenerationBrief.mockReturnValue({
+    generationBrief: undefined,
+    loading: false,
+  });
+  mockUseImageGen.mockReturnValue({
+    availableProviders: [],
+    selectedProvider: null,
+    selectedProviderId: "",
+    setSelectedProviderId: vi.fn(),
+    providersLoading: false,
+    preferredProviderUnavailable: false,
+    availableModels: [],
+    selectedModel: null,
+    selectedModelId: "",
+    setSelectedModelId: vi.fn(),
+    selectedSize: "1024x1024",
+    setSelectedSize: vi.fn(),
+    images: [],
+    selectedImage: null,
+    selectedImageId: null,
+    setSelectedImageId: vi.fn(),
+    generating: false,
+    savingToResource: false,
+    generateImage: vi.fn(async () => undefined),
+    cancelGeneration: vi.fn(),
+    backfillImagesToResource: vi.fn(async () => undefined),
+    saveImagesToResource: vi.fn(async () => ({ saved: false, skipped: true })),
+    deleteImage: vi.fn(),
+    newImage: vi.fn(),
   });
   mockInputbar.mockClear();
   mockWorkspacePendingA2UIPanel.mockClear();

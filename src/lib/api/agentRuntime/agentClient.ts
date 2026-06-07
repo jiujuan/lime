@@ -19,23 +19,51 @@ export interface GenerateAgentRuntimeTitleRequest {
   titleKind?: "session" | "image_task";
 }
 
-function normalizeGeneratedTitleResult(
-  response: string | AgentRuntimeGeneratedTitleResult,
-): AgentRuntimeGeneratedTitleResult {
-  if (typeof response === "string") {
-    return {
-      title: response,
-      usedFallback: false,
-    };
+const LOCAL_TITLE_MAX_LENGTH = 32;
+
+function stripPreviewRolePrefix(line: string): string {
+  return line.replace(
+    /^(?:user|assistant|system|human|用户|助手|系统)\s*[:：]\s*/i,
+    "",
+  );
+}
+
+function normalizePreviewTitleText(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/!\[[^\]]*]\([^)]+\)/g, " ")
+    .replace(/\[([^\]]+)]\([^)]+\)/g, "$1")
+    .replace(/^[#>*\-\s]+/, "")
+    .replace(/[#*_~[\]{}()<>]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function truncateLocalTitle(text: string): string {
+  const chars = Array.from(text);
+  if (chars.length <= LOCAL_TITLE_MAX_LENGTH) {
+    return text;
   }
 
-  return {
-    title: response.title,
-    sessionId: response.sessionId ?? null,
-    executionRuntime: response.executionRuntime ?? null,
-    usedFallback: response.usedFallback ?? false,
-    fallbackReason: response.fallbackReason ?? null,
-  };
+  return chars.slice(0, LOCAL_TITLE_MAX_LENGTH).join("").trim();
+}
+
+function buildLocalGeneratedTitle(
+  previewText: string | undefined,
+): string {
+  const lines =
+    previewText
+      ?.split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean) ?? [];
+  const userLine =
+    lines.find((line) => /^(?:user|human|用户)\s*[:：]/i.test(line)) ??
+    lines[0] ??
+    "";
+  const title = normalizePreviewTitleText(stripPreviewRolePrefix(userLine));
+
+  return truncateLocalTitle(title);
 }
 
 export function createAgentClient({
@@ -56,20 +84,15 @@ export function createAgentClient({
   async function generateAgentRuntimeTitleResult(
     request: GenerateAgentRuntimeTitleRequest,
   ): Promise<AgentRuntimeGeneratedTitleResult> {
-    const payload: Record<string, string> = {};
-    if (request.sessionId?.trim()) {
-      payload.sessionId = request.sessionId.trim();
-    }
-    if (request.previewText?.trim()) {
-      payload.previewText = request.previewText.trim();
-    }
-    if (request.titleKind?.trim()) {
-      payload.titleKind = request.titleKind.trim();
-    }
+    const sessionId = request.sessionId?.trim() || null;
 
-    return normalizeGeneratedTitleResult(
-      await bridgeInvoke("agent_generate_title", payload),
-    );
+    return {
+      title: buildLocalGeneratedTitle(request.previewText),
+      sessionId,
+      executionRuntime: null,
+      usedFallback: true,
+      fallbackReason: "local_preview_title",
+    };
   }
 
   async function generateAgentRuntimeTitle(

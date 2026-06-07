@@ -25,7 +25,7 @@ P17.5 已用 `smoke:agent-apps` 证明正式 Agent Apps 入口可以独立跑通
 ## 关键修复
 
 1. `AgentAppsPage` 根节点补 `data-testid="agent-apps-page"`，避免 smoke 已进入页面却误判不可见。
-2. `scripts/agent-apps-smoke.mjs` 在 active bootstrap 阶段注入受控 `__LIME_OEM_CLOUD__` / `__LIME_SESSION_TOKEN__`，并用 Playwright route mock `/client/agent-apps`，避免访问真实网络。
+2. `scripts/agent-app/apps-smoke.mjs` 在 active bootstrap 阶段注入受控 `__LIME_OEM_CLOUD__` / `__LIME_SESSION_TOKEN__`，并用 Playwright route mock `/client/agent-apps`，避免访问真实网络。
 3. active bootstrap 的 `packageHash` / `manifestHash` 改为合法 `sha256:<64 hex>`，符合 P17.2 Cloud release descriptor 校验。
 4. cleanup rehearsal 断言从 lifecycle descriptor 的 `completionEffect` 调整为 cleanup evidence 的 `DRY_RUN_ONLY` 警告，符合 UI 当前导出的事实源。
 
@@ -33,8 +33,8 @@ P17.5 已用 `smoke:agent-apps` 证明正式 Agent Apps 入口可以独立跑通
 
 | 命令 | 结果 |
 |---|---|
-| `node --check scripts/agent-apps-smoke.mjs` | 通过。 |
-| `git diff --check -- scripts/agent-apps-smoke.mjs src/features/agent-app/ui/AgentAppsPage.tsx` | 通过。 |
+| `node --check scripts/agent-app/apps-smoke.mjs` | 通过。 |
+| `git diff --check -- scripts/agent-app/apps-smoke.mjs src/features/agent-app/ui/AgentAppsPage.tsx` | 通过。 |
 | `nice -n 10 npm run smoke:agent-apps -- --timeout-ms 300000 --interval-ms 1000` | 通过。 |
 
 证据产物：

@@ -7,7 +7,9 @@ function allPassed(items, ids) {
 }
 
 function evidenceFor(items, ids) {
-  return ids.map((id) => `${id}=${items.get(id)?.passed ? "pass" : "fail"}`).join("; ");
+  return ids
+    .map((id) => `${id}=${items.get(id)?.passed ? "pass" : "fail"}`)
+    .join("; ");
 }
 
 function gapFor(items, ids) {
@@ -32,7 +34,9 @@ function ownerProtocolStatus(items, processOwner) {
   if (!hasOwnerProtocolEvidence(items, processOwner)) {
     return "fail";
   }
-  return processOwner?.verdict?.status === "busy" ? "pass_with_blocking_owner" : "pass";
+  return processOwner?.verdict?.status === "busy"
+    ? "pass_with_blocking_owner"
+    : "pass";
 }
 
 function buildAgentQcObjectiveChecklist({
@@ -42,7 +46,11 @@ function buildAgentQcObjectiveChecklist({
   generatedAt = new Date().toISOString(),
 }) {
   const items = itemById(audit);
-  const manifestIds = ["scenario-manifest", "gui-flow-manifest", "evidence-schema"];
+  const manifestIds = [
+    "scenario-manifest",
+    "gui-flow-manifest",
+    "evidence-schema",
+  ];
   const qcloopToolingIds = [
     "qcloop-payload-generator",
     "qcloop-payload-coverage",
@@ -65,23 +73,28 @@ function buildAgentQcObjectiveChecklist({
       gap: items.get("docs-tests-standard")?.gap || "",
     },
     {
-      requirement: "提供 P0 scenario manifest、GUI flow manifest、Evidence Pack schema",
+      requirement:
+        "提供 P0 scenario manifest、GUI flow manifest、Evidence Pack schema",
       artifacts: [
         "internal/test/agent-qc-scenarios.manifest.json",
         "internal/test/agent-qc-gui-flows.manifest.json",
         "internal/test/agent-qc-evidence.schema.json",
       ],
-      evidence: manifestIds.map((id) => items.get(id)?.evidence).filter(Boolean).join("; "),
+      evidence: manifestIds
+        .map((id) => items.get(id)?.evidence)
+        .filter(Boolean)
+        .join("; "),
       status: allPassed(items, manifestIds) ? "pass" : "fail",
       gap: gapFor(items, manifestIds),
     },
     {
-      requirement: "qcloop payload / verifier / exporter / release summary gate 可生成和审查结构化证据",
+      requirement:
+        "qcloop payload / verifier / exporter / release summary gate 可生成和审查结构化证据",
       artifacts: [
-        "scripts/agent-qc-qcloop-job.mjs",
-        "scripts/agent-qc-payload-coverage.mjs",
-        "scripts/agent-qc-export-evidence.mjs",
-        "scripts/agent-qc-release-summary.mjs",
+        "scripts/agent-qc/qcloop-job.mjs",
+        "scripts/agent-qc/payload-coverage.mjs",
+        "scripts/agent-qc/export-evidence.mjs",
+        "scripts/agent-qc/release-summary.mjs",
         "internal/tests/lime-agent-qc-evidence-contract.md",
       ],
       evidence: evidenceFor(items, qcloopToolingIds),
@@ -89,11 +102,12 @@ function buildAgentQcObjectiveChecklist({
       gap: gapFor(items, qcloopToolingIds),
     },
     {
-      requirement: "qcloop / GUI owner / raw process owner 有只读取证与安全处置协议",
+      requirement:
+        "qcloop / GUI owner / raw process owner 有只读取证与安全处置协议",
       artifacts: [
-        "scripts/agent-qc-qcloop-status.mjs",
-        "scripts/agent-qc-gui-owner-check.mjs",
-        "scripts/agent-qc-process-owner-check.mjs",
+        "scripts/agent-qc/qcloop-status.mjs",
+        "scripts/agent-qc/gui-owner-check.mjs",
+        "scripts/agent-qc/process-owner-check.mjs",
         "scripts/lib/agent-qc-process-owner-core.mjs",
         "internal/tests/lime-agent-qc-qcloop-operations.md",
         ".lime/qc/stale-raw-gui-owner-intervention-request.json",
@@ -106,8 +120,12 @@ function buildAgentQcObjectiveChecklist({
           : "",
     },
     {
-      requirement: "官方 .lime/qc/agent-qc-evidence.json 必须是真实 8/8 P0 pass Evidence Pack",
-      artifacts: [".lime/qc/agent-qc-evidence.json", "internal/test/agent-qc-scenarios.manifest.json"],
+      requirement:
+        "官方 .lime/qc/agent-qc-evidence.json 必须是真实 8/8 P0 pass Evidence Pack",
+      artifacts: [
+        ".lime/qc/agent-qc-evidence.json",
+        "internal/test/agent-qc-scenarios.manifest.json",
+      ],
       evidence: items.get("real-qcloop-evidence")?.evidence || "",
       status: items.get("real-qcloop-evidence")?.passed ? "pass" : "fail",
       gap: items.get("real-qcloop-evidence")?.gap || "",
@@ -120,16 +138,22 @@ function buildAgentQcObjectiveChecklist({
       gap: items.get("local-verify-gate")?.gap || "",
     },
     {
-      requirement: "在 Lime 仓库内不执行未授权 git commit / push / tag / release",
+      requirement:
+        "在 Lime 仓库内不执行未授权 git commit / push / tag / release",
       artifacts: ["git status", "user guardrail"],
-      evidence: "本轮未执行 git commit / push / tag / release；工作树存在其他并发进程产生的 unrelated 修改，未触碰。",
+      evidence:
+        "本轮未执行 git commit / push / tag / release；工作树存在其他并发进程产生的 unrelated 修改，未触碰。",
       status: "pass",
       gap: "",
     },
   ];
   const blockers = checklist
     .filter((item) => item.status !== "pass")
-    .map((item) => ({ requirement: item.requirement, status: item.status, gap: item.gap }));
+    .map((item) => ({
+      requirement: item.requirement,
+      status: item.status,
+      gap: item.gap,
+    }));
   return {
     schemaVersion: "v1",
     generatedAt,
@@ -173,4 +197,7 @@ function renderAgentQcObjectiveChecklistMarkdown(result) {
   return `${lines.join("\n")}\n`;
 }
 
-export { buildAgentQcObjectiveChecklist, renderAgentQcObjectiveChecklistMarkdown };
+export {
+  buildAgentQcObjectiveChecklist,
+  renderAgentQcObjectiveChecklistMarkdown,
+};

@@ -1,6 +1,12 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { APP_SERVER_METHOD_AGENT_SESSION_EVENT } from "@/lib/api/appServer";
+import { listenAgentRuntimeEvent } from "@/lib/api/agentRuntimeEvents";
+import {
+  createThreadClient,
+  type AgentRuntimeAppServerClient,
+} from "@/lib/api/agentRuntime/threadClient";
 import type { AgentThreadTurn } from "../types";
 import { useAgentRuntimeSyncEffects } from "./useAgentRuntimeSyncEffects";
 
@@ -8,17 +14,22 @@ const mockIsDevBridgeAvailable = vi.hoisted(() => vi.fn(() => false));
 const mockHasDevBridgeEventListenerCapability = vi.hoisted(() =>
   vi.fn(() => false),
 );
-const mockHasTauriEventListenerCapability = vi.hoisted(() => vi.fn(() => true));
+const mockHasDesktopHostEventListenerCapability = vi.hoisted(() =>
+  vi.fn(() => true),
+);
+const mockSafeInvoke = vi.hoisted(() => vi.fn());
 const mockSafeListen = vi.hoisted(() => vi.fn(async () => () => {}));
 
 vi.mock("@/lib/dev-bridge", () => ({
   hasDevBridgeEventListenerCapability: mockHasDevBridgeEventListenerCapability,
   isDevBridgeAvailable: mockIsDevBridgeAvailable,
+  safeInvoke: mockSafeInvoke,
   safeListen: mockSafeListen,
 }));
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriEventListenerCapability: mockHasTauriEventListenerCapability,
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostEventListenerCapability:
+    mockHasDesktopHostEventListenerCapability,
 }));
 
 type HookProps = Parameters<typeof useAgentRuntimeSyncEffects>[0];
@@ -48,6 +59,45 @@ function createThreadTurn(
   };
 }
 
+function createAppServerThreadClientMock(): AgentRuntimeAppServerClient {
+  return {
+    readSession: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          status: "idle",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+        },
+        turns: [],
+      },
+      response: {
+        id: 1,
+        result: {
+          session: {
+            sessionId: "session-1",
+            threadId: "thread-1",
+            appId: "agent-chat",
+            status: "idle",
+            createdAt: "2026-06-06T00:00:00.000Z",
+            updatedAt: "2026-06-06T00:00:00.000Z",
+          },
+          turns: [],
+        },
+      },
+      messages: [],
+      notifications: [],
+    }),
+    startTurn: vi.fn().mockResolvedValue({}),
+    cancelTurn: vi.fn().mockResolvedValue({}),
+    respondAction: vi.fn().mockResolvedValue({}),
+    drainEvents: vi.fn().mockResolvedValue([]),
+  };
+}
+
 async function mountHook(props?: Partial<HookProps>): Promise<HookHarness> {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -56,10 +106,12 @@ async function mountHook(props?: Partial<HookProps>): Promise<HookHarness> {
   const defaultProps: HookProps = {
     runtime: {
       listenToTeamEvents: vi.fn(async () => () => {}),
+      listenToTurnEvents: vi.fn(async () => () => {}),
     },
     sessionIdRef: { current: "session-1" },
     sessionId: "session-1",
     parentSessionId: null,
+    currentTurnEventName: null,
     isSending: false,
     threadReadStatus: null,
     queuedTurnCount: 0,
@@ -114,7 +166,7 @@ describe("useAgentRuntimeSyncEffects", () => {
     vi.setSystemTime(new Date("2026-03-29T00:05:00.000Z"));
     mockIsDevBridgeAvailable.mockReturnValue(false);
     mockHasDevBridgeEventListenerCapability.mockReturnValue(false);
-    mockHasTauriEventListenerCapability.mockReturnValue(true);
+    mockHasDesktopHostEventListenerCapability.mockReturnValue(true);
     mockSafeListen.mockResolvedValue(() => {});
   });
 
@@ -238,6 +290,7 @@ describe("useAgentRuntimeSyncEffects", () => {
     const refreshSessionDetail = vi.fn(async () => true);
     const listeners = new Map<string, (event: { payload: unknown }) => void>();
     const runtime = {
+      listenToTurnEvents: vi.fn(async () => () => {}),
       listenToTeamEvents: vi.fn(async (eventName, handler) => {
         listeners.set(
           eventName,
@@ -278,9 +331,192 @@ describe("useAgentRuntimeSyncEffects", () => {
     }
   });
 
+  it("收到当前 turn 的 App Server runtime event 后应刷新 read model", async () => {
+    const refreshSessionDetail = vi.fn(async () => true);
+    const listeners = new Map<string, (event: { payload: unknown }) => void>();
+    const runtime = {
+      listenToTeamEvents: vi.fn(async () => () => {}),
+      listenToTurnEvents: vi.fn(async (eventName, handler) => {
+        listeners.set(
+          eventName,
+          handler as (event: { payload: unknown }) => void,
+        );
+        return () => {
+          listeners.delete(eventName);
+        };
+      }),
+    };
+    const harness = await mountHook({
+      runtime,
+      currentTurnEventName: "aster_stream_assistant-1",
+      isSending: true,
+      refreshSessionDetail,
+    });
+
+    try {
+      expect(runtime.listenToTurnEvents).toHaveBeenCalledWith(
+        "aster_stream_assistant-1",
+        expect.any(Function),
+      );
+
+      await act(async () => {
+        listeners.get("aster_stream_assistant-1")?.({
+          payload: {
+            type: "runtime_status",
+            status: {
+              phase: "running",
+              title: "处理中",
+            },
+          },
+        });
+        await Promise.resolve();
+      });
+
+      expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
+      expect(refreshSessionDetail).toHaveBeenCalledWith("session-1");
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("当前 turn 的 text_delta 不应触发完整 read model 刷新", async () => {
+    const refreshSessionDetail = vi.fn(async () => true);
+    const listeners = new Map<string, (event: { payload: unknown }) => void>();
+    const runtime = {
+      listenToTeamEvents: vi.fn(async () => () => {}),
+      listenToTurnEvents: vi.fn(async (eventName, handler) => {
+        listeners.set(
+          eventName,
+          handler as (event: { payload: unknown }) => void,
+        );
+        return () => {
+          listeners.delete(eventName);
+        };
+      }),
+    };
+    const harness = await mountHook({
+      runtime,
+      currentTurnEventName: "aster_stream_assistant-2",
+      isSending: true,
+      refreshSessionDetail,
+    });
+
+    try {
+      await act(async () => {
+        listeners.get("aster_stream_assistant-2")?.({
+          payload: {
+            type: "text_delta",
+            text: "增量内容",
+          },
+        });
+        await Promise.resolve();
+      });
+
+      expect(refreshSessionDetail).not.toHaveBeenCalled();
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("App Server turn notification 应通过当前 stream event 触发 read model 刷新", async () => {
+    const eventName = "aster_stream_app-server-p3-126";
+    const refreshSessionDetail = vi.fn(async () => true);
+    const appServerClient = createAppServerThreadClientMock();
+    vi.mocked(appServerClient.startTurn).mockResolvedValueOnce({
+      id: 1,
+      result: {
+        turn: {
+          turnId: "turn-1",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          status: "accepted",
+        },
+      },
+      response: {
+        id: 1,
+        result: {
+          turn: {
+            turnId: "turn-1",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "accepted",
+          },
+        },
+      },
+      messages: [],
+      notifications: [
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-done-1",
+              sequence: 1,
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-1",
+              type: "turn.done",
+              timestamp: "2026-06-06T00:00:01.000Z",
+              payload: {},
+            },
+          },
+        },
+      ],
+    });
+    const threadClient = createThreadClient({
+      appServerClient,
+      invokeCommand: vi.fn(),
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+    const runtime = {
+      listenToTeamEvents: vi.fn(async () => () => {}),
+      listenToTurnEvents: vi.fn((name, handler) =>
+        listenAgentRuntimeEvent(name, handler),
+      ),
+    };
+    const harness = await mountHook({
+      runtime,
+      currentTurnEventName: eventName,
+      isSending: true,
+      refreshSessionDetail,
+    });
+
+    try {
+      await vi.waitFor(() => {
+        expect(runtime.listenToTurnEvents).toHaveBeenCalledWith(
+          eventName,
+          expect.any(Function),
+        );
+      });
+
+      await act(async () => {
+        await threadClient.submitAgentRuntimeTurn({
+          message: "继续",
+          session_id: "session-1",
+          turn_id: "turn-1",
+          event_name: eventName,
+        });
+        await Promise.resolve();
+      });
+
+      expect(appServerClient.startTurn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: "session-1",
+          turnId: "turn-1",
+          runtimeOptions: expect.objectContaining({
+            eventName,
+          }),
+        }),
+      );
+      expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
+      expect(refreshSessionDetail).toHaveBeenCalledWith("session-1");
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("浏览器 DevBridge 发送中但无原生事件能力时，应轮询刷新当前会话详情", async () => {
     mockIsDevBridgeAvailable.mockReturnValue(true);
-    mockHasTauriEventListenerCapability.mockReturnValue(false);
+    mockHasDesktopHostEventListenerCapability.mockReturnValue(false);
     mockHasDevBridgeEventListenerCapability.mockReturnValue(false);
 
     const refreshSessionDetail = vi.fn(async () => true);
@@ -314,7 +550,7 @@ describe("useAgentRuntimeSyncEffects", () => {
 
   it("浏览器 DevBridge 已接通事件桥时，不应再轮询刷新当前会话详情", async () => {
     mockIsDevBridgeAvailable.mockReturnValue(true);
-    mockHasTauriEventListenerCapability.mockReturnValue(false);
+    mockHasDesktopHostEventListenerCapability.mockReturnValue(false);
     mockHasDevBridgeEventListenerCapability.mockReturnValue(true);
 
     const refreshSessionDetail = vi.fn(async () => true);
@@ -343,9 +579,10 @@ describe("useAgentRuntimeSyncEffects", () => {
   });
 
   it("浏览器桥接下无活跃工作时不应订阅 team 事件，避免旧会话占满 SSE 连接", async () => {
-    mockHasTauriEventListenerCapability.mockReturnValue(false);
+    mockHasDesktopHostEventListenerCapability.mockReturnValue(false);
     mockHasDevBridgeEventListenerCapability.mockReturnValue(true);
     const runtime = {
+      listenToTurnEvents: vi.fn(async () => () => {}),
       listenToTeamEvents: vi.fn(async () => () => {}),
     };
     const harness = await mountHook({
@@ -364,9 +601,10 @@ describe("useAgentRuntimeSyncEffects", () => {
   });
 
   it("浏览器桥接下存在活跃工作时仍应订阅 team 事件", async () => {
-    mockHasTauriEventListenerCapability.mockReturnValue(false);
+    mockHasDesktopHostEventListenerCapability.mockReturnValue(false);
     mockHasDevBridgeEventListenerCapability.mockReturnValue(true);
     const runtime = {
+      listenToTurnEvents: vi.fn(async () => () => {}),
       listenToTeamEvents: vi.fn(async () => () => {}),
     };
     const harness = await mountHook({

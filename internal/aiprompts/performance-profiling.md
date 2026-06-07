@@ -6,16 +6,18 @@ Lime 的卡顿来源通常不是单点：
 
 - Rust 后端 CPU 热点
 - Tokio 异步任务等待、锁竞争或阻塞
-- Tauri 命令边界过慢
+- Electron IPC / App Server / legacy adapter 边界过慢
 - React / WebView 主线程重渲染或长任务
 
 因此仓库内采用分层诊断，而不是只依赖单一火焰图工具。
 
 ## 当前内置能力
 
-所有内置 profiling 能力都只面向开发环境：
+所有内置 profiling 能力都只面向开发环境。当前 profiling 口径必须围绕 Electron Desktop Host、App Server sidecar 和 renderer DevTools；旧桌面宿主 profiling 脚本不得作为 current 证据。
 
-- 只建议通过 `npm run tauri:dev:profile:*` 这组命令启用
+- 当前桌面启动入口是 `npm run electron:dev`
+- renderer DevTools 通过 `LIME_ELECTRON_OPEN_DEVTOOLS=1 npm run electron:dev` 打开
+- Rust trace / Tokio Console 需要显式构建带 profiling feature 的 App Server sidecar，并通过 `APP_SERVER_BIN` 接入 Electron dev
 - release / 生产构建默认不启用这些 feature
 - 即使手动设置 `LIME_PROFILE=*`，release / 生产构建也会忽略这些开发诊断开关
 
@@ -25,7 +27,7 @@ Lime 的卡顿来源通常不是单点：
 
 - 输出目录：应用运行时目录下的 `profiles/`
 - 自定义路径：`LIME_PROFILE_TRACE_PATH=/abs/path/to/trace.json`
-- 调试时自动打开主窗口 DevTools：`LIME_OPEN_WEBVIEW_DEVTOOLS=1`
+- 调试时自动打开主窗口 DevTools：`LIME_ELECTRON_OPEN_DEVTOOLS=1`
 
 ### 2. Tokio Console 遥测
 
@@ -37,7 +39,7 @@ Lime 的卡顿来源通常不是单点：
 
 ### 3. 前端 Invoke User Timing
 
-`safeInvoke` 会在浏览器 Performance 面板中写入 `lime:safeInvoke:*` 的 User Timing 条目，便于把前端交互和 Tauri 命令耗时对齐。
+`safeInvoke` 会在浏览器 Performance 面板中写入 `lime:safeInvoke:*` 的 User Timing 条目，便于把前端交互和 Electron IPC / App Server / legacy adapter 耗时对齐。
 
 ### 4. 关键慢链路 Span
 
@@ -65,19 +67,7 @@ Lime 的卡顿来源通常不是单点：
 命令：
 
 ```bash
-npm run tauri:dev:profile:trace
-```
-
-如果需要一起开 WebView DevTools：
-
-```bash
-npm run tauri:dev:profile:trace:devtools
-```
-
-如果要复用 headless 配置：
-
-```bash
-npm run tauri:dev:profile:trace:headless
+LIME_PROFILE=trace LIME_ELECTRON_OPEN_DEVTOOLS=1 APP_SERVER_BIN=/abs/path/to/app-server npm run electron:dev
 ```
 
 结束应用后，把生成的 trace 文件导入 Perfetto：
@@ -102,14 +92,10 @@ npm run tauri:dev:profile:trace:headless
 先启动应用：
 
 ```bash
-npm run tauri:dev:profile:console
+LIME_PROFILE=console APP_SERVER_BIN=/abs/path/to/app-server npm run electron:dev
 ```
 
-如果还要同时看 trace：
-
-```bash
-npm run tauri:dev:profile:trace-console
-```
+如果还要同时看 trace，把 `LIME_PROFILE` 设为 `trace,console`。
 
 然后在另一个终端连接：
 
@@ -141,7 +127,7 @@ cargo install tokio-console
 优先使用 `samply`：
 
 ```bash
-samply record npm run tauri:dev
+samply record npm run electron:dev
 ```
 
 如果偏好传统 flamegraph，也可以使用 `cargo flamegraph`。

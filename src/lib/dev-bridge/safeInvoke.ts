@@ -1,43 +1,31 @@
 /**
- * @file Safe Tauri Invoke 封装
- * @description 提供安全的 Tauri invoke 调用，支持三层 fallback：
- *   1. Tauri IPC (生产环境或 Tauri webview)
- *   2. HTTP Bridge (开发模式，浏览器 + Tauri 后端)
- *   3. Mock (仅测试/非浏览器调试场景)
+ * @file Safe Desktop Host Invoke 封装
+ * @description 提供安全的 Desktop Host 调用。current 主链固定为：
+ *   前端 -> Electron IPC -> App Server JSON-RPC -> RuntimeCore / backend。
+ *   HTTP Bridge 仅保留为浏览器开发诊断通道，失败时不再回退 mock。
  *
  * @module dev-bridge/safeInvoke
  */
 
-import { core as tauriCore, event as tauriEvent } from "@tauri-apps/api";
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@/lib/desktop-host/event";
 import {
   hasDevBridgeEventListenerCapability,
   invokeViaHttp,
   isDevBridgeAvailable,
   listenViaHttpEvent,
   normalizeDevBridgeError,
+  resolveBridgeRequestTimeoutMs,
 } from "./http-client";
-import { invokeExplicitMock, listenExplicitMock } from "./explicitMockFallback";
+import { shouldDisallowMockEventFallbackInBrowser } from "./mockPriorityCommands";
 import {
-  shouldDisallowMockEventFallbackInBrowser,
-  shouldDisallowMockFallbackInBrowser,
-  shouldPreferMockInBrowser,
-} from "./mockPriorityCommands";
-import {
-  getTauriGlobal,
-  hasTauriEventCapability,
-  hasTauriEventListenerCapability,
-  hasTauriInvokeCapability,
-  hasTauriRuntimeMarkers,
-} from "@/lib/tauri-runtime";
-
-const { invoke: baseInvoke } = tauriCore;
-const { listen: baseListen, emit: baseEmit } = tauriEvent;
+  getElectronHostBridge,
+  isElectronHostCommandAvailable,
+} from "@/lib/electron-host";
 
 export interface InvokeErrorBufferEntry {
   timestamp: string;
   command: string;
-  transport: "tauri-ipc" | "tauri-legacy" | "http-bridge" | "fallback-invoke";
+  transport: "electron-ipc" | "http-bridge" | "unavailable";
   error: string;
   args_preview?: Record<string, unknown>;
 }
@@ -45,7 +33,7 @@ export interface InvokeErrorBufferEntry {
 export interface InvokeTraceBufferEntry {
   timestamp: string;
   command: string;
-  transport: "tauri-ipc" | "tauri-legacy" | "http-bridge" | "fallback-invoke";
+  transport: "electron-ipc" | "http-bridge" | "unavailable";
   status: "success" | "error";
   duration_ms: number;
   error?: string;
@@ -132,48 +120,6 @@ function sanitizeTimingLabel(input: string): string {
   return normalized || "invoke";
 }
 
-function canUseExplicitBrowserMockFallback(): boolean {
-  return typeof window !== "undefined" && !hasTauriRuntimeMarkers();
-}
-
-async function invokeFallbackTransport<T>(
-  cmd: string,
-  args?: Record<string, unknown>,
-): Promise<T> {
-  try {
-    return (await baseInvoke(cmd, args)) as T;
-  } catch (error) {
-    if (!canUseExplicitBrowserMockFallback()) {
-      throw error;
-    }
-    return invokeExplicitMock<T>(cmd, args);
-  }
-}
-
-async function invokeBrowserMockFallbackTransport<T>(
-  cmd: string,
-  args?: Record<string, unknown>,
-): Promise<T> {
-  if (canUseExplicitBrowserMockFallback()) {
-    return invokeExplicitMock<T>(cmd, args);
-  }
-  return invokeFallbackTransport<T>(cmd, args);
-}
-
-async function listenFallbackTransport<T>(
-  event: string,
-  handler: (event: { payload: T }) => void,
-): Promise<UnlistenFn> {
-  try {
-    return createSafeUnlisten(await baseListen(event, handler));
-  } catch (error) {
-    if (!canUseExplicitBrowserMockFallback()) {
-      throw error;
-    }
-    return createSafeUnlisten(await listenExplicitMock(event, handler));
-  }
-}
-
 function createSafeUnlisten(unlisten: UnlistenFn): UnlistenFn {
   let active = true;
 
@@ -193,35 +139,62 @@ function createSafeUnlisten(unlisten: UnlistenFn): UnlistenFn {
 
 function normalizeDevBridgeListenError(event: string, error: unknown): Error {
   return new Error(
-    `[DevBridge] 浏览器模式无法连接事件桥，事件 "${event}" 监听失败。请先启动 Tauri 开发后端（例如 npm run tauri:dev 或 npm run tauri:dev:headless），并确认 http://127.0.0.1:3030/events 可访问。原始错误: ${toErrorMessage(error)}`,
+    `[DevBridge] 浏览器模式无法连接事件桥，事件 "${event}" 监听失败。请先启动 Electron 开发入口（npm run dev），并确认桌面宿主桥接可用。原始错误: ${toErrorMessage(error)}`,
   );
 }
 
-function normalizeTauriListenError(event: string, error: unknown): Error {
+function normalizeDesktopHostListenError(event: string, error: unknown): Error {
   return new Error(
-    `[Tauri] 原生事件桥不可用，事件 "${event}" 监听失败。请确认当前窗口的 event 插件桥接已经初始化完成，并检查前端预加载桥接是否可用。原始错误: ${toErrorMessage(error)}`,
+    `[Desktop Host] 原生事件桥不可用，事件 "${event}" 监听失败。请确认当前窗口的 event 插件桥接已经初始化完成，并检查前端预加载桥接是否可用。原始错误: ${toErrorMessage(error)}`,
   );
-}
-
-function getTauriGlobalEventListen():
-  | ((event: string, handler: (event: { payload: unknown }) => void) => unknown)
-  | null {
-  const tauriGlobal = getTauriGlobal() as {
-    event?: {
-      listen?: unknown;
-    };
-  } | null;
-
-  return typeof tauriGlobal?.event?.listen === "function"
-    ? (tauriGlobal.event.listen as (
-        event: string,
-        handler: (event: { payload: unknown }) => void,
-      ) => unknown)
-    : null;
 }
 
 function shouldFailClosedOnMissingNativeEventBridge(event: string): boolean {
   return shouldDisallowMockEventFallbackInBrowser(event);
+}
+
+function electronUnsupportedCommandError(command: string): Error {
+  return new Error(
+    `[Electron] Desktop Host 尚未支持命令 "${command}"。该命令不能回退到 legacy desktop host、DevBridge mock 或 renderer mock；请经 Electron Desktop Host bridge 迁移到 App Server JSON-RPC。`,
+  );
+}
+
+function electronHostUnavailableError(command: string): Error {
+  return new Error(
+    `[Electron] Desktop Host IPC 不可用，命令 "${command}" 无法进入 App Server JSON-RPC 主链。请通过 Electron 桌面入口运行，或启动开发 HTTP bridge 诊断通道。`,
+  );
+}
+
+function electronInvokeTimeoutError(command: string, timeoutMs: number): Error {
+  return new Error(
+    `[Electron] Desktop Host IPC 命令 "${command}" 在 ${timeoutMs}ms 内未返回，已按 fail-closed 结束；该命令不能回退到 legacy desktop host、DevBridge mock 或 renderer mock。`,
+  );
+}
+
+async function invokeElectronHostWithTimeout<T>(
+  invoke: () => Promise<T>,
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  const timeoutMs = resolveBridgeRequestTimeoutMs(command, args);
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return await invoke();
+  }
+
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = globalThis.setTimeout(() => {
+      reject(electronInvokeTimeoutError(command, timeoutMs));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([invoke(), timeoutPromise]);
+  } finally {
+    if (timeoutId !== undefined) {
+      globalThis.clearTimeout(timeoutId);
+    }
+  }
 }
 
 function startInvokeTiming(command: string): string | null {
@@ -436,10 +409,9 @@ export function clearInvokeTraceBuffer(): void {
 }
 
 /**
- * 安全的 Tauri invoke 封装
- * 支持三种模式：Tauri IPC → HTTP Bridge → Mock。
- * 在浏览器开发模式下，模型 / Provider / Agent 运行时等真相命令
- * 若 HTTP Bridge 失败，会直接报错；其余非真相命令才允许回退到 mock。
+ * 安全的 Desktop Host invoke 封装
+ * current 主链：Electron IPC -> App Server JSON-RPC。
+ * 浏览器开发态可走 HTTP Bridge，失败时直接抛出，不再回退 mock 或 legacy desktop host。
  */
 export async function safeInvoke<T = any>(
   cmd: string,
@@ -448,81 +420,33 @@ export async function safeInvoke<T = any>(
   const startedAt = Date.now();
   const timingId = startInvokeTiming(cmd);
 
-  // 1. 优先使用 Tauri IPC (生产环境或 Tauri webview 可用时)
-  if (
-    typeof window !== "undefined" &&
-    (window as any).__TAURI__?.core?.invoke
-  ) {
+  const electronHost = getElectronHostBridge();
+  if (electronHost && isElectronHostCommandAvailable(cmd)) {
     try {
-      const result = (await (window as any).__TAURI__.core.invoke(
+      const result = await invokeElectronHostWithTimeout(
+        () => electronHost.invoke<T>(cmd, args),
         cmd,
         args,
-      )) as T;
-      recordInvokeTrace(cmd, args, "tauri-ipc", "success", startedAt);
-      finishInvokeTiming(timingId, cmd, "tauri-ipc", "success");
-      return result;
-    } catch (error) {
-      recordInvokeError(cmd, args, error, "tauri-ipc");
-      recordInvokeTrace(cmd, args, "tauri-ipc", "error", startedAt, error);
-      finishInvokeTiming(timingId, cmd, "tauri-ipc", "error");
-      throw error;
-    }
-  }
-
-  // Legacy check for older Tauri versions
-  if (typeof window !== "undefined" && (window as any).__TAURI__?.invoke) {
-    try {
-      const result = (await (window as any).__TAURI__.invoke(cmd, args)) as T;
-      recordInvokeTrace(cmd, args, "tauri-legacy", "success", startedAt);
-      finishInvokeTiming(timingId, cmd, "tauri-legacy", "success");
-      return result;
-    } catch (error) {
-      recordInvokeError(cmd, args, error, "tauri-legacy");
-      recordInvokeTrace(cmd, args, "tauri-legacy", "error", startedAt, error);
-      finishInvokeTiming(timingId, cmd, "tauri-legacy", "error");
-      throw error;
-    }
-  }
-
-  // Tauri IPC 尚未就绪时不再轮询等待，直接 fall through 到后续通道。
-  // 避免首屏并发大量 safeInvoke 时全部阻塞在 waitForTauriCapability 上。
-  if (hasTauriInvokeCapability()) {
-    try {
-      const result = (await baseInvoke(cmd, args)) as T;
-      recordInvokeTrace(cmd, args, "tauri-ipc", "success", startedAt);
-      finishInvokeTiming(timingId, cmd, "tauri-ipc", "success");
-      return result;
-    } catch (error) {
-      recordInvokeError(cmd, args, error, "tauri-ipc");
-      recordInvokeTrace(cmd, args, "tauri-ipc", "error", startedAt, error);
-      finishInvokeTiming(timingId, cmd, "tauri-ipc", "error");
-      throw error;
-    }
-  }
-
-  // 2. 浏览器开发模式下，部分原生/非关键命令直接优先走 mock。
-  if (isDevBridgeAvailable() && shouldPreferMockInBrowser(cmd)) {
-    try {
-      const result = await invokeFallbackTransport<T>(cmd, args);
-      recordInvokeTrace(cmd, args, "fallback-invoke", "success", startedAt);
-      finishInvokeTiming(timingId, cmd, "fallback-invoke", "success");
-      return result;
-    } catch (error) {
-      recordInvokeError(cmd, args, error, "fallback-invoke");
-      recordInvokeTrace(
-        cmd,
-        args,
-        "fallback-invoke",
-        "error",
-        startedAt,
-        error,
       );
-      finishInvokeTiming(timingId, cmd, "fallback-invoke", "error");
+      recordInvokeTrace(cmd, args, "electron-ipc", "success", startedAt);
+      finishInvokeTiming(timingId, cmd, "electron-ipc", "success");
+      return result;
+    } catch (error) {
+      recordInvokeError(cmd, args, error, "electron-ipc");
+      recordInvokeTrace(cmd, args, "electron-ipc", "error", startedAt, error);
+      finishInvokeTiming(timingId, cmd, "electron-ipc", "error");
       throw error;
     }
   }
+  if (electronHost) {
+    const error = electronUnsupportedCommandError(cmd);
+    recordInvokeError(cmd, args, error, "electron-ipc");
+    recordInvokeTrace(cmd, args, "electron-ipc", "error", startedAt, error);
+    finishInvokeTiming(timingId, cmd, "electron-ipc", "error");
+    throw error;
+  }
 
-  // 3. Dev 模式下尝试 HTTP 桥接（浏览器环境，Tauri 后端在运行）
+  // 浏览器开发模式下尝试 HTTP 桥接。失败时直接暴露真实错误。
   if (isDevBridgeAvailable()) {
     try {
       const result = await invokeViaHttp(cmd, args);
@@ -541,89 +465,43 @@ export async function safeInvoke<T = any>(
         normalizedError,
       );
 
-      if (shouldDisallowMockFallbackInBrowser(cmd)) {
-        finishInvokeTiming(timingId, cmd, "http-bridge", "error");
-        throw normalizedError;
-      }
-
-      try {
-        const result = await invokeBrowserMockFallbackTransport<T>(cmd, args);
-        recordInvokeTrace(cmd, args, "fallback-invoke", "success", startedAt);
-        finishInvokeTiming(timingId, cmd, "fallback-invoke", "success");
-        return result;
-      } catch (fallbackError) {
-        recordInvokeError(cmd, args, fallbackError, "fallback-invoke");
-        recordInvokeTrace(
-          cmd,
-          args,
-          "fallback-invoke",
-          "error",
-          startedAt,
-          fallbackError,
-        );
-        finishInvokeTiming(timingId, cmd, "fallback-invoke", "error");
-        throw normalizedError;
-      }
+      finishInvokeTiming(timingId, cmd, "http-bridge", "error");
+      throw normalizedError;
     }
   }
 
-  // 4. Fallback 到 mock（Vite alias 会替换 @tauri-apps 导入）
-  try {
-    const result = await invokeFallbackTransport<T>(cmd, args);
-    recordInvokeTrace(cmd, args, "fallback-invoke", "success", startedAt);
-    finishInvokeTiming(timingId, cmd, "fallback-invoke", "success");
-    return result;
-  } catch (error) {
-    recordInvokeError(cmd, args, error, "fallback-invoke");
-    recordInvokeTrace(cmd, args, "fallback-invoke", "error", startedAt, error);
-    finishInvokeTiming(timingId, cmd, "fallback-invoke", "error");
-    throw error;
-  }
+  const error = electronHostUnavailableError(cmd);
+  recordInvokeError(cmd, args, error, "unavailable");
+  recordInvokeTrace(cmd, args, "unavailable", "error", startedAt, error);
+  finishInvokeTiming(timingId, cmd, "unavailable", "error");
+  throw error;
 }
 
 /**
- * 安全的 Tauri listen 封装
- * 优先使用真实的 Tauri event API
+ * 安全的 Desktop Host listen 封装
+ * 优先使用真实的 Desktop Host event API
  */
 export async function safeListen<T = any>(
   event: string,
   handler: (event: { payload: T }) => void,
 ): Promise<UnlistenFn> {
-  const tauriGlobalListen = getTauriGlobalEventListen();
-  if (tauriGlobalListen) {
+  const electronHost = getElectronHostBridge();
+  if (electronHost) {
     try {
-      const unlisten = await tauriGlobalListen(event, handler as never);
-      return createSafeUnlisten(
-        typeof unlisten === "function" ? (unlisten as UnlistenFn) : () => {},
-      );
+      const listen = electronHost.listen ?? electronHost.on;
+      if (listen) {
+        const unlisten = await listen<T>(event, handler as never);
+        return createSafeUnlisten(unlisten);
+      }
     } catch (error) {
       if (shouldFailClosedOnMissingNativeEventBridge(event)) {
-        throw normalizeTauriListenError(event, error);
+        throw normalizeDesktopHostListenError(event, error);
       }
       console.warn(
-        `[safeListen] Tauri 全局事件桥调用失败，跳过监听: ${event}`,
+        `[safeListen] Electron 事件桥调用失败，跳过监听: ${event}`,
         error,
       );
       return () => {};
-    }
-  }
-
-  // 同步检查即可，不轮询等待，避免首屏并发监听全部阻塞
-  if (hasTauriEventListenerCapability()) {
-    try {
-      return createSafeUnlisten(await baseListen(event, handler));
-    } catch (error) {
-      if (hasTauriRuntimeMarkers()) {
-        if (shouldFailClosedOnMissingNativeEventBridge(event)) {
-          throw normalizeTauriListenError(event, error);
-        }
-        console.warn(
-          `[safeListen] Tauri 事件桥调用失败，跳过监听: ${event}`,
-          error,
-        );
-        return () => {};
-      }
-      throw error;
     }
   }
 
@@ -631,62 +509,35 @@ export async function safeListen<T = any>(
     try {
       return createSafeUnlisten(await listenViaHttpEvent(event, handler));
     } catch (error) {
-      if (!hasTauriRuntimeMarkers()) {
-        if (shouldDisallowMockEventFallbackInBrowser(event)) {
-          throw normalizeDevBridgeListenError(event, error);
-        }
-        return createSafeUnlisten(await listenExplicitMock(event, handler));
-      }
-      console.warn(
-        `[safeListen] DevBridge 事件流调用失败，跳过监听: ${event}`,
-        error,
-      );
-      return () => {};
+      throw normalizeDevBridgeListenError(event, error);
     }
   }
 
-  if (hasTauriRuntimeMarkers()) {
-    if (shouldFailClosedOnMissingNativeEventBridge(event)) {
-      throw normalizeTauriListenError(event, new Error("Tauri 事件桥未就绪"));
-    }
-    console.warn(`[safeListen] Tauri 事件桥未就绪，跳过监听: ${event}`);
-    return () => {};
-  }
-
-  return listenFallbackTransport(event, handler);
+  throw normalizeDesktopHostListenError(
+    event,
+    new Error("Electron IPC 事件桥未就绪"),
+  );
 }
 
-export function hasNativeTauriEventSupport(): boolean {
-  return hasTauriEventListenerCapability();
+export function hasNativeDesktopHostEventSupport(): boolean {
+  const electronHost = getElectronHostBridge();
+  return Boolean(electronHost?.listen || electronHost?.on);
 }
 
 /**
- * 安全的 Tauri emit 封装
- * 优先使用真实的 Tauri event API
+ * 安全的 Desktop Host emit 封装
+ * 优先使用真实的 Desktop Host event API
  */
 export async function safeEmit(
   event: string,
   payload?: unknown,
 ): Promise<void> {
-  const tauriGlobal = getTauriGlobal() as {
-    event?: {
-      emit?: (event: string, payload?: unknown) => Promise<void>;
-    };
-  } | null;
-
-  if (typeof tauriGlobal?.event?.emit === "function") {
-    return tauriGlobal.event.emit(event, payload);
+  const electronHost = getElectronHostBridge();
+  if (electronHost) {
+    return electronHost.emit(event, payload);
   }
 
-  // 同步检查，不轮询
-  if (hasTauriEventCapability()) {
-    return baseEmit(event, payload);
-  }
-
-  if (hasTauriRuntimeMarkers()) {
-    console.warn(`[safeEmit] Tauri 事件桥未就绪，跳过发送: ${event}`);
-    return;
-  }
-
-  return baseEmit(event, payload);
+  throw new Error(
+    `[Electron] Desktop Host IPC 不可用，事件 "${event}" 无法发送。`,
+  );
 }

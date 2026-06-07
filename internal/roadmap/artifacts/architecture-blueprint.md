@@ -49,15 +49,15 @@
 本文基于以下现役事实源：
 
 - `src/components/agent/chat/hooks/agentRuntimeAdapter.ts`
-- `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs`
-- `src-tauri/src/commands/aster_agent_cmd/prompt_context.rs`
-- `src-tauri/src/services/memory_profile_prompt_service.rs`
-- `src-tauri/src/services/web_search_prompt_service.rs`
+- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
+- `lime-rs/src/commands/aster_agent_cmd/prompt_context.rs`
+- `lime-rs/src/services/memory_profile_prompt_service.rs`
+- `lime-rs/src/services/web_search_prompt_service.rs`
 - `src/components/agent/chat/workspace/workbenchPreview.tsx`
 - `src/components/agent/chat/workspace/WorkspaceCanvasContent.tsx`
 - `src/components/artifact/ArtifactRenderer.tsx`
 - `src/components/workspace/document/editor/NotionEditor.tsx`
-- `src-tauri/src/services/agent_timeline_service.rs`
+- `lime-rs/src/services/agent_timeline_service.rs`
 
 从这些事实源可以确认：
 
@@ -556,19 +556,19 @@ Stage 2 的职责是生成正式结构化交付物。
 
 建议新增：
 
-- `src-tauri/src/services/artifact_prompt_service.rs`
-- `src-tauri/src/services/artifact_document_service.rs`
-- `src-tauri/src/services/artifact_document_validator.rs`
-- 可选 `src-tauri/src/services/artifact_generation_orchestrator.rs`
+- `lime-rs/src/services/artifact_prompt_service.rs`
+- `lime-rs/src/services/artifact_document_service.rs`
+- `lime-rs/src/services/artifact_document_validator.rs`
+- 可选 `lime-rs/src/services/artifact_generation_orchestrator.rs`
 
 如果同步建设 `aster-rust`，则建议把运行时通用能力下沉为独立 runtime 模块：
 
-- `src-tauri/crates/aster-rust/crates/aster/src/runtime/thread.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/runtime/turn.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/runtime/item.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/runtime/event.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/runtime/prompt.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/runtime/schema.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/runtime/thread.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/runtime/turn.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/runtime/item.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/runtime/event.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/runtime/prompt.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/runtime/schema.rs`
 
 这部分是框架层远期形态参考，不构成 Lime 当前仓库的直接实施清单。
 

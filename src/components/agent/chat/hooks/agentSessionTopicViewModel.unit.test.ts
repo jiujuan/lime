@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type {
-  AgentThreadItem,
-  AgentThreadTurn,
-  Message,
-} from "../types";
+import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
 
 import {
@@ -21,6 +17,7 @@ import {
   selectActiveSessionTransientMessages,
   selectActiveSessionTransientTurns,
   shouldAutoResumeHydratedRuntimeThread,
+  sortTopicsByRecentActivity,
   upsertFreshSessionDraftTopic,
   upsertTopicFromSessionDetail,
 } from "./agentSessionTopicViewModel";
@@ -298,7 +295,9 @@ describe("agentSessionTopicViewModel", () => {
       tag: null,
     });
 
-    expect(upsertTopicFromSessionDetail([existing, newer], detailTopic)).toEqual([
+    expect(
+      upsertTopicFromSessionDetail([existing, newer], detailTopic),
+    ).toEqual([
       {
         ...detailTopic,
         isPinned: true,
@@ -307,6 +306,106 @@ describe("agentSessionTopicViewModel", () => {
       },
       newer,
     ]);
+  });
+
+  it("详情刷新只有通用 fallback 标题时不应覆盖已有真实标题", () => {
+    const existing = createTopic({
+      id: "topic-1",
+      title: "Claw 新闻输入 Electron fixture",
+      updatedAt: new Date(2_000),
+    });
+    const detailTopic = createTopic({
+      id: "topic-1",
+      title: "任务 1970/1/1",
+      updatedAt: new Date(3_000),
+    });
+
+    expect(
+      upsertTopicFromSessionDetail([existing], detailTopic)[0],
+    ).toMatchObject({
+      id: "topic-1",
+      title: "Claw 新闻输入 Electron fixture",
+      updatedAt: new Date(3_000),
+    });
+  });
+
+  it("同时间话题排序应优先保留明确属于当前 workspace 的会话", () => {
+    const legacy = createTopic({
+      id: "topic-legacy",
+      createdAt: new Date(1_000),
+      updatedAt: new Date(2_000),
+      workspaceId: null,
+    });
+    const current = createTopic({
+      id: "topic-current",
+      createdAt: new Date(1_000),
+      updatedAt: new Date(2_000),
+      workspaceId: "workspace-1",
+    });
+
+    expect(
+      sortTopicsByRecentActivity([legacy, current], {
+        workspaceId: "workspace-1",
+      }).map((topic) => topic.id),
+    ).toEqual(["topic-current", "topic-legacy"]);
+    expect(
+      upsertTopicFromSessionDetail(
+        [legacy, current],
+        {
+          ...legacy,
+          title: "历史详情已刷新",
+        },
+        {
+          workspaceId: "workspace-1",
+        },
+      ).map((topic) => topic.id),
+    ).toEqual(["topic-current", "topic-legacy"]);
+  });
+
+  it("session detail 缺少 workspace 时不应抹掉列表已确认的 workspace 归属", () => {
+    const existing = createTopic({
+      id: "topic-current",
+      workspaceId: "workspace-1",
+    });
+    const detailTopic = createTopic({
+      id: "topic-current",
+      title: "详情标题",
+      workspaceId: null,
+    });
+
+    expect(
+      upsertTopicFromSessionDetail([existing], detailTopic, {
+        workspaceId: "workspace-1",
+      })[0],
+    ).toMatchObject({
+      id: "topic-current",
+      title: "详情标题",
+      workspaceId: "workspace-1",
+    });
+  });
+
+  it("补入已验证会话时应复用最近话题排序，避免 legacy 会话插到当前 workspace 前面", () => {
+    const current = createTopic({
+      id: "topic-current",
+      createdAt: new Date(1_000),
+      updatedAt: new Date(2_000),
+      workspaceId: "workspace-1",
+    });
+
+    expect(
+      prependVerifiedSessionTopicFromDetail(
+        [current],
+        "topic-legacy",
+        createDetail({
+          id: "topic-legacy",
+          created_at: 1,
+          updated_at: 2,
+          messages_count: 1,
+          messages: [],
+        }),
+        { workspaceId: "workspace-1" },
+      ).map((topic) => topic.id),
+    ).toEqual(["topic-current", "topic-legacy"]);
   });
 
   it("应把新建 session 草稿插入到 topic 顶部并去重", () => {
@@ -392,11 +491,7 @@ describe("agentSessionTopicViewModel", () => {
     });
 
     expect(
-      applyTopicExecutionStrategyToTopics(
-        [target, other],
-        "topic-1",
-        "react",
-      ),
+      applyTopicExecutionStrategyToTopics([target, other], "topic-1", "react"),
     ).toEqual([
       {
         ...target,
@@ -407,8 +502,16 @@ describe("agentSessionTopicViewModel", () => {
   });
 
   it("应只把 live snapshot 写回目标 topic", () => {
-    const original = createTopic({ id: "topic-1", messagesCount: 1 });
-    const other = createTopic({ id: "topic-2", messagesCount: 2 });
+    const original = createTopic({
+      id: "topic-1",
+      messagesCount: 1,
+      updatedAt: new Date(1_000),
+    });
+    const other = createTopic({
+      id: "topic-2",
+      messagesCount: 2,
+      updatedAt: new Date(2_000),
+    });
     const updatedAt = new Date(6_000);
 
     expect(
@@ -432,6 +535,23 @@ describe("agentSessionTopicViewModel", () => {
       },
       other,
     ]);
+  });
+
+  it("live snapshot 更新最近活动时间后应重排到顶部", () => {
+    const stale = createTopic({
+      id: "topic-stale",
+      updatedAt: new Date(1_000),
+    });
+    const recent = createTopic({
+      id: "topic-recent",
+      updatedAt: new Date(4_000),
+    });
+
+    expect(
+      applyTopicSnapshotToTopics([stale, recent], "topic-stale", {
+        updatedAt: new Date(8_000),
+      }).map((topic) => topic.id),
+    ).toEqual(["topic-stale", "topic-recent"]);
   });
 
   it("live snapshot 未改变或目标不存在时应复用原 topic 数组", () => {

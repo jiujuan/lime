@@ -368,6 +368,8 @@ export interface AgentEventItemCompleted {
 export interface AgentEventTurnCompleted {
   type: "turn_completed";
   turn: AgentThreadTurn;
+  text?: string;
+  usage?: AgentTokenUsage;
 }
 
 export interface AgentEventTurnFailed {
@@ -878,6 +880,68 @@ function normalizeOptionalNumber(value: unknown): number | undefined {
     : undefined;
 }
 
+function pickStringField(
+  record: Record<string, unknown>,
+  ...keys: string[]
+): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string") {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function normalizeToolArguments(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function normalizeToolResultOutput(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value === undefined || value === null) {
+    return "";
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function normalizeToolExecutionResult(
+  event: Record<string, unknown>,
+): AgentToolExecutionResult {
+  const rawResult = normalizeRecord(event.result);
+  const source = rawResult || event;
+  const error = typeof source.error === "string" ? source.error : undefined;
+  const success = typeof source.success === "boolean" ? source.success : !error;
+
+  return {
+    success,
+    output: normalizeToolResultOutput(
+      source.output ?? source.text ?? source.content,
+    ),
+    error,
+    images: Array.isArray(source.images)
+      ? (source.images as AgentToolResultImage[])
+      : undefined,
+    metadata: normalizeRecord(source.metadata),
+  };
+}
+
 function normalizeExecutionStrategy(
   value: unknown,
 ): AsterExecutionStrategy | null {
@@ -924,6 +988,8 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
       return {
         type: "turn_completed",
         turn: event.turn as AgentThreadTurn,
+        text: pickStringField(event, "text", "delta", "message", "content"),
+        usage: event.usage as AgentTokenUsage | undefined,
       };
     case "turn_failed":
       return {
@@ -959,17 +1025,24 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
         text: (event.text as string) || "",
       };
     case "tool_start":
+    case "tool_started":
+    case "tool.started":
       return {
         type: "tool_start",
-        tool_name: (event.tool_name as string) || "",
-        tool_id: (event.tool_id as string) || "",
-        arguments: event.arguments as string | undefined,
+        tool_name:
+          pickStringField(event, "tool_name", "toolName", "name") || "",
+        tool_id: pickStringField(event, "tool_id", "toolId", "id") || "",
+        arguments: normalizeToolArguments(
+          event.arguments ?? event.args ?? event.input ?? event.parameters,
+        ),
       };
     case "tool_end":
+    case "tool_result":
+    case "tool.result":
       return {
         type: "tool_end",
-        tool_id: (event.tool_id as string) || "",
-        result: event.result as AgentToolExecutionResult,
+        tool_id: pickStringField(event, "tool_id", "toolId", "id") || "",
+        result: normalizeToolExecutionResult(event),
       };
     case "tool_progress": {
       const progress = normalizeRecord(event.progress) || {};

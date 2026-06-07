@@ -3,7 +3,6 @@
     "agent_start_process",
     "agent_stop_process",
     "agent_get_process_status",
-    "agent_generate_title",
     "aster_agent_init",
     "aster_agent_status",
     "aster_agent_configure_provider",
@@ -113,7 +112,6 @@
     "capability_draft_get",
     "capability_draft_verify",
     "capability_draft_register",
-    "capability_draft_list_registered_skills",
     "capability_draft_submit_approval_session_inputs",
     "capability_draft_execute_controlled_get"
   ],
@@ -149,8 +147,6 @@
     "start_oem_cloud_oauth_callback_bridge"
   ],
   "fileBrowserCommands": [
-    "list_dir",
-    "read_file_preview_cmd",
     "get_home_dir",
     "get_file_manager_locations",
     "get_file_icon_data_url",
@@ -193,7 +189,9 @@
     "delete_poster_metadata": "delete_gallery_material_metadata",
     "list_by_image_category": "list_gallery_materials_by_image_category",
     "list_by_layout_category": "list_gallery_materials_by_layout_category",
-    "list_by_mood": "list_gallery_materials_by_mood"
+    "list_by_mood": "list_gallery_materials_by_mood",
+    "list_dir": "fileSystem/listDirectory",
+    "read_file_preview_cmd": "fileSystem/readFilePreview"
   },
   "deprecatedHelperReplacements": {
     "createAgentSession": "createAgentRuntimeSession",

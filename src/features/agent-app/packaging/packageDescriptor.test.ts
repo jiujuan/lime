@@ -7,10 +7,10 @@ import {
   buildNativeShellRegistrationPlan,
   buildPackageDescriptor,
   buildStandaloneArtifactBuildPlan,
-  buildStandaloneTauriConfigWritePlan,
+  buildStandaloneNativeShellConfigWritePlan,
   buildStandaloneReleasePlan,
   buildStandaloneUpdaterManifestPlan,
-  materializeStandaloneTauriConfig,
+  materializeStandaloneNativeShellConfig,
   UnavailableProductionArtifactBuilder,
 } from "./index";
 import { projectApp } from "../projection/projectApp";
@@ -54,13 +54,12 @@ function buildMacOsStandaloneTarget() {
   return {
     kind: "standalone" as const,
     platform: "macos" as const,
-    packageFormat: "pkg" as const,
+    packageFormat: "dmg" as const,
     macosIdentity: buildMacOsStandaloneIdentity({
       teamId: "TEAMID1234",
       bundleId: "com.limecloud.agentapp.contentfactory",
       appGroups: ["group.com.limecloud.agentapps"],
       keychainAccessGroups: ["TEAMID1234.com.limecloud.agentapps"],
-      installerCertificateKind: "developer_id_installer",
     }),
     productionReady: false as const,
   };
@@ -139,13 +138,13 @@ describe("Agent App v2 package descriptor", () => {
     );
   });
 
-  it("pkg 分发必须声明 Developer ID Installer 身份", () => {
+  it("Forge dmg 分发只要求独立 macOS 应用身份", () => {
     const shell = buildStandaloneShell();
     const descriptor = buildPackageDescriptor({
       target: {
         kind: "standalone",
         platform: "macos",
-        packageFormat: "pkg",
+        packageFormat: "dmg",
         macosIdentity: buildMacOsStandaloneIdentity({
           teamId: "TEAMID1234",
           bundleId: "com.limecloud.agentapp.contentfactory",
@@ -155,11 +154,9 @@ describe("Agent App v2 package descriptor", () => {
       shell,
     });
 
-    expect(descriptor.warnings).toEqual(
+    expect(descriptor.warnings).not.toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          code: "MACOS_INSTALLER_CERTIFICATE_MISSING",
-        }),
+        expect.objectContaining({ code: "MACOS_IDENTITY_MISSING" }),
       ]),
     );
   });
@@ -175,7 +172,7 @@ describe("Agent App v2 package descriptor", () => {
     expect(plan.status).toBe("ready");
     expect(plan.bundleIdentifier).toBe("com.limecloud.agentapp.contentfactory");
     expect(plan.deepLinkSchemes).toEqual(["lime-agent-content-factory-app"]);
-    expect(plan.tauriConfigPatch).toMatchObject({
+    expect(plan.nativeShellConfigPatch).toMatchObject({
       productName: "Content Factory",
       identifier: "com.limecloud.agentapp.contentfactory",
       plugins: {
@@ -226,14 +223,14 @@ describe("Agent App v2 package descriptor", () => {
     expect(plan.deepLinkSchemes).toEqual(["lime-agent-app"]);
   });
 
-  it("standalone Tauri config materializer 应把 per-app identity / deep link 写入独立配置", () => {
+  it("standalone native shell config materializer 应把 per-app identity / deep link 写入独立配置", () => {
     const shell = buildStandaloneShell();
     const descriptor = buildPackageDescriptor({
       target: buildMacOsStandaloneTarget(),
       shell,
     });
     const registrationPlan = buildNativeShellRegistrationPlan({ descriptor });
-    const result = materializeStandaloneTauriConfig({
+    const result = materializeStandaloneNativeShellConfig({
       registrationPlan,
       baseConfig: {
         productName: "Lime",
@@ -275,7 +272,7 @@ describe("Agent App v2 package descriptor", () => {
     });
   });
 
-  it("standalone Tauri config materializer 应拒绝 blocked registration plan", () => {
+  it("standalone native shell config materializer 应拒绝 blocked registration plan", () => {
     const shell = buildStandaloneShell();
     const descriptor = buildPackageDescriptor({
       target: {
@@ -287,7 +284,7 @@ describe("Agent App v2 package descriptor", () => {
       shell,
     });
     const registrationPlan = buildNativeShellRegistrationPlan({ descriptor });
-    const result = materializeStandaloneTauriConfig({
+    const result = materializeStandaloneNativeShellConfig({
       registrationPlan,
       baseConfig: {},
     });
@@ -302,14 +299,14 @@ describe("Agent App v2 package descriptor", () => {
     });
   });
 
-  it("standalone Tauri config write plan 应生成可落盘的 config/env 文件计划", () => {
+  it("standalone native shell config write plan 应生成可落盘的 config/env 文件计划", () => {
     const shell = buildStandaloneShell();
     const descriptor = buildPackageDescriptor({
       target: buildMacOsStandaloneTarget(),
       shell,
     });
     const registrationPlan = buildNativeShellRegistrationPlan({ descriptor });
-    const materializedConfig = materializeStandaloneTauriConfig({
+    const materializedConfig = materializeStandaloneNativeShellConfig({
       registrationPlan,
       baseConfig: {
         productName: "Lime",
@@ -319,16 +316,16 @@ describe("Agent App v2 package descriptor", () => {
       },
     });
 
-    const first = buildStandaloneTauriConfigWritePlan({
+    const first = buildStandaloneNativeShellConfigWritePlan({
       materializerResult: materializedConfig,
       configOutputPath:
-        "<dist>/agent-apps/content-factory/src-tauri/tauri.conf.json",
+        "<dist>/agent-apps/content-factory/lime-rs/native-shell.config.json",
       envOutputPath: "<dist>/agent-apps/content-factory/.env.standalone",
     });
-    const second = buildStandaloneTauriConfigWritePlan({
+    const second = buildStandaloneNativeShellConfigWritePlan({
       materializerResult: materializedConfig,
       configOutputPath:
-        "<dist>/agent-apps/content-factory/src-tauri/tauri.conf.json",
+        "<dist>/agent-apps/content-factory/lime-rs/native-shell.config.json",
       envOutputPath: "<dist>/agent-apps/content-factory/.env.standalone",
     });
 
@@ -339,11 +336,11 @@ describe("Agent App v2 package descriptor", () => {
     }
     expect(first.planHash).toBe(second.planHash);
     expect(first.files.map((file) => file.kind)).toEqual([
-      "tauri_config",
+      "native_shell_config",
       "runtime_env",
     ]);
     expect(first.files[0]).toMatchObject({
-      path: "<dist>/agent-apps/content-factory/src-tauri/tauri.conf.json",
+      path: "<dist>/agent-apps/content-factory/lime-rs/native-shell.config.json",
       encoding: "utf8",
       sensitive: false,
     });
@@ -366,19 +363,19 @@ describe("Agent App v2 package descriptor", () => {
     );
   });
 
-  it("standalone Tauri config write plan 缺输出路径时必须 blocked", () => {
+  it("standalone native shell config write plan 缺输出路径时必须 blocked", () => {
     const shell = buildStandaloneShell();
     const descriptor = buildPackageDescriptor({
       target: buildMacOsStandaloneTarget(),
       shell,
     });
     const registrationPlan = buildNativeShellRegistrationPlan({ descriptor });
-    const materializedConfig = materializeStandaloneTauriConfig({
+    const materializedConfig = materializeStandaloneNativeShellConfig({
       registrationPlan,
       baseConfig: {},
     });
 
-    const plan = buildStandaloneTauriConfigWritePlan({
+    const plan = buildStandaloneNativeShellConfigWritePlan({
       materializerResult: materializedConfig,
       configOutputPath: "",
       envOutputPath: "",
@@ -406,13 +403,11 @@ describe("Agent App v2 package descriptor", () => {
       channel: "stable",
       signing: {
         applicationCertificateKind: "developer_id_application",
-        installerCertificateKind: "developer_id_installer",
         notarizationConfigured: true,
         notarizationProfileRef: "notarytool:lime-prod",
       },
       updater: {
         enabled: true,
-        pubkey: "lime-prod-updater-pubkey",
         endpoint: "https://updates.limecloud.example/content-factory",
       },
       rollback: {
@@ -440,13 +435,12 @@ describe("Agent App v2 package descriptor", () => {
     );
     expect(plan.signing).toMatchObject({
       applicationCertificateKind: "developer_id_application",
-      installerCertificateKind: "developer_id_installer",
       notarizationConfigured: true,
       notarizationProfileRef: "notarytool:lime-prod",
     });
     expect(plan.updater).toEqual({
       enabled: true,
-      pubkeyConfigured: true,
+      endpointConfigured: true,
       endpoint: "https://updates.limecloud.example/content-factory",
     });
     expect(plan.rollback).toMatchObject({
@@ -472,7 +466,6 @@ describe("Agent App v2 package descriptor", () => {
     expect(plan.blockers).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: "APPLICATION_SIGNING_MISSING" }),
-        expect.objectContaining({ code: "INSTALLER_SIGNING_MISSING" }),
         expect.objectContaining({ code: "MACOS_NOTARIZATION_MISSING" }),
         expect.objectContaining({ code: "UPDATER_CONFIG_MISSING" }),
         expect.objectContaining({ code: "ROLLBACK_PLAN_MISSING" }),
@@ -480,7 +473,7 @@ describe("Agent App v2 package descriptor", () => {
     );
     expect(plan.updater).toEqual({
       enabled: false,
-      pubkeyConfigured: false,
+      endpointConfigured: false,
       endpoint: undefined,
     });
     expect(plan.rollback).toMatchObject({
@@ -500,13 +493,11 @@ describe("Agent App v2 package descriptor", () => {
       channel: "stable",
       signing: {
         applicationCertificateKind: "developer_id_application",
-        installerCertificateKind: "developer_id_installer",
         notarizationConfigured: true,
         notarizationProfileRef: "notarytool:lime-prod",
       },
       updater: {
         enabled: true,
-        pubkey: "lime-prod-updater-pubkey",
         endpoint: "https://updates.limecloud.example/content-factory",
       },
       rollback: {
@@ -516,7 +507,7 @@ describe("Agent App v2 package descriptor", () => {
       productionArtifactBuilderAvailable: false,
     });
     const registrationPlan = buildNativeShellRegistrationPlan({ descriptor });
-    const materializedConfig = materializeStandaloneTauriConfig({
+    const materializedConfig = materializeStandaloneNativeShellConfig({
       registrationPlan,
       baseConfig: {
         app: { windows: [{ title: "Lime" }] },
@@ -527,10 +518,10 @@ describe("Agent App v2 package descriptor", () => {
     const buildPlan = buildStandaloneArtifactBuildPlan({
       releasePlan,
       outputDirectory: "<dist>/agent-apps/content-factory",
-      tauriConfig: {
+      nativeShellConfig: {
         materializerResult: materializedConfig,
         configOutputPath:
-          "<dist>/agent-apps/content-factory/src-tauri/tauri.conf.json",
+          "<dist>/agent-apps/content-factory/lime-rs/native-shell.config.json",
         envOutputPath: "<dist>/agent-apps/content-factory/.env.standalone",
       },
     });
@@ -541,20 +532,19 @@ describe("Agent App v2 package descriptor", () => {
       readyToBuild: false,
       artifactRefs: [],
       requiredAdapters: [
-        "tauri_config_writer",
-        "tauri_build_runner",
+        "native_shell_config_writer",
+        "electron_artifact_builder",
         "app_bundle_builder",
         "macos_application_signer",
-        "macos_pkg_builder",
-        "macos_installer_signer",
+        "macos_dmg_builder",
         "macos_notarization_submitter",
         "updater_manifest_writer",
         "rollback_manifest_writer",
       ],
-      tauriConfig: {
+      nativeShellConfig: {
         status: "ready",
         configOutputPath:
-          "<dist>/agent-apps/content-factory/src-tauri/tauri.conf.json",
+          "<dist>/agent-apps/content-factory/lime-rs/native-shell.config.json",
         envOutputPath: "<dist>/agent-apps/content-factory/.env.standalone",
         runtimeEnv: {
           LIME_AGENT_APP_STANDALONE_APP_ID: "content-factory-app",
@@ -564,7 +554,7 @@ describe("Agent App v2 package descriptor", () => {
           readyToWrite: true,
           appId: "content-factory-app",
           files: [
-            expect.objectContaining({ kind: "tauri_config" }),
+            expect.objectContaining({ kind: "native_shell_config" }),
             expect.objectContaining({ kind: "runtime_env" }),
           ],
         },
@@ -581,7 +571,7 @@ describe("Agent App v2 package descriptor", () => {
     expect(buildPlan.blockers).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          code: "TAURI_CONFIG_MATERIALIZATION_BLOCKED",
+          code: "NATIVE_SHELL_CONFIG_MATERIALIZATION_BLOCKED",
         }),
       ]),
     );
@@ -605,16 +595,19 @@ describe("Agent App v2 package descriptor", () => {
     });
 
     expect(buildPlan.requiredAdapters).toEqual(
-      expect.arrayContaining(["tauri_config_writer", "tauri_build_runner"]),
+      expect.arrayContaining([
+        "native_shell_config_writer",
+        "electron_artifact_builder",
+      ]),
     );
-    expect(buildPlan.tauriConfig).toEqual({
+    expect(buildPlan.nativeShellConfig).toEqual({
       status: "blocked",
-      blockerCodes: ["TAURI_CONFIG_MATERIALIZER_MISSING"],
+      blockerCodes: ["NATIVE_SHELL_CONFIG_MATERIALIZER_MISSING"],
     });
     expect(buildPlan.blockers).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          code: "TAURI_CONFIG_MATERIALIZATION_BLOCKED",
+          code: "NATIVE_SHELL_CONFIG_MATERIALIZATION_BLOCKED",
         }),
       ]),
     );
@@ -632,7 +625,7 @@ describe("Agent App v2 package descriptor", () => {
       updater: { enabled: false },
     });
     const registrationPlan = buildNativeShellRegistrationPlan({ descriptor });
-    const materializedConfig = materializeStandaloneTauriConfig({
+    const materializedConfig = materializeStandaloneNativeShellConfig({
       registrationPlan,
       baseConfig: {},
     });
@@ -640,20 +633,22 @@ describe("Agent App v2 package descriptor", () => {
     const buildPlan = buildStandaloneArtifactBuildPlan({
       releasePlan,
       outputDirectory: "<dist>/agent-apps/content-factory",
-      tauriConfig: {
+      nativeShellConfig: {
         materializerResult: materializedConfig,
         configOutputPath: "",
         envOutputPath: "",
       },
     });
 
-    expect(buildPlan.tauriConfig).toEqual({
+    expect(buildPlan.nativeShellConfig).toEqual({
       status: "blocked",
       blockerCodes: ["CONFIG_OUTPUT_PATH_MISSING", "ENV_OUTPUT_PATH_MISSING"],
     });
     expect(buildPlan.blockers).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ code: "TAURI_CONFIG_WRITE_PLAN_BLOCKED" }),
+        expect.objectContaining({
+          code: "NATIVE_SHELL_CONFIG_WRITE_PLAN_BLOCKED",
+        }),
       ]),
     );
   });
@@ -698,12 +693,10 @@ describe("Agent App v2 package descriptor", () => {
       channel: "stable",
       signing: {
         applicationCertificateKind: "developer_id_application",
-        installerCertificateKind: "developer_id_installer",
         notarizationConfigured: true,
       },
       updater: {
         enabled: true,
-        pubkey: "lime-prod-updater-pubkey",
         endpoint: "https://updates.limecloud.example/content-factory",
       },
       rollback: {
@@ -726,7 +719,7 @@ describe("Agent App v2 package descriptor", () => {
       appId: "content-factory-app",
       channel: "stable",
       endpoint: "https://updates.limecloud.example/content-factory",
-      pubkeyConfigured: true,
+      endpointConfigured: true,
       rollbackRequired: true,
       rollbackConfigured: true,
       status: "blocked",

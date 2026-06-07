@@ -2,6 +2,7 @@ import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
   createHarnessState,
+  getHarnessPanelTestMocks,
   renderPanel,
 } from "./HarnessStatusPanel.testFixtures";
 
@@ -447,10 +448,8 @@ describe("HarnessStatusPanel outputs", () => {
       await Promise.resolve();
     });
 
-    expect(window.open).toHaveBeenCalledWith(
-      "https://example.com/xinhua",
-      "_blank",
-    );
+    const { mockShellOpen } = getHarnessPanelTestMocks();
+    expect(mockShellOpen).toHaveBeenCalledWith("https://example.com/xinhua");
   });
 
   it("连续多条搜索输出应在 harness 中按搜索批次分组展示", () => {
@@ -609,10 +608,8 @@ describe("HarnessStatusPanel outputs", () => {
       await Promise.resolve();
     });
 
-    expect(window.open).toHaveBeenCalledWith(
-      "https://example.com/report",
-      "_blank",
-    );
+    const { mockShellOpen } = getHarnessPanelTestMocks();
+    expect(mockShellOpen).toHaveBeenCalledWith("https://example.com/report");
   });
 
   it("能力区中的上下文路径应支持直接系统打开", async () => {

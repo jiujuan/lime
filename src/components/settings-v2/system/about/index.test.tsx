@@ -24,16 +24,13 @@ vi.mock("@/lib/api/appUpdate", () => ({
   checkForUpdates: mockCheckForUpdates,
   getUpdateInstallSession: mockGetUpdateInstallSession,
   isUpdateInstallSessionActive: (
-    session:
-      | { stage: string; isActive: boolean }
-      | null
-      | undefined,
+    session: { stage: string; isActive: boolean } | null | undefined,
   ) =>
     Boolean(
       session?.isActive &&
-        ["checking", "downloading", "installing", "restarting"].includes(
-          session.stage,
-        ),
+      ["checking", "downloading", "installing", "restarting"].includes(
+        session.stage,
+      ),
     ),
   listenUpdateInstallSession: mockListenUpdateInstallSession,
   startUpdateInstallSession: mockStartUpdateInstallSession,
@@ -303,29 +300,39 @@ describe("AboutSection", () => {
     });
 
     expect(mockSetSkillPackageFileAssociationDefault).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain(".skill / .skills files now open with Lime.");
+    expect(container.textContent).toContain(
+      ".skill / .skills files now open with Lime.",
+    );
     expect(container.textContent).toContain("Lime is the default");
   });
 
   it("更新检查失败时应隐藏技术错误", async () => {
-    mockCheckForUpdates.mockResolvedValueOnce({
-      current: "1.10.0",
-      latest: "1.10.1",
-      hasUpdate: false,
-      downloadUrl: undefined,
-      releaseNotes: undefined,
-      pubDate: undefined,
-      error: "更新清单请求失败（HTTP 404 Not Found），已回退本地缓存",
-    });
+    const consoleWarnSpy = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
+    try {
+      mockCheckForUpdates.mockResolvedValueOnce({
+        current: "1.10.0",
+        latest: "1.10.1",
+        hasUpdate: false,
+        downloadUrl: undefined,
+        releaseNotes: undefined,
+        pubDate: undefined,
+        error: "更新清单请求失败（HTTP 404 Not Found），已回退本地缓存",
+      });
 
-    const container = renderComponent();
-    await waitForLoad();
+      const container = renderComponent();
+      await waitForLoad();
 
-    const text = container.textContent ?? "";
-    expect(text).toContain(
-      "Unable to check for updates right now. Please try again later.",
-    );
-    expect(text).not.toContain("HTTP 404");
-    expect(text).not.toContain("已回退本地缓存");
+      const text = container.textContent ?? "";
+      expect(text).toContain(
+        "Unable to check for updates right now. Please try again later.",
+      );
+      expect(text).not.toContain("HTTP 404");
+      expect(text).not.toContain("已回退本地缓存");
+      expect(consoleWarnSpy).not.toHaveBeenCalled();
+    } finally {
+      consoleWarnSpy.mockRestore();
+    }
   });
 });

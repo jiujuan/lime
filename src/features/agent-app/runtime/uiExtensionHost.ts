@@ -16,7 +16,7 @@ export const agentAppUiSandboxPolicy: AgentAppUiSandboxPolicy = {
   allowForms: false,
   allowPopups: false,
   allowDownloads: false,
-  allowRawTauriApi: false,
+  allowRawHostApi: false,
   allowNodeApi: false,
   allowNetworkAccess: false,
 };
@@ -84,7 +84,7 @@ export class UiExtensionHost {
                 : "unsupported",
           }))
           .sort((left, right) => left.capability.localeCompare(right.capability)),
-        rawTauriApi: false,
+        rawHostApi: false,
         nodeApi: false,
       },
       provenance: entry.provenance,

@@ -18,7 +18,7 @@ function createTempRoot() {
 function runHarnessEval(args: string[]) {
   const output = execFileSync(
     process.execPath,
-    [path.join(repoRoot, "scripts/harness-eval-runner.mjs"), ...args],
+    [path.join(repoRoot, "scripts/harness/eval-runner.mjs"), ...args],
     {
       cwd: repoRoot,
       encoding: "utf8",
@@ -113,9 +113,10 @@ describe("Harness repo fixtures", () => {
       .map((entry: { caseId: string }) => entry.caseId);
     expect(gapCaseIds).toEqual(["fixture-minimal-observability-gap"]);
 
-    const observabilityBreakdownNames = summary.breakdowns.observabilitySignals.map(
-      (entry: { name: string }) => entry.name,
-    );
+    const observabilityBreakdownNames =
+      summary.breakdowns.observabilitySignals.map(
+        (entry: { name: string }) => entry.name,
+      );
     expect(observabilityBreakdownNames).toContain("requestTelemetry:exported");
     expect(observabilityBreakdownNames).toContain("requestTelemetry:known_gap");
     expect(observabilityBreakdownNames).toContain("artifactValidator:exported");
@@ -163,8 +164,8 @@ describe("Harness repo fixtures", () => {
       "guiSmoke:passed",
     );
 
-    expect(summary.breakdowns.degradedObservabilityVerificationOutcomes).toEqual(
-      [],
-    );
+    expect(
+      summary.breakdowns.degradedObservabilityVerificationOutcomes,
+    ).toEqual([]);
   });
 });

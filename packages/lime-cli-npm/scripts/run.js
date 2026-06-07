@@ -25,9 +25,9 @@ function resolveBinaryCandidates() {
 
   push(process.env.LIME_CLI_BINARY_PATH);
   push(bundledBin);
-  push(path.join(process.cwd(), "src-tauri", "target", "release", "lime" + ext));
+  push(path.join(process.cwd(), "lime-rs", "target", "release", "lime" + ext));
   push(path.join(process.cwd(), "target", "release", "lime" + ext));
-  push(path.join(packageDir, "..", "..", "src-tauri", "target", "release", "lime" + ext));
+  push(path.join(packageDir, "..", "..", "lime-rs", "target", "release", "lime" + ext));
   push(path.join(packageDir, "..", "..", "target", "release", "lime" + ext));
 
   return candidates;
@@ -46,9 +46,9 @@ function cargoExists() {
 
 function findManifestPath() {
   const candidates = [
-    path.join(process.cwd(), "src-tauri", "Cargo.toml"),
+    path.join(process.cwd(), "lime-rs", "Cargo.toml"),
     path.join(process.cwd(), "Cargo.toml"),
-    path.join(packageDir, "..", "..", "src-tauri", "Cargo.toml"),
+    path.join(packageDir, "..", "..", "lime-rs", "Cargo.toml"),
   ];
   return candidates.find((candidate) => fs.existsSync(candidate)) || null;
 }

@@ -794,11 +794,25 @@ export function resolveMessageListItemProjection({
                 activePendingA2UISource.requestId,
           )
         : false;
+  const hasPendingActionRequestForMessage =
+    (message.actionRequests || []).some(
+      (request) => request.status !== "submitted",
+    ) ||
+    (message.contentParts || []).some(
+      (part) =>
+        part.type === "action_required" &&
+        part.actionRequired.status !== "submitted",
+    );
+  const hasActiveStreamingOverlay = Boolean(
+    streamingTextOverlay?.content?.trim(),
+  );
   const isCurrentInteractiveAssistantMessage =
     message.role === "assistant" &&
-    (Boolean(message.isThinking) ||
-      hasActivePendingSourceForMessage ||
-      (message.id === lastAssistantMessageId && hasActiveInteractiveRuntime));
+    (hasActivePendingSourceForMessage ||
+      hasActiveStreamingOverlay ||
+      (message.id === lastAssistantMessageId &&
+        hasActiveInteractiveRuntime &&
+        (isSending || hasPendingActionRequestForMessage)));
   const shouldReadOnlyInteractiveContent =
     message.role === "assistant" && !isCurrentInteractiveAssistantMessage;
   const usesProcessSeparatedFinalText =
@@ -1073,6 +1087,7 @@ export function resolveMessageListItemProjection({
     inlineProcessCoverage,
     installedSkillMessageLabel,
     isConversationTailAssistant,
+    isCurrentInteractiveAssistantMessage,
     isUserCommandMessage,
     knowledgeArtifactSource,
     messageCanvasShortcutPath,

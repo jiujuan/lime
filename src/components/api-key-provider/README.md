@@ -8,16 +8,16 @@
 
 ## 当前组件
 
-| 文件 | 描述 |
-|------|------|
+| 文件                        | 描述                                                               |
+| --------------------------- | ------------------------------------------------------------------ |
 | `ApiKeyProviderSection.tsx` | 当前 API Key Provider 管理区域，承载左侧列表、添加流程和右侧设置页 |
-| `ModelProviderList.tsx` | 当前左侧模型列表，只展示已启用/已配置的模型入口 |
-| `ModelAddPanel.tsx` | 当前添加模型流程，按推荐/国内/聚合/海外/本地分类筛选服务商 |
-| `ProviderSetting.tsx` | 当前简洁设置页，只保留 API Key、模型优先级、接口获取模型和测试连接 |
-| `ImportExportDialog.tsx` | 当前配置导入导出对话框 |
-| `providerConfigUtils.ts` | 当前 Provider 类型、Prompt Cache、模型 ID 规范化工具 |
-| `providerTypeMapping.ts` | 模型注册表 Provider 映射工具 |
-| `connectionTestTypes.ts` | 连接测试共享类型 |
+| `ModelProviderList.tsx`     | 当前左侧模型列表，只展示已启用/已配置的模型入口                    |
+| `ModelAddPanel.tsx`         | 当前添加模型流程，按推荐/国内/聚合/海外/本地分类筛选服务商         |
+| `ProviderSetting.tsx`       | 当前简洁设置页，只保留 API Key、模型优先级、接口获取模型和测试连接 |
+| `ImportExportDialog.tsx`    | 当前配置导入导出对话框                                             |
+| `providerConfigUtils.ts`    | 当前 Provider 类型、Prompt Cache、模型 ID 规范化工具               |
+| `providerTypeMapping.ts`    | 模型注册表 Provider 映射工具                                       |
+| `connectionTestTypes.ts`    | 连接测试共享类型                                                   |
 
 ## 已删除旧实现
 
@@ -31,15 +31,15 @@
 
 ## 测试文件
 
-| 文件 | 描述 |
-|------|------|
-| `ApiKeyProviderSection.test.ts` | Provider 选择同步与测试模型解析属性测试 |
-| `ApiKeyProviderSection.ui.test.tsx` | 当前模型管理布局、添加流程与激活链路 UI 回归 |
-| `ModelProviderList.test.ts` | 当前左侧启用模型列表 helper 回归 |
-| `ProviderSetting.test.ts` | 当前简洁设置页字段属性测试 |
-| `ProviderSetting.ui.test.tsx` | 设置面板 UI 回归：简洁页、接口模型、手动添加和连接测试 |
-| `providerConfigUtils.test.ts` | Provider 类型、模型 ID 规范化和模型排序属性测试 |
-| `providerTypeMapping.test.ts` | 模型注册表映射契约：目录归一不等于 Prompt Cache 能力 |
+| 文件                                | 描述                                                   |
+| ----------------------------------- | ------------------------------------------------------ |
+| `ApiKeyProviderSection.test.ts`     | Provider 选择同步与测试模型解析属性测试                |
+| `ApiKeyProviderSection.ui.test.tsx` | 当前模型管理布局、添加流程与激活链路 UI 回归           |
+| `ModelProviderList.test.ts`         | 当前左侧启用模型列表 helper 回归                       |
+| `ProviderSetting.test.ts`           | 当前简洁设置页字段属性测试                             |
+| `ProviderSetting.ui.test.tsx`       | 设置面板 UI 回归：简洁页、接口模型、手动添加和连接测试 |
+| `providerConfigUtils.test.ts`       | Provider 类型、模型 ID 规范化和模型排序属性测试        |
+| `providerTypeMapping.test.ts`       | 模型注册表映射契约：目录归一不等于 Prompt Cache 能力   |
 
 ## 使用示例
 
@@ -60,7 +60,7 @@ function ProviderSettingsPage() {
 为避免“改一处坏一片”，Provider/模型映射采用分层策略：
 
 1. **框架层（aster-rust）**：负责 Provider 工厂与别名归一，支持 `ASTER_PROVIDER_ALIAS_OVERRIDES` 做运行时覆盖。
-2. **应用后端层（Lime Tauri）**：`get_system_provider_catalog` 提供 Provider 元信息；Provider 模型列表只来自实时 `/models` 接口或用户显式 `custom_models`。实时 `/models` 成功结果允许缓存 10 天，读取时先查缓存再访问上游，但缓存只保存接口结果，不恢复本地 catalog 兜底。`get_model_registry_provider_ids` 仅兼容返回空集合。
+2. **应用后端层（App Server / Desktop Host）**：Provider 列表与系统 Provider Catalog 由 App Server `modelProvider/list`、`modelProvider/catalog/list` 提供；legacy `get_api_key_providers` / `get_system_provider_catalog` 只允许作为 Desktop compat facade。Provider 模型列表只来自实时 `/models` 接口或用户显式 `custom_models`。实时 `/models` 成功结果允许缓存 10 天，读取时先查缓存再访问上游，但缓存只保存接口结果，不恢复本地 catalog 兜底。`get_model_registry_provider_ids` 仅兼容返回空集合。
 3. **应用前端层（UI）**：设置页只接受接口返回模型和用户手动添加模型；已下线的本地模型目录不再参与添加页发现或右侧配置页兜底。
 
 ### 解析优先级

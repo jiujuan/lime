@@ -7,7 +7,7 @@ MCP (Model Context Protocol) 服务器管理模块。
 ## 目录结构
 
 ```
-src-tauri/src/services/
+lime-rs/src/services/
 ├── mcp_service.rs      # MCP 服务管理
 └── mcp_sync.rs         # 配置同步
 
@@ -69,26 +69,31 @@ impl McpService {
 }
 ```
 
-## Tauri 命令
+## Desktop Host / App Server 边界
 
-```rust
-#[tauri::command]
-async fn mcp_list_servers() -> Result<Vec<McpServerInfo>, String>;
+MCP 相关新能力默认收敛到 App Server JSON-RPC 能力发现与 Agent runtime 工具执行链；Electron Desktop Host 只负责 IPC、窗口和 sidecar 生命周期，不承接 MCP 业务事实。
 
-#[tauri::command]
-async fn mcp_start_server(name: String) -> Result<(), String>;
+```typescript
+// src/lib/api/mcp.ts / src/lib/api/appServer.ts
 
-#[tauri::command]
-async fn mcp_stop_server(name: String) -> Result<(), String>;
+const capabilityListRequest = {
+  method: "capability/list",
+  params: {
+    caller: "agent-workspace",
+    includeDeferred: true,
+  },
+};
 
-#[tauri::command]
-async fn mcp_list_tools(server: String) -> Result<Vec<Tool>, String>;
-
-#[tauri::command]
-async fn mcp_call_tool(server: String, tool: String, args: Value) -> Result<Value, String>;
+const turnStartRequest = {
+  method: "agentSession/turn/start",
+  params: {
+    sessionId: "session-main",
+    prompt: "调用当前会话允许的 MCP 工具完成任务",
+  },
+};
 ```
 
 ## 相关文档
 
 - [services.md](services.md) - 业务服务
-- [commands.md](commands.md) - Tauri 命令
+- [commands.md](commands.md) - Desktop Host / App Server 命令边界

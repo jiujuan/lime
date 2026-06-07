@@ -96,6 +96,48 @@ function createHeavyAssistantMessage(): Message {
   };
 }
 
+function createCompletedAssistantMessageWithStaleRunningTool(): Message {
+  const timestamp = new Date("2026-06-07T10:34:45.000Z");
+
+  return {
+    id: "message-news-assistant-complete",
+    role: "assistant",
+    content:
+      "根据多源检索结果，以下是 2026年6月7日 的主要国际新闻整理。",
+    timestamp,
+    isThinking: false,
+    contentParts: [
+      {
+        type: "text",
+        text: "我来搜索今天（2026年6月7日）的国际新闻。",
+      },
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-web-search-stale-running",
+          name: "WebSearch",
+          arguments: "{\"query\":\"2026年6月7日 国际新闻\"}",
+          status: "running",
+          startTime: timestamp,
+        },
+      },
+      {
+        type: "text",
+        text: "根据多源检索结果，以下是 2026年6月7日 的主要国际新闻整理。",
+      },
+    ],
+    toolCalls: [
+      {
+        id: "tool-web-search-stale-running",
+        name: "WebSearch",
+        arguments: "{\"query\":\"2026年6月7日 国际新闻\"}",
+        status: "running",
+        startTime: timestamp,
+      },
+    ],
+  };
+}
+
 function createStandaloneSkillAssistantMessage(): Message {
   const timestamp = new Date("2026-04-24T00:00:03.000Z");
 
@@ -231,6 +273,56 @@ describe("agentSessionScopedStorage", () => {
         text: "最终回复正文",
       },
     ]);
+  });
+
+  it("恢复未压缩缓存时应收尾已完成 assistant 残留 running 工具", () => {
+    const workspaceId = "ws-session-snapshot-stale-running-tool";
+    const sessionId = "topic-stale-running-tool";
+
+    saveAgentSessionCachedSnapshot(workspaceId, sessionId, {
+      messages: [
+        {
+          id: "message-news-user",
+          role: "user",
+          content: "整理今天的国际新闻",
+          timestamp: new Date("2026-06-07T10:34:44.000Z"),
+        },
+        createCompletedAssistantMessageWithStaleRunningTool(),
+      ],
+      threadTurns: [
+        {
+          ...createTurn(1),
+          id: "turn-news-running-stale",
+          status: "running",
+          completed_at: undefined,
+        },
+      ],
+      threadItems: [],
+      currentTurnId: "turn-news-running-stale",
+    });
+
+    const restored = loadAgentSessionCachedSnapshot(workspaceId, sessionId);
+    const restoredAssistant = restored?.messages.find(
+      (message) => message.id === "message-news-assistant-complete",
+    );
+
+    expect(restoredAssistant?.content).toContain("主要国际新闻整理");
+    expect(restoredAssistant?.isThinking).toBe(false);
+    expect(restoredAssistant?.toolCalls?.[0]).toMatchObject({
+      id: "tool-web-search-stale-running",
+      status: "completed",
+      result: {
+        success: true,
+        output: "",
+      },
+    });
+    const toolPart = restoredAssistant?.contentParts?.find(
+      (part) => part.type === "tool_use",
+    );
+    expect(toolPart?.type).toBe("tool_use");
+    if (toolPart?.type === "tool_use") {
+      expect(toolPart.toolCall.status).toBe("completed");
+    }
   });
 
   it("保存已完成直执 Skill 快照时应保留本地思考，因为后端会话详情没有对应 timeline", () => {

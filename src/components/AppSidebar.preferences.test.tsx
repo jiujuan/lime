@@ -10,6 +10,7 @@ import {
   flushEffects,
   mockCheckForUpdates,
   mockGetConfig,
+  mockOpenUpdateWindow,
   mountSidebarContainer,
   resetAppSidebarTest,
 } from "./AppSidebar.testFixtures";
@@ -19,7 +20,7 @@ describe("AppSidebar preferences", () => {
   beforeEach(resetAppSidebarTest);
   afterEach(cleanupAppSidebarTest);
 
-  it("检测到新版本时应在账户区显示升级图标并点击展开窄弹窗", async () => {
+  it("检测到新版本时应在账户区显示升级图标并点击打开更新专用窗口", async () => {
     mockCheckForUpdates.mockResolvedValue({
       current: "1.57.0",
       latest: "1.58.0",
@@ -51,27 +52,32 @@ describe("AppSidebar preferences", () => {
       container.querySelector('[data-testid="app-sidebar-update-panel"]'),
     ).toBeNull();
 
+    updateButton!.getBoundingClientRect = vi.fn(
+      () =>
+        ({
+          x: 18,
+          y: 816,
+          width: 30,
+          height: 30,
+          top: 816,
+          right: 48,
+          bottom: 846,
+          left: 18,
+          toJSON: () => ({}),
+        }) as DOMRect,
+    );
+
     await act(async () => {
       updateButton?.click();
       await Promise.resolve();
     });
 
-    const updatePanel = container.querySelector(
-      '[data-testid="app-sidebar-update-panel"]',
-    );
-    expect(updatePanel).not.toBeNull();
-    expect(updatePanel?.textContent).toContain("发现新版本 1.58.0");
-    expect(updatePanel?.textContent).toContain("当前 1.57.0");
-    expect(updatePanel?.textContent).toContain("稍后");
-    expect(updatePanel?.textContent).toContain("立即更新");
-
-    await act(async () => {
-      updatePanel
-        ?.querySelector<HTMLButtonElement>('button[aria-label="收起更新面板"]')
-        ?.click();
-      await Promise.resolve();
+    expect(mockOpenUpdateWindow).toHaveBeenCalledWith({
+      x: 18,
+      y: 816,
+      width: 30,
+      height: 30,
     });
-
     expect(
       container.querySelector('[data-testid="app-sidebar-update-panel"]'),
     ).toBeNull();
@@ -83,6 +89,7 @@ describe("AppSidebar preferences", () => {
   it("显式开启后应显示可选系统扩展入口", async () => {
     mockGetConfig.mockResolvedValue({
       navigation: {
+        schema_version: 3,
         enabled_items: ["companion"],
       },
     });
@@ -118,11 +125,13 @@ describe("AppSidebar preferences", () => {
     mockGetConfig
       .mockResolvedValueOnce({
         navigation: {
+          schema_version: 3,
           enabled_items: [],
         },
       })
       .mockResolvedValueOnce({
         navigation: {
+          schema_version: 3,
           enabled_items: ["companion"],
         },
       });
@@ -167,6 +176,36 @@ describe("AppSidebar preferences", () => {
       '[data-testid="app-sidebar-account-menu"]',
     );
     expect(accountMenu?.textContent).toContain("桌宠");
+  });
+
+  it("旧 schema 中的桌宠入口不应默认显示", async () => {
+    mockGetConfig.mockResolvedValue({
+      navigation: {
+        schema_version: 2,
+        enabled_items: ["companion"],
+      },
+    });
+
+    const container = mountSidebarContainer({
+      currentPageParams: {
+        agentEntry: "new-task",
+      } as AgentPageParams,
+    });
+    await flushEffects(2);
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="app-sidebar-account-button"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+
+    const accountMenu = container.querySelector(
+      '[data-testid="app-sidebar-account-menu"]',
+    );
+    expect(accountMenu?.textContent).not.toContain("桌宠");
   });
 
   it("点击当前已激活的Skills入口时不应重复导航", async () => {
@@ -381,6 +420,7 @@ describe("AppSidebar preferences", () => {
   it("桌宠入口开启后，进入 companion 视图应高亮桌宠", async () => {
     mockGetConfig.mockResolvedValue({
       navigation: {
+        schema_version: 3,
         enabled_items: ["companion"],
       },
     });

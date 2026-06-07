@@ -208,6 +208,13 @@ describe("buildConfiguredProviders", () => {
     );
   });
 
+  it("Provider 列表短暂缺失时不应让设置页选择器崩溃", () => {
+    expect(findConfiguredProviderBySelection(undefined, "openai")).toBeNull();
+    expect(() =>
+      resolveConfiguredProviderPromptCacheSupportNotice(undefined, "openai"),
+    ).not.toThrow();
+  });
+
   it("应基于真实受管 Provider 解析 prompt cache 提示", () => {
     const providers = buildConfiguredProviders([
       createApiKeyProvider({

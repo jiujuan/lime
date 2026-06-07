@@ -42,7 +42,7 @@ import {
 } from "./textOcrWorkerClient";
 
 export const LAYERED_DESIGN_DEFAULT_MODEL_SLOT_TEXT_OCR_PRIORITY_LABEL =
-  "OCR priority: Tauri native OCR -> Worker OCR provider via model slot JSON executor";
+  "OCR priority: Desktop Host native OCR -> Worker OCR provider via model slot JSON executor";
 
 export interface LayeredDesignAnalyzerModelSlotsFromTransport {
   subjectMattingSlot?: LayeredDesignSubjectMattingModelSlot;

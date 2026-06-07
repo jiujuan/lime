@@ -25,13 +25,13 @@
 
 ### 2.2 Lime 侧（已核对）
 
-- `src-tauri/src/services/execution_tracker_service.rs`
-- `src-tauri/src/services/heartbeat_service/mod.rs`
-- `src-tauri/src/services/heartbeat_service/delivery.rs`
-- `src-tauri/src/commands/aster_agent_cmd/mod.rs`
-- `src-tauri/src/commands/aster_agent_cmd/tool_runtime/subagent_tools.rs`
-- `src-tauri/crates/websocket/src/handlers/rpc_handler.rs`
-- `src-tauri/crates/core/src/database/schema.rs`
+- `lime-rs/src/services/execution_tracker_service.rs`
+- `lime-rs/src/services/heartbeat_service/mod.rs`
+- `lime-rs/src/services/heartbeat_service/delivery.rs`
+- `lime-rs/src/commands/aster_agent_cmd/mod.rs`
+- `lime-rs/src/commands/aster_agent_cmd/tool_runtime/subagent_tools.rs`
+- `lime-rs/crates/websocket/src/handlers/rpc_handler.rs`
+- `lime-rs/crates/core/src/database/schema.rs`
 
 ---
 

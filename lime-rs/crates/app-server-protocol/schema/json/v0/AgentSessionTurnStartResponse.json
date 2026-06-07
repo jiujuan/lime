@@ -1,0 +1,62 @@
+{
+  "$defs": {
+    "AgentTurn": {
+      "properties": {
+        "completedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "startedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/AgentTurnStatus"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId",
+        "status",
+        "threadId",
+        "turnId"
+      ],
+      "type": "object"
+    },
+    "AgentTurnStatus": {
+      "enum": [
+        "accepted",
+        "canceled",
+        "completed",
+        "failed",
+        "queued",
+        "running",
+        "waitingAction"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "turn": {
+      "$ref": "#/$defs/AgentTurn"
+    }
+  },
+  "required": [
+    "turn"
+  ],
+  "title": "AgentSessionTurnStartResponse",
+  "type": "object"
+}

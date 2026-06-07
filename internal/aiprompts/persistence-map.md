@@ -30,8 +30,8 @@
 
 文件：
 
-- `src-tauri/src/services/agent_timeline_service.rs`
-- `src-tauri/crates/core/src/database/dao/agent_timeline.rs`
+- `lime-rs/src/services/agent_timeline_service.rs`
+- `lime-rs/crates/core/src/database/dao/agent_timeline.rs`
 
 职责：
 
@@ -48,7 +48,7 @@
 
 文件：
 
-- `src-tauri/src/services/artifact_document_service.rs`
+- `lime-rs/src/services/artifact_document_service.rs`
 
 职责：
 
@@ -65,8 +65,8 @@
 
 文件：
 
-- `src-tauri/src/services/runtime_file_checkpoint_service.rs`
-- `src-tauri/src/commands/aster_agent_cmd/dto.rs`
+- `lime-rs/src/services/runtime_file_checkpoint_service.rs`
+- `lime-rs/src/commands/aster_agent_cmd/dto.rs`
 - `src/lib/api/agentRuntime/threadClient.ts`
 
 职责：
@@ -84,8 +84,8 @@
 
 文件：
 
-- `src-tauri/src/services/runtime_evidence_pack_service.rs`
-- `src-tauri/src/services/runtime_replay_case_service.rs`
+- `lime-rs/src/services/runtime_evidence_pack_service.rs`
+- `lime-rs/src/services/runtime_replay_case_service.rs`
 
 当前约束：
 

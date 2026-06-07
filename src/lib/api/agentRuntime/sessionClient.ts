@@ -3,16 +3,17 @@ import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics"
 import { normalizeLegacyThreadItem } from "../agentTextNormalization";
 import type { AgentThreadItem } from "../agentProtocol";
 import { normalizeQueuedTurnSnapshots } from "../queuedTurn";
-import { AGENT_RUNTIME_COMMANDS } from "./commandManifest.generated";
+import {
+  createAppServerSessionClient,
+  type AppServerSessionClient,
+  type AppServerSessionRpcClient,
+} from "./appServerSessionClient";
 import {
   normalizeSubagentParentContext,
   normalizeSubagentSessionInfo,
   normalizeThreadReadModel,
 } from "./normalizers";
-import {
-  invokeAgentRuntimeCommand,
-  type AgentRuntimeCommandInvoke,
-} from "./transport";
+import type { AgentRuntimeCommandInvoke } from "./transport";
 import type {
   AsterExecutionStrategy,
   AsterSessionDetail,
@@ -22,17 +23,6 @@ import type {
   AgentRuntimeGetSessionOptions,
   AgentRuntimeUpdateSessionRequest,
 } from "./types";
-
-const requireWorkspaceId = (
-  workspaceId?: string,
-  fallbackWorkspaceId?: string,
-): string => {
-  const resolvedWorkspaceId = (workspaceId ?? fallbackWorkspaceId)?.trim();
-  if (!resolvedWorkspaceId) {
-    throw new Error("workspaceId 不能为空，请先选择项目工作区");
-  }
-  return resolvedWorkspaceId;
-};
 
 function isTransientSessionReadError(error: unknown): boolean {
   const message =
@@ -52,10 +42,13 @@ function isTransientSessionReadError(error: unknown): boolean {
 
 export interface AgentRuntimeSessionClientDeps {
   invokeCommand?: AgentRuntimeCommandInvoke;
+  appServerClient?: AppServerSessionRpcClient;
+  appServerSessionClient?: AppServerSessionClient;
 }
 
 export function createSessionClient({
-  invokeCommand = invokeAgentRuntimeCommand,
+  appServerClient,
+  appServerSessionClient = createAppServerSessionClient({ appServerClient }),
 }: AgentRuntimeSessionClientDeps = {}) {
   async function createAgentRuntimeSession(
     workspaceId: string,
@@ -63,12 +56,12 @@ export function createSessionClient({
     executionStrategy?: AsterExecutionStrategy,
     options?: AgentRuntimeCreateSessionOptions,
   ): Promise<string> {
-    return await invokeCommand<string>(AGENT_RUNTIME_COMMANDS.createSession, {
-      workspaceId: requireWorkspaceId(workspaceId),
+    return await appServerSessionClient.createAgentRuntimeSession(
+      workspaceId,
       name,
       executionStrategy,
-      ...(options?.runStartHooks === false ? { runStartHooks: false } : {}),
-    });
+      options,
+    );
   }
 
   async function listAgentRuntimeSessions(
@@ -120,20 +113,12 @@ export function createSessionClient({
     logAgentDebug("AgentApi", "runtimeListSessions.start", listMetricContext);
 
     try {
-      const request = {
-        ...(includeArchived ? { include_archived: true } : {}),
-        ...(archivedOnly ? { archived_only: true } : {}),
-        ...(workspaceId ? { workspace_id: workspaceId } : {}),
-        ...(typeof limit === "number" ? { limit } : {}),
-      };
-      const sessions = await invokeCommand<AsterSessionInfo[]>(
-        AGENT_RUNTIME_COMMANDS.listSessions,
-        Object.keys(request).length > 0
-          ? {
-              request,
-            }
-          : undefined,
-      );
+      const sessions = await appServerSessionClient.listAgentRuntimeSessions({
+        includeArchived,
+        archivedOnly,
+        workspaceId,
+        limit,
+      });
       settled = true;
       recordAgentUiPerformanceMetric("agentRuntime.listSessions.success", {
         ...listMetricContext,
@@ -245,10 +230,9 @@ export function createSessionClient({
     );
 
     try {
-      const detail = await invokeCommand<AsterSessionDetail>(
-        AGENT_RUNTIME_COMMANDS.getSession,
+      const detail = await appServerSessionClient.getAgentRuntimeSession(
+        sessionId,
         {
-          sessionId,
           ...(resumeSessionStartHooks ? { resumeSessionStartHooks: true } : {}),
           ...(typeof historyLimit === "number" ? { historyLimit } : {}),
           ...(typeof historyOffset === "number" ? { historyOffset } : {}),
@@ -260,18 +244,24 @@ export function createSessionClient({
       const normalizedDetail = detail as AsterSessionDetail | null | undefined;
       const normalizedSessionDetail: AsterSessionDetail = {
         ...(detail as AsterSessionDetail),
+        messages: Array.isArray(normalizedDetail?.messages)
+          ? normalizedDetail.messages
+          : [],
+        turns: Array.isArray(normalizedDetail?.turns)
+          ? normalizedDetail.turns
+          : [],
         items: Array.isArray(normalizedDetail?.items)
           ? normalizedDetail.items.map((item) =>
               normalizeLegacyThreadItem(item as AgentThreadItem),
             )
-          : normalizedDetail?.items,
+          : [],
         child_subagent_sessions: Array.isArray(
           normalizedDetail?.child_subagent_sessions,
         )
           ? normalizedDetail.child_subagent_sessions.map(
               normalizeSubagentSessionInfo,
             )
-          : normalizedDetail?.child_subagent_sessions,
+          : [],
         subagent_parent_context: normalizeSubagentParentContext(
           normalizedDetail?.subagent_parent_context,
         ),
@@ -279,6 +269,9 @@ export function createSessionClient({
           normalizedDetail?.queued_turns,
         ),
         thread_read: normalizeThreadReadModel(normalizedDetail?.thread_read),
+        todo_items: Array.isArray(normalizedDetail?.todo_items)
+          ? normalizedDetail.todo_items
+          : [],
       };
       settled = true;
       recordAgentUiPerformanceMetric("agentRuntime.getSession.success", {
@@ -337,14 +330,13 @@ export function createSessionClient({
   async function updateAgentRuntimeSession(
     request: AgentRuntimeUpdateSessionRequest,
   ): Promise<void> {
-    return await invokeCommand<void>(AGENT_RUNTIME_COMMANDS.updateSession, {
-      request,
-    });
+    return await appServerSessionClient.updateAgentRuntimeSession(request);
   }
 
   async function deleteAgentRuntimeSession(sessionId: string): Promise<void> {
-    return await invokeCommand<void>(AGENT_RUNTIME_COMMANDS.deleteSession, {
-      sessionId,
+    return await updateAgentRuntimeSession({
+      session_id: sessionId,
+      archived: true,
     });
   }
 

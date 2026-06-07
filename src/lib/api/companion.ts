@@ -1,5 +1,5 @@
 import { safeInvoke, safeListen } from "@/lib/dev-bridge";
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@/lib/desktop-host/event";
 
 export const COMPANION_PET_STATUS_EVENT = "companion-pet-status";
 export const COMPANION_OPEN_PROVIDER_SETTINGS_EVENT =

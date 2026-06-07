@@ -14,9 +14,9 @@ P17.5 正式入口 smoke 已收口；P18 代码实施继续和 AgentRuntime / GU
 
 | 分工                    | 负责范围                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | 暂不触碰                                                                                                                                                                                                               |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P17.5 / 已收口          | 正式 `agent-apps` smoke、`scripts/agent-apps-smoke.mjs`、P17.5 evidence summary。                                                                                                                                                                                                                                                                                                                                                                                                                                     | 不把通过 smoke 扩大解释为 marketplace / 真实 delete-data / Cloud 管理台。                                                                                                                                              |
+| P17.5 / 已收口          | 正式 `agent-apps` smoke、`scripts/agent-app/apps-smoke.mjs`、P17.5 evidence summary。                                                                                                                                                                                                                                                                                                                                                                                                                                     | 不把通过 smoke 扩大解释为 marketplace / 真实 delete-data / Cloud 管理台。                                                                                                                                              |
 | AgentRuntime / 隔壁任务 | `AgentRuntimeThreadReadModel`、`agent_app_runtime_*` facade、artifact / evidence / handoff 投影、`artifact:created` refs、跨刷新 task 恢复、Host response 回写；`internal/roadmap/agentruntime/claw-capability-sharing.md` 进一步把 Claw `@` 能力收敛到 AgentRuntime capability catalog。                                                                                                                                                                                                                                 | 不改 Agent App SDK 路线图，不由 P18 复制 runtime read model；push subscribe、workspace patch producer、capability catalog service、Claw capability catalog 和真实桌面 GUI smoke 仍由 AgentRuntime 任务收口。           |
-| P18 / 完成候选          | 上游 Agent App v0.4 Host Bridge 标准对齐、Typed Capability SDK gate、App-scoped Agent task 契约。P18.1 已落 SDK 类型、stable error、mock host 和 contract seam；P18.2 已收敛 Host Bridge typed router；P18.3 已完成 core adapters；P18.4 已完成 `lime.agent` SDK facade；P18.4-H 已完成 handoff gate；P18.5.1 已完成 Lime-side 内容工厂 SDK 回归；P18.5.2 已完成 package-side read-only tests；P18.5-S 已补 Host Bridge SDK client；P18.5.3 已完成真实 package verify 和 dist 同步；P18.6 已完成 raw worker 前 gate。 | 不启停隔壁 Tauri / Vite / DevBridge，不改 `src-tauri/*` / runtime facade，不改 `src/features/agent-app/runtime/agentRuntimeCapabilityHost*`，不进入 raw worker；后续只做 owner handoff / 提交边界，不再扩 P18 功能面。 |
+| P18 / 完成候选          | 上游 Agent App v0.4 Host Bridge 标准对齐、Typed Capability SDK gate、App-scoped Agent task 契约。P18.1 已落 SDK 类型、stable error、mock host 和 contract seam；P18.2 已收敛 Host Bridge typed router；P18.3 已完成 core adapters；P18.4 已完成 `lime.agent` SDK facade；P18.4-H 已完成 handoff gate；P18.5.1 已完成 Lime-side 内容工厂 SDK 回归；P18.5.2 已完成 package-side read-only tests；P18.5-S 已补 Host Bridge SDK client；P18.5.3 已完成真实 package verify 和 dist 同步；P18.6 已完成 raw worker 前 gate。 | 不启停隔壁 Tauri / Vite / DevBridge，不改 `lime-rs/*` / runtime facade，不改 `src/features/agent-app/runtime/agentRuntimeCapabilityHost*`，不进入 raw worker；后续只做 owner handoff / 提交边界，不再扩 P18 功能面。 |
 
 收敛规则：P17.5 已解除正式入口 smoke 阻塞；P18 代码只从 SDK contract 最小面开始，不把 SDK gate 扩大成垂直内容系统。
 
@@ -297,7 +297,7 @@ nice -n 10 npm test -- src/features/agent-app/sdk/capabilityContract.test.ts src
 nice -n 10 npm run typecheck -- --pretty false
 ```
 
-边界：P18.1 未修改 `src-tauri/*`、`src/lib/api/agentAppRuntime.ts`、`src/features/agent-app/runtime/agentRuntimeCapabilityHost*`、GUI smoke 脚本或 Cloud / LimeCore。
+边界：P18.1 未修改 `lime-rs/*`、`src/lib/api/agentAppRuntime.ts`、`src/features/agent-app/runtime/agentRuntimeCapabilityHost*`、GUI smoke 脚本或 Cloud / LimeCore。
 
 ## P18.2 实施记录
 
@@ -319,7 +319,7 @@ git diff --check -- src/features/agent-app/sdk src/features/agent-app/runtime sr
 rg -n "SceneApp|contentEngineering|sceneapp_|safeInvoke|invoke\\(|new Worker|Worker\\(" src/features/agent-app || true
 ```
 
-边界：P18.2 未修改 `src-tauri/*`、`src/lib/api/agentAppRuntime.ts`、GUI smoke 脚本、Cloud / LimeCore，也不抢隔壁 AgentRuntime 的 Rust / facade / GUI 验证链路；`agentRuntimeCapabilityHost*` 的并行改动由隔壁任务负责。
+边界：P18.2 未修改 `lime-rs/*`、`src/lib/api/agentAppRuntime.ts`、GUI smoke 脚本、Cloud / LimeCore，也不抢隔壁 AgentRuntime 的 Rust / facade / GUI 验证链路；`agentRuntimeCapabilityHost*` 的并行改动由隔壁任务负责。
 
 ## P18.3 实施记录
 
@@ -364,7 +364,7 @@ git diff --check -- src/features/agent-app/sdk src/features/agent-app/index.ts i
 rg -n "SceneApp|contentEngineering|sceneapp_|safeInvoke|invoke\\(|new Worker|Worker\\(" src/features/agent-app || true
 ```
 
-边界：P18.4 未修改 `src-tauri/*`、`src/lib/api/agentAppRuntime.ts`、`src/features/agent-app/runtime/agentRuntimeCapabilityHost*`、GUI smoke 脚本、DevBridge / Tauri / Vite 进程、Cloud / LimeCore；真实 runtime push subscribe、workspace patch producer、capability catalog 和桌面 GUI smoke 仍归 P18.4-H / 隔壁 AgentRuntime 收口。
+边界：P18.4 未修改 `lime-rs/*`、`src/lib/api/agentAppRuntime.ts`、`src/features/agent-app/runtime/agentRuntimeCapabilityHost*`、GUI smoke 脚本、DevBridge / Tauri / Vite 进程、Cloud / LimeCore；真实 runtime push subscribe、workspace patch producer、capability catalog 和桌面 GUI smoke 仍归 P18.4-H / 隔壁 AgentRuntime 收口。
 
 ## P18.4-H 实施记录
 
@@ -380,7 +380,7 @@ P18.4-H 的最小目标是做 Agent App 消费侧 handoff gate，而不是抢隔
 git diff --check -- internal/roadmap/agentapp
 ```
 
-边界：P18.4-H 未修改 `src-tauri/*`、`src/lib/api/agentAppRuntime.ts`、`src/features/agent-app/runtime/agentRuntimeCapabilityHost*`、GUI smoke 脚本、DevBridge / Tauri / Vite 进程、Cloud / LimeCore。
+边界：P18.4-H 未修改 `lime-rs/*`、`src/lib/api/agentAppRuntime.ts`、`src/features/agent-app/runtime/agentRuntimeCapabilityHost*`、GUI smoke 脚本、DevBridge / Tauri / Vite 进程、Cloud / LimeCore。
 
 ## P18.5 实施记录
 
@@ -419,7 +419,7 @@ rg -n "SceneApp|contentEngineering|sceneapp_|safeInvoke|invoke\\(|new Worker|Wor
 - Lime `typecheck` 与 `test:contracts`：均通过。
 - 外部 package 仍有 39 个 dirty / untracked 条目；`src/ui/host-bridge.js` 仍包含 `pendingRequests / buildMessage / window.parent.postMessage / requestHostBridge / capability:invoke / capability:subscribe / capability:event`，未出现 `createLimeHostBridgeCapabilityInvoker` 或 `createLimeCoreCapabilityAdapters`。
 
-边界：P18.5.1 / P18.5.2 / P18.5-S 未修改外部 content-factory package、`src-tauri/*`、`src/lib/api/agentAppRuntime.ts`、`src/features/agent-app/runtime/agentRuntimeCapabilityHost*`、GUI smoke 脚本、DevBridge / Tauri / Vite 进程、Cloud / LimeCore；`hostBridge.ts` 仅有 timer 类型修正用于恢复 `typecheck`，`index.test.ts` 只固定 public SDK export seam。后续 P18.5.3 已在 10:55 完成真实 package verify / dist 同步；完整 `verify:local` 已于 2026-05-16 07:33 端到端通过，不再是当前阻塞。
+边界：P18.5.1 / P18.5.2 / P18.5-S 未修改外部 content-factory package、`lime-rs/*`、`src/lib/api/agentAppRuntime.ts`、`src/features/agent-app/runtime/agentRuntimeCapabilityHost*`、GUI smoke 脚本、DevBridge / Tauri / Vite 进程、Cloud / LimeCore；`hostBridge.ts` 仅有 timer 类型修正用于恢复 `typecheck`，`index.test.ts` 只固定 public SDK export seam。后续 P18.5.3 已在 10:55 完成真实 package verify / dist 同步；完整 `verify:local` 已于 2026-05-16 07:33 端到端通过，不再是当前阻塞。
 
 ## P18.6 实施记录
 
@@ -500,6 +500,6 @@ P18.5 允许范围：
 
 P18.5 暂不触碰：
 
-- `src-tauri/*`、`src/lib/api/agentAppRuntime.ts`、`src/features/agent-app/runtime/agentRuntimeCapabilityHost*`。
+- `lime-rs/*`、`src/lib/api/agentAppRuntime.ts`、`src/features/agent-app/runtime/agentRuntimeCapabilityHost*`。
 - GUI smoke 脚本、DevBridge / Tauri / Vite 进程、Cloud / LimeCore。
 - raw Worker、marketplace、真实 delete-data、垂直内容工厂专用命令。

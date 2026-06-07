@@ -38,8 +38,8 @@ describe("agent-qc-qcloop-preflight-core", () => {
 
     expect(report.status).toBe("blocked");
     expect(report.failedChecks).toContain("devbridge-health");
-    expect(report.checks.find((check) => check.id === "devbridge-health")?.detail).toContain(
-      "fetch failed",
-    );
+    expect(
+      report.checks.find((check) => check.id === "devbridge-health")?.detail,
+    ).toContain("fetch failed");
   });
 });

@@ -13,7 +13,7 @@ const OPTIMIZED_DEP_FILES = [
   "react_jsx-dev-runtime.js",
 ];
 const HOST_BRIDGE_MODULE_PATH = "/src/features/agent-app/runtime/hostBridge.ts";
-const TAURI_DIALOG_MOCK_MARKER = "/src/lib/tauri-mock/plugin-dialog";
+const DESKTOP_HOST_DIALOG_MOCK_MARKER = "/src/lib/desktop-host/plugin-dialog";
 
 function isLimeDevShell(html) {
   return ROOT_MARKERS.some((marker) => html.includes(marker));
@@ -43,29 +43,23 @@ async function fetchText(url, timeoutMs) {
   };
 }
 
-function createEnv({ browserBridge }) {
+function createEnv() {
   const env = { ...process.env };
 
-  if (browserBridge) {
-    delete env.TAURI_ENV_PLATFORM;
-    env.LIME_BROWSER_BRIDGE = "1";
-  } else if (!env.TAURI_ENV_PLATFORM) {
-    // Tauri dev server 必须强制进入 Tauri 解析模式，否则 Vite 会把 dialog 解析到浏览器 mock。
-    env.TAURI_ENV_PLATFORM = process.platform;
-  }
+  env.LIME_BROWSER_BRIDGE = "1";
 
   return env;
 }
 
-function resolveOptimizedDepUrls(url, { browserBridge }) {
-  const depsDir = browserBridge ? ".vite-web" : ".vite-tauri";
+function resolveOptimizedDepUrls(url) {
+  const depsDir = ".vite-web";
   return OPTIMIZED_DEP_FILES.map((file) =>
     new URL(`/node_modules/${depsDir}/deps/${file}`, url).toString(),
   );
 }
 
-function describeExpectedRuntimeMode({ browserBridge }) {
-  return browserBridge ? "浏览器 DevBridge mock 模式" : "Tauri 原生模式";
+function describeExpectedRuntimeMode() {
+  return "浏览器 DevBridge mock 模式";
 }
 
 async function probeExistingDevServer(url, options) {
@@ -118,10 +112,11 @@ async function probeExistingDevServer(url, options) {
             hostBridgeUrl,
             ENTRY_MODULE_TIMEOUT_MS,
           );
-          const usesDialogMock = bridgeCode.includes(TAURI_DIALOG_MOCK_MARKER);
+          const usesDesktopHostDialogMock = bridgeCode.includes(
+            DESKTOP_HOST_DIALOG_MOCK_MARKER,
+          );
           runtimeModeReady =
-            bridgeResponse.ok &&
-            (options.browserBridge ? usesDialogMock : !usesDialogMock);
+            bridgeResponse.ok && usesDesktopHostDialogMock;
         } catch {
           runtimeModeReady = false;
         }
@@ -174,7 +169,7 @@ async function waitForExistingDevServer(url, options) {
       !lastProbe.isRuntimeModeReady
     ) {
       throw new Error(
-        `[${options.logLabel}] ${options.devUrl} 当前不是${describeExpectedRuntimeMode(options)}。请先关闭现有 Vite dev server 后重启，避免 Tauri dialog 继续落到浏览器 mock。`,
+        `[${options.logLabel}] ${options.devUrl} 当前不是${describeExpectedRuntimeMode()}。请先关闭现有 Vite dev server 后重启。`,
       );
     }
 
@@ -251,15 +246,20 @@ async function waitForExitSignal() {
 }
 
 export async function runViteDevServerBootstrap({
-  browserBridge = false,
+  browserBridge = true,
   devUrl = "http://127.0.0.1:1420/",
   entryModulePath = "/src/main.tsx",
   reuseExistingOnly = false,
   logLabel = "vite:dev",
 } = {}) {
-  const env = createEnv({ browserBridge });
+  if (!browserBridge) {
+    throw new Error(
+      "Vite dev bootstrap only supports browser DevBridge mock mode. Use Electron current entrypoints for desktop development.",
+    );
+  }
+
+  const env = createEnv();
   const options = {
-    browserBridge,
     devUrl,
     entryModulePath,
     logLabel,
@@ -297,7 +297,7 @@ export async function runViteDevServerBootstrap({
     return;
   }
 
-  console.log(`[${logLabel}] 先执行 vite optimize，避免 Tauri 抢跑到半就绪 dev server。`);
+  console.log(`[${logLabel}] 先执行 vite optimize，避免复用半就绪 dev server。`);
   await runCommand("npx", ["vite", "optimize"], env, logLabel);
   startVite(env, devUrl);
   await waitForExitSignal();

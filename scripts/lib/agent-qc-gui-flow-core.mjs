@@ -38,15 +38,30 @@ function validateAgentQcGuiFlowManifest(flowManifest, scenarioManifest) {
   if (!flowManifest || typeof flowManifest !== "object") {
     return {
       valid: false,
-      issues: [{ severity: "error", path: "manifest", message: "GUI flow manifest 必须是 JSON object。" }],
+      issues: [
+        {
+          severity: "error",
+          path: "manifest",
+          message: "GUI flow manifest 必须是 JSON object。",
+        },
+      ],
     };
   }
 
   if (flowManifest.manifestVersion !== "v1") {
-    addIssue(issues, "error", "manifestVersion", "当前只接受 manifestVersion=v1。");
+    addIssue(
+      issues,
+      "error",
+      "manifestVersion",
+      "当前只接受 manifestVersion=v1。",
+    );
   }
 
-  const scenarios = new Set(asArray(scenarioManifest?.scenarios).map((scenario) => scenario.id).filter(Boolean));
+  const scenarios = new Set(
+    asArray(scenarioManifest?.scenarios)
+      .map((scenario) => scenario.id)
+      .filter(Boolean),
+  );
   const flows = asArray(flowManifest.flows);
   const flowIds = new Set();
 
@@ -71,12 +86,27 @@ function validateAgentQcGuiFlowManifest(flowManifest, scenarioManifest) {
     }
 
     if (!isNonEmptyString(flow.scenarioId)) {
-      addIssue(issues, "error", `${prefix}.scenarioId`, "scenarioId 必须是非空字符串。");
+      addIssue(
+        issues,
+        "error",
+        `${prefix}.scenarioId`,
+        "scenarioId 必须是非空字符串。",
+      );
     } else if (!scenarios.has(flow.scenarioId)) {
-      addIssue(issues, "error", `${prefix}.scenarioId`, `引用了不存在的 Agent QC scenario: ${flow.scenarioId}`);
+      addIssue(
+        issues,
+        "error",
+        `${prefix}.scenarioId`,
+        `引用了不存在的 Agent QC scenario: ${flow.scenarioId}`,
+      );
     }
 
-    for (const field of ["preflight", "steps", "assertions", "evidenceRequired"]) {
+    for (const field of [
+      "preflight",
+      "steps",
+      "assertions",
+      "evidenceRequired",
+    ]) {
       validateStringArray(flow[field], `${prefix}.${field}`, issues);
     }
   });
@@ -101,10 +131,16 @@ function summarizeAgentQcGuiFlowManifest(flowManifest, validation) {
     manifestVersion: flowManifest?.manifestVersion || "unknown",
     valid: validation.valid,
     issueCount: validation.issues.length,
-    errorCount: validation.issues.filter((issue) => issue.severity === "error").length,
-    warnCount: validation.issues.filter((issue) => issue.severity === "warn").length,
+    errorCount: validation.issues.filter((issue) => issue.severity === "error")
+      .length,
+    warnCount: validation.issues.filter((issue) => issue.severity === "warn")
+      .length,
     flowCount: flows.length,
-    risks: Object.fromEntries(Array.from(riskCounts.entries()).sort(([left], [right]) => left.localeCompare(right))),
+    risks: Object.fromEntries(
+      Array.from(riskCounts.entries()).sort(([left], [right]) =>
+        left.localeCompare(right),
+      ),
+    ),
     flows: flows.map((flow) => ({
       id: flow.id,
       scenarioId: flow.scenarioId,
@@ -128,7 +164,12 @@ function renderAgentQcGuiFlowMarkdown(summary) {
         .join("\n")
     : "- 无";
   const issueLines = summary.issues.length
-    ? summary.issues.map((issue) => `- ${issue.severity.toUpperCase()} ${issue.path}: ${issue.message}`).join("\n")
+    ? summary.issues
+        .map(
+          (issue) =>
+            `- ${issue.severity.toUpperCase()} ${issue.path}: ${issue.message}`,
+        )
+        .join("\n")
     : "- 无";
 
   return `# ${summary.title}
@@ -151,7 +192,10 @@ ${issueLines}
 }
 
 function createAgentQcGuiFlowReport({ flowManifest, scenarioManifest }) {
-  const validation = validateAgentQcGuiFlowManifest(flowManifest, scenarioManifest);
+  const validation = validateAgentQcGuiFlowManifest(
+    flowManifest,
+    scenarioManifest,
+  );
   return summarizeAgentQcGuiFlowManifest(flowManifest, validation);
 }
 

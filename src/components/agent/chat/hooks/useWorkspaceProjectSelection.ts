@@ -25,6 +25,14 @@ interface UseWorkspaceProjectSelectionOptions {
   storageKey?: string;
 }
 
+export type WorkspaceProjectSelectionSource =
+  | "external"
+  | "initial-session"
+  | "remembered"
+  | "manual"
+  | "topic-switch"
+  | "none";
+
 export function useWorkspaceProjectSelection(
   options: UseWorkspaceProjectSelectionOptions = {},
 ) {
@@ -56,13 +64,42 @@ export function useWorkspaceProjectSelection(
       ? null
       : rememberedProjectId;
   }, [storageKey]);
+  const resolveInitialSelection = useCallback((): {
+    projectId: string | null;
+    source: Exclude<WorkspaceProjectSelectionSource, "external">;
+  } => {
+    const initialSessionProjectId = loadInitialSessionProjectId();
+    if (initialSessionProjectId) {
+      return {
+        projectId: initialSessionProjectId,
+        source: "initial-session",
+      };
+    }
+
+    const rememberedProjectId = loadRememberedProjectId();
+    if (rememberedProjectId) {
+      return {
+        projectId: rememberedProjectId,
+        source: "remembered",
+      };
+    }
+
+    return {
+      projectId: null,
+      source: "none",
+    };
+  }, [loadInitialSessionProjectId, loadRememberedProjectId]);
   const [internalProjectId, setInternalProjectId] = useState<string | null>(
-    () =>
-      normalizedExternalProjectId ??
-      loadInitialSessionProjectId() ??
-      loadRememberedProjectId(),
+    () => normalizedExternalProjectId ?? resolveInitialSelection().projectId,
   );
+  const [internalProjectSelectionSource, setInternalProjectSelectionSource] =
+    useState<Exclude<WorkspaceProjectSelectionSource, "external">>(() =>
+      normalizedExternalProjectId ? "none" : resolveInitialSelection().source,
+    );
   const handledNewChatRequestRef = useRef<string | null>(null);
+  const [handledNewChatRequestKey, setHandledNewChatRequestKey] = useState<
+    string | null
+  >(null);
   const pendingTopicSwitchRef = useRef<PendingTopicSwitchState | null>(null);
   const isResolvingTopicProjectRef = useRef(false);
 
@@ -70,18 +107,30 @@ export function useWorkspaceProjectSelection(
     typeof newChatAt === "number" ? String(newChatAt) : null;
   const hasExplicitInitialSession =
     typeof initialSessionId === "string" && initialSessionId.trim().length > 0;
+  const hasHandledIncomingNewChatRequest =
+    incomingNewChatRequestKey !== null &&
+    (handledNewChatRequestKey === incomingNewChatRequestKey ||
+      handledNewChatRequestRef.current === incomingNewChatRequestKey);
   const shouldDisableSessionRestore =
-    incomingNewChatRequestKey !== null || hasExplicitInitialSession;
+    hasExplicitInitialSession ||
+    (incomingNewChatRequestKey !== null && !hasHandledIncomingNewChatRequest);
   const projectId =
     normalizedExternalProjectId ?? internalProjectId ?? undefined;
+  const projectSelectionSource: WorkspaceProjectSelectionSource =
+    normalizedExternalProjectId ? "external" : internalProjectSelectionSource;
 
   const hasHandledNewChatRequest = useCallback(
-    (requestKey: string) => handledNewChatRequestRef.current === requestKey,
-    [],
+    (requestKey: string) =>
+      handledNewChatRequestRef.current === requestKey ||
+      handledNewChatRequestKey === requestKey,
+    [handledNewChatRequestKey],
   );
 
   const markNewChatRequestHandled = useCallback((requestKey: string) => {
     handledNewChatRequestRef.current = requestKey;
+    setHandledNewChatRequestKey((currentKey) =>
+      currentKey === requestKey ? currentKey : requestKey,
+    );
   }, []);
 
   const clearProjectSelectionRuntime = useCallback(() => {
@@ -118,6 +167,7 @@ export function useWorkspaceProjectSelection(
         ? currentProjectId
         : initialSessionProjectId,
     );
+    setInternalProjectSelectionSource("initial-session");
   }, [
     clearProjectSelectionRuntime,
     loadInitialSessionProjectId,
@@ -128,6 +178,7 @@ export function useWorkspaceProjectSelection(
   const resetProjectSelection = useCallback(() => {
     clearProjectSelectionRuntime();
     setInternalProjectId(null);
+    setInternalProjectSelectionSource("none");
   }, [clearProjectSelectionRuntime]);
 
   const applyProjectSelection = useCallback(
@@ -140,6 +191,9 @@ export function useWorkspaceProjectSelection(
       clearProjectSelectionRuntime();
       rememberProjectId(normalizedProjectId);
       setInternalProjectId(normalizedProjectId);
+      setInternalProjectSelectionSource(
+        normalizedProjectId ? "manual" : "none",
+      );
     },
     [
       clearProjectSelectionRuntime,
@@ -190,6 +244,7 @@ export function useWorkspaceProjectSelection(
           : {}),
       };
       setInternalProjectId(normalizedTargetProjectId);
+      setInternalProjectSelectionSource("topic-switch");
     },
     [rememberProjectId],
   );
@@ -219,6 +274,7 @@ export function useWorkspaceProjectSelection(
 
   return {
     projectId,
+    projectSelectionSource,
     shouldDisableSessionRestore,
     hasHandledNewChatRequest,
     markNewChatRequestHandled,

@@ -186,6 +186,60 @@ describe("AdapterCapabilityHost", () => {
     });
   });
 
+  it("创建 SDK context 不应提前校验未调用的 adapter capability", async () => {
+    const preview = buildInstalledAppPreview({
+      fixture: {
+        manifestVersion: "0.3.0",
+        name: "agent-only-app",
+        displayName: "Agent Only",
+        version: "0.3.0",
+        runtimeTargets: ["local"],
+        requires: {
+          capabilities: {
+            "lime.agent": "^0.3.0",
+          },
+        },
+        entries: [
+          {
+            key: "dashboard",
+            kind: "page",
+            title: "Agent Only",
+            route: "/dashboard",
+            requiredCapabilities: ["lime.agent"],
+          },
+        ],
+      },
+      profile: buildAdapterCapabilityProfile(),
+      loadedAt: "2026-05-15T00:00:00.000Z",
+      checkedAt: "2026-05-15T00:00:00.000Z",
+      generatedAt: "2026-05-15T00:00:00.000Z",
+    });
+    const host = new AdapterCapabilityHost({
+      preview,
+      now: () => "2026-05-15T00:00:00.000Z",
+    });
+
+    const sdk = host.createSdkContext("dashboard", "agent-only-run");
+    const task = await sdk.agent.startTask({
+      title: "Agent only task",
+      prompt: "验证未调用的 storage 不会阻断 agent capability。",
+      taskKind: "agent.only",
+    });
+
+    expect(task).toMatchObject({
+      taskId: "adapter-task-1",
+      appId: "agent-only-app",
+      entryKey: "dashboard",
+      taskKind: "agent.only",
+      provenance: expect.objectContaining({
+        workflowRunId: "agent-only-run",
+      }),
+    });
+    await expect(sdk.storage.list()).rejects.toMatchObject({
+      code: "CAPABILITY_NOT_DECLARED",
+    });
+  });
+
   it("关闭 real adapter 时不允许运行 entry", async () => {
     const host = new AdapterCapabilityHost({
       preview: buildAdapterPreview(),

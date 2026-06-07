@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "archivedOnly": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "includeArchived": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "limit": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "workspaceId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "title": "AgentSessionListParams",
+  "type": "object"
+}

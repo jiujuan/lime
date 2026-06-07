@@ -88,6 +88,9 @@ interface RuntimeTaskState {
 const RUNTIME_TASK_STORAGE_PREFIX = "agent-runtime/tasks/";
 
 type RuntimeAgentTaskRequest = AgentAppTaskRequest & {
+  taskId?: string;
+  turnId?: string;
+  eventName?: string;
   requiredCapabilities?: string[];
   capabilityHints?: string[];
   metadata?: Record<string, unknown>;
@@ -95,6 +98,7 @@ type RuntimeAgentTaskRequest = AgentAppTaskRequest & {
   workspaceId?: string;
   providerPreference?: string;
   modelPreference?: string;
+  turnConfig?: AgentAppRuntimeStartTaskRequest["turnConfig"];
   queueIfBusy?: boolean;
   skipPreSubmitResume?: boolean;
   runStartHooks?: boolean;
@@ -142,7 +146,9 @@ function isRuntimeTaskState(value: unknown): value is RuntimeTaskState {
   );
 }
 
-function readPersistedRuntimeTaskState(value: unknown): RuntimeTaskState | null {
+function readPersistedRuntimeTaskState(
+  value: unknown,
+): RuntimeTaskState | null {
   if (isRecord(value) && isRuntimeTaskState(value.state)) {
     return value.state;
   }
@@ -250,11 +256,74 @@ function readRecordString(
   return typeof item === "string" && item.trim() ? item.trim() : undefined;
 }
 
-function readThreadReadArtifacts(threadRead: unknown): Record<string, unknown>[] {
+function readThreadReadArtifacts(
+  threadRead: unknown,
+): Record<string, unknown>[] {
   if (!isRecord(threadRead) || !Array.isArray(threadRead.artifacts)) {
     return [];
   }
   return threadRead.artifacts.filter(isRecord);
+}
+
+function readThreadReadToolCalls(
+  threadRead: unknown,
+): Record<string, unknown>[] {
+  if (!isRecord(threadRead)) {
+    return [];
+  }
+  const nestedThreadRead =
+    (isRecord(threadRead.thread_read) && threadRead.thread_read) ||
+    (isRecord(threadRead.threadRead) && threadRead.threadRead) ||
+    null;
+  return [
+    ...readRecordArray(threadRead, "tool_calls"),
+    ...readRecordArray(threadRead, "toolCalls"),
+    ...(nestedThreadRead
+      ? readRecordArray(nestedThreadRead, "tool_calls")
+      : []),
+    ...(nestedThreadRead ? readRecordArray(nestedThreadRead, "toolCalls") : []),
+  ];
+}
+
+function readRecordArray(
+  value: Record<string, unknown>,
+  key: string,
+): Record<string, unknown>[] {
+  const item = value[key];
+  return Array.isArray(item) ? item.filter(isRecord) : [];
+}
+
+function readRecordBoolean(
+  value: Record<string, unknown>,
+  key: string,
+): boolean | undefined {
+  const item = value[key];
+  return typeof item === "boolean" ? item : undefined;
+}
+
+function readFirstRecordString(
+  value: Record<string, unknown>,
+  keys: string[],
+): string | undefined {
+  for (const key of keys) {
+    const item = readRecordString(value, key);
+    if (item) {
+      return item;
+    }
+  }
+  return undefined;
+}
+
+function readFirstRecordValue(
+  value: Record<string, unknown>,
+  keys: string[],
+): unknown {
+  for (const key of keys) {
+    if (value[key] !== undefined && value[key] !== null) {
+      return value[key];
+    }
+  }
+  return undefined;
 }
 
 function repairUnescapedStringQuotes(value: string): string {
@@ -293,7 +362,9 @@ function repairUnescapedStringQuotes(value: string): string {
   return output;
 }
 
-function parseJsonRecordCandidate(candidate: string): Record<string, unknown> | null {
+function parseJsonRecordCandidate(
+  candidate: string,
+): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(candidate);
     return isRecord(parsed) ? parsed : null;
@@ -311,7 +382,9 @@ function parseJsonRecordCandidate(candidate: string): Record<string, unknown> | 
   }
 }
 
-function parseJsonObjectFromMarkdown(value: string): Record<string, unknown> | null {
+function parseJsonObjectFromMarkdown(
+  value: string,
+): Record<string, unknown> | null {
   const trimmed = value.trim();
   const candidate = trimmed.startsWith("```")
     ? trimmed
@@ -333,7 +406,9 @@ function parseJsonObjectFromMarkdown(value: string): Record<string, unknown> | n
   return parseJsonRecordCandidate(candidate.slice(start, end + 1));
 }
 
-function hasContentFactoryWorkspacePatchFields(value: Record<string, unknown>): boolean {
+function hasContentFactoryWorkspacePatchFields(
+  value: Record<string, unknown>,
+): boolean {
   return [
     "workspace",
     "project",
@@ -358,7 +433,8 @@ function extractContentFactoryWorkspacePatch(
       return patch;
     }
   }
-  const kind = readRecordString(value, "kind") ?? readRecordString(value, "artifactKind");
+  const kind =
+    readRecordString(value, "kind") ?? readRecordString(value, "artifactKind");
   if (
     kind === "content_factory.workspace_patch" ||
     kind === "contentFactoryWorkspacePatch" ||
@@ -418,12 +494,14 @@ function buildRuntimeArtifactReplayEvents(
     }
     const metadata = isRecord(artifact.metadata) ? artifact.metadata : {};
     const artifactDocument =
-      isRecord(metadata.artifactDocument) || isRecord(metadata.artifact_document)
-        ? metadata.artifactDocument ?? metadata.artifact_document
+      isRecord(metadata.artifactDocument) ||
+      isRecord(metadata.artifact_document)
+        ? (metadata.artifactDocument ?? metadata.artifact_document)
         : undefined;
     const workspacePatch =
-      isRecord(metadata.workspacePatch) || isRecord(metadata.contentFactoryWorkspacePatch)
-        ? metadata.workspacePatch ?? metadata.contentFactoryWorkspacePatch
+      isRecord(metadata.workspacePatch) ||
+      isRecord(metadata.contentFactoryWorkspacePatch)
+        ? (metadata.workspacePatch ?? metadata.contentFactoryWorkspacePatch)
         : extractWorkspacePatchFromArtifactDocument(artifactDocument);
     const at =
       readRecordString(artifact, "completed_at") ??
@@ -474,6 +552,117 @@ function buildRuntimeArtifactReplayEvents(
   });
 }
 
+function buildRuntimeToolCallReplayEvents(
+  state: RuntimeTaskState,
+  threadRead: unknown,
+  existingEvents: AgentAppTaskStreamEvent[],
+): AgentAppTaskStreamEvent[] {
+  const toolCalls = readThreadReadToolCalls(threadRead);
+  if (!toolCalls.length) {
+    return [];
+  }
+  const existingToolKeys = new Set(
+    existingEvents
+      .filter((event) => event.type === "task:toolCall")
+      .flatMap((event) => {
+        const payload = isRecord(event.payload) ? event.payload : {};
+        const runtimeEvent = isRecord(payload.runtimeEvent)
+          ? payload.runtimeEvent
+          : {};
+        const toolCall = isRecord(payload.toolCall) ? payload.toolCall : {};
+        return [
+          event.eventId,
+          readFirstRecordString(toolCall, ["id", "tool_call_id", "toolCallId"]),
+          readFirstRecordString(runtimeEvent, [
+            "id",
+            "tool_call_id",
+            "toolCallId",
+          ]),
+        ];
+      })
+      .filter((item): item is string => Boolean(item)),
+  );
+
+  return toolCalls.flatMap((toolCall, index) => {
+    const id =
+      readFirstRecordString(toolCall, ["id", "tool_call_id", "toolCallId"]) ??
+      `${state.taskId}:tool:${index + 1}`;
+    const eventId = `${state.taskId}:tool:${id}`;
+    if (existingToolKeys.has(id) || existingToolKeys.has(eventId)) {
+      return [];
+    }
+    const toolName =
+      readFirstRecordString(toolCall, ["tool_name", "toolName", "name"]) ??
+      "未命名工具";
+    const status = mapRuntimeTaskStatus(
+      readFirstRecordString(toolCall, ["status", "state"]),
+    );
+    const rawOutput = readFirstRecordValue(toolCall, [
+      "output_preview",
+      "outputPreview",
+      "output",
+      "result",
+      "text",
+      "content",
+    ]);
+    const outputPreview =
+      typeof rawOutput === "string"
+        ? rawOutput
+        : rawOutput === undefined
+          ? undefined
+          : JSON.stringify(rawOutput);
+    const error = readFirstRecordValue(toolCall, ["error", "failure"]);
+    const success =
+      readRecordBoolean(toolCall, "success") ??
+      (status === "failed" ? false : status === "succeeded" ? true : undefined);
+    const at =
+      readFirstRecordString(toolCall, [
+        "timestamp",
+        "occurredAt",
+        "occurred_at",
+        "completed_at",
+        "started_at",
+      ]) ?? state.startedAt;
+    return [
+      {
+        eventId,
+        taskId: state.taskId,
+        traceId: state.traceId,
+        type: "task:toolCall",
+        status,
+        at,
+        message: outputPreview
+          ? `工具 ${toolName} 已回写：${outputPreview}`
+          : `工具 ${toolName} 状态已回写`,
+        refs: [`tool:${id}`],
+        payload: {
+          source: "agent_runtime_tool_call_replay",
+          toolCall,
+          toolName,
+          outputPreview,
+          success,
+          error,
+          runtimeEvent: {
+            type:
+              status === "failed"
+                ? "tool.failed"
+                : status === "running"
+                  ? "tool.started"
+                  : "tool.result",
+            id,
+            toolName,
+            tool_name: toolName,
+            status,
+            output: outputPreview,
+            success,
+            error,
+          },
+        },
+      },
+    ];
+  });
+}
+
 function buildTaskRecord(
   state: RuntimeTaskState,
   snapshot?: AgentAppRuntimeTaskSnapshot,
@@ -484,13 +673,21 @@ function buildTaskRecord(
         mapRuntimeEvent(state, event, index),
       )
     : [buildStartEvent(state)];
+  const toolReplayEvents = effectiveSnapshot
+    ? buildRuntimeToolCallReplayEvents(
+        state,
+        effectiveSnapshot.threadRead,
+        runtimeEvents,
+      )
+    : [];
   const events = effectiveSnapshot
     ? [
         ...runtimeEvents,
+        ...toolReplayEvents,
         ...buildRuntimeArtifactReplayEvents(
           state,
           effectiveSnapshot.threadRead,
-          runtimeEvents,
+          [...runtimeEvents, ...toolReplayEvents],
         ),
       ]
     : runtimeEvents;
@@ -567,11 +764,15 @@ function buildTaskRecord(
   };
 }
 
-function readRuntimeRequest(input: AgentAppTaskRequest): RuntimeAgentTaskRequest {
+function readRuntimeRequest(
+  input: AgentAppTaskRequest,
+): RuntimeAgentTaskRequest {
   return input as RuntimeAgentTaskRequest;
 }
 
-function normalizeTaskLookup(task: string | AgentAppTaskLookup): AgentAppTaskLookup {
+function normalizeTaskLookup(
+  task: string | AgentAppTaskLookup,
+): AgentAppTaskLookup {
   return typeof task === "string" ? { taskId: task } : task;
 }
 
@@ -717,7 +918,8 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
     retry?: { retryOfTaskId: string; retryAttempt: number; sessionId?: string },
   ): Promise<AgentAppTaskRecord> {
     const runtimeRequest = readRuntimeRequest(input);
-    const taskKind = normalizeString(runtimeRequest.taskKind) ?? "agent_app.task";
+    const taskKind =
+      normalizeString(runtimeRequest.taskKind) ?? "agent_app.task";
     const workspaceId = await this.resolveWorkspaceId(runtimeRequest);
     const requiredCapabilities = normalizeList(
       runtimeRequest.requiredCapabilities,
@@ -731,6 +933,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       entryKey,
       workspaceId,
       sessionId: normalizeString(runtimeRequest.sessionId) ?? retry?.sessionId,
+      taskId: normalizeString(runtimeRequest.taskId),
       taskKind,
       idempotencyKey: runtimeRequest.idempotencyKey,
       title: runtimeRequest.title,
@@ -741,8 +944,11 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       capabilityHints,
       knowledgeBindings: runtimeRequest.knowledge,
       humanReview: runtimeRequest.humanReview,
+      eventName: normalizeString(runtimeRequest.eventName),
+      turnId: normalizeString(runtimeRequest.turnId),
       providerPreference: runtimeRequest.providerPreference,
       modelPreference: runtimeRequest.modelPreference,
+      turnConfig: runtimeRequest.turnConfig,
       queueIfBusy: runtimeRequest.queueIfBusy,
       skipPreSubmitResume: runtimeRequest.skipPreSubmitResume,
       runStartHooks: runtimeRequest.runStartHooks,
@@ -787,7 +993,8 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
   ): Promise<AgentAppTaskRecord | null> {
     const lookup = normalizeTaskLookup(taskLookup);
     const state =
-      this.tasks.get(lookup.taskId) ?? this.loadPersistedRuntimeTaskState(lookup.taskId);
+      this.tasks.get(lookup.taskId) ??
+      this.loadPersistedRuntimeTaskState(lookup.taskId);
     const sessionId = state?.sessionId ?? normalizeString(lookup.sessionId);
     if (!sessionId) {
       return null;
@@ -798,8 +1005,12 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       sessionId,
     });
     const nextState =
-      state ?? (await this.buildRuntimeTaskStateFromLookup(entryKey, lookup, snapshot));
-    if (!nextState.request.expectedOutput && lookup.expectedOutput !== undefined) {
+      state ??
+      (await this.buildRuntimeTaskStateFromLookup(entryKey, lookup, snapshot));
+    if (
+      !nextState.request.expectedOutput &&
+      lookup.expectedOutput !== undefined
+    ) {
       nextState.request = {
         ...nextState.request,
         expectedOutput: lookup.expectedOutput,
@@ -846,7 +1057,9 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
     };
   }
 
-  private async cancelRuntimeTask(taskLookup: string | AgentAppTaskLookup): Promise<AgentAppTaskRecord> {
+  private async cancelRuntimeTask(
+    taskLookup: string | AgentAppTaskLookup,
+  ): Promise<AgentAppTaskRecord> {
     const taskId = normalizeTaskLookup(taskLookup).taskId;
     const state = await this.requireTask(taskId);
     await this.api.cancelTask({
@@ -944,7 +1157,9 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
     };
   }
 
-  private async persistRuntimeTaskState(state: RuntimeTaskState): Promise<void> {
+  private async persistRuntimeTaskState(
+    state: RuntimeTaskState,
+  ): Promise<void> {
     try {
       const sdk = this.delegate.createSdkContext(state.entryKey ?? state.appId);
       await sdk.storage.set(runtimeTaskStorageKey(state.taskId), {
@@ -977,7 +1192,9 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       });
   }
 
-  private loadPersistedRuntimeTaskState(taskId: string): RuntimeTaskState | null {
+  private loadPersistedRuntimeTaskState(
+    taskId: string,
+  ): RuntimeTaskState | null {
     const entry = this.delegate
       .getStorageEntries({ appId: this.appId })
       .find((item) => item.key === runtimeTaskStorageKey(taskId));

@@ -5,7 +5,7 @@ import { changeLimeLocale } from "@/i18n/createI18n";
 import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtocol";
 import { ToolCallDisplay, ToolCallList } from "./ToolCallDisplay";
 
-vi.mock("@tauri-apps/plugin-shell", () => ({
+vi.mock("@/lib/desktop-host/plugin-shell", () => ({
   open: vi.fn().mockResolvedValue(undefined),
 }));
 

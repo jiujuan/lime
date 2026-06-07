@@ -215,7 +215,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: lime-rs
           shared-key: quality-gui-smoke
           cache-on-failure: true
 
@@ -246,7 +246,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: lime-rs
           shared-key: quality-rust-quick
           cache-on-failure: true
 
@@ -277,7 +277,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: lime-rs
           shared-key: quality-rust-full
           cache-on-failure: true
 
@@ -300,15 +300,15 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: lime-rs
           shared-key: quality-windows-shell-runtime
           cache-on-failure: true
 
       - name: Test Windows shell runtime fallback
-        run: cargo test --manifest-path src-tauri/Cargo.toml -p lime-agent --test windows_shell_runtime -- --test-threads=1
+        run: cargo test --manifest-path lime-rs/Cargo.toml -p lime-agent --test windows_shell_runtime -- --test-threads=1
 
       - name: Test Windows file browser directory creation
-        run: cargo test --manifest-path src-tauri/Cargo.toml -p lime-services create_directory_creates_nested_directory_from_platform_path -- --test-threads=1
+        run: cargo test --manifest-path lime-rs/Cargo.toml -p lime-services create_directory_creates_nested_directory_from_platform_path -- --test-threads=1
 
   results:
     name: Quality results
@@ -462,7 +462,7 @@ jobs:
 
             if [[ -n "${FAILURE_REASON}" ]]; then
               if [[ "${FAILURE_REASON}" == "integrity failed" ]]; then
-                NEXT_ACTION='Run `npm run verify:app-version` and sync package / Cargo / Tauri version files.'
+                NEXT_ACTION='Run `npm run verify:app-version` and sync package / Cargo / Electron version files.'
               elif [[ "${FAILURE_REASON}" == "frontend quick failed" ]]; then
                 NEXT_ACTION='Run `npm run lint && npm run typecheck && node scripts/check-vitest-layer-budget.mjs --max-component-candidates 8 && npm run test:unit && npm run test:contract` to reproduce the frontend quick failure locally.'
               elif [[ "${FAILURE_REASON}" == "frontend full failed" ]]; then
@@ -476,11 +476,11 @@ jobs:
                   NEXT_ACTION='Run `npm run verify:local` or `npm run test:bridge && npm run test:contracts` to reproduce the bridge/contracts failure.'
                 fi
               elif [[ "${FAILURE_REASON}" == "gui smoke failed" ]]; then
-                NEXT_ACTION='Run `npm run verify:gui-smoke -- --timeout-ms 900000` and inspect DevBridge / headless Tauri readiness.'
+                NEXT_ACTION='Run `npm run verify:gui-smoke -- --timeout-ms 900000` and inspect Electron Desktop Host / DevBridge readiness.'
               elif [[ "${FAILURE_REASON}" == "rust quick failed" ]]; then
                 NEXT_ACTION='Run `node scripts/check-rust-layer-budget.mjs --max-e2e-runnable 0 && npm run test:rust:unit` to reproduce the Rust unit-layer failure locally.'
               elif [[ "${FAILURE_REASON}" == "windows shell runtime failed" ]]; then
-                NEXT_ACTION='Run `cargo test --manifest-path src-tauri/Cargo.toml -p lime-agent --test windows_shell_runtime -- --test-threads=1` on Windows and inspect PowerShell PATH fallback.'
+                NEXT_ACTION='Run `cargo test --manifest-path lime-rs/Cargo.toml -p lime-agent --test windows_shell_runtime -- --test-threads=1` on Windows and inspect PowerShell PATH fallback.'
               elif [[ "${FAILURE_REASON}" == "rust full failed" ]]; then
                 NEXT_ACTION='Run `npm run test:rust` to reproduce the Rust workspace failure locally.'
               fi

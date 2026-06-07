@@ -2406,8 +2406,11 @@ export function AppSidebar({
         ? null
         : loadPersistedProjectId(LAST_PROJECT_ID_KEY),
   );
-  const currentProjectId =
-    activeAgentPageParams?.projectId?.trim() || rememberedProjectId;
+  const activeAgentProjectId = isAgentWorkspace
+    ? activeAgentPageParams?.projectId?.trim() || null
+    : null;
+  const currentProjectId = activeAgentProjectId || rememberedProjectId;
+  const sidebarSessionQueryWorkspaceId = activeAgentProjectId;
   const currentSessionId =
     activeAgentPageParams?.initialSessionId?.trim() || null;
   const [collapsed, setCollapsed] = useState<boolean>(() => {
@@ -2633,6 +2636,7 @@ export function AppSidebar({
         const config = await getConfig();
         const resolvedItems = resolveEnabledSidebarNavItems(
           config.navigation?.enabled_items,
+          config.navigation?.schema_version,
         );
         setEnabledNavItems(resolvedItems);
         setLanguageState(normalizeLocalePreference(config.language));
@@ -3209,12 +3213,14 @@ export function AppSidebar({
     const startedAt = Date.now();
     logAgentDebug("AppSidebar", "recentConversations.load.start", {
       limit: recentSessionRequestLimit,
-      workspaceId: currentProjectId ?? "",
+      workspaceId: sidebarSessionQueryWorkspaceId,
     });
     try {
       const sessions = await listAgentRuntimeSessions({
         limit: recentSessionRequestLimit,
-        workspaceId: currentProjectId ?? "",
+        ...(sidebarSessionQueryWorkspaceId
+          ? { workspaceId: sidebarSessionQueryWorkspaceId }
+          : {}),
       });
       const listDurationMs = Date.now() - startedAt;
       const sortStartedAt = Date.now();
@@ -3233,7 +3239,7 @@ export function AppSidebar({
         sortDurationMs,
         totalDurationMs: Date.now() - startedAt,
         visibleCount: recentSessionsVisibleCount,
-        workspaceId: currentProjectId ?? "",
+        workspaceId: sidebarSessionQueryWorkspaceId,
       };
       recordAgentUiPerformanceMetric(
         "appSidebar.recentConversations.loadBreakdown",
@@ -3259,7 +3265,7 @@ export function AppSidebar({
           durationMs: Date.now() - startedAt,
           error,
           limit: recentSessionRequestLimit,
-          workspaceId: currentProjectId ?? "",
+          workspaceId: sidebarSessionQueryWorkspaceId,
         },
         { level: "warn" },
       );
@@ -3278,6 +3284,7 @@ export function AppSidebar({
     recentSessionRequestLimit,
     recentSessionsVisibleCount,
     scheduleRecentSidebarReload,
+    sidebarSessionQueryWorkspaceId,
     shouldLoadWorkspaceScopedConversations,
   ]);
   useEffect(() => {
@@ -3312,7 +3319,9 @@ export function AppSidebar({
       const sessions = await listAgentRuntimeSessions({
         archivedOnly: true,
         limit: archivedSessionRequestLimit,
-        workspaceId: currentProjectId ?? "",
+        ...(sidebarSessionQueryWorkspaceId
+          ? { workspaceId: sidebarSessionQueryWorkspaceId }
+          : {}),
       });
       const sortedSessions = sortSidebarSessions(
         sessions.filter((session) => Boolean(session.archived_at)),
@@ -3340,8 +3349,8 @@ export function AppSidebar({
     archivedSessionRequestLimit,
     archivedSessionsCollapsed,
     archivedSessionsVisibleCount,
-    currentProjectId,
     scheduleArchivedSidebarReload,
+    sidebarSessionQueryWorkspaceId,
     shouldLoadWorkspaceScopedConversations,
   ]);
   useEffect(() => {
@@ -3493,29 +3502,35 @@ export function AppSidebar({
       return [];
     }
 
-    const filteredSessions = currentProjectId
+    const filteredSessions = sidebarSessionQueryWorkspaceId
       ? sidebarSessions.filter(
           (session) =>
-            !session.workspace_id || session.workspace_id === currentProjectId,
+            !session.workspace_id ||
+            session.workspace_id === sidebarSessionQueryWorkspaceId,
         )
-      : [];
+      : sidebarSessions;
 
     return filteredSessions.filter((session) => !session.archived_at);
-  }, [currentProjectId, sidebarSessions]);
+  }, [currentProjectId, sidebarSessionQueryWorkspaceId, sidebarSessions]);
   const archivedSidebarSessions = useMemo(() => {
     if (!currentProjectId) {
       return [];
     }
 
-    const filteredSessions = currentProjectId
+    const filteredSessions = sidebarSessionQueryWorkspaceId
       ? archivedSessionEntries.filter(
           (session) =>
-            !session.workspace_id || session.workspace_id === currentProjectId,
+            !session.workspace_id ||
+            session.workspace_id === sidebarSessionQueryWorkspaceId,
         )
-      : [];
+      : archivedSessionEntries;
 
     return filteredSessions.filter((session) => Boolean(session.archived_at));
-  }, [archivedSessionEntries, currentProjectId]);
+  }, [
+    archivedSessionEntries,
+    currentProjectId,
+    sidebarSessionQueryWorkspaceId,
+  ]);
   const visibleRecentSidebarSessions = useMemo(
     () =>
       buildVisibleSidebarSessions({

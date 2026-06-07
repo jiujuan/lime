@@ -4,7 +4,7 @@
 
 ## 概述
 
-`lime-terminal` 已从当前仓库移除，Lime 不再提供内置 PTY / SSH / WSL 终端会话能力。独立前端 `terminal / sysinfo / files / web` 页面更早已下线；本轮收口后，旧 `src-tauri/src/terminal/`、`terminal_cmd`、`connection_cmd` 与 `src/lib/api/terminal.ts` 也不再作为 current surface 保留。
+`lime-terminal` 已从当前仓库移除，Lime 不再提供内置 PTY / SSH / WSL 终端会话能力。独立前端 `terminal / sysinfo / files / web` 页面更早已下线；本轮收口后，旧 `lime-rs/src/terminal/`、`terminal_cmd`、`connection_cmd` 与 `src/lib/api/terminal.ts` 也不再作为 current surface 保留。
 
 ## 当前结论
 
@@ -20,9 +20,9 @@
 ## 治理分类
 
 - `dead`
-  - `src-tauri/src/terminal/*`
-  - `src-tauri/src/commands/terminal_cmd.rs`
-  - `src-tauri/src/commands/connection_cmd.rs`
+  - `lime-rs/src/terminal/*`
+  - `lime-rs/src/commands/terminal_cmd.rs`
+  - `lime-rs/src/commands/connection_cmd.rs`
   - `src/lib/api/terminal.ts`
 - `current`
   - `src/lib/api/serverRuntime.ts`、`crashDiagnostic.ts` 等非终端产品面的运行时诊断入口
@@ -31,11 +31,11 @@
 
 ## 约束
 
-- 不再新增任何 `terminal_*` / `connection_*` Tauri 命令
+- 不再新增任何 `terminal_*` / `connection_*` legacy Tauri adapter 命令
 - 不再恢复终端页面、终端 API 网关或 PTY 管理层
 - 如未来确有需求，必须重新定义新的 current surface，而不是复活旧 crate / 旧命令 / 旧页面
 
 ## 相关文档
 
-- [commands.md](commands.md) - Tauri 命令
+- [commands.md](commands.md) - Desktop Host / App Server 命令边界
 - [governance.md](governance.md) - 治理判断

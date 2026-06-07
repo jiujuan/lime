@@ -45,7 +45,9 @@ describe("agent-qc-qcloop-job-core", () => {
   it("默认应选择 P0 场景", () => {
     const scenarios = selectScenarios(manifest);
 
-    expect(scenarios.map((scenario) => scenario.id)).toEqual(["command-bridge-contract"]);
+    expect(scenarios.map((scenario) => scenario.id)).toEqual([
+      "command-bridge-contract",
+    ]);
   });
 
   it("应按风险等级生成 qcloop job payload", () => {
@@ -58,14 +60,18 @@ describe("agent-qc-qcloop-job-core", () => {
 
     expect(payload.name).toBe("lime-agent-qc-p1-2026-05-10");
     expect(payload.prompt_template).toContain("目标仓库 cwd: /workspace/lime");
-    expect(payload.prompt_template).toContain("QCLOOP_WORKER_RESULT=PASS|FAIL|BLOCKED");
+    expect(payload.prompt_template).toContain(
+      "QCLOOP_WORKER_RESULT=PASS|FAIL|BLOCKED",
+    );
     expect(payload.prompt_template).toContain("QCLOOP_EVIDENCE_SUMMARY_JSON=");
     expect(payload.items).toHaveLength(1);
     expect(payload.max_executor_retries).toBe(0);
     expect(payload.verifier_prompt_template).toContain("{{stdout}}");
     expect(payload.verifier_prompt_template).toContain("{{exit_code}}");
     expect(payload.verifier_prompt_template).toContain("{{issue_ledger}}");
-    expect(payload.verifier_prompt_template).toContain("QCLOOP_EVIDENCE_SUMMARY_JSON");
+    expect(payload.verifier_prompt_template).toContain(
+      "QCLOOP_EVIDENCE_SUMMARY_JSON",
+    );
     expect(payload.verifier_prompt_template).toContain('{"pass": true|false');
     expect(JSON.parse(payload.items[0]).scenario_id).toBe(
       "knowledge-ingest-retrieve-summarize",
@@ -92,7 +98,9 @@ describe("agent-qc-qcloop-job-core", () => {
 
     expect(payload.name).toBe("selected-job");
     expect(payload.items).toHaveLength(1);
-    expect(JSON.parse(payload.items[0]).scenario_id).toBe("command-bridge-contract");
+    expect(JSON.parse(payload.items[0]).scenario_id).toBe(
+      "command-bridge-contract",
+    );
   });
 
   it("validateQCLoopJobPayload 应阻止缺少 verifier stdout 占位符的 payload", () => {
@@ -114,7 +122,9 @@ describe("agent-qc-qcloop-job-core", () => {
     const validation = validateQCLoopJobPayload(payload);
 
     expect(validation.valid).toBe(false);
-    expect(validation.issues.join("\n")).toContain("QCLOOP_EVIDENCE_SUMMARY_JSON=");
+    expect(validation.issues.join("\n")).toContain(
+      "QCLOOP_EVIDENCE_SUMMARY_JSON=",
+    );
   });
 
   it("validateQCLoopJobPayload 应阻止非法 max_executor_retries", () => {
@@ -139,14 +149,18 @@ describe("agent-qc-qcloop-job-core", () => {
       { scenarioIds: ["command-bridge-contract"] },
     );
 
-    expect(payload.verifier_prompt_template.match(/{{stdout}}/g)).toHaveLength(1);
+    expect(payload.verifier_prompt_template.match(/{{stdout}}/g)).toHaveLength(
+      1,
+    );
   });
 
   it("应生成可复制的 curl 命令", () => {
     const payload = buildQCLoopJobPayload(manifest);
-    const curl = renderQCLoopCurl(payload, { baseUrl: "http://localhost:8080" });
+    const curl = renderQCLoopCurl(payload, {
+      baseUrl: "http://localhost:8080",
+    });
 
-    expect(curl).toContain("POST \"http://localhost:8080/api/jobs\"");
+    expect(curl).toContain('POST "http://localhost:8080/api/jobs"');
     expect(curl).toContain("command-bridge-contract");
   });
 
@@ -154,6 +168,6 @@ describe("agent-qc-qcloop-job-core", () => {
     const payload = buildQCLoopJobPayload(manifest);
     const curl = renderQCLoopCurl(payload);
 
-    expect(curl).toContain("POST \"http://127.0.0.1:8080/api/jobs\"");
+    expect(curl).toContain('POST "http://127.0.0.1:8080/api/jobs"');
   });
 });

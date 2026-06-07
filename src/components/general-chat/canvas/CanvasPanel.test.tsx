@@ -156,7 +156,7 @@ describe("CanvasPanel", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("HTML 文件有真实路径时应使用 Tauri 文件 URL 预览并支持独立窗口打开", () => {
+  it("HTML 文件有真实路径时应使用 Desktop Host 文件 URL 预览并支持独立窗口打开", () => {
     const container = mountCanvasPanel({
       state: {
         isOpen: true,
@@ -223,7 +223,7 @@ describe("CanvasPanel", () => {
     expect(iframe?.getAttribute("srcdoc")).toContain("浏览器预览");
   });
 
-  it("HTML 文件有绝对 baseFilePath 时应使用该路径生成 Tauri 文件 URL", () => {
+  it("HTML 文件有绝对 baseFilePath 时应使用该路径生成 Desktop Host 文件 URL", () => {
     const container = mountCanvasPanel({
       state: {
         isOpen: true,

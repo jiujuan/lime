@@ -76,7 +76,7 @@ Workspace 是 Lime 应用层的概念，用于组织和管理 AI Agent 的工作
 ### Workspace 类型定义
 
 ```rust
-// lime/src-tauri/src/workspace/types.rs
+// lime/lime-rs/src/workspace/types.rs
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -141,7 +141,7 @@ CREATE INDEX idx_workspaces_root_path ON workspaces(root_path);
 ### WorkspaceManager
 
 ```rust
-// lime/src-tauri/src/workspace/manager.rs
+// lime/lime-rs/src/workspace/manager.rs
 
 impl WorkspaceManager {
     /// 创建新 workspace
@@ -196,35 +196,25 @@ impl WorkspaceManager {
 }
 ```
 
-### Tauri 命令
+### Desktop Host / App Server 边界
 
-```rust
-// lime/src-tauri/src/commands/workspace_cmd.rs
+Workspace 数据读取默认走 App Server JSON-RPC；Electron Desktop Host 只保留窗口、对话框、托盘、Dock、updater 和 sidecar 生命周期等桌面壳能力。
 
-#[tauri::command]
-pub async fn workspace_create(name: String, root_path: String) -> Result<Workspace, String>;
+```typescript
+// packages/app-server-client / src/lib/api/appServer.ts
 
-#[tauri::command]
-pub async fn workspace_list() -> Result<Vec<Workspace>, String>;
+const workspaceListRequest = {
+  method: "workspace/list",
+  params: {},
+};
 
-#[tauri::command]
-pub async fn workspace_get(id: String) -> Result<Workspace, String>;
-
-#[tauri::command]
-pub async fn workspace_update(id: String, updates: WorkspaceUpdate) -> Result<Workspace, String>;
-
-#[tauri::command]
-pub async fn workspace_delete(id: String) -> Result<(), String>;
-
-#[tauri::command]
-pub async fn workspace_set_default(id: String) -> Result<(), String>;
-
-#[tauri::command]
-pub async fn workspace_list_sessions(workspace_id: String) -> Result<Vec<SessionInfo>, String>;
-
-#[tauri::command]
-pub async fn workspace_create_session(workspace_id: String, name: String) -> Result<String, String>;
+const sessionListRequest = {
+  method: "agentSession/list",
+  params: { workspaceId: "workspace-main" },
+};
 ```
+
+旧 workspace 桥接入口只允许作为 compat facade 委托 current 数据源，不得承接新业务逻辑或作为新测试的可交付证据。
 
 
 
@@ -299,7 +289,7 @@ export function WorkspaceSelector() {
 ### Phase 1: 基础功能
 1. 数据库 schema 迁移
 2. WorkspaceManager 核心 CRUD
-3. Tauri 命令实现
+3. legacy adapter 命令实现
 4. WorkspaceSelector 组件
 
 ### Phase 2: 集成功能

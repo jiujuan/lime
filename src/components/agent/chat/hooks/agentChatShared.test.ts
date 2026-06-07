@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
 import type { Message } from "../types";
 import {
   buildLiveTaskSnapshot,
   deriveTaskLiveState,
   deriveTaskStatusFromLiveState,
   extractTaskPreviewFromMessages,
+  mapSessionToTopic,
   resolveRecentTopicActionLabel,
   resolveRecentTopicCandidate,
 } from "./agentChatShared";
@@ -49,6 +51,44 @@ function createPendingActionMessages(
 }
 
 describe("agentChatShared", () => {
+  it("App Server 毫秒时间戳不应在任务标题里显示 Invalid Date", () => {
+    const topic = mapSessionToTopic({
+      id: "session-ms",
+      created_at: 1780847017766,
+      updated_at: 1780847020000,
+      messages_count: 0,
+    });
+
+    expect(topic.title).toBe("任务 2026/6/7");
+    expect(topic.title).not.toContain("Invalid Date");
+    expect(topic.createdAt.toISOString()).toBe("2026-06-07T15:43:37.766Z");
+    expect(topic.updatedAt.toISOString()).toBe("2026-06-07T15:43:40.000Z");
+  });
+
+  it("旧秒级时间戳仍应映射为有效任务日期", () => {
+    const topic = mapSessionToTopic({
+      id: "session-seconds",
+      created_at: 1780847017,
+      updated_at: 1780847020,
+      messages_count: 0,
+    });
+
+    expect(topic.title).toBe("任务 2026/6/7");
+    expect(topic.createdAt.toISOString()).toBe("2026-06-07T15:43:37.000Z");
+    expect(topic.updatedAt.toISOString()).toBe("2026-06-07T15:43:40.000Z");
+  });
+
+  it("缺失时间戳时不应把 epoch 日期暴露成任务标题", () => {
+    const malformedSession = {
+      id: "session-missing-time",
+      messages_count: 0,
+    } as Partial<AsterSessionInfo> as AsterSessionInfo;
+    const topic = mapSessionToTopic(malformedSession);
+
+    expect(topic.title).toBe("新任务");
+    expect(topic.title).not.toContain("1970");
+  });
+
   it("待处理 action request 未提交时应优先判定为待处理", () => {
     const messages = createPendingActionMessages();
 
@@ -263,6 +303,59 @@ describe("agentChatShared", () => {
       status: "running",
       statusReason: "default",
     });
+  });
+
+  it("首字前等待中的 assistant 草稿不应因 isSending 清空而误判为已完成", () => {
+    const messages: Message[] = [
+      {
+        id: "msg-user-first-token-waiting",
+        role: "user",
+        content: "帮我解释启动状态",
+        timestamp: new Date("2026-06-07T10:00:00.000Z"),
+      },
+      {
+        id: "msg-assistant-first-token-waiting",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-07T10:00:01.000Z"),
+        isThinking: true,
+        runtimeStatus: {
+          phase: "routing",
+          title: "正在生成回复",
+          detail: "运行时已开始处理，等待首个输出。",
+        },
+      },
+    ];
+
+    expect(
+      deriveTaskLiveState({
+        messages,
+        isSending: false,
+        pendingActionCount: 0,
+        queuedTurnCount: 0,
+        threadStatus: "completed",
+        workspaceError: false,
+      }),
+    ).toEqual({
+      status: "running",
+      statusReason: "default",
+    });
+
+    expect(
+      buildLiveTaskSnapshot({
+        messages,
+        isSending: false,
+        pendingActionCount: 0,
+        queuedTurnCount: 0,
+        threadStatus: "completed",
+        workspaceError: false,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        status: "running",
+        lastPreview: "帮我解释启动状态",
+      }),
+    );
   });
 
   it("应优先返回最近可继续的会话候选", () => {

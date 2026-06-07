@@ -6,6 +6,7 @@ import {
   extractThinkingContentFromParts,
   hydrateSessionDetailMessages,
   mergeHydratedMessagesWithLocalState,
+  normalizeHistoryMessages,
   shouldCompactCompletedSessionHistory,
 } from "./agentChatHistory";
 
@@ -44,6 +45,444 @@ describe("agentChatHistory", () => {
         type: "text",
         text: "你好！我是 Lime 助手。",
       },
+    ]);
+  });
+
+  it("已完成 assistant 历史消息不应保留 running 工具状态", () => {
+    const timestamp = new Date("2026-06-07T10:34:45.000Z");
+    const messages = normalizeHistoryMessages([
+      {
+        id: "history-assistant-news-complete",
+        role: "assistant",
+        content: "根据多源检索结果，以下是 2026年6月7日 的主要国际新闻整理。",
+        timestamp,
+        isThinking: false,
+        contentParts: [
+          {
+            type: "text",
+            text: "我来搜索今天（2026年6月7日）的国际新闻。",
+          },
+          {
+            type: "tool_use",
+            toolCall: {
+              id: "tool-web-search-stale-running",
+              name: "WebSearch",
+              arguments: '{"query":"2026年6月7日 国际新闻"}',
+              status: "running",
+              startTime: timestamp,
+            },
+          },
+          {
+            type: "text",
+            text: "根据多源检索结果，以下是 2026年6月7日 的主要国际新闻整理。",
+          },
+        ],
+        toolCalls: [
+          {
+            id: "tool-web-search-stale-running",
+            name: "WebSearch",
+            arguments: '{"query":"2026年6月7日 国际新闻"}',
+            status: "running",
+            startTime: timestamp,
+          },
+        ],
+      },
+    ]);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.toolCalls?.[0]).toMatchObject({
+      id: "tool-web-search-stale-running",
+      status: "completed",
+      result: {
+        success: true,
+        output: "",
+      },
+    });
+    const toolPart = messages[0]?.contentParts?.find(
+      (part) => part.type === "tool_use",
+    );
+    expect(toolPart?.type).toBe("tool_use");
+    if (toolPart?.type === "tool_use") {
+      expect(toolPart.toolCall.status).toBe("completed");
+    }
+  });
+
+  it("App Server read detail.messages 当前形状应直接恢复用户与助手消息", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-app-server-messages",
+      created_at: 1,
+      updated_at: 2,
+      messages_count: 2,
+      history_limit: 2,
+      history_offset: 0,
+      history_cursor: {
+        oldest_message_id: null,
+        start_index: 0,
+        loaded_count: 2,
+      },
+      history_truncated: false,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1780704000,
+          content: [
+            {
+              type: "text",
+              text: "请整理 App Server 对话历史",
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          timestamp: 1780704002,
+          content: [
+            {
+              type: "text",
+              text: "已从 App Server detail.messages 读取。",
+            },
+          ],
+        },
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-app-server-messages",
+    );
+
+    expect(messages).toHaveLength(2);
+    expect(messages.map((message) => message.id)).toEqual([
+      "session-app-server-messages-0",
+      "session-app-server-messages-1",
+    ]);
+    expect(messages[0]).toMatchObject({
+      role: "user",
+      content: "请整理 App Server 对话历史",
+      contentParts: [
+        {
+          type: "text",
+          text: "请整理 App Server 对话历史",
+        },
+      ],
+    });
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      content: "已从 App Server detail.messages 读取。",
+      contentParts: [
+        {
+          type: "text",
+          text: "已从 App Server detail.messages 读取。",
+        },
+      ],
+    });
+  });
+
+  it("App Server thread_read.tool_calls 应合入已恢复助手消息", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-app-server-tool-calls",
+      thread_id: "thread-app-server-tool-calls",
+      created_at: 1,
+      updated_at: 2,
+      messages_count: 2,
+      history_limit: 2,
+      history_offset: 0,
+      history_cursor: {
+        oldest_message_id: null,
+        start_index: 0,
+        loaded_count: 2,
+      },
+      history_truncated: false,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1780704100,
+          content: [
+            {
+              type: "text",
+              text: "生成 TypeScript greeting 代码产物",
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          timestamp: 1780704102,
+          content: [
+            {
+              type: "text",
+              text: "已生成代码产物，可在工作台查看。",
+            },
+          ],
+        },
+      ],
+      turns: [
+        {
+          id: "turn-tool-read",
+          thread_id: "thread-app-server-tool-calls",
+          prompt_text: "生成 TypeScript greeting 代码产物",
+          status: "completed",
+          started_at: "2026-06-07T10:41:40.000Z",
+          completed_at: "2026-06-07T10:41:42.000Z",
+          created_at: "2026-06-07T10:41:40.000Z",
+          updated_at: "2026-06-07T10:41:42.000Z",
+        },
+      ],
+      thread_read: {
+        thread_id: "thread-app-server-tool-calls",
+        status: "completed",
+        profile_status: "completed",
+        turns: [
+          {
+            turn_id: "turn-tool-read",
+            status: "completed",
+            native_status: "completed",
+          },
+        ],
+        pending_requests: [],
+        incidents: [],
+        queued_turns: [],
+        tool_calls: [
+          {
+            tool_call_id: "tool-webfetch-read",
+            turn_id: "turn-tool-read",
+            tool_name: "WebFetch",
+            status: "completed",
+            started_at: "2026-06-07T10:41:41.000Z",
+            finished_at: "2026-06-07T10:41:42.000Z",
+            arguments: {
+              url: "https://example.com/lime-workbench-tool",
+            },
+            output_preview:
+              "已获取 fixture 工具事实: https://example.com/lime-workbench-tool",
+            output:
+              "已获取 fixture 工具事实: https://example.com/lime-workbench-tool",
+            success: true,
+          },
+        ],
+      },
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-app-server-tool-calls",
+    );
+
+    expect(messages).toHaveLength(2);
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      content: "已生成代码产物，可在工作台查看。",
+      runtimeTurnId: "turn-tool-read",
+      toolCalls: [
+        {
+          id: "tool-webfetch-read",
+          name: "WebFetch",
+          status: "completed",
+          result: {
+            success: true,
+            output:
+              "已获取 fixture 工具事实: https://example.com/lime-workbench-tool",
+          },
+        },
+      ],
+    });
+    expect(messages[1]?.contentParts?.map((part) => part.type)).toEqual([
+      "tool_use",
+      "text",
+    ]);
+
+    const messagesWithoutTimelineFallback = hydrateSessionDetailMessages(
+      detail,
+      "session-app-server-tool-calls",
+      { includeTimelineFallback: false },
+    );
+
+    expect(messagesWithoutTimelineFallback).toHaveLength(2);
+    expect(messagesWithoutTimelineFallback[1]).toMatchObject({
+      role: "assistant",
+      content: "已生成代码产物，可在工作台查看。",
+      runtimeTurnId: "turn-tool-read",
+      toolCalls: [
+        {
+          id: "tool-webfetch-read",
+          name: "WebFetch",
+          status: "completed",
+          result: {
+            success: true,
+            output:
+              "已获取 fixture 工具事实: https://example.com/lime-workbench-tool",
+          },
+        },
+      ],
+    });
+    expect(
+      messagesWithoutTimelineFallback[1]?.contentParts?.map(
+        (part) => part.type,
+      ),
+    ).toEqual(["tool_use", "text"]);
+
+    const compactMessagesWithoutTimelineFallback =
+      hydrateSessionDetailMessages(detail, "session-app-server-tool-calls", {
+        compactCompletedHistory: true,
+        includeTimelineFallback: false,
+      });
+
+    expect(compactMessagesWithoutTimelineFallback).toHaveLength(2);
+    expect(compactMessagesWithoutTimelineFallback[1]).toMatchObject({
+      role: "assistant",
+      content: "已生成代码产物，可在工作台查看。",
+      runtimeTurnId: "turn-tool-read",
+      toolCalls: [
+        {
+          id: "tool-webfetch-read",
+          name: "WebFetch",
+          status: "completed",
+          result: {
+            success: true,
+            output:
+              "已获取 fixture 工具事实: https://example.com/lime-workbench-tool",
+          },
+        },
+      ],
+    });
+    expect(
+      compactMessagesWithoutTimelineFallback[1]?.contentParts?.map(
+        (part) => part.type,
+      ),
+    ).toEqual(["tool_use", "text"]);
+  });
+
+  it("App Server thread_read.tool_calls 与 artifact summary 同时存在时仍应保留工具过程", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-app-server-tool-artifact",
+      thread_id: "thread-app-server-tool-artifact",
+      created_at: 1,
+      updated_at: 2,
+      messages_count: 2,
+      history_limit: 40,
+      history_offset: 0,
+      history_cursor: {
+        oldest_message_id: null,
+        start_index: 0,
+        loaded_count: 2,
+      },
+      history_truncated: false,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1780704100,
+          content: [
+            {
+              type: "text",
+              text: "生成 TypeScript greeting 代码产物",
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          timestamp: 1780704102,
+          content: [
+            {
+              type: "text",
+              text: "已生成代码产物，可在工作台查看。",
+            },
+          ],
+        },
+      ],
+      turns: [
+        {
+          id: "turn-tool-artifact",
+          thread_id: "thread-app-server-tool-artifact",
+          prompt_text: "生成 TypeScript greeting 代码产物",
+          status: "completed",
+          started_at: "2026-06-07T10:41:40.000Z",
+          completed_at: "2026-06-07T10:41:42.000Z",
+          created_at: "2026-06-07T10:41:40.000Z",
+          updated_at: "2026-06-07T10:41:42.000Z",
+        },
+      ],
+      thread_read: {
+        thread_id: "thread-app-server-tool-artifact",
+        status: "completed",
+        profile_status: "completed",
+        turns: [
+          {
+            turn_id: "turn-tool-artifact",
+            status: "completed",
+            native_status: "completed",
+          },
+        ],
+        pending_requests: [],
+        incidents: [],
+        queued_turns: [],
+        tool_calls: [
+          {
+            tool_call_id: "tool-webfetch-artifact",
+            turn_id: "turn-tool-artifact",
+            tool_name: "WebFetch",
+            status: "completed",
+            started_at: "2026-06-07T10:41:41.000Z",
+            finished_at: "2026-06-07T10:41:42.000Z",
+            arguments: {
+              url: "https://example.com/lime-workbench-tool",
+            },
+            output_preview:
+              "已获取 fixture 工具事实: https://example.com/lime-workbench-tool",
+            output:
+              "已获取 fixture 工具事实: https://example.com/lime-workbench-tool",
+            success: true,
+          },
+        ],
+        artifacts: [
+          {
+            artifactRef: "artifact-ref-tool-artifact",
+            eventId: "event-artifact-tool-artifact",
+            sequence: 1,
+            turnId: "turn-tool-artifact",
+            artifactId: "code-artifact:greeting",
+            path: ".lime/qc/code-artifact-workbench/src/greeting.ts",
+            title: "greeting.ts",
+            kind: "code",
+            status: "complete",
+            contentStatus: "available",
+            metadata: {
+              language: "typescript",
+              previewText: "export const greeting = 'hello';",
+            },
+          },
+        ],
+      },
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-app-server-tool-artifact",
+      {
+        compactCompletedHistory: true,
+        includeTimelineFallback: true,
+      },
+    );
+
+    expect(messages).toHaveLength(2);
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      content: "已生成代码产物，可在工作台查看。",
+      runtimeTurnId: "turn-tool-artifact",
+      toolCalls: [
+        {
+          id: "tool-webfetch-artifact",
+          name: "WebFetch",
+          status: "completed",
+        },
+      ],
+      artifacts: [
+        {
+          id: "code-artifact:greeting",
+          title: "greeting.ts",
+        },
+      ],
+    });
+    expect(messages[1]?.contentParts?.map((part) => part.type)).toEqual([
+      "tool_use",
+      "text",
     ]);
   });
 
@@ -202,6 +641,156 @@ describe("agentChatHistory", () => {
         {
           type: "text",
           text: "已找到最新模型信息。",
+        },
+      ],
+    });
+  });
+
+  it("App Server 历史 turn 缺少旧 prompt_text 字段时不应中断会话恢复", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-missing-legacy-text",
+      created_at: 1,
+      updated_at: 2,
+      messages: [],
+      turns: [
+        {
+          id: "turn-missing-prompt",
+          thread_id: "session-missing-legacy-text",
+          status: "failed",
+          started_at: "2026-06-07T04:39:20.100Z",
+          completed_at: "2026-06-07T04:42:05.905Z",
+          created_at: "2026-06-07T04:39:20.100Z",
+          updated_at: "2026-06-07T04:42:05.905Z",
+        } as never,
+      ],
+      items: [
+        {
+          id: "item-user-missing-content",
+          thread_id: "session-missing-legacy-text",
+          turn_id: "turn-missing-prompt",
+          sequence: 1,
+          type: "user_message",
+          status: "completed",
+          started_at: "2026-06-07T04:39:20.100Z",
+          updated_at: "2026-06-07T04:39:20.100Z",
+        } as never,
+        {
+          id: "item-agent-missing-text",
+          thread_id: "session-missing-legacy-text",
+          turn_id: "turn-missing-prompt",
+          sequence: 2,
+          type: "agent_message",
+          status: "failed",
+          started_at: "2026-06-07T04:42:05.905Z",
+          updated_at: "2026-06-07T04:42:05.905Z",
+        } as never,
+      ],
+    };
+
+    expect(() =>
+      hydrateSessionDetailMessages(detail, "session-missing-legacy-text"),
+    ).not.toThrow();
+    expect(
+      hydrateSessionDetailMessages(detail, "session-missing-legacy-text"),
+    ).toEqual([]);
+  });
+
+  it("App Server 历史只有 artifact summary 时应恢复产物消息", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-artifact-only",
+      thread_id: "session-artifact-only-thread",
+      created_at: 1,
+      updated_at: 2,
+      messages: [],
+      turns: [
+        {
+          id: "turn-artifact-only",
+          thread_id: "session-artifact-only-thread",
+          prompt_text: "",
+          status: "completed",
+          started_at: "2026-06-07T06:17:13.000Z",
+          completed_at: "2026-06-07T06:17:14.000Z",
+          created_at: "2026-06-07T06:17:13.000Z",
+          updated_at: "2026-06-07T06:17:14.000Z",
+        },
+      ],
+      items: [],
+      artifacts: [
+        {
+          artifactRef: "artifact-ref-1",
+          eventId: "event-artifact-1",
+          sequence: 1,
+          turnId: "turn-artifact-only",
+          artifactId: "code-artifact:greeting",
+          path: ".lime/qc/code-artifact-workbench/src/greeting.ts",
+          title: "greeting.ts",
+          kind: "code",
+          status: "complete",
+          contentStatus: "available",
+          metadata: {
+            language: "typescript",
+            previewText: "export const greeting = 'hello';",
+          },
+        },
+      ],
+      thread_read: {
+        thread_id: "session-artifact-only-thread",
+        status: "completed",
+        profile_status: "completed",
+        turns: [
+          {
+            turn_id: "turn-artifact-only",
+            status: "completed",
+            native_status: "completed",
+          },
+        ],
+        pending_requests: [],
+        incidents: [],
+        queued_turns: [],
+        artifacts: [
+          {
+            artifactRef: "artifact-ref-1",
+            eventId: "event-artifact-1",
+            sequence: 1,
+            turnId: "turn-artifact-only",
+            artifactId: "code-artifact:greeting",
+            path: ".lime/qc/code-artifact-workbench/src/greeting.ts",
+            title: "greeting.ts",
+            kind: "code",
+            status: "complete",
+            contentStatus: "available",
+            metadata: {
+              language: "typescript",
+              previewText: "export const greeting = 'hello';",
+            },
+          },
+        ],
+      } as never,
+    } as AsterSessionDetail & { artifacts: unknown[] };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-artifact-only",
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      id: "session-artifact-only-app-server-artifacts",
+      role: "assistant",
+      content: "已生成代码产物，可在工作台查看。",
+      runtimeTurnId: "turn-artifact-only",
+      artifacts: [
+        {
+          id: "code-artifact:greeting",
+          type: "code",
+          title: "greeting.ts",
+          status: "complete",
+          content: "export const greeting = 'hello';",
+          meta: {
+            filePath: ".lime/qc/code-artifact-workbench/src/greeting.ts",
+            artifactPath: ".lime/qc/code-artifact-workbench/src/greeting.ts",
+            previewText: "export const greeting = 'hello';",
+          },
         },
       ],
     });
@@ -621,6 +1210,123 @@ describe("agentChatHistory", () => {
     expect(messages[0]?.content).not.toContain("confirmationStatus");
     expect(messages[0]?.content).not.toContain("askProfileKeys");
     expect(messages[0]?.content).not.toContain("辅助标题生成");
+  });
+
+  it("App Server failed read model 应恢复用户请求并追加失败助手消息", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-app-server-failed-read",
+      thread_id: "thread-app-server-failed-read",
+      created_at: 1,
+      updated_at: 2,
+      messages_count: 1,
+      history_limit: 80,
+      history_offset: 0,
+      history_cursor: {
+        oldest_message_id: null,
+        start_index: 0,
+        loaded_count: 1,
+      },
+      history_truncated: false,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1780834200,
+          content: [
+            {
+              type: "text",
+              text: "整理今天的国际新闻",
+            },
+          ],
+        },
+      ],
+      turns: [
+        {
+          id: "turn-news-failed",
+          thread_id: "thread-app-server-failed-read",
+          prompt_text: "整理今天的国际新闻",
+          status: "failed",
+          error_message:
+            "Request failed: failed to connect to token-plan-cn.xiaomimimo.com",
+          started_at: "2026-06-07T09:30:00.000Z",
+          completed_at: "2026-06-07T09:30:12.000Z",
+          created_at: "2026-06-07T09:30:00.000Z",
+          updated_at: "2026-06-07T09:30:12.000Z",
+        },
+      ],
+      items: [
+        {
+          id: "item-news-error",
+          thread_id: "thread-app-server-failed-read",
+          turn_id: "turn-news-failed",
+          sequence: 3,
+          type: "error",
+          status: "failed",
+          message:
+            "Request failed: failed to connect to token-plan-cn.xiaomimimo.com",
+          started_at: "2026-06-07T09:30:12.000Z",
+          completed_at: "2026-06-07T09:30:12.000Z",
+          updated_at: "2026-06-07T09:30:12.000Z",
+        } as never,
+      ],
+      thread_read: {
+        thread_id: "thread-app-server-failed-read",
+        status: "failed",
+        profile_status: "failed",
+        active_turn_id: undefined,
+        turns: [
+          {
+            turn_id: "turn-news-failed",
+            status: "failed",
+            native_status: "failed",
+          },
+        ],
+        pending_requests: [],
+        incidents: [],
+        queued_turns: [],
+        diagnostics: {
+          latest_turn_status: "failed",
+          latest_turn_started_at: "2026-06-07T09:30:00.000Z",
+          latest_turn_completed_at: "2026-06-07T09:30:12.000Z",
+          latest_turn_updated_at: "2026-06-07T09:30:12.000Z",
+          latest_turn_error_message:
+            "Request failed: failed to connect to token-plan-cn.xiaomimimo.com",
+          warning_count: 0,
+          context_compaction_count: 0,
+          failed_tool_call_count: 0,
+          failed_command_count: 0,
+          pending_request_count: 0,
+        },
+      },
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-app-server-failed-read",
+    );
+
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toMatchObject({
+      role: "user",
+      content: "整理今天的国际新闻",
+    });
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      content: expect.stringContaining("执行失败："),
+      isThinking: false,
+      runtimeTurnId: "turn-news-failed",
+      runtimeStatus: {
+        phase: "failed",
+        title: "当前处理失败",
+        detail: expect.stringContaining("token-plan-cn.xiaomimimo.com"),
+      },
+    });
+    expect(messages[1]?.content).toContain("token-plan-cn.xiaomimimo.com");
+    expect(messages[1]?.contentParts).toEqual([
+      {
+        type: "text",
+        text: messages[1]?.content,
+      },
+    ]);
   });
 
   it("后端 messages 只有助手图片轨迹时应从真实 turn 补回用户指令", () => {
@@ -1170,7 +1876,8 @@ describe("agentChatHistory", () => {
     });
     expect(
       mergedMessages[1]?.contentParts?.find(
-        (part) => part.type === "tool_use" && part.toolCall.id === "tool-state-1",
+        (part) =>
+          part.type === "tool_use" && part.toolCall.id === "tool-state-1",
       ),
     ).toMatchObject({
       type: "tool_use",
@@ -1323,7 +2030,8 @@ describe("agentChatHistory", () => {
       path: ".lime/tasks/image_generate/task-history-json-image-1.json",
       absolute_path:
         "/workspace/.lime/tasks/image_generate/task-history-json-image-1.json",
-      artifact_path: ".lime/tasks/image_generate/task-history-json-image-1.json",
+      artifact_path:
+        ".lime/tasks/image_generate/task-history-json-image-1.json",
       progress: {
         phase: "pending_submit",
         message: "任务已创建，等待进入队列",
@@ -1400,9 +2108,7 @@ describe("agentChatHistory", () => {
       "session-history-json-image",
       { compactCompletedHistory: true },
     );
-    const assistant = messages.find(
-      (message) => message.role === "assistant",
-    );
+    const assistant = messages.find((message) => message.role === "assistant");
 
     expect(messages.map((message) => message.role)).toEqual([
       "user",
@@ -1828,6 +2534,104 @@ describe("agentChatHistory", () => {
     expect(mergedMessages[1]?.usage).toEqual({
       input_tokens: 1200,
       output_tokens: 80,
+    });
+  });
+
+  it("远端 failed runtimeStatus 应覆盖本地正在输出状态", () => {
+    const localMessages = [
+      {
+        id: "local-user-news",
+        role: "user" as const,
+        content: "整理今天的国际新闻",
+        timestamp: new Date("2026-06-07T09:30:00.000Z"),
+      },
+      {
+        id: "local-assistant-news",
+        role: "assistant" as const,
+        content: "我会先检索多组来源并交叉核对。",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "我会先检索多组来源并交叉核对。",
+          },
+        ],
+        toolCalls: [
+          {
+            id: "tool-web-search-running",
+            name: "WebSearch",
+            arguments: '{"query":"2026年6月7日 国际新闻"}',
+            status: "running" as const,
+            startTime: new Date("2026-06-07T09:30:02.000Z"),
+          },
+        ],
+        timestamp: new Date("2026-06-07T09:30:01.000Z"),
+        isThinking: true,
+        runtimeStatus: {
+          phase: "routing" as const,
+          title: "正在输出",
+          detail: "正在等待模型继续输出。",
+        },
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "history-user-news",
+        role: "user" as const,
+        content: "整理今天的国际新闻",
+        timestamp: new Date("2026-06-07T09:30:00.000Z"),
+      },
+      {
+        id: "history-assistant-news-failed",
+        role: "assistant" as const,
+        content:
+          "执行失败：Request failed: failed to connect to token-plan-cn.xiaomimimo.com",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "执行失败：Request failed: failed to connect to token-plan-cn.xiaomimimo.com",
+          },
+        ],
+        timestamp: new Date("2026-06-07T09:30:12.000Z"),
+        isThinking: false,
+        runtimeTurnId: "turn-news-failed",
+        runtimeStatus: {
+          phase: "failed" as const,
+          title: "当前处理失败",
+          detail:
+            "Request failed: failed to connect to token-plan-cn.xiaomimimo.com",
+        },
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+    );
+
+    expect(mergedMessages).toHaveLength(2);
+    expect(mergedMessages[1]).toMatchObject({
+      id: "local-assistant-news",
+      content:
+        "执行失败：Request failed: failed to connect to token-plan-cn.xiaomimimo.com",
+      isThinking: false,
+      runtimeTurnId: "turn-news-failed",
+      runtimeStatus: {
+        phase: "failed",
+        title: "当前处理失败",
+      },
+    });
+    expect(mergedMessages[1]?.content).not.toContain("我会先检索");
+    expect(mergedMessages[1]?.runtimeStatus?.detail).toContain(
+      "token-plan-cn.xiaomimimo.com",
+    );
+    expect(mergedMessages[1]?.toolCalls?.[0]).toMatchObject({
+      id: "tool-web-search-running",
+      status: "failed",
+      result: {
+        success: false,
+        error:
+          "Request failed: failed to connect to token-plan-cn.xiaomimimo.com",
+      },
     });
   });
 

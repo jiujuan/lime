@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Dispatch, SetStateAction } from "react";
+import {
+  APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+  type AppServerJsonRpcNotification,
+} from "@/lib/api/appServer";
 import { activityLogger } from "@/lib/workspace/workbenchRuntime";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type {
@@ -10,6 +14,7 @@ import type { ActionRequired, Message } from "../types";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import type { StreamRequestState } from "./agentStreamSubmissionLifecycle";
 import { registerAgentStreamTurnEventBinding } from "./agentStreamTurnEventBinding";
+import { projectAppServerAgentEventPayload } from "@/lib/api/agentRuntime/threadClient";
 
 function noopDispatch<T>() {
   return vi.fn() as unknown as Dispatch<SetStateAction<T>>;
@@ -769,5 +774,158 @@ describe("agentStreamTurnEventBinding", () => {
     });
     expect(clearActiveStreamIfMatch).not.toHaveBeenCalled();
     expect(disposeListener).not.toHaveBeenCalled();
+  });
+
+  it("App Server agentSession/event 投影应驱动现有 GUI stream listener 完成消息收口", async () => {
+    vi.useFakeTimers();
+
+    let messages: Message[] = [
+      {
+        id: "assistant-app-server",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-06T00:00:00.000Z"),
+        isThinking: true,
+      },
+    ];
+    let streamActivated = false;
+    let streamHandler: ((event: { payload: unknown }) => void) | null = null;
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const clearActiveStreamIfMatch = vi.fn(() => true);
+    const disposeListener = vi.fn();
+    const runtime = {
+      listenToTurnEvents: vi.fn(async (_eventName, handler) => {
+        streamHandler = handler;
+        return vi.fn();
+      }),
+    } as unknown as AgentRuntimeAdapter;
+    const requestState: StreamRequestState = {
+      accumulatedContent: "",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+      queuedTurnId: null,
+    };
+
+    await registerAgentStreamTurnEventBinding({
+      runtime,
+      eventName: "aster_stream_message-app-server",
+      requestState,
+      skipUserMessage: false,
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.4",
+      effectiveExecutionStrategy: "react",
+      content: "生成草稿",
+      expectingQueue: false,
+      activeSessionId: "session-app-server",
+      resolvedWorkspaceId: "workspace-app-server",
+      assistantMsgId: "assistant-app-server",
+      pendingTurnKey: "pending-turn-app-server",
+      pendingItemKey: "pending-item-app-server",
+      effectiveWaitingRuntimeStatus: {
+        phase: "preparing",
+        title: "处理中",
+        detail: "正在准备执行上下文",
+      },
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      callbacks: {
+        activateStream: () => {
+          streamActivated = true;
+        },
+        isStreamActivated: () => streamActivated,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener,
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch,
+        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
+        removeQueuedTurnState: () => {},
+      },
+      sounds: {
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+      },
+      appendThinkingToParts: (parts) => parts,
+      setMessages: setMessages as never,
+      setPendingActions: noopDispatch<ActionRequired[]>(),
+      setThreadItems: noopDispatch<AgentThreadItem[]>(),
+      setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
+      setCurrentTurnId: noopDispatch<string | null>(),
+      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setIsSending: noopDispatch<boolean>(),
+    });
+
+    if (!streamHandler) {
+      throw new Error("expected stream handler to be registered");
+    }
+
+    const activeStreamHandler = streamHandler as (event: {
+      payload: unknown;
+    }) => void;
+    const project = (notification: AppServerJsonRpcNotification) => {
+      const payload = projectAppServerAgentEventPayload(notification);
+      if (!payload) {
+        throw new Error("expected App Server notification to project");
+      }
+      activeStreamHandler({ payload });
+    };
+
+    project({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-app-server-1",
+          sequence: 1,
+          sessionId: "session-app-server",
+          threadId: "thread-app-server",
+          turnId: "turn-app-server",
+          type: "message.delta",
+          timestamp: "2026-06-06T00:00:00.000Z",
+          payload: {
+            text: "第一段",
+          },
+        },
+      },
+    });
+
+    project({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-app-server-2",
+          sequence: 2,
+          sessionId: "session-app-server",
+          threadId: "thread-app-server",
+          turnId: "turn-app-server",
+          type: "turn.done",
+          timestamp: "2026-06-06T00:00:01.000Z",
+          payload: {},
+        },
+      },
+    });
+
+    expect(messages[0]).toMatchObject({
+      content: "第一段",
+      isThinking: false,
+    });
+    expect(messages[0]?.contentParts).toEqual([
+      {
+        type: "text",
+        text: "第一段",
+      },
+    ]);
+    expect(streamActivated).toBe(true);
+    expect(clearActiveStreamIfMatch).toHaveBeenCalledWith(
+      "aster_stream_message-app-server",
+    );
+    expect(disposeListener).toHaveBeenCalledTimes(1);
   });
 });

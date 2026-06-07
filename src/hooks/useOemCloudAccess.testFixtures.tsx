@@ -31,9 +31,9 @@ const hoisted = vi.hoisted(() => ({
     openExternalUrlWithSystemBrowser: vi.fn(),
     startOemCloudOAuthCallbackBridge: vi.fn(),
   },
-  tauriRuntimeMocks: {
-    hasTauriInvokeCapability: vi.fn(),
-    hasTauriRuntimeMarkers: vi.fn(),
+  desktopRuntimeMocks: {
+    hasDesktopHostInvokeCapability: vi.fn(),
+    hasDesktopHostRuntimeMarkers: vi.fn(),
   },
   desktopAuthMocks: {
     completeOemCloudDesktopOAuthLogin: vi.fn(),
@@ -43,7 +43,7 @@ const hoisted = vi.hoisted(() => ({
 export const controlPlaneMocks = hoisted.controlPlaneMocks;
 export const shellOpenMock = hoisted.shellOpenMock;
 export const systemBrowserMocks = hoisted.systemBrowserMocks;
-export const tauriRuntimeMocks = hoisted.tauriRuntimeMocks;
+export const desktopRuntimeMocks = hoisted.desktopRuntimeMocks;
 export const desktopAuthMocks = hoisted.desktopAuthMocks;
 
 vi.mock("@/lib/api/oemCloudControlPlane", () => {
@@ -92,7 +92,7 @@ vi.mock("@/lib/api/oemCloudControlPlane", () => {
   };
 });
 
-vi.mock("@tauri-apps/plugin-shell", () => ({
+vi.mock("@/lib/desktop-host/plugin-shell", () => ({
   open: hoisted.shellOpenMock,
 }));
 
@@ -104,9 +104,9 @@ vi.mock("@/lib/api/externalUrl", () => ({
     hoisted.systemBrowserMocks.startOemCloudOAuthCallbackBridge,
 }));
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriInvokeCapability: hoisted.tauriRuntimeMocks.hasTauriInvokeCapability,
-  hasTauriRuntimeMarkers: hoisted.tauriRuntimeMocks.hasTauriRuntimeMarkers,
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostInvokeCapability: hoisted.desktopRuntimeMocks.hasDesktopHostInvokeCapability,
+  hasDesktopHostRuntimeMarkers: hoisted.desktopRuntimeMocks.hasDesktopHostRuntimeMarkers,
 }));
 
 vi.mock("@/lib/oemCloudDesktopAuth", () => ({
@@ -287,8 +287,8 @@ export function useOemCloudAccessTestLifecycle() {
     systemBrowserMocks.startOemCloudOAuthCallbackBridge.mockResolvedValue({
       callbackUrl: "http://127.0.0.1:18081/oauth/callback",
     });
-    tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(true);
-    tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(true);
+    desktopRuntimeMocks.hasDesktopHostInvokeCapability.mockReturnValue(true);
+    desktopRuntimeMocks.hasDesktopHostRuntimeMarkers.mockReturnValue(true);
   });
 
   afterEach(async () => {

@@ -133,7 +133,7 @@ npm run verify:gui-smoke
 验证：
 
 ```bash
-cargo test --manifest-path "src-tauri/Cargo.toml" memory_profile_prompt_service
+cargo test --manifest-path "lime-rs/Cargo.toml" memory_profile_prompt_service
 npm run test:contracts
 ```
 
@@ -212,7 +212,7 @@ npm run test:contracts
 
 ```bash
 npm exec vitest run "src/components/agent/chat" "src/features/knowledge"
-cargo test --manifest-path "src-tauri/Cargo.toml" runtime_turn
+cargo test --manifest-path "lime-rs/Cargo.toml" runtime_turn
 ```
 
 GUI 主链补：
@@ -306,7 +306,7 @@ npm run test:contracts
 
 ```bash
 npm exec vitest run "src/components/agent/chat"
-cargo test --manifest-path "src-tauri/Cargo.toml" runtime_turn
+cargo test --manifest-path "lime-rs/Cargo.toml" runtime_turn
 ```
 
 ## 11. 迁移与兼容
@@ -353,7 +353,7 @@ npm run verify:gui-smoke
 涉及 Rust runtime：
 
 ```bash
-cargo test --manifest-path "src-tauri/Cargo.toml"
+cargo test --manifest-path "lime-rs/Cargo.toml"
 ```
 
 ## 14. 当前验证记录
@@ -365,7 +365,7 @@ cargo test --manifest-path "src-tauri/Cargo.toml"
 3. 本轮设置页五语言 key 已对齐；`npm run i18n:unused -- --check` 仍因既有 `agent` / `agentMessageList` 未引用 key 失败，但 `settings` namespace 已清到 `unused=0`。
 4. Playwright 轻量 GUI 检查已覆盖本地 `http://127.0.0.1:1420/` 设置页：记忆页默认只展示 `日常记忆 / AI 个性 / 高级` 三个 tab；`AI 个性` tab 只展示当前状态、三个初始模板、重置和边界说明，无 input / textarea；`高级` tab 将 `SOUL.md 文件内容` 放在导入区之前，空配置显示“当前还没有可查看的 SOUL.md 内容”。
 5. `git diff --check` 已针对本轮设置页、五语言和 Soul 路线图写集通过。
-6. Rust `artifact_generation_brief_boundary_service` 定向测试已通过：`cargo test --manifest-path "src-tauri/Cargo.toml" artifact_generation_brief_boundary_service -- --test-threads=1`，结果为 6 tests passed。
+6. Rust `artifact_generation_brief_boundary_service` 定向测试已通过：`cargo test --manifest-path "lime-rs/Cargo.toml" artifact_generation_brief_boundary_service -- --test-threads=1`，结果为 6 tests passed。
 7. `npm run test:contracts` 已通过。
 8. `npm run bridge:health -- --timeout-ms 120000` 已通过，DevBridge health status 为 `ok`。
 9. `npm run verify:gui-smoke -- --reuse-running` 本轮已通过 `workspace-ready`、`browser-runtime`、`site-adapters`、`agent-service-skill-entry`、`agent-runtime-tool-surface`、`agent-runtime-tool-surface-page`、`code-runtime-fixture`、`agent-runtime-approval-sandbox`、`at-command-registry` 与 `agent-apps` 等 GUI / runtime 主路径 smoke；其中 page smoke 已真实打开 `http://127.0.0.1:1420/`，完成输入、发送、打开 code session、查看 runtime summary、审批与文件 checkpoint 回滚等步骤。

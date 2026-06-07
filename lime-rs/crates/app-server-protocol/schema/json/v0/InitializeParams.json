@@ -1,0 +1,61 @@
+{
+  "$defs": {
+    "ClientCapabilities": {
+      "properties": {
+        "eventMethods": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "experimental": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "ClientInfo": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "version": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "capabilities": {
+      "$ref": "#/$defs/ClientCapabilities",
+      "default": {
+        "eventMethods": [],
+        "experimental": false
+      }
+    },
+    "clientInfo": {
+      "$ref": "#/$defs/ClientInfo"
+    }
+  },
+  "required": [
+    "clientInfo"
+  ],
+  "title": "InitializeParams",
+  "type": "object"
+}

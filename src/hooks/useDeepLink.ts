@@ -8,10 +8,16 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { safeInvoke, safeListen } from "@/lib/dev-bridge";
-import type { UnlistenFn } from "@tauri-apps/api/event";
-import { getCurrent } from "@tauri-apps/plugin-deep-link";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import {
+  resolveConnectDeepLink,
+  resolveOpenDeepLink,
+  saveConnectRelayApiKey,
+  type ConnectPayload,
+  type DeepLinkResult,
+  type RelayInfo,
+} from "@/lib/api/connect";
+import { getCurrent, onOpenUrl } from "@/lib/desktop-host/plugin-deep-link";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import {
   completeOemCloudDesktopOAuthLogin,
   parseOemCloudDesktopOAuthCallbackUrl,
@@ -34,137 +40,11 @@ import {
 import { toast } from "sonner";
 import { useConnectCallback } from "./useConnectCallback";
 
-/**
- * Deep Link 解析后的 payload
- */
-interface ConnectPayload {
-  /** 中转商 ID（必填） */
-  relay: string;
-  /** API Key（必填） */
-  key: string;
-  /** Key 名称（可选） */
-  name?: string;
-  /** 推广码（可选） */
-  ref_code?: string;
-}
-
-/**
- * 中转商品牌信息
- */
-export interface RelayBranding {
-  /** Logo URL */
-  logo: string;
-  /** 主题色 */
-  color: string;
-}
-
-/**
- * 中转商链接
- */
-export interface RelayLinks {
-  /** 主页 */
-  homepage: string;
-  /** 注册链接 */
-  register?: string;
-  /** 充值链接 */
-  recharge?: string;
-  /** 文档链接 */
-  docs?: string;
-  /** 状态页链接 */
-  status?: string;
-  /** 控制台/仪表盘链接 */
-  dashboard?: string;
-  /** 网站链接 */
-  website?: string;
-}
-
-/**
- * 中转商 API 配置
- */
-export interface RelayApi {
-  /** API 基础 URL */
-  base_url: string;
-  /** 协议类型 */
-  protocol: string;
-  /** 认证头名称 */
-  auth_header: string;
-  /** 认证前缀 */
-  auth_prefix: string;
-}
-
-/**
- * 中转商联系方式
- */
-export interface RelayContact {
-  email?: string;
-  discord?: string;
-  telegram?: string;
-  twitter?: string;
-}
-
-/**
- * 中转商功能特性
- */
-export interface RelayFeatures {
-  /** 支持的模型列表 */
-  models: string[];
-  /** 是否支持流式响应 */
-  streaming: boolean;
-  /** 是否支持函数调用 */
-  function_calling: boolean;
-  /** 是否支持视觉模型 */
-  vision: boolean;
-  /** 是否已验证 */
-  verified?: boolean;
-}
-
-/**
- * 中转商信息
- */
-export interface RelayInfo {
-  /** 中转商唯一 ID */
-  id: string;
-  /** 中转商名称 */
-  name: string;
-  /** 中转商描述 */
-  description: string;
-  /** 品牌信息 */
-  branding: RelayBranding;
-  /** 相关链接 */
-  links: RelayLinks;
-  /** API 配置 */
-  api: RelayApi;
-  /** 联系方式 */
-  contact: RelayContact;
-  /** 功能特性 */
-  features: RelayFeatures;
-}
-
-/**
- * Deep Link 处理结果（从后端接收的事件 payload）
- */
-interface DeepLinkResult {
-  /** 解析后的 payload */
-  payload: ConnectPayload;
-  /** 中转商信息（如果在注册表中找到） */
-  relay_info: RelayInfo | null;
-  /** 是否为已验证的中转商 */
-  is_verified: boolean;
-}
-
-/**
- * 保存 API Key 的返回结果
- */
-interface SaveApiKeyResult {
-  /** Provider ID */
-  provider_id: string;
-  /** API Key ID */
-  key_id: string;
-  /** Provider 名称 */
-  provider_name: string;
-  /** 是否为新创建的 Provider */
-  is_new_provider: boolean;
-}
+export type {
+  ConnectPayload,
+  DeepLinkResult,
+  RelayInfo,
+} from "@/lib/api/connect";
 
 /**
  * Connect 错误
@@ -240,11 +120,11 @@ function parseBrowserConnectorDeepLink(
 /**
  * Deep Link 事件处理 Hook
  *
- * 监听来自 Tauri 后端的 deep-link-connect 事件，管理 Connect 弹窗状态。
+ * 监听 Electron Desktop Host deep link URL，管理 Connect 弹窗状态。
  *
  * ## 功能
  *
- * - 监听 `deep-link-connect` 事件（Requirements 5.1）
+ * - 监听 Electron Desktop Host deep link URL（Requirements 5.1）
  * - 触发 Connect_Dialog 打开（Requirements 5.2）
  * - 提供解析后的 Deep Link 参数（Requirements 5.3）
  * - 关闭时清理临时状态（Requirements 5.4）
@@ -292,9 +172,6 @@ export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<ConnectError | null>(null);
 
-  // 用于清理的 ref
-  const unlistenRef = useRef<UnlistenFn | null>(null);
-  const unlistenErrorRef = useRef<UnlistenFn | null>(null);
   const handledUrlSetRef = useRef<Set<string>>(new Set());
 
   // 统计回调 hook
@@ -302,24 +179,11 @@ export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
     useConnectCallback();
 
   /**
-   * 处理 deep-link-error 事件
-   * _Requirements: 7.1_
-   */
-  const handleDeepLinkError = useCallback(
-    (error: { code: string; message: string }) => {
-      console.error("[useDeepLink] 收到 deep-link-error 事件:", error);
-      // 显示 Toast 错误提示
-      showDeepLinkError(error.message, error.code);
-    },
-    [],
-  );
-
-  /**
-   * 处理 deep-link-connect 事件
+   * 处理 Connect Deep Link 解析结果
    * _Requirements: 5.1, 5.2, 5.3_
    */
   const handleDeepLinkEvent = useCallback((result: DeepLinkResult) => {
-    console.log("[useDeepLink] 收到 deep-link-connect 事件:", result);
+    console.log("[useDeepLink] 收到 Connect Deep Link 解析结果:", result);
 
     // 设置状态
     setConnectPayload(result.payload);
@@ -478,12 +342,7 @@ export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
 
       if (normalizedUrl.startsWith("lime://open")) {
         try {
-          const result = await safeInvoke<OpenDeepLinkResult>(
-            "handle_open_deep_link",
-            {
-              url: normalizedUrl,
-            },
-          );
+          const result = await resolveOpenDeepLink(normalizedUrl);
           handleOpenDeepLinkEvent(result);
         } catch (err) {
           console.error("[useDeepLink] 处理官网 Deep Link 失败:", err);
@@ -498,9 +357,7 @@ export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
       }
 
       try {
-        const result = await safeInvoke<DeepLinkResult>("handle_deep_link", {
-          url: normalizedUrl,
-        });
+        const result = await resolveConnectDeepLink(normalizedUrl);
         handleDeepLinkEvent(result);
       } catch (err) {
         console.error("[useDeepLink] 处理 Deep Link 失败:", err);
@@ -533,10 +390,10 @@ export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
 
     try {
       // 调用后端保存 API Key（添加到 API Key Provider 系统）
-      const result = await safeInvoke<SaveApiKeyResult>("save_relay_api_key", {
+      const result = await saveConnectRelayApiKey({
         relayId: connectPayload.relay,
         apiKey: connectPayload.key,
-        name: connectPayload.name ?? null,
+        name: connectPayload.name,
       });
 
       console.log(
@@ -616,12 +473,12 @@ export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
     setError(null);
   }, []);
 
-  // 监听 Deep Link URL 和后端事件
+  // 监听 Electron Desktop Host Deep Link URL
   // _Requirements: 5.1, 7.1_
   useEffect(() => {
     // 浏览器开发模式下 deep-link 事件不属于当前聊天主链，
     // 跳过这些 SSE 监听以避免占满 DevBridge 连接槽位。
-    if (!hasTauriInvokeCapability()) {
+    if (!hasDesktopHostInvokeCapability()) {
       return;
     }
 
@@ -630,47 +487,20 @@ export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
 
     const setupListener = async () => {
       try {
-        // 监听插件派发的 Deep Link URL 事件
+        // 监听 Electron Desktop Host 派发的 Deep Link URL 事件。
         // _Requirements: 5.1_
-        unlistenDeepLink = await safeListen<string[]>(
-          "deep-link://new-url",
-          async (event) => {
-            if (!mounted) return;
+        unlistenDeepLink = await onOpenUrl(async (urls) => {
+          if (!mounted) return;
 
-            const urls = Array.isArray(event.payload) ? event.payload : [];
-            console.log("[useDeepLink] 收到 Deep Link URL:", urls);
+          console.log("[useDeepLink] 收到 Deep Link URL:", urls);
 
-            for (const url of urls) {
-              await processDeepLinkUrl(url);
-            }
-          },
-        );
-
-        // 监听后端发送的 deep-link-connect 事件（兼容旧逻辑）
-        const unlisten = await safeListen<DeepLinkResult>(
-          "deep-link-connect",
-          (event) => {
-            if (mounted) {
-              handleDeepLinkEvent(event.payload);
-            }
-          },
-        );
-
-        // 监听 deep-link-error 事件
-        // _Requirements: 7.1_
-        const unlistenError = await safeListen<{
-          code: string;
-          message: string;
-        }>("deep-link-error", (event) => {
-          if (mounted) {
-            handleDeepLinkError(event.payload);
+          for (const url of urls) {
+            await processDeepLinkUrl(url);
           }
         });
 
         if (mounted) {
-          unlistenRef.current = unlisten;
-          unlistenErrorRef.current = unlistenError;
-          console.log("[useDeepLink] 已注册 Deep Link 和事件监听器");
+          console.log("[useDeepLink] 已注册 Electron Deep Link URL 监听器");
 
           const currentUrls = await getCurrent();
           if (mounted && Array.isArray(currentUrls) && currentUrls.length > 0) {
@@ -682,8 +512,6 @@ export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
           await tryClaimStoredReferralInvite();
         } else {
           // 如果组件已卸载，立即取消监听
-          unlisten();
-          unlistenError();
           if (unlistenDeepLink) unlistenDeepLink();
         }
       } catch (err) {
@@ -696,14 +524,6 @@ export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
     // 清理函数
     return () => {
       mounted = false;
-      if (unlistenRef.current) {
-        unlistenRef.current();
-        unlistenRef.current = null;
-      }
-      if (unlistenErrorRef.current) {
-        unlistenErrorRef.current();
-        unlistenErrorRef.current = null;
-      }
       if (unlistenDeepLink) {
         unlistenDeepLink();
       }
@@ -711,7 +531,6 @@ export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
     };
   }, [
     handleDeepLinkEvent,
-    handleDeepLinkError,
     handleOauthCallbackUrl,
     processDeepLinkUrl,
     tryClaimStoredReferralInvite,

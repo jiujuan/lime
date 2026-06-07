@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef } from "react";
 import { buildClawAgentParams } from "@/lib/workspace/navigation";
 import {
-  hasTauriEventCapability,
-  hasTauriInvokeCapability,
-} from "@/lib/tauri-runtime";
+  hasDesktopHostEventCapability,
+  hasDesktopHostInvokeCapability,
+} from "@/lib/desktop-runtime";
 import type { Page, PageParams, ResourcesPageParams } from "@/types/page";
 import {
   RESOURCE_MANAGER_NAVIGATION_INTENT_EVENT,
@@ -33,7 +33,7 @@ interface ResourceManagerFocusableWindow {
 interface FocusMainWindowAfterResourceIntentOptions {
   currentWindow?: ResourceManagerFocusableWindow | null;
   browserWindow?: Pick<Window, "focus"> | null;
-  useTauriWindow?: boolean;
+  useDesktopHostWindow?: boolean;
 }
 
 interface UseResourceManagerNavigationIntentsOptions {
@@ -67,12 +67,12 @@ export async function focusMainWindowAfterResourceIntent(
   const browserWindow =
     options.browserWindow ?? (typeof window === "undefined" ? null : window);
   let currentWindow = options.currentWindow ?? null;
-  const shouldUseTauriWindow =
-    options.useTauriWindow ?? hasTauriInvokeCapability();
+  const shouldUseDesktopHostWindow =
+    options.useDesktopHostWindow ?? hasDesktopHostInvokeCapability();
 
-  if (!currentWindow && shouldUseTauriWindow) {
+  if (!currentWindow && shouldUseDesktopHostWindow) {
     try {
-      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      const { getCurrentWindow } = await import("@/lib/desktop-host/window");
       currentWindow = getCurrentWindow();
     } catch {
       currentWindow = null;
@@ -293,9 +293,9 @@ export function useResourceManagerNavigationIntents({
     }, 0);
 
     let disposed = false;
-    let unlistenTauri: (() => void) | null = null;
-    if (hasTauriEventCapability()) {
-      void import("@tauri-apps/api/event")
+    let unlistenDesktopHost: (() => void) | null = null;
+    if (hasDesktopHostEventCapability()) {
+      void import("@/lib/desktop-host/event")
         .then(({ listen }) =>
           listen(RESOURCE_MANAGER_NAVIGATION_INTENT_EVENT, (event) => {
             handleIntent(event.payload);
@@ -306,17 +306,17 @@ export function useResourceManagerNavigationIntents({
             unlisten();
             return;
           }
-          unlistenTauri = unlisten;
+          unlistenDesktopHost = unlisten;
         })
         .catch(() => {
-          // 浏览器模式没有 Tauri 事件能力，保留 window/localStorage 通道即可。
+          // 浏览器模式没有 Desktop Host 事件能力，保留 window/localStorage 通道即可。
         });
     }
 
     return () => {
       disposed = true;
       window.clearTimeout(initialIntentTimer);
-      unlistenTauri?.();
+      unlistenDesktopHost?.();
       window.removeEventListener(
         RESOURCE_MANAGER_NAVIGATION_INTENT_EVENT,
         handleCustomEvent,

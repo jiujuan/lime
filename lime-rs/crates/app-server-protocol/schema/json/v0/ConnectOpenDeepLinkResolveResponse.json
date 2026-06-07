@@ -1,0 +1,48 @@
+{
+  "$defs": {
+    "OpenDeepLinkPayload": {
+      "properties": {
+        "action": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "source": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "version": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "slug"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "payload": {
+      "$ref": "#/$defs/OpenDeepLinkPayload"
+    }
+  },
+  "required": [
+    "payload"
+  ],
+  "title": "ConnectOpenDeepLinkResolveResponse",
+  "type": "object"
+}

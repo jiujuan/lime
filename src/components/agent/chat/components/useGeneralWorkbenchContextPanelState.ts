@@ -6,7 +6,7 @@ import {
   type DragEvent,
   type RefObject,
 } from "react";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog } from "@/lib/desktop-host/plugin-dialog";
 import { toast } from "sonner";
 import {
   buildGeneralWorkbenchActiveContextItems,

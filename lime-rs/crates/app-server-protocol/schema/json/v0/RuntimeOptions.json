@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "capabilityId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "eventName": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "hostOptions": true,
+    "metadata": true,
+    "modelPreference": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "providerPreference": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "queuedTurnId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "stream": {
+      "default": false,
+      "type": "boolean"
+    }
+  },
+  "title": "RuntimeOptions",
+  "type": "object"
+}

@@ -237,7 +237,11 @@ describe("CloudProviderSettings", () => {
     expect(
       container.querySelector('[data-testid="api-key-provider-stub"]')
         ?.className,
-    ).toContain("h-[calc(100vh-220px)]");
+    ).toContain("h-[calc(100vh-280px)]");
+    expect(container.querySelector("h1")?.textContent).toBe("AI 服务商");
+    expect(
+      container.querySelector('[data-testid="provider-settings-title"]'),
+    ).not.toBeNull();
     expect(
       container.querySelectorAll('[data-testid="provider-workspace-switcher"]')
         .length,
@@ -246,6 +250,9 @@ describe("CloudProviderSettings", () => {
     expect(
       container.querySelector('[data-testid="companion-provider-card"]'),
     ).toBeNull();
+    expect(mockGetCompanionPetStatus).not.toHaveBeenCalled();
+    expect(mockListenCompanionPetStatus).not.toHaveBeenCalled();
+    expect(mockSubscribeProviderDataChanged).not.toHaveBeenCalled();
     expect(text).not.toContain("把本地 Provider 配置和 OEM 云端服务拆开管理");
     expect(text).not.toContain("把本地 Provider 配置和品牌云端服务拆开管理");
     expect(text).not.toContain("默认先进入“服务商设置”处理 Provider");
@@ -354,7 +361,9 @@ describe("CloudProviderSettings", () => {
     const { container } = await renderPage();
 
     expect(
-      container.querySelector('[data-testid="provider-workspace-tab-companion"]'),
+      container.querySelector(
+        '[data-testid="provider-workspace-tab-companion"]',
+      ),
     ).toBeNull();
 
     await vi.waitFor(() => {
@@ -580,9 +589,7 @@ describe("CloudProviderSettings", () => {
   });
 
   it("单个云端来源时不再渲染本地 Offer 网格", async () => {
-    mockUseOemCloudAccess.mockReturnValue(
-      createCloudOfferAccessState(),
-    );
+    mockUseOemCloudAccess.mockReturnValue(createCloudOfferAccessState());
 
     const { container } = await renderPage();
 
@@ -617,7 +624,9 @@ describe("CloudProviderSettings", () => {
 
     await vi.waitFor(() => {
       expect(
-        container.querySelector('[data-testid="provider-workspace-tab-companion"]'),
+        container.querySelector(
+          '[data-testid="provider-workspace-tab-companion"]',
+        ),
       ).not.toBeNull();
     });
 
@@ -687,7 +696,9 @@ describe("CloudProviderSettings", () => {
 
     await vi.waitFor(() => {
       expect(
-        container.querySelector('[data-testid="provider-workspace-tab-companion"]'),
+        container.querySelector(
+          '[data-testid="provider-workspace-tab-companion"]',
+        ),
       ).not.toBeNull();
     });
 
@@ -751,7 +762,9 @@ describe("CloudProviderSettings", () => {
 
     await vi.waitFor(() => {
       expect(
-        container.querySelector('[data-testid="provider-workspace-tab-companion"]'),
+        container.querySelector(
+          '[data-testid="provider-workspace-tab-companion"]',
+        ),
       ).not.toBeNull();
     });
 
@@ -802,7 +815,9 @@ describe("CloudProviderSettings", () => {
 
     await vi.waitFor(() => {
       expect(
-        container.querySelector('[data-testid="provider-workspace-tab-companion"]'),
+        container.querySelector(
+          '[data-testid="provider-workspace-tab-companion"]',
+        ),
       ).not.toBeNull();
     });
 

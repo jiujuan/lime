@@ -11,6 +11,20 @@ import {
   renamePath,
 } from "./fileBrowser";
 
+const { appServerListDirectoryMock, appServerReadFilePreviewMock } = vi.hoisted(
+  () => ({
+    appServerListDirectoryMock: vi.fn(),
+    appServerReadFilePreviewMock: vi.fn(),
+  }),
+);
+
+vi.mock("@/lib/api/appServer", () => ({
+  AppServerClient: vi.fn(() => ({
+    listDirectory: appServerListDirectoryMock,
+    readFilePreview: appServerReadFilePreviewMock,
+  })),
+}));
+
 vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
 }));
@@ -20,30 +34,36 @@ describe("fileBrowser API", () => {
     vi.clearAllMocks();
   });
 
-  it("应获取目录列表与文件预览", async () => {
-    vi.mocked(safeInvoke)
+  it("应通过 App Server current 主链获取目录列表与文件预览", async () => {
+    appServerListDirectoryMock
       .mockResolvedValueOnce({
-        path: "~",
-        parentPath: null,
-        entries: [
-          {
-            name: "Lime.app",
-            path: "/Applications/Lime.app",
-            isDir: true,
-            size: 0,
-            modifiedAt: 1,
-            iconDataUrl: "data:image/png;base64,abc",
-          },
-        ],
-        error: null,
-      })
-      .mockResolvedValueOnce({
+        result: {
+          path: "~",
+          parentPath: null,
+          entries: [
+            {
+              name: "Lime.app",
+              path: "/Applications/Lime.app",
+              isDir: true,
+              size: 0,
+              modifiedAt: 1,
+              iconDataUrl: "data:image/png;base64,abc",
+              isHidden: false,
+              isSymlink: false,
+            },
+          ],
+          error: null,
+        },
+      });
+    appServerReadFilePreviewMock.mockResolvedValueOnce({
+      result: {
         path: "/tmp/demo.txt",
         content: "hello",
         isBinary: false,
         size: 5,
         error: null,
-      });
+      },
+    });
 
     await expect(listDirectory("~")).resolves.toEqual(
       expect.objectContaining({
@@ -58,6 +78,16 @@ describe("fileBrowser API", () => {
     );
     await expect(readFilePreview("/tmp/demo.txt", 1024)).resolves.toEqual(
       expect.objectContaining({ path: "/tmp/demo.txt", content: "hello" }),
+    );
+    expect(appServerListDirectoryMock).toHaveBeenCalledWith({ path: "~" });
+    expect(appServerReadFilePreviewMock).toHaveBeenCalledWith({
+      path: "/tmp/demo.txt",
+      maxSize: 1024,
+    });
+    expect(safeInvoke).not.toHaveBeenCalledWith("list_dir", expect.anything());
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "read_file_preview_cmd",
+      expect.anything(),
     );
   });
 

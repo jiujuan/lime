@@ -23,7 +23,6 @@ import {
   isUserProjectType,
 } from "./lib/api/project";
 import { useDeepLink } from "./hooks/useDeepLink";
-import { useRelayRegistry } from "./hooks/useRelayRegistry";
 import { useSkillCatalogBootstrap } from "./hooks/useSkillCatalogBootstrap";
 import { useServiceSkillCatalogBootstrap } from "./hooks/useServiceSkillCatalogBootstrap";
 import { useSiteAdapterCatalogBootstrap } from "./hooks/useSiteAdapterCatalogBootstrap";
@@ -31,6 +30,7 @@ import { useAppNavigation } from "./hooks/useAppNavigation";
 import { useAppShellLayout } from "./hooks/useAppShellLayout";
 import { useAppStartupEffects } from "./hooks/useAppStartupEffects";
 import { useCompanionProviderBridge } from "./hooks/useCompanionProviderBridge";
+import { useCompanionEntryEnabled } from "./hooks/useCompanionEntryEnabled";
 import { useGlobalTrayModelSync } from "./hooks/useGlobalTrayModelSync";
 import { useOemLimeHubProviderSync } from "./hooks/useOemLimeHubProviderSync";
 import { useSkillPackageOpenRequests } from "./hooks/useSkillPackageOpenRequests";
@@ -52,7 +52,11 @@ import {
 import { installOfficialMarketplaceSkill } from "./lib/api/officialSkillMarketplace";
 import { toast } from "sonner";
 import { SettingsTabs } from "./types/settings";
-import { hasTauriInvokeCapability } from "./lib/tauri-runtime";
+import { hasDesktopHostInvokeCapability } from "./lib/desktop-runtime";
+import {
+  hasNativeStartupScreen,
+  hideNativeStartupOverlayWhenReady,
+} from "./lib/nativeStartupScreen";
 import { shouldReserveMacWindowControls } from "./lib/windowControls";
 import { startWindowDragFromMouseEvent } from "./lib/windowDrag";
 import {
@@ -136,9 +140,11 @@ function AppContent() {
   startupTracker.mark("AppContent: render start");
 
   const { t } = useTranslation("common");
-  const hasTauriDesktopRuntime = hasTauriInvokeCapability();
+  const hasDesktopHostRuntime = hasDesktopHostInvokeCapability();
+  const nativeStartupScreenAvailable = hasNativeStartupScreen();
+  const companionEntryEnabled = useCompanionEntryEnabled();
   const reserveMacWindowControls = shouldReserveMacWindowControls();
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(!nativeStartupScreenAvailable);
   const {
     currentPage,
     pageParams,
@@ -189,6 +195,7 @@ function AppContent() {
     pageParams,
   });
   useCompanionProviderBridge({
+    enabled: companionEntryEnabled,
     onNavigate: handleNavigate,
   });
   useSkillPackageOpenRequests({
@@ -363,12 +370,8 @@ function AppContent() {
     onOpenWebsiteDeepLink: handleOpenWebsiteDeepLink,
   });
 
-  const { error: registryError, refresh: _refreshRegistry } = useRelayRegistry({
-    autoLoad: hasTauriDesktopRuntime,
-  });
   useAppStartupEffects({
     currentPage,
-    registryError,
   });
   const { shouldShowAppSidebar, shouldAddMainContentGap } = useAppShellLayout({
     currentPage,
@@ -399,6 +402,16 @@ function AppContent() {
     preloadDefaultProject();
   }, []);
 
+  useEffect(() => {
+    if (showSplash || !nativeStartupScreenAvailable) {
+      return;
+    }
+
+    startupTracker.mark("Native startup screen: renderer ready");
+    preloadDefaultProject();
+    hideNativeStartupOverlayWhenReady();
+  }, [nativeStartupScreenAvailable, showSplash]);
+
   const handleWindowDragStart = useCallback(
     (event: React.MouseEvent<HTMLElement>) => {
       void startWindowDragFromMouseEvent(event, { source: "app_shell" });
@@ -417,23 +430,20 @@ function AppContent() {
     <SoundProvider>
       <ComponentDebugProvider>
         <AppContainer>
-          {hasTauriDesktopRuntime ? (
+          {hasDesktopHostRuntime ? (
             <WindowDragLayer aria-hidden="true">
               <WindowTopDragRegion
                 $reserveMacWindowControls={reserveMacWindowControls}
-                data-tauri-drag-region
                 data-lime-window-drag-region
                 onMouseDown={handleWindowDragStart}
               />
               <WindowSideDragRegion
                 $side="left"
-                data-tauri-drag-region
                 data-lime-window-drag-region
                 onMouseDown={handleWindowDragStart}
               />
               <WindowSideDragRegion
                 $side="right"
-                data-tauri-drag-region
                 data-lime-window-drag-region
                 onMouseDown={handleWindowDragStart}
               />

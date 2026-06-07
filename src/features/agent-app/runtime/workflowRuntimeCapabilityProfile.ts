@@ -1,7 +1,6 @@
 import { buildAdapterCapabilityProfile } from "../adapters/adapterCapabilityProfile";
 import { resolveAgentAppHostFlags } from "../featureFlag";
 import { p0HostCapabilityProfile } from "../readiness/hostCapabilityProfile";
-import { buildMockCapabilityProfile } from "../sdk/mockCapabilityProfile";
 import type { AgentAppHostFlags, HostCapabilityProfile } from "../types";
 
 export function buildWorkflowRuntimeCapabilityProfile(
@@ -14,9 +13,7 @@ export function buildWorkflowRuntimeCapabilityProfile(
   });
   const baseProfile = featureFlags.realAdapterEnabled
     ? buildAdapterCapabilityProfile(featureFlags)
-    : featureFlags.mockSdkEnabled
-      ? buildMockCapabilityProfile(featureFlags)
-      : p0HostCapabilityProfile;
+    : p0HostCapabilityProfile;
 
   return {
     ...baseProfile,

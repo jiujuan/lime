@@ -434,7 +434,7 @@ P17.2.1、P17.2.2 与 P17.2.3 已完成最小实现：正式入口已补 source 
 | `npm run test -- src/features/agent-app/ui/AgentAppsPage.test.tsx src/features/agent-app/ui/AgentAppRuntimePage.test.tsx src/lib/api/agentApps.test.ts` | 通过，3 files / 28 tests。 |
 | `npm run typecheck` | 通过。 |
 | `npm run test:contracts` | 通过。 |
-| `cargo test --manifest-path src-tauri/Cargo.toml -p lime agent_app_cmd --lib --target-dir /tmp/lime-cargo-test-agent-app-fetch` | 通过，2 tests；首次独立 target 编译下载了 `sherpa-onnx` 预编译依赖。 |
+| `cargo test --manifest-path lime-rs/Cargo.toml -p lime agent_app_cmd --lib --target-dir /tmp/lime-cargo-test-agent-app-fetch` | 通过，2 tests；首次独立 target 编译下载了 `sherpa-onnx` 预编译依赖。 |
 | `rg -n "safeInvoke\|invoke\\(\|tauri::\|generate_handler\|mockPriorityCommands\|defaultMocks\|new Worker\|Worker\\(" src/features/agent-app \|\| true` | 无命中，feature island 未直接扩展命令边界。 |
 | `npm run verify:local` | 未通过；smart 模式触发全仓 lint，阻塞于 `src/components/agent/chat/experts/ExpertInfoPanel.tsx` 的 `react-hooks/exhaustive-deps` warning，非本轮 Agent App P17.2.4b-2 命令 / roadmap 文件。 |
 
@@ -484,7 +484,7 @@ P17.2.1、P17.2.2 与 P17.2.3 已完成最小实现：正式入口已补 source 
 |---|---|
 | `npm run test -- src/features/agent-app/ui/AgentAppRuntimePage.test.tsx src/lib/api/agentApps.test.ts src/lib/dev-bridge/mockPriorityCommands.test.ts src/lib/tauri-mock/core.test.ts` | 通过，4 files / 34 tests。 |
 | `npx eslint ...agent-app/runtime/api/mock files... --max-warnings 0` | 通过。 |
-| `cargo check --manifest-path src-tauri/Cargo.toml -p lime --lib --target-dir /tmp/lime-cargo-check-agent-app` | 通过。 |
+| `cargo check --manifest-path lime-rs/Cargo.toml -p lime --lib --target-dir /tmp/lime-cargo-check-agent-app` | 通过。 |
 | `npm run test:contracts` | 通过。 |
 | `npm run bridge:health` + DevBridge `agent_app_start_ui_runtime` | 通过，返回 `entryUrl=http://127.0.0.1:<port>/dashboard`，runtime 目录为本地 `limecloud/content-factory-app`。 |
 | Playwright 打开 runtime `/dashboard` | 通过，页面标题 `内容工厂`，App 内导航包含 `项目中心 / 资料整理 / 场景规划 / 写文案 / 做脚本 / 交付文件 / 看数据 / 团队设置`。 |
@@ -528,7 +528,7 @@ P17.2.1、P17.2.2 与 P17.2.3 已完成最小实现：正式入口已补 source 
 
 | 命令 / 证据 | 结果 |
 |---|---|
-| `cargo test -p lime agent_app_` in `src-tauri` | 通过，Agent App 命令相关 4 tests。 |
+| `cargo test -p lime agent_app_` in `lime-rs` | 通过，Agent App 命令相关 4 tests。 |
 | `npm run test:contracts` | 通过，命令契约、Harness 契约和 modality contract 均通过。 |
 | `npm run test -- src/lib/api/agentApps.test.ts src/lib/dev-bridge/mockPriorityCommands.test.ts src/lib/tauri-mock/core.test.ts` | 通过，3 files / 40 tests。 |
 | `npm test` in `/Users/coso/Documents/dev/ai/limecloud/content-factory-app` | 通过，39 tests。 |

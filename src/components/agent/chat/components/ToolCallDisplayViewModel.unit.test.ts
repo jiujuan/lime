@@ -247,7 +247,7 @@ describe("ToolCallDisplayViewModel", () => {
       baseToolCall({
         id: "search-2",
         name: "WebSearch",
-        arguments: JSON.stringify({ query: "Tauri" }),
+        arguments: JSON.stringify({ query: "Electron" }),
       }),
       baseToolCall({
         id: "bash-1",

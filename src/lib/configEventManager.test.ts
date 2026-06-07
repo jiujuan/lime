@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@/lib/desktop-host/event";
 import {
   ConfigEventManager,
   type ConfigEventManagerDependencies,
@@ -7,22 +7,22 @@ import {
 
 describe("configEventManager", () => {
   let safeListen: ReturnType<typeof vi.fn>;
-  let hasTauriInvokeCapability: ReturnType<typeof vi.fn>;
+  let hasDesktopHostInvokeCapability: ReturnType<typeof vi.fn>;
   let configEventManager: ConfigEventManager;
 
   beforeEach(() => {
     safeListen = vi.fn(async () => vi.fn());
-    hasTauriInvokeCapability = vi.fn(() => true);
+    hasDesktopHostInvokeCapability = vi.fn(() => true);
     configEventManager = new ConfigEventManager({
       safeListen:
         safeListen as unknown as ConfigEventManagerDependencies["safeListen"],
-      hasTauriInvokeCapability:
-        hasTauriInvokeCapability as unknown as ConfigEventManagerDependencies["hasTauriInvokeCapability"],
+      hasDesktopHostInvokeCapability:
+        hasDesktopHostInvokeCapability as unknown as ConfigEventManagerDependencies["hasDesktopHostInvokeCapability"],
     });
   });
 
   it("浏览器开发模式下不应占用 config-changed 事件桥连接", async () => {
-    hasTauriInvokeCapability.mockReturnValue(false);
+    hasDesktopHostInvokeCapability.mockReturnValue(false);
 
     await configEventManager.subscribe();
 

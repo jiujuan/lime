@@ -46,6 +46,10 @@ describe("sidebarNav", () => {
     expect(resolveEnabledSidebarNavItems(["skills", "resources"])).toEqual([]);
   });
 
+  it("旧 schema 中的 companion 不应被当作显式开启", () => {
+    expect(resolveEnabledSidebarNavItems(["companion"], 2)).toEqual([]);
+  });
+
   it("Agent App Lab 只在实验开关开启时进入左侧栏", () => {
     expect(
       buildMainSidebarNavItems({ labEnabled: false }).map((item) => item.id),

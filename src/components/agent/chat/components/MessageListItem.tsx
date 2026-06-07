@@ -189,6 +189,7 @@ export function MessageListItem({
     imageWorkbenchRendererState,
     installedSkillMessageLabel,
     isConversationTailAssistant,
+    isCurrentInteractiveAssistantMessage,
     isUserCommandMessage,
     knowledgeArtifactSource,
     messageCanvasShortcutPath,
@@ -399,6 +400,9 @@ export function MessageListItem({
                   historicalAssistantPreviewContent
                 }
                 imageWorkbenchRendererState={imageWorkbenchRendererState}
+                isCurrentInteractiveAssistantMessage={
+                  isCurrentInteractiveAssistantMessage
+                }
                 message={msg}
                 sessionId={sessionId}
                 messageCanvasShortcutPath={messageCanvasShortcutPath}

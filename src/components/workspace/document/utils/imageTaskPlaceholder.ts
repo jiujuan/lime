@@ -219,6 +219,19 @@ export function isDocumentImageTaskPlaceholderSrc(
   return parseDocumentImageTaskPlaceholderSrc(src) !== null;
 }
 
+export function markdownContainsDocumentImageTaskPlaceholder(
+  markdown?: string | null,
+): boolean {
+  const normalizedMarkdown = markdown?.trim();
+  if (!normalizedMarkdown) {
+    return false;
+  }
+  return (
+    normalizedMarkdown.includes(IMAGE_TASK_PLACEHOLDER_PREFIX) ||
+    normalizedMarkdown.includes(IMAGE_TASK_SLOT_MARKER_PREFIX)
+  );
+}
+
 export function upsertDocumentImageTaskPlaceholder(
   markdown: string,
   params: DocumentImageTaskPlaceholderDescriptor,

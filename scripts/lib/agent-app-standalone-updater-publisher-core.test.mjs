@@ -16,18 +16,17 @@ function releaseInput(outputDir) {
     version: "0.8.0",
     channel: "stable",
     endpoint: "https://updates.limecloud.example/agent-apps",
-    pubkey: "lime-agent-app-updater-pubkey",
     outputDir,
-    previousArtifactRef: "sha256:previous-pkg",
+    previousArtifactRef: "sha256:previous-dmg",
     previousManifestRef:
       "https://updates.limecloud.example/agent-apps/content-factory-app/stable/previous.json",
     artifacts: [
       {
-        kind: "pkg",
+        kind: "dmg",
         platform: "macos",
-        path: path.join(outputDir, "Content Factory.signed.pkg"),
-        contentHash: "sha256:pkg",
-        updaterSignature: "tauri-signature:pkg",
+        path: path.join(outputDir, "Content Factory.dmg"),
+        contentHash: "sha256:dmg",
+        signed: true,
         notarized: true,
         size: 1234,
       },
@@ -64,13 +63,13 @@ describe("agent-app standalone updater publisher", () => {
       ],
     });
     expect(plan.latest.artifacts[0]).toMatchObject({
-      contentHash: "sha256:pkg",
-      signature: "tauri-signature:pkg",
-      url: "https://updates.limecloud.example/agent-apps/content-factory-app/stable/0.8.0/Content%20Factory.signed.pkg",
+      contentHash: "sha256:dmg",
+      url: "https://updates.limecloud.example/agent-apps/content-factory-app/stable/0.8.0/Content%20Factory.dmg",
     });
+    expect(plan.latest.artifacts[0]).not.toHaveProperty("signature");
   });
 
-  it("缺 updater signature / endpoint / rollback ref 时 blocked", () => {
+  it("缺平台签名 / endpoint / rollback ref 时 blocked", () => {
     const plan = buildStandaloneUpdaterPublishPlan({
       appId: "content-factory-app",
       version: "0.8.0",
@@ -78,10 +77,10 @@ describe("agent-app standalone updater publisher", () => {
       outputDir: "/tmp/out",
       artifacts: [
         {
-          kind: "pkg",
+          kind: "dmg",
           platform: "macos",
-          path: "/tmp/out/Content Factory.signed.pkg",
-          contentHash: "sha256:pkg",
+          path: "/tmp/out/Content Factory.dmg",
+          contentHash: "sha256:dmg",
           notarized: true,
         },
       ],
@@ -93,8 +92,9 @@ describe("agent-app standalone updater publisher", () => {
       files: [],
       blockers: [
         expect.objectContaining({ code: "ENDPOINT_MISSING" }),
-        expect.objectContaining({ code: "UPDATER_PUBKEY_MISSING" }),
-        expect.objectContaining({ code: "ARTIFACT_UPDATER_SIGNATURE_MISSING" }),
+        expect.objectContaining({
+          code: "ARTIFACT_SIGNING_EVIDENCE_MISSING",
+        }),
         expect.objectContaining({ code: "ROLLBACK_REFERENCE_MISSING" }),
       ],
     });
@@ -123,9 +123,7 @@ describe("agent-app standalone updater publisher", () => {
       JSON.parse(fs.readFileSync(path.join(outputDir, "latest.json"), "utf8")),
     ).toMatchObject({
       appId: "content-factory-app",
-      artifacts: [
-        expect.objectContaining({ signature: "tauri-signature:pkg" }),
-      ],
+      artifacts: [expect.objectContaining({ contentHash: "sha256:dmg" })],
     });
   });
 
@@ -140,7 +138,7 @@ describe("agent-app standalone updater publisher", () => {
     const result = spawnSync(
       process.execPath,
       [
-        path.resolve("scripts/agent-app-standalone-updater-publisher.mjs"),
+        path.resolve("scripts/agent-app/standalone-updater-publisher.mjs"),
         "--release",
         releasePath,
         "--output-dir",

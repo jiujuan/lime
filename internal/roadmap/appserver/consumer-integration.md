@@ -26,13 +26,13 @@ content-studio / other apps
 
 ## 2. 为什么不是源码同步
 
-| 方案 | 判断 | 原因 |
-| --- | --- | --- |
-| 直接 copy Lime Rust 代码到独立 App | `dead` | 无法治理版本、修复、安全和 runtime facts，会快速分叉。 |
-| Git submodule 引入 Lime 源码 | `deprecated for app consumption` | 适合 pin 外部源码，不适合高频演进 runtime SDK；App 会被迫理解 Lime 内部 workspace。 |
-| Git subtree / vendor | `dead` | 更像低频 vendoring，会制造双向同步成本。 |
-| 独立 App 直接依赖 Lime Rust crate | `not recommended` | Electron App 不应链接内部 Rust workspace；跨平台构建和发布成本过高。 |
-| 版本化 TS client + sidecar binary | `current` | App 只依赖稳定协议和可校验二进制；RuntimeCore 仍由 Lime 维护。 |
+| 方案                               | 判断                             | 原因                                                                                |
+| ---------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------- |
+| 直接 copy Lime Rust 代码到独立 App | `dead`                           | 无法治理版本、修复、安全和 runtime facts，会快速分叉。                              |
+| Git submodule 引入 Lime 源码       | `deprecated for app consumption` | 适合 pin 外部源码，不适合高频演进 runtime SDK；App 会被迫理解 Lime 内部 workspace。 |
+| Git subtree / vendor               | `dead`                           | 更像低频 vendoring，会制造双向同步成本。                                            |
+| 独立 App 直接依赖 Lime Rust crate  | `not recommended`                | Electron App 不应链接内部 Rust workspace；跨平台构建和发布成本过高。                |
+| 版本化 TS client + sidecar binary  | `current`                        | App 只依赖稳定协议和可校验二进制；RuntimeCore 仍由 Lime 维护。                      |
 
 执行规则：
 
@@ -74,9 +74,9 @@ app-server-client
 7. 已提供 `npm run app-server:manifest`，可从本地 sidecar binary 生成 release manifest。
 8. 已提供 `AppServerConnection`，封装 `startSession / readSession / startTurn / cancelTurn`、request/response 等待、同批 notification 收集和异步 notification 读取。
 9. `agentSession/turn/start` 已支持 `queueIfBusy` 与 `skipPreSubmitResume`，独立 App 不需要回退到旧 `agent_runtime_*` 命令来表达排队策略。
-10. `agentSession/turn/start` 已支持 caller-supplied `turnId`，Rust protocol、TS client 和 Desktop adapter 均通过同一字段保持 turn id 稳定。
+10. `agentSession/turn/start` 已支持 caller-supplied `turnId`，Rust protocol、TS client 和 Desktop bridge 均通过同一字段保持 turn id 稳定。
 11. 当前 standalone `app-server` binary 仅支持 `mock` backend；它只能验证协议、client、打包和 sidecar lifecycle，不能完成真实 Agent turn。
-12. content-studio 生产集成不得依赖 Lime Desktop in-process Tauri adapter；真实 runtime 必须等待 host-agnostic backend sidecar mode。
+12. content-studio 生产集成不得依赖 Lime Desktop in-process legacy desktop facade；真实 runtime 必须等待 host-agnostic backend sidecar mode。
 13. `APP_SERVER_BIN` 只允许本地开发覆盖；生产必须从 manifest 选择 artifact、校验 sha256，并从 packaged resources 启动。`resolveSidecarFromReleaseManifest(...)` 生产调用应传 `allowEnvOverride: false`。
 14. P4 完成前，content-studio 只能把该路径视为 integration skeleton；完成标准是真实 sidecar Agent flow、事件投影、cancel/shutdown、stderr 日志、crash/backoff 均跑通。
 15. 尚未实现 release artifact 下载、schema 自动生成、重启 backoff 或生产级日志路由。
@@ -86,7 +86,7 @@ app-server-client
 
 1. Rust 源码。
 2. Aster 私有类型。
-3. Lime Desktop Tauri command。
+3. Lime Desktop legacy desktop command facade。
 4. App 业务 UI。
 
 ### 3.2 Sidecar binary
@@ -135,7 +135,7 @@ app-server.exe
 
 ## 4. content-studio 集成形态
 
-content-studio 当前是 Electron + electron-builder。推荐接入点：
+content-studio 当前是 Electron 桌面 App。推荐接入点：
 
 ```text
 content-studio
@@ -149,7 +149,7 @@ content-studio
 2026-06-05 只读审阅 content-studio 仓库后的具体接入点：
 
 1. `package.json`：新增 `app-server-client` npm 依赖，不拉 Lime Rust workspace。
-2. `electron-builder.yml`：通过 `extraResources` 打包 `app-server.release.json` 与 `app-server/<platform>/app-server(.exe)`；可执行文件不能放进 asar。
+2. 桌面打包配置：通过 Electron Forge `packagerConfig.extraResource` 打包 `app-server.release.json` 与 `app-server/<platform>/app-server(.exe)`；可执行文件不能放进 asar。
 3. `src/main/services/appServerSidecarService.ts`：封装 `startPackagedAppServerSidecar`、restart policy、stderr logging、`AppServerAgentEventRouter` 和 `stop()`。
 4. `src/main/ipc.ts`：集中注册 `appServer:*` IPC，例如 status、capability list、start session、start turn、cancel turn。
 5. `src/preload/index.ts`：只暴露 preload bridge；renderer 不直接 import `app-server-client`。
@@ -193,7 +193,8 @@ const { connection, sidecar } = await connectAppServerSidecar(resolved.config, {
     version: app.getVersion(),
   },
   capabilities: {
-    eventMethods: ["agentSession/event"],
+    experimentalApi: false,
+    optOutNotificationMethods: [],
   },
 });
 
@@ -226,7 +227,7 @@ const event = await connection.nextNotification();
 
 ## 5. 打包方式
 
-content-studio 生产包应通过 `electron-builder` 的 `extraResources` 带上 sidecar。
+content-studio 生产包应通过 Electron Forge 的 `packagerConfig.extraResource` 带上 sidecar。
 
 建议路径：
 
@@ -240,12 +241,12 @@ resources/
     manifest.json
 ```
 
-`electron-builder.yml` 后续示意：
+`forge.config.mjs` 后续示意：
 
-```yaml
-extraResources:
-  - from: resources/app-server
-    to: app-server
+```js
+packagerConfig: {
+  extraResource: ["resources/app-server"],
+}
 ```
 
 运行时解析顺序：
@@ -267,7 +268,7 @@ extraResources:
 推荐：
 
 ```bash
-APP_SERVER_BIN=/Users/coso/Documents/dev/ai/aiclientproxy/lime/src-tauri/target/debug/app-server
+APP_SERVER_BIN=/Users/coso/Documents/dev/ai/aiclientproxy/lime/lime-rs/target/debug/app-server
 ```
 
 TS client 本地调试可以用：
@@ -297,7 +298,7 @@ flowchart LR
     Schema --> Manifest["Publish manifest + sha256"]
     Manifest --> AppCI["content-studio CI"]
     AppCI --> Verify["Download / verify artifact"]
-    Verify --> Bundle["electron-builder extraResources"]
+    Verify --> Bundle["Electron Forge extraResource"]
 ```
 
 content-studio CI 必须：
@@ -311,11 +312,11 @@ content-studio CI 必须：
 Lime 当前已提供本地 smoke 入口：
 
 ```bash
-cargo build --manifest-path "src-tauri/Cargo.toml" -p app-server
+cargo build --manifest-path "lime-rs/Cargo.toml" -p app-server
 npm --prefix "packages/app-server-client" test
 npm run smoke:app-server-stdio
 npm run app-server:manifest:test
-npm run app-server:manifest -- --binary "src-tauri/target/debug/app-server" --url "https://example/app-server-darwin-arm64.tar.gz" --platform "darwin-arm64" --out "/tmp/app-server-manifest.json"
+npm run app-server:manifest -- --binary "lime-rs/target/debug/app-server" --url "https://example/app-server-darwin-arm64.tar.gz" --platform "darwin-arm64" --out "/tmp/app-server-manifest.json"
 ```
 
 该 smoke 使用 `app-server-client` 启动 `app-server --stdio`，验证 `initialize -> initialized -> agentSession/start -> agentSession/turn/start -> agentSession/event`。独立 App 后续应复用同一 client 能力，但把 binary path 解析替换为自己的 packaged resources。
@@ -332,7 +333,8 @@ client 和 server 通过 `initialize` 握手判断兼容：
   },
   "capabilities": {
     "requiredProtocol": "appserver.v0",
-    "eventMethods": ["agentSession/event"]
+    "experimentalApi": false,
+    "optOutNotificationMethods": []
   }
 }
 ```
@@ -354,21 +356,21 @@ server 返回：
 1. patch version 可以自动升级。
 2. minor version 必须通过 capability flags。
 3. major / protocol mismatch 必须阻止启动。
-4. experimental method 必须显式 opt-in。
+4. experimental method 必须通过 `experimentalApi` 显式 opt-in。
 5. TS client 的 request builder 必须跟 Rust protocol fixture 对齐，至少覆盖 `sessionId / threadId / turnId / runtimeOptions / queueIfBusy / skipPreSubmitResume`。
 
 ## 9. 独立库边界
 
 应该独立管理的是 client package，不是 runtime 源码。
 
-| 代码 | 位置 | 分发 |
-| --- | --- | --- |
-| RuntimeCore | Lime Rust workspace | 不直接给 App import。 |
-| ExecutionBackend / AsterBackend | Lime Rust workspace | 不直接给 App import。 |
-| app-server-protocol Rust DTO | Lime Rust workspace | 生成 schema / TS types。 |
-| `app-server-client` | Lime 发布的 npm package | 独立 App 依赖。 |
-| `app-server` binary | Lime release artifact | 独立 App 打包。 |
-| App UI projection | 各 App repo | 自己实现。 |
+| 代码                            | 位置                    | 分发                     |
+| ------------------------------- | ----------------------- | ------------------------ |
+| RuntimeCore                     | Lime Rust workspace     | 不直接给 App import。    |
+| ExecutionBackend / AsterBackend | Lime Rust workspace     | 不直接给 App import。    |
+| app-server-protocol Rust DTO    | Lime Rust workspace     | 生成 schema / TS types。 |
+| `app-server-client`             | Lime 发布的 npm package | 独立 App 依赖。          |
+| `app-server` binary             | Lime release artifact   | 独立 App 打包。          |
+| App UI projection               | 各 App repo             | 自己实现。               |
 
 ## 10. 何时考虑 monorepo
 
@@ -389,8 +391,8 @@ server 返回：
 
 1. Cargo workspace 官方文档：适合在 Lime 内部统一管理 Rust packages。
    https://doc.rust-lang.org/cargo/reference/workspaces.html
-2. electron-builder application contents：`extraResources` 适合打包 app 运行期资源和 sidecar。
-   https://www.electron.build/docs/contents/
+2. Electron Forge makers / packager 配置适合统一桌面 App 打包、installer 与 sidecar resources。
+   https://www.electronforge.io/configuration
 3. Git submodule 官方文档：submodule 是源码嵌入 / pin commit 机制，不应作为高频 runtime SDK 主分发边界。
    https://git-scm.com/docs/git-submodule
 4. npm workspaces 官方文档：适合 TS client 本地开发和发布前联调。

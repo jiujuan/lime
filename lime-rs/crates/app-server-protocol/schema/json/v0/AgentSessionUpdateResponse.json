@@ -1,0 +1,80 @@
+{
+  "$defs": {
+    "AgentSessionOverview": {
+      "properties": {
+        "archivedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "executionStrategy": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "messagesCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "workingDir": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "createdAt",
+        "messagesCount",
+        "model",
+        "sessionId",
+        "updatedAt"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "session": {
+      "$ref": "#/$defs/AgentSessionOverview"
+    }
+  },
+  "required": [
+    "session"
+  ],
+  "title": "AgentSessionUpdateResponse",
+  "type": "object"
+}

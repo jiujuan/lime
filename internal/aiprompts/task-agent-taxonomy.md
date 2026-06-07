@@ -82,8 +82,8 @@
 ### 1. `agent turn`
 
 - `internal/aiprompts/query-loop.md`
-- `src-tauri/src/commands/aster_agent_cmd/command_api/runtime_api.rs`
-- `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs`
+- `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs`
+- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
 
 固定规则：
 
@@ -93,9 +93,9 @@
 
 ### 2. `subagent turn`
 
-- `src-tauri/src/commands/aster_agent_cmd/subagent_runtime.rs`
-- `src-tauri/src/commands/aster_agent_cmd/command_api/subagent_api.rs`
-- `src-tauri/src/commands/aster_agent_cmd/tool_runtime/subagent_tools.rs`
+- `lime-rs/src/commands/aster_agent_cmd/subagent_runtime.rs`
+- `lime-rs/src/commands/aster_agent_cmd/command_api/subagent_api.rs`
+- `lime-rs/src/commands/aster_agent_cmd/tool_runtime/subagent_tools.rs`
 
 当前这里负责：
 
@@ -113,8 +113,8 @@
 
 ### 3. `automation job`
 
-- `src-tauri/src/services/automation_service/mod.rs`
-- `src-tauri/src/commands/automation_cmd.rs`
+- `lime-rs/src/services/automation_service/mod.rs`
+- `lime-rs/src/commands/automation_cmd.rs`
 - `src/lib/api/automation.ts`
 
 当前这里负责：
@@ -133,9 +133,9 @@
 
 ### 4. `execution run`
 
-- `src-tauri/src/services/execution_tracker_service.rs`
-- `src-tauri/crates/core/src/database/dao/agent_run.rs`
-- `src-tauri/src/commands/execution_run_cmd.rs`
+- `lime-rs/src/services/execution_tracker_service.rs`
+- `lime-rs/crates/core/src/database/dao/agent_run.rs`
+- `lime-rs/src/commands/execution_run_cmd.rs`
 
 当前这里负责：
 
@@ -152,8 +152,8 @@
 
 ### 5. `scheduler tick`
 
-- `src-tauri/src/app/scheduler_service.rs`
-- `src-tauri/crates/scheduler/*`
+- `lime-rs/src/app/scheduler_service.rs`
+- `lime-rs/crates/scheduler/*`
 - `internal/develop/scheduler-task-governance-p1.md`
 
 当前这里负责：
@@ -174,9 +174,9 @@
 
 - `internal/aiprompts/task-agent-taxonomy.md`
 - `internal/aiprompts/query-loop.md`
-- `src-tauri/src/commands/aster_agent_cmd/subagent_runtime.rs`
-- `src-tauri/src/services/automation_service/*`
-- `src-tauri/src/services/execution_tracker_service.rs`
+- `lime-rs/src/commands/aster_agent_cmd/subagent_runtime.rs`
+- `lime-rs/src/services/automation_service/*`
+- `lime-rs/src/services/execution_tracker_service.rs`
 - `agent_runs`
 - `automation_jobs`
 
@@ -189,8 +189,8 @@
 
 ### `compat`
 
-- `src-tauri/src/app/scheduler_service.rs`
-- `src-tauri/crates/scheduler/*`
+- `lime-rs/src/app/scheduler_service.rs`
+- `lime-rs/crates/scheduler/*`
 - `scheduled_tasks`
 - `internal/develop/scheduler-task-governance-p1.md`
 

@@ -54,7 +54,7 @@ vi.mock(
   }),
 );
 
-vi.mock("@tauri-apps/plugin-dialog", () => ({
+vi.mock("@/lib/desktop-host/plugin-dialog", () => ({
   open: vi.fn(async () => null),
 }));
 
@@ -300,7 +300,7 @@ describe("CrashRecoveryPanel", () => {
     expect(text).toContain("Force Resource Refresh");
     expect(text).toContain("Retry Only");
     expect(text).toContain("A frontend module resource failed to load.");
-    expect(text).toContain("node_modules/.vite-tauri");
+    expect(text).toContain("node_modules/.vite-electron");
     expect(text).not.toContain("强制刷新资源");
     expect(text).not.toContain("errors.crashRecovery");
 

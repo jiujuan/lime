@@ -21,8 +21,8 @@ MCP (Model Context Protocol) 服务器管理组件集合。
 ## 依赖关系
 
 - Hooks: `useMcp`（运行时状态）、`useMcpServers`（配置管理）
-- API: `src/lib/api/mcp.ts`（Tauri 命令封装）
-- 后端: `src-tauri/src/commands/mcp_cmd.rs`、`src-tauri/src/mcp/`
+- API: `src/lib/api/mcp.ts`（Desktop Host / App Server 网关封装）
+- 后端: `lime-rs/src/commands/mcp_cmd.rs`、`lime-rs/src/mcp/`
 
 ## 更新提醒
 

@@ -1,7 +1,8 @@
+import { AppServerClient } from "@/lib/api/appServer";
+import { projectAppServerEvidenceExportToRuntimeEvidencePack } from "./appServerEvidenceExportProjection";
 import { AGENT_RUNTIME_COMMANDS } from "./commandManifest.generated";
 import {
   normalizeAnalysisHandoff,
-  normalizeEvidencePack,
   normalizeHandoffBundle,
   normalizeReplayCase,
   normalizeReviewDecisionTemplate,
@@ -19,11 +20,18 @@ import type {
   AgentRuntimeSaveReviewDecisionRequest,
 } from "./types";
 
+export type AgentRuntimeEvidenceExportAppServerClient = Pick<
+  AppServerClient,
+  "exportEvidence"
+>;
+
 export interface AgentRuntimeExportClientDeps {
   invokeCommand?: AgentRuntimeCommandInvoke;
+  appServerClient?: AgentRuntimeEvidenceExportAppServerClient;
 }
 
 export function createExportClient({
+  appServerClient = new AppServerClient(),
   invokeCommand = invokeAgentRuntimeCommand,
 }: AgentRuntimeExportClientDeps = {}) {
   async function exportAgentRuntimeHandoffBundle(
@@ -69,11 +77,18 @@ export function createExportClient({
   async function exportAgentRuntimeEvidencePack(
     sessionId: string,
   ): Promise<AgentRuntimeEvidencePack> {
-    return normalizeEvidencePack(
-      await invokeCommand(AGENT_RUNTIME_COMMANDS.exportEvidencePack, {
-        sessionId,
-      }),
-    );
+    const normalizedSessionId = sessionId.trim();
+    if (!normalizedSessionId) {
+      throw new Error("sessionId is required to export App Server evidence");
+    }
+
+    const response = await appServerClient.exportEvidence({
+      sessionId: normalizedSessionId,
+      includeEvents: true,
+      includeArtifacts: true,
+      includeEvidencePack: true,
+    });
+    return projectAppServerEvidenceExportToRuntimeEvidencePack(response.result);
   }
 
   async function exportAgentRuntimeReplayCase(

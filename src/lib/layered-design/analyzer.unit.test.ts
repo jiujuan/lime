@@ -38,7 +38,7 @@ afterEach(() => {
 });
 
 describe("LayeredDesign structured analyzer pure adapter", () => {
-  it("native OCR provider 应把 Tauri 命令输出映射为 analyzer text blocks", async () => {
+  it("native OCR provider 应把 Desktop Host 命令输出映射为 analyzer text blocks", async () => {
     const recognizeText = vi.fn(async () => ({
       supported: true,
       engine: "mock-native-ocr",
@@ -319,14 +319,14 @@ describe("LayeredDesign structured analyzer pure adapter", () => {
     });
   });
 
-  it("native structured analyzer provider 应代理 Tauri analyzer 命令", async () => {
+  it("native structured analyzer provider 应代理 Desktop Host analyzer 命令", async () => {
     analyzeLayeredDesignFlatImageNativeMock.mockResolvedValueOnce({
       supported: true,
       engine: "native_heuristic_analyzer",
       result: {
         analyzer: {
           kind: "local_heuristic",
-          label: "Tauri native heuristic analyzer",
+          label: "Desktop Host native heuristic analyzer",
         },
         generatedAt: CREATED_AT,
         candidates: [
@@ -371,7 +371,7 @@ describe("LayeredDesign structured analyzer pure adapter", () => {
       }),
     ).resolves.toMatchObject({
       analyzer: {
-        label: "Tauri native heuristic analyzer",
+        label: "Desktop Host native heuristic analyzer",
       },
       candidates: [
         {

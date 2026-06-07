@@ -6,7 +6,7 @@ import { useSkillPackageOpenRequests } from "./useSkillPackageOpenRequests";
 const mocks = vi.hoisted(() => ({
   safeListen: vi.fn(),
   takePendingSkillPackageOpenRequests: vi.fn(),
-  hasTauriInvokeCapability: vi.fn(),
+  hasDesktopHostInvokeCapability: vi.fn(),
 }));
 
 vi.mock("@/lib/dev-bridge", () => ({
@@ -21,8 +21,8 @@ vi.mock("@/lib/api/skills", () => ({
   },
 }));
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriInvokeCapability: () => mocks.hasTauriInvokeCapability(),
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostInvokeCapability: () => mocks.hasDesktopHostInvokeCapability(),
 }));
 
 const mountedRoots: Array<{ container: HTMLDivElement; root: Root }> = [];
@@ -62,8 +62,8 @@ describe("useSkillPackageOpenRequests", () => {
     mocks.safeListen.mockResolvedValue(vi.fn());
     mocks.takePendingSkillPackageOpenRequests.mockReset();
     mocks.takePendingSkillPackageOpenRequests.mockResolvedValue([]);
-    mocks.hasTauriInvokeCapability.mockReset();
-    mocks.hasTauriInvokeCapability.mockReturnValue(true);
+    mocks.hasDesktopHostInvokeCapability.mockReset();
+    mocks.hasDesktopHostInvokeCapability.mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -143,8 +143,8 @@ describe("useSkillPackageOpenRequests", () => {
     );
   });
 
-  it("非 Tauri 运行时不应注册文件打开监听", async () => {
-    mocks.hasTauriInvokeCapability.mockReturnValue(false);
+  it("非 Desktop Host 运行时不应注册文件打开监听", async () => {
+    mocks.hasDesktopHostInvokeCapability.mockReturnValue(false);
     await renderHookProbe();
 
     expect(mocks.safeListen).not.toHaveBeenCalled();

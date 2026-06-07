@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { open as openExternal } from "@tauri-apps/plugin-shell";
+import { open as openExternal } from "@/lib/desktop-host/plugin-shell";
 import { toast } from "sonner";
 import {
   summarizeAgentUiProjectionEvents,

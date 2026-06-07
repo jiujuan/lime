@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockLogAgentDebug, mockSafeInvoke } = vi.hoisted(() => ({
+const {
+  mockIsElectronHostCommandAvailable,
+  mockLogAgentDebug,
+  mockSafeListen,
+  mockSafeInvoke,
+} = vi.hoisted(() => ({
+  mockIsElectronHostCommandAvailable: vi.fn(),
   mockLogAgentDebug: vi.fn(),
+  mockSafeListen: vi.fn(),
   mockSafeInvoke: vi.fn(),
 }));
 
@@ -11,8 +18,22 @@ vi.mock("@/lib/agentDebug", () => ({
 
 vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: mockSafeInvoke,
+  safeListen: mockSafeListen,
 }));
 
+vi.mock("@/lib/electron-host", () => ({
+  isElectronHostCommandAvailable: mockIsElectronHostCommandAvailable,
+}));
+
+import {
+  APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
+  APP_SERVER_METHOD_AGENT_SESSION_READ,
+  APP_SERVER_METHOD_AGENT_SESSION_START,
+  APP_SERVER_METHOD_AGENT_SESSION_UPDATE,
+  APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
+  APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+  APP_SERVER_METHOD_EVIDENCE_EXPORT,
+} from "./appServer";
 import {
   exportAgentRuntimeAnalysisHandoff,
   closeAgentRuntimeSubagent,
@@ -44,13 +65,82 @@ import {
   waitAgentRuntimeSubagents,
 } from "./agentRuntime";
 
+function line(value: unknown): string {
+  return `${JSON.stringify(value)}\n`;
+}
+
+const appServerResponseQueue: unknown[] = [];
+
+function mockAppServerResponse(result: unknown): void {
+  appServerResponseQueue.push(result);
+}
+
+function installAppServerMock(): void {
+  mockSafeInvoke.mockImplementation(async (command, args) => {
+    if (command === "app_server_drain_events") {
+      return { lines: [] };
+    }
+    if (command !== "app_server_handle_json_lines") {
+      return undefined;
+    }
+
+    const result = appServerResponseQueue.shift();
+    const requestLine = args?.request?.lines?.[0];
+    const request =
+      typeof requestLine === "string"
+        ? (JSON.parse(requestLine) as { id: number | string })
+        : { id: 1 };
+
+    return {
+      lines: [
+        line({
+          id: request.id,
+          result,
+        }),
+      ],
+    };
+  });
+}
+
+function expectAppServerRequest(
+  callIndex: number,
+  method: string,
+  params: Record<string, unknown>,
+): void {
+  const call = mockSafeInvoke.mock.calls.filter(
+    (safeInvokeCall) => safeInvokeCall[0] === "app_server_handle_json_lines",
+  )[callIndex - 1];
+  expect(call?.[0]).toBe("app_server_handle_json_lines");
+  const requestLine = call?.[1]?.request?.lines?.[0];
+  expect(typeof requestLine).toBe("string");
+  const request = JSON.parse(requestLine as string);
+  expect(request).toMatchObject({
+    method,
+    params,
+  });
+}
+
 describe("Agent API 治理护栏", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    appServerResponseQueue.length = 0;
+    installAppServerMock();
+    mockIsElectronHostCommandAvailable.mockReturnValue(true);
+    mockSafeListen.mockResolvedValue(vi.fn());
   });
 
-  it("createAgentRuntimeSession 应走统一 runtime create 命令", async () => {
-    mockSafeInvoke.mockResolvedValueOnce("session-created");
+  it("createAgentRuntimeSession 应经 Electron IPC 调 App Server session/start", async () => {
+    mockAppServerResponse({
+      session: {
+        sessionId: "session-created",
+        threadId: "thread-created",
+        appId: "desktop",
+        workspaceId: "workspace-2",
+        status: "idle",
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:00.000Z",
+      },
+    });
 
     await expect(
       createAgentRuntimeSession("workspace-2", "新会话", "react", {
@@ -58,15 +148,20 @@ describe("Agent API 治理护栏", () => {
       }),
     ).resolves.toBe("session-created");
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_create_session",
-      {
-        workspaceId: "workspace-2",
-        name: "新会话",
-        executionStrategy: "react",
-        runStartHooks: false,
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_START, {
+      appId: "desktop",
+      workspaceId: "workspace-2",
+      businessObjectRef: {
+        kind: "agent.session",
+        id: expect.stringMatching(/^agent-session:workspace-2:\d+$/),
+        title: "新会话",
+        metadata: {
+          title: "新会话",
+          executionStrategy: "react",
+          runStartHooks: false,
+        },
       },
-    );
+    });
   });
 
   it("getAsterAgentStatus 应返回现役状态结构", async () => {
@@ -85,8 +180,15 @@ describe("Agent API 治理护栏", () => {
     });
   });
 
-  it("submitAgentRuntimeTurn 应走统一 runtime submit 命令", async () => {
-    mockSafeInvoke.mockResolvedValueOnce(undefined);
+  it("submitAgentRuntimeTurn 应经 Electron IPC 调 App Server turn/start", async () => {
+    mockAppServerResponse({
+      turn: {
+        turnId: "turn-runtime",
+        sessionId: "session-runtime",
+        threadId: "thread-runtime",
+        status: "accepted",
+      },
+    });
 
     await submitAgentRuntimeTurn({
       message: "runtime hello",
@@ -106,29 +208,47 @@ describe("Agent API 治理护栏", () => {
       },
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith("agent_runtime_submit_turn", {
-      request: {
-        message: "runtime hello",
-        session_id: "session-runtime",
-        event_name: "event-runtime",
-        workspace_id: "workspace-runtime",
-        turn_config: {
-          execution_strategy: "react",
-          provider_config: {
-            provider_id: "provider-runtime",
-            provider_name: "Provider Runtime",
-            model_name: "model-runtime",
-          },
-          metadata: {
-            source: "hook-facade",
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_TURN_START, {
+      sessionId: "session-runtime",
+      input: {
+        text: "runtime hello",
+      },
+      runtimeOptions: {
+        stream: true,
+        eventName: "event-runtime",
+        metadata: {
+          source: "hook-facade",
+        },
+        hostOptions: {
+          asterChatRequest: {
+            message: "runtime hello",
+            session_id: "session-runtime",
+            event_name: "event-runtime",
+            workspace_id: "workspace-runtime",
+            execution_strategy: "react",
+            provider_config: {
+              provider_id: "provider-runtime",
+              provider_name: "Provider Runtime",
+              model_name: "model-runtime",
+            },
+            metadata: {
+              source: "hook-facade",
+            },
           },
         },
       },
     });
   });
 
-  it("submitAgentRuntimeTurn 应透传 web_search 与 queue_if_busy", async () => {
-    mockSafeInvoke.mockResolvedValueOnce(undefined);
+  it("submitAgentRuntimeTurn 应通过 App Server runtimeOptions 保留 web_search 与 queue_if_busy", async () => {
+    mockAppServerResponse({
+      turn: {
+        turnId: "queued-turn-1",
+        sessionId: "session-runtime-search",
+        threadId: "thread-runtime-search",
+        status: "queued",
+      },
+    });
 
     await submitAgentRuntimeTurn({
       message: "查一下今天的汇率",
@@ -144,25 +264,42 @@ describe("Agent API 治理护栏", () => {
       },
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith("agent_runtime_submit_turn", {
-      request: {
-        message: "查一下今天的汇率",
-        session_id: "session-runtime-search",
-        event_name: "event-runtime-search",
-        workspace_id: "workspace-runtime-search",
-        queue_if_busy: true,
-        queued_turn_id: "queued-turn-1",
-        skip_pre_submit_resume: true,
-        turn_config: {
-          execution_strategy: "react",
-          web_search: true,
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_TURN_START, {
+      sessionId: "session-runtime-search",
+      input: {
+        text: "查一下今天的汇率",
+      },
+      runtimeOptions: {
+        stream: true,
+        eventName: "event-runtime-search",
+        queuedTurnId: "queued-turn-1",
+        hostOptions: {
+          asterChatRequest: {
+            message: "查一下今天的汇率",
+            session_id: "session-runtime-search",
+            event_name: "event-runtime-search",
+            workspace_id: "workspace-runtime-search",
+            queue_if_busy: true,
+            queued_turn_id: "queued-turn-1",
+            execution_strategy: "react",
+            web_search: true,
+          },
         },
       },
+      queueIfBusy: true,
+      skipPreSubmitResume: true,
     });
   });
 
-  it("submitAgentRuntimeTurn 应支持透传 provider/model 偏好字段", async () => {
-    mockSafeInvoke.mockResolvedValueOnce(undefined);
+  it("submitAgentRuntimeTurn 应通过 App Server runtimeOptions 支持 provider/model 偏好字段", async () => {
+    mockAppServerResponse({
+      turn: {
+        turnId: "turn-runtime-preference",
+        sessionId: "session-runtime-preference",
+        threadId: "thread-runtime-preference",
+        status: "accepted",
+      },
+    });
 
     await submitAgentRuntimeTurn({
       message: "请继续",
@@ -178,44 +315,69 @@ describe("Agent API 治理护栏", () => {
       },
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith("agent_runtime_submit_turn", {
-      request: {
-        message: "请继续",
-        session_id: "session-runtime-preference",
-        event_name: "event-runtime-preference",
-        workspace_id: "workspace-runtime-preference",
-        turn_config: {
-          provider_preference: "custom-provider",
-          model_preference: "gpt-5.3-codex",
-          thinking_enabled: true,
-          approval_policy: "on-request",
-          sandbox_policy: "workspace-write",
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_TURN_START, {
+      sessionId: "session-runtime-preference",
+      input: {
+        text: "请继续",
+      },
+      runtimeOptions: {
+        stream: true,
+        eventName: "event-runtime-preference",
+        providerPreference: "custom-provider",
+        modelPreference: "gpt-5.3-codex",
+        hostOptions: {
+          asterChatRequest: {
+            message: "请继续",
+            session_id: "session-runtime-preference",
+            event_name: "event-runtime-preference",
+            workspace_id: "workspace-runtime-preference",
+            provider_preference: "custom-provider",
+            model_preference: "gpt-5.3-codex",
+            thinking_enabled: true,
+            approval_policy: "on-request",
+            sandbox_policy: "workspace-write",
+          },
         },
       },
     });
   });
 
   it("updateAgentRuntimeSession 应支持 recent_access_mode", async () => {
-    mockSafeInvoke.mockResolvedValueOnce(undefined);
+    mockAppServerResponse({
+      session: {
+        sessionId: "session-runtime-access",
+        threadId: "session-runtime-access",
+        title: "Session",
+        model: "gpt-5.4",
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:01.000Z",
+        messagesCount: 0,
+      },
+    });
 
     await updateAgentRuntimeSession({
       session_id: "session-runtime-access",
       recent_access_mode: "full-access",
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_update_session",
-      {
-        request: {
-          session_id: "session-runtime-access",
-          recent_access_mode: "full-access",
-        },
-      },
-    );
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_UPDATE, {
+      sessionId: "session-runtime-access",
+      recentAccessMode: "full-access",
+    });
   });
 
   it("updateAgentRuntimeSession 应透传 provider_selector", async () => {
-    mockSafeInvoke.mockResolvedValueOnce(undefined);
+    mockAppServerResponse({
+      session: {
+        sessionId: "session-runtime-provider",
+        threadId: "session-runtime-provider",
+        title: "Session",
+        model: "mimo-v2-pro",
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:01.000Z",
+        messagesCount: 0,
+      },
+    });
 
     await updateAgentRuntimeSession({
       session_id: "session-runtime-provider",
@@ -223,20 +385,15 @@ describe("Agent API 治理护栏", () => {
       model_name: "mimo-v2-pro",
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_update_session",
-      {
-        request: {
-          session_id: "session-runtime-provider",
-          provider_selector: "custom-cae6e762-fb45-4f71-878c-3106510ade78",
-          model_name: "mimo-v2-pro",
-        },
-      },
-    );
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_UPDATE, {
+      sessionId: "session-runtime-provider",
+      providerSelector: "custom-cae6e762-fb45-4f71-878c-3106510ade78",
+      modelName: "mimo-v2-pro",
+    });
   });
 
-  it("respondAgentRuntimeAction 应走统一 action 响应命令", async () => {
-    mockSafeInvoke.mockResolvedValueOnce(undefined);
+  it("respondAgentRuntimeAction 应经 Electron IPC 调 App Server action/respond", async () => {
+    mockAppServerResponse({});
 
     await respondAgentRuntimeAction({
       session_id: "session-runtime",
@@ -247,23 +404,18 @@ describe("Agent API 治理护栏", () => {
       user_data: { answer: "A" },
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_respond_action",
-      {
-        request: {
-          session_id: "session-runtime",
-          request_id: "req-runtime",
-          action_type: "ask_user",
-          confirmed: true,
-          response: '{"answer":"A"}',
-          user_data: { answer: "A" },
-        },
-      },
-    );
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND, {
+      sessionId: "session-runtime",
+      requestId: "req-runtime",
+      actionType: "ask_user",
+      confirmed: true,
+      response: '{"answer":"A"}',
+      userData: { answer: "A" },
+    });
   });
 
-  it("respondAgentRuntimeAction 应透传 event_name 以便立即恢复当前执行流", async () => {
-    mockSafeInvoke.mockResolvedValueOnce(undefined);
+  it("respondAgentRuntimeAction 应通过 App Server 透传 event_name 以便立即恢复当前执行流", async () => {
+    mockAppServerResponse({});
 
     await respondAgentRuntimeAction({
       session_id: "session-runtime",
@@ -275,24 +427,19 @@ describe("Agent API 治理护栏", () => {
       event_name: "aster_stream_session-runtime",
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_respond_action",
-      {
-        request: {
-          session_id: "session-runtime",
-          request_id: "req-runtime-resume",
-          action_type: "elicitation",
-          confirmed: true,
-          response: '{"answer":"继续"}',
-          user_data: { answer: "继续" },
-          event_name: "aster_stream_session-runtime",
-        },
-      },
-    );
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND, {
+      sessionId: "session-runtime",
+      requestId: "req-runtime-resume",
+      actionType: "elicitation",
+      confirmed: true,
+      response: '{"answer":"继续"}',
+      userData: { answer: "继续" },
+      eventName: "aster_stream_session-runtime",
+    });
   });
 
-  it("respondAgentRuntimeAction 应透传 action_scope 以便精确恢复 ask/elicitation", async () => {
-    mockSafeInvoke.mockResolvedValueOnce(undefined);
+  it("respondAgentRuntimeAction 应通过 App Server 透传 action_scope 以便精确恢复 ask/elicitation", async () => {
+    mockAppServerResponse({});
 
     await respondAgentRuntimeAction({
       session_id: "session-runtime",
@@ -308,24 +455,19 @@ describe("Agent API 治理护栏", () => {
       },
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_respond_action",
-      {
-        request: {
-          session_id: "session-runtime",
-          request_id: "req-runtime-scope",
-          action_type: "ask_user",
-          confirmed: true,
-          response: '{"answer":"自动执行"}',
-          user_data: { answer: "自动执行" },
-          action_scope: {
-            session_id: "session-runtime",
-            thread_id: "thread-runtime",
-            turn_id: "turn-runtime",
-          },
-        },
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND, {
+      sessionId: "session-runtime",
+      requestId: "req-runtime-scope",
+      actionType: "ask_user",
+      confirmed: true,
+      response: '{"answer":"自动执行"}',
+      userData: { answer: "自动执行" },
+      actionScope: {
+        sessionId: "session-runtime",
+        threadId: "thread-runtime",
+        turnId: "turn-runtime",
       },
-    );
+    });
   });
 
   it("resumeAgentRuntimeThread 应走统一 runtime resume 命令", async () => {
@@ -373,52 +515,47 @@ describe("Agent API 治理护栏", () => {
     );
   });
 
-  it("getAgentRuntimeThreadRead 应走独立 thread_read 命令并归一化 queued_turns", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
-      thread_id: "thread-runtime",
-      status: "waiting_request",
-      diagnostics: {
-        latest_turn_status: "aborted",
-        warning_count: 2,
-        context_compaction_count: 1,
-        failed_tool_call_count: 1,
-        failed_command_count: 0,
-        pending_request_count: 0,
-        primary_blocking_kind: "context_risk",
-        latest_warning: {
-          item_id: "warning-1",
-          code: "context_compaction_accuracy",
-          message: "长对话和多次上下文压缩会降低模型准确性",
-          updated_at: "2026-03-23T10:00:00Z",
-        },
+  it("getAgentRuntimeThreadRead 应经 Electron IPC 调 App Server session/read 并归一化 queued_turns", async () => {
+    mockAppServerResponse({
+      session: {
+        sessionId: "session-runtime",
+        threadId: "thread-runtime",
+        appId: "agent-chat",
+        status: "waitingAction",
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:03.000Z",
       },
-      queued_turns: [
+      turns: [
         {
-          queued_turn_id: "queued-turn-1",
-          message_preview: "继续执行",
-          created_at: 1711184400,
-          position: 1,
+          turnId: "turn-runtime",
+          sessionId: "session-runtime",
+          threadId: "thread-runtime",
+          status: "running",
         },
       ],
+      detail: {
+        thread_read: {
+          thread_id: "thread-runtime",
+          status: "blocked",
+          queued_turns: [
+            {
+              queued_turn_id: "queued-turn-1",
+              message_preview: "继续执行",
+              created_at: 1711184400,
+              position: 1,
+            },
+          ],
+        },
+      },
     });
 
     await expect(
       getAgentRuntimeThreadRead("session-runtime"),
     ).resolves.toMatchObject({
       thread_id: "thread-runtime",
-      status: "waiting_request",
-      diagnostics: {
-        latest_turn_status: "aborted",
-        warning_count: 2,
-        context_compaction_count: 1,
-        failed_tool_call_count: 1,
-        failed_command_count: 0,
-        pending_request_count: 0,
-        primary_blocking_kind: "context_risk",
-        latest_warning: {
-          code: "context_compaction_accuracy",
-        },
-      },
+      status: "blocked",
+      profile_status: "blocked",
+      active_turn_id: "turn-runtime",
       queued_turns: [
         expect.objectContaining({
           queued_turn_id: "queued-turn-1",
@@ -427,12 +564,9 @@ describe("Agent API 治理护栏", () => {
       ],
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_get_thread_read",
-      {
-        sessionId: "session-runtime",
-      },
-    );
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_READ, {
+      sessionId: "session-runtime",
+    });
   });
 
   it("exportAgentRuntimeReplayCase 应走统一 runtime replay case 命令", async () => {
@@ -494,8 +628,19 @@ describe("Agent API 治理护栏", () => {
     );
   });
 
-  it("interruptAgentRuntimeTurn 与 updateAgentRuntimeSession 应走统一 runtime 命令", async () => {
-    mockSafeInvoke.mockResolvedValueOnce(true).mockResolvedValueOnce(undefined);
+  it("interruptAgentRuntimeTurn 与 updateAgentRuntimeSession 应经 Electron IPC 调 App Server", async () => {
+    mockAppServerResponse({});
+    mockAppServerResponse({
+      session: {
+        sessionId: "session-runtime",
+        threadId: "session-runtime",
+        title: "新标题",
+        model: "gpt-5.4",
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:01.000Z",
+        messagesCount: 0,
+      },
+    });
 
     await interruptAgentRuntimeTurn({
       session_id: "session-runtime",
@@ -507,101 +652,102 @@ describe("Agent API 治理护栏", () => {
       execution_strategy: "react",
     });
 
-    expect(mockSafeInvoke).toHaveBeenNthCalledWith(
-      1,
-      "agent_runtime_interrupt_turn",
-      {
-        request: {
-          session_id: "session-runtime",
-          turn_id: "turn-1",
-        },
-      },
-    );
-    expect(mockSafeInvoke).toHaveBeenNthCalledWith(
-      2,
-      "agent_runtime_update_session",
-      {
-        request: {
-          session_id: "session-runtime",
-          name: "新标题",
-          execution_strategy: "react",
-        },
-      },
-    );
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL, {
+      sessionId: "session-runtime",
+      turnId: "turn-1",
+    });
+    expectAppServerRequest(2, APP_SERVER_METHOD_AGENT_SESSION_UPDATE, {
+      sessionId: "session-runtime",
+      title: "新标题",
+      executionStrategy: "react",
+    });
   });
 
   it("listAgentRuntimeSessions 应返回现役 runtime 会话列表", async () => {
-    mockSafeInvoke.mockResolvedValueOnce([
-      {
-        id: "session-runtime-1",
-        name: "Runtime Session",
-        model: "claude-sonnet-4-20250514",
-        created_at: 1710000000,
-        updated_at: 1710000123,
-        messages_count: 3,
-        execution_strategy: "react",
-        workspace_id: "workspace-1",
-        working_dir: "/tmp/workspace-1",
-      },
-    ]);
+    mockAppServerResponse({
+      sessions: [
+        {
+          sessionId: "session-runtime-1",
+          threadId: "thread-runtime-1",
+          title: "Runtime Session",
+          model: "claude-sonnet-4-20250514",
+          createdAt: "2024-03-09T16:00:00.000Z",
+          updatedAt: "2024-03-09T16:02:03.000Z",
+          messagesCount: 3,
+          executionStrategy: "react",
+          workspaceId: "workspace-1",
+          workingDir: "/tmp/workspace-1",
+        },
+      ],
+    });
 
     await expect(listAgentRuntimeSessions()).resolves.toEqual([
       {
         id: "session-runtime-1",
+        thread_id: "thread-runtime-1",
         name: "Runtime Session",
         model: "claude-sonnet-4-20250514",
-        created_at: 1710000000,
-        updated_at: 1710000123,
+        created_at: 1710000000000,
+        updated_at: 1710000123000,
         messages_count: 3,
         workspace_id: "workspace-1",
         working_dir: "/tmp/workspace-1",
         execution_strategy: "react",
       },
     ]);
-    expect(mockSafeInvoke).toHaveBeenCalledWith("agent_runtime_list_sessions");
+    expectAppServerRequest(1, "agentSession/list", {});
   });
 
   it("listAgentRuntimeSessions 应支持请求包含归档会话", async () => {
-    mockSafeInvoke.mockResolvedValueOnce([
-      {
-        id: "session-runtime-archived",
-        name: "Archived Runtime Session",
-        created_at: 1710000000,
-        updated_at: 1710000123,
-        archived_at: 1710000300,
-      },
-    ]);
+    mockAppServerResponse({
+      sessions: [
+        {
+          sessionId: "session-runtime-archived",
+          title: "Archived Runtime Session",
+          createdAt: "2024-03-09T16:00:00.000Z",
+          updatedAt: "2024-03-09T16:02:03.000Z",
+          archivedAt: "2024-03-09T16:05:00.000Z",
+          model: "gpt-5.4",
+          messagesCount: 0,
+        },
+      ],
+    });
 
     await expect(
       listAgentRuntimeSessions({ includeArchived: true }),
     ).resolves.toEqual([
       {
         id: "session-runtime-archived",
+        thread_id: "session-runtime-archived",
         name: "Archived Runtime Session",
-        created_at: 1710000000,
-        updated_at: 1710000123,
-        archived_at: 1710000300,
+        model: "gpt-5.4",
+        created_at: 1710000000000,
+        updated_at: 1710000123000,
+        archived_at: 1710000300000,
+        messages_count: 0,
       },
     ]);
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith("agent_runtime_list_sessions", {
-      request: {
-        include_archived: true,
-      },
+    expectAppServerRequest(1, "agentSession/list", {
+      includeArchived: true,
     });
   });
 
   it("listAgentRuntimeSessions 应支持工作区限流与仅归档过滤", async () => {
-    mockSafeInvoke.mockResolvedValueOnce([
-      {
-        id: "session-runtime-archived",
-        name: "Archived Runtime Session",
-        created_at: 1710000000,
-        updated_at: 1710000123,
-        archived_at: 1710000300,
-        workspace_id: "workspace-1",
-      },
-    ]);
+    mockAppServerResponse({
+      sessions: [
+        {
+          sessionId: "session-runtime-archived",
+          title: "Archived Runtime Session",
+          createdAt: "2024-03-09T16:00:00.000Z",
+          updatedAt: "2024-03-09T16:02:03.000Z",
+          archivedAt: "2024-03-09T16:05:00.000Z",
+          workspaceId: "workspace-1",
+          model: "gpt-5.4",
+          messagesCount: 0,
+        },
+      ],
+    });
 
     await expect(
       listAgentRuntimeSessions({
@@ -612,117 +758,130 @@ describe("Agent API 治理护栏", () => {
     ).resolves.toEqual([
       {
         id: "session-runtime-archived",
+        thread_id: "session-runtime-archived",
         name: "Archived Runtime Session",
-        created_at: 1710000000,
-        updated_at: 1710000123,
-        archived_at: 1710000300,
+        model: "gpt-5.4",
+        created_at: 1710000000000,
+        updated_at: 1710000123000,
+        archived_at: 1710000300000,
         workspace_id: "workspace-1",
+        messages_count: 0,
       },
     ]);
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith("agent_runtime_list_sessions", {
-      request: {
-        archived_only: true,
-        workspace_id: "workspace-1",
-        limit: 12,
-      },
+    expectAppServerRequest(1, "agentSession/list", {
+      archivedOnly: true,
+      workspaceId: "workspace-1",
+      limit: 12,
     });
   });
 
   it("getAgentRuntimeSession 应返回现役 runtime 详情并归一 queued_turns", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
-      id: "session-runtime-2",
-      name: "Runtime Detail",
-      model: "gpt-5.4",
-      created_at: 1710001000,
-      updated_at: 1710002000,
-      workspace_id: "workspace-2",
-      working_dir: "/tmp/workspace-2",
-      execution_strategy: "react",
-      child_subagent_sessions: [
-        {
-          id: "subagent-session-1",
-          name: "Image #1",
-          created_at: 1710001200,
-          updated_at: 1710001800,
-          session_type: "sub_agent",
-          model: "gpt-5.4-mini",
+    mockAppServerResponse({
+      session: {
+        sessionId: "session-runtime-2",
+        threadId: "thread-runtime-2",
+        appId: "desktop",
+        workspaceId: "workspace-2",
+        status: "running",
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:02.000Z",
+      },
+      turns: [],
+      detail: {
+        id: "session-runtime-2",
+        name: "Runtime Detail",
+        model: "gpt-5.4",
+        created_at: 1710001000,
+        updated_at: 1710002000,
+        workspace_id: "workspace-2",
+        working_dir: "/tmp/workspace-2",
+        execution_strategy: "react",
+        child_subagent_sessions: [
+          {
+            id: "subagent-session-1",
+            name: "Image #1",
+            created_at: 1710001200,
+            updated_at: 1710001800,
+            session_type: "sub_agent",
+            model: "gpt-5.4-mini",
+            role_hint: "image_editor",
+            task_summary: "处理封面图优化",
+            origin_tool: "Agent",
+            runtime_status: "completed",
+          },
+        ],
+        subagent_parent_context: {
+          parent_session_id: "parent-session-1",
+          parent_session_name: "主线程会话",
           role_hint: "image_editor",
           task_summary: "处理封面图优化",
           origin_tool: "Agent",
-          runtime_status: "completed",
+          created_from_turn_id: "turn-2",
+          sibling_subagent_sessions: [
+            {
+              id: "subagent-session-2",
+              name: "Image #2",
+              created_at: 1710001250,
+              updated_at: 1710001850,
+              session_type: "sub_agent",
+              role_hint: "image_reviewer",
+              task_summary: "检查图片导出尺寸",
+              runtime_status: "running",
+            },
+          ],
         },
-      ],
-      subagent_parent_context: {
-        parent_session_id: "parent-session-1",
-        parent_session_name: "主线程会话",
-        role_hint: "image_editor",
-        task_summary: "处理封面图优化",
-        origin_tool: "Agent",
-        created_from_turn_id: "turn-2",
-        sibling_subagent_sessions: [
-          {
-            id: "subagent-session-2",
-            name: "Image #2",
-            created_at: 1710001250,
-            updated_at: 1710001850,
-            session_type: "sub_agent",
-            role_hint: "image_reviewer",
-            task_summary: "检查图片导出尺寸",
-            runtime_status: "running",
-          },
-        ],
-      },
-      queued_turns: [
-        {
-          queued_turn_id: "queued-1",
-          message_text: "排队中的任务",
-          message_preview: "排队中的任务",
-          created_at: 1710001500,
-          image_count: 0,
-          position: 2,
-        },
-      ],
-      thread_read: {
-        thread_id: "thread-runtime-2",
-        status: "running",
         queued_turns: [
           {
-            queued_turn_id: "queued-2",
-            message_text: "线程读模型中的排队任务",
-            message_preview: "线程读模型中的排队任务",
-            created_at: 1710001510,
+            queued_turn_id: "queued-1",
+            message_text: "排队中的任务",
+            message_preview: "排队中的任务",
+            created_at: 1710001500,
             image_count: 0,
-            position: 1,
+            position: 2,
+          },
+        ],
+        thread_read: {
+          thread_id: "thread-runtime-2",
+          status: "running",
+          queued_turns: [
+            {
+              queued_turn_id: "queued-2",
+              message_text: "线程读模型中的排队任务",
+              message_preview: "线程读模型中的排队任务",
+              created_at: 1710001510,
+              image_count: 0,
+              position: 1,
+            },
+          ],
+        },
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "hello" }],
+            timestamp: 1710001000,
+          },
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "world" }],
+            timestamp: 1710002000,
+          },
+        ],
+        items: [
+          {
+            id: "turn-summary-1",
+            thread_id: "thread-runtime-2",
+            turn_id: "turn-runtime-2",
+            sequence: 1,
+            status: "completed",
+            started_at: "2026-03-29T10:00:00Z",
+            completed_at: "2026-03-29T10:00:02Z",
+            updated_at: "2026-03-29T10:00:02Z",
+            type: "turn_summary",
+            text: "已决定：直接回答优先\n当前请求无需默认升级为搜索或任务。",
           },
         ],
       },
-      messages: [
-        {
-          role: "user",
-          content: [{ type: "text", text: "hello" }],
-          timestamp: 1710001000,
-        },
-        {
-          role: "assistant",
-          content: [{ type: "text", text: "world" }],
-          timestamp: 1710002000,
-        },
-      ],
-      items: [
-        {
-          id: "turn-summary-1",
-          thread_id: "thread-runtime-2",
-          turn_id: "turn-runtime-2",
-          sequence: 1,
-          status: "completed",
-          started_at: "2026-03-29T10:00:00Z",
-          completed_at: "2026-03-29T10:00:02Z",
-          updated_at: "2026-03-29T10:00:02Z",
-          type: "turn_summary",
-          text: "已决定：直接回答优先\n当前请求无需默认升级为搜索或任务。",
-        },
-      ],
     });
 
     await expect(getAgentRuntimeSession("session-runtime-2")).resolves.toEqual({
@@ -762,6 +921,7 @@ describe("Agent API 治理护栏", () => {
             created_at: 1710001250,
             updated_at: 1710001850,
             session_type: "sub_agent",
+            origin_tool: undefined,
             role_hint: "image_reviewer",
             task_summary: "检查图片导出尺寸",
             runtime_status: "running",
@@ -818,16 +978,29 @@ describe("Agent API 治理护栏", () => {
           text: "直接回答优先\n当前请求无需默认升级为搜索或任务。",
         },
       ],
+      todo_items: [],
+      turns: [],
     });
-    expect(mockSafeInvoke).toHaveBeenCalledWith("agent_runtime_get_session", {
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_READ, {
       sessionId: "session-runtime-2",
     });
   });
 
   it("getAgentRuntimeSession 应支持透传 resume hooks 标记", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
-      id: "session-runtime-resume",
-      messages: [],
+    mockAppServerResponse({
+      session: {
+        sessionId: "session-runtime-resume",
+        threadId: "thread-runtime-resume",
+        appId: "desktop",
+        status: "idle",
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:00.000Z",
+      },
+      turns: [],
+      detail: {
+        id: "session-runtime-resume",
+        messages: [],
+      },
     });
 
     await expect(
@@ -839,16 +1012,26 @@ describe("Agent API 治理护栏", () => {
       messages: [],
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith("agent_runtime_get_session", {
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_READ, {
       sessionId: "session-runtime-resume",
-      resumeSessionStartHooks: true,
     });
   });
 
   it("getAgentRuntimeSession 应支持透传历史 tail 限制", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
-      id: "session-runtime-tail",
-      messages: [],
+    mockAppServerResponse({
+      session: {
+        sessionId: "session-runtime-tail",
+        threadId: "thread-runtime-tail",
+        appId: "desktop",
+        status: "idle",
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:00.000Z",
+      },
+      turns: [],
+      detail: {
+        id: "session-runtime-tail",
+        messages: [],
+      },
     });
 
     await expect(
@@ -860,7 +1043,7 @@ describe("Agent API 治理护栏", () => {
       messages: [],
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith("agent_runtime_get_session", {
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_READ, {
       sessionId: "session-runtime-tail",
       historyLimit: 120,
     });
@@ -869,7 +1052,7 @@ describe("Agent API 治理护栏", () => {
   it("getAgentRuntimeSession 遇到 transient DevBridge 读失败时只输出 warn 调试日志", async () => {
     mockSafeInvoke.mockRejectedValueOnce(
       new Error(
-        '[DevBridge] 浏览器模式无法连接后端桥接，命令 "agent_runtime_get_session" 执行失败。原始错误: Failed to fetch (timeout after 20000ms)',
+        '[DevBridge] 浏览器模式无法连接后端桥接，命令 "app_server_handle_json_lines" 执行失败。原始错误: Failed to fetch (timeout after 20000ms)',
       ),
     );
 
@@ -940,435 +1123,76 @@ describe("Agent API 治理护栏", () => {
     );
   });
 
-  it("exportAgentRuntimeEvidencePack 应走统一 runtime evidence 导出命令", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
-      sessionId: "session-runtime-4",
-      threadId: "thread-runtime-4",
-      workspaceRoot: "/tmp/workspace-4",
-      packRelativeRoot: ".lime/harness/sessions/session-runtime-4/evidence",
-      packAbsoluteRoot:
-        "/tmp/workspace-4/.lime/harness/sessions/session-runtime-4/evidence",
-      exportedAt: "2026-03-27T10:05:00Z",
-      threadStatus: "running",
-      latestTurnStatus: "running",
-      turnCount: 2,
-      itemCount: 6,
-      pendingRequestCount: 1,
-      queuedTurnCount: 1,
-      recentArtifactCount: 2,
-      knownGaps: [
-        "当前环境未找到可读取的 request telemetry 日志目录，Evidence Pack 无法导出会话级请求遥测。",
-      ],
-      completionAuditSummary: {
-        source: "runtime_evidence_pack_completion_audit",
-        decision: "completed",
-        ownerRunCount: 1,
-        successfulOwnerRunCount: 1,
-        workspaceSkillToolCallCount: 1,
-        artifactCount: 2,
-        controlledGetEvidenceArtifactCount: 1,
-        controlledGetEvidenceExecutedCount: 1,
-        controlledGetEvidenceScannedArtifactCount: 1,
-        controlledGetEvidenceSkippedUnsafeArtifactCount: 0,
-        controlledGetEvidenceStatusCounts: {
-          executed: 1,
-        },
-        controlledGetEvidenceRequired: true,
-        ownerAuditStatuses: ["audit_input_ready"],
-        requiredEvidence: {
-          automationOwner: true,
-          workspaceSkillToolCall: true,
-          artifactOrTimeline: true,
-          controlledGetEvidence: true,
-        },
-        blockingReasons: [],
-        notes: ["证据齐全。"],
+  it("exportAgentRuntimeEvidencePack 应经 Electron IPC 调 App Server evidence/export", async () => {
+    mockAppServerResponse({
+      session: {
+        sessionId: "session-runtime-4",
+        threadId: "thread-runtime-4",
+        appId: "desktop",
+        workspaceId: "workspace-runtime-4",
+        status: "running",
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:03.000Z",
       },
-      observabilitySummary: {
-        schemaVersion: "v1",
-        knownGaps: [
-          "当前环境未找到可读取的 request telemetry 日志目录，Evidence Pack 无法导出会话级请求遥测。",
-        ],
-        signalCoverage: [
+      turns: [],
+      events: [],
+      artifacts: [],
+      exportedAt: "2026-06-06T00:00:04.000Z",
+      evidencePack: {
+        packRelativeRoot: ".lime/harness/sessions/session-runtime-4/evidence",
+        packAbsoluteRoot:
+          "/tmp/workspace-4/.lime/harness/sessions/session-runtime-4/evidence",
+        exportedAt: "2026-06-06T00:00:05.000Z",
+        threadStatus: "running",
+        latestTurnStatus: "running",
+        turnCount: 2,
+        itemCount: 6,
+        pendingRequestCount: 1,
+        queuedTurnCount: 1,
+        recentArtifactCount: 2,
+        knownGaps: ["request telemetry unavailable"],
+        completionAuditSummary: {
+          source: "runtime_evidence_pack_completion_audit",
+          decision: "completed",
+          ownerRunCount: 1,
+          requiredEvidence: {
+            automationOwner: true,
+            workspaceSkillToolCall: true,
+            artifactOrTimeline: true,
+            controlledGetEvidence: true,
+          },
+          blockingReasons: [],
+        },
+        artifacts: [
           {
-            signal: "correlation",
-            status: "exported",
-            source: "runtime thread identity",
-            detail: "已导出关联键。",
+            kind: "summary",
+            title: "问题摘要",
+            relativePath:
+              ".lime/harness/sessions/session-runtime-4/evidence/summary.md",
+            absolutePath:
+              "/tmp/workspace-4/.lime/harness/sessions/session-runtime-4/evidence/summary.md",
+            bytes: 256,
           },
         ],
-        verificationSummary: {
-          artifactValidator: {
-            applicable: true,
-            recordCount: 1,
-            issueCount: 0,
-            repairedCount: 1,
-            fallbackUsedCount: 0,
-            outcome: "recovered",
-          },
-          focusVerificationFailureOutcomes: [],
-          focusVerificationRecoveredOutcomes: [
-            "Artifact 校验已恢复 1 个产物，fallback 0 次。",
-          ],
-        },
-        modalityRuntimeContracts: {
-          snapshotCount: 2,
-          snapshotIndex: {
-            taskIndex: {
-              snapshotCount: 1,
-              threadIds: ["thread-runtime-4"],
-              turnIds: ["turn-runtime-4"],
-              contentIds: ["content-runtime-4"],
-              entryKeys: ["at_browser_command"],
-              modalities: ["browser"],
-              skillIds: ["browser_assist"],
-              modelIds: ["gpt-5.2-browser"],
-              executorKinds: ["browser_action"],
-              executorBindingKeys: ["lime_browser_mcp"],
-              costStates: ["estimated"],
-              limitStates: ["within_limit"],
-              estimatedCostClasses: ["low"],
-              limitEventKinds: ["quota_low"],
-              quotaLowCount: 1,
-              items: [
-                {
-                  artifactPath:
-                    "runtime_timeline/browser-tool-1/mcp__lime-browser__navigate",
-                  contractKey: "browser_control",
-                  threadId: "thread-runtime-4",
-                  turnId: "turn-runtime-4",
-                  contentId: "content-runtime-4",
-                  entryKey: "at_browser_command",
-                  modality: "browser",
-                  skillId: "browser_assist",
-                  modelId: "gpt-5.2-browser",
-                  executorKind: "browser_action",
-                  executorBindingKey: "lime_browser_mcp",
-                  costState: "estimated",
-                  limitState: "within_limit",
-                  estimatedCostClass: "low",
-                  limitEventKind: "quota_low",
-                  quotaLow: true,
-                },
-              ],
-            },
-            browserActionIndex: {
-              actionCount: 2,
-              sessionCount: 1,
-              observationCount: 1,
-              screenshotCount: 1,
-              lastUrl: "https://example.com/",
-              sessionIds: ["browser-session-1"],
-              targetIds: ["target-1"],
-              profileKeys: ["general_browser_assist"],
-              statusCounts: [{ status: "completed", count: 2 }],
-              artifactKindCounts: [
-                { artifactKind: "browser_session", count: 1 },
-                { artifactKind: "browser_snapshot", count: 1 },
-              ],
-              actionCounts: [
-                { action: "navigate", count: 1 },
-                { action: "get_page_info", count: 1 },
-              ],
-              backendCounts: [{ backend: "lime_extension_bridge", count: 1 }],
-              items: [
-                {
-                  artifactKind: "browser_snapshot",
-                  action: "get_page_info",
-                  status: "completed",
-                  success: true,
-                  sessionId: "browser-session-1",
-                  targetId: "target-1",
-                  entrySource: "at_browser_agent_command",
-                  backend: "lime_extension_bridge",
-                  lastUrl: "https://example.com/",
-                  observationAvailable: true,
-                  screenshotAvailable: true,
-                },
-              ],
-            },
-            limecorePolicyIndex: {
-              snapshotCount: 1,
-              refKeys: [
-                "model_catalog",
-                "provider_offer",
-                "tenant_feature_flags",
-              ],
-              missingInputs: [
-                "model_catalog",
-                "provider_offer",
-                "tenant_feature_flags",
-              ],
-              pendingHitRefs: [
-                "model_catalog",
-                "provider_offer",
-                "tenant_feature_flags",
-              ],
-              policyValueHitCount: 0,
-              statusCounts: [{ status: "local_defaults_evaluated", count: 1 }],
-              decisionCounts: [{ decision: "allow", count: 1 }],
-              items: [
-                {
-                  artifactPath: ".lime/tasks/image_generate/task-image-2.json",
-                  contractKey: "image_generation",
-                  executionProfileKey: "image_generation_profile",
-                  executorAdapterKey: "skill:image_generate",
-                  refs: [
-                    "model_catalog",
-                    "provider_offer",
-                    "tenant_feature_flags",
-                  ],
-                  status: "local_defaults_evaluated",
-                  decision: "allow",
-                  decisionSource: "local_default_policy",
-                  decisionScope: "local_defaults_only",
-                  decisionReason:
-                    "declared_policy_refs_with_no_local_deny_rule",
-                  policyEvaluation: {
-                    status: "input_gap",
-                    decision: "ask",
-                    decisionSource: "policy_input_evaluator",
-                    decisionScope: "pending_policy_inputs",
-                    decisionReason: "declared_policy_refs_missing_inputs",
-                    blockingRefs: [],
-                    askRefs: [
-                      "model_catalog",
-                      "provider_offer",
-                      "tenant_feature_flags",
-                    ],
-                    pendingRefs: [
-                      "model_catalog",
-                      "provider_offer",
-                      "tenant_feature_flags",
-                    ],
-                  },
-                  unresolvedRefs: [
-                    "model_catalog",
-                    "provider_offer",
-                    "tenant_feature_flags",
-                  ],
-                  missingInputs: [
-                    "model_catalog",
-                    "provider_offer",
-                    "tenant_feature_flags",
-                  ],
-                  pendingHitRefs: [
-                    "model_catalog",
-                    "provider_offer",
-                    "tenant_feature_flags",
-                  ],
-                  policyValueHits: [],
-                  policyValueHitCount: 0,
-                  policyInputs: [
-                    {
-                      refKey: "model_catalog",
-                      status: "declared_only",
-                      source: "modality_runtime_contract",
-                      valueSource: "limecore_pending",
-                    },
-                  ],
-                  source: "modality_runtime_contract",
-                },
-              ],
-            },
-          },
-        },
       },
-      artifacts: [
-        {
-          kind: "summary",
-          title: "问题摘要",
-          relativePath:
-            ".lime/harness/sessions/session-runtime-4/evidence/summary.md",
-          absolutePath:
-            "/tmp/workspace-4/.lime/harness/sessions/session-runtime-4/evidence/summary.md",
-          bytes: 256,
-        },
-      ],
     });
 
     await expect(
       exportAgentRuntimeEvidencePack("session-runtime-4"),
     ).resolves.toMatchObject({
       session_id: "session-runtime-4",
+      thread_id: "thread-runtime-4",
+      workspace_id: "workspace-runtime-4",
+      workspace_root: "/tmp/workspace-4",
+      pack_relative_root: ".lime/harness/sessions/session-runtime-4/evidence",
+      pack_absolute_root:
+        "/tmp/workspace-4/.lime/harness/sessions/session-runtime-4/evidence",
       thread_status: "running",
       turn_count: 2,
-      known_gaps: [
-        "当前环境未找到可读取的 request telemetry 日志目录，Evidence Pack 无法导出会话级请求遥测。",
-      ],
-      observability_summary: expect.objectContaining({
-        schema_version: "v1",
-        signal_coverage: [
-          expect.objectContaining({
-            signal: "correlation",
-            status: "exported",
-          }),
-        ],
-        verification_summary: expect.objectContaining({
-          artifact_validator: expect.objectContaining({
-            applicable: true,
-            outcome: "recovered",
-          }),
-          focus_verification_recovered_outcomes: [
-            "Artifact 校验已恢复 1 个产物，fallback 0 次。",
-          ],
-        }),
-        modality_runtime_contracts: expect.objectContaining({
-          snapshot_count: 2,
-          snapshot_index: expect.objectContaining({
-            task_index: expect.objectContaining({
-              snapshot_count: 1,
-              thread_ids: ["thread-runtime-4"],
-              turn_ids: ["turn-runtime-4"],
-              content_ids: ["content-runtime-4"],
-              entry_keys: ["at_browser_command"],
-              modalities: ["browser"],
-              skill_ids: ["browser_assist"],
-              model_ids: ["gpt-5.2-browser"],
-              executor_kinds: ["browser_action"],
-              executor_binding_keys: ["lime_browser_mcp"],
-              cost_states: ["estimated"],
-              limit_states: ["within_limit"],
-              estimated_cost_classes: ["low"],
-              limit_event_kinds: ["quota_low"],
-              quota_low_count: 1,
-              items: [
-                expect.objectContaining({
-                  artifact_path:
-                    "runtime_timeline/browser-tool-1/mcp__lime-browser__navigate",
-                  contract_key: "browser_control",
-                  thread_id: "thread-runtime-4",
-                  turn_id: "turn-runtime-4",
-                  content_id: "content-runtime-4",
-                  entry_key: "at_browser_command",
-                  modality: "browser",
-                  skill_id: "browser_assist",
-                  model_id: "gpt-5.2-browser",
-                  executor_kind: "browser_action",
-                  executor_binding_key: "lime_browser_mcp",
-                  cost_state: "estimated",
-                  limit_state: "within_limit",
-                  estimated_cost_class: "low",
-                  limit_event_kind: "quota_low",
-                  quota_low: true,
-                }),
-              ],
-            }),
-            browser_action_index: expect.objectContaining({
-              action_count: 2,
-              last_url: "https://example.com/",
-              observation_count: 1,
-              screenshot_count: 1,
-              items: [
-                expect.objectContaining({
-                  artifact_kind: "browser_snapshot",
-                  action: "get_page_info",
-                  backend: "lime_extension_bridge",
-                  observation_available: true,
-                  screenshot_available: true,
-                }),
-              ],
-            }),
-            limecore_policy_index: expect.objectContaining({
-              snapshot_count: 1,
-              ref_keys: [
-                "model_catalog",
-                "provider_offer",
-                "tenant_feature_flags",
-              ],
-              missing_inputs: [
-                "model_catalog",
-                "provider_offer",
-                "tenant_feature_flags",
-              ],
-              pending_hit_refs: [
-                "model_catalog",
-                "provider_offer",
-                "tenant_feature_flags",
-              ],
-              policy_value_hit_count: 0,
-              decision_counts: [{ decision: "allow", count: 1 }],
-              items: [
-                expect.objectContaining({
-                  artifact_path: ".lime/tasks/image_generate/task-image-2.json",
-                  contract_key: "image_generation",
-                  execution_profile_key: "image_generation_profile",
-                  executor_adapter_key: "skill:image_generate",
-                  refs: [
-                    "model_catalog",
-                    "provider_offer",
-                    "tenant_feature_flags",
-                  ],
-                  status: "local_defaults_evaluated",
-                  decision: "allow",
-                  decision_source: "local_default_policy",
-                  decision_scope: "local_defaults_only",
-                  decision_reason:
-                    "declared_policy_refs_with_no_local_deny_rule",
-                  policy_evaluation: {
-                    status: "input_gap",
-                    decision: "ask",
-                    decision_source: "policy_input_evaluator",
-                    decision_scope: "pending_policy_inputs",
-                    decision_reason: "declared_policy_refs_missing_inputs",
-                    blocking_refs: [],
-                    ask_refs: [
-                      "model_catalog",
-                      "provider_offer",
-                      "tenant_feature_flags",
-                    ],
-                    pending_refs: [
-                      "model_catalog",
-                      "provider_offer",
-                      "tenant_feature_flags",
-                    ],
-                  },
-                  unresolved_refs: [
-                    "model_catalog",
-                    "provider_offer",
-                    "tenant_feature_flags",
-                  ],
-                  missing_inputs: [
-                    "model_catalog",
-                    "provider_offer",
-                    "tenant_feature_flags",
-                  ],
-                  pending_hit_refs: [
-                    "model_catalog",
-                    "provider_offer",
-                    "tenant_feature_flags",
-                  ],
-                  policy_value_hits: [],
-                  policy_value_hit_count: 0,
-                  policy_inputs: [
-                    {
-                      ref_key: "model_catalog",
-                      status: "declared_only",
-                      source: "modality_runtime_contract",
-                      value_source: "limecore_pending",
-                    },
-                  ],
-                }),
-              ],
-            }),
-          }),
-        }),
-      }),
+      known_gaps: ["request telemetry unavailable"],
       completion_audit_summary: expect.objectContaining({
         decision: "completed",
         owner_run_count: 1,
-        successful_owner_run_count: 1,
-        workspace_skill_tool_call_count: 1,
-        artifact_count: 2,
-        controlled_get_evidence_artifact_count: 1,
-        controlled_get_evidence_executed_count: 1,
-        controlled_get_evidence_scanned_artifact_count: 1,
-        controlled_get_evidence_skipped_unsafe_artifact_count: 0,
-        controlled_get_evidence_status_counts: {
-          executed: 1,
-        },
-        controlled_get_evidence_required: true,
-        owner_audit_statuses: ["audit_input_ready"],
         required_evidence: expect.objectContaining({
           automation_owner: true,
           workspace_skill_tool_call: true,
@@ -1385,12 +1209,12 @@ describe("Agent API 治理护栏", () => {
       ],
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_export_evidence_pack",
-      {
-        sessionId: "session-runtime-4",
-      },
-    );
+    expectAppServerRequest(1, APP_SERVER_METHOD_EVIDENCE_EXPORT, {
+      sessionId: "session-runtime-4",
+      includeEvents: true,
+      includeArtifacts: true,
+      includeEvidencePack: true,
+    });
   });
 
   it("exportAgentRuntimeAnalysisHandoff 应兼容 camelCase / snake_case 并走统一 analysis 导出命令", async () => {
@@ -2102,11 +1926,19 @@ describe("Agent API 治理护栏", () => {
     );
   });
 
-  it("deleteAgentRuntimeSession / updateAgentRuntimeSession / generateAgentRuntimeSessionTitle 应走现役命令", async () => {
-    mockSafeInvoke
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce("新的智能标题");
+  it("deleteAgentRuntimeSession / updateAgentRuntimeSession 应走 current 边界，标题生成只做本地投影", async () => {
+    mockAppServerResponse({});
+    mockAppServerResponse({
+      session: {
+        sessionId: "session-runtime-3",
+        threadId: "session-runtime-3",
+        title: "重命名后的标题",
+        model: "gpt-5.4",
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:01.000Z",
+        messagesCount: 0,
+      },
+    });
 
     await deleteAgentRuntimeSession("session-runtime-3");
     await updateAgentRuntimeSession({
@@ -2114,155 +1946,66 @@ describe("Agent API 治理护栏", () => {
       name: "重命名后的标题",
     });
     await expect(
-      generateAgentRuntimeSessionTitle("session-runtime-3"),
+      generateAgentRuntimeSessionTitle(
+        "session-runtime-3",
+        "user：新的智能标题\nassistant：正在整理",
+      ),
     ).resolves.toBe("新的智能标题");
 
-    expect(mockSafeInvoke).toHaveBeenNthCalledWith(
-      1,
-      "agent_runtime_delete_session",
-      {
-        sessionId: "session-runtime-3",
-      },
-    );
-    expect(mockSafeInvoke).toHaveBeenNthCalledWith(
-      2,
-      "agent_runtime_update_session",
-      {
-        request: {
-          session_id: "session-runtime-3",
-          name: "重命名后的标题",
-        },
-      },
-    );
-    expect(mockSafeInvoke).toHaveBeenNthCalledWith(3, "agent_generate_title", {
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_UPDATE, {
       sessionId: "session-runtime-3",
-      titleKind: "session",
+      archived: true,
     });
+    expectAppServerRequest(2, APP_SERVER_METHOD_AGENT_SESSION_UPDATE, {
+      sessionId: "session-runtime-3",
+      title: "重命名后的标题",
+    });
+    expect(mockSafeInvoke).toHaveBeenCalledTimes(2);
   });
 
-  it("generateAgentRuntimeTitle 应支持图片任务命名预览", async () => {
-    mockSafeInvoke.mockResolvedValueOnce("城市夜景主视觉");
-
+  it("generateAgentRuntimeTitle 应从图片任务预览文本生成本地标题", async () => {
     await expect(
       generateAgentRuntimeTitle({
         previewText: "赛博朋克风城市夜景主视觉",
         titleKind: "image_task",
       }),
-    ).resolves.toBe("城市夜景主视觉");
+    ).resolves.toBe("赛博朋克风城市夜景主视觉");
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith("agent_generate_title", {
-      previewText: "赛博朋克风城市夜景主视觉",
-      titleKind: "image_task",
-    });
+    expect(mockSafeInvoke).not.toHaveBeenCalled();
   });
 
-  it("generateAgentRuntimeTitleResult 应保留 generation_topic runtime task profile", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
-      title: "城市夜景主视觉",
-      sessionId: "title-gen-1",
-      executionRuntime: {
-        session_id: "title-gen-1",
-        source: "runtime_snapshot",
-        task_profile: {
-          kind: "generation_topic",
-          source: "auxiliary_generation_topic",
-          service_model_slot: "generation_topic",
-        },
-        routing_decision: {
-          routingMode: "single_candidate",
-          decisionSource: "service_model_setting",
-          decisionReason: "命中 service_models.generation_topic",
-          candidateCount: 1,
-        },
-      },
-      usedFallback: false,
-    });
-
+  it("generateAgentRuntimeTitleResult 应返回本地 fallback 诊断且不调用旧标题命令", async () => {
     const result = await generateAgentRuntimeTitleResult({
-      previewText: "赛博朋克风城市夜景主视觉",
-      titleKind: "image_task",
+      sessionId: "session-runtime-3",
+      previewText:
+        "user：整理今天的国际新闻，按地区归类并给出可执行摘要\nassistant：好的",
+      titleKind: "session",
     });
 
-    expect(result.executionRuntime?.task_profile).toMatchObject({
-      kind: "generation_topic",
-      source: "auxiliary_generation_topic",
-      service_model_slot: "generation_topic",
+    expect(result).toEqual({
+      title: "整理今天的国际新闻，按地区归类并给出可执行摘要",
+      sessionId: "session-runtime-3",
+      executionRuntime: null,
+      usedFallback: true,
+      fallbackReason: "local_preview_title",
     });
-    expect(result.executionRuntime?.routing_decision).toMatchObject({
-      decisionReason: "命中 service_models.generation_topic",
-    });
+    expect(mockSafeInvoke).not.toHaveBeenCalled();
   });
 
-  it("generateAgentRuntimeTitleResult 应解析 runtime 诊断结果", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
-      title: "城市夜景主视觉",
-      sessionId: "title-gen-1",
-      executionRuntime: {
-        session_id: "title-gen-1",
-        source: "runtime_snapshot",
-        task_profile: {
-          kind: "generation_topic",
-          source: "auxiliary_generation_topic",
-        },
-        routing_decision: {
-          routingMode: "single_candidate",
-          decisionSource: "service_model_setting",
-          decisionReason: "命中 service_models.generation_topic",
-          candidateCount: 1,
-        },
-        limit_state: {
-          status: "single_candidate_only",
-          singleCandidateOnly: true,
-          providerLocked: true,
-          settingsLocked: true,
-          oemLocked: false,
-          candidateCount: 1,
-        },
-        cost_state: {
-          status: "estimated",
-          estimatedCostClass: "low",
-        },
-      },
-      usedFallback: false,
-    });
-
+  it("generateAgentRuntimeTitleResult 应清理 Markdown 与角色前缀", async () => {
     await expect(
       generateAgentRuntimeTitleResult({
-        previewText: "赛博朋克风城市夜景主视觉",
+        previewText: "user：# `城市夜景主视觉`",
         titleKind: "image_task",
       }),
     ).resolves.toEqual({
       title: "城市夜景主视觉",
-      sessionId: "title-gen-1",
-      executionRuntime: {
-        session_id: "title-gen-1",
-        source: "runtime_snapshot",
-        task_profile: {
-          kind: "generation_topic",
-          source: "auxiliary_generation_topic",
-        },
-        routing_decision: {
-          routingMode: "single_candidate",
-          decisionSource: "service_model_setting",
-          decisionReason: "命中 service_models.generation_topic",
-          candidateCount: 1,
-        },
-        limit_state: {
-          status: "single_candidate_only",
-          singleCandidateOnly: true,
-          providerLocked: true,
-          settingsLocked: true,
-          oemLocked: false,
-          candidateCount: 1,
-        },
-        cost_state: {
-          status: "estimated",
-          estimatedCostClass: "low",
-        },
-      },
-      usedFallback: false,
-      fallbackReason: null,
+      sessionId: null,
+      executionRuntime: null,
+      usedFallback: true,
+      fallbackReason: "local_preview_title",
     });
+    expect(mockSafeInvoke).not.toHaveBeenCalled();
   });
 
   it("subagent 控制面 helper 应走统一 runtime 命令", async () => {

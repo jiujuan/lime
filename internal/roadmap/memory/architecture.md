@@ -96,11 +96,11 @@ taste / reference / memory / feedback -> context compile -> 单主生成容器
 
 1. `internal/aiprompts/memory-compaction.md`
 2. `src/lib/api/memoryRuntime.ts`
-3. `src-tauri/src/commands/memory_management_cmd.rs`
-4. `src-tauri/src/services/memory_source_resolver_service.rs`
-5. `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs`
+3. `lime-rs/src/commands/memory_management_cmd.rs`
+4. `lime-rs/src/services/memory_source_resolver_service.rs`
+5. `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
 6. `src/lib/api/unifiedMemory.ts`
-7. `src-tauri/src/commands/unified_memory_cmd.rs`
+7. `lime-rs/src/commands/unified_memory_cmd.rs`
 8. `src/components/memory/inspirationProjection.ts`
 9. `src/components/agent/chat/utils/saveSceneAppExecutionAsInspiration.ts`
 10. `src/components/agent/chat/utils/curatedTaskRecommendationSignals.ts`
@@ -114,7 +114,7 @@ taste / reference / memory / feedback -> context compile -> 单主生成容器
 这些路径仍可保留，但不能继续定义主链：
 
 1. `src/lib/api/memory.ts`
-2. `src-tauri/src/commands/memory_cmd.rs`
+2. `lime-rs/src/commands/memory_cmd.rs`
 3. `src/lib/workspace/projectPrompt.ts`
 
 定位：

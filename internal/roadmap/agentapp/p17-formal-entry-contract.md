@@ -44,7 +44,7 @@ P16-H 已完成多 App repository、selected launcher、持久化 lifecycle、cl
 | 入口 | 面向对象 | 可以做 | 不可以做 | 事实源 |
 |---|---|---|---|---|
 | `agent-apps` | 普通用户 / 团队管理员 | 安装 local / cloud release、提交注册码、查看 installed apps、启动 entry、disable / enable、uninstall rehearsal、查看 runtime surface。 | 公开市场、审核流、真实删除、Lab fixture 调试、smoke 控制、Cloud 管理台。 | `AgentAppsPage`、`AgentAppRuntimePage`、`src/lib/api/agentApps.ts`、P11-P16-H current 链。 |
-| `agent-app-lab` | 开发者 / QA / 路线图验证 | fixture 验证、package review、guard 断言、cleanup rehearsal、residual audit、GUI smoke、flag-off regression。 | 作为正式用户入口、承载 marketplace、替代正式 runtime page、写入 Cloud metadata。 | `AgentAppLabPage`、`AgentAppManagerPanel`、`scripts/agent-app-lab-smoke.mjs`。 |
+| `agent-app-lab` | 开发者 / QA / 路线图验证 | fixture 验证、package review、guard 断言、cleanup rehearsal、residual audit、GUI smoke、flag-off regression。 | 作为正式用户入口、承载 marketplace、替代正式 runtime page、写入 Cloud metadata。 | `AgentAppLabPage`、`AgentAppManagerPanel`、`scripts/agent-app/lab-smoke.mjs`。 |
 | `agent-app` runtime | 从正式入口或深链进入的 App 运行面 | 展示 App entries、触发 P14 guard、mount UI entry、run workflow / entry、展示 readiness / artifact / knowledge 摘要。 | 绕过 P14 guard、加载 disabled App、直接执行未验证 package、直接访问宿主内部 store。 | `AgentAppRuntimePage`、P13 loader、P14 guard、Capability SDK host。 |
 
 ## 架构图

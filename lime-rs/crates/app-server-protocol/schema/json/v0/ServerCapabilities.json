@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "agentSession": {
+      "type": "boolean"
+    },
+    "artifact": {
+      "type": "boolean"
+    },
+    "capabilityDiscovery": {
+      "type": "boolean"
+    },
+    "evidence": {
+      "type": "boolean"
+    },
+    "workspace": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "agentSession",
+    "artifact",
+    "capabilityDiscovery",
+    "evidence",
+    "workspace"
+  ],
+  "title": "ServerCapabilities",
+  "type": "object"
+}

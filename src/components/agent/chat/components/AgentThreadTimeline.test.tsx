@@ -90,7 +90,7 @@ describe("AgentThreadTimeline", () => {
     expect(container.textContent).toContain("打开了 https://mp.weixin.qq.com");
     expect(container.textContent).toContain("请确认是否发布文章");
   });
-  it("file_artifact 命中多个 block 时应提供精确跳转按钮", () => {
+  it("file_artifact 命中多个 block 时应提供精确跳转按钮", async () => {
     const onOpenArtifactFromTimeline = vi.fn();
     const container = renderTimeline([createFileArtifactItem()], {
       onOpenArtifactFromTimeline,
@@ -101,8 +101,9 @@ describe("AgentThreadTimeline", () => {
     ).find((button) => button.textContent?.includes("定位到 摘要"));
     expect(heroJumpButton).not.toBeUndefined();
 
-    act(() => {
+    await act(async () => {
       heroJumpButton?.click();
+      await Promise.resolve();
     });
 
     expect(onOpenArtifactFromTimeline).toHaveBeenCalledWith(

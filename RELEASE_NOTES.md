@@ -6,7 +6,7 @@
 - 新增 App Server sidecar 启动与生命周期能力，支持 packaged resources manifest、平台 artifact 选择、sha256 校验、初始化握手和事件路由
 - 新增 standalone App Server app policy source，独立 App 可通过 JSON policy manifest 注入 scoped capabilities，并用 `--app-policy` 约束 capability discovery
 - 新增 standalone external backend 配置入口，允许 App Server 通过外部进程 backend 承接 host-independent turn / cancel / action 响应原型
-- Desktop Agent runtime 主路径开始接入 in-process App Server adapter，现有 Tauri command 兼容入口可通过 JSON-RPC 路径提交 Agent turn
+- Desktop Agent runtime 主路径开始接入 in-process App Server adapter，Electron Desktop Host 可通过 JSON-RPC 路径提交 Agent turn
 - App Server 协议新增 `capability/list`、`artifact/read`、`evidence/export` 与 `agentSession/action/respond`，为独立 App 的能力发现、产物读取、证据导出和审批响应打通基础链路
 
 ### 修复
@@ -16,11 +16,11 @@
 - 修正 artifact 读取和 evidence 导出 read model 的分页、内容状态和 provider 注入边界，让独立 App 读取运行结果时不依赖 UI 推断
 
 ### 优化与重构
-- 将 Agent runtime 服务化为 `RuntimeCore`、`ExecutionBackend`、`AsterBackend` 和 host adapter 分层，减少 Tauri command glue 继续承载业务逻辑
+- 将 Agent runtime 服务化为 `RuntimeCore`、`ExecutionBackend`、`AsterBackend` 和 host adapter 分层，减少桌面宿主胶水层继续承载业务逻辑
 - 新增 `app-server-protocol`、`app-server-transport`、`app-server`、`app-server-client`、`app-server-daemon`、`app-server-test-client` crate 家族，统一协议、transport、server、client 和测试边界
 - 将 runtime queue、stream、projection、managed objective continuation 与 event 输出拆到 host ports，便于 App Server 和 Desktop 共享同一执行主链
 - 将 runtime turn 的 Desktop host 依赖收敛到 `RuntimeTurnHostContext`，减少执行链路中散装传递 AppHandle、DB、配置和服务状态
-- 保持 `app-server` 公共 crate 不直接依赖 Tauri，Aster 私有 DTO 不上浮到公共 JSON-RPC 协议
+- 保持 `app-server` 公共 crate 不直接依赖桌面宿主壳层，Aster 私有 DTO 不上浮到公共 JSON-RPC 协议
 
 ### 测试与质量
 - `npm run test:contracts` 新增 App Server client / protocol contract 检查，覆盖 Rust 协议、router、runtime、Desktop adapter、TypeScript client 和 sidecar helper 的关键一致性
@@ -29,7 +29,7 @@
 - 新增 `smoke:app-server-sidecar-lifecycle`，覆盖 packaged manifest、sha256 校验、sidecar 启动、连接和生命周期恢复路径
 - 补充 app policy manifest、external backend、standalone CLI 参数和 factory 注入的 Rust 回归
 - 补充 App Server Rust 单测、host boundary guard、TypeScript client 单测和 renderer-safe API 回归
-- 根应用、Tauri workspace、Tauri 配置、CLI npm package、Agent App runtime package、App Server client package 与锁文件版本统一更新到 `1.59.0`
+- 根应用、Electron 配置、Rust workspace、CLI npm package、Agent App runtime package、App Server client package 与锁文件版本统一更新到 `1.59.0`
 
 ### 文档
 - 新增 `internal/roadmap/appserver/` 路线图、PRD、架构、协议、时序、流程图、服务抽取、独立应用接入和 Electron 迁移规划

@@ -16,8 +16,8 @@ const toastMocks = vi.hoisted(() => ({
   warning: vi.fn(),
 }));
 
-const tauriRuntimeMocks = vi.hoisted(() => ({
-  hasTauriInvokeCapability: vi.fn(),
+const desktopRuntimeMocks = vi.hoisted(() => ({
+  hasDesktopHostInvokeCapability: vi.fn(),
 }));
 
 vi.mock("@/lib/api/serverRuntime", () => ({
@@ -28,16 +28,12 @@ vi.mock("@/lib/api/project", () => ({
   ensureDefaultWorkspaceReady: projectMocks.ensureDefaultWorkspaceReady,
 }));
 
-vi.mock("@/lib/utils/connectError", () => ({
-  showRegistryLoadError: vi.fn(),
-}));
-
 vi.mock("@/lib/workspaceHealthTelemetry", () => ({
   recordWorkspaceRepair: vi.fn(),
 }));
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriInvokeCapability: tauriRuntimeMocks.hasTauriInvokeCapability,
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostInvokeCapability: desktopRuntimeMocks.hasDesktopHostInvokeCapability,
 }));
 
 vi.mock("sonner", () => ({
@@ -56,7 +52,6 @@ let mountedHarness: MountedHarness | null = null;
 function HookHarness() {
   useAppStartupEffects({
     currentPage: "agent",
-    registryError: null,
   });
   return <main data-testid="main" />;
 }
@@ -98,7 +93,7 @@ describe("useAppStartupEffects", () => {
     ).IS_REACT_ACT_ENVIRONMENT = true;
 
     setWindowsNavigator();
-    tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(true);
+    desktopRuntimeMocks.hasDesktopHostInvokeCapability.mockReturnValue(true);
     projectMocks.ensureDefaultWorkspaceReady.mockResolvedValue(null);
     serverRuntimeMocks.getWindowsStartupDiagnostics.mockResolvedValue({
       summary_message: "Driver policy is missing.",

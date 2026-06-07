@@ -161,7 +161,7 @@ describe("CharacterMention slash recent entries", () => {
   });
 
   it("选择最近使用的 slash 命令时应回填上次成功参数", async () => {
-    const replayText = "src-tauri packages";
+    const replayText = "lime-rs packages";
     act(() => {
       recordSlashEntryUsage({
         kind: "command",
@@ -190,7 +190,7 @@ describe("CharacterMention slash recent entries", () => {
       recentCommandButton?.click();
     });
 
-    expect(onChangeSpy).toHaveBeenLastCalledWith("/review src-tauri packages");
+    expect(onChangeSpy).toHaveBeenLastCalledWith("/review lime-rs packages");
   });
 
   it("选择最近使用的 scene 时应优先回填上次成功参数，而不是再次挂起补参卡", async () => {

@@ -221,12 +221,14 @@ export function shouldKeepInlineProcessForActiveAssistant(
   }
 
   const hasRunningToolCall =
-    (message.toolCalls || []).some(
+    !displayContent.trim() &&
+    ((message.toolCalls || []).some(
       (toolCall) => toolCall.status === "running",
     ) ||
-    (message.contentParts || []).some(
-      (part) => part.type === "tool_use" && part.toolCall.status === "running",
-    );
+      (message.contentParts || []).some(
+        (part) =>
+          part.type === "tool_use" && part.toolCall.status === "running",
+      ));
   const hasPendingActionRequest =
     (message.actionRequests || []).some(
       (request) => request.status !== "submitted",

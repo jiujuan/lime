@@ -12,7 +12,7 @@ import {
   mountHookHarness,
   shellOpenMock,
   systemBrowserMocks,
-  tauriRuntimeMocks,
+  desktopRuntimeMocks,
   useOemCloudAccessTestLifecycle,
 } from "./useOemCloudAccess.testFixtures";
 
@@ -400,12 +400,12 @@ describe("useOemCloudAccess", () => {
   });
 
   it("浏览器场景桌面登录不可用时应复用预打开空白页导航到用户中心登录页", async () => {
-    tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(false);
-    tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(false);
+    desktopRuntimeMocks.hasDesktopHostInvokeCapability.mockReturnValue(false);
+    desktopRuntimeMocks.hasDesktopHostRuntimeMarkers.mockReturnValue(false);
     controlPlaneMocks.createClientDesktopAuthSession.mockRejectedValue(
       new Error("desktop client not found"),
     );
-    shellOpenMock.mockRejectedValue(new Error("not in tauri"));
+    shellOpenMock.mockRejectedValue(new Error("not in desktop host"));
     const openedWindow = createOpenedWindow();
     const windowOpenSpy = vi
       .spyOn(window, "open")
@@ -438,7 +438,7 @@ describe("useOemCloudAccess", () => {
     }
   });
 
-  it("Tauri 桌面登录会用本机回调桥覆盖静态 localhost 回调配置", async () => {
+  it("Desktop Host 桌面登录会用本机回调桥覆盖静态 localhost 回调配置", async () => {
     window.__LIME_OEM_CLOUD__ = {
       enabled: true,
       baseUrl: "https://user.limeai.run",

@@ -17,7 +17,7 @@ import {
   toSerializableLegacySurfaceReport,
 } from "./report-legacy-surfaces.mjs";
 
-const TREND_REPORT_PATH = "scripts/harness-eval-trend-report.mjs";
+const TREND_REPORT_PATH = "scripts/harness/eval-trend-report.mjs";
 
 export {
   buildGeneratedSlopReport,
@@ -293,7 +293,11 @@ function runGeneratedSlopReportCli() {
   if (options.outputJson) {
     const targetPath = resolvePath(repoRoot, options.outputJson);
     ensureParentDirectory(targetPath);
-    fs.writeFileSync(targetPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    fs.writeFileSync(
+      targetPath,
+      `${JSON.stringify(report, null, 2)}\n`,
+      "utf8",
+    );
   }
 
   if (options.outputMarkdown) {

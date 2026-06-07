@@ -9,7 +9,13 @@ function normalizeIdList(value) {
 }
 
 function createItem(id, title, passed, evidence, gap = "") {
-  return { id, title, passed: Boolean(passed), evidence: evidence || "", gap: passed ? "" : gap };
+  return {
+    id,
+    title,
+    passed: Boolean(passed),
+    evidence: evidence || "",
+    gap: passed ? "" : gap,
+  };
 }
 
 function summarizeQcloopStatusSidecar(entry) {
@@ -69,10 +75,16 @@ function isUnstartedPendingQcloopStatusSidecar(entry) {
 }
 
 function buildAgentQcCompletionAudit(facts) {
-  const requiredQcloopScenarioIds = normalizeIdList(facts.scenarioReport?.p0ScenarioIds);
+  const requiredQcloopScenarioIds = normalizeIdList(
+    facts.scenarioReport?.p0ScenarioIds,
+  );
   const requiredQcloopScenarioCount =
-    requiredQcloopScenarioIds.length || facts.scenarioReport?.p0ScenarioCount || 1;
-  const realEvidenceScenarioIds = new Set(normalizeIdList(facts.realEvidencePack?.scenarioIds));
+    requiredQcloopScenarioIds.length ||
+    facts.scenarioReport?.p0ScenarioCount ||
+    1;
+  const realEvidenceScenarioIds = new Set(
+    normalizeIdList(facts.realEvidencePack?.scenarioIds),
+  );
   const missingQcloopScenarioIds = requiredQcloopScenarioIds.filter(
     (scenarioId) => !realEvidenceScenarioIds.has(scenarioId),
   );
@@ -81,9 +93,14 @@ function buildAgentQcCompletionAudit(facts) {
       ? missingQcloopScenarioIds.length === 0
       : facts.realEvidencePack?.scenarioCount >= requiredQcloopScenarioCount;
   const sidecarEvidenceSummary = asArray(facts.realEvidenceSidecars)
-    .map((entry) => `${entry.path} status=${entry.status || "unknown"} scenarios=${entry.scenarioCount || 0}`)
+    .map(
+      (entry) =>
+        `${entry.path} status=${entry.status || "unknown"} scenarios=${entry.scenarioCount || 0}`,
+    )
     .join("; ");
-  const qcloopStatusSidecars = selectLatestQcloopStatusSidecars(facts.qcloopStatusSidecars);
+  const qcloopStatusSidecars = selectLatestQcloopStatusSidecars(
+    facts.qcloopStatusSidecars,
+  );
   const qcloopStatusSidecarSummary = qcloopStatusSidecars
     .map((entry) => {
       const counts = entry.counts
@@ -93,7 +110,8 @@ function buildAgentQcCompletionAudit(facts) {
     })
     .join("; ");
   const staleQcloopStatusSidecars = qcloopStatusSidecars.filter(
-    (entry) => entry.verdictStatus === "stale" || Number(entry.counts?.stale || 0) > 0,
+    (entry) =>
+      entry.verdictStatus === "stale" || Number(entry.counts?.stale || 0) > 0,
   );
   const activeQcloopStatusSidecars = qcloopStatusSidecars.filter(
     (entry) =>
@@ -112,16 +130,23 @@ function buildAgentQcCompletionAudit(facts) {
     ? `${qcloopEvidenceText}; qcloopStatus: ${qcloopStatusSidecarSummary}`
     : qcloopEvidenceText;
   const qcloopGapFragments = [];
-  if (facts.realEvidencePack?.exists && facts.realEvidencePack.status !== "pass") {
+  if (
+    facts.realEvidencePack?.exists &&
+    facts.realEvidencePack.status !== "pass"
+  ) {
     qcloopGapFragments.push(
       `官方 Evidence Pack 当前 status=${facts.realEvidencePack.status || "unknown"}，不能发布`,
     );
   }
   if (!facts.realEvidencePack?.exists && sidecarEvidenceSummary) {
-    qcloopGapFragments.push("已有 sidecar Evidence Pack，但尚未生成 pass 的官方 .lime/qc/agent-qc-evidence.json");
+    qcloopGapFragments.push(
+      "已有 sidecar Evidence Pack，但尚未生成 pass 的官方 .lime/qc/agent-qc-evidence.json",
+    );
   }
   if (missingQcloopScenarioIds.length > 0) {
-    qcloopGapFragments.push(`尚未覆盖 P0 场景：${missingQcloopScenarioIds.join(",")}`);
+    qcloopGapFragments.push(
+      `尚未覆盖 P0 场景：${missingQcloopScenarioIds.join(",")}`,
+    );
   }
   if (activeQcloopStatusSidecars.length > 0) {
     qcloopGapFragments.push(
@@ -151,7 +176,9 @@ function buildAgentQcCompletionAudit(facts) {
       `verify:local 当前 status=${facts.localVerify.status}${facts.localVerify.error ? `；${facts.localVerify.error}` : ""}`,
     );
   } else {
-    localVerifyGapFragments.push("缺少 verify:local 当前结果 sidecar，无法证明仓库统一本地校验通过");
+    localVerifyGapFragments.push(
+      "缺少 verify:local 当前结果 sidecar，无法证明仓库统一本地校验通过",
+    );
   }
   if (facts.guiSmoke?.status && facts.guiSmoke.status !== "pass") {
     localVerifyGapFragments.push(
@@ -186,7 +213,8 @@ function buildAgentQcCompletionAudit(facts) {
     createItem(
       "scenario-manifest",
       "Agent QC scenario manifest 有效",
-      facts.scenarioReport?.valid === true && facts.scenarioReport?.scenarioCount > 0,
+      facts.scenarioReport?.valid === true &&
+        facts.scenarioReport?.scenarioCount > 0,
       `scenarioCount=${facts.scenarioReport?.scenarioCount ?? 0}`,
       "scenario manifest 未通过校验或没有场景。",
     ),
@@ -207,7 +235,9 @@ function buildAgentQcCompletionAudit(facts) {
     createItem(
       "qcloop-payload-generator",
       "可从 manifest 生成 qcloop job payload",
-      facts.files?.qcloopJobScript && facts.qcloopPayload?.valid === true && facts.qcloopPayload?.itemCount > 0,
+      facts.files?.qcloopJobScript &&
+        facts.qcloopPayload?.valid === true &&
+        facts.qcloopPayload?.itemCount > 0,
       `itemCount=${facts.qcloopPayload?.itemCount ?? 0}`,
       "qcloop payload 生成器不可用或没有 item。",
     ),
@@ -233,7 +263,7 @@ function buildAgentQcCompletionAudit(facts) {
       "structured-evidence-contract",
       "qcloop worker / verifier / exporter 强制结构化 evidence summary",
       facts.files?.evidenceContractDoc &&
-      facts.qcloopPayload?.workerPromptHasStructuredEvidence === true &&
+        facts.qcloopPayload?.workerPromptHasStructuredEvidence === true &&
         facts.qcloopPayload?.verifierRequiresStructuredEvidence === true &&
         facts.qcloopPayload?.verifierRequiresStrictJson === true &&
         facts.structuredEvidence?.exporterParsesSummary === true &&
@@ -245,21 +275,21 @@ function buildAgentQcCompletionAudit(facts) {
       "qcloop-evidence-exporter",
       "可把 qcloop job/items 导出为 Evidence Pack",
       facts.files?.exportEvidenceScript,
-      "scripts/agent-qc-export-evidence.mjs",
+      "scripts/agent-qc/export-evidence.mjs",
       "缺少 qcloop Evidence Pack 导出入口。",
     ),
     createItem(
       "qcloop-status-monitor",
       "可只读监控 qcloop 运行批次和 stale item",
       facts.files?.qcloopStatusScript && facts.files?.qcloopOperationsDoc,
-      "scripts/agent-qc-qcloop-status.mjs, internal/tests/lime-agent-qc-qcloop-operations.md",
+      "scripts/agent-qc/qcloop-status.mjs, internal/tests/lime-agent-qc-qcloop-operations.md",
       "缺少 qcloop 只读状态监控脚本或运维手册。",
     ),
     createItem(
       "gui-owner-check",
       "可在启动 GUI P0 前阻断并发 qcloop GUI owner",
       facts.files?.guiOwnerCheckScript && facts.files?.qcloopOperationsDoc,
-      "scripts/agent-qc-gui-owner-check.mjs, internal/tests/lime-agent-qc-qcloop-operations.md",
+      "scripts/agent-qc/gui-owner-check.mjs, internal/tests/lime-agent-qc-qcloop-operations.md",
       "缺少 GUI owner 并发检查脚本或运维手册。",
     ),
     createItem(
@@ -267,7 +297,8 @@ function buildAgentQcCompletionAudit(facts) {
       "stale GUI qcloop owner 有只读取证和 owner 确认协议",
       facts.files?.staleOwnerInterventionDoc &&
         facts.files?.qcloopOperationsDoc &&
-        facts.staleOwnerIntervention?.guiOwnerReportHasDecisionPacket === true &&
+        facts.staleOwnerIntervention?.guiOwnerReportHasDecisionPacket ===
+          true &&
         facts.staleOwnerIntervention?.docMentionsDecisionPacket === true &&
         facts.staleOwnerIntervention?.guiOwnerReportHasWatchHistory === true &&
         facts.staleOwnerIntervention?.docMentionsWatchHistory === true,
@@ -286,7 +317,7 @@ function buildAgentQcCompletionAudit(facts) {
       "release-summary",
       "可把 Evidence Pack 汇总为 release note 质量证据",
       facts.files?.releaseSummaryScript,
-      "scripts/agent-qc-release-summary.mjs",
+      "scripts/agent-qc/release-summary.mjs",
       "缺少 release summary 入口。",
     ),
     createItem(
@@ -301,8 +332,7 @@ function buildAgentQcCompletionAudit(facts) {
     createItem(
       "real-qcloop-evidence",
       "存在真实 qcloop Agent QC Evidence Pack",
-      facts.realEvidencePack?.status === "pass" &&
-        hasRequiredQcloopCoverage,
+      facts.realEvidencePack?.status === "pass" && hasRequiredQcloopCoverage,
       qcloopEvidenceWithStatusText,
       qcloopGapText,
     ),
@@ -310,7 +340,9 @@ function buildAgentQcCompletionAudit(facts) {
       "real-gui-evidence",
       "存在真实 GUI / Playwright MCP evidence",
       facts.files?.realGuiEvidence,
-      facts.files?.realGuiEvidence ? ".lime/qc/gui-evidence" : "未发现 .lime/qc/gui-evidence",
+      facts.files?.realGuiEvidence
+        ? ".lime/qc/gui-evidence"
+        : "未发现 .lime/qc/gui-evidence",
       "尚未执行真实 GUI / Playwright MCP flow 并保存证据。",
     ),
     createItem(
@@ -331,7 +363,11 @@ function buildAgentQcCompletionAudit(facts) {
     totalCount: items.length,
     completionRatio: items.length === 0 ? 0 : passedCount / items.length,
     items,
-    gaps: failed.map((item) => ({ id: item.id, title: item.title, gap: item.gap })),
+    gaps: failed.map((item) => ({
+      id: item.id,
+      title: item.title,
+      gap: item.gap,
+    })),
   };
 }
 

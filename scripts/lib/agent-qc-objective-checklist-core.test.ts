@@ -37,7 +37,10 @@ function auditWith(overrides = {}) {
 
 function passProcessOwner() {
   return {
-    verdict: { status: "pass", summary: "activeGuiSmoke=0, cargoOrRust=0, qcloopRelated=0" },
+    verdict: {
+      status: "pass",
+      summary: "activeGuiSmoke=0, cargoOrRust=0, qcloopRelated=0",
+    },
     ownerIntervention: { status: "not_required" },
   };
 }
@@ -46,9 +49,13 @@ function busyProcessOwner() {
   return {
     verdict: {
       status: "busy",
-      summary: "activeGuiSmoke=1, cargoOrRust=0, qcloopRelated=0, staleActiveGuiSmoke=1",
+      summary:
+        "activeGuiSmoke=1, cargoOrRust=0, qcloopRelated=0, staleActiveGuiSmoke=1",
     },
-    ownerIntervention: { status: "requires_owner_confirmation", processIds: [59011] },
+    ownerIntervention: {
+      status: "requires_owner_confirmation",
+      processIds: [59011],
+    },
   };
 }
 
@@ -75,7 +82,9 @@ describe("agent-qc-objective-checklist-core", () => {
       guiOwner,
     });
 
-    const ownerItem = checklist.checklist.find((item) => item.requirement.includes("raw process owner"));
+    const ownerItem = checklist.checklist.find((item) =>
+      item.requirement.includes("raw process owner"),
+    );
     expect(checklist.status).toBe("incomplete");
     expect(ownerItem?.status).toBe("pass_with_blocking_owner");
     expect(ownerItem?.gap).toContain("raw process owner 仍 busy");
@@ -84,7 +93,10 @@ describe("agent-qc-objective-checklist-core", () => {
   it("官方 evidence 或 verify:local 失败时应列为 blocker", () => {
     const checklist = buildAgentQcObjectiveChecklist({
       audit: auditWith({
-        "real-qcloop-evidence": { passed: false, gap: "official evidence fail" },
+        "real-qcloop-evidence": {
+          passed: false,
+          gap: "official evidence fail",
+        },
         "local-verify-gate": { passed: false, gap: "verify local fail" },
       }),
       processOwner: passProcessOwner(),
@@ -92,8 +104,12 @@ describe("agent-qc-objective-checklist-core", () => {
     });
 
     expect(checklist.status).toBe("incomplete");
-    expect(checklist.blockers.map((item) => item.gap)).toContain("official evidence fail");
-    expect(checklist.blockers.map((item) => item.gap)).toContain("verify local fail");
+    expect(checklist.blockers.map((item) => item.gap)).toContain(
+      "official evidence fail",
+    );
+    expect(checklist.blockers.map((item) => item.gap)).toContain(
+      "verify local fail",
+    );
   });
 
   it("应渲染 Markdown", () => {

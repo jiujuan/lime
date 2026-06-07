@@ -400,8 +400,8 @@ const ConversationMenuSurface = styled.div`
   position: fixed;
   z-index: 110;
   width: ${CONVERSATION_MENU_WIDTH}px;
-  padding: 14px 10px;
-  border-radius: 24px;
+  padding: 8px;
+  border-radius: 16px;
   border: 1px solid var(--lime-card-subtle-border, rgba(226, 240, 226, 0.9));
   background: var(--lime-surface, #ffffff);
   color: var(--lime-text-strong, #0f172a);
@@ -412,9 +412,9 @@ const ConversationMenuSurface = styled.div`
 
 const ConversationMenuItem = styled.button<{ $danger?: boolean }>`
   width: 100%;
-  min-height: 42px;
+  min-height: 36px;
   border: none;
-  border-radius: 14px;
+  border-radius: 10px;
   background: transparent;
   color: ${({ $danger }) =>
     $danger
@@ -422,12 +422,12 @@ const ConversationMenuItem = styled.button<{ $danger?: boolean }>`
       : "var(--lime-text-strong, #0f172a)"};
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 0 16px;
+  gap: 10px;
+  padding: 0 10px;
   cursor: pointer;
   text-align: left;
-  font-size: 16px;
-  font-weight: 680;
+  font-size: 13px;
+  font-weight: 650;
   transition:
     background-color 0.16s ease,
     color 0.16s ease;
@@ -440,8 +440,8 @@ const ConversationMenuItem = styled.button<{ $danger?: boolean }>`
   }
 
   svg {
-    width: 19px;
-    height: 19px;
+    width: 15px;
+    height: 15px;
     flex-shrink: 0;
     color: ${({ $danger }) =>
       $danger ? "var(--lime-danger, #b91c1c)" : "var(--sidebar-muted)"};
@@ -956,12 +956,12 @@ export function AppSidebarConversationShelf({
                                 workspaceId: session.workspace_id ?? null,
                               },
                             );
-                          if (multiSelectMode) {
-                            toggleSelectedSession(session);
-                            return;
-                          }
-                          onNavigateToConversation(session);
-                        }}
+                            if (multiSelectMode) {
+                              toggleSelectedSession(session);
+                              return;
+                            }
+                            onNavigateToConversation(session);
+                          }}
                           title={title}
                         >
                           {multiSelectMode ? (

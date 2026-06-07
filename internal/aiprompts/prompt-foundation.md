@@ -43,7 +43,7 @@ aster Agent::prepare_tools_and_prompt(...)
 
 ### 1. Base Session Prompt 入口
 
-- `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs`
+- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
 - 优先级固定为：
   1. `project prompt`
   2. `session prompt`
@@ -59,14 +59,14 @@ aster Agent::prepare_tools_and_prompt(...)
 
 ### 2. Lime 侧 augmentation 主链
 
-- `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs`
-- `src-tauri/src/commands/aster_agent_cmd/prompt_context.rs`
-- `src-tauri/src/services/memory_profile_prompt_service.rs`
-- `src-tauri/src/services/artifact_prompt_service.rs`
-- `src-tauri/src/services/web_search_prompt_service.rs`
-- `src-tauri/crates/agent/src/request_tool_policy.rs`
-- `src-tauri/crates/agent/src/prompt/runtime_agents.rs`
-- `src-tauri/crates/agent/src/turn_input_envelope.rs`
+- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
+- `lime-rs/src/commands/aster_agent_cmd/prompt_context.rs`
+- `lime-rs/src/services/memory_profile_prompt_service.rs`
+- `lime-rs/src/services/artifact_prompt_service.rs`
+- `lime-rs/src/services/web_search_prompt_service.rs`
+- `lime-rs/crates/agent/src/request_tool_policy.rs`
+- `lime-rs/crates/agent/src/prompt/runtime_agents.rs`
+- `lime-rs/crates/agent/src/turn_input_envelope.rs`
 
 FullRuntime 固定顺序：
 
@@ -111,10 +111,10 @@ FastChat 固定顺序：
 
 ### 3. Aster 侧最终包装
 
-- `src-tauri/crates/aster-rust/crates/aster/src/agents/reply_parts.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/agents/prompt_manager.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/prompt_template.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/prompts/*.md`
+- `lime-rs/crates/aster-rust/crates/aster/src/agents/reply_parts.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/agents/prompt_manager.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/prompt_template.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/prompts/*.md`
 
 当前 provider prompt 的最终结构不是“Lime 直接整段覆盖”，而是：
 
@@ -128,7 +128,7 @@ FastChat 固定顺序：
 
 ### 4. Embedded Prompt 文件的 current 用途
 
-`src-tauri/crates/aster-rust/crates/aster/src/prompts` 是 Aster 的嵌入式模板目录，但不是所有文件都在 current 主链里。
+`lime-rs/crates/aster-rust/crates/aster/src/prompts` 是 Aster 的嵌入式模板目录，但不是所有文件都在 current 主链里。
 
 当前有明确 runtime 调用点的模板：
 
@@ -154,34 +154,34 @@ FastChat 固定顺序：
 
 以下路径是当前唯一允许继续演进的基础 Prompt 事实源：
 
-- `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs`
-- `src-tauri/src/commands/aster_agent_cmd/prompt_context.rs`
-- `src-tauri/src/services/memory_profile_prompt_service.rs`
-- `src-tauri/src/services/artifact_prompt_service.rs`
-- `src-tauri/src/services/web_search_prompt_service.rs`
-- `src-tauri/crates/agent/src/request_tool_policy.rs`
-- `src-tauri/crates/agent/src/prompt/runtime_agents.rs`
-- `src-tauri/crates/agent/src/turn_input_envelope.rs`
-- `src-tauri/crates/agent/src/aster_state_support.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/agents/prompt_manager.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/agents/reply_parts.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/prompt_template.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/prompts/identity.md`
-- `src-tauri/crates/aster-rust/crates/aster/src/prompts/capabilities.md`
-- `src-tauri/crates/aster-rust/crates/aster/src/prompts/subagent_system.md`
-- `src-tauri/crates/aster-rust/crates/aster/src/prompts/plan.md`
-- `src-tauri/crates/aster-rust/crates/aster/src/prompts/recipe.md`
-- `src-tauri/crates/aster-rust/crates/aster/src/prompts/summarize_oneshot.md`
-- `src-tauri/crates/aster-rust/crates/aster/src/prompts/permission_judge.md`
+- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
+- `lime-rs/src/commands/aster_agent_cmd/prompt_context.rs`
+- `lime-rs/src/services/memory_profile_prompt_service.rs`
+- `lime-rs/src/services/artifact_prompt_service.rs`
+- `lime-rs/src/services/web_search_prompt_service.rs`
+- `lime-rs/crates/agent/src/request_tool_policy.rs`
+- `lime-rs/crates/agent/src/prompt/runtime_agents.rs`
+- `lime-rs/crates/agent/src/turn_input_envelope.rs`
+- `lime-rs/crates/agent/src/aster_state_support.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/agents/prompt_manager.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/agents/reply_parts.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/prompt_template.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/prompts/identity.md`
+- `lime-rs/crates/aster-rust/crates/aster/src/prompts/capabilities.md`
+- `lime-rs/crates/aster-rust/crates/aster/src/prompts/subagent_system.md`
+- `lime-rs/crates/aster-rust/crates/aster/src/prompts/plan.md`
+- `lime-rs/crates/aster-rust/crates/aster/src/prompts/recipe.md`
+- `lime-rs/crates/aster-rust/crates/aster/src/prompts/summarize_oneshot.md`
+- `lime-rs/crates/aster-rust/crates/aster/src/prompts/permission_judge.md`
 
 ### Compat
 
 以下路径仍保留，但不属于当前基础 Prompt 主链，后续不要继续把新能力长进去：
 
-- `src-tauri/crates/agent/src/prompt/builder.rs`
-- `src-tauri/crates/agent/src/prompt/templates.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/prompt/builder.rs`
-- `src-tauri/crates/aster-rust/crates/aster/src/prompt/templates.rs`
+- `lime-rs/crates/agent/src/prompt/builder.rs`
+- `lime-rs/crates/agent/src/prompt/templates.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/prompt/builder.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/prompt/templates.rs`
 - `internal/aiprompts/query-loop.md`
   这是 Query Loop current 文档，但不是基础 Prompt 逐层拼装的唯一事实源
 - `internal/aiprompts/content-creator.md`
@@ -193,14 +193,14 @@ FastChat 固定顺序：
 
 以下 embedded prompt 文件当前在仓库内没有明确 runtime 调用点，不应再作为新实现参考：
 
-- `src-tauri/crates/aster-rust/crates/aster/src/prompts/system.md`
-- `src-tauri/crates/aster-rust/crates/aster/src/prompts/system_gpt_4.1.md`
-- `src-tauri/crates/aster-rust/crates/aster/src/prompts/desktop_prompt.md`
-- `src-tauri/crates/aster-rust/crates/aster/src/prompts/desktop_recipe_instruction.md`
+- `lime-rs/crates/aster-rust/crates/aster/src/prompts/system.md`
+- `lime-rs/crates/aster-rust/crates/aster/src/prompts/system_gpt_4.1.md`
+- `lime-rs/crates/aster-rust/crates/aster/src/prompts/desktop_prompt.md`
+- `lime-rs/crates/aster-rust/crates/aster/src/prompts/desktop_recipe_instruction.md`
 
 ### 特殊说明
 
-- `src-tauri/crates/aster-rust/crates/aster/src/prompts/mock.md` 目前只看到 `prompt_template.rs` 内部测试覆盖，不属于基础 Prompt current 主链。
+- `lime-rs/crates/aster-rust/crates/aster/src/prompts/mock.md` 目前只看到 `prompt_template.rs` 内部测试覆盖，不属于基础 Prompt current 主链。
 - `internal/prd/gongneng/**`、`internal/roadmap/**`、`x-article-export/**` 等功能样板或产品文档，只能消费主链事实，不能反向定义基础 Prompt 顺序。
 
 ## 谁可以定义基础 Prompt，谁只能消费

@@ -1,4 +1,4 @@
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@/lib/desktop-host/event";
 export declare const COMPANION_PET_STATUS_EVENT = "companion-pet-status";
 export declare const COMPANION_OPEN_PROVIDER_SETTINGS_EVENT = "companion-open-provider-settings";
 export declare const COMPANION_REQUEST_PROVIDER_SYNC_EVENT = "companion-request-provider-sync";

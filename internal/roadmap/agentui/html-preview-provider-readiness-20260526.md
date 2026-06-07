@@ -14,23 +14,23 @@
 
 ## 当前实现证据
 
-| 要求 | 当前证据 | 判定 |
-| --- | --- | --- |
-| HTML 类型可穷举 | `CanvasContentType` 包含 `html`；`CanvasPanel` 用 `assertNever` 穷举 `code / html / markdown / file / empty` | 已实现 |
-| HTML 文件识别 | `workspaceFilePreview.ts` 将 `.html / .htm` 解析为 `contentType: "html"`、`language: "html"` | 已实现 |
-| 默认网页预览 | `CanvasPanel` 对 HTML 默认渲染 iframe；无真实路径用 `srcDoc` | 已实现 |
-| 源码切换 | HTML 工具栏提供“预览 / 源码”切换，源码走 `CodePreview` | 已实现 |
-| Tauri 本地文件预览 | 有 `sourcePath` 或绝对 `baseFilePath` 时使用 `convertFileSrc` 生成 iframe `src` | 已实现 |
-| 浏览器 / DevBridge 回退预览 | `convertFileSrc` 不可用且返回原始绝对路径时，不再把 `/Users/...html` 当成 Vite 站内 iframe `src`；改用 `srcDoc` 展示真实 HTML 内容 | 已实现 |
-| 独立预览窗口 | `openHtmlPreviewWindow` 使用 Tauri `WebviewWindow` 创建 `html-preview-*`，失败回退系统默认应用 | 已实现 |
-| HTML artifact 流式阶段预览 | `resolveDefaultArtifactViewMode` 对 `html` 与 `code + language: html` 始终返回 `preview`，不再因 `writePhase: streaming` 默认源码 | 已实现 |
-| HTML artifact 工具栏切换 | `HtmlRenderer` 接入外部 `viewMode / previewSize` 受控状态；工作区已有外部工具栏时隐藏内部重复工具栏，源码切换会真实移除 iframe 并渲染源码 | 已实现 |
-| `.htm` 产物识别 | `buildArtifactFromWrite` 将 `.htm` 构建为 `html` artifact，并标记 `language: "html"` | 已实现 |
-| Tauri 权限与 CSP | `tauri.conf*.json` 启用 `assetProtocol`，CSP 覆盖 `asset:` / `http://asset.localhost` / `frame-src`；capability 覆盖 `html-preview-*` 与 `core:webview:allow-create-webview-window` | 已实现 |
-| Provider 设置页不再误导 | 文本模型按钮显示“试跑当前模型”，并通过 `test_api_key_provider_chat` 做真实聊天试跑 | 已实现 |
-| 402 额度错误友好化 | `agentRuntimeErrorPresentation` 将 `402 / Payment Required / Insufficient Balance / 余额不足 / 额度不足` 归一为额度不足提示；聊天时间线、折叠摘要、流式失败 assistant patch 与会话概览均在 presentation 层显示友好提示，不再向普通用户暴露 raw Provider error | 已实现 |
-| 失败态不过度重复 | 失败详情只保留在时间线错误卡等主解释位置；assistant 正文若只是同一失败详情的重复文案会被隐藏，底部运行状态行只保留“失败 + 耗时”等短状态 | 已实现 |
-| 五语言文案 | `settings.json` 与 `agent.json` 已覆盖 `zh-CN / zh-TW / en-US / ja-JP / ko-KR` | 已实现 |
+| 要求                        | 当前证据                                                                                                                                                                                                                                                      | 判定   |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| HTML 类型可穷举             | `CanvasContentType` 包含 `html`；`CanvasPanel` 用 `assertNever` 穷举 `code / html / markdown / file / empty`                                                                                                                                                  | 已实现 |
+| HTML 文件识别               | `workspaceFilePreview.ts` 将 `.html / .htm` 解析为 `contentType: "html"`、`language: "html"`                                                                                                                                                                  | 已实现 |
+| 默认网页预览                | `CanvasPanel` 对 HTML 默认渲染 iframe；无真实路径用 `srcDoc`                                                                                                                                                                                                  | 已实现 |
+| 源码切换                    | HTML 工具栏提供“预览 / 源码”切换，源码走 `CodePreview`                                                                                                                                                                                                        | 已实现 |
+| Tauri 本地文件预览          | 有 `sourcePath` 或绝对 `baseFilePath` 时使用 `convertFileSrc` 生成 iframe `src`                                                                                                                                                                               | 已实现 |
+| 浏览器 / DevBridge 回退预览 | `convertFileSrc` 不可用且返回原始绝对路径时，不再把 `/Users/...html` 当成 Vite 站内 iframe `src`；改用 `srcDoc` 展示真实 HTML 内容                                                                                                                            | 已实现 |
+| 独立预览窗口                | `openHtmlPreviewWindow` 使用 Tauri `WebviewWindow` 创建 `html-preview-*`，失败回退系统默认应用                                                                                                                                                                | 已实现 |
+| HTML artifact 流式阶段预览  | `resolveDefaultArtifactViewMode` 对 `html` 与 `code + language: html` 始终返回 `preview`，不再因 `writePhase: streaming` 默认源码                                                                                                                             | 已实现 |
+| HTML artifact 工具栏切换    | `HtmlRenderer` 接入外部 `viewMode / previewSize` 受控状态；工作区已有外部工具栏时隐藏内部重复工具栏，源码切换会真实移除 iframe 并渲染源码                                                                                                                     | 已实现 |
+| `.htm` 产物识别             | `buildArtifactFromWrite` 将 `.htm` 构建为 `html` artifact，并标记 `language: "html"`                                                                                                                                                                          | 已实现 |
+| Tauri 权限与 CSP            | `tauri.conf*.json` 启用 `assetProtocol`，CSP 覆盖 `asset:` / `http://asset.localhost` / `frame-src`；capability 覆盖 `html-preview-*` 与 `core:webview:allow-create-webview-window`                                                                           | 已实现 |
+| Provider 设置页不再误导     | 文本模型按钮显示“试跑当前模型”，并通过 `test_api_key_provider_chat` 做真实聊天试跑                                                                                                                                                                            | 已实现 |
+| 402 额度错误友好化          | `agentRuntimeErrorPresentation` 将 `402 / Payment Required / Insufficient Balance / 余额不足 / 额度不足` 归一为额度不足提示；聊天时间线、折叠摘要、流式失败 assistant patch 与会话概览均在 presentation 层显示友好提示，不再向普通用户暴露 raw Provider error | 已实现 |
+| 失败态不过度重复            | 失败详情只保留在时间线错误卡等主解释位置；assistant 正文若只是同一失败详情的重复文案会被隐藏，底部运行状态行只保留“失败 + 耗时”等短状态                                                                                                                       | 已实现 |
+| 五语言文案                  | `settings.json` 与 `agent.json` 已覆盖 `zh-CN / zh-TW / en-US / ja-JP / ko-KR`                                                                                                                                                                                | 已实现 |
 
 ## 外部依据
 
@@ -162,7 +162,7 @@ GUI smoke：
   - `services::runtime_skill_binding_service::tests::`：7 个用例通过。
   - `services::capability_draft_service::tests::execute_capability_draft_controlled_get_returns_evidence_without_persisting_inputs`：通过。
   - `commands::aster_agent_cmd::workspace_skill_binding_prompt::tests::should_project_workspace_skill_runtime_enable_as_callable_scope`：通过。
-  - `lime-agent tools::skill_tool_gate::tests::`：编译 `aster-core` 阶段失败于 `No space left on device (os error 28)`；当前磁盘可用约 `797MiB`，`src-tauri/target` 约 `116G`。
+  - `lime-agent tools::skill_tool_gate::tests::`：编译 `aster-core` 阶段失败于 `No space left on device (os error 28)`；当前磁盘可用约 `797MiB`，`lime-rs/target` 约 `116G`。
 - 再次尝试单跑 `lime-agent tools::skill_tool_gate::tests::`：仍在构建 `libaster-*.rlib` 时失败于 `No space left on device (os error 28)`；失败后磁盘可用约 `809MiB`。
 - 早前同命令曾失败于本机 `~/.cargo` registry 中 `base64-0.22.1` 缺文件；本次复跑已越过该错误，剩余问题是 Rust smoke 阶段总耗时超过脚本上限。
 - 使用临时 `CARGO_HOME` 与独立 target 重跑：workspace ready、browser runtime、site adapters、Skill Forge 前端定向测试通过；Rust 冷编译超过 10 分钟超时，脚本已清理子进程。
@@ -179,11 +179,11 @@ Typecheck：
 
 ## 当前未完成门槛
 
-| 缺口 | 原因 | 下一步 |
-| --- | --- | --- |
-| 真实 Mimo 试跑证据 | 点击会消耗真实 Provider 余额，且当前用户截图已显示余额不足；仓库 live Provider smoke 默认禁止真实外部 Provider 调用 | 只有在用户明确允许消耗额度时执行；否则以 mock / 单测覆盖链路 |
-| 全量 GUI smoke green | 当前 Rust / Skill Forge 磁盘阻塞已解除；剩余阻塞是 `smoke:agent-runtime-tool-surface-page` 页面级等待 `Runtime 能力摘要` 超时，页面停留在首页 / 新对话输入区 | 定向排查 `scripts/agent-runtime-tool-surface-page-smoke.mjs` 的页面导航 / fixture submit / Harness 打开链路，再复跑 `npm run smoke:agent-runtime-tool-surface-page -- --app-url http://127.0.0.1:1420/ --health-url http://127.0.0.1:3030/health --invoke-url http://127.0.0.1:3030/invoke --timeout-ms 300000 --interval-ms 1000`，最后复跑 `npm run verify:gui-smoke -- --reuse-running --timeout-ms 300000` |
-| 全量 typecheck green | 当前本机全量 `tsc --noEmit` 不收敛 | 后续需要单独治理 typecheck 性能 / 环境 |
+| 缺口                 | 原因                                                                                                                                                         | 下一步                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 真实 Mimo 试跑证据   | 点击会消耗真实 Provider 余额，且当前用户截图已显示余额不足；仓库 live Provider smoke 默认禁止真实外部 Provider 调用                                          | 只有在用户明确允许消耗额度时执行；否则以 mock / 单测覆盖链路                                                                                                                                                                                                                                                                                                                                                   |
+| 全量 GUI smoke green | 当前 Rust / Skill Forge 磁盘阻塞已解除；剩余阻塞是 `smoke:agent-runtime-tool-surface-page` 页面级等待 `Runtime 能力摘要` 超时，页面停留在首页 / 新对话输入区 | 定向排查 `scripts/agent-runtime/tool-surface-page-smoke.mjs` 的页面导航 / fixture submit / Harness 打开链路，再复跑 `npm run smoke:agent-runtime-tool-surface-page -- --app-url http://127.0.0.1:1420/ --health-url http://127.0.0.1:3030/health --invoke-url http://127.0.0.1:3030/invoke --timeout-ms 300000 --interval-ms 1000`，最后复跑 `npm run verify:gui-smoke -- --reuse-running --timeout-ms 300000` |
+| 全量 typecheck green | 当前本机全量 `tsc --noEmit` 不收敛                                                                                                                           | 后续需要单独治理 typecheck 性能 / 环境                                                                                                                                                                                                                                                                                                                                                                         |
 
 ## 结论
 

@@ -229,7 +229,7 @@ describe("resolveResourceManagerNavigationDestination", () => {
     );
   });
 
-  it("应优先用 Tauri 窗口 API 唤起主窗口", async () => {
+  it("应优先用 Desktop Host 窗口 API 唤起主窗口", async () => {
     const show = vi.fn().mockResolvedValue(undefined);
     const unminimize = vi.fn().mockResolvedValue(undefined);
     const setFocus = vi.fn().mockResolvedValue(undefined);

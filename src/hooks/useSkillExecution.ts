@@ -1,6 +1,6 @@
 /**
  * @file Skill 执行 Hook
- * @description 提供 Skill 执行功能，监听 Tauri 事件并管理执行状态
+ * @description 提供 Skill 执行功能，监听 Desktop Host 事件并管理执行状态
  *
  * 功能：
  * - 执行 Skill 并返回结果
@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { safeListen } from "@/lib/dev-bridge";
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@/lib/desktop-host/event";
 import {
   skillExecutionApi,
   SKILL_EVENTS,
@@ -76,7 +76,7 @@ interface UseSkillExecutionReturn {
 /**
  * Skill 执行 Hook
  *
- * 提供 Skill 执行功能，监听 Tauri 事件并管理执行状态。
+ * 提供 Skill 执行功能，监听 Desktop Host 事件并管理执行状态。
  *
  * @param options - Hook 选项，包含事件回调
  * @returns Hook 返回值，包含执行函数和状态
@@ -158,7 +158,7 @@ export function useSkillExecution(
   // 当前执行 ID 的 ref（用于事件过滤）
   const currentExecutionIdRef = useRef<string | null>(null);
 
-  // 监听 Tauri 事件
+  // 监听 Desktop Host 事件
   useEffect(() => {
     const unlistenFns: UnlistenFn[] = [];
 

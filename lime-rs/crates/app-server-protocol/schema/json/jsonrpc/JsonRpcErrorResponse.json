@@ -1,0 +1,47 @@
+{
+  "$defs": {
+    "JsonRpcError": {
+      "properties": {
+        "code": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "data": true,
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "RequestId": {
+      "anyOf": [
+        {
+          "format": "int64",
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "error": {
+      "$ref": "#/$defs/JsonRpcError"
+    },
+    "id": {
+      "$ref": "#/$defs/RequestId"
+    }
+  },
+  "required": [
+    "error",
+    "id"
+  ],
+  "title": "JsonRpcErrorResponse",
+  "type": "object"
+}

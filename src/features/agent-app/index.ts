@@ -157,10 +157,7 @@ export type {
   ShellLaunchReadiness,
   ShellLaunchResult,
 } from "./shell";
-export {
-  buildPackageDescriptor,
-  validatePackageTarget,
-} from "./packaging";
+export { buildPackageDescriptor, validatePackageTarget } from "./packaging";
 export type {
   AgentAppPackageDescriptor,
   AgentAppPackageTarget,
@@ -206,7 +203,6 @@ export {
   createLimeCapabilityErrorResponse,
   createLimeCapabilityInvoker,
   createLimeCapabilitySuccessResponse,
-  createMockLimeCapabilityTransport,
 } from "./sdk/capabilityContract";
 export type {
   BuildLimeCapabilityInvokeRequestParams,
@@ -217,8 +213,6 @@ export type {
   LimeCapabilityInvokeResponse,
   LimeCapabilityInvoker,
   LimeCapabilityMethod,
-  LimeCapabilityMockHandler,
-  LimeCapabilityMockHandlers,
   LimeCapabilityName,
   LimeCapabilityTransport,
   LimeCapabilityValue,
@@ -291,8 +285,6 @@ export type {
   LimeHostThemeSnapshot,
   SyncLimeHostThemeOptions,
 } from "./sdk/hostBridgeClient";
-export { MockCapabilityHost } from "./sdk/MockCapabilityHost";
-export { buildMockCapabilityProfile } from "./sdk/mockCapabilityProfile";
 export { buildAgentAppProvenance } from "./sdk/provenance";
 export { matchesAgentAppProvenanceQuery } from "./sdk/provenanceQuery";
 export { AdapterCapabilityHost } from "./adapters/AdapterCapabilityHost";

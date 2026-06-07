@@ -168,6 +168,37 @@ export function buildCapabilityDraftRequest(workspaceRoot) {
   };
 }
 
+async function invokeAppServer(options, invoke, method, params = {}) {
+  const response = await invoke(options, "app_server_handle_json_lines", {
+    request: {
+      lines: [
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method,
+          params,
+        }),
+      ],
+    },
+  });
+  const lines = Array.isArray(response?.lines) ? response.lines : [];
+  for (const line of lines) {
+    const text = typeof line === "string" ? line.trim() : "";
+    if (!text) {
+      continue;
+    }
+    const message = JSON.parse(text);
+    if (message?.id !== 1) {
+      continue;
+    }
+    if (message.error) {
+      throw new Error(`${method} failed: ${JSON.stringify(message.error)}`);
+    }
+    return message.result;
+  }
+  throw new Error(`${method} did not return a JSON-RPC response`);
+}
+
 export async function registerAutomationSmokeWorkspaceSkill(
   options,
   workspaceRoot,
@@ -236,16 +267,15 @@ export async function registerAutomationSmokeWorkspaceSkill(
     throw new Error("capability_draft_register 未返回 verification provenance");
   }
 
-  const bindingSnapshot = await invoke(
+  const bindingSnapshot = await invokeAppServer(
     options,
-    "agent_runtime_list_workspace_skill_bindings",
+    invoke,
+    "workspaceSkillBindings/list",
     {
-      request: {
-        workspaceRoot,
-        caller: "assistant",
-        workbench: true,
-        browserAssist: false,
-      },
+      workspaceRoot,
+      caller: "assistant",
+      workbench: true,
+      browserAssist: false,
     },
   );
   const binding = pickArray(bindingSnapshot, "bindings").find((item) => {

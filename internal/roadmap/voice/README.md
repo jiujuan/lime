@@ -60,10 +60,10 @@ P0 固定为：
 
 当前仓库已经有语音主链基础：
 
-1. `src-tauri/crates/voice-core` 负责录音、转写核心类型、云端 ASR 客户端与可选 Whisper 本地识别。
-2. `src-tauri/crates/services/src/voice_asr_service.rs` 统一管理 ASR 服务。
-3. `src-tauri/crates/services/src/voice_command_service.rs` 封装转写、润色和输出流程。
-4. `src-tauri/src/voice/shortcut.rs` 负责普通全局快捷键 press/release。
+1. `lime-rs/crates/voice-core` 负责录音、转写核心类型、云端 ASR 客户端与可选 Whisper 本地识别。
+2. `lime-rs/crates/services/src/voice_asr_service.rs` 统一管理 ASR 服务。
+3. `lime-rs/crates/services/src/voice_command_service.rs` 封装转写、润色和输出流程。
+4. `lime-rs/src/voice/shortcut.rs` 负责普通全局快捷键 press/release。
 5. `src/components/settings-v2/agent/voice/index.tsx` 已有语音输入、语音处理、语音服务模型三段设置。
 6. `src/components/agent/chat/components/Inputbar/hooks/useInputbarDictation.ts` 已把输入栏语音听写接到现有转写主链。
 

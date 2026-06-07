@@ -1,5 +1,8 @@
 import { safeInvoke } from "@/lib/dev-bridge";
-import type { AgentRuntimeRespondActionRequest } from "./agentRuntime/types";
+import type {
+  AgentRuntimeRespondActionRequest,
+  AgentTurnConfigSnapshot,
+} from "./agentRuntime/types";
 
 export const AGENT_APP_RUNTIME_COMMANDS = {
   startTask: "agent_app_runtime_start_task",
@@ -28,6 +31,7 @@ export interface AgentAppRuntimeStartTaskRequest {
   turnId?: string;
   providerPreference?: string;
   modelPreference?: string;
+  turnConfig?: AgentTurnConfigSnapshot;
   queueIfBusy?: boolean;
   skipPreSubmitResume?: boolean;
   runStartHooks?: boolean;

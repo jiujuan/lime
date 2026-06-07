@@ -4,6 +4,7 @@
  * 提供与后端 ModelRegistryService 交互的 API
  */
 
+import { AppServerClient } from "@/lib/api/appServer";
 import { safeInvoke } from "@/lib/dev-bridge";
 import type {
   EnhancedModelMetadata,
@@ -12,6 +13,59 @@ import type {
   ProviderAliasConfig,
   UserModelPreference,
 } from "@/lib/types/modelRegistry";
+import {
+  METHOD_MODEL_LIST,
+  METHOD_MODEL_PREFERENCES_LIST,
+  METHOD_MODEL_PROVIDER_ALIAS_LIST,
+  METHOD_MODEL_PROVIDER_ALIAS_READ,
+  METHOD_MODEL_SYNC_STATE_READ,
+  type ModelListParams,
+} from "../../../packages/app-server-client/src/protocol";
+
+type ModelRegistryAppServerClient = Pick<AppServerClient, "request">;
+
+type ModelListAppServerResponse = {
+  models?: EnhancedModelMetadata[] | null;
+};
+
+type ModelPreferencesListAppServerResponse = {
+  preferences?: UserModelPreference[] | null;
+};
+
+type ModelSyncStateReadAppServerResponse = {
+  syncState?: ModelSyncState | null;
+};
+
+type ModelProviderAliasReadAppServerResponse = {
+  config?: ProviderAliasConfig | null;
+};
+
+type ModelProviderAliasListAppServerResponse = {
+  configs?: Record<string, ProviderAliasConfig> | null;
+};
+
+async function requestModelRegistryAppServer<T>(
+  method: string,
+  params: unknown,
+  appServerClient: ModelRegistryAppServerClient = new AppServerClient(),
+): Promise<T> {
+  const response = await appServerClient.request<T>(method, params);
+  return response.result;
+}
+
+async function readModelsFromAppServer(
+  params: ModelListParams = {},
+): Promise<EnhancedModelMetadata[]> {
+  const response =
+    await requestModelRegistryAppServer<ModelListAppServerResponse>(
+      METHOD_MODEL_LIST,
+      params,
+    );
+  if (!Array.isArray(response.models)) {
+    throw new Error("App Server model/list did not return models");
+  }
+  return response.models;
+}
 
 interface ModelRegistryQueryOptions {
   forceRefresh?: boolean;
@@ -93,9 +147,7 @@ export async function getModelRegistry(
   }
 
   if (!modelRegistryLoadingPromise) {
-    modelRegistryLoadingPromise = safeInvoke<EnhancedModelMetadata[]>(
-      "get_model_registry",
-    )
+    modelRegistryLoadingPromise = readModelsFromAppServer()
       .then((models) => {
         modelRegistryCache = cloneValue(models);
         return modelRegistryCache;
@@ -141,7 +193,17 @@ export async function searchModels(
  * 获取用户模型偏好
  */
 export async function getModelPreferences(): Promise<UserModelPreference[]> {
-  return safeInvoke("get_model_preferences");
+  const response =
+    await requestModelRegistryAppServer<ModelPreferencesListAppServerResponse>(
+      METHOD_MODEL_PREFERENCES_LIST,
+      {},
+    );
+  if (!Array.isArray(response.preferences)) {
+    throw new Error(
+      "App Server modelPreferences/list did not return preferences",
+    );
+  }
+  return response.preferences;
 }
 
 /**
@@ -173,7 +235,15 @@ export async function recordModelUsage(modelId: string): Promise<void> {
  * 获取模型同步状态
  */
 export async function getModelSyncState(): Promise<ModelSyncState> {
-  return safeInvoke("get_model_sync_state");
+  const response =
+    await requestModelRegistryAppServer<ModelSyncStateReadAppServerResponse>(
+      METHOD_MODEL_SYNC_STATE_READ,
+      {},
+    );
+  if (!response.syncState) {
+    throw new Error("App Server modelSyncState/read did not return syncState");
+  }
+  return response.syncState;
 }
 
 /**
@@ -183,7 +253,7 @@ export async function getModelSyncState(): Promise<ModelSyncState> {
 export async function getModelsForProvider(
   providerId: string,
 ): Promise<EnhancedModelMetadata[]> {
-  return safeInvoke("get_models_for_provider", { providerId });
+  return readModelsFromAppServer({ providerId });
 }
 
 /**
@@ -193,7 +263,7 @@ export async function getModelsForProvider(
 export async function getModelsByTier(
   tier: ModelTier,
 ): Promise<EnhancedModelMetadata[]> {
-  return safeInvoke("get_models_by_tier", { tier });
+  return readModelsFromAppServer({ tier });
 }
 
 export async function fetchProviderModelsAuto(
@@ -234,18 +304,19 @@ export async function getProviderAliasConfig(
     return cloneValue(await existingPromise);
   }
 
-  const loadingPromise = safeInvoke<ProviderAliasConfig | null>(
-    "get_provider_alias_config",
-    { provider: normalizedProvider },
-  )
-    .then((config) => {
-      const snapshot = config ? cloneValue(config) : null;
-      providerAliasConfigCache.set(normalizedProvider, snapshot);
-      return snapshot;
-    })
-    .finally(() => {
-      providerAliasConfigLoadingPromises.delete(normalizedProvider);
-    });
+  const loadingPromise =
+    requestModelRegistryAppServer<ModelProviderAliasReadAppServerResponse>(
+      METHOD_MODEL_PROVIDER_ALIAS_READ,
+      { provider: normalizedProvider },
+    )
+      .then((config) => {
+        const snapshot = config.config ? cloneValue(config.config) : null;
+        providerAliasConfigCache.set(normalizedProvider, snapshot);
+        return snapshot;
+      })
+      .finally(() => {
+        providerAliasConfigLoadingPromises.delete(normalizedProvider);
+      });
 
   providerAliasConfigLoadingPromises.set(normalizedProvider, loadingPromise);
   return cloneValue(await loadingPromise);
@@ -272,20 +343,27 @@ async function getAllAliasConfigsCached(
   }
 
   if (!allAliasConfigsLoadingPromise) {
-    allAliasConfigsLoadingPromise = safeInvoke<
-      Record<string, ProviderAliasConfig>
-    >("get_all_alias_configs")
-      .then((configs) => {
-        allAliasConfigsCache = cloneValue(configs);
-        providerAliasConfigCache.clear();
-        Object.entries(allAliasConfigsCache).forEach(([key, value]) => {
-          providerAliasConfigCache.set(key, cloneValue(value));
+    allAliasConfigsLoadingPromise =
+      requestModelRegistryAppServer<ModelProviderAliasListAppServerResponse>(
+        METHOD_MODEL_PROVIDER_ALIAS_LIST,
+        {},
+      )
+        .then((configs) => {
+          if (!configs.configs) {
+            throw new Error(
+              "App Server modelProviderAlias/list did not return configs",
+            );
+          }
+          allAliasConfigsCache = cloneValue(configs.configs);
+          providerAliasConfigCache.clear();
+          Object.entries(allAliasConfigsCache).forEach(([key, value]) => {
+            providerAliasConfigCache.set(key, cloneValue(value));
+          });
+          return allAliasConfigsCache;
+        })
+        .finally(() => {
+          allAliasConfigsLoadingPromise = null;
         });
-        return allAliasConfigsCache;
-      })
-      .finally(() => {
-        allAliasConfigsLoadingPromise = null;
-      });
   }
 
   return cloneValue(await allAliasConfigsLoadingPromise);

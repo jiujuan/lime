@@ -13,7 +13,7 @@
 | 层级 | 目标 | 放在哪里 | 判断标准 |
 | --- | --- | --- | --- |
 | 公共标准协议 | 跨产品、跨实现复用的 Agent 语义 | 独立标准仓库与 GitHub Pages | 不依赖 Lime 私有实现，能被其他 Agent 产品采用 |
-| Lime 开发协议 | Lime 当前实现的命令、运行时、目录、UI、治理边界 | `internal/aiprompts/`、`internal/roadmap/`、代码契约测试 | 直接约束 Lime 源码、GUI、Tauri/Rust/React 主链 |
+| Lime 开发协议 | Lime 当前实现的命令、运行时、目录、UI、治理边界 | `internal/aiprompts/`、`internal/roadmap/`、代码契约测试 | 直接约束 Lime 源码、GUI、Electron/App Server/Rust/React 主链 |
 | 路线图候选 | 已在 Lime 中出现稳定模式，但还没足够独立 | `internal/roadmap/` | 有多处实现压力，但标准边界仍需验证 |
 | 外部参考标准 | 已存在的行业协议或生态规范 | 本文引用与各标准 `research-sources` | 只作为对齐对象，不复制其产品边界 |
 
@@ -53,7 +53,7 @@
 | --- | --- | --- | --- |
 | Query Loop | `query-loop.md` | turn 提交、prompt 组包、runtime 主链、执行入口 | 公共 runtime 标准全文 |
 | Command Runtime | `command-runtime.md` | `@` / `/` / 轻卡 / viewer / 功能方案包执行边界 | 新造独立命令协议 |
-| Tauri Command Boundary | `commands.md` | `safeInvoke`、Rust handler、command catalog、mock 四侧同步 | UI 或业务语义定义 |
+| Desktop Host / App Server Command Boundary | `commands.md` | `safeInvoke`、Electron host / preload、App Server protocol / client、legacy adapter、command catalog、mock 多侧同步 | UI 或业务语义定义 |
 | Skill Standard | `skill-standard.md` | Skill 包解析、标准摘要层、runtime binding、目录投影 | 把 `SKILL.md` 原文当 runtime 协议 |
 | Site Adapter Standard | `site-adapter-standard.md` | 站点适配器字段、来源导入、执行收敛 | 第二套浏览器 runtime |
 | State / History / Telemetry | `state-history-telemetry.md` | session/thread/request/evidence/history 事实链 | Evidence 标准的全部 review 语义 |
@@ -81,7 +81,7 @@
 一个 Lime 内部协议要升级为公共标准，应同时满足：
 
 1. **跨实现**：至少能被两个不同 runtime、UI、产品或服务采用。
-2. **可移植**：不依赖 Lime 路径、Tauri command、内部组件名或私有服务。
+2. **可移植**：不依赖 Lime 路径、宿主命令、内部组件名或私有服务。
 3. **边界清晰**：能一句话说清“它拥有何种事实，不拥有何种事实”。
 4. **有 schema / events / acceptance**：不只是散文，需要最小机器可验证结构。
 5. **能保留原生 id**：对外部协议只做 refs 与映射，不吞并其身份模型。

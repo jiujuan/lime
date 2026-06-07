@@ -38,7 +38,9 @@ describe("agent-qc-qcloop-status-core", () => {
     expect(report.counts.stale).toBe(1);
     expect(report.items[0].staleSeconds).toBe(3600);
     expect(report.items[0].worker.durationSeconds).toBe(3600);
-    expect(report.items[0].staleReasons.join("\n")).toContain("stdout/stderr 为空");
+    expect(report.items[0].staleReasons.join("\n")).toContain(
+      "stdout/stderr 为空",
+    );
     expect(validateQCLoopStatusReport(report).valid).toBe(true);
   });
 
@@ -97,7 +99,9 @@ describe("agent-qc-qcloop-status-core", () => {
           status: "exhausted",
           current_attempt_no: 1,
           current_qc_no: 1,
-          attempts: [{ id: "attempt-3", status: "failed", stdout: "", stderr: "error" }],
+          attempts: [
+            { id: "attempt-3", status: "failed", stdout: "", stderr: "error" },
+          ],
           qc_rounds: [{ id: "qc-3", status: "fail", feedback: "缺少证据" }],
         },
       ],
@@ -123,11 +127,18 @@ describe("agent-qc-qcloop-status-core", () => {
             {
               id: "attempt-4",
               status: "success",
-              stdout: "QCLOOP_WORKER_RESULT=BLOCKED\nDevBridge preflight: BLOCKED",
+              stdout:
+                "QCLOOP_WORKER_RESULT=BLOCKED\nDevBridge preflight: BLOCKED",
               stderr: "",
             },
           ],
-          qc_rounds: [{ id: "qc-4", status: "fail", feedback: "DevBridge preflight blocked" }],
+          qc_rounds: [
+            {
+              id: "qc-4",
+              status: "fail",
+              feedback: "DevBridge preflight blocked",
+            },
+          ],
         },
       ],
       options: { generatedAt, staleMinutes: 30 },
@@ -156,7 +167,9 @@ describe("agent-qc-qcloop-status-core", () => {
                 "QCLOOP_CODEX_BIN 不可用: /opt/homebrew/bin/codex: fork/exec /opt/homebrew/bin/codex: no such file or directory",
             },
           ],
-          qc_rounds: [{ id: "qc-5", status: "fail", feedback: "verifier 输出格式错误" }],
+          qc_rounds: [
+            { id: "qc-5", status: "fail", feedback: "verifier 输出格式错误" },
+          ],
         },
       ],
       options: { generatedAt, staleMinutes: 30 },

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileQuestion } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   openPathWithDefaultApp,
@@ -7,9 +8,9 @@ import {
 } from "@/lib/api/fileSystem";
 import { readFilePreview } from "@/lib/api/fileBrowser";
 import {
-  hasTauriEventCapability,
-  hasTauriInvokeCapability,
-} from "@/lib/tauri-runtime";
+  hasDesktopHostEventCapability,
+  hasDesktopHostInvokeCapability,
+} from "@/lib/desktop-runtime";
 import { DATA_RESOURCE_PREVIEW_MAX_SIZE } from "./DataResourceRenderer";
 import { useImageResourceViewControls } from "./imageResourceViewControls";
 import { getResourcePreviewTarget } from "./resourceFormatCatalog";
@@ -53,14 +54,14 @@ function readSessionIdFromLocation(): string | null {
 }
 
 async function closeCurrentResourceManagerWindow(): Promise<void> {
-  if (hasTauriInvokeCapability()) {
+  if (hasDesktopHostInvokeCapability()) {
     try {
       const { getCurrentWebviewWindow } =
-        await import("@tauri-apps/api/webviewWindow");
+        await import("@/lib/desktop-host/webviewWindow");
       await getCurrentWebviewWindow().close();
       return;
     } catch (error) {
-      console.warn("[资源管理器] 关闭 Tauri 窗口失败，尝试浏览器关闭:", error);
+      console.warn("[资源管理器] 关闭 Desktop Host 窗口失败，尝试浏览器关闭:", error);
     }
   }
 
@@ -68,9 +69,9 @@ async function closeCurrentResourceManagerWindow(): Promise<void> {
 }
 
 async function openExternalUrl(url: string): Promise<void> {
-  if (hasTauriInvokeCapability()) {
+  if (hasDesktopHostInvokeCapability()) {
     try {
-      const { open } = await import("@tauri-apps/plugin-shell");
+      const { open } = await import("@/lib/desktop-host/plugin-shell");
       await open(url);
       return;
     } catch (error) {
@@ -195,6 +196,7 @@ function getReadablePreviewLimit(item: ResourceManagerItem): number {
 const EMPTY_RESOURCE_MANAGER_ITEMS: ResourceManagerItem[] = [];
 
 export function ResourceManagerPage() {
+  const { t } = useTranslation("workspace");
   const [session, setSession] = useState<ResourceManagerSession | null>(() =>
     readResourceManagerSession(readSessionIdFromLocation()),
   );
@@ -366,12 +368,12 @@ export function ResourceManagerPage() {
   }, [activeIndex, items.length, selectIndex, visibleResourceEntries]);
 
   useEffect(() => {
-    if (!hasTauriEventCapability()) {
+    if (!hasDesktopHostEventCapability()) {
       return;
     }
 
     let unlisten: (() => void) | null = null;
-    void import("@tauri-apps/api/event")
+    void import("@/lib/desktop-host/event")
       .then(({ listen }) =>
         listen<{ sessionId?: string }>(
           RESOURCE_MANAGER_SESSION_EVENT,
@@ -696,10 +698,10 @@ export function ResourceManagerPage() {
             <FileQuestion className="h-7 w-7" />
           </div>
           <h1 className="mt-5 text-lg font-semibold text-slate-950">
-            暂无可查看资源
+            {t("workspace.resourceManager.empty.title")}
           </h1>
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            这次资源查看会话已过期或不存在，请回到 Lime 重新打开资源。
+            {t("workspace.resourceManager.empty.description")}
           </p>
         </div>
       </main>

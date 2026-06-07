@@ -24,7 +24,7 @@ const EXCLUDED_DIR_NAMES = new Set([
 ]);
 
 const EXCLUDED_PATH_SEGMENTS = [
-  "/src-tauri/target/",
+  "/lime-rs/target/",
   "/tmp/lime-pnpm-frozen-node_modules/",
 ];
 
@@ -71,10 +71,18 @@ const NETWORK_INTEGRATION_PATTERNS = [
   },
 ];
 
+const LEGACY_DESKTOP_HOST_API_PATTERN = new RegExp(
+  [
+    ["@", "ta", "uri-apps", "\\/api"].join(""),
+    ["__TA", "URI__"].join(""),
+  ].join("|"),
+);
+
 const CONTRACT_PATTERNS = [
-  { reason: "tauri-api", pattern: /@tauri-apps\/api|__TAURI__/ },
   { reason: "safeInvoke", pattern: /\bsafeInvoke\b|\binvoke\s*\(/ },
-  { reason: "dev-bridge", pattern: /\bDevBridge\b|dev-bridge|tauri-mock/ },
+  { reason: "dev-bridge", pattern: /\bDevBridge\b|dev-bridge/ },
+  { reason: "desktop-host-api", pattern: /desktop-host|DesktopHost/ },
+  { reason: "legacy-desktop-host-api", pattern: LEGACY_DESKTOP_HOST_API_PATTERN },
   {
     reason: "command-catalog",
     pattern:

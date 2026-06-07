@@ -6,13 +6,8 @@
  * _Requirements: 2.1, 7.2, 7.3_
  */
 
-import { useState, useEffect, useCallback } from "react";
-import { safeInvoke } from "@/lib/dev-bridge";
-import type { RelayInfo } from "./useDeepLink";
-import {
-  showRegistryLoadError,
-  showRegistryNoCacheError,
-} from "@/lib/utils/connectError";
+import { useCallback, useEffect, useState } from "react";
+import type { RelayInfo } from "@/lib/api/connect";
 
 interface UseRelayRegistryOptions {
   autoLoad?: boolean;
@@ -43,32 +38,11 @@ interface UseRelayRegistryReturn {
 }
 
 /**
- * Relay Registry 管理 Hook
+ * Relay Registry 管理 Hook。
  *
- * 管理中转商注册表的加载、刷新和状态。
- *
- * ## 功能
- *
- * - 应用启动时自动加载注册表（Requirements 2.1）
- * - 加载失败时回退到缓存（Requirements 7.2）
- * - 无缓存且加载失败时显示错误（Requirements 7.3）
- * - 提供手动刷新功能
- *
- * ## 使用示例
- *
- * ```tsx
- * function App() {
- *   const { providers, isLoading, error, refresh } = useRelayRegistry();
- *
- *   if (error) {
- *     return <ErrorMessage error={error} onRetry={refresh} />;
- *   }
- *
- *   return <ProviderList providers={providers} />;
- * }
- * ```
- *
- * @returns Hook 返回值
+ * Connect registry 不再通过前端列表命令预加载。Electron deep link
+ * URL 发生时，`useDeepLink -> src/lib/api/connect.ts -> App Server`
+ * 会按需解析注册表并保存 API Key。
  */
 export function useRelayRegistry(
   options: UseRelayRegistryOptions = {},
@@ -79,58 +53,15 @@ export function useRelayRegistry(
   const [error, setError] = useState<RegistryError | null>(null);
 
   /**
-   * 加载中转商列表
-   * _Requirements: 2.1_
-   */
-  const loadProviders = useCallback(async () => {
-    try {
-      const list = await safeInvoke<RelayInfo[]>("list_relay_providers");
-      setProviders(list);
-      setError(null);
-    } catch (err) {
-      console.error("[useRelayRegistry] 加载中转商列表失败:", err);
-      // 不设置错误，因为可能是 Connect 模块还未初始化
-      // 后端会自动处理缓存回退
-    }
-  }, []);
-
-  /**
    * 刷新注册表
-   * _Requirements: 2.5, 7.2, 7.3_
    */
   const refresh = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
-    // 在调用前捕获当前 providers 长度，避免闭包问题
-    const hasCache = providers.length > 0;
-
-    try {
-      // 调用后端刷新注册表
-      const count = await safeInvoke<number>("refresh_relay_registry");
-      console.log(`[useRelayRegistry] 注册表已刷新，共 ${count} 个中转商`);
-
-      // 重新加载列表
-      await loadProviders();
-    } catch (err) {
-      console.error("[useRelayRegistry] 刷新注册表失败:", err);
-      // _Requirements: 7.2, 7.3_
-      const registryError = err as RegistryError;
-      setError(registryError);
-
-      // 根据错误类型显示不同的 Toast
-      // 检查是否有缓存数据（providers 不为空表示有缓存）
-      if (hasCache) {
-        // _Requirements: 7.2_ - 有缓存，显示加载失败但已回退到缓存
-        showRegistryLoadError(registryError.message);
-      } else {
-        // _Requirements: 7.3_ - 无缓存，显示错误并允许重试
-        showRegistryNoCacheError(registryError.message);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [loadProviders, providers.length]);
+    setIsLoading(false);
+    setError({
+      code: "REGISTRY_LIST_DISABLED",
+      message: "Connect registry list is resolved on demand by App Server.",
+    });
+  }, []);
 
   /**
    * 获取指定中转商信息
@@ -142,21 +73,15 @@ export function useRelayRegistry(
     [providers],
   );
 
-  // 初始加载
-  // _Requirements: 2.1_
   useEffect(() => {
+    setIsLoading(false);
     if (!autoLoad) {
-      setIsLoading(false);
       return;
     }
 
-    // 延迟加载，等待 Connect 模块初始化
-    const timer = setTimeout(() => {
-      loadProviders();
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [autoLoad, loadProviders]);
+    setProviders([]);
+    setError(null);
+  }, [autoLoad]);
 
   return {
     providers,

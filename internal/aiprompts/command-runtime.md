@@ -494,7 +494,7 @@ Agent turn 必须把当前 OS、工作目录、shell 运行时和本机路径格
 - viewer 看什么
 - scope / 恢复 / 重试 / 取消怎么做
 - 前端改哪里
-- Rust / Tauri 改哪里
+- Electron / App Server / legacy adapter 改哪里
 - 哪些路径是 current，哪些只是 compat
 
 ### 6. 再进入实现
@@ -519,7 +519,7 @@ Agent turn 必须把当前 OS、工作目录、shell 运行时和本机路径格
 两份文档不要混用：
 
 - `internal/aiprompts/commands.md`
-  - 关注 Tauri 命令边界、`safeInvoke`、`generate_handler!`、mock 与契约同步
+  - 关注 Electron IPC、App Server JSON-RPC、legacy adapter、`safeInvoke`、mock 与契约同步
 
 - `internal/aiprompts/command-runtime.md`
   - 关注命令运行时产品模型、公共设计包、单功能方案包、轻卡 / viewer / truth source 关系

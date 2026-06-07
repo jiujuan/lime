@@ -22,7 +22,9 @@ const manifest = {
 
 describe("agent-qc-gui-owner-core", () => {
   it("应从 manifest 中识别 GUI owner 场景", () => {
-    expect(collectGuiScenarioIds(manifest)).toEqual(["claw-chat-ready-streaming"]);
+    expect(collectGuiScenarioIds(manifest)).toEqual([
+      "claw-chat-ready-streaming",
+    ]);
   });
 
   it("没有 active GUI sidecar 时应 pass", () => {
@@ -82,8 +84,12 @@ describe("agent-qc-gui-owner-core", () => {
     expect(report.staleOwnerCount).toBe(1);
     expect(report.oldestStaleSeconds).toBe(600);
     expect(report.verdict.nextAction).toContain("只读观察");
-    expect(report.ownerIntervention?.status).toBe("requires_owner_confirmation");
-    expect(report.ownerIntervention?.requiredConfirmationText).toContain("job-gui");
+    expect(report.ownerIntervention?.status).toBe(
+      "requires_owner_confirmation",
+    );
+    expect(report.ownerIntervention?.requiredConfirmationText).toContain(
+      "job-gui",
+    );
     expect(report.ownerIntervention?.prohibitedUntilConfirmed).toContain(
       "start another full GUI P0 batch",
     );
@@ -180,7 +186,9 @@ describe("agent-qc-gui-owner-core", () => {
 
     expect(report.ownerCount).toBe(1);
     expect(report.oldestStaleSeconds).toBe(900);
-    expect(report.activeOwners[0].path).toBe(".lime/qc/qcloop-status.gui-current.json");
+    expect(report.activeOwners[0].path).toBe(
+      ".lime/qc/qcloop-status.gui-current.json",
+    );
   });
 
   it("同一 job 存在终态 sidecar 时应忽略旧 running sidecar", () => {
@@ -210,8 +218,14 @@ describe("agent-qc-gui-owner-core", () => {
     const report = createAgentQcGuiOwnerReport({
       manifest,
       statusSidecars: [
-        { path: ".lime/qc/qcloop-status.gui-current.json", status: runningSidecar },
-        { path: ".lime/qc/qcloop-status.gui-completed.json", status: terminalSidecar },
+        {
+          path: ".lime/qc/qcloop-status.gui-current.json",
+          status: runningSidecar,
+        },
+        {
+          path: ".lime/qc/qcloop-status.gui-completed.json",
+          status: terminalSidecar,
+        },
       ],
     });
 
@@ -221,7 +235,10 @@ describe("agent-qc-gui-owner-core", () => {
   });
 
   it("应渲染 summary", () => {
-    const report = createAgentQcGuiOwnerReport({ manifest, statusSidecars: [] });
+    const report = createAgentQcGuiOwnerReport({
+      manifest,
+      statusSidecars: [],
+    });
     const summary = renderAgentQcGuiOwnerSummary(report);
 
     expect(summary).toContain("status=pass");

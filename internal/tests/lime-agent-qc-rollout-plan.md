@@ -25,7 +25,7 @@ Diff / Release Candidate
 | --- | --- | --- |
 | 本地智能校验 | `npm run verify:local` | 选择前端、Rust、契约和 smoke 的最低门槛 |
 | 桥接契约 | `npm run test:contracts` | 防止前端、Rust、DevBridge、mock、治理目录漂移 |
-| GUI 冒烟 | `npm run verify:gui-smoke` | 验证 Tauri 壳、DevBridge、workspace、browser runtime 等主路径 |
+| GUI 冒烟 | `npm run verify:gui-smoke` | 验证 Electron Desktop Host、App Server、DevBridge、workspace、browser runtime 等主路径 |
 | Runtime smoke | `npm run smoke:agent-runtime-tool-surface` | 验证 tool surface、runtime strip、工作台能力摘要 |
 | Browser / Site Adapter | `npm run smoke:browser-runtime`、`npm run smoke:site-adapters` | 验证浏览器会话、adapter catalog 和清理边界 |
 | Harness eval | `npm run harness:eval`、`npm run harness:eval:trend` | 验证 replay、grader、行为趋势 |

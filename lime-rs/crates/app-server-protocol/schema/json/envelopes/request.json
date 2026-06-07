@@ -1,0 +1,9 @@
+{
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "clientInfo": {
+      "name": "fixture"
+    }
+  }
+}

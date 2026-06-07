@@ -46,6 +46,10 @@ type UseAsterAgentChatRuntimeOptions = UseAsterAgentChatOptions & {
 const AUTO_TITLE_DEFERRED_LOAD_MS = 30_000;
 const AUTO_TITLE_IDLE_TIMEOUT_MS = 2_000;
 
+function normalizeProviderSelection(value?: string | null): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
 export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
   const {
     systemPrompt,
@@ -149,43 +153,101 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
       const hasPersistedWorkspacePreference = Boolean(
         currentProviderType && currentModel,
       );
+      const runtimeProviderType =
+        status?.provider_configured === true
+          ? status.provider_selector?.trim() || status.provider_name?.trim() || ""
+          : "";
+      const runtimeModel = status?.model_name?.trim() || "";
+      const currentProviderMatchesRuntime =
+        Boolean(runtimeProviderType) &&
+        normalizeProviderSelection(currentProviderType) ===
+          normalizeProviderSelection(runtimeProviderType);
 
       if (
-        !hasPersistedWorkspacePreference &&
-        status?.provider_configured &&
-        (status.provider_selector?.trim() || status.provider_name?.trim()) &&
-        status.model_name?.trim()
+        runtimeProviderType &&
+        hasPersistedWorkspacePreference &&
+        !currentProviderMatchesRuntime
+      ) {
+        try {
+          const retainedSelection = await resolveClawWorkspaceProviderSelection({
+            currentProviderType,
+            currentModel,
+            theme: "general",
+            allowProviderFallback: false,
+          });
+          if (!isCurrentWorkspace()) {
+            return;
+          }
+          if (retainedSelection) {
+            applyWorkspaceModelPreference({
+              providerType: retainedSelection.providerType,
+              model: retainedSelection.model,
+            });
+            return;
+          }
+        } catch (error) {
+          console.warn("[AsterChat] 校验当前工作区模型失败:", error);
+        }
+      }
+
+      if (
+        runtimeProviderType &&
+        runtimeModel &&
+        (!hasPersistedWorkspacePreference || !currentProviderMatchesRuntime)
       ) {
         if (!isCurrentWorkspace()) {
           return;
         }
         applyWorkspaceModelPreference({
-          providerType:
-            status.provider_selector?.trim() || status.provider_name!.trim(),
-          model: status.model_name.trim(),
+          providerType: runtimeProviderType,
+          model: runtimeModel,
         });
         return;
       }
 
-      if (status?.provider_configured && hasPersistedWorkspacePreference) {
+      if (
+        status?.provider_configured &&
+        hasPersistedWorkspacePreference &&
+        (!runtimeProviderType || currentProviderMatchesRuntime)
+      ) {
         return;
       }
 
       try {
-        const defaultProvider = !hasPersistedWorkspacePreference
+        const defaultProvider =
+          !hasPersistedWorkspacePreference && !runtimeProviderType
           ? (await getDefaultProvider()).trim()
           : "";
         if (!isCurrentWorkspace()) {
           return;
         }
-        const fallbackProviderType = currentProviderType || defaultProvider;
-        const resolvedSelection = await resolveClawWorkspaceProviderSelection({
+        const fallbackProviderType =
+          runtimeProviderType || currentProviderType || defaultProvider;
+        const fallbackModel =
+          !runtimeProviderType || currentProviderMatchesRuntime
+            ? currentModel
+            : "";
+        const resolvedSelectionInput = {
           currentProviderType: fallbackProviderType || undefined,
-          currentModel: currentModel || null,
+          currentModel: fallbackModel || null,
           theme: "general",
-        });
+          ...(runtimeProviderType ? { allowProviderFallback: false } : {}),
+        };
+        const resolvedSelection = await resolveClawWorkspaceProviderSelection(
+          resolvedSelectionInput,
+        );
 
         if (!resolvedSelection || !isCurrentWorkspace()) {
+          if (
+            runtimeProviderType &&
+            !currentProviderMatchesRuntime &&
+            isCurrentWorkspace()
+          ) {
+            applyWorkspaceModelPreference({
+              providerType: runtimeProviderType,
+              model: "",
+            });
+          }
           return;
         }
 
@@ -403,6 +465,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     sessionIdRef,
     sessionId: session.sessionId,
     parentSessionId: session.subagentParentContext?.parent_session_id,
+    currentTurnEventName: currentStreamingEventNameRef.current,
     isSending: stream.isSending,
     threadReadStatus: session.threadRead?.status,
     queuedTurnCount: session.queuedTurns.length,

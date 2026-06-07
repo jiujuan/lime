@@ -15,12 +15,11 @@ on:
       package_format:
         description: "macOS package format"
         required: true
-        default: "pkg"
+        default: "dmg"
         type: choice
         options:
           - app
           - dmg
-          - pkg
       channel:
         description: "Release channel"
         required: true
@@ -32,11 +31,6 @@ on:
           - dev
       remote_upload:
         description: "Require remote upload token"
-        required: true
-        default: true
-        type: boolean
-      updater_enabled:
-        description: "Require Tauri updater signing secrets"
         required: true
         default: true
         type: boolean
@@ -67,16 +61,11 @@ jobs:
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
       APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_INSTALLER_SIGNING_IDENTITY: ${{ secrets.APPLE_INSTALLER_SIGNING_IDENTITY }}
       APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
       APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-      APPLE_SIGNING_IDENTITY_INSTALLER: ${{ secrets.APPLE_SIGNING_IDENTITY_INSTALLER }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       LIME_AGENT_APP_PREVIOUS_RELEASE_REF: ${{ secrets.LIME_AGENT_APP_PREVIOUS_RELEASE_REF || vars.LIME_AGENT_APP_PREVIOUS_RELEASE_REF }}
       LIME_AGENT_APP_RELEASE_UPLOAD_TOKEN: ${{ secrets.LIME_AGENT_APP_RELEASE_UPLOAD_TOKEN }}
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-      TAURI_SIGNING_PRIVATE_KEY_RAW: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_RAW }}
       WINDOWS_SIGNING_CERTIFICATE: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE }}
       WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
 
@@ -105,11 +94,7 @@ jobs:
           if [ "${{ inputs.remote_upload }}" = "true" ]; then
             args+=(--remote-upload)
           fi
-          if [ "${{ inputs.updater_enabled }}" != "true" ]; then
-            args+=(--no-updater)
-          fi
-
-          node scripts/agent-app-standalone-release-secret-preflight.mjs "${args[@]}"
+          node scripts/agent-app/standalone-release-secret-preflight.mjs "${args[@]}"
 
       - name: Summarize release gate evidence
         if: always()
@@ -164,7 +149,7 @@ jobs:
             args+=(--artifact-root "$ARTIFACT_ROOT")
           fi
 
-          node scripts/agent-app-standalone-release-evidence-check.mjs "${args[@]}"
+          node scripts/agent-app/standalone-release-evidence-check.mjs "${args[@]}"
 
       - name: Summarize final release evidence audit
         if: ${{ always() && inputs.release_evidence_path != '' }}

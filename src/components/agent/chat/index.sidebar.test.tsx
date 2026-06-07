@@ -23,7 +23,7 @@ describe("AgentChatPage 侧栏显示控制", () => {
       ({ workspaceId }: { workspaceId: string }) => {
         observedWorkspaceIds.push(workspaceId);
         return {
-          providerType: "kiro",
+          providerType: "openai",
           setProviderType: vi.fn(),
           model: "mock-model",
           setModel: vi.fn(),
@@ -172,7 +172,7 @@ describe("AgentChatPage 侧栏显示控制", () => {
       ({ workspaceId }: { workspaceId: string }) => {
         observedWorkspaceIds.push(workspaceId);
         return {
-          providerType: "kiro",
+          providerType: "openai",
           setProviderType: vi.fn(),
           model: "mock-model",
           setModel: vi.fn(),

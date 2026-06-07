@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { safeInvoke } from "@/lib/dev-bridge";
+import { invalidateAppConfigCache } from "./appConfig";
 import {
   addAsrCredential,
   cancelRecording,
@@ -31,6 +32,7 @@ vi.mock("@/lib/dev-bridge", () => ({
 describe("asrProvider API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    invalidateAppConfigCache();
   });
 
   it("应代理设备与凭证命令", async () => {
@@ -75,7 +77,7 @@ describe("asrProvider API", () => {
     );
   });
 
-  it("应代理语音输入配置与指令命令", async () => {
+  it("应通过 app config 读写语音输入配置", async () => {
     const config = {
       enabled: true,
       shortcut: "CommandOrControl+Shift+V",
@@ -93,7 +95,25 @@ describe("asrProvider API", () => {
     };
 
     vi.mocked(safeInvoke)
-      .mockResolvedValueOnce(config)
+      .mockResolvedValueOnce({
+        default_provider: "openai",
+        experimental: {
+          webmcp: { enabled: false },
+          voice_input: {
+            ...config,
+            asr_credentials: [{ id: "cred-1" }],
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        default_provider: "openai",
+        experimental: {
+          webmcp: { enabled: false },
+          voice_input: {
+            asr_credentials: [{ id: "cred-1" }],
+          },
+        },
+      })
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce([
         { id: "inst-1", name: "默认", prompt: "优化", is_preset: true },
@@ -117,6 +137,24 @@ describe("asrProvider API", () => {
       }),
     ).resolves.toBeUndefined();
     await expect(deleteVoiceInstruction("inst-2")).resolves.toBeUndefined();
+
+    expect(safeInvoke).toHaveBeenNthCalledWith(1, "get_config");
+    expect(safeInvoke).toHaveBeenNthCalledWith(2, "get_config");
+    expect(safeInvoke).toHaveBeenNthCalledWith(3, "save_config", {
+      config: expect.objectContaining({
+        experimental: expect.objectContaining({
+          voice_input: expect.objectContaining({
+            enabled: true,
+            asr_credentials: [{ id: "cred-1" }],
+          }),
+        }),
+      }),
+    });
+    expect(safeInvoke).not.toHaveBeenCalledWith("get_voice_input_config");
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "save_voice_input_config",
+      expect.anything(),
+    );
   });
 
   it("应代理转写、润色与录音命令", async () => {

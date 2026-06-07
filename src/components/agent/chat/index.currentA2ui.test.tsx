@@ -234,7 +234,7 @@ ask<arg_key>question</arg_key><arg_key>arg_value>请提供您希望我研究的�
       ({ workspaceId }: { workspaceId: string }) => {
         observedWorkspaceIds.push(workspaceId);
         return {
-          providerType: "kiro",
+          providerType: "openai",
           setProviderType: vi.fn(),
           model: "mock-model",
           setModel: vi.fn(),
@@ -342,7 +342,7 @@ ask<arg_key>question</arg_key><arg_key>arg_value>请提供您希望我研究的�
       ({ workspaceId }: { workspaceId: string }) => {
         observedWorkspaceIds.push(workspaceId);
         return {
-          providerType: "kiro",
+          providerType: "openai",
           setProviderType: vi.fn(),
           model: "mock-model",
           setModel: vi.fn(),

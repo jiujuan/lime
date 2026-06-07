@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const DEFAULT_ROOTS = ["src", "src-tauri", "scripts", "packages"];
+const DEFAULT_ROOTS = ["src", "lime-rs", "scripts", "packages"];
 const SCANNED_EXTENSIONS = new Set([
   ".cjs",
   ".cts",
@@ -47,10 +47,10 @@ const SKIPPED_FILE_SUFFIXES = [
   ".spec.tsx",
 ];
 const DEFAULT_TOOL_SURFACE_PATHS = [
-  "src-tauri/src/agent_tools",
-  "src-tauri/src/commands/aster_agent_cmd/tool_runtime.rs",
-  "src-tauri/src/commands/aster_agent_cmd/tool_runtime",
-  "src-tauri/src/commands/aster_agent_cmd/command_api/runtime_api.rs",
+  "lime-rs/src/agent_tools",
+  "lime-rs/src/commands/aster_agent_cmd/tool_runtime.rs",
+  "lime-rs/src/commands/aster_agent_cmd/tool_runtime",
+  "lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs",
 ];
 
 export function managedObjectiveForbiddenSurfaceTokens() {

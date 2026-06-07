@@ -1,0 +1,82 @@
+{
+  "$defs": {
+    "AgentSessionActionScope": {
+      "properties": {
+        "sessionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "turnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "AgentSessionActionType": {
+      "enum": [
+        "ask_user",
+        "elicitation",
+        "tool_confirmation"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "actionScope": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AgentSessionActionScope"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "actionType": {
+      "$ref": "#/$defs/AgentSessionActionType"
+    },
+    "confirmed": {
+      "type": "boolean"
+    },
+    "eventName": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "metadata": true,
+    "requestId": {
+      "type": "string"
+    },
+    "response": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "userData": true
+  },
+  "required": [
+    "actionType",
+    "confirmed",
+    "requestId",
+    "sessionId"
+  ],
+  "title": "AgentSessionActionRespondParams",
+  "type": "object"
+}

@@ -138,12 +138,12 @@ vi.mock("@/lib/api/appConfig", () => ({
   getDefaultProvider: mockGetDefaultProvider,
 }));
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  getTauriGlobal: vi.fn(() => null),
-  hasTauriEventCapability: vi.fn(() => true),
-  hasTauriEventListenerCapability: vi.fn(() => true),
-  hasTauriInvokeCapability: vi.fn(() => true),
-  hasTauriRuntimeMarkers: vi.fn(() => true),
+vi.mock("@/lib/desktop-runtime", () => ({
+  getLegacyDesktopHostGlobal: vi.fn(() => null),
+  hasDesktopHostEventCapability: vi.fn(() => true),
+  hasDesktopHostEventListenerCapability: vi.fn(() => true),
+  hasDesktopHostInvokeCapability: vi.fn(() => true),
+  hasDesktopHostRuntimeMarkers: vi.fn(() => true),
 }));
 
 vi.mock("@/lib/utils/scheduleMinimumDelayIdleTask", () => ({
@@ -156,6 +156,7 @@ vi.mock("../utils/clawWorkspaceProviderSelection", () => ({
 }));
 
 import { useAsterAgentChat } from "./useAsterAgentChat";
+import { publishAgentRuntimeEvent } from "@/lib/api/agentRuntimeEvents";
 import {
   clearAllAgentStreamTextOverlays,
   getAgentStreamTextOverlay,
@@ -284,15 +285,81 @@ function captureRuntimeStream(matcher: (eventName: unknown) => boolean) {
 
   return {
     emit(payload: unknown) {
+      const eventName = resolveCapturedRuntimeEventName({
+        activeEventName,
+        matcher,
+      });
+      if (eventName) {
+        publishAgentRuntimeEvent(eventName, payload);
+        return;
+      }
       streamHandler?.({ payload });
     },
     getEventName() {
-      return activeEventName;
+      return resolveCapturedRuntimeEventName({
+        activeEventName,
+        matcher,
+      });
     },
   };
 }
 
+function resolveCapturedRuntimeEventName({
+  activeEventName,
+  matcher,
+}: {
+  activeEventName: string | null;
+  matcher: (eventName: unknown) => boolean;
+}) {
+  if (activeEventName && matcher(activeEventName)) {
+    return activeEventName;
+  }
+
+  const runtimeCalls = [
+    ...collectRuntimeEventNameCalls(mockSubmitAgentRuntimeTurn),
+    ...collectRuntimeEventNameCalls(mockCompactAgentRuntimeSession),
+  ].sort((left, right) => right.order - left.order);
+
+  for (const call of runtimeCalls) {
+    const eventName = readRuntimeEventNameFromCall(call.args);
+    if (eventName && matcher(eventName)) {
+      return eventName;
+    }
+  }
+
+  return null;
+}
+
+function collectRuntimeEventNameCalls(mock: typeof mockSubmitAgentRuntimeTurn) {
+  return mock.mock.calls.map((args, index) => ({
+    args,
+    order: mock.mock.invocationCallOrder[index] ?? index,
+  }));
+}
+
+function readRuntimeEventNameFromCall(args: unknown[]) {
+  const request = args[0];
+  if (!request || typeof request !== "object" || Array.isArray(request)) {
+    return null;
+  }
+  const eventName = (request as { event_name?: unknown; eventName?: unknown })
+    .event_name;
+  if (typeof eventName === "string" && eventName.trim()) {
+    return eventName;
+  }
+  const camelEventName = (
+    request as { event_name?: unknown; eventName?: unknown }
+  ).eventName;
+  return typeof camelEventName === "string" && camelEventName.trim()
+    ? camelEventName
+    : null;
+}
+
 function seedSession(workspaceId: string, sessionId: string) {
+  localStorage.setItem(
+    `agent_session_workspace_${sessionId}`,
+    JSON.stringify(workspaceId),
+  );
   sessionStorage.setItem(
     `aster_curr_sessionId_${workspaceId}`,
     JSON.stringify(sessionId),
@@ -462,6 +529,7 @@ describe("useAsterAgentChat 首页新会话", () => {
         created_at: 1700000020,
         updated_at: 1700000021,
         messages_count: 0,
+        workspace_id: workspaceId,
       },
     ]);
 
@@ -558,6 +626,63 @@ describe("useAsterAgentChat 首页新会话", () => {
     }
   });
 
+  it("已有有效工作区模型偏好时不应被 legacy init 默认 provider 清空", async () => {
+    const workspaceId = "ws-init-retain-explicit-custom-model";
+    const selectedProvider = "custom-230cb5bf-3419-4742-8148-e8222423541c";
+    const selectedModel = "mimo-v2.5-pro";
+    localStorage.setItem(
+      `agent_pref_provider_${workspaceId}`,
+      JSON.stringify(selectedProvider),
+    );
+    localStorage.setItem(
+      `agent_pref_model_${workspaceId}`,
+      JSON.stringify(selectedModel),
+    );
+    mockInitAsterAgent.mockResolvedValue({
+      initialized: true,
+      provider_configured: true,
+      provider_name: "openai",
+      provider_selector: "deepseek",
+      model_name: "deepseek-v4-pro",
+    });
+    mockResolveClawWorkspaceProviderSelection.mockResolvedValue({
+      providerType: selectedProvider,
+      model: selectedModel,
+    });
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+      await flushEffects();
+
+      expect(mockResolveClawWorkspaceProviderSelection).toHaveBeenCalledWith({
+        currentProviderType: selectedProvider,
+        currentModel: selectedModel,
+        theme: "general",
+        allowProviderFallback: false,
+      });
+      expect(harness.getValue().providerType).toBe(selectedProvider);
+      expect(harness.getValue().model).toBe(selectedModel);
+
+      await act(async () => {
+        await harness.getValue().triggerAIGuide("检查 Mimo provider 透传");
+      });
+
+      expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
+          ?.provider_preference,
+      ).toBe(selectedProvider);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
+          ?.model_preference,
+      ).toBe(selectedModel);
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("deferred 话题加载模式下应延后 Agent 预热，避免抢占首屏会话恢复", async () => {
     const scheduledTasks: Array<() => void> = [];
     mockScheduleMinimumDelayIdleTask.mockImplementation((task: () => void) => {
@@ -633,6 +758,54 @@ describe("useAsterAgentChat 首页新会话", () => {
           localStorage.getItem(`agent_pref_provider_${workspaceId}`) || "null",
         ),
       ).toBe("custom-a32774c6-6fd0-433b-8b81-e95340e08793");
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("Agent 初始化返回 current provider 但无模型时不应回流旧 Provider 缓存", async () => {
+    const workspaceId = "ws-init-current-provider-without-model";
+    localStorage.setItem(
+      `agent_pref_provider_${workspaceId}`,
+      JSON.stringify("deepseek"),
+    );
+    localStorage.setItem(
+      `agent_pref_model_${workspaceId}`,
+      JSON.stringify("deepseek-v4-pro"),
+    );
+    mockInitAsterAgent.mockResolvedValue({
+      initialized: true,
+      provider_configured: true,
+      provider_name: "Lime Hub",
+      provider_selector: "lime-hub",
+    });
+    mockResolveClawWorkspaceProviderSelection.mockResolvedValue(null);
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+      await flushEffects();
+
+      expect(mockGetDefaultProvider).not.toHaveBeenCalled();
+      expect(mockResolveClawWorkspaceProviderSelection).toHaveBeenCalledWith({
+        currentProviderType: "lime-hub",
+        currentModel: null,
+        theme: "general",
+        allowProviderFallback: false,
+      });
+      expect(harness.getValue().providerType).toBe("lime-hub");
+      expect(harness.getValue().model).toBe("");
+      expect(
+        JSON.parse(
+          localStorage.getItem(`agent_pref_provider_${workspaceId}`) || "null",
+        ),
+      ).toBe("lime-hub");
+      expect(
+        JSON.parse(
+          localStorage.getItem(`agent_pref_model_${workspaceId}`) || "null",
+        ),
+      ).toBe("");
     } finally {
       harness.unmount();
     }
@@ -729,6 +902,7 @@ describe("useAsterAgentChat 首页新会话", () => {
           created_at: 1700000100,
           updated_at: 1700000101,
           messages_count: 2,
+          workspace_id: workspaceId,
         },
       ])
       .mockResolvedValueOnce([
@@ -738,6 +912,7 @@ describe("useAsterAgentChat 首页新会话", () => {
           created_at: 1700000100,
           updated_at: 1700000101,
           messages_count: 2,
+          workspace_id: workspaceId,
         },
       ]);
     mockGetAgentRuntimeSession.mockResolvedValue({
@@ -745,6 +920,7 @@ describe("useAsterAgentChat 首页新会话", () => {
       name: "当前执行任务",
       created_at: 1700000200,
       updated_at: 1700000201,
+      workspace_id: workspaceId,
       messages: [],
       turns: [],
       items: [],
@@ -811,6 +987,7 @@ describe("useAsterAgentChat 首页新会话", () => {
           created_at: 1700000100,
           updated_at: 1700000101,
           messages_count: 1,
+          workspace_id: workspaceId,
         },
       ])
       .mockResolvedValue([
@@ -820,6 +997,7 @@ describe("useAsterAgentChat 首页新会话", () => {
           created_at: 1700000100,
           updated_at: 1700000101,
           messages_count: 1,
+          workspace_id: workspaceId,
         },
       ]);
     mockGetAgentRuntimeSession.mockImplementation(async (sessionId: string) => {
@@ -832,6 +1010,7 @@ describe("useAsterAgentChat 首页新会话", () => {
         name: "既有任务",
         created_at: 1700000100,
         updated_at: 1700000101,
+        workspace_id: workspaceId,
         messages: [],
         turns: [],
         items: [],
@@ -1123,7 +1302,7 @@ describe("useAsterAgentChat 任务快照", () => {
     }
   });
 
-  it("页面刷新恢复到排队会话时应自动恢复后台执行", async () => {
+  it("页面刷新恢复到排队会话时只水合运行态，不自动调用 legacy resume", async () => {
     const workspaceId = "ws-auto-resume-after-reload";
     const sessionId = "session-auto-resume-after-reload";
     sessionStorage.setItem(
@@ -1174,16 +1353,6 @@ describe("useAsterAgentChat 任务快照", () => {
         ],
       },
     });
-    mockResumeAgentRuntimeThread.mockResolvedValueOnce(true);
-    mockGetAgentRuntimeThreadRead.mockResolvedValueOnce({
-      thread_id: "thread-after-reload",
-      status: "running",
-      active_turn_id: "queued-after-reload-1",
-      pending_requests: [],
-      incidents: [],
-      queued_turns: [],
-    });
-
     const harness = mountHook(workspaceId);
 
     try {
@@ -1191,17 +1360,23 @@ describe("useAsterAgentChat 任务快照", () => {
       await flushEffects();
       await flushEffects();
 
-      expect(mockResumeAgentRuntimeThread).toHaveBeenCalledWith({
-        session_id: sessionId,
-      });
+      expect(mockResumeAgentRuntimeThread).not.toHaveBeenCalled();
       expect(mockSubmitAgentRuntimeTurn).not.toHaveBeenCalled();
-      expect(mockGetAgentRuntimeThreadRead).toHaveBeenCalledWith(sessionId);
+      expect(mockGetAgentRuntimeThreadRead).not.toHaveBeenCalled();
       expect(harness.getValue().threadRead).toMatchObject({
         thread_id: "thread-after-reload",
-        status: "running",
-        active_turn_id: "queued-after-reload-1",
+        status: "queued",
       });
-      expect(harness.getValue().queuedTurns).toEqual([]);
+      expect(harness.getValue().queuedTurns).toEqual([
+        {
+          queued_turn_id: "queued-after-reload-1",
+          message_preview: "刷新后继续完成这个任务",
+          message_text: "刷新后继续完成这个任务",
+          created_at: 1700000200000,
+          image_count: 0,
+          position: 1,
+        },
+      ]);
       expect(
         harness.getValue().topics.find((topic) => topic.id === sessionId),
       ).toMatchObject({
@@ -2166,15 +2341,13 @@ describe("useAsterAgentChat queue hydration", () => {
       ).toMatchObject({
         status: "running",
       });
-      expect(mockResumeAgentRuntimeThread).toHaveBeenCalledWith({
-        session_id: "session-queue",
-      });
+      expect(mockResumeAgentRuntimeThread).not.toHaveBeenCalled();
     } finally {
       harness.unmount();
     }
   });
 
-  it("切换到 running thread_read 时只恢复线程，不重复提交 turn", async () => {
+  it("切换到 running thread_read 时只水合状态，不自动调用 legacy resume", async () => {
     const sessionId = "session-running-auto-resume";
     mockListAgentRuntimeSessions.mockResolvedValue([
       {
@@ -2209,9 +2382,7 @@ describe("useAsterAgentChat queue hydration", () => {
       });
       await flushEffects();
 
-      expect(mockResumeAgentRuntimeThread).toHaveBeenCalledWith({
-        session_id: sessionId,
-      });
+      expect(mockResumeAgentRuntimeThread).not.toHaveBeenCalled();
       expect(mockSubmitAgentRuntimeTurn).not.toHaveBeenCalled();
       expect(harness.getValue().isSending).toBe(false);
       expect(harness.getValue().threadRead).toMatchObject({
@@ -3790,7 +3961,7 @@ describe("useAsterAgentChat runtime routing", () => {
         .find((msg) => msg.role === "assistant");
 
       expect(assistantMessage?.content).toContain(
-        "执行失败：已完成当前回合的工具执行，但模型未输出最终答复。",
+        "执行失败：模型未输出最终答复，请重试",
       );
       expect(assistantMessage?.runtimeStatus).toMatchObject({
         phase: "failed",
@@ -4239,7 +4410,22 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
         workspaceId,
         undefined,
         "react",
-        { runStartHooks: true },
+        {
+          runStartHooks: true,
+          metadata: {
+            providerSelector: selectedProvider,
+            modelName: selectedModel,
+            executionRuntime: {
+              providerSelector: selectedProvider,
+              modelName: selectedModel,
+            },
+            extensionData: {
+              "lime_provider_routing.v0": {
+                providerSelector: selectedProvider,
+              },
+            },
+          },
+        },
       );
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
       expect(
@@ -4494,7 +4680,6 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
       expect(harness.getValue().turns).toEqual([]);
       expect(harness.getValue().threadItems).toEqual([]);
       expect(harness.getValue().isSending).toBe(false);
-      expect(stream.getEventName()).toBeNull();
 
       await act(async () => {
         stream.emit({
@@ -4687,7 +4872,7 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
       await act(async () => {
         await harness
           .getValue()
-          .sendMessage("/review src-tauri", [], false, false, false, "react");
+          .sendMessage("/review lime-rs", [], false, false, false, "react");
       });
 
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
@@ -4698,7 +4883,7 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
       );
       expect(mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]).toEqual(
         expect.objectContaining({
-          message: expect.stringContaining("src-tauri"),
+          message: expect.stringContaining("lime-rs"),
         }),
       );
       expect(mockParseSkillSlashCommand).toHaveBeenCalledWith(
@@ -6931,6 +7116,88 @@ describe("useAsterAgentChat 偏好持久化", () => {
     }
   });
 
+  it("发送前应丢弃 App Server 已不存在的本地恢复会话并新建", async () => {
+    const workspaceId = "ws-stale-restore-submit";
+    const staleSessionId = "session-stale-restore-submit";
+    const freshSessionId = "session-fresh-after-stale-restore";
+    const staleHydration = createDeferred<{
+      id: string;
+      workspace_id: string;
+      messages: [];
+      turns: [];
+      items: [];
+      queued_turns: [];
+    }>();
+    seedSession(workspaceId, staleSessionId);
+    mockCreateAgentRuntimeSession.mockResolvedValue(freshSessionId);
+    mockGetAgentRuntimeSession.mockImplementation(async (sessionId: string) => {
+      if (sessionId === staleSessionId) {
+        if (mockGetAgentRuntimeSession.mock.calls.length === 1) {
+          return staleHydration.promise;
+        }
+        throw new Error(`session not found: ${staleSessionId}`);
+      }
+
+      return {
+        id: sessionId,
+        workspace_id: workspaceId,
+        messages: [],
+        turns: [],
+        items: [],
+        queued_turns: [],
+      };
+    });
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+
+      expect(harness.getValue().sessionId).toBe(staleSessionId);
+
+      await act(async () => {
+        await harness
+          .getValue()
+          .sendMessage("继续处理这个任务", [], false, false, false, "react");
+      });
+
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(staleSessionId, {
+        historyLimit: 40,
+      });
+      expect(mockCreateAgentRuntimeSession).toHaveBeenCalledWith(
+        workspaceId,
+        undefined,
+        "react",
+        { runStartHooks: true },
+      );
+      expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: "继续处理这个任务",
+          session_id: freshSessionId,
+        }),
+      );
+      expect(harness.getValue().sessionId).toBe(freshSessionId);
+      expect(
+        sessionStorage.getItem(`aster_curr_sessionId_${workspaceId}`),
+      ).toBe(JSON.stringify(freshSessionId));
+
+      await act(async () => {
+        staleHydration.resolve({
+          id: staleSessionId,
+          workspace_id: workspaceId,
+          messages: [],
+          turns: [],
+          items: [],
+          queued_turns: [],
+        });
+        await flushEffects();
+      });
+      expect(harness.getValue().sessionId).toBe(freshSessionId);
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("恢复候选会话时应先由 runtime 确认工作区归属", async () => {
     const consoleWarnSpy = vi
       .spyOn(console, "warn")
@@ -6983,12 +7250,14 @@ describe("useAsterAgentChat 偏好持久化", () => {
         created_at: now - 10,
         updated_at: now,
         messages_count: 1,
+        workspace_id: workspaceId,
       },
     ]);
     mockGetAgentRuntimeSession.mockResolvedValue({
       id: activeSessionId,
       created_at: now - 10,
       updated_at: now,
+      workspace_id: workspaceId,
       messages: [],
     });
 
@@ -7054,7 +7323,6 @@ describe("useAsterAgentChat 偏好持久化", () => {
 
       expect(harness.getValue().topics.map((topic) => topic.id)).toEqual([
         "topic-current",
-        "topic-legacy",
       ]);
       expect(
         JSON.parse(
@@ -7298,18 +7566,21 @@ describe("useAsterAgentChat 偏好持久化", () => {
         name: "历史任务 A",
         created_at: createdAt,
         messages_count: 1,
+        workspace_id: workspaceId,
       },
       {
         id: "topic-b",
         name: "当前任务 B",
         created_at: createdAt,
         messages_count: 1,
+        workspace_id: workspaceId,
       },
     ]);
     mockGetAgentRuntimeSession.mockImplementation(async (topicId: string) => {
       if (topicId === "topic-a") {
         return {
           id: "topic-a",
+          workspace_id: workspaceId,
           messages: [
             {
               role: "user",
@@ -7331,6 +7602,7 @@ describe("useAsterAgentChat 偏好持久化", () => {
 
       return {
         id: "topic-b",
+        workspace_id: workspaceId,
         messages: [
           {
             role: "assistant",
@@ -7400,6 +7672,7 @@ describe("useAsterAgentChat 偏好持久化", () => {
     const createdAt = Math.floor(Date.now() / 1000);
     const deferredTopicDetail = createDeferred<{
       id: string;
+      workspace_id?: string;
       messages: Array<{
         role: "assistant" | "user";
         timestamp: number;
@@ -7439,6 +7712,7 @@ describe("useAsterAgentChat 偏好持久化", () => {
         name: "历史任务 A",
         created_at: createdAt,
         messages_count: 2,
+        workspace_id: workspaceId,
       },
     ]);
     mockGetAgentRuntimeSession.mockImplementation(async (topicId: string) => {
@@ -7448,6 +7722,7 @@ describe("useAsterAgentChat 偏好持久化", () => {
 
       return {
         id: topicId,
+        workspace_id: workspaceId,
         messages: [],
         turns: [],
         items: [],
@@ -7519,6 +7794,7 @@ describe("useAsterAgentChat 偏好持久化", () => {
     const nowMs = Date.now();
     const deferredTopicDetail = createDeferred<{
       id: string;
+      workspace_id?: string;
       messages: Array<{
         role: "assistant" | "user";
         timestamp: number;
@@ -7559,6 +7835,7 @@ describe("useAsterAgentChat 偏好持久化", () => {
         name: "当前任务",
         created_at: Math.floor(nowMs / 1000),
         messages_count: 1,
+        workspace_id: workspaceId,
       },
       {
         id: "topic-stale",
@@ -7566,6 +7843,7 @@ describe("useAsterAgentChat 偏好持久化", () => {
         created_at: Math.floor(nowMs / 1000),
         updated_at: Math.floor((nowMs + 1_000) / 1000),
         messages_count: 2,
+        workspace_id: workspaceId,
       },
     ]);
     mockGetAgentRuntimeSession.mockImplementation(async (topicId: string) => {
@@ -7575,6 +7853,7 @@ describe("useAsterAgentChat 偏好持久化", () => {
 
       return {
         id: topicId,
+        workspace_id: workspaceId,
         messages: [],
         turns: [],
         items: [],
@@ -7644,6 +7923,7 @@ describe("useAsterAgentChat 偏好持久化", () => {
     const now = Math.floor(Date.now() / 1000);
     const deferredTopicDetail = createDeferred<{
       id: string;
+      workspace_id?: string;
       messages: Array<{
         role: "assistant" | "user";
         timestamp: number;
@@ -7660,12 +7940,14 @@ describe("useAsterAgentChat 偏好持久化", () => {
         name: "当前任务",
         created_at: now - 10,
         messages_count: 1,
+        workspace_id: workspaceId,
       },
       {
         id: topicId,
         name: "冷启动历史任务",
         created_at: now,
         messages_count: 12,
+        workspace_id: workspaceId,
       },
     ]);
     seedSession(workspaceId, currentTopicId);
@@ -7676,6 +7958,7 @@ describe("useAsterAgentChat 偏好持久化", () => {
 
       return {
         id: sessionId,
+        workspace_id: workspaceId,
         messages: [],
         turns: [],
         items: [],
@@ -10757,6 +11040,7 @@ describe("useAsterAgentChat 兼容接口", () => {
           name: "新标题",
           created_at: createdAt,
           messages_count: 2,
+          workspace_id: "ws-rename",
         },
       ])
       .mockResolvedValueOnce([
@@ -10765,6 +11049,7 @@ describe("useAsterAgentChat 兼容接口", () => {
           name: "旧标题",
           created_at: createdAt,
           messages_count: 2,
+          workspace_id: "ws-rename",
         },
       ]);
 

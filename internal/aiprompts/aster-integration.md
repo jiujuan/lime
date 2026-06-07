@@ -13,14 +13,14 @@ Lime 已完整集成 aster-rust 框架。Provider 配置桥接已收敛到 API K
 - 会话删除统一收口到存储边界；命令层和 Dev Bridge 不应直接调用 `AgentDao::delete_session`。
 - 需要恢复运行态时，优先从 Aster runtime 恢复，再映射到 Lime timeline。
 
-**后端模块** (`src-tauri/src/agent/`):
+**后端模块** (`lime-rs/src/agent/`):
 
 - `aster_state.rs` - Agent 状态管理
 - `aster_agent.rs` - Agent 包装器
 - `event_converter.rs` - 事件转换器
 - `credential_bridge.rs` - API Key Provider 桥接
 
-**Tauri 命令** (`src-tauri/src/commands/aster_agent_cmd.rs`):
+**legacy adapter 命令** (`lime-rs/src/commands/aster_agent_cmd.rs`):
 
 - `aster_agent_init` - 初始化 Agent
 - `aster_agent_configure_provider` - 手动配置 Provider
@@ -42,7 +42,7 @@ Lime 已完整集成 aster-rust 框架。Provider 配置桥接已收敛到 API K
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                   Tauri Commands                                 │
+│                   Desktop legacy adapter                          │
 │  ┌─────────────────────────────────────────────────────────────┐│
 │  │  aster_agent_cmd.rs                                          ││
 │  └─────────────────────────────────────────────────────────────┘│

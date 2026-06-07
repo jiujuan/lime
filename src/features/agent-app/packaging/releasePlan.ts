@@ -9,13 +9,11 @@ export interface AgentAppStandaloneReleaseInput {
   channel: AgentAppReleaseChannel;
   signing?: {
     applicationCertificateKind?: MacOsSigningCertificateKind;
-    installerCertificateKind?: "developer_id_installer";
     notarizationConfigured?: boolean;
     notarizationProfileRef?: string;
   };
   updater?: {
     enabled: boolean;
-    pubkey?: string;
     endpoint?: string;
   };
   rollback?: {
@@ -29,7 +27,6 @@ export interface AgentAppStandaloneReleaseInput {
 export interface AgentAppStandaloneReleaseGate {
   code:
     | "APPLICATION_SIGNING_MISSING"
-    | "INSTALLER_SIGNING_MISSING"
     | "MACOS_IDENTITY_INVALID"
     | "MACOS_NOTARIZATION_MISSING"
     | "PACKAGE_DESCRIPTOR_NON_PRODUCTION"
@@ -52,13 +49,12 @@ export interface AgentAppStandaloneReleasePlan {
   descriptorHash: string;
   signing: {
     applicationCertificateKind?: MacOsSigningCertificateKind;
-    installerCertificateKind?: "developer_id_installer";
     notarizationConfigured: boolean;
     notarizationProfileRef?: string;
   };
   updater: {
     enabled: boolean;
-    pubkeyConfigured: boolean;
+    endpointConfigured: boolean;
     endpoint?: string;
   };
   rollback: {
@@ -85,14 +81,15 @@ function gate(
 
 function hasUpdaterConfig(input: AgentAppStandaloneReleaseInput): boolean {
   if (!input.updater?.enabled) return false;
-  return Boolean(input.updater.pubkey?.trim() && input.updater.endpoint?.trim());
+  return Boolean(input.updater.endpoint?.trim());
 }
 
 function hasRollbackPlan(input: AgentAppStandaloneReleaseInput): boolean {
   if (input.channel !== "stable") return true;
   return Boolean(
     input.rollback?.strategy &&
-      (input.rollback.previousDescriptorHash || input.rollback.previousPackageHash),
+    (input.rollback.previousDescriptorHash ||
+      input.rollback.previousPackageHash),
   );
 }
 
@@ -123,7 +120,7 @@ export function buildStandaloneReleasePlan(
     gates.push(
       gate(
         "TARGET_PACKAGE_FORMAT_MISSING",
-        "Standalone release must select app, dmg or pkg package format.",
+        "Standalone release must select app or dmg package format for macOS Forge current.",
       ),
     );
   }
@@ -153,9 +150,9 @@ export function buildStandaloneReleasePlan(
         ),
       );
     } else {
-      const identityIssues = validateMacOsStandaloneIdentity(target.macosIdentity, {
-        requiresInstallerCertificate: target.packageFormat === "pkg",
-      });
+      const identityIssues = validateMacOsStandaloneIdentity(
+        target.macosIdentity,
+      );
       if (identityIssues.length > 0) {
         gates.push(
           gate(
@@ -188,17 +185,6 @@ export function buildStandaloneReleasePlan(
           ),
         );
       }
-      if (
-        target.packageFormat === "pkg" &&
-        input.signing?.installerCertificateKind !== "developer_id_installer"
-      ) {
-        gates.push(
-          gate(
-            "INSTALLER_SIGNING_MISSING",
-            "pkg release must bind a Developer ID Installer signing identity.",
-          ),
-        );
-      }
     }
   }
 
@@ -206,7 +192,7 @@ export function buildStandaloneReleasePlan(
     gates.push(
       gate(
         "UPDATER_CONFIG_MISSING",
-        "Standalone release must include updater pubkey and endpoint before production release.",
+        "Standalone release must include an Electron update feed endpoint before production release.",
       ),
     );
   }
@@ -230,13 +216,12 @@ export function buildStandaloneReleasePlan(
     descriptorHash: descriptor.descriptorHash,
     signing: {
       applicationCertificateKind: input.signing?.applicationCertificateKind,
-      installerCertificateKind: input.signing?.installerCertificateKind,
       notarizationConfigured: Boolean(input.signing?.notarizationConfigured),
       notarizationProfileRef: input.signing?.notarizationProfileRef,
     },
     updater: {
       enabled: Boolean(input.updater?.enabled),
-      pubkeyConfigured: Boolean(input.updater?.pubkey?.trim()),
+      endpointConfigured: Boolean(input.updater?.endpoint?.trim()),
       endpoint: input.updater?.endpoint,
     },
     rollback: {

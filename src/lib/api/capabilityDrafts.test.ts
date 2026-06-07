@@ -1,14 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { safeInvoke } from "@/lib/dev-bridge";
+import { METHOD_WORKSPACE_REGISTERED_SKILLS_LIST } from "../../../packages/app-server-client/src/protocol";
 import { capabilityDraftsApi } from "./capabilityDrafts";
+
+const appServerMock = vi.hoisted(() => ({
+  request: vi.fn(),
+}));
 
 vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
 }));
 
+vi.mock("@/lib/api/appServer", () => ({
+  AppServerClient: vi.fn(() => appServerMock),
+}));
+
 describe("capabilityDraftsApi", () => {
   beforeEach(() => {
     vi.mocked(safeInvoke).mockReset();
+    appServerMock.request.mockReset();
   });
 
   it("创建草案时应通过单一命令网关提交嵌套 request 并归一化返回", async () => {
@@ -380,211 +390,215 @@ describe("capabilityDraftsApi", () => {
   });
 
   it("读取 Workspace 已注册能力时应归一化 provenance、标准状态与 runtime gate", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce([
-      {
-        key: "workspace:capability-report",
-        name: "只读 CLI 报告",
-        description: "把本地只读 CLI 输出整理成 Markdown 报告。",
-        directory: "capability-report",
-        registered_skill_directory:
-          "/tmp/work/.agents/skills/capability-report",
-        registration: {
-          registration_id: "capreg-1",
-          registered_at: "2026-05-05T01:10:00.000Z",
-          skill_directory: "capability-report",
-          registered_skill_directory:
-            "/tmp/work/.agents/skills/capability-report",
-          source_draft_id: "capdraft-registered",
-          source_verification_report_id: "capver-1",
-          generated_file_count: 4,
-          permission_summary: ["Level 0 只读发现"],
-          verification_gates: [
-            {
-              check_id: "readonly_http_execution_preflight",
-              label: "只读 HTTP 执行 preflight",
-              evidence: [
-                { key: "method", value: "GET" },
+    appServerMock.request.mockResolvedValueOnce({
+      result: {
+        skills: [
+          {
+            key: "workspace:capability-report",
+            name: "只读 CLI 报告",
+            description: "把本地只读 CLI 输出整理成 Markdown 报告。",
+            directory: "capability-report",
+            registered_skill_directory:
+              "/tmp/work/.agents/skills/capability-report",
+            registration: {
+              registration_id: "capreg-1",
+              registered_at: "2026-05-05T01:10:00.000Z",
+              skill_directory: "capability-report",
+              registered_skill_directory:
+                "/tmp/work/.agents/skills/capability-report",
+              source_draft_id: "capdraft-registered",
+              source_verification_report_id: "capver-1",
+              generated_file_count: 4,
+              permission_summary: ["Level 0 只读发现"],
+              verification_gates: [
                 {
-                  key: "credentialReferenceId",
-                  value: "readonly_api_session",
+                  check_id: "readonly_http_execution_preflight",
+                  label: "只读 HTTP 执行 preflight",
+                  evidence: [
+                    { key: "method", value: "GET" },
+                    {
+                      key: "credentialReferenceId",
+                      value: "readonly_api_session",
+                    },
+                  ],
+                },
+              ],
+              approval_requests: [
+                {
+                  approval_id: "capreg-1:readonly-http-session",
+                  status: "pending",
+                  source_check_id: "readonly_http_execution_preflight",
+                  skill_directory: "capability-report",
+                  endpoint_source: "runtime_input",
+                  method: "GET",
+                  credential_reference_id: "readonly_api_session",
+                  evidence_schema: [
+                    "request_url_hash",
+                    "request_method",
+                    "response_status",
+                    "response_sha256",
+                    "executed_at",
+                  ],
+                  policy_path: "policy/readonly-http-session.json",
+                  created_at: "2026-05-05T01:10:00.000Z",
+                  consumption_gate: {
+                    status: "awaiting_session_approval",
+                    required_inputs: [
+                      "session_user_approval",
+                      "runtime_endpoint_input",
+                      "credential_reference:readonly_api_session",
+                      "evidence_capture",
+                    ],
+                    runtime_execution_enabled: false,
+                    credential_storage_enabled: false,
+                    blocked_reason: "等待当前 session 显式授权",
+                    next_action: "消费 approval request artifact",
+                  },
+                  credential_resolver: {
+                    status: "awaiting_session_credential",
+                    reference_id: "readonly_api_session",
+                    scope: "session",
+                    source: "user_session_config",
+                    secret_material_status: "not_requested",
+                    token_persisted: false,
+                    runtime_injection_enabled: false,
+                    blocked_reason: "等待当前 session 提供或确认凭证引用",
+                    next_action: "在 session scope 内解析 reference",
+                  },
+                  consumption_input_schema: {
+                    schema_id: "readonly_http_session_approval_v1",
+                    version: 1,
+                    fields: [
+                      {
+                        key: "session_user_approval",
+                        label: "Session 授权确认",
+                        kind: "boolean_confirmation",
+                        required: true,
+                        source: "user_confirmation",
+                        secret: false,
+                        description: "用户必须确认授权",
+                      },
+                      {
+                        key: "runtime_endpoint_input",
+                        label: "运行时 Endpoint",
+                        kind: "url",
+                        required: true,
+                        source: "runtime_input",
+                        secret: false,
+                        description: "运行时输入 endpoint",
+                      },
+                      {
+                        key: "credential_reference_confirmation",
+                        label: "凭证引用确认",
+                        kind: "credential_reference",
+                        required: true,
+                        source: "user_session_config",
+                        secret: false,
+                        description: "确认凭证引用",
+                      },
+                      {
+                        key: "evidence_capture_consent",
+                        label: "Evidence 捕获确认",
+                        kind: "boolean_confirmation",
+                        required: true,
+                        source: "user_confirmation",
+                        secret: false,
+                        description: "确认捕获 evidence",
+                      },
+                    ],
+                    ui_submission_enabled: false,
+                    runtime_execution_enabled: false,
+                    blocked_reason: "当前只定义 session 授权输入合同",
+                  },
+                  session_input_intake: {
+                    status: "awaiting_session_inputs",
+                    schema_id: "readonly_http_session_approval_v1",
+                    scope: "session",
+                    required_field_keys: [
+                      "session_user_approval",
+                      "runtime_endpoint_input",
+                      "credential_reference_confirmation",
+                      "evidence_capture_consent",
+                    ],
+                    missing_field_keys: [
+                      "session_user_approval",
+                      "runtime_endpoint_input",
+                      "credential_reference_confirmation",
+                      "evidence_capture_consent",
+                    ],
+                    collected_field_keys: [],
+                    credential_reference_id: "readonly_api_session",
+                    endpoint_input_persisted: false,
+                    secret_material_status: "not_collected",
+                    token_persisted: false,
+                    ui_submission_enabled: false,
+                    runtime_execution_enabled: false,
+                    blocked_reason: "已声明当前 session 输入槽位",
+                    next_action: "在当前 session 收集一次性授权输入",
+                  },
+                  session_input_submission_contract: {
+                    status: "submission_contract_declared",
+                    scope: "session",
+                    mode: "one_time_session_submission",
+                    accepted_field_keys: [
+                      "session_user_approval",
+                      "runtime_endpoint_input",
+                      "credential_reference_confirmation",
+                      "evidence_capture_consent",
+                    ],
+                    validation_rules: [
+                      {
+                        field_key: "runtime_endpoint_input",
+                        kind: "url",
+                        required: true,
+                        source: "runtime_input",
+                        secret_allowed: false,
+                        rule: "必须是 http/https URL",
+                      },
+                      {
+                        field_key: "credential_reference_confirmation",
+                        kind: "credential_reference",
+                        required: true,
+                        source: "user_session_config",
+                        secret_allowed: false,
+                        rule: "不接收 token 明文",
+                      },
+                    ],
+                    value_retention: "none",
+                    endpoint_input_persisted: false,
+                    secret_material_accepted: false,
+                    token_persisted: false,
+                    evidence_capture_required: true,
+                    submission_handler_enabled: true,
+                    ui_submission_enabled: false,
+                    runtime_execution_enabled: false,
+                    blocked_reason: "已声明一次性 session 输入提交校验合同",
+                    next_action: "先接入 session-scoped submit handler",
+                  },
                 },
               ],
             },
-          ],
-          approval_requests: [
-            {
-              approval_id: "capreg-1:readonly-http-session",
-              status: "pending",
-              source_check_id: "readonly_http_execution_preflight",
-              skill_directory: "capability-report",
-              endpoint_source: "runtime_input",
-              method: "GET",
-              credential_reference_id: "readonly_api_session",
-              evidence_schema: [
-                "request_url_hash",
-                "request_method",
-                "response_status",
-                "response_sha256",
-                "executed_at",
-              ],
-              policy_path: "policy/readonly-http-session.json",
-              created_at: "2026-05-05T01:10:00.000Z",
-              consumption_gate: {
-                status: "awaiting_session_approval",
-                required_inputs: [
-                  "session_user_approval",
-                  "runtime_endpoint_input",
-                  "credential_reference:readonly_api_session",
-                  "evidence_capture",
-                ],
-                runtime_execution_enabled: false,
-                credential_storage_enabled: false,
-                blocked_reason: "等待当前 session 显式授权",
-                next_action: "消费 approval request artifact",
-              },
-              credential_resolver: {
-                status: "awaiting_session_credential",
-                reference_id: "readonly_api_session",
-                scope: "session",
-                source: "user_session_config",
-                secret_material_status: "not_requested",
-                token_persisted: false,
-                runtime_injection_enabled: false,
-                blocked_reason: "等待当前 session 提供或确认凭证引用",
-                next_action: "在 session scope 内解析 reference",
-              },
-              consumption_input_schema: {
-                schema_id: "readonly_http_session_approval_v1",
-                version: 1,
-                fields: [
-                  {
-                    key: "session_user_approval",
-                    label: "Session 授权确认",
-                    kind: "boolean_confirmation",
-                    required: true,
-                    source: "user_confirmation",
-                    secret: false,
-                    description: "用户必须确认授权",
-                  },
-                  {
-                    key: "runtime_endpoint_input",
-                    label: "运行时 Endpoint",
-                    kind: "url",
-                    required: true,
-                    source: "runtime_input",
-                    secret: false,
-                    description: "运行时输入 endpoint",
-                  },
-                  {
-                    key: "credential_reference_confirmation",
-                    label: "凭证引用确认",
-                    kind: "credential_reference",
-                    required: true,
-                    source: "user_session_config",
-                    secret: false,
-                    description: "确认凭证引用",
-                  },
-                  {
-                    key: "evidence_capture_consent",
-                    label: "Evidence 捕获确认",
-                    kind: "boolean_confirmation",
-                    required: true,
-                    source: "user_confirmation",
-                    secret: false,
-                    description: "确认捕获 evidence",
-                  },
-                ],
-                ui_submission_enabled: false,
-                runtime_execution_enabled: false,
-                blocked_reason: "当前只定义 session 授权输入合同",
-              },
-              session_input_intake: {
-                status: "awaiting_session_inputs",
-                schema_id: "readonly_http_session_approval_v1",
-                scope: "session",
-                required_field_keys: [
-                  "session_user_approval",
-                  "runtime_endpoint_input",
-                  "credential_reference_confirmation",
-                  "evidence_capture_consent",
-                ],
-                missing_field_keys: [
-                  "session_user_approval",
-                  "runtime_endpoint_input",
-                  "credential_reference_confirmation",
-                  "evidence_capture_consent",
-                ],
-                collected_field_keys: [],
-                credential_reference_id: "readonly_api_session",
-                endpoint_input_persisted: false,
-                secret_material_status: "not_collected",
-                token_persisted: false,
-                ui_submission_enabled: false,
-                runtime_execution_enabled: false,
-                blocked_reason: "已声明当前 session 输入槽位",
-                next_action: "在当前 session 收集一次性授权输入",
-              },
-              session_input_submission_contract: {
-                status: "submission_contract_declared",
-                scope: "session",
-                mode: "one_time_session_submission",
-                accepted_field_keys: [
-                  "session_user_approval",
-                  "runtime_endpoint_input",
-                  "credential_reference_confirmation",
-                  "evidence_capture_consent",
-                ],
-                validation_rules: [
-                  {
-                    field_key: "runtime_endpoint_input",
-                    kind: "url",
-                    required: true,
-                    source: "runtime_input",
-                    secret_allowed: false,
-                    rule: "必须是 http/https URL",
-                  },
-                  {
-                    field_key: "credential_reference_confirmation",
-                    kind: "credential_reference",
-                    required: true,
-                    source: "user_session_config",
-                    secret_allowed: false,
-                    rule: "不接收 token 明文",
-                  },
-                ],
-                value_retention: "none",
-                endpoint_input_persisted: false,
-                secret_material_accepted: false,
-                token_persisted: false,
-                evidence_capture_required: true,
-                submission_handler_enabled: true,
-                ui_submission_enabled: false,
-                runtime_execution_enabled: false,
-                blocked_reason: "已声明一次性 session 输入提交校验合同",
-                next_action: "先接入 session-scoped submit handler",
-              },
+            permission_summary: ["Level 0 只读发现"],
+            metadata: {
+              lime_workflow_ref: "references/workflow.yaml",
             },
-          ],
-        },
-        permission_summary: ["Level 0 只读发现"],
-        metadata: {
-          lime_workflow_ref: "references/workflow.yaml",
-        },
-        allowed_tools: ["Read"],
-        resource_summary: {
-          has_scripts: true,
-          has_references: true,
-          has_assets: false,
-        },
-        standard_compliance: {
-          is_standard: true,
-          validation_errors: [],
-          deprecated_fields: [],
-        },
-        launch_enabled: false,
-        runtime_gate: "进入运行前还需要 P3C runtime binding。",
+            allowed_tools: ["Read"],
+            resource_summary: {
+              has_scripts: true,
+              has_references: true,
+              has_assets: false,
+            },
+            standard_compliance: {
+              is_standard: true,
+              validation_errors: [],
+              deprecated_fields: [],
+            },
+            launch_enabled: false,
+            runtime_gate: "进入运行前还需要 P3C runtime binding。",
+          },
+        ],
       },
-    ]);
+    });
 
     await expect(
       capabilityDraftsApi.listRegisteredSkills({
@@ -785,24 +799,41 @@ describe("capabilityDraftsApi", () => {
       }),
     ]);
 
-    expect(safeInvoke).toHaveBeenCalledWith(
-      "capability_draft_list_registered_skills",
+    expect(appServerMock.request).toHaveBeenCalledWith(
+      METHOD_WORKSPACE_REGISTERED_SKILLS_LIST,
       {
-        request: {
-          workspaceRoot: "/tmp/work",
-        },
+        workspaceRoot: "/tmp/work",
       },
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "capability_draft_list_registered_skills",
+      expect.anything(),
     );
   });
 
-  it("读取 Workspace 已注册能力时应防御非数组返回", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({ not: "array" });
+  it("读取 Workspace 已注册能力缺少 App Server skills 数组时应 fail closed", async () => {
+    appServerMock.request.mockResolvedValueOnce({
+      result: { not: "array" },
+    });
 
     await expect(
       capabilityDraftsApi.listRegisteredSkills({
         workspaceRoot: "/tmp/work",
       }),
-    ).resolves.toEqual([]);
+    ).rejects.toThrow(
+      "App Server workspaceRegisteredSkills/list did not return skills",
+    );
+  });
+
+  it("读取 Workspace 已注册能力缺少 workspaceRoot 时应 fail closed", async () => {
+    await expect(
+      capabilityDraftsApi.listRegisteredSkills({
+        workspaceRoot: "   ",
+      }),
+    ).rejects.toThrow(
+      "workspaceRoot is required to list App Server workspace registered skills",
+    );
+    expect(appServerMock.request).not.toHaveBeenCalled();
   });
 
   it("提交 approval session 输入时只走校验命令并归一化安全边界", async () => {

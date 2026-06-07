@@ -1,13 +1,17 @@
-import { safeInvoke } from "@/lib/dev-bridge";
+import {
+  searchThemeContextWithAppServer,
+  type SearchCitation,
+  type SearchThemeContextOptions,
+  type ThemeContextSearchCommandResponse,
+  type ThemeContextSearchMode,
+} from "@/lib/api/themeContextSearch";
 
 const FALLBACK_SUMMARY_LENGTH = 420;
 
-export type ThemeContextSearchMode = "web" | "social";
-
-export interface SearchCitation {
-  title: string;
-  url: string;
-}
+export type {
+  SearchCitation,
+  ThemeContextSearchMode,
+};
 
 export interface ThemeContextSearchResult {
   title: string;
@@ -17,27 +21,10 @@ export interface ThemeContextSearchResult {
   attemptsSummary?: string;
 }
 
-interface SearchThemeContextOptions {
-  workspaceId: string;
-  projectId?: string;
-  providerType: string;
-  model: string;
-  query: string;
-  mode: ThemeContextSearchMode;
-}
-
 interface ParsedSearchResultPayload {
   title?: string;
   summary?: string;
   citations?: SearchCitation[];
-}
-
-interface ThemeContextSearchCommandResponse {
-  title?: string;
-  summary?: string;
-  citations?: SearchCitation[];
-  rawResponse?: string;
-  attemptsSummary?: string;
 }
 
 function normalizeWhitespace(value: string): string {
@@ -266,19 +253,14 @@ export async function searchThemeContextWithWebSearch({
     throw new Error("搜索词不能为空");
   }
 
-  const payload = await safeInvoke<ThemeContextSearchCommandResponse>(
-    "aster_agent_theme_context_search",
-    {
-      request: {
-        workspaceId: trimmedWorkspaceId,
-        projectId: projectId?.trim() || undefined,
-        providerType: trimmedProviderType,
-        model: trimmedModel,
-        query: trimmedQuery,
-        mode,
-      },
-    },
-  );
+  const payload = await searchThemeContextWithAppServer({
+    workspaceId: trimmedWorkspaceId,
+    projectId: projectId?.trim() || undefined,
+    providerType: trimmedProviderType,
+    model: trimmedModel,
+    query: trimmedQuery,
+    mode,
+  });
 
   const result = normalizeCommandResult(payload || {}, trimmedQuery, mode);
   if (!result.summary.trim()) {

@@ -44,7 +44,7 @@
 ### 1. `消息渠道 runtime`
 
 - `src/lib/api/channelsRuntime.ts`
-- `src-tauri/src/commands/gateway_channel_cmd.rs`
+- `lime-rs/src/commands/gateway_channel_cmd.rs`
 - `lime_gateway::{telegram, feishu, discord, wechat}`
 
 当前这里负责：
@@ -63,10 +63,10 @@
 ### 2. `浏览器连接器 / ChromeBridge`
 
 - `src/lib/webview-api.ts`
-- `src-tauri/src/commands/browser_connector_cmd.rs`
-- `src-tauri/src/services/browser_connector_service.rs`
-- `src-tauri/src/commands/webview_cmd.rs`
-- `src-tauri/src/commands/browser_runtime_cmd.rs`
+- `lime-rs/src/commands/browser_connector_cmd.rs`
+- `lime-rs/src/services/browser_connector_service.rs`
+- `lime-rs/src/commands/webview_cmd.rs`
+- `lime-rs/src/commands/browser_runtime_cmd.rs`
 
 当前这里负责：
 
@@ -83,24 +83,24 @@
 
 ### 3. 已删除的本地 Gateway 兼容壳
 
-OpenClaw 安装、Gateway、Dashboard 与运行态管理模块已经判定为 `dead` 并从前端入口、Tauri 命令、DevBridge dispatcher、mock 与 core helper 中移除。
+OpenClaw 安装、Gateway、Dashboard 与运行态管理模块已经判定为 `dead` 并从前端入口、legacy adapter 命令、DevBridge dispatcher、mock 与 core helper 中移除。
 
 固定规则：
 
-- 不再恢复 `src/components/openclaw/*`、`src/lib/api/openclaw.ts`、`src-tauri/src/commands/openclaw_cmd.rs` 或 `src-tauri/src/services/openclaw_service/*`
+- 不再恢复 `src/components/openclaw/*`、`src/lib/api/openclaw.ts`、`lime-rs/src/commands/openclaw_cmd.rs` 或 `lime-rs/src/services/openclaw_service/*`
 - 不再把本地 Gateway / Dashboard 壳当成 remote runtime 或一级系统入口
 - 如需新增远程入口，只能回到 `消息渠道 runtime` 或 `浏览器连接器 / ChromeBridge` current 主链
 
 ### 4. `DevBridge`
 
-- `src-tauri/src/dev_bridge.rs`
-- `src-tauri/src/dev_bridge/*`
+- `lime-rs/src/dev_bridge.rs`
+- `lime-rs/src/dev_bridge/*`
 - `src/lib/dev-bridge/*`
 
 当前这里负责：
 
 1. 仅在 `debug_assertions` 下提供 `3030` HTTP 桥
-2. 让浏览器 dev server 调用现有 Tauri 命令
+2. 让浏览器 dev server 调用现有 Desktop Host / App Server 命令，legacy adapter 只作为兼容兜底
 3. 为浏览器开发模式提供事件流和本地后端接通能力
 
 固定规则：
@@ -111,7 +111,7 @@ OpenClaw 安装、Gateway、Dashboard 与运行态管理模块已经判定为 `d
 
 ### 5. `telegram_remote_cmd`
 
-- `src-tauri/src/commands/telegram_remote_cmd.rs`
+- `lime-rs/src/commands/telegram_remote_cmd.rs`
 
 当前这里负责：
 
@@ -129,14 +129,14 @@ OpenClaw 安装、Gateway、Dashboard 与运行态管理模块已经判定为 `d
 ### `current`
 
 - `src/lib/api/channelsRuntime.ts`
-- `src-tauri/src/commands/gateway_channel_cmd.rs`
+- `lime-rs/src/commands/gateway_channel_cmd.rs`
 - `gateway_tunnel_*`
 - `lime_gateway::{telegram, feishu, discord, wechat}`
 - `src/lib/webview-api.ts`
-- `src-tauri/src/commands/browser_connector_cmd.rs`
-- `src-tauri/src/services/browser_connector_service.rs`
-- `src-tauri/src/commands/webview_cmd.rs`
-- `src-tauri/src/commands/browser_runtime_cmd.rs`
+- `lime-rs/src/commands/browser_connector_cmd.rs`
+- `lime-rs/src/services/browser_connector_service.rs`
+- `lime-rs/src/commands/webview_cmd.rs`
+- `lime-rs/src/commands/browser_runtime_cmd.rs`
 - `internal/aiprompts/remote-runtime.md`
 
 这些路径共同构成当前 remote 主链：
@@ -147,8 +147,8 @@ OpenClaw 安装、Gateway、Dashboard 与运行态管理模块已经判定为 `d
 
 ### `compat`
 
-- `src-tauri/src/dev_bridge.rs`
-- `src-tauri/src/dev_bridge/*`
+- `lime-rs/src/dev_bridge.rs`
+- `lime-rs/src/dev_bridge/*`
 - `src/lib/dev-bridge/*`
 
 保留原因：
@@ -161,7 +161,7 @@ OpenClaw 安装、Gateway、Dashboard 与运行态管理模块已经判定为 `d
 
 ### `deprecated`
 
-- `src-tauri/src/commands/telegram_remote_cmd.rs`
+- `lime-rs/src/commands/telegram_remote_cmd.rs`
 - 任何继续把单渠道 bot runtime 直接定义为 remote 总入口的新实现
 - 任何继续把 `DevBridge` HTTP 桥当成产品 remote runtime 真相的新实现
 
@@ -170,10 +170,10 @@ OpenClaw 安装、Gateway、Dashboard 与运行态管理模块已经判定为 `d
 - `src/components/openclaw/*`
 - `src/lib/api/openclaw.ts`
 - `src/lib/api/openclawDashboardWindow.ts`
-- `src-tauri/src/commands/openclaw_cmd.rs`
-- `src-tauri/src/services/openclaw_service/*`
-- `src-tauri/src/dev_bridge/dispatcher/openclaw.rs`
-- `src-tauri/crates/core/src/openclaw_install.rs`
+- `lime-rs/src/commands/openclaw_cmd.rs`
+- `lime-rs/src/services/openclaw_service/*`
+- `lime-rs/src/dev_bridge/dispatcher/openclaw.rs`
+- `lime-rs/crates/core/src/openclaw_install.rs`
 
 ## 最低验证要求
 

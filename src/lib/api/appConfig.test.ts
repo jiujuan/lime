@@ -164,7 +164,7 @@ describe("appConfig API", () => {
   it("getConfig 应缓存并复用同一轮读取结果", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       default_provider: "claude",
-      navigation: { enabled_items: ["companion"] },
+      navigation: { schema_version: 3, enabled_items: ["companion"] },
     });
 
     const [first, second] = await Promise.all([getConfig(), getConfig()]);
@@ -179,19 +179,45 @@ describe("appConfig API", () => {
     expect(first).not.toBe(second);
   });
 
+  it("getConfig 应把旧 schema 的桌宠入口迁移为默认关闭", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      default_provider: "claude",
+      navigation: { schema_version: 2, enabled_items: ["companion"] },
+    });
+
+    await expect(getConfig()).resolves.toEqual(
+      expect.objectContaining({
+        navigation: { schema_version: 3, enabled_items: [] },
+      }),
+    );
+  });
+
+  it("getConfig 应保留 current schema 下显式开启的桌宠入口", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      default_provider: "claude",
+      navigation: { schema_version: 3, enabled_items: ["companion"] },
+    });
+
+    await expect(getConfig()).resolves.toEqual(
+      expect.objectContaining({
+        navigation: { schema_version: 3, enabled_items: ["companion"] },
+      }),
+    );
+  });
+
   it("saveConfig 后后续 getConfig 应直接命中新缓存", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce(undefined);
 
     const nextConfig = {
-      default_provider: "kiro",
-      navigation: { enabled_items: ["companion"] },
+      default_provider: "openai",
+      navigation: { schema_version: 3, enabled_items: ["companion"] },
     } as never;
 
     await expect(saveConfig(nextConfig)).resolves.toBeUndefined();
     await expect(getConfig()).resolves.toEqual(
       expect.objectContaining({
-        default_provider: "kiro",
-        navigation: { enabled_items: ["companion"] },
+        default_provider: "openai",
+        navigation: { schema_version: 3, enabled_items: ["companion"] },
       }),
     );
 
@@ -202,7 +228,7 @@ describe("appConfig API", () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce({
         default_provider: "claude",
-        navigation: { enabled_items: ["companion"] },
+        navigation: { schema_version: 3, enabled_items: ["companion"] },
       })
       .mockResolvedValueOnce("gemini");
 
@@ -219,12 +245,12 @@ describe("appConfig API", () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce({
         default_provider: "claude",
-        navigation: { enabled_items: ["companion"] },
+        navigation: { schema_version: 3, enabled_items: ["companion"] },
       })
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce({
         default_provider: "openai",
-        navigation: { enabled_items: ["companion"] },
+        navigation: { schema_version: 3, enabled_items: ["companion"] },
       });
 
     await getConfig();
@@ -232,7 +258,7 @@ describe("appConfig API", () => {
     await expect(getConfig()).resolves.toEqual(
       expect.objectContaining({
         default_provider: "openai",
-        navigation: { enabled_items: ["companion"] },
+        navigation: { schema_version: 3, enabled_items: ["companion"] },
       }),
     );
 

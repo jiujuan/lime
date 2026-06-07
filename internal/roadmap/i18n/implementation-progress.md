@@ -8,7 +8,7 @@
 
 本轮完成：
 
-- 新增 `scripts/i18n-roadmap-readiness-report.ts` 与测试 `scripts/i18n-roadmap-readiness-report.test.ts`，把 PRD P0-P4 的交付项、验收项、底层 evidence 和已知缺口聚合成 machine-readable completion audit。
+- 新增 `scripts/i18n/i18n-roadmap-readiness-report.ts` 与测试 `scripts/i18n/i18n-roadmap-readiness-report.test.ts`，把 PRD P0-P4 的交付项、验收项、底层 evidence 和已知缺口聚合成 machine-readable completion audit。
 - `package.json` 新增 `i18n:roadmap-readiness-report` / `i18n:roadmap-readiness-report:json`，用于只读生成全路线图 readiness，不刷新底层 evidence、不修改 locale resources。
 - `scripts/quality-task-planner.mjs` / `scripts/quality-task-planner.test.ts` 已把全路线图 readiness evidence 接入推荐命令；i18n resources、P3 自动化 evidence、Patch gate、P4 子 evidence 或 P4 readiness 变化后，都会提示刷新 `internal/roadmap/i18n/evidence/roadmap-readiness-report.json`。
 - 已刷新 `translation-coverage-report.json`、`source-locale-export.json`、`translation-pr-pack.json` 与 `bundle-strategy-report.json`，让 P3 自动化 evidence 回到同一 source locale 快照；当前四份报告的 `sourceKeyCount` 统一为 `7581`。
@@ -17,12 +17,12 @@
 当前口径：
 
 - Chrome extension 已完成是否迁移 `_locales/messages.json` 的评估，当前记录为 `standardChromeLocaleDecisionRecorded=true`、`standardChromeLocaleWorkflowRequired=false`；继续保留轻量 `InstallI18n` registry，并用 drift / terminology inventory 作为门禁。
-- Installer / app metadata 已完成 build-time locale manifest workflow，当前 `appMetadataLocaleBuildManifestReady=true`、`hasInstallerLocalizationWorkflow=true`；`generatedConfigEmissionAllowed=false` 仍表示不改写真实 Tauri / installer 配置。
+- Installer / app metadata 已完成 build-time locale manifest workflow，当前 `appMetadataLocaleBuildManifestReady=true`、`hasInstallerLocalizationWorkflow=true`；`generatedConfigEmissionAllowed=false` 仍表示不改写真实 Electron Forge / installer 配置。
 - 文档站、installer 与 Chrome extension 的现状仍不等于已经生成多语言发布产物；本阶段完成的是 PRD P4 要求的评估、scope、manifest、smoke 与发布前审阅 workflow。
 
 验证：
 
-- `npm test -- "scripts/i18n-roadmap-readiness-report.test.ts"` 通过，覆盖 3 个用例。
+- `npm test -- "scripts/i18n/i18n-roadmap-readiness-report.test.ts"` 通过，覆盖 3 个用例。
 - `npm test -- "scripts/quality-task-planner.test.ts"` 通过，覆盖 26 个用例。
 - `npm run i18n:check:json -- --output "internal/roadmap/i18n/evidence/translation-coverage-report.json"` 通过。
 - `npm run i18n:source-export:json -- --output "internal/roadmap/i18n/evidence/source-locale-export.json"` 通过。
@@ -34,16 +34,16 @@
 
 本轮完成：
 
-- 新增 `scripts/i18n-app-metadata-locale-build-manifest.ts` 与测试 `scripts/i18n-app-metadata-locale-build-manifest.test.ts`，把 `app-metadata-translation-scope.json` 转成 build-time locale manifest；它只读提取 app / installer metadata 字段，检查 required localized value，不写回 `package.json`、`tauri.conf*.json` 或平台安装器配置。
-- `internal/roadmap/i18n/app-metadata-translation-scope.json` 已把 `workflowStatus` 更新为 `ready`，新增 `manifestGenerationAllowed=true`，并为两个 `translatable` 字段补齐 `en-US` localized value：`package.json#description` 与 `src-tauri/tauri.conf.json#bundle.fileAssociations[0].description`。
+- 新增 `scripts/i18n/i18n-app-metadata-locale-build-manifest.ts` 与测试 `scripts/i18n/i18n-app-metadata-locale-build-manifest.test.ts`，把 `app-metadata-translation-scope.json` 转成 build-time locale manifest；它只读提取 app / installer metadata 字段，检查 required localized value，不写回 `package.json`、`forge.config.mjs` 或平台安装器配置。
+- `internal/roadmap/i18n/app-metadata-translation-scope.json` 已把 `workflowStatus` 更新为 `ready`，新增 `manifestGenerationAllowed=true`，并为 `package.json#description` 这个 `translatable` 字段补齐 `en-US` localized value；Electron Forge 的 `productName / appId / deep-link scheme` 保持 stable brand / identifier。
 - `package.json` 新增 `i18n:app-metadata-locale-manifest` / `i18n:app-metadata-locale-manifest:json` / `i18n:app-metadata-locale-manifest:check`，用于发布前生成和检查 metadata locale manifest。
-- `scripts/i18n-app-metadata-workflow-report.ts` 已消费 `app-metadata-locale-build-manifest.json`，当前 `appMetadataLocaleBuildManifestReady=true`、`hasInstallerLocalizationWorkflow=true`；`generatedConfigEmissionAllowed=false` 保持不变，避免把 manifest 误报成真实平台安装包配置生成。
-- `scripts/quality-task-planner.mjs` / `scripts/quality-task-planner.test.ts` 已把 app metadata locale manifest 接入推荐命令；metadata scope、Tauri config、package metadata 或相关脚本变化后，会提示先刷新 `app-metadata-locale-build-manifest.json`，再刷新 inventory / P4 / roadmap readiness。
-- 已刷新 `internal/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json`；当前 `workflowStatus=ready`，11 个 metadata entry 中 2 个 localized entry、7 个 stable entry、2 个 source-only entry，missing field 与 required localized missing 均为 `0`。
+- `scripts/i18n/i18n-app-metadata-workflow-report.ts` 已消费 `app-metadata-locale-build-manifest.json`，当前 `appMetadataLocaleBuildManifestReady=true`、`hasInstallerLocalizationWorkflow=true`；`generatedConfigEmissionAllowed=false` 保持不变，避免把 manifest 误报成真实平台安装包配置生成。
+- `scripts/quality-task-planner.mjs` / `scripts/quality-task-planner.test.ts` 已把 app metadata locale manifest 接入推荐命令；metadata scope、Electron Forge 配置、package metadata 或相关脚本变化后，会提示先刷新 `app-metadata-locale-build-manifest.json`，再刷新 inventory / P4 / roadmap readiness。
+- 已刷新 `internal/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json`；当前 `workflowStatus=ready`，9 个 metadata entry 中 1 个 localized entry、3 个 stable entry、5 个 source-only entry，missing field 与 required localized missing 均为 `0`。
 
 验证：
 
-- `npm test -- "scripts/i18n-app-metadata-locale-build-manifest.test.ts" "scripts/i18n-app-metadata-workflow-report.test.ts" "scripts/i18n-p4-readiness-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过。
+- `npm test -- "scripts/i18n/i18n-app-metadata-locale-build-manifest.test.ts" "scripts/i18n/i18n-app-metadata-workflow-report.test.ts" "scripts/i18n/i18n-p4-readiness-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过。
 - `npm run i18n:app-metadata-locale-manifest:json -- --output "internal/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json"` 通过。
 - `npm run i18n:app-metadata-report:json -- --output "internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json"` 通过。
 - `npm run i18n:p4-readiness-report:json -- --output "internal/roadmap/i18n/evidence/p4-readiness-report.json"` 通过，当前 `knownGapCount=0`、`overallStatus=ready`。
@@ -53,13 +53,13 @@
 
 本轮完成：
 
-- `scripts/i18n-chrome-extension-workflow-report.ts` 新增 `decision` 与 summary 字段：`standardChromeLocaleDecisionRecorded=true`、`standardChromeLocaleWorkflowRequired=false`，明确当前不迁移 `_locales/messages.json` 是已记录的 P4 决策，不再作为 known gap。
-- `scripts/i18n-p4-readiness-report.ts` 继续保留回归门禁：如果未来缺少该 decision，或把 `standardChromeLocaleWorkflowRequired` 改为 `true` 但仍没有 `_locales` workflow，会重新输出 `chrome-standard-locales-not-used` 缺口。
+- `scripts/i18n/i18n-chrome-extension-workflow-report.ts` 新增 `decision` 与 summary 字段：`standardChromeLocaleDecisionRecorded=true`、`standardChromeLocaleWorkflowRequired=false`，明确当前不迁移 `_locales/messages.json` 是已记录的 P4 决策，不再作为 known gap。
+- `scripts/i18n/i18n-p4-readiness-report.ts` 继续保留回归门禁：如果未来缺少该 decision，或把 `standardChromeLocaleWorkflowRequired` 改为 `true` 但仍没有 `_locales` workflow，会重新输出 `chrome-standard-locales-not-used` 缺口。
 - 刷新 `internal/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json` 后，Chrome extension 当前仍没有 `_locales/`，但 InstallI18n registry drift、options language drift 均为 `0`，术语覆盖 `5/5`。
 
 验证：
 
-- `npm test -- "scripts/i18n-chrome-extension-workflow-report.test.ts" "scripts/i18n-p4-readiness-report.test.ts"` 通过。
+- `npm test -- "scripts/i18n/i18n-chrome-extension-workflow-report.test.ts" "scripts/i18n/i18n-p4-readiness-report.test.ts"` 通过。
 - `npm run i18n:chrome-extension-report:json -- --output "internal/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json"` 通过。
 - `npm run i18n:p4-readiness-report:json -- --output "internal/roadmap/i18n/evidence/p4-readiness-report.json"` 通过，当前 `knownGapCount=0`。
 - `npm run i18n:roadmap-readiness-report:json -- --output "internal/roadmap/i18n/evidence/roadmap-readiness-report.json"` 通过，当前 `overallStatus=ready`。
@@ -68,9 +68,9 @@
 
 本轮完成：
 
-- 新增 `scripts/i18n-docs-locale-build-manifest.ts` 与测试 `scripts/i18n-docs-locale-build-manifest.test.ts`，把 release docs translation scope 转成 build-time locale manifest；它只读检查 source、required companion、pilot companion 与 source-only 队列，不改写 `docs/content`。
+- 新增 `scripts/i18n/i18n-docs-locale-build-manifest.ts` 与测试 `scripts/i18n/i18n-docs-locale-build-manifest.test.ts`，把 release docs translation scope 转成 build-time locale manifest；它只读检查 source、required companion、pilot companion 与 source-only 队列，不改写 `docs/content`。
 - `package.json` 新增 `i18n:docs-locale-manifest` / `i18n:docs-locale-manifest:json` / `i18n:docs-locale-manifest:check`，让发布材料 / 官网文档 / 帮助文档的 locale workflow 有独立入口。
-- `scripts/i18n-release-docs-workflow-report.ts` 已消费 `docs-locale-build-manifest.json`，当前 `docsLocaleBuildManifestReady=true`、`hasDocsLocaleWorkflow=true`、`docsTranslationWorkflowPresent=true`；P4 readiness 因此不再保留 `docs-locale-build-workflow-missing`。
+- `scripts/i18n/i18n-release-docs-workflow-report.ts` 已消费 `docs-locale-build-manifest.json`，当前 `docsLocaleBuildManifestReady=true`、`hasDocsLocaleWorkflow=true`、`docsTranslationWorkflowPresent=true`；P4 readiness 因此不再保留 `docs-locale-build-workflow-missing`。
 - `scripts/quality-task-planner.mjs` / `scripts/quality-task-planner.test.ts` 已把 docs locale manifest evidence 接入推荐命令；docs content、release docs scope、companion 或相关脚本变化后，会提示刷新 `internal/roadmap/i18n/evidence/docs-locale-build-manifest.json`。
 - 已刷新 `internal/roadmap/i18n/evidence/docs-locale-build-manifest.json`；当前 `workflowStatus=ready`，source locale 为 `zh-CN`，target locales 为 `en-US`，15 个 scope entry 中 3 个已有 companion、12 个为 source-only candidate，missing source / required companion missing / pilot companion missing 均为 `0`，`docs/content` route emission 保持 `disabled`。
 
@@ -80,7 +80,7 @@
 
 验证：
 
-- `npm test -- "scripts/i18n-docs-locale-build-manifest.test.ts" "scripts/i18n-release-docs-workflow-report.test.ts" "scripts/i18n-p4-readiness-report.test.ts"` 通过。
+- `npm test -- "scripts/i18n/i18n-docs-locale-build-manifest.test.ts" "scripts/i18n/i18n-release-docs-workflow-report.test.ts" "scripts/i18n/i18n-p4-readiness-report.test.ts"` 通过。
 - `npm test -- "scripts/quality-task-planner.test.ts"` 通过。
 - `npm run i18n:docs-locale-manifest:check` 通过。
 - `npm run i18n:docs-locale-manifest:json -- --output "internal/roadmap/i18n/evidence/docs-locale-build-manifest.json"` 通过。
@@ -95,7 +95,7 @@
 ## 当前事实
 
 - `src/i18n/resources/<locale>/` 已覆盖 `zh-CN / zh-TW / en-US / ja-JP / ko-KR`。
-- `scripts/detect-missing-translations.ts` 已能按 `zh-CN` source locale 检查 namespace 与 key 结构一致性。
+- `scripts/i18n/detect-missing-translations.ts` 已能按 `zh-CN` source locale 检查 namespace 与 key 结构一致性。
 - `package.json` 之前只有 `detect-translations*` 入口，缺少 PRD P3 明确验收口径里的 `npm run i18n:check`。
 - `npm run verify:local` 已开始在 frontend / i18n 相关改动时串联 `i18n:check` 与 `i18n:unused --check`，让 source locale 结构与 unused key 门禁进入统一本地校验入口。
 
@@ -103,16 +103,16 @@
 
 本轮完成：
 
-- `src-tauri/src/services/artifact_document_validator.rs` 不再把显式 `document.language` 固定覆盖成 `zh-CN`；当模型或上游协议给出 `en-US` 等文档级语言元数据时，validator 会保留该值。
+- `lime-rs/src/services/artifact_document_validator.rs` 不再把显式 `document.language` 固定覆盖成 `zh-CN`；当模型或上游协议给出 `en-US` 等文档级语言元数据时，validator 会保留该值。
 - Artifact document 缺失或空 `language` 时仍回退 `zh-CN`，并记录修复 issue，保持历史默认行为可追踪。
-- `src-tauri/src/services/artifact_output_schema_service.rs` 新增 content target language 读取：当 request metadata 显式提供 `target_language` / `targetLanguage` / `artifact_language` / `artifactLanguage` / `content_target_language` / `contentTargetLanguage` 时，stage2 document schema 的 `language.enum` 收窄到该内容目标语言；未提供时继续默认 `zh-CN`。
+- `lime-rs/src/services/artifact_output_schema_service.rs` 新增 content target language 读取：当 request metadata 显式提供 `target_language` / `targetLanguage` / `artifact_language` / `artifactLanguage` / `content_target_language` / `contentTargetLanguage` 时，stage2 document schema 的 `language.enum` 收窄到该内容目标语言；未提供时继续默认 `zh-CN`。
 - 这条 runtime 证据把 PRD P2 验收“Artifact 目标语言不因 UI 切换而改变”推进到 Artifact document 主链：语言事实源来自文档 / turn metadata 的 content target language，而不是 UI locale。
 
 验证：
 
-- `cargo test --manifest-path "src-tauri/Cargo.toml" validate_or_fallback_should_accept_plain_document_json` 通过。
-- `cargo test --manifest-path "src-tauri/Cargo.toml" validate_or_fallback_should_default_missing_document_language` 通过。
-- `cargo test --manifest-path "src-tauri/Cargo.toml" stage2_should_narrow_document_language_to_content_target_language` 通过。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" validate_or_fallback_should_accept_plain_document_json` 通过。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" validate_or_fallback_should_default_missing_document_language` 通过。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" stage2_should_narrow_document_language_to_content_target_language` 通过。
 
 ## 2026-05-24：P2 Service Skill 导出目标语言反向回归
 
@@ -130,7 +130,7 @@
 
 本轮完成：
 
-- `scripts/i18n-language-boundary-report.ts` 新增 `--category <category>` 聚焦输出，支持单独导出 `contentTargetLanguage`、`agentResponseLanguage` 等边界 evidence。
+- `scripts/i18n/i18n-language-boundary-report.ts` 新增 `--category <category>` 聚焦输出，支持单独导出 `contentTargetLanguage`、`agentResponseLanguage` 等边界 evidence。
 - language boundary report 的 JSON summary 现在包含 `fileSummaries` 与 `markerSummaries`，可以直接看到某类 language-like 字段的热点文件和 marker 分布。
 - 已刷新 `internal/roadmap/i18n/evidence/language-boundary-report.json`，当前全量扫描 3007 个源码文件、1935 个 marker：`uiLocale=1081`、`contentTargetLanguage=418`、`codeLanguage=121`、`asrLanguage=97`、`unknownLanguageLike=95`、`browserEnvironmentLanguage=91`、`agentResponseLanguage=32`。
 - 新增 `internal/roadmap/i18n/evidence/content-target-language-boundary-report.json`，聚焦 PRD P2 “Artifact / 文档 / 文章 / 翻译类任务明确 content target language”；当前 marker 分布为 `language=257`、`target_language=82`、`targetLanguage=48`、`locale=31`。
@@ -138,7 +138,7 @@
 
 验证：
 
-- `npm test -- "scripts/i18n-language-boundary-report.test.ts"` 通过，覆盖 3 个用例。
+- `npm test -- "scripts/i18n/i18n-language-boundary-report.test.ts"` 通过，覆盖 3 个用例。
 - `npm run i18n:language-boundary-report -- --category contentTargetLanguage` 通过，文本报告输出 `contentTargetLanguage=418` 与 top file / marker 热点。
 - `npm run i18n:language-boundary-report:json -- --output "internal/roadmap/i18n/evidence/language-boundary-report.json"` 通过。
 - `npm run i18n:language-boundary-report:json -- --category contentTargetLanguage --output "internal/roadmap/i18n/evidence/content-target-language-boundary-report.json"` 通过。
@@ -154,7 +154,7 @@
 
 验证：
 
-- `npm test -- "scripts/quality-task-planner.test.ts" "scripts/i18n-patch-retirement-gate.test.ts"` 通过。
+- `npm test -- "scripts/quality-task-planner.test.ts" "scripts/i18n/i18n-patch-retirement-gate.test.ts"` 通过。
 - `node --check "scripts/local-ci.mjs"` 通过。
 - `node --check "scripts/quality-task-planner.mjs"` 通过。
 - `npm run i18n:unused -- --check` 通过，当前 `unusedKeyCount=0`。
@@ -176,16 +176,16 @@
 
 本轮继续完成：
 
-- `scripts/i18next-cli-parity-benchmark.mjs` 已把 Lime 自研 `i18n-unused-key-check.ts` 纳入同一个 temp fixture benchmark，和官方 `status` / `lint` / `extract --dry-run --ci` / `types` 结果一起落盘。
+- `scripts/i18n/i18next-cli-parity-benchmark.mjs` 已把 Lime 自研 `i18n-unused-key-check.ts` 纳入同一个 temp fixture benchmark，和官方 `status` / `lint` / `extract --dry-run --ci` / `types` 结果一起落盘。
 - benchmark 现在先跑 Lime unused scan，再跑官方 CLI，避免官方 `types` 命令生成的 `src/types` 文件污染 unused key 统计。
-- 新增 `scripts/i18next-cli-parity-benchmark.test.ts`，锁住 summary 里必须包含 `limeUnused` 的 `unusedKeyCount`、`protectedKeyCount`、`dynamicKeyPatternCount` 与热点 namespace。
+- 新增 `scripts/i18n/i18next-cli-parity-benchmark.test.ts`，锁住 summary 里必须包含 `limeUnused` 的 `unusedKeyCount`、`protectedKeyCount`、`dynamicKeyPatternCount` 与热点 namespace。
 - 已刷新 `internal/roadmap/i18n/evidence/i18next-cli-parity-benchmark.json`；当前 fixture 结果显示官方 CLI 能覆盖 extraction / lint / type 方向，Lime unused 侧则给出 `unusedKeyCount=1`、`protectedKeyCount=1`，继续证明两者现在是互补关系，不是可直接替换关系。
 - `internal/roadmap/i18n/toolchain-evaluation.md` 已同步这份增强证据。
 
 验证：
 
-- `node --check "scripts/i18next-cli-parity-benchmark.mjs"` 通过。
-- `npm test -- "scripts/i18next-cli-parity-benchmark.test.ts"` 通过。
+- `node --check "scripts/i18n/i18next-cli-parity-benchmark.mjs"` 通过。
+- `npm test -- "scripts/i18n/i18next-cli-parity-benchmark.test.ts"` 通过。
 - `npm run i18n:toolchain-benchmark -- --output "internal/roadmap/i18n/evidence/i18next-cli-parity-benchmark.json"` 通过。
 
 ## 2026-05-24：P4 legacy Patch 退出门禁接入 GUI smoke
@@ -193,66 +193,66 @@
 本轮完成：
 
 - `scripts/verify-gui-smoke.mjs` 在写出 `.lime/i18n/patch-metrics.json` 与 `.lime/i18n/patch-metrics-report.json` 后，继续生成 `.lime/governance/legacy-surface-report.json`，并自动执行 `npm run i18n:patch-retirement-gate -- --check`，把 legacy Patch 退出门禁接到真实 GUI smoke 产物链。
-- `scripts/quality-task-planner.mjs` 与 `scripts/quality-task-planner.test.ts` 新增 patch retirement 相关脚本识别：当 `scripts/i18n-patch-metrics-report.mjs`、`scripts/i18n-patch-retirement-gate.mjs`、`scripts/report-legacy-surfaces.mjs`、`scripts/lib/i18n-patch-metrics-report-core.mjs`、`scripts/lib/legacy-surface-report-core.mjs` 或 `scripts/verify-gui-smoke.mjs` 变更时，会把这条链路视为 `guiSmoke` 风险，并推荐直接重跑 `npm run i18n:patch-retirement-gate -- --check`。
+- `scripts/quality-task-planner.mjs` 与 `scripts/quality-task-planner.test.ts` 新增 patch retirement 相关脚本识别：当 `scripts/i18n/i18n-patch-metrics-report.mjs`、`scripts/i18n/i18n-patch-retirement-gate.mjs`、`scripts/report-legacy-surfaces.mjs`、`scripts/lib/i18n-patch-metrics-report-core.mjs`、`scripts/lib/legacy-surface-report-core.mjs` 或 `scripts/verify-gui-smoke.mjs` 变更时，会把这条链路视为 `guiSmoke` 风险，并推荐直接重跑 `npm run i18n:patch-retirement-gate -- --check`。
 - `src/i18n/README.md` 的 gate 说明已同步改写成“GUI smoke 会同时刷新 legacy surface report 并执行 gate”，避免只记住 patch metrics 而忽略 dependency audit。
 
 验证：
 
 - `node --check "scripts/verify-gui-smoke.mjs"` 通过。
 - `node --check "scripts/quality-task-planner.mjs"` 通过。
-- `npm test -- "scripts/quality-task-planner.test.ts" "scripts/i18n-patch-retirement-gate.test.ts"` 通过，覆盖 2 个文件、17 个用例。
+- `npm test -- "scripts/quality-task-planner.test.ts" "scripts/i18n/i18n-patch-retirement-gate.test.ts"` 通过，覆盖 2 个文件、17 个用例。
 - `npm run i18n:patch-retirement-gate -- --check --format json --patch-report .lime/i18n/patch-metrics-report.json --legacy-report .lime/governance/legacy-surface-report.json` 通过，当前 `status=no-hit`、`violationCount=0`、`retirementReady=true`。
 
 ## 2026-05-23：P2 language boundary inventory
 
 本轮完成：
 
-- 新增 `scripts/i18n-language-boundary-report.ts` 与测试 `scripts/i18n-language-boundary-report.test.ts`，把 `language` / `locale` / `accept_language` / `target_language` 等 language-like marker 分类到 UI locale、AI response language、content target language、Browser Environment、ASR、code language 和 unknown 七类。
+- 新增 `scripts/i18n/i18n-language-boundary-report.ts` 与测试 `scripts/i18n/i18n-language-boundary-report.test.ts`，把 `language` / `locale` / `accept_language` / `target_language` 等 language-like marker 分类到 UI locale、AI response language、content target language、Browser Environment、ASR、code language 和 unknown 七类。
 - `package.json` 新增 `i18n:language-boundary-report` 与 `i18n:language-boundary-report:json`，用于在实现 response language、content target language 或 Browser Environment 语言能力前复跑 inventory。
-- 通过 `npx tsx scripts/i18n-language-boundary-report.ts --format json --output "internal/roadmap/i18n/evidence/language-boundary-report.json"` 落盘 evidence；当前扫描 3007 个源码文件，识别 1864 个 marker，其中 `uiLocale=1068`、`contentTargetLanguage=406`、`codeLanguage=121`、`asrLanguage=97`、`browserEnvironmentLanguage=91`、`unknownLanguageLike=81`。
+- 通过 `npx tsx scripts/i18n/i18n-language-boundary-report.ts --format json --output "internal/roadmap/i18n/evidence/language-boundary-report.json"` 落盘 evidence；当前扫描 3007 个源码文件，识别 1864 个 marker，其中 `uiLocale=1068`、`contentTargetLanguage=406`、`codeLanguage=121`、`asrLanguage=97`、`browserEnvironmentLanguage=91`、`unknownLanguageLike=81`。
 - 本轮继续收紧分类规则，把 Markdown / code fence、media task、workspace artifact preview、runtime export locale、Browser Runtime / WebView language 等明确语义从 unknown 桶剥离，`unknownLanguageLike` 从 322 降到 81。
 - 新增 `internal/roadmap/i18n/language-boundary-evaluation.md`，明确当前不应复用 `Config.language` 作为 AI response language 或内容产物语言事实源。
 - `src/i18n/README.md` 已补充 language boundary report 的入口说明。
 
 验证：
 
-- `npm test -- "scripts/i18n-language-boundary-report.test.ts"` 通过，覆盖 2 个用例。
-- `git diff --check -- "scripts/i18n-language-boundary-report.ts" "scripts/i18n-language-boundary-report.test.ts" "package.json" "src/i18n/README.md" "internal/roadmap/i18n/evidence/language-boundary-report.json" "internal/roadmap/i18n/language-boundary-evaluation.md"` 通过。
+- `npm test -- "scripts/i18n/i18n-language-boundary-report.test.ts"` 通过，覆盖 2 个用例。
+- `git diff --check -- "scripts/i18n/i18n-language-boundary-report.ts" "scripts/i18n/i18n-language-boundary-report.test.ts" "package.json" "src/i18n/README.md" "internal/roadmap/i18n/evidence/language-boundary-report.json" "internal/roadmap/i18n/language-boundary-evaluation.md"` 通过。
 
 ## 2026-05-23：P3 source locale 导出
 
 本轮完成：
 
-- 新增 `scripts/i18n-source-locale-export.ts` 与测试 `scripts/i18n-source-locale-export.test.ts`，把 `zh-CN` source locale 的 namespace、扁平 key、原文值、key 数和 raw bytes 汇总导出为稳定 JSON / text 报告。
+- 新增 `scripts/i18n/i18n-source-locale-export.ts` 与测试 `scripts/i18n/i18n-source-locale-export.test.ts`，把 `zh-CN` source locale 的 namespace、扁平 key、原文值、key 数和 raw bytes 汇总导出为稳定 JSON / text 报告。
 - `package.json` 新增 `i18n:source-export` 与 `i18n:source-export:json`，后续自动翻译 PR、人工 review 或外部翻译工具可以复用同一份 source 输入。
-- 通过 `npx tsx scripts/i18n-source-locale-export.ts --format json --output "internal/roadmap/i18n/evidence/source-locale-export.json"` 落盘当前 source export evidence，当前 `zh-CN` source locale 覆盖 13 个 namespace、7318 个 key、636992 raw bytes。
+- 通过 `npx tsx scripts/i18n/i18n-source-locale-export.ts --format json --output "internal/roadmap/i18n/evidence/source-locale-export.json"` 落盘当前 source export evidence，当前 `zh-CN` source locale 覆盖 13 个 namespace、7318 个 key、636992 raw bytes。
 - `src/i18n/README.md` 已补充 source export 入口说明，避免后续翻译 workflow 直接临时拼读 resources 目录。
 
 验证：
 
-- `npm test -- "scripts/i18n-source-locale-export.test.ts"` 通过，覆盖 2 个用例。
-- `git diff --check -- "scripts/i18n-source-locale-export.ts" "scripts/i18n-source-locale-export.test.ts" "package.json" "src/i18n/README.md" "internal/roadmap/i18n/evidence/source-locale-export.json"` 通过。
+- `npm test -- "scripts/i18n/i18n-source-locale-export.test.ts"` 通过，覆盖 2 个用例。
+- `git diff --check -- "scripts/i18n/i18n-source-locale-export.ts" "scripts/i18n/i18n-source-locale-export.test.ts" "package.json" "src/i18n/README.md" "internal/roadmap/i18n/evidence/source-locale-export.json"` 通过。
 
 ## 2026-05-23：P3 translation PR pack
 
 本轮完成：
 
-- 新增 `scripts/i18n-translation-pr-pack.ts` 与测试 `scripts/i18n-translation-pr-pack.test.ts`，把 `zh-CN` source export、翻译覆盖率与 locale 缺口组合成可审阅的 PR pack，不会改写任何 source locale 或目标 locale 文件。
+- 新增 `scripts/i18n/i18n-translation-pr-pack.ts` 与测试 `scripts/i18n/i18n-translation-pr-pack.test.ts`，把 `zh-CN` source export、翻译覆盖率与 locale 缺口组合成可审阅的 PR pack，不会改写任何 source locale 或目标 locale 文件。
 - `package.json` 新增 `i18n:translation-pr-pack` 与 `i18n:translation-pr-pack:json`，后续自动翻译或人工 review 可以直接消费同一份包。
 - 这个 PR pack 会对每个缺口 locale 生成 namespace 级 `missingEntries`，携带原始 source 文案，方便自动翻译系统或人工 reviewer 直接复核，而不是只看空洞的 missing key 列表。
-- 通过 `npx tsx scripts/i18n-translation-pr-pack.ts --format json --output "internal/roadmap/i18n/evidence/translation-pr-pack.json"` 落盘当前 PR pack evidence；当前 5 个 locale、13 个 namespace 维持无缺口，`proposedEntryCount=0`。
+- 通过 `npx tsx scripts/i18n/i18n-translation-pr-pack.ts --format json --output "internal/roadmap/i18n/evidence/translation-pr-pack.json"` 落盘当前 PR pack evidence；当前 5 个 locale、13 个 namespace 维持无缺口，`proposedEntryCount=0`。
 - `src/i18n/README.md` 已补充 PR pack 入口说明，明确它只做 review packaging，不回写 resources。
 
 验证：
 
-- `npm test -- "scripts/i18n-translation-pr-pack.test.ts"` 通过，覆盖 2 个用例。
-- `git diff --check -- "scripts/i18n-translation-pr-pack.ts" "scripts/i18n-translation-pr-pack.test.ts" "package.json" "src/i18n/README.md" "internal/roadmap/i18n/evidence/translation-pr-pack.json"` 通过。
+- `npm test -- "scripts/i18n/i18n-translation-pr-pack.test.ts"` 通过，覆盖 2 个用例。
+- `git diff --check -- "scripts/i18n/i18n-translation-pr-pack.ts" "scripts/i18n/i18n-translation-pr-pack.test.ts" "package.json" "src/i18n/README.md" "internal/roadmap/i18n/evidence/translation-pr-pack.json"` 通过。
 
 ## 2026-05-23：P3 translation PR pack 接入质量选择器
 
 本轮完成：
 
-- `scripts/quality-task-planner.mjs` 已把 `scripts/i18n-*` workflow 脚本纳入 i18n 结构校验触发面，避免后续改 source export / PR pack / unused key / RTL 等 i18n 治理脚本时没有任何 i18n 定向校验。
+- `scripts/quality-task-planner.mjs` 已把 `scripts/i18n/` workflow 脚本纳入 i18n 结构校验触发面，避免后续改 source export / PR pack / unused key / RTL 等 i18n 治理脚本时没有任何 i18n 定向校验。
 - 当 `src/i18n/resources/` 或 source export / translation PR pack 相关脚本变更时，质量选择器会推荐 `npm run i18n:translation-pr-pack:json -- --output internal/roadmap/i18n/evidence/translation-pr-pack.json`，把 PR pack 从孤立脚本接到日常 review 流程。
 - 这条推荐只作为审阅证据，不把 PR pack 生成强制塞进 `verify:local` 阻断面；当前阻断面仍由 `i18n:check` 保证资源结构一致性，符合“可审阅、可回滚、不直接覆盖人工修订”的 P3 目标。
 
@@ -266,29 +266,29 @@
 
 本轮完成：
 
-- `scripts/detect-missing-translations.ts` 新增翻译覆盖率计算，`detect-translations:json` 现在会同时输出 locale 总覆盖率与 namespace 级覆盖率，覆盖 `translated / missing / extra` 的机器可消费摘要。
-- `scripts/detect-missing-translations.test.ts` 补充 coverage 回归，锁住 JSON 报告里的 locale 总覆盖率、namespace 覆盖率和 verbose 文本输出。
-- 通过 `npx tsx scripts/detect-missing-translations.ts --format json` 落盘 `internal/roadmap/i18n/evidence/translation-coverage-report.json`，当前五个 locale 与 13 个 namespace 维持 `hasIssues=false`，`en-US / ja-JP / ko-KR / zh-TW` 的翻译覆盖率均为 100%。
+- `scripts/i18n/detect-missing-translations.ts` 新增翻译覆盖率计算，`detect-translations:json` 现在会同时输出 locale 总覆盖率与 namespace 级覆盖率，覆盖 `translated / missing / extra` 的机器可消费摘要。
+- `scripts/i18n/detect-missing-translations.test.ts` 补充 coverage 回归，锁住 JSON 报告里的 locale 总覆盖率、namespace 覆盖率和 verbose 文本输出。
+- 通过 `npx tsx scripts/i18n/detect-missing-translations.ts --format json` 落盘 `internal/roadmap/i18n/evidence/translation-coverage-report.json`，当前五个 locale 与 13 个 namespace 维持 `hasIssues=false`，`en-US / ja-JP / ko-KR / zh-TW` 的翻译覆盖率均为 100%。
 - `src/i18n/README.md` 已补充 `detect-translations:json` 的覆盖率报告入口说明，避免只看 `--verbose` 文本输出。
 
 验证：
 
-- `npm test -- "scripts/detect-missing-translations.test.ts"` 通过，覆盖 6 个用例。
-- `git diff --check -- "scripts/detect-missing-translations.ts" "scripts/detect-missing-translations.test.ts" "src/i18n/README.md" "internal/roadmap/i18n/evidence/translation-coverage-report.json"` 通过。
+- `npm test -- "scripts/i18n/detect-missing-translations.test.ts"` 通过，覆盖 6 个用例。
+- `git diff --check -- "scripts/i18n/detect-missing-translations.ts" "scripts/i18n/detect-missing-translations.test.ts" "src/i18n/README.md" "internal/roadmap/i18n/evidence/translation-coverage-report.json"` 通过。
 
 ## 2026-05-23：P4 installer / app metadata workflow 库存报告
 
 本轮完成：
 
-- 新增 `scripts/i18n-app-metadata-workflow-report.ts` 与测试 `scripts/i18n-app-metadata-workflow-report.test.ts`，把 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`、`src-tauri/tauri.conf.headless.json` 与 `src-tauri/capabilities/agent-app-shell.json` 的 app / installer 元数据事实源做成可重复 inventory 报告。
+- 新增 `scripts/i18n/i18n-app-metadata-workflow-report.ts` 与测试 `scripts/i18n/i18n-app-metadata-workflow-report.test.ts`，把 `package.json`、`lime-rs/Cargo.toml`、`lime-rs/tauri.conf.json`、`lime-rs/tauri.conf.headless.json` 与 `lime-rs/capabilities/agent-app-shell.json` 的 app / installer 元数据事实源做成可重复 inventory 报告。
 - 通过 `npm run i18n:app-metadata-report -- --format json --output "internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json"` 落盘库存报告，确认当前这些元数据仍是单语事实源，没有独立 installer 翻译工作流。
 - 新增 `internal/roadmap/i18n/app-metadata-workflow-evaluation.md`，把 installer / app metadata 的边界判断、建议工作流和重新评估条件写成可引用的 roadmap 工件。
 - 报告结论保持不变：app / installer 元数据现在只有单一文本事实源，没有 `zh-CN / en-US` 之类的专门翻译链路；如果后续要做，必须先定义 source locale、metadata ownership 和发布约束，再补 workflow。
 
 验证：
 
-- `npm test -- "scripts/i18n-app-metadata-workflow-report.test.ts"` 通过，覆盖 2 个用例。
-- `git diff --check -- "scripts/i18n-app-metadata-workflow-report.ts" "scripts/i18n-app-metadata-workflow-report.test.ts" "package.json" "internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json"` 通过。
+- `npm test -- "scripts/i18n/i18n-app-metadata-workflow-report.test.ts"` 通过，覆盖 2 个用例。
+- `git diff --check -- "scripts/i18n/i18n-app-metadata-workflow-report.ts" "scripts/i18n/i18n-app-metadata-workflow-report.test.ts" "package.json" "internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json"` 通过。
 
 ## 2026-05-23：P4 RTL readiness groundwork
 
@@ -309,14 +309,14 @@
 
 本轮完成：
 
-- 新增 `scripts/i18n-rtl-readiness-report.ts` 与测试 `scripts/i18n-rtl-readiness-report.test.ts`，把 RTL 主路径的方向基础、设置页 / 侧栏 / Workspace / 对话框 / Knowledge 主路径布局敏感面做成可重复 inventory。
+- 新增 `scripts/i18n/i18n-rtl-readiness-report.ts` 与测试 `scripts/i18n/i18n-rtl-readiness-report.test.ts`，把 RTL 主路径的方向基础、设置页 / 侧栏 / Workspace / 对话框 / Knowledge 主路径布局敏感面做成可重复 inventory。
 - `package.json` 新增 `i18n:rtl-readiness-report` 与 `i18n:rtl-readiness-report:json`，方便后续把同一份 inventory 直接落盘成 evidence。
 - 通过 `npm run i18n:rtl-readiness-report -- --format json --output "internal/roadmap/i18n/evidence/rtl-readiness-inventory.json"` 落盘静态 inventory，当前结果显示：38 个审计文件、98 个方向敏感 marker、23 个高风险文件、5 个主路径 surface，且仍缺 RTL 截图回归与 Playwright smoke 证据。
 - `internal/roadmap/i18n/rtl-readiness-evaluation.md` 已更新，引用这份 inventory 作为当前态基线。
 
 验证：
 
-- `npm test -- "scripts/i18n-rtl-readiness-report.test.ts"` 通过，覆盖 2 个用例。
+- `npm test -- "scripts/i18n/i18n-rtl-readiness-report.test.ts"` 通过，覆盖 2 个用例。
 - `npm run i18n:rtl-readiness-report -- --format json --output "internal/roadmap/i18n/evidence/rtl-readiness-inventory.json"` 成功落盘。
 
 ## 2026-05-23：P4 RTL screenshot / smoke evidence
@@ -337,7 +337,7 @@
 
 本轮完成：
 
-- 新增 `scripts/i18n-rtl-playwright-smoke.mjs`，把强制 `rtl` 下的首页、用户菜单和设置页验证固化为可复跑的 Playwright smoke。
+- 新增 `scripts/i18n/i18n-rtl-playwright-smoke.mjs`，把强制 `rtl` 下的首页、用户菜单和设置页验证固化为可复跑的 Playwright smoke。
 - `package.json` 新增 `i18n:rtl-smoke` 入口，直接复用仓库已有的 Playwright / Chromium 依赖。
 - 自动 smoke 生成 `internal/roadmap/i18n/evidence/rtl-playwright-smoke-report.json`，并复用同一目录下的三张自动截图 `rtl-home-automated.png`、`rtl-settings-automated.png`、`rtl-user-menu-automated.png`。
 - 报告摘要显示：`homeSidebarOnRight=true`、`settingsNavVisible=true`、`userMenuDialogVisible=true`，且 console / page error 都为 0。
@@ -350,14 +350,14 @@
 
 本轮完成：
 
-- 新增 `scripts/i18n-release-docs-workflow-report.ts` 与测试 `scripts/i18n-release-docs-workflow-report.test.ts`，把 `README.md` / `README.en.md`、`RELEASE_NOTES.md`、`docs/package.json`、`docs/nuxt.config.ts` 与 `docs/content/` 的翻译工作流现状做成可重复报告。
+- 新增 `scripts/i18n/i18n-release-docs-workflow-report.ts` 与测试 `scripts/i18n/i18n-release-docs-workflow-report.test.ts`，把 `README.md` / `README.en.md`、`RELEASE_NOTES.md`、`docs/package.json`、`docs/nuxt.config.ts` 与 `docs/content/` 的翻译工作流现状做成可重复报告。
 - 通过 `npm run i18n:release-docs-report -- --format json --output "internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 落盘库存报告，证明当前 `docs/` 站点没有 `i18n` / `locales` 配置，也没有独立翻译脚本。
 - 报告结论保持不变：当前没有独立的发布材料 / 官网文档 / 帮助文档翻译工作流，但现在已经有机器可消费的 inventory artifact，可作为后续 workflow 变更的基线。
 
 验证：
 
-- `npm test -- "scripts/i18n-release-docs-workflow-report.test.ts"` 通过，覆盖 2 个用例。
-- `git diff --check -- "scripts/i18n-release-docs-workflow-report.ts" "scripts/i18n-release-docs-workflow-report.test.ts" "package.json" "internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过。
+- `npm test -- "scripts/i18n/i18n-release-docs-workflow-report.test.ts"` 通过，覆盖 2 个用例。
+- `git diff --check -- "scripts/i18n/i18n-release-docs-workflow-report.ts" "scripts/i18n/i18n-release-docs-workflow-report.test.ts" "package.json" "internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过。
 
 ## 2026-05-23：P4 发布材料 / 帮助文档翻译工作流评估
 
@@ -479,17 +479,17 @@
 
 本轮继续完成：
 
-- `scripts/i18n-hardcoded-check.ts` 新增轻量硬编码扫描原型，先只检查当前变更的前端源码文件，识别 JSX 里直接写入的用户可见中文与 visible prop literal。
-- `scripts/i18n-hardcoded-check.test.ts` 补充正向与忽略路径回归，验证 i18n resources 与 test files 不会进入扫描结果。
+- `scripts/i18n/i18n-hardcoded-check.ts` 新增轻量硬编码扫描原型，先只检查当前变更的前端源码文件，识别 JSX 里直接写入的用户可见中文与 visible prop literal。
+- `scripts/i18n/i18n-hardcoded-check.test.ts` 补充正向与忽略路径回归，验证 i18n resources 与 test files 不会进入扫描结果。
 - `package.json` 新增 `i18n:scan` / `i18n:scan:json` 入口，便于本地与后续 CI 复用。
 - `scripts/quality-task-planner.mjs` / `scripts/quality-task-selector.mjs` 暴露 `i18nHardcoded` 风险位。
 - `scripts/local-ci.mjs` 在前端源码变更命中时自动执行 `npm run i18n:scan -- --files ...`，但仅扫描变更文件，不把历史代码一次性拉进阻断面。
 
 验证：
 
-- `npm test -- "scripts/i18n-hardcoded-check.test.ts" "scripts/quality-task-planner.test.ts" "scripts/detect-missing-translations.test.ts"` 通过。
+- `npm test -- "scripts/i18n/i18n-hardcoded-check.test.ts" "scripts/quality-task-planner.test.ts" "scripts/i18n/detect-missing-translations.test.ts"` 通过。
 - `npm run verify:tasks -- --format json` 能看到 `i18nHardcoded` 分类。
-- `node_modules/.bin/tsx scripts/i18n-hardcoded-check.ts --format json --files <hardcoded fixture>` 会输出机器可消费 JSON，并在命中时以非零退出码结束。
+- `node_modules/.bin/tsx scripts/i18n/i18n-hardcoded-check.ts --format json --files <hardcoded fixture>` 会输出机器可消费 JSON，并在命中时以非零退出码结束。
 - `npm run verify:local` 通过，确认本地质量入口和新扫描器接线正常。
 
 ## 2026-05-23：legacy patch coverage 命名收口
@@ -502,34 +502,34 @@
 
 本轮完成：
 
-- `scripts/detect-missing-translations.ts` 新增 `--format json`，CLI 可以输出结构化翻译检查报告。
+- `scripts/i18n/detect-missing-translations.ts` 新增 `--format json`，CLI 可以输出结构化翻译检查报告。
 - JSON 报告包含 schema version、resources 位置、source locale、locale / namespace 列表、source key 数量、issue 汇总与完整 issues 结构，方便后续质量报告和 CI 消费。
 - `package.json` 新增 `i18n:check:json` 与 `detect-translations:json` 入口，复用同一脚本，不再额外派生别的逻辑分支。
-- `scripts/detect-missing-translations.test.ts` 增补 JSON 格式化与 CLI 回归，覆盖结构化输出和非零退出码。
+- `scripts/i18n/detect-missing-translations.test.ts` 增补 JSON 格式化与 CLI 回归，覆盖结构化输出和非零退出码。
 
 验证：
 
-- `npm test -- "scripts/detect-missing-translations.test.ts" "scripts/i18n-hardcoded-check.test.ts" "scripts/quality-task-planner.test.ts"` 通过。
+- `npm test -- "scripts/i18n/detect-missing-translations.test.ts" "scripts/i18n/i18n-hardcoded-check.test.ts" "scripts/quality-task-planner.test.ts"` 通过。
 - `npm run i18n:check:json` 可正常输出结构化 JSON 报告。
 
 ## 2026-05-23：P3 hard-coded 文案扫描 AST 收口
 
 本轮完成：
 
-- `scripts/i18n-hardcoded-check.ts` 从 regex 扫描升级为 AST 扫描，只收 JSX 文本节点、JSX 子节点里的直接字面量表达式，以及 `title` / `label` / `placeholder` 等可见属性字面量。
+- `scripts/i18n/i18n-hardcoded-check.ts` 从 regex 扫描升级为 AST 扫描，只收 JSX 文本节点、JSX 子节点里的直接字面量表达式，以及 `title` / `label` / `placeholder` 等可见属性字面量。
 - 扫描器排除了 `t(...)`、普通逻辑字符串、测试文件和 i18n 资源文件，减少了对非 UI 文本的误报。
-- `scripts/i18n-hardcoded-check.test.ts` 增补 AST 级回归，覆盖 JSX 文本、直接字面量表达式、可见属性、资源 / 测试 / 普通逻辑字符串忽略场景。
+- `scripts/i18n/i18n-hardcoded-check.test.ts` 增补 AST 级回归，覆盖 JSX 文本、直接字面量表达式、可见属性、资源 / 测试 / 普通逻辑字符串忽略场景。
 
 验证：
 
-- `npm test -- "scripts/i18n-hardcoded-check.test.ts" "scripts/quality-task-planner.test.ts" "scripts/detect-missing-translations.test.ts"` 通过。
+- `npm test -- "scripts/i18n/i18n-hardcoded-check.test.ts" "scripts/quality-task-planner.test.ts" "scripts/i18n/detect-missing-translations.test.ts"` 通过。
 - `npm run verify:local` 通过，说明 AST 扫描器与统一质量入口保持兼容。
 
 ## 2026-05-23：P3 unused key 候选报告
 
 本轮完成：
 
-- `scripts/i18n-unused-key-check.ts` 新增 source locale unused key 候选分析，默认从 `src/i18n/resources/zh-CN/*.json` 读取 key，并扫描 `src/**/*.{ts,tsx,js,jsx}` 的字符串字面量引用。
+- `scripts/i18n/i18n-unused-key-check.ts` 新增 source locale unused key 候选分析，默认从 `src/i18n/resources/zh-CN/*.json` 读取 key，并扫描 `src/**/*.{ts,tsx,js,jsx}` 的字符串字面量引用。
 - 扫描默认排除测试文件、`src/i18n/resources/` 与 `src/i18n/legacy-patch/`，避免把测试 fixture、资源自身和迁移兜底层误计为 current 生产引用。
 - `package.json` 新增 `i18n:unused` / `i18n:unused:json`，输出 text 或 JSON 报告；`--check` 可用于后续治理门禁，但当前不接入 `verify:local`。
 - `--protected-prefix` 支持显式保护动态 key prefix；同时脚本开始从 `t(\`...\${...}...\`)` 模板字符串推断动态 key pattern，并把匹配 key 归入 protected，避免把显式动态访问误报成 unused。
@@ -546,7 +546,7 @@
 
 验证：
 
-- `npm test -- "scripts/i18n-unused-key-check.test.ts" "scripts/detect-missing-translations.test.ts" "scripts/i18n-hardcoded-check.test.ts" "scripts/quality-task-planner.test.ts"` 通过。
+- `npm test -- "scripts/i18n/i18n-unused-key-check.test.ts" "scripts/i18n/detect-missing-translations.test.ts" "scripts/i18n/i18n-hardcoded-check.test.ts" "scripts/quality-task-planner.test.ts"` 通过。
 - `npm run i18n:unused:json` 通过并输出结构化候选报告。
 
 ## 下一刀候选
@@ -570,14 +570,14 @@
 
 本轮完成：
 
-- `scripts/i18n-bundle-report.ts` 新增 bundle footprint 报告，按 current loader 的 core namespace 边界聚合 `common / navigation / settings / workspace / agent / errors`，并将未来非 core namespace 视为 lazy chunk 候选。
+- `scripts/i18n/i18n-bundle-report.ts` 新增 bundle footprint 报告，按 current loader 的 core namespace 边界聚合 `common / navigation / settings / workspace / agent / errors`，并将未来非 core namespace 视为 lazy chunk 候选。
 - `src/i18n/bundledNamespaceParts.ts` 作为纯数据源沉淀 core namespace 与 agent 资源分片规则；`src/i18n/loadNamespace.ts` 只负责运行时加载，不再承担规则定义。
 - `package.json` 新增 `i18n:bundle-report` / `i18n:bundle-report:json`，`src/i18n/README.md` 记录了报告入口。
 - 当前报告结果：`inlineGroupCount=6`、`lazyGroupCount=0`、`sourceLocaleFileCount=13`、`sourceLocaleKeyCount=7318`、`totalRawBytes=3374451`。
 
 验证：
 
-- `npm test -- "scripts/i18n-bundle-report.test.ts"` 通过。
+- `npm test -- "scripts/i18n/i18n-bundle-report.test.ts"` 通过。
 - `npm run i18n:bundle-report:json` 可输出结构化 bundle footprint 报告。
 - `npm run verify:local` 通过，确认 bundle 报告脚本与 `loadNamespace` 的边界调整未破坏本地质量入口。
 
@@ -585,42 +585,42 @@
 
 本轮完成：
 
-- `scripts/i18n-patch-retirement-gate.mjs` 新增组合门禁，统一消费 `.lime/i18n/patch-metrics-report.json` 与 `.lime/governance/legacy-surface-report.json`，只有当 Patch report 为 `no-hit` 且 legacy surface report 无违规引用时才通过。
+- `scripts/i18n/i18n-patch-retirement-gate.mjs` 新增组合门禁，统一消费 `.lime/i18n/patch-metrics-report.json` 与 `.lime/governance/legacy-surface-report.json`，只有当 Patch report 为 `no-hit` 且 legacy surface report 无违规引用时才通过。
 - `package.json` 新增 `i18n:patch-retirement-gate` / `i18n:patch-retirement-gate:json`，`src/i18n/README.md` 记录了门禁入口和默认 artifact 路径。
 - 组合门禁当前在真实 artifact 上通过：Patch `status=no-hit`、`retirementCandidate=true`、`totalMatchedSegments=0`、`totalReplacedNodes=0`、`totalRuns=17`；legacy surface `violationCount=0`。门禁仍会显式输出 `classificationDriftCandidateCount=23` 作为审阅信号，但不单独阻断本轮退出。
 
 验证：
 
-- `npm test -- "scripts/i18n-patch-retirement-gate.test.ts"` 通过。
-- `node scripts/i18n-patch-retirement-gate.mjs --check --format json --patch-report .lime/i18n/patch-metrics-report.json --legacy-report .lime/governance/legacy-surface-report.json` 通过。
-- `npm run governance:legacy-report -- --json --output .lime/governance/legacy-surface-report.json` 与 `node scripts/i18n-patch-metrics-report.mjs --input .lime/i18n/patch-metrics.json --format json --output .lime/i18n/patch-metrics-report.json` 生成当前 gate 依赖 artifact。
+- `npm test -- "scripts/i18n/i18n-patch-retirement-gate.test.ts"` 通过。
+- `node scripts/i18n/i18n-patch-retirement-gate.mjs --check --format json --patch-report .lime/i18n/patch-metrics-report.json --legacy-report .lime/governance/legacy-surface-report.json` 通过。
+- `npm run governance:legacy-report -- --json --output .lime/governance/legacy-surface-report.json` 与 `node scripts/i18n/i18n-patch-metrics-report.mjs --input .lime/i18n/patch-metrics.json --format json --output .lime/i18n/patch-metrics-report.json` 生成当前 gate 依赖 artifact。
 
 ## 2026-05-23：unused key namespace 热点报告
 
 本轮完成：
 
-- `scripts/i18n-unused-key-check.ts` 新增 `namespaceSummaries`，把 unused / referenced / protected / total / unusedRatio 变成 namespace 级汇总，`i18n:unused:json` 和 text 报告都能直接复核热点桶。
-- `scripts/i18n-unused-key-check.test.ts` 增补 namespace 热点、JSON 结构与 text 输出回归，避免后续只保留扁平候选列表。
+- `scripts/i18n/i18n-unused-key-check.ts` 新增 `namespaceSummaries`，把 unused / referenced / protected / total / unusedRatio 变成 namespace 级汇总，`i18n:unused:json` 和 text 报告都能直接复核热点桶。
+- `scripts/i18n/i18n-unused-key-check.test.ts` 增补 namespace 热点、JSON 结构与 text 输出回归，避免后续只保留扁平候选列表。
 - `src/i18n/README.md` 记录了热点报告入口，方便后续按桶 tightening protected prefixes 或拆 namespace。
 - 当前热点结果：`agentRuntime` unused=368 / total=601，`agentSkills` unused=225 / total=980，`agentTeamWorkspace` unused=143 / total=404，`agent` unused=48 / total=587，`settings` unused=24 / total=2717，`workspace` unused=23 / total=871。
 
 后续收紧：
 
-- `scripts/i18n-unused-key-check.ts` 继续补齐文件内 `const` 字符串前缀推断，能识别 `agentChat.threadReliability.diagnostic.*` 这类 prefix helper，避免把同文件动态拼接误计为 unused。
+- `scripts/i18n/i18n-unused-key-check.ts` 继续补齐文件内 `const` 字符串前缀推断，能识别 `agentChat.threadReliability.diagnostic.*` 这类 prefix helper，避免把同文件动态拼接误计为 unused。
 - 当前复跑后，`protectedKeyCount` 从 169 提升到 354，`unusedKeyCount` 从 832 降到 647；`agentRuntime` 从 unused=368 / protected=0 调整到 unused=183 / protected=185，说明热点桶里有一半以上是可由动态前缀保护的 current 引用，而不是纯 dead key。
 
 验证：
 
-- `npm test -- "scripts/i18n-unused-key-check.test.ts"` 通过。
-- `npx tsx scripts/i18n-unused-key-check.ts --format json` 可正常输出 `namespaceSummaries` 热点表。
+- `npm test -- "scripts/i18n/i18n-unused-key-check.test.ts"` 通过。
+- `npx tsx scripts/i18n/i18n-unused-key-check.ts --format json` 可正常输出 `namespaceSummaries` 热点表。
 
 ## 2026-05-23：unused key 扫描器再收紧
 
 本轮继续完成：
 
-- `scripts/i18n-unused-key-check.ts` 继续补齐动态 key 推断，支持 `i18n.t(...)` 这类 property-call 形式，以及文件内 `const` 前缀 + 简单拼接表达式，避免把明确的 current 动态访问误计为 unused。
+- `scripts/i18n/i18n-unused-key-check.ts` 继续补齐动态 key 推断，支持 `i18n.t(...)` 这类 property-call 形式，以及文件内 `const` 前缀 + 简单拼接表达式，避免把明确的 current 动态访问误计为 unused。
 - 动态 key pattern 现在只保留首个动态槽之前的静态前缀，减少中间模板占位符后静态片段被错误算进 prefix 的情况。
-- `scripts/i18n-unused-key-check.test.ts` 新增 property-call 回归，和 const 前缀动态拼接回归，锁住这次推断边界。
+- `scripts/i18n/i18n-unused-key-check.test.ts` 新增 property-call 回归，和 const 前缀动态拼接回归，锁住这次推断边界。
 
 当前复跑结果：
 
@@ -629,16 +629,16 @@
 
 验证：
 
-- `npm test -- "scripts/i18n-unused-key-check.test.ts"` 通过。
+- `npm test -- "scripts/i18n/i18n-unused-key-check.test.ts"` 通过。
 - `npm run typecheck` 通过。
-- `npx tsx scripts/i18n-unused-key-check.ts --format json` 可正常输出更新后的热点和保护统计。
+- `npx tsx scripts/i18n/i18n-unused-key-check.ts --format json` 可正常输出更新后的热点和保护统计。
 
 ## 2026-05-23：unused key 家族热点分桶
 
 本轮继续完成：
 
-- `scripts/i18n-unused-key-check.ts` 新增 `unusedKeyFamiliesByNamespace`，把 unused key 再按 namespace 内前缀家族聚合，JSON 与 text 报告都能直接看到可收口的家族桶。
-- `scripts/i18n-unused-key-check.test.ts` 增补家族热点回归，锁住 JSON 结构与 text 报告输出，避免后续只能看到扁平 unused list。
+- `scripts/i18n/i18n-unused-key-check.ts` 新增 `unusedKeyFamiliesByNamespace`，把 unused key 再按 namespace 内前缀家族聚合，JSON 与 text 报告都能直接看到可收口的家族桶。
+- `scripts/i18n/i18n-unused-key-check.test.ts` 增补家族热点回归，锁住 JSON 结构与 text 报告输出，避免后续只能看到扁平 unused list。
 
 当前真实热点家族：
 
@@ -647,9 +647,9 @@
 
 验证：
 
-- `npm test -- "scripts/i18n-unused-key-check.test.ts"` 通过。
+- `npm test -- "scripts/i18n/i18n-unused-key-check.test.ts"` 通过。
 - `npm run typecheck` 通过。
-- `npx tsx scripts/i18n-unused-key-check.ts --format json` 可输出 `unusedKeyFamiliesByNamespace`。
+- `npx tsx scripts/i18n/i18n-unused-key-check.ts --format json` 可输出 `unusedKeyFamiliesByNamespace`。
 
 ## 2026-05-23：i18next-cli 工具链评估
 
@@ -683,16 +683,16 @@ benchmark 摘要：
 本轮继续完成：
 
 - 新增 `internal/roadmap/i18n/response-language-injection-evaluation.md`，把 PRD P2 的 “AI response language 设置与 request metadata 注入” 先落成 Query Loop 边界评估，避免直接复用 UI `Config.language`。
-- 读回 `internal/aiprompts/query-loop.md`、`internal/aiprompts/commands.md`、`src/components/agent/chat/utils/harnessRequestMetadata.ts`、`src/components/agent/chat/workspace/workspaceSendHelpers.ts`、`src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `src-tauri/crates/agent/src/turn_input_envelope.rs`，确认正确扩展点是 `request_metadata.harness.*`、`runtime_turn.rs` prompt augmentation 与 `TurnInputEnvelope` 快照。
+- 读回 `internal/aiprompts/query-loop.md`、`internal/aiprompts/commands.md`、`src/components/agent/chat/utils/harnessRequestMetadata.ts`、`src/components/agent/chat/workspace/workspaceSendHelpers.ts`、`lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/crates/agent/src/turn_input_envelope.rs`，确认正确扩展点是 `request_metadata.harness.*`、`runtime_turn.rs` prompt augmentation 与 `TurnInputEnvelope` 快照。
 - 结论收紧为：current 写入命名应使用 `agent_response_language`，不要写泛名 `language`；`response_language` 最多作为短期兼容读取 alias；`Config.language`、Browser Environment `Accept-Language`、Artifact / media `target_language` 与 ASR `language` 均不能直接复用。
 - `src/components/agent/chat/utils/harnessRequestMetadata.ts` 已给 `BuildHarnessRequestMetadataOptions` 增加 `agentResponseLanguage?: string | null`，并在 harness metadata 中 current 写入 `agent_response_language`。
 - `buildHarnessRequestMetadata()` 会兼容读取已有 `agent_response_language` / `agentResponseLanguage` / `response_language` / `responseLanguage`，但不会写入泛名 `language`，也不会从 UI locale 自动派生。
 - `src/components/agent/chat/utils/harnessRequestMetadata.test.ts` 新增回归，锁住显式 `agentResponseLanguage` 优先级、alias 兼容和 current snake_case 写入。
 - `src/components/settings-v2/general/appearance/index.tsx` 新增“回复语言”表单块，持久化到 `workspace_preferences.agent_response_language`；`AgentChatWorkspace` / `useWorkspaceSendActions` / `workspaceSendHelpers` / `useServiceModelsConfig` 全链路消费同一偏好并写入 `request_metadata.harness.agent_response_language`。
-- `src/lib/api/appConfigTypes.ts` 与 `src-tauri/crates/core/src/config/types.rs` 已同步新增 `workspace_preferences.agent_response_language`，并将 workspace preferences schema_version 升到 3；Rust roundtrip 测试覆盖该字段。
-- `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` 新增 `ResponseLanguage` prompt stage，并把 `request_metadata.harness.agent_response_language` 注入到 system prompt；`src-tauri/crates/agent/src/turn_input_envelope.rs` 同步阶段枚举。
+- `src/lib/api/appConfigTypes.ts` 与 `lime-rs/crates/core/src/config/types.rs` 已同步新增 `workspace_preferences.agent_response_language`，并将 workspace preferences schema_version 升到 3；Rust roundtrip 测试覆盖该字段。
+- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 新增 `ResponseLanguage` prompt stage，并把 `request_metadata.harness.agent_response_language` 注入到 system prompt；`lime-rs/crates/agent/src/turn_input_envelope.rs` 同步阶段枚举。
 - `runtime_turn.rs` 新增 response language helper tests，覆盖显式 locale 与 `auto` 两条路径，确认 prompt 约束不会退回到 UI locale 派生。
-- `src-tauri/crates/agent/src/session_execution_runtime.rs` 继续把 `harness.agent_response_language` 投影进 `recent_response_language`，让 evidence / replay / review 继续沿 `SessionExecutionRuntime` 这条现成 runtime 事实链观察该偏好。
+- `lime-rs/crates/agent/src/session_execution_runtime.rs` 继续把 `harness.agent_response_language` 投影进 `recent_response_language`，让 evidence / replay / review 继续沿 `SessionExecutionRuntime` 这条现成 runtime 事实链观察该偏好。
 - 下一刀实现顺序调整为：继续评估是否把 `agent_response_language` 暴露到更多设置入口，或者转去收紧其它 P2/P3 主缺口；避免继续扩散 schema。
 
 验证：
@@ -701,7 +701,7 @@ benchmark 摘要：
 - `npm test -- "src/components/agent/chat/utils/harnessRequestMetadata.test.ts"` 通过，覆盖 17 个用例。
 - `npx eslint --max-warnings 0 "src/components/agent/chat/utils/harnessRequestMetadata.ts" "src/components/agent/chat/utils/harnessRequestMetadata.test.ts"` 通过。
 - `npm run typecheck -- --pretty false` 通过。
-- `cargo test --manifest-path "src-tauri/Cargo.toml" merge_system_prompt_with_response_language -- --nocapture` 通过，覆盖 2 个新 Rust 测试。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" merge_system_prompt_with_response_language -- --nocapture` 通过，覆盖 2 个新 Rust 测试。
 - `git diff --check -- "src/components/agent/chat/utils/harnessRequestMetadata.ts" "src/components/agent/chat/utils/harnessRequestMetadata.test.ts" "internal/roadmap/i18n/response-language-injection-evaluation.md" "internal/roadmap/i18n/implementation-progress.md"` 通过。
 
 ## 2026-05-23：P2 chrome relay 语言语义收口
@@ -722,14 +722,14 @@ benchmark 摘要：
 
 本轮继续完成：
 
-- `scripts/i18n-unused-key-check.ts` 现在内置默认 protected dynamic prefix 清单，把已确认的动态家族从 current unused 候选里分离出去，避免 `agentChat.agentUiProjection.*`、`agentChat.teamWorkspace.control.*`、`agentChat.threadReliability.*`、`curatedTask.templates.*` 与 `skills.workspace.*` 这类实际运行时家族继续被误报成 dead key。
+- `scripts/i18n/i18n-unused-key-check.ts` 现在内置默认 protected dynamic prefix 清单，把已确认的动态家族从 current unused 候选里分离出去，避免 `agentChat.agentUiProjection.*`、`agentChat.teamWorkspace.control.*`、`agentChat.threadReliability.*`、`curatedTask.templates.*` 与 `skills.workspace.*` 这类实际运行时家族继续被误报成 dead key。
 - 默认保护清单只覆盖已经从 current 代码与热点报告里复核过的家族，不再把整批 source locale key 留给临时命令参数手动保护。
-- `scripts/i18n-unused-key-check.test.ts` 补了默认动态家族回归，锁住 `agentChat.agentUiProjection.eventType.*` 这类不显式传 `--protected-prefix` 也应自动归入 protected 的行为。
+- `scripts/i18n/i18n-unused-key-check.test.ts` 补了默认动态家族回归，锁住 `agentChat.agentUiProjection.eventType.*` 这类不显式传 `--protected-prefix` 也应自动归入 protected 的行为。
 - 当前复跑结果：`protectedKeyCount=852`、`unusedKeyCount=156`；`agentTeamWorkspace` 与 `agentRuntime` 已分别收敛到 `unused=0`，`agentSkills` 收敛到 `unused=59`。
 
 验证：
 
-- `npm test -- "scripts/i18n-unused-key-check.test.ts"` 通过。
+- `npm test -- "scripts/i18n/i18n-unused-key-check.test.ts"` 通过。
 - `npm run i18n:unused:json` 通过并继续输出结构化热点报告。
 
 ## 2026-05-24：P3 agentSkills dead key 收口
@@ -779,14 +779,14 @@ benchmark 摘要：
 本轮继续完成：
 
 - 从 `src/i18n/resources/*/agent.json` 删除了 48 个确认无 current 代码引用的 `agentApp.apps.*` dead key，覆盖旧 App Center / runtime surface 残留的表格、详情、状态、安装入口与运行分区文案。
-- `workspace.document.editor.slashCommand.*` 不是 dead key，而是 `slashCommandItems.tsx` 通过模板 key 动态访问；`scripts/i18n-unused-key-check.ts` 已把这个前缀加入默认动态保护清单，避免把文档编辑器 slash command 资源误判为 unused。
-- `scripts/i18n-unused-key-check.test.ts` 补了默认保护 `workspace.document.editor.slashCommand.*` 的回归，锁住这类动态资源不会再次进入 dead key 候选。
+- `workspace.document.editor.slashCommand.*` 不是 dead key，而是 `slashCommandItems.tsx` 通过模板 key 动态访问；`scripts/i18n/i18n-unused-key-check.ts` 已把这个前缀加入默认动态保护清单，避免把文档编辑器 slash command 资源误判为 unused。
+- `scripts/i18n/i18n-unused-key-check.test.ts` 补了默认保护 `workspace.document.editor.slashCommand.*` 的回归，锁住这类动态资源不会再次进入 dead key 候选。
 - 已刷新 `internal/roadmap/i18n/evidence/source-locale-export.json` 与 `internal/roadmap/i18n/evidence/translation-pr-pack.json`，当前 source export / PR pack 均按 `sourceKeyCount=7198` 生成，translation PR pack 仍为 `proposedEntryCount=0`。
 - 当前 `i18n:unused:json` 全量收敛为 `unusedKeyCount=0`；`agent`、`workspace`、`common`、`navigation`、`settings` 与 `agentSkills` 均为 `unusedKeyCount=0`。
 
 验证：
 
-- `npm test -- "scripts/i18n-unused-key-check.test.ts"` 通过。
+- `npm test -- "scripts/i18n/i18n-unused-key-check.test.ts"` 通过。
 - `npm run i18n:check` 通过，`sourceKeys` 从 `7246` 降到 `7198`。
 - `npm run i18n:unused:json` 通过，全量 `unusedKeyCount` 从 `71` 降到 `0`，`protectedKeyCount` 从 `852` 升到 `875`。
 - `npm run i18n:source-export:json -- --output "internal/roadmap/i18n/evidence/source-locale-export.json"` 通过。
@@ -798,13 +798,13 @@ benchmark 摘要：
 
 本轮继续完成：
 
-- 修复了 `scripts/i18n-hardcoded-check.ts` 的两处门禁问题：`--files` 路径匹配现在能正确识别 `src/components/` 前缀，`--format json` 不再被误当成扫描文件；同时补上对 `<kbd>K</kbd>` 这类单字符快捷键标记的豁免，避免把无语义快捷键误报成硬编码文案。
+- 修复了 `scripts/i18n/i18n-hardcoded-check.ts` 的两处门禁问题：`--files` 路径匹配现在能正确识别 `src/components/` 前缀，`--format json` 不再被误当成扫描文件；同时补上对 `<kbd>K</kbd>` 这类单字符快捷键标记的豁免，避免把无语义快捷键误报成硬编码文案。
 - 将 `src/components/agent/chat/AgentChatWorkspace.tsx` 里“无法找到上下文详情”与上下文来源 / 估算 token 的 toast 文案资源化，统一接入 `agent` namespace 的 `generalWorkbench.context.detail.*` / `generalWorkbench.context.source.*` key。
 - 补齐 `src/i18n/resources/*/agent.json` 的五语言翻译，并同步更新 `src/i18n/__tests__/loadNamespace.test.ts` 与 `src/i18n/__tests__/types.test.ts` 的契约锚点。
 
 验证：
 
-- `npm test -- "scripts/i18n-hardcoded-check.test.ts"` 通过。
+- `npm test -- "scripts/i18n/i18n-hardcoded-check.test.ts"` 通过。
 - `npm run i18n:scan:json -- --files "src/components/AppSidebar.tsx" "src/components/agent/chat/AgentChatWorkspace.tsx" "src/components/agent/chat/utils/harnessRequestMetadata.ts" "src/components/agent/chat/workspace/useWorkspaceSendActions.ts" "src/components/agent/chat/workspace/workspaceSendHelpers.ts" "src/components/settings-v2/general/appearance/index.tsx"` 通过，6 个真实变更文件的 findingCount 为 `0`。
 - `npm run i18n:check` 通过，`sourceKeys` 从 `7198` 增至 `7200`，覆盖仍为 `100%`。
 - `npm test -- "src/i18n/__tests__/loadNamespace.test.ts" "src/i18n/__tests__/types.test.ts"` 通过。
@@ -839,9 +839,9 @@ benchmark 摘要：
 
 验证：
 
-- `cargo test --manifest-path "src-tauri/Cargo.toml" create_audio_generation_task_artifact_inner_should_write_voice_contract_payload` 通过。
-- `cargo test --manifest-path "src-tauri/Cargo.toml" complete_audio_generation_task_artifact_inner_should_write_audio_output_result`、`execute_audio_generation_task_should_mark_provider_resolver_unavailable_without_fabricated_audio`、`execute_audio_generation_task_with_openai_compatible_provider_should_write_audio_output` 通过。
-- `cargo test --manifest-path "src-tauri/Cargo.toml" create_transcription_task_artifact_inner_should_write_audio_transcription_contract_payload`、`execute_audio_transcription_task_with_openai_compatible_provider_should_write_transcript_output` 通过。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" create_audio_generation_task_artifact_inner_should_write_voice_contract_payload` 通过。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" complete_audio_generation_task_artifact_inner_should_write_audio_output_result`、`execute_audio_generation_task_should_mark_provider_resolver_unavailable_without_fabricated_audio`、`execute_audio_generation_task_with_openai_compatible_provider_should_write_audio_output` 通过。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" create_transcription_task_artifact_inner_should_write_audio_transcription_contract_payload`、`execute_audio_transcription_task_with_openai_compatible_provider_should_write_transcript_output` 通过。
 - `npm test -- "src/lib/tauri-mock/core.test.ts" "src/lib/api/mediaTasks.test.ts"`、`npm run typecheck -- --pretty false`、`npm run i18n:check`、`npm run test:contracts` 通过。
 - `npm run i18n:language-boundary-report:json -- --category contentTargetLanguage --output "internal/roadmap/i18n/evidence/content-target-language-boundary-report.json"` 与全量 `npm run i18n:language-boundary-report:json -- --output "internal/roadmap/i18n/evidence/language-boundary-report.json"` 通过。
 
@@ -849,13 +849,13 @@ benchmark 摘要：
 
 本轮继续完成：
 
-- `scripts/i18n-language-boundary-report.ts` 补充 context-aware 分类规则，把此前泛名 `language` 误报中的 code fence / Artifact preview、transcription task preview、ASR provider、Browser language、i18n mock、Knowledge metadata、Agent response language guard 与 service skill 语言类 ID 分别归回 `codeLanguage`、`contentTargetLanguage`、`asrLanguage`、`browserEnvironmentLanguage`、`uiLocale` 与 `agentResponseLanguage`。
-- `scripts/i18n-language-boundary-report.test.ts` 新增回归，锁住 code block handler、transcription preview、response language、browser language 与 i18n `getFixedT(instance.language)` 这些高频上下文不再进入 unknown。
+- `scripts/i18n/i18n-language-boundary-report.ts` 补充 context-aware 分类规则，把此前泛名 `language` 误报中的 code fence / Artifact preview、transcription task preview、ASR provider、Browser language、i18n mock、Knowledge metadata、Agent response language guard 与 service skill 语言类 ID 分别归回 `codeLanguage`、`contentTargetLanguage`、`asrLanguage`、`browserEnvironmentLanguage`、`uiLocale` 与 `agentResponseLanguage`。
+- `scripts/i18n/i18n-language-boundary-report.test.ts` 新增回归，锁住 code block handler、transcription preview、response language、browser language 与 i18n `getFixedT(instance.language)` 这些高频上下文不再进入 unknown。
 - 重新刷新 `internal/roadmap/i18n/evidence/language-boundary-report.json` 与 `internal/roadmap/i18n/evidence/content-target-language-boundary-report.json`；当前全量报告保持 `entryCount=1999`，`unknownLanguageLike` 从 97 收敛到 1，唯一剩余项是 `src/lib/model/oemCloudModelMetadata.ts` 的 `"vision-language"` 模型能力别名，不是 UI locale / 自然语言偏好；聚焦 content target 报告为 `contentTargetLanguage=428`。
 
 验证：
 
-- `npm test -- "scripts/i18n-language-boundary-report.test.ts"` 通过。
+- `npm test -- "scripts/i18n/i18n-language-boundary-report.test.ts"` 通过。
 - `npm run i18n:language-boundary-report:json -- --output "internal/roadmap/i18n/evidence/language-boundary-report.json"` 通过。
 - `npm run i18n:language-boundary-report:json -- --category contentTargetLanguage --output "internal/roadmap/i18n/evidence/content-target-language-boundary-report.json"` 通过。
 
@@ -863,13 +863,13 @@ benchmark 摘要：
 
 本轮继续完成：
 
-- `scripts/i18n-patch-retirement-gate.mjs` 的输出新增 `schemaVersion=lime.i18n.patchRetirementGate.v1`、`generatedAt` 与 `advisoryIssues`，让 Patch 退出门禁 evidence 可被后续 CI / PR 审阅稳定消费。
+- `scripts/i18n/i18n-patch-retirement-gate.mjs` 的输出新增 `schemaVersion=lime.i18n.patchRetirementGate.v1`、`generatedAt` 与 `advisoryIssues`，让 Patch 退出门禁 evidence 可被后续 CI / PR 审阅稳定消费。
 - gate 仍只把 Patch 非 `no-hit`、`retirementCandidate=false`、threshold issue 和 legacy violation 作为阻断项；legacy classification drift / zero-reference 候选进入 advisory，不阻塞 DOM Patch no-hit 退出，但会在报告中显式提示。
 - 新增 evidence `internal/roadmap/i18n/evidence/patch-retirement-gate-report.json`；当前门禁 `retirementReady=true`，Patch 报告 `status=no-hit`、`retirementCandidate=true`、`totalRuns=19`、`totalMatchedSegments=0`、`totalReplacedNodes=0`，legacy report `violationCount=0`、`zeroReferenceCandidateCount=0`，同时提示 `classificationDriftCandidateCount=26` 需要按治理计划继续收口。
 
 验证：
 
-- `npm test -- "scripts/i18n-patch-retirement-gate.test.ts"` 通过。
+- `npm test -- "scripts/i18n/i18n-patch-retirement-gate.test.ts"` 通过。
 - `npm run i18n:patch-retirement-gate:json -- --output "internal/roadmap/i18n/evidence/patch-retirement-gate-report.json"` 通过。
 - `npm run i18n:patch-retirement-gate -- --check` 通过。
 
@@ -895,14 +895,14 @@ benchmark 摘要：
 
 本轮继续完成：
 
-- `scripts/detect-missing-translations.ts` 补齐 `--output <path>`，使 `npm run i18n:check:json -- --output "internal/roadmap/i18n/evidence/translation-coverage-report.json"` 能直接生成版本化 coverage evidence，不再依赖 stdout 重定向或手工复制。
-- `scripts/detect-missing-translations.test.ts` 增加 CLI `--output` 回归，锁住结构化 JSON 报告写入文件且不污染 stdout。
+- `scripts/i18n/detect-missing-translations.ts` 补齐 `--output <path>`，使 `npm run i18n:check:json -- --output "internal/roadmap/i18n/evidence/translation-coverage-report.json"` 能直接生成版本化 coverage evidence，不再依赖 stdout 重定向或手工复制。
+- `scripts/i18n/detect-missing-translations.test.ts` 增加 CLI `--output` 回归，锁住结构化 JSON 报告写入文件且不污染 stdout。
 - 刷新 `internal/roadmap/i18n/evidence/translation-coverage-report.json`、`internal/roadmap/i18n/evidence/source-locale-export.json` 与 `internal/roadmap/i18n/evidence/translation-pr-pack.json`；当前三份证据统一到 `sourceKeyCount=7493`、`namespaceCount=13`，translation coverage `hasIssues=false`、`missingKeyCount=0`、`extraKeyCount=0`、coverage `100.0%`，translation PR pack `proposedEntryCount=0`。
 - `npm run i18n:unused:json -- --check` 当前也保持 `unusedKeyCount=0`，说明本轮刷新没有把新资源面变成 dead key 积压。
 
 验证：
 
-- `npm test -- "scripts/detect-missing-translations.test.ts"` 通过。
+- `npm test -- "scripts/i18n/detect-missing-translations.test.ts"` 通过。
 - `npm run i18n:check:json -- --output "internal/roadmap/i18n/evidence/translation-coverage-report.json"` 通过。
 - `npm run i18n:source-export:json -- --output "internal/roadmap/i18n/evidence/source-locale-export.json"` 通过。
 - `npm run i18n:translation-pr-pack:json -- --output "internal/roadmap/i18n/evidence/translation-pr-pack.json"` 通过。
@@ -990,7 +990,7 @@ benchmark 摘要：
 
 本轮继续完成：
 
-- `scripts/i18n-bundle-report.ts` 新增 `--output <path>`，使 bundle footprint / chunk strategy 报告可以直接落成版本化 evidence，而不是依赖 stdout 复制。
+- `scripts/i18n/i18n-bundle-report.ts` 新增 `--output <path>`，使 bundle footprint / chunk strategy 报告可以直接落成版本化 evidence，而不是依赖 stdout 复制。
 - 新增 `internal/roadmap/i18n/evidence/bundle-strategy-report.json`；当前报告覆盖 5 个 locale、13 个 source locale 文件、7549 个 source key，总 raw bytes 为 3450322。
 - 当前 core namespace 仍全部 inline；最大 inline group 是 `agent`，由 `agent / agentExperts / agentHome / agentInputbar / agentMessageList / agentRuntime / agentSkills / agentTeamWorkspace` 8 个资源分片组成，source locale 为 3504 key、296675 bytes。
 - `settings` 是第二大 inline group，source locale 为 2534 key、226601 bytes；后续新增非启动路径 namespace 时应继续默认走 lazy chunk 候选，避免桌面首屏被非核心资源拖慢。
@@ -1003,13 +1003,13 @@ benchmark 摘要：
 
 本轮继续完成：
 
-- `scripts/quality-task-planner.mjs` 将 i18n 资源、`loadNamespace.ts`、`bundledNamespaceParts.ts` 与 `scripts/i18n-bundle-report.ts` 纳入 bundle strategy 推荐命令范围。
+- `scripts/quality-task-planner.mjs` 将 i18n 资源、`loadNamespace.ts`、`bundledNamespaceParts.ts` 与 `scripts/i18n/i18n-bundle-report.ts` 纳入 bundle strategy 推荐命令范围。
 - 资源改动现在会同时推荐刷新 `translation-pr-pack.json` 与 `bundle-strategy-report.json`；bundle loader / 报告脚本改动会推荐刷新 `bundle-strategy-report.json`。
 - `internal/aiprompts/quality-workflow.md` 同步记录该口径，确保 P3 bundle 体积与 chunk 策略 evidence 不停留在一次性手工报告，而是进入质量任务选择器的治理闭环。
 
 验证：
 
-- `npm test -- "scripts/quality-task-planner.test.ts" "scripts/i18n-bundle-report.test.ts"` 通过。
+- `npm test -- "scripts/quality-task-planner.test.ts" "scripts/i18n/i18n-bundle-report.test.ts"` 通过。
 - `npm run verify:tasks -- --format json` 能在当前 i18n bundle 报告改动下输出 `npm run i18n:bundle-report:json -- --output internal/roadmap/i18n/evidence/bundle-strategy-report.json` 推荐命令。
 
 ## 2026-05-27：P4 evidence 推荐命令接入质量选择器
@@ -1017,7 +1017,7 @@ benchmark 摘要：
 本轮继续完成：
 
 - `scripts/quality-task-planner.mjs` 将发布材料 / 官网文档 / 帮助文档事实源变更映射到 `i18n:release-docs-report:json` 推荐命令；docs-only 变更仍跳过代码校验，但会保留 evidence 刷新建议。
-- installer / app metadata 相关的 `package.json`、`src-tauri/Cargo.toml`、`tauri.conf*.json` 与 `agent-app-shell.json` 变更现在会推荐刷新 `app-metadata-workflow-inventory.json`。
+- installer / app metadata 相关的 `package.json`、`lime-rs/Cargo.toml`、`tauri.conf*.json` 与 `agent-app-shell.json` 变更现在会推荐刷新 `app-metadata-workflow-inventory.json`。
 - RTL 方向基础与 readiness inventory 审计过的设置页、侧栏、Workspace、弹窗和 Knowledge 主路径 surface 变更，会推荐刷新 `rtl-readiness-inventory.json`；布局敏感 surface 同时推荐 `npm run i18n:rtl-smoke`。
 - `scripts/local-ci.mjs` 调整 docs-only 摘要输出顺序，确保 docs-only 仍跳过本地代码校验，但不会吞掉 P4 evidence 推荐命令。
 
@@ -1031,14 +1031,14 @@ benchmark 摘要：
 
 本轮继续完成：
 
-- 新增 `scripts/i18n-chrome-extension-workflow-report.ts` 与测试 `scripts/i18n-chrome-extension-workflow-report.test.ts`，把 `extensions/lime-chrome` 的 manifest、Chrome `_locales` 状态、`InstallI18n` registry、options 页语言集合、页面 `data-i18n` 属性和核心术语出现情况做成可重复 inventory。
+- 新增 `scripts/i18n/i18n-chrome-extension-workflow-report.ts` 与测试 `scripts/i18n/i18n-chrome-extension-workflow-report.test.ts`，把 `extensions/lime-chrome` 的 manifest、Chrome `_locales` 状态、`InstallI18n` registry、options 页语言集合、页面 `data-i18n` 属性和核心术语出现情况做成可重复 inventory。
 - `package.json` 新增 `i18n:chrome-extension-report` 与 `i18n:chrome-extension-report:json`，后续可直接刷新 `internal/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json`。
 - `scripts/quality-task-planner.mjs` 已把 Chrome extension i18n surface 变更接入 `recommendedCommands`，当扩展 manifest、页面、`install-i18n.js`、options 语言脚本或对应 evidence / evaluation 变更时，推荐刷新 Chrome extension inventory。
 - `internal/roadmap/i18n/chrome-extension-evaluation.md` 已补充 machine-readable evidence 链接，继续保持当前结论：不迁移 `_locales/messages.json`，但扩展术语与页面级 registry 状态必须可复验。
 
 验证：
 
-- `npm test -- "scripts/i18n-chrome-extension-workflow-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖 2 个文件、23 个用例。
+- `npm test -- "scripts/i18n/i18n-chrome-extension-workflow-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖 2 个文件、23 个用例。
 - `npm run i18n:chrome-extension-report:json -- --output "internal/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json"` 通过，当前报告显示 manifest 无 `default_locale`、无 `_locales/`，`InstallI18n` 支持 `de / en / es / fr / pt / zh`，options 页支持 `en / zh`，核心术语 5/5 出现。
 
 ## 2026-05-27：P4 Release Notes 英文 companion 补齐
@@ -1046,7 +1046,7 @@ benchmark 摘要：
 本轮继续完成：
 
 - 新增 `RELEASE_NOTES.en.md`，按 `RELEASE_NOTES.md` 当前 `v1.52.0` 结构补齐英文 companion，并明确中文发布说明仍是 primary/source 版本。
-- `README.en.md` 的 Release Notes 入口已指向 `RELEASE_NOTES.en.md`；`scripts/i18n-release-docs-workflow-report.ts` 同步补充英文 README companion 链接检查，以及中英文 release notes 标题版本一致性检查。
+- `README.en.md` 的 Release Notes 入口已指向 `RELEASE_NOTES.en.md`；`scripts/i18n/i18n-release-docs-workflow-report.ts` 同步补充英文 README companion 链接检查，以及中英文 release notes 标题版本一致性检查。
 - `internal/roadmap/i18n/release-docs-workflow-evaluation.md` 已从“Release Notes 无英文 companion”更新为“README 与 Release Notes 已有最小 `zh-CN / en-US` companion 覆盖，但文档站仍没有独立 locale workflow”。
 - 这一步直接推进 PRD P4 验收“发布材料至少覆盖 `zh-CN / en-US`”；官网文档与帮助文档仍需要后续独立 workflow。
 
@@ -1060,7 +1060,7 @@ benchmark 摘要：
 本轮继续完成：
 
 - 新增 `internal/roadmap/i18n/release-docs-translation-scope.json`，把发布材料、官网文档和帮助文档拆成 `required / pilot / source-only` 三类翻译范围；当前 required 为 README 与 Release Notes，pilot 为 `docs/content/index.md`。
-- `scripts/i18n-release-docs-workflow-report.ts` 已读取 translation scope manifest，并输出 scope item 数、required companion 缺失数、source locale、target locales 与 source / companion 文件存在情况。
+- `scripts/i18n/i18n-release-docs-workflow-report.ts` 已读取 translation scope manifest，并输出 scope item 数、required companion 缺失数、source locale、target locales 与 source / companion 文件存在情况。
 - `internal/roadmap/i18n/release-docs-workflow-evaluation.md` 已更新结论：发布材料已有最小 `zh-CN / en-US` companion 覆盖和可机器读取的 translation scope，但文档站仍没有 locale 构建 workflow。
 
 验证：
@@ -1072,13 +1072,13 @@ benchmark 摘要：
 
 本轮继续完成：
 
-- `scripts/i18n-release-docs-workflow-report.ts` 在 required companion 门禁之外新增 `missingPilotEnglishCompanions` 与 `releaseDocsPilotCompanionMissingCount`，把 pilot 文档的英文 companion 缺口暴露为非阻断 advisory。
+- `scripts/i18n/i18n-release-docs-workflow-report.ts` 在 required companion 门禁之外新增 `missingPilotEnglishCompanions` 与 `releaseDocsPilotCompanionMissingCount`，把 pilot 文档的英文 companion 缺口暴露为非阻断 advisory。
 - 刷新 `internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json` 后，当前 required companion 缺失数仍为 `0`，pilot companion 缺失数为 `1`，具体是 `docs/content/index.md`。
 - `internal/roadmap/i18n/release-docs-workflow-evaluation.md` 已同步说明：README 与 Release Notes 的最低 `zh-CN / en-US` 发布材料覆盖不受 pilot 缺失影响，但文档首页 pilot 是下一步官网 / 帮助文档 companion 的明确候选。
 
 验证：
 
-- `npm test -- "scripts/i18n-release-docs-workflow-report.test.ts"` 通过，覆盖 required 门禁和 pilot advisory。
+- `npm test -- "scripts/i18n/i18n-release-docs-workflow-report.test.ts"` 通过，覆盖 required 门禁和 pilot advisory。
 - `npm run i18n:release-docs-report:json -- --output "internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过，已刷新 evidence。
 
 ## 2026-05-27：P4 app metadata translation scope manifest
@@ -1086,14 +1086,14 @@ benchmark 摘要：
 本轮继续完成：
 
 - 新增 `internal/roadmap/i18n/app-metadata-translation-scope.json`，把 installer / app metadata 字段拆成 translatable、stable brand / identifier 与 source-only 三类；当前 `generatedMetadataAllowed=false`，避免在发布链路未设计前生成平行配置。
-- `scripts/i18n-app-metadata-workflow-report.ts` 已读取 metadata scope，并在 inventory 中输出 scope item 数、可翻译字段数、稳定字段数、source-only 字段数、owner、source locale、target locales 与 workflow status。
+- `scripts/i18n/i18n-app-metadata-workflow-report.ts` 已读取 metadata scope，并在 inventory 中输出 scope item 数、可翻译字段数、稳定字段数、source-only 字段数、owner、source locale、target locales 与 workflow status。
 - 刷新 `internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json` 后，当前 scope 共 `10` 项，其中 translatable 字段 `2` 项、stable 字段 `6` 项、source-only 字段 `2` 项；installer localization workflow 仍为 `false`。
 - `scripts/quality-task-planner.mjs` 已把 metadata scope 纳入 P4 app metadata evidence 推荐范围；单独改 scope manifest 时保持 docs-only，但推荐刷新 `app-metadata-workflow-inventory.json`。
 - `internal/roadmap/i18n/app-metadata-workflow-evaluation.md` 已同步记录：这一步只建立可机器读取的 ownership / scope，不改真实安装器或 Tauri 配置。
 
 验证：
 
-- `npm test -- "scripts/i18n-app-metadata-workflow-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖 app metadata scope 读取与 docs-only 推荐命令。
+- `npm test -- "scripts/i18n/i18n-app-metadata-workflow-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖 app metadata scope 读取与 docs-only 推荐命令。
 - `npm run i18n:app-metadata-report:json -- --output "internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json"` 通过，已刷新 evidence。
 
 ## 2026-05-27：P4 docs home English companion pilot
@@ -1107,7 +1107,7 @@ benchmark 摘要：
 
 验证：
 
-- `npm test -- "scripts/i18n-release-docs-workflow-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖 pilot companion 存在时 advisory 为 `0`。
+- `npm test -- "scripts/i18n/i18n-release-docs-workflow-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖 pilot companion 存在时 advisory 为 `0`。
 - `npm run i18n:release-docs-report:json -- --output "internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过，已刷新 release docs evidence。
 
 ## 2026-05-27：P4 docs companion pilot 避免文档站假路由
@@ -1116,12 +1116,12 @@ benchmark 摘要：
 
 - 将文档首页英文 companion 从 `docs/content/index.en.md` 移到 `internal/roadmap/i18n/companions/docs-content-index.en.md`，避免在 `docs/nuxt.config.ts` 尚无 locale route 的情况下，被 Docus / Nuxt Content 当成普通内容页收集。
 - `internal/roadmap/i18n/release-docs-translation-scope.json` 已同步把 `docs/content/index.md` 的 pilot `enUSPath` 指向 roadmap companion 目录；release docs evidence 仍显示 required companion 缺失数 `0`、pilot companion 缺失数 `0`、existing English companion 数 `3`。
-- `scripts/i18n-release-docs-workflow-report.ts` 新增 `docsSite.contentEnglishCompanionFiles` 与 `summary.docsContentEnglishCompanionFileCount`，专门检测 `docs/content` 内是否出现 `.en.md` / `.en-US.md` companion；当前应保持为 `0`，直到真正引入 docs locale route / build workflow。
+- `scripts/i18n/i18n-release-docs-workflow-report.ts` 新增 `docsSite.contentEnglishCompanionFiles` 与 `summary.docsContentEnglishCompanionFileCount`，专门检测 `docs/content` 内是否出现 `.en.md` / `.en-US.md` companion；当前应保持为 `0`，直到真正引入 docs locale route / build workflow。
 - `internal/roadmap/i18n/release-docs-workflow-evaluation.md` 已同步说明：当前已有文档首页英文 companion pilot，但它不是文档站 locale route，也不代表完整 docs i18n workflow 已完成。
 
 验证：
 
-- `npm test -- "scripts/i18n-release-docs-workflow-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖 companion 不落入 `docs/content` 的口径。
+- `npm test -- "scripts/i18n/i18n-release-docs-workflow-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖 companion 不落入 `docs/content` 的口径。
 - `npm run i18n:release-docs-report:json -- --output "internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过，已刷新 release docs evidence。
 
 ## 2026-05-27：P4 docs companion 接入质量选择器
@@ -1134,94 +1134,94 @@ benchmark 摘要：
 
 验证：
 
-- `npm test -- "scripts/quality-task-planner.test.ts" "scripts/i18n-release-docs-workflow-report.test.ts"` 通过，覆盖 2 个文件、26 个用例。
+- `npm test -- "scripts/quality-task-planner.test.ts" "scripts/i18n/i18n-release-docs-workflow-report.test.ts"` 通过，覆盖 2 个文件、26 个用例。
 - 定向 `detectTasks(["internal/roadmap/i18n/companions/docs-content-index.en.md"])` 输出 `docsOnly=true`，且推荐 `npm run i18n:release-docs-report:json -- --output internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json`。
 
 ## 2026-05-27：P4 release docs companion orphan 检测
 
 本轮继续完成：
 
-- `scripts/i18n-release-docs-workflow-report.ts` 新增 companion 目录审计：收集 `internal/roadmap/i18n/companions/` 下英文 Markdown companion，并与 `release-docs-translation-scope.json` 中的 `enUSPath` 交叉比对。
+- `scripts/i18n/i18n-release-docs-workflow-report.ts` 新增 companion 目录审计：收集 `internal/roadmap/i18n/companions/` 下英文 Markdown companion，并与 `release-docs-translation-scope.json` 中的 `enUSPath` 交叉比对。
 - inventory 现在输出 `releaseDocsTranslationScope.companionFiles`、`orphanEnglishCompanions` 与 `summary.releaseDocsOrphanCompanionCount`，避免后续出现未被 scope 管理的游离英文 companion。
 - 刷新 `internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json` 后，当前 companion 文件为 `internal/roadmap/i18n/companions/docs-content-index.en.md`，orphan companion 数为 `0`；required / pilot companion 缺失数仍为 `0`。
 
 验证：
 
-- `npm test -- "scripts/i18n-release-docs-workflow-report.test.ts"` 通过，覆盖 companion 正常引用和 orphan companion 反向用例。
+- `npm test -- "scripts/i18n/i18n-release-docs-workflow-report.test.ts"` 通过，覆盖 companion 正常引用和 orphan companion 反向用例。
 - `npm run i18n:release-docs-report:json -- --output "internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过，已刷新 release docs evidence。
 
 ## 2026-05-27：P4 release docs source-only 剩余范围量化
 
 本轮继续完成：
 
-- `scripts/i18n-release-docs-workflow-report.ts` 新增 `sourceOnlyWithoutCompanions` 与 `sourceOnlyWithoutCompanionCount`，把 translation scope 中明确暂不翻译的 source-only 文档数量直接暴露到 inventory。
+- `scripts/i18n/i18n-release-docs-workflow-report.ts` 新增 `sourceOnlyWithoutCompanions` 与 `sourceOnlyWithoutCompanionCount`，把 translation scope 中明确暂不翻译的 source-only 文档数量直接暴露到 inventory。
 - 刷新 `internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json` 后，当前 required companion 缺失数为 `0`、pilot companion 缺失数为 `0`、orphan companion 数为 `0`；source-only without companion 数为 `12`，对应现有帮助文档 / API reference / open platform / legal 长尾。
 - 这一步不改变当前门禁，但让 P4 “官网文档、帮助文档进入独立翻译 workflow” 的剩余范围可机器读取，避免只看 required / pilot 就误判 docs workflow 已完成。
 
 验证：
 
-- `npm test -- "scripts/i18n-release-docs-workflow-report.test.ts"` 通过，覆盖 source-only without companion 统计。
+- `npm test -- "scripts/i18n/i18n-release-docs-workflow-report.test.ts"` 通过，覆盖 source-only without companion 统计。
 - `npm run i18n:release-docs-report:json -- --output "internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过，已刷新 release docs evidence。
 
 ## 2026-05-27：P4 release docs content scope drift 检测
 
 本轮继续完成：
 
-- `scripts/i18n-release-docs-workflow-report.ts` 新增 `docsSite.unscopedContentSourceFiles` 与 `summary.docsUnscopedContentSourceFileCount`，把 `docs/content` 中未纳入 `release-docs-translation-scope.json` 的 source Markdown 暴露为 evidence drift。
+- `scripts/i18n/i18n-release-docs-workflow-report.ts` 新增 `docsSite.unscopedContentSourceFiles` 与 `summary.docsUnscopedContentSourceFileCount`，把 `docs/content` 中未纳入 `release-docs-translation-scope.json` 的 source Markdown 暴露为 evidence drift。
 - `releaseDocsTranslationScope.scopedSourceFiles` 现在输出 scope 已覆盖的 source 文件列表，后续新增 `docs/content` 页面如果没有进入 required / pilot / source-only 范围，会被 inventory 明确列出。
 - 当前真实仓库 evidence 显示 `docsUnscopedContentSourceFileCount=0`，说明现有 `docs/content` source 文件都已进入 translation scope；source-only without companion 数仍为 `12`，文档站长尾翻译未被误判为完成。
 
 验证：
 
-- `npm test -- "scripts/i18n-release-docs-workflow-report.test.ts"` 覆盖未纳入 scope 的反向用例。
+- `npm test -- "scripts/i18n/i18n-release-docs-workflow-report.test.ts"` 覆盖未纳入 scope 的反向用例。
 - `npm run i18n:release-docs-report:json -- --output "internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 刷新 release docs evidence，确认当前 unscoped 数为 `0`。
 
 ## 2026-05-27：P4 app metadata scope drift 检测
 
 本轮继续完成：
 
-- `scripts/i18n-app-metadata-workflow-report.ts` 新增 `metadataFieldCoverage`，把真实 app / installer metadata 字段与 `app-metadata-translation-scope.json` 做双向比对：真实字段未入 scope 会进入 `unscopedMetadataFields`，scope 引用失效字段会进入 `missingScopedFields`。
-- `internal/roadmap/i18n/app-metadata-translation-scope.json` 补入 `src-tauri/tauri.conf.json#bundle.fileAssociations[0].name`，将 Skill Package 文件关联类型名归为稳定品牌字段，避免 file association 只审计 description 而漏掉 name。
+- `scripts/i18n/i18n-app-metadata-workflow-report.ts` 新增 `metadataFieldCoverage`，把真实 app / installer metadata 字段与 `app-metadata-translation-scope.json` 做双向比对：真实字段未入 scope 会进入 `unscopedMetadataFields`，scope 引用失效字段会进入 `missingScopedFields`。
+- `internal/roadmap/i18n/app-metadata-translation-scope.json` 补入 `lime-rs/tauri.conf.json#bundle.fileAssociations[0].name`，将 Skill Package 文件关联类型名归为稳定品牌字段，避免 file association 只审计 description 而漏掉 name。
 - 刷新 `internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json` 后，当前审计字段 `11` 个，`metadataUnscopedFieldCount=0`、`metadataMissingScopedFieldCount=0`；`hasInstallerLocalizationWorkflow` 仍为 `false`，不误判为多语言 installer workflow 已完成。
 - `internal/roadmap/i18n/app-metadata-workflow-evaluation.md` 已同步说明：在 `generatedMetadataAllowed=false` 期间，不新增平行 locale 配置，只用 scope + inventory 管住发布元数据漂移。
 
 验证：
 
-- `npm test -- "scripts/i18n-app-metadata-workflow-report.test.ts"` 通过，覆盖正常 scope 覆盖、漏管字段和失效引用字段。
+- `npm test -- "scripts/i18n/i18n-app-metadata-workflow-report.test.ts"` 通过，覆盖正常 scope 覆盖、漏管字段和失效引用字段。
 - `npm run i18n:app-metadata-report:json -- --output "internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json"` 通过，已刷新 app metadata evidence。
 
 ## 2026-05-27：P4 Chrome extension registry drift 检测
 
 本轮继续完成：
 
-- `scripts/i18n-chrome-extension-workflow-report.ts` 新增扩展 locale registry 双向漂移检测：`InstallI18n` 的 `SUPPORTED` 与页面 `InstallI18n.register(...)` 结果互相比对，输出 `supportedButUnregisteredLocales`、`registeredButUnsupportedLocales` 与 `installI18nLocaleDriftCount`。
+- `scripts/i18n/i18n-chrome-extension-workflow-report.ts` 新增扩展 locale registry 双向漂移检测：`InstallI18n` 的 `SUPPORTED` 与页面 `InstallI18n.register(...)` 结果互相比对，输出 `supportedButUnregisteredLocales`、`registeredButUnsupportedLocales` 与 `installI18nLocaleDriftCount`。
 - options 页新增 `OPTIONS_TRANSLATIONS` locale 读取，并与 `SUPPORTED_LANGUAGES` 双向比对，输出 `supportedButMissingTranslations`、`translationButUnsupportedLanguages` 与 `optionsLanguageDriftCount`。
 - 刷新 `internal/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json` 后，当前仍不使用 Chrome 标准 `_locales` workflow，但 `InstallI18n` 6 个 supported locale 与页面注册完全一致，options 页 `en / zh` 支持与翻译对象一致，两个 drift count 均为 `0`。
 - `internal/roadmap/i18n/chrome-extension-evaluation.md` 已同步说明：当前继续保留轻量 `InstallI18n` registry，但新增 / 删除扩展 locale 时必须刷新 inventory 并解释或归零 drift。
 
 验证：
 
-- `npm test -- "scripts/i18n-chrome-extension-workflow-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖正常无 drift、故意 registry drift 与质量任务推荐。
+- `npm test -- "scripts/i18n/i18n-chrome-extension-workflow-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖正常无 drift、故意 registry drift 与质量任务推荐。
 - `npm run i18n:chrome-extension-report:json -- --output "internal/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json"` 通过，已刷新 Chrome extension evidence。
 
 ## 2026-05-27：P4 RTL required smoke surface 覆盖审计
 
 本轮继续完成：
 
-- `scripts/i18n-rtl-readiness-report.ts` 新增 `smokeCoverage`，读取 `rtl-playwright-smoke-report.json` 的 summary，并按 PRD 点名的 `sidebar / settings / workspace / dialogs` 四个主路径 surface 计算 covered / missing。
+- `scripts/i18n/i18n-rtl-readiness-report.ts` 新增 `smokeCoverage`，读取 `rtl-playwright-smoke-report.json` 的 summary，并按 PRD 点名的 `sidebar / settings / workspace / dialogs` 四个主路径 surface 计算 covered / missing。
 - 刷新 `internal/roadmap/i18n/evidence/rtl-readiness-inventory.json` 后，当前有 Playwright smoke evidence，但 required surface coverage 只有 `3/4`：`sidebar / settings / dialogs` 已覆盖，`workspace` 缺明确 smoke summary 断言，`missingRequiredSurfaceSmokeEvidence=true`。
 - `internal/roadmap/i18n/rtl-readiness-evaluation.md` 已同步把 Workspace smoke 缺口写入结论：当前仍不应把 RTL locale 加入主支持列表；下一刀应优先补 `i18n:rtl-smoke` 的 Workspace 可见性 / 主工作台交互断言，使 required surface missing count 归零。
 
 验证：
 
-- `npm test -- "scripts/i18n-rtl-readiness-report.test.ts"` 通过，覆盖部分 smoke surface 缺口与全部 surface 覆盖两种情况。
+- `npm test -- "scripts/i18n/i18n-rtl-readiness-report.test.ts"` 通过，覆盖部分 smoke surface 缺口与全部 surface 覆盖两种情况。
 - `npm run i18n:rtl-readiness-report:json -- --output "internal/roadmap/i18n/evidence/rtl-readiness-inventory.json"` 通过，已刷新 RTL readiness evidence。
 
 ## 2026-05-27：P4 RTL Workspace smoke 补齐
 
 本轮继续完成：
 
-- `scripts/i18n-rtl-playwright-smoke.mjs` 在设置页验证后回到首页，等待 `data-testid="workspace-shell-scene"` 可见，并把 Workspace shell 的可见性断言、截图路径与 `workspaceVisible=true` 写入 `rtl-playwright-smoke-report.json`。
+- `scripts/i18n/i18n-rtl-playwright-smoke.mjs` 在设置页验证后回到首页，等待 `data-testid="workspace-shell-scene"` 可见，并把 Workspace shell 的可见性断言、截图路径与 `workspaceVisible=true` 写入 `rtl-playwright-smoke-report.json`。
 - 复跑 `npm run i18n:rtl-smoke` 后，控制台 error 与 page error 均为 `0`，新增 `rtl-workspace-automated.png` 与 `rtl-workspace-fullpage.png`。
 - 复刷 `internal/roadmap/i18n/evidence/rtl-readiness-inventory.json` 后，PRD required surface coverage 从 `3/4` 提升到 `4/4`，`missingRequiredSurfaceSmokeEvidence=false`；覆盖面为 `sidebar / settings / workspace / dialogs`。
 - `internal/roadmap/i18n/rtl-readiness-evaluation.md` 与 `rtl-screenshot-smoke-report.md` 已同步更新：当前 required surface 的强制 RTL smoke 已齐，但仍不等于开放 `ar` / `fa-IR` 这类真实 RTL locale。
@@ -1229,7 +1229,7 @@ benchmark 摘要：
 验证：
 
 - `npm run bridge:health -- --timeout-ms 120000` 通过，DevBridge 就绪。
-- `node --check "scripts/i18n-rtl-playwright-smoke.mjs"` 通过。
+- `node --check "scripts/i18n/i18n-rtl-playwright-smoke.mjs"` 通过。
 - `npm run i18n:rtl-smoke` 通过，生成 Workspace 截图与 `workspaceVisible=true`。
 - `npm run i18n:rtl-readiness-report:json -- --output "internal/roadmap/i18n/evidence/rtl-readiness-inventory.json"` 通过，确认 required surface missing count 为 `0`。
 
@@ -1237,13 +1237,13 @@ benchmark 摘要：
 
 本轮继续完成：
 
-- `scripts/i18n-release-docs-workflow-report.ts` 在 translation scope / companion / drift 统计之外新增 `releaseDocsTranslationQueue`，把缺失 source、required companion blocker、pilot companion advisory 与 source-only candidate 拆成可机器读取的队列事实源。
+- `scripts/i18n/i18n-release-docs-workflow-report.ts` 在 translation scope / companion / drift 统计之外新增 `releaseDocsTranslationQueue`，把缺失 source、required companion blocker、pilot companion advisory 与 source-only candidate 拆成可机器读取的队列事实源。
 - 刷新 `internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json` 后，当前 queue 状态为 `ready`；`releaseDocsTranslationQueueMissingSourceCount=0`、`releaseDocsTranslationQueueRequiredCompanionMissingCount=0`、`releaseDocsTranslationQueuePilotCompanionMissingCount=0`，12 个 source-only 文档进入后续翻译候选队列。
 - `internal/roadmap/i18n/release-docs-workflow-evaluation.md` 已同步更新结论：发布材料已具备最小 `zh-CN / en-US` companion 覆盖，官网 / 帮助文档已有独立 translation scope 与 queue，但文档站仍没有 locale route / locale build workflow，不能宣称完整 docs i18n 发布链路完成。
 
 验证：
 
-- `npm test -- "scripts/i18n-release-docs-workflow-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖 2 个文件、29 个用例。
+- `npm test -- "scripts/i18n/i18n-release-docs-workflow-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖 2 个文件、29 个用例。
 - `npm run i18n:release-docs-report:json -- --output "internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过，已刷新 release docs evidence。
 - `jq empty "internal/roadmap/i18n/release-docs-translation-scope.json" "internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过，确认 scope 与 inventory JSON 有效。
 
@@ -1251,14 +1251,14 @@ benchmark 摘要：
 
 本轮继续完成：
 
-- 新增 `scripts/i18n-p4-readiness-report.ts` 与 `npm run i18n:p4-readiness-report:json`，聚合 Chrome extension、release docs、RTL readiness 与 app metadata 四份 P4 evidence，按 PRD P4 的 4 条交付和 3 条验收逐条输出 passed / failed。
+- 新增 `scripts/i18n/i18n-p4-readiness-report.ts` 与 `npm run i18n:p4-readiness-report:json`，聚合 Chrome extension、release docs、RTL readiness 与 app metadata 四份 P4 evidence，按 PRD P4 的 4 条交付和 3 条验收逐条输出 passed / failed。
 - 新增 `internal/roadmap/i18n/evidence/p4-readiness-report.json`，当前 `deliverablesReady=true`、`acceptanceReady=true`，4 条交付与 3 条验收均有对应 evidence 通过；总体状态为 `ready-with-known-gaps`。
 - readiness 报告当时显式保留 3 个 known gap：Chrome extension 当前决策是保留 InstallI18n registry、官网 / 帮助文档仍没有 locale route / build workflow、installer / app metadata 仍没有真实多语言生成 workflow。后续 `docs-locale-build-manifest.json` 与 `app-metadata-locale-build-manifest.json` 已补上 build-time manifest workflow，Chrome 标准 `_locales` 也已收成 explicit decision evidence；当前 P4 known gap 已归零，但真实 locale route / 多站点发布 / 平台 installer 配置生成仍不能被误报为已完成。
 - `scripts/quality-task-planner.mjs` 已把 P4 readiness report 接入推荐命令；任一 P4 子 evidence 或对应脚本 / 文档变化时，都会推荐刷新 `p4-readiness-report.json`。
 
 验证：
 
-- `npm test -- "scripts/i18n-p4-readiness-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖 2 个文件、28 个用例。
+- `npm test -- "scripts/i18n/i18n-p4-readiness-report.test.ts" "scripts/quality-task-planner.test.ts"` 通过，覆盖 2 个文件、28 个用例。
 - `npm run i18n:p4-readiness-report:json -- --output "internal/roadmap/i18n/evidence/p4-readiness-report.json"` 通过，已刷新 P4 readiness evidence。
 - `jq empty "internal/roadmap/i18n/evidence/p4-readiness-report.json" "internal/roadmap/i18n/evidence/chrome-extension-workflow-inventory.json" "internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json" "internal/roadmap/i18n/evidence/rtl-readiness-inventory.json" "internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json"` 通过，确认聚合报告和四份输入 evidence 均为有效 JSON。
 

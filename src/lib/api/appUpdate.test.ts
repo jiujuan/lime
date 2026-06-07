@@ -11,6 +11,7 @@ import {
   getUpdateNotificationMetrics,
   isUpdateInstallSessionActive,
   listenUpdateInstallSession,
+  openUpdateWindow,
   recordUpdateNotificationAction,
   remindUpdateLater,
   setUpdateCheckSettings,
@@ -71,6 +72,7 @@ describe("appUpdate API", () => {
   it("应代理更新提醒动作", async () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(123)
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(456)
@@ -79,6 +81,7 @@ describe("appUpdate API", () => {
       .mockResolvedValueOnce(undefined);
 
     await expect(closeUpdateWindow()).resolves.toBeUndefined();
+    await expect(openUpdateWindow()).resolves.toBeUndefined();
     await expect(dismissUpdateNotification("1.2.3")).resolves.toBe(123);
     await expect(
       recordUpdateNotificationAction("update_now"),
@@ -96,6 +99,19 @@ describe("appUpdate API", () => {
       }),
     ).resolves.toBeUndefined();
     await expect(testUpdateWindow()).resolves.toBeUndefined();
+    expect(safeInvoke).toHaveBeenNthCalledWith(2, "open_update_window");
+  });
+
+  it("打开更新提醒窗口时应传递更新按钮锚点矩形", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce(undefined);
+
+    await expect(
+      openUpdateWindow({ x: 18.4, y: 816.2, width: 30.1, height: 30 }),
+    ).resolves.toBeUndefined();
+
+    expect(safeInvoke).toHaveBeenCalledWith("open_update_window", {
+      anchorRect: { x: 18, y: 816, width: 30, height: 30 },
+    });
   });
 
   it("应代理更新安装会话命令和事件", async () => {
@@ -131,9 +147,9 @@ describe("appUpdate API", () => {
     );
     expect(safeInvoke).toHaveBeenNthCalledWith(2, "get_update_install_session");
     expect(isUpdateInstallSessionActive(session)).toBe(true);
-    expect(
-      isUpdateInstallSessionActive({ ...session, stage: "failed" }),
-    ).toBe(false);
+    expect(isUpdateInstallSessionActive({ ...session, stage: "failed" })).toBe(
+      false,
+    );
 
     const handler = vi.fn();
     await listenUpdateInstallSession(handler);

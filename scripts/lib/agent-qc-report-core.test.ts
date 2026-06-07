@@ -11,7 +11,8 @@ const packageJson = {
   scripts: {
     "verify:local": "node scripts/local-ci.mjs",
     "test:contracts": "node scripts/check-command-contracts.mjs",
-    "verify:gui-smoke": "node scripts/verify-gui-smoke.mjs",
+    "verify:gui-smoke": "npm run smoke:electron",
+    "smoke:electron": "node scripts/electron/smoke.mjs",
   },
 };
 
@@ -85,9 +86,9 @@ const validManifest = {
 
 describe("agent-qc-report-core", () => {
   it("能从 npm run 命令中提取 script 名称", () => {
-    expect(collectNpmScriptName("npm run verify:gui-smoke -- --reuse-running")).toBe(
-      "verify:gui-smoke",
-    );
+    expect(
+      collectNpmScriptName("npm run verify:gui-smoke -- --reuse-running"),
+    ).toBe("verify:gui-smoke");
     expect(collectNpmScriptName("node scripts/foo.mjs")).toBe("");
   });
 
@@ -98,7 +99,21 @@ describe("agent-qc-report-core", () => {
     });
 
     expect(result.valid).toBe(true);
-    expect(result.issues.filter((issue) => issue.severity === "error")).toEqual([]);
+    expect(result.issues.filter((issue) => issue.severity === "error")).toEqual(
+      [],
+    );
+  });
+
+  it("GUI smoke fixture 应保持 Electron current 口径", () => {
+    expect(packageJson.scripts["verify:gui-smoke"]).toBe(
+      "npm run smoke:electron",
+    );
+    expect(packageJson.scripts["smoke:electron"]).toContain(
+      "scripts/electron/smoke.mjs",
+    );
+    expect(packageJson.scripts["verify:gui-smoke"]).not.toContain(
+      "scripts/verify-gui-smoke.mjs",
+    );
   });
 
   it("应阻止 qcloop verifier 缺少 worker stdout 占位符", () => {
@@ -136,7 +151,8 @@ describe("agent-qc-report-core", () => {
 
   it("应阻止 qcloop verifier 缺少 attempt 状态占位符", () => {
     const manifest = structuredClone(validManifest);
-    manifest.qcloop.verifierPromptTemplate = "verifier {{item}} stdout={{stdout}}";
+    manifest.qcloop.verifierPromptTemplate =
+      "verifier {{item}} stdout={{stdout}}";
 
     const result = validateAgentQcManifest(manifest, {
       packageScripts: packageJson.scripts,
@@ -198,7 +214,10 @@ describe("agent-qc-report-core", () => {
 
   it("应阻止未知 evidence layer", () => {
     const manifest = structuredClone(validManifest);
-    manifest.scenarios[0].evidenceLayers = ["deterministic-smoke", "unknown-layer"];
+    manifest.scenarios[0].evidenceLayers = [
+      "deterministic-smoke",
+      "unknown-layer",
+    ];
 
     const result = validateAgentQcManifest(manifest, {
       packageScripts: packageJson.scripts,

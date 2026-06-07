@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, ExternalLink } from "lucide-react";
-import { open as openExternal } from "@tauri-apps/plugin-shell";
+import { open as openExternal } from "@/lib/desktop-host/plugin-shell";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { getClipboardPermissionGuide } from "@/lib/crashDiagnostic";

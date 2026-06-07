@@ -1,0 +1,2412 @@
+use crate::conversation::message::{Message, MessageContent, MessageMetadata};
+use crate::model::ModelConfig;
+use crate::providers::base::{ProviderUsage, Usage};
+use crate::providers::formats::tool_description_with_examples;
+use crate::providers::utils::{
+    convert_image, detect_image_path, load_image_file, parse_tool_arguments_json_object,
+    safely_parse_json, sanitize_function_name, ImageFormat,
+};
+use anyhow::{anyhow, Error};
+use async_stream::try_stream;
+use chrono;
+use futures::Stream;
+use rmcp::model::{
+    object, AnnotateAble, CallToolRequestParam, Content, ErrorCode, ErrorData, RawContent,
+    ResourceContents, Role, Tool,
+};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use std::borrow::Cow;
+use std::ops::Deref;
+
+#[derive(Serialize, Deserialize, Debug)]
+struct DeltaToolCallFunction {
+    name: Option<String>,
+    namespace: Option<String>,
+    arguments: Option<Value>, // chunk of encoded JSON,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct DeltaToolCall {
+    id: Option<String>,
+    function: Option<DeltaToolCallFunction>,
+    name: Option<String>,
+    namespace: Option<String>,
+    arguments: Option<Value>,
+    index: Option<i32>,
+    r#type: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Delta {
+    content: Option<String>,
+    role: Option<String>,
+    tool_calls: Option<Vec<DeltaToolCall>>,
+    /// OpenAI-compatible 推理内容，兼容 DeepSeek(`reasoning_content`) 与 Ollama(`reasoning`)
+    reasoning_content: Option<String>,
+    reasoning: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct StreamingChoice {
+    delta: Delta,
+    index: Option<i32>,
+    finish_reason: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct StreamingChunk {
+    choices: Vec<StreamingChoice>,
+    created: Option<i64>,
+    id: Option<String>,
+    usage: Option<Value>,
+    model: Option<String>,
+}
+
+#[derive(Debug, Default)]
+struct StreamingToolCallAccumulator {
+    id: Option<String>,
+    name: Option<String>,
+    arguments: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenAiSystemPromptRolePolicy {
+    /// OpenAI-compatible providers are safest with the broadly supported system role.
+    System,
+    /// First-party OpenAI reasoning chat models expect the newer developer role.
+    DeveloperForOpenAiReasoningModels,
+}
+
+fn is_openai_reasoning_chat_model(model_name: &str) -> bool {
+    model_name.starts_with("o1")
+        || model_name.starts_with("o2")
+        || model_name.starts_with("o3")
+        || model_name.starts_with("o4")
+        || model_name.starts_with("gpt-5")
+}
+
+fn system_prompt_role_for_model(
+    policy: OpenAiSystemPromptRolePolicy,
+    model_name: &str,
+) -> &'static str {
+    match policy {
+        OpenAiSystemPromptRolePolicy::DeveloperForOpenAiReasoningModels
+            if is_openai_reasoning_chat_model(model_name) =>
+        {
+            "developer"
+        }
+        _ => "system",
+    }
+}
+
+fn split_openai_reasoning_effort_suffix(model_name: &str) -> (String, Option<String>) {
+    let parts: Vec<&str> = model_name.split('-').collect();
+    let Some(last_part) = parts.last() else {
+        return (model_name.to_string(), None);
+    };
+
+    match *last_part {
+        "low" | "medium" | "high" if parts.len() > 1 => (
+            parts[..parts.len() - 1].join("-"),
+            Some(last_part.to_string()),
+        ),
+        _ => (model_name.to_string(), None),
+    }
+}
+
+fn resolve_openai_reasoning_effort(
+    model_config: &ModelConfig,
+    is_reasoning_model: bool,
+) -> (String, Option<String>) {
+    let explicit_effort = model_config
+        .reasoning_effort
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string);
+
+    if is_reasoning_model {
+        let (model_name, suffix_effort) =
+            split_openai_reasoning_effort_suffix(&model_config.model_name);
+        if explicit_effort.is_some() {
+            return (model_name, explicit_effort);
+        }
+        return (
+            model_name,
+            Some(suffix_effort.unwrap_or_else(|| "medium".to_string())),
+        );
+    }
+
+    (model_config.model_name.to_string(), explicit_effort)
+}
+
+fn tool_input_delta_message(
+    id: String,
+    name: Option<String>,
+    delta: String,
+    accumulated_arguments: String,
+    provider: &str,
+) -> Message {
+    Message::assistant()
+        .with_tool_input_delta(
+            id,
+            name,
+            delta,
+            Some(accumulated_arguments),
+            Some(provider.to_string()),
+        )
+        .with_metadata(MessageMetadata::invisible())
+}
+
+fn json_value_as_tool_arguments(value: &Value) -> Option<String> {
+    match value {
+        Value::String(text) => Some(text.clone()),
+        Value::Object(_) => Some(value.to_string()),
+        _ => None,
+    }
+}
+
+fn trim_non_empty(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn join_provider_tool_name(namespace: Option<&str>, name: Option<&str>) -> Option<String> {
+    let name = trim_non_empty(name)?;
+    let Some(namespace) = trim_non_empty(namespace) else {
+        return Some(name);
+    };
+    if name.contains('.') || name.contains("__") {
+        return Some(name);
+    }
+    if namespace.ends_with('.') || namespace.ends_with('_') || namespace.ends_with('/') {
+        Some(format!("{namespace}{name}"))
+    } else {
+        Some(format!("{namespace}.{name}"))
+    }
+}
+
+fn is_valid_received_tool_name(name: &str) -> bool {
+    let name = name.trim();
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.' | '/'))
+}
+
+fn tool_call_name_from_value(tool_call: &Value) -> Option<String> {
+    let function = tool_call.get("function");
+    let name = function
+        .and_then(|value| value.get("name"))
+        .and_then(Value::as_str)
+        .or_else(|| tool_call.get("name").and_then(Value::as_str));
+    let namespace = function
+        .and_then(|value| value.get("namespace"))
+        .and_then(Value::as_str)
+        .or_else(|| tool_call.get("namespace").and_then(Value::as_str));
+
+    join_provider_tool_name(namespace, name)
+}
+
+fn tool_call_arguments_from_value(tool_call: &Value) -> String {
+    tool_call
+        .get("function")
+        .and_then(|value| value.get("arguments"))
+        .or_else(|| tool_call.get("arguments"))
+        .and_then(json_value_as_tool_arguments)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "{}".to_string())
+}
+
+impl DeltaToolCall {
+    fn tool_name(&self) -> Option<String> {
+        let function_name = self.function.as_ref().and_then(|function| {
+            join_provider_tool_name(function.namespace.as_deref(), function.name.as_deref())
+        });
+        function_name
+            .or_else(|| join_provider_tool_name(self.namespace.as_deref(), self.name.as_deref()))
+    }
+
+    fn arguments_delta(&self) -> Option<String> {
+        self.function
+            .as_ref()
+            .and_then(|function| function.arguments.as_ref())
+            .or(self.arguments.as_ref())
+            .and_then(json_value_as_tool_arguments)
+    }
+}
+
+pub fn format_messages(messages: &[Message], image_format: &ImageFormat) -> Vec<Value> {
+    let mut messages_spec = Vec::new();
+    for message in messages.iter().filter(|m| m.is_agent_visible()) {
+        let mut converted = json!({
+            "role": message.role
+        });
+
+        let mut output = Vec::new();
+        let mut content_array = Vec::new();
+        let mut text_array = Vec::new();
+        // 收集完整 Thinking 内容用于 DeepSeek reasoner 的 reasoning_content
+        let mut reasoning_content = String::new();
+
+        for content in &message.content {
+            match content {
+                MessageContent::Text(text) => {
+                    if !text.text.is_empty() {
+                        if let Some(image_path) = detect_image_path(&text.text) {
+                            if let Ok(image) = load_image_file(image_path) {
+                                flush_text_parts_into_openai_content(
+                                    &mut text_array,
+                                    &mut content_array,
+                                );
+                                content_array.push(json!({"type": "text", "text": text.text}));
+                                content_array.push(convert_image(&image, image_format));
+                            } else {
+                                push_openai_text_part(
+                                    &mut text_array,
+                                    &mut content_array,
+                                    text.text.clone(),
+                                );
+                            }
+                        } else {
+                            push_openai_text_part(
+                                &mut text_array,
+                                &mut content_array,
+                                text.text.clone(),
+                            );
+                        }
+                    }
+                }
+                MessageContent::Thinking(thinking) => {
+                    // 保留完整 Thinking 内容，避免多段推理在下一轮 tool 调用时丢失
+                    if !thinking.thinking.is_empty() {
+                        reasoning_content.push_str(&thinking.thinking);
+                    }
+                }
+                MessageContent::RedactedThinking(_) => {
+                    // Redacted thinking blocks are not directly used in OpenAI format
+                    continue;
+                }
+                MessageContent::SystemNotification(_) => {
+                    continue;
+                }
+                MessageContent::ToolRequest(request) => match &request.tool_call {
+                    Ok(tool_call) => {
+                        let sanitized_name = sanitize_function_name(&tool_call.name);
+                        let arguments_str = match &tool_call.arguments {
+                            Some(args) => {
+                                serde_json::to_string(args).unwrap_or_else(|_| "{}".to_string())
+                            }
+                            None => "{}".to_string(),
+                        };
+
+                        let tool_calls = converted
+                            .as_object_mut()
+                            .unwrap()
+                            .entry("tool_calls")
+                            .or_insert(json!([]));
+
+                        tool_calls.as_array_mut().unwrap().push(json!({
+                            "id": request.id,
+                            "type": "function",
+                            "function": {
+                                "name": sanitized_name,
+                                "arguments": arguments_str,
+                            }
+                        }));
+                    }
+                    Err(e) => {
+                        output.push(json!({
+                            "role": "tool",
+                            "content": format!("Error: {}", e),
+                            "tool_call_id": request.id
+                        }));
+                    }
+                },
+                MessageContent::ToolResponse(response) => {
+                    match &response.tool_result {
+                        Ok(result) => {
+                            // Send only contents with no audience or with Assistant in the audience
+                            let abridged: Vec<_> = result
+                                .content
+                                .iter()
+                                .filter(|content| {
+                                    content
+                                        .audience()
+                                        .is_none_or(|audience| audience.contains(&Role::Assistant))
+                                })
+                                .cloned()
+                                .collect();
+
+                            // Process all content, replacing images with placeholder text
+                            let mut tool_content = Vec::new();
+                            let mut image_messages = Vec::new();
+
+                            for content in abridged {
+                                match content.deref() {
+                                    RawContent::Image(image) => {
+                                        // Add placeholder text in the tool response
+                                        tool_content.push(Content::text("This tool result included an image that is uploaded in the next message."));
+
+                                        // Create a separate image message
+                                        image_messages.push(json!({
+                                            "role": "user",
+                                            "content": [convert_image(&image.clone().no_annotation(), image_format)]
+                                        }));
+                                    }
+                                    RawContent::Resource(resource) => {
+                                        let text = match &resource.resource {
+                                            ResourceContents::TextResourceContents {
+                                                text, ..
+                                            } => text.clone(),
+                                            _ => String::new(),
+                                        };
+                                        tool_content.push(Content::text(text));
+                                    }
+                                    _ => {
+                                        tool_content.push(content);
+                                    }
+                                }
+                            }
+                            let tool_response_content: Value = json!(tool_content
+                                .iter()
+                                .map(|content| match content.deref() {
+                                    RawContent::Text(text) => text.text.clone(),
+                                    _ => String::new(),
+                                })
+                                .collect::<Vec<String>>()
+                                .join(" "));
+
+                            // First add the tool response with all content
+                            output.push(json!({
+                                "role": "tool",
+                                "content": tool_response_content,
+                                "tool_call_id": response.id
+                            }));
+                            // Then add any image messages that need to follow
+                            output.extend(image_messages);
+                        }
+                        Err(e) => {
+                            // A tool result error is shown as output so the model can interpret the error message
+                            output.push(json!({
+                                "role": "tool",
+                                "content": format!("The tool call returned the following error:\n{}", e),
+                                "tool_call_id": response.id
+                            }));
+                        }
+                    }
+                }
+                MessageContent::ToolConfirmationRequest(_) => {}
+                MessageContent::ActionRequired(_) => {}
+                MessageContent::ToolInputDelta(_) => {}
+                MessageContent::Image(image) => {
+                    flush_text_parts_into_openai_content(&mut text_array, &mut content_array);
+                    content_array.push(convert_image(image, image_format));
+                }
+                MessageContent::FrontendToolRequest(request) => match &request.tool_call {
+                    Ok(tool_call) => {
+                        let sanitized_name = sanitize_function_name(&tool_call.name);
+                        let arguments_str = match &tool_call.arguments {
+                            Some(args) => {
+                                serde_json::to_string(args).unwrap_or_else(|_| "{}".to_string())
+                            }
+                            None => "{}".to_string(),
+                        };
+
+                        let tool_calls = converted
+                            .as_object_mut()
+                            .unwrap()
+                            .entry("tool_calls")
+                            .or_insert(json!([]));
+
+                        tool_calls.as_array_mut().unwrap().push(json!({
+                            "id": request.id,
+                            "type": "function",
+                            "function": {
+                                "name": sanitized_name,
+                                "arguments": arguments_str,
+                            }
+                        }));
+                    }
+                    Err(e) => {
+                        output.push(json!({
+                            "role": "tool",
+                            "content": format!("Error: {}", e),
+                            "tool_call_id": request.id
+                        }));
+                    }
+                },
+            }
+        }
+
+        if !content_array.is_empty() {
+            flush_text_parts_into_openai_content(&mut text_array, &mut content_array);
+            converted["content"] = json!(content_array);
+        } else if !text_array.is_empty() {
+            converted["content"] = json!(text_array.join("\n"));
+        }
+
+        // 添加 reasoning_content 字段（用于 DeepSeek reasoner 模型）
+        if !reasoning_content.is_empty() {
+            converted["reasoning_content"] = json!(reasoning_content);
+        }
+
+        if converted.get("content").is_some() || converted.get("tool_calls").is_some() {
+            output.insert(0, converted);
+        }
+
+        messages_spec.extend(output);
+    }
+
+    messages_spec
+}
+
+fn push_openai_text_part(
+    text_array: &mut Vec<String>,
+    content_array: &mut Vec<Value>,
+    text: String,
+) {
+    if content_array.is_empty() {
+        text_array.push(text);
+        return;
+    }
+
+    content_array.push(json!({"type": "text", "text": text}));
+}
+
+fn flush_text_parts_into_openai_content(
+    text_array: &mut Vec<String>,
+    content_array: &mut Vec<Value>,
+) {
+    if text_array.is_empty() {
+        return;
+    }
+
+    content_array.push(json!({
+        "type": "text",
+        "text": std::mem::take(text_array).join("\n"),
+    }));
+}
+
+pub fn format_tools(tools: &[Tool]) -> anyhow::Result<Vec<Value>> {
+    let mut tool_names = std::collections::HashSet::new();
+    let mut result = Vec::new();
+
+    for tool in tools {
+        if !tool_names.insert(&tool.name) {
+            return Err(anyhow!("Duplicate tool name: {}", tool.name));
+        }
+
+        result.push(json!({
+            "type": "function",
+            "function": {
+                "name": tool.name,
+                "description": tool_description_with_examples(tool),
+                "parameters": tool.input_schema,
+            }
+        }));
+    }
+
+    Ok(result)
+}
+
+/// Convert OpenAI's API response to internal Message format
+pub fn response_to_message(response: &Value) -> anyhow::Result<Message> {
+    let Some(original) = response
+        .get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|m| m.get("message"))
+    else {
+        return Ok(Message::new(
+            Role::Assistant,
+            chrono::Utc::now().timestamp(),
+            Vec::new(),
+        ));
+    };
+
+    let mut content = Vec::new();
+
+    if let Some(reasoning) = extract_openai_reasoning_text(original) {
+        content.push(MessageContent::thinking(reasoning, ""));
+    }
+
+    if let Some(text) = original.get("content") {
+        if let Some(text_str) = text.as_str() {
+            content.push(MessageContent::text(text_str));
+        }
+    }
+
+    if let Some(tool_calls) = original.get("tool_calls") {
+        if let Some(tool_calls_array) = tool_calls.as_array() {
+            for tool_call in tool_calls_array {
+                let id = tool_call["id"].as_str().unwrap_or_default().to_string();
+                let function_name = tool_call_name_from_value(tool_call).unwrap_or_default();
+                let arguments_str = tool_call_arguments_from_value(tool_call);
+
+                if !is_valid_received_tool_name(&function_name) {
+                    let error = ErrorData {
+                        code: ErrorCode::INVALID_REQUEST,
+                        message: Cow::from(format!(
+                            "The provided function name '{}' was empty or had invalid characters",
+                            function_name
+                        )),
+                        data: None,
+                    };
+                    content.push(MessageContent::tool_request(id, Err(error)));
+                } else {
+                    match safely_parse_json(&arguments_str) {
+                        Ok(params) => {
+                            content.push(MessageContent::tool_request(
+                                id,
+                                Ok(CallToolRequestParam {
+                                    name: function_name.into(),
+                                    arguments: Some(object(params)),
+                                }),
+                            ));
+                        }
+                        Err(e) => {
+                            let error = ErrorData {
+                                code: ErrorCode::INVALID_PARAMS,
+                                message: Cow::from(format!(
+                                    "Could not interpret tool use parameters for id {}: {}. Raw arguments: '{}'",
+                                    id, e, arguments_str
+                                )),
+                                data: None,
+                            };
+                            content.push(MessageContent::tool_request(id, Err(error)));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(Message::new(
+        Role::Assistant,
+        chrono::Utc::now().timestamp(),
+        content,
+    ))
+}
+
+pub fn get_usage(usage: &Value) -> Usage {
+    let input_tokens = usage
+        .get("prompt_tokens")
+        .and_then(|v| v.as_i64())
+        .map(|v| v as i32);
+
+    let output_tokens = usage
+        .get("completion_tokens")
+        .and_then(|v| v.as_i64())
+        .map(|v| v as i32);
+
+    let total_tokens = usage
+        .get("total_tokens")
+        .and_then(|v| v.as_i64())
+        .map(|v| v as i32)
+        .or_else(|| match (input_tokens, output_tokens) {
+            (Some(input), Some(output)) => Some(input + output),
+            _ => None,
+        });
+
+    let cached_input_tokens = usage
+        .get("prompt_tokens_details")
+        .and_then(|details| details.get("cached_tokens"))
+        .and_then(|v| v.as_i64())
+        .map(|v| v as i32);
+
+    Usage::new(input_tokens, output_tokens, total_tokens)
+        .with_cached_input_tokens(cached_input_tokens)
+}
+
+/// Validates and fixes tool schemas to ensure they have proper parameter structure.
+/// If parameters exist, ensures they have properties and required fields, or removes parameters entirely.
+pub fn validate_tool_schemas(tools: &mut [Value]) {
+    for tool in tools.iter_mut() {
+        if let Some(function) = tool.get_mut("function") {
+            if let Some(parameters) = function.get_mut("parameters") {
+                if parameters.is_object() {
+                    ensure_valid_json_schema(parameters);
+                }
+            }
+        }
+    }
+}
+
+/// Ensures that the given JSON value follows the expected JSON Schema structure.
+pub(crate) fn ensure_valid_json_schema(schema: &mut Value) {
+    if let Some(params_obj) = schema.as_object_mut() {
+        if params_obj
+            .get("type")
+            .and_then(|t| t.as_str())
+            .is_some_and(|t| t == "array")
+        {
+            params_obj.entry("items").or_insert_with(|| json!({}));
+        }
+
+        // Check if this is meant to be an object type schema
+        let is_object_type = params_obj
+            .get("type")
+            .and_then(|t| t.as_str())
+            .is_none_or(|t| t == "object"); // Default to true if no type is specified
+
+        // Only apply full schema validation to object types
+        if is_object_type {
+            // Ensure required fields exist with default values
+            params_obj.entry("properties").or_insert_with(|| json!({}));
+            params_obj.entry("required").or_insert_with(|| json!([]));
+            params_obj.entry("type").or_insert_with(|| json!("object"));
+
+            // Recursively validate properties if it exists
+            if let Some(properties) = params_obj.get_mut("properties") {
+                if let Some(properties_obj) = properties.as_object_mut() {
+                    for (_key, prop) in properties_obj.iter_mut() {
+                        if prop.is_object() {
+                            ensure_valid_json_schema(prop);
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(items) = params_obj.get_mut("items") {
+            ensure_valid_json_schema(items);
+        }
+
+        for keyword in ["oneOf", "anyOf", "allOf"] {
+            if let Some(variants) = params_obj.get_mut(keyword).and_then(Value::as_array_mut) {
+                for variant in variants.iter_mut() {
+                    ensure_valid_json_schema(variant);
+                }
+            }
+        }
+
+        if let Some(additional_properties) = params_obj.get_mut("additionalProperties") {
+            if additional_properties.is_object() {
+                ensure_valid_json_schema(additional_properties);
+            }
+        }
+    }
+}
+
+fn strip_data_prefix(line: &str) -> Option<&str> {
+    line.strip_prefix("data: ").map(|s| s.trim())
+}
+
+fn normalized_openai_reasoning_text<'a>(
+    reasoning_content: Option<&'a str>,
+    reasoning: Option<&'a str>,
+) -> Option<&'a str> {
+    reasoning_content
+        .filter(|value| !value.is_empty())
+        .or_else(|| reasoning.filter(|value| !value.is_empty()))
+}
+
+fn extract_openai_reasoning_text(message: &Value) -> Option<&str> {
+    normalized_openai_reasoning_text(
+        message.get("reasoning_content").and_then(Value::as_str),
+        message.get("reasoning").and_then(Value::as_str),
+    )
+}
+
+fn extract_openai_stream_reasoning_delta(delta: &Delta) -> Option<&str> {
+    normalized_openai_reasoning_text(
+        delta.reasoning_content.as_deref(),
+        delta.reasoning.as_deref(),
+    )
+}
+
+fn streaming_chunk_usage(chunk: &StreamingChunk) -> Option<ProviderUsage> {
+    chunk.usage.as_ref().and_then(|usage| {
+        chunk.model.as_ref().map(|model| ProviderUsage {
+            usage: get_usage(usage),
+            model: model.clone(),
+        })
+    })
+}
+
+pub fn response_to_streaming_message<S>(
+    mut stream: S,
+) -> impl Stream<Item = anyhow::Result<(Option<Message>, Option<ProviderUsage>)>> + 'static
+where
+    S: Stream<Item = anyhow::Result<String>> + Unpin + Send + 'static,
+{
+    try_stream! {
+        use futures::StreamExt;
+
+        'outer: while let Some(response) = stream.next().await {
+            if response.as_ref().is_ok_and(|s| s == "data: [DONE]") {
+                break 'outer;
+            }
+            let response_str = response?;
+            let line = strip_data_prefix(&response_str);
+
+            if line.is_none() || line.is_some_and(|l| l.is_empty()) {
+                continue
+            }
+
+            let chunk: StreamingChunk = serde_json::from_str(line
+                .ok_or_else(|| anyhow!("unexpected stream format"))?)
+                .map_err(|e| anyhow!("Failed to parse streaming chunk: {}: {:?}", e, &line))?;
+
+            let usage = streaming_chunk_usage(&chunk);
+
+            let Some(choice) = chunk.choices.first() else {
+                yield (None, usage);
+                continue;
+            };
+
+            if choice.delta.tool_calls.as_ref().is_some_and(|tc| !tc.is_empty()) {
+                let mut tool_call_data: std::collections::HashMap<i32, StreamingToolCallAccumulator> =
+                    std::collections::HashMap::new();
+                let mut final_usage = usage;
+
+                if let Some(tool_calls) = &choice.delta.tool_calls {
+                    for tool_call in tool_calls {
+                        if let Some(index) = tool_call.index {
+                            let entry = tool_call_data.entry(index).or_default();
+                            if let Some(id) = &tool_call.id {
+                                entry.id = Some(id.clone());
+                            }
+                            if let Some(name) = tool_call.tool_name() {
+                                entry.name = Some(name.clone());
+                            }
+                            if let Some(arguments_delta) = tool_call.arguments_delta() {
+                                if arguments_delta.is_empty() {
+                                    continue;
+                                }
+                                entry.arguments.push_str(&arguments_delta);
+                                if let Some(id) = entry.id.clone() {
+                                    yield (
+                                        Some(tool_input_delta_message(
+                                            id,
+                                            entry.name.clone(),
+                                            arguments_delta,
+                                            entry.arguments.clone(),
+                                            "openai_compatible",
+                                        )),
+                                        None,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Check if this chunk already has finish_reason "tool_calls"
+                let is_complete = choice.finish_reason == Some("tool_calls".to_string());
+
+                if !is_complete {
+                    let mut done = false;
+                    while !done {
+                        if let Some(response_chunk) = stream.next().await {
+                            if response_chunk.as_ref().is_ok_and(|s| s == "data: [DONE]") {
+                                break 'outer;
+                            }
+                            let response_str = response_chunk?;
+                            if let Some(line) = strip_data_prefix(&response_str) {
+                                if line.is_empty() {
+                                    continue;
+                                }
+
+                                let tool_chunk: StreamingChunk = serde_json::from_str(line)
+                                    .map_err(|e| anyhow!("Failed to parse streaming chunk: {}: {:?}", e, &line))?;
+
+                                let tool_usage = streaming_chunk_usage(&tool_chunk);
+                                if tool_usage.is_some() {
+                                    final_usage = tool_usage;
+                                }
+
+                                let Some(tool_choice) = tool_chunk.choices.first() else {
+                                    continue;
+                                };
+
+                                if let Some(delta_tool_calls) = &tool_choice.delta.tool_calls {
+                                    for delta_call in delta_tool_calls {
+                                        if let Some(index) = delta_call.index {
+                                            let entry = tool_call_data.entry(index).or_default();
+                                            if let Some(id) = &delta_call.id {
+                                                entry.id = Some(id.clone());
+                                            }
+                                            if let Some(name) = delta_call.tool_name() {
+                                                entry.name = Some(name.clone());
+                                            }
+                                            if let Some(arguments_delta) = delta_call.arguments_delta() {
+                                                if arguments_delta.is_empty() {
+                                                    continue;
+                                                }
+                                                entry.arguments.push_str(&arguments_delta);
+                                                if let Some(id) = entry.id.clone() {
+                                                    yield (
+                                                        Some(tool_input_delta_message(
+                                                            id,
+                                                            entry.name.clone(),
+                                                            arguments_delta,
+                                                            entry.arguments.clone(),
+                                                            "openai_compatible",
+                                                        )),
+                                                        None,
+                                                    );
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                if tool_choice.finish_reason.is_some() {
+                                    done = true;
+                                }
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
+
+                let mut contents = Vec::new();
+                let mut sorted_indices: Vec<_> = tool_call_data.keys().cloned().collect();
+                sorted_indices.sort();
+
+                for index in sorted_indices {
+                    if let Some(tool_call) = tool_call_data.get(&index) {
+                        let (Some(id), Some(function_name)) =
+                            (tool_call.id.as_ref(), tool_call.name.as_ref())
+                        else {
+                            continue;
+                        };
+                        let arguments = &tool_call.arguments;
+                        let parsed = if arguments.is_empty() {
+                            Ok(json!({}))
+                        } else {
+                            parse_tool_arguments_json_object(arguments)
+                        };
+
+                        let content = match parsed {
+                            Ok(params) => {
+                                MessageContent::tool_request(
+                                    id.clone(),
+                                    Ok(CallToolRequestParam { name: function_name.clone().into(), arguments: Some(object(params)) }),
+                                )
+                            },
+                            Err(e) => {
+                                let error = ErrorData {
+                                    code: ErrorCode::INVALID_PARAMS,
+                                    message: Cow::from(format!(
+                                        "Could not interpret tool use parameters for id {}: {}",
+                                        id, e
+                                    )),
+                                    data: None,
+                                };
+                                MessageContent::tool_request(id.clone(), Err(error))
+                            }
+                        };
+                        contents.push(content);
+                    }
+                }
+
+                // 如果有推理内容，添加为 Thinking 内容
+                if let Some(reasoning) =
+                    extract_openai_stream_reasoning_delta(&choice.delta)
+                {
+                    contents.insert(0, MessageContent::thinking(reasoning.to_string(), ""));
+                }
+
+                let mut msg = Message::new(
+                    Role::Assistant,
+                    chrono::Utc::now().timestamp(),
+                    contents,
+                );
+
+                // Add ID if present
+                if let Some(id) = chunk.id {
+                    msg = msg.with_id(id);
+                }
+
+                yield (
+                    Some(msg),
+                    final_usage,
+                )
+            } else if choice.delta.content.is_some()
+                || extract_openai_stream_reasoning_delta(&choice.delta).is_some()
+            {
+                let mut contents = Vec::new();
+
+                // 处理推理内容（兼容 reasoning_content / reasoning）
+                if let Some(reasoning) =
+                    extract_openai_stream_reasoning_delta(&choice.delta)
+                {
+                    contents.push(MessageContent::thinking(reasoning.to_string(), ""));
+                }
+
+                // 处理普通文本内容
+                if let Some(text) = &choice.delta.content {
+                    if !text.is_empty() {
+                        contents.push(MessageContent::text(text));
+                    }
+                }
+
+                if contents.is_empty() {
+                    if usage.is_some() {
+                        yield (None, usage);
+                    }
+                    continue;
+                }
+
+                let mut msg = Message::new(
+                    Role::Assistant,
+                    chrono::Utc::now().timestamp(),
+                    contents,
+                );
+
+                // Add ID if present
+                if let Some(id) = chunk.id {
+                    msg = msg.with_id(id);
+                }
+
+                yield (
+                    Some(msg),
+                    if choice.finish_reason.is_some() {
+                        usage
+                    } else {
+                        None
+                    },
+                )
+            } else if usage.is_some() {
+                yield (None, usage)
+            }
+        }
+    }
+}
+
+pub fn create_request(
+    model_config: &ModelConfig,
+    system: &str,
+    messages: &[Message],
+    tools: &[Tool],
+    image_format: &ImageFormat,
+    for_streaming: bool,
+) -> anyhow::Result<Value, Error> {
+    create_request_with_system_prompt_role_policy(
+        model_config,
+        system,
+        messages,
+        tools,
+        image_format,
+        for_streaming,
+        OpenAiSystemPromptRolePolicy::System,
+    )
+}
+
+pub fn create_request_with_system_prompt_role_policy(
+    model_config: &ModelConfig,
+    system: &str,
+    messages: &[Message],
+    tools: &[Tool],
+    image_format: &ImageFormat,
+    for_streaming: bool,
+    system_prompt_role_policy: OpenAiSystemPromptRolePolicy,
+) -> anyhow::Result<Value, Error> {
+    if model_config.model_name.starts_with("o1-mini") {
+        return Err(anyhow!(
+            "o1-mini model is not currently supported since aster uses tool calling and o1-mini does not support it. Please use o1 or o3 models instead."
+        ));
+    }
+
+    let is_ox_model = is_openai_reasoning_chat_model(&model_config.model_name);
+
+    let (model_name, reasoning_effort) = resolve_openai_reasoning_effort(model_config, is_ox_model);
+
+    let system_message = json!({
+        "role": system_prompt_role_for_model(system_prompt_role_policy, &model_config.model_name),
+        "content": system
+    });
+
+    let messages_spec = format_messages(messages, image_format);
+    let mut tools_spec = format_tools(tools)?;
+
+    validate_tool_schemas(&mut tools_spec);
+
+    let mut messages_array = vec![system_message];
+    messages_array.extend(messages_spec);
+
+    let mut payload = json!({
+        "model": model_name,
+        "messages": messages_array
+    });
+
+    if let Some(effort) = reasoning_effort {
+        payload["reasoning_effort"] = json!(effort);
+    }
+
+    if !tools_spec.is_empty() {
+        payload["tools"] = json!(tools_spec);
+    }
+
+    // o1, o3 models currently don't support temperature
+    if !is_ox_model {
+        if let Some(temp) = model_config.temperature {
+            payload["temperature"] = json!(temp);
+        }
+    }
+
+    // o1 models use max_completion_tokens instead of max_tokens
+    if let Some(tokens) = model_config.max_tokens {
+        let key = if is_ox_model {
+            "max_completion_tokens"
+        } else {
+            "max_tokens"
+        };
+        payload
+            .as_object_mut()
+            .unwrap()
+            .insert(key.to_string(), json!(tokens));
+    }
+
+    if for_streaming {
+        payload["stream"] = json!(true);
+        payload["stream_options"] = json!({"include_usage": true});
+    }
+
+    Ok(payload)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::conversation::message::Message;
+    use rmcp::model::CallToolResult;
+    use rmcp::object;
+    use serde_json::json;
+    use tokio::pin;
+    use tokio_stream::{self, StreamExt};
+
+    #[test]
+    fn test_validate_tool_schemas() {
+        // Test case 1: Empty parameters object
+        // Input JSON with an incomplete parameters object
+        let mut actual = vec![json!({
+            "type": "function",
+            "function": {
+                "name": "test_func",
+                "description": "test description",
+                "parameters": {
+                    "type": "object"
+                }
+            }
+        })];
+
+        // Run the function to validate and update schemas
+        validate_tool_schemas(&mut actual);
+
+        // Expected JSON after validation
+        let expected = vec![json!({
+            "type": "function",
+            "function": {
+                "name": "test_func",
+                "description": "test description",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            }
+        })];
+
+        // Compare entire JSON structures instead of individual fields
+        assert_eq!(actual, expected);
+
+        // Test case 2: Missing type field
+        let mut tools = vec![json!({
+            "type": "function",
+            "function": {
+                "name": "test_func",
+                "description": "test description",
+                "parameters": {
+                    "properties": {}
+                }
+            }
+        })];
+
+        validate_tool_schemas(&mut tools);
+
+        let params = tools[0]["function"]["parameters"].as_object().unwrap();
+        assert_eq!(params["type"], "object");
+
+        // Test case 3: Complete valid schema should remain unchanged
+        let original_schema = json!({
+            "type": "function",
+            "function": {
+                "name": "test_func",
+                "description": "test description",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "City and country"
+                        }
+                    },
+                    "required": ["location"]
+                }
+            }
+        });
+
+        let mut tools = vec![original_schema.clone()];
+        validate_tool_schemas(&mut tools);
+        assert_eq!(tools[0], original_schema);
+
+        // Test case 4: Nested oneOf array schema should get items for OpenAI-compatible APIs.
+        let mut tools = vec![json!({
+            "type": "function",
+            "function": {
+                "name": "test_func",
+                "description": "test description",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "message": {
+                            "oneOf": [
+                                { "type": "string" },
+                                { "type": "array" }
+                            ]
+                        }
+                    },
+                    "required": ["message"]
+                }
+            }
+        })];
+
+        validate_tool_schemas(&mut tools);
+        assert_eq!(
+            tools[0]["function"]["parameters"]["properties"]["message"]["oneOf"][1]["items"],
+            json!({})
+        );
+    }
+
+    const OPENAI_TOOL_USE_RESPONSE: &str = r#"{
+        "choices": [{
+            "role": "assistant",
+            "message": {
+                "tool_calls": [{
+                    "id": "1",
+                    "function": {
+                        "name": "example_fn",
+                        "arguments": "{\"param\": \"value\"}"
+                    }
+                }]
+            }
+        }],
+        "usage": {
+            "input_tokens": 10,
+            "output_tokens": 25,
+            "total_tokens": 35
+        }
+    }"#;
+
+    #[test]
+    fn test_format_messages() -> anyhow::Result<()> {
+        let message = Message::user().with_text("Hello");
+        let spec = format_messages(&[message], &ImageFormat::OpenAi);
+
+        assert_eq!(spec.len(), 1);
+        assert_eq!(spec[0]["role"], "user");
+        assert_eq!(spec[0]["content"], "Hello");
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_messages_with_text_and_image_keeps_prompt() -> anyhow::Result<()> {
+        let message = Message::user()
+            .with_text("请识别这张图里的文字")
+            .with_image("aGVsbG8=", "image/png")
+            .with_text("只输出识别结果");
+
+        let spec = format_messages(&[message], &ImageFormat::OpenAi);
+
+        assert_eq!(spec.len(), 1);
+        assert_eq!(spec[0]["role"], "user");
+        let content = spec[0]["content"].as_array().expect("content parts");
+        assert_eq!(content.len(), 3);
+        assert_eq!(
+            content[0],
+            json!({"type": "text", "text": "请识别这张图里的文字"})
+        );
+        assert_eq!(content[1]["type"], "image_url");
+        assert_eq!(
+            content[1]["image_url"]["url"],
+            "data:image/png;base64,aGVsbG8="
+        );
+        assert_eq!(
+            content[2],
+            json!({"type": "text", "text": "只输出识别结果"})
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_messages_preserves_full_reasoning_content_with_tool_calls() -> anyhow::Result<()>
+    {
+        let message = Message::assistant()
+            .with_thinking("第一段推理。", "")
+            .with_thinking("第二段推理。", "")
+            .with_tool_request(
+                "tool1",
+                Ok(CallToolRequestParam {
+                    name: "example".into(),
+                    arguments: Some(object!({"param1": "value1"})),
+                }),
+            )
+            .with_tool_request(
+                "tool2",
+                Ok(CallToolRequestParam {
+                    name: "example_two".into(),
+                    arguments: Some(object!({"param2": "value2"})),
+                }),
+            );
+
+        let spec = format_messages(&[message], &ImageFormat::OpenAi);
+
+        assert_eq!(spec.len(), 1);
+        assert_eq!(spec[0]["role"], "assistant");
+        assert_eq!(spec[0]["reasoning_content"], "第一段推理。第二段推理。");
+        assert_eq!(spec[0]["tool_calls"].as_array().map(Vec::len), Some(2));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_tools() -> anyhow::Result<()> {
+        let tool = Tool::new(
+            "test_tool",
+            "A test tool",
+            object!({
+                "type": "object",
+                "properties": {
+                    "input": {
+                        "type": "string",
+                        "description": "Test parameter"
+                    }
+                },
+                "required": ["input"]
+            }),
+        );
+
+        let spec = format_tools(&[tool])?;
+
+        assert_eq!(spec.len(), 1);
+        assert_eq!(spec[0]["type"], "function");
+        assert_eq!(spec[0]["function"]["name"], "test_tool");
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_tools_with_input_examples_in_description() -> anyhow::Result<()> {
+        let mut tool = Tool::new(
+            "ticket_create",
+            "Create ticket",
+            object!({
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string" }
+                },
+                "required": ["title"]
+            }),
+        );
+        tool.meta = Some(rmcp::model::Meta(object!({
+            "input_examples": [
+                {
+                    "description": "P1 incident",
+                    "input": {
+                        "title": "database down"
+                    }
+                }
+            ]
+        })));
+
+        let spec = format_tools(&[tool])?;
+        let description = spec[0]["function"]["description"].as_str().unwrap_or("");
+        assert!(description.contains("Input examples:"));
+        assert!(description.contains("P1 incident"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_messages_complex() -> anyhow::Result<()> {
+        let mut messages = vec![
+            Message::assistant().with_text("Hello!"),
+            Message::user().with_text("How are you?"),
+            Message::assistant().with_tool_request(
+                "tool1",
+                Ok(CallToolRequestParam {
+                    name: "example".into(),
+                    arguments: Some(object!({"param1": "value1"})),
+                }),
+            ),
+        ];
+
+        // Get the ID from the tool request to use in the response
+        let tool_id = if let MessageContent::ToolRequest(request) = &messages[2].content[0] {
+            request.id.clone()
+        } else {
+            panic!("should be tool request");
+        };
+
+        messages.push(Message::user().with_tool_response(
+            tool_id,
+            Ok(CallToolResult {
+                content: vec![Content::text("Result")],
+                structured_content: None,
+                is_error: Some(false),
+                meta: None,
+            }),
+        ));
+
+        let spec = format_messages(&messages, &ImageFormat::OpenAi);
+
+        assert_eq!(spec.len(), 4);
+        assert_eq!(spec[0]["role"], "assistant");
+        assert_eq!(spec[0]["content"], "Hello!");
+        assert_eq!(spec[1]["role"], "user");
+        assert_eq!(spec[1]["content"], "How are you?");
+        assert_eq!(spec[2]["role"], "assistant");
+        assert!(spec[2]["tool_calls"].is_array());
+        assert_eq!(spec[3]["role"], "tool");
+        assert_eq!(spec[3]["content"], "Result");
+        assert_eq!(spec[3]["tool_call_id"], spec[2]["tool_calls"][0]["id"]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_messages_multiple_content() -> anyhow::Result<()> {
+        let mut messages = vec![Message::assistant().with_tool_request(
+            "tool1",
+            Ok(CallToolRequestParam {
+                name: "example".into(),
+                arguments: Some(object!({"param1": "value1"})),
+            }),
+        )];
+
+        // Get the ID from the tool request to use in the response
+        let tool_id = if let MessageContent::ToolRequest(request) = &messages[0].content[0] {
+            request.id.clone()
+        } else {
+            panic!("should be tool request");
+        };
+
+        messages.push(Message::user().with_tool_response(
+            tool_id,
+            Ok(CallToolResult {
+                content: vec![Content::text("Result")],
+                structured_content: None,
+                is_error: Some(false),
+                meta: None,
+            }),
+        ));
+
+        let spec = format_messages(&messages, &ImageFormat::OpenAi);
+
+        assert_eq!(spec.len(), 2);
+        assert_eq!(spec[0]["role"], "assistant");
+        assert!(spec[0]["tool_calls"].is_array());
+        assert_eq!(spec[1]["role"], "tool");
+        assert_eq!(spec[1]["content"], "Result");
+        assert_eq!(spec[1]["tool_call_id"], spec[0]["tool_calls"][0]["id"]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_tools_duplicate() -> anyhow::Result<()> {
+        let tool1 = Tool::new(
+            "test_tool",
+            "Test tool",
+            object!({
+                "type": "object",
+                "properties": {
+                    "input": {
+                        "type": "string",
+                        "description": "Test parameter"
+                    }
+                },
+                "required": ["input"]
+            }),
+        );
+
+        let tool2 = Tool::new(
+            "test_tool",
+            "Test tool",
+            object!({
+                "type": "object",
+                "properties": {
+                    "input": {
+                        "type": "string",
+                        "description": "Test parameter"
+                    }
+                },
+                "required": ["input"]
+            }),
+        );
+
+        let result = format_tools(&[tool1, tool2]);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Duplicate tool name"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_tools_empty() -> anyhow::Result<()> {
+        let spec = format_tools(&[])?;
+        assert!(spec.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_messages_with_image_path() -> anyhow::Result<()> {
+        // Create a temporary PNG file with valid PNG magic numbers
+        let temp_dir = tempfile::tempdir()?;
+        let png_path = temp_dir.path().join("test.png");
+        let png_data = [
+            0x89, 0x50, 0x4E, 0x47, // PNG magic number
+            0x0D, 0x0A, 0x1A, 0x0A, // PNG header
+            0x00, 0x00, 0x00, 0x0D, // Rest of fake PNG data
+        ];
+        std::fs::write(&png_path, png_data)?;
+        let png_path_str = png_path.to_str().unwrap();
+
+        // Create message with image path
+        let message = Message::user().with_text(format!("Here is an image: {}", png_path_str));
+        let spec = format_messages(&[message], &ImageFormat::OpenAi);
+
+        assert_eq!(spec.len(), 1);
+        assert_eq!(spec[0]["role"], "user");
+
+        // Content should be an array with text and image
+        let content = spec[0]["content"].as_array().unwrap();
+        assert_eq!(content.len(), 2);
+        assert_eq!(content[0]["type"], "text");
+        assert!(content[0]["text"].as_str().unwrap().contains(png_path_str));
+        assert_eq!(content[1]["type"], "image_url");
+        assert!(content[1]["image_url"]["url"]
+            .as_str()
+            .unwrap()
+            .starts_with("data:image/png;base64,"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_response_to_message_text() -> anyhow::Result<()> {
+        let response = json!({
+            "choices": [{
+                "role": "assistant",
+                "message": {
+                    "content": "Hello from John Cena!"
+                }
+            }],
+            "usage": {
+                "input_tokens": 10,
+                "output_tokens": 25,
+                "total_tokens": 35
+            }
+        });
+
+        let message = response_to_message(&response)?;
+        assert_eq!(message.content.len(), 1);
+        if let MessageContent::Text(text) = &message.content[0] {
+            assert_eq!(text.text, "Hello from John Cena!");
+        } else {
+            panic!("Expected Text content");
+        }
+        assert!(matches!(message.role, Role::Assistant));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_response_to_message_with_reasoning_content() -> anyhow::Result<()> {
+        let response = json!({
+            "choices": [{
+                "role": "assistant",
+                "message": {
+                    "reasoning_content": "先推理，再调用工具。",
+                    "tool_calls": [{
+                        "id": "tool-1",
+                        "type": "function",
+                        "function": {
+                            "name": "example_fn",
+                            "arguments": "{\"param\": \"value\"}"
+                        }
+                    }]
+                }
+            }]
+        });
+
+        let message = response_to_message(&response)?;
+        assert_eq!(message.content.len(), 2);
+        assert!(matches!(message.content[0], MessageContent::Thinking(_)));
+        assert!(matches!(message.content[1], MessageContent::ToolRequest(_)));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_response_to_message_with_ollama_reasoning_alias() -> anyhow::Result<()> {
+        let response = json!({
+            "choices": [{
+                "role": "assistant",
+                "message": {
+                    "reasoning": "先思考，再给答案。",
+                    "content": "收到"
+                }
+            }]
+        });
+
+        let message = response_to_message(&response)?;
+        assert_eq!(message.content.len(), 2);
+
+        if let MessageContent::Thinking(thinking) = &message.content[0] {
+            assert_eq!(thinking.thinking, "先思考，再给答案。");
+        } else {
+            panic!("Expected Thinking content");
+        }
+
+        if let MessageContent::Text(text) = &message.content[1] {
+            assert_eq!(text.text, "收到");
+        } else {
+            panic!("Expected Text content");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_response_to_message_valid_toolrequest() -> anyhow::Result<()> {
+        let response: Value = serde_json::from_str(OPENAI_TOOL_USE_RESPONSE)?;
+        let message = response_to_message(&response)?;
+
+        assert_eq!(message.content.len(), 1);
+        if let MessageContent::ToolRequest(request) = &message.content[0] {
+            let tool_call = request.tool_call.as_ref().unwrap();
+            assert_eq!(tool_call.name, "example_fn");
+            assert_eq!(tool_call.arguments, Some(object!({"param": "value"})));
+        } else {
+            panic!("Expected ToolRequest content");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_response_to_message_invalid_func_name() -> anyhow::Result<()> {
+        let mut response: Value = serde_json::from_str(OPENAI_TOOL_USE_RESPONSE)?;
+        response["choices"][0]["message"]["tool_calls"][0]["function"]["name"] =
+            json!("invalid fn");
+
+        let message = response_to_message(&response)?;
+
+        if let MessageContent::ToolRequest(request) = &message.content[0] {
+            match &request.tool_call {
+                Err(ErrorData {
+                    code: ErrorCode::INVALID_REQUEST,
+                    message: msg,
+                    data: None,
+                }) => {
+                    assert!(msg.starts_with("The provided function name"));
+                }
+                _ => panic!("Expected ToolNotFound error"),
+            }
+        } else {
+            panic!("Expected ToolRequest content");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_response_to_message_json_decode_error() -> anyhow::Result<()> {
+        let mut response: Value = serde_json::from_str(OPENAI_TOOL_USE_RESPONSE)?;
+        response["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"] =
+            json!("invalid json {");
+
+        let message = response_to_message(&response)?;
+
+        if let MessageContent::ToolRequest(request) = &message.content[0] {
+            match &request.tool_call {
+                Err(ErrorData {
+                    code: ErrorCode::INVALID_PARAMS,
+                    message: msg,
+                    data: None,
+                }) => {
+                    assert!(msg.starts_with("Could not interpret tool use parameters"));
+                }
+                _ => panic!("Expected InvalidParameters error"),
+            }
+        } else {
+            panic!("Expected ToolRequest content");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_response_to_message_empty_argument() -> anyhow::Result<()> {
+        let mut response: Value = serde_json::from_str(OPENAI_TOOL_USE_RESPONSE)?;
+        response["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"] =
+            serde_json::Value::String("".to_string());
+
+        let message = response_to_message(&response)?;
+
+        if let MessageContent::ToolRequest(request) = &message.content[0] {
+            let tool_call = request.tool_call.as_ref().unwrap();
+            assert_eq!(tool_call.name, "example_fn");
+            assert_eq!(tool_call.arguments, Some(object!({})));
+        } else {
+            panic!("Expected ToolRequest content");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_messages_tool_request_with_none_arguments() -> anyhow::Result<()> {
+        // Test that tool calls with None arguments are formatted as "{}" string
+        let message = Message::assistant().with_tool_request(
+            "tool1",
+            Ok(CallToolRequestParam {
+                name: "test_tool".into(),
+                arguments: None, // This is the key case the fix addresses
+            }),
+        );
+
+        let spec = format_messages(&[message], &ImageFormat::OpenAi);
+
+        assert_eq!(spec.len(), 1);
+        assert_eq!(spec[0]["role"], "assistant");
+        assert!(spec[0]["tool_calls"].is_array());
+
+        let tool_call = &spec[0]["tool_calls"][0];
+        assert_eq!(tool_call["id"], "tool1");
+        assert_eq!(tool_call["type"], "function");
+        assert_eq!(tool_call["function"]["name"], "test_tool");
+        // This should be the string "{}", not null
+        assert_eq!(tool_call["function"]["arguments"], "{}");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_messages_tool_request_with_some_arguments() -> anyhow::Result<()> {
+        // Test that tool calls with Some arguments are properly JSON-serialized
+        let message = Message::assistant().with_tool_request(
+            "tool1",
+            Ok(CallToolRequestParam {
+                name: "test_tool".into(),
+                arguments: Some(object!({"param": "value", "number": 42})),
+            }),
+        );
+
+        let spec = format_messages(&[message], &ImageFormat::OpenAi);
+
+        assert_eq!(spec.len(), 1);
+        assert_eq!(spec[0]["role"], "assistant");
+        assert!(spec[0]["tool_calls"].is_array());
+
+        let tool_call = &spec[0]["tool_calls"][0];
+        assert_eq!(tool_call["id"], "tool1");
+        assert_eq!(tool_call["type"], "function");
+        assert_eq!(tool_call["function"]["name"], "test_tool");
+        // This should be a JSON string representation
+        let args_str = tool_call["function"]["arguments"].as_str().unwrap();
+        let parsed_args: Value = serde_json::from_str(args_str)?;
+        assert_eq!(parsed_args["param"], "value");
+        assert_eq!(parsed_args["number"], 42);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_messages_frontend_tool_request_with_none_arguments() -> anyhow::Result<()> {
+        // Test that FrontendToolRequest with None arguments are formatted as "{}" string
+        let message = Message::assistant().with_frontend_tool_request(
+            "frontend_tool1",
+            Ok(CallToolRequestParam {
+                name: "frontend_test_tool".into(),
+                arguments: None, // This is the key case the fix addresses
+            }),
+        );
+
+        let spec = format_messages(&[message], &ImageFormat::OpenAi);
+
+        assert_eq!(spec.len(), 1);
+        assert_eq!(spec[0]["role"], "assistant");
+        assert!(spec[0]["tool_calls"].is_array());
+
+        let tool_call = &spec[0]["tool_calls"][0];
+        assert_eq!(tool_call["id"], "frontend_tool1");
+        assert_eq!(tool_call["type"], "function");
+        assert_eq!(tool_call["function"]["name"], "frontend_test_tool");
+        // This should be the string "{}", not null
+        assert_eq!(tool_call["function"]["arguments"], "{}");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_messages_frontend_tool_request_with_some_arguments() -> anyhow::Result<()> {
+        // Test that FrontendToolRequest with Some arguments are properly JSON-serialized
+        let message = Message::assistant().with_frontend_tool_request(
+            "frontend_tool1",
+            Ok(CallToolRequestParam {
+                name: "frontend_test_tool".into(),
+                arguments: Some(object!({"action": "click", "element": "button"})),
+            }),
+        );
+
+        let spec = format_messages(&[message], &ImageFormat::OpenAi);
+
+        assert_eq!(spec.len(), 1);
+        assert_eq!(spec[0]["role"], "assistant");
+        assert!(spec[0]["tool_calls"].is_array());
+
+        let tool_call = &spec[0]["tool_calls"][0];
+        assert_eq!(tool_call["id"], "frontend_tool1");
+        assert_eq!(tool_call["type"], "function");
+        assert_eq!(tool_call["function"]["name"], "frontend_test_tool");
+        // This should be a JSON string representation
+        let args_str = tool_call["function"]["arguments"].as_str().unwrap();
+        let parsed_args: Value = serde_json::from_str(args_str)?;
+        assert_eq!(parsed_args["action"], "click");
+        assert_eq!(parsed_args["element"], "button");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_messages_multiple_text_blocks() -> anyhow::Result<()> {
+        let message = Message::user()
+            .with_text("--- Resource: file:///test.md ---\n# Test\n\n---\n")
+            .with_text(" What is in the file?");
+
+        let spec = format_messages(&[message], &ImageFormat::OpenAi);
+
+        assert_eq!(spec.len(), 1);
+        assert_eq!(spec[0]["role"], "user");
+        assert_eq!(
+            spec[0]["content"],
+            "--- Resource: file:///test.md ---\n# Test\n\n---\n\n What is in the file?"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_request_gpt_4o() -> anyhow::Result<()> {
+        // Test default medium reasoning effort for O3 model
+        let model_config = ModelConfig {
+            model_name: "gpt-4o".to_string(),
+            context_limit: Some(4096),
+            temperature: None,
+            max_tokens: Some(1024),
+            reasoning_effort: None,
+            toolshim: false,
+            toolshim_model: None,
+            fast_model: None,
+        };
+        let request = create_request(
+            &model_config,
+            "system",
+            &[],
+            &[],
+            &ImageFormat::OpenAi,
+            false,
+        )?;
+        let obj = request.as_object().unwrap();
+        let expected = json!({
+            "model": "gpt-4o",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "system"
+                }
+            ],
+            "max_tokens": 1024
+        });
+
+        for (key, value) in expected.as_object().unwrap() {
+            assert_eq!(obj.get(key).unwrap(), value);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_request_o1_default() -> anyhow::Result<()> {
+        // Test default medium reasoning effort for O1 model
+        let model_config = ModelConfig {
+            model_name: "o1".to_string(),
+            context_limit: Some(4096),
+            temperature: None,
+            max_tokens: Some(1024),
+            reasoning_effort: None,
+            toolshim: false,
+            toolshim_model: None,
+            fast_model: None,
+        };
+        let request = create_request(
+            &model_config,
+            "system",
+            &[],
+            &[],
+            &ImageFormat::OpenAi,
+            false,
+        )?;
+        let obj = request.as_object().unwrap();
+        let expected = json!({
+            "model": "o1",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "system"
+                }
+            ],
+            "reasoning_effort": "medium",
+            "max_completion_tokens": 1024
+        });
+
+        for (key, value) in expected.as_object().unwrap() {
+            assert_eq!(obj.get(key).unwrap(), value);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_request_first_party_openai_gpt5_uses_developer_role() -> anyhow::Result<()> {
+        let model_config = ModelConfig {
+            model_name: "gpt-5.4".to_string(),
+            context_limit: Some(4096),
+            temperature: None,
+            max_tokens: Some(1024),
+            reasoning_effort: None,
+            toolshim: false,
+            toolshim_model: None,
+            fast_model: None,
+        };
+        let request = create_request_with_system_prompt_role_policy(
+            &model_config,
+            "system",
+            &[],
+            &[],
+            &ImageFormat::OpenAi,
+            false,
+            OpenAiSystemPromptRolePolicy::DeveloperForOpenAiReasoningModels,
+        )?;
+
+        assert_eq!(request["messages"][0]["role"], "developer");
+        assert_eq!(request["model"], "gpt-5.4");
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_request_openai_compatible_gpt5_defaults_to_system_role() -> anyhow::Result<()> {
+        let model_config = ModelConfig {
+            model_name: "gpt-5.4".to_string(),
+            context_limit: Some(4096),
+            temperature: None,
+            max_tokens: Some(1024),
+            reasoning_effort: None,
+            toolshim: false,
+            toolshim_model: None,
+            fast_model: None,
+        };
+        let request = create_request(
+            &model_config,
+            "system",
+            &[],
+            &[],
+            &ImageFormat::OpenAi,
+            false,
+        )?;
+
+        assert_eq!(request["messages"][0]["role"], "system");
+        assert_eq!(request["model"], "gpt-5.4");
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_request_deepseek_v4_uses_system_role() -> anyhow::Result<()> {
+        let model_config = ModelConfig {
+            model_name: "deepseek-v4-flash".to_string(),
+            context_limit: Some(4096),
+            temperature: None,
+            max_tokens: Some(1024),
+            reasoning_effort: None,
+            toolshim: false,
+            toolshim_model: None,
+            fast_model: None,
+        };
+        let request = create_request(
+            &model_config,
+            "system",
+            &[],
+            &[],
+            &ImageFormat::OpenAi,
+            true,
+        )?;
+
+        assert_eq!(request["messages"][0]["role"], "system");
+        assert_eq!(request["model"], "deepseek-v4-flash");
+        assert_eq!(request["stream"], true);
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_request_o3_custom_reasoning_effort() -> anyhow::Result<()> {
+        // Test custom reasoning effort for O3 model
+        let model_config = ModelConfig {
+            model_name: "o3-mini-high".to_string(),
+            context_limit: Some(4096),
+            temperature: None,
+            max_tokens: Some(1024),
+            reasoning_effort: None,
+            toolshim: false,
+            toolshim_model: None,
+            fast_model: None,
+        };
+        let request = create_request_with_system_prompt_role_policy(
+            &model_config,
+            "system",
+            &[],
+            &[],
+            &ImageFormat::OpenAi,
+            false,
+            OpenAiSystemPromptRolePolicy::DeveloperForOpenAiReasoningModels,
+        )?;
+        let obj = request.as_object().unwrap();
+        let expected = json!({
+            "model": "o3-mini",
+            "messages": [
+                {
+                    "role": "developer",
+                    "content": "system"
+                }
+            ],
+            "reasoning_effort": "high",
+            "max_completion_tokens": 1024
+        });
+
+        for (key, value) in expected.as_object().unwrap() {
+            assert_eq!(obj.get(key).unwrap(), value);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_request_uses_explicit_reasoning_effort() -> anyhow::Result<()> {
+        let model_config = ModelConfig {
+            model_name: "o3-mini".to_string(),
+            context_limit: Some(4096),
+            temperature: None,
+            max_tokens: Some(1024),
+            reasoning_effort: Some("high".to_string()),
+            toolshim: false,
+            toolshim_model: None,
+            fast_model: None,
+        };
+
+        let request = create_request(
+            &model_config,
+            "system",
+            &[],
+            &[],
+            &ImageFormat::OpenAi,
+            false,
+        )?;
+
+        assert_eq!(request["model"], "o3-mini");
+        assert_eq!(request["reasoning_effort"], "high");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_streamed_multi_tool_response_to_messages() -> anyhow::Result<()> {
+        let response_lines = r#"
+data: {"model":"us.anthropic.claude-sonnet-4-20250514-v1:0","choices":[{"delta":{"role":"assistant","content":"I'll run both"},"index":0,"finish_reason":null}],"usage":{"prompt_tokens":4982,"completion_tokens":null,"total_tokens":null},"object":"chat.completion.chunk","id":"msg_bdrk_014pifLTHsNZz6Lmtw1ywgDJ","created":1753288340}
+data: {"model":"us.anthropic.claude-sonnet-4-20250514-v1:0","choices":[{"delta":{"role":"assistant","content":" `ls` commands in a"},"index":0,"finish_reason":null}],"usage":{"prompt_tokens":4982,"completion_tokens":null,"total_tokens":null},"object":"chat.completion.chunk","id":"msg_bdrk_014pifLTHsNZz6Lmtw1ywgDJ","created":1753288340}
+data: {"model":"us.anthropic.claude-sonnet-4-20250514-v1:0","choices":[{"delta":{"role":"assistant","content":" single turn for you -"},"index":0,"finish_reason":null}],"usage":{"prompt_tokens":4982,"completion_tokens":null,"total_tokens":null},"object":"chat.completion.chunk","id":"msg_bdrk_014pifLTHsNZz6Lmtw1ywgDJ","created":1753288340}
+data: {"model":"us.anthropic.claude-sonnet-4-20250514-v1:0","choices":[{"delta":{"role":"assistant","content":" one on the current directory an"},"index":0,"finish_reason":null}],"usage":{"prompt_tokens":4982,"completion_tokens":null,"total_tokens":null},"object":"chat.completion.chunk","id":"msg_bdrk_014pifLTHsNZz6Lmtw1ywgDJ","created":1753288340}
+data: {"model":"us.anthropic.claude-sonnet-4-20250514-v1:0","choices":[{"delta":{"role":"assistant","content":"d one on the `working_dir`."},"index":0,"finish_reason":null}],"usage":{"prompt_tokens":4982,"completion_tokens":null,"total_tokens":null},"object":"chat.completion.chunk","id":"msg_bdrk_014pifLTHsNZz6Lmtw1ywgDJ","created":1753288340}
+data: {"model":"us.anthropic.claude-sonnet-4-20250514-v1:0","choices":[{"delta":{"role":"assistant","content":null,"tool_calls":[{"index":1,"id":"toolu_bdrk_01RMTd7R9DzQjEEWgDwzcBsU","type":"function","function":{"name":"developer__shell","arguments":""}}]},"index":0,"finish_reason":null}],"usage":{"prompt_tokens":4982,"completion_tokens":null,"total_tokens":null},"object":"chat.completion.chunk","id":"msg_bdrk_014pifLTHsNZz6Lmtw1ywgDJ","created":1753288341}
+data: {"model":"us.anthropic.claude-sonnet-4-20250514-v1:0","choices":[{"delta":{"role":"assistant","content":null,"tool_calls":[{"index":1,"function":{"arguments":""}}]},"index":0,"finish_reason":null}],"usage":{"prompt_tokens":4982,"completion_tokens":null,"total_tokens":null},"object":"chat.completion.chunk","id":"msg_bdrk_014pifLTHsNZz6Lmtw1ywgDJ","created":1753288341}
+data: {"model":"us.anthropic.claude-sonnet-4-20250514-v1:0","choices":[{"delta":{"role":"assistant","content":null,"tool_calls":[{"index":1,"function":{"arguments":"{\""}}]},"index":0,"finish_reason":null}],"usage":{"prompt_tokens":4982,"completion_tokens":null,"total_tokens":null},"object":"chat.completion.chunk","id":"msg_bdrk_014pifLTHsNZz6Lmtw1ywgDJ","created":1753288341}
+data: {"model":"us.anthropic.claude-sonnet-4-20250514-v1:0","choices":[{"delta":{"role":"assistant","content":null,"tool_calls":[{"index":1,"function":{"arguments":"command\": \"l"}}]},"index":0,"finish_reason":null}],"usage":{"prompt_tokens":4982,"completion_tokens":null,"total_tokens":null},"object":"chat.completion.chunk","id":"msg_bdrk_014pifLTHsNZz6Lmtw1ywgDJ","created":1753288341}
+data: {"model":"us.anthropic.claude-sonnet-4-20250514-v1:0","choices":[{"delta":{"role":"assistant","content":null,"tool_calls":[{"index":1,"function":{"arguments":"s\"}"}}]},"index":0,"finish_reason":null}],"usage":{"prompt_tokens":4982,"completion_tokens":null,"total_tokens":null},"object":"chat.completion.chunk","id":"msg_bdrk_014pifLTHsNZz6Lmtw1ywgDJ","created":1753288341}
+data: {"model":"us.anthropic.claude-sonnet-4-20250514-v1:0","choices":[{"delta":{"role":"assistant","content":null,"tool_calls":[{"index":2,"id":"toolu_bdrk_016bgVTGZdpjP8ehjMWp9cWW","type":"function","function":{"name":"developer__shell","arguments":""}}]},"index":0,"finish_reason":null}],"usage":{"prompt_tokens":4982,"completion_tokens":null,"total_tokens":null},"object":"chat.completion.chunk","id":"msg_bdrk_014pifLTHsNZz6Lmtw1ywgDJ","created":1753288341}
+data: {"model":"us.anthropic.claude-sonnet-4-20250514-v1:0","choices":[{"delta":{"role":"assistant","content":null,"tool_calls":[{"index":2,"function":{"arguments":""}}]},"index":0,"finish_reason":null}],"usage":{"prompt_tokens":4982,"completion_tokens":null,"total_tokens":null},"object":"chat.completion.chunk","id":"msg_bdrk_014pifLTHsNZz6Lmtw1ywgDJ","created":1753288341}
+data: {"model":"us.anthropic.claude-sonnet-4-20250514-v1:0","choices":[{"delta":{"role":"assistant","content":null,"tool_calls":[{"index":2,"function":{"arguments":"{\""}}]},"index":0,"finish_reason":null}],"usage":{"prompt_tokens":4982,"completion_tokens":null,"total_tokens":null},"object":"chat.completion.chunk","id":"msg_bdrk_014pifLTHsNZz6Lmtw1ywgDJ","created":1753288342}
+data: {"model":"us.anthropic.claude-sonnet-4-20250514-v1:0","choices":[{"delta":{"role":"assistant","content":null,"tool_calls":[{"index":2,"function":{"arguments":"command\""}}]},"index":0,"finish_reason":null}],"usage":{"prompt_tokens":4982,"completion_tokens":null,"total_tokens":null},"object":"chat.completion.chunk","id":"msg_bdrk_014pifLTHsNZz6Lmtw1ywgDJ","created":1753288342}
+data: {"model":"us.anthropic.claude-sonnet-4-20250514-v1:0","choices":[{"delta":{"role":"assistant","content":null,"tool_calls":[{"index":2,"function":{"arguments":": \"ls wor"}}]},"index":0,"finish_reason":null}],"usage":{"prompt_tokens":4982,"completion_tokens":null,"total_tokens":null},"object":"chat.completion.chunk","id":"msg_bdrk_014pifLTHsNZz6Lmtw1ywgDJ","created":1753288342}
+data: {"model":"us.anthropic.claude-sonnet-4-20250514-v1:0","choices":[{"delta":{"role":"assistant","content":null,"tool_calls":[{"index":2,"function":{"arguments":"king_dir"}}]},"index":0,"finish_reason":null}],"usage":{"prompt_tokens":4982,"completion_tokens":null,"total_tokens":null},"object":"chat.completion.chunk","id":"msg_bdrk_014pifLTHsNZz6Lmtw1ywgDJ","created":1753288342}
+data: {"model":"us.anthropic.claude-sonnet-4-20250514-v1:0","choices":[{"delta":{"role":"assistant","content":null,"tool_calls":[{"index":2,"function":{"arguments":"\"}"}}]},"index":0,"finish_reason":null}],"usage":{"prompt_tokens":4982,"completion_tokens":null,"total_tokens":null},"object":"chat.completion.chunk","id":"msg_bdrk_014pifLTHsNZz6Lmtw1ywgDJ","created":1753288342}
+data: {"model":"us.anthropic.claude-sonnet-4-20250514-v1:0","choices":[{"delta":{"role":"assistant","content":""},"index":0,"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":4982,"completion_tokens":122,"total_tokens":5104},"object":"chat.completion.chunk","id":"msg_bdrk_014pifLTHsNZz6Lmtw1ywgDJ","created":1753288342}
+data: [DONE]
+"#;
+
+        let response_stream =
+            tokio_stream::iter(response_lines.lines().map(|line| Ok(line.to_string())));
+        let messages = response_to_streaming_message(response_stream);
+        pin!(messages);
+
+        while let Some(Ok((message, _usage))) = messages.next().await {
+            if let Some(msg) = message {
+                println!("{:?}", msg);
+                if msg.content.len() == 2 {
+                    if let (MessageContent::ToolRequest(req1), MessageContent::ToolRequest(req2)) =
+                        (&msg.content[0], &msg.content[1])
+                    {
+                        if req1.tool_call.is_ok() && req2.tool_call.is_ok() {
+                            // We expect two tool calls in the response
+                            assert_eq!(req1.tool_call.as_ref().unwrap().name, "developer__shell");
+                            assert_eq!(req2.tool_call.as_ref().unwrap().name, "developer__shell");
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+        }
+
+        panic!("Expected tool call message with two calls, but did not see it");
+    }
+
+    #[tokio::test]
+    async fn test_streaming_tool_call_emits_input_delta_signal() -> anyhow::Result<()> {
+        let response_lines = [
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call-1","type":"function","function":{"name":"read_file","arguments":""}}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"path\""}}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":":\"README.md\"}"}}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"content":""},"index":0,"finish_reason":"tool_calls"}],"id":"chatcmpl-1"}"#,
+            "data: [DONE]",
+        ];
+
+        let response_stream =
+            tokio_stream::iter(response_lines.into_iter().map(|line| Ok(line.to_string())));
+        let messages = response_to_streaming_message(response_stream);
+        pin!(messages);
+
+        let mut deltas = Vec::new();
+        let mut final_tool_arguments = None;
+
+        while let Some(Ok((message, _usage))) = messages.next().await {
+            let Some(message) = message else {
+                continue;
+            };
+            for content in message.content {
+                match content {
+                    MessageContent::ToolInputDelta(delta) => {
+                        assert_eq!(delta.id, "call-1");
+                        assert_eq!(delta.tool_name.as_deref(), Some("read_file"));
+                        assert_eq!(delta.provider.as_deref(), Some("openai_compatible"));
+                        deltas.push(delta.accumulated_arguments.unwrap_or_default());
+                    }
+                    MessageContent::ToolRequest(request) => {
+                        let call = request.tool_call.expect("tool call should parse");
+                        final_tool_arguments = Some(call.arguments);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        assert_eq!(deltas, vec!["{\"path\"", "{\"path\":\"README.md\"}"]);
+        assert_eq!(
+            final_tool_arguments
+                .flatten()
+                .and_then(|args| args.get("path").cloned()),
+            Some(json!("README.md"))
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_streaming_tool_call_ignores_empty_choices_usage_chunks_until_finish(
+    ) -> anyhow::Result<()> {
+        let response_lines = [
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call-1","type":"function","function":{"name":"read_file","arguments":""}}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[],"usage":{"prompt_tokens":12,"completion_tokens":2,"total_tokens":14},"id":"chatcmpl-1"}"#,
+            "data: ",
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"path\""}}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":":\"README.md\"}"}}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"content":""},"index":0,"finish_reason":"tool_calls"}],"id":"chatcmpl-1"}"#,
+            "data: [DONE]",
+        ];
+
+        let response_stream =
+            tokio_stream::iter(response_lines.into_iter().map(|line| Ok(line.to_string())));
+        let messages = response_to_streaming_message(response_stream);
+        pin!(messages);
+
+        let mut deltas = Vec::new();
+        let mut final_path = None;
+        let mut final_usage = None;
+
+        while let Some(item) = messages.next().await {
+            let (message, usage) = item?;
+            if usage.is_some() {
+                final_usage = usage;
+            }
+            let Some(message) = message else {
+                continue;
+            };
+            for content in message.content {
+                match content {
+                    MessageContent::ToolInputDelta(delta) => {
+                        deltas.push(delta.accumulated_arguments.unwrap_or_default());
+                    }
+                    MessageContent::ToolRequest(request) => {
+                        let call = request.tool_call.expect("tool call should parse");
+                        final_path = call.arguments.and_then(|args| args.get("path").cloned());
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        assert_eq!(deltas, vec!["{\"path\"", "{\"path\":\"README.md\"}"]);
+        assert_eq!(final_path, Some(json!("README.md")));
+        let usage = final_usage.expect("usage from empty choices chunk should be preserved");
+        assert_eq!(usage.model, "gpt-4o");
+        assert_eq!(usage.usage.input_tokens, Some(12));
+        assert_eq!(usage.usage.output_tokens, Some(2));
+        assert_eq!(usage.usage.total_tokens, Some(14));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_response_to_message_accepts_top_level_and_namespaced_tool_names() {
+        let response = json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": "call-bash",
+                            "type": "function",
+                            "namespace": "functions",
+                            "name": "Bash",
+                            "arguments": { "command": "pwd" }
+                        },
+                        {
+                            "id": "call-read",
+                            "type": "function",
+                            "function": {
+                                "namespace": "functions.",
+                                "name": "Read",
+                                "arguments": "{\"path\":\"README.md\"}"
+                            }
+                        }
+                    ]
+                }
+            }]
+        });
+
+        let message = response_to_message(&response).expect("response should parse");
+        assert_eq!(message.content.len(), 2);
+
+        let MessageContent::ToolRequest(bash_request) = &message.content[0] else {
+            panic!("expected bash tool request");
+        };
+        let bash_call = bash_request
+            .tool_call
+            .as_ref()
+            .expect("bash tool call should parse");
+        assert_eq!(bash_request.id, "call-bash");
+        assert_eq!(bash_call.name.as_ref(), "functions.Bash");
+        assert_eq!(
+            bash_call
+                .arguments
+                .as_ref()
+                .and_then(|args| args.get("command"))
+                .cloned(),
+            Some(json!("pwd"))
+        );
+
+        let MessageContent::ToolRequest(read_request) = &message.content[1] else {
+            panic!("expected read tool request");
+        };
+        let read_call = read_request
+            .tool_call
+            .as_ref()
+            .expect("read tool call should parse");
+        assert_eq!(read_request.id, "call-read");
+        assert_eq!(read_call.name.as_ref(), "functions.Read");
+        assert_eq!(
+            read_call
+                .arguments
+                .as_ref()
+                .and_then(|args| args.get("path"))
+                .cloned(),
+            Some(json!("README.md"))
+        );
+    }
+
+    #[test]
+    fn test_response_to_message_rejects_empty_tool_name_without_guessing_from_arguments() {
+        let response = json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [{
+                        "id": "call-empty-name",
+                        "type": "function",
+                        "function": {
+                            "arguments": "{\"command\":\"pwd\"}"
+                        }
+                    }]
+                }
+            }]
+        });
+
+        let message = response_to_message(&response).expect("response should parse");
+        let MessageContent::ToolRequest(request) = &message.content[0] else {
+            panic!("expected tool request error");
+        };
+        assert_eq!(request.id, "call-empty-name");
+        assert!(
+            request.tool_call.is_err(),
+            "empty tool names must not become executable tool calls"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_streaming_tool_call_accepts_top_level_namespace_and_name() -> anyhow::Result<()> {
+        let response_lines = [
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call-bash","type":"function","namespace":"functions","name":"Bash","arguments":""}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"tool_calls":[{"index":0,"arguments":"{\"command\""}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"tool_calls":[{"index":0,"arguments":":\"pwd\"}"}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"content":""},"index":0,"finish_reason":"tool_calls"}],"id":"chatcmpl-1"}"#,
+            "data: [DONE]",
+        ];
+
+        let response_stream =
+            tokio_stream::iter(response_lines.into_iter().map(|line| Ok(line.to_string())));
+        let messages = response_to_streaming_message(response_stream);
+        pin!(messages);
+
+        let mut delta_tool_names = Vec::new();
+        let mut final_tool_name = None;
+        let mut final_command = None;
+
+        while let Some(Ok((message, _usage))) = messages.next().await {
+            let Some(message) = message else {
+                continue;
+            };
+            for content in message.content {
+                match content {
+                    MessageContent::ToolInputDelta(delta) => {
+                        delta_tool_names.push(delta.tool_name);
+                    }
+                    MessageContent::ToolRequest(request) => {
+                        let call = request.tool_call.expect("tool call should parse");
+                        final_tool_name = Some(call.name.to_string());
+                        final_command =
+                            call.arguments.and_then(|args| args.get("command").cloned());
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        assert_eq!(
+            delta_tool_names,
+            vec![
+                Some("functions.Bash".to_string()),
+                Some("functions.Bash".to_string())
+            ]
+        );
+        assert_eq!(final_tool_name.as_deref(), Some("functions.Bash"));
+        assert_eq!(final_command, Some(json!("pwd")));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_streaming_response_with_ollama_reasoning_delta() -> anyhow::Result<()> {
+        let response_lines = [
+            r#"data: {"model":"deepseek-r1:latest","choices":[{"delta":{"role":"assistant","reasoning":"先想一下"},"index":0,"finish_reason":null}],"id":"chatcmpl-ollama-1"}"#,
+            r#"data: {"model":"deepseek-r1:latest","choices":[{"delta":{"content":"收到"},"index":0,"finish_reason":"stop"}],"usage":{"prompt_tokens":7,"completion_tokens":3,"total_tokens":10},"id":"chatcmpl-ollama-1"}"#,
+            "data: [DONE]",
+        ];
+
+        let response_stream =
+            tokio_stream::iter(response_lines.into_iter().map(|line| Ok(line.to_string())));
+        let messages = response_to_streaming_message(response_stream);
+        pin!(messages);
+
+        let mut seen_thinking = false;
+        let mut seen_text = false;
+        let mut seen_usage = false;
+
+        while let Some(Ok((message, usage))) = messages.next().await {
+            if let Some(msg) = message {
+                for content in msg.content {
+                    match content {
+                        MessageContent::Thinking(thinking) => {
+                            assert_eq!(thinking.thinking, "先想一下");
+                            seen_thinking = true;
+                        }
+                        MessageContent::Text(text) => {
+                            assert_eq!(text.text, "收到");
+                            seen_text = true;
+                        }
+                        other => panic!("Unexpected content: {:?}", other),
+                    }
+                }
+            }
+
+            if let Some(provider_usage) = usage {
+                assert_eq!(provider_usage.model, "deepseek-r1:latest");
+                assert_eq!(provider_usage.usage.input_tokens, Some(7));
+                assert_eq!(provider_usage.usage.output_tokens, Some(3));
+                assert_eq!(provider_usage.usage.total_tokens, Some(10));
+                seen_usage = true;
+            }
+        }
+
+        assert!(
+            seen_thinking,
+            "Expected reasoning delta to emit Thinking content"
+        );
+        assert!(seen_text, "Expected content delta to emit Text content");
+        assert!(seen_usage, "Expected finish chunk to emit usage");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_usage_should_preserve_cached_prompt_tokens() {
+        let usage = get_usage(&json!({
+            "prompt_tokens": 1200,
+            "completion_tokens": 300,
+            "total_tokens": 1500,
+            "prompt_tokens_details": {
+                "cached_tokens": 900
+            }
+        }));
+
+        assert_eq!(usage.input_tokens, Some(1200));
+        assert_eq!(usage.output_tokens, Some(300));
+        assert_eq!(usage.total_tokens, Some(1500));
+        assert_eq!(usage.cached_input_tokens, Some(900));
+    }
+}

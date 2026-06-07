@@ -413,11 +413,11 @@ function resolveLocalHeuristicProviderCapabilities(params: {
   }
 
   const textOcrProviderLabel = params.textOcrProviderLabel?.toLowerCase() ?? "";
-  if (textOcrProviderLabel.includes("tauri native ocr")) {
+  if (textOcrProviderLabel.includes("desktop host native ocr")) {
     const nativeOcrCapability = findAnalyzerProviderCapability({
       kind: "text_ocr",
       execution: "native_command",
-      modelId: "tauri_native_ocr",
+      modelId: "desktop_host_native_ocr",
     });
     if (nativeOcrCapability) {
       capabilities.set(nativeOcrCapability.label, nativeOcrCapability);
@@ -887,7 +887,7 @@ export function createLayeredDesignNativeTextOcrProvider(
   recognizeText: RecognizeLayeredDesignText = recognizeLayeredDesignText,
 ): LayeredDesignFlatImageTextOcrProvider {
   return {
-    label: "Tauri native OCR",
+    label: "Desktop Host native OCR",
     detectText: async (input) => {
       const output: RecognizeLayeredDesignTextOutput = await recognizeText({
         imageSrc: input.candidate.asset.src,
@@ -921,7 +921,7 @@ export function createLayeredDesignNativeStructuredAnalyzerProvider(
         });
 
       if (!output.supported || !output.result) {
-        throw new Error(output.message ?? "Tauri native analyzer 不可用");
+        throw new Error(output.message ?? "Desktop Host native analyzer 不可用");
       }
 
       return output.result;

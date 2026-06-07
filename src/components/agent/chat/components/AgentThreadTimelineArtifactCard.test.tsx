@@ -6,6 +6,7 @@ import { AgentThreadTimelineArtifactCard } from "./AgentThreadTimelineArtifactCa
 import type { AgentThreadItem } from "../types";
 import { conversationProjectionStore } from "../projection/conversationProjectionStore";
 import { changeLimeLocale } from "@/i18n/createI18n";
+import type { AgentRuntimeTimelineArtifactContent } from "@/lib/api/agentRuntime/appServerArtifactClient";
 
 interface MountedHarness {
   container: HTMLDivElement;
@@ -102,6 +103,9 @@ function renderCard(
       blockId?: string;
       artifactId?: string;
     }) => void;
+    readTimelineArtifactContent?: (
+      item: Extract<AgentThreadItem, { type: "file_artifact" }>,
+    ) => Promise<AgentRuntimeTimelineArtifactContent | null>;
     sourceMessageId?: string;
     onSaveFileArtifactAsKnowledge?: (source: {
       messageId: string;
@@ -122,6 +126,7 @@ function renderCard(
         timestamp={props?.timestamp || "09:00"}
         onFileClick={props?.onFileClick}
         onOpenArtifactFromTimeline={props?.onOpenArtifactFromTimeline}
+        readTimelineArtifactContent={props?.readTimelineArtifactContent}
         sourceMessageId={props?.sourceMessageId}
         onSaveFileArtifactAsKnowledge={props?.onSaveFileArtifactAsKnowledge}
       />,
@@ -184,6 +189,9 @@ describe("AgentThreadTimelineArtifactCard", () => {
       createFileArtifactItem({
         content: undefined,
         metadata: {
+          session_id: "session-1",
+          turn_id: "turn-1",
+          artifact_ref: "artifact-document:demo",
           artifact_id: "artifact-document:demo",
           artifactTitle: "季度复盘",
           artifactKind: "analysis",
@@ -205,6 +213,59 @@ describe("AgentThreadTimelineArtifactCard", () => {
       "本轮重点是补齐来源线索与交付节奏。",
     );
     expect(container.textContent).not.toContain("schemaVersion");
+  });
+
+  it("首屏省略 artifact 正文时点击打开应通过 App Server artifact/read 补齐内容", async () => {
+    const onOpenArtifactFromTimeline = vi.fn();
+    const readTimelineArtifactContent = vi.fn().mockResolvedValue({
+      artifactRef: "artifact-document:demo",
+      artifactId: "artifact-document:demo",
+      content: "# 季度复盘\n\n这里是 App Server 返回的完整正文。",
+      filePath: ".app-server/artifacts/quarterly-review.md",
+      title: "季度复盘",
+    });
+    const container = renderCard(
+      createFileArtifactItem({
+        content: undefined,
+        metadata: {
+          session_id: "session-1",
+          turn_id: "turn-1",
+          artifact_ref: "artifact-document:demo",
+          artifact_id: "artifact-document:demo",
+          artifactTitle: "季度复盘",
+          artifactKind: "analysis",
+          artifactStatus: "ready",
+          previewText: "本轮重点是补齐来源线索与交付节奏。",
+        },
+      }),
+      {
+        onOpenArtifactFromTimeline,
+        readTimelineArtifactContent,
+      },
+    );
+
+    const openButton = container.querySelector<HTMLButtonElement>("button");
+    expect(openButton).not.toBeNull();
+
+    await act(async () => {
+      openButton?.click();
+      await Promise.resolve();
+    });
+
+    expect(readTimelineArtifactContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "artifact-1",
+        turn_id: "turn-1",
+      }),
+    );
+    expect(onOpenArtifactFromTimeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        artifactId: "artifact-document:demo",
+        timelineItemId: "artifact-1",
+        filePath: ".app-server/artifacts/quarterly-review.md",
+        content: "# 季度复盘\n\n这里是 App Server 返回的完整正文。",
+      }),
+    );
   });
 
   it("应在时间线摘要中显示文件快照、diff 和校验事实", () => {

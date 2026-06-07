@@ -10,7 +10,7 @@
 
 ## 当前事实
 
-- 新增 `scripts/i18n-language-boundary-report.ts`，默认扫描 `src/` 与 `src-tauri/`，并把 language-like marker 分类为：
+- 新增 `scripts/i18n/i18n-language-boundary-report.ts`，默认扫描 `src/` 与 `lime-rs/`，并把 language-like marker 分类为：
   - `uiLocale`
   - `agentResponseLanguage`
   - `contentTargetLanguage`
@@ -56,10 +56,10 @@ npm run i18n:language-boundary-report:json -- --category contentTargetLanguage -
 
 | 文件 | 数量 | 边界判断 |
 | ---- | ---- | ---- |
-| `src-tauri/src/commands/media_task_cmd.rs` | 57 | media task 产物语言 / 内容语言 |
+| `lime-rs/src/commands/media_task_cmd.rs` | 57 | media task 产物语言 / 内容语言 |
 | `src/components/artifact/ArtifactToolbar.test.ts` | 24 | Artifact UI 测试里的内容 language fixture |
 | `src/components/agent/chat/utils/taskPreviewFromToolResult.ts` | 22 | tool result preview 的内容语言展示 |
-| `src-tauri/crates/knowledge/src/lib.rs` | 19 | Knowledge 内容语言元数据 |
+| `lime-rs/crates/knowledge/src/lib.rs` | 19 | Knowledge 内容语言元数据 |
 | `src/components/artifact/renderers/CodeRenderer.tsx` | 15 | Artifact code renderer 的内容 / code language 边界热点 |
 
 本轮结论：`target_language` 是任务级 content target language，Artifact document `language` 是文档级元数据，两者都不能从 UI locale 自动写回；需要默认值时，应在具体任务或文档生成协议中显式定义，而不是复用 `Config.language`。
@@ -92,5 +92,5 @@ Media task runtime 继续收口：`audio_generate` 会把显式 `target_language
 
 - [language-boundary-report.json](/Users/coso/Documents/dev/ai/aiclientproxy/lime/internal/roadmap/i18n/evidence/language-boundary-report.json)
 - [content-target-language-boundary-report.json](/Users/coso/Documents/dev/ai/aiclientproxy/lime/internal/roadmap/i18n/evidence/content-target-language-boundary-report.json)
-- [i18n-language-boundary-report.ts](/Users/coso/Documents/dev/ai/aiclientproxy/lime/scripts/i18n-language-boundary-report.ts)
+- [i18n-language-boundary-report.ts](/Users/coso/Documents/dev/ai/aiclientproxy/lime/scripts/i18n/i18n-language-boundary-report.ts)
 - [PRD](/Users/coso/Documents/dev/ai/aiclientproxy/lime/internal/roadmap/i18n/prd.md)

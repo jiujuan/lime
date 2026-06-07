@@ -13,9 +13,9 @@ import {
 } from "@/lib/api/mediaTasks";
 import { safeListen } from "@/lib/dev-bridge";
 import {
-  hasTauriInvokeCapability,
-  hasTauriRuntimeMarkers,
-} from "@/lib/tauri-runtime";
+  hasDesktopHostInvokeCapability,
+  hasDesktopHostRuntimeMarkers,
+} from "@/lib/desktop-runtime";
 import { resolveAbsoluteWorkspacePath } from "./workspacePath";
 import {
   buildImageTaskLookupRequest,
@@ -25,6 +25,7 @@ import {
 import { parseImageWorkbenchCommand } from "../utils/imageWorkbenchCommand";
 import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
 import {
+  markdownContainsDocumentImageTaskPlaceholder,
   replaceDocumentImageTaskPlaceholderWithImage,
   upsertDocumentImageTaskPlaceholder,
 } from "@/components/workspace/document/utils/imageTaskPlaceholder";
@@ -282,6 +283,37 @@ function collectSeedImageTasks(messages?: Message[]): SeedImageTaskRecord[] {
     });
   });
   return tasks;
+}
+
+function hasCachedImageWorkbenchTasks(
+  imageWorkbenchState?: SessionImageWorkbenchState,
+): boolean {
+  return (imageWorkbenchState?.tasks || []).some(
+    (task) => !isDraftImageWorkbenchTaskId(task.id),
+  );
+}
+
+function hasDocumentImageTaskRecoverySignal(
+  canvasState?: CanvasStateUnion | null,
+): boolean {
+  return (
+    canvasState?.type === "document" &&
+    markdownContainsDocumentImageTaskPlaceholder(canvasState.content)
+  );
+}
+
+function shouldProbeWorkspaceImageTaskCatalog(params: {
+  messages?: Message[];
+  imageWorkbenchState?: SessionImageWorkbenchState;
+  canvasState?: CanvasStateUnion | null;
+}): boolean {
+  const messages = params.messages || [];
+  return (
+    collectSeedImageTasks(messages).length > 0 ||
+    Boolean(resolvePendingImageCommandRecoverySignature(messages)) ||
+    hasCachedImageWorkbenchTasks(params.imageWorkbenchState) ||
+    hasDocumentImageTaskRecoverySignal(params.canvasState)
+  );
 }
 
 function isImageWorkbenchTaskSatisfiedByCache(params: {
@@ -2153,7 +2185,9 @@ function isDraftAndResolvedImageWorkbenchPreviewPair(
     return false;
   }
 
-  return isDraftImageWorkbenchPreview(left) !== isDraftImageWorkbenchPreview(right);
+  return (
+    isDraftImageWorkbenchPreview(left) !== isDraftImageWorkbenchPreview(right)
+  );
 }
 
 function resolveImageWorkbenchPreviewIdentityKeys(
@@ -3473,7 +3507,13 @@ export function useWorkspaceImageTaskPreviewRuntime({
   useEffect(() => {
     const shouldRestoreWorkspaceTaskCatalog =
       restoreFromWorkspace &&
-      (hasTauriInvokeCapability() || hasTauriRuntimeMarkers());
+      (hasDesktopHostInvokeCapability() || hasDesktopHostRuntimeMarkers()) &&
+      shouldProbeWorkspaceImageTaskCatalog({
+        messages: runtimeContextRef.current.messages,
+        imageWorkbenchState:
+          runtimeContextRef.current.currentImageWorkbenchState,
+        canvasState: runtimeContextRef.current.canvasState,
+      });
 
     const trackedTasks = trackedTasksRef.current;
     trackedTasks.forEach((trackedTask) => {

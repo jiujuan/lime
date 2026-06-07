@@ -44,15 +44,15 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["现有 Tauri command runtime glue"] --> B["盘点 Tauri-only 依赖"]
+    A["legacy desktop command runtime glue"] --> B["盘点 legacy desktop-only 依赖"]
     B --> C{"是否依赖壳层对象?"}
-    C -- 是 --> D["抽 HostAdapter / context / event sink"]
+    C -- 是 --> D["抽 HostBridge / context / event sink"]
     C -- 否 --> E["判断公共 core 还是 backend"]
     D --> E
     E --> F{"是否 Aster 私有逻辑?"}
     F -- 是 --> G["收进 AsterBackend"]
     F -- 否 --> H["下沉 RuntimeCore"]
-    G --> I["Tauri command 改为委托 RuntimeCore"]
+    G --> I["legacy desktop facade 改为委托 RuntimeCore"]
     H --> I
     I --> J["App Server 调用同一 RuntimeCore"]
     J --> K["合同测试对比输出"]
@@ -70,7 +70,7 @@ flowchart LR
     P1 --> P2["P2 RuntimeCore / ExecutionBackend"]
     P2 --> P3["P3 AsterBackend"]
     P3 --> P4["P4 App Server 接入 core"]
-    P4 --> P5["P5 Desktop thin adapter"]
+    P4 --> P5["P5 Desktop Host bridge"]
     P5 --> P6["P6 content-studio client"]
     P6 --> P7["P7 tool/action/artifact/evidence"]
     P7 --> P8["P8 多 App capability discovery"]
@@ -88,9 +88,9 @@ flowchart TB
         D["未来垂直 App"]
     end
 
-    subgraph ClientLayer["Client Layer"]
-        E["Tauri Adapter"]
-        F["Electron Main Client"]
+    subgraph ClientLayer["Desktop Host Bridge / Client Layer"]
+        E["Electron Desktop Host Bridge<br/>current"]
+        F["Legacy Desktop Facade<br/>compat"]
         G["Generic App Client"]
     end
 
@@ -110,11 +110,11 @@ flowchart TB
     end
 
     A --> E
-    B --> F
+    B --> E
     C --> G
     D --> G
     E --> H
-    F --> H
+    F -. "compat only" .-> H
     G --> H
     H --> I
     H --> J

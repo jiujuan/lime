@@ -483,7 +483,7 @@ describe("AgentChatPage 自动引导", { timeout: 20_000 }, () => {
       ({ workspaceId }: { workspaceId: string }) => {
         observedWorkspaceIds.push(workspaceId);
         return {
-          providerType: "kiro",
+          providerType: "openai",
           setProviderType: vi.fn(),
           model: "mock-model",
           setModel: vi.fn(),

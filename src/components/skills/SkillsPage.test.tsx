@@ -16,7 +16,7 @@ const mockCreateSkillScaffold = vi.fn();
 const mockImportLocalSkill = vi.fn();
 const mockOpenDialog = vi.fn();
 
-vi.mock("@tauri-apps/plugin-dialog", () => ({
+vi.mock("@/lib/desktop-host/plugin-dialog", () => ({
   open: (...args: unknown[]) => mockOpenDialog(...args),
 }));
 

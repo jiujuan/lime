@@ -1,6 +1,6 @@
 import React from "react";
 import type { AsterSessionExecutionRuntime } from "@/lib/api/agentRuntime";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import { ChatModelSelector } from "../../ChatModelSelector";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 
@@ -32,7 +32,7 @@ export const InputbarModelExtra: React.FC<InputbarModelExtraProps> = ({
   if (isFullscreen) {
     return null;
   }
-  const selectorBackgroundPreload = hasTauriInvokeCapability()
+  const selectorBackgroundPreload = hasDesktopHostInvokeCapability()
     ? "immediate"
     : "disabled";
 

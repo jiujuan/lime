@@ -203,6 +203,19 @@ function resolveLatestUserMessage(messages: Message[]): Message | null {
   return null;
 }
 
+export function isAssistantAwaitingFinalResponse(
+  latestAssistant: Message | null,
+): boolean {
+  if (!latestAssistant?.isThinking) {
+    return false;
+  }
+
+  return (
+    latestAssistant.runtimeStatus?.phase !== "failed" &&
+    latestAssistant.runtimeStatus?.phase !== "cancelled"
+  );
+}
+
 function resolveLatestUsage(messages: Message[]): AgentTokenUsage | undefined {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
@@ -214,6 +227,7 @@ function resolveLatestUsage(messages: Message[]): AgentTokenUsage | undefined {
 }
 
 function resolveTaskStatus(params: {
+  latestAssistant: Message | null;
   latestTurn: AgentThreadTurn | null;
   latestTurnItems: AgentThreadItem[];
   threadRead?: AgentRuntimeThreadReadModel | null;
@@ -223,6 +237,7 @@ function resolveTaskStatus(params: {
   isSending: boolean;
 }): AgentTaskRuntimeStatus | null {
   const {
+    latestAssistant,
     latestTurn,
     latestTurnItems,
     threadRead,
@@ -282,6 +297,9 @@ function resolveTaskStatus(params: {
 
   switch (latestTurn?.status) {
     case "completed":
+      if (isAssistantAwaitingFinalResponse(latestAssistant)) {
+        return "running";
+      }
       return "completed";
     case "failed":
       return "failed";
@@ -480,6 +498,7 @@ export function buildAgentTaskRuntimeCardModel({
     summarizeThreadProcessBatch(latestProcessItems);
   const batchDescriptor = streamingBatchDescriptor || persistedBatchDescriptor;
   const status = resolveTaskStatus({
+    latestAssistant,
     latestTurn,
     latestTurnItems,
     threadRead,

@@ -32,8 +32,20 @@ function evidenceSummary(overrides = {}) {
       },
     ],
     evidence_layers_covered: ["deterministic-smoke"],
-    failure_modes: [{ name: "mock fallback drift", status: "excluded", evidence: "contract check passed" }],
-    artifacts: [{ path: ".lime/qc/contract-summary.json", kind: "deterministic-smoke", redacted: true }],
+    failure_modes: [
+      {
+        name: "mock fallback drift",
+        status: "excluded",
+        evidence: "contract check passed",
+      },
+    ],
+    artifacts: [
+      {
+        path: ".lime/qc/contract-summary.json",
+        kind: "deterministic-smoke",
+        redacted: true,
+      },
+    ],
     blockers: [],
     gui_session_owner: "",
     release_scope: "source-tree-startup-smoke",
@@ -108,7 +120,8 @@ describe("agent-qc-evidence-core", () => {
           id: "attempt-pass-conflict",
           status: "failed",
           attempt_no: 2,
-          stdout: "QCLOOP_WORKER_RESULT=PASS\nsmoke pass, but no live transcript",
+          stdout:
+            "QCLOOP_WORKER_RESULT=PASS\nsmoke pass, but no live transcript",
         },
       ],
       qc_rounds: [
@@ -143,9 +156,9 @@ describe("agent-qc-evidence-core", () => {
     expect(parseScenarioId('{"scenario_id":"command-bridge-contract"}')).toBe(
       "command-bridge-contract",
     );
-    expect(parseScenarioId('{"name":"agent-ui-performance-summary-ttft-fields"}')).toBe(
-      "agent-ui-performance-summary-ttft-fields",
-    );
+    expect(
+      parseScenarioId('{"name":"agent-ui-performance-summary-ttft-fields"}'),
+    ).toBe("agent-ui-performance-summary-ttft-fields");
     expect(parseScenarioId('{"entry":"lime-agent-runtime-client-check"}')).toBe(
       "lime-agent-runtime-client-check",
     );
@@ -181,9 +194,15 @@ describe("agent-qc-evidence-core", () => {
 
     expect(pack.verdict.status).toBe("pass");
     expect(pack.scenarioResults[0].scenarioId).toBe("command-bridge-contract");
-    expect(pack.scenarioResults[0].evidenceRefs).toContain("qcloop:attempt:attempt-1");
-    expect(pack.scenarioResults[0].evidenceRefs).toContain(".lime/qc/contract-summary.json");
-    expect(pack.scenarioResults[0].evidenceRefs).toContain("release-scope:source-tree-startup-smoke");
+    expect(pack.scenarioResults[0].evidenceRefs).toContain(
+      "qcloop:attempt:attempt-1",
+    );
+    expect(pack.scenarioResults[0].evidenceRefs).toContain(
+      ".lime/qc/contract-summary.json",
+    );
+    expect(pack.scenarioResults[0].evidenceRefs).toContain(
+      "release-scope:source-tree-startup-smoke",
+    );
     expect(validateEvidencePackShape(pack).valid).toBe(true);
   });
 
@@ -197,7 +216,9 @@ describe("agent-qc-evidence-core", () => {
           status: "success",
           current_attempt_no: 1,
           current_qc_no: 1,
-          attempts: [{ id: "attempt-missing-summary", status: "success", attempt_no: 1 }],
+          attempts: [
+            { id: "attempt-missing-summary", status: "success", attempt_no: 1 },
+          ],
           qc_rounds: [{ id: "qc-missing-summary", status: "pass", qc_no: 1 }],
         },
       ],
@@ -205,8 +226,12 @@ describe("agent-qc-evidence-core", () => {
     });
 
     expect(pack.verdict.status).toBe("fail");
-    expect(pack.scenarioResults[0].failureModes).toContain("qcloop:evidence_summary_missing");
-    expect(pack.verdict.blockers.join("\n")).toContain("缺少 QCLOOP_EVIDENCE_SUMMARY_JSON");
+    expect(pack.scenarioResults[0].failureModes).toContain(
+      "qcloop:evidence_summary_missing",
+    );
+    expect(pack.verdict.blockers.join("\n")).toContain(
+      "缺少 QCLOOP_EVIDENCE_SUMMARY_JSON",
+    );
   });
 
   it("应拒绝无法解析的 QCLOOP_EVIDENCE_SUMMARY_JSON", () => {
@@ -234,7 +259,9 @@ describe("agent-qc-evidence-core", () => {
     });
 
     expect(pack.verdict.status).toBe("fail");
-    expect(pack.scenarioResults[0].failureModes).toContain("qcloop:evidence_summary_invalid_json");
+    expect(pack.scenarioResults[0].failureModes).toContain(
+      "qcloop:evidence_summary_invalid_json",
+    );
     expect(pack.verdict.blockers.join("\n")).toContain("JSON 无法解析");
   });
 
@@ -284,7 +311,8 @@ describe("agent-qc-evidence-core", () => {
               id: "attempt-3",
               status: "success",
               attempt_no: 3,
-              stdout: "QCLOOP_WORKER_RESULT=BLOCKED\nDevBridge preflight: BLOCKED",
+              stdout:
+                "QCLOOP_WORKER_RESULT=BLOCKED\nDevBridge preflight: BLOCKED",
             },
           ],
           qc_rounds: [
@@ -301,8 +329,12 @@ describe("agent-qc-evidence-core", () => {
     });
 
     expect(pack.verdict.status).toBe("blocked");
-    expect(pack.verdict.blockers.join("\n")).toContain("DevBridge preflight blocked");
-    expect(pack.scenarioResults[0].failureModes).toContain("qcloop:worker_blocked");
+    expect(pack.verdict.blockers.join("\n")).toContain(
+      "DevBridge preflight blocked",
+    );
+    expect(pack.scenarioResults[0].failureModes).toContain(
+      "qcloop:worker_blocked",
+    );
   });
 
   it("应把 qcloop worker 环境阻断导出为 blocked evidence pack，且不泄露原始 stderr", () => {
@@ -325,15 +357,28 @@ describe("agent-qc-evidence-core", () => {
                 "QCLOOP_CODEX_BIN 不可用: /opt/homebrew/bin/codex: fork/exec /opt/homebrew/bin/codex: no such file or directory",
             },
           ],
-          qc_rounds: [{ id: "qc-env", status: "fail", qc_no: 1, feedback: "verifier 输出格式错误" }],
+          qc_rounds: [
+            {
+              id: "qc-env",
+              status: "fail",
+              qc_no: 1,
+              feedback: "verifier 输出格式错误",
+            },
+          ],
         },
       ],
       options: { generatedAt: "2026-05-10T00:00:00.000Z" },
     });
 
     expect(pack.verdict.status).toBe("blocked");
-    expect(pack.scenarioResults[0].failureModes).toContain("qcloop:worker_environment_blocked");
-    expect(pack.verdict.blockers.join("\n")).toContain("qcloop worker 环境阻断");
-    expect(pack.verdict.blockers.join("\n")).not.toContain("/opt/homebrew/bin/codex");
+    expect(pack.scenarioResults[0].failureModes).toContain(
+      "qcloop:worker_environment_blocked",
+    );
+    expect(pack.verdict.blockers.join("\n")).toContain(
+      "qcloop worker 环境阻断",
+    );
+    expect(pack.verdict.blockers.join("\n")).not.toContain(
+      "/opt/homebrew/bin/codex",
+    );
   });
 });

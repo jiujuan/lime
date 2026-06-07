@@ -240,7 +240,7 @@ describe("LayeredDesign worker heuristic analyzer client", () => {
         analysis: {
           analyzer: {
             kind: "local_heuristic",
-            label: "Fallback analyzer + Tauri native OCR",
+            label: "Fallback analyzer + Desktop Host native OCR",
           },
           outputs: {
             candidateRaster: true,
@@ -251,9 +251,9 @@ describe("LayeredDesign worker heuristic analyzer client", () => {
           providerCapabilities: [
             {
               kind: "text_ocr",
-              label: "Tauri native OCR",
+              label: "Desktop Host native OCR",
               execution: "native_command",
-              modelId: "tauri_native_ocr",
+              modelId: "desktop_host_native_ocr",
               supports: {
                 textGeometry: true,
               },

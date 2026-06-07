@@ -80,7 +80,7 @@ describe("voiceModelSettingsNavigation", () => {
     ).toBeNull();
   });
 
-  it("跨窗口请求应通过 Tauri 事件桥广播", async () => {
+  it("跨窗口请求应通过 Desktop Host 事件桥广播", async () => {
     await broadcastOpenVoiceModelSettingsRequest({
       source: "inputbar",
       reason: "missing-model",
@@ -94,7 +94,7 @@ describe("voiceModelSettingsNavigation", () => {
     });
   });
 
-  it("监听器应接收 Tauri 事件桥请求", async () => {
+  it("监听器应接收 Desktop Host 事件桥请求", async () => {
     const bridgeHandlers: Array<
       (event: { payload: VoiceModelSettingsNavigationDetail }) => void
     > = [];

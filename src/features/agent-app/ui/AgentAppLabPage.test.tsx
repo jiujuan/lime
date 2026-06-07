@@ -38,7 +38,9 @@ async function renderPage(flags?: Partial<AgentAppHostFlags>) {
 }
 
 function unmountPage(container: HTMLDivElement) {
-  const index = mountedPages.findIndex((mounted) => mounted.container === container);
+  const index = mountedPages.findIndex(
+    (mounted) => mounted.container === container,
+  );
   if (index < 0) {
     return;
   }
@@ -72,36 +74,35 @@ describe("AgentAppLabPage", () => {
   it("应展示 fixture entries、blocked readiness 和 cleanup dry-run", async () => {
     const container = await renderPage();
 
-    expect(container.querySelector('[data-testid="agent-app-lab-page"]')).not.toBeNull();
-    expect(container.querySelectorAll('[data-testid="agent-app-entry-card"]')).toHaveLength(5);
-    expect(container.querySelector('[data-testid="agent-app-readiness-blocked"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="agent-app-lab-page"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelectorAll('[data-testid="agent-app-entry-card"]'),
+    ).toHaveLength(5);
+    expect(
+      container.querySelector('[data-testid="agent-app-readiness-blocked"]'),
+    ).not.toBeNull();
     expect(container.textContent).toContain("content-factory-app");
     expect(container.textContent).toContain("package-fnv1a-");
-    expect(container.textContent).toContain("<LimeAppData>/agent-apps/storage/content-factory-app");
-    expect(container.querySelector('[data-testid^="agent-app-run-entry-"]')).toBeNull();
+    expect(container.textContent).toContain(
+      "<LimeAppData>/agent-apps/storage/content-factory-app",
+    );
+    expect(
+      container.querySelector('[data-testid^="agent-app-run-entry-"]'),
+    ).toBeNull();
   });
 
-  it("开启 mock SDK 后点击 entry 应先被 P14 guard 阻止未完成 setup", async () => {
+  it("开启 mock SDK 也不能让产品页出现 mock 运行入口", async () => {
     const container = await renderPage({ mockSdkEnabled: true });
     const button = container.querySelector(
       '[data-testid="agent-app-run-entry-content_scenario_planning"]',
     ) as HTMLButtonElement | null;
 
-    expect(button).not.toBeNull();
-    await act(async () => {
-      button?.click();
-      await Promise.resolve();
-    });
-
+    expect(button).toBeNull();
     expect(
-      container.querySelector('[data-testid="agent-app-entry-runtime-guard-result"]'),
-    ).not.toBeNull();
-    expect(
-      container.querySelector('[data-testid="agent-app-entry-runtime-guard-needs-setup"]'),
-    ).not.toBeNull();
-    expect(container.querySelector('[data-testid="agent-app-run-result"]')).toBeNull();
-    expect(container.textContent).toContain("agentApp.lab.guard.summary.needs-setup");
-    expect(container.textContent).toContain("project_knowledge");
+      container.querySelector('[data-testid="agent-app-run-result"]'),
+    ).toBeNull();
   });
 
   it("开启 real adapter 后点击 entry 也不得绕过 P14 setup guard", async () => {
@@ -117,9 +118,13 @@ describe("AgentAppLabPage", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="agent-app-entry-runtime-guard-needs-setup"]'),
+      container.querySelector(
+        '[data-testid="agent-app-entry-runtime-guard-needs-setup"]',
+      ),
     ).not.toBeNull();
-    expect(container.querySelector('[data-testid="agent-app-run-result"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="agent-app-run-result"]'),
+    ).toBeNull();
     expect(container.textContent).toContain("project_knowledge");
     expect(container.textContent).toContain("article-writer");
     expect(container.textContent).toContain("document_parser");
@@ -141,9 +146,13 @@ describe("AgentAppLabPage", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="agent-app-entry-runtime-guard-needs-setup"]'),
+      container.querySelector(
+        '[data-testid="agent-app-entry-runtime-guard-needs-setup"]',
+      ),
     ).not.toBeNull();
-    expect(container.querySelector('[data-testid="agent-app-ui-runtime-result"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="agent-app-ui-runtime-result"]'),
+    ).toBeNull();
     expect(container.textContent).toContain("agentApp.lab.guard.rawApiBlocked");
     expect(container.textContent).toContain("lime.ui");
   });
@@ -163,7 +172,9 @@ describe("AgentAppLabPage", () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain("agentApp.lab.installFlow.launchReady");
+    expect(container.textContent).toContain(
+      "agentApp.lab.installFlow.launchReady",
+    );
 
     const button = container.querySelector(
       '[data-testid="agent-app-open-ui-entry-dashboard"]',
@@ -177,11 +188,17 @@ describe("AgentAppLabPage", () => {
       container.querySelector('[data-testid="agent-app-ui-runtime-result"]'),
     ).not.toBeNull();
     expect(
-      container.querySelector('[data-testid="agent-app-entry-runtime-guard-allow"]'),
+      container.querySelector(
+        '[data-testid="agent-app-entry-runtime-guard-allow"]',
+      ),
     ).not.toBeNull();
-    expect(container.textContent).toContain("agentApp.lab.installFlow.status.launched");
+    expect(container.textContent).toContain(
+      "agentApp.lab.installFlow.status.launched",
+    );
     expect(
-      container.querySelector('[data-testid="agent-app-install-flow-stage-cleanup-preview"]'),
+      container.querySelector(
+        '[data-testid="agent-app-install-flow-stage-cleanup-preview"]',
+      ),
     ).not.toBeNull();
   });
 
@@ -199,15 +216,23 @@ describe("AgentAppLabPage", () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelector('[data-testid="agent-app-manager"]')).not.toBeNull();
     expect(
-      container.querySelector('[data-testid="agent-app-manager-repository-list"]'),
+      container.querySelector('[data-testid="agent-app-manager"]'),
     ).not.toBeNull();
     expect(
-      container.querySelectorAll('[data-testid^="agent-app-manager-repository-app-"]'),
+      container.querySelector(
+        '[data-testid="agent-app-manager-repository-list"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelectorAll(
+        '[data-testid^="agent-app-manager-repository-app-"]',
+      ),
     ).toHaveLength(2);
     expect(container.textContent).toContain("content-factory-playbook-app");
-    expect(container.textContent).toContain("agentApp.lab.manager.status.launchable");
+    expect(container.textContent).toContain(
+      "agentApp.lab.manager.status.launchable",
+    );
 
     const launchButton = container.querySelector(
       '[data-testid="agent-app-manager-launch-entry-dashboard"]',
@@ -218,13 +243,17 @@ describe("AgentAppLabPage", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="agent-app-entry-runtime-guard-allow"]'),
+      container.querySelector(
+        '[data-testid="agent-app-entry-runtime-guard-allow"]',
+      ),
     ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="agent-app-ui-runtime-result"]'),
     ).not.toBeNull();
     expect(
-      container.querySelector('[data-testid="agent-app-manager-cleanup-evidence"]'),
+      container.querySelector(
+        '[data-testid="agent-app-manager-cleanup-evidence"]',
+      ),
     ).not.toBeNull();
     expect(container.textContent).toContain(
       "agentApp.lab.manager.evidence.action.launch",
@@ -238,7 +267,9 @@ describe("AgentAppLabPage", () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain("agentApp.lab.manager.status.disabled");
+    expect(container.textContent).toContain(
+      "agentApp.lab.manager.status.disabled",
+    );
     expect(launchButton?.disabled).toBe(true);
 
     const deleteDataButton = container.querySelector(
@@ -281,7 +312,8 @@ describe("AgentAppLabPage", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="agent-app-manager-selected-app"]')?.textContent,
+      container.querySelector('[data-testid="agent-app-manager-selected-app"]')
+        ?.textContent,
     ).toContain("fixture:content-factory-playbook-app");
 
     const launchButton = container.querySelector(
@@ -293,7 +325,8 @@ describe("AgentAppLabPage", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="agent-app-ui-runtime-result"]')?.textContent,
+      container.querySelector('[data-testid="agent-app-ui-runtime-result"]')
+        ?.textContent,
     ).toContain("content-factory-playbook-app");
 
     const deleteDataButton = container.querySelector(
@@ -315,11 +348,14 @@ describe("AgentAppLabPage", () => {
     expect(evidenceJson?.textContent).toContain('"blockedTargetCount": 0');
     expect(evidenceJson?.textContent).not.toContain("secret-value");
     expect(
-      container.querySelector('[data-testid="agent-app-manager-residual-audit"]'),
+      container.querySelector(
+        '[data-testid="agent-app-manager-residual-audit"]',
+      ),
     ).not.toBeNull();
     expect(
-      container.querySelector('[data-testid="agent-app-manager-residual-pending"]')
-        ?.textContent,
+      container.querySelector(
+        '[data-testid="agent-app-manager-residual-pending"]',
+      )?.textContent,
     ).toContain("agentApp.lab.manager.evidence.residual.pendingDeletion");
 
     const disableButton = container.querySelector(
@@ -331,7 +367,9 @@ describe("AgentAppLabPage", () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain("agentApp.lab.manager.status.disabled");
+    expect(container.textContent).toContain(
+      "agentApp.lab.manager.status.disabled",
+    );
     expect(launchButton?.disabled).toBe(true);
 
     unmountPage(container);
@@ -377,10 +415,16 @@ describe("AgentAppLabPage", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="agent-app-entry-runtime-guard-needs-setup"]'),
+      container.querySelector(
+        '[data-testid="agent-app-entry-runtime-guard-needs-setup"]',
+      ),
     ).not.toBeNull();
-    expect(container.querySelector('[data-testid="agent-app-content-demo-result"]')).toBeNull();
-    expect(container.textContent).toContain("agentApp.lab.guard.summary.needs-setup");
+    expect(
+      container.querySelector('[data-testid="agent-app-content-demo-result"]'),
+    ).toBeNull();
+    expect(container.textContent).toContain(
+      "agentApp.lab.guard.summary.needs-setup",
+    );
   });
 
   it("开启 workflow runtime 后内容工厂 demo 仍不得绕过 P14 guard", async () => {
@@ -399,11 +443,17 @@ describe("AgentAppLabPage", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="agent-app-workflow-runtime-result"]'),
+      container.querySelector(
+        '[data-testid="agent-app-workflow-runtime-result"]',
+      ),
     ).toBeNull();
     expect(
-      container.querySelector('[data-testid="agent-app-entry-runtime-guard-needs-setup"]'),
+      container.querySelector(
+        '[data-testid="agent-app-entry-runtime-guard-needs-setup"]',
+      ),
     ).not.toBeNull();
-    expect(container.textContent).toContain("agentApp.lab.guard.summary.needs-setup");
+    expect(container.textContent).toContain(
+      "agentApp.lab.guard.summary.needs-setup",
+    );
   });
 });

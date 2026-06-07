@@ -53,6 +53,27 @@ export function hasStructuredHistoricalContentHint(content: string): boolean {
   return STRUCTURED_HISTORY_CONTENT_RE.test(content);
 }
 
+function hasRunningHistoricalProcessContentParts(
+  message: HistoricalConversationMessageLike,
+): boolean {
+  return Boolean(
+    message.contentParts?.some((part) => {
+      if (!part || typeof part !== "object") {
+        return false;
+      }
+      const type = (part as { type?: unknown }).type;
+      if (type !== "tool_use") {
+        return false;
+      }
+      const toolCall = (part as { toolCall?: unknown }).toolCall;
+      if (!toolCall || typeof toolCall !== "object") {
+        return false;
+      }
+      return (toolCall as { status?: unknown }).status === "running";
+    }),
+  );
+}
+
 export function isHistoricalAssistantMessageHydrationCandidate<
   TMessage extends HistoricalConversationMessageLike,
 >(message: TMessage, state: HistoricalMessageHydrationState): boolean {
@@ -64,6 +85,7 @@ export function isHistoricalAssistantMessageHydrationCandidate<
     message.role === "assistant" &&
     !message.isThinking &&
     !message.thinkingContent &&
+    !hasRunningHistoricalProcessContentParts(message) &&
     (message.toolCalls?.length ?? 0) === 0 &&
     (message.actionRequests?.length ?? 0) === 0
   );

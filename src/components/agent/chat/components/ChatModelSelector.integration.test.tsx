@@ -18,6 +18,7 @@ const {
   mockUseConfiguredProviders,
   mockUseProviderModels,
   mockApiKeyProvidersGetProviders,
+  mockGetDefaultProvider,
   mockEmitProviderDataChanged,
   mockWechatChannelSetRuntimeModel,
 } = vi.hoisted(() => ({
@@ -39,6 +40,7 @@ const {
   mockUseConfiguredProviders: vi.fn(),
   mockUseProviderModels: vi.fn(),
   mockApiKeyProvidersGetProviders: vi.fn(),
+  mockGetDefaultProvider: vi.fn(),
   mockEmitProviderDataChanged: vi.fn(),
   mockWechatChannelSetRuntimeModel: vi.fn(async () => undefined),
 }));
@@ -124,6 +126,17 @@ vi.mock("@/lib/api/apiKeyProvider", () => ({
   },
 }));
 
+vi.mock("@/lib/api/appConfig", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/api/appConfig")>(
+      "@/lib/api/appConfig",
+    );
+  return {
+    ...actual,
+    getDefaultProvider: mockGetDefaultProvider,
+  };
+});
+
 vi.mock("@/lib/providerDataEvents", () => ({
   emitProviderDataChanged: mockEmitProviderDataChanged,
 }));
@@ -133,6 +146,7 @@ vi.mock("@/lib/api/channelsRuntime", () => ({
 }));
 
 import { useAsterAgentChat } from "../hooks/useAsterAgentChat";
+import type { AgentRuntimeAdapter } from "../hooks/agentRuntimeAdapter";
 import { ChatModelSelector } from "./ChatModelSelector";
 
 interface MountedRoot {
@@ -216,6 +230,79 @@ function createProviderModelsFixture(providerKey?: string | null) {
   return [];
 }
 
+function createRuntimeAdapterFixture(): AgentRuntimeAdapter {
+  const unsupported = async () => {
+    throw new Error("当前测试未覆盖该 runtime adapter 方法");
+  };
+
+  return {
+    init: () => mockInitAsterAgent(),
+    createSession: (workspaceId, name, executionStrategy, options) =>
+      mockCreateAgentRuntimeSession(
+        workspaceId,
+        name,
+        executionStrategy,
+        options,
+      ),
+    listSessions: (options) => mockListAgentRuntimeSessions(options),
+    getSession: (sessionId, options) =>
+      mockGetAgentRuntimeSession(sessionId, options),
+    getSessionReadModel: async () => null,
+    replayRequest: async () => null,
+    renameSession: async (sessionId, title) => {
+      await mockUpdateAgentRuntimeSession({
+        session_id: sessionId,
+        name: title,
+      });
+    },
+    deleteSession: unsupported,
+    setSessionExecutionStrategy: async (sessionId, executionStrategy) => {
+      await mockUpdateAgentRuntimeSession({
+        session_id: sessionId,
+        execution_strategy: executionStrategy,
+      });
+    },
+    setSessionAccessMode: async (sessionId, accessMode) => {
+      await mockUpdateAgentRuntimeSession({
+        session_id: sessionId,
+        recent_access_mode: accessMode,
+      });
+    },
+    setSessionProviderSelection: async (sessionId, providerType, model) => {
+      await mockUpdateAgentRuntimeSession({
+        session_id: sessionId,
+        provider_selector: providerType,
+        model_name: model,
+      });
+    },
+    updateSessionMetadata: async (sessionId, patch) => {
+      await mockUpdateAgentRuntimeSession({
+        session_id: sessionId,
+        ...(patch.accessMode ? { recent_access_mode: patch.accessMode } : {}),
+        ...(patch.providerType
+          ? { provider_selector: patch.providerType }
+          : {}),
+        ...(patch.model ? { model_name: patch.model } : {}),
+        ...(patch.executionStrategy
+          ? { execution_strategy: patch.executionStrategy }
+          : {}),
+      });
+    },
+    generateSessionTitle: async () => "",
+    submitOp: unsupported,
+    compactSession: unsupported,
+    interruptTurn: async () => false,
+    resumeThread: async () => false,
+    promoteQueuedTurn: async () => false,
+    removeQueuedTurn: async () => false,
+    respondToAction: unsupported,
+    listenToTurnEvents: (eventName, handler) =>
+      mockSafeListen(eventName, handler),
+    listenToTeamEvents: (eventName, handler) =>
+      mockSafeListen(eventName, handler),
+  };
+}
+
 function mount(
   workspaceId: string,
   options: MountOptions = {},
@@ -224,10 +311,11 @@ function mount(
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const runtimeAdapter = createRuntimeAdapterFixture();
   let chatValue: ReturnType<typeof useAsterAgentChat> | null = null;
 
   function TestComponent() {
-    const chat = useAsterAgentChat({ workspaceId });
+    const chat = useAsterAgentChat({ workspaceId, runtimeAdapter });
     chatValue = chat;
     return (
       <div>
@@ -317,6 +405,7 @@ beforeEach(async () => {
   mockUpdateAgentRuntimeSession.mockResolvedValue(undefined);
   mockSafeListen.mockResolvedValue(() => {});
   mockApiKeyProvidersGetProviders.mockResolvedValue([]);
+  mockGetDefaultProvider.mockResolvedValue("");
   mockEmitProviderDataChanged.mockImplementation(() => {});
   mockWechatChannelSetRuntimeModel.mockResolvedValue(undefined);
   const configuredProviders = createConfiguredProviderFixtures();

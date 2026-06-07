@@ -1,5 +1,5 @@
 import { safeListen } from "@/lib/dev-bridge";
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@/lib/desktop-host/event";
 import type { AgentEvent } from "@/lib/api/agentProtocol";
 
 export type AgentRuntimeEventHandler<TPayload = AgentEvent | unknown> =
@@ -46,6 +46,43 @@ export function dedupeAgentRuntimeEventNames(
   });
 }
 
+const localRuntimeEventListeners = new Map<
+  string,
+  Set<AgentRuntimeEventHandler>
+>();
+
+export function publishAgentRuntimeEvent<TPayload = AgentEvent | unknown>(
+  eventName: string,
+  payload: TPayload,
+): void {
+  const listeners = localRuntimeEventListeners.get(eventName);
+  if (!listeners?.size) {
+    return;
+  }
+
+  for (const handler of [...listeners]) {
+    handler({ payload });
+  }
+}
+
+function listenLocalAgentRuntimeEvent(
+  eventName: string,
+  handler: AgentRuntimeEventHandler,
+): UnlistenFn {
+  const listeners =
+    localRuntimeEventListeners.get(eventName) ??
+    new Set<AgentRuntimeEventHandler>();
+  listeners.add(handler);
+  localRuntimeEventListeners.set(eventName, listeners);
+
+  return () => {
+    listeners.delete(handler);
+    if (listeners.size === 0) {
+      localRuntimeEventListeners.delete(eventName);
+    }
+  };
+}
+
 export function createAgentRuntimeEventListener({
   listen = safeListen,
 }: AgentRuntimeEventTransportDeps = {}): AgentRuntimeEventListener {
@@ -53,7 +90,20 @@ export function createAgentRuntimeEventListener({
     eventName: string,
     handler: AgentRuntimeEventHandler<TPayload>,
   ): Promise<UnlistenFn> => {
-    return await listen<TPayload>(eventName, handler);
+    const unlistenLocal = listenLocalAgentRuntimeEvent(
+      eventName,
+      handler as AgentRuntimeEventHandler,
+    );
+    try {
+      const unlistenBridge = await listen<TPayload>(eventName, handler);
+      return () => {
+        unlistenLocal();
+        unlistenBridge();
+      };
+    } catch (error) {
+      unlistenLocal();
+      throw error;
+    }
   };
 }
 

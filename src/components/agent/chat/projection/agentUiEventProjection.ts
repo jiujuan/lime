@@ -906,6 +906,72 @@ function compactProjectionFields<T extends Record<string, unknown>>(
   ) as T;
 }
 
+function buildRoutingDecisionPayload(event: AgentEvent): Record<string, unknown> {
+  const eventRecord = readRecord(event);
+  const routingDecision =
+    readRecord(eventRecord?.routing_decision) ??
+    readRecord(eventRecord?.routingDecision);
+
+  if (!routingDecision) {
+    return {};
+  }
+
+  return compactProjectionFields({
+    routingMode: readStringField(routingDecision, [
+      "routingMode",
+      "routing_mode",
+    ]),
+    decisionSource: readStringField(routingDecision, [
+      "decisionSource",
+      "decision_source",
+    ]),
+    decisionReason: readStringField(routingDecision, [
+      "decisionReason",
+      "decision_reason",
+    ]),
+    selectedProvider: readStringField(routingDecision, [
+      "selectedProvider",
+      "selected_provider",
+    ]),
+    selectedModel: readStringField(routingDecision, [
+      "selectedModel",
+      "selected_model",
+    ]),
+    requestedProvider: readStringField(routingDecision, [
+      "requestedProvider",
+      "requested_provider",
+    ]),
+    requestedModel: readStringField(routingDecision, [
+      "requestedModel",
+      "requested_model",
+    ]),
+    candidateCount: readNumberField(routingDecision, [
+      "candidateCount",
+      "candidate_count",
+    ]),
+    estimatedCostClass: readStringField(routingDecision, [
+      "estimatedCostClass",
+      "estimated_cost_class",
+    ]),
+    capabilityGap: readStringField(routingDecision, [
+      "capabilityGap",
+      "capability_gap",
+    ]),
+    fallbackChain: readStringArrayField(routingDecision, [
+      "fallbackChain",
+      "fallback_chain",
+    ]),
+    settingsSource: readStringField(routingDecision, [
+      "settingsSource",
+      "settings_source",
+    ]),
+    serviceModelSlot: readStringField(routingDecision, [
+      "serviceModelSlot",
+      "service_model_slot",
+    ]),
+  });
+}
+
 function resolveTeamTopology(
   facts: Pick<
     AgentUiProjectionEvent,
@@ -3052,22 +3118,7 @@ export function buildAgentUiProjectionEvents(
               event.type === "routing_decision_made" ||
               event.type === "routing_fallback_applied" ||
               event.type === "routing_not_possible"
-                ? {
-                    routingMode: event.routing_decision.routingMode,
-                    decisionSource: event.routing_decision.decisionSource,
-                    decisionReason: event.routing_decision.decisionReason,
-                    selectedProvider: event.routing_decision.selectedProvider,
-                    selectedModel: event.routing_decision.selectedModel,
-                    requestedProvider: event.routing_decision.requestedProvider,
-                    requestedModel: event.routing_decision.requestedModel,
-                    candidateCount: event.routing_decision.candidateCount,
-                    estimatedCostClass:
-                      event.routing_decision.estimatedCostClass,
-                    capabilityGap: event.routing_decision.capabilityGap,
-                    fallbackChain: event.routing_decision.fallbackChain ?? [],
-                    settingsSource: event.routing_decision.settingsSource,
-                    serviceModelSlot: event.routing_decision.serviceModelSlot,
-                  }
+                ? buildRoutingDecisionPayload(event)
                 : {}),
               ...(event.type === "limit_state_updated" ||
               event.type === "single_candidate_only" ||

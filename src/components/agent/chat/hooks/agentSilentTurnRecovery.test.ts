@@ -43,6 +43,37 @@ describe("agentSilentTurnRecovery", () => {
     ).toBe(true);
   });
 
+  it("App Server turn 缺少旧 prompt_text 字段时仍应按近期活动恢复", () => {
+    const requestStartedAt = Date.parse("2026-04-23T10:00:12.000Z");
+    const detail = createDetail({
+      turns: [
+        {
+          id: "turn-app-server-current",
+          thread_id: "thread-1",
+          status: "running",
+          started_at: "2026-04-23T10:00:10.000Z",
+          created_at: "2026-04-23T10:00:10.000Z",
+          updated_at: "2026-04-23T10:00:13.000Z",
+        } as never,
+      ],
+    });
+
+    expect(() =>
+      hasRecoverableSilentTurnActivity(
+        detail,
+        requestStartedAt,
+        "整理今天的国际新闻",
+      ),
+    ).not.toThrow();
+    expect(
+      hasRecoverableSilentTurnActivity(
+        detail,
+        requestStartedAt,
+        "整理今天的国际新闻",
+      ),
+    ).toBe(true);
+  });
+
   it("应识别无精确 prompt 命中但已入队的 queued turn", () => {
     const requestStartedAt = Date.parse("2026-04-23T10:00:12.000Z");
     const detail = createDetail({
@@ -65,6 +96,28 @@ describe("agentSilentTurnRecovery", () => {
         "@配图 三国人物群像",
       ),
     ).toBe(true);
+  });
+
+  it("queued turn 缺少旧 message_text 字段时不应中断恢复判断", () => {
+    const requestStartedAt = Date.parse("2026-04-23T10:00:12.000Z");
+    const detail = createDetail({
+      queued_turns: [
+        {
+          queued_turn_id: "queued-current",
+          created_at: 1_777_025_212,
+          image_count: 0,
+          position: 0,
+        } as never,
+      ],
+    });
+
+    expect(() =>
+      hasRecoverableSilentTurnActivity(
+        detail,
+        requestStartedAt,
+        "整理今天的国际新闻",
+      ),
+    ).not.toThrow();
   });
 
   it("不应把请求开始前的陈旧活动误判为可恢复", () => {

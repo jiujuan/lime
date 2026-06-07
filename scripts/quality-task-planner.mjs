@@ -42,8 +42,8 @@ const FRONTEND_TOOLING_FILES = new Set([
 
 const I18N_CHECK_FILES = new Set([
   "package.json",
-  "scripts/detect-missing-translations.ts",
-  "scripts/detect-missing-translations.test.ts",
+  "scripts/i18n/detect-missing-translations.ts",
+  "scripts/i18n/detect-missing-translations.test.ts",
   "scripts/local-ci.mjs",
   "scripts/quality-task-planner.mjs",
   "scripts/quality-task-selector.mjs",
@@ -53,7 +53,7 @@ const I18N_CHECK_FILES = new Set([
 ]);
 
 const I18N_CHECK_PREFIXES = [
-  "scripts/i18n-",
+  "scripts/i18n/",
   "src/i18n/resources/",
   "src/i18n/__tests__/",
 ];
@@ -68,8 +68,8 @@ const I18N_BUNDLE_STRATEGY_RECOMMENDED_COMMANDS = [
 
 const I18N_BUNDLE_STRATEGY_FILES = new Set([
   "internal/roadmap/i18n/evidence/bundle-strategy-report.json",
-  "scripts/i18n-bundle-report.test.ts",
-  "scripts/i18n-bundle-report.ts",
+  "scripts/i18n/i18n-bundle-report.test.ts",
+  "scripts/i18n/i18n-bundle-report.ts",
   "src/i18n/bundledNamespaceParts.ts",
   "src/i18n/loadNamespace.ts",
 ]);
@@ -107,12 +107,11 @@ const I18N_ROADMAP_READINESS_RECOMMENDED_COMMANDS = [
 ];
 
 const I18N_PATCH_RETIREMENT_FILES = new Set([
-  "scripts/i18n-patch-metrics-report.mjs",
-  "scripts/i18n-patch-retirement-gate.mjs",
+  "scripts/i18n/i18n-patch-metrics-report.mjs",
+  "scripts/i18n/i18n-patch-retirement-gate.mjs",
   "scripts/lib/i18n-patch-metrics-report-core.mjs",
   "scripts/lib/legacy-surface-report-core.mjs",
   "scripts/report-legacy-surfaces.mjs",
-  "scripts/verify-gui-smoke.mjs",
 ]);
 
 const I18N_RELEASE_DOCS_WORKFLOW_FILES = new Set([
@@ -127,10 +126,10 @@ const I18N_RELEASE_DOCS_WORKFLOW_FILES = new Set([
   "internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json",
   "internal/roadmap/i18n/release-docs-translation-scope.json",
   "internal/roadmap/i18n/release-docs-workflow-evaluation.md",
-  "scripts/i18n-docs-locale-build-manifest.test.ts",
-  "scripts/i18n-docs-locale-build-manifest.ts",
-  "scripts/i18n-release-docs-workflow-report.test.ts",
-  "scripts/i18n-release-docs-workflow-report.ts",
+  "scripts/i18n/i18n-docs-locale-build-manifest.test.ts",
+  "scripts/i18n/i18n-docs-locale-build-manifest.ts",
+  "scripts/i18n/i18n-release-docs-workflow-report.test.ts",
+  "scripts/i18n/i18n-release-docs-workflow-report.ts",
 ]);
 
 const I18N_RELEASE_DOCS_WORKFLOW_PREFIXES = [
@@ -149,8 +148,8 @@ const I18N_CHROME_EXTENSION_WORKFLOW_FILES = new Set([
   "extensions/lime-chrome/manifest.json",
   "extensions/lime-chrome/pages/scripts/install-i18n.js",
   "extensions/lime-chrome/pages/scripts/options.js",
-  "scripts/i18n-chrome-extension-workflow-report.test.ts",
-  "scripts/i18n-chrome-extension-workflow-report.ts",
+  "scripts/i18n/i18n-chrome-extension-workflow-report.test.ts",
+  "scripts/i18n/i18n-chrome-extension-workflow-report.ts",
 ]);
 
 const I18N_CHROME_EXTENSION_WORKFLOW_PREFIXES = [
@@ -163,39 +162,40 @@ const I18N_APP_METADATA_WORKFLOW_FILES = new Set([
   "internal/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json",
   "internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json",
   "package.json",
-  "scripts/i18n-app-metadata-locale-build-manifest.test.ts",
-  "scripts/i18n-app-metadata-locale-build-manifest.ts",
-  "scripts/i18n-app-metadata-workflow-report.test.ts",
-  "scripts/i18n-app-metadata-workflow-report.ts",
-  "src-tauri/Cargo.toml",
-  "src-tauri/capabilities/agent-app-shell.json",
-  "src-tauri/tauri.conf.headless.json",
-  "src-tauri/tauri.conf.json",
+  "scripts/i18n/i18n-app-metadata-locale-build-manifest.test.ts",
+  "scripts/i18n/i18n-app-metadata-locale-build-manifest.ts",
+  "scripts/i18n/i18n-app-metadata-workflow-report.test.ts",
+  "scripts/i18n/i18n-app-metadata-workflow-report.ts",
+  "lime-rs/Cargo.toml",
+  "lime-rs/capabilities/agent-app-shell.json",
+  "forge.config.mjs",
 ]);
 
 const I18N_RTL_READINESS_FILES = new Set([
   "internal/roadmap/i18n/evidence/rtl-readiness-inventory.json",
   "internal/roadmap/i18n/rtl-readiness-evaluation.md",
-  "scripts/i18n-rtl-readiness-report.test.ts",
-  "scripts/i18n-rtl-readiness-report.ts",
+  "scripts/i18n/i18n-rtl-readiness-report.test.ts",
+  "scripts/i18n/i18n-rtl-readiness-report.ts",
   "src/i18n/createI18n.ts",
   "src/i18n/locales.ts",
 ]);
 
-const I18N_RTL_SMOKE_FILES = new Set(["scripts/i18n-rtl-playwright-smoke.mjs"]);
+const I18N_RTL_SMOKE_FILES = new Set([
+  "scripts/i18n/i18n-rtl-playwright-smoke.mjs",
+]);
 
 const I18N_P4_READINESS_FILES = new Set([
   "internal/roadmap/i18n/evidence/p4-readiness-report.json",
   "internal/roadmap/i18n/prd.md",
-  "scripts/i18n-p4-readiness-report.test.ts",
-  "scripts/i18n-p4-readiness-report.ts",
+  "scripts/i18n/i18n-p4-readiness-report.test.ts",
+  "scripts/i18n/i18n-p4-readiness-report.ts",
 ]);
 
 const I18N_ROADMAP_READINESS_FILES = new Set([
   "internal/roadmap/i18n/evidence/roadmap-readiness-report.json",
   "internal/roadmap/i18n/prd.md",
-  "scripts/i18n-roadmap-readiness-report.test.ts",
-  "scripts/i18n-roadmap-readiness-report.ts",
+  "scripts/i18n/i18n-roadmap-readiness-report.test.ts",
+  "scripts/i18n/i18n-roadmap-readiness-report.ts",
 ]);
 
 const I18N_RTL_SURFACE_FILES = new Set([
@@ -245,15 +245,19 @@ const I18N_HARDCODED_SCAN_PREFIXES = [
 
 const BRIDGE_FILES = new Set([
   "vite.config.ts",
+  "electron/appServerHost.ts",
+  "electron/hostCommands.ts",
+  "electron/ipcChannels.ts",
+  "electron/main.ts",
+  "electron/preload.ts",
   "scripts/check-command-contracts.mjs",
   "scripts/check-generated-slop-report.mjs",
   "scripts/check-dev-bridge-health.mjs",
-  "scripts/harness-eval-history-record.mjs",
-  "scripts/harness-eval-trend-report.mjs",
+  "scripts/harness/eval-history-record.mjs",
+  "scripts/harness/eval-trend-report.mjs",
   "scripts/report-generated-slop.mjs",
   "scripts/social-workbench-e2e-smoke.mjs",
   "scripts/chrome-bridge-e2e.mjs",
-  "scripts/verify-gui-smoke.mjs",
   "scripts/lib/generated-slop-report-core.mjs",
   "scripts/lib/harness-dashboard-core.mjs",
   "internal/aiprompts/playwright-e2e.md",
@@ -261,8 +265,8 @@ const BRIDGE_FILES = new Set([
 
 const HARNESS_CLEANUP_CONTRACT_FILES = new Set([
   "scripts/check-generated-slop-report.mjs",
-  "scripts/harness-eval-history-record.mjs",
-  "scripts/harness-eval-trend-report.mjs",
+  "scripts/harness/eval-history-record.mjs",
+  "scripts/harness/eval-trend-report.mjs",
   "scripts/report-generated-slop.mjs",
   "scripts/lib/generated-slop-report-core.mjs",
   "scripts/lib/harness-dashboard-core.mjs",
@@ -271,9 +275,8 @@ const HARNESS_CLEANUP_CONTRACT_FILES = new Set([
 const INTEGRITY_FILES = new Set([
   "package.json",
   "packages/lime-cli-npm/package.json",
-  "src-tauri/Cargo.toml",
-  "src-tauri/tauri.conf.json",
-  "src-tauri/tauri.conf.headless.json",
+  "lime-rs/Cargo.toml",
+  "forge.config.mjs",
   "scripts/check-app-version-consistency.mjs",
   "scripts/quality-task-planner.mjs",
   "scripts/quality-task-selector.mjs",
@@ -282,30 +285,34 @@ const INTEGRITY_FILES = new Set([
 const GUI_SMOKE_FILES = new Set([
   "src/App.tsx",
   "src/main.tsx",
-  "src-tauri/tauri.conf.json",
-  "src-tauri/tauri.conf.headless.json",
-  "src-tauri/src/app/runner.rs",
-  "src-tauri/src/commands/workspace_cmd.rs",
-  "src-tauri/src/workspace_support.rs",
+  "electron/appServerHost.ts",
+  "electron/hostCommands.ts",
+  "electron/ipcChannels.ts",
+  "electron/main.ts",
+  "electron/preload.ts",
+  "scripts/electron/build-renderer.mjs",
+  "scripts/electron/build-host.mjs",
   "scripts/check-dev-bridge-health.mjs",
-  "scripts/workspace-ready-smoke.mjs",
-  "scripts/verify-gui-smoke.mjs",
+  "scripts/electron/copy-desktop-assets.mjs",
+  "scripts/electron/smoke.mjs",
+  "scripts/electron/run-dev.mjs",
+  "scripts/electron/run-preview.mjs",
+  "src/lib/electron-host.ts",
+  "tsconfig.electron.json",
 ]);
 
 const GUI_SMOKE_PREFIXES = [
+  "electron/",
   "src/components/",
   "src/contexts/",
   "src/features/",
   "src/hooks/",
   "src/lib/dev-bridge/",
   "src/lib/navigation/",
-  "src/lib/tauri/",
-  "src/lib/tauri-mock/",
+  "src/lib/desktop-host/",
   "src/lib/workspace/",
   "src/pages/",
   "src/stores/",
-  "src-tauri/src/app/",
-  "src-tauri/src/dev_bridge/",
 ];
 
 const KNOWLEDGE_PRODUCT_E2E_FILES = new Set([
@@ -494,9 +501,9 @@ function isI18nCheckChange(file) {
 function isI18nTranslationReviewPackChange(file) {
   return (
     file.startsWith("src/i18n/resources/") ||
-    file === "scripts/detect-missing-translations.ts" ||
-    file === "scripts/i18n-source-locale-export.ts" ||
-    file === "scripts/i18n-translation-pr-pack.ts"
+    file === "scripts/i18n/detect-missing-translations.ts" ||
+    file === "scripts/i18n/i18n-source-locale-export.ts" ||
+    file === "scripts/i18n/i18n-translation-pr-pack.ts"
   );
 }
 
@@ -562,7 +569,8 @@ function isI18nRoadmapReadinessChange(file) {
     isI18nBundleStrategyChange(file) ||
     isI18nPatchRetirementChange(file) ||
     isI18nP4ReadinessChange(file) ||
-    file === "internal/roadmap/i18n/evidence/translation-coverage-report.json" ||
+    file ===
+      "internal/roadmap/i18n/evidence/translation-coverage-report.json" ||
     file === "internal/roadmap/i18n/evidence/source-locale-export.json" ||
     file === "internal/roadmap/i18n/evidence/language-boundary-report.json" ||
     file ===
@@ -572,7 +580,8 @@ function isI18nRoadmapReadinessChange(file) {
     file === "internal/roadmap/i18n/glossary.md" ||
     file === "internal/roadmap/i18n/implementation-progress.md" ||
     file === "internal/roadmap/i18n/language-boundary-evaluation.md" ||
-    file === "internal/roadmap/i18n/response-language-injection-evaluation.md" ||
+    file ===
+      "internal/roadmap/i18n/response-language-injection-evaluation.md" ||
     file === "internal/roadmap/i18n/toolchain-evaluation.md"
   );
 }
@@ -586,13 +595,13 @@ function isI18nHardcodedScanChange(file) {
 }
 
 function isRustChange(file) {
-  return file.startsWith("src-tauri/");
+  return file.startsWith("lime-rs/");
 }
 
 function isBridgeChange(file) {
   return (
     file.startsWith("src/lib/dev-bridge/") ||
-    file.startsWith("src/lib/tauri-mock/") ||
+    file.startsWith("src/lib/desktop-host/") ||
     BRIDGE_FILES.has(file)
   );
 }

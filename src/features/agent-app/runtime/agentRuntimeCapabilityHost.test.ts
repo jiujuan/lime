@@ -111,6 +111,10 @@ describe("AgentRuntimeCapabilityHost", () => {
     const started = await sdk.agent.startTask({
       title: "生成内容场景",
       prompt: "基于项目知识生成内容场景",
+      taskId: "agent-app-requested-task",
+      turnId: "agent-app-requested-turn",
+      eventName:
+        "agent_app_runtime:content-factory-app:agent-app-requested-task",
       taskKind: "content.scenario_planning",
       input: { projectId: "project-1" },
       expectedOutput: { artifactKind: "content_table" },
@@ -118,6 +122,26 @@ describe("AgentRuntimeCapabilityHost", () => {
       humanReview: true,
       providerPreference: "deepseek",
       modelPreference: "deepseek-v4-flash",
+      turnConfig: {
+        provider_config: {
+          provider_id: "deepseek",
+          provider_name: "deepseek",
+          model_name: "deepseek-v4-flash",
+        },
+        reasoning_effort: "high",
+        thinking_enabled: true,
+        approval_policy: "on-request",
+        sandbox_policy: "workspace-write",
+        execution_strategy: "react",
+        web_search: true,
+        search_mode: "required",
+        system_prompt: "保留 Agent App 的 Claw 运行时提示",
+        metadata: {
+          harness: {
+            source: "agent_app",
+          },
+        },
+      },
       queueIfBusy: true,
       skipPreSubmitResume: true,
       runStartHooks: false,
@@ -143,11 +167,29 @@ describe("AgentRuntimeCapabilityHost", () => {
         appId: "content-factory-app",
         entryKey: "dashboard",
         workspaceId: "workspace-1",
+        taskId: "agent-app-requested-task",
+        turnId: "agent-app-requested-turn",
+        eventName:
+          "agent_app_runtime:content-factory-app:agent-app-requested-task",
         taskKind: "content.scenario_planning",
         capabilityHints: ["image_generation"],
         humanReview: true,
         providerPreference: "deepseek",
         modelPreference: "deepseek-v4-flash",
+        turnConfig: expect.objectContaining({
+          provider_config: expect.objectContaining({
+            provider_id: "deepseek",
+            model_name: "deepseek-v4-flash",
+          }),
+          reasoning_effort: "high",
+          thinking_enabled: true,
+          approval_policy: "on-request",
+          sandbox_policy: "workspace-write",
+          execution_strategy: "react",
+          web_search: true,
+          search_mode: "required",
+          system_prompt: "保留 Agent App 的 Claw 运行时提示",
+        }),
         queueIfBusy: true,
         skipPreSubmitResume: true,
         runStartHooks: false,
@@ -331,8 +373,7 @@ describe("AgentRuntimeCapabilityHost", () => {
         .getStorageEntries({ appId: "content-factory-app" })
         .some(
           (entry) =>
-            entry.key ===
-            "agent-runtime/tasks/agent-app-task-persisted",
+            entry.key === "agent-runtime/tasks/agent-app-task-persisted",
         ),
     ).toBe(true);
 
@@ -572,7 +613,10 @@ describe("AgentRuntimeCapabilityHost", () => {
             payload: {
               runtimeEvent: {
                 type: "tool_end",
-                result: { output: "完成", metadata: { command_name: "knowledge-builder" } },
+                result: {
+                  output: "完成",
+                  metadata: { command_name: "knowledge-builder" },
+                },
               },
             },
           },
@@ -654,7 +698,10 @@ describe("AgentRuntimeCapabilityHost", () => {
       model: { provider: "openai", model: "gpt-4.1", label: "openai/gpt-4.1" },
       usage: { inputTokens: 1200, outputTokens: 340, totalTokens: 1540 },
       cost: { estimatedTotalCost: 0.0032, currency: "USD" },
-      skillNames: expect.arrayContaining(["knowledge-builder", "content-reviewer"]),
+      skillNames: expect.arrayContaining([
+        "knowledge-builder",
+        "content-reviewer",
+      ]),
       invokedSkillNames: ["knowledge-builder"],
       streamText: "第一段输出",
       thinkingText: "先分析内容目标",
@@ -663,7 +710,10 @@ describe("AgentRuntimeCapabilityHost", () => {
     expect(snapshot?.runtimeProcess?.timeline).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ kind: "routing", title: "模型路由" }),
-        expect.objectContaining({ kind: "skill", title: "Skill · knowledge-builder" }),
+        expect.objectContaining({
+          kind: "skill",
+          title: "Skill · knowledge-builder",
+        }),
         expect.objectContaining({ kind: "metrics", title: "消耗统计" }),
       ]),
     );
@@ -713,7 +763,7 @@ describe("AgentRuntimeCapabilityHost", () => {
                   blocks: [
                     {
                       content:
-                        "```json\n{\"contentFactoryWorkspacePatch\":{\"kind\":\"content_batch\",\"contentBatch\":{\"count\":20,\"items\":[{\"title\":\"突出\"一擦即净\"的视觉感\"}]}}}\n```",
+                        '```json\n{"contentFactoryWorkspacePatch":{"kind":"content_batch","contentBatch":{"count":20,"items":[{"title":"突出"一擦即净"的视觉感"}]}}}\n```',
                     },
                   ],
                 },
@@ -782,6 +832,116 @@ describe("AgentRuntimeCapabilityHost", () => {
               }),
             }),
           }),
+        }),
+      ]),
+    );
+  });
+
+  it("从 threadRead tool_calls 补投 task:toolCall，保证 Host Bridge 可 replay 工具事实", async () => {
+    const api = {
+      startTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        entryKey: request.entryKey,
+        taskId: "agent-app-task-tool-replay",
+        traceId: "agent-app-trace-tool-replay",
+        taskKind: request.taskKind,
+        sessionId: "session-tool-replay",
+        turnId: "turn-tool-replay",
+        eventName: `agent_app_runtime:${request.appId}:agent-app-task-tool-replay`,
+        status: "accepted" as const,
+        submittedAt: "2026-05-15T00:00:00.000Z",
+      })),
+      getTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        taskId: request.taskId,
+        sessionId: request.sessionId,
+        status: "thread_read_available" as const,
+        taskStatus: "completed",
+        taskEvents: [
+          {
+            id: "task:completed",
+            eventType: "task:completed",
+            status: "completed",
+            message: "任务已完成",
+            occurredAt: "2026-05-15T00:00:02.000Z",
+          },
+        ],
+        threadRead: {
+          session_id: request.sessionId,
+          profile_status: "completed",
+          thread_read: {
+            tool_calls: [
+              {
+                id: "web-fetch-call-1",
+                tool_name: "WebFetch",
+                status: "completed",
+                success: true,
+                output_preview: "fetched https://example.com",
+                turn_id: "turn-tool-replay",
+                timestamp: "2026-05-15T00:00:01.000Z",
+              },
+            ],
+          },
+        },
+      })),
+      cancelTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        taskId: request.taskId,
+        sessionId: request.sessionId,
+        cancelled: true,
+        status: "cancelled" as const,
+      })),
+      submitHostResponse: vi.fn(async (request) => ({
+        appId: request.appId,
+        taskId: request.taskId,
+        status: "submitted" as const,
+      })),
+    };
+    const host = new AgentRuntimeCapabilityHost({
+      delegate: buildDelegateHost(),
+      appId: "content-factory-app",
+      appVersion: "0.3.0",
+      packageHash: "package-hash-1",
+      manifestHash: "manifest-hash-1",
+      workspaceIdResolver: async () => "workspace-1",
+      api,
+      now: () => "2026-05-15T00:00:04.000Z",
+    });
+    const sdk = host.createSdkContext("dashboard");
+    const started = await sdk.agent.startTask({
+      title: "读取资料",
+      taskKind: "content.research",
+      input: { url: "https://example.com" },
+      expectedOutput: { artifactKind: "research_notes" },
+    });
+
+    const snapshot = await sdk.agent.getTask(started.taskId);
+
+    expect(snapshot?.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "task:toolCall",
+          refs: ["tool:web-fetch-call-1"],
+          payload: expect.objectContaining({
+            source: "agent_runtime_tool_call_replay",
+            toolName: "WebFetch",
+            outputPreview: "fetched https://example.com",
+            success: true,
+            runtimeEvent: expect.objectContaining({
+              type: "tool.result",
+              id: "web-fetch-call-1",
+              toolName: "WebFetch",
+            }),
+          }),
+        }),
+      ]),
+    );
+    expect(snapshot?.runtimeProcess?.timeline).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "tool",
+          title: "工具 · WebFetch",
+          message: "工具 WebFetch 已回写：fetched https://example.com",
         }),
       ]),
     );

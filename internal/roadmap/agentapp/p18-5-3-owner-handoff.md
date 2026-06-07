@@ -18,7 +18,7 @@ P18 Lime-side SDK / Host Bridge / typed contract 已有证据；外部 `content-
 | 外部写集 | 外部仓库仍有大量 dirty / untracked，且 `src/ui/host-bridge.js`、`dist/ui/host-bridge.js` 仍未跟踪。 | owner 未稳定前继续只读。 |
 | SDK facade marker | 2026-05-16 09:22 只读复核：`src/ui/host-bridge.js` 仍包含 `pendingRequests / buildMessage / window.parent.postMessage / requestHostBridge / capability:invoke / capability:subscribe / capability:event`；`tests/ui.test.mjs` 仍直接过滤 `message.type === 'capability:invoke'`。 | 外部 package 仍不是 SDK facade consumer；P18.5.3 不可标记完成。 |
 | 09:39 再复核 | 外部 `npm test` 重跑仍为 46 tests passed；Lime-side SDK seam 最小集重跑 3 files / 8 tests passed；外部仓库仍是 36 个 tracked modified、3 个 untracked，且私有 bridge marker 未消失。 | 可以继续交接准备，但还不能默认接管；确认 handoff 后再改最小写集。 |
-| 10:33 机械 gate 复核 | 运行 `node scripts/agent-app-package-handoff-check.mjs --package-dir /Users/coso/Documents/dev/ai/limecloud/content-factory-app`：`status=needs_handoff`，dirty `tracked=36 / untracked=4 / total=40`，`hostBridgePrivate=none`，`uiTestPrivate=none`，SDK marker 为 `createLimeHostBridgeCapabilityInvoker:2 / createLimeCoreCapabilityAdapters:2`，blockers 为 `none`。 | source-side facade blocker 已解除；接管动作从“实现迁移”改为“确认 owner handoff、决定是否跑 verify / 重建 dist”。 |
+| 10:33 机械 gate 复核 | 运行 `node scripts/agent-app/package-handoff-check.mjs --package-dir /Users/coso/Documents/dev/ai/limecloud/content-factory-app`：`status=needs_handoff`，dirty `tracked=36 / untracked=4 / total=40`，`hostBridgePrivate=none`，`uiTestPrivate=none`，SDK marker 为 `createLimeHostBridgeCapabilityInvoker:2 / createLimeCoreCapabilityAdapters:2`，blockers 为 `none`。 | source-side facade blocker 已解除；接管动作从“实现迁移”改为“确认 owner handoff、决定是否跑 verify / 重建 dist”。 |
 | 10:41 不重建 dist 验证 | Lime SDK seam 4 files / 11 tests passed；外部 `npm test` 46 tests passed；外部 `validate:app` passed；`readiness:app` needs-setup。 | 可交接证据增强；仍不能替代 `npm run verify`，因为 verify 会先 build 并重建 `dist/*`。 |
 | 10:45 dist 预审 | 只读解析 `scripts/build.mjs`：build 会先删除 `dist` 再复制 `src/ui`、`src/core`、`src/integrations`、`src/worker/index.mjs`；hash 预审发现 `src/ui/host-bridge.js` 与 `dist/ui/host-bridge.js` 不一致，`src/ui/lime-app-sdk.js` 缺少对应 `dist/ui/lime-app-sdk.js`。 | 说明 source-side facade 尚未进入 dist 产物；最终验收必须由 owner 确认后重建 dist，或明确保留该缺口。 |
 | 10:47 隔离 verify 演练 | 临时副本 `/tmp/limecloud-content-factory-verify.uots6S/content-factory-app` 中运行 `npm run verify` 通过：build、46 tests、validate、readiness 均完成，readiness 仍为预期 `needs-setup`。 | 说明当前源码具备通过 verify 的能力；真实仓库仍需 owner 确认后把 dist 重建纳入实际写集。 |
@@ -29,13 +29,13 @@ P18 Lime-side SDK / Host Bridge / typed contract 已有证据；外部 `content-
 ```bash
 git -C /Users/coso/Documents/dev/ai/limecloud/content-factory-app status --short
 rg -n "pendingRequests|requestHostBridge|buildMessage|postMessage|createLimeHostBridgeCapabilityInvoker|createLimeCoreCapabilityAdapters|capability:invoke|capability:subscribe|capability:event" /Users/coso/Documents/dev/ai/limecloud/content-factory-app/src/ui/host-bridge.js /Users/coso/Documents/dev/ai/limecloud/content-factory-app/tests/ui.test.mjs
-node scripts/agent-app-package-handoff-check.mjs --package-dir /Users/coso/Documents/dev/ai/limecloud/content-factory-app
+node scripts/agent-app/package-handoff-check.mjs --package-dir /Users/coso/Documents/dev/ai/limecloud/content-factory-app
 cd /Users/coso/Documents/dev/ai/limecloud/content-factory-app && nice -n 10 npm test
 ```
 
 如果仍有未知 dirty / untracked，或者 owner 未明确交接，停止，不继续写外部 package。
 
-2026-05-16 09:48 机械 handoff gate 已新增到 Lime repo：`scripts/agent-app-package-handoff-check.mjs` 只读检查外部 package 的 dirty 计数、私有 bridge marker、SDK facade marker、`scripts/build.mjs` 和会重建 `dist/*` 的高风险脚本。2026-05-16 10:33 最新输出为 `status=needs_handoff`：私有 Host Bridge transport marker 已消失，SDK facade marker 已出现；高风险脚本仍命中 `build / verify / e2e:user-flow / e2e:user-flow:fake-model`，因此下一步必须确认 owner handoff，不能直接重建 package artifacts。
+2026-05-16 09:48 机械 handoff gate 已新增到 Lime repo：`scripts/agent-app/package-handoff-check.mjs` 只读检查外部 package 的 dirty 计数、私有 bridge marker、SDK facade marker、`scripts/build.mjs` 和会重建 `dist/*` 的高风险脚本。2026-05-16 10:33 最新输出为 `status=needs_handoff`：私有 Host Bridge transport marker 已消失，SDK facade marker 已出现；高风险脚本仍命中 `build / verify / e2e:user-flow / e2e:user-flow:fake-model`，因此下一步必须确认 owner handoff，不能直接重建 package artifacts。
 
 ## 最小写集
 
@@ -57,7 +57,7 @@ cd /Users/coso/Documents/dev/ai/limecloud/content-factory-app && nice -n 10 npm 
 |---|---|---|
 | SDK facade / Host Bridge contract | `src/features/agent-app/sdk/*`、`src/features/agent-app/index.ts`、`src/features/agent-app/index.test.ts`。 | typed Capability SDK、SDK-only public surface、Host Bridge SDK client 与内容工厂 SDK regression。 |
 | Agent App runtime / readiness / projection 回归 | `src/features/agent-app/runtime/*`、`src/features/agent-app/readiness/*`、`src/features/agent-app/projection/*`、`src/features/agent-app/manifest/*`、`src/features/agent-app/types.ts`、`src/features/agent-app/fixtures/content-factory-app.json`。 | P18 SDK gate 与 package projection / readiness / runtime contract 的配套回归。 |
-| P18 handoff gate | `scripts/agent-app-package-handoff-check.mjs`、`scripts/lib/agent-app-package-handoff-core.mjs`、`scripts/lib/agent-app-package-handoff-core.test.ts`。 | 机械检查外部 package 的私有 bridge marker、SDK marker、高风险脚本与 `src -> dist` 产物漂移。 |
+| P18 handoff gate | `scripts/agent-app/package-handoff-check.mjs`、`scripts/lib/agent-app-package-handoff-core.mjs`、`scripts/lib/agent-app-package-handoff-core.test.ts`。 | 机械检查外部 package 的私有 bridge marker、SDK marker、高风险脚本与 `src -> dist` 产物漂移。 |
 | Roadmap / 审计 | `internal/roadmap/agentapp/p18-completion-audit.md`、`p18-5-content-factory-sdk-regression.md`、`p18-5-3-package-sdk-migration-plan.md`、`p18-5-3-owner-handoff.md` 及相关 P17/P18 roadmap 增量。 | 记录 P18 分阶段证据、owner 边界、验证结果与下一阶段约束。 |
 
 ### 外部 content-factory-app 的 P18.5.3 最小接收写集

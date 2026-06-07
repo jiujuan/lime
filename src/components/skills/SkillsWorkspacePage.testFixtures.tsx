@@ -37,6 +37,13 @@ const hoisted = vi.hoisted(() => ({
     exportLocalSkillPackage: vi.fn(),
     inspectLocalSkillPackage: vi.fn(),
     installLocalSkillPackage: vi.fn(),
+    getOrCreateDefaultProject: vi.fn(),
+    listRegisteredSkills: vi.fn(),
+    listWorkspaceSkillBindings: vi.fn(),
+    getAutomationJobs: vi.fn(),
+    getAutomationRunHistory: vi.fn(),
+    updateAutomationJob: vi.fn(),
+    exportAgentRuntimeEvidencePack: vi.fn(),
     serviceSkills: [] as ServiceSkillHomeItem[],
     officialMarketplaceSkills: [] as SkillMarketplaceItem[],
     officialMarketplaceError: null as string | null,
@@ -48,7 +55,7 @@ const hoisted = vi.hoisted(() => ({
 
 export const mocks = hoisted.mocks;
 
-vi.mock("@tauri-apps/plugin-dialog", () => ({
+vi.mock("@/lib/desktop-host/plugin-dialog", () => ({
   open: (...args: unknown[]) => mocks.openDialog(...args),
   save: (...args: unknown[]) => mocks.saveDialog(...args),
 }));
@@ -138,6 +145,37 @@ vi.mock("@/lib/api/officialSkillMarketplace", () => ({
     mocks.installOfficialMarketplaceSkill(...args),
   getOfficialSkillMarketplaceBundle: (...args: unknown[]) =>
     mocks.getOfficialSkillMarketplaceBundle(...args),
+}));
+
+vi.mock("@/lib/api/project", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/project")>();
+  return {
+    ...actual,
+    getOrCreateDefaultProject: (...args: unknown[]) =>
+      mocks.getOrCreateDefaultProject(...args),
+  };
+});
+
+vi.mock("@/lib/api/capabilityDrafts", () => ({
+  capabilityDraftsApi: {
+    listRegisteredSkills: (...args: unknown[]) =>
+      mocks.listRegisteredSkills(...args),
+  },
+}));
+
+vi.mock("@/lib/api/agentRuntime", () => ({
+  listWorkspaceSkillBindings: (...args: unknown[]) =>
+    mocks.listWorkspaceSkillBindings(...args),
+  exportAgentRuntimeEvidencePack: (...args: unknown[]) =>
+    mocks.exportAgentRuntimeEvidencePack(...args),
+}));
+
+vi.mock("@/lib/api/automation", () => ({
+  getAutomationJobs: (...args: unknown[]) => mocks.getAutomationJobs(...args),
+  getAutomationRunHistory: (...args: unknown[]) =>
+    mocks.getAutomationRunHistory(...args),
+  updateAutomationJob: (...args: unknown[]) =>
+    mocks.updateAutomationJob(...args),
 }));
 
 vi.mock("./SkillScaffoldDialog", () => ({
@@ -589,6 +627,33 @@ export function useSkillsWorkspacePageTestLifecycle() {
           deprecatedFields: [],
         },
       },
+    });
+    mocks.getOrCreateDefaultProject.mockReset();
+    mocks.getOrCreateDefaultProject.mockResolvedValue({
+      id: "default-workspace",
+      name: "默认工作区",
+      workspaceType: "general",
+      rootPath: "/Users/demo/Lime/default-workspace",
+      isDefault: true,
+      createdAt: 0,
+      updatedAt: 0,
+      isFavorite: false,
+      isArchived: false,
+      tags: [],
+    });
+    mocks.listRegisteredSkills.mockReset();
+    mocks.listRegisteredSkills.mockResolvedValue([]);
+    mocks.listWorkspaceSkillBindings.mockReset();
+    mocks.listWorkspaceSkillBindings.mockResolvedValue({ bindings: [] });
+    mocks.getAutomationJobs.mockReset();
+    mocks.getAutomationJobs.mockResolvedValue([]);
+    mocks.getAutomationRunHistory.mockReset();
+    mocks.getAutomationRunHistory.mockResolvedValue([]);
+    mocks.updateAutomationJob.mockReset();
+    mocks.updateAutomationJob.mockResolvedValue({});
+    mocks.exportAgentRuntimeEvidencePack.mockReset();
+    mocks.exportAgentRuntimeEvidencePack.mockResolvedValue({
+      completion_audit_summary: undefined,
     });
     window.localStorage.clear();
   });

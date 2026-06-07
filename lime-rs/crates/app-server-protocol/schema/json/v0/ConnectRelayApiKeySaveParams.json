@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "apiKey": {
+      "type": "string"
+    },
+    "name": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "relayId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "apiKey",
+    "relayId"
+  ],
+  "title": "ConnectRelayApiKeySaveParams",
+  "type": "object"
+}

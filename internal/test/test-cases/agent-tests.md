@@ -346,5 +346,5 @@ async fn create_temp_file(content: &str) -> TempFile {
 ## 运行测试
 
 ```bash
-cd src-tauri && cargo test agent::
+cd lime-rs && cargo test agent::
 ```

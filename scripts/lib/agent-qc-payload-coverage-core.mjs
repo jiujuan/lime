@@ -17,7 +17,10 @@ function p0ScenarioIdsFromManifest(manifest) {
 }
 
 function scenarioIdsFromPayload(payload) {
-  return (payload?.items || []).map(parsePayloadItem).map(scenarioIdOf).filter(Boolean);
+  return (payload?.items || [])
+    .map(parsePayloadItem)
+    .map(scenarioIdOf)
+    .filter(Boolean);
 }
 
 function buildRepairGuard(payload) {
@@ -50,8 +53,12 @@ function buildAgentQcPayloadCoverageReport({
 } = {}) {
   const manifestScenarioIds = p0ScenarioIdsFromManifest(manifest);
   const payloadScenarioIds = scenarioIdsFromPayload(payload);
-  const missingScenarioIds = manifestScenarioIds.filter((id) => !payloadScenarioIds.includes(id));
-  const extraScenarioIds = payloadScenarioIds.filter((id) => !manifestScenarioIds.includes(id));
+  const missingScenarioIds = manifestScenarioIds.filter(
+    (id) => !payloadScenarioIds.includes(id),
+  );
+  const extraScenarioIds = payloadScenarioIds.filter(
+    (id) => !manifestScenarioIds.includes(id),
+  );
   const orderMatchesManifest =
     manifestScenarioIds.length === payloadScenarioIds.length &&
     manifestScenarioIds.every((id, index) => id === payloadScenarioIds[index]);
@@ -67,7 +74,11 @@ function buildAgentQcPayloadCoverageReport({
     payloadValidationPassed &&
     repairGuard.passed;
   const ownerStatus = processOwner?.verdict?.status || "unknown";
-  const status = coveragePassed ? (ownerStatus === "pass" ? "ready" : "blocked") : "fail";
+  const status = coveragePassed
+    ? ownerStatus === "pass"
+      ? "ready"
+      : "blocked"
+    : "fail";
   return {
     schemaVersion: "v1",
     generatedAt,

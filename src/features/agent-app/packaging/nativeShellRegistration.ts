@@ -22,7 +22,7 @@ export interface AgentAppNativeShellRegistrationPlan {
   menu: ReturnType<typeof buildShellChromeDescriptor>["menu"];
   tray: ReturnType<typeof buildShellChromeDescriptor>["tray"];
   closePolicy: ReturnType<typeof buildShellChromeDescriptor>["closePolicy"];
-  tauriConfigPatch: {
+  nativeShellConfigPatch: {
     productName: string;
     identifier?: string;
     plugins: {
@@ -83,6 +83,17 @@ export function buildNativeShellRegistrationPlan(params: {
   const productName = chrome.menu.appName;
   const bundleIdentifier = descriptor.target.macosIdentity?.bundleId;
   const deepLinkSchemes = [chrome.deepLink.scheme];
+  const nativeShellConfigPatch = {
+    productName,
+    identifier: bundleIdentifier,
+    plugins: {
+      "deep-link": {
+        desktop: {
+          schemes: deepLinkSchemes,
+        },
+      },
+    },
+  };
 
   return {
     schemaVersion: 1,
@@ -93,17 +104,7 @@ export function buildNativeShellRegistrationPlan(params: {
     menu: chrome.menu,
     tray: chrome.tray,
     closePolicy: chrome.closePolicy,
-    tauriConfigPatch: {
-      productName,
-      identifier: bundleIdentifier,
-      plugins: {
-        "deep-link": {
-          desktop: {
-            schemes: deepLinkSchemes,
-          },
-        },
-      },
-    },
+    nativeShellConfigPatch,
     runtimeEnv: {
       LIME_AGENT_APP_STANDALONE_APP_ID: descriptor.shell.appId,
       LIME_AGENT_APP_STANDALONE_ENTRY_KEY: chrome.deepLink.openEntryKey,

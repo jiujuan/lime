@@ -28,11 +28,11 @@ vi.mock("@/lib/api/session-files", () => ({
   openFileWithDefaultApp: mockOpenSessionFileWithDefaultApp,
 }));
 
-vi.mock("@tauri-apps/plugin-dialog", () => ({
+vi.mock("@/lib/desktop-host/plugin-dialog", () => ({
   open: mockOpenDialog,
 }));
 
-vi.mock("@tauri-apps/plugin-shell", () => ({
+vi.mock("@/lib/desktop-host/plugin-shell", () => ({
   open: vi.fn().mockResolvedValue(undefined),
 }));
 

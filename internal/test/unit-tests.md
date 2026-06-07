@@ -16,7 +16,7 @@
 
 ```bash
 # 运行所有测试
-cd src-tauri && cargo test
+cd lime-rs && cargo test
 
 # 运行特定模块测试
 cargo test converter::
@@ -29,7 +29,7 @@ cargo test -- --nocapture
 ### 测试文件位置
 
 ```
-src-tauri/src/
+lime-rs/src/
 ├── converter/
 │   ├── mod.rs
 │   └── tests.rs          # 转换器测试
@@ -116,7 +116,7 @@ src/
 ```
 *.unit.test.ts        # 纯单元：View Model / projection / selector / parser / formatter
 *.component.test.tsx  # React/jsdom 组件接线
-*.contract.test.ts    # DevBridge / Tauri mock / command catalog 契约
+*.contract.test.ts    # DevBridge / desktop-host mock / App Server / command catalog 契约
 *.integration.test.ts # 文件系统、子进程、本地 server、多模块流程
 *.e2e.test.ts         # Vitest 内显式 E2E / smoke 测试
 *.live.test.ts        # 真实 Provider / 真实联网，默认跳过
@@ -124,7 +124,7 @@ src/
 
 `*.live.test.ts` 归入 E2E 层，但默认不运行。确需运行时必须显式设置 `LIME_ALLOW_LIVE_PROVIDER_SMOKE=1` 或 `LIME_REAL_API_TEST=1`。
 
-显式后缀不能降低风险层级。`*.unit.test.*` 只有在测试不触碰 React/jsdom、DevBridge/Tauri、文件系统、子进程、网络、Playwright 等外部边界时才会进入 `test:unit`；一旦出现这些边界，分类器会自动提升到 component / contract / integration / e2e。
+显式后缀不能降低风险层级。`*.unit.test.*` 只有在测试不触碰 React/jsdom、DevBridge、Desktop Host、App Server、文件系统、子进程、网络、Playwright 等外部边界时才会进入 `test:unit`；一旦出现这些边界，分类器会自动提升到 component / contract / integration / e2e。
 
 `npm run test:layers:stats` 还会输出 `Component unit-migration candidates`，用于提示哪些 component 测试因用例过多、文件过大或出现筛选 / 分组 / formatter / request builder / runtime metadata / reducer / selector 等信号，适合后续继续抽 VM。该统计是治理提示，不是失败门禁。
 
@@ -133,7 +133,7 @@ src/
 新增前端代码时默认按这个顺序落测试：
 
 1. 先识别筛选、分组、格式化、运行时参数拼装、状态机、reducer、request builder 等可纯化逻辑，并抽到 VM / projection / selector / helper。
-2. 给这些纯逻辑补 `*.unit.test.ts`，不要依赖 React render、jsdom、真实 timer、DevBridge/Tauri、文件系统或网络。
+2. 给这些纯逻辑补 `*.unit.test.ts`，不要依赖 React render、jsdom、真实 timer、DevBridge、Desktop Host、App Server、文件系统或网络。
 3. 组件测试只覆盖关键文案/状态是否渲染、用户事件是否触发正确 action、VM 输出是否接上 UI。
 4. 核心用户流程和 GUI 壳 / Workspace 主路径交给 `verify:gui-smoke` 或 E2E，不在重组件测试里重复铺满所有业务分支。
 5. 如果某个分支暂时不能抽纯测试，必须在对应路线图或执行计划记录原因、风险层级和后续迁移条件，避免后续新增代码继续沿用临时组件测试模式。

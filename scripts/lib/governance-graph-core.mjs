@@ -21,7 +21,7 @@ export function isFrontendCodePath(relativePath) {
 }
 
 export function isRustCodePath(relativePath) {
-  return relativePath.startsWith("src-tauri/src/") && relativePath.endsWith(".rs");
+  return relativePath.startsWith("lime-rs/src/") && relativePath.endsWith(".rs");
 }
 
 export function isTestLikePath(relativePath) {
@@ -143,11 +143,11 @@ export function resolveMatchingGovernanceRule(relativePath, rules) {
 export function buildRustModulePathFromFile(relativePath) {
   const normalizedPath = normalizePath(relativePath);
 
-  if (!normalizedPath.startsWith("src-tauri/src/") || !normalizedPath.endsWith(".rs")) {
+  if (!normalizedPath.startsWith("lime-rs/src/") || !normalizedPath.endsWith(".rs")) {
     return null;
   }
 
-  const withoutRoot = normalizedPath.slice("src-tauri/src/".length);
+  const withoutRoot = normalizedPath.slice("lime-rs/src/".length);
 
   if (withoutRoot === "main.rs" || withoutRoot === "lib.rs") {
     return "";

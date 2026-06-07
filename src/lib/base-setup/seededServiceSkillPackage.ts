@@ -539,7 +539,7 @@ const SEEDED_SERVICE_SKILL_PACKAGE: BaseSetupPackage = {
         Lime_agent_knowledge_profile: "document-first",
         Lime_agent_knowledge_runtime_mode: "persona",
         Lime_skill_bundle_path:
-          "src-tauri/resources/default-skills/personal-ip-knowledge-builder",
+          "lime-rs/resources/default-skills/personal-ip-knowledge-builder",
         Lime_skill_bundle_version: "1.0.0",
       },
       skillBundleResourceSummary: {
@@ -603,7 +603,7 @@ const SEEDED_SERVICE_SKILL_PACKAGE: BaseSetupPackage = {
         Lime_agent_knowledge_profile: "document-first",
         Lime_agent_knowledge_runtime_mode: "persona",
         Lime_skill_bundle_path:
-          "src-tauri/resources/default-skills/brand-persona-knowledge-builder",
+          "lime-rs/resources/default-skills/brand-persona-knowledge-builder",
         Lime_skill_bundle_version: "1.0.0",
       },
       skillBundleResourceSummary: {
@@ -661,7 +661,7 @@ const SEEDED_SERVICE_SKILL_PACKAGE: BaseSetupPackage = {
         Lime_agent_knowledge_profile: "document-first",
         Lime_agent_knowledge_runtime_mode: "data",
         Lime_skill_bundle_path:
-          "src-tauri/resources/default-skills/content-operations-knowledge-builder",
+          "lime-rs/resources/default-skills/content-operations-knowledge-builder",
         Lime_skill_bundle_version: "1.0.0",
       },
       skillBundleResourceSummary: {
@@ -720,7 +720,7 @@ const SEEDED_SERVICE_SKILL_PACKAGE: BaseSetupPackage = {
         Lime_agent_knowledge_profile: "document-first",
         Lime_agent_knowledge_runtime_mode: "data",
         Lime_skill_bundle_path:
-          "src-tauri/resources/default-skills/private-domain-operations-knowledge-builder",
+          "lime-rs/resources/default-skills/private-domain-operations-knowledge-builder",
         Lime_skill_bundle_version: "1.0.0",
       },
       skillBundleResourceSummary: {
@@ -778,7 +778,7 @@ const SEEDED_SERVICE_SKILL_PACKAGE: BaseSetupPackage = {
         Lime_agent_knowledge_profile: "document-first",
         Lime_agent_knowledge_runtime_mode: "data",
         Lime_skill_bundle_path:
-          "src-tauri/resources/default-skills/live-commerce-operations-knowledge-builder",
+          "lime-rs/resources/default-skills/live-commerce-operations-knowledge-builder",
         Lime_skill_bundle_version: "1.0.0",
       },
       skillBundleResourceSummary: {
@@ -842,7 +842,7 @@ const SEEDED_SERVICE_SKILL_PACKAGE: BaseSetupPackage = {
         Lime_agent_knowledge_profile: "document-first",
         Lime_agent_knowledge_runtime_mode: "data",
         Lime_skill_bundle_path:
-          "src-tauri/resources/default-skills/campaign-operations-knowledge-builder",
+          "lime-rs/resources/default-skills/campaign-operations-knowledge-builder",
         Lime_skill_bundle_version: "1.0.0",
       },
       skillBundleResourceSummary: {
@@ -905,7 +905,7 @@ const SEEDED_SERVICE_SKILL_PACKAGE: BaseSetupPackage = {
         Lime_agent_knowledge_profile: "document-first",
         Lime_agent_knowledge_runtime_mode: "data",
         Lime_skill_bundle_path:
-          "src-tauri/resources/default-skills/brand-product-knowledge-builder",
+          "lime-rs/resources/default-skills/brand-product-knowledge-builder",
         Lime_skill_bundle_version: "1.0.0",
       },
       skillBundleResourceSummary: {
@@ -968,7 +968,7 @@ const SEEDED_SERVICE_SKILL_PACKAGE: BaseSetupPackage = {
         Lime_agent_knowledge_profile: "document-first",
         Lime_agent_knowledge_runtime_mode: "data",
         Lime_skill_bundle_path:
-          "src-tauri/resources/default-skills/organization-knowhow-knowledge-builder",
+          "lime-rs/resources/default-skills/organization-knowhow-knowledge-builder",
         Lime_skill_bundle_version: "1.0.0",
       },
       skillBundleResourceSummary: {
@@ -1031,7 +1031,7 @@ const SEEDED_SERVICE_SKILL_PACKAGE: BaseSetupPackage = {
         Lime_agent_knowledge_profile: "document-first",
         Lime_agent_knowledge_runtime_mode: "data",
         Lime_skill_bundle_path:
-          "src-tauri/resources/default-skills/growth-strategy-knowledge-builder",
+          "lime-rs/resources/default-skills/growth-strategy-knowledge-builder",
         Lime_skill_bundle_version: "1.0.0",
       },
       skillBundleResourceSummary: {

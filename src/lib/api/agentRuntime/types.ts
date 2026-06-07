@@ -330,6 +330,7 @@ export interface AgentRuntimeThreadReadModel {
   incidents?: AgentRuntimeIncidentView[];
   queued_turns?: QueuedTurnSnapshot[];
   tool_calls?: AgentRuntimeThreadToolCallView[];
+  artifacts?: Record<string, unknown>[];
   model_routing?: Record<string, unknown> | null;
   evidence_summary?: AgentRuntimeThreadEvidenceSummary | null;
   telemetry_summary?: AgentRuntimeThreadTelemetrySummary | null;
@@ -1195,11 +1196,13 @@ export interface AgentRuntimeSubmitTurnRequest {
 
 export interface AgentRuntimeCreateSessionOptions {
   runStartHooks?: boolean;
+  metadata?: Record<string, unknown>;
 }
 
 export interface AgentRuntimeInterruptTurnRequest {
   session_id: string;
   turn_id?: string;
+  event_name?: string;
 }
 
 export interface AgentRuntimeCompactSessionRequest {

@@ -17,7 +17,10 @@ export interface ArtifactAutoPreviewResult {
 interface UseArtifactAutoPreviewSyncOptions {
   enabled: boolean;
   artifact: Artifact | null;
-  loadPreview: (path: string) => Promise<ArtifactAutoPreviewResult>;
+  loadPreview: (
+    path: string,
+    artifact: Artifact,
+  ) => Promise<ArtifactAutoPreviewResult>;
   onSyncArtifact: (artifact: Artifact) => void;
 }
 
@@ -196,7 +199,7 @@ export function useArtifactAutoPreviewSync({
 
       inFlight = true;
       try {
-        const preview = await loadPreview(artifactPath);
+        const preview = await loadPreview(artifactPath, artifact);
         if (disposed) {
           return;
         }

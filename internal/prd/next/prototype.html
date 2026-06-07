@@ -1,0 +1,1143 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lime Next Runtime 原型</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --surface: #ffffff;
+      --surface-soft: #f8fafc;
+      --surface-tint: #eefaf7;
+      --border: #dbe4ee;
+      --border-strong: #c7d3e1;
+      --text: #182334;
+      --muted: #66758a;
+      --faint: #8a98aa;
+      --navy: #13263f;
+      --navy-2: #203a5c;
+      --teal: #0f766e;
+      --teal-soft: #dff7f1;
+      --sky: #0f6ea8;
+      --sky-soft: #e4f2fb;
+      --emerald: #15803d;
+      --emerald-soft: #e5f7eb;
+      --amber: #a16207;
+      --amber-soft: #fff4d6;
+      --rose: #be123c;
+      --rose-soft: #ffe4ec;
+      --shadow: 0 16px 40px rgba(18, 35, 59, 0.08);
+      --radius: 14px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        linear-gradient(180deg, #f4fbf9 0%, #f6f8fb 34%, #f8fafc 100%);
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 248px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--border);
+      background: #f9fbfc;
+      padding: 18px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 10px 12px;
+    }
+
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      background: var(--navy);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+    }
+
+    .brand-text strong {
+      display: block;
+      font-size: 14px;
+      line-height: 1.2;
+    }
+
+    .brand-text span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .nav {
+      display: grid;
+      gap: 6px;
+    }
+
+    .nav button {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      text-align: left;
+      padding: 10px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav button span:first-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .nav button:hover {
+      background: #f0f5f8;
+      color: var(--text);
+    }
+
+    .nav button.active {
+      background: var(--teal-soft);
+      color: #075f58;
+      font-weight: 700;
+    }
+
+    .nav-index {
+      color: var(--faint);
+      font-size: 12px;
+    }
+
+    .sidebar-note {
+      margin-top: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .main {
+      min-width: 0;
+      padding: 22px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .eyebrow {
+      color: var(--teal);
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 26px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 8px 0 0;
+      max-width: 840px;
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 14px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 9px 12px;
+      cursor: pointer;
+      min-height: 36px;
+    }
+
+    .btn.primary {
+      background: var(--navy);
+      border-color: var(--navy);
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .status-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .metric {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      min-height: 86px;
+      box-shadow: 0 8px 24px rgba(18, 35, 59, 0.04);
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 22px;
+      margin-bottom: 6px;
+    }
+
+    .metric p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .panel {
+      display: none;
+      background: rgba(255,255,255,0.86);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    .panel-header {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .panel-header h2 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    .panel-header p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .tag-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 5px 8px;
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--surface-soft);
+      border: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .tag.good {
+      color: var(--emerald);
+      background: var(--emerald-soft);
+      border-color: #bfe9cd;
+    }
+
+    .tag.warn {
+      color: var(--amber);
+      background: var(--amber-soft);
+      border-color: #f2d98e;
+    }
+
+    .tag.info {
+      color: var(--sky);
+      background: var(--sky-soft);
+      border-color: #bddff4;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      flex: 0 0 auto;
+    }
+
+    .content {
+      padding: 18px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .grid.cols-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .grid.cols-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      min-width: 0;
+    }
+
+    .section h3 {
+      margin: 0 0 10px;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    .section p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 13px;
+    }
+
+    .map {
+      display: grid;
+      grid-template-columns: minmax(180px, 0.8fr) minmax(220px, 1fr) minmax(180px, 0.8fr);
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .lane {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      background: var(--surface-soft);
+    }
+
+    .lane h3 {
+      margin: 0 0 10px;
+      font-size: 13px;
+    }
+
+    .pill-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .pill {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: 10px;
+      padding: 9px 10px;
+      font-size: 13px;
+      color: var(--text);
+      min-height: 38px;
+    }
+
+    .runtime-core {
+      background: var(--navy);
+      color: #fff;
+      border-color: var(--navy);
+    }
+
+    .runtime-core p {
+      color: rgba(255,255,255,0.76);
+    }
+
+    .timeline {
+      display: grid;
+      gap: 10px;
+    }
+
+    .event {
+      display: grid;
+      grid-template-columns: 86px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: start;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 11px;
+      background: var(--surface);
+    }
+
+    .event-time {
+      color: var(--faint);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .event strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
+    .event p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .workspace-layout {
+      display: grid;
+      grid-template-columns: 190px minmax(0, 1fr) 260px;
+      gap: 14px;
+    }
+
+    .mini-nav {
+      display: grid;
+      gap: 7px;
+    }
+
+    .mini-nav div {
+      padding: 9px 10px;
+      border-radius: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .mini-nav div.active {
+      color: #075f58;
+      background: var(--teal-soft);
+      font-weight: 700;
+    }
+
+    .inspector {
+      display: grid;
+      gap: 10px;
+    }
+
+    .kv {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      border-bottom: 1px solid #edf1f5;
+      padding: 8px 0;
+      font-size: 12px;
+    }
+
+    .kv span:first-child {
+      color: var(--muted);
+    }
+
+    .kv span:last-child {
+      color: var(--text);
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .server-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .server-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 12px;
+      min-height: 210px;
+    }
+
+    .server-card h3 {
+      margin: 0 0 10px;
+      font-size: 14px;
+    }
+
+    .queue-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      padding: 9px 0;
+      border-top: 1px solid #edf1f5;
+      font-size: 12px;
+    }
+
+    .queue-row:first-of-type {
+      border-top: 0;
+    }
+
+    .phone-area {
+      display: grid;
+      grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .phone {
+      width: min(100%, 330px);
+      min-height: 590px;
+      border: 10px solid #172033;
+      border-radius: 34px;
+      background: #f8fafc;
+      box-shadow: 0 20px 44px rgba(15, 23, 42, 0.18);
+      overflow: hidden;
+      justify-self: center;
+    }
+
+    .phone-head {
+      background: #ffffff;
+      border-bottom: 1px solid var(--border);
+      padding: 18px 18px 12px;
+    }
+
+    .phone-head strong {
+      display: block;
+      font-size: 16px;
+    }
+
+    .phone-head span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .phone-body {
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .mobile-action {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+    }
+
+    .mobile-action h3 {
+      margin: 0 0 8px;
+      font-size: 15px;
+    }
+
+    .mobile-action p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .phone-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .danger {
+      color: var(--rose);
+      background: var(--rose-soft);
+      border-color: #fecdd8;
+    }
+
+    .safe {
+      color: var(--emerald);
+      background: var(--emerald-soft);
+      border-color: #bbf7d0;
+    }
+
+    .wechat-top {
+      background: #111827;
+      color: #fff;
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+
+    .boundary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(170px, 1fr));
+      gap: 14px;
+      align-items: stretch;
+    }
+
+    .port-stack {
+      display: grid;
+      gap: 8px;
+    }
+
+    .port {
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 12px;
+      text-align: center;
+      font-weight: 700;
+    }
+
+    .forbidden {
+      border: 1px solid #fecdd8;
+      background: var(--rose-soft);
+      color: var(--rose);
+      border-radius: var(--radius);
+      padding: 12px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 1120px) {
+      .status-strip,
+      .grid.cols-3,
+      .server-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .workspace-layout,
+      .map,
+      .boundary {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: static;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .nav {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .topbar {
+        display: block;
+      }
+
+      .actions {
+        margin-top: 12px;
+        justify-content: flex-start;
+      }
+
+      .status-strip,
+      .grid.cols-2,
+      .grid.cols-3,
+      .server-grid,
+      .phone-area {
+        grid-template-columns: 1fr;
+      }
+
+      .event {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">L</div>
+        <div class="brand-text">
+          <strong>Lime Next</strong>
+          <span>Runtime 原型</span>
+        </div>
+      </div>
+      <nav class="nav" aria-label="原型视图">
+        <button class="active" data-target="overview"><span>总览</span><span class="nav-index">01</span></button>
+        <button data-target="claw"><span>Claw 工作台</span><span class="nav-index">02</span></button>
+        <button data-target="server"><span>Sandbox 控制台</span><span class="nav-index">03</span></button>
+        <button data-target="mobile"><span>移动审批</span><span class="nav-index">04</span></button>
+        <button data-target="wechat"><span>微信轻入口</span><span class="nav-index">05</span></button>
+        <button data-target="infra"><span>Sandbox 与基础设施</span><span class="nav-index">06</span></button>
+      </nav>
+      <div class="sidebar-note">
+        原型只展示 Runtime facts、projection、sandbox 和 adapters 边界。它不是生产 UI，也不定义第二套 runtime。
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">NORTH STAR PROTOTYPE</div>
+          <h1>Lime Next Runtime Cockpit</h1>
+          <p class="subtitle">一条 App Server / RuntimeCore 主链，覆盖 Claw 桌面工作台、Agent Apps、服务端长任务、移动 App 和微信小程序。客户端与服务端共享语义和 sandbox 合同，不共享基础设施实现。</p>
+        </div>
+        <div class="actions">
+          <button class="btn">查看 PRD</button>
+          <button class="btn primary">进入下一刀</button>
+        </div>
+      </header>
+
+      <section class="status-strip" aria-label="当前状态">
+        <div class="metric">
+          <span>后端事实源</span>
+          <strong>1</strong>
+          <p>App Server JSON-RPC -> RuntimeCore -> ExecutionBackend。</p>
+        </div>
+        <div class="metric">
+          <span>端侧入口</span>
+          <strong>5</strong>
+          <p>Claw、Agent Apps、Server Console、Mobile、小程序。</p>
+        </div>
+        <div class="metric">
+          <span>基础设施端口</span>
+          <strong>7</strong>
+          <p>Cache、Workspace、DB、Object、Queue、Secret、OTel。</p>
+        </div>
+        <div class="metric">
+          <span>执行边界</span>
+          <strong>1</strong>
+          <p>PermissionProfile -> SandboxManager -> Approval / Audit。</p>
+        </div>
+        <div class="metric">
+          <span>下一刀</span>
+          <strong>N6</strong>
+          <p>沉淀 Sandbox / Permissions PRD，再推进远程入口。</p>
+        </div>
+      </section>
+
+      <section class="panel active" id="overview">
+        <div class="panel-header">
+          <div>
+            <h2>总览：一条 Runtime，多端入口</h2>
+            <p>所有产品壳消费同一组 Runtime facts，执行先经过 permission profile 和 sandbox manager，差异再发生在 shell adapter、gateway 和 infrastructure adapter。</p>
+          </div>
+          <div class="tag-row">
+            <span class="tag good"><span class="dot"></span>current target</span>
+            <span class="tag info"><span class="dot"></span>projection first</span>
+          </div>
+        </div>
+        <div class="content grid">
+          <div class="map">
+            <div class="lane">
+              <h3>产品入口</h3>
+              <div class="pill-list">
+                <div class="pill">Claw / Lime Desktop</div>
+                <div class="pill">Agent Apps</div>
+                <div class="pill">content-studio</div>
+                <div class="pill">Mobile App</div>
+                <div class="pill">微信小程序</div>
+              </div>
+            </div>
+            <div class="lane runtime-core">
+              <h3>RuntimeCore Facts</h3>
+              <p>Session / Turn / Event / Action / Artifact / Evidence 是唯一可共享事实。UI 只消费 projection，不猜测终态。</p>
+              <div class="pill-list" style="margin-top:12px;">
+                <div class="pill">agentSession/turn/start</div>
+                <div class="pill">agentSession/event</div>
+                <div class="pill">artifact/read</div>
+                <div class="pill">evidence/export</div>
+              </div>
+            </div>
+            <div class="lane">
+              <h3>执行边界与基础设施</h3>
+              <div class="pill-list">
+                <div class="pill">PermissionProfile / SandboxManager</div>
+                <div class="pill">Client Sandbox / Server Worker Sandbox</div>
+                <div class="pill">Client: FS / SQLite / Keychain</div>
+                <div class="pill">Server: Redis / Postgres / S3</div>
+                <div class="pill">Worker carrier: Docker / Kubernetes</div>
+                <div class="pill">Secret Manager / OTel</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid cols-3">
+            <div class="section">
+              <h3>近期主线</h3>
+              <p>先完成本地 App Server current 主链和 Claw streaming GUI E2E，再推进 projection 标准化。</p>
+            </div>
+            <div class="section">
+              <h3>远期扩展</h3>
+              <p>Remote Runtime Gateway 承接移动 App、小程序、消息渠道和服务端长任务入口，并为每个 turn 选择 sandbox profile。</p>
+            </div>
+            <div class="section">
+              <h3>禁止路径</h3>
+              <p>不复制 Claw shell，不绕过 SandboxManager，不让 RuntimeCore 直接依赖 Redis / S3 / K8s，不用 mock 证明生产完成。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="claw">
+        <div class="panel-header">
+          <div>
+            <h2>Claw 工作台：旗舰体验不退化</h2>
+            <p>桌面端仍保留完整工作台，但 Agent 执行事实从 App Server current 主链投影而来。</p>
+          </div>
+          <div class="tag-row">
+            <span class="tag good"><span class="dot"></span>streaming</span>
+            <span class="tag warn"><span class="dot"></span>等待审批</span>
+          </div>
+        </div>
+        <div class="content workspace-layout">
+          <div class="section">
+            <h3>Lime</h3>
+            <div class="mini-nav">
+              <div>搜索任务</div>
+              <div class="active">Claw 工作台</div>
+              <div>Agent Apps</div>
+              <div>服务端任务</div>
+              <div>权限边界</div>
+              <div>产物与证据</div>
+              <div>基础设施</div>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>Runtime Timeline</h3>
+            <div class="timeline">
+              <div class="event">
+                <div class="event-time">09:41:12</div>
+                <div>
+                  <strong>用户发起 turn</strong>
+                  <p>agentSession/turn/start · workspace: current · capability: content_review</p>
+                </div>
+                <span class="tag info">accepted</span>
+              </div>
+              <div class="event">
+                <div class="event-time">09:41:18</div>
+                <div>
+                  <strong>Sandboxed 工具执行</strong>
+                  <p>profile: workspace · FS write: workspace only · network: restricted。</p>
+                </div>
+                <span class="tag good">running</span>
+              </div>
+              <div class="event">
+                <div class="event-time">09:41:24</div>
+                <div>
+                  <strong>等待确认</strong>
+                  <p>需要用户确认是否将 publish-plan.md 写回工作区。</p>
+                </div>
+                <span class="tag warn">action</span>
+              </div>
+              <div class="event">
+                <div class="event-time">09:41:30</div>
+                <div>
+                  <strong>产物预览</strong>
+                  <p>artifact ref: artifact://publish-plan · evidence summary 已可导出。</p>
+                </div>
+                <span class="tag info">preview</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>运行详情</h3>
+            <div class="inspector">
+              <div class="kv"><span>事实源</span><span>RuntimeCore</span></div>
+              <div class="kv"><span>Projection</span><span>AgentRuntimeViewModel</span></div>
+              <div class="kv"><span>Permission</span><span>:workspace</span></div>
+              <div class="kv"><span>Sandbox</span><span>local OS backend</span></div>
+              <div class="kv"><span>Action</span><span>write_workspace</span></div>
+              <div class="kv"><span>Artifact</span><span>preview only</span></div>
+              <div class="kv"><span>Evidence</span><span>export ready</span></div>
+              <div class="kv"><span>Legacy</span><span>not used</span></div>
+            </div>
+            <div style="display:grid; gap:8px; margin-top:14px;">
+              <button class="btn primary">批准写入</button>
+              <button class="btn">导出证据包</button>
+              <button class="btn">取消当前运行</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="server">
+        <div class="panel-header">
+          <div>
+            <h2>Sandbox 控制台：权限边界与长任务</h2>
+            <p>Server Mode 复用 Runtime facts，通过 Remote Gateway、Sandbox Profile、Approval、Worker Carrier 和 Event Store 管理长任务。</p>
+          </div>
+          <div class="tag-row">
+            <span class="tag good"><span class="dot"></span>healthy</span>
+            <span class="tag info"><span class="dot"></span>tenant scoped</span>
+          </div>
+        </div>
+        <div class="content">
+          <div class="server-grid">
+            <div class="server-card">
+              <h3>Gateway</h3>
+              <div class="queue-row"><span>Auth</span><strong>pass</strong></div>
+              <div class="queue-row"><span>Tenant</span><strong>default</strong></div>
+              <div class="queue-row"><span>Capability</span><strong>content_review</strong></div>
+              <div class="queue-row"><span>Transport</span><strong>SSE / Push</strong></div>
+            </div>
+            <div class="server-card">
+              <h3>Sandbox Profile</h3>
+              <div class="queue-row"><span>Profile</span><strong>tenant-workspace</strong></div>
+              <div class="queue-row"><span>Filesystem</span><strong>deny-read wins</strong></div>
+              <div class="queue-row"><span>Network</span><strong>allowlist</strong></div>
+              <div class="queue-row"><span>Secret</span><strong>scoped refs</strong></div>
+            </div>
+            <div class="server-card">
+              <h3>Approval / Exec</h3>
+              <div class="queue-row"><span>Action</span><strong>pending</strong></div>
+              <div class="queue-row"><span>Exec policy</span><strong>prompt prefix</strong></div>
+              <div class="queue-row"><span>Escalation</span><strong>scoped only</strong></div>
+              <div class="queue-row"><span>Decision log</span><strong>audited</strong></div>
+            </div>
+            <div class="server-card">
+              <h3>Worker Carrier</h3>
+              <div class="queue-row"><span>Queue</span><strong>running</strong></div>
+              <div class="queue-row"><span>Carrier</span><strong>K8s job</strong></div>
+              <div class="queue-row"><span>Backend</span><strong>ExecutionBackend</strong></div>
+              <div class="queue-row"><span>Audit</span><strong>OTel / Event</strong></div>
+            </div>
+          </div>
+          <div class="grid cols-2" style="margin-top:14px;">
+            <div class="section">
+              <h3>服务端 adapters</h3>
+              <p>Redis、Postgres、S3、Queue、Secret Manager 和 OpenTelemetry 只在 server-side adapters 中出现；Docker / Kubernetes 只作为 worker carrier。</p>
+            </div>
+            <div class="section">
+              <h3>运行边界</h3>
+              <p>Gateway 可以映射 REST / SSE / WebSocket / Push，但每个 turn 必须携带 sandbox profile，且不能发明第二套 session / turn / event facts。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="mobile">
+        <div class="panel-header">
+          <div>
+            <h2>移动审批：轻量查看与确认</h2>
+            <p>移动端只消费 Remote Gateway projection，不持有 secret，不运行完整 ToolRuntime。</p>
+          </div>
+          <span class="tag warn"><span class="dot"></span>action pending</span>
+        </div>
+        <div class="content phone-area">
+          <div class="phone">
+            <div class="phone-head">
+              <strong>Lime Mobile</strong>
+              <span>内容发布检查 · 等待确认</span>
+            </div>
+            <div class="phone-body">
+              <div class="mobile-action">
+                <h3>是否写入工作区？</h3>
+                <p>Agent 已生成发布清单，需要你确认是否将 artifact 写入当前项目。</p>
+                <div class="phone-buttons">
+                  <button class="btn danger">拒绝</button>
+                  <button class="btn safe">批准</button>
+                </div>
+              </div>
+              <div class="mobile-action">
+                <h3>产物预览</h3>
+                <p>publish-plan.md · 仅展示安全摘要和 preview，不暴露对象存储路径。</p>
+              </div>
+              <div class="mobile-action">
+                <h3>运行状态</h3>
+                <p>turn running · 4 events · evidence summary ready。</p>
+              </div>
+            </div>
+          </div>
+          <div class="grid">
+            <div class="section">
+              <h3>移动端只做什么</h3>
+              <p>查看状态、响应 action、补充轻量输入、打开 artifact preview、接收任务通知。</p>
+            </div>
+            <div class="section">
+              <h3>移动端不做什么</h3>
+              <p>不直连本地 sidecar，不持有 provider secret，不执行完整 ToolRuntime，不复制 Claw 全量工作台。</p>
+            </div>
+            <div class="section">
+              <h3>Gateway 要求</h3>
+              <p>action respond 必须做鉴权、租户隔离、approval scope、幂等校验和审计记录。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="wechat">
+        <div class="panel-header">
+          <div>
+            <h2>微信小程序：生态轻入口</h2>
+            <p>小程序通过 HTTPS Remote Runtime Gateway 触发预定义能力、审批和查看摘要。</p>
+          </div>
+          <span class="tag info"><span class="dot"></span>gateway only</span>
+        </div>
+        <div class="content phone-area">
+          <div class="phone">
+            <div class="wechat-top">
+              <span>微信</span>
+              <span>Lime 任务</span>
+            </div>
+            <div class="phone-head">
+              <strong>公众号草稿检查</strong>
+              <span>OpenID 已绑定 · tenant policy passed</span>
+            </div>
+            <div class="phone-body">
+              <div class="mobile-action">
+                <h3>任务提醒</h3>
+                <p>草稿已生成发布前检查清单，等待你确认是否继续排版。</p>
+              </div>
+              <div class="mobile-action">
+                <h3>预定义能力</h3>
+                <p>生成发布清单、检查错别字、生成摘要、导出证据摘要。</p>
+                <div class="phone-buttons">
+                  <button class="btn">查看摘要</button>
+                  <button class="btn primary">确认继续</button>
+                </div>
+              </div>
+              <div class="mobile-action">
+                <h3>安全预览</h3>
+                <p>只显示 artifact preview 和 evidence summary。</p>
+              </div>
+            </div>
+          </div>
+          <div class="grid">
+            <div class="section">
+              <h3>身份边界</h3>
+              <p>OpenID / unionId 只作为 Gateway context，不进入 RuntimeCore facts。</p>
+            </div>
+            <div class="section">
+              <h3>能力边界</h3>
+              <p>小程序只能触发服务端允许的预定义 capability，不能自建 runtime。</p>
+            </div>
+            <div class="forbidden">
+              禁止：直连本地 sidecar、保存 provider secret、执行本地文件工具、显示 Redis key / S3 key / Secret ARN。
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="infra">
+        <div class="panel-header">
+          <div>
+            <h2>Sandbox 与基础设施：共享语义，不共享实现</h2>
+            <p>ToolRuntime 先经过 SandboxManager；RuntimeCore 依赖 ports；客户端和服务端 adapters 根据运行形态替换。</p>
+          </div>
+          <span class="tag good"><span class="dot"></span>sandbox first</span>
+        </div>
+        <div class="content grid">
+          <div class="boundary">
+            <div class="section">
+              <h3>Sandbox Boundary</h3>
+              <div class="pill-list">
+                <div class="pill">PermissionProfile</div>
+                <div class="pill">FileSystem / Network Policy</div>
+                <div class="pill">Approval / Exec Policy</div>
+                <div class="pill">SandboxManager</div>
+                <div class="pill">Audit / Evidence</div>
+              </div>
+            </div>
+            <div class="section">
+              <h3>Client Adapters</h3>
+              <div class="pill-list">
+                <div class="pill">Memory / local cache</div>
+                <div class="pill">Local FS / App data</div>
+                <div class="pill">SQLite / local store</div>
+                <div class="pill">Local artifact directory</div>
+                <div class="pill">In-process queue</div>
+                <div class="pill">OS Keychain</div>
+                <div class="pill">Local logs</div>
+                <div class="pill">Local OS sandbox</div>
+              </div>
+            </div>
+            <div class="section">
+              <h3>Infrastructure Ports</h3>
+              <div class="port-stack">
+                <div class="port">CachePort</div>
+                <div class="port">WorkspacePort</div>
+                <div class="port">DatabasePort</div>
+                <div class="port">ObjectStorePort</div>
+                <div class="port">QueuePort</div>
+                <div class="port">SecretPort</div>
+                <div class="port">ObservabilityPort</div>
+              </div>
+            </div>
+            <div class="section">
+              <h3>Server Adapters</h3>
+              <div class="pill-list">
+                <div class="pill">Redis / distributed cache</div>
+                <div class="pill">Workspace volume / sandbox</div>
+                <div class="pill">Postgres / managed DB</div>
+                <div class="pill">S3 / OSS object storage</div>
+                <div class="pill">Queue / workflow / cron</div>
+                <div class="pill">Worker carrier: Docker / Kubernetes</div>
+                <div class="pill">Secret Manager / OTel</div>
+              </div>
+            </div>
+          </div>
+          <div class="forbidden">
+            RuntimeCore 禁止直接 import Redis、Postgres、S3、Docker、Kubernetes 或具体云 SDK。ToolRuntime / ExecutionBackend 禁止绕过 SandboxManager。端侧 UI 禁止消费 Redis key、S3 key、K8s job、Secret ARN 或本地绝对路径作为 Runtime facts。
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const buttons = Array.from(document.querySelectorAll('.nav button'));
+    const panels = Array.from(document.querySelectorAll('.panel'));
+
+    buttons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const target = button.dataset.target;
+        buttons.forEach((item) => item.classList.toggle('active', item === button));
+        panels.forEach((panel) => panel.classList.toggle('active', panel.id === target));
+      });
+    });
+  </script>
+</body>
+</html>

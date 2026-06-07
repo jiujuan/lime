@@ -24,9 +24,9 @@ import {
 } from "@/lib/oemCloudDesktopAuth";
 import { getStoredOemCloudSessionState } from "@/lib/oemCloudSession";
 import {
-  hasTauriInvokeCapability,
-  hasTauriRuntimeMarkers,
-} from "@/lib/tauri-runtime";
+  hasDesktopHostInvokeCapability,
+  hasDesktopHostRuntimeMarkers,
+} from "@/lib/desktop-runtime";
 import { isDevBridgeAvailable, safeListen } from "@/lib/dev-bridge";
 
 const DESKTOP_AUTH_LEGACY_CLIENT_IDS: Record<string, string[]> = {
@@ -110,8 +110,8 @@ export function createExternalBrowserOpenTarget(
   copy: ExternalBrowserOpenTargetCopy = {},
 ): ExternalBrowserOpenTarget | null {
   if (
-    hasTauriInvokeCapability() ||
-    hasTauriRuntimeMarkers() ||
+    hasDesktopHostInvokeCapability() ||
+    hasDesktopHostRuntimeMarkers() ||
     typeof window === "undefined"
   ) {
     return null;
@@ -170,7 +170,7 @@ export async function openExternalUrl(
     }
 
     try {
-      const { open } = await import("@tauri-apps/plugin-shell");
+      const { open } = await import("@/lib/desktop-host/plugin-shell");
       await open(url);
       options.browserTarget?.close();
       return;
@@ -298,8 +298,8 @@ function shouldUseOAuthCallbackBridge() {
 
 function hasHostDesktopBridge() {
   return (
-    hasTauriInvokeCapability() ||
-    hasTauriRuntimeMarkers() ||
+    hasDesktopHostInvokeCapability() ||
+    hasDesktopHostRuntimeMarkers() ||
     isDevBridgeAvailable()
   );
 }

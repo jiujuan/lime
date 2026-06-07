@@ -8,7 +8,7 @@
 
 ```
 src/lib/
-├── api/                # API 封装
+├── api/                # API 封装，统一进入 Desktop Host / App Server 网关
 │   └── apiKeyProvider.ts
 ├── config/             # 配置
 │   └── providers.ts
@@ -16,7 +16,7 @@ src/lib/
 │   └── provider.ts
 ├── errors/             # 错误处理
 │   └── playwrightErrors.ts
-├── tauri/              # Tauri 命令封装
+├── desktop-host/       # Electron Desktop Host / mock 封装
 ├── utils/              # 工具函数
 ├── flowEventManager.ts # 流量事件管理
 ├── terminal-api.ts     # 终端 API
@@ -25,16 +25,16 @@ src/lib/
 
 ## 核心模块
 
-### Tauri 命令封装
+### Desktop Host / App Server 网关
 
 ```typescript
-// src/lib/tauri/credentials.ts
+// src/lib/api/credentials.ts
 export async function addCredential(provider: string, path: string) {
-    return invoke<CredentialInfo>('add_credential', { provider, filePath: path });
+    return safeInvoke<CredentialInfo>('add_credential', { provider, filePath: path });
 }
 
 export async function listCredentials() {
-    return invoke<CredentialInfo[]>('list_credentials');
+    return safeInvoke<CredentialInfo[]>('list_credentials');
 }
 ```
 

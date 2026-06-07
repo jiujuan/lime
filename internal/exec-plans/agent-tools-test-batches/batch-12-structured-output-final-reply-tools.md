@@ -34,7 +34,7 @@ compat / alias：
 事实源声明：最终答复 current 主路径只允许向 runtime final content、`messageDisplaySanitizer`、`protocolResidue`、`toolProcessSummary` 和 Agent Chat inline process 展示收敛；`StructuredOutput` 工具名只能作为过程摘要或协议清理信号，不应成为最终正文的一部分。
 
 - `current`
-  - `src-tauri/src/agent_tools/catalog.rs` 中的 `StructuredOutput`
+  - `lime-rs/src/agent_tools/catalog.rs` 中的 `StructuredOutput`
   - `src/lib/tauri-mock/runtimeToolInventoryMocks.ts` 中的 `StructuredOutput`
   - `src/components/agent/chat/utils/toolDisplayInfo.ts` 的 `structuredoutput` 展示
   - `src/components/agent/chat/utils/toolProcessSummary.ts` 的最终答复过程摘要

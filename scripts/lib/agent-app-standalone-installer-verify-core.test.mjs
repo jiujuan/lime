@@ -18,20 +18,20 @@ function macosArtifacts(outputRoot) {
       contentHash: "sha256:app",
     },
     {
-      kind: "pkg",
-      path: path.join(outputRoot, "Content Factory.pkg"),
-      contentHash: "sha256:pkg",
+      kind: "dmg",
+      path: path.join(outputRoot, "Content Factory.dmg"),
+      contentHash: "sha256:dmg",
     },
   ];
 }
 
 describe("agent-app standalone installer verification", () => {
-  it("为 macOS pkg 生成 codesign/spctl/pkgutil/stapler 验证命令", () => {
+  it("为 macOS dmg 生成 codesign/spctl/hdiutil/stapler 验证命令", () => {
     const outputRoot = "/tmp/lime-agent-apps/content-factory/dist";
     const plan = buildStandaloneInstallerVerificationPlan({
       artifacts: macosArtifacts(outputRoot),
       outputRoot,
-      packageFormat: "pkg",
+      packageFormat: "dmg",
       platform: "macos",
     });
 
@@ -42,7 +42,7 @@ describe("agent-app standalone installer verification", () => {
       commands: [
         expect.objectContaining({ id: "codesign-verify-app" }),
         expect.objectContaining({ id: "spctl-assess-app" }),
-        expect.objectContaining({ id: "pkgutil-check-signature" }),
+        expect.objectContaining({ id: "hdiutil-verify-dmg" }),
         expect.objectContaining({ id: "stapler-validate" }),
       ],
     });
@@ -54,7 +54,7 @@ describe("agent-app standalone installer verification", () => {
     const plan = buildStandaloneInstallerVerificationPlan({
       artifacts: macosArtifacts("/tmp/lime-agent-apps/other/dist"),
       outputRoot,
-      packageFormat: "pkg",
+      packageFormat: "dmg",
       platform: "macos",
     });
 
@@ -103,7 +103,7 @@ describe("agent-app standalone installer verification", () => {
     const plan = buildStandaloneInstallerVerificationPlan({
       artifacts: macosArtifacts(outputRoot),
       outputRoot,
-      packageFormat: "pkg",
+      packageFormat: "dmg",
       platform: "macos",
     });
     const calls = [];
@@ -124,7 +124,7 @@ describe("agent-app standalone installer verification", () => {
     expect(result.commandsRun.map((item) => item.id)).toEqual([
       "codesign-verify-app",
       "spctl-assess-app",
-      "pkgutil-check-signature",
+      "hdiutil-verify-dmg",
       "stapler-validate",
     ]);
     expect(result.commandsRun).toContainEqual(
@@ -136,7 +136,7 @@ describe("agent-app standalone installer verification", () => {
     expect(calls.map((call) => call.tool)).toEqual([
       "codesign",
       "spctl",
-      "pkgutil",
+      "hdiutil",
       "xcrun",
     ]);
   });
@@ -146,7 +146,7 @@ describe("agent-app standalone installer verification", () => {
     const plan = buildStandaloneInstallerVerificationPlan({
       artifacts: macosArtifacts(outputRoot),
       outputRoot,
-      packageFormat: "pkg",
+      packageFormat: "dmg",
       platform: "macos",
     });
     const result = runStandaloneInstallerVerificationPlan({
@@ -181,22 +181,20 @@ describe("agent-app standalone installer verification", () => {
           contentHash: "sha256:app",
         },
         {
-          kind: "pkg",
-          path: path.join(outputRoot, "Content Factory.pkg"),
-          contentHash: "sha256:pkg",
+          kind: "dmg",
+          path: path.join(outputRoot, "Content Factory.dmg"),
+          contentHash: "sha256:dmg",
         },
       ],
       outputRoot,
-      packageFormat: "pkg",
+      packageFormat: "dmg",
       platform: "macos",
     });
 
     expect(plan).toMatchObject({
       status: "blocked",
       commands: [],
-      blockers: [
-        expect.objectContaining({ code: "ARTIFACT_PATH_MISSING" }),
-      ],
+      blockers: [expect.objectContaining({ code: "ARTIFACT_PATH_MISSING" })],
     });
   });
 
@@ -229,13 +227,13 @@ describe("agent-app standalone installer verification", () => {
     const result = spawnSync(
       process.execPath,
       [
-        path.resolve("scripts/agent-app-standalone-installer-verify.mjs"),
+        path.resolve("scripts/agent-app/standalone-installer-verify.mjs"),
         "--artifacts",
         artifactsPath,
         "--output-root",
         outputRoot,
         "--package-format",
-        "pkg",
+        "dmg",
         "--evidence",
         evidencePath,
         "--check",
@@ -250,7 +248,7 @@ describe("agent-app standalone installer verification", () => {
       expect.objectContaining({ id: "codesign-verify-app" }),
     );
     expect(evidence.commands).toContainEqual(
-      expect.objectContaining({ id: "pkgutil-check-signature" }),
+      expect.objectContaining({ id: "hdiutil-verify-dmg" }),
     );
   });
 });

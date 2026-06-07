@@ -45,10 +45,12 @@ const requiredIgnoreRules = [
 const skippedDirectories = new Set([
   ".git",
   ".lime",
+  ".tmp",
+  ".tmp-smoke",
   "node_modules",
   "target",
   "dist",
-  "src-tauri/target",
+  "lime-rs/target",
 ]);
 const skippedExtensions = new Set([
   ".gif",
@@ -145,7 +147,7 @@ function shouldScanFile(relativePath) {
     return false;
   }
 
-  if (relativePath.startsWith("src-tauri/target")) {
+  if (relativePath.startsWith("lime-rs/target")) {
     return false;
   }
 

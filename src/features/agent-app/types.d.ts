@@ -768,9 +768,48 @@ export interface AgentAppTaskKnowledgeBinding {
     mode?: "retrieval" | "data";
     required?: boolean;
 }
+export type AgentAppApprovalPolicy = "never" | "on-request" | "on-failure" | "untrusted";
+export type AgentAppSandboxPolicy = "read-only" | "workspace-write" | "danger-full-access";
+export type AgentAppExecutionStrategy = "react";
+export type AgentAppWebSearchMode = "disabled" | "allowed" | "required";
+export interface AgentAppProviderConfig {
+    provider_id?: string;
+    provider_name: string;
+    model_name: string;
+    api_key?: string;
+    base_url?: string;
+    model_capabilities?: Record<string, unknown>;
+    tool_call_strategy?: "native" | "tool_shim";
+    toolshim_model?: string;
+}
+export interface AgentAppAutoContinueRequest {
+    enabled: boolean;
+    fast_mode_enabled: boolean;
+    continuation_length: number;
+    sensitivity: number;
+    source?: string;
+}
+export interface AgentAppTurnConfigSnapshot {
+    provider_config?: AgentAppProviderConfig;
+    provider_preference?: string;
+    model_preference?: string;
+    reasoning_effort?: string;
+    thinking_enabled?: boolean;
+    approval_policy?: AgentAppApprovalPolicy;
+    sandbox_policy?: AgentAppSandboxPolicy;
+    execution_strategy?: AgentAppExecutionStrategy;
+    web_search?: boolean;
+    search_mode?: AgentAppWebSearchMode;
+    auto_continue?: AgentAppAutoContinueRequest;
+    system_prompt?: string;
+    metadata?: Record<string, unknown>;
+}
 export interface AgentAppTaskRequest {
     title: string;
     prompt?: string;
+    taskId?: string;
+    turnId?: string;
+    eventName?: string;
     taskKind?: string;
     idempotencyKey?: string;
     queueIfBusy?: boolean;
@@ -778,6 +817,7 @@ export interface AgentAppTaskRequest {
     runStartHooks?: boolean;
     providerPreference?: string;
     modelPreference?: string;
+    turnConfig?: AgentAppTurnConfigSnapshot;
     input?: unknown;
     expectedOutput?: unknown;
     knowledge?: AgentAppTaskKnowledgeBinding[];
@@ -863,7 +903,7 @@ export interface AgentAppUiSandboxPolicy {
     allowForms: boolean;
     allowPopups: boolean;
     allowDownloads: boolean;
-    allowRawTauriApi: boolean;
+    allowRawHostApi: boolean;
     allowNodeApi: boolean;
     allowNetworkAccess: boolean;
 }
@@ -877,7 +917,7 @@ export interface AgentAppUiSdkBridgeDescriptor {
     entryKey: string;
     allowedCapabilities: string[];
     blockedCapabilities: AgentAppUiBridgeBlockedCapability[];
-    rawTauriApi: false;
+    rawHostApi: false;
     nodeApi: false;
 }
 export interface AgentAppUiMountResult {

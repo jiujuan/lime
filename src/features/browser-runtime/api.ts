@@ -62,7 +62,7 @@ import {
   type SiteAdapterRecommendation,
 } from "@/lib/webview-api";
 import {
-  hasNativeTauriEventSupport,
+  hasNativeDesktopHostEventSupport,
   safeListen,
 } from "@/lib/dev-bridge/safeInvoke";
 
@@ -134,5 +134,5 @@ export const browserRuntimeApi = {
     openChromeProfileWindow(params),
   listenBrowserEvent: (handler: (event: { payload: BrowserEvent }) => void) =>
     safeListen<BrowserEvent>("browser-event", handler),
-  supportsNativeEvents: () => hasNativeTauriEventSupport(),
+  supportsNativeEvents: () => hasNativeDesktopHostEventSupport(),
 };

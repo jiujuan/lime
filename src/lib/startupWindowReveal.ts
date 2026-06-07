@@ -1,4 +1,4 @@
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 
 const STARTUP_REVEAL_SETTLE_DELAY_MS = 80;
 const STARTUP_REVEAL_PAINT_TIMEOUT_MS = 180;
@@ -133,7 +133,7 @@ async function runStartupWindowAction(
 
 async function revealCurrentWindow(): Promise<void> {
   try {
-    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    const { getCurrentWindow } = await import("@/lib/desktop-host/window");
     const windowApi = getCurrentWindow() as StartupWindow;
 
     await runStartupWindowAction(windowApi.unminimize?.bind(windowApi));
@@ -145,7 +145,7 @@ async function revealCurrentWindow(): Promise<void> {
 }
 
 export function revealStartupWindowWhenReady(): void {
-  if (startupWindowRevealRequested || !hasTauriInvokeCapability()) {
+  if (startupWindowRevealRequested || !hasDesktopHostInvokeCapability()) {
     return;
   }
 

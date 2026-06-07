@@ -53,7 +53,7 @@
 - `src/lib/api/oemCloudRuntime.ts`
 - `src/components/settings-v2/`
 - `src/components/agent/`
-- `src-tauri/`
+- `lime-rs/`
 
 ## 默认工作原则
 

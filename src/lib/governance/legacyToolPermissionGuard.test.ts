@@ -4,18 +4,18 @@ import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const REPO_ROOT = process.cwd();
-const AGENT_LIB_RS = join(REPO_ROOT, "src-tauri/crates/agent/src/lib.rs");
+const AGENT_LIB_RS = join(REPO_ROOT, "lime-rs/crates/agent/src/lib.rs");
 const LEGACY_PERMISSION_FIXTURE_RS = join(
   REPO_ROOT,
-  "src-tauri/crates/agent/tests/legacy_permission_surfaces.rs",
+  "lime-rs/crates/agent/tests/legacy_permission_surfaces.rs",
 );
 const RUST_SCAN_ROOTS = [
-  join(REPO_ROOT, "src-tauri/src"),
-  join(REPO_ROOT, "src-tauri/crates"),
+  join(REPO_ROOT, "lime-rs/src"),
+  join(REPO_ROOT, "lime-rs/crates"),
 ];
 const EXCLUDED_RUST_FILES = new Set([
-  "src-tauri/crates/agent/src/tool_permissions.rs",
-  "src-tauri/crates/agent/src/shell_security.rs",
+  "lime-rs/crates/agent/src/tool_permissions.rs",
+  "lime-rs/crates/agent/src/shell_security.rs",
 ]);
 const EXCLUDED_RUST_DIRS = new Set(["target", "aster-rust"]);
 

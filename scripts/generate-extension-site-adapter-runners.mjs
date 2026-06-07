@@ -6,11 +6,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 const bundledIndexPath = path.join(
   projectRoot,
-  "src-tauri/resources/site-adapters/bundled/index.json",
+  "lime-rs/resources/site-adapters/bundled/index.json",
 );
 const bundledScriptsRoot = path.join(
   projectRoot,
-  "src-tauri/resources/site-adapters/bundled",
+  "lime-rs/resources/site-adapters/bundled",
 );
 const outputPath = path.join(
   projectRoot,

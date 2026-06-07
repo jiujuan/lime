@@ -1,0 +1,47 @@
+{
+  "$defs": {
+    "ConnectPayload": {
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "refCode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "relay": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "relay"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "isVerified": {
+      "type": "boolean"
+    },
+    "payload": {
+      "$ref": "#/$defs/ConnectPayload"
+    },
+    "relayInfo": true
+  },
+  "required": [
+    "isVerified",
+    "payload"
+  ],
+  "title": "ConnectDeepLinkResolveResponse",
+  "type": "object"
+}

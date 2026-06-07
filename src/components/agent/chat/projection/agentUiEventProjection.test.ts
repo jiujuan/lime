@@ -1615,6 +1615,54 @@ describe("agentUiEventProjection", () => {
     expect(
       buildAgentUiProjectionEvents(
         {
+          type: "routing_decision_made",
+          routing_decision: {
+            routing_mode: "single_candidate",
+            decision_source: "runtime",
+            decision_reason: "single_configured_model",
+            selected_provider: "deepseek",
+            selected_model: "deepseek-chat",
+            candidate_count: 1,
+            fallback_chain: ["deepseek-chat"],
+          },
+        } as unknown as AgentEvent,
+        baseContext,
+      )[0],
+    ).toMatchObject({
+      type: "run.status",
+      sourceType: "routing_decision_made",
+      phase: "routing",
+      payload: {
+        runtimeEvent: "routing_decision_made",
+        routingMode: "single_candidate",
+        decisionSource: "runtime",
+        decisionReason: "single_configured_model",
+        selectedProvider: "deepseek",
+        selectedModel: "deepseek-chat",
+        candidateCount: 1,
+        fallbackChain: ["deepseek-chat"],
+      },
+    });
+
+    expect(
+      buildAgentUiProjectionEvents(
+        {
+          type: "routing_decision_made",
+        } as unknown as AgentEvent,
+        baseContext,
+      )[0],
+    ).toMatchObject({
+      type: "run.status",
+      sourceType: "routing_decision_made",
+      phase: "routing",
+      payload: {
+        runtimeEvent: "routing_decision_made",
+      },
+    });
+
+    expect(
+      buildAgentUiProjectionEvents(
+        {
           type: "cost_recorded",
           cost_state: {
             status: "estimated",

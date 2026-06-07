@@ -2,8 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { execFile } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
+
+import { runNodeScriptJson } from "./node-script-test-runner.mjs";
 
 const repoRoot = process.cwd();
 const tempRoots: string[] = [];
@@ -140,24 +141,7 @@ function createReplayFixture(tempRoot: string) {
 }
 
 function runNodeScript(scriptRelativePath: string, args: string[]) {
-  return new Promise<any>((resolve, reject) => {
-    execFile(
-      process.execPath,
-      [path.join(repoRoot, scriptRelativePath), ...args],
-      {
-        cwd: repoRoot,
-        encoding: "utf8",
-      },
-      (error, stdout) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        resolve(JSON.parse(stdout));
-      },
-    );
-  });
+  return runNodeScriptJson(scriptRelativePath, args, { repoRoot });
 }
 
 afterEach(() => {
@@ -178,7 +162,7 @@ describe("Harness eval history window", () => {
 
     writeJson(manifestPath, createHarnessManifest(caseDir));
 
-    await runNodeScript("scripts/harness-eval-history-record.mjs", [
+    await runNodeScript("scripts/harness/eval-history-record.mjs", [
       "--format",
       "json",
       "--manifest",
@@ -187,9 +171,10 @@ describe("Harness eval history window", () => {
       historyDir,
       "--retain",
       "2",
+      "--skip-cleanup",
     ]);
     await delayMs(10);
-    await runNodeScript("scripts/harness-eval-history-record.mjs", [
+    await runNodeScript("scripts/harness/eval-history-record.mjs", [
       "--format",
       "json",
       "--manifest",
@@ -198,9 +183,10 @@ describe("Harness eval history window", () => {
       historyDir,
       "--retain",
       "2",
+      "--skip-cleanup",
     ]);
     await delayMs(10);
-    await runNodeScript("scripts/harness-eval-history-record.mjs", [
+    await runNodeScript("scripts/harness/eval-history-record.mjs", [
       "--format",
       "json",
       "--manifest",
@@ -209,6 +195,7 @@ describe("Harness eval history window", () => {
       historyDir,
       "--retain",
       "2",
+      "--skip-cleanup",
     ]);
 
     const historyFiles = fs
@@ -217,14 +204,17 @@ describe("Harness eval history window", () => {
       .sort();
     expect(historyFiles).toHaveLength(2);
 
-    const report = await runNodeScript("scripts/harness-eval-trend-report.mjs", [
-      "--format",
-      "json",
-      "--manifest",
-      manifestPath,
-      "--history-dir",
-      historyDir,
-    ]);
+    const report = await runNodeScript(
+      "scripts/harness/eval-trend-report.mjs",
+      [
+        "--format",
+        "json",
+        "--manifest",
+        manifestPath,
+        "--history-dir",
+        historyDir,
+      ],
+    );
 
     expect(report.sampleCount).toBe(2);
     expect(report.signals).not.toContain(

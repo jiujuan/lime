@@ -107,4 +107,14 @@ describe("RootRouter", () => {
       container.querySelector('[data-testid="browser-connector-guide-page"]'),
     ).not.toBeNull();
   });
+
+  it("独立更新窗口从 index.html 入口启动时应映射到更新提醒页", async () => {
+    const { container } = await renderRootRouter(
+      "/index.html?lime_window=update-notification&latest=1.58.0",
+    );
+
+    expect(
+      container.querySelector('[data-testid="update-notification-page"]'),
+    ).not.toBeNull();
+  });
 });

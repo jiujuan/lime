@@ -64,7 +64,8 @@ function validateArtifacts({ artifacts, outputRoot }) {
   if (normalizedOutputRoot && hasTraversal(normalizedOutputRoot)) {
     blockers.push({
       code: "PATH_TRAVERSAL_DETECTED",
-      message: "Installer verification output root must not contain parent traversal.",
+      message:
+        "Installer verification output root must not contain parent traversal.",
       details: { path: normalizedOutputRoot },
     });
   }
@@ -72,7 +73,8 @@ function validateArtifacts({ artifacts, outputRoot }) {
     if (!String(artifact?.path ?? "").trim()) {
       blockers.push({
         code: "ARTIFACT_PATH_MISSING",
-        message: "Installer verification artifact refs require a non-empty path.",
+        message:
+          "Installer verification artifact refs require a non-empty path.",
         details: { kind: artifact?.kind },
       });
       continue;
@@ -80,7 +82,8 @@ function validateArtifacts({ artifacts, outputRoot }) {
     if (hasTraversal(artifact?.path)) {
       blockers.push({
         code: "PATH_TRAVERSAL_DETECTED",
-        message: "Installer verification artifact paths must not contain parent traversal.",
+        message:
+          "Installer verification artifact paths must not contain parent traversal.",
         details: { path: artifact?.path },
       });
     }
@@ -91,7 +94,8 @@ function validateArtifacts({ artifacts, outputRoot }) {
     ) {
       blockers.push({
         code: "ARTIFACT_OUTSIDE_OUTPUT_ROOT",
-        message: "Installer verification refuses artifacts outside output root.",
+        message:
+          "Installer verification refuses artifacts outside output root.",
         details: { path: artifact.path, outputRoot: normalizedOutputRoot },
       });
     }
@@ -100,7 +104,6 @@ function validateArtifacts({ artifacts, outputRoot }) {
 }
 
 function macosDistributableKind(packageFormat) {
-  if (packageFormat === "pkg") return "pkg";
   if (packageFormat === "dmg") return "dmg";
   return "app_bundle";
 }
@@ -122,17 +125,6 @@ function macosCommands({ appBundle, distributable, packageFormat }) {
         ["--assess", "--type", "execute", "--verbose", appBundle.path],
         [artifactKey(appBundle)],
         [`${artifactKey(appBundle)}:spctl_assessed`],
-      ),
-    );
-  }
-  if (packageFormat === "pkg" && distributable) {
-    commands.push(
-      command(
-        "pkgutil-check-signature",
-        "pkgutil",
-        ["--check-signature", distributable.path],
-        [artifactKey(distributable)],
-        [`${artifactKey(distributable)}:pkg_signature_verified`],
       ),
     );
   }
@@ -190,10 +182,10 @@ export function buildStandaloneInstallerVerificationPlan({
   const commands = [];
 
   if (platform === "macos") {
-    if (!["app", "dmg", "pkg"].includes(normalizedPackageFormat)) {
+    if (!["app", "dmg"].includes(normalizedPackageFormat)) {
       blockers.push({
         code: "PACKAGE_FORMAT_UNSUPPORTED",
-        message: "macOS installer verification only supports app, dmg, or pkg.",
+        message: "macOS installer verification only supports app or dmg.",
         details: { packageFormat: normalizedPackageFormat },
       });
     }
@@ -203,13 +195,15 @@ export function buildStandaloneInstallerVerificationPlan({
     if (!appBundle) {
       blockers.push({
         code: "APP_BUNDLE_ARTIFACT_MISSING",
-        message: "macOS installer verification requires the .app bundle artifact ref.",
+        message:
+          "macOS installer verification requires the .app bundle artifact ref.",
       });
     }
     if (!distributable) {
       blockers.push({
         code: "DISTRIBUTABLE_ARTIFACT_MISSING",
-        message: "macOS installer verification requires the target distributable artifact ref.",
+        message:
+          "macOS installer verification requires the target distributable artifact ref.",
         details: { expectedKind: distributableKind },
       });
     }
@@ -225,7 +219,8 @@ export function buildStandaloneInstallerVerificationPlan({
     if (!installer) {
       blockers.push({
         code: "WINDOWS_INSTALLER_ARTIFACT_MISSING",
-        message: "Windows installer verification requires the installer artifact ref.",
+        message:
+          "Windows installer verification requires the installer artifact ref.",
       });
     }
     commands.push(...windowsCommands({ installer }));
@@ -298,7 +293,11 @@ export function runStandaloneInstallerVerificationPlan({
 
   const commandsRun = [];
   for (const item of plan.commands) {
-    const result = runner.run({ args: item.args, id: item.id, tool: item.tool });
+    const result = runner.run({
+      args: item.args,
+      id: item.id,
+      tool: item.tool,
+    });
     commandsRun.push({
       id: item.id,
       tool: item.tool,
@@ -318,7 +317,11 @@ export function runStandaloneInstallerVerificationPlan({
           {
             code: "VERIFICATION_COMMAND_FAILED",
             message: "Installer verification command failed.",
-            details: { id: item.id, tool: item.tool, exitCode: result.exitCode },
+            details: {
+              id: item.id,
+              tool: item.tool,
+              exitCode: result.exitCode,
+            },
           },
         ],
       };

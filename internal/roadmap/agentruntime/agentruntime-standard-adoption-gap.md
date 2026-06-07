@@ -207,7 +207,7 @@ Host projection seam 当前定向验证：
 | `npm run governance:legacy-report` | 通过；扫描文件数 `1344`、测试文件数 `785`、零引用候选 `0`、分类漂移候选 `23`、边界违规 `0`，说明本轮 AgentRuntime / Agent App 收口没有新增 legacy surface 违规。 |
 | `node --test tests/ui.test.mjs` in `/Users/coso/Documents/dev/ai/limecloud/content-factory-app` | 通过；当前并行工作树中内容工厂 UI 单测为 `30` 个全部通过，新增覆盖项目流程导航、统一抽屉、Host 运行明细、Host profile 缺 AI 能力时阻止本地模型兜底等页面行为。 |
 | `npm test -- "scripts/lib/agent-app-package-handoff-core.test.ts"` | 通过；`7` 个测试覆盖 Agent App package handoff 守卫，包括私有 Host Bridge marker、src/dist 漂移、高风险脚本，以及新增的 provider/Gateway 直连 runtime bypass marker。 |
-| `node scripts/agent-app-package-handoff-check.mjs --package-dir "/Users/coso/Documents/dev/ai/limecloud/content-factory-app" --format summary` | 修复后返回 `status=needs_handoff`；`agentRuntimeBypass=none`、`blockers=none`、`distArtifacts total=0`。仍有 dirty / high-risk build script warning，所以外部 package 需要持有者 handoff，但“直连 provider/Gateway”这一 blocker 已清零。 |
+| `node scripts/agent-app/package-handoff-check.mjs --package-dir "/Users/coso/Documents/dev/ai/limecloud/content-factory-app" --format summary` | 修复后返回 `status=needs_handoff`；`agentRuntimeBypass=none`、`blockers=none`、`distArtifacts total=0`。仍有 dirty / high-risk build script warning，所以外部 package 需要持有者 handoff，但“直连 provider/Gateway”这一 blocker 已清零。 |
 
 仍然阻止整体目标完成的 evidence：
 
@@ -216,7 +216,7 @@ Host projection seam 当前定向验证：
 | `rg "AgentRunProjectionPanel|agentRunProjectionState" src/features/agent-app/ui/AgentRunHostDrawer.tsx` | 当前无命中；`AgentRunHostDrawer.tsx` 仍直接读取 `runtimeProcess / timeline / thinking / execution / streamText`。 | Host drawer 尚未消费已验证的 projection seam，Host Run renderer 完整共享 seam 仍未完成。 |
 | `.lime/qc/gui-evidence/agent-apps/content-factory-run-scenarios-audit-20260517-failure.json` + `.lime/qc/gui-evidence/agent-apps/content-factory-run-scenarios-post-timeout-completion-20260517.json` | `run-scenarios` 已能启动真实 AgentRuntime task，调用 `knowledge-builder / content-reviewer`，并在 direct snapshot 中完成 `status=completed`、`artifactCount=1`、`sceneCount=120`、`workspacePatchReady=true`；但 flow runner 在 `completionTimeoutMs=240000` 内先判失败，且 `usageReady=false`。 | `run-scenarios` 的前置 gate / 运行时主链已推进到可证明完成；剩余是 runner completion window、usage fact 或 completion 判定口径需要收敛。 |
 | `.lime/qc/gui-evidence/agent-apps/content-factory-run-production-audit-20260517-failure.json` | 等待 `button[data-action="run-production"]` 60 秒超时；截图/iframe 文本显示 sample workspace 已是 `场景 120/120`、`内容 20/20`、`交付已整理`、`复盘已生成`，页面主 CTA 变为“继续下一轮”。 | 当前 full-flow runner 与内容工厂新业务路径/seed sample 不再对齐；这不是新的 runtime task 失败，而是验收脚本仍按旧“空内容 -> run-production”路径找按钮。 |
-| `node scripts/agent-app-package-handoff-check.mjs --package-dir "/Users/coso/Documents/dev/ai/limecloud/content-factory-app" --format summary` | `agentRuntimeBypass=none`，外部 package 当前 direct provider/Gateway marker 已清零；但 package worktree 仍有 `tracked=45`、`untracked=3`，且 build/verify/e2e 脚本仍会重建 dist。 | “App 不直连 provider API”已从 blocker 降为 handoff warning；整体仍不能完成，因为 full-flow runner、Host drawer projection-first 和 HITL/usage 分支仍未闭环。 |
+| `node scripts/agent-app/package-handoff-check.mjs --package-dir "/Users/coso/Documents/dev/ai/limecloud/content-factory-app" --format summary` | `agentRuntimeBypass=none`，外部 package 当前 direct provider/Gateway marker 已清零；但 package worktree 仍有 `tracked=45`、`untracked=3`，且 build/verify/e2e 脚本仍会重建 dist。 | “App 不直连 provider API”已从 blocker 降为 handoff warning；整体仍不能完成，因为 full-flow runner、Host drawer projection-first 和 HITL/usage 分支仍未闭环。 |
 
 因此当前应继续推进 **单会话全流程绿色** 和 **Host Run renderer 完整共享 seam**，不能因为 key action 或单步 `run-scenarios` direct snapshot 已绿就把整体目标标记完成。下一步应先把内容工厂 full-flow runner 改为新业务路径：要么 seed 一个仅有资料/场景、未生成内容的 workspace，再点击 `run-production`；要么在 sample 已完成时走“继续下一轮”动作并验证新的 AgentRuntime task / attempt。
 
@@ -228,7 +228,7 @@ Host projection seam 当前定向验证：
 
 2026-05-17 继续只读复测后，`run-scenarios` 不再停在旧的“按钮不可见”失败形态：
 
-- `node scripts/agent-apps-content-factory-flow.mjs --actions run-scenarios --prefix content-factory-run-scenarios-audit-20260517 --timeout-ms 120000 --completion-timeout-ms 240000`
+- `node scripts/agent-app/content-factory-flow.mjs --actions run-scenarios --prefix content-factory-run-scenarios-audit-20260517 --timeout-ms 120000 --completion-timeout-ms 240000`
 - runner 在 `wait-runtime` 阶段因 `terminalReady / usageReady / artifactReady / workspacePatchReady` 未及时就绪而输出 failure summary。
 - 失败后继续 direct get 同一 `taskId=sessionId`，`agent_app_runtime_get_task` 已返回 `status=completed`、`artifactCount=1`、`sceneCount=120`、`workspacePatchReady=true`、`evidenceReady=true`、`costReady=true`，且 invoked skills 为 `knowledge-builder / content-reviewer`。
 
@@ -292,7 +292,7 @@ Host projection seam 当前定向验证：
 
 - 先补 unit test：已有生产资产 + readiness false 时仍保留业务递进，不隐藏后续合理动作。
 - 再补 runner 用例：`scenes-ready -> run-production` 与 `fully-complete -> continue-next-round` 分开验收。
-- 最后跑 `scripts/agent-apps-content-factory-flow.mjs` 的 operational flow，证明从目标初始状态出发能连续创建或恢复可观测 AgentRuntime 工作。
+- 最后跑 `scripts/agent-app/content-factory-flow.mjs` 的 operational flow，证明从目标初始状态出发能连续创建或恢复可观测 AgentRuntime 工作。
 
 ## 14. Host drawer projection seam handoff
 

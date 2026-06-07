@@ -11,13 +11,7 @@ function readJson(filePath) {
 }
 
 const repoRoot = path.resolve(process.cwd());
-const cargoTomlPath = path.join(repoRoot, "src-tauri", "Cargo.toml");
-const tauriConfigPath = path.join(repoRoot, "src-tauri", "tauri.conf.json");
-const tauriHeadlessConfigPath = path.join(
-  repoRoot,
-  "src-tauri",
-  "tauri.conf.headless.json",
-);
+const cargoTomlPath = path.join(repoRoot, "lime-rs", "Cargo.toml");
 const packageJsonPath = path.join(repoRoot, "package.json");
 const cliNpmPackageJsonPath = path.join(
   repoRoot,
@@ -27,8 +21,6 @@ const cliNpmPackageJsonPath = path.join(
 );
 
 const cargo = readCargoVersions(cargoTomlPath);
-const tauriConfig = readJson(tauriConfigPath);
-const tauriHeadlessConfig = readJson(tauriHeadlessConfigPath);
 const packageJson = readJson(packageJsonPath);
 const cliNpmPackageJson = readJson(cliNpmPackageJsonPath);
 
@@ -36,12 +28,16 @@ const sourceVersion = cargo.workspaceVersion;
 const issues = [];
 
 if (!sourceVersion) {
-  issues.push("src-tauri/Cargo.toml [workspace.package].version 缺失");
+  issues.push("lime-rs/Cargo.toml [workspace.package].version 缺失");
 }
 
-if (!cargo.packageVersionIsWorkspace && cargo.packageVersion !== sourceVersion) {
+if (
+  cargo.packageSectionExists &&
+  !cargo.packageVersionIsWorkspace &&
+  cargo.packageVersion !== sourceVersion
+) {
   issues.push(
-    `src-tauri/Cargo.toml [package].version (${cargo.packageVersion ?? "missing"}) 与 workspace.version (${sourceVersion ?? "missing"}) 不一致`,
+    `lime-rs/Cargo.toml [package].version (${cargo.packageVersion ?? "missing"}) 与 workspace.version (${sourceVersion ?? "missing"}) 不一致`,
   );
 }
 
@@ -54,18 +50,6 @@ if ((packageJson.version ?? null) !== sourceVersion) {
 if ((cliNpmPackageJson.version ?? null) !== sourceVersion) {
   issues.push(
     `packages/lime-cli-npm/package.json version (${cliNpmPackageJson.version ?? "missing"}) 与 workspace.version (${sourceVersion ?? "missing"}) 不一致`,
-  );
-}
-
-if ((tauriConfig.version ?? null) !== sourceVersion) {
-  issues.push(
-    `src-tauri/tauri.conf.json version (${tauriConfig.version ?? "missing"}) 与 workspace.version (${sourceVersion ?? "missing"}) 不一致`,
-  );
-}
-
-if ((tauriHeadlessConfig.version ?? null) !== sourceVersion) {
-  issues.push(
-    `src-tauri/tauri.conf.headless.json version (${tauriHeadlessConfig.version ?? "missing"}) 与 workspace.version (${sourceVersion ?? "missing"}) 不一致`,
   );
 }
 

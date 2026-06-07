@@ -749,11 +749,87 @@ export function handleTurnStreamEvent({
     );
     clearStreamingTextOverlay();
     if (sideEffectPlan.shouldClearActiveStream) {
-      clearActiveStreamIfMatch(eventName);
-    }
-    if (sideEffectPlan.shouldDisposeListener) {
+      finalizeTerminalStreamState({
+        shouldClearActiveStream: true,
+        shouldDisposeListener: sideEffectPlan.shouldDisposeListener,
+      });
+    } else if (sideEffectPlan.shouldDisposeListener) {
       disposeListener();
     }
+  };
+
+  const finalizeTerminalStreamState = ({
+    shouldClearActiveStream = true,
+    shouldDisposeListener = true,
+  }: {
+    shouldClearActiveStream?: boolean;
+    shouldDisposeListener?: boolean;
+  } = {}) => {
+    const activeStreamCleared = shouldClearActiveStream
+      ? clearActiveStreamIfMatch(eventName)
+      : false;
+    if (activeStreamCleared || !isStreamActivated()) {
+      setIsSending(false);
+    }
+    if (shouldDisposeListener) {
+      disposeListener();
+    }
+  };
+  const completeAssistantStreamMessage = ({
+    finalContent,
+    rawContent,
+    usage,
+  }: {
+    finalContent: string;
+    rawContent: string;
+    usage?: Message["usage"];
+  }) => {
+    observer?.onComplete?.(finalContent);
+    setMessages((prev) => {
+      const nextMessages = prev.map((msg) => {
+        if (msg.id !== assistantMsgId) {
+          return msg;
+        }
+
+        return {
+          ...updateMessageArtifactsStatus(msg, "complete"),
+          ...buildAgentStreamCompletedAssistantMessagePatch({
+            parts: msg.contentParts,
+            finalContent,
+            previousContent: msg.content,
+            rawContent,
+            surfaceThinkingDeltas:
+              surfaceThinkingDeltas || isRetainedSkillProcessMessage(msg),
+            thinkingContent: msg.thinkingContent,
+            toolCalls: msg.toolCalls,
+            usage: usage ?? msg.usage,
+          }),
+        };
+      });
+      persistRetainedSkillProcessSnapshot(nextMessages);
+      return nextMessages;
+    });
+    clearStreamingTextOverlay();
+    finalizeTerminalStreamState();
+  };
+  const completeAssistantStreamMessageFromCompletionPlan = ({
+    finalContent,
+    queuedTurnIds,
+    requestLogPayload,
+    usage,
+  }: {
+    finalContent: string;
+    queuedTurnIds: string[];
+    requestLogPayload: AgentStreamRequestLogFinishPayload;
+    usage?: Message["usage"];
+  }) => {
+    removeQueuedTurnState(queuedTurnIds);
+    finishRequestLog(requestState, requestLogPayload);
+    completeAssistantStreamMessage({
+      finalContent,
+      rawContent: requestState.accumulatedContent,
+      usage,
+    });
   };
 
   const markQueuedDraftState = (queuedMessageText?: string | null) => {
@@ -935,8 +1011,49 @@ export function handleTurnStreamEvent({
       );
       break;
 
-    case "turn_completed":
-    case "turn_failed":
+    case "turn_completed": {
+      clearQueuedDraftCleanupTimer();
+      flushPendingTextRender();
+      bindAssistantMessageToRuntimeTurn(
+        setMessages,
+        assistantMsgId,
+        data.turn.id,
+      );
+      clearOptimisticItem();
+      clearOptimisticTurn();
+      setThreadTurns((prev) =>
+        upsertThreadTurnState(
+          removeThreadTurnState(prev, pendingTurnKey),
+          data.turn,
+        ),
+      );
+      setCurrentTurnId(data.turn.id);
+      if (data.text?.trim() && !shouldPreserveAssistantContent) {
+        requestState.accumulatedContent = data.text;
+        requestState.renderedContent = data.text;
+        requestState.hasMeaningfulCompletionSignal = true;
+      }
+      const turnCompletedPlan = buildAgentStreamFinalDonePlan({
+        accumulatedContent: requestState.accumulatedContent,
+        fallbackContent: assistantFallbackContent,
+        hasMeaningfulCompletionSignal:
+          requestState.hasMeaningfulCompletionSignal,
+        queuedTurnId: requestState.queuedTurnId,
+        toolCallCount: toolLogIdByToolId.size,
+        usage: data.usage,
+      });
+      if (turnCompletedPlan.type === "missing_final_reply_failure") {
+        finalizeMissingFinalReplyFailure(turnCompletedPlan);
+        break;
+      }
+      completeAssistantStreamMessageFromCompletionPlan({
+        ...turnCompletedPlan,
+        usage: data.usage,
+      });
+      break;
+    }
+
+    case "turn_failed": {
       clearQueuedDraftCleanupTimer();
       activateStream();
       bindAssistantMessageToRuntimeTurn(
@@ -953,6 +1070,7 @@ export function handleTurnStreamEvent({
       );
       setCurrentTurnId(data.turn.id);
       break;
+    }
 
     case "runtime_status":
       activateStream();
@@ -1353,6 +1471,7 @@ export function handleTurnStreamEvent({
       });
       break;
 
+    case "done":
     case "final_done": {
       clearQueuedDraftCleanupTimer();
       flushPendingTextRender();
@@ -1372,36 +1491,10 @@ export function handleTurnStreamEvent({
         break;
       }
 
-      removeQueuedTurnState(finalDonePlan.queuedTurnIds);
-      finishRequestLog(requestState, finalDonePlan.requestLogPayload);
-      const finalContent = finalDonePlan.finalContent;
-      observer?.onComplete?.(finalContent);
-      setMessages((prev) => {
-        const nextMessages = prev.map((msg) => {
-          if (msg.id !== assistantMsgId) {
-            return msg;
-          }
-
-          return {
-            ...updateMessageArtifactsStatus(msg, "complete"),
-            ...buildAgentStreamCompletedAssistantMessagePatch({
-              parts: msg.contentParts,
-              finalContent,
-              previousContent: msg.content,
-              rawContent: requestState.accumulatedContent,
-              surfaceThinkingDeltas:
-                surfaceThinkingDeltas || isRetainedSkillProcessMessage(msg),
-              thinkingContent: msg.thinkingContent,
-              usage: data.usage ?? msg.usage,
-            }),
-          };
-        });
-        persistRetainedSkillProcessSnapshot(nextMessages);
-        return nextMessages;
+      completeAssistantStreamMessageFromCompletionPlan({
+        ...finalDonePlan,
+        usage: data.usage,
       });
-      clearStreamingTextOverlay();
-      clearActiveStreamIfMatch(eventName);
-      disposeListener();
       break;
     }
 
@@ -1429,9 +1522,7 @@ export function handleTurnStreamEvent({
           return nextMessages;
         });
         clearStreamingTextOverlay();
-        setIsSending(false);
-        clearActiveStreamIfMatch(eventName);
-        disposeListener();
+        finalizeTerminalStreamState();
         break;
       }
       if (isAgentStreamEmptyFinalReplyError(data.message)) {
@@ -1467,6 +1558,7 @@ export function handleTurnStreamEvent({
                       surfaceThinkingDeltas ||
                       isRetainedSkillProcessMessage(msg),
                     thinkingContent: msg.thinkingContent,
+                    toolCalls: msg.toolCalls,
                   }),
                 }
               : msg,
@@ -1475,8 +1567,7 @@ export function handleTurnStreamEvent({
           return nextMessages;
         });
         clearStreamingTextOverlay();
-        clearActiveStreamIfMatch(eventName);
-        disposeListener();
+        finalizeTerminalStreamState();
         break;
       }
 
@@ -1507,8 +1598,7 @@ export function handleTurnStreamEvent({
         return nextMessages;
       });
       clearStreamingTextOverlay();
-      clearActiveStreamIfMatch(eventName);
-      disposeListener();
+      finalizeTerminalStreamState();
       break;
     }
 

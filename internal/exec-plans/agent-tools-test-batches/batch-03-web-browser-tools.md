@@ -102,7 +102,7 @@ npm test -- "src/components/agent/chat/utils/toolBatchGrouping.test.ts" "src/com
 Rust 定向：
 
 ```bash
-cargo test --manifest-path "src-tauri/Cargo.toml" tools::web -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" tools::web -- --nocapture
 ```
 
 GUI / Playwright：

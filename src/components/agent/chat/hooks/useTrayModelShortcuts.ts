@@ -24,7 +24,7 @@ import {
 import { buildProviderModelsFromRegistry } from "@/lib/model/providerModelsCatalog";
 import { filterModelsByTheme } from "../utils/modelThemePolicy";
 import { getProviderModelCompatibilityIssue } from "../utils/providerModelCompatibility";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 
 interface UseTrayModelShortcutsOptions {
   providerType: string;
@@ -346,7 +346,7 @@ export function useTrayModelShortcuts({
   activeTheme,
   deferInitialSync = false,
 }: UseTrayModelShortcutsOptions) {
-  const traySyncEnabled = hasTauriInvokeCapability();
+  const traySyncEnabled = hasDesktopHostInvokeCapability();
   const lastSyncedSignatureRef = useRef<string>("");
   const initialSyncHandledRef = useRef(false);
   const latestSelectionRef = useRef({

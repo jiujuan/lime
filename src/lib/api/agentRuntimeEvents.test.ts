@@ -10,6 +10,7 @@ import {
   listenAgentRuntimeEvent,
   listenAgentSubagentStatus,
   listenAgentSubagentStream,
+  publishAgentRuntimeEvent,
 } from "./agentRuntimeEvents";
 
 vi.mock("@/lib/dev-bridge", () => ({
@@ -103,6 +104,32 @@ describe("agentRuntimeEvents API", () => {
       "agent_turn_stream:session-1",
       listener,
     );
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("应把本地发布的 App Server runtime 事件投递给现有 listener", async () => {
+    vi.mocked(safeListen).mockResolvedValueOnce(vi.fn());
+
+    const listener = vi.fn();
+    const unlisten = await listenAgentRuntimeEvent("aster_stream_message-1", listener);
+
+    publishAgentRuntimeEvent("aster_stream_message-1", {
+      type: "text_delta",
+      text: "App Server delta",
+    });
+
+    expect(listener).toHaveBeenCalledWith({
+      payload: {
+        type: "text_delta",
+        text: "App Server delta",
+      },
+    });
+
+    unlisten();
+    publishAgentRuntimeEvent("aster_stream_message-1", {
+      type: "text_delta",
+      text: "ignored",
+    });
     expect(listener).toHaveBeenCalledTimes(1);
   });
 

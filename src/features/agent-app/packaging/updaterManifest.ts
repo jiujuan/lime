@@ -20,7 +20,7 @@ export interface AgentAppStandaloneUpdaterManifestPlan {
   channel: AgentAppStandaloneReleasePlan["channel"];
   descriptorHash: string;
   endpoint?: string;
-  pubkeyConfigured: boolean;
+  endpointConfigured: boolean;
   rollbackRequired: boolean;
   rollbackConfigured: boolean;
   status: "blocked";
@@ -70,7 +70,7 @@ export function buildStandaloneUpdaterManifestPlan(
     channel: releasePlan.channel,
     descriptorHash: releasePlan.descriptorHash,
     endpoint: releasePlan.updater.endpoint,
-    pubkeyConfigured: releasePlan.updater.pubkeyConfigured,
+    endpointConfigured: releasePlan.updater.endpointConfigured,
     rollbackRequired: releasePlan.rollback.required,
     rollbackConfigured: releasePlan.rollback.configured,
     status: "blocked",

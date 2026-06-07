@@ -83,16 +83,16 @@ Lime 当前仍然缺少下面三类关键闭环：
 
 | LangChain Harness 能力                | Lime 当前状态 | 当前事实源                                                                                                                                                                                                                                                     | 结论                                                                                                                                                                                                          |
 | ------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| System Prompts / 规则注入             | 已落地        | `src-tauri/src/services/memory_profile_prompt_service.rs`、`src-tauri/src/services/memory_source_resolver_service.rs`                                                                                                                                          | Lime 已把 profile、memory source、project rule 注入到 system prompt 主链，不是裸 prompt 模式                                                                                                                  |
-| Filesystem / Durable Storage          | 已落地        | `internal/aiprompts/overview.md`、`src-tauri/src/commands/aster_agent_cmd/tool_runtime/workspace_tools.rs`                                                                                                                                                         | Workspace、artifact、项目目录、文件工具都已经进入主链                                                                                                                                                         |
-| Bash / Code Execution                 | 已落地        | `src-tauri/src/agent_tools/catalog.rs`、`src-tauri/src/agent_tools/execution.rs`                                                                                                                                                                               | Lime 已具备通用执行能力，不依赖“预先定义完所有工具”                                                                                                                                                           |
-| Sandbox / Approval / Policy           | 已落地        | `src-tauri/src/agent_tools/execution.rs`、`internal/aiprompts/commands.md`                                                                                                                                                                                         | restriction profile、sandbox profile、warning policy 都已进入 runtime 主链                                                                                                                                    |
-| Tools / Skills / MCP / Browser        | 已落地        | `internal/aiprompts/skill-standard.md`、`internal/aiprompts/command-runtime.md`、`src-tauri/src/agent_tools/catalog.rs`                                                                                                                                                | Lime 已有较完整 capability surface，不是单一 chat tool 模型                                                                                                                                                   |
-| Memory / Search / AGENTS 注入         | 已落地        | `src-tauri/src/services/memory_source_resolver_service.rs`、`internal/aiprompts/overview.md`                                                                                                                                                                       | 记忆与规则文件已进入生产链，Web/MCP/search 也已存在                                                                                                                                                           |
-| Context Rot 治理                      | 部分落地      | `src-tauri/src/commands/aster_agent_cmd/command_api/runtime_api.rs`、`src-tauri/crates/aster-rust/crates/aster/src/context_mgmt/mod.rs`、`src-tauri/crates/agent/src/tool_io_offload.rs`、`src-tauri/crates/aster-rust/crates/aster/src/context/compressor.rs` | 已有 compact、tool output compression、tool offload，但产品侧可见性与默认治理还不够强                                                                                                                         |
-| Long-Horizon Execution                | 部分落地      | `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs`、`src-tauri/src/commands/aster_agent_cmd/tool_runtime/subagent_tools.rs`、`src-tauri/src/commands/aster_agent_cmd/command_api/runtime_api.rs`                                                         | 已有 auto continue、provider continuation、subagent、queue/resume，但还没形成统一 completion loop                                                                                                             |
-| Verification / Replay / Review        | 部分落地      | `internal/aiprompts/harness-engine-governance.md`、`src-tauri/src/commands/aster_agent_cmd/command_api/runtime_api.rs`、`src/lib/agentRuntime/harnessVerificationPresentation.ts`、`src-tauri/src/services/runtime_review_decision_service.rs`                     | evidence / replay / analysis / review 已成链；前端 verification 展示语义已收敛到共享 helper，review template 也开始直接携带同一份 structured verification summary，但验证结果尚未成为所有后续动作的默认硬约束 |
-| Just-in-Time Tool / Context Assembly  | 待加强        | `src-tauri/src/agent_tools/catalog.rs`、`internal/aiprompts/skill-standard.md`、`internal/aiprompts/command-runtime.md`                                                                                                                                                | 已有 surface/profile/skill progressive disclosure，但仍偏静态 catalog，不够按任务即时裁剪                                                                                                                     |
+| System Prompts / 规则注入             | 已落地        | `lime-rs/src/services/memory_profile_prompt_service.rs`、`lime-rs/src/services/memory_source_resolver_service.rs`                                                                                                                                          | Lime 已把 profile、memory source、project rule 注入到 system prompt 主链，不是裸 prompt 模式                                                                                                                  |
+| Filesystem / Durable Storage          | 已落地        | `internal/aiprompts/overview.md`、`lime-rs/src/commands/aster_agent_cmd/tool_runtime/workspace_tools.rs`                                                                                                                                                         | Workspace、artifact、项目目录、文件工具都已经进入主链                                                                                                                                                         |
+| Bash / Code Execution                 | 已落地        | `lime-rs/src/agent_tools/catalog.rs`、`lime-rs/src/agent_tools/execution.rs`                                                                                                                                                                               | Lime 已具备通用执行能力，不依赖“预先定义完所有工具”                                                                                                                                                           |
+| Sandbox / Approval / Policy           | 已落地        | `lime-rs/src/agent_tools/execution.rs`、`internal/aiprompts/commands.md`                                                                                                                                                                                         | restriction profile、sandbox profile、warning policy 都已进入 runtime 主链                                                                                                                                    |
+| Tools / Skills / MCP / Browser        | 已落地        | `internal/aiprompts/skill-standard.md`、`internal/aiprompts/command-runtime.md`、`lime-rs/src/agent_tools/catalog.rs`                                                                                                                                                | Lime 已有较完整 capability surface，不是单一 chat tool 模型                                                                                                                                                   |
+| Memory / Search / AGENTS 注入         | 已落地        | `lime-rs/src/services/memory_source_resolver_service.rs`、`internal/aiprompts/overview.md`                                                                                                                                                                       | 记忆与规则文件已进入生产链，Web/MCP/search 也已存在                                                                                                                                                           |
+| Context Rot 治理                      | 部分落地      | `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs`、`lime-rs/crates/aster-rust/crates/aster/src/context_mgmt/mod.rs`、`lime-rs/crates/agent/src/tool_io_offload.rs`、`lime-rs/crates/aster-rust/crates/aster/src/context/compressor.rs` | 已有 compact、tool output compression、tool offload，但产品侧可见性与默认治理还不够强                                                                                                                         |
+| Long-Horizon Execution                | 部分落地      | `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`、`lime-rs/src/commands/aster_agent_cmd/tool_runtime/subagent_tools.rs`、`lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs`                                                         | 已有 auto continue、provider continuation、subagent、queue/resume，但还没形成统一 completion loop                                                                                                             |
+| Verification / Replay / Review        | 部分落地      | `internal/aiprompts/harness-engine-governance.md`、`lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs`、`src/lib/agentRuntime/harnessVerificationPresentation.ts`、`lime-rs/src/services/runtime_review_decision_service.rs`                     | evidence / replay / analysis / review 已成链；前端 verification 展示语义已收敛到共享 helper，review template 也开始直接携带同一份 structured verification summary，但验证结果尚未成为所有后续动作的默认硬约束 |
+| Just-in-Time Tool / Context Assembly  | 待加强        | `lime-rs/src/agent_tools/catalog.rs`、`internal/aiprompts/skill-standard.md`、`internal/aiprompts/command-runtime.md`                                                                                                                                                | 已有 surface/profile/skill progressive disclosure，但仍偏静态 catalog，不够按任务即时裁剪                                                                                                                     |
 | Trace-Driven Harness Self-Improvement | 待建设        | `internal/aiprompts/harness-engine-governance.md`、现有 evidence/replay/export 主链                                                                                                                                                                                | 已经具备取证底座，但还未形成“基于 trace 自动发现缺口并推进治理”的稳定平台能力                                                                                                                                 |
 
 ---
@@ -101,18 +101,18 @@ Lime 当前仍然缺少下面三类关键闭环：
 
 ### 5.1 Prompt / Memory / Rules
 
-- `src-tauri/src/services/memory_profile_prompt_service.rs`
+- `lime-rs/src/services/memory_profile_prompt_service.rs`
   证明 Lime 已把用户画像与 memory prompt 合并进 system prompt，而不是只靠前端临时拼接。
-- `src-tauri/src/services/memory_source_resolver_service.rs`
+- `lime-rs/src/services/memory_source_resolver_service.rs`
   证明 Lime 已支持 user memory、durable memory、project rule、多层目录记忆来源解析。
 
 ### 5.2 Workspace / Tool Surface / Execution
 
-- `src-tauri/src/agent_tools/catalog.rs`
+- `lime-rs/src/agent_tools/catalog.rs`
   证明 Lime 已有 tool catalog、surface profile、capability、lifecycle、permission plane 这些 Harness 级抽象。
-- `src-tauri/src/agent_tools/execution.rs`
+- `lime-rs/src/agent_tools/execution.rs`
   证明 Lime 已把 warning policy、restriction profile、sandbox profile 做成统一执行策略，而不是 scattered 规则。
-- `src-tauri/src/commands/aster_agent_cmd/tool_runtime/workspace_tools.rs`
+- `lime-rs/src/commands/aster_agent_cmd/tool_runtime/workspace_tools.rs`
   证明 workspace tool 不只是文件读写，还承担 output summary、metadata、observability 编码职责。
 
 ### 5.3 Skills / Scene / Browser / MCP
@@ -126,15 +126,15 @@ Lime 当前仍然缺少下面三类关键闭环：
 
 ### 5.4 Context Rot / Offload / Continuation
 
-- `src-tauri/src/commands/aster_agent_cmd/command_api/runtime_api.rs`
+- `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs`
   证明 Lime 已有 `agent_runtime_compact_session`、resume thread、thread read model、evidence export 这类 runtime 操作主链。
-- `src-tauri/crates/aster-rust/crates/aster/src/context_mgmt/mod.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/context_mgmt/mod.rs`
   证明 Aster 已有 continuation message 与 compact 后续写逻辑，Lime 不是完全没有 continuation。
-- `src-tauri/crates/aster-rust/crates/aster/src/context/compressor.rs`
+- `lime-rs/crates/aster-rust/crates/aster/src/context/compressor.rs`
   证明 tool output 已有 head/tail compression。
-- `src-tauri/crates/agent/src/tool_io_offload.rs`
+- `lime-rs/crates/agent/src/tool_io_offload.rs`
   证明 Lime 已有通用 tool arguments/results offload、preview、eviction policy 与 `offload_file` 协议。
-- `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs`
+- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
   证明 Lime 已有 auto continue、provider continuation state 恢复与 runtime 级 continuation 配置。
 
 ### 5.5 Evidence / Replay / Review / UI
@@ -143,7 +143,7 @@ Lime 当前仍然缺少下面三类关键闭环：
   证明 Lime 已明确要求 evidence pack 作为事实源，replay / analysis / review / UI 都应复用它。
 - `src/lib/agentRuntime/harnessVerificationPresentation.ts`
   证明前端 verification label / variant / description 已开始从 `HarnessStatusPanel` 本地解释收敛到共享 helper，GUI 消费层不再各自维护一套语义。
-- `src-tauri/src/services/runtime_review_decision_service.rs`
+- `lime-rs/src/services/runtime_review_decision_service.rs`
   证明 review decision 模板不再只携带 failure / recovered 文本列表，而开始直接透传 structured verification summary，review 消费层可以继续复用 evidence 同一份事实。
 - `src/components/agent/chat/components/HarnessStatusPanel.tsx`
   证明前端已经能消费 evidence pack，并开始在 evidence / review 两个消费面直接复用共享 verification presentation helper；但展示仍偏状态卡，不是完整治理闭环。

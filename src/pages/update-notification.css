@@ -8,29 +8,31 @@
 .update-container {
   width: 100vw;
   height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  align-items: stretch;
+  justify-items: stretch;
   background: transparent;
-  padding: 6px;
+  padding: 0;
   box-sizing: border-box;
   pointer-events: none;
 }
 
 .update-toast {
   position: relative;
-  width: min(196px, calc(100vw - 12px));
-  min-height: 0;
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  box-sizing: border-box;
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 10px;
-  border-radius: 9px;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
   border: 1px solid rgba(15, 23, 42, 0.12);
   background: #fff;
   box-shadow:
-    0 10px 26px rgba(15, 23, 42, 0.16),
-    0 2px 8px rgba(15, 23, 42, 0.1);
+    0 10px 24px rgba(15, 23, 42, 0.14),
+    0 2px 8px rgba(15, 23, 42, 0.08);
   opacity: 0;
   transform: translateY(10px) scale(0.98);
   transition:
@@ -70,7 +72,7 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
+  gap: 8px;
 }
 
 .update-toast-top {
@@ -105,8 +107,9 @@
 }
 
 .update-toast-actions {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   gap: 6px;
   width: 100%;
   -webkit-app-region: no-drag;
@@ -117,10 +120,10 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  width: 100%;
+  width: auto;
   min-height: 30px;
   border-radius: 8px;
-  padding: 0 8px;
+  padding: 0 10px;
   border: none;
   background: transparent;
   font-size: 12px;
@@ -227,8 +230,7 @@
 
 @media (max-width: 520px) {
   .update-toast {
-    width: min(196px, calc(100vw - 12px));
-    padding: 9px;
+    padding: 10px;
   }
 }
 

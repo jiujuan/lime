@@ -61,7 +61,7 @@ describe("UiExtensionHost", () => {
     });
     expect(mounted.sandboxPolicy).toMatchObject({
       allowScripts: true,
-      allowRawTauriApi: false,
+      allowRawHostApi: false,
       allowNodeApi: false,
       allowNetworkAccess: false,
     });
@@ -69,7 +69,7 @@ describe("UiExtensionHost", () => {
       bridgeKind: "injected-sdk",
       appId: "content-factory-app",
       entryKey: "dashboard",
-      rawTauriApi: false,
+      rawHostApi: false,
       nodeApi: false,
     });
     expect(mounted.sdkBridge.allowedCapabilities).toEqual(

@@ -113,7 +113,7 @@ async function main() {
 
   const detail = lastError instanceof Error ? lastError.message : String(lastError || "unknown error");
   throw new Error(
-    `[bridge:health] 超时未就绪: ${options.url}。请先启动 npm run tauri:dev:headless，并确认 DevBridge 已监听 3030。最后错误: ${detail}`
+    `[bridge:health] 超时未就绪: ${options.url}。请先启动 npm run electron:dev，并确认 DevBridge 已监听 3030。最后错误: ${detail}`
   );
 }
 

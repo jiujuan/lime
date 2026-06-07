@@ -26,7 +26,7 @@
 
 #### 3.1 创建 AI 摘要服务
 
-**文件**: `src-tauri/crates/services/src/ai_summary_service.rs`
+**文件**: `lime-rs/crates/services/src/ai_summary_service.rs`
 
 **功能**:
 - `AISummaryService`: AI 摘要服务主体
@@ -75,7 +75,7 @@
 **目标**: 在应用启动时初始化 AI 摘要服务
 
 **修改文件**:
-- `src-tauri/src/main.rs` 或相关初始化代码
+- `lime-rs/src/main.rs` 或相关初始化代码
 - 创建 `AISummaryService` 实例
 - 注入到 `SessionContextService`
 
@@ -128,8 +128,8 @@
 - `internal/iteration-notes/p0-phase1-implementation-plan.md` - 阶段 1 详细计划
 
 ### 代码文件
-- `src-tauri/crates/services/src/ai_summary_service.rs` - AI 摘要服务（新增）
-- `src-tauri/crates/services/src/lib.rs` - 模块导出（已修改）
+- `lime-rs/crates/services/src/ai_summary_service.rs` - AI 摘要服务（新增）
+- `lime-rs/crates/services/src/lib.rs` - 模块导出（已修改）
 
 ## 风险与缓解
 

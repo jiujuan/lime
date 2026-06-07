@@ -1,17 +1,17 @@
 # App Server 服务抽取计划
 
 > 状态：current planning source
-> 更新时间：2026-06-04
-> 作用：定义如何从现有 Lime runtime 中抽出可被 App Server 和 Tauri command 共用的服务层。
+> 更新时间：2026-06-06
+> 作用：定义如何从现有 Lime runtime 中抽出可被 App Server 和 legacy desktop facade 共用的服务层。
 
 ## 1. 抽取原则
 
 1. 先抽公共 RuntimeCore，不先改产品入口。
 2. 先定义 backend-neutral 合同，再迁 Aster 主链。
 3. Aster 只是第一个 `ExecutionBackend`，不能把 Aster DTO 直接抬成公共 DTO。
-4. Tauri command 只保留参数适配、事件转发和错误映射。
-5. App Server 和 Tauri command 必须调用同一个 RuntimeCore。
-6. 服务层不能依赖 `tauri::AppHandle`、`Emitter`、`State`。
+4. legacy desktop command 只保留参数适配、事件转发和错误映射。
+5. App Server 和 legacy desktop facade 必须调用同一个 RuntimeCore。
+6. 服务层不能依赖 retired desktop host app handle、event emitter 或 state container。
 7. 事件 sink、路径、凭证、workspace、policy 都通过 trait / context 注入。
 
 ## 2. 当前候选事实源
@@ -21,19 +21,19 @@
 | `RuntimeCore` | `current target` | 公共 session/thread/turn/task/run/action/event/artifact/evidence 事实源。 |
 | `ExecutionBackend` | `current target` | 后端适配接口，Aster 和未来后端都走这里。 |
 | `AsterBackend` | `current target` | 对现有 Aster runtime_turn/tool_runtime 的适配封装。 |
-| `src-tauri/crates/agent` | `current reference` | 当前最接近 core 的 crate，后续继续拆公共模型与服务。 |
-| `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` | `current reference` | Aster backend 实现参考，不直接成为公共 core。 |
-| `src-tauri/src/commands/aster_agent_cmd/tool_runtime/*` | `current reference` | Aster tool execution 参考，事件需转换为公共 tool facts。 |
-| `src-tauri/src/commands/aster_agent_cmd/command_api/*` | `compat` | 保留 Tauri command DTO / adapter，逐步委托 service。 |
+| `lime-rs/crates/agent` | `current reference` | 当前最接近 core 的 crate，后续继续拆公共模型与服务。 |
+| `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` | `current reference` | Aster backend 实现参考，不直接成为公共 core。 |
+| `lime-rs/src/commands/aster_agent_cmd/tool_runtime/*` | `current reference` | Aster tool execution 参考，事件需转换为公共 tool facts。 |
+| `lime-rs/src/commands/aster_agent_cmd/command_api/*` | `compat` | 保留 legacy desktop command DTO / facade，逐步委托 service。 |
 | 前端 `safeInvoke` / `invoke` agent runtime API | `compat client` | Lime Desktop 迁移期继续保留，但可改为 app-server client。 |
 | `app-server-protocol` | `current target` | 定义 wire DTO 和 schema。 |
-| `app-server` crate 家族 | `current target` | 复刻 Codex 分层命名，提供 protocol / transport / server / client / daemon / test-client。 |
+| `app-server` crate 家族 | `current target` | 参考 codex-rs 分层命名，提供 protocol / transport / server / client / daemon / test-client。 |
 
 ## 3. 目标服务边界
 
 ```mermaid
 flowchart TB
-    Tauri["Tauri Commands<br/>compat adapter"] --> Facade["RuntimeCore"]
+    DesktopFacade["Legacy Desktop Facade<br/>compat"] --> Facade["RuntimeCore"]
     Server["App Server JSON-RPC"] --> Facade
 
     Facade --> Session["SessionService"]
@@ -68,7 +68,7 @@ flowchart TB
 不负责：
 
 1. 直接持有壳层窗口。
-2. 直接发送 Tauri event。
+2. 直接发送 legacy desktop event。
 3. 直接读取 renderer state。
 4. 暴露 Aster 私有 DTO。
 
@@ -80,7 +80,7 @@ flowchart TB
 2. 执行具体后端逻辑。
 3. 通过 `RuntimeEventSink` 回传标准事件。
 4. 支持 cancel / resume 的最小合同。
-5. backend host 返回值必须是公共 `RuntimeEvent`，不能把 `lime_agent::AgentEvent`、`AsterChatRequest` 或 Tauri DTO 带回 `app-server` 公共合同。
+5. backend host 返回值必须是公共 `RuntimeEvent`，不能把 `lime_agent::AgentEvent`、`AsterChatRequest` 或 legacy desktop DTO 带回 `app-server` 公共合同。
 
 首批 backend：
 
@@ -89,7 +89,7 @@ flowchart TB
 
 ### 4.3 `RuntimeEventSink`
 
-App Server、Tauri command、测试 fixture 都应通过统一 event sink 消费事件：
+App Server、legacy desktop facade、测试 fixture 都应通过统一 event sink 消费事件：
 
 ```text
 RuntimeEventSink
@@ -101,7 +101,7 @@ RuntimeEventSink
 实现：
 
 1. `JsonRpcEventSink`：发 notification。
-2. `TauriEventSink`：迁移期转发到现有 GUI event。
+2. `DesktopEventSink`：迁移期转发到现有 GUI event。
 3. `TestEventSink`：收集 fixture。
 
 ### 4.4 `RuntimeHostContext`
@@ -118,13 +118,13 @@ RuntimeEventSink
 8. artifact policy
 9. evidence policy
 
-不能从全局 Tauri state 隐式读取。
+不能从全局 legacy desktop host state 隐式读取。
 
 ## 5. 迁移映射
 
 | 能力 | 现状 | 目标服务 | 迁移策略 |
 | --- | --- | --- | --- |
-| submit turn | Tauri command 调 runtime_turn | `TurnExecutionService::start_turn` | 先包 service，再让 command 委托。 |
+| submit turn | legacy desktop command 调 runtime_turn | `TurnExecutionService::start_turn` | 先包 service，再让 command 委托。 |
 | read thread | command_api / session store projection | `SessionService::read_session` | read model 下沉为 service 输出。 |
 | cancel turn | command / queue glue | `TurnExecutionService::cancel_turn` | 统一 active turn 状态和取消事件。 |
 | respond action | scattered approval bridge | `ActionService::respond_action` | action id 成为协议事实。 |
@@ -142,8 +142,8 @@ RuntimeEventSink
 | backend 选择、取消、事件序列 | RuntimeCore |
 | Aster prompt / tool orchestration 细节 | AsterBackend |
 | 未来其他执行引擎细节 | 对应 ExecutionBackend |
-| 旧 Lime Agent event payload 解析 | Desktop compat adapter |
-| Tauri AppHandle / window event | TauriHostAdapter |
+| 旧 Lime Agent event payload 解析 | Desktop compat facade |
+| legacy desktop host handle / window event | DesktopHostBridge |
 | Electron sidecar 管理 | app-server-client / app-server-daemon |
 | content-studio 业务对象 | content-studio App surface |
 
@@ -154,7 +154,7 @@ RuntimeEventSink
 输出：
 
 1. runtime command dependency map。
-2. Tauri-only dependency list。
+2. legacy desktop-only dependency list。
 3. service candidate list。
 
 退出条件：
@@ -173,7 +173,7 @@ RuntimeEventSink
 
 退出条件：
 
-1. Tauri command 可通过 service 调用最小 turn。
+1. legacy desktop command 可通过 service 调用最小 turn。
 2. 测试能收集事件。
 
 ### P2：App Server 接入 service
@@ -188,7 +188,7 @@ RuntimeEventSink
 退出条件：
 
 1. stdio fixture 跑通 initialize / start / turn / cancel。
-2. 不依赖 Tauri。
+2. 不依赖 retired desktop host crates。
 
 ### P3：事件和 action 统一
 
@@ -196,7 +196,7 @@ RuntimeEventSink
 
 1. `RuntimeEventSink` 全面接入。
 2. `ActionService` 统一 action required / resolved。
-3. Tauri event 和 JSON-RPC notification 同源。
+3. legacy desktop event 和 JSON-RPC notification 同源。
 
 退出条件：
 
@@ -216,36 +216,36 @@ RuntimeEventSink
 1. artifact changed / evidence changed 事件可跨 App 投影。
 2. evidence export 不重新拼 runtime facts。
 
-## 7. Tauri-only 依赖退场
+## 7. retired host 依赖退场
 
 下列依赖在服务层中禁止出现：
 
-1. `tauri::AppHandle`
-2. `tauri::Emitter`
-3. `tauri::State`
+1. retired desktop host app handle。
+2. retired desktop host event emitter。
+3. retired desktop host state container。
 4. window label
 5. renderer-specific event names
 6. frontend-only DTO
 
 允许存在的位置：
 
-1. Tauri command adapter。
-2. Tauri event sink。
+1. legacy desktop command facade。
+2. legacy desktop event sink。
 3. Lime Desktop frontend gateway。
 
 退出条件：
 
-1. service crate 编译不依赖 Tauri。
+1. service crate 编译不依赖 retired desktop host crates。
 2. app-server crate 可独立启动。
-3. Tauri adapter 删除后 service 不受影响。
+3. legacy desktop facade 删除后 service 不受影响。
 
 ## 8. 守卫
 
 后续实现应补：
 
-1. 结构测试：service crate 不得依赖 Tauri。
+1. 结构测试：service crate 不得依赖 retired desktop host crates。
 2. 文本扫描：新 runtime 业务逻辑不得落回 command glue。
-3. contract test：Tauri command 和 App Server 对同一 fixture 产出一致事件。
+3. contract test：legacy desktop facade 和 App Server 对同一 fixture 产出一致事件。
 4. protocol test：JSON-RPC request / response / notification schema 稳定。
 5. 边界测试：`app-server` 公共后端 contract 不得重新出现 Lime/Aster 私有事件类型。
 
@@ -255,5 +255,5 @@ RuntimeEventSink
 
 1. 至少一个真实 Agent turn 经由 service 被 Lime Desktop 和 App Server 复用。
 2. Tool / action / artifact / evidence 至少有同源事件链。
-3. Tauri command 只做 adapter。
+3. legacy desktop command 只做 compat facade。
 4. content-studio 这类独立 App 不需要理解 Lime Desktop 内部 command。

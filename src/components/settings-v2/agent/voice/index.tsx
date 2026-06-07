@@ -6,7 +6,7 @@ import {
   type ChangeEvent,
   type ReactNode,
 } from "react";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog } from "@/lib/desktop-host/plugin-dialog";
 import type { TFunction } from "i18next";
 import {
   AlertCircle,
@@ -1041,7 +1041,7 @@ export function VoiceSettings() {
               <div className="flex shrink-0 items-center gap-2">
                 {voiceConfig?.enabled ? (
                   <span className="inline-flex h-7 items-center rounded-full border border-emerald-200 bg-white px-2.5 text-xs font-semibold text-emerald-800 shadow-sm">
-                    🌐 Fn
+                    {t("settings.voice.input.fn.activeKeyLabel")}
                   </span>
                 ) : null}
                 <Switch
@@ -1058,7 +1058,7 @@ export function VoiceSettings() {
             {voiceConfig?.enabled ? (
               <div className="rounded-[16px] border border-slate-200/80 bg-slate-100/90 px-3 py-2.5 text-xs leading-5 text-slate-600">
                 <span className="mr-2 inline-flex h-6 items-center rounded-md border border-slate-300 bg-white px-2 font-semibold text-slate-700">
-                  Fn
+                  {t("settings.voice.input.fn.keyLabel")}
                 </span>
                 {voiceShortcutStatus?.fn_note ??
                   t("settings.voice.input.fnHoldDescription")}
@@ -1103,7 +1103,7 @@ export function VoiceSettings() {
           <div className="space-y-3 rounded-[18px] bg-slate-50/80 px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex h-8 items-center rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700">
-                Fn
+                {t("settings.voice.input.fn.keyLabel")}
               </span>
               <StatusPill tone={fnShortcutStatus.tone}>
                 {fnShortcutStatus.text}
@@ -1160,7 +1160,7 @@ export function VoiceSettings() {
         })}
       >
         <SettingRow
-          label="SenseVoice Small"
+          label={t("settings.voice.model.senseVoice.label")}
           description={t("settings.voice.model.senseVoice.description")}
         >
           {primaryVoiceModel ? (
@@ -1375,12 +1375,19 @@ export function VoiceSettings() {
                         {t("settings.voice.model.test.completedBadge")}
                       </StatusPill>
                       <span className="text-xs text-emerald-700">
-                        {voiceModelTestResult.sample_rate} Hz ·{" "}
-                        {t("settings.voice.model.test.durationSeconds", {
-                          seconds:
-                            voiceModelTestResult.duration_secs.toFixed(2),
-                        })}{" "}
-                        · {voiceModelTestResult.language || "auto"}
+                        {t("settings.voice.model.test.resultMeta", {
+                          duration: t(
+                            "settings.voice.model.test.durationSeconds",
+                            {
+                              seconds:
+                                voiceModelTestResult.duration_secs.toFixed(2),
+                            },
+                          ),
+                          language:
+                            voiceModelTestResult.language ||
+                            t("settings.voice.model.test.languageAuto"),
+                          sampleRate: voiceModelTestResult.sample_rate,
+                        })}
                       </span>
                     </div>
                     <p className="whitespace-pre-wrap text-sm leading-6 text-slate-800">

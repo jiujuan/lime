@@ -53,8 +53,6 @@ import { UiExtensionHost } from "../runtime/uiExtensionHost";
 import { buildUiRuntimeCapabilityProfile } from "../runtime/uiRuntimeCapabilityProfile";
 import { buildLimeRuntimeProfileForPreview } from "../runtime-profile";
 import type { CapabilityHost } from "../sdk/CapabilityHost";
-import { MockCapabilityHost } from "../sdk/MockCapabilityHost";
-import { buildMockCapabilityProfile } from "../sdk/mockCapabilityProfile";
 import type {
   AgentAppHostFlags,
   AgentAppRunResult,
@@ -78,7 +76,7 @@ interface AgentAppLabPageProps {
   flags?: Partial<AgentAppHostFlags>;
 }
 
-type CapabilityHostMode = "mock" | "adapter";
+type CapabilityHostMode = "adapter";
 
 const LAB_INSTALL_FLOW_STAGES: AgentAppLabInstallFlowStage[] = [
   "source-selected",
@@ -108,7 +106,9 @@ function buildManagerCompanionFixture(): AppManifest {
   };
 }
 
-function buildPreviewFromInstalledState(state: InstalledAgentAppState): InstalledAppPreview {
+function buildPreviewFromInstalledState(
+  state: InstalledAgentAppState,
+): InstalledAppPreview {
   return {
     identity: state.identity,
     manifest: state.manifest,
@@ -176,7 +176,11 @@ function guardTone(status: AgentAppEntryRuntimeGuardResult["status"]): string {
   return "border-rose-200 bg-rose-50 text-rose-700";
 }
 
-function GuardStatusBadge({ status }: { status: AgentAppEntryRuntimeGuardResult["status"] }) {
+function GuardStatusBadge({
+  status,
+}: {
+  status: AgentAppEntryRuntimeGuardResult["status"];
+}) {
   const { t } = useTranslation("agent");
   return (
     <span
@@ -217,7 +221,9 @@ function SectionCard({
   );
 }
 
-function installFlowTone(status: AgentAppLabInstallFlowResult["status"]): string {
+function installFlowTone(
+  status: AgentAppLabInstallFlowResult["status"],
+): string {
   if (status === "launched" || status === "cleanup-preview") {
     return "border-emerald-200 bg-emerald-50 text-emerald-700";
   }
@@ -262,7 +268,8 @@ function InstallFlowPanel({
               {t(`agentApp.lab.installFlow.status.${flow.status}`)}
             </p>
             <p className="mt-1 text-xs font-mono">
-              {flow.review.sourceKind}:{flow.review.appId}@{flow.review.appVersion}
+              {flow.review.sourceKind}:{flow.review.appId}@
+              {flow.review.appVersion}
             </p>
           </div>
           <span className="rounded-full border border-white/70 bg-white/70 px-2 py-1 text-xs font-medium">
@@ -379,12 +386,10 @@ function EntryList({
   entries,
   onRunEntry,
   onOpenUiEntry,
-  hostMode,
 }: {
   entries: ProjectedEntry[];
   onRunEntry?: (entryKey: string) => void;
   onOpenUiEntry?: (entryKey: string) => void;
-  hostMode?: CapabilityHostMode;
 }) {
   const { t } = useTranslation("agent");
   return (
@@ -405,7 +410,9 @@ function EntryList({
             </span>
           </div>
           {entry.description ? (
-            <p className="mt-3 text-sm leading-6 text-slate-600">{entry.description}</p>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              {entry.description}
+            </p>
           ) : null}
           <div className="mt-4 flex flex-wrap gap-2">
             <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600">
@@ -425,14 +432,11 @@ function EntryList({
               onClick={() => onRunEntry(entry.key)}
             >
               <PlayCircle size={14} />
-              {t(
-                hostMode === "adapter"
-                  ? "agentApp.lab.run.adapterAction"
-                  : "agentApp.lab.run.mockAction",
-              )}
+              {t("agentApp.lab.run.adapterAction")}
             </button>
           ) : null}
-          {onOpenUiEntry && ["page", "panel", "settings"].includes(entry.kind) ? (
+          {onOpenUiEntry &&
+          ["page", "panel", "settings"].includes(entry.kind) ? (
             <button
               type="button"
               className="ml-2 mt-4 inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white px-3 py-1.5 text-xs font-medium text-sky-700 transition hover:border-sky-300 hover:bg-sky-50"
@@ -479,11 +483,17 @@ function IssueList({ issues }: { issues: ReadinessIssue[] }) {
                 ? t("agentApp.lab.readiness.blocker")
                 : t("agentApp.lab.readiness.warning")}
             </span>
-            <span className="font-mono text-xs text-slate-500">{issue.code}</span>
+            <span className="font-mono text-xs text-slate-500">
+              {issue.code}
+            </span>
           </div>
-          <p className="mt-2 text-sm leading-6 text-slate-700">{issue.message}</p>
+          <p className="mt-2 text-sm leading-6 text-slate-700">
+            {issue.message}
+          </p>
           {issue.capability ? (
-            <p className="mt-1 font-mono text-xs text-slate-500">{issue.capability}</p>
+            <p className="mt-1 font-mono text-xs text-slate-500">
+              {issue.capability}
+            </p>
           ) : null}
         </div>
       ))}
@@ -507,11 +517,16 @@ function EntryRuntimeGuardPanel({
 
   const prompt = result.prompt;
   return (
-    <div className="space-y-3" data-testid="agent-app-entry-runtime-guard-result">
+    <div
+      className="space-y-3"
+      data-testid="agent-app-entry-runtime-guard-result"
+    >
       <div className={`rounded-2xl border p-4 ${guardTone(result.status)}`}>
         <div className="flex flex-wrap items-center gap-2">
           <GuardStatusBadge status={result.status} />
-          <span className="font-mono text-xs">{prompt?.entryKey ?? result.provenance.entryKey}</span>
+          <span className="font-mono text-xs">
+            {prompt?.entryKey ?? result.provenance.entryKey}
+          </span>
         </div>
         <p className="mt-2 text-sm">
           {t(`agentApp.lab.guard.summary.${result.status}`)}
@@ -574,35 +589,47 @@ function EntryRuntimeGuardPanel({
 
       {result.blockers.length || result.warnings.length ? (
         <div className="space-y-2">
-          {[...result.blockers, ...result.warnings].slice(0, 5).map((issue, index) => (
-            <div
-              key={`${issue.code}:${issue.entryKey ?? "app"}:${index}`}
-              className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className={`rounded-full border px-2 py-1 text-xs font-medium ${
-                    issue.severity === "blocker"
-                      ? "border-rose-200 bg-white text-rose-700"
-                      : "border-amber-200 bg-white text-amber-700"
-                  }`}
-                >
-                  {issue.severity === "blocker"
-                    ? t("agentApp.lab.readiness.blocker")
-                    : t("agentApp.lab.readiness.warning")}
-                </span>
-                <span className="font-mono text-xs text-slate-500">{issue.code}</span>
+          {[...result.blockers, ...result.warnings]
+            .slice(0, 5)
+            .map((issue, index) => (
+              <div
+                key={`${issue.code}:${issue.entryKey ?? "app"}:${index}`}
+                className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`rounded-full border px-2 py-1 text-xs font-medium ${
+                      issue.severity === "blocker"
+                        ? "border-rose-200 bg-white text-rose-700"
+                        : "border-amber-200 bg-white text-amber-700"
+                    }`}
+                  >
+                    {issue.severity === "blocker"
+                      ? t("agentApp.lab.readiness.blocker")
+                      : t("agentApp.lab.readiness.warning")}
+                  </span>
+                  <span className="font-mono text-xs text-slate-500">
+                    {issue.code}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  {issue.message}
+                </p>
               </div>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{issue.message}</p>
-            </div>
-          ))}
+            ))}
         </div>
       ) : null}
     </div>
   );
 }
 
-function CleanupTargets({ title, targets }: { title: string; targets: CleanupTarget[] }) {
+function CleanupTargets({
+  title,
+  targets,
+}: {
+  title: string;
+  targets: CleanupTarget[];
+}) {
   const { t } = useTranslation("agent");
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -615,19 +642,26 @@ function CleanupTargets({ title, targets }: { title: string; targets: CleanupTar
       {targets.length ? (
         <div className="space-y-2">
           {targets.map((target) => (
-            <div key={`${target.kind}:${target.value}`} className="rounded-xl bg-white px-3 py-2">
+            <div
+              key={`${target.kind}:${target.value}`}
+              className="rounded-xl bg-white px-3 py-2"
+            >
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
                   {target.kind}
                 </span>
-                <span className="font-mono text-xs text-slate-700">{target.value}</span>
+                <span className="font-mono text-xs text-slate-700">
+                  {target.value}
+                </span>
               </div>
               <p className="mt-1 text-xs text-slate-500">{target.reason}</p>
             </div>
           ))}
         </div>
       ) : (
-        <p className="text-sm text-slate-500">{t("agentApp.lab.cleanup.empty")}</p>
+        <p className="text-sm text-slate-500">
+          {t("agentApp.lab.cleanup.empty")}
+        </p>
       )}
     </div>
   );
@@ -648,13 +682,20 @@ function CleanupPlanPanel({ plan }: { plan: AppCleanupPlan }) {
       />
       <CleanupTargets
         title={t("agentApp.lab.cleanup.projection")}
-        targets={[...plan.projectionPaths, ...plan.readinessPaths, ...plan.setupStatePaths]}
+        targets={[
+          ...plan.projectionPaths,
+          ...plan.readinessPaths,
+          ...plan.setupStatePaths,
+        ]}
       />
       <CleanupTargets
         title={t("agentApp.lab.cleanup.storage")}
         targets={plan.storageNamespaces}
       />
-      <CleanupTargets title={t("agentApp.lab.cleanup.logs")} targets={plan.logPaths} />
+      <CleanupTargets
+        title={t("agentApp.lab.cleanup.logs")}
+        targets={plan.logPaths}
+      />
     </div>
   );
 }
@@ -741,7 +782,9 @@ function RunResultPanel({
           <p className="text-sm font-semibold text-slate-900">
             {t("agentApp.lab.run.knowledge")}
           </p>
-          <p className="mt-2 font-mono text-xs text-slate-600">{knowledge.query}</p>
+          <p className="mt-2 font-mono text-xs text-slate-600">
+            {knowledge.query}
+          </p>
           <p className="mt-2 text-sm text-slate-600">
             {knowledge.records.map((record) => record.bindingKey).join(" / ")}
           </p>
@@ -782,7 +825,9 @@ function UiRuntimePanel({
             {result.entryKind}
           </span>
           <span className="font-mono text-xs text-sky-700">{result.appId}</span>
-          <span className="font-mono text-xs text-sky-700">{result.entryKey}</span>
+          <span className="font-mono text-xs text-sky-700">
+            {result.entryKey}
+          </span>
         </div>
         <p className="mt-2 text-sm text-sky-700">
           {t("agentApp.lab.uiRuntime.mounted")}
@@ -797,7 +842,9 @@ function UiRuntimePanel({
             {result.bundlePath}
           </p>
           {result.route ? (
-            <p className="mt-2 font-mono text-xs text-slate-500">{result.route}</p>
+            <p className="mt-2 font-mono text-xs text-slate-500">
+              {result.route}
+            </p>
           ) : null}
         </div>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -929,7 +976,9 @@ function ContentFactoryDemoPanel({
             <p className="mt-2 font-mono text-xs text-slate-600">
               {result.artifact.id}
             </p>
-            <p className="mt-2 text-sm text-slate-600">{result.artifact.title}</p>
+            <p className="mt-2 text-sm text-slate-600">
+              {result.artifact.title}
+            </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-sm font-semibold text-slate-900">
@@ -938,7 +987,9 @@ function ContentFactoryDemoPanel({
             <p className="mt-2 font-mono text-xs text-slate-600">
               {result.evidence.id}
             </p>
-            <p className="mt-2 text-sm text-slate-600">{result.evidence.message}</p>
+            <p className="mt-2 text-sm text-slate-600">
+              {result.evidence.message}
+            </p>
           </div>
           {result.workflowRun ? (
             <div
@@ -971,7 +1022,9 @@ function ContentFactoryDemoPanel({
               </div>
               <div className="mt-3 space-y-2">
                 {result.workflowRun.trace
-                  .filter((event) => event.stepId && event.status === "succeeded")
+                  .filter(
+                    (event) => event.stepId && event.status === "succeeded",
+                  )
                   .slice(0, 6)
                   .map((event) => (
                     <div
@@ -981,7 +1034,9 @@ function ContentFactoryDemoPanel({
                       <p className="font-mono text-xs text-cyan-800">
                         {event.stepId}
                       </p>
-                      <p className="mt-1 text-xs text-cyan-700">{event.message}</p>
+                      <p className="mt-1 text-xs text-cyan-700">
+                        {event.message}
+                      </p>
                     </div>
                   ))}
               </div>
@@ -1000,14 +1055,22 @@ function CapabilityTable({ preview }: { preview: InstalledAppPreview }) {
       <table className="min-w-full divide-y divide-slate-200 text-sm">
         <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
           <tr>
-            <th className="px-4 py-3 font-medium">{t("agentApp.lab.capability.name")}</th>
-            <th className="px-4 py-3 font-medium">{t("agentApp.lab.capability.range")}</th>
-            <th className="px-4 py-3 font-medium">{t("agentApp.lab.capability.source")}</th>
+            <th className="px-4 py-3 font-medium">
+              {t("agentApp.lab.capability.name")}
+            </th>
+            <th className="px-4 py-3 font-medium">
+              {t("agentApp.lab.capability.range")}
+            </th>
+            <th className="px-4 py-3 font-medium">
+              {t("agentApp.lab.capability.source")}
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100 bg-white">
           {preview.projection.requiredCapabilities.map((requirement) => (
-            <tr key={`${requirement.capability}:${requirement.entryKey ?? "app"}`}>
+            <tr
+              key={`${requirement.capability}:${requirement.entryKey ?? "app"}`}
+            >
               <td className="px-4 py-3 font-mono text-xs text-slate-700">
                 {requirement.capability}
               </td>
@@ -1031,9 +1094,8 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
   const [runResult, setRunResult] = useState<AgentAppRunResult | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
-  const [uiMountResult, setUiMountResult] = useState<AgentAppUiMountResult | null>(
-    null,
-  );
+  const [uiMountResult, setUiMountResult] =
+    useState<AgentAppUiMountResult | null>(null);
   const [uiMountError, setUiMountError] = useState<string | null>(null);
   const [entryGuardResult, setEntryGuardResult] =
     useState<AgentAppEntryRuntimeGuardResult | null>(null);
@@ -1048,16 +1110,17 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
   const [managerRepositoryStates, setManagerRepositoryStates] = useState<
     InstalledAgentAppState[]
   >([]);
-  const [managerRepositoryIssueCount, setManagerRepositoryIssueCount] = useState(0);
+  const [managerRepositoryIssueCount, setManagerRepositoryIssueCount] =
+    useState(0);
   const [managerRepositoryIssues, setManagerRepositoryIssues] = useState<
     InstalledAgentAppStatePersistenceIssue[]
   >([]);
   const [managerRepositorySeedKey, setManagerRepositorySeedKey] = useState<
     string | null
   >(null);
-  const [managerSelectedAppId, setManagerSelectedAppId] = useState<string | null>(
-    null,
-  );
+  const [managerSelectedAppId, setManagerSelectedAppId] = useState<
+    string | null
+  >(null);
   const [lastLaunch, setLastLaunch] = useState<{
     entryKey: string;
     operation: AgentAppEntryRuntimeGuardOperation;
@@ -1076,9 +1139,7 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
   const adapterStore = useMemo(() => new InMemoryAgentAppCapabilityStore(), []);
   const hostMode: CapabilityHostMode | null = resolvedFlags.realAdapterEnabled
     ? "adapter"
-    : resolvedFlags.mockSdkEnabled
-      ? "mock"
-      : null;
+    : null;
   const capabilityProfile = useMemo(() => {
     if (resolvedFlags.workerRuntimeEnabled) {
       return buildWorkflowRuntimeCapabilityProfile(resolvedFlags);
@@ -1088,9 +1149,6 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
     }
     if (hostMode === "adapter") {
       return buildAdapterCapabilityProfile(resolvedFlags);
-    }
-    if (hostMode === "mock") {
-      return buildMockCapabilityProfile(resolvedFlags);
     }
     return undefined;
   }, [hostMode, resolvedFlags]);
@@ -1122,7 +1180,10 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
       }),
     [capabilityProfile, labSetup],
   );
-  const managerCompanionFixture = useMemo(() => buildManagerCompanionFixture(), []);
+  const managerCompanionFixture = useMemo(
+    () => buildManagerCompanionFixture(),
+    [],
+  );
   const managerCompanionPreview = useMemo(() => {
     const identity = buildPackageIdentity({
       manifest: managerCompanionFixture,
@@ -1144,31 +1205,16 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
     () => buildRuntimePackageLoadForPreview(preview),
     [preview],
   );
-  const capabilityHost = useMemo<CapabilityHost | null>(
-    () => {
-      if (hostMode === "adapter") {
-        return new AdapterCapabilityHost({
-          preview,
-          realAdapterEnabled: resolvedFlags.realAdapterEnabled,
-          store: adapterStore,
-        });
-      }
-      if (hostMode === "mock") {
-        return new MockCapabilityHost({
-          preview,
-          mockSdkEnabled: resolvedFlags.mockSdkEnabled,
-        });
-      }
-      return null;
-    },
-    [
-      adapterStore,
-      hostMode,
-      preview,
-      resolvedFlags.mockSdkEnabled,
-      resolvedFlags.realAdapterEnabled,
-    ],
-  );
+  const capabilityHost = useMemo<CapabilityHost | null>(() => {
+    if (hostMode === "adapter") {
+      return new AdapterCapabilityHost({
+        preview,
+        realAdapterEnabled: resolvedFlags.realAdapterEnabled,
+        store: adapterStore,
+      });
+    }
+    return null;
+  }, [adapterStore, hostMode, preview, resolvedFlags.realAdapterEnabled]);
   const uiExtensionHost = useMemo(
     () =>
       resolvedFlags.uiRuntimeEnabled
@@ -1224,20 +1270,29 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
     [installFlow.installedState, managerCompanionInstalledState],
   );
   const managerSelectedState = managerRepositoryStates.find(
-    (state) => state.appId === (managerSelectedAppId ?? installFlow.review.appId),
+    (state) =>
+      state.appId === (managerSelectedAppId ?? installFlow.review.appId),
   );
-  const managerPersistedState = managerSelectedState ?? managerRepositoryStates.find(
-    (state) => state.appId === installFlow.review.appId,
-  );
+  const managerPersistedState =
+    managerSelectedState ??
+    managerRepositoryStates.find(
+      (state) => state.appId === installFlow.review.appId,
+    );
   const managerEffectiveDisabled =
     managerPersistedState?.disabled ?? managerDisabled;
-  const allIssues = [...preview.readiness.blockers, ...preview.readiness.warnings];
+  const allIssues = [
+    ...preview.readiness.blockers,
+    ...preview.readiness.warnings,
+  ];
   useEffect(() => {
     if (!managerRepository || managerSeedStates.length === 0) {
       return;
     }
     const seedKey = managerSeedStates
-      .map((state) => `${state.appId}:${state.identity.packageHash}:${Boolean(labSetup)}`)
+      .map(
+        (state) =>
+          `${state.appId}:${state.identity.packageHash}:${Boolean(labSetup)}`,
+      )
       .join("|");
     let canceled = false;
 
@@ -1260,7 +1315,9 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
         setManagerRepositoryStates(list.states);
         setManagerRepositoryIssueCount(list.issues.length);
         setManagerRepositoryIssues(list.issues);
-        setManagerSelectedAppId((current) => current ?? installFlow.review.appId);
+        setManagerSelectedAppId(
+          (current) => current ?? installFlow.review.appId,
+        );
       }
     })();
 
@@ -1321,7 +1378,9 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
     operation: AgentAppEntryRuntimeGuardOperation,
     state?: InstalledAgentAppState,
   ): AgentAppEntryRuntimeGuardResult => {
-    const guardPreview = state ? buildPreviewFromInstalledState(state) : preview;
+    const guardPreview = state
+      ? buildPreviewFromInstalledState(state)
+      : preview;
     const runtimeProfile = capabilityProfile
       ? buildLimeRuntimeProfileForPreview({
           preview: guardPreview,
@@ -1338,7 +1397,8 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
         ? buildRuntimePackageLoadForPreview(guardPreview)
         : runtimePackageLoad,
       permissionDecision: "accepted",
-      installMode: state?.installMode ?? guardPreview.projection.install.preferredMode,
+      installMode:
+        state?.installMode ?? guardPreview.projection.install.preferredMode,
       runtimeProfile,
       lifecycle: {
         disabled: state?.disabled ?? false,
@@ -1359,12 +1419,7 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
             realAdapterEnabled: resolvedFlags.realAdapterEnabled,
             store: adapterStore,
           })
-        : state && hostMode === "mock"
-          ? new MockCapabilityHost({
-              preview: runPreview,
-              mockSdkEnabled: resolvedFlags.mockSdkEnabled,
-            })
-          : capabilityHost;
+        : capabilityHost;
     if (!runHost) {
       return undefined;
     }
@@ -1392,7 +1447,9 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
     entryKey: string,
     state?: InstalledAgentAppState,
   ): AgentAppEntryRuntimeGuardResult | undefined => {
-    const mountPreview = state ? buildPreviewFromInstalledState(state) : preview;
+    const mountPreview = state
+      ? buildPreviewFromInstalledState(state)
+      : preview;
     const mountHost =
       state && resolvedFlags.uiRuntimeEnabled
         ? new UiExtensionHost({ preview: mountPreview, flags: resolvedFlags })
@@ -1482,7 +1539,10 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
     });
     setManagerEvidence(
       buildManagerEvidence({
-        action: mode === "keep-data" ? "uninstall-keep-data" : "uninstall-delete-data",
+        action:
+          mode === "keep-data"
+            ? "uninstall-keep-data"
+            : "uninstall-delete-data",
         state,
         deletedTargetCount: cleanupEvidence.deletedTargetCount,
         retainedTargetCount: cleanupEvidence.retainedTargetCount,
@@ -1495,10 +1555,15 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
     if (!capabilityHost || hostMode !== "adapter") {
       return;
     }
-    const guardResult = evaluateGuard("content_scenario_planning", "run-content-demo");
+    const guardResult = evaluateGuard(
+      "content_scenario_planning",
+      "run-content-demo",
+    );
     if (guardResult.status !== "allow") {
       setContentDemoResult(null);
-      setContentDemoError(t(`agentApp.lab.guard.summary.${guardResult.status}`));
+      setContentDemoError(
+        t(`agentApp.lab.guard.summary.${guardResult.status}`),
+      );
       return;
     }
     setIsContentDemoRunning(true);
@@ -1516,7 +1581,9 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
       });
     } catch (error) {
       setContentDemoResult(null);
-      setContentDemoError(error instanceof Error ? error.message : String(error));
+      setContentDemoError(
+        error instanceof Error ? error.message : String(error),
+      );
     } finally {
       setIsContentDemoRunning(false);
     }
@@ -1551,17 +1618,25 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
               </div>
               <dl className="mt-4 space-y-3 text-sm">
                 <div className="flex justify-between gap-3">
-                  <dt className="text-slate-500">{t("agentApp.lab.overview.appId")}</dt>
-                  <dd className="font-mono text-xs text-slate-700">{preview.identity.appId}</dd>
+                  <dt className="text-slate-500">
+                    {t("agentApp.lab.overview.appId")}
+                  </dt>
+                  <dd className="font-mono text-xs text-slate-700">
+                    {preview.identity.appId}
+                  </dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-slate-500">{t("agentApp.lab.overview.version")}</dt>
+                  <dt className="text-slate-500">
+                    {t("agentApp.lab.overview.version")}
+                  </dt>
                   <dd className="font-mono text-xs text-slate-700">
                     {preview.identity.appVersion}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-slate-500">{t("agentApp.lab.overview.source")}</dt>
+                  <dt className="text-slate-500">
+                    {t("agentApp.lab.overview.source")}
+                  </dt>
                   <dd className="font-mono text-xs text-slate-700">
                     {preview.identity.sourceKind}
                   </dd>
@@ -1634,7 +1709,6 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
             >
               <EntryList
                 entries={preview.projection.entries}
-                hostMode={hostMode ?? undefined}
                 onRunEntry={capabilityHost ? handleRunEntry : undefined}
                 onOpenUiEntry={uiExtensionHost ? handleOpenUiEntry : undefined}
               />
@@ -1652,16 +1726,8 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
 
             {capabilityHost ? (
               <SectionCard
-                title={t(
-                  hostMode === "adapter"
-                    ? "agentApp.lab.run.adapterTitle"
-                    : "agentApp.lab.run.title",
-                )}
-                description={t(
-                  hostMode === "adapter"
-                    ? "agentApp.lab.run.adapterDescription"
-                    : "agentApp.lab.run.description",
-                )}
+                title={t("agentApp.lab.run.adapterTitle")}
+                description={t("agentApp.lab.run.adapterDescription")}
                 icon={<PlayCircle size={18} />}
               >
                 <RunResultPanel

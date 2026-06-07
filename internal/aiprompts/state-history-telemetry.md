@@ -20,7 +20,7 @@
 - 调整 `build_pending_requests(...)`、`build_last_outcome(...)`、`build_incidents(...)`
 - 调整 request correlation headers、`RequestLog`、`requestTelemetry`
 - 调整 `agent_runtime_export_*`、handoff bundle、evidence pack、replay case、analysis handoff、review decision
-- 调整 `scripts/harness-eval-history-record.mjs`、cleanup/dashboard、`HarnessStatusPanel.tsx`、`AgentThreadReliabilityPanel.tsx`
+- 调整 `scripts/harness/eval-history-record.mjs`、cleanup/dashboard、`HarnessStatusPanel.tsx`、`AgentThreadReliabilityPanel.tsx`
 - 讨论“状态模型”“可靠性”“证据链”“历史窗口”这几个词时，发现大家已经在混用不同层的语言
 
 如果一个需求同时碰到“会话历史 + 线程状态”“request telemetry + evidence 导出”“history-record + cleanup/dashboard”中的两项以上，默认属于本主链。
@@ -53,8 +53,8 @@
 
 ### 1. 持久会话与历史事实源
 
-- `src-tauri/crates/agent/src/session_store.rs`
-- `src-tauri/src/agent/aster_agent.rs` 的 `get_runtime_session_detail(...)`
+- `lime-rs/crates/agent/src/session_store.rs`
+- `lime-rs/src/agent/aster_agent.rs` 的 `get_runtime_session_detail(...)`
 - `agent_sessions / agent_messages`
 
 当前这里负责：
@@ -70,17 +70,17 @@
 
 ### 2. 线程稳定读模型与 reliability projection
 
-- `src-tauri/src/commands/aster_agent_cmd/command_api/runtime_api.rs`
+- `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs`
   - `agent_runtime_get_session`
   - `agent_runtime_get_thread_read`
   - `load_runtime_export_context(...)`
-- `src-tauri/src/commands/aster_agent_cmd/dto.rs`
+- `lime-rs/src/commands/aster_agent_cmd/dto.rs`
   - `AgentRuntimeSessionDetail`
   - `AgentRuntimeThreadReadModel`
   - `build_pending_requests(...)`
   - `build_last_outcome(...)`
   - `build_incidents(...)`
-- `src-tauri/src/services/thread_reliability_projection_service.rs`
+- `lime-rs/src/services/thread_reliability_projection_service.rs`
 
 当前这里负责：
 
@@ -97,9 +97,9 @@
 
 ### 3. 请求关联键与 request telemetry 事实源
 
-- `src-tauri/crates/server/src/handlers/api.rs` 的 `attach_request_correlation_metadata(...)`
-- `src-tauri/crates/server/src/lib.rs` 的 `record_request_telemetry(...)`
-- `src-tauri/crates/infra/src/telemetry/types.rs` 的 `RequestLog`
+- `lime-rs/crates/server/src/handlers/api.rs` 的 `attach_request_correlation_metadata(...)`
+- `lime-rs/crates/server/src/lib.rs` 的 `record_request_telemetry(...)`
+- `lime-rs/crates/infra/src/telemetry/types.rs` 的 `RequestLog`
 
 当前这里负责：
 
@@ -115,12 +115,12 @@
 
 ### 4. 证据、交接与审核派生链
 
-- `src-tauri/src/services/runtime_handoff_artifact_service.rs`
-- `src-tauri/src/services/runtime_evidence_pack_service.rs`
-- `src-tauri/src/services/runtime_replay_case_service.rs`
-- `src-tauri/src/services/runtime_analysis_handoff_service.rs`
-- `src-tauri/src/services/runtime_review_decision_service.rs`
-- `src-tauri/src/commands/aster_agent_cmd/command_api/runtime_api.rs` 的：
+- `lime-rs/src/services/runtime_handoff_artifact_service.rs`
+- `lime-rs/src/services/runtime_evidence_pack_service.rs`
+- `lime-rs/src/services/runtime_replay_case_service.rs`
+- `lime-rs/src/services/runtime_analysis_handoff_service.rs`
+- `lime-rs/src/services/runtime_review_decision_service.rs`
+- `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs` 的：
   - `agent_runtime_export_handoff_bundle`
   - `agent_runtime_export_evidence_pack`
   - `agent_runtime_export_analysis_handoff`
@@ -142,7 +142,7 @@
 
 ### 5. 历史窗口与下游汇总
 
-- `scripts/harness-eval-history-record.mjs`
+- `scripts/harness/eval-history-record.mjs`
 - `scripts/lib/harness-verification-facts.mjs`
 
 当前这里负责：
@@ -178,20 +178,20 @@
 ### `current`
 
 - `internal/aiprompts/state-history-telemetry.md`
-- `src-tauri/crates/agent/src/session_store.rs`
-- `src-tauri/src/agent/aster_agent.rs`
-- `src-tauri/src/commands/aster_agent_cmd/dto.rs`
-- `src-tauri/src/commands/aster_agent_cmd/command_api/runtime_api.rs` 的 `get_session / get_thread_read / replay_request / export_*`
-- `src-tauri/src/services/thread_reliability_projection_service.rs`
-- `src-tauri/crates/server/src/handlers/api.rs`
-- `src-tauri/crates/server/src/lib.rs`
-- `src-tauri/crates/infra/src/telemetry/types.rs`
-- `src-tauri/src/services/runtime_handoff_artifact_service.rs`
-- `src-tauri/src/services/runtime_evidence_pack_service.rs`
-- `src-tauri/src/services/runtime_replay_case_service.rs`
-- `src-tauri/src/services/runtime_analysis_handoff_service.rs`
-- `src-tauri/src/services/runtime_review_decision_service.rs`
-- `scripts/harness-eval-history-record.mjs`
+- `lime-rs/crates/agent/src/session_store.rs`
+- `lime-rs/src/agent/aster_agent.rs`
+- `lime-rs/src/commands/aster_agent_cmd/dto.rs`
+- `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs` 的 `get_session / get_thread_read / replay_request / export_*`
+- `lime-rs/src/services/thread_reliability_projection_service.rs`
+- `lime-rs/crates/server/src/handlers/api.rs`
+- `lime-rs/crates/server/src/lib.rs`
+- `lime-rs/crates/infra/src/telemetry/types.rs`
+- `lime-rs/src/services/runtime_handoff_artifact_service.rs`
+- `lime-rs/src/services/runtime_evidence_pack_service.rs`
+- `lime-rs/src/services/runtime_replay_case_service.rs`
+- `lime-rs/src/services/runtime_analysis_handoff_service.rs`
+- `lime-rs/src/services/runtime_review_decision_service.rs`
+- `scripts/harness/eval-history-record.mjs`
 - `scripts/lib/harness-verification-facts.mjs`
 - `src/components/agent/chat/components/HarnessStatusPanel.tsx`
 - `src/components/agent/chat/components/AgentThreadReliabilityPanel.tsx`
@@ -209,7 +209,7 @@
 - `internal/roadmap/lime-aster-codex-alignment-roadmap.md`
 - `internal/roadmap/reliability/README.md`
 - `internal/roadmap/reliability/*`
-- `src-tauri/src/commands/telemetry_cmd.rs`
+- `lime-rs/src/commands/telemetry_cmd.rs`
 
 保留原因：
 
@@ -249,7 +249,7 @@
 - 纯文档 / 分类回写：`npm run harness:doc-freshness`
 - 改 `SessionDetail`、`AgentRuntimeThreadReadModel`、projection 或 `export_*`：相关 Rust 定向测试
 - 改 request correlation headers、`RequestLog` 或 cleanup/dashboard verification 语义：相关 Rust / Vitest 测试；必要时补 `npm run harness:cleanup-report:check`
-- 改 Tauri 命令边界：额外执行 `npm run test:contracts`
+- 改 Electron IPC / App Server / legacy adapter 命令边界：额外执行 `npm run test:contracts`
 - 改 `HarnessStatusPanel`、`AgentThreadReliabilityPanel` 等用户可见面：补现有 `*.test.tsx` 稳定断言；必要时再补 `npm run verify:gui-smoke`
 
 ## 这一步如何服务主线

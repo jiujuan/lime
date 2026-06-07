@@ -22,7 +22,7 @@ import {
 import { getProjectByRootPath, updateProject } from "@/lib/api/project";
 import { cn } from "@/lib/utils";
 import { ClipboardPermissionGuideCard } from "@/components/settings-v2/system/shared/ClipboardPermissionGuideCard";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog } from "@/lib/desktop-host/plugin-dialog";
 import { notifyProjectRuntimeAgentsGuide } from "@/components/workspace/services/runtimeAgentsGuideService";
 import {
   buildCrashRecoveryReloadUrl,
@@ -37,7 +37,7 @@ interface CrashRecoveryPanelProps {
 }
 
 const VITE_CACHE_DIR = "node_modules/.vite";
-const VITE_TAURI_CACHE_DIR = "node_modules/.vite-tauri";
+const VITE_ELECTRON_CACHE_DIR = "node_modules/.vite-electron";
 
 export function CrashRecoveryPanel({
   error,
@@ -359,7 +359,7 @@ export function CrashRecoveryPanel({
             </code>
             {t("errors.crashRecovery.moduleImportFailure.middle")}
             <code className="mx-1 rounded bg-slate-100 px-1 py-0.5 text-slate-700 dark:bg-white/10 dark:text-slate-100">
-              {VITE_TAURI_CACHE_DIR}
+              {VITE_ELECTRON_CACHE_DIR}
             </code>
             {t("errors.crashRecovery.moduleImportFailure.suffix")}
           </div>

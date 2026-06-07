@@ -136,11 +136,12 @@ function looksLikeChatModel(model: EnhancedModelMetadata): boolean {
 
 export function filterModelsByTheme(
   theme: string | undefined,
-  models: EnhancedModelMetadata[],
+  models: EnhancedModelMetadata[] | null | undefined,
 ): ThemeModelFilterResult {
-  if (models.length === 0) {
+  const safeModels = Array.isArray(models) ? models : [];
+  if (safeModels.length === 0) {
     return {
-      models,
+      models: [],
       usedFallback: false,
       filteredOutCount: 0,
       policyName: "none",
@@ -149,7 +150,7 @@ export function filterModelsByTheme(
 
   if (!theme?.trim()) {
     return {
-      models,
+      models: safeModels,
       usedFallback: false,
       filteredOutCount: 0,
       policyName: "none",
@@ -157,18 +158,18 @@ export function filterModelsByTheme(
   }
 
   if (normalizeThemeType(theme) === "general") {
-    const chatModels = models.filter(looksLikeChatModel);
+    const chatModels = safeModels.filter(looksLikeChatModel);
     if (chatModels.length > 0) {
       return {
         models: chatModels,
         usedFallback: false,
-        filteredOutCount: models.length - chatModels.length,
+        filteredOutCount: safeModels.length - chatModels.length,
         policyName: "chat-only",
       };
     }
 
     return {
-      models,
+      models: safeModels,
       usedFallback: true,
       filteredOutCount: 0,
       policyName: "fallback-all",
@@ -176,7 +177,7 @@ export function filterModelsByTheme(
   }
 
   return {
-    models,
+    models: safeModels,
     usedFallback: false,
     filteredOutCount: 0,
     policyName: "none",

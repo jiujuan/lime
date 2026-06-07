@@ -522,12 +522,14 @@ export function AgentChatWorkspace({
     useState(false);
   const {
     projectId,
+    projectSelectionSource,
     shouldDisableSessionRestore,
     hasHandledNewChatRequest,
     markNewChatRequestHandled,
     rememberProjectId,
     getRememberedProjectId,
     applyProjectSelection,
+    resetProjectSelection,
     clearProjectSelectionRuntime,
     startTopicProjectResolution,
     finishTopicProjectResolution,
@@ -982,16 +984,20 @@ export function AgentChatWorkspace({
   const [projectMemory, setProjectMemory] = useState<ProjectMemory | null>(
     null,
   );
+  const runtimeWorkspaceId =
+    projectSelectionSource === "remembered" &&
+    taskCenterWorkspaceId &&
+    normalizeProjectId(project?.id) !== taskCenterWorkspaceId
+      ? ""
+      : (taskCenterWorkspaceId ?? "");
   const { workspaceHarnessEnabled } = useDeveloperFeatureFlags();
   const { mediaDefaults, loading: mediaDefaultsLoading } =
     useGlobalMediaGenerationDefaults();
   const { serviceModels, agentResponseLanguage } = useServiceModelsConfig();
   const { generationBrief: soulArtifactVoiceGenerationBrief } =
     useSoulArtifactVoiceGenerationBrief();
-  const [
-    soulArtifactVoiceEnabledForTurn,
-    setSoulArtifactVoiceEnabledForTurn,
-  ] = useState(true);
+  const [soulArtifactVoiceEnabledForTurn, setSoulArtifactVoiceEnabledForTurn] =
+    useState(true);
   useEffect(() => {
     setSoulArtifactVoiceEnabledForTurn(true);
   }, [soulArtifactVoiceGenerationBrief]);
@@ -1392,6 +1398,9 @@ export function AgentChatWorkspace({
           );
           setProject(null);
           setProjectMemory(null);
+          if (!externalProjectId) {
+            resetProjectSelection();
+          }
           if (contentId) {
             setInitialContentLoadError("当前项目不存在或已被删除");
           }
@@ -1602,8 +1611,10 @@ export function AgentChatWorkspace({
   }, [
     projectId,
     contentId,
+    externalProjectId,
     lockTheme,
     initialTheme,
+    resetProjectSelection,
     shouldDeferWorkspaceAuxiliaryLoads,
     shouldPreserveEntryThemeOnHome,
   ]);
@@ -1896,7 +1907,7 @@ export function AgentChatWorkspace({
       // 使用 ref 调用最新的 handleWriteFile
       handleWriteFileRef.current?.(content, fileName, context);
     },
-    workspaceId: projectId ?? "",
+    workspaceId: runtimeWorkspaceId,
     disableSessionRestore: shouldDisableSessionRestore,
     initialTopicsLoadMode: shouldDeferInitialTopicsLoad
       ? "deferred"
@@ -6416,8 +6427,7 @@ export function AgentChatWorkspace({
     handleRefreshSkills,
     soulArtifactVoiceGenerationBrief,
     soulArtifactVoiceEnabledForTurn,
-    onSoulArtifactVoiceEnabledForTurnChange:
-      setSoulArtifactVoiceEnabledForTurn,
+    onSoulArtifactVoiceEnabledForTurnChange: setSoulArtifactVoiceEnabledForTurn,
     turns,
     threadItems: effectiveThreadItems,
     currentTurnId,

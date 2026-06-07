@@ -4,7 +4,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog } from "@/lib/desktop-host/plugin-dialog";
 import { toast } from "sonner";
 import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
 import type {

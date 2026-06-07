@@ -76,6 +76,42 @@ describe("historicalMessageHydrationProjection", () => {
         isSending: true,
       }),
     ).toBe(false);
+    expect(
+      isHistoricalAssistantMessageHydrationCandidate(
+        message("assistant-completed-tool-use", {
+          contentParts: [
+            {
+              type: "tool_use",
+              toolCall: {
+                id: "tool-webfetch-read",
+                name: "WebFetch",
+                status: "completed",
+              },
+            },
+            { type: "text", text: "已生成代码产物，可在工作台查看。" },
+          ],
+        }),
+        restoredState,
+      ),
+    ).toBe(true);
+    expect(
+      isHistoricalAssistantMessageHydrationCandidate(
+        message("assistant-running-tool-use", {
+          contentParts: [
+            {
+              type: "tool_use",
+              toolCall: {
+                id: "tool-websearch-running",
+                name: "WebSearch",
+                status: "running",
+              },
+            },
+            { type: "text", text: "正在检索今日国际新闻。" },
+          ],
+        }),
+        restoredState,
+      ),
+    ).toBe(false);
   });
 
   it("应只为普通 markdown 历史 assistant 生成 hydration 目标", () => {

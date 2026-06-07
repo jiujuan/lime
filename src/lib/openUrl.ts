@@ -1,4 +1,4 @@
-import { open as openExternal } from "@tauri-apps/plugin-shell";
+import { open as openExternal } from "@/lib/desktop-host/plugin-shell";
 
 export async function openUrl(url: string): Promise<void> {
   try {

@@ -9,11 +9,9 @@ import {
   LIME_AGENT_APP_BRIDGE_VERSION,
   LIME_CAPABILITY_DEFINITIONS,
   LIME_CAPABILITY_NAMES,
-  MockCapabilityHost,
   applyLimeHostTheme,
   createLimeCoreCapabilityAdapters,
   createLimeHostBridgeCapabilityInvoker,
-  createMockLimeCapabilityTransport,
   isLimeCapabilityErrorCode,
   normalizeLimeCapabilityErrorCode,
   syncLimeHostTheme,
@@ -43,8 +41,11 @@ describe("agent app SDK public surface", () => {
     expect(typeof createLimeHostBridgeCapabilityInvoker).toBe("function");
     expect(typeof applyLimeHostTheme).toBe("function");
     expect(typeof syncLimeHostTheme).toBe("function");
-    expect(typeof createMockLimeCapabilityTransport).toBe("function");
-    expect(typeof MockCapabilityHost).toBe("function");
+    expect(publicSdkSurface).not.toHaveProperty(
+      "createMockLimeCapabilityTransport",
+    );
+    expect(publicSdkSurface).not.toHaveProperty("MockCapabilityHost");
+    expect(publicSdkSurface).not.toHaveProperty("buildMockCapabilityProfile");
   });
 
   it("不导出客户端 UI、安装器或 runtime host 内部实现", () => {

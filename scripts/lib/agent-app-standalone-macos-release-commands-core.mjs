@@ -41,12 +41,6 @@ function findArtifact(artifacts, kind) {
   return artifacts.find((artifact) => artifact?.kind === kind);
 }
 
-function signedPkgPath(pkgPath) {
-  return pkgPath.endsWith(".pkg")
-    ? pkgPath.replace(/\.pkg$/, ".signed.pkg")
-    : `${pkgPath}.signed.pkg`;
-}
-
 function command(id, tool, args, inputRefs, outputRefs = []) {
   return {
     id,
@@ -103,7 +97,6 @@ function validateArtifacts({ artifacts, outputRoot }) {
 export function buildMacOsStandaloneReleaseCommandPlan({
   applicationSigningIdentity = "",
   artifacts = [],
-  installerSigningIdentity = "",
   notarizationProfile = "",
   outputRoot,
   packageFormat = "app",
@@ -115,14 +108,16 @@ export function buildMacOsStandaloneReleaseCommandPlan({
   });
   const blockers = [...validation.blockers];
   const appBundle = findArtifact(normalizedArtifacts, "app_bundle");
-  const distributableKind =
-    packageFormat === "pkg"
-      ? "pkg"
-      : packageFormat === "dmg"
-        ? "dmg"
-        : "app_bundle";
+  const distributableKind = packageFormat === "dmg" ? "dmg" : "app_bundle";
   const distributable = findArtifact(normalizedArtifacts, distributableKind);
 
+  if (!["app", "dmg"].includes(packageFormat)) {
+    blockers.push({
+      code: "PACKAGE_FORMAT_UNSUPPORTED",
+      message: "macOS Forge release command planner only supports app or dmg.",
+      details: { packageFormat },
+    });
+  }
   if (!appBundle) {
     blockers.push({
       code: "APP_BUNDLE_ARTIFACT_MISSING",
@@ -142,13 +137,6 @@ export function buildMacOsStandaloneReleaseCommandPlan({
       code: "APPLICATION_SIGNING_IDENTITY_MISSING",
       message:
         "macOS release command plan requires a Developer ID Application identity ref.",
-    });
-  }
-  if (packageFormat === "pkg" && !String(installerSigningIdentity).trim()) {
-    blockers.push({
-      code: "INSTALLER_SIGNING_IDENTITY_MISSING",
-      message:
-        "pkg release command plan requires a Developer ID Installer identity ref.",
     });
   }
   if (!String(notarizationProfile).trim()) {
@@ -187,25 +175,6 @@ export function buildMacOsStandaloneReleaseCommandPlan({
       [artifactKey(appBundle)],
     ),
   ];
-  let notarizationTarget = distributable;
-  if (packageFormat === "pkg") {
-    const signedPath = signedPkgPath(distributable.path);
-    const signedPkgRef = `${artifactKey(distributable)}:signed`;
-    commands.push(
-      command(
-        "productsign-pkg",
-        "productsign",
-        ["--sign", installerSigningIdentity, distributable.path, signedPath],
-        [artifactKey(distributable)],
-        [signedPkgRef],
-      ),
-    );
-    notarizationTarget = {
-      ...distributable,
-      path: signedPath,
-      contentHash: signedPkgRef,
-    };
-  }
   commands.push(
     command(
       "notarytool-submit",
@@ -213,22 +182,22 @@ export function buildMacOsStandaloneReleaseCommandPlan({
       [
         "notarytool",
         "submit",
-        notarizationTarget.path,
+        distributable.path,
         "--keychain-profile",
         notarizationProfile,
         "--wait",
       ],
-      [artifactKey(notarizationTarget)],
-      [`${artifactKey(notarizationTarget)}:notarized`],
+      [artifactKey(distributable)],
+      [`${artifactKey(distributable)}:notarized`],
     ),
   );
   commands.push(
     command(
       "stapler-staple",
       "xcrun",
-      ["stapler", "staple", notarizationTarget.path],
-      [`${artifactKey(notarizationTarget)}:notarized`],
-      [`${artifactKey(notarizationTarget)}:stapled`],
+      ["stapler", "staple", distributable.path],
+      [`${artifactKey(distributable)}:notarized`],
+      [`${artifactKey(distributable)}:stapled`],
     ),
   );
 

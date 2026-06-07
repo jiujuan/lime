@@ -17,9 +17,9 @@ import {
   buildLimeCapabilityInvokeProvenance,
   buildLimeCapabilityInvokeRequest,
   createLimeCapabilityInvoker,
-  createMockLimeCapabilityTransport,
 } from "./capabilityContract";
 import { buildMockCapabilityProfile } from "./mockCapabilityProfile";
+import { createMockLimeCapabilityTransport } from "./__tests__/testFixtures";
 
 const provenance = buildLimeCapabilityInvokeProvenance({
   sourceKind: "agent_app",

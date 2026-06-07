@@ -283,7 +283,7 @@
       "classification": "dead-candidate",
       "description": "已删除的旧 provider_pool_model 运行时 / 展示 DTO；历史配置清理不得恢复凭证池模型模块",
       "targets": [
-        "src-tauri/crates/core/src/models/provider_pool_model.rs"
+        "lime-rs/crates/core/src/models/provider_pool_model.rs"
       ],
       "allowedPaths": []
     },
@@ -292,7 +292,7 @@
       "classification": "dead-candidate",
       "description": "已删除的旧凭证监控示例插件；插件示例不得恢复凭证池状态 UI",
       "targets": [
-        "src-tauri/crates/core/src/plugin/examples/credential_monitor.rs"
+        "lime-rs/crates/core/src/plugin/examples/credential_monitor.rs"
       ],
       "allowedPaths": []
     },
@@ -466,8 +466,8 @@
       "classification": "dead-candidate",
       "description": "已删除的旧 Claw 推荐方案 Rust 命令与服务模块",
       "targets": [
-        "src-tauri/src/commands/claw_solution_cmd.rs",
-        "src-tauri/src/services/claw_solution_service.rs"
+        "lime-rs/src/commands/claw_solution_cmd.rs",
+        "lime-rs/src/services/claw_solution_service.rs"
       ],
       "allowedPaths": []
     },
@@ -1190,11 +1190,11 @@
     {
       "id": "unused-frontend-utility-modules",
       "classification": "dead-candidate",
-      "description": "已删除的零引用前端工具模块，当前主链不再暴露旧通知管理、tauri 事件代理与语法高亮辅助",
+      "description": "已删除的零引用前端工具模块，当前主链不再暴露旧通知管理、legacy desktop host 事件代理与语法高亮辅助",
       "targets": [
         "src/lib/notifications.ts",
-        "src/lib/tauri-event.ts",
-        "src/lib/tauri-event.test.ts",
+        "src/lib/legacy-desktop-host-event.ts",
+        "src/lib/legacy-desktop-host-event.test.ts",
         "src/lib/utils/syntaxHighlight.ts"
       ],
       "allowedPaths": []
@@ -1210,11 +1210,11 @@
       "allowedPaths": []
     },
     {
-      "id": "notification-settings-legacy-tauri-api",
+      "id": "notification-settings-legacy-desktop-host-api",
       "classification": "dead-candidate",
-      "description": "已删除的旧通知设置 Tauri API 壳，当前前端主链不再暴露这条通知设置旧链路",
+      "description": "已删除的旧通知设置 旧桌面宿主 API 壳，当前前端主链不再暴露这条通知设置旧链路",
       "targets": [
-        "src/lib/tauri/notificationApi.ts"
+        "src/lib/legacy-desktop-host/notificationApi.ts"
       ],
       "allowedPaths": []
     },
@@ -1368,10 +1368,10 @@
         "src/components/openclaw/OpenClawPage.tsx",
         "src/lib/api/openclaw.ts",
         "src/lib/api/openclawDashboardWindow.ts",
-        "src-tauri/src/commands/openclaw_cmd.rs",
-        "src-tauri/src/services/openclaw_service/mod.rs",
-        "src-tauri/src/dev_bridge/dispatcher/openclaw.rs",
-        "src-tauri/crates/core/src/openclaw_install.rs"
+        "lime-rs/src/commands/openclaw_cmd.rs",
+        "lime-rs/src/services/openclaw_service/mod.rs",
+        "lime-rs/src/dev_bridge/dispatcher/openclaw.rs",
+        "lime-rs/crates/core/src/openclaw_install.rs"
       ],
       "allowedPaths": []
     },
@@ -1907,11 +1907,11 @@
       "classification": "dead-candidate",
       "description": "已删除的 Rust 侧旧 content_creator 服务模块",
       "targets": [
-        "src-tauri/crates/services/src/content_creator/mod.rs",
-        "src-tauri/crates/services/src/content_creator/progress_store.rs",
-        "src-tauri/crates/services/src/content_creator/step_executor.rs",
-        "src-tauri/crates/services/src/content_creator/types.rs",
-        "src-tauri/crates/services/src/content_creator/workflow_service.rs"
+        "lime-rs/crates/services/src/content_creator/mod.rs",
+        "lime-rs/crates/services/src/content_creator/progress_store.rs",
+        "lime-rs/crates/services/src/content_creator/step_executor.rs",
+        "lime-rs/crates/services/src/content_creator/types.rs",
+        "lime-rs/crates/services/src/content_creator/workflow_service.rs"
       ],
       "allowedPaths": []
     },
@@ -1954,9 +1954,9 @@
     {
       "id": "content-workflow-rust-command-module",
       "classification": "dead-candidate",
-      "description": "已退出 Tauri 主命令注册的旧 content workflow 命令模块",
+      "description": "已退出 旧桌面宿主命令注册的旧 content workflow 命令模块",
       "targets": [
-        "src-tauri/src/commands/content_workflow_cmd.rs"
+        "lime-rs/src/commands/content_workflow_cmd.rs"
       ],
       "allowedPaths": []
     },
@@ -1976,28 +1976,28 @@
       "classification": "dead-candidate",
       "description": "已删除的旧海报素材 Rust 命令与 DAO 模块",
       "targets": [
-        "src-tauri/src/commands/poster_material_cmd.rs",
-        "src-tauri/crates/core/src/database/dao/poster_material_dao.rs"
+        "lime-rs/src/commands/poster_material_cmd.rs",
+        "lime-rs/crates/core/src/database/dao/poster_material_dao.rs"
       ],
       "allowedPaths": []
     },
     {
       "id": "content-creator-legacy-rust-command-modules",
       "classification": "dead-candidate",
-      "description": "已退出 Tauri 主命令注册的旧 music/novel 命令与服务模块",
+      "description": "已退出 旧桌面宿主命令注册的旧 music/novel 命令与服务模块",
       "targets": [
-        "src-tauri/src/commands/music_cmd.rs",
-        "src-tauri/src/commands/novel_cmd.rs",
-        "src-tauri/src/services/novel_service.rs",
-        "src-tauri/src/theme/novel/command.rs",
-        "src-tauri/src/theme/novel/mod.rs",
-        "src-tauri/resources/scripts/audio_to_midi.py",
-        "src-tauri/resources/scripts/midi_analyzer.py",
-        "src-tauri/resources/music/chord-progressions.json",
-        "src-tauri/resources/music/guofeng-patterns.json",
-        "src-tauri/resources/music/midi-parser-rules.json",
-        "src-tauri/resources/music/pentatonic-rules.json",
-        "src-tauri/resources/music/rhyme-patterns.json"
+        "lime-rs/src/commands/music_cmd.rs",
+        "lime-rs/src/commands/novel_cmd.rs",
+        "lime-rs/src/services/novel_service.rs",
+        "lime-rs/src/theme/novel/command.rs",
+        "lime-rs/src/theme/novel/mod.rs",
+        "lime-rs/resources/scripts/audio_to_midi.py",
+        "lime-rs/resources/scripts/midi_analyzer.py",
+        "lime-rs/resources/music/chord-progressions.json",
+        "lime-rs/resources/music/guofeng-patterns.json",
+        "lime-rs/resources/music/midi-parser-rules.json",
+        "lime-rs/resources/music/pentatonic-rules.json",
+        "lime-rs/resources/music/rhyme-patterns.json"
       ],
       "allowedPaths": []
     },
@@ -2091,8 +2091,8 @@
       "classification": "dead-candidate",
       "description": "已删除的旧 SubAgent scheduler Rust 命令与事件桥模块",
       "targets": [
-        "src-tauri/src/commands/subagent_cmd.rs",
-        "src-tauri/src/agent/subagent_scheduler.rs"
+        "lime-rs/src/commands/subagent_cmd.rs",
+        "lime-rs/src/agent/subagent_scheduler.rs"
       ],
       "allowedPaths": []
     },
@@ -2120,8 +2120,8 @@
       "classification": "dead-candidate",
       "description": "已删除的旧 Provider Switch Rust 命令与服务模块",
       "targets": [
-        "src-tauri/src/commands/switch_cmd.rs",
-        "src-tauri/crates/services/src/switch.rs"
+        "lime-rs/src/commands/switch_cmd.rs",
+        "lime-rs/crates/services/src/switch.rs"
       ],
       "allowedPaths": []
     },
@@ -2141,13 +2141,13 @@
         "src/lib/api/plugins.test.ts",
         "src/lib/api/pluginUI.ts",
         "src/lib/api/pluginUI.test.ts",
-        "src-tauri/src/commands/plugin_cmd.rs",
-        "src-tauri/src/commands/plugin_install_cmd.rs",
-        "src-tauri/src/commands/plugin_rpc_cmd.rs",
-        "src-tauri/src/dev_bridge/dispatcher/plugins.rs",
-        "src-tauri/src/plugin/mod.rs",
-        "src-tauri/src/plugin/ui_events.rs",
-        "src-tauri/src/plugin/README.md",
+        "lime-rs/src/commands/plugin_cmd.rs",
+        "lime-rs/src/commands/plugin_install_cmd.rs",
+        "lime-rs/src/commands/plugin_rpc_cmd.rs",
+        "lime-rs/src/dev_bridge/dispatcher/plugins.rs",
+        "lime-rs/src/plugin/mod.rs",
+        "lime-rs/src/plugin/ui_events.rs",
+        "lime-rs/src/plugin/README.md",
         "internal/aiprompts/plugins.md",
         "docs/content/02.user-guide/13.plugins.md",
         "docs/plugins/README.md",
@@ -2468,7 +2468,7 @@
     {
       "id": "team-subagent-scheduler-commands",
       "classification": "dead-candidate",
-      "description": "已删除的旧 SubAgent scheduler Tauri 命令",
+      "description": "已删除的旧 SubAgent scheduler 旧桌面宿主命令",
       "commands": [
         "init_subagent_scheduler",
         "execute_subagent_tasks",
@@ -2600,9 +2600,9 @@
       "allowedPaths": []
     },
     {
-      "id": "sceneapp-tauri-command-surface",
+      "id": "sceneapp-legacy-desktop-host-command-surface",
       "classification": "dead",
-      "description": "SceneApp 独立 Tauri 命令已随 Agent App current 主链下线，不得恢复前端网关、Rust 注册、DevBridge 或 mock",
+      "description": "SceneApp 独立 旧桌面宿主命令已随 Agent App current 主链下线，不得恢复前端网关、Rust 注册、DevBridge 或 mock",
       "commands": [
         "sceneapp_list_catalog",
         "sceneapp_get_descriptor",
@@ -3958,9 +3958,9 @@
       "allowedPaths": []
     },
     {
-      "id": "tauri-mock-index-legacy-barrel-exports",
+      "id": "desktop-host-index-legacy-barrel-exports",
       "classification": "dead-candidate",
-      "description": "tauri-mock/index 只允许作为浏览器开发模式副作用初始化入口，不允许恢复旧 mock 模块聚合导出；实际 mock 入口由 Vite alias 和 explicitMockFallback 直连子模块",
+      "description": "desktop-host/index 只允许作为浏览器开发模式副作用初始化入口，不允许恢复旧 mock 模块聚合导出；实际 mock 入口由 Vite alias 和 explicitMockFallback 直连子模块",
       "patterns": [
         "export * from \"./core\"",
         "export * from \"./event\"",
@@ -3968,7 +3968,7 @@
         "openShell"
       ],
       "includePathPrefixes": [
-        "src/lib/tauri-mock/index.ts"
+        "src/lib/desktop-host/index.ts"
       ],
       "allowedPaths": []
     },
@@ -4048,8 +4048,23 @@
         "read_image_as_base64"
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "rust-theme-context-search-legacy-command",
+      "classification": "dead",
+      "description": "旧主题上下文搜索 Tauri 命令已下线；current 事实源是 App Server agentSession current turn 网关",
+      "patterns": [
+        "pub mod theme_context_cmd;",
+        "commands::theme_context_cmd::",
+        "aster_agent_theme_context_search"
+      ],
+      "includePathPrefixes": [
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": []
     },
@@ -4072,10 +4087,10 @@
         "general_chat_messages"
       ],
       "allowedPaths": [
-        "src-tauri/crates/core/src/app_paths.rs",
-        "src-tauri/crates/core/src/database/migration/general_chat_migration.rs",
-        "src-tauri/crates/core/src/database/migration.rs",
-        "src-tauri/crates/core/src/database/schema.rs"
+        "lime-rs/crates/core/src/app_paths.rs",
+        "lime-rs/crates/core/src/database/migration/general_chat_migration.rs",
+        "lime-rs/crates/core/src/database/migration.rs",
+        "lime-rs/crates/core/src/database/schema.rs"
       ]
     },
     {
@@ -4109,8 +4124,8 @@
         "summarize_pending_general("
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": []
     },
@@ -4135,7 +4150,7 @@
         "is_general_chat_migration_completed("
       ],
       "allowedPaths": [
-        "src-tauri/crates/core/src/database/migration/general_chat_migration.rs"
+        "lime-rs/crates/core/src/database/migration/general_chat_migration.rs"
       ]
     },
     {
@@ -4148,7 +4163,7 @@
         "crate::general_chat::SessionService"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/services/src"
+        "lime-rs/crates/services/src"
       ],
       "allowedPaths": []
     },
@@ -4183,7 +4198,7 @@
         "ClaudeOAuthProvider"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/providers/src/providers"
+        "lime-rs/crates/providers/src/providers"
       ],
       "allowedPaths": []
     },
@@ -4200,7 +4215,7 @@
         "GEMINI_OAUTH_"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/providers/src/providers"
+        "lime-rs/crates/providers/src/providers"
       ],
       "allowedPaths": []
     },
@@ -4229,7 +4244,7 @@
         "id_token"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/providers/src/providers/codex.rs"
+        "lime-rs/crates/providers/src/providers/codex.rs"
       ],
       "allowedPaths": []
     },
@@ -4248,7 +4263,7 @@
         "create_token_refresh_error"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/providers/src/providers"
+        "lime-rs/crates/providers/src/providers"
       ],
       "allowedPaths": []
     },
@@ -4263,7 +4278,7 @@
         "get_usage_limits_safe("
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/services/src"
+        "lime-rs/crates/services/src"
       ],
       "allowedPaths": []
     },
@@ -4278,7 +4293,7 @@
         "kiro_fingerprints.json"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/core/src/models"
+        "lime-rs/crates/core/src/models"
       ],
       "allowedPaths": []
     },
@@ -4293,7 +4308,7 @@
         "provider_pool_credentials"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/core/src/database/dao"
+        "lime-rs/crates/core/src/database/dao"
       ],
       "allowedPaths": []
     },
@@ -4308,7 +4323,7 @@
         "provider_pool_model::"
       ],
       "includePathPrefixes": [
-        "src-tauri"
+        "lime-rs"
       ],
       "allowedPaths": []
     },
@@ -4322,7 +4337,7 @@
         "凭证监控"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/core/src/plugin"
+        "lime-rs/crates/core/src/plugin"
       ],
       "allowedPaths": []
     },
@@ -4335,10 +4350,10 @@
         "provider_pool_model::"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src",
-        "src-tauri/crates/server/src",
-        "src-tauri/crates/services/src",
-        "src-tauri/crates/skills/src"
+        "lime-rs/crates/agent/src",
+        "lime-rs/crates/server/src",
+        "lime-rs/crates/services/src",
+        "lime-rs/crates/skills/src"
       ],
       "allowedPaths": []
     },
@@ -4352,7 +4367,7 @@
         "pub type RuntimeCredentialData"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/core/src/models/provider_pool_model.rs"
+        "lime-rs/crates/core/src/models/provider_pool_model.rs"
       ],
       "allowedPaths": []
     },
@@ -4365,7 +4380,7 @@
         "use super::provider_type::ProviderType"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/core/src/models/runtime_provider_model.rs"
+        "lime-rs/crates/core/src/models/runtime_provider_model.rs"
       ],
       "allowedPaths": []
     },
@@ -4393,14 +4408,14 @@
         "pool provider_type"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src/credential_bridge.rs",
-        "src-tauri/crates/server/src/handlers/api.rs",
-        "src-tauri/crates/server/src/handlers/credentials_api.rs",
-        "src-tauri/crates/server/src/lib.rs",
-        "src-tauri/crates/services/src/ai_summary_service.rs",
-        "src-tauri/crates/services/src/provider_type_mapping.rs",
-        "src-tauri/crates/services/src/api_key_provider_service.rs",
-        "src-tauri/crates/skills/src/lime_llm_provider.rs"
+        "lime-rs/crates/agent/src/credential_bridge.rs",
+        "lime-rs/crates/server/src/handlers/api.rs",
+        "lime-rs/crates/server/src/handlers/credentials_api.rs",
+        "lime-rs/crates/server/src/lib.rs",
+        "lime-rs/crates/services/src/ai_summary_service.rs",
+        "lime-rs/crates/services/src/provider_type_mapping.rs",
+        "lime-rs/crates/services/src/api_key_provider_service.rs",
+        "lime-rs/crates/skills/src/lime_llm_provider.rs"
       ],
       "allowedPaths": []
     },
@@ -4414,7 +4429,7 @@
         "call_llm_mock"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/services/src/ai_summary_service.rs"
+        "lime-rs/crates/services/src/ai_summary_service.rs"
       ],
       "allowedPaths": []
     },
@@ -4436,7 +4451,7 @@
         "CredentialResponse"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/server/src"
+        "lime-rs/crates/server/src"
       ],
       "allowedPaths": []
     },
@@ -4456,11 +4471,11 @@
         "get_credential_health_from_pool"
       ],
       "includePathPrefixes": [
-        "src-tauri/src/tray",
-        "src-tauri/src/app/runner.rs",
-        "src-tauri/crates/core/src/tray_menu_meta.rs",
-        "src-tauri/crates/core/src/tray_state.rs",
-        "src-tauri/crates/core/src/tray_format.rs"
+        "lime-rs/src/tray",
+        "lime-rs/src/app/runner.rs",
+        "lime-rs/crates/core/src/tray_menu_meta.rs",
+        "lime-rs/crates/core/src/tray_state.rs",
+        "lime-rs/crates/core/src/tray_format.rs"
       ],
       "allowedPaths": []
     },
@@ -4473,7 +4488,7 @@
         "Token 刷新失败"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src/credential_bridge.rs"
+        "lime-rs/crates/agent/src/credential_bridge.rs"
       ],
       "allowedPaths": []
     },
@@ -4487,10 +4502,10 @@
         "\"runtime-api-key-\""
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src",
-        "src-tauri/crates/server/src",
-        "src-tauri/crates/services/src",
-        "src-tauri/crates/skills/src"
+        "lime-rs/crates/agent/src",
+        "lime-rs/crates/server/src",
+        "lime-rs/crates/services/src",
+        "lime-rs/crates/skills/src"
       ],
       "allowedPaths": []
     },
@@ -4503,12 +4518,12 @@
         "regex:\\bCredentialData\\b"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src/credential_bridge.rs",
-        "src-tauri/crates/server/src/handlers/api.rs",
-        "src-tauri/crates/server/src/handlers/provider_calls.rs",
-        "src-tauri/crates/server/src/handlers/websocket.rs",
-        "src-tauri/crates/services/src/api_key_provider_service.rs",
-        "src-tauri/crates/skills/src/lime_llm_provider.rs"
+        "lime-rs/crates/agent/src/credential_bridge.rs",
+        "lime-rs/crates/server/src/handlers/api.rs",
+        "lime-rs/crates/server/src/handlers/provider_calls.rs",
+        "lime-rs/crates/server/src/handlers/websocket.rs",
+        "lime-rs/crates/services/src/api_key_provider_service.rs",
+        "lime-rs/crates/skills/src/lime_llm_provider.rs"
       ],
       "allowedPaths": []
     },
@@ -4524,13 +4539,13 @@
         "creds_file_path"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/core/src/models/runtime_provider_model.rs",
-        "src-tauri/crates/agent/src/credential_bridge.rs",
-        "src-tauri/crates/server/src/handlers/api.rs",
-        "src-tauri/crates/server/src/handlers/provider_calls.rs",
-        "src-tauri/crates/server/src/handlers/websocket.rs",
-        "src-tauri/crates/services/src/api_key_provider_service.rs",
-        "src-tauri/crates/skills/src/lime_llm_provider.rs"
+        "lime-rs/crates/core/src/models/runtime_provider_model.rs",
+        "lime-rs/crates/agent/src/credential_bridge.rs",
+        "lime-rs/crates/server/src/handlers/api.rs",
+        "lime-rs/crates/server/src/handlers/provider_calls.rs",
+        "lime-rs/crates/server/src/handlers/websocket.rs",
+        "lime-rs/crates/services/src/api_key_provider_service.rs",
+        "lime-rs/crates/skills/src/lime_llm_provider.rs"
       ],
       "allowedPaths": []
     },
@@ -4550,8 +4565,8 @@
         "CodeWhispererResponse"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/providers/src/converter",
-        "src-tauri/crates/core/src/models"
+        "lime-rs/crates/providers/src/converter",
+        "lime-rs/crates/core/src/models"
       ],
       "allowedPaths": []
     },
@@ -4566,7 +4581,7 @@
         "kiro::openai"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/providers/src/translator"
+        "lime-rs/crates/providers/src/translator"
       ],
       "allowedPaths": []
     },
@@ -4581,7 +4596,7 @@
         "kiro_to_openai"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/providers/src/stream/pipeline.rs"
+        "lime-rs/crates/providers/src/stream/pipeline.rs"
       ],
       "allowedPaths": []
     },
@@ -4622,7 +4637,7 @@
         "cleanup_conversation_memory"
       ],
       "includePathPrefixes": [
-        "src-tauri/src"
+        "lime-rs/src"
       ],
       "allowedPaths": []
     },
@@ -4634,10 +4649,10 @@
         "build_memory_profile_prompt("
       ],
       "includePathPrefixes": [
-        "src-tauri/src"
+        "lime-rs/src"
       ],
       "allowedPaths": [
-        "src-tauri/src/services/memory_profile_prompt_service.rs"
+        "lime-rs/src/services/memory_profile_prompt_service.rs"
       ]
     },
     {
@@ -4648,11 +4663,11 @@
         "build_memory_sources_prompt("
       ],
       "includePathPrefixes": [
-        "src-tauri/src"
+        "lime-rs/src"
       ],
       "allowedPaths": [
-        "src-tauri/src/services/memory_profile_prompt_service.rs",
-        "src-tauri/src/services/memory_source_resolver_service.rs"
+        "lime-rs/src/services/memory_profile_prompt_service.rs",
+        "lime-rs/src/services/memory_source_resolver_service.rs"
       ]
     },
     {
@@ -4672,7 +4687,7 @@
         "pub mod unified_chat_cmd;"
       ],
       "includePathPrefixes": [
-        "src-tauri/src/commands"
+        "lime-rs/src/commands"
       ],
       "allowedPaths": []
     },
@@ -4684,7 +4699,7 @@
         "pub mod tool_hooks;"
       ],
       "includePathPrefixes": [
-        "src-tauri/src/commands"
+        "lime-rs/src/commands"
       ],
       "allowedPaths": []
     },
@@ -4697,7 +4712,7 @@
         "pub mod novel_cmd;"
       ],
       "includePathPrefixes": [
-        "src-tauri/src/commands"
+        "lime-rs/src/commands"
       ],
       "allowedPaths": []
     },
@@ -4709,7 +4724,7 @@
         "pub mod novel_service;"
       ],
       "includePathPrefixes": [
-        "src-tauri/src/services"
+        "lime-rs/src/services"
       ],
       "allowedPaths": []
     },
@@ -4721,7 +4736,7 @@
         "pub mod novel;"
       ],
       "includePathPrefixes": [
-        "src-tauri/src/theme"
+        "lime-rs/src/theme"
       ],
       "allowedPaths": []
     },
@@ -4739,7 +4754,7 @@
         "CREATE TABLE IF NOT EXISTS novel_consistency_checks ("
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/core/src/database"
+        "lime-rs/crates/core/src/database"
       ],
       "allowedPaths": []
     },
@@ -4753,7 +4768,7 @@
         "WorkspaceType::Novel"
       ],
       "includePathPrefixes": [
-        "src-tauri"
+        "lime-rs"
       ],
       "allowedPaths": []
     },
@@ -4772,7 +4787,7 @@
         "idx_poster_material_metadata_"
       ],
       "allowedPaths": [
-        "src-tauri/crates/core/src/database/schema.rs"
+        "lime-rs/crates/core/src/database/schema.rs"
       ]
     },
     {
@@ -4783,7 +4798,7 @@
         "pub mod tool_hooks_service;"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/services/src"
+        "lime-rs/crates/services/src"
       ],
       "allowedPaths": []
     },
@@ -4796,15 +4811,15 @@
         "three_stage_workflow"
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": []
     },
     {
-      "id": "rust-skill-workflow-tauri-orchestration-leak",
+      "id": "rust-skill-workflow-legacy-desktop-host-orchestration-leak",
       "classification": "dead-candidate",
-      "description": "已零引用的 skill workflow 执行主链回流到 Tauri skills 模块",
+      "description": "已零引用的 skill workflow 执行主链回流到 旧桌面宿主 skills 模块",
       "patterns": [
         "SessionConfigBuilder::new(",
         "convert_agent_event(",
@@ -4812,7 +4827,7 @@
         ".reply("
       ],
       "includePathPrefixes": [
-        "src-tauri/src/skills"
+        "lime-rs/src/skills"
       ],
       "allowedPaths": []
     },
@@ -4827,7 +4842,7 @@
         ".reply("
       ],
       "includePathPrefixes": [
-        "src-tauri/src/commands/skill_exec_cmd.rs"
+        "lime-rs/src/commands/skill_exec_cmd.rs"
       ],
       "allowedPaths": []
     },
@@ -4841,10 +4856,10 @@
         "ensure_creation_task_tools_registered(",
         "build_memory_profile_prompt(",
         ".configure_provider_from_pool(",
-        "TauriExecutionCallback::new("
+        "LegacyDesktopHostExecutionCallback::new("
       ],
       "includePathPrefixes": [
-        "src-tauri/src/commands/skill_exec_cmd.rs"
+        "lime-rs/src/commands/skill_exec_cmd.rs"
       ],
       "allowedPaths": []
     },
@@ -4863,7 +4878,7 @@
         "parse_boolean("
       ],
       "includePathPrefixes": [
-        "src-tauri/src/commands/skill_exec_cmd.rs"
+        "lime-rs/src/commands/skill_exec_cmd.rs"
       ],
       "allowedPaths": []
     },
@@ -4878,7 +4893,7 @@
         "execute_skill_prompt("
       ],
       "includePathPrefixes": [
-        "src-tauri/src/commands/skill_exec_cmd.rs"
+        "lime-rs/src/commands/skill_exec_cmd.rs"
       ],
       "allowedPaths": []
     },
@@ -4896,27 +4911,27 @@
     {
       "id": "rust-service-agent-table-query-leak",
       "classification": "dead-candidate",
-      "description": "已零引用的 Tauri service 层 direct agent_sessions/agent_messages 查询回流",
+      "description": "已零引用的 旧桌面宿主 service 层 direct agent_sessions/agent_messages 查询回流",
       "patterns": [
         "FROM agent_sessions s",
         "FROM agent_messages m",
         "JOIN agent_sessions s ON s.id = m.session_id"
       ],
       "includePathPrefixes": [
-        "src-tauri/src/services"
+        "lime-rs/src/services"
       ],
       "allowedPaths": []
     },
     {
       "id": "rust-service-model-usage-table-query-leak",
       "classification": "dead-candidate",
-      "description": "已零引用的 Tauri service 层 direct model_usage_stats 查询回流",
+      "description": "已零引用的 旧桌面宿主 service 层 direct model_usage_stats 查询回流",
       "patterns": [
         "FROM model_usage_stats",
         "SELECT COUNT(*) FROM model_usage_stats"
       ],
       "includePathPrefixes": [
-        "src-tauri/src/services"
+        "lime-rs/src/services"
       ],
       "allowedPaths": []
     },
@@ -4931,7 +4946,7 @@
         "DELETE FROM unified_memory"
       ],
       "includePathPrefixes": [
-        "src-tauri/src/dev_bridge/dispatcher/memory.rs"
+        "lime-rs/src/dev_bridge/dispatcher/memory.rs"
       ],
       "allowedPaths": []
     },
@@ -4943,11 +4958,11 @@
         "agent_runtime_queued_turns"
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": [
-        "src-tauri/crates/core/src/database/agent_runtime_queue_repository.rs"
+        "lime-rs/crates/core/src/database/agent_runtime_queue_repository.rs"
       ]
     },
     {
@@ -4958,11 +4973,11 @@
         "migrate_legacy_runtime_queue_to_aster_store("
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": [
-        "src-tauri/crates/agent/src/aster_runtime_support.rs"
+        "lime-rs/crates/agent/src/aster_runtime_support.rs"
       ]
     },
     {
@@ -4974,11 +4989,11 @@
         "TodoState::new("
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": [
-        "src-tauri/crates/aster-rust/crates/aster/src/session/extension_data.rs"
+        "lime-rs/crates/aster-rust/crates/aster/src/session/extension_data.rs"
       ]
     },
     {
@@ -4990,11 +5005,11 @@
         "TodoListState::from_markdown("
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": [
-        "src-tauri/crates/aster-rust/crates/aster/src/session/extension_data.rs"
+        "lime-rs/crates/aster-rust/crates/aster/src/session/extension_data.rs"
       ]
     },
     {
@@ -5005,7 +5020,7 @@
         "SELECT root_path FROM workspaces WHERE is_default = 1 LIMIT 1"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/services/src"
+        "lime-rs/crates/services/src"
       ],
       "allowedPaths": []
     },
@@ -5029,7 +5044,7 @@
         "AgentDao::update_execution_strategy("
       ],
       "allowedPaths": [
-        "src-tauri/crates/core/src/database/agent_session_repository.rs"
+        "lime-rs/crates/core/src/database/agent_session_repository.rs"
       ]
     },
     {
@@ -5049,7 +5064,7 @@
         "AgentDao::create_session("
       ],
       "allowedPaths": [
-        "src-tauri/crates/core/src/database/agent_session_repository.rs"
+        "lime-rs/crates/core/src/database/agent_session_repository.rs"
       ]
     },
     {
@@ -5060,7 +5075,7 @@
         "AgentSessionOverviewRow"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src"
+        "lime-rs/crates/agent/src"
       ],
       "allowedPaths": []
     },
@@ -5072,7 +5087,7 @@
         "SELECT id FROM workspaces WHERE root_path = ? LIMIT 1"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src"
+        "lime-rs/crates/agent/src"
       ],
       "allowedPaths": []
     },
@@ -5084,7 +5099,7 @@
         "mod session_record_repository;"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src/lib.rs"
+        "lime-rs/crates/agent/src/lib.rs"
       ],
       "allowedPaths": []
     },
@@ -5098,7 +5113,7 @@
         "get_compat_session_sync("
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src"
+        "lime-rs/crates/agent/src"
       ],
       "allowedPaths": []
     },
@@ -5110,7 +5125,7 @@
         "pub mod session_store;"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src/lib.rs"
+        "lime-rs/crates/agent/src/lib.rs"
       ],
       "allowedPaths": []
     },
@@ -5122,7 +5137,7 @@
         "lime_agent::session_store::"
       ],
       "includePathPrefixes": [
-        "src-tauri/src"
+        "lime-rs/src"
       ],
       "allowedPaths": []
     },
@@ -5134,13 +5149,13 @@
         "SessionManager::get_session("
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": [
-        "src-tauri/crates/agent/src/session_query.rs",
-        "src-tauri/crates/aster-rust/crates/aster/src/session/query.rs",
-        "src-tauri/crates/aster-rust/crates/aster/src/session/subagent.rs"
+        "lime-rs/crates/agent/src/session_query.rs",
+        "lime-rs/crates/aster-rust/crates/aster/src/session/query.rs",
+        "lime-rs/crates/aster-rust/crates/aster/src/session/subagent.rs"
       ]
     },
     {
@@ -5151,13 +5166,13 @@
         "list_subagent_child_sessions("
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": [
-        "src-tauri/crates/agent/src/session_query.rs",
-        "src-tauri/crates/aster-rust/crates/aster/src/session/query.rs",
-        "src-tauri/crates/aster-rust/crates/aster/src/session/subagent.rs"
+        "lime-rs/crates/agent/src/session_query.rs",
+        "lime-rs/crates/aster-rust/crates/aster/src/session/query.rs",
+        "lime-rs/crates/aster-rust/crates/aster/src/session/subagent.rs"
       ]
     },
     {
@@ -5168,13 +5183,13 @@
         "list_subagent_sessions_with_metadata("
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": [
-        "src-tauri/crates/agent/src/session_query.rs",
-        "src-tauri/crates/aster-rust/crates/aster/src/session/query.rs",
-        "src-tauri/crates/aster-rust/crates/aster/src/session/subagent.rs"
+        "lime-rs/crates/agent/src/session_query.rs",
+        "lime-rs/crates/aster-rust/crates/aster/src/session/query.rs",
+        "lime-rs/crates/aster-rust/crates/aster/src/session/subagent.rs"
       ]
     },
     {
@@ -5185,15 +5200,15 @@
         "resolve_subagent_session_metadata("
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": [
-        "src-tauri/crates/agent/src/session_query.rs",
-        "src-tauri/crates/agent/src/session_store.rs",
-        "src-tauri/crates/agent/src/session_store_subagent_context.rs",
-        "src-tauri/crates/aster-rust/crates/aster/src/session/query.rs",
-        "src-tauri/crates/aster-rust/crates/aster/src/session/subagent.rs"
+        "lime-rs/crates/agent/src/session_query.rs",
+        "lime-rs/crates/agent/src/session_store.rs",
+        "lime-rs/crates/agent/src/session_store_subagent_context.rs",
+        "lime-rs/crates/aster-rust/crates/aster/src/session/query.rs",
+        "lime-rs/crates/aster-rust/crates/aster/src/session/subagent.rs"
       ]
     },
     {
@@ -5205,8 +5220,8 @@
         "SessionManager::update_session\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.extension_data\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.apply\\(\\)"
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": []
     },
@@ -5218,12 +5233,12 @@
         "SessionManager::update_session("
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": [
-        "src-tauri/crates/agent/src/session_update.rs",
-        "src-tauri/crates/aster-rust/crates/aster/src/session/update.rs"
+        "lime-rs/crates/agent/src/session_update.rs",
+        "lime-rs/crates/aster-rust/crates/aster/src/session/update.rs"
       ]
     },
     {
@@ -5235,8 +5250,8 @@
         "SessionManager::update_session\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.schedule_id\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.total_tokens\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.input_tokens\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.output_tokens\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.accumulated_total_tokens\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.accumulated_input_tokens\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.accumulated_output_tokens\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.apply\\(\\)"
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": []
     },
@@ -5248,12 +5263,12 @@
         "SessionManager::replace_conversation("
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": [
-        "src-tauri/crates/agent/src/session_update.rs",
-        "src-tauri/crates/aster-rust/crates/aster/src/session/update.rs"
+        "lime-rs/crates/agent/src/session_update.rs",
+        "lime-rs/crates/aster-rust/crates/aster/src/session/update.rs"
       ]
     },
     {
@@ -5264,12 +5279,12 @@
         "SessionManager::create_session("
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": [
-        "src-tauri/crates/agent/src/session_update.rs",
-        "src-tauri/crates/aster-rust/crates/aster/src/session/update.rs"
+        "lime-rs/crates/agent/src/session_update.rs",
+        "lime-rs/crates/aster-rust/crates/aster/src/session/update.rs"
       ]
     },
     {
@@ -5280,11 +5295,11 @@
         "SessionManager::delete_session("
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": [
-        "src-tauri/crates/aster-rust/crates/aster/src/session/update.rs"
+        "lime-rs/crates/aster-rust/crates/aster/src/session/update.rs"
       ]
     },
     {
@@ -5296,7 +5311,7 @@
         "CreateSessionRecordInput,"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src/lib.rs"
+        "lime-rs/crates/agent/src/lib.rs"
       ],
       "allowedPaths": []
     },
@@ -5308,7 +5323,7 @@
         "resolve_subagent_session_metadata("
       ],
       "includePathPrefixes": [
-        "src-tauri/src/commands/aster_agent_cmd"
+        "lime-rs/src/commands/aster_agent_cmd"
       ],
       "allowedPaths": []
     },
@@ -5320,7 +5335,7 @@
         "pub mod tool_permissions;"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src/lib.rs"
+        "lime-rs/crates/agent/src/lib.rs"
       ],
       "allowedPaths": []
     },
@@ -5332,7 +5347,7 @@
         "pub mod shell_security;"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src/lib.rs"
+        "lime-rs/crates/agent/src/lib.rs"
       ],
       "allowedPaths": []
     },
@@ -5344,7 +5359,7 @@
         "mod tool_permissions;"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src/lib.rs"
+        "lime-rs/crates/agent/src/lib.rs"
       ],
       "allowedPaths": []
     },
@@ -5356,7 +5371,7 @@
         "mod shell_security;"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src/lib.rs"
+        "lime-rs/crates/agent/src/lib.rs"
       ],
       "allowedPaths": []
     },
@@ -5368,7 +5383,7 @@
         "pub use tool_permissions::"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src/lib.rs"
+        "lime-rs/crates/agent/src/lib.rs"
       ],
       "allowedPaths": []
     },
@@ -5380,7 +5395,7 @@
         "pub use shell_security::"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src/lib.rs"
+        "lime-rs/crates/agent/src/lib.rs"
       ],
       "allowedPaths": []
     },
@@ -5392,8 +5407,8 @@
         "lime_agent::tool_permissions::"
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": []
     },
@@ -5405,8 +5420,8 @@
         "lime_agent::shell_security::"
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": []
     },
@@ -5420,8 +5435,8 @@
         "lime_agent::ShellSecurityChecker"
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": []
     },
@@ -5433,10 +5448,10 @@
         "crate::tool_permissions::"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src"
+        "lime-rs/crates/agent/src"
       ],
       "allowedPaths": [
-        "src-tauri/crates/agent/src/shell_security.rs"
+        "lime-rs/crates/agent/src/shell_security.rs"
       ]
     },
     {
@@ -5447,7 +5462,7 @@
         "pub mod integration;"
       ],
       "includePathPrefixes": [
-        "src-tauri/src/agent/mod.rs"
+        "lime-rs/src/agent/mod.rs"
       ],
       "allowedPaths": []
     },
@@ -5459,7 +5474,7 @@
         "mod integration;"
       ],
       "includePathPrefixes": [
-        "src-tauri/src/agent/mod.rs"
+        "lime-rs/src/agent/mod.rs"
       ],
       "allowedPaths": []
     },
@@ -5471,7 +5486,7 @@
         "crate::agent::integration::"
       ],
       "includePathPrefixes": [
-        "src-tauri/src"
+        "lime-rs/src"
       ],
       "allowedPaths": []
     },
@@ -5483,7 +5498,7 @@
         "crate::agent::subagent_scheduler::"
       ],
       "includePathPrefixes": [
-        "src-tauri/src"
+        "lime-rs/src"
       ],
       "allowedPaths": []
     },
@@ -5495,8 +5510,8 @@
         "load_session_runtime_snapshot("
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": []
     },
@@ -5510,8 +5525,8 @@
         "initialize_shared_sqlite_thread_runtime_store("
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": []
     },
@@ -5523,7 +5538,7 @@
         "pub fn require_aster_thread_runtime_store("
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src/aster_runtime_support.rs"
+        "lime-rs/crates/agent/src/aster_runtime_support.rs"
       ],
       "allowedPaths": []
     },
@@ -5535,7 +5550,7 @@
         "pub fn initialize_aster_thread_runtime_store() -> Result<Arc<dyn ThreadRuntimeStore>, String>"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src/aster_runtime_support.rs"
+        "lime-rs/crates/agent/src/aster_runtime_support.rs"
       ],
       "allowedPaths": []
     },
@@ -5547,7 +5562,7 @@
         "pub fn initialize_aster_thread_runtime_store("
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src/aster_runtime_support.rs"
+        "lime-rs/crates/agent/src/aster_runtime_support.rs"
       ],
       "allowedPaths": []
     },
@@ -5559,7 +5574,7 @@
         "load_aster_runtime_snapshot"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src/lib.rs"
+        "lime-rs/crates/agent/src/lib.rs"
       ],
       "allowedPaths": []
     },
@@ -5572,8 +5587,8 @@
         "(?<!require_)shared_session_runtime_queue_service\\("
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": []
     },
@@ -5585,12 +5600,12 @@
         "\"ASTER_PATH_ROOT\""
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": [
-        "src-tauri/crates/aster-rust/crates/aster/src/config/paths.rs",
-        "src-tauri/crates/aster-rust/crates/aster/tests/acp_integration_test.rs"
+        "lime-rs/crates/aster-rust/crates/aster/src/config/paths.rs",
+        "lime-rs/crates/aster-rust/crates/aster/tests/acp_integration_test.rs"
       ]
     },
     {
@@ -5601,8 +5616,8 @@
         "set_global_session_store("
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": []
     },
@@ -5615,8 +5630,8 @@
         "~/.lime/aster"
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates"
+        "lime-rs/src",
+        "lime-rs/crates"
       ],
       "allowedPaths": []
     },
@@ -5650,8 +5665,8 @@
         "auto_select"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/core/src/config",
-        "src-tauri/src/config"
+        "lime-rs/crates/core/src/config",
+        "lime-rs/src/config"
       ],
       "allowedPaths": []
     },
@@ -5669,9 +5684,9 @@
         "\"model_registry_version\""
       ],
       "allowedPaths": [
-        "src-tauri/crates/core/src/database/migration/api_key_migration.rs",
-        "src-tauri/crates/core/src/database/migration/mcp_migration.rs",
-        "src-tauri/crates/core/src/database/migration/model_registry_migration.rs"
+        "lime-rs/crates/core/src/database/migration/api_key_migration.rs",
+        "lime-rs/crates/core/src/database/migration/mcp_migration.rs",
+        "lime-rs/crates/core/src/database/migration/model_registry_migration.rs"
       ]
     },
     {
@@ -5693,7 +5708,7 @@
         "migration_v4::migrate_fix_promise_paths("
       ],
       "allowedPaths": [
-        "src-tauri/crates/core/src/database/startup_migrations.rs"
+        "lime-rs/crates/core/src/database/startup_migrations.rs"
       ]
     },
     {
@@ -5722,7 +5737,7 @@
         "fn mark_migration_completed(conn:"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/core/src/database/migration_v"
+        "lime-rs/crates/core/src/database/migration_v"
       ],
       "allowedPaths": []
     },
@@ -5736,7 +5751,7 @@
         "conn.execute(\"ROLLBACK\""
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/core/src/database/migration_v"
+        "lime-rs/crates/core/src/database/migration_v"
       ],
       "allowedPaths": []
     },
@@ -5749,7 +5764,7 @@
         "join(\".lime\").join(\"projects\")"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/core/src/database"
+        "lime-rs/crates/core/src/database"
       ],
       "allowedPaths": []
     },
@@ -5762,7 +5777,7 @@
         "join(\".lime\").join(\"sessions\")"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/core/src/session_files"
+        "lime-rs/crates/core/src/session_files"
       ],
       "allowedPaths": []
     },
@@ -5775,7 +5790,7 @@
         "join(\".lime\").join(\"config.json\")"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/core/src/database"
+        "lime-rs/crates/core/src/database"
       ],
       "allowedPaths": []
     },
@@ -5788,7 +5803,7 @@
         "join(\".lime\").join(\"projects\")"
       ],
       "includePathPrefixes": [
-        "src-tauri/src"
+        "lime-rs/src"
       ],
       "allowedPaths": []
     },
@@ -5801,7 +5816,7 @@
         "join(\".lime\").join(\"projects\")"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/services/src"
+        "lime-rs/crates/services/src"
       ],
       "allowedPaths": []
     },
@@ -5814,7 +5829,7 @@
         "join(\".lime\").join(\"logs\")"
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/core/src/logger.rs"
+        "lime-rs/crates/core/src/logger.rs"
       ],
       "allowedPaths": []
     },
@@ -5827,7 +5842,7 @@
         "join(\".lime\").join(\"skills\")"
       ],
       "includePathPrefixes": [
-        "src-tauri/src"
+        "lime-rs/src"
       ],
       "allowedPaths": []
     },
@@ -5842,9 +5857,9 @@
         ".lime/memory"
       ],
       "includePathPrefixes": [
-        "src-tauri/src",
-        "src-tauri/crates/core/src/config",
-        "src-tauri/crates/agent/src/prompt"
+        "lime-rs/src",
+        "lime-rs/crates/core/src/config",
+        "lime-rs/crates/agent/src/prompt"
       ],
       "allowedPaths": []
     },
@@ -5857,7 +5872,7 @@
         "\".lime/instructions.md\""
       ],
       "includePathPrefixes": [
-        "src-tauri/crates/agent/src/prompt"
+        "lime-rs/crates/agent/src/prompt"
       ],
       "allowedPaths": []
     },
@@ -5895,7 +5910,7 @@
         "crate::sceneapp::"
       ],
       "includePathPrefixes": [
-        "src-tauri/src"
+        "lime-rs/src"
       ],
       "allowedPaths": []
     }
@@ -5906,7 +5921,7 @@
       "classification": "deprecated",
       "description": "app_paths 重复获取 preferred/legacy root 样板回流",
       "includePathPrefixes": [
-        "src-tauri/crates/core/src/app_paths.rs"
+        "lime-rs/crates/core/src/app_paths.rs"
       ],
       "occurrences": [
         {

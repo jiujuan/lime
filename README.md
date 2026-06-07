@@ -15,7 +15,7 @@ AI content workspace for Chinese creators: desktop writing, research, prompt man
 <p>
   <a href="https://github.com/limecloud/lime/releases"><img src="https://img.shields.io/github/v/release/limecloud/lime?label=release" alt="Lime GitHub Release" /></a>
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-246B45" alt="Lime supports macOS and Windows" />
-  <img src="https://img.shields.io/badge/desktop-Tauri-24C8DB" alt="Lime is a Tauri desktop app" />
+  <img src="https://img.shields.io/badge/desktop-Electron-24C8DB" alt="Lime is an Electron desktop app" />
   <img src="https://img.shields.io/badge/license-GPLv3-2F4F4F" alt="Lime GPLv3 license" />
 </p>
 
@@ -48,7 +48,7 @@ AI content workspace for Chinese creators: desktop writing, research, prompt man
 
 ## Lime 是什么
 
-Lime 是一个开源的 Tauri 桌面端 AI 内容工作台，面向中文创作者、品牌运营、研究型写作者和小团队，覆盖 AI 写作、选题研究、素材管理、提示词沉淀、知识库和多模型创作流程。
+Lime 是一个开源的 Electron 桌面端 AI 内容工作台，面向中文创作者、品牌运营、研究型写作者和小团队，覆盖 AI 写作、选题研究、素材管理、提示词沉淀、知识库和多模型创作流程。
 
 English summary: Lime is an open-source desktop AI workspace for Chinese creators to write, research, manage prompts, organize knowledge, and reuse multi-model workflows.
 
@@ -201,7 +201,7 @@ brew install --cask lime
 
 ## 技术栈与平台
 
-- 桌面框架：Tauri 2、Rust
+- 桌面框架：Electron、Rust App Server
 - 前端技术：React、TypeScript、Vite
 - 支持平台：macOS、Windows
 - 开源协议：GPLv3

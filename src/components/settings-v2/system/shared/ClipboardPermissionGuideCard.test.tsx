@@ -11,7 +11,7 @@ const { mockOpen } = vi.hoisted(() => ({
   mockOpen: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/plugin-shell", () => ({
+vi.mock("@/lib/desktop-host/plugin-shell", () => ({
   open: mockOpen,
 }));
 

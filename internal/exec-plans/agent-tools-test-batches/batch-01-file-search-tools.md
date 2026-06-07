@@ -15,7 +15,7 @@
 
 ## 覆盖工具
 
-native 注册事实源：`src-tauri/crates/aster-rust/crates/aster/src/tools/mod.rs`
+native 注册事实源：`lime-rs/crates/aster-rust/crates/aster/src/tools/mod.rs`
 
 - `Read`
 - `Write`
@@ -94,8 +94,8 @@ npm test -- "src/components/agent/chat/utils/fileChangesUndo.unit.test.ts" "src/
 Rust 定向可选：
 
 ```bash
-cargo test --manifest-path "src-tauri/Cargo.toml" diff_summary -- --nocapture
-cargo test --manifest-path "src-tauri/Cargo.toml" restore_file_checkpoint_should -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" diff_summary -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" restore_file_checkpoint_should -- --nocapture
 ```
 
 ## GUI 验证

@@ -2,7 +2,7 @@
 
 > 状态：目标架构
 > 更新时间：2026-04-30
-> 适用范围：`src/components/agent/chat` 主工作区、`src/lib/api/agentRuntime` 前端协议层、`src-tauri` agent runtime 主链。
+> 适用范围：`src/components/agent/chat` 主工作区、`src/lib/api/agentRuntime` 前端协议层、`lime-rs` agent runtime 主链。
 
 ## 1. 架构原则
 

@@ -100,7 +100,12 @@ describe("agent-qc-completion-audit-core", () => {
 
   it("缺真实 evidence 时应保持 incomplete", () => {
     const facts = completeFacts();
-    facts.realEvidencePack = { exists: false, status: "", scenarioCount: 0, scenarioIds: [] };
+    facts.realEvidencePack = {
+      exists: false,
+      status: "",
+      scenarioCount: 0,
+      scenarioIds: [],
+    };
     facts.files.realGuiEvidence = false;
 
     const audit = buildAgentQcCompletionAudit(facts);
@@ -112,7 +117,12 @@ describe("agent-qc-completion-audit-core", () => {
 
   it("缺正式 evidence 但存在 sidecar evidence 时应在审计证据中显示 sidecar 状态", () => {
     const facts = completeFacts();
-    facts.realEvidencePack = { exists: false, status: "", scenarioCount: 0, scenarioIds: [] };
+    facts.realEvidencePack = {
+      exists: false,
+      status: "",
+      scenarioCount: 0,
+      scenarioIds: [],
+    };
     facts.realEvidenceSidecars = [
       {
         path: ".lime/qc/agent-qc-evidence.p0-v2.json",
@@ -123,7 +133,9 @@ describe("agent-qc-completion-audit-core", () => {
     ];
 
     const audit = buildAgentQcCompletionAudit(facts);
-    const item = audit.items.find((entry) => entry.id === "real-qcloop-evidence");
+    const item = audit.items.find(
+      (entry) => entry.id === "real-qcloop-evidence",
+    );
 
     expect(audit.status).toBe("incomplete");
     expect(item?.evidence).toContain("sidecars");
@@ -147,12 +159,16 @@ describe("agent-qc-completion-audit-core", () => {
     ];
 
     const audit = buildAgentQcCompletionAudit(facts);
-    const item = audit.items.find((entry) => entry.id === "real-qcloop-evidence");
+    const item = audit.items.find(
+      (entry) => entry.id === "real-qcloop-evidence",
+    );
 
     expect(audit.status).toBe("incomplete");
     expect(item?.evidence).toContain("qcloopStatus");
     expect(item?.gap).toContain("stale");
-    expect(item?.gap).toContain("qcloop-status.isolated-p0-full-v1-stale-check.json");
+    expect(item?.gap).toContain(
+      "qcloop-status.isolated-p0-full-v1-stale-check.json",
+    );
   });
 
   it("真实 qcloop 批次仍在运行时应在缺口中显示未终态 sidecar 摘要", () => {
@@ -172,12 +188,16 @@ describe("agent-qc-completion-audit-core", () => {
     ];
 
     const audit = buildAgentQcCompletionAudit(facts);
-    const item = audit.items.find((entry) => entry.id === "real-qcloop-evidence");
+    const item = audit.items.find(
+      (entry) => entry.id === "real-qcloop-evidence",
+    );
 
     expect(audit.status).toBe("incomplete");
     expect(item?.gap).toContain("未终态");
     expect(item?.gap).toContain("running=1");
-    expect(item?.gap).toContain("qcloop-status.fastmini-readonly-p0-v1-current.json");
+    expect(item?.gap).toContain(
+      "qcloop-status.fastmini-readonly-p0-v1-current.json",
+    );
   });
 
   it("未启动 pending-only qcloop sidecar 不应阻断已通过的官方 evidence", () => {
@@ -189,12 +209,21 @@ describe("agent-qc-completion-audit-core", () => {
         jobId: "job-pending",
         jobStatus: "pending",
         verdictStatus: "running",
-        counts: { success: 0, failed: 0, exhausted: 0, running: 0, pending: 8, stale: 0 },
+        counts: {
+          success: 0,
+          failed: 0,
+          exhausted: 0,
+          running: 0,
+          pending: 8,
+          stale: 0,
+        },
       },
     ];
 
     const audit = buildAgentQcCompletionAudit(facts);
-    const item = audit.items.find((entry) => entry.id === "real-qcloop-evidence");
+    const item = audit.items.find(
+      (entry) => entry.id === "real-qcloop-evidence",
+    );
 
     expect(audit.status).toBe("complete");
     expect(item?.evidence).toContain("qcloop-status.old-pending.json");
@@ -227,11 +256,17 @@ describe("agent-qc-completion-audit-core", () => {
     ];
 
     const audit = buildAgentQcCompletionAudit(facts);
-    const item = audit.items.find((entry) => entry.id === "real-qcloop-evidence");
+    const item = audit.items.find(
+      (entry) => entry.id === "real-qcloop-evidence",
+    );
 
     expect(audit.status).toBe("incomplete");
-    expect(item?.evidence).toContain("qcloop-status.isolated-p0-full-v1-current.json");
-    expect(item?.evidence).not.toContain("qcloop-status.pre-intervention-20260511-022817.json");
+    expect(item?.evidence).toContain(
+      "qcloop-status.isolated-p0-full-v1-current.json",
+    );
+    expect(item?.evidence).not.toContain(
+      "qcloop-status.pre-intervention-20260511-022817.json",
+    );
     expect(item?.gap).not.toContain("仍有 qcloop status sidecar 未终态");
     expect(item?.gap).not.toContain("其中 stale sidecar");
   });
@@ -251,12 +286,16 @@ describe("agent-qc-completion-audit-core", () => {
   it("ready payload coverage 不完整时应保持 incomplete", () => {
     const facts = completeFacts();
     facts.payloadCoverage.coverage.passed = false;
-    facts.payloadCoverage.coverage.missingScenarioIds = ["workspace-ready-session-restore"];
+    facts.payloadCoverage.coverage.missingScenarioIds = [
+      "workspace-ready-session-restore",
+    ];
 
     const audit = buildAgentQcCompletionAudit(facts);
 
     expect(audit.status).toBe("incomplete");
-    expect(audit.gaps.map((gap) => gap.id)).toContain("qcloop-payload-coverage");
+    expect(audit.gaps.map((gap) => gap.id)).toContain(
+      "qcloop-payload-coverage",
+    );
   });
 
   it("ready payload 未禁用 qcloop repair 时应保持 incomplete", () => {
@@ -270,10 +309,13 @@ describe("agent-qc-completion-audit-core", () => {
     const audit = buildAgentQcCompletionAudit(facts);
 
     expect(audit.status).toBe("incomplete");
-    expect(audit.gaps.map((gap) => gap.id)).toContain("qcloop-payload-coverage");
-    expect(audit.items.find((item) => item.id === "qcloop-payload-coverage")?.evidence).toContain(
-      "repairGuard=fail",
+    expect(audit.gaps.map((gap) => gap.id)).toContain(
+      "qcloop-payload-coverage",
     );
+    expect(
+      audit.items.find((item) => item.id === "qcloop-payload-coverage")
+        ?.evidence,
+    ).toContain("repairGuard=fail");
   });
 
   it("结构化 evidence summary 契约缺失时应保持 incomplete", () => {
@@ -285,7 +327,9 @@ describe("agent-qc-completion-audit-core", () => {
     const audit = buildAgentQcCompletionAudit(facts);
 
     expect(audit.status).toBe("incomplete");
-    expect(audit.gaps.map((gap) => gap.id)).toContain("structured-evidence-contract");
+    expect(audit.gaps.map((gap) => gap.id)).toContain(
+      "structured-evidence-contract",
+    );
   });
 
   it("缺少 qcloop 状态监控入口时应保持 incomplete", () => {
@@ -305,7 +349,9 @@ describe("agent-qc-completion-audit-core", () => {
     const audit = buildAgentQcCompletionAudit(facts);
 
     expect(audit.status).toBe("incomplete");
-    expect(audit.gaps.map((gap) => gap.id)).toContain("qcloop-worker-preflight");
+    expect(audit.gaps.map((gap) => gap.id)).toContain(
+      "qcloop-worker-preflight",
+    );
   });
 
   it("缺少 stale owner 机器可读决策输出时应保持 incomplete", () => {
@@ -315,10 +361,14 @@ describe("agent-qc-completion-audit-core", () => {
     const audit = buildAgentQcCompletionAudit(facts);
 
     expect(audit.status).toBe("incomplete");
-    expect(audit.gaps.map((gap) => gap.id)).toContain("stale-owner-intervention-protocol");
-    expect(audit.items.find((item) => item.id === "stale-owner-intervention-protocol")?.evidence).toContain(
-      "ownerIntervention=false",
+    expect(audit.gaps.map((gap) => gap.id)).toContain(
+      "stale-owner-intervention-protocol",
     );
+    expect(
+      audit.items.find(
+        (item) => item.id === "stale-owner-intervention-protocol",
+      )?.evidence,
+    ).toContain("ownerIntervention=false");
   });
 
   it("缺少 stale owner watch history 输出时应保持 incomplete", () => {
@@ -328,10 +378,14 @@ describe("agent-qc-completion-audit-core", () => {
     const audit = buildAgentQcCompletionAudit(facts);
 
     expect(audit.status).toBe("incomplete");
-    expect(audit.gaps.map((gap) => gap.id)).toContain("stale-owner-intervention-protocol");
-    expect(audit.items.find((item) => item.id === "stale-owner-intervention-protocol")?.evidence).toContain(
-      "watchHistory=false",
+    expect(audit.gaps.map((gap) => gap.id)).toContain(
+      "stale-owner-intervention-protocol",
     );
+    expect(
+      audit.items.find(
+        (item) => item.id === "stale-owner-intervention-protocol",
+      )?.evidence,
+    ).toContain("watchHistory=false");
   });
 
   it("GitHub Release workflow 触发 Agent QC 时应给出缺口", () => {
@@ -341,7 +395,9 @@ describe("agent-qc-completion-audit-core", () => {
     const audit = buildAgentQcCompletionAudit(facts);
 
     expect(audit.status).toBe("incomplete");
-    expect(audit.gaps.map((gap) => gap.id)).toContain("github-actions-detached");
+    expect(audit.gaps.map((gap) => gap.id)).toContain(
+      "github-actions-detached",
+    );
   });
 
   it("test:contracts 间接触发 Agent QC 时应给出缺口", () => {
@@ -351,7 +407,9 @@ describe("agent-qc-completion-audit-core", () => {
     const audit = buildAgentQcCompletionAudit(facts);
 
     expect(audit.status).toBe("incomplete");
-    expect(audit.gaps.map((gap) => gap.id)).toContain("github-actions-detached");
+    expect(audit.gaps.map((gap) => gap.id)).toContain(
+      "github-actions-detached",
+    );
   });
 
   it("verify:local 失败时应给出缺口", () => {
@@ -366,9 +424,9 @@ describe("agent-qc-completion-audit-core", () => {
 
     expect(audit.status).toBe("incomplete");
     expect(audit.gaps.map((gap) => gap.id)).toContain("local-verify-gate");
-    expect(audit.items.find((item) => item.id === "local-verify-gate")?.evidence).toContain(
-      "failedStage=typecheck",
-    );
+    expect(
+      audit.items.find((item) => item.id === "local-verify-gate")?.evidence,
+    ).toContain("failedStage=typecheck");
   });
 
   it("真实 evidence 数量足够但缺 P0 scenario id 时仍应保持 incomplete", () => {
@@ -388,9 +446,9 @@ describe("agent-qc-completion-audit-core", () => {
     const audit = buildAgentQcCompletionAudit(facts);
 
     expect(audit.status).toBe("incomplete");
-    expect(audit.items.find((item) => item.id === "real-qcloop-evidence")?.evidence).toContain(
-      "missing=tool-approval-sandbox-boundary",
-    );
+    expect(
+      audit.items.find((item) => item.id === "real-qcloop-evidence")?.evidence,
+    ).toContain("missing=tool-approval-sandbox-boundary");
   });
 
   it("应渲染 Markdown 审计报告", () => {

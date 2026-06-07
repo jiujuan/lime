@@ -12,7 +12,11 @@ function countByStatus(items, getStatus = (item) => item?.status) {
     const status = getStatus(item) || "unknown";
     counts.set(status, (counts.get(status) ?? 0) + 1);
   }
-  return Object.fromEntries(Array.from(counts.entries()).sort(([left], [right]) => left.localeCompare(right)));
+  return Object.fromEntries(
+    Array.from(counts.entries()).sort(([left], [right]) =>
+      left.localeCompare(right),
+    ),
+  );
 }
 
 function summarizeEvidencePack(pack, sourcePath = "") {
@@ -38,7 +42,11 @@ function summarizeEvidencePack(pack, sourcePath = "") {
 
 function normalizeScenarioIds(scenarioIds) {
   return Array.from(
-    new Set(asArray(scenarioIds).map((scenarioId) => String(scenarioId || "").trim()).filter(Boolean)),
+    new Set(
+      asArray(scenarioIds)
+        .map((scenarioId) => String(scenarioId || "").trim())
+        .filter(Boolean),
+    ),
   ).sort();
 }
 
@@ -67,15 +75,25 @@ function buildAgentQcReleaseSummary({
   requiredScenarioIds = [],
   tag = "",
 } = {}) {
-  const evidence = asArray(evidencePacks).map((entry) => summarizeEvidencePack(entry.pack, entry.sourcePath));
+  const evidence = asArray(evidencePacks).map((entry) =>
+    summarizeEvidencePack(entry.pack, entry.sourcePath),
+  );
   const statusCounts = countByStatus(evidence);
-  const blockers = evidence.flatMap((entry) => entry.blockers.map((blocker) => `${entry.runId}: ${blocker}`));
-  const waiverCount = evidence.reduce((sum, entry) => sum + entry.waivers.length, 0);
+  const blockers = evidence.flatMap((entry) =>
+    entry.blockers.map((blocker) => `${entry.runId}: ${blocker}`),
+  );
+  const waiverCount = evidence.reduce(
+    (sum, entry) => sum + entry.waivers.length,
+    0,
+  );
   const hasFailingEvidence = evidence.some((entry) => entry.status !== "pass");
   const weakEvidenceScenarioIds = normalizeScenarioIds(
     asArray(evidencePacks).flatMap((entry) =>
       asArray(entry?.pack?.scenarioResults)
-        .filter((scenario) => scenario?.status === "pass" && !hasStructuredEvidenceRef(scenario))
+        .filter(
+          (scenario) =>
+            scenario?.status === "pass" && !hasStructuredEvidenceRef(scenario),
+        )
         .map((scenario) => scenario?.scenarioId),
     ),
   );
@@ -85,9 +103,16 @@ function buildAgentQcReleaseSummary({
   );
   const hasWeakStructuredEvidence = weakEvidenceScenarioIds.length > 0;
   const status =
-    evidence.length === 0 ? "blocked" : hasFailingEvidence || hasWeakStructuredEvidence ? "fail" : "pass";
-  const coveredScenarioIds = normalizeScenarioIds(evidence.flatMap((entry) => entry.scenarioIds));
-  const normalizedRequiredScenarioIds = normalizeScenarioIds(requiredScenarioIds);
+    evidence.length === 0
+      ? "blocked"
+      : hasFailingEvidence || hasWeakStructuredEvidence
+        ? "fail"
+        : "pass";
+  const coveredScenarioIds = normalizeScenarioIds(
+    evidence.flatMap((entry) => entry.scenarioIds),
+  );
+  const normalizedRequiredScenarioIds =
+    normalizeScenarioIds(requiredScenarioIds);
   const coveredScenarioIdSet = new Set(coveredScenarioIds);
   const missingRequiredScenarioIds = normalizedRequiredScenarioIds.filter(
     (scenarioId) => !coveredScenarioIdSet.has(scenarioId),
@@ -132,9 +157,15 @@ function renderAgentQcReleaseMarkdown(summary) {
     : "- 无";
 
   const harnessLines = [
-    summary.harness.readyCount !== null ? `- Harness ready: ${summary.harness.readyCount}` : "- Harness ready: 未提供",
-    summary.harness.invalidCount !== null ? `- Harness invalid: ${summary.harness.invalidCount}` : "- Harness invalid: 未提供",
-    summary.harness.trendSampleCount !== null ? `- Harness trend samples: ${summary.harness.trendSampleCount}` : "- Harness trend samples: 未提供",
+    summary.harness.readyCount !== null
+      ? `- Harness ready: ${summary.harness.readyCount}`
+      : "- Harness ready: 未提供",
+    summary.harness.invalidCount !== null
+      ? `- Harness invalid: ${summary.harness.invalidCount}`
+      : "- Harness invalid: 未提供",
+    summary.harness.trendSampleCount !== null
+      ? `- Harness trend samples: ${summary.harness.trendSampleCount}`
+      : "- Harness trend samples: 未提供",
     ...summary.harness.signals.map((signal) => `- ${signal}`),
   ].join("\n");
 
@@ -163,13 +194,19 @@ ${blockerLines}
 function validateReleaseSummary(summary, { requireEvidence = true } = {}) {
   const issues = [];
   if (requireEvidence && summary.evidenceCount === 0) {
-    issues.push("缺少 Agent QC Evidence Pack。请先导出 qcloop evidence 或显式记录 waiver。");
+    issues.push(
+      "缺少 Agent QC Evidence Pack。请先导出 qcloop evidence 或显式记录 waiver。",
+    );
   }
   if (summary.status !== "pass") {
-    issues.push(`Agent QC release summary 状态为 ${summary.status}，不能作为绿色发布证据。`);
+    issues.push(
+      `Agent QC release summary 状态为 ${summary.status}，不能作为绿色发布证据。`,
+    );
   }
   if (asArray(summary.missingRequiredScenarioIds).length > 0) {
-    issues.push(`Agent QC Evidence Pack 未覆盖必需场景：${summary.missingRequiredScenarioIds.join(", ")}。`);
+    issues.push(
+      `Agent QC Evidence Pack 未覆盖必需场景：${summary.missingRequiredScenarioIds.join(", ")}。`,
+    );
   }
   if (asArray(summary.weakEvidenceScenarioIds).length > 0) {
     issues.push(

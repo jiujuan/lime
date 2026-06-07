@@ -18,10 +18,10 @@
 
 ## Lime 当前事实
 
-- 已有自研 `scripts/detect-missing-translations.ts`，负责 locale / namespace / key 结构一致性。
-- 已有 `scripts/i18n-hardcoded-check.ts`，负责当前变更文件的硬编码文案扫描。
-- 已有 `scripts/i18n-unused-key-check.ts`，负责 source locale unused key 候选、namespace 热点和前缀家族分桶。
-- 已有 `scripts/i18n-patch-retirement-gate.mjs`，负责 legacy Patch 退出门禁。
+- 已有自研 `scripts/i18n/detect-missing-translations.ts`，负责 locale / namespace / key 结构一致性。
+- 已有 `scripts/i18n/i18n-hardcoded-check.ts`，负责当前变更文件的硬编码文案扫描。
+- 已有 `scripts/i18n/i18n-unused-key-check.ts`，负责 source locale unused key 候选、namespace 热点和前缀家族分桶。
+- 已有 `scripts/i18n/i18n-patch-retirement-gate.mjs`，负责 legacy Patch 退出门禁。
 - `scripts/local-ci.mjs` 已把 `i18n:check`、`i18n:unused --check` 和 patch retirement gate 串成统一本地校验路径；`scripts/quality-task-selector.mjs` 也会把 `i18n_unused` 作为独立任务位输出。
 
 ## 结论

@@ -96,7 +96,7 @@ describe("knowledgeMetadata", () => {
         source: "knowledge_page",
         deprecated: false,
         bundle_path:
-          "src-tauri/resources/default-skills/brand-persona-knowledge-builder",
+          "lime-rs/resources/default-skills/brand-persona-knowledge-builder",
       },
     });
   });
@@ -122,7 +122,7 @@ describe("knowledgeMetadata", () => {
         source: "inputbar",
         deprecated: false,
         bundle_path:
-          "src-tauri/resources/default-skills/content-operations-knowledge-builder",
+          "lime-rs/resources/default-skills/content-operations-knowledge-builder",
       },
     });
   });
@@ -152,7 +152,7 @@ describe("knowledgeMetadata", () => {
           working_dir: "/tmp/project",
           source: "inputbar",
           deprecated: false,
-          bundle_path: `src-tauri/resources/default-skills/${skillName}`,
+          bundle_path: `lime-rs/resources/default-skills/${skillName}`,
         },
       });
     }

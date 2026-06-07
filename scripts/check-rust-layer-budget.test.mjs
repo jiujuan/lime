@@ -16,7 +16,7 @@ function buildReport({ e2eEntries = [] } = {}) {
     entries: [
       ...e2eEntries,
       {
-        file: "src-tauri/tests/real_web_search.rs",
+        file: "lime-rs/tests/real_web_search.rs",
         layer: "e2e",
         packageName: "lime",
         liveGated: true,
@@ -50,7 +50,7 @@ describe("check-rust-layer-budget", () => {
       },
       entries: [
         {
-          file: "src-tauri/src/services/skill_cmd.rs",
+          file: "lime-rs/src/services/skill_cmd.rs",
           layer: "unit",
           packageName: "lime",
           cargoScope: "workspace",
@@ -73,7 +73,7 @@ describe("check-rust-layer-budget", () => {
       buildReport({
         e2eEntries: [
           {
-            file: "src-tauri/tests/live_provider.rs",
+            file: "lime-rs/tests/live_provider.rs",
             layer: "e2e",
             packageName: "lime",
             cargoScope: "workspace",
@@ -90,7 +90,7 @@ describe("check-rust-layer-budget", () => {
       e2eOverBudgetBy: 1,
     });
     expect(renderBudgetResultText(result)).toContain(
-      "- src-tauri/tests/live_provider.rs (lime, runnable tests=1)",
+      "- lime-rs/tests/live_provider.rs (lime, runnable tests=1)",
     );
   });
 });

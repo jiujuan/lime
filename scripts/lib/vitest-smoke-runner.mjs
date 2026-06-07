@@ -4,30 +4,30 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-const TauriAliasPatterns = [
-  ["^@tauri-apps/api/core$", "core.ts"],
-  ["^@tauri-apps/api/event$", "event.ts"],
-  ["^@tauri-apps/api/window$", "window.ts"],
-  ["^@tauri-apps/api/app$", "window.ts"],
-  ["^@tauri-apps/api/path$", "window.ts"],
-  ["^@tauri-apps/plugin-dialog$", "plugin-dialog.ts"],
-  ["^@tauri-apps/plugin-shell$", "plugin-shell.ts"],
-  ["^@tauri-apps/plugin-deep-link$", "plugin-deep-link.ts"],
-  ["^@tauri-apps/plugin-global-shortcut$", "plugin-global-shortcut.ts"],
+const desktopHostAliasPatterns = [
+  ["^@/lib/desktop-host/core$", "core.ts"],
+  ["^@/lib/desktop-host/event$", "event.ts"],
+  ["^@/lib/desktop-host/window$", "window.ts"],
+  ["^@/lib/desktop-host/window$", "window.ts"],
+  ["^@/lib/desktop-host/window$", "window.ts"],
+  ["^@/lib/desktop-host/plugin-dialog$", "plugin-dialog.ts"],
+  ["^@/lib/desktop-host/plugin-shell$", "plugin-shell.ts"],
+  ["^@/lib/desktop-host/plugin-deep-link$", "plugin-deep-link.ts"],
+  ["^@/lib/desktop-host/plugin-global-shortcut$", "plugin-global-shortcut.ts"],
 ];
 
 function toFileUrl(filePath) {
   return pathToFileURL(filePath).href;
 }
 
-function createVitestSmokeConfig(rootDir) {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "lime-vitest-smoke-"));
+export function createVitestSmokeConfig(rootDir) {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vitest-smoke-"));
   const configPath = path.join(tempDir, "vitest.config.mjs");
   const cacheDir = path.join(tempDir, "vite-cache");
-  const tauriMockDir = path.join(rootDir, "src/lib/tauri-mock");
-  const aliasSpecs = TauriAliasPatterns.map(([pattern, target]) => ({
+  const desktopHostDir = path.join(rootDir, "src/lib/desktop-host");
+  const aliasSpecs = desktopHostAliasPatterns.map(([pattern, target]) => ({
     pattern,
-    replacement: path.join(tauriMockDir, target),
+    replacement: path.join(desktopHostDir, target),
   }));
 
   fs.writeFileSync(
@@ -58,7 +58,7 @@ function createVitestSmokeConfig(rootDir) {
       `  test: {\n` +
       `    globals: true,\n` +
       `    environment: "jsdom",\n` +
-      `    exclude: ["**/node_modules/**", "**/dist/**", "**/src-tauri/target/**"],\n` +
+      `    exclude: ["**/node_modules/**", "**/dist/**", "**/lime-rs/target/**"],\n` +
       `  },\n` +
       `});\n`,
   );

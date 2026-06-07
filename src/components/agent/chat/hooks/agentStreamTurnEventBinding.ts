@@ -323,12 +323,9 @@ export async function registerAgentStreamTurnEventBinding(
       content,
     );
   };
-  const dispatchSyntheticError = (message: string) => {
+  const dispatchSyntheticEvent = (data: AgentEvent) => {
     handleTurnStreamEvent({
-      data: {
-        type: "error",
-        message,
-      } as AgentEvent,
+      data,
       requestState,
       callbacks: {
         activateStream: () =>
@@ -376,6 +373,12 @@ export async function registerAgentStreamTurnEventBinding(
       setExecutionRuntime,
       setIsSending,
     });
+  };
+  const dispatchSyntheticError = (message: string) => {
+    dispatchSyntheticEvent({
+      type: "error",
+      message,
+    } as AgentEvent);
   };
   const scheduleInactivityWatchdog = () => {
     clearInactivityWatchdog();

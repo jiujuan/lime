@@ -27,7 +27,7 @@ const DEFAULT_POLICY_EVIDENCE: AgentAppRuntimePackagePolicyEvidence = {
   rawWorkerAllowed: false,
   networkAllowed: false,
   fileSystemAllowed: false,
-  rawTauriAllowed: false,
+  rawHostApiAllowed: false,
   nodeApiAllowed: false,
   sandboxPolicy: agentAppUiSandboxPolicy,
 };
@@ -107,7 +107,7 @@ export interface AgentAppPermissionPromptDescriptor {
     | "rawWorkerAllowed"
     | "networkAllowed"
     | "fileSystemAllowed"
-    | "rawTauriAllowed"
+    | "rawHostApiAllowed"
     | "nodeApiAllowed"
   >;
   runtimeProfile?: AgentAppPermissionPromptRuntimeProfile;
@@ -345,7 +345,7 @@ function policySummary(
     rawWorkerAllowed: evidence.rawWorkerAllowed,
     networkAllowed: evidence.networkAllowed,
     fileSystemAllowed: evidence.fileSystemAllowed,
-    rawTauriAllowed: evidence.rawTauriAllowed,
+    rawHostApiAllowed: evidence.rawHostApiAllowed,
     nodeApiAllowed: evidence.nodeApiAllowed,
   };
 }

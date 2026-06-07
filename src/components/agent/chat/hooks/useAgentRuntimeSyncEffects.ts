@@ -8,7 +8,7 @@ import {
   dedupeAgentRuntimeEventNames,
   getAgentSubagentStatusEventName,
 } from "@/lib/api/agentRuntimeEvents";
-import { hasTauriEventListenerCapability } from "@/lib/tauri-runtime";
+import { hasDesktopHostEventListenerCapability } from "@/lib/desktop-runtime";
 import type { AgentThreadTurn } from "../types";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 
@@ -66,11 +66,40 @@ function shouldPollRecoveredRuntimeWork(params: {
   );
 }
 
+function shouldRefreshReadModelForTurnEvent(payload: unknown): boolean {
+  const data = parseAgentEvent(payload);
+  if (!data) {
+    return false;
+  }
+
+  switch (data.type) {
+    case "action_required":
+    case "action_resolved":
+    case "artifact_snapshot":
+    case "done":
+    case "error":
+    case "final_done":
+    case "queue_added":
+    case "queue_cleared":
+    case "queue_removed":
+    case "queue_started":
+    case "runtime_status":
+    case "warning":
+      return true;
+    default:
+      return false;
+  }
+}
+
 interface UseAgentRuntimeSyncEffectsOptions {
-  runtime: Pick<AgentRuntimeAdapter, "listenToTeamEvents">;
+  runtime: Pick<
+    AgentRuntimeAdapter,
+    "listenToTeamEvents" | "listenToTurnEvents"
+  >;
   sessionIdRef: MutableRefObject<string | null>;
   sessionId: string | null;
   parentSessionId?: string | null;
+  currentTurnEventName?: string | null;
   isSending: boolean;
   threadReadStatus?: string | null;
   queuedTurnCount: number;
@@ -86,6 +115,7 @@ export function useAgentRuntimeSyncEffects(
     sessionIdRef,
     sessionId,
     parentSessionId,
+    currentTurnEventName,
     isSending,
     threadReadStatus,
     queuedTurnCount,
@@ -94,10 +124,11 @@ export function useAgentRuntimeSyncEffects(
   } = options;
   const lastIsSendingRef = useRef(isSending);
   const normalizedParentSessionId = parentSessionId?.trim() || null;
-  const hasTauriRuntimeEventListenerCapability =
-    hasTauriEventListenerCapability();
+  const normalizedCurrentTurnEventName = currentTurnEventName?.trim() || null;
+  const hasDesktopRuntimeEventListenerCapability =
+    hasDesktopHostEventListenerCapability();
   const hasRuntimeEventListenerCapability =
-    hasTauriRuntimeEventListenerCapability ||
+    hasDesktopRuntimeEventListenerCapability ||
     hasDevBridgeEventListenerCapability();
   const hasActiveRuntimeWork = shouldPollRecoveredRuntimeWork({
     threadReadStatus,
@@ -111,7 +142,7 @@ export function useAgentRuntimeSyncEffects(
     !hasRuntimeEventListenerCapability;
   const shouldSubscribeTeamEvents =
     Boolean(sessionId) &&
-    (hasTauriRuntimeEventListenerCapability ||
+    (hasDesktopRuntimeEventListenerCapability ||
       isSending ||
       hasActiveRuntimeWork ||
       Boolean(normalizedParentSessionId));
@@ -173,6 +204,51 @@ export function useAgentRuntimeSyncEffects(
       window.clearInterval(timer);
     };
   }, [refreshSessionDetail, sessionId, shouldUseDevBridgeRuntimePolling]);
+
+  useEffect(() => {
+    if (!sessionId || !normalizedCurrentTurnEventName) {
+      return;
+    }
+
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+
+    const subscribe = async () => {
+      const nextUnlisten = await runtime.listenToTurnEvents(
+        normalizedCurrentTurnEventName,
+        (event) => {
+          if (
+            disposed ||
+            sessionIdRef.current !== sessionId ||
+            !shouldRefreshReadModelForTurnEvent(event.payload)
+          ) {
+            return;
+          }
+          void refreshSessionDetail(sessionId);
+        },
+      );
+
+      if (disposed) {
+        nextUnlisten();
+        return;
+      }
+
+      unlisten = nextUnlisten;
+    };
+
+    void subscribe();
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [
+    normalizedCurrentTurnEventName,
+    refreshSessionDetail,
+    runtime,
+    sessionId,
+    sessionIdRef,
+  ]);
 
   useEffect(() => {
     if (!sessionId || !shouldSubscribeTeamEvents) {

@@ -2,13 +2,13 @@
 
 ## 概述
 
-Lime 是一个以创作为中心的本地优先 AI Agent 交互工作台，基于 Tauri 桌面应用构建，面向创作者、内容团队与轻知识工作者。系统由 Workspace、Skills 编排层、MCP 标准能力层、Claw 渠道层、Artifact 交付层与多模型接入能力共同组成。
+Lime 是一个以创作为中心的本地优先 AI Agent 交互工作台，当前 Desktop host 主路径基于 Electron。Electron 只作为 Desktop Host bridge，负责 IPC 与桌面壳能力；AI Agent / runtime / 跨 App 复用能力收敛到 App Server JSON-RPC 与 RuntimeCore，面向创作者、内容团队与轻知识工作者。系统由 Workspace、Skills 编排层、MCP 标准能力层、Claw 渠道层、Artifact 交付层与多模型接入能力共同组成。
 
 可以把它理解为三层结构：
 
 1. **产品层**：Workspace、通用工作区 / Harness、Agent 对话、Skills、Artifact/Canvas、记忆与风格
 2. **能力层**：MCP、浏览器运行时、终端、插件、批量/心跳、Claw 渠道
-3. **基础设施层**：Aster Agent、API Key Provider、模型注册表、协议兼容、路由、服务器、数据库与监控
+3. **基础设施层**：App Server / RuntimeCore、ExecutionBackend、API Key Provider、模型注册表、协议兼容、路由、服务器、数据库与监控
 
 其中，Provider 接入、协议兼容与运行时服务共同构成底层能力底座。
 
@@ -47,9 +47,13 @@ lime/
 │   ├── hooks/           # React Hooks
 │   ├── lib/             # 工具库
 │   └── stores/          # 状态管理
-├── src-tauri/           # Rust 后端
+├── electron/          # Electron main / preload / Desktop Host bridge
+├── lime-rs/           # Rust App Server 与 legacy facade workspace
+│   ├── crates/
+│   │   ├── app-server* # App Server protocol / server / client / transport current crates
+│   │   └── agent       # RuntimeCore 当前参考 crate，后续继续拆公共模型与服务
 │   └── src/
-│       ├── commands/    # Tauri 命令
+│       ├── commands/    # legacy desktop facade 命令，仅用于兼容迁移
 │       ├── providers/   # Provider 实现
 │       ├── services/    # 业务服务
 │       ├── converter/   # 协议转换
@@ -77,18 +81,20 @@ lime/
 |------|------|
 | `src/features/browser-runtime/` | 浏览器协助运行时与调试工作区 |
 | `终端能力（已移除）` | 不属于当前能力层；仅在治理文档中保留退役说明与历史检索语义 |
-| `src-tauri/src/services/automation_service/` + `src-tauri/src/app/scheduler_service.rs` | 自动化任务、后台轮询与兼容调度触发壳 |
-| `src-tauri/src/plugin/` | 插件系统 |
-| `src-tauri/src/services/mcp_service.rs` | MCP 服务器与工具管理 |
-| `src-tauri/src/commands/gateway_channel_cmd.rs` | 多渠道远程入口、Webhook/Tunnel 与渠道运行时 |
-| `src-tauri/src/commands/browser_connector_cmd.rs` + `src-tauri/src/commands/webview_cmd.rs` | 浏览器连接器、ChromeBridge 与远程浏览器接入 |
-| `src-tauri/src/commands/telegram_remote_cmd.rs` + `src-tauri/src/dev_bridge.rs` | 单通道旧入口与开发桥兼容支撑 |
+| `lime-rs/src/services/automation_service/` + `lime-rs/src/app/scheduler_service.rs` | 自动化任务、后台轮询与兼容调度触发壳 |
+| `lime-rs/src/plugin/` | 插件系统 |
+| `lime-rs/src/services/mcp_service.rs` | MCP 服务器与工具管理 |
+| `lime-rs/src/commands/gateway_channel_cmd.rs` | 多渠道远程入口、Webhook/Tunnel 与渠道运行时 |
+| `lime-rs/src/commands/browser_connector_cmd.rs` + `lime-rs/src/commands/webview_cmd.rs` | 浏览器连接器、ChromeBridge 与远程浏览器接入 |
+| `lime-rs/src/commands/telegram_remote_cmd.rs` + `lime-rs/src/dev_bridge.rs` | 单通道旧入口与开发桥兼容支撑 |
 
 ### 基础设施层
 
 | 模块 | 说明 |
 |------|------|
-| `src-tauri/src/agent/` | Aster Agent 集成、会话历史、线程读模型、工具注册与流式桥接 |
+| `lime-rs/crates/app-server*` | App Server protocol / server / client / transport current crates，承接跨 App JSON-RPC 事实源 |
+| `lime-rs/crates/agent` | RuntimeCore 当前参考 crate，承接 session / thread / turn / event 等公共 facts 的拆分方向 |
+| `lime-rs/src/agent/` | Aster execution backend 的历史实现参考；只作为 ExecutionBackend 迁移来源，不再是公共 runtime owner |
 | `providers/` | LLM Provider API 实现与协议兼容 |
 | `services/` | 业务服务层 |
 | `converter/` | 协议转换与兼容层 |
@@ -99,11 +105,11 @@ lime/
 
 ## 核心模块视图
 
-### 后端（`src-tauri/src/`）
+### 后端（`lime-rs/src/`）
 
 | 模块 | 说明 |
 |------|------|
-| `agent/` | Aster Agent 运行时桥接、会话管理与状态读模型装配 |
+| `agent/` | Aster execution backend 迁移参考、会话历史与状态读模型装配 |
 | `skills/` | Skills 标准集成、动态加载与执行回调 |
 | `providers/` | 多 Provider 认证与请求发送 |
 | `services/` | 心跳、浏览器窗口、MCP 等业务服务 |
@@ -120,7 +126,7 @@ lime/
 | `components/` | 主 UI 组件与共享工作区 |
 | `features/` | 浏览器运行时等较独立特性域 |
 | `hooks/` | 业务逻辑 Hooks |
-| `lib/api/` | Tauri API 与运行时封装 |
+| `lib/api/` | Desktop host / App Server API 与运行时封装 |
 | `lib/artifact/` | Artifact 状态与解析 |
 | `pages/` | 独立窗口与页面入口 |
 
@@ -149,10 +155,10 @@ lime/
           │
           ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Agent Runtime                               │
+│              App Server / RuntimeCore                            │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
-│  │ Aster Agent │  │ Session     │  │ Stream / Action         │  │
-│  │ 执行        │  │ 状态        │  │ Request                 │  │
+│  │ RuntimeCore │  │ Session     │  │ Stream / Action         │  │
+│  │ facts       │  │ 状态        │  │ Request                 │  │
 │  └──────┬──────┘  └──────┬──────┘  └───────────┬─────────────┘  │
 └─────────┼────────────────┼─────────────────────┼────────────────┘
           │                │                     │
@@ -211,7 +217,8 @@ lime/
 - 支持远程触发、异步协作、消息回流与外部入口接入
 
 ### 5. Agent Runtime
-- 基于 Aster Agent，支持会话、流式事件、工具调用与多模型配置
+- Runtime facts 由 App Server / RuntimeCore 拥有；Aster 只是第一个 `ExecutionBackend`
+- 支持会话、流式事件、工具调用与多模型配置
 - 支持任务接力、会话持续化、步骤可观测与长期运行
 
 ### 6. Artifact First
@@ -235,7 +242,7 @@ lime/
 - [memory-compaction.md](memory-compaction.md) - 记忆来源链、会话记忆、持久记忆与会话压缩主链
 - [state-history-telemetry.md](state-history-telemetry.md) - session/thread/request/evidence/history 的状态读模型主链
 - [skill-standard.md](skill-standard.md) - 统一技能标准、目录与运行边界
-- [../../src-tauri/src/skills/README.md](../../src-tauri/src/skills/README.md) - Skills 标准与集成
+- [../../lime-rs/src/skills/README.md](../../lime-rs/src/skills/README.md) - Skills 标准与集成
 - [mcp.md](mcp.md) - MCP 服务器
 - [aster-integration.md](aster-integration.md) - Agent Runtime 集成
 
@@ -251,7 +258,7 @@ lime/
 - [lib.md](lib.md) - 工具库
 
 ### 配置、服务与数据
-- [commands.md](commands.md) - Tauri 命令
+- [commands.md](commands.md) - Electron Desktop Host bridge / App Server / legacy facade 命令边界
 - [command-runtime.md](command-runtime.md) - 命令运行时、`@` / `/`、轻卡与 viewer 实施规则
 - [site-adapter-standard.md](site-adapter-standard.md) - 站点适配器标准与外部来源接入边界
 - [services.md](services.md) - 业务服务

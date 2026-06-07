@@ -282,6 +282,70 @@ describe("agentProtocol", () => {
     });
   });
 
+  it("应兼容 App Server 透传的工具开始与工具结果事件", () => {
+    expect(
+      parseAgentEvent({
+        type: "tool_started",
+        tool_id: "tool-1",
+        tool_name: "WebSearch",
+        arguments: {
+          query: "2026年6月7日 国际新闻",
+        },
+      }),
+    ).toEqual({
+      type: "tool_start",
+      tool_id: "tool-1",
+      tool_name: "WebSearch",
+      arguments: '{"query":"2026年6月7日 国际新闻"}',
+    });
+
+    expect(
+      parseAgentEvent({
+        type: "tool_result",
+        tool_id: "tool-1",
+        result: {
+          success: true,
+          output: "ok",
+          metadata: {
+            source: "web_search",
+          },
+        },
+      }),
+    ).toEqual({
+      type: "tool_end",
+      tool_id: "tool-1",
+      result: {
+        success: true,
+        output: "ok",
+        error: undefined,
+        images: undefined,
+        metadata: {
+          source: "web_search",
+        },
+      },
+    });
+
+    expect(
+      parseAgentEvent({
+        type: "tool.result",
+        toolId: "tool-2",
+        output: {
+          total: 2,
+        },
+      }),
+    ).toEqual({
+      type: "tool_end",
+      tool_id: "tool-2",
+      result: {
+        success: true,
+        output: '{"total":2}',
+        error: undefined,
+        images: undefined,
+        metadata: undefined,
+      },
+    });
+  });
+
   it("应解析 turn_context 的结构化 context summary", () => {
     expect(
       parseAgentEvent({

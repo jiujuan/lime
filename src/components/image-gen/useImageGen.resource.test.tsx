@@ -50,7 +50,7 @@ vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: mockInvoke,
 }));
 
-vi.mock("@tauri-apps/api/core", () => ({
+vi.mock("@/lib/desktop-host/core", () => ({
   invoke: mockInvoke,
 }));
 

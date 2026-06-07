@@ -60,26 +60,26 @@ Lime 实际已经具备这些能力：
 
 本轮治理后，建议把事实源固定为：
 
-- **工具元数据事实源**：`src-tauri/crates/core/src/tool_calling.rs`
-- **native 工具目录事实源**：`src-tauri/src/agent_tools/catalog.rs`
-- **执行权限事实源**：`src-tauri/src/agent_tools/execution.rs`
-- **MCP runtime 工具事实源**：`src-tauri/crates/mcp/src/manager.rs`
-- **Aster 注入工具面事实源**：`src-tauri/src/commands/aster_agent_cmd.rs`
-- **工具库存 / 审计快照事实源**：`src-tauri/src/agent_tools/inventory.rs`
+- **工具元数据事实源**：`lime-rs/crates/core/src/tool_calling.rs`
+- **native 工具目录事实源**：`lime-rs/src/agent_tools/catalog.rs`
+- **执行权限事实源**：`lime-rs/src/agent_tools/execution.rs`
+- **MCP runtime 工具事实源**：`lime-rs/crates/mcp/src/manager.rs`
+- **Aster 注入工具面事实源**：`lime-rs/src/commands/aster_agent_cmd.rs`
+- **工具库存 / 审计快照事实源**：`lime-rs/src/agent_tools/inventory.rs`
 
 ### 2.3 当前 / 兼容 / 待清理分类
 
 | 分类           | 路径 / 对象                                      | 说明                                                                                                                     |
 | -------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
 | current        | `lime_core::tool_calling`                        | 统一 metadata 读取与打分                                                                                                 |
-| current        | `src-tauri/src/agent_tools/catalog.rs`           | 完整 native tool 目录与默认授权子集                                                                                      |
-| current        | `src-tauri/src/agent_tools/execution.rs`         | 统一 execution 层的 warning / sandbox / 参数限制事实源                                                                   |
-| current        | `src-tauri/crates/mcp/src/manager.rs`            | MCP tools runtime registry                                                                                               |
-| current        | `src-tauri/src/commands/aster_agent_cmd.rs`      | Aster runtime 注入、`ToolSearch`、inventory 命令                                                                         |
-| current        | `src-tauri/src/agent_tools/inventory.rs`         | runtime 工具库存快照                                                                                                     |
+| current        | `lime-rs/src/agent_tools/catalog.rs`           | 完整 native tool 目录与默认授权子集                                                                                      |
+| current        | `lime-rs/src/agent_tools/execution.rs`         | 统一 execution 层的 warning / sandbox / 参数限制事实源                                                                   |
+| current        | `lime-rs/crates/mcp/src/manager.rs`            | MCP tools runtime registry                                                                                               |
+| current        | `lime-rs/src/commands/aster_agent_cmd.rs`      | Aster runtime 注入、`ToolSearch`、inventory 命令                                                                         |
+| current        | `lime-rs/src/agent_tools/inventory.rs`         | runtime 工具库存快照                                                                                                     |
 | compat         | `workspace_allowed_tool_names(...)`              | 当前保留为旧调用入口别名，实际委托默认授权目录                                                                           |
-| dead-candidate | `src-tauri/crates/agent/src/tool_permissions.rs` | 已退出 `lime-agent` 的 `lib.rs` 编译图，仅通过 `src-tauri/crates/agent/tests/legacy_permission_surfaces.rs` 测试夹具加载 |
-| dead-candidate | `src-tauri/crates/agent/src/shell_security.rs`   | 已退出 `lime-agent` 的 `lib.rs` 编译图，仅通过 `src-tauri/crates/agent/tests/legacy_permission_surfaces.rs` 测试夹具加载 |
+| dead-candidate | `lime-rs/crates/agent/src/tool_permissions.rs` | 已退出 `lime-agent` 的 `lib.rs` 编译图，仅通过 `lime-rs/crates/agent/tests/legacy_permission_surfaces.rs` 测试夹具加载 |
+| dead-candidate | `lime-rs/crates/agent/src/shell_security.rs`   | 已退出 `lime-agent` 的 `lib.rs` 编译图，仅通过 `lime-rs/crates/agent/tests/legacy_permission_surfaces.rs` 测试夹具加载 |
 
 > 注意：`dead-candidate` 本轮只做标记，不直接删除。删除属于高风险操作，需要单独确认。
 
@@ -99,14 +99,14 @@ Lime 实际已经具备这些能力：
 
 以下模块都已切换到共享逻辑：
 
-- `src-tauri/crates/mcp/src/manager.rs`
-- `src-tauri/src/commands/aster_agent_cmd.rs`
-- `src-tauri/crates/providers/src/providers/openai_custom.rs`
-- `src-tauri/crates/providers/src/providers/claude_custom.rs`
+- `lime-rs/crates/mcp/src/manager.rs`
+- `lime-rs/src/commands/aster_agent_cmd.rs`
+- `lime-rs/crates/providers/src/providers/openai_custom.rs`
+- `lime-rs/crates/providers/src/providers/claude_custom.rs`
 
 ### 3.2 native 工具目录补全
 
-`src-tauri/src/agent_tools/catalog.rs` 已升级为完整目录，覆盖：
+`lime-rs/src/agent_tools/catalog.rs` 已升级为完整目录，覆盖：
 
 - Aster built-ins
 - Lime 注入工具
@@ -124,7 +124,7 @@ Lime 实际已经具备这些能力：
 
 新增：
 
-- `src-tauri/src/agent_tools/inventory.rs`
+- `lime-rs/src/agent_tools/inventory.rs`
 - `agent_runtime_get_tool_inventory` Tauri 命令
 - `src/lib/api/agentRuntime.ts` 对应 helper
 
@@ -142,7 +142,7 @@ Lime 实际已经具备这些能力：
 
 新增：
 
-- `src-tauri/src/agent_tools/execution.rs`
+- `lime-rs/src/agent_tools/execution.rs`
 
 负责：
 
@@ -155,9 +155,9 @@ Lime 实际已经具备这些能力：
 
 其中策略覆盖入口已经收口为：
 
-- **持久化覆盖**：`src-tauri/crates/core/src/config/types.rs` -> `NativeAgentConfig.tool_execution`
+- **持久化覆盖**：`lime-rs/crates/core/src/config/types.rs` -> `NativeAgentConfig.tool_execution`
 - **运行时覆盖**：`request.metadata.harness.executionPolicy` / `execution_policy`
-- **有效策略解析**：`src-tauri/src/agent_tools/execution.rs::resolve_tool_execution_policy`
+- **有效策略解析**：`lime-rs/src/agent_tools/execution.rs::resolve_tool_execution_policy`
 
 结果：
 
@@ -184,14 +184,14 @@ Lime 实际已经具备这些能力：
 
 为避免 `lime` 主包在本地因 Tauri 链接过大而降低回归效率，已补一条对齐 Codex 思路的轻量测试通道：
 
-- `src-tauri/crates/agent/src/lib.rs`
-- `src-tauri/crates/agent/src/agent_tools/mod.rs`
+- `lime-rs/crates/agent/src/lib.rs`
+- `lime-rs/crates/agent/src/agent_tools/mod.rs`
 
 这条通道直接复用 app crate 的：
 
-- `src-tauri/src/agent_tools/catalog.rs`
-- `src-tauri/src/agent_tools/execution.rs`
-- `src-tauri/src/agent_tools/inventory.rs`
+- `lime-rs/src/agent_tools/catalog.rs`
+- `lime-rs/src/agent_tools/execution.rs`
+- `lime-rs/src/agent_tools/inventory.rs`
 
 用于承接纯逻辑单测，而不是复制第二份实现。
 
@@ -205,8 +205,8 @@ Lime 实际已经具备这些能力：
 
 本轮继续做了一刀减法：
 
-- `src-tauri/crates/agent/src/tool_permissions.rs`
-- `src-tauri/crates/agent/src/shell_security.rs`
+- `lime-rs/crates/agent/src/tool_permissions.rs`
+- `lime-rs/crates/agent/src/shell_security.rs`
 
 现在文件仍保留在仓库中，但编译边界已经：
 
@@ -214,7 +214,7 @@ Lime 实际已经具备这些能力：
 - 不再通过 `lime-agent` crate 根对外 `pub use`
 - 不再进入 `lime-agent` 的 `lib.rs` 编译图
 - 不再进入正常 `cargo check` / 运行时编译图
-- 只通过 `src-tauri/crates/agent/tests/legacy_permission_surfaces.rs` 测试夹具加载，并继续复用文件内自测
+- 只通过 `lime-rs/crates/agent/tests/legacy_permission_surfaces.rs` 测试夹具加载，并继续复用文件内自测
 
 同时新增了两层守卫：
 
@@ -240,7 +240,7 @@ Lime 实际已经具备这些能力：
   当前不再保留 `SubAgentTask`；team runtime 已收敛到 `Agent / SendMessage / TeamCreate / TeamDelete / ListPeers`
 
 - **说明**  
-  Core surface 现已按 current surface 收敛；精确数量与分类以 `src-tauri/src/agent_tools/catalog.rs` 为准。
+  Core surface 现已按 current surface 收敛；精确数量与分类以 `lime-rs/src/agent_tools/catalog.rs` 为准。
 
 ### 4.2 Workbench surface
 

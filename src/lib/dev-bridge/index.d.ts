@@ -1,7 +1,7 @@
 /**
  * 开发桥接模块
  *
- * 提供浏览器开发服务器与 Tauri 后端的 HTTP 通信桥接。
+ * 提供浏览器开发服务器与 DevBridge 的 HTTP 通信桥接。
  *
  * @module dev-bridge
  */

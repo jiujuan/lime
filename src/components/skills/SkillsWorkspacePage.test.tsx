@@ -134,6 +134,31 @@ describe("SkillsWorkspacePage", () => {
     );
   });
 
+  it("用户安装页应挂载已保存技能面板并读取 workspace skill binding readiness", async () => {
+    const { container } = renderPage({ initialView: "installed" });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-registered-skills-panel"]',
+      ),
+    ).toBeTruthy();
+    expect(mocks.getOrCreateDefaultProject).toHaveBeenCalledTimes(1);
+    expect(mocks.listRegisteredSkills).toHaveBeenCalledWith({
+      workspaceRoot: "/Users/demo/Lime/default-workspace",
+    });
+    expect(mocks.listWorkspaceSkillBindings).toHaveBeenCalledWith({
+      workspaceRoot: "/Users/demo/Lime/default-workspace",
+      caller: "assistant",
+      workbench: true,
+    });
+  });
+
   it("内置页点击详情应读取并展示对应 SKILL.md", async () => {
     const { container } = renderPage();
 
@@ -158,9 +183,7 @@ describe("SkillsWorkspacePage", () => {
       container.querySelector('[data-testid="skills-installed-detail"]'),
     ).toBeTruthy();
     expect(document.body.textContent).toContain("Detail for aspnet-core");
-    expect(container.querySelector("strong")?.textContent).toBe(
-      "aspnet-core",
-    );
+    expect(container.querySelector("strong")?.textContent).toBe("aspnet-core");
     expect(container.querySelector("code")?.textContent).toBe("SKILL.md");
     expect(container.querySelector("table")?.textContent).toContain("Ready");
   });

@@ -52,7 +52,7 @@
 
 ### 4.1 新增模块
 
-建议新增：`src-tauri/crates/services/src/execution_tracker.rs`
+建议新增：`lime-rs/crates/services/src/execution_tracker.rs`
 
 核心职责：
 

@@ -2,7 +2,7 @@
 
 ## 背景
 
-当前 `npm test` 同时承载纯单元、React/jsdom 组件、DevBridge/Tauri 契约、脚本集成和少量 live-gated 测试。按当前工作区实测，前端完整 Vitest 分批跑完约 `306.95s`，Rust 后端 `cargo test --manifest-path "src-tauri/Cargo.toml"` 约 `11.00s`。这说明 Lime 的主要反馈瓶颈在前端测试分层，而不是 Rust 后端。
+当前 `npm test` 同时承载纯单元、React/jsdom 组件、DevBridge/Tauri 契约、脚本集成和少量 live-gated 测试。按当前工作区实测，前端完整 Vitest 分批跑完约 `306.95s`，Rust 后端 `cargo test --manifest-path "lime-rs/Cargo.toml"` 约 `11.00s`。这说明 Lime 的主要反馈瓶颈在前端测试分层，而不是 Rust 后端。
 
 本路线图目标是把本地 TDD 反馈环从“全量前端 Vitest”收敛到“快速纯单元 + 定向相关测试”，同时保留 `verify:local`、`test:contracts`、`verify:gui-smoke` 对交付风险的覆盖。
 
@@ -226,7 +226,7 @@
 - 2026-05-31：P2 第一刀完成。抽取 `agentChatPageShellViewModel`，新增 `agentChatPageShellViewModel.unit.test.ts`，将 `AgentChatPage` 的 `new-task` 直达工作区 shell 路由判断落到纯 VM 单测；`npm run test:unit -- src/components/agent/chat/agentChatPageShellViewModel.unit.test.ts` 实测 `8` 个 case，约 `0.73s` 通过；`npm run test:component -- src/components/agent/chat/index.shell-routing.test.tsx` 实测 `6` 个 case，约 `0.74s` 通过。
 - 2026-05-31：修复 unit 层稳定性缺口。`sessionMetadataSyncScheduler.test.ts` 去掉真实 `setTimeout(0)` 式 promise flush，改为纯 microtask flush，避免 timer 状态泄漏导致伪单元测试超时；完整 `npm run test:unit` 当前筛出 `385` 个文件、`2080` 个 case，实测 `21.43s` 通过。
 - 2026-05-31：P0/P3 分层治理收口。新增 `test:e2e` 与 `test:layers:stats`，将 Vitest 分层事实源收敛到 `scripts/lib/vitest-layer-classifier.mjs` 与 `scripts/report-vitest-layers.mjs`。当前 `npm run test:layers:stats` 统计：总 `882` 个 Vitest 文件，默认可运行 `881`，live-gated `1`；分层为 unit `385`、component `370`、contract `77`、integration `49`、e2e `1`。
-- 2026-05-31：补齐最终治理统计。最近一次完整 `npm run test:unit` 实测 `385` 个文件、`2080` 个 case、`25.01s` 通过；最近一次 `cargo test --manifest-path "src-tauri/Cargo.toml"` 实测 `13.17s` total，`1528` passed，`3` ignored。
+- 2026-05-31：补齐最终治理统计。最近一次完整 `npm run test:unit` 实测 `385` 个文件、`2080` 个 case、`25.01s` 通过；最近一次 `cargo test --manifest-path "lime-rs/Cargo.toml"` 实测 `13.17s` total，`1528` passed，`3` ignored。
 - 2026-05-31：P2 第二刀完成。抽取 `agentChatWorkspaceShellViewModel`，将 `AgentChatWorkspace` 内联的展示消息、聊天面板、侧栏切换和工作区图片任务恢复判断落到纯 VM 单测；`npm run test:unit -- src/components/agent/chat/agentChatWorkspaceShellViewModel.unit.test.ts` 实测 `8` 个 case，约 `0.96s` 通过；`npm run test:component -- src/components/agent/chat/index.test.tsx -t "showChatPanel=false|new-task 执行态"` 实际回归整文件 `120` 个 case，约 `56.43s` 通过。当前 `npm run test:unit` 单独复跑 `386` 个文件、`2088` 个 case，实测 `21.68s` 通过；`npm run test:layers:stats` 统计：总 `883` 个 Vitest 文件，默认可运行 `882`，live-gated `1`；分层为 unit `386`、component `370`、contract `77`、integration `49`、e2e `1`。
 - 2026-05-31：修复 unit 层 i18n 状态污染。`agentStreamErrorController.test.ts` 在测试级固定 `zh-CN` locale，避免完整 `test:unit` 中其他 locale 测试污染 402 Provider 友好提示断言；`npm run test:unit -- src/components/agent/chat/hooks/agentStreamErrorController.test.ts` 实测 `15` 个 case 通过。
 - 2026-05-31：P2 第二刀 GUI 验证完成。`npm run verify:gui-smoke` 完整通过，包含 `workspace-ready`、`browser-runtime`、`site-adapters`、Service Skill entry、runtime tool surface、页面级 runtime tool surface、code runtime fixture、approval/sandbox、`@` command registry、Agent Apps、Knowledge GUI、design canvas；`claw-chat-ready-streaming` 仍按规则跳过真实 Provider 调用。

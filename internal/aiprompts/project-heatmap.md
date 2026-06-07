@@ -93,7 +93,7 @@ npm run heatmap:project -- --days 180 --depth 2 --top 18 --output "./tmp/project
 含义：
 
 - `--days 180`：观察最近 180 天的 Git churn
-- `--depth 2`：按目录深度 2 聚合，适合总览 `src` / `src-tauri` / `docs`
+- `--depth 2`：按目录深度 2 聚合，适合总览 `src` / `lime-rs` / `docs`
 - `--top 18`：矩阵中展示前 18 个热点模块
 
 ### 3. 生成“治理图”
@@ -107,7 +107,7 @@ npm run heatmap:project -- --days 30 --depth 3 --top 15 --output "./tmp/project-
 推荐参数解释：
 
 - `--days 30`：更适合看近期治理优先级，而不是长期历史噪音
-- `--depth 3`：能把 `src/components/agent`、`src-tauri/src/commands` 这种真实模块层级打出来
+- `--depth 3`：能把 `src/components/agent`、`lime-rs/src/commands` 这种真实模块层级打出来
 - `--top 15`：矩阵和候选榜更聚焦
 
 ### 4. 配套生成治理扫描结果
@@ -257,8 +257,8 @@ npm run governance:legacy-report
 ### 总览热力图重点看
 
 - `src/components`
-- `src-tauri/src`
-- `src-tauri/crates`
+- `lime-rs/src`
+- `lime-rs/crates`
 - `src/lib`
 - `src/features`
 
@@ -269,10 +269,10 @@ npm run governance:legacy-report
 - `src/components/agent`
 - `src/components/workspace`
 - `src/components/settings-v2`
-- `src-tauri/src/commands`
-- `src-tauri/src/dev_bridge`
+- `lime-rs/src/commands`
+- `lime-rs/src/dev_bridge`
 - `src/lib/api`
-- `src-tauri/src/services`
+- `lime-rs/src/services`
 
 ## 建议的 AI 结论模板
 
@@ -287,7 +287,7 @@ npm run governance:legacy-report
 本轮最值得优先治理的模块：
 - src/components/agent
 - src/components/workspace
-- src-tauri/src/commands
+- lime-rs/src/commands
 
 补充验证：
 - governance:legacy-report 已运行

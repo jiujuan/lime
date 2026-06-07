@@ -1,6 +1,6 @@
 /**
  * @file 视频生成 API
- * @description 封装视频生成任务相关的 Tauri 命令调用
+ * @description 封装视频生成任务相关的 Desktop Host / App Server 命令调用
  * @module lib/api/videoGeneration
  */
 

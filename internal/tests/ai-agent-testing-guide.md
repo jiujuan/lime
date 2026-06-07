@@ -39,7 +39,7 @@ AI Agent 与传统软件的关键区别：
 测试独立的、确定性的组件：
 
 ```rust
-// src-tauri/src/agent/tests/message_tests.rs
+// lime-rs/src/agent/tests/message_tests.rs
 
 #[cfg(test)]
 mod tests {
@@ -75,7 +75,7 @@ mod tests {
 测试组件之间的交互：
 
 ```rust
-// src-tauri/src/agent/tests/tool_integration_tests.rs
+// lime-rs/src/agent/tests/tool_integration_tests.rs
 
 #[cfg(test)]
 mod tests {
@@ -118,7 +118,7 @@ mod tests {
 测试完整的 Agent 流程：
 
 ```rust
-// src-tauri/src/agent/tests/e2e_tests.rs
+// lime-rs/src/agent/tests/e2e_tests.rs
 
 #[cfg(test)]
 mod tests {
@@ -158,7 +158,7 @@ mod tests {
 适用于有明确对错的场景：
 
 ```rust
-// src-tauri/src/agent/tests/graders/code_grader.rs
+// lime-rs/src/agent/tests/graders/code_grader.rs
 
 /// 代码评分器
 pub struct CodeGrader;
@@ -196,7 +196,7 @@ impl CodeGrader {
 适用于开放式任务：
 
 ```rust
-// src-tauri/src/agent/tests/graders/model_grader.rs
+// lime-rs/src/agent/tests/graders/model_grader.rs
 
 /// 模型评分器
 pub struct ModelGrader {
@@ -248,7 +248,7 @@ pub struct GradeResult {
 用于校准模型评分器：
 
 ```rust
-// src-tauri/src/agent/tests/graders/human_grader.rs
+// lime-rs/src/agent/tests/graders/human_grader.rs
 
 /// 人工评分记录
 pub struct HumanGrade {
@@ -292,7 +292,7 @@ impl HumanGradeCollector {
 测试 Agent 能做什么：
 
 ```rust
-// src-tauri/src/agent/tests/capability_tests.rs
+// lime-rs/src/agent/tests/capability_tests.rs
 
 /// 文件操作能力测试
 mod file_operations {
@@ -332,7 +332,7 @@ mod code_understanding {
 确保 Agent 不退化：
 
 ```rust
-// src-tauri/src/agent/tests/regression_tests.rs
+// lime-rs/src/agent/tests/regression_tests.rs
 
 /// 回归测试套件
 /// 预期通过率：接近 100%
@@ -360,7 +360,7 @@ mod regression {
 测试异常情况：
 
 ```rust
-// src-tauri/src/agent/tests/edge_case_tests.rs
+// lime-rs/src/agent/tests/edge_case_tests.rs
 
 mod edge_cases {
     #[tokio::test]
@@ -396,7 +396,7 @@ mod edge_cases {
 ### 5.1 pass@k 与 pass^k
 
 ```rust
-// src-tauri/src/agent/tests/metrics.rs
+// lime-rs/src/agent/tests/metrics.rs
 
 /// 计算 pass@k：至少一次成功的概率
 pub fn pass_at_k(success_rate: f64, k: u32) -> f64 {
@@ -429,7 +429,7 @@ mod tests {
 ### 5.2 多次试验
 
 ```rust
-// src-tauri/src/agent/tests/trial_runner.rs
+// lime-rs/src/agent/tests/trial_runner.rs
 
 /// 试验运行器
 pub struct TrialRunner {
@@ -475,7 +475,7 @@ pub struct TrialResults {
 ### 6.1 Mock Provider
 
 ```rust
-// src-tauri/src/agent/tests/mocks/mock_provider.rs
+// lime-rs/src/agent/tests/mocks/mock_provider.rs
 
 /// Mock Provider 用于测试
 pub struct MockProvider {
@@ -530,7 +530,7 @@ impl ProviderClient for MockProvider {
 ### 6.2 Mock 文件系统
 
 ```rust
-// src-tauri/src/agent/tests/mocks/mock_fs.rs
+// lime-rs/src/agent/tests/mocks/mock_fs.rs
 
 /// Mock 文件系统
 pub struct MockFileSystem {
@@ -570,7 +570,7 @@ impl MockFileSystem {
 ### 7.1 目录结构
 
 ```
-src-tauri/
+lime-rs/
 ├── src/
 │   └── agent/
 │       ├── mod.rs
@@ -629,13 +629,13 @@ jobs:
         uses: dtolnay/rust-action@stable
       
       - name: Run unit tests
-        run: cd src-tauri && cargo test
+        run: cd lime-rs && cargo test
       
       - name: Run integration tests
-        run: cd src-tauri && cargo test --test '*'
+        run: cd lime-rs && cargo test --test '*'
       
       - name: Run clippy
-        run: cd src-tauri && cargo clippy -- -D warnings
+        run: cd lime-rs && cargo clippy -- -D warnings
 ```
 
 

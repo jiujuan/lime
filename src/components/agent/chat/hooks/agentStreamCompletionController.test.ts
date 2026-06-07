@@ -199,6 +199,61 @@ describe("agentStreamCompletionController", () => {
     });
   });
 
+  it("完成态应收尾残留 running 工具，避免最终正文继续显示正在输出", () => {
+    const startedAt = new Date("2026-06-07T10:34:54.000Z");
+    const patch = buildAgentStreamCompletedAssistantMessagePatch({
+      parts: [
+        { type: "text", text: "我先搜索新闻。" },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-news-stale",
+            name: "WebSearch",
+            arguments: "{\"query\":\"2026年6月7日 国际新闻\"}",
+            status: "running",
+            startTime: startedAt,
+          },
+        },
+        { type: "text", text: "根据多源检索结果，以下是摘要。" },
+      ],
+      toolCalls: [
+        {
+          id: "tool-news-stale",
+          name: "WebSearch",
+          arguments: "{\"query\":\"2026年6月7日 国际新闻\"}",
+          status: "running",
+          startTime: startedAt,
+        },
+      ],
+      finalContent: "根据多源检索结果，以下是摘要。",
+      previousContent: "我先搜索新闻。根据多源检索结果，以下是摘要。",
+      rawContent: "根据多源检索结果，以下是摘要。",
+      surfaceThinkingDeltas: true,
+    });
+
+    expect(patch.isThinking).toBe(false);
+    expect(patch.toolCalls?.[0]).toMatchObject({
+      id: "tool-news-stale",
+      status: "completed",
+      result: {
+        success: true,
+        output: "",
+      },
+    });
+    expect(
+      patch.contentParts?.find((part) => part.type === "tool_use"),
+    ).toMatchObject({
+      toolCall: {
+        id: "tool-news-stale",
+        status: "completed",
+        result: {
+          success: true,
+          output: "",
+        },
+      },
+    });
+  });
+
   it("完成态最终正文较短时应保留已经显示给用户的前期输出", () => {
     expect(
       resolveAgentStreamCompletedVisibleContent({

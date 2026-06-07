@@ -16,6 +16,11 @@ function extractSection(content, sectionName) {
   return match?.[1] ?? "";
 }
 
+function hasSection(content, sectionName) {
+  const pattern = new RegExp(`^\\[${escapeRegExp(sectionName)}\\]\\s*$`, "m");
+  return pattern.test(content);
+}
+
 function parseStringField(section, fieldName) {
   const pattern = new RegExp(
     `^\\s*${escapeRegExp(fieldName)}\\s*=\\s*\"([^\"]+)\"\\s*$`,
@@ -59,11 +64,12 @@ export function readCargoVersions(cargoTomlPath) {
     workspaceVersion,
     packageVersion,
     packageVersionIsWorkspace,
+    packageSectionExists: hasSection(content, "package"),
   };
 }
 
 export function readWorkspaceAppVersion(repoRoot = process.cwd()) {
-  const cargoTomlPath = path.join(repoRoot, "src-tauri", "Cargo.toml");
+  const cargoTomlPath = path.join(repoRoot, "lime-rs", "Cargo.toml");
   if (!fs.existsSync(cargoTomlPath)) {
     return readPackageJsonVersion(repoRoot);
   }
@@ -78,7 +84,7 @@ if (entryFilePath && currentFilePath === entryFilePath) {
   const repoRoot = path.resolve(path.dirname(currentFilePath), "..");
   const version = readWorkspaceAppVersion(repoRoot);
   if (!version) {
-    console.error("[lime] 无法从 src-tauri/Cargo.toml 读取 workspace 版本");
+    console.error("[lime] 无法从 lime-rs/Cargo.toml 读取 workspace 版本");
     process.exit(1);
   }
   process.stdout.write(version);

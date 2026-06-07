@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { open as openExternal } from "@tauri-apps/plugin-shell";
+import { open as openExternal } from "@/lib/desktop-host/plugin-shell";
 import { ChevronDown, ExternalLink, FileText, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";

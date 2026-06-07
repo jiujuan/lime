@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "includeArchived": {
+      "default": false,
+      "type": "boolean"
+    },
+    "workingDir": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "workingDir"
+  ],
+  "title": "KnowledgeListPacksParams",
+  "type": "object"
+}

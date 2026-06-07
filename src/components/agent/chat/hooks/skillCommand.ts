@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@/lib/desktop-host/event";
 import { safeListen } from "@/lib/dev-bridge";
 import { parseAgentEvent, type AgentEvent } from "@/lib/api/agentProtocol";
 import {

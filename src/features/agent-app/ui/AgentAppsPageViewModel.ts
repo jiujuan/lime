@@ -88,20 +88,20 @@ function escapeSvgText(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function svgToDataUri(svg: string): string {
+function svgToDataUrl(svg: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
 function buildAppNameIcon(title: string): string {
   const safeTitle = escapeSvgText(title || "Lime App");
   const initial = escapeSvgText([...safeTitle][0] || "L");
-  return svgToDataUri(
+  return svgToDataUrl(
     `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="${safeTitle}"><defs><linearGradient id="g" x1="16" y1="12" x2="82" y2="86" gradientUnits="userSpaceOnUse"><stop stop-color="#ecfdf5"/><stop offset="0.55" stop-color="#eff6ff"/><stop offset="1" stop-color="#f8fafc"/></linearGradient></defs><rect width="96" height="96" rx="22" fill="url(#g)"/><rect x="1" y="1" width="94" height="94" rx="21" fill="none" stroke="#cbd5e1"/><circle cx="70" cy="25" r="9" fill="#10b981" fill-opacity="0.18"/><path d="M24 36h48M24 50h36M24 64h26" stroke="#64748b" stroke-width="5" stroke-linecap="round"/><text x="70" y="74" text-anchor="middle" font-family="ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="24" font-weight="800" fill="#0f172a">${initial}</text></svg>`,
   );
 }
 
 function isDirectAssetSrc(value: string): boolean {
-  return /^(?:https?:|data:|blob:|asset:|tauri:)/i.test(value);
+  return /^(?:https?:|data:|blob:|asset:)/i.test(value);
 }
 
 function isRelativeIconPath(value: string): boolean {
@@ -193,7 +193,7 @@ export function resolveAppIconSrc(params: {
     return buildAppNameIcon(params.title);
   }
   if (candidate.trim().startsWith("<svg")) {
-    return svgToDataUri(candidate.trim());
+    return svgToDataUrl(candidate.trim());
   }
   if (isDirectAssetSrc(candidate)) {
     return candidate;

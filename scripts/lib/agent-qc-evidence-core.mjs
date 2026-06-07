@@ -15,13 +15,17 @@ function normalizeStatus(value) {
 
 function collectAttemptStdout(item) {
   return asArray(item?.attempts)
-    .map((attempt) => (typeof attempt?.stdout === "string" ? attempt.stdout : ""))
+    .map((attempt) =>
+      typeof attempt?.stdout === "string" ? attempt.stdout : "",
+    )
     .join("\n");
 }
 
 function collectAttemptStderr(item) {
   return asArray(item?.attempts)
-    .map((attempt) => (typeof attempt?.stderr === "string" ? attempt.stderr : ""))
+    .map((attempt) =>
+      typeof attempt?.stderr === "string" ? attempt.stderr : "",
+    )
     .join("\n");
 }
 
@@ -30,7 +34,9 @@ function collectAttemptOutput(item) {
 }
 
 function isQCLoopWorkerBlocked(item) {
-  return /QCLOOP_WORKER_RESULT\s*[:=]\s*BLOCKED/i.test(collectAttemptStdout(item));
+  return /QCLOOP_WORKER_RESULT\s*[:=]\s*BLOCKED/i.test(
+    collectAttemptStdout(item),
+  );
 }
 
 function isQCLoopWorkerEnvironmentBlocked(item) {
@@ -57,7 +63,9 @@ function parseQCLoopEvidenceSummaryLine(line) {
     return { summary: null, error: "" };
   }
 
-  const rawJson = line.slice(markerIndex + QCLoopEvidenceSummaryMarker.length).trim();
+  const rawJson = line
+    .slice(markerIndex + QCLoopEvidenceSummaryMarker.length)
+    .trim();
   if (!rawJson) {
     return { summary: null, error: "empty" };
   }
@@ -114,16 +122,24 @@ function hasFailedQCLoopExecution(item) {
   if (status === "failed" || status === "exhausted") {
     return true;
   }
-  if (asArray(item?.attempts).some((attempt) => normalizeStatus(attempt?.status) === "failed")) {
+  if (
+    asArray(item?.attempts).some(
+      (attempt) => normalizeStatus(attempt?.status) === "failed",
+    )
+  ) {
     return true;
   }
-  return asArray(item?.qc_rounds).some((round) => normalizeStatus(round?.status) === "fail");
+  return asArray(item?.qc_rounds).some(
+    (round) => normalizeStatus(round?.status) === "fail",
+  );
 }
 
 function mapQCLoopItemStatus(status, item = null) {
   const normalized = normalizeStatus(status);
   const evidenceSummary = item ? latestQCLoopEvidenceSummary(item) : null;
-  const evidenceResult = evidenceSummary ? normalizeEvidenceResult(evidenceSummary.result) : "unknown";
+  const evidenceResult = evidenceSummary
+    ? normalizeEvidenceResult(evidenceSummary.result)
+    : "unknown";
   if (evidenceResult === "blocked") {
     return "blocked";
   }
@@ -162,7 +178,11 @@ function mapQCLoopJobStatus(status, itemStatuses) {
   if (normalized === "failed") {
     return "fail";
   }
-  if (normalized === "paused" || normalized === "running" || normalized === "pending") {
+  if (
+    normalized === "paused" ||
+    normalized === "running" ||
+    normalized === "pending"
+  ) {
     return "blocked";
   }
   return "needs-human-review";
@@ -197,7 +217,11 @@ function collectItemFailureModes(item) {
   if (parseErrors.length > 0) {
     modes.push("qcloop:evidence_summary_invalid_json");
   }
-  if (status === "success" && summaries.length === 0 && parseErrors.length === 0) {
+  if (
+    status === "success" &&
+    summaries.length === 0 &&
+    parseErrors.length === 0
+  ) {
     modes.push("qcloop:evidence_summary_missing");
   }
   if (status === "failed") {
@@ -240,7 +264,12 @@ function collectItemFailureModes(item) {
 function collectEvidenceSummaryArtifactRefs(summary) {
   const refs = [];
   for (const command of asArray(summary?.commands)) {
-    for (const key of ["stdout_artifact", "stderr_artifact", "logRef", "log_ref"]) {
+    for (const key of [
+      "stdout_artifact",
+      "stderr_artifact",
+      "logRef",
+      "log_ref",
+    ]) {
       if (isNonEmptyString(command?.[key])) {
         refs.push(command[key].trim());
       }
@@ -308,7 +337,9 @@ function findArtifactRefByKind(summary, kind) {
 function summarizeQCLoopItem(item) {
   const attempts = asArray(item?.attempts);
   const qcRounds = asArray(item?.qc_rounds);
-  const failedQcRound = qcRounds.find((round) => normalizeStatus(round.status) === "fail");
+  const failedQcRound = qcRounds.find(
+    (round) => normalizeStatus(round.status) === "fail",
+  );
   const latestQcRound = qcRounds.at(-1);
   const status = mapQCLoopItemStatus(item?.status, item);
   const evidenceSummary = latestQCLoopEvidenceSummary(item);
@@ -340,7 +371,11 @@ function summarizeQCLoopItem(item) {
       qcloopStatus: item?.status ?? "unknown",
       currentAttemptNo: item?.current_attempt_no ?? 0,
       currentQcNo: item?.current_qc_no ?? 0,
-      latestFeedback: failedQcRound?.feedback || latestQcRound?.feedback || item?.last_error || "",
+      latestFeedback:
+        failedQcRound?.feedback ||
+        latestQcRound?.feedback ||
+        item?.last_error ||
+        "",
       evidenceSummaryPresent: Boolean(evidenceSummary),
     },
   };
@@ -361,14 +396,22 @@ function buildAgentQcEvidencePack({ job, items, options = {} }) {
   const scenarioResults = scenarioSummaries.map(stripPrivateSummary);
   const itemStatuses = scenarioResults.map((result) => result.status);
   const verdictStatus = mapQCLoopJobStatus(job?.status, itemStatuses);
-  const failedItems = scenarioSummaries.filter((result) => result.status === "fail");
-  const blockedItems = scenarioSummaries.filter((result) => result.status === "blocked");
-  const reviewItems = scenarioSummaries.filter((result) => result.status === "needs-human-review");
+  const failedItems = scenarioSummaries.filter(
+    (result) => result.status === "fail",
+  );
+  const blockedItems = scenarioSummaries.filter(
+    (result) => result.status === "blocked",
+  );
+  const reviewItems = scenarioSummaries.filter(
+    (result) => result.status === "needs-human-review",
+  );
   const commandStatus = verdictStatus === "pass" ? "pass" : verdictStatus;
 
   return {
     schemaVersion: "v1",
-    runId: options.runId || `qcloop-${job?.id || "unknown"}-${Date.parse(generatedAt) || Date.now()}`,
+    runId:
+      options.runId ||
+      `qcloop-${job?.id || "unknown"}-${Date.parse(generatedAt) || Date.now()}`,
     generatedAt,
     subject: {
       repo: options.repo || "lime",
@@ -403,7 +446,13 @@ function buildAgentQcEvidencePack({ job, items, options = {} }) {
     scenarioResults,
     verdict: {
       status: verdictStatus,
-      summary: renderVerdictSummary({ job, scenarioResults, failedItems, blockedItems, reviewItems }),
+      summary: renderVerdictSummary({
+        job,
+        scenarioResults,
+        failedItems,
+        blockedItems,
+        reviewItems,
+      }),
       blockers: renderBlockers({ failedItems, blockedItems, reviewItems }),
       waivers: [],
       nextAction: renderNextAction(verdictStatus),
@@ -411,7 +460,13 @@ function buildAgentQcEvidencePack({ job, items, options = {} }) {
   };
 }
 
-function renderVerdictSummary({ job, scenarioResults, failedItems, blockedItems, reviewItems }) {
+function renderVerdictSummary({
+  job,
+  scenarioResults,
+  failedItems,
+  blockedItems,
+  reviewItems,
+}) {
   return `qcloop job ${job?.id || "unknown"} (${job?.status || "unknown"}) 导出 ${scenarioResults.length} 个场景结果：失败 ${failedItems.length}，阻断 ${blockedItems.length}，需人审 ${reviewItems.length}。`;
 }
 
@@ -420,16 +475,26 @@ function renderBlockers({ failedItems, blockedItems, reviewItems }) {
   for (const result of failedItems) {
     let reason = result._summary.latestFeedback || "qcloop item failed";
     if (result.failureModes.includes("qcloop:evidence_summary_missing")) {
-      reason = "qcloop item 已 success，但 stdout 缺少 QCLOOP_EVIDENCE_SUMMARY_JSON；不能作为 release pass。";
-    } else if (result.failureModes.includes("qcloop:evidence_summary_invalid_json")) {
-      reason = "qcloop stdout 包含 QCLOOP_EVIDENCE_SUMMARY_JSON，但 JSON 无法解析。";
-    } else if (result.failureModes.includes("qcloop:worker_self_report_pass_not_verified")) {
+      reason =
+        "qcloop item 已 success，但 stdout 缺少 QCLOOP_EVIDENCE_SUMMARY_JSON；不能作为 release pass。";
+    } else if (
+      result.failureModes.includes("qcloop:evidence_summary_invalid_json")
+    ) {
+      reason =
+        "qcloop stdout 包含 QCLOOP_EVIDENCE_SUMMARY_JSON，但 JSON 无法解析。";
+    } else if (
+      result.failureModes.includes(
+        "qcloop:worker_self_report_pass_not_verified",
+      )
+    ) {
       reason = `worker stdout 自报 QCLOOP_WORKER_RESULT=PASS，但 qcloop / verifier 未通过；latest verifier feedback: ${result._summary.latestFeedback || "无"}`;
     }
     blockers.push(`${result.scenarioId}: ${reason}`);
   }
   for (const result of blockedItems) {
-    const reason = result.failureModes.includes("qcloop:worker_environment_blocked")
+    const reason = result.failureModes.includes(
+      "qcloop:worker_environment_blocked",
+    )
       ? "qcloop worker 环境阻断；请检查内层 CLI 二进制、认证、sandbox 或 extra args。"
       : result.failureModes.includes("qcloop:worker_blocked")
         ? `qcloop worker 明确输出 QCLOOP_WORKER_RESULT=BLOCKED；latest verifier feedback: ${result._summary.latestFeedback || "无"}`
@@ -457,7 +522,15 @@ function renderNextAction(status) {
 
 function validateEvidencePackShape(pack) {
   const issues = [];
-  for (const field of ["schemaVersion", "runId", "generatedAt", "subject", "laneResults", "scenarioResults", "verdict"]) {
+  for (const field of [
+    "schemaVersion",
+    "runId",
+    "generatedAt",
+    "subject",
+    "laneResults",
+    "scenarioResults",
+    "verdict",
+  ]) {
     if (!(field in pack)) {
       issues.push(`缺少字段 ${field}`);
     }
@@ -471,7 +544,12 @@ function validateEvidencePackShape(pack) {
   if (!Array.isArray(pack.scenarioResults)) {
     issues.push("scenarioResults 必须是数组");
   }
-  if (!pack.verdict || !["pass", "fail", "blocked", "needs-human-review", "waived"].includes(pack.verdict.status)) {
+  if (
+    !pack.verdict ||
+    !["pass", "fail", "blocked", "needs-human-review", "waived"].includes(
+      pack.verdict.status,
+    )
+  ) {
     issues.push("verdict.status 不合法");
   }
   return {

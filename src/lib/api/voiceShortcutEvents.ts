@@ -1,5 +1,5 @@
 import { safeListen } from "@/lib/dev-bridge";
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@/lib/desktop-host/event";
 
 export const VOICE_START_RECORDING_EVENT = "voice-start-recording";
 export const VOICE_STOP_RECORDING_EVENT = "voice-stop-recording";

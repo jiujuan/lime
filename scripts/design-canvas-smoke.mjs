@@ -67,7 +67,7 @@ const WORKER_MODEL_SLOT_HTTP_JSON_EXECUTOR_FIXTURE =
 const WORKER_MODEL_SLOT_NATIVE_OCR_JSON_EXECUTOR_FIXTURE =
   "Analyzer model slots native OCR JSON executor fixture";
 const WORKER_MODEL_SLOT_NATIVE_OCR_PRIORITY =
-  "OCR priority: Tauri native OCR -> Worker OCR provider via model slot JSON executor";
+  "OCR priority: Native OCR -> Worker OCR provider via model slot JSON executor";
 const WORKER_MODEL_SLOT_EXPORT_RELATIVE_PATH =
   ".lime/layered-designs/design-canvas-smoke.layered-design";
 const EXTRACTION_QUALITY_EXPORT_RELATIVE_PATH =
@@ -165,7 +165,7 @@ const ANALYZER_BADGE_TEXT = {
 
 const ANALYZER_RESULT_TEXT = {
   default: "Worker local heuristic analyzer",
-  native: "Tauri native heuristic analyzer",
+  native: "Native heuristic analyzer",
   worker: "Worker local heuristic analyzer",
   "worker-refined": "Worker local heuristic analyzer",
   "worker-matting": "Worker local heuristic analyzer",
@@ -748,7 +748,7 @@ async function waitForHealth(options) {
       ? lastError.message
       : String(lastError || "unknown error");
   throw new Error(
-    `[smoke:design-canvas] DevBridge 未就绪，请先启动 npm run tauri:dev:headless。最后错误: ${detail}`,
+    `[smoke:design-canvas] DevBridge 未就绪，请先启动 npm run electron:dev。最后错误: ${detail}`,
   );
 }
 

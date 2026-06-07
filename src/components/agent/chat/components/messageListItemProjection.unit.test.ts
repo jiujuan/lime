@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import { resolveMessageListItemProjection } from "./messageListItemProjection";
 import type { AgentStreamTextOverlaySnapshot } from "../hooks/agentStreamTextOverlayStore";
-import type { Message } from "../types";
+import type { Message, PendingA2UISource } from "../types";
 
 function buildProjection(
   message: Message,
@@ -15,12 +15,16 @@ function buildProjection(
     >["items"]
   > | null = null,
   options: {
+    activePendingA2UISource?: PendingA2UISource | null;
+    hasActiveInteractiveRuntime?: boolean;
+    isSending?: boolean;
+    lastAssistantMessageId?: string | null;
     streamingTextOverlay?: AgentStreamTextOverlaySnapshot | null;
   } = {},
 ) {
   return resolveMessageListItemProjection({
     activeCurrentTurnId: null,
-    activePendingA2UISource: null,
+    activePendingA2UISource: options.activePendingA2UISource ?? null,
     canOpenSavedSiteContent: false,
     expandedHistoricalAssistantMessageIds: new Set(),
     expandedHistoricalTimelineKeys: new Set(),
@@ -37,10 +41,10 @@ function buildProjection(
           } as never)
         : null,
     } as never,
-    hasActiveInteractiveRuntime: true,
+    hasActiveInteractiveRuntime: options.hasActiveInteractiveRuntime ?? true,
     isRestoredHistoryWindow: false,
-    isSending: true,
-    lastAssistantMessageId: message.id,
+    isSending: options.isSending ?? true,
+    lastAssistantMessageId: options.lastAssistantMessageId ?? message.id,
     message,
     shouldDeferHistoricalAssistantMessageDetails: () => false,
     shouldDeferThreadItemsScan: false,
@@ -49,6 +53,85 @@ function buildProjection(
 }
 
 describe("messageListItemProjection", () => {
+  it("流式 overlay 应保持当前 assistant 输出态", () => {
+    const message: Message = {
+      id: "assistant-overlay-current",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-06-02T10:00:00.000Z"),
+      isThinking: true,
+    };
+
+    const projection = buildProjection(message, null, {
+      hasActiveInteractiveRuntime: false,
+      isSending: false,
+      lastAssistantMessageId: "other-assistant",
+      streamingTextOverlay: {
+        messageId: message.id,
+        eventName: "response.output_text.delta",
+        content: "正文已经开始输出。",
+        updatedAt: Date.parse("2026-06-02T10:00:02.000Z"),
+      },
+    });
+
+    expect(projection.isCurrentInteractiveAssistantMessage).toBe(true);
+    expect(projection.shouldReadOnlyInteractiveContent).toBe(false);
+  });
+
+  it("尾部 pending action 在当前 runtime 活跃时应保持可提交", () => {
+    const message: Message = {
+      id: "assistant-pending-action-current",
+      role: "assistant",
+      content: "请选择执行方式。",
+      timestamp: new Date("2026-06-02T10:00:00.000Z"),
+      actionRequests: [
+        {
+          requestId: "req-current-action",
+          actionType: "ask_user",
+          status: "pending",
+          prompt: "请选择执行方式",
+          questions: [{ question: "请选择执行方式" }],
+        },
+      ],
+    };
+
+    const projection = buildProjection(message, null, {
+      hasActiveInteractiveRuntime: true,
+      isSending: false,
+      lastAssistantMessageId: message.id,
+    });
+
+    expect(projection.isCurrentInteractiveAssistantMessage).toBe(true);
+    expect(projection.shouldReadOnlyInteractiveContent).toBe(false);
+  });
+
+  it("非当前尾部的 pending action 仍应只读回显", () => {
+    const message: Message = {
+      id: "assistant-pending-action-history",
+      role: "assistant",
+      content: "请选择执行方式。",
+      timestamp: new Date("2026-06-02T10:00:00.000Z"),
+      actionRequests: [
+        {
+          requestId: "req-history-action",
+          actionType: "ask_user",
+          status: "pending",
+          prompt: "请选择执行方式",
+          questions: [{ question: "请选择执行方式" }],
+        },
+      ],
+    };
+
+    const projection = buildProjection(message, null, {
+      hasActiveInteractiveRuntime: true,
+      isSending: false,
+      lastAssistantMessageId: "other-assistant",
+    });
+
+    expect(projection.isCurrentInteractiveAssistantMessage).toBe(false);
+    expect(projection.shouldReadOnlyInteractiveContent).toBe(true);
+  });
+
   it("工具过程存在时应只把最后的 text part 作为最终正文", () => {
     const message: Message = {
       id: "assistant-live",

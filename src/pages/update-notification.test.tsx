@@ -1,4 +1,7 @@
 import { act } from "react";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { cwd } from "node:process";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UpdateInstallSession } from "@/lib/api/appUpdate";
@@ -28,11 +31,11 @@ const {
   mockStartUpdateInstallSession: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/api/window", () => ({
+vi.mock("@/lib/desktop-host/window", () => ({
   getCurrentWindow: mockGetCurrentWindow,
 }));
 
-vi.mock("@tauri-apps/plugin-shell", () => ({
+vi.mock("@/lib/desktop-host/plugin-shell", () => ({
   open: mockShellOpen,
 }));
 
@@ -41,16 +44,13 @@ vi.mock("@/lib/api/appUpdate", () => ({
   dismissUpdateNotification: mockDismissUpdateNotification,
   getUpdateInstallSession: mockGetUpdateInstallSession,
   isUpdateInstallSessionActive: (
-    session:
-      | { stage: string; isActive: boolean }
-      | null
-      | undefined,
+    session: { stage: string; isActive: boolean } | null | undefined,
   ) =>
     Boolean(
       session?.isActive &&
-        ["checking", "downloading", "installing", "restarting"].includes(
-          session.stage,
-        ),
+      ["checking", "downloading", "installing", "restarting"].includes(
+        session.stage,
+      ),
     ),
   listenUpdateInstallSession: mockListenUpdateInstallSession,
   recordUpdateNotificationAction: mockRecordUpdateNotificationAction,
@@ -98,6 +98,13 @@ function findButtonByText(container: HTMLElement, text: string) {
     throw new Error(`未找到按钮文本: ${text}`);
   }
   return button as HTMLButtonElement;
+}
+
+function readUpdateNotificationCss() {
+  return readFileSync(
+    path.resolve(cwd(), "src/pages/update-notification.css"),
+    "utf8",
+  );
 }
 
 function createInstallSession(
@@ -165,6 +172,41 @@ afterEach(async () => {
 });
 
 describe("UpdateNotificationPage", () => {
+  it("更新独立窗口应只保留单层 toast 表面，不应再露出外层背景", () => {
+    const css = readUpdateNotificationCss();
+
+    expect(css).toContain(".update-container");
+    expect(css).toContain("background: transparent;");
+    expect(css).toContain("padding: 0;");
+    expect(css).toContain("pointer-events: none;");
+    expect(css).toContain(".update-toast");
+    expect(css).toContain("width: 100%;");
+    expect(css).toContain("min-height: 100%;");
+    expect(css).not.toContain("background: rgba(255, 255, 255");
+    expect(css).not.toContain("backdrop-filter");
+    expect(css).not.toContain("backdrop-blur");
+  });
+
+  it("挂载期间应把独立更新窗口根背景标记为透明并在卸载后恢复", async () => {
+    delete document.documentElement.dataset.limeWindow;
+    await renderUpdateNotification(
+      "/update-notification?current=1.0.0&latest=1.2.0",
+    );
+
+    expect(document.documentElement.dataset.limeWindow).toBe(
+      "update-notification",
+    );
+
+    const mounted = mountedRoots.pop();
+    expect(mounted).toBeDefined();
+    act(() => {
+      mounted!.root.unmount();
+    });
+    mounted!.container.remove();
+
+    expect(document.documentElement.dataset.limeWindow).toBeUndefined();
+  });
+
   it("应通过 common namespace 渲染英文更新提醒窗口文案", async () => {
     const container = await renderUpdateNotification(
       "/update-notification?current=1.0.0&latest=1.2.0&download_url=https%3A%2F%2Fexample.com%2Frelease",
@@ -204,8 +246,8 @@ describe("UpdateNotificationPage", () => {
     );
     expect(mockStartUpdateInstallSession).toHaveBeenCalledTimes(1);
     expect(getText(container)).toContain("Downloading 50%");
-    expect(
-      container.querySelector('[role="progressbar"]'),
-    ).toBeInstanceOf(HTMLDivElement);
+    expect(container.querySelector('[role="progressbar"]')).toBeInstanceOf(
+      HTMLDivElement,
+    );
   });
 });

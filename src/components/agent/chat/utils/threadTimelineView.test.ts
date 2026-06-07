@@ -574,4 +574,45 @@ describe("threadTimelineView", () => {
     expect(mergedTurns[0]?.status).toBe("completed");
     expect(mergedTurns[0]?.completed_at).toBe("2026-03-18T08:36:05.000Z");
   });
+
+  it("历史 turn 缺少 prompt_text 时不应中断会话水合", () => {
+    const persistedTurn = {
+      id: "turn-from-app-server-detail",
+      thread_id: "thread-1",
+      status: "completed",
+      started_at: "2026-06-07T06:17:13.000Z",
+      completed_at: "2026-06-07T06:17:14.000Z",
+      created_at: "2026-06-07T06:17:13.000Z",
+      updated_at: "2026-06-07T06:17:14.000Z",
+    } as AgentThreadTurn;
+
+    expect(() => mergeThreadTurns([persistedTurn])).not.toThrow();
+    expect(mergeThreadTurns([persistedTurn])).toEqual([persistedTurn]);
+  });
+
+  it("历史 turn 或 item 缺少 started_at 时不应中断排序", () => {
+    const turnWithoutStart = {
+      id: "turn-without-start",
+      thread_id: "thread-1",
+      prompt_text: "整理今天的国际新闻",
+      status: "failed",
+      created_at: "2026-06-07T07:53:20.000Z",
+      updated_at: "2026-06-07T07:55:20.000Z",
+    } as AgentThreadTurn;
+    const itemWithoutStart = {
+      id: "item-without-start",
+      thread_id: "thread-1",
+      turn_id: "turn-without-start",
+      sequence: 1,
+      status: "failed",
+      updated_at: "2026-06-07T07:55:20.000Z",
+      type: "error",
+      message: "执行已中断",
+    } as AgentThreadItem;
+
+    expect(() => mergeThreadTurns([turnWithoutStart])).not.toThrow();
+    expect(() => mergeThreadItems([itemWithoutStart])).not.toThrow();
+    expect(mergeThreadTurns([turnWithoutStart])).toEqual([turnWithoutStart]);
+    expect(mergeThreadItems([itemWithoutStart])).toEqual([itemWithoutStart]);
+  });
 });

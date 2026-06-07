@@ -76,7 +76,7 @@ vi.mock("@/lib/api/voiceModels", () => ({
   testTranscribeVoiceModelFile: mockTestTranscribeVoiceModelFile,
 }));
 
-vi.mock("@tauri-apps/plugin-dialog", () => ({
+vi.mock("@/lib/desktop-host/plugin-dialog", () => ({
   open: mockOpenDialog,
 }));
 

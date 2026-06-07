@@ -50,9 +50,44 @@ import {
   type ContentStatus,
 } from "./project";
 
+const appServerRequestMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/api/appServer", () => ({
+  AppServerClient: vi.fn(() => ({
+    request: appServerRequestMock,
+  })),
+}));
+
 vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
 }));
+
+function resolveAppServerRequest<T>(result: T): void {
+  appServerRequestMock.mockResolvedValueOnce({ result });
+}
+
+function expectAppServerRequest(
+  index: number,
+  method: string,
+  params: unknown,
+): void {
+  expect(appServerRequestMock).toHaveBeenNthCalledWith(index, method, params);
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+
+  return {
+    promise,
+    reject,
+    resolve,
+  };
+}
 
 // ============================================================================
 // 辅助函数测试
@@ -62,38 +97,38 @@ describe("项目管理 API", () => {
   describe("workspace 路径 API", () => {
     beforeEach(() => {
       vi.clearAllMocks();
+      appServerRequestMock.mockReset();
       clearProjectDetailCacheForTests();
     });
 
-    it("应该调用命令获取 workspace 根目录", async () => {
-      vi.mocked(safeInvoke).mockResolvedValueOnce("/Users/test/.lime/projects");
+    it("应该通过 App Server 获取 workspace 根目录", async () => {
+      resolveAppServerRequest({ rootPath: "/Users/test/.lime/projects" });
 
       const root = await getWorkspaceProjectsRoot();
 
       expect(root).toBe("/Users/test/.lime/projects");
-      expect(safeInvoke).toHaveBeenCalledWith("workspace_get_projects_root");
+      expectAppServerRequest(1, "workspace/projectsRoot/read", {});
+      expect(safeInvoke).not.toHaveBeenCalled();
     });
 
-    it("应该调用命令解析项目目录", async () => {
-      vi.mocked(safeInvoke).mockResolvedValueOnce(
-        "/Users/test/.lime/projects/MyProject",
-      );
+    it("应该通过 App Server 解析项目目录", async () => {
+      resolveAppServerRequest({
+        rootPath: "/Users/test/.lime/projects/MyProject",
+      });
 
       const path = await resolveProjectRootPath("MyProject");
 
       expect(path).toBe("/Users/test/.lime/projects/MyProject");
-      expect(safeInvoke).toHaveBeenCalledWith(
-        "workspace_resolve_project_path",
-        {
-          name: "MyProject",
-        },
-      );
+      expectAppServerRequest(1, "workspace/projectPath/resolve", {
+        name: "MyProject",
+      });
+      expect(safeInvoke).not.toHaveBeenCalled();
     });
 
     it("应该支持按用户选择的父目录解析项目目录", async () => {
-      vi.mocked(safeInvoke).mockResolvedValueOnce(
-        "/Users/test/Documents/MyProject",
-      );
+      resolveAppServerRequest({
+        rootPath: "/Users/test/Documents/MyProject",
+      });
 
       const path = await resolveProjectRootPath(
         "MyProject",
@@ -101,53 +136,49 @@ describe("项目管理 API", () => {
       );
 
       expect(path).toBe("/Users/test/Documents/MyProject");
-      expect(safeInvoke).toHaveBeenCalledWith(
-        "workspace_resolve_project_path",
-        {
-          name: "MyProject",
-          parentRootPath: "/Users/test/Documents",
-        },
-      );
+      expectAppServerRequest(1, "workspace/projectPath/resolve", {
+        name: "MyProject",
+        parentRootPath: "/Users/test/Documents",
+      });
+      expect(safeInvoke).not.toHaveBeenCalled();
     });
 
     it("应该忽略空白父目录并交给后端使用默认目录", async () => {
-      vi.mocked(safeInvoke).mockResolvedValueOnce(
-        "/Users/test/.lime/projects/MyProject",
-      );
+      resolveAppServerRequest({
+        rootPath: "/Users/test/.lime/projects/MyProject",
+      });
 
       const path = await resolveProjectRootPath("MyProject", "   ");
 
       expect(path).toBe("/Users/test/.lime/projects/MyProject");
-      expect(safeInvoke).toHaveBeenCalledWith(
-        "workspace_resolve_project_path",
-        {
-          name: "MyProject",
-        },
-      );
+      expectAppServerRequest(1, "workspace/projectPath/resolve", {
+        name: "MyProject",
+      });
+      expect(safeInvoke).not.toHaveBeenCalled();
     });
 
     it("应该将空名称传给后端统一处理", async () => {
-      vi.mocked(safeInvoke).mockResolvedValueOnce(
-        "/Users/test/.lime/projects/未命名项目",
-      );
+      resolveAppServerRequest({
+        rootPath: "/Users/test/.lime/projects/未命名项目",
+      });
 
       const path = await resolveProjectRootPath("   ");
 
       expect(path).toBe("/Users/test/.lime/projects/未命名项目");
-      expect(safeInvoke).toHaveBeenCalledWith(
-        "workspace_resolve_project_path",
-        {
-          name: "   ",
-        },
-      );
+      expectAppServerRequest(1, "workspace/projectPath/resolve", {
+        name: "   ",
+      });
+      expect(safeInvoke).not.toHaveBeenCalled();
     });
 
-    it("应该调用命令按路径获取项目", async () => {
-      vi.mocked(safeInvoke).mockResolvedValueOnce({
-        id: "p1",
-        name: "测试项目",
-        workspace_type: "general",
-        root_path: "/Users/test/.lime/projects/demo",
+    it("应该通过 App Server 按路径获取项目", async () => {
+      resolveAppServerRequest({
+        workspace: {
+          id: "p1",
+          name: "测试项目",
+          workspace_type: "general",
+          root_path: "/Users/test/.lime/projects/demo",
+        },
       });
 
       const project = await getProjectByRootPath(
@@ -156,28 +187,35 @@ describe("项目管理 API", () => {
 
       expect(project?.id).toBe("p1");
       expect(project?.rootPath).toBe("/Users/test/.lime/projects/demo");
-      expect(safeInvoke).toHaveBeenCalledWith("workspace_get_by_path", {
+      expectAppServerRequest(1, "workspace/byPath/read", {
         rootPath: "/Users/test/.lime/projects/demo",
       });
+      expect(safeInvoke).not.toHaveBeenCalled();
     });
 
     it("按路径查询不存在项目时应该返回 null", async () => {
-      vi.mocked(safeInvoke).mockResolvedValueOnce(null);
+      resolveAppServerRequest({ workspace: null });
 
       const project = await getProjectByRootPath(
         "/Users/test/.lime/projects/missing",
       );
 
       expect(project).toBeNull();
+      expectAppServerRequest(1, "workspace/byPath/read", {
+        rootPath: "/Users/test/.lime/projects/missing",
+      });
+      expect(safeInvoke).not.toHaveBeenCalled();
     });
 
-    it("应该获取并标准化默认项目", async () => {
-      vi.mocked(safeInvoke).mockResolvedValueOnce({
-        id: "default-1",
-        name: "默认项目",
-        workspace_type: "general",
-        root_path: "/Users/test/.lime/projects/default",
-        is_default: true,
+    it("应该通过 App Server 获取并标准化默认项目", async () => {
+      resolveAppServerRequest({
+        workspace: {
+          id: "default-1",
+          name: "默认项目",
+          workspace_type: "general",
+          root_path: "/Users/test/.lime/projects/default",
+          is_default: true,
+        },
       });
 
       const project = await getDefaultProject();
@@ -191,33 +229,42 @@ describe("项目管理 API", () => {
           isDefault: true,
         }),
       );
-      expect(safeInvoke).toHaveBeenCalledWith("workspace_get_default");
+      expectAppServerRequest(1, "workspace/default/read", {});
+      expect(safeInvoke).not.toHaveBeenCalled();
     });
 
     it("requireDefaultProject 缺失默认项目时应抛指定错误", async () => {
-      vi.mocked(safeInvoke).mockResolvedValueOnce(null);
+      resolveAppServerRequest({ workspace: null });
 
       await expect(requireDefaultProject("请先创建默认项目")).rejects.toThrow(
         "请先创建默认项目",
       );
+      expectAppServerRequest(1, "workspace/default/read", {});
+      expect(safeInvoke).not.toHaveBeenCalled();
     });
 
     it("requireDefaultProjectId 应返回默认项目 ID", async () => {
-      vi.mocked(safeInvoke).mockResolvedValueOnce({
-        id: "default-2",
-        name: "默认项目 2",
+      resolveAppServerRequest({
+        workspace: {
+          id: "default-2",
+          name: "默认项目 2",
+        },
       });
 
       await expect(requireDefaultProjectId()).resolves.toBe("default-2");
+      expectAppServerRequest(1, "workspace/default/read", {});
+      expect(safeInvoke).not.toHaveBeenCalled();
     });
 
-    it("应该调用命令确保默认项目目录就绪", async () => {
-      vi.mocked(safeInvoke).mockResolvedValueOnce({
-        workspaceId: "default-3",
-        rootPath: "/tmp/default-3",
-        existed: true,
-        created: false,
-        repaired: true,
+    it("应该通过 App Server 确保工作区目录就绪", async () => {
+      resolveAppServerRequest({
+        result: {
+          workspaceId: "default-3",
+          rootPath: "/tmp/default-3",
+          existed: true,
+          created: false,
+          repaired: true,
+        },
       });
 
       await expect(ensureWorkspaceReady("default-3")).resolves.toEqual({
@@ -227,16 +274,50 @@ describe("项目管理 API", () => {
         created: false,
         repaired: true,
       });
-      expect(safeInvoke).toHaveBeenCalledWith("workspace_ensure_ready", {
+      expectAppServerRequest(1, "workspace/ensureReady", {
         id: "default-3",
       });
+      expect(safeInvoke).not.toHaveBeenCalled();
     });
 
-    it("应该调用命令确保默认项目目录就绪并支持空返回", async () => {
-      vi.mocked(safeInvoke).mockResolvedValueOnce(null);
+    it("确保默认工作区目录就绪时应先 ensure 默认 workspace 再 ensureReady", async () => {
+      resolveAppServerRequest({
+        workspace: {
+          id: "default-3",
+          name: "默认项目 3",
+        },
+      });
+      resolveAppServerRequest({
+        result: {
+          workspaceId: "default-3",
+          rootPath: "/tmp/default-3",
+          existed: true,
+          created: false,
+          repaired: true,
+        },
+      });
+
+      await expect(ensureDefaultWorkspaceReady()).resolves.toEqual({
+        workspaceId: "default-3",
+        rootPath: "/tmp/default-3",
+        existed: true,
+        created: false,
+        repaired: true,
+      });
+      expectAppServerRequest(1, "workspace/default/ensure", {});
+      expectAppServerRequest(2, "workspace/ensureReady", {
+        id: "default-3",
+      });
+      expect(safeInvoke).not.toHaveBeenCalled();
+    });
+
+    it("确保默认工作区目录就绪时应支持缺失 workspace 并 fail closed", async () => {
+      resolveAppServerRequest({ workspace: null });
 
       await expect(ensureDefaultWorkspaceReady()).resolves.toBeNull();
-      expect(safeInvoke).toHaveBeenCalledWith("workspace_ensure_default_ready");
+      expectAppServerRequest(1, "workspace/default/ensure", {});
+      expect(appServerRequestMock).toHaveBeenCalledTimes(1);
+      expect(safeInvoke).not.toHaveBeenCalled();
     });
 
     it("应该调用命令设置默认项目", async () => {
@@ -248,28 +329,8 @@ describe("项目管理 API", () => {
       });
     });
 
-    it("应该代理项目 CRUD 相关命令", async () => {
+    it("应该代理项目写命令，并通过 App Server 读取项目", async () => {
       vi.mocked(safeInvoke)
-        .mockResolvedValueOnce({
-          id: "project-1",
-          name: "项目 1",
-          workspace_type: "general",
-          root_path: "/tmp/project-1",
-        })
-        .mockResolvedValueOnce([
-          {
-            id: "project-1",
-            name: "项目 1",
-            workspace_type: "general",
-            root_path: "/tmp/project-1",
-          },
-        ])
-        .mockResolvedValueOnce({
-          id: "default-5",
-          name: "默认项目 5",
-          workspace_type: "general",
-          root_path: "/tmp/default-5",
-        })
         .mockResolvedValueOnce({
           id: "project-1",
           name: "项目 1",
@@ -283,6 +344,32 @@ describe("项目管理 API", () => {
           root_path: "/tmp/project-1",
         })
         .mockResolvedValueOnce(true);
+      resolveAppServerRequest({
+        workspaces: [
+          {
+            id: "project-1",
+            name: "项目 1",
+            workspace_type: "general",
+            root_path: "/tmp/project-1",
+          },
+        ],
+      });
+      resolveAppServerRequest({
+        workspace: {
+          id: "default-5",
+          name: "默认项目 5",
+          workspace_type: "general",
+          root_path: "/tmp/default-5",
+        },
+      });
+      resolveAppServerRequest({
+        workspace: {
+          id: "project-1",
+          name: "项目 1",
+          workspace_type: "general",
+          root_path: "/tmp/project-1",
+        },
+      });
 
       await expect(
         createProject({
@@ -312,40 +399,40 @@ describe("项目管理 API", () => {
           workspaceType: "general",
         },
       });
-      expect(safeInvoke).toHaveBeenNthCalledWith(2, "workspace_list");
-      expect(safeInvoke).toHaveBeenNthCalledWith(
-        3,
-        "get_or_create_default_project",
-      );
-      expect(safeInvoke).toHaveBeenNthCalledWith(4, "workspace_get", {
-        id: "project-1",
-      });
-      expect(safeInvoke).toHaveBeenNthCalledWith(5, "workspace_update", {
+      expect(safeInvoke).toHaveBeenNthCalledWith(2, "workspace_update", {
         id: "project-1",
         request: { name: "项目 1-更新" },
       });
-      expect(safeInvoke).toHaveBeenNthCalledWith(6, "workspace_delete", {
+      expect(safeInvoke).toHaveBeenNthCalledWith(3, "workspace_delete", {
         id: "project-1",
         deleteDirectory: true,
       });
+      expectAppServerRequest(1, "workspace/list", {});
+      expectAppServerRequest(2, "workspace/default/ensure", {});
+      expectAppServerRequest(3, "workspace/read", {
+        id: "project-1",
+      });
     });
 
-    it("短时间重复获取同一项目应复用 workspace_get 缓存", async () => {
+    it("短时间重复获取同一项目应复用 workspace/read 缓存", async () => {
       const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_000);
       try {
-        vi.mocked(safeInvoke)
-          .mockResolvedValueOnce({
+        resolveAppServerRequest({
+          workspace: {
             id: "cached-project",
             name: "缓存项目",
             workspace_type: "general",
             root_path: "/tmp/cached-project",
-          })
-          .mockResolvedValueOnce({
+          },
+        });
+        resolveAppServerRequest({
+          workspace: {
             id: "cached-project",
             name: "缓存项目刷新",
             workspace_type: "general",
             root_path: "/tmp/cached-project",
-          });
+          },
+        });
 
         await expect(getProject("cached-project")).resolves.toEqual(
           expect.objectContaining({ name: "缓存项目" }),
@@ -360,48 +447,103 @@ describe("项目管理 API", () => {
           expect.objectContaining({ name: "缓存项目刷新" }),
         );
 
-        expect(safeInvoke).toHaveBeenCalledTimes(2);
-        expect(safeInvoke).toHaveBeenNthCalledWith(1, "workspace_get", {
+        expect(appServerRequestMock).toHaveBeenCalledTimes(2);
+        expectAppServerRequest(1, "workspace/read", {
           id: "cached-project",
         });
-        expect(safeInvoke).toHaveBeenNthCalledWith(2, "workspace_get", {
+        expectAppServerRequest(2, "workspace/read", {
           id: "cached-project",
         });
+        expect(safeInvoke).not.toHaveBeenCalled();
       } finally {
         nowSpy.mockRestore();
       }
     });
 
-    it("并发获取同一项目时应合并为一次 workspace_get", async () => {
-      let resolveProject!: (value: {
-        id: string;
-        name: string;
-        workspace_type: string;
-        root_path: string;
-      }) => void;
-      vi.mocked(safeInvoke).mockReturnValueOnce(
-        new Promise((resolve) => {
-          resolveProject = resolve;
-        }) as ReturnType<typeof safeInvoke>,
-      );
+    it("并发获取同一项目时应合并为一次 workspace/read", async () => {
+      const deferred = createDeferred<{
+        result: {
+          workspace: {
+            id: string;
+            name: string;
+            workspace_type: string;
+            root_path: string;
+          };
+        };
+      }>();
+      appServerRequestMock.mockReturnValueOnce(deferred.promise);
 
       const first = getProject("parallel-project");
       const second = getProject("parallel-project");
-      resolveProject({
-        id: "parallel-project",
-        name: "并发项目",
-        workspace_type: "general",
-        root_path: "/tmp/parallel-project",
+      deferred.resolve({
+        result: {
+          workspace: {
+            id: "parallel-project",
+            name: "并发项目",
+            workspace_type: "general",
+            root_path: "/tmp/parallel-project",
+          },
+        },
       });
 
       await expect(Promise.all([first, second])).resolves.toEqual([
         expect.objectContaining({ id: "parallel-project", name: "并发项目" }),
         expect.objectContaining({ id: "parallel-project", name: "并发项目" }),
       ]);
-      expect(safeInvoke).toHaveBeenCalledTimes(1);
-      expect(safeInvoke).toHaveBeenCalledWith("workspace_get", {
+      expect(appServerRequestMock).toHaveBeenCalledTimes(1);
+      expect(appServerRequestMock).toHaveBeenCalledWith("workspace/read", {
         id: "parallel-project",
       });
+      expect(safeInvoke).not.toHaveBeenCalled();
+    });
+
+    it("workspace read/ensure 缺少必需 App Server result 时不应回退 legacy", async () => {
+      resolveAppServerRequest({});
+      await expect(getWorkspaceProjectsRoot()).rejects.toThrow(
+        "App Server workspace/projectsRoot/read did not return rootPath",
+      );
+
+      appServerRequestMock.mockReset();
+      resolveAppServerRequest({});
+      await expect(resolveProjectRootPath("MyProject")).rejects.toThrow(
+        "App Server workspace/projectPath/resolve did not return rootPath",
+      );
+
+      appServerRequestMock.mockReset();
+      resolveAppServerRequest({});
+      await expect(ensureWorkspaceReady("project-1")).rejects.toThrow(
+        "App Server workspace/ensureReady did not return result",
+      );
+
+      appServerRequestMock.mockReset();
+      resolveAppServerRequest({});
+      await expect(getOrCreateDefaultProject()).rejects.toThrow(
+        "App Server workspace/default/ensure did not return workspace",
+      );
+
+      expect(safeInvoke).not.toHaveBeenCalledWith(
+        "workspace_get_projects_root",
+      );
+      expect(safeInvoke).not.toHaveBeenCalledWith(
+        "workspace_resolve_project_path",
+        expect.anything(),
+      );
+      expect(safeInvoke).not.toHaveBeenCalledWith(
+        "workspace_ensure_ready",
+        expect.anything(),
+      );
+      expect(safeInvoke).not.toHaveBeenCalledWith(
+        "get_or_create_default_project",
+      );
+    });
+
+    it("ensureWorkspaceReady 缺少 workspace id 时应 fail closed", async () => {
+      await expect(ensureWorkspaceReady("   ")).rejects.toThrow(
+        "workspace id is required to ensure App Server workspace",
+      );
+
+      expect(appServerRequestMock).not.toHaveBeenCalled();
+      expect(safeInvoke).not.toHaveBeenCalled();
     });
 
     it("应该代理内容相关命令", async () => {

@@ -37,10 +37,10 @@ compat 工具：
 
 ## 当前事实源与分类
 
-事实源声明：站点能力 current 主路径只允许向 `src-tauri/src/agent_tools/catalog.rs` 的 Browser Assist catalog、浏览器 runtime / site adapter 元数据、`runtimeToolInventoryMocks.ts` 的 browser assist mock inventory，以及 Agent Chat inline process / saved site content 展示收敛。
+事实源声明：站点能力 current 主路径只允许向 `lime-rs/src/agent_tools/catalog.rs` 的 Browser Assist catalog、浏览器 runtime / site adapter 元数据、`runtimeToolInventoryMocks.ts` 的 browser assist mock inventory，以及 Agent Chat inline process / saved site content 展示收敛。
 
 - `current`
-  - `src-tauri/src/agent_tools/catalog.rs` 中的 `LIME_SITE_*_TOOL_NAME`
+  - `lime-rs/src/agent_tools/catalog.rs` 中的 `LIME_SITE_*_TOOL_NAME`
   - `src/lib/tauri-mock/runtimeToolInventoryMocks.ts` 中的 `BROWSER_ASSIST_MOCK_TOOL_SPECS`
   - `src/components/agent/chat/utils/toolDisplayInfo.ts` 的站点工具展示
   - `src/components/agent/chat/utils/toolProcessSummary.ts` 的站点过程摘要
@@ -74,7 +74,7 @@ compat 工具：
 
 ### 2026-06-03
 
-- `src-tauri/src/agent_tools/catalog.rs` 已把 `lime_site_*` 标记为 `current`，`lime_run_service_skill` 标记为 `compat`。
+- `lime-rs/src/agent_tools/catalog.rs` 已把 `lime_site_*` 标记为 `current`，`lime_run_service_skill` 标记为 `compat`。
 - Browser fallback mock 已包含 `lime_site_*`，workbench mock 已包含 `lime_search_web_images` 和 `lime_run_service_skill`。
 - `toolDisplayInfo.ts` 的站点批次标题此前通过 `info.groupTitle === "站点"` 判定站点族。该做法会在后续 i18n 化 groupTitle 时变成隐性行为漂移。
 - `taskPreviewFromToolResult.ts` 已支持 `lime_search_web_images` 的图片候选预览和带来源 artifact document，但缺少直接单元测试锁住该工具名。

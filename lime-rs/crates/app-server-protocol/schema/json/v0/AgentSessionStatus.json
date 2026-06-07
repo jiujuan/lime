@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "canceled",
+    "completed",
+    "failed",
+    "idle",
+    "running",
+    "waitingAction"
+  ],
+  "title": "AgentSessionStatus",
+  "type": "string"
+}

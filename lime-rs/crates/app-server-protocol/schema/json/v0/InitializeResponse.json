@@ -1,0 +1,84 @@
+{
+  "$defs": {
+    "PlatformInfo": {
+      "properties": {
+        "family": {
+          "type": "string"
+        },
+        "os": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "family",
+        "os"
+      ],
+      "type": "object"
+    },
+    "ServerCapabilities": {
+      "properties": {
+        "agentSession": {
+          "type": "boolean"
+        },
+        "artifact": {
+          "type": "boolean"
+        },
+        "capabilityDiscovery": {
+          "type": "boolean"
+        },
+        "evidence": {
+          "type": "boolean"
+        },
+        "workspace": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "agentSession",
+        "artifact",
+        "capabilityDiscovery",
+        "evidence",
+        "workspace"
+      ],
+      "type": "object"
+    },
+    "ServerInfo": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "protocolVersion": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "protocolVersion",
+        "version"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "capabilities": {
+      "$ref": "#/$defs/ServerCapabilities"
+    },
+    "platform": {
+      "$ref": "#/$defs/PlatformInfo"
+    },
+    "serverInfo": {
+      "$ref": "#/$defs/ServerInfo"
+    }
+  },
+  "required": [
+    "capabilities",
+    "platform",
+    "serverInfo"
+  ],
+  "title": "InitializeResponse",
+  "type": "object"
+}

@@ -7,7 +7,7 @@
 ## 目录结构
 
 ```
-src-tauri/src/converter/
+lime-rs/src/converter/
 ├── mod.rs                    # 模块入口
 ├── protocol_selector.rs      # 协议选择器
 ├── openai_to_cw.rs           # OpenAI → CodeWhisperer

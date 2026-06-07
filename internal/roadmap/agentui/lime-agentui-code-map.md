@@ -11,9 +11,9 @@ flowchart TB
   UI[src/components/agent/chat UI]
   Hooks[src/components/agent/chat/hooks state + stream]
   Api[src/lib/api/agentRuntime + agentProtocol]
-  Tauri[src-tauri commands/aster_agent_cmd]
-  AgentCrate[src-tauri/crates/agent runtime crate]
-  Services[src-tauri/src/services]
+  Tauri[lime-rs commands/aster_agent_cmd]
+  AgentCrate[lime-rs/crates/agent runtime crate]
+  Services[lime-rs/src/services]
   Store[(SQLite + .lime files)]
 
   UI --> Hooks
@@ -80,13 +80,13 @@ flowchart TB
 
 | 文件 | 当前职责 | AgentUI 相关能力 |
 | --- | --- | --- |
-| `src-tauri/src/commands/aster_agent_cmd/command_api/runtime_api.rs` | runtime Tauri command 主入口 | submit、interrupt、compact、resume、get session、thread read、file checkpoint、evidence/review export |
-| `src-tauri/src/commands/aster_agent_cmd/runtime_turn.rs` | turn 执行主链 | 提前发 `runtime_status`、执行 provider/runtime/tool/hook/memory/artifact/auto compact |
-| `src-tauri/src/commands/aster_agent_cmd/session_runtime.rs` | session create/list/update/recent runtime context | sidebar/session summary 和 tab 管理基础 |
-| `src-tauri/src/commands/aster_agent_cmd/subagent_runtime.rs` | subagent runtime | team/capsule 子代理状态基础 |
-| `src-tauri/src/commands/aster_agent_cmd/action_runtime.rs` | action required / response | HITL、权限确认、用户输入请求 |
-| `src-tauri/src/commands/aster_agent_cmd/tool_runtime/*` | tool bridge | browser、workspace、service skill、media、mcp、subagent、site |
-| `src-tauri/src/commands/aster_agent_cmd/dto.rs` | 后端 DTO | `AgentRuntimeSessionDetail`、history cursor、thread_read 投影 |
+| `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs` | runtime Tauri command 主入口 | submit、interrupt、compact、resume、get session、thread read、file checkpoint、evidence/review export |
+| `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` | turn 执行主链 | 提前发 `runtime_status`、执行 provider/runtime/tool/hook/memory/artifact/auto compact |
+| `lime-rs/src/commands/aster_agent_cmd/session_runtime.rs` | session create/list/update/recent runtime context | sidebar/session summary 和 tab 管理基础 |
+| `lime-rs/src/commands/aster_agent_cmd/subagent_runtime.rs` | subagent runtime | team/capsule 子代理状态基础 |
+| `lime-rs/src/commands/aster_agent_cmd/action_runtime.rs` | action required / response | HITL、权限确认、用户输入请求 |
+| `lime-rs/src/commands/aster_agent_cmd/tool_runtime/*` | tool bridge | browser、workspace、service skill、media、mcp、subagent、site |
+| `lime-rs/src/commands/aster_agent_cmd/dto.rs` | 后端 DTO | `AgentRuntimeSessionDetail`、history cursor、thread_read 投影 |
 
 `agent_runtime_get_session` 当前关键行为：
 
@@ -102,30 +102,30 @@ flowchart TB
 
 | 文件 | 当前职责 | AgentUI 意义 |
 | --- | --- | --- |
-| `src-tauri/crates/agent/src/runtime_queue.rs` | turn queue、resume、queue event | queue/capsule/task layer 的事实源 |
-| `src-tauri/crates/agent/src/session_store.rs` | session detail、messages、turns、items、todo、runtime overlay、subagent context | old session restore、history pagination、thread_read 的底层事实源 |
-| `src-tauri/crates/agent/src/session_query.rs` | parent/child/cascade 查询 | team/subagent 视图 |
-| `src-tauri/crates/agent/src/event_converter.rs` | Aster event -> Lime runtime event | text/thinking/tool/artifact/status 的协议生成点 |
-| `src-tauri/crates/agent/src/protocol_projection.rs` | current projection 入口 | 新 UI 应优先跟 current projection 对齐 |
-| `src-tauri/crates/agent/src/runtime_projection_snapshot.rs` | runtime summary snapshot | tab/capsule/sidebar summary 可复用 |
-| `src-tauri/crates/agent/src/session_execution_runtime.rs` | execution runtime/cost/limit/routing | provider/model/cost/context usage UI |
-| `src-tauri/crates/agent/src/queued_turn.rs` | queue snapshot 数据结构 | queue panel、task capsule |
-| `src-tauri/crates/agent/src/tool_io_offload.rs` | tool 大输出 offload | tool UI 大输出不卡顿的后端基础 |
-| `src-tauri/crates/agent/src/write_artifact_events.rs` | artifact write event | artifact snapshot / workbench 联动 |
+| `lime-rs/crates/agent/src/runtime_queue.rs` | turn queue、resume、queue event | queue/capsule/task layer 的事实源 |
+| `lime-rs/crates/agent/src/session_store.rs` | session detail、messages、turns、items、todo、runtime overlay、subagent context | old session restore、history pagination、thread_read 的底层事实源 |
+| `lime-rs/crates/agent/src/session_query.rs` | parent/child/cascade 查询 | team/subagent 视图 |
+| `lime-rs/crates/agent/src/event_converter.rs` | Aster event -> Lime runtime event | text/thinking/tool/artifact/status 的协议生成点 |
+| `lime-rs/crates/agent/src/protocol_projection.rs` | current projection 入口 | 新 UI 应优先跟 current projection 对齐 |
+| `lime-rs/crates/agent/src/runtime_projection_snapshot.rs` | runtime summary snapshot | tab/capsule/sidebar summary 可复用 |
+| `lime-rs/crates/agent/src/session_execution_runtime.rs` | execution runtime/cost/limit/routing | provider/model/cost/context usage UI |
+| `lime-rs/crates/agent/src/queued_turn.rs` | queue snapshot 数据结构 | queue panel、task capsule |
+| `lime-rs/crates/agent/src/tool_io_offload.rs` | tool 大输出 offload | tool UI 大输出不卡顿的后端基础 |
+| `lime-rs/crates/agent/src/write_artifact_events.rs` | artifact write event | artifact snapshot / workbench 联动 |
 
 ## 7. Service 层
 
 | 文件 | 当前职责 | AgentUI 使用方式 |
 | --- | --- | --- |
-| `src-tauri/src/services/agent_timeline_service.rs` | `AgentTimelineRecorder` 持久化 runtime event -> turn/item | Process layer 与 Evidence layer 的过程事实 |
-| `src-tauri/src/services/artifact_document_service.rs` | ArtifactDocument 持久化、版本、`.lime/artifacts` | Artifact layer 主事实源 |
-| `src-tauri/src/services/artifact_ops_service.rs` | incremental artifact envelope | artifact.begin/meta/source/block/complete/fail |
-| `src-tauri/src/services/runtime_evidence_pack_service.rs` | evidence pack 导出 | Evidence layer 输出 `summary.md/runtime.json/timeline.json/artifacts.json` |
-| `src-tauri/src/services/runtime_review_decision_service.rs` | review decision 模板与保存 | Human review 闭环 |
-| `src-tauri/src/services/runtime_replay_case_service.rs` | replay case | 失败复现与验证 |
-| `src-tauri/src/services/runtime_handoff_artifact_service.rs` | handoff bundle | 跨 agent/人工交接 |
-| `src-tauri/src/services/runtime_file_checkpoint_service.rs` | file checkpoint / diff | 代码任务可审查变更 |
-| `src-tauri/src/services/thread_reliability_projection_service.rs` | reliability projection | thread_read、incident、pending request |
+| `lime-rs/src/services/agent_timeline_service.rs` | `AgentTimelineRecorder` 持久化 runtime event -> turn/item | Process layer 与 Evidence layer 的过程事实 |
+| `lime-rs/src/services/artifact_document_service.rs` | ArtifactDocument 持久化、版本、`.lime/artifacts` | Artifact layer 主事实源 |
+| `lime-rs/src/services/artifact_ops_service.rs` | incremental artifact envelope | artifact.begin/meta/source/block/complete/fail |
+| `lime-rs/src/services/runtime_evidence_pack_service.rs` | evidence pack 导出 | Evidence layer 输出 `summary.md/runtime.json/timeline.json/artifacts.json` |
+| `lime-rs/src/services/runtime_review_decision_service.rs` | review decision 模板与保存 | Human review 闭环 |
+| `lime-rs/src/services/runtime_replay_case_service.rs` | replay case | 失败复现与验证 |
+| `lime-rs/src/services/runtime_handoff_artifact_service.rs` | handoff bundle | 跨 agent/人工交接 |
+| `lime-rs/src/services/runtime_file_checkpoint_service.rs` | file checkpoint / diff | 代码任务可审查变更 |
+| `lime-rs/src/services/thread_reliability_projection_service.rs` | reliability projection | thread_read、incident、pending request |
 
 ## 8. 存储与文件事实源
 
@@ -150,7 +150,7 @@ flowchart TB
 | Timeline | `AgentThreadTimeline.test.tsx`、`AgentThreadTimelineArtifactCard.test.tsx` |
 | Task center / team | `TaskCenterTabStrip.test.tsx`、`TeamWorkspaceBoard*.test.tsx` |
 | Harness | `HarnessStatusPanel.test.tsx` |
-| Backend history/session | `src-tauri/crates/agent/src/session_store.rs` unit tests |
+| Backend history/session | `lime-rs/crates/agent/src/session_store.rs` unit tests |
 | Command contract | `npm run test:contracts` |
 | GUI smoke | `npm run verify:gui-smoke` |
 

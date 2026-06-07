@@ -821,7 +821,6 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
     <aside
       className="flex h-full w-[34vw] min-w-[460px] max-w-[720px] shrink-0 overflow-hidden rounded-[12px] border border-[color:var(--lime-surface-border)] bg-white shadow-sm shadow-slate-950/5"
       data-testid="file-manager-sidebar"
-      data-tauri-no-drag
       data-lime-no-window-drag
     >
       <div

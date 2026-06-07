@@ -1,0 +1,234 @@
+/**
+ * Desktop Host renderer adapter.
+ *
+ * current 主链固定为：
+ * Frontend -> Electron Desktop Host IPC -> App Server JSON-RPC -> RuntimeCore / backend。
+ * 本文件里的 mock 数据只允许通过 invokeMockOnly 作为测试夹具使用，生产 invoke 不再回退 mock。
+ */
+
+import {
+  invokeViaHttp,
+  isDevBridgeAvailable,
+  normalizeDevBridgeError,
+} from "../dev-bridge/http-client";
+import { getElectronHostBridge } from "@/lib/electron-host";
+
+type MockHandler = (args?: any) => any;
+
+const mockCommands = new Map<string, (...args: any[]) => any>();
+const shouldLogMockInfo = import.meta.env.MODE !== "test";
+let defaultMocksPromise: Promise<Record<string, MockHandler>> | null = null;
+let loadedMockResetters: Array<() => void> = [];
+
+function isTestEnvironment(): boolean {
+  return Boolean(import.meta.env?.MODE === "test" || import.meta.env?.VITEST);
+}
+
+function assertTestMockEnvironment(apiName: string): void {
+  if (isTestEnvironment()) {
+    return;
+  }
+  throw new Error(
+    `[Mock] ${apiName} 只能在测试环境使用；生产路径必须进入 Electron Desktop Host IPC / App Server JSON-RPC。`,
+  );
+}
+
+function logMockInfo(...args: Parameters<typeof console.log>) {
+  if (!shouldLogMockInfo) {
+    return;
+  }
+  console.log(...args);
+}
+
+function loadDefaultMocks(): Promise<Record<string, MockHandler>> {
+  assertTestMockEnvironment("loadDefaultMocks");
+  defaultMocksPromise ??= (async () => {
+    const [
+      browser,
+      configSystem,
+      companion,
+      agentRuntime,
+      agentRuntimeObjective,
+      agentApp,
+      fileSystem,
+      knowledge,
+      layeredDesign,
+      log,
+      mcp,
+      mediaTask,
+      memory,
+      model,
+      provider,
+      sessionFile,
+      skillManagement,
+      skillForge,
+      runtimeToolInventory,
+      update,
+      workspace,
+      voice,
+    ] = await Promise.all([
+      import("./browserMocks"),
+      import("./configSystemMocks"),
+      import("./companionMocks"),
+      import("./agentRuntimeMocks"),
+      import("./agentRuntimeObjectiveMocks"),
+      import("./agentAppMocks"),
+      import("./fileSystemMocks"),
+      import("./knowledgeMocks"),
+      import("./layeredDesignMocks"),
+      import("./logMocks"),
+      import("./mcpMocks"),
+      import("./mediaTaskMocks"),
+      import("./memoryMocks"),
+      import("./modelMocks"),
+      import("./providerMocks"),
+      import("./sessionFileMocks"),
+      import("./skillManagementMocks"),
+      import("./skillForgeMocks"),
+      import("./runtimeToolInventoryMocks"),
+      import("./updateMocks"),
+      import("./workspaceMocks"),
+      import("./voiceMocks"),
+    ]);
+
+    loadedMockResetters = [
+      companion.clearCompanionMocks,
+      knowledge.clearKnowledgeMocks,
+      agentRuntimeObjective.resetAgentRuntimeObjectiveMocks,
+      skillForge.clearSkillForgeMocks,
+      layeredDesign.clearLayeredDesignMocks,
+    ];
+
+    return {
+      execution_run_get_general_workbench_state: () => ({
+        run_state: "idle",
+        current_gate_key: "idle",
+        queue_items: [],
+        latest_terminal: null,
+        recent_terminals: [],
+        updated_at: new Date(0).toISOString(),
+      }),
+
+      ...companion.companionMocks,
+      ...knowledge.knowledgeMocks,
+      ...skillForge.skillForgeMocks,
+      ...configSystem.configSystemMocks,
+      ...browser.browserMocks,
+
+      ...agentRuntime.agentRuntimeMocks,
+      ...agentApp.agentAppMocks,
+      ...runtimeToolInventory.runtimeToolInventoryMocks,
+
+      ...skillManagement.skillManagementMocks,
+      ...provider.providerMocks,
+      ...mediaTask.mediaTaskMocks,
+      ...memory.memoryMocks,
+      ...sessionFile.sessionFileMocks,
+      ...layeredDesign.layeredDesignMocks,
+      ...model.modelMocks,
+      ...mcp.mcpMocks,
+
+      ...fileSystem.fileSystemMocks,
+      ...log.logMocks,
+
+      ...voice.voiceMocks,
+      ...update.updateMocks,
+
+      ...workspace.workspaceMocks,
+    };
+  })();
+  return defaultMocksPromise;
+}
+
+async function invokeDefaultMock<T = any>(
+  cmd: string,
+  args?: Record<string, unknown>,
+  options: { log?: boolean } = {},
+): Promise<T> {
+  if (options.log !== false) {
+    logMockInfo(`[Mock] invoke: ${cmd}`, args);
+  }
+
+  if (mockCommands.has(cmd)) {
+    const handler = mockCommands.get(cmd)!;
+    return handler(args);
+  }
+
+  const defaultMocks = await loadDefaultMocks();
+  if (cmd in defaultMocks) {
+    return defaultMocks[cmd](args);
+  }
+
+  console.warn(`[Mock] Unhandled command: ${cmd}`);
+  return undefined as T;
+}
+
+/**
+ * 显式 mock 入口，仅供测试夹具使用。
+ * 这里不能再次探测 HTTP bridge，否则会把一次后端未就绪放大成多条 console error。
+ */
+export async function invokeMockOnly<T = any>(
+  cmd: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  assertTestMockEnvironment("invokeMockOnly");
+  return invokeDefaultMock<T>(cmd, args);
+}
+
+/**
+ * Renderer invoke 只进入 Electron Desktop Host IPC 或开发 HTTP bridge。
+ * 不能回退 defaultMocks，否则会把 App Server / backend 缺口伪装成成功。
+ */
+export async function invoke<T = any>(
+  cmd: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  const electronHost = getElectronHostBridge();
+  if (electronHost) {
+    return electronHost.invoke<T>(cmd, args);
+  }
+
+  if (isDevBridgeAvailable()) {
+    try {
+      return await invokeViaHttp<T>(cmd, args);
+    } catch (error) {
+      throw normalizeDevBridgeError(cmd, error);
+    }
+  }
+
+  throw new Error(
+    `[Electron] Desktop Host IPC 不可用，命令 "${cmd}" 无法进入 App Server JSON-RPC 主链。`,
+  );
+}
+
+/**
+ * Register a mock command handler
+ */
+export function mockCommand(cmd: string, handler: (...args: any[]) => any) {
+  assertTestMockEnvironment("mockCommand");
+  mockCommands.set(cmd, handler);
+}
+
+/**
+ * Clear all mock commands
+ */
+export function clearMocks() {
+  assertTestMockEnvironment("clearMocks");
+  mockCommands.clear();
+  for (const reset of loadedMockResetters) {
+    reset();
+  }
+}
+
+export function convertFileSrc(filePath: string, _protocol?: string): string {
+  const electronHost = getElectronHostBridge();
+  if (electronHost?.convertFileSrc) {
+    return electronHost.convertFileSrc(filePath, _protocol);
+  }
+
+  throw new Error(
+    `[Electron] Desktop Host IPC 不可用，本地文件路径无法转换: ${filePath}`,
+  );
+}
+
+export type InvokeOptions = Record<string, unknown>;
