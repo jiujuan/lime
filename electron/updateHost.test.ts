@@ -10,9 +10,9 @@ const { appState, checkForUpdatesMock, quitAndInstallMock, setFeedURLMock } =
     setFeedURLMock: vi.fn(),
   }));
 
-vi.mock("electron", () => ({
+  vi.mock("electron", () => ({
   app: {
-    getVersion: () => "1.59.0",
+    getVersion: () => "1.60.0",
     get isPackaged() {
       return appState.isPackaged;
     },
@@ -45,7 +45,7 @@ describe("ElectronUpdateHost", () => {
     const host = new ElectronUpdateHost(vi.fn());
 
     await expect(host.invoke("check_for_updates")).resolves.toEqual({
-      current: "1.59.0",
+      current: "1.60.0",
       hasUpdate: false,
       error: "Electron updater is only enabled for packaged builds.",
     });
@@ -69,7 +69,7 @@ describe("ElectronUpdateHost", () => {
 
     expect(open).toHaveBeenCalledWith(
       expect.objectContaining({
-        current: "1.59.0",
+        current: "1.60.0",
         anchorRect: { x: 18, y: 816, width: 30, height: 30 },
       }),
     );

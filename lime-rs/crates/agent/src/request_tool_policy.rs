@@ -985,7 +985,7 @@ fn push_unique_query(queries: &mut Vec<String>, query: String) {
     }
 }
 
-pub fn message_requires_fresh_web_search(message_text: &str) -> bool {
+fn message_requires_fresh_web_search(message_text: &str) -> bool {
     let normalized = message_text.trim().to_ascii_lowercase();
     if normalized.is_empty() {
         return false;

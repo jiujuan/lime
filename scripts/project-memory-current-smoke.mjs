@@ -350,11 +350,7 @@ function writeJsonFile(filePath, value) {
 }
 
 async function primeAgentHomeStorage(page, options) {
-  await page.goto(options.appUrl, {
-    waitUntil: "domcontentloaded",
-    timeout: options.timeoutMs,
-  });
-  await page.evaluate(
+  await page.addInitScript(
     ({ collapsedKey, lastProjectKey }) => {
       localStorage.removeItem(lastProjectKey);
       localStorage.setItem(collapsedKey, "false");
@@ -368,7 +364,7 @@ async function primeAgentHomeStorage(page, options) {
 
 async function openAgentHome(page, options) {
   await primeAgentHomeStorage(page, options);
-  await page.reload({
+  await page.goto(options.appUrl, {
     waitUntil: "domcontentloaded",
     timeout: options.timeoutMs,
   });

@@ -43,7 +43,7 @@ async function main() {
     {
       clientInfo: {
         name: "lime_stdio_smoke",
-        version: "1.59.0",
+        version: "1.60.0",
       },
       capabilities: {
         eventMethods: [METHOD_AGENT_SESSION_EVENT],

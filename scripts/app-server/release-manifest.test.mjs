@@ -42,11 +42,11 @@ describe("app-server release manifest", () => {
         binary: binaryPath,
         url: "https://example/app-server-darwin-arm64.tar.gz",
         platform: "darwin-arm64",
-        version: "1.59.0",
+        version: "1.60.0",
       });
 
       expect(manifest).toEqual({
-        version: "1.59.0",
+        version: "1.60.0",
         protocolVersion: PROTOCOL_VERSION,
         artifacts: [
           {
@@ -73,7 +73,7 @@ describe("app-server release manifest", () => {
         binary: binaryPath,
         url: "https://example/app-server-darwin-arm64.tar.gz",
         platform: "darwin-arm64",
-        version: "1.59.0",
+        version: "1.60.0",
         out: outPath,
       });
 

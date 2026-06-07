@@ -421,5 +421,10 @@ describe("buildUserInputSubmitOp", () => {
     expect(op.preferences?.executionStrategy).toBeUndefined();
     expect(op.preferences?.searchMode).toBeUndefined();
     expect(op.metadata).toBeUndefined();
+
+    const request = createSubmitTurnRequestFromAgentOp(op);
+
+    expect(request.turn_config?.web_search).toBeUndefined();
+    expect(request.turn_config?.search_mode).toBeUndefined();
   });
 });

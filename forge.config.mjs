@@ -15,8 +15,7 @@ const SQUIRREL_PACKAGE_NAME = "lime";
 const PACKAGE_VERSION = JSON.parse(
   readFileSync("package.json", "utf8"),
 ).version;
-const UPDATE_BASE_URL =
-  process.env.LIME_UPDATES_BASE_URL || "https://updates.limecloud.com";
+const DEFAULT_UPDATE_BASE_URL = "https://updates.limecloud.com";
 
 const retainedPackageRoots = new Set(["dist", "node_modules", "package.json"]);
 const retainedPackageDirectories = new Set([
@@ -56,10 +55,13 @@ function ignorePackagerInput(filePath) {
   return true;
 }
 
-function macSignOptions() {
+function macSignOptions({
+  env = process.env,
+  platform = process.platform,
+} = {}) {
   if (
-    process.platform !== "darwin" ||
-    (process.env.LIME_ELECTRON_SIGN !== "1" && !process.env.LIME_MACOS_KEYCHAIN)
+    platform !== "darwin" ||
+    (env.LIME_ELECTRON_SIGN !== "1" && !env.LIME_MACOS_KEYCHAIN)
   ) {
     return undefined;
   }
@@ -69,27 +71,30 @@ function macSignOptions() {
     entitlements: "lime-rs/entitlements.plist",
     "entitlements-inherit": "lime-rs/entitlements.plist",
   };
-  if (process.env.APPLE_SIGNING_IDENTITY) {
-    options.identity = process.env.APPLE_SIGNING_IDENTITY;
+  if (env.APPLE_SIGNING_IDENTITY) {
+    options.identity = env.APPLE_SIGNING_IDENTITY;
   }
-  if (process.env.LIME_MACOS_KEYCHAIN) {
-    options.keychain = process.env.LIME_MACOS_KEYCHAIN;
+  if (env.LIME_MACOS_KEYCHAIN) {
+    options.keychain = env.LIME_MACOS_KEYCHAIN;
   }
   return options;
 }
 
-function macNotarizeOptions() {
+function macNotarizeOptions({
+  env = process.env,
+  platform = process.platform,
+} = {}) {
   if (
-    process.platform !== "darwin" ||
-    (process.env.LIME_ELECTRON_SIGN !== "1" && !process.env.LIME_MACOS_KEYCHAIN)
+    platform !== "darwin" ||
+    (env.LIME_ELECTRON_SIGN !== "1" && !env.LIME_MACOS_KEYCHAIN)
   ) {
     return undefined;
   }
 
-  const appleId = process.env.APPLE_ID;
+  const appleId = env.APPLE_ID;
   const appleIdPassword =
-    process.env.APPLE_APP_SPECIFIC_PASSWORD || process.env.APPLE_PASSWORD;
-  const teamId = process.env.APPLE_TEAM_ID;
+    env.APPLE_APP_SPECIFIC_PASSWORD || env.APPLE_PASSWORD;
+  const teamId = env.APPLE_TEAM_ID;
   if (!appleId || !appleIdPassword || !teamId) {
     return undefined;
   }
@@ -97,8 +102,10 @@ function macNotarizeOptions() {
   return { appleId, appleIdPassword, teamId };
 }
 
-function normalizedUpdateBaseUrl() {
-  return UPDATE_BASE_URL.trim().replace(/\/+$/, "");
+function normalizedUpdateBaseUrl({ env = process.env } = {}) {
+  return (env.LIME_UPDATES_BASE_URL || DEFAULT_UPDATE_BASE_URL)
+    .trim()
+    .replace(/\/+$/, "");
 }
 
 function updateFeedLabel(platform = process.platform, arch = process.arch) {
@@ -111,29 +118,34 @@ function updateFeedLabel(platform = process.platform, arch = process.arch) {
   return `${platform}-${arch}`;
 }
 
-function updateFeedUrl(platform = process.platform, arch = process.arch) {
-  const explicitFeedUrl = process.env.LIME_ELECTRON_UPDATES_URL?.trim();
+function updateFeedUrl(
+  platform = process.platform,
+  arch = process.arch,
+  { env = process.env } = {},
+) {
+  const explicitFeedUrl = env.LIME_ELECTRON_UPDATES_URL?.trim();
   if (explicitFeedUrl) {
     return explicitFeedUrl.replace(/\/+$/, "");
   }
-  return `${normalizedUpdateBaseUrl()}/lime/stable/${updateFeedLabel(platform, arch)}`;
+  return `${normalizedUpdateBaseUrl({ env })}/lime/stable/${updateFeedLabel(platform, arch)}`;
 }
 
-function macZipConfig(arch = process.arch) {
+function macZipConfig(arch = process.arch, options = {}) {
   return {
-    macUpdateManifestBaseUrl: updateFeedUrl("darwin", arch),
+    macUpdateManifestBaseUrl: updateFeedUrl("darwin", arch, options),
   };
 }
 
-function windowsSigningOptions() {
-  if (process.platform !== "win32" || process.env.LIME_ELECTRON_SIGN !== "1") {
+function windowsSigningOptions({
+  env = process.env,
+  platform = process.platform,
+} = {}) {
+  if (platform !== "win32" || env.LIME_ELECTRON_SIGN !== "1") {
     return {};
   }
 
-  const certificateFile =
-    process.env.LIME_WINDOWS_SIGNING_CERTIFICATE_FILE?.trim();
-  const certificatePassword =
-    process.env.LIME_WINDOWS_SIGNING_CERTIFICATE_PASSWORD;
+  const certificateFile = env.LIME_WINDOWS_SIGNING_CERTIFICATE_FILE?.trim();
+  const certificatePassword = env.LIME_WINDOWS_SIGNING_CERTIFICATE_PASSWORD;
   if (!certificateFile || !certificatePassword) {
     return {};
   }
@@ -144,18 +156,31 @@ function windowsSigningOptions() {
   };
 }
 
-function squirrelConfig(arch = process.arch) {
+function squirrelConfig(arch = process.arch, options = {}) {
+  const packageVersion = options.packageVersion || PACKAGE_VERSION;
   return {
     authors: "Lime",
     exe: `${PRODUCT_NAME}.exe`,
     name: SQUIRREL_PACKAGE_NAME,
     noMsi: true,
-    remoteReleases: updateFeedUrl("win32", arch),
-    setupExe: `${PRODUCT_NAME}-${PACKAGE_VERSION} Setup.exe`,
+    remoteReleases: updateFeedUrl("win32", arch, options),
+    setupExe: `${PRODUCT_NAME}-${packageVersion} Setup.exe`,
     setupIcon: "lime-rs/icons/icon.ico",
-    ...windowsSigningOptions(),
+    ...windowsSigningOptions(options),
   };
 }
+
+export {
+  ignorePackagerInput,
+  macNotarizeOptions,
+  macSignOptions,
+  macZipConfig,
+  normalizedUpdateBaseUrl,
+  squirrelConfig,
+  updateFeedLabel,
+  updateFeedUrl,
+  windowsSigningOptions,
+};
 
 export default {
   outDir: RELEASE_OUTPUT_DIR,

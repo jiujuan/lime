@@ -1,51 +1,53 @@
-## Lime v1.59.0
+## Lime v1.60.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
 
-- Added the local App Server JSON-RPC runtime skeleton, giving Lime Desktop and independent apps a shared protocol boundary for Agent sessions, turns, events, actions, artifacts, and evidence.
-- Added the App Server TypeScript client so independent apps can use typed connections to start sessions, submit turns, cancel turns, respond to actions, and consume `agentSession/event` notifications.
-- Added App Server sidecar lifecycle support, including packaged resources manifests, platform artifact resolution, sha256 verification, initialize handshake, and event routing.
-- Added the standalone App Server app policy source so independent apps can inject scoped capabilities from a JSON policy manifest and constrain capability discovery with `--app-policy`.
-- Added the standalone external backend configuration path, allowing App Server to prototype host-independent turn, cancel, and action-response handling through an external backend process.
-- Started routing the Desktop Agent runtime main path through an in-process App Server adapter, allowing Electron Desktop Host entry points to submit Agent turns through JSON-RPC.
-- Added `capability/list`, `artifact/read`, `evidence/export`, and `agentSession/action/respond` protocol surfaces for capability discovery, artifact reading, evidence export, and approval responses from independent apps.
+- Made Electron Desktop Host the primary desktop entry point, adding main process, preload, IPC channels, window configuration, DevBridge HTTP bridge, and App Server host bridge foundations.
+- Moved release and updater work onto the Electron Forge current path, covering macOS DMG/ZIP, Windows Squirrel, Forge release asset staging, package-resource verification, and local ZIP feed validation.
+- Expanded App Server JSON-RPC coverage across Agent sessions, read/list/update, turn cancel, Connect deep links, workspace, model, knowledge, skill, artifact, and evidence surfaces.
+- Advanced the Agent Runtime / Claw path onto the App Server current read model, including Electron fixture coverage for session restore, code artifacts, stop generation, history reads, and completion projection.
+- Improved Agent App runtime lifecycle support for UI runtime start/status/stop, runtime packages, SDK contracts, native shell configuration, and standalone release helpers.
+- Added current GUI smoke coverage for settings, sidebar sessions, Connect deep links, Agent App UI runtime, Claw current fixture, code artifact workbench, and session history fixtures.
 
 ### Fixes
 
-- Fixed App Server turn id, `queueIfBusy`, `skipPreSubmitResume`, and legacy Aster request parameter propagation, reducing migration risk around lost runtime options or mismatched ids.
-- Fixed Desktop direct event bridge scoping and terminal-event cleanup so session / turn events are less likely to be duplicated or leave stale listeners behind.
-- Fixed capability discovery filtering across session, workspace, and runtime-enable facts so only executable capabilities are projected into `agentSession/turn/start`.
-- Fixed artifact read and evidence export read-model boundaries around pagination, content status, and provider injection so independent apps can read runtime output without relying on UI inference.
+- Fixed Electron `safeInvoke` JSON-RPC result-envelope handling so real App Server `result.lines` responses are no longer treated as empty.
+- Fixed sends from stale restored sessions by confirming restored ids with `agentSession/read` before submitting a new turn.
+- Fixed recent and archived sidebar sessions being filtered by stale remembered workspace ids.
+- Fixed Claw first-token waiting state so task cards and input status no longer show completed before a real terminal projection is available.
+- Fixed stop-generation behavior so `agentSession/turn/cancel` quickly writes a canceled read model and late completion events cannot overwrite the canceled state.
+- Fixed Electron startup and second-instance handling for `lime://connect` deep links, including current resolve, save, and callback paths.
 
 ### Improvements And Refactors
 
-- Split Agent runtime service boundaries into `RuntimeCore`, `ExecutionBackend`, `AsterBackend`, and host adapters, reducing business logic growth inside desktop host glue.
-- Added the `app-server-protocol`, `app-server-transport`, `app-server`, `app-server-client`, `app-server-daemon`, and `app-server-test-client` crate family to separate protocol, transport, server, client, and test boundaries.
-- Moved runtime queue, stream, projection, managed objective continuation, and event emission behind host ports so App Server and Desktop can share the same execution path.
-- Consolidated Desktop host dependencies for runtime turns into `RuntimeTurnHostContext`, reducing scattered AppHandle, database, config, and service-state parameter passing.
-- Kept the public `app-server` crate independent from desktop host shell internals and prevented Aster-private DTOs from becoming part of the public JSON-RPC protocol.
+- Consolidated desktop host facts around Electron Desktop Host, App Server JSON-RPC, and `src/lib/desktop-host/` current mock boundaries.
+- Split large Agent Chat, workbench, sidebar, Harness, Skill selector, and Agent App tests into focused View Model and fixture layers.
+- Tightened App Server client contracts, command catalog, DevBridge policy, and governance catalogs to reduce mock-priority and legacy-command regressions.
+- Moved Electron release/updater scripts into `scripts/electron/` and continued organizing App Server, Agent Runtime, Agent App, i18n, Harness, Agent QC, and Knowledge scripts by domain.
+- Removed old Tauri naming and legacy updater/builder references from current release paths, making Forge-only release/updater the active source of truth.
 
 ### Tests And Quality
 
-- Added App Server client / protocol contract checks to `npm run test:contracts`, covering key Rust protocol, router, runtime, Desktop adapter, TypeScript client, and sidecar helper consistency.
-- Added `app-server:manifest` and `app-server:manifest:test` for generating and validating App Server sidecar release manifests.
-- Added `smoke:app-server-stdio` to verify the app-server binary over stdio JSON-RPC initialize, session, and turn flows.
-- Added `smoke:app-server-sidecar-lifecycle` to cover packaged manifests, sha256 verification, sidecar startup, connection, and lifecycle recovery.
-- Added Rust regressions for app policy manifests, external backends, standalone CLI arguments, and factory injection.
-- Added App Server Rust tests, a host boundary guard, TypeScript client tests, and renderer-safe API regressions.
-- Updated the root app, Electron config, Rust workspace, CLI npm package, Agent App runtime package, App Server client package, and lockfiles to `1.59.0`.
+- Added App Server client contracts, command contracts, modality contracts, scripts governance, and Electron release workflow guards to `npm run test:contracts`.
+- Added a structured Electron release workflow guard for Forge makers, signing/notarization, Windows Squirrel, R2 updater assets, and legacy release-path rejection.
+- Added `npm run governance:scripts` to freeze the root `scripts/` directory and track domain migrations; the root release bucket is now cleared.
+- Added App Server, Electron, and Agent Runtime fixture smokes for stdio, sidecar lifecycle, packaged backend failure, package resources, Claw current fixture, cancel fixture, and history restore.
+- Strengthened live Provider / WebSearch / WebFetch smoke gates so unauthorized runs fail closed and authorized runs require turn-scoped provider, model, routing, completed tools, and output evidence.
+- Added targeted Rust and frontend regressions for App Server cancel/read model/JSON-RPC/external backend, App Server gateway, Agent Runtime clients, Connect, Agent App runtime, and i18n loading.
+- Updated the root app, Rust workspace, CLI npm package, Agent App runtime package, App Server client package, and lockfiles to `1.60.0`.
 
 ### Documentation
 
-- Added the `internal/roadmap/appserver/` roadmap set, including PRD, architecture, protocol, sequences, flowcharts, service extraction, independent app integration, and Electron migration planning.
-- Added the App Server implementation plan with P0 through P3.61 status, fact-source classification, validation entries, and remaining exit criteria.
-- Added `packages/app-server-client/README.md` with the recommended independent-app integration shape for the TypeScript client and sidecar.
-- Updated engineering navigation, command boundary, governance, and services docs to converge cross-app Agent runtime work onto the App Server current path.
+- Updated the App Server implementation plan with Electron migration, Claw current fixture, Connect deep link, Agent App UI runtime, cancel semantics, and release/updater governance progress.
+- Updated the quality workflow with Electron Desktop Host, App Server JSON-RPC, GUI smoke, current fixture, live Provider authorization, and localization validation rules.
+- Updated scripts governance documentation for Electron, App Server, Agent Runtime, Agent App, i18n, Harness, Agent QC, and Knowledge domain entry points.
+- Updated command boundary, governance, Playwright/E2E, App Server release/updater, and frontend migration docs with legacy / compat / dead surface exit criteria.
 
 ### Other
 
-- Added App Server release-manifest generation and packaged sidecar resource-path conventions for future independent-app distribution of the App Server binary.
+- Continued the repository structure migration from `src-tauri` to `lime-rs`, aligning Rust workspace and desktop backend fact sources.
+- Clarified release runners and asset staging: macOS arm64 uses `macos-15`, x64 uses `macos-15-intel`, and Windows uses `windows-2022`.
 
-**Full changes**: `v1.58.0` -> `v1.59.0`
+**Full changes**: `v1.59.0` -> `v1.60.0`

@@ -1970,6 +1970,27 @@ const checks = [
     ],
   },
   {
+    name: "Request tool policy keeps freshness keyword helper internal",
+    files: [
+      "lime-rs/crates/agent/src/lib.rs",
+      "lime-rs/crates/agent/src/request_tool_policy.rs",
+    ],
+    snippets: [
+      "pub fn resolve_request_tool_policy_with_mode(",
+      "fn build_preflight_queries(",
+      "if !policy.requires_web_search() || !message_requires_fresh_web_search(message_text)",
+      "fn should_run_web_search_preflight(policy: &RequestToolPolicy, _message_text: &str) -> bool",
+      "policy.requires_web_search()",
+      "allowed_web_search_should_not_run_preflight_from_message_keywords",
+      "required_news_web_search_should_expand_preflight_queries",
+    ],
+    absentSnippets: [
+      "pub fn message_requires_fresh_web_search(",
+      "pub use request_tool_policy::message_requires_fresh_web_search",
+      "merge_system_prompt_with_web_search_preflight_context, message_requires_fresh_web_search",
+    ],
+  },
+  {
     name: "App Server stdio streams backend events before turn response",
     files: [
       "lime-rs/crates/app-server/src/lib.rs",

@@ -75,7 +75,7 @@ async function main() {
       {
         clientInfo: {
           name: "content_studio",
-          version: "1.59.0",
+          version: "1.60.0",
         },
         capabilities: {
           eventMethods: [METHOD_AGENT_SESSION_EVENT],

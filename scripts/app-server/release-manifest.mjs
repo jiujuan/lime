@@ -109,7 +109,7 @@ function printUsage() {
   node scripts/app-server/release-manifest.mjs \\
     --binary lime-rs/target/debug/app-server \\
     --url https://example/app-server-darwin-arm64.tar.gz \\
-    [--platform darwin-arm64] [--version 1.59.0] [--out dist/app-server/manifest.json]`);
+    [--platform darwin-arm64] [--version 1.60.0] [--out dist/app-server/manifest.json]`);
 }
 
 async function main() {

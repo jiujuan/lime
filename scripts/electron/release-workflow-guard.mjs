@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 
 const DEFAULT_WORKFLOW_PATH = ".github/workflows/release.yml";
+const DEFAULT_FORGE_CONFIG_PATH = "forge.config.mjs";
 
 function readWorkflow(workflowPath = DEFAULT_WORKFLOW_PATH) {
   return YAML.parse(fs.readFileSync(workflowPath, "utf8"));
@@ -15,6 +16,13 @@ function readWorkflow(workflowPath = DEFAULT_WORKFLOW_PATH) {
 
 function stepByName(steps, name) {
   return steps.find((step) => step?.name === name);
+}
+
+function assertEnvValueIncludes(env, key, needle, label) {
+  if (!env || !(key in env)) {
+    throw new Error(`${label} env missing ${key}`);
+  }
+  assertIncludes(env[key], needle, `${label} env ${key}`);
 }
 
 function assertIncludes(haystack, needle, label) {
@@ -99,6 +107,20 @@ function assertBuildSteps(buildJob) {
     throw new Error("release build job must define steps");
   }
 
+  const buildJobEnv = buildJob?.env || {};
+  assertEnvValueIncludes(
+    buildJobEnv,
+    "LIME_ELECTRON_UPDATES_URL",
+    "LIME_UPDATES_BASE_URL",
+    "release build job",
+  );
+  assertEnvValueIncludes(
+    buildJobEnv,
+    "LIME_ELECTRON_UPDATES_URL",
+    "matrix.feed",
+    "release build job",
+  );
+
   const installStep = stepByName(steps, "Install dependencies");
   if (installStep?.run !== "npm ci") {
     throw new Error("release build must install dependencies with npm ci");
@@ -108,6 +130,23 @@ function assertBuildSteps(buildJob) {
     steps,
     "Validate Electron macOS signing secrets",
   );
+  const macSecretEnv = macSecretStep?.env || {};
+  for (const secret of [
+    "APPLE_CERTIFICATE",
+    "APPLE_CERTIFICATE_PASSWORD",
+    "APPLE_ID",
+    "APPLE_PASSWORD",
+    "APPLE_SIGNING_IDENTITY",
+    "APPLE_TEAM_ID",
+    "KEYCHAIN_PASSWORD",
+  ]) {
+    assertEnvValueIncludes(
+      macSecretEnv,
+      secret,
+      `secrets.${secret}`,
+      "macOS signing secret preflight",
+    );
+  }
   const macSecretRun = macSecretStep?.run || "";
   for (const secret of [
     "APPLE_CERTIFICATE",
@@ -125,12 +164,27 @@ function assertBuildSteps(buildJob) {
     steps,
     "Import Electron macOS signing certificate",
   );
+  const macImportEnv = macImportStep?.env || {};
+  for (const secret of [
+    "APPLE_CERTIFICATE",
+    "APPLE_CERTIFICATE_PASSWORD",
+    "KEYCHAIN_PASSWORD",
+  ]) {
+    assertEnvValueIncludes(
+      macImportEnv,
+      secret,
+      `secrets.${secret}`,
+      "macOS certificate import",
+    );
+  }
   const macImportRun = macImportStep?.run || "";
   for (const required of [
+    "base64 --decode",
     "security create-keychain",
     "security import",
     "security set-key-partition-list",
     "LIME_MACOS_KEYCHAIN",
+    '>> "$GITHUB_ENV"',
   ]) {
     assertIncludes(macImportRun, required, "macOS certificate import");
   }
@@ -139,6 +193,18 @@ function assertBuildSteps(buildJob) {
     steps,
     "Validate Electron Windows signing secrets",
   );
+  const winSecretEnv = winSecretStep?.env || {};
+  for (const secret of [
+    "WINDOWS_SIGNING_CERTIFICATE",
+    "WINDOWS_SIGNING_CERTIFICATE_PASSWORD",
+  ]) {
+    assertEnvValueIncludes(
+      winSecretEnv,
+      secret,
+      `secrets.${secret}`,
+      "Windows signing secret preflight",
+    );
+  }
   const winSecretRun = winSecretStep?.run || "";
   for (const secret of [
     "WINDOWS_SIGNING_CERTIFICATE",
@@ -151,10 +217,25 @@ function assertBuildSteps(buildJob) {
     steps,
     "Prepare Electron Windows signing certificate",
   );
+  const winImportEnv = winImportStep?.env || {};
+  for (const secret of [
+    "WINDOWS_SIGNING_CERTIFICATE",
+    "WINDOWS_SIGNING_CERTIFICATE_PASSWORD",
+  ]) {
+    assertEnvValueIncludes(
+      winImportEnv,
+      secret,
+      `secrets.${secret}`,
+      "Windows certificate preparation",
+    );
+  }
   const winImportRun = winImportStep?.run || "";
   for (const required of [
+    "WINDOWS_SIGNING_CERTIFICATE_PATH",
+    'Buffer.from(certificate, "base64")',
     "LIME_WINDOWS_SIGNING_CERTIFICATE_FILE",
     "LIME_WINDOWS_SIGNING_CERTIFICATE_PASSWORD",
+    '>> "$GITHUB_ENV"',
   ]) {
     assertIncludes(winImportRun, required, "Windows certificate preparation");
   }
@@ -171,17 +252,36 @@ function assertBuildSteps(buildJob) {
     assertIncludes(buildRun, required, "Electron Forge make step");
   }
   const buildEnv = buildStep?.env || {};
-  for (const requiredEnv of [
+  assertEnvValueIncludes(
+    buildEnv,
     "LIME_ELECTRON_SIGN",
+    "matrix.host_platform == 'win32'",
+    "Electron build",
+  );
+  assertEnvValueIncludes(
+    buildEnv,
     "APPLE_SIGNING_IDENTITY",
+    "secrets.APPLE_SIGNING_IDENTITY",
+    "Electron build",
+  );
+  assertEnvValueIncludes(
+    buildEnv,
     "APPLE_ID",
+    "secrets.APPLE_ID",
+    "Electron build",
+  );
+  assertEnvValueIncludes(
+    buildEnv,
     "APPLE_APP_SPECIFIC_PASSWORD",
+    "secrets.APPLE_PASSWORD",
+    "Electron build",
+  );
+  assertEnvValueIncludes(
+    buildEnv,
     "APPLE_TEAM_ID",
-  ]) {
-    if (!(requiredEnv in buildEnv)) {
-      throw new Error(`Electron build env missing ${requiredEnv}`);
-    }
-  }
+    "secrets.APPLE_TEAM_ID",
+    "Electron build",
+  );
 
   const verifyStep = stepByName(steps, "Verify Electron package resources");
   assertIncludes(
@@ -243,22 +343,84 @@ function assertPublishSteps(workflow) {
   );
 }
 
-function assertNoRetiredPackagingWorkflowInputs(workflowText) {
+function assertNoRetiredPackagingInputs(content, label) {
   for (const forbidden of [
     "electron-builder",
     "electron-updater",
     "nsis",
     "plan-electron-updater-r2-upload",
   ]) {
-    if (workflowText.toLowerCase().includes(forbidden.toLowerCase())) {
+    if (content.toLowerCase().includes(forbidden.toLowerCase())) {
       throw new Error(
-        `release workflow must not use retired packaging input: ${forbidden}`,
+        `${label} must not use retired packaging input: ${forbidden}`,
       );
     }
   }
 }
 
+function assertForgeConfig(forgeConfigPath = DEFAULT_FORGE_CONFIG_PATH) {
+  const forgeConfig = fs.readFileSync(forgeConfigPath, "utf8");
+
+  assertNoRetiredPackagingInputs(forgeConfig, "Forge config");
+
+  for (const required of [
+    "@electron-forge/maker-dmg",
+    "@electron-forge/maker-zip",
+    "@electron-forge/maker-squirrel",
+    "new MakerDMG",
+    "new MakerZIP",
+    "new MakerSquirrel",
+    '["darwin"]',
+    '["win32"]',
+    "macUpdateManifestBaseUrl",
+    'updateFeedUrl("darwin", arch)',
+    'updateFeedUrl("win32", arch)',
+    "RELEASE_OUTPUT_DIR",
+    "LIME_ELECTRON_FORGE_OUT_DIR",
+    "dist-electron/app-server.release.json",
+    "dist-electron/app-server",
+  ]) {
+    assertIncludes(forgeConfig, required, "Forge current maker config");
+  }
+
+  for (const required of [
+    "macSignOptions",
+    "hardenedRuntime",
+    "lime-rs/entitlements.plist",
+    "APPLE_SIGNING_IDENTITY",
+    "LIME_MACOS_KEYCHAIN",
+    "osxSign: macSignOptions()",
+    "macNotarizeOptions",
+    "APPLE_ID",
+    "APPLE_APP_SPECIFIC_PASSWORD",
+    "APPLE_PASSWORD",
+    "APPLE_TEAM_ID",
+    "osxNotarize: macNotarizeOptions()",
+  ]) {
+    assertIncludes(forgeConfig, required, "Forge macOS signing config");
+  }
+
+  for (const required of [
+    "windowsSigningOptions",
+    "LIME_WINDOWS_SIGNING_CERTIFICATE_FILE",
+    "LIME_WINDOWS_SIGNING_CERTIFICATE_PASSWORD",
+    "certificateFile",
+    "certificatePassword",
+    "squirrelConfig",
+    "SQUIRREL_PACKAGE_NAME",
+    "noMsi: true",
+    "setupExe",
+    "Setup.exe",
+    "setupIcon",
+    "lime-rs/icons/icon.ico",
+    "...windowsSigningOptions()",
+  ]) {
+    assertIncludes(forgeConfig, required, "Forge Windows Squirrel config");
+  }
+}
+
 function validateReleaseWorkflow({
+  forgeConfigPath = DEFAULT_FORGE_CONFIG_PATH,
   workflowPath = DEFAULT_WORKFLOW_PATH,
 } = {}) {
   const workflowText = fs.readFileSync(workflowPath, "utf8");
@@ -271,7 +433,8 @@ function validateReleaseWorkflow({
   assertMatrix(buildJob);
   assertBuildSteps(buildJob);
   assertPublishSteps(workflow);
-  assertNoRetiredPackagingWorkflowInputs(workflowText);
+  assertNoRetiredPackagingInputs(workflowText, "release workflow");
+  assertForgeConfig(forgeConfigPath);
 }
 
 function main() {
