@@ -121,6 +121,12 @@ describe("workspaceConversationSceneViewModel", () => {
       label: "t:agentChat.sessionOverview.status.turn.failed",
       tone: "default",
     });
+    for (const status of ["canceled", "cancelled", "interrupted"] as const) {
+      expect(resolveSessionStatusBadge(status)).toEqual({
+        label: "已中断",
+        tone: "default",
+      });
+    }
   });
 
   it("应解析跨平台路径末尾名称", () => {

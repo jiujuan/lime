@@ -368,6 +368,8 @@ describe("Electron current testing docs guard", () => {
     expect(releaseUpdater).toContain(
       "LIME_WINDOWS_SIGNING_CERTIFICATE_PASSWORD",
     );
+    expect(releaseUpdater).toContain("可选但成对");
+    expect(releaseUpdater).toContain("unsigned Forge Squirrel installer");
     expect(releaseUpdater).toContain("app-server.release.json");
     expect(releaseUpdater).toContain("不进入 App Server JSON-RPC");
     expect(releaseUpdater).toContain("不从 Codex App UI 推断");
@@ -428,6 +430,12 @@ describe("Electron current testing docs guard", () => {
       "Prepare Electron Windows signing certificate",
     );
     expect(releaseWorkflow).toContain("WINDOWS_SIGNING_CERTIFICATE");
+    expect(releaseWorkflow).toContain(
+      "Forge Squirrel will produce unsigned installer assets",
+    );
+    expect(releaseWorkflow).toContain(
+      "Incomplete Electron Windows signing secrets",
+    );
     expect(releaseWorkflow).toContain("LIME_WINDOWS_SIGNING_CERTIFICATE_FILE");
     expect(releaseWorkflow).toContain(
       "Publish Electron updater assets to Cloudflare R2",

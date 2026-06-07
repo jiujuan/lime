@@ -49,6 +49,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
   it("uses a local external fixture backend and current Agent Session methods", () => {
     const content = readSmokeScript();
 
+    expect(content).toContain('"app_server_drain_events"');
+    expect(content).toContain('"agentSession/event"');
     expect(content).toContain('APP_SERVER_BACKEND_MODE: "external"');
     expect(content).toContain("APP_SERVER_BACKEND_COMMAND: process.execPath");
     expect(content).toContain("writeFixtureBackend");
@@ -69,22 +71,90 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).not.toContain('type: "turn.final_done"');
   });
 
+  it("proves agentSession/event notifications align with the same turn read model", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("runEventReadProbe");
+    expect(content).toContain("waitForAgentSessionEventsForTurn");
+    expect(content).toContain("waitForSessionReadContainsTurn");
+    expect(content).toContain("drainAppServerEventsFromPage");
+    expect(content).toContain("EVENT_READ_PROBE_TURN_ID");
+    expect(content).toContain("EVENT_READ_PROBE_DONE_TEXT");
+    expect(content).toContain("EVENT_READ_PROBE_TOOL_CALL_ID");
+    expect(content).toContain('const EVENT_READ_PROBE_TOOL_NAME = "WebFetch"');
+    expect(content).toContain("EVENT_READ_PROBE_TOOL_OUTPUT");
+    expect(content).toContain('type: "tool.started"');
+    expect(content).toContain('type: "tool.result"');
+    expect(content).toContain("hasToolStarted");
+    expect(content).toContain("hasToolResult");
+    expect(content).toContain("collectReadModelToolCalls");
+    expect(content).toContain("findReadModelToolCall");
+    expect(content).toContain("eventReadProbeObserved");
+    expect(content).toContain("readModelEventReadAligned");
+    expect(content).toContain("readModelToolCallAligned");
+    expect(content).toContain("containsToolOutput");
+    expect(content).toContain("agentSession/event 与 read model 同 turn 对齐");
+  });
+
+  it("keeps scenario-specific assertions out of unrelated evidence", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("const commonAssertions = {");
+    expect(content).toContain("const scenarioAssertions =");
+    expect(content).toContain("const notApplicableAssertions =");
+    expect(content).toContain("summary.commonAssertions = commonAssertions");
+    expect(content).toContain(
+      "summary.scenarioAssertions = scenarioAssertions",
+    );
+    expect(content).toContain(
+      "summary.notApplicableAssertions = notApplicableAssertions",
+    );
+    expect(content).toContain('"readModelCanceled"');
+    expect(content).toContain('"eventReadProbeObserved"');
+    expect(content).toContain('"readModelToolCallAligned"');
+    expect(content).toContain("isCancelThenContinueScenario");
+    expect(content).toContain("hasCancelPhase");
+    expect(content).toContain("continuePromptReachedBackend");
+    expect(content).toContain("backendRecordedCancelThenContinue");
+  });
+
   it("covers the current cancel flow through GUI stop and App Server read model", () => {
     const content = readSmokeScript();
 
-    expect(content).toContain('--scenario <name>');
+    expect(content).toContain("--scenario <name>");
     expect(content).toContain('scenario: "complete"');
-    expect(content).toContain('CLAW_CHAT_FIXTURE_SCENARIO: options.scenario');
-    expect(content).toContain('waitForStopButtonVisibleAndClick');
-    expect(content).toContain('waitForGuiChatCanceled');
-    expect(content).toContain('waitForSessionReadCanceled');
-    expect(content).toContain('click-stop-from-gui');
-    expect(content).toContain('wait-read-model-canceled');
-    expect(content).toContain('usedCurrentTurnCancel');
-    expect(content).toContain('externalFixtureCancelUsed');
-    expect(content).toContain('fixtureCancelReachedBackend');
-    expect(content).toContain('readModelCanceled');
-    expect(content).toContain('guiStopClicked');
+    expect(content).toContain("CLAW_CHAT_FIXTURE_SCENARIO: options.scenario");
+    expect(content).toContain("waitForStopButtonVisibleAndClick");
+    expect(content).toContain("waitForGuiChatCanceled");
+    expect(content).toContain("waitForSessionReadCanceled");
+    expect(content).toContain("click-stop-from-gui");
+    expect(content).toContain("wait-read-model-canceled");
+    expect(content).toContain("usedCurrentTurnCancel");
+    expect(content).toContain("externalFixtureCancelUsed");
+    expect(content).toContain("fixtureCancelReachedBackend");
+    expect(content).toContain("readModelCanceled");
+    expect(content).toContain("guiStopClicked");
+  });
+
+  it("proves a stopped Claw turn can continue in the same current session", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain('const CONTINUE_PROMPT = "继续输出"');
+    expect(content).toContain(
+      'const CONTINUE_DONE_TEXT = "CLAW_CONTINUE_FIXTURE_DONE"',
+    );
+    expect(content).toContain("send-continue-prompt-from-gui");
+    expect(content).toContain("wait-gui-continue-completed");
+    expect(content).toContain("wait-read-model-continue-completed");
+    expect(content).toContain("continueInputSend");
+    expect(content).toContain("guiContinueCompleted");
+    expect(content).toContain("readModelContinueCompleted");
+    expect(content).toContain("continuePromptReachedBackend");
+    expect(content).toContain("guiContinueInputSubmitted");
+    expect(content).toContain("guiContinueCompleted");
+    expect(content).toContain("readModelContinueCompleted");
+    expect(content).toContain("backendRecordedCancelThenContinue");
+    expect(content).toContain("停止后的同一会话已经可以继续输出");
   });
 
   it("locks the news WebSearch policy to model-visible auto choice, not keyword required", () => {

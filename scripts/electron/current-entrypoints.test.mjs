@@ -26,11 +26,12 @@ function retiredRootDesktopHostFiles() {
     "lime-rs/src/lib.rs",
     ["lime-rs/", configStem, ".json"].join(""),
     ["lime-rs/", configStem, ".headless.json"].join(""),
+    ["lime-rs/", retiredHostTopic(), ".windows.conf.json"].join(""),
   ];
 }
 
 function retiredHostCleanupCandidateFiles() {
-  return [["lime-rs/", retiredHostTopic(), ".windows.conf.json"].join("")];
+  return [];
 }
 
 function retiredHostBuildInputTerms() {

@@ -401,7 +401,9 @@ describe("agentStreamTurnEventBinding", () => {
     expect(messages[0]?.content).toContain("执行失败");
     expect(messages[0]?.content).toContain("长时间没有返回新进度");
     expect(messages[0]?.runtimeStatus?.detail).toContain("执行已中断");
-    expect(messages[0]?.runtimeStatus?.detail).toContain("长时间没有返回新进度");
+    expect(messages[0]?.runtimeStatus?.detail).toContain(
+      "长时间没有返回新进度",
+    );
     expect(clearActiveStreamIfMatch).toHaveBeenCalledWith("event-dispatched");
     expect(disposeListener).toHaveBeenCalled();
   });
@@ -925,6 +927,156 @@ describe("agentStreamTurnEventBinding", () => {
     expect(streamActivated).toBe(true);
     expect(clearActiveStreamIfMatch).toHaveBeenCalledWith(
       "aster_stream_message-app-server",
+    );
+    expect(disposeListener).toHaveBeenCalledTimes(1);
+  });
+
+  it("App Server 取消终态应驱动 GUI stream listener 立即收口为已停止", async () => {
+    vi.useFakeTimers();
+
+    let messages: Message[] = [
+      {
+        id: "assistant-app-server-cancel",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-06T00:00:00.000Z"),
+        isThinking: true,
+        toolCalls: [
+          {
+            id: "tool-running-1",
+            name: "WebFetch",
+            status: "running",
+            startTime: new Date("2026-06-06T00:00:01.000Z"),
+          },
+        ],
+      },
+    ];
+    let streamActivated = false;
+    let isSending = true;
+    let currentTurnId: string | null = "pending-turn-app-server-cancel";
+    let streamHandler: ((event: { payload: unknown }) => void) | null = null;
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const clearActiveStreamIfMatch = vi.fn(() => true);
+    const disposeListener = vi.fn();
+    const runtime = {
+      listenToTurnEvents: vi.fn(async (_eventName, handler) => {
+        streamHandler = handler;
+        return vi.fn();
+      }),
+    } as unknown as AgentRuntimeAdapter;
+    const requestState: StreamRequestState = {
+      accumulatedContent: "",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+      queuedTurnId: null,
+    };
+
+    await registerAgentStreamTurnEventBinding({
+      runtime,
+      eventName: "aster_stream_message-app-server-cancel",
+      requestState,
+      skipUserMessage: false,
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.4",
+      effectiveExecutionStrategy: "react",
+      content: "整理今天的国际新闻",
+      expectingQueue: false,
+      activeSessionId: "session-app-server-cancel",
+      resolvedWorkspaceId: "workspace-app-server",
+      assistantMsgId: "assistant-app-server-cancel",
+      pendingTurnKey: "pending-turn-app-server-cancel",
+      pendingItemKey: "pending-item-app-server-cancel",
+      effectiveWaitingRuntimeStatus: {
+        phase: "preparing",
+        title: "处理中",
+        detail: "正在准备执行上下文",
+      },
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      callbacks: {
+        activateStream: () => {
+          streamActivated = true;
+        },
+        isStreamActivated: () => streamActivated,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener,
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch,
+        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
+        removeQueuedTurnState: () => {},
+      },
+      sounds: {
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+      },
+      appendThinkingToParts: (parts) => parts,
+      setMessages: setMessages as never,
+      setPendingActions: noopDispatch<ActionRequired[]>(),
+      setThreadItems: noopDispatch<AgentThreadItem[]>(),
+      setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
+      setCurrentTurnId: (value) => {
+        currentTurnId =
+          typeof value === "function" ? value(currentTurnId) : value;
+      },
+      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setIsSending: (value) => {
+        isSending = typeof value === "function" ? value(isSending) : value;
+      },
+    });
+
+    if (!streamHandler) {
+      throw new Error("expected stream handler to be registered");
+    }
+
+    const payload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-app-server-cancel",
+          sequence: 1,
+          sessionId: "session-app-server-cancel",
+          threadId: "thread-app-server-cancel",
+          turnId: "turn-app-server-cancel",
+          type: "turn.canceled",
+          timestamp: "2026-06-06T00:00:02.000Z",
+          payload: {
+            reason: "user_cancelled",
+          },
+        },
+      },
+    });
+
+    if (!payload) {
+      throw new Error("expected App Server notification to project");
+    }
+    (streamHandler as (event: { payload: unknown }) => void)({ payload });
+
+    expect(messages[0]).toMatchObject({
+      content: "(已停止)",
+      isThinking: false,
+      runtimeStatus: undefined,
+    });
+    expect(messages[0]?.toolCalls?.[0]).toMatchObject({
+      status: "failed",
+      result: {
+        success: false,
+        output: "",
+        error: "本轮已中止",
+      },
+    });
+    expect(currentTurnId).toBe("turn-app-server-cancel");
+    expect(isSending).toBe(false);
+    expect(clearActiveStreamIfMatch).toHaveBeenCalledWith(
+      "aster_stream_message-app-server-cancel",
     );
     expect(disposeListener).toHaveBeenCalledTimes(1);
   });

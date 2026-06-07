@@ -277,6 +277,76 @@ describe("Electron release asset staging", () => {
       ["Lime-1.20.0 Setup.exe", "RELEASES", "lime-1.20.0-full.nupkg"].sort(),
     );
   });
+
+  it("Windows staging 缺少 Squirrel nupkg 时应输出 Forge 候选资产", () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "lime-electron-stage-forge-win-missing-nupkg-"),
+    );
+    const forgeDir = path.join(root, "release-electron");
+    const outDir = path.join(root, "release-assets", "x86_64-pc-windows-msvc");
+
+    writeFile(
+      path.join(
+        forgeDir,
+        "make",
+        "squirrel.windows",
+        "x64",
+        "Lime-1.20.0 Setup.exe",
+      ),
+      "setup",
+    );
+    writeFile(
+      path.join(forgeDir, "make", "squirrel.windows", "x64", "RELEASES"),
+      "releases",
+    );
+
+    expect(() =>
+      stageElectronReleaseAssets({
+        forgeDir,
+        outDir,
+        targetTriple: "x86_64-pc-windows-msvc",
+        version: "v1.20.0",
+      }),
+    ).toThrow(
+      /no updater archive for x86_64-pc-windows-msvc asset found under Forge output\. Candidate files: .*Lime-1\.20\.0 Setup\.exe.*RELEASES/,
+    );
+  });
+
+  it("Windows staging 不应把非 Setup exe 当作 Squirrel 安装包", () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "lime-electron-stage-forge-win-non-setup-exe-"),
+    );
+    const forgeDir = path.join(root, "release-electron");
+    const outDir = path.join(root, "release-assets", "x86_64-pc-windows-msvc");
+
+    writeFile(
+      path.join(forgeDir, "make", "squirrel.windows", "x64", "Lime.exe"),
+      "app-exe",
+    );
+    writeFile(
+      path.join(
+        forgeDir,
+        "make",
+        "squirrel.windows",
+        "x64",
+        "lime-1.20.0-full.nupkg",
+      ),
+      "nupkg",
+    );
+    writeFile(
+      path.join(forgeDir, "make", "squirrel.windows", "x64", "RELEASES"),
+      "releases",
+    );
+
+    expect(() =>
+      stageElectronReleaseAssets({
+        forgeDir,
+        outDir,
+        targetTriple: "x86_64-pc-windows-msvc",
+        version: "v1.20.0",
+      }),
+    ).toThrow(/no installer for x86_64-pc-windows-msvc asset found/);
+  });
 });
 
 describe("R2 release cleanup", () => {

@@ -162,9 +162,38 @@ describe("live-provider-smoke-gate", () => {
     expect(content).toContain("REQUIRED_LIVE_WEB_TOOL_NAMES");
     expect(content).toContain("./lib/claw-chat-live-web-tool-evidence.mjs");
     expect(content).toContain("liveWebToolEvidenceFromSession");
+    expect(content).toContain("liveWebToolStreamEvidenceFromEvents");
     expect(content).toContain("turnId: liveWebTurnId");
     expect(content).toContain("allRequiredCompletedForTurn");
     expect(content).toContain("allRequiredOutputPresentForTurn");
+    expect(content).toContain("liveWebReadAfterEvent");
+    expect(content).toContain("liveWebSessionReadTurn");
+    expect(content).toContain("liveWebAppServerEvent");
+    expect(content).toContain("strictEventScope");
+    expect(content).toContain("{ strictEventScope: true }");
+    expect(content).toContain("appServerEventRecords(invokes).find");
+    expect(content).toContain("eventRecordMatchesTurn(record");
+    expect(content).toContain("eventRecordStrictlyMatchesTurn(record");
+    expect(content).toContain("liveWebCurrentStreamingEvent");
+    expect(content).toContain("liveWebToolStreamEvidence");
+    expect(content).toContain("summary.assertions.liveWebAppServerEventSeen");
+    expect(content).toContain(
+      "summary.assertions.liveWebSessionReadAfterEventSeen",
+    );
+    expect(content).toContain("summary.assertions.liveWebSearchToolEventsSeen");
+    expect(content).toContain("summary.assertions.liveWebFetchToolEventsSeen");
+    expect(content).toContain(
+      "summary.assertions.liveWebRequiredToolEventsSeen",
+    );
+    expect(content).toContain(
+      "summary.assertions.liveWebRequiredToolEventOutputsPresent",
+    );
+    expect(content).toContain(
+      "summary.assertions.liveWebRequiredToolEventOrderValid",
+    );
+    expect(content).toContain(
+      "summary.assertions.liveWebTurnCompletedEventSeen",
+    );
     expect(content).toContain(
       "等待 read model 出现 live WebSearch/WebFetch 工具输出事实",
     );
@@ -200,6 +229,9 @@ describe("live-provider-smoke-gate", () => {
 
     expect(content).toContain('["WebSearch", "WebFetch"]');
     expect(content).toContain("export function liveWebToolEvidenceFromSession");
+    expect(content).toContain(
+      "export function liveWebToolStreamEvidenceFromEvents",
+    );
     expect(content).toContain("export function collectToolCallsFromValue");
     expect(content).toContain("export function toolCallMatchesTurn");
     expect(content).toContain("value.result");
@@ -207,6 +239,9 @@ describe("live-provider-smoke-gate", () => {
     expect(content).toContain("requiredForTurn");
     expect(content).toContain("allRequiredCompletedForTurn");
     expect(content).toContain("allRequiredOutputPresentForTurn");
+    expect(content).toContain("allRequiredToolEventsForTurn");
+    expect(content).toContain("allRequiredResultAfterStartForTurn");
+    expect(content).toContain("terminalEventSeen");
     expect(content).toContain("outputPresent");
   });
 
@@ -220,6 +255,7 @@ describe("live-provider-smoke-gate", () => {
     );
 
     expect(content).toContain("liveWebToolEvidenceFromSession");
+    expect(content).toContain("liveWebToolStreamEvidenceFromEvents");
     expect(content).toContain("allRequiredCompletedForTurn");
     expect(content).toContain("requiredForTurn");
     expect(content).toContain("turnScopedToolCalls");
@@ -229,6 +265,9 @@ describe("live-provider-smoke-gate", () => {
     expect(content).toContain("toolCallTurnId");
     expect(content).toContain("result.detail");
     expect(content).toContain("output present");
+    expect(content).toContain("缺少明确 session/turn scope");
+    expect(content).toContain("allRequiredResultAfterStartForTurn");
+    expect(content).toContain("allRequiredToolEventsForTurn).toBe(false)");
   });
 
   it("知识库真实 Provider E2E 即使指定 provider/model 也必须显式授权", () => {

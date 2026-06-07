@@ -998,11 +998,16 @@ describe("agentRuntime threadClient", () => {
 
     expect(listener).toHaveBeenCalledWith({
       payload: expect.objectContaining({
-        type: "error",
+        type: "turn_completed",
         message: "user_cancelled",
         event_id: "evt-canceled",
         session_id: "session-1",
         turn_id: "turn-1",
+        turn: expect.objectContaining({
+          id: "turn-1",
+          status: "canceled",
+          error_message: "user_cancelled",
+        }),
       }),
     });
     unlisten();
@@ -1473,8 +1478,40 @@ describe("agentRuntime threadClient", () => {
         method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
         params: {
           event: {
-            eventId: "evt-batch",
+            eventId: "evt-canceled",
             sequence: 7,
+            sessionId: "session-1",
+            turnId: "turn-1",
+            type: "turn.canceled",
+            timestamp: "2026-06-06T00:00:06.000Z",
+            payload: {
+              reason: "user_cancelled",
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      type: "turn_completed",
+      message: "user_cancelled",
+      turn: {
+        id: "turn-1",
+        thread_id: "session-1",
+        prompt_text: "",
+        status: "canceled",
+        error_message: "user_cancelled",
+      },
+      event_id: "evt-canceled",
+      session_id: "session-1",
+      turn_id: "turn-1",
+    });
+
+    expect(
+      projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-batch",
+            sequence: 8,
             sessionId: "session-1",
             turnId: "turn-1",
             type: "message.delta_batch",
@@ -1502,7 +1539,7 @@ describe("agentRuntime threadClient", () => {
         params: {
           event: {
             eventId: "evt-claw-batch",
-            sequence: 8,
+            sequence: 9,
             sessionId: "session-1",
             turnId: "turn-1",
             type: "message.delta",

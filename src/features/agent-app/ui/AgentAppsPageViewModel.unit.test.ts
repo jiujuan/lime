@@ -233,6 +233,72 @@ describe("AgentAppsPageViewModel", () => {
         convertLocalFileSrc: (path) => `asset://${path}`,
       }),
     ).toBe(`asset://${LOCAL_APP_DIR}/assets/icon.svg`);
+
+    const installedWithAbsoluteIcon = buildReadyState({
+      manifest: buildManifest({
+        install: {
+          branding: {
+            name: "内容工厂",
+            icon: `${LOCAL_APP_DIR}/assets/icon.svg`,
+            windowTitle: "内容工厂",
+          },
+        },
+      }),
+    });
+
+    expect(
+      resolveAppIconSrc({
+        title: "内容工厂",
+        installedState: installedWithAbsoluteIcon,
+        convertLocalFileSrc: (path) => `asset://${path}`,
+      }),
+    ).toBe(`asset://${LOCAL_APP_DIR}/assets/icon.svg`);
+    expect(
+      decodeURIComponent(
+        resolveAppIconSrc({
+          title: "内容工厂",
+          installedState: installedWithAbsoluteIcon,
+          convertLocalFileSrc: (path) => path,
+        }),
+      ),
+    ).toContain("内容工厂");
+    expect(
+      resolveAppIconSrc({
+        title: "内容工厂",
+        installedState: installedWithAbsoluteIcon,
+        convertLocalFileSrc: (path) => path,
+      }),
+    ).not.toBe(`${LOCAL_APP_DIR}/assets/icon.svg`);
+
+    const installedCloudReleaseWithAbsoluteIcon = buildReadyState({
+      manifest: buildManifest({
+        install: {
+          branding: {
+            name: "内容工厂",
+            icon: `${LOCAL_APP_DIR}/assets/icon.svg`,
+            windowTitle: "内容工厂",
+          },
+        },
+      }),
+    });
+    installedCloudReleaseWithAbsoluteIcon.identity.sourceKind = "cloud_release";
+
+    expect(
+      resolveAppIconSrc({
+        title: "内容工厂",
+        installedState: installedCloudReleaseWithAbsoluteIcon,
+        convertLocalFileSrc: (path) => `asset://${path}`,
+      }),
+    ).toBe(`asset://${LOCAL_APP_DIR}/assets/icon.svg`);
+
+    expect(
+      resolveAppIconSrc({
+        title: "Cloud",
+        cloudApp: buildCloudApp({ icon: `${LOCAL_APP_DIR}/assets/icon.svg` }),
+        convertLocalFileSrc: (path) => `asset://${path}`,
+      }),
+    ).toBe(`asset://${LOCAL_APP_DIR}/assets/icon.svg`);
+
     expect(
       resolveAppIconSrc({
         title: "Cloud",

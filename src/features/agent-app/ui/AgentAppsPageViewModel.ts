@@ -108,6 +108,14 @@ function isRelativeIconPath(value: string): boolean {
   return value.startsWith("./") || value.startsWith("../");
 }
 
+function isAbsoluteLocalIconPath(value: string): boolean {
+  return (
+    value.startsWith("/") ||
+    /^[A-Za-z]:[\\/]/.test(value) ||
+    value.startsWith("\\\\")
+  );
+}
+
 function joinLocalPath(basePath: string, relativePath: string): string {
   const normalizedBase = basePath.replace(/\/+$/, "");
   const normalizedRelative = relativePath.replace(/^\.?\//, "");
@@ -180,6 +188,20 @@ function getLocalSourceRoot(
   return normalizeOptionalText(state.identity.sourceUri);
 }
 
+function resolveConvertedLocalIconSrc(
+  path: string,
+  convertLocalFileSrc: ConvertLocalFileSrc | undefined,
+): string | undefined {
+  if (!convertLocalFileSrc) {
+    return undefined;
+  }
+  const converted = normalizeOptionalText(convertLocalFileSrc(path));
+  if (!converted || converted === path || isAbsoluteLocalIconPath(converted)) {
+    return undefined;
+  }
+  return converted;
+}
+
 export function resolveAppIconSrc(params: {
   title: string;
   installedState?: InstalledAgentAppState;
@@ -198,10 +220,21 @@ export function resolveAppIconSrc(params: {
   if (isDirectAssetSrc(candidate)) {
     return candidate;
   }
+  if (isAbsoluteLocalIconPath(candidate)) {
+    return (
+      resolveConvertedLocalIconSrc(candidate, params.convertLocalFileSrc) ??
+      buildAppNameIcon(params.title)
+    );
+  }
+
   const sourceRoot = getLocalSourceRoot(params.installedState);
   if (sourceRoot && isRelativeIconPath(candidate)) {
-    const convertLocalFileSrc = params.convertLocalFileSrc ?? ((path) => path);
-    return convertLocalFileSrc(joinLocalPath(sourceRoot, candidate));
+    return (
+      resolveConvertedLocalIconSrc(
+        joinLocalPath(sourceRoot, candidate),
+        params.convertLocalFileSrc,
+      ) ?? buildAppNameIcon(params.title)
+    );
   }
   return buildAppNameIcon(params.title);
 }

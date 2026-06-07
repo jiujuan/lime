@@ -8,6 +8,7 @@ import { chromium } from "playwright";
 import {
   REQUIRED_LIVE_WEB_TOOL_NAMES,
   liveWebToolEvidenceFromSession,
+  liveWebToolStreamEvidenceFromEvents,
 } from "./lib/claw-chat-live-web-tool-evidence.mjs";
 import {
   assertLiveProviderSmokeAllowed,
@@ -440,6 +441,16 @@ function eventRecordMatchesTurn(record, { sessionId, turnId }) {
   );
 }
 
+function eventRecordStrictlyMatchesTurn(record, { sessionId, turnId }) {
+  const params = record?.params || {};
+  const eventSessionId = appServerEventSessionId(params);
+  const eventTurnId = appServerEventTurnId(params);
+  return (
+    (!sessionId || eventSessionId === sessionId) &&
+    (!turnId || eventTurnId === turnId)
+  );
+}
+
 function consoleStreamEventEvidence(consoleMessages, { sessionId, turnId }) {
   const markers = [
     "AgentStream.firstEvent",
@@ -544,9 +555,13 @@ function appServerReadResponseHasSessionTurn(response, sessionId, turnId) {
 function appServerSessionReadAfterEventEvidence(
   invokes,
   { sessionId, turnId },
+  options = {},
 ) {
+  const eventMatcher = options.strictEventScope
+    ? eventRecordStrictlyMatchesTurn
+    : eventRecordMatchesTurn;
   const eventRecords = appServerEventRecords(invokes).filter((record) =>
-    eventRecordMatchesTurn(record, { sessionId, turnId }),
+    eventMatcher(record, { sessionId, turnId }),
   );
   const readRecords = appServerMethodRecords(
     invokes,
@@ -2463,11 +2478,42 @@ async function main() {
     summary.networkErrorCount = failedRequests.length;
     summary.networkErrorTop = networkErrorTop;
     summary.devBridgeCommands = [...new Set(invokes.map((item) => item.cmd))];
-    const appServerReadAfterEvent =
-      appServerSessionReadAfterEventEvidence(invokes, {
+    const liveWebReadAfterEvent = appServerSessionReadAfterEventEvidence(
+      invokes,
+      {
         sessionId: submittedLiveWebSessionId,
         turnId: submittedLiveWebTurnId,
-      }) ||
+      },
+      { strictEventScope: true },
+    );
+    const liveWebSessionReadTurn = appServerSessionReadTurnEvidence(invokes, {
+      sessionId: submittedLiveWebSessionId,
+      turnId: submittedLiveWebTurnId,
+    });
+    const liveWebCurrentStreamingEvent = appServerCurrentEventEvidence(
+      invokes,
+      consoleMessages,
+      {
+        sessionId: submittedLiveWebSessionId,
+        turnId: submittedLiveWebTurnId,
+      },
+    );
+    const liveWebToolStreamEvidence = liveWebToolStreamEvidenceFromEvents(
+      appServerEventRecords(invokes),
+      {
+        sessionId: submittedLiveWebSessionId,
+        turnId: submittedLiveWebTurnId,
+      },
+    );
+    const liveWebAppServerEvent =
+      appServerEventRecords(invokes).find((record) =>
+        eventRecordStrictlyMatchesTurn(record, {
+          sessionId: submittedLiveWebSessionId,
+          turnId: submittedLiveWebTurnId,
+        }),
+      ) || null;
+    const appServerReadAfterEvent =
+      liveWebReadAfterEvent ||
       appServerSessionReadAfterEventEvidence(invokes, {
         sessionId: followSessionId,
         turnId: followTurnId,
@@ -2477,10 +2523,7 @@ async function main() {
         turnId: longTurnId,
       });
     const appServerSessionReadTurn =
-      appServerSessionReadTurnEvidence(invokes, {
-        sessionId: submittedLiveWebSessionId,
-        turnId: submittedLiveWebTurnId,
-      }) ||
+      liveWebSessionReadTurn ||
       appServerSessionReadTurnEvidence(invokes, {
         sessionId: followSessionId,
         turnId: followTurnId,
@@ -2490,10 +2533,7 @@ async function main() {
         turnId: longTurnId,
       });
     const currentStreamingEvent =
-      appServerCurrentEventEvidence(invokes, consoleMessages, {
-        sessionId: submittedLiveWebSessionId,
-        turnId: submittedLiveWebTurnId,
-      }) ||
+      liveWebCurrentStreamingEvent ||
       appServerCurrentEventEvidence(invokes, consoleMessages, {
         sessionId: followSessionId,
         turnId: followTurnId,
@@ -2551,6 +2591,11 @@ async function main() {
         { direction: "response" },
       ).length,
       drainEventNotificationCount: appServerDrainEventRecords(invokes).length,
+      liveWebReadAfterEvent,
+      liveWebSessionReadTurn,
+      liveWebAppServerEvent,
+      liveWebCurrentStreamingEvent,
+      liveWebToolStreamEvidence,
       readAfterEvent: appServerReadAfterEvent,
       sessionReadTurn: appServerSessionReadTurn,
       currentStreamingEvent,
@@ -2591,6 +2636,38 @@ async function main() {
         }) || Boolean(currentStreamingEvent),
       appServerSessionReadAfterEventSeen: Boolean(
         appServerReadAfterEvent || appServerSessionReadTurn,
+      ),
+      liveWebAppServerEventSeen: Boolean(liveWebAppServerEvent),
+      liveWebSessionReadAfterEventSeen: Boolean(
+        liveWebReadAfterEvent || liveWebSessionReadTurn,
+      ),
+      liveWebSearchToolEventsSeen: Boolean(
+        liveWebToolStreamEvidence.required.find(
+          (item) => item.name === "WebSearch",
+        )?.started &&
+        liveWebToolStreamEvidence.required.find(
+          (item) => item.name === "WebSearch",
+        )?.result,
+      ),
+      liveWebFetchToolEventsSeen: Boolean(
+        liveWebToolStreamEvidence.required.find(
+          (item) => item.name === "WebFetch",
+        )?.started &&
+        liveWebToolStreamEvidence.required.find(
+          (item) => item.name === "WebFetch",
+        )?.result,
+      ),
+      liveWebRequiredToolEventsSeen: Boolean(
+        liveWebToolStreamEvidence.allRequiredToolEventsForTurn,
+      ),
+      liveWebRequiredToolEventOutputsPresent: Boolean(
+        liveWebToolStreamEvidence.allRequiredOutputPresentForTurn,
+      ),
+      liveWebRequiredToolEventOrderValid: Boolean(
+        liveWebToolStreamEvidence.allRequiredResultAfterStartForTurn,
+      ),
+      liveWebTurnCompletedEventSeen: Boolean(
+        liveWebToolStreamEvidence.terminalEventSeen,
       ),
       interruptScopedToLongTurn: Boolean(summary.interruptHasTurnScope),
       interruptedTurnCanceled: isInterruptedTurnStatus(
@@ -2693,6 +2770,14 @@ async function main() {
       summary.assertions.liveWebProviderPreferenceHonored &&
       summary.assertions.liveWebModelPreferenceHonored &&
       summary.assertions.liveWebTurnCompleted &&
+      summary.assertions.liveWebAppServerEventSeen &&
+      summary.assertions.liveWebSessionReadAfterEventSeen &&
+      summary.assertions.liveWebSearchToolEventsSeen &&
+      summary.assertions.liveWebFetchToolEventsSeen &&
+      summary.assertions.liveWebRequiredToolEventsSeen &&
+      summary.assertions.liveWebRequiredToolEventOutputsPresent &&
+      summary.assertions.liveWebRequiredToolEventOrderValid &&
+      summary.assertions.liveWebTurnCompletedEventSeen &&
       summary.assertions.liveWebSearchCompleted &&
       summary.assertions.liveWebFetchCompleted &&
       summary.assertions.liveWebRequiredToolsCompleted &&

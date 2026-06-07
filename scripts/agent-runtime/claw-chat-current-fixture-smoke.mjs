@@ -27,8 +27,10 @@ const DEFAULTS = {
 
 const LOG_PREFIX = "[smoke:claw-chat-current-fixture]";
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+const APP_SERVER_DRAIN_EVENTS_COMMAND = "app_server_drain_events";
 const APP_SERVER_METHOD_INITIALIZE = "initialize";
 const APP_SERVER_METHOD_INITIALIZED = "initialized";
+const APP_SERVER_METHOD_AGENT_SESSION_EVENT = "agentSession/event";
 const APP_SERVER_METHOD_SESSION_START = "agentSession/start";
 const APP_SERVER_METHOD_SESSION_UPDATE = "agentSession/update";
 const APP_SERVER_METHOD_SESSION_TURN_START = "agentSession/turn/start";
@@ -37,12 +39,23 @@ const APP_SERVER_METHOD_SESSION_READ = "agentSession/read";
 const APP_SERVER_METHOD_SESSION_LIST = "agentSession/list";
 const APP_SERVER_METHOD_WORKSPACE_DEFAULT_ENSURE = "workspace/default/ensure";
 const NEWS_PROMPT = "整理今天的国际新闻";
+const CONTINUE_PROMPT = "继续输出";
 const ASSISTANT_DONE_TEXT = "CLAW_NEWS_FIXTURE_DONE";
+const CONTINUE_DONE_TEXT = "CLAW_CONTINUE_FIXTURE_DONE";
 const FIXTURE_PROVIDER = "fixture-provider";
 const FIXTURE_MODEL = "fixture-model";
 const SESSION_ID = `claw-chat-current-${Date.now()}-${process.pid}`;
 const THREAD_ID = `${SESSION_ID}-thread`;
 const SESSION_TITLE = "Claw 新闻输入 Electron fixture";
+const EVENT_READ_PROBE_PROMPT =
+  "验证 agentSession/event 与 read model 同 turn 对齐。";
+const EVENT_READ_PROBE_TURN_ID = `${SESSION_ID}-event-read-probe`;
+const EVENT_READ_PROBE_READ_TEXT = "事件流 probe 已进入 RuntimeCore";
+const EVENT_READ_PROBE_DONE_TEXT = "EVENT_READ_PROBE_DONE";
+const EVENT_READ_PROBE_TOOL_CALL_ID = `${EVENT_READ_PROBE_TURN_ID}:tool:webfetch`;
+const EVENT_READ_PROBE_TOOL_NAME = "WebFetch";
+const EVENT_READ_PROBE_TOOL_OUTPUT =
+  "fixture fetched https://example.com/claw-event-read";
 
 function printHelp() {
   console.log(`
@@ -65,7 +78,7 @@ Claw Chat Current Electron Fixture Smoke
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
-  --scenario <name>      complete | cancel，默认 complete
+  --scenario <name>      complete | cancel | cancel-then-continue，默认 complete
   --timeout-ms <ms>      总超时，默认 180000
   --interval-ms <ms>     轮询间隔，默认 500
   --keep-temp            保留临时目录便于调试
@@ -128,8 +141,12 @@ function parseArgs(argv) {
   if (!options.evidenceDir || !options.prefix) {
     throw new Error("--evidence-dir / --prefix 均不能为空");
   }
-  if (!["complete", "cancel"].includes(options.scenario)) {
-    throw new Error("--scenario 只能是 complete 或 cancel");
+  if (
+    !["complete", "cancel", "cancel-then-continue"].includes(options.scenario)
+  ) {
+    throw new Error(
+      "--scenario 只能是 complete、cancel 或 cancel-then-continue",
+    );
   }
   return options;
 }
@@ -317,15 +334,32 @@ if (input.kind === "turnCancel") {
 }
 
 if (input.kind === "turnStart") {
+  const inputText = input.request?.input?.text || "";
+  const isEventReadProbe = inputText.includes("agentSession/event");
+  const isContinuePrompt = inputText.includes("${CONTINUE_PROMPT}");
+  const assistantDoneText = isEventReadProbe
+    ? "${EVENT_READ_PROBE_DONE_TEXT}"
+    : isContinuePrompt
+      ? "${CONTINUE_DONE_TEXT}"
+    : "${ASSISTANT_DONE_TEXT}";
   const initialEvents = [
     {
       type: "message.delta",
       payload: {
-        text: "以下是今日国际新闻简要整理：\\n"
+        text: isEventReadProbe
+          ? "事件流 probe 已进入 RuntimeCore：\\n"
+          : isContinuePrompt
+            ? "继续输出已恢复：\\n"
+          : "以下是今日国际新闻简要整理：\\n"
       }
     }
   ];
-  if (process.env.CLAW_CHAT_FIXTURE_SCENARIO === "cancel") {
+  const shouldWaitForCancel =
+    (process.env.CLAW_CHAT_FIXTURE_SCENARIO === "cancel" ||
+      process.env.CLAW_CHAT_FIXTURE_SCENARIO === "cancel-then-continue") &&
+    !isEventReadProbe &&
+    !isContinuePrompt;
+  if (shouldWaitForCancel) {
     console.log(JSON.stringify({ events: initialEvents }));
     const startedAt = Date.now();
     while (Date.now() - startedAt < 120000) {
@@ -346,17 +380,46 @@ if (input.kind === "turnStart") {
   console.log(JSON.stringify({
     events: [
       ...initialEvents,
+      ...(isEventReadProbe
+        ? [
+            {
+              type: "tool.started",
+              payload: {
+                toolCallId: "${EVENT_READ_PROBE_TOOL_CALL_ID}",
+                toolName: "${EVENT_READ_PROBE_TOOL_NAME}",
+                tool_name: "${EVENT_READ_PROBE_TOOL_NAME}",
+                arguments: {
+                  url: "https://example.com/claw-event-read",
+                  purpose: "claw-chat-current-fixture-event-read"
+                }
+              }
+            },
+            {
+              type: "tool.result",
+              payload: {
+                toolCallId: "${EVENT_READ_PROBE_TOOL_CALL_ID}",
+                toolName: "${EVENT_READ_PROBE_TOOL_NAME}",
+                tool_name: "${EVENT_READ_PROBE_TOOL_NAME}",
+                outputPreview: "${EVENT_READ_PROBE_TOOL_OUTPUT}",
+                output: "${EVENT_READ_PROBE_TOOL_OUTPUT}",
+                success: true
+              }
+            }
+          ]
+        : []),
       {
         type: "message.delta",
         payload: {
-          text: "1. 多国外交议题持续升温，地区安全与经贸协商仍是焦点。\\n2. 全球市场继续关注能源、供应链和主要央行政策变化。\\n3. 国际组织呼吁在气候、粮食与人道援助议题上保持协调。\\n"
+          text: isContinuePrompt
+            ? "停止后的同一会话已经可以继续输出，并由 App Server current 终态收口。\\n"
+            : "1. 多国外交议题持续升温，地区安全与经贸协商仍是焦点。\\n2. 全球市场继续关注能源、供应链和主要央行政策变化。\\n3. 国际组织呼吁在气候、粮食与人道援助议题上保持协调。\\n"
         }
       },
       {
         type: "turn.completed",
         payload: {
           status: "completed",
-          text: "${ASSISTANT_DONE_TEXT}"
+          text: assistantDoneText
         }
       }
     ]
@@ -418,6 +481,106 @@ function decodeJsonRpcLines(lines) {
   return Array.isArray(lines)
     ? lines.map(parseJsonRpcLine).filter(Boolean)
     : [];
+}
+
+function readRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : null;
+}
+
+function readString(value, ...keys) {
+  const record = readRecord(value);
+  if (!record) {
+    return null;
+  }
+  for (const key of keys) {
+    if (typeof record[key] === "string" && record[key].trim()) {
+      return record[key].trim();
+    }
+  }
+  return null;
+}
+
+function agentSessionEventFromMessage(message) {
+  if (message?.method !== APP_SERVER_METHOD_AGENT_SESSION_EVENT) {
+    return null;
+  }
+  const event = readRecord(message?.params)?.event;
+  if (!event) {
+    return null;
+  }
+  return {
+    eventId: readString(event, "eventId", "event_id"),
+    sequence:
+      typeof event.sequence === "number" && Number.isFinite(event.sequence)
+        ? event.sequence
+        : null,
+    sessionId: readString(event, "sessionId", "session_id"),
+    threadId: readString(event, "threadId", "thread_id"),
+    turnId: readString(event, "turnId", "turn_id"),
+    type: readString(event, "type"),
+    timestamp: readString(event, "timestamp"),
+    payload: readRecord(event.payload) ?? event.payload ?? null,
+  };
+}
+
+function collectAgentSessionEvents(messages) {
+  return Array.isArray(messages)
+    ? messages.map(agentSessionEventFromMessage).filter(Boolean)
+    : [];
+}
+
+function mergeAgentSessionEvents(events, nextEvents) {
+  const byKey = new Map();
+  for (const event of [...events, ...nextEvents]) {
+    const key =
+      event.eventId ||
+      `${event.sessionId || ""}:${event.turnId || ""}:${event.sequence ?? ""}:${event.type || ""}`;
+    byKey.set(key, event);
+  }
+  return [...byKey.values()].sort((left, right) => {
+    const leftSequence =
+      typeof left.sequence === "number"
+        ? left.sequence
+        : Number.MAX_SAFE_INTEGER;
+    const rightSequence =
+      typeof right.sequence === "number"
+        ? right.sequence
+        : Number.MAX_SAFE_INTEGER;
+    return leftSequence - rightSequence;
+  });
+}
+
+function summarizeAgentSessionEvents(events, turnId) {
+  const scopedEvents = events.filter((event) => event.turnId === turnId);
+  const terminalTypes = new Set([
+    "turn.completed",
+    "turn.done",
+    "turn.final_done",
+    "turn.failed",
+    "turn.canceled",
+    "turn.cancelled",
+  ]);
+  return sanitizeJson({
+    eventCount: events.length,
+    scopedEventCount: scopedEvents.length,
+    eventTypes: scopedEvents.map((event) => event.type).filter(Boolean),
+    eventTurnIds: Array.from(
+      new Set(scopedEvents.map((event) => event.turnId).filter(Boolean)),
+    ),
+    hasTextDelta: scopedEvents.some((event) => event.type === "message.delta"),
+    hasToolStarted: scopedEvents.some((event) => event.type === "tool.started"),
+    hasToolResult: scopedEvents.some((event) => event.type === "tool.result"),
+    hasCompleted: scopedEvents.some((event) => event.type === "turn.completed"),
+    hasTerminal: scopedEvents.some((event) => terminalTypes.has(event.type)),
+    terminalTypes: scopedEvents
+      .map((event) => event.type)
+      .filter((type) => terminalTypes.has(type)),
+    sequences: scopedEvents
+      .map((event) => event.sequence)
+      .filter((sequence) => typeof sequence === "number"),
+  });
 }
 
 function collectTraceRequestMethods(traceMessages) {
@@ -560,6 +723,40 @@ async function invokeAppServerFromPage(page, method, params = {}, requestLog) {
       command: APP_SERVER_HANDLE_JSON_LINES_COMMAND,
       method,
       params,
+    },
+  );
+}
+
+async function drainAppServerEventsFromPage(page, limit = 50) {
+  return await page.evaluate(
+    async ({ command, limit }) => {
+      const invoke = window.electronAPI?.invoke;
+      if (typeof invoke !== "function") {
+        throw new Error("Electron preload invoke bridge is unavailable");
+      }
+      const response = await invoke(command, {
+        request: {
+          limit,
+        },
+      });
+      const messages = Array.isArray(response?.lines)
+        ? response.lines
+            .map((line) => {
+              try {
+                return JSON.parse(line);
+              } catch {
+                return null;
+              }
+            })
+            .filter(Boolean)
+        : [];
+      return {
+        messages,
+      };
+    },
+    {
+      command: APP_SERVER_DRAIN_EVENTS_COMMAND,
+      limit,
     },
   );
 }
@@ -950,10 +1147,10 @@ async function waitForInputReady(page, options) {
   );
 }
 
-async function sendNewsPromptFromGui(page, options) {
+async function sendPromptFromGui(page, options, prompt) {
   const before = await waitForInputReady(page, options);
   const textarea = page.locator('textarea[name="agent-chat-message"]').first();
-  await textarea.fill(NEWS_PROMPT);
+  await textarea.fill(prompt);
   const afterFill = await page.evaluate((prompt) => {
     const input = document.querySelector('textarea[name="agent-chat-message"]');
     return {
@@ -961,7 +1158,7 @@ async function sendNewsPromptFromGui(page, options) {
       promptVisibleInTextarea:
         input instanceof HTMLTextAreaElement ? input.value === prompt : false,
     };
-  }, NEWS_PROMPT);
+  }, prompt);
   assert(
     afterFill.promptVisibleInTextarea,
     `输入框未保留用户输入: ${JSON.stringify(sanitizeJson(afterFill))}`,
@@ -1009,13 +1206,25 @@ async function sendNewsPromptFromGui(page, options) {
   };
 }
 
-async function waitForGuiChatCompleted(page, options) {
+async function sendNewsPromptFromGui(page, options) {
+  return await sendPromptFromGui(page, options, NEWS_PROMPT);
+}
+
+async function waitForGuiChatCompleted(
+  page,
+  options,
+  {
+    prompt = NEWS_PROMPT,
+    doneText = ASSISTANT_DONE_TEXT,
+    summaryText = "今日国际新闻简要整理",
+  } = {},
+) {
   const startedAt = Date.now();
   let lastSnapshot = null;
   while (Date.now() - startedAt < options.timeoutMs) {
     const snapshot = await evaluatePageSnapshot(
       page,
-      ({ prompt, doneText }) => {
+      ({ prompt, doneText, summaryText }) => {
         const text = document.body?.innerText || "";
         const textarea = document.querySelector(
           'textarea[name="agent-chat-message"]',
@@ -1050,7 +1259,7 @@ async function waitForGuiChatCompleted(page, options) {
         return {
           url: window.location.href,
           hasPrompt: text.includes(prompt),
-          hasAssistantSummary: text.includes("今日国际新闻简要整理"),
+          hasAssistantSummary: text.includes(summaryText),
           hasDoneText: text.includes(doneText),
           hasEpochFallbackTitle: text.includes("任务 1970/1/1"),
           textareaVisible,
@@ -1066,7 +1275,7 @@ async function waitForGuiChatCompleted(page, options) {
           bodyText: text,
         };
       },
-      { prompt: NEWS_PROMPT, doneText: ASSISTANT_DONE_TEXT },
+      { prompt, doneText, summaryText },
     );
     if (!snapshot) {
       await sleep(options.intervalMs);
@@ -1085,9 +1294,7 @@ async function waitForGuiChatCompleted(page, options) {
     await sleep(options.intervalMs);
   }
   throw new Error(
-    `Claw GUI 未完成新闻输入闭环: ${JSON.stringify(
-      sanitizeJson(lastSnapshot),
-    )}`,
+    `Claw GUI 未完成输入闭环: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
   );
 }
 
@@ -1265,7 +1472,16 @@ async function waitForGuiChatCanceled(page, options) {
   );
 }
 
-async function waitForSessionReadCompleted(page, options, requestLog) {
+async function waitForSessionReadCompleted(
+  page,
+  options,
+  requestLog,
+  {
+    prompt = NEWS_PROMPT,
+    doneText = ASSISTANT_DONE_TEXT,
+    summaryText = "今日国际新闻简要整理",
+  } = {},
+) {
   const startedAt = Date.now();
   let lastRead = null;
   while (Date.now() - startedAt < options.timeoutMs) {
@@ -1281,19 +1497,227 @@ async function waitForSessionReadCompleted(page, options, requestLog) {
     lastRead = read.result;
     const serialized = JSON.stringify(read.result || {});
     if (
-      serialized.includes(NEWS_PROMPT) &&
-      (serialized.includes(ASSISTANT_DONE_TEXT) ||
-        serialized.includes("今日国际新闻简要整理"))
+      serialized.includes(prompt) &&
+      (serialized.includes(doneText) || serialized.includes(summaryText))
     ) {
       return read.result;
     }
     await sleep(options.intervalMs);
   }
   throw new Error(
-    `App Server read model 未完成新闻输入闭环: ${JSON.stringify(
+    `App Server read model 未完成输入闭环: ${JSON.stringify(
       sanitizeJson(lastRead),
     )}`,
   );
+}
+
+async function waitForSessionReadContainsTurn(
+  page,
+  options,
+  requestLog,
+  turnId,
+  expectedText,
+) {
+  const startedAt = Date.now();
+  let lastRead = null;
+  const timeoutMs = Math.min(options.timeoutMs, 30_000);
+  while (Date.now() - startedAt < timeoutMs) {
+    const read = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_SESSION_READ,
+      {
+        sessionId: SESSION_ID,
+        historyLimit: 100,
+      },
+      requestLog,
+    );
+    lastRead = read.result;
+    const serialized = JSON.stringify(read.result || {});
+    if (serialized.includes(turnId) && serialized.includes(expectedText)) {
+      return read.result;
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `App Server read model 未读回 event/read probe turn: ${JSON.stringify(
+      sanitizeJson(lastRead),
+    )}`,
+  );
+}
+
+function collectReadModelToolCalls(readResult) {
+  const detail = readRecord(readResult?.detail) ?? readRecord(readResult) ?? {};
+  const threadRead =
+    readRecord(detail.thread_read) ?? readRecord(detail.threadRead) ?? {};
+  return [
+    ...(Array.isArray(detail.tool_calls) ? detail.tool_calls : []),
+    ...(Array.isArray(detail.toolCalls) ? detail.toolCalls : []),
+    ...(Array.isArray(threadRead.tool_calls) ? threadRead.tool_calls : []),
+    ...(Array.isArray(threadRead.toolCalls) ? threadRead.toolCalls : []),
+  ].filter((toolCall) => toolCall && typeof toolCall === "object");
+}
+
+function findReadModelToolCall(readResult, toolCallId, toolName) {
+  return collectReadModelToolCalls(readResult).find((toolCall) => {
+    const id = String(
+      toolCall.id ??
+        toolCall.tool_call_id ??
+        toolCall.toolCallId ??
+        toolCall.toolId ??
+        "",
+    );
+    const name = String(
+      toolCall.tool_name ?? toolCall.toolName ?? toolCall.name ?? "",
+    );
+    return id === toolCallId && name === toolName;
+  });
+}
+
+async function waitForAgentSessionEventsForTurn(
+  page,
+  options,
+  turnId,
+  initialMessages,
+) {
+  const startedAt = Date.now();
+  const timeoutMs = Math.min(options.timeoutMs, 30_000);
+  let events = collectAgentSessionEvents(initialMessages);
+  let drainAttempts = 0;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const summary = summarizeAgentSessionEvents(events, turnId);
+    if (
+      summary.scopedEventCount > 0 &&
+      summary.hasTextDelta &&
+      summary.hasToolStarted &&
+      summary.hasToolResult &&
+      summary.hasTerminal
+    ) {
+      return {
+        events,
+        summary: {
+          ...summary,
+          drainAttempts,
+        },
+      };
+    }
+
+    const drained = await drainAppServerEventsFromPage(page, 50);
+    drainAttempts += 1;
+    events = mergeAgentSessionEvents(
+      events,
+      collectAgentSessionEvents(drained.messages),
+    );
+    await sleep(options.intervalMs);
+  }
+
+  throw new Error(
+    `未观察到 agentSession/event 同 turn 终态: ${JSON.stringify(
+      summarizeAgentSessionEvents(events, turnId),
+    )}`,
+  );
+}
+
+async function runEventReadProbe(page, options, requestLog) {
+  const eventName = `agentSession/event/${SESSION_ID}`;
+  const turnStart = await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_SESSION_TURN_START,
+    {
+      sessionId: SESSION_ID,
+      turnId: EVENT_READ_PROBE_TURN_ID,
+      input: {
+        text: EVENT_READ_PROBE_PROMPT,
+      },
+      runtimeOptions: {
+        stream: true,
+        eventName,
+        providerPreference: FIXTURE_PROVIDER,
+        modelPreference: FIXTURE_MODEL,
+        metadata: {
+          harness: {
+            source: "smoke:claw-chat-current-fixture:event-read-probe",
+          },
+        },
+        hostOptions: {
+          asterChatRequest: {
+            message: EVENT_READ_PROBE_PROMPT,
+            session_id: SESSION_ID,
+            event_name: eventName,
+            provider_preference: FIXTURE_PROVIDER,
+            model_preference: FIXTURE_MODEL,
+            turn_id: EVENT_READ_PROBE_TURN_ID,
+            turn_config: null,
+          },
+        },
+      },
+      queueIfBusy: false,
+      skipPreSubmitResume: true,
+    },
+    requestLog,
+  );
+
+  const eventObservation = await waitForAgentSessionEventsForTurn(
+    page,
+    options,
+    EVENT_READ_PROBE_TURN_ID,
+    turnStart.messages,
+  );
+  const readModel = await waitForSessionReadContainsTurn(
+    page,
+    options,
+    requestLog,
+    EVENT_READ_PROBE_TURN_ID,
+    EVENT_READ_PROBE_READ_TEXT,
+  );
+  const toolCall = findReadModelToolCall(
+    readModel,
+    EVENT_READ_PROBE_TOOL_CALL_ID,
+    EVENT_READ_PROBE_TOOL_NAME,
+  );
+  const toolOutput = String(
+    toolCall?.output_preview ??
+      toolCall?.outputPreview ??
+      toolCall?.output ??
+      "",
+  );
+
+  return sanitizeJson({
+    turnId: EVENT_READ_PROBE_TURN_ID,
+    eventName,
+    turnStartResult: {
+      turnId:
+        turnStart.result?.turn?.turnId ??
+        turnStart.result?.turn?.turn_id ??
+        null,
+      status: turnStart.result?.turn?.status ?? null,
+      messageCount: turnStart.messages.length,
+      notificationCount: collectAgentSessionEvents(turnStart.messages).length,
+    },
+    events: eventObservation.summary,
+    readModel: {
+      containsTurnId: JSON.stringify(readModel || {}).includes(
+        EVENT_READ_PROBE_TURN_ID,
+      ),
+      containsDoneText: JSON.stringify(readModel || {}).includes(
+        EVENT_READ_PROBE_DONE_TEXT,
+      ),
+      containsReadText: JSON.stringify(readModel || {}).includes(
+        EVENT_READ_PROBE_READ_TEXT,
+      ),
+      toolCallCount: collectReadModelToolCalls(readModel).length,
+      containsToolCall: Boolean(toolCall),
+      toolName: toolCall?.tool_name ?? toolCall?.toolName ?? null,
+      toolStatus: toolCall?.status ?? null,
+      containsToolOutput: toolOutput.includes(EVENT_READ_PROBE_TOOL_OUTPUT),
+      toolTurnId: toolCall?.turn_id ?? toolCall?.turnId ?? null,
+      latestTurnStatus:
+        readModel?.detail?.thread_read?.runtime_summary?.latestTurnStatus ??
+        readModel?.detail?.thread_read?.status ??
+        readModel?.detail?.status ??
+        null,
+    },
+  });
 }
 
 async function waitForSessionReadCanceled(page, options, requestLog) {
@@ -1427,8 +1851,12 @@ async function run() {
     guiCompleted: null,
     stopClick: null,
     guiCanceled: null,
+    continueInputSend: null,
+    guiContinueCompleted: null,
     readModelCompleted: null,
     readModelCanceled: null,
+    readModelContinueCompleted: null,
+    eventReadProbe: null,
     assertions: {},
     summary: summaryPath,
   };
@@ -1572,7 +2000,10 @@ async function run() {
       await sendNewsPromptFromGui(page, options),
     );
 
-    if (options.scenario === "cancel") {
+    if (
+      options.scenario === "cancel" ||
+      options.scenario === "cancel-then-continue"
+    ) {
       logStage("click-stop-from-gui");
       summary.stopClick = sanitizeJson(
         await waitForStopButtonVisibleAndClick(page, options),
@@ -1616,6 +2047,56 @@ async function run() {
         turnId: cancelLedger.entry.turnId,
         ledgerCount: cancelLedger.ledger.length,
       });
+
+      if (options.scenario === "cancel-then-continue") {
+        logStage("send-continue-prompt-from-gui");
+        summary.continueInputSend = sanitizeJson(
+          await sendPromptFromGui(page, options, CONTINUE_PROMPT),
+        );
+
+        logStage("wait-gui-continue-completed");
+        summary.guiContinueCompleted = sanitizeJson(
+          await waitForGuiChatCompleted(page, options, {
+            prompt: CONTINUE_PROMPT,
+            doneText: CONTINUE_DONE_TEXT,
+            summaryText: "继续输出已恢复",
+          }),
+        );
+
+        logStage("wait-read-model-continue-completed");
+        const readModelContinueCompleted = await waitForSessionReadCompleted(
+          page,
+          options,
+          appServerRequests,
+          {
+            prompt: CONTINUE_PROMPT,
+            doneText: CONTINUE_DONE_TEXT,
+            summaryText: "继续输出已恢复",
+          },
+        );
+        summary.readModelContinueCompleted = sanitizeJson({
+          detailItemCount: Array.isArray(
+            readModelContinueCompleted?.detail?.items,
+          )
+            ? readModelContinueCompleted.detail.items.length
+            : null,
+          latestTurnStatus:
+            readModelContinueCompleted?.detail?.thread_read?.runtime_summary
+              ?.latestTurnStatus ??
+            readModelContinueCompleted?.detail?.thread_read?.status ??
+            readModelContinueCompleted?.detail?.status ??
+            null,
+          includesPrompt: JSON.stringify(
+            readModelContinueCompleted || {},
+          ).includes(CONTINUE_PROMPT),
+          includesAssistantDone: JSON.stringify(
+            readModelContinueCompleted || {},
+          ).includes(CONTINUE_DONE_TEXT),
+          includesAssistantSummary: JSON.stringify(
+            readModelContinueCompleted || {},
+          ).includes("继续输出已恢复"),
+        });
+      }
     } else {
       logStage("wait-gui-completed");
       summary.guiCompleted = sanitizeJson(
@@ -1648,6 +2129,13 @@ async function run() {
           readModelCompleted || {},
         ).includes("今日国际新闻简要整理"),
       });
+
+      logStage("probe-agent-session-event-read");
+      summary.eventReadProbe = await runEventReadProbe(
+        page,
+        options,
+        appServerRequests,
+      );
     }
 
     const backendLedger = readJsonl(runtimeEnv.backendLedgerPath);
@@ -1672,11 +2160,22 @@ async function run() {
     const latestTurnStart = backendLedger
       .filter((entry) => entry.kind === "turnStart")
       .at(-1);
+    const newsTurnStart = backendLedger.find(
+      (entry) => entry.kind === "turnStart" && entry.inputText === NEWS_PROMPT,
+    );
+    const continueTurnStart = backendLedger.find(
+      (entry) =>
+        entry.kind === "turnStart" && entry.inputText === CONTINUE_PROMPT,
+    );
     const latestTurnCancel = backendLedger
       .filter((entry) => entry.kind === "turnCancel")
       .at(-1);
-    const asterChatRequest = latestTurnStart?.asterChatRequest ?? {};
-    const assertions = {
+    const asterChatRequest = newsTurnStart?.asterChatRequest ?? {};
+    const isCancelOnlyScenario = options.scenario === "cancel";
+    const isCancelThenContinueScenario =
+      options.scenario === "cancel-then-continue";
+    const hasCancelPhase = isCancelOnlyScenario || isCancelThenContinueScenario;
+    const commonAssertions = {
       electronPreloadBridge: rendererSnapshot.electron === true,
       appServerJsonRpcUsed: appServerRequestMethods.includes(
         APP_SERVER_METHOD_SESSION_TURN_START,
@@ -1690,21 +2189,10 @@ async function run() {
       usedCurrentSessionList: appServerRequestMethods.includes(
         APP_SERVER_METHOD_SESSION_LIST,
       ),
-      usedCurrentTurnCancel:
-        options.scenario !== "cancel" ||
-        appServerRequestMethods.includes(APP_SERVER_METHOD_SESSION_TURN_CANCEL),
       externalFixtureBackendUsed: backendLedger.some(
         (entry) => entry.kind === "turnStart",
       ),
-      externalFixtureCancelUsed:
-        options.scenario !== "cancel" ||
-        backendLedger.some((entry) => entry.kind === "turnCancel"),
-      fixturePromptReachedBackend: latestTurnStart?.inputText === NEWS_PROMPT,
-      fixtureCancelReachedBackend:
-        options.scenario !== "cancel" ||
-        (latestTurnCancel?.sessionId === SESSION_ID &&
-          typeof latestTurnCancel?.turnId === "string" &&
-          latestTurnCancel.turnId.trim().length > 0),
+      fixturePromptReachedBackend: newsTurnStart?.inputText === NEWS_PROMPT,
       liveProviderNotUsed: backendLedger.every(
         (entry) =>
           entry.kind !== "turnStart" ||
@@ -1718,52 +2206,157 @@ async function run() {
           asterChatRequest || {},
           "web_search",
         ),
-      guiUserMessageVisible:
-        options.scenario === "cancel"
-          ? summary.guiCanceled?.hasPrompt === true
+      guiUserMessageVisible: isCancelOnlyScenario
+        ? summary.guiCanceled?.hasPrompt === true
+        : isCancelThenContinueScenario
+          ? summary.guiContinueCompleted?.hasPrompt === true &&
+            summary.guiContinueCompleted?.bodyText?.includes(NEWS_PROMPT) ===
+              true
           : summary.guiCompleted?.hasPrompt === true,
-      guiAssistantOutputVisible:
-        options.scenario === "cancel"
-          ? summary.guiCanceled?.hasStoppedCopy === true
+      guiAssistantOutputVisible: isCancelOnlyScenario
+        ? summary.guiCanceled?.hasStoppedCopy === true
+        : isCancelThenContinueScenario
+          ? summary.guiContinueCompleted?.hasAssistantSummary === true ||
+            summary.guiContinueCompleted?.hasDoneText === true
           : summary.guiCompleted?.hasAssistantSummary === true ||
             summary.guiCompleted?.hasDoneText === true,
-      guiInputRemainsReady:
-        options.scenario === "cancel"
-          ? summary.guiCanceled?.textareaVisible === true &&
-            summary.guiCanceled?.textareaDisabled === false
+      guiInputRemainsReady: isCancelOnlyScenario
+        ? summary.guiCanceled?.textareaVisible === true &&
+          summary.guiCanceled?.textareaDisabled === false
+        : isCancelThenContinueScenario
+          ? summary.guiContinueCompleted?.textareaVisible === true &&
+            summary.guiContinueCompleted?.textareaDisabled === false
           : summary.guiCompleted?.textareaVisible === true &&
             summary.guiCompleted?.textareaDisabled === false,
-      guiNotStuckStreaming:
-        options.scenario === "cancel"
-          ? summary.guiCanceled?.stopButtonVisible === false
+      guiNotStuckStreaming: isCancelOnlyScenario
+        ? summary.guiCanceled?.stopButtonVisible === false
+        : isCancelThenContinueScenario
+          ? summary.guiContinueCompleted?.stopButtonVisible === false
           : summary.guiCompleted?.stopButtonVisible === false,
-      guiStopClicked:
-        options.scenario !== "cancel" ||
-        summary.stopClick?.clicked?.clicked === true,
-      noEpochFallbackTitle:
-        options.scenario === "cancel" ||
-        summary.guiCompleted?.hasEpochFallbackTitle === false,
-      readModelCompleted:
-        options.scenario === "cancel" ||
-        (summary.readModelCompleted?.includesPrompt === true &&
-          (summary.readModelCompleted?.includesAssistantDone === true ||
-            summary.readModelCompleted?.includesAssistantSummary === true)),
-      readModelCanceled:
-        options.scenario !== "cancel" ||
-        (summary.readModelCanceled?.includesPrompt === true &&
-          summary.readModelCanceled?.includesCanceled === true),
-      pageMentionsPromptAndAssistant:
-        options.scenario === "cancel"
+      pageMentionsPromptAndAssistant: isCancelOnlyScenario
+        ? pageText.includes(NEWS_PROMPT) &&
+          (pageText.includes("已停止") ||
+            pageText.includes("本轮已中止") ||
+            /\bStopped\b/i.test(pageText) ||
+            /\bCanceled\b/i.test(pageText))
+        : isCancelThenContinueScenario
           ? pageText.includes(NEWS_PROMPT) &&
-            (pageText.includes("已停止") ||
-              pageText.includes("本轮已中止") ||
-              /\bStopped\b/i.test(pageText) ||
-              /\bCanceled\b/i.test(pageText))
+            pageText.includes(CONTINUE_PROMPT) &&
+            (pageText.includes("继续输出已恢复") ||
+              pageText.includes(CONTINUE_DONE_TEXT))
           : pageText.includes(NEWS_PROMPT) &&
             (pageText.includes("今日国际新闻简要整理") ||
               pageText.includes(ASSISTANT_DONE_TEXT)),
       noInvokeErrors: !errorRaw,
       noConsoleErrors: consoleErrors.length === 0,
+    };
+    const scenarioAssertions = hasCancelPhase
+      ? {
+          usedCurrentTurnCancel: appServerRequestMethods.includes(
+            APP_SERVER_METHOD_SESSION_TURN_CANCEL,
+          ),
+          externalFixtureCancelUsed: backendLedger.some(
+            (entry) => entry.kind === "turnCancel",
+          ),
+          fixtureCancelReachedBackend:
+            latestTurnCancel?.sessionId === SESSION_ID &&
+            typeof latestTurnCancel?.turnId === "string" &&
+            latestTurnCancel.turnId.trim().length > 0,
+          guiStopClicked: summary.stopClick?.clicked?.clicked === true,
+          readModelCanceled:
+            summary.readModelCanceled?.includesPrompt === true &&
+            summary.readModelCanceled?.includesCanceled === true,
+          ...(isCancelThenContinueScenario
+            ? {
+                continuePromptReachedBackend:
+                  continueTurnStart?.inputText === CONTINUE_PROMPT,
+                guiContinueInputSubmitted:
+                  summary.continueInputSend?.afterFill
+                    ?.promptVisibleInTextarea === true &&
+                  summary.continueInputSend?.clicked?.clicked === true,
+                guiContinueCompleted:
+                  summary.guiContinueCompleted?.hasPrompt === true &&
+                  (summary.guiContinueCompleted?.hasAssistantSummary === true ||
+                    summary.guiContinueCompleted?.hasDoneText === true) &&
+                  summary.guiContinueCompleted?.textareaVisible === true &&
+                  summary.guiContinueCompleted?.textareaDisabled === false &&
+                  summary.guiContinueCompleted?.stopButtonVisible === false,
+                readModelContinueCompleted:
+                  summary.readModelContinueCompleted?.includesPrompt === true &&
+                  (summary.readModelContinueCompleted?.includesAssistantDone ===
+                    true ||
+                    summary.readModelContinueCompleted
+                      ?.includesAssistantSummary === true),
+                backendRecordedCancelThenContinue:
+                  backendLedger.filter((entry) => entry.kind === "turnStart")
+                    .length >= 2 &&
+                  backendLedger.some((entry) => entry.kind === "turnCancel"),
+              }
+            : {}),
+        }
+      : {
+          noEpochFallbackTitle:
+            summary.guiCompleted?.hasEpochFallbackTitle === false,
+          readModelCompleted:
+            summary.readModelCompleted?.includesPrompt === true &&
+            (summary.readModelCompleted?.includesAssistantDone === true ||
+              summary.readModelCompleted?.includesAssistantSummary === true),
+          eventReadProbeObserved:
+            summary.eventReadProbe?.events?.hasTextDelta === true &&
+            summary.eventReadProbe?.events?.hasToolStarted === true &&
+            summary.eventReadProbe?.events?.hasToolResult === true &&
+            summary.eventReadProbe?.events?.hasTerminal === true &&
+            summary.eventReadProbe?.events?.eventTurnIds?.length === 1 &&
+            summary.eventReadProbe?.events?.eventTurnIds?.[0] ===
+              EVENT_READ_PROBE_TURN_ID,
+          readModelEventReadAligned:
+            summary.eventReadProbe?.readModel?.containsTurnId === true &&
+            summary.eventReadProbe?.readModel?.containsReadText === true,
+          readModelToolCallAligned:
+            summary.eventReadProbe?.readModel?.containsToolCall === true &&
+            summary.eventReadProbe?.readModel?.toolName ===
+              EVENT_READ_PROBE_TOOL_NAME &&
+            summary.eventReadProbe?.readModel?.toolStatus === "completed" &&
+            summary.eventReadProbe?.readModel?.containsToolOutput === true &&
+            summary.eventReadProbe?.readModel?.toolTurnId ===
+              EVENT_READ_PROBE_TURN_ID,
+        };
+    const notApplicableAssertions = isCancelOnlyScenario
+      ? [
+          "noEpochFallbackTitle",
+          "readModelCompleted",
+          "eventReadProbeObserved",
+          "readModelEventReadAligned",
+          "readModelToolCallAligned",
+          "continuePromptReachedBackend",
+          "guiContinueInputSubmitted",
+          "guiContinueCompleted",
+          "readModelContinueCompleted",
+          "backendRecordedCancelThenContinue",
+        ]
+      : isCancelThenContinueScenario
+        ? [
+            "noEpochFallbackTitle",
+            "readModelCompleted",
+            "eventReadProbeObserved",
+            "readModelEventReadAligned",
+            "readModelToolCallAligned",
+          ]
+        : [
+            "usedCurrentTurnCancel",
+            "externalFixtureCancelUsed",
+            "fixtureCancelReachedBackend",
+            "guiStopClicked",
+            "readModelCanceled",
+            "continuePromptReachedBackend",
+            "guiContinueInputSubmitted",
+            "guiContinueCompleted",
+            "readModelContinueCompleted",
+            "backendRecordedCancelThenContinue",
+          ];
+    const assertions = {
+      ...commonAssertions,
+      ...scenarioAssertions,
     };
 
     for (const [key, passed] of Object.entries(assertions)) {
@@ -1776,6 +2369,9 @@ async function run() {
     summary.appServerRequestMethods = appServerRequestMethods;
     summary.backend = sanitizeJson(backendSummary);
     summary.assertions = assertions;
+    summary.commonAssertions = commonAssertions;
+    summary.scenarioAssertions = scenarioAssertions;
+    summary.notApplicableAssertions = notApplicableAssertions;
     summary.ok = true;
     summary.completedAt = new Date().toISOString();
     writeJsonFile(summaryPath, summary);

@@ -9,6 +9,34 @@ import YAML from "yaml";
 
 const DEFAULT_WORKFLOW_PATH = ".github/workflows/release.yml";
 const DEFAULT_FORGE_CONFIG_PATH = "forge.config.mjs";
+const DEFAULT_STAGE_RELEASE_ASSETS_PATH =
+  "scripts/electron/stage-release-assets.mjs";
+const DEFAULT_UPDATE_FEED_UPLOAD_PLAN_PATH =
+  "scripts/electron/update-feed-r2-upload-plan.mjs";
+const DEFAULT_GITHUB_RELEASE_ASSETS_PATH =
+  "scripts/electron/prepare-github-release-assets.mjs";
+const DEFAULT_REPOSITORY_ROOT = ".";
+
+const RETIRED_PACKAGING_FILE_PATTERNS = [
+  /(?:^|\/)tauri(?:\.[^/]*)?\.conf\.json$/i,
+  /(?:^|\/)latest(?:-mac)?\.ya?ml$/i,
+  /\.blockmap$/i,
+  /\.app\.tar\.gz$/i,
+  /\.sig$/i,
+];
+
+const IGNORED_RETIRED_FILE_DIRS = new Set([
+  ".codex",
+  ".git",
+  ".tmp",
+  "coverage",
+  "dist",
+  "dist-electron",
+  "node_modules",
+  "release-assets",
+  "release-electron",
+  "release-github-assets",
+]);
 
 function readWorkflow(workflowPath = DEFAULT_WORKFLOW_PATH) {
   return YAML.parse(fs.readFileSync(workflowPath, "utf8"));
@@ -181,8 +209,12 @@ function assertBuildSteps(buildJob) {
   for (const required of [
     "base64 --decode",
     "security create-keychain",
+    "existing_keychains=()",
+    "while IFS= read -r keychain",
+    'security list-keychains -d user -s "$KEYCHAIN_PATH" "${existing_keychains[@]}"',
     "security import",
     "security set-key-partition-list",
+    "security find-identity -v -p codesigning",
     "LIME_MACOS_KEYCHAIN",
     '>> "$GITHUB_ENV"',
   ]) {
@@ -262,10 +294,19 @@ function assertBuildSteps(buildJob) {
   const buildRun = buildStep?.run || "";
   for (const required of [
     "npm run electron:build",
+    "npx electron-forge package",
     "npx electron-forge make",
+    "--skip-package",
     '--platform "${{ matrix.host_platform }}"',
     '--arch "${{ matrix.arch }}"',
     '--targets "${{ matrix.forge_targets }}"',
+    "find release-electron -type f | sort",
+    "codesign --display --verbose=4",
+    "codesign --verify --deep --strict --verbose=4",
+    "release-electron/make",
+    "*.nupkg",
+    "RELEASES.json",
+    "Electron Forge make produced no release assets",
   ]) {
     assertIncludes(buildRun, required, "Electron Forge make step");
   }
@@ -376,6 +417,49 @@ function assertNoRetiredPackagingInputs(content, label) {
   }
 }
 
+function listRepositoryFiles(root) {
+  const directories = [""];
+  const files = [];
+
+  while (directories.length > 0) {
+    const currentRelativePath = directories.pop();
+    const absoluteDir = path.join(root, currentRelativePath);
+    const entries = fs.readdirSync(absoluteDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const relativePath = currentRelativePath
+        ? path.join(currentRelativePath, entry.name)
+        : entry.name;
+      const normalizedPath = relativePath.replace(/\\/g, "/");
+
+      if (entry.isDirectory()) {
+        if (IGNORED_RETIRED_FILE_DIRS.has(entry.name)) {
+          continue;
+        }
+        directories.push(relativePath);
+        continue;
+      }
+      if (entry.isFile()) {
+        files.push(normalizedPath);
+      }
+    }
+  }
+
+  return files.sort();
+}
+
+function assertNoRetiredPackagingFiles(repositoryRoot = DEFAULT_REPOSITORY_ROOT) {
+  const root = path.resolve(repositoryRoot);
+  const retiredFiles = listRepositoryFiles(root).filter((filePath) =>
+    RETIRED_PACKAGING_FILE_PATTERNS.some((pattern) => pattern.test(filePath)),
+  );
+  if (retiredFiles.length > 0) {
+    throw new Error(
+      `retired Electron packaging files must not exist in the repository: ${retiredFiles.join(", ")}`,
+    );
+  }
+}
+
 function assertForgeConfig(forgeConfigPath = DEFAULT_FORGE_CONFIG_PATH) {
   const forgeConfig = fs.readFileSync(forgeConfigPath, "utf8");
 
@@ -401,10 +485,26 @@ function assertForgeConfig(forgeConfigPath = DEFAULT_FORGE_CONFIG_PATH) {
     assertIncludes(forgeConfig, required, "Forge current maker config");
   }
 
+  if (forgeConfig.includes("afterComplete")) {
+    throw new Error(
+      "Forge macOS branding hook must run before signing via afterCopyExtraResources",
+    );
+  }
+
   for (const required of [
     "macSignOptions",
-    "hardenedRuntime",
+    "continueOnError: false",
+    "identityValidation",
+    "preAutoEntitlements: false",
+    "preEmbedProvisioningProfile: false",
+    "optionsForFile",
+    "MACOS_APP_ENTITLEMENTS",
+    "isTopLevelAppBundle",
+    '!normalized.includes(".app/")',
+    "return null",
     "lime-rs/entitlements.plist",
+    "hardenedRuntime",
+    "signatureFlags",
     "APPLE_SIGNING_IDENTITY",
     "LIME_MACOS_KEYCHAIN",
     "osxSign: macSignOptions()",
@@ -414,6 +514,8 @@ function assertForgeConfig(forgeConfigPath = DEFAULT_FORGE_CONFIG_PATH) {
     "APPLE_PASSWORD",
     "APPLE_TEAM_ID",
     "osxNotarize: macNotarizeOptions()",
+    "afterCopyExtraResources",
+    "brandMacHelperApps",
   ]) {
     assertIncludes(forgeConfig, required, "Forge macOS signing config");
   }
@@ -437,8 +539,68 @@ function assertForgeConfig(forgeConfigPath = DEFAULT_FORGE_CONFIG_PATH) {
   }
 }
 
+function assertReleaseAssetPipelineScripts({
+  githubReleaseAssetsPath = DEFAULT_GITHUB_RELEASE_ASSETS_PATH,
+  stageAssetsPath = DEFAULT_STAGE_RELEASE_ASSETS_PATH,
+  updateFeedUploadPlanPath = DEFAULT_UPDATE_FEED_UPLOAD_PLAN_PATH,
+} = {}) {
+  const stageAssets = fs.readFileSync(stageAssetsPath, "utf8");
+  for (const required of [
+    '"aarch64-apple-darwin"',
+    '"x86_64-apple-darwin"',
+    '"x86_64-pc-windows-msvc"',
+    'metadataNames: ["RELEASES.json"]',
+    'metadataNames: ["RELEASES"]',
+    'installerExtensions: [".dmg"]',
+    'installerExtensions: [".exe"]',
+    'installerBasenameIncludes: ["setup"]',
+    'archiveExtensions: [".zip"]',
+    'archiveExtensions: [".nupkg"]',
+    "assertNoRetiredUpdaterAssets",
+    "assertNoLocalMacUpdateManifest",
+    "local Electron updater feed URLs are not allowed in release staging",
+    "legacy updater assets are not allowed in Electron release staging",
+  ]) {
+    assertIncludes(stageAssets, required, "Electron release staging script");
+  }
+
+  const uploadPlan = fs.readFileSync(updateFeedUploadPlanPath, "utf8");
+  for (const required of [
+    '"aarch64-apple-darwin": "darwin-arm64"',
+    '"x86_64-apple-darwin": "darwin-x64"',
+    '"x86_64-pc-windows-msvc": "win32-x64"',
+    'basename === "RELEASES.json"',
+    'basename === "RELEASES"',
+    "\\.(dmg|exe|nupkg|zip)",
+    "assertNoRetiredUpdaterAssets",
+    "legacy updater assets are not allowed in Electron release",
+  ]) {
+    assertIncludes(uploadPlan, required, "Electron R2 updater upload plan");
+  }
+
+  const githubReleaseAssets = fs.readFileSync(githubReleaseAssetsPath, "utf8");
+  for (const required of [
+    "duplicateTargetLabel",
+    "macos-arm64",
+    "macos-x64",
+    "windows-x64",
+    "assertNoRetiredUpdaterAssets",
+    "legacy updater assets are not allowed in Electron GitHub release assets",
+  ]) {
+    assertIncludes(
+      githubReleaseAssets,
+      required,
+      "Electron GitHub release asset preparation",
+    );
+  }
+}
+
 function validateReleaseWorkflow({
   forgeConfigPath = DEFAULT_FORGE_CONFIG_PATH,
+  githubReleaseAssetsPath = DEFAULT_GITHUB_RELEASE_ASSETS_PATH,
+  repositoryRoot = DEFAULT_REPOSITORY_ROOT,
+  stageAssetsPath = DEFAULT_STAGE_RELEASE_ASSETS_PATH,
+  updateFeedUploadPlanPath = DEFAULT_UPDATE_FEED_UPLOAD_PLAN_PATH,
   workflowPath = DEFAULT_WORKFLOW_PATH,
 } = {}) {
   const workflowText = fs.readFileSync(workflowPath, "utf8");
@@ -452,7 +614,13 @@ function validateReleaseWorkflow({
   assertBuildSteps(buildJob);
   assertPublishSteps(workflow);
   assertNoRetiredPackagingInputs(workflowText, "release workflow");
+  assertNoRetiredPackagingFiles(repositoryRoot);
   assertForgeConfig(forgeConfigPath);
+  assertReleaseAssetPipelineScripts({
+    githubReleaseAssetsPath,
+    stageAssetsPath,
+    updateFeedUploadPlanPath,
+  });
 }
 
 function main() {

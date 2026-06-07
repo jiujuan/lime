@@ -697,7 +697,22 @@ export function projectAppServerAgentEventPayload(
     case "turn.cancelled":
       return {
         ...basePayload,
-        type: "error",
+        type: "turn_completed",
+        text: readString(payload, "text", "delta", "message", "content"),
+        usage: payload.usage,
+        turn: normalizeRecord(payload.turn) ?? {
+          id: event.turnId ?? "",
+          thread_id: event.threadId ?? event.sessionId,
+          prompt_text:
+            readString(payload, "prompt_text", "promptText", "prompt") ?? "",
+          status: "canceled",
+          started_at: event.timestamp,
+          completed_at: event.timestamp,
+          created_at: event.timestamp,
+          updated_at: event.timestamp,
+          error_message:
+            readString(payload, "message", "error", "reason") ?? "本轮已中止",
+        },
         message:
           readString(payload, "message", "error", "reason") ?? "本轮已中止",
       };

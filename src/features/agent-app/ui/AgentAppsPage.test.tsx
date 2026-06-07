@@ -173,6 +173,47 @@ describe("AgentAppsPage", () => {
     );
   });
 
+  it("本地图标不应把机器绝对路径作为浏览器路径输出到图片 src", async () => {
+    installedStates.push(
+      buildReadyState({
+        manifest: {
+          ...(contentFactoryFixture as AppManifest),
+          install: {
+            branding: {
+              name: "内容工厂",
+              icon: REMOVED_MACHINE_PATH,
+              windowTitle: "内容工厂",
+            },
+          },
+        },
+      }),
+    );
+    const container = await renderPage();
+    await flush();
+
+    const icon = container.querySelector(
+      '[data-testid="agent-apps-icon-content-factory-app"] img',
+    ) as HTMLImageElement | null;
+    expect(icon?.getAttribute("src")).not.toBe(REMOVED_MACHINE_PATH);
+    expect(icon?.getAttribute("src")).toBe(`asset://${REMOVED_MACHINE_PATH}`);
+    expect(
+      container.querySelector('img[src^="/Users/"], img[src^="C:\\\\"]'),
+    ).toBeNull();
+
+    await openAppDetail(container);
+
+    const detailIcon = container.querySelector(
+      '[data-testid="agent-apps-detail-icon-content-factory-app"] img',
+    ) as HTMLImageElement | null;
+    expect(detailIcon?.getAttribute("src")).not.toBe(REMOVED_MACHINE_PATH);
+    expect(detailIcon?.getAttribute("src")).toBe(
+      `asset://${REMOVED_MACHINE_PATH}`,
+    );
+    expect(
+      container.querySelector('img[src^="/Users/"], img[src^="C:\\\\"]'),
+    ).toBeNull();
+  });
+
   it("详情弹窗应支持关闭并回到卡片列表", async () => {
     const container = await renderPage();
     await flush();

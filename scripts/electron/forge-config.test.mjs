@@ -37,12 +37,29 @@ describe("Electron Forge config", () => {
     };
 
     expect(macSignOptions({ env, platform: "darwin" })).toEqual({
-      hardenedRuntime: true,
-      entitlements: "lime-rs/entitlements.plist",
-      "entitlements-inherit": "lime-rs/entitlements.plist",
+      continueOnError: false,
       identity: "Developer ID Application: Lime",
+      identityValidation: true,
       keychain: "/tmp/lime.keychain-db",
+      optionsForFile: expect.any(Function),
+      preAutoEntitlements: false,
+      preEmbedProvisioningProfile: false,
+      strictVerify: true,
     });
+    expect(
+      macSignOptions({ env, platform: "darwin" }).optionsForFile(
+        "release-electron/Lime-darwin-arm64/Lime.app",
+      ),
+    ).toEqual({
+      entitlements: "lime-rs/entitlements.plist",
+      hardenedRuntime: true,
+      signatureFlags: ["runtime"],
+    });
+    expect(
+      macSignOptions({ env, platform: "darwin" }).optionsForFile(
+        "release-electron/Lime-darwin-arm64/Lime.app/Contents/MacOS/Lime",
+      ),
+    ).toBeNull();
     expect(macNotarizeOptions({ env, platform: "darwin" })).toEqual({
       appleId: "release@example.com",
       appleIdPassword: "app-specific-password",
@@ -55,6 +72,14 @@ describe("Electron Forge config", () => {
         platform: "darwin",
       }),
     ).toBeUndefined();
+  });
+
+  it("runs macOS branding before signing and notarization", () => {
+    expect(forgeConfig.packagerConfig.afterComplete).toBeUndefined();
+    expect(forgeConfig.packagerConfig.afterCopyExtraResources).toHaveLength(1);
+    expect(
+      forgeConfig.packagerConfig.afterCopyExtraResources[0].length,
+    ).toBeGreaterThanOrEqual(5);
   });
 
   it("builds updater feed URLs from explicit env or platform feed labels", () => {
@@ -111,6 +136,39 @@ describe("Electron Forge config", () => {
       setupIcon: "lime-rs/icons/icon.ico",
     });
     expect(windowsSigningOptions({ env, platform: "darwin" })).toEqual({});
+  });
+
+  it("keeps Windows Squirrel signing optional but paired", () => {
+    expect(
+      windowsSigningOptions({
+        env: {
+          LIME_ELECTRON_SIGN: "1",
+          LIME_WINDOWS_SIGNING_CERTIFICATE_FILE: "",
+          LIME_WINDOWS_SIGNING_CERTIFICATE_PASSWORD: "",
+        },
+        platform: "win32",
+      }),
+    ).toEqual({});
+    expect(
+      squirrelConfig("x64", {
+        env: {
+          LIME_ELECTRON_SIGN: "1",
+          LIME_UPDATES_BASE_URL: "https://updates.example",
+        },
+        packageVersion: "9.8.7",
+        platform: "win32",
+      }),
+    ).not.toHaveProperty("certificateFile");
+    expect(
+      windowsSigningOptions({
+        env: {
+          LIME_ELECTRON_SIGN: "1",
+          LIME_WINDOWS_SIGNING_CERTIFICATE_FILE: "C:/certs/lime.pfx",
+          LIME_WINDOWS_SIGNING_CERTIFICATE_PASSWORD: "",
+        },
+        platform: "win32",
+      }),
+    ).toEqual({});
   });
 
   it("keeps required packaged app inputs while ignoring repository-only sources", () => {

@@ -13,6 +13,7 @@ describe("agent runtime current fixture regression smoke guard", () => {
     const content = readSmokeScript();
 
     expect(content).toContain("runVitestSmoke");
+    expect(content).toContain("runNodeSmoke");
     expect(content).toContain(
       "src/components/agent/chat/hooks/agentChatHistory.test.ts",
     );
@@ -44,6 +45,21 @@ describe("agent runtime current fixture regression smoke guard", () => {
     );
     expect(content).toContain("Electron/App Server fixture smoke guard");
     expect(content).toContain("Claw GUI current fixture guard");
+  });
+
+  it("runs the real Electron cancel-then-continue Claw fixture", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("Claw 停止后同会话继续输出 Electron fixture");
+    expect(content).toContain(
+      "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
+    );
+    expect(content).toContain("--scenario");
+    expect(content).toContain("cancel-then-continue");
+    expect(content).toContain(
+      "claw-chat-current-fixture-cancel-then-continue-regression",
+    );
+    expect(content).toContain("停止后同会话继续输出 Electron fixture");
   });
 
   it("does not opt into live provider or mock backend evidence", () => {

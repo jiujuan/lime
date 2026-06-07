@@ -382,6 +382,65 @@ describe("appServerSessionClient", () => {
     });
   });
 
+  it("get 无 detail 时应保留 App Server canceled turn current 状态", async () => {
+    const appServerClient = appServerClientMock();
+    const readSessionResult = {
+      session: {
+        sessionId: "session-cancel",
+        threadId: "thread-cancel",
+        appId: "desktop",
+        workspaceId: "workspace-2",
+        status: "canceled" as const,
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:04.000Z",
+      },
+      turns: [
+        {
+          turnId: "turn-cancel",
+          sessionId: "session-cancel",
+          threadId: "thread-cancel",
+          status: "canceled" as const,
+          completedAt: "2026-06-06T00:00:04.000Z",
+        },
+      ],
+    };
+    vi.mocked(appServerClient.readSession).mockResolvedValueOnce({
+      id: 3,
+      result: readSessionResult,
+      response: { id: 3, result: readSessionResult },
+      notifications: [],
+      messages: [],
+    });
+    const client = createAppServerSessionClient({ appServerClient });
+
+    await expect(
+      client.getAgentRuntimeSession("session-cancel"),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: "session-cancel",
+        thread_id: "thread-cancel",
+        turns: [
+          expect.objectContaining({
+            id: "turn-cancel",
+            status: "canceled",
+            completed_at: "2026-06-06T00:00:04.000Z",
+          }),
+        ],
+        thread_read: expect.objectContaining({
+          status: "cancelled",
+          profile_status: "cancelled",
+          turns: [
+            {
+              turn_id: "turn-cancel",
+              status: "cancelled",
+              native_status: "canceled",
+            },
+          ],
+        }),
+      }),
+    );
+  });
+
   it("get 缺少 sessionId 时应 fail closed", async () => {
     const appServerClient = appServerClientMock();
     const client = createAppServerSessionClient({ appServerClient });

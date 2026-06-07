@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  assertSingleCurrentVersionZip,
   buildForgeMakeZipArgs,
   createLocalReleasesServer,
   defaultOutDir,
@@ -13,6 +14,7 @@ import {
   normalizeDarwinArch,
   parseArgs,
   prepareIsolatedPackageDir,
+  prepareIsolatedMakeDir,
 } from "./make-zip-local-feed.mjs";
 
 function listen(server) {
@@ -158,5 +160,39 @@ describe("Electron Forge macOS ZIP local feed helper", () => {
     expect(fs.realpathSync(result.destination)).toBe(
       fs.realpathSync(result.source),
     );
+  });
+
+  it("cleans the isolated make output before generating a new ZIP", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "lime-forge-zip-make-"));
+    const outDir = path.join(root, ".tmp", "electron-forge-local-feed");
+    const makeDir = path.join(outDir, "make", "zip", "darwin", "arm64");
+    fs.mkdirSync(makeDir, { recursive: true });
+    fs.writeFileSync(path.join(makeDir, "Lime-darwin-arm64-1.59.0.zip"), "");
+
+    expect(prepareIsolatedMakeDir({ arch: "arm64", outDir })).toBe(makeDir);
+    expect(fs.existsSync(makeDir)).toBe(false);
+  });
+
+  it("rejects stale ZIP versions in local feed evidence", () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "lime-forge-zip-stale-"),
+    );
+    fs.writeFileSync(path.join(root, "Lime-darwin-arm64-1.59.0.zip"), "");
+    fs.writeFileSync(path.join(root, "Lime-darwin-arm64-1.60.0.zip"), "");
+
+    expect(() =>
+      assertSingleCurrentVersionZip({
+        makeDir: root,
+        packageVersion: "1.60.0",
+      }),
+    ).toThrow(/exactly one current 1\.60\.0 zip/);
+
+    fs.rmSync(path.join(root, "Lime-darwin-arm64-1.59.0.zip"));
+    expect(
+      assertSingleCurrentVersionZip({
+        makeDir: root,
+        packageVersion: "1.60.0",
+      }).map((filePath) => path.basename(filePath)),
+    ).toEqual(["Lime-darwin-arm64-1.60.0.zip"]);
   });
 });

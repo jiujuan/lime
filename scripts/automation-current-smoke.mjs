@@ -363,45 +363,69 @@ async function openAutomationPage(page, options) {
     waitUntil: "domcontentloaded",
     timeout: options.timeoutMs,
   });
-  await page.waitForSelector('[data-testid="app-sidebar"]', {
-    timeout: options.timeoutMs,
-  });
+  await page
+    .waitForSelector('[data-testid="app-sidebar"]', {
+      timeout: Math.min(15_000, options.timeoutMs),
+    })
+    .catch(() => null);
 
-  const clickAutomationButton = (scopeSelector) =>
-    page.evaluate((selector) => {
+  const clickButtonByPattern = (scopeSelector, patternSource) =>
+    page.evaluate(({ selector, pattern }) => {
       const scope = selector ? document.querySelector(selector) : document;
       if (!scope) {
         return false;
       }
+      const matcher = new RegExp(pattern, "i");
       const buttons = Array.from(scope.querySelectorAll("button"));
       const target = buttons.find((button) => {
         const text = button.textContent || "";
         const aria = button.getAttribute("aria-label") || "";
         const title = button.getAttribute("title") || "";
-        return /持续流程|Automation|Automations|Workflow/i.test(
-          `${text}\n${aria}\n${title}`,
-        );
+        return matcher.test(`${text}\n${aria}\n${title}`);
       });
       if (!target) {
         return false;
       }
       target.click();
       return true;
-    }, scopeSelector);
+    }, { selector: scopeSelector, pattern: patternSource });
 
-  let clicked = await clickAutomationButton('[data-testid="app-sidebar"]');
+  let clicked = await clickButtonByPattern(
+    '[data-testid="app-sidebar"]',
+    "持续流程|Automation|Automations|Workflow",
+  );
 
   if (!clicked) {
-    await page.getByTestId("app-sidebar-account-button").click();
-    await page.waitForSelector('[data-testid="app-sidebar-account-menu"]', {
-      timeout: options.timeoutMs,
-    });
-    clicked = await clickAutomationButton(
-      '[data-testid="app-sidebar-account-menu"]',
+    const accountButton = page.getByTestId("app-sidebar-account-button");
+    if ((await accountButton.count()) > 0) {
+      await accountButton.click();
+      await page.waitForSelector('[data-testid="app-sidebar-account-menu"]', {
+        timeout: Math.min(15_000, options.timeoutMs),
+      });
+      clicked = await clickButtonByPattern(
+        '[data-testid="app-sidebar-account-menu"]',
+        "持续流程|Automation|Automations|Workflow",
+      );
+    }
+  }
+
+  if (!clicked) {
+    const settingsOpened = await clickButtonByPattern(
+      '[data-testid="app-sidebar"]',
+      "设置|Settings",
+    );
+    assert(settingsOpened, "未找到设置入口，无法打开持续流程页面");
+    await page.waitForFunction(
+      () => /打开持续流程|Open Automation/i.test(document.body.textContent || ""),
+      { timeout: Math.min(30_000, options.timeoutMs) },
+    );
+    clicked = await clickButtonByPattern(
+      null,
+      "打开持续流程|Open Automation",
     );
   }
 
-  assert(clicked, "未找到侧栏持续流程入口");
+  assert(clicked, "未找到持续流程入口");
   await page.waitForSelector('[data-testid="automation-tab-tasks"]', {
     timeout: options.timeoutMs,
   });

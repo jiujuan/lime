@@ -31,6 +31,7 @@ const TARGETS = {
     archLabel: "x64",
     forgeArchLabel: "x64",
     installerExtensions: [".exe"],
+    installerBasenameIncludes: ["setup"],
     archiveExtensions: [".nupkg"],
     metadataNames: ["RELEASES"],
   },
@@ -91,6 +92,16 @@ function scoreByNameAndPath(filePath, spec, extensions) {
   if (!extensions.some((extension) => basename.endsWith(extension))) {
     return 0;
   }
+  if (
+    extensions === spec.installerExtensions &&
+    Array.isArray(spec.installerBasenameIncludes) &&
+    spec.installerBasenameIncludes.length > 0 &&
+    !spec.installerBasenameIncludes.some((needle) =>
+      basename.includes(needle.toLowerCase()),
+    )
+  ) {
+    return 0;
+  }
   const normalizedPath = filePath.replace(/\\/g, "/").toLowerCase();
   let score = 1;
   if (basename.includes(spec.archLabel)) {
@@ -111,6 +122,41 @@ function scoreByNameAndPath(filePath, spec, extensions) {
   return score;
 }
 
+function describeCandidateFiles(files, spec) {
+  const extensions = [
+    ...spec.installerExtensions,
+    ...spec.archiveExtensions,
+    ...spec.metadataNames,
+    ".dmg",
+    ".exe",
+    ".nupkg",
+    ".zip",
+    "RELEASES",
+    "RELEASES.json",
+  ];
+  const seen = new Set();
+  return files
+    .filter((filePath) => {
+      const basename = path.basename(filePath);
+      const normalized = basename.toLowerCase();
+      return extensions.some((extension) => {
+        if (extension.startsWith(".")) {
+          return normalized.endsWith(extension);
+        }
+        return basename === extension;
+      });
+    })
+    .map((filePath) => path.relative(process.cwd(), filePath))
+    .filter((filePath) => {
+      if (seen.has(filePath)) {
+        return false;
+      }
+      seen.add(filePath);
+      return true;
+    })
+    .sort();
+}
+
 function selectAsset(files, spec, extensions, label) {
   const selected = files
     .map((filePath) => ({
@@ -123,7 +169,14 @@ function selectAsset(files, spec, extensions, label) {
         right.score - left.score || left.filePath.localeCompare(right.filePath),
     )[0]?.filePath;
   if (!selected) {
-    throw new Error(`no ${label} asset found under Forge output`);
+    const candidates = describeCandidateFiles(files, spec);
+    const candidateSummary =
+      candidates.length > 0
+        ? ` Candidate files: ${candidates.join(", ")}`
+        : " No installer, archive, or updater metadata candidates were present.";
+    throw new Error(
+      `no ${label} asset found under Forge output.${candidateSummary}`,
+    );
   }
   return selected;
 }

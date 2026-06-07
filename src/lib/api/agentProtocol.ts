@@ -121,6 +121,9 @@ export type AgentThreadTurnStatus =
   | "running"
   | "completed"
   | "failed"
+  | "canceled"
+  | "cancelled"
+  | "interrupted"
   | "aborted";
 
 export type AgentThreadItemStatus = "in_progress" | "completed" | "failed";

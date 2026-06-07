@@ -32,6 +32,259 @@ const legacySessionCompatCommandSpecs = [
   { command: "agent_runtime_update_session", key: "updateSession" },
   { command: "agent_runtime_delete_session", key: "deleteSession" },
 ];
+const agentRuntimeThinGatewayForbiddenSnippets = [
+  {
+    snippet: "mockPriorityCommands",
+    reason:
+      "frontend agentRuntime gateway cannot import renderer mock priority commands",
+  },
+  {
+    snippet: "defaultMocks",
+    reason:
+      "frontend agentRuntime gateway cannot use default mocks as fallback",
+  },
+  {
+    snippet: "invokeMockOnly",
+    reason: "frontend agentRuntime gateway cannot call test-only desktop mocks",
+  },
+  {
+    snippet: "explicitMockFallback",
+    reason:
+      "frontend agentRuntime gateway cannot use explicit renderer mock fallback",
+  },
+  {
+    snippet: "invokeExplicitMock",
+    reason:
+      "frontend agentRuntime gateway cannot invoke renderer mock fallback",
+  },
+  {
+    snippet: "listenExplicitMock",
+    reason:
+      "frontend agentRuntime gateway cannot listen to renderer mock fallback",
+  },
+  {
+    snippet: "mockCommand",
+    reason:
+      "frontend agentRuntime gateway cannot register renderer mock commands",
+  },
+  {
+    snippet: "clearMocks",
+    reason: "frontend agentRuntime gateway cannot clear renderer mock commands",
+  },
+  {
+    snippet: "fetch(",
+    reason:
+      "frontend agentRuntime gateway cannot call Provider or backend HTTP directly",
+  },
+  {
+    snippet: "XMLHttpRequest",
+    reason:
+      "frontend agentRuntime gateway cannot call Provider or backend HTTP directly",
+  },
+  {
+    snippet: "EventSource",
+    reason:
+      "frontend agentRuntime gateway cannot open a parallel stream transport",
+  },
+  {
+    snippet: "new WebSocket",
+    reason:
+      "frontend agentRuntime gateway cannot open a parallel stream transport",
+  },
+  {
+    snippet: "/v1/chat/completions",
+    reason: "frontend agentRuntime gateway cannot call model APIs directly",
+  },
+  {
+    snippet: "/v1/messages",
+    reason: "frontend agentRuntime gateway cannot call model APIs directly",
+  },
+  {
+    snippet: "chat/completions",
+    reason: "frontend agentRuntime gateway cannot call model APIs directly",
+  },
+  {
+    snippet: "LIME_GATEWAY",
+    reason: "frontend agentRuntime gateway cannot receive Gateway credentials",
+  },
+  {
+    snippet: "APP_SERVER_BACKEND_MODE=mock",
+    reason:
+      "frontend agentRuntime gateway cannot depend on App Server mock backend",
+  },
+  {
+    snippet: 'APP_SERVER_BACKEND_MODE: "mock"',
+    reason:
+      "frontend agentRuntime gateway cannot depend on App Server mock backend",
+  },
+  {
+    snippet: "APP_SERVER_BACKEND_MODE: 'mock'",
+    reason:
+      "frontend agentRuntime gateway cannot depend on App Server mock backend",
+  },
+];
+const agentAppUiRuntimeLifecycleForbiddenSnippets = [
+  {
+    snippet: "safeInvoke",
+    reason:
+      "Agent App UI runtime lifecycle must call App Server current methods, not legacy Desktop facade commands",
+  },
+  {
+    snippet: "agent_app_runtime_start_task",
+    reason: "Agent App UI runtime lifecycle cannot start Agent turn tasks",
+  },
+  {
+    snippet: "agent_app_runtime_cancel_task",
+    reason: "Agent App UI runtime lifecycle cannot cancel Agent turn tasks",
+  },
+  {
+    snippet: "agent_app_runtime_get_task",
+    reason: "Agent App UI runtime lifecycle cannot read Agent turn tasks",
+  },
+  {
+    snippet: "agent_app_runtime_submit_host_response",
+    reason:
+      "Agent App UI runtime lifecycle cannot submit Agent task host responses",
+  },
+  {
+    snippet: "agentSession/turn/start",
+    reason:
+      "Agent App UI runtime lifecycle cannot call App Server turn lifecycle methods",
+  },
+  {
+    snippet: "METHOD_AGENT_SESSION_TURN_START",
+    reason:
+      "Agent App UI runtime lifecycle cannot call App Server turn lifecycle methods",
+  },
+  {
+    snippet: "startAgentAppRuntimeTask",
+    reason: "Agent App UI runtime lifecycle cannot delegate to the task facade",
+  },
+  {
+    snippet: "cancelAgentAppRuntimeTask",
+    reason: "Agent App UI runtime lifecycle cannot delegate to the task facade",
+  },
+  {
+    snippet: "getAgentAppRuntimeTask",
+    reason: "Agent App UI runtime lifecycle cannot delegate to the task facade",
+  },
+  {
+    snippet: "submitAgentAppRuntimeHostResponse",
+    reason: "Agent App UI runtime lifecycle cannot delegate to the task facade",
+  },
+  {
+    snippet: "toolName",
+    reason: "Agent App UI runtime lifecycle cannot project tool runtime facts",
+  },
+  {
+    snippet: "toolCall",
+    reason: "Agent App UI runtime lifecycle cannot project tool runtime facts",
+  },
+  {
+    snippet: "tool_calls",
+    reason: "Agent App UI runtime lifecycle cannot project tool runtime facts",
+  },
+  {
+    snippet: "evidence",
+    reason: "Agent App UI runtime lifecycle cannot project evidence facts",
+  },
+  {
+    snippet: "evidencePack",
+    reason: "Agent App UI runtime lifecycle cannot project evidence facts",
+  },
+  {
+    snippet: "fetch(",
+    reason:
+      "Agent App UI runtime lifecycle cannot call Provider or backend HTTP directly",
+  },
+  {
+    snippet: "XMLHttpRequest",
+    reason:
+      "Agent App UI runtime lifecycle cannot call Provider or backend HTTP directly",
+  },
+  {
+    snippet: "EventSource",
+    reason:
+      "Agent App UI runtime lifecycle cannot open a parallel stream transport",
+  },
+  {
+    snippet: "new WebSocket",
+    reason:
+      "Agent App UI runtime lifecycle cannot open a parallel stream transport",
+  },
+  {
+    snippet: "/v1/chat/completions",
+    reason: "Agent App UI runtime lifecycle cannot call model APIs directly",
+  },
+  {
+    snippet: "/v1/messages",
+    reason: "Agent App UI runtime lifecycle cannot call model APIs directly",
+  },
+  {
+    snippet: "chat/completions",
+    reason: "Agent App UI runtime lifecycle cannot call model APIs directly",
+  },
+  {
+    snippet: "LIME_GATEWAY",
+    reason: "Agent App UI runtime lifecycle cannot receive Gateway credentials",
+  },
+  {
+    snippet: "mockPriorityCommands",
+    reason:
+      "Agent App UI runtime lifecycle cannot import renderer mock priority commands",
+  },
+  {
+    snippet: "defaultMocks",
+    reason:
+      "Agent App UI runtime lifecycle cannot use default mocks as fallback",
+  },
+  {
+    snippet: "invokeMockOnly",
+    reason: "Agent App UI runtime lifecycle cannot call test-only mocks",
+  },
+  {
+    snippet: "APP_SERVER_BACKEND_MODE=mock",
+    reason:
+      "Agent App UI runtime lifecycle cannot depend on App Server mock backend",
+  },
+  {
+    snippet: 'APP_SERVER_BACKEND_MODE: "mock"',
+    reason:
+      "Agent App UI runtime lifecycle cannot depend on App Server mock backend",
+  },
+  {
+    snippet: "APP_SERVER_BACKEND_MODE: 'mock'",
+    reason:
+      "Agent App UI runtime lifecycle cannot depend on App Server mock backend",
+  },
+];
+const agentAppUiRuntimeLifecycleSpecs = [
+  {
+    functionName: "requestAgentAppUiRuntimeAppServer",
+    requiredSnippets: [
+      "appServerClient.request<AgentAppUiRuntimeStatusResponse>",
+      "normalizeAgentAppUiRuntimeStatusResponse(response.result)",
+    ],
+  },
+  {
+    functionName: "startAgentAppUiRuntime",
+    requiredSnippets: [
+      "requestAgentAppUiRuntimeAppServer(METHOD_AGENT_APP_UI_RUNTIME_START",
+    ],
+  },
+  {
+    functionName: "getAgentAppUiRuntimeStatus",
+    requiredSnippets: [
+      "requestAgentAppUiRuntimeAppServer(METHOD_AGENT_APP_UI_RUNTIME_STATUS",
+    ],
+  },
+  {
+    functionName: "stopAgentAppUiRuntime",
+    requiredSnippets: [
+      "requestAgentAppUiRuntimeAppServer(METHOD_AGENT_APP_UI_RUNTIME_STOP",
+    ],
+  },
+];
 
 const checks = [
   {
@@ -4736,6 +4989,8 @@ for (const check of checks) {
 }
 
 checkLegacySessionCompatContracts();
+checkAgentRuntimeThinGatewayContracts();
+checkAgentAppUiRuntimeLifecycleContracts();
 
 if (failures.length > 0) {
   console.error("[app-server-client-contract] failed");
@@ -4745,7 +5000,117 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`[app-server-client-contract] ok (${checks.length} checks)`);
+console.log(`[app-server-client-contract] ok (${checks.length + 2} checks)`);
+
+function checkAgentRuntimeThinGatewayContracts() {
+  const sourceRoot = path.join(repoRoot, "src/lib/api/agentRuntime");
+  for (const relativePath of walkSourceFiles(sourceRoot)) {
+    if (!isAgentRuntimeGatewaySource(relativePath)) {
+      continue;
+    }
+    const content = fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
+    for (const {
+      snippet,
+      reason,
+    } of agentRuntimeThinGatewayForbiddenSnippets) {
+      if (content.includes(snippet)) {
+        failures.push(
+          `agentRuntime thin gateway: ${relativePath} forbidden ${JSON.stringify(
+            snippet,
+          )}; ${reason}`,
+        );
+      }
+    }
+  }
+}
+
+function walkSourceFiles(root) {
+  const entries = fs.readdirSync(root, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const absolutePath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...walkSourceFiles(absolutePath));
+      continue;
+    }
+    if (!entry.isFile()) {
+      continue;
+    }
+    files.push(path.relative(repoRoot, absolutePath));
+  }
+  return files.sort();
+}
+
+function isAgentRuntimeGatewaySource(relativePath) {
+  return (
+    relativePath.endsWith(".ts") &&
+    !relativePath.endsWith(".d.ts") &&
+    !relativePath.endsWith(".test.ts") &&
+    !relativePath.endsWith(".generated.ts")
+  );
+}
+
+function checkAgentAppUiRuntimeLifecycleContracts() {
+  const relativePath = "src/lib/api/agentApps.ts";
+  const content = fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
+  for (const spec of agentAppUiRuntimeLifecycleSpecs) {
+    const functionBody = extractFunctionBlock(content, spec.functionName);
+    if (!functionBody) {
+      failures.push(
+        `agentAppUiRuntime lifecycle: ${relativePath} missing function ${spec.functionName}`,
+      );
+      continue;
+    }
+    for (const snippet of spec.requiredSnippets) {
+      if (!functionBody.includes(snippet)) {
+        failures.push(
+          `agentAppUiRuntime lifecycle: ${spec.functionName} missing ${JSON.stringify(
+            snippet,
+          )}`,
+        );
+      }
+    }
+    for (const {
+      snippet,
+      reason,
+    } of agentAppUiRuntimeLifecycleForbiddenSnippets) {
+      if (functionBody.includes(snippet)) {
+        failures.push(
+          `agentAppUiRuntime lifecycle: ${spec.functionName} forbidden ${JSON.stringify(
+            snippet,
+          )}; ${reason}`,
+        );
+      }
+    }
+  }
+}
+
+function extractFunctionBlock(content, functionName) {
+  const functionPattern = new RegExp(
+    `(?:export\\s+)?(?:async\\s+)?function\\s+${functionName}\\s*\\(`,
+  );
+  const match = functionPattern.exec(content);
+  if (!match) {
+    return "";
+  }
+  const openBraceIndex = content.indexOf("{", match.index + match[0].length);
+  if (openBraceIndex < 0) {
+    return "";
+  }
+  let depth = 0;
+  for (let index = openBraceIndex; index < content.length; index += 1) {
+    const char = content[index];
+    if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return content.slice(openBraceIndex, index + 1);
+      }
+    }
+  }
+  return "";
+}
 
 function checkLegacySessionCompatContracts() {
   const schema = JSON.parse(

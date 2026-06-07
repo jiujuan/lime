@@ -63,8 +63,7 @@ export function buildSessionRuntimeProjectionIdentity({
 }): SessionRuntimeProjectionIdentity {
   const resolvedSessionId = sessionId ?? "no-session";
   const firstMessageId = messages[0]?.id ?? "no-first-message";
-  const lastMessageId =
-    messages[messages.length - 1]?.id ?? "no-last-message";
+  const lastMessageId = messages[messages.length - 1]?.id ?? "no-last-message";
   const lastTurnId = turns[turns.length - 1]?.id ?? "no-last-turn";
   const lastItemId = threadItems[threadItems.length - 1]?.id ?? "no-last-item";
 
@@ -188,7 +187,7 @@ export function shortenSessionText(
 }
 
 export function resolveSessionStatusBadge(
-  status?: "running" | "completed" | "failed" | "aborted" | null,
+  status?: AgentThreadTurn["status"] | null,
   t?: AgentTranslate,
 ): SessionStatusBadge {
   if (status === "running") {
@@ -209,7 +208,12 @@ export function resolveSessionStatusBadge(
       tone: "default",
     };
   }
-  if (status === "aborted") {
+  if (
+    status === "aborted" ||
+    status === "canceled" ||
+    status === "cancelled" ||
+    status === "interrupted"
+  ) {
     return {
       label: t?.("agentChat.sessionOverview.status.turn.aborted") ?? "已中断",
       tone: "default",
@@ -238,9 +242,7 @@ export function buildQuotedReplyText({
     .map((line) => `> ${line}`)
     .join("\n")}\n\n`;
 
-  return input.trim()
-    ? `${input.trimEnd()}\n\n${quotedBlock}`
-    : quotedBlock;
+  return input.trim() ? `${input.trimEnd()}\n\n${quotedBlock}` : quotedBlock;
 }
 
 export function isCodeOutputThreadItem(item: AgentThreadItem): boolean {

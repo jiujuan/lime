@@ -32,6 +32,7 @@ import {
   handleToolStartEvent,
 } from "./agentStreamEventProcessor";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
+import { settleInterruptedMessageProcess } from "./agentStreamFlowControl";
 import {
   buildAgentStreamCompletedAssistantMessagePatch,
   buildAgentStreamEmptyFinalErrorPlan,
@@ -297,6 +298,15 @@ function hasRetainedSkillInlineProcess(message: Message): boolean {
           (part) => part.type === "thinking" && part.text.trim().length > 0,
         ),
       ))
+  );
+}
+
+function isInterruptedTurnStatus(status: AgentThreadTurn["status"]): boolean {
+  return (
+    status === "aborted" ||
+    status === "canceled" ||
+    status === "cancelled" ||
+    status === "interrupted"
   );
 }
 
@@ -831,6 +841,37 @@ export function handleTurnStreamEvent({
       usage,
     });
   };
+  const completeInterruptedTurn = (turn: AgentThreadTurn) => {
+    removeQueuedTurnState(
+      requestState.queuedTurnId ? [requestState.queuedTurnId] : [],
+    );
+    finishRequestLog(requestState, {
+      eventType: "chat_request_complete",
+      status: "success",
+      description: "请求已中止",
+    });
+    observer?.onComplete?.(requestState.accumulatedContent.trim());
+    setMessages((prev) => {
+      const nextMessages = prev.map((msg) => {
+        if (msg.id !== assistantMsgId) {
+          return msg;
+        }
+
+        const interruptedMessage = settleInterruptedMessageProcess(msg);
+        return {
+          ...updateMessageArtifactsStatus(interruptedMessage, "complete"),
+          content: interruptedMessage.content || "(已停止)",
+          isThinking: false,
+          runtimeStatus: undefined,
+        };
+      });
+      persistRetainedSkillProcessSnapshot(nextMessages);
+      return nextMessages;
+    });
+    clearStreamingTextOverlay();
+    setCurrentTurnId(turn.id);
+    finalizeTerminalStreamState();
+  };
 
   const markQueuedDraftState = (queuedMessageText?: string | null) => {
     const queuedDraftPlan = buildAgentStreamQueuedDraftStatePlan({
@@ -1028,6 +1069,10 @@ export function handleTurnStreamEvent({
         ),
       );
       setCurrentTurnId(data.turn.id);
+      if (isInterruptedTurnStatus(data.turn.status)) {
+        completeInterruptedTurn(data.turn);
+        break;
+      }
       if (data.text?.trim() && !shouldPreserveAssistantContent) {
         requestState.accumulatedContent = data.text;
         requestState.renderedContent = data.text;

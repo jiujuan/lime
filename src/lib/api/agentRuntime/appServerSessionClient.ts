@@ -304,7 +304,7 @@ function agentThreadTurnStatusFromAppServer(
     case "failed":
       return "failed";
     case "canceled":
-      return "aborted";
+      return "canceled";
     case "accepted":
     case "queued":
     case "running":

@@ -104,6 +104,12 @@ function prepareIsolatedPackageDir({ arch, cwd, outDir, packageRoot }) {
   };
 }
 
+function prepareIsolatedMakeDir({ arch, outDir }) {
+  const makeDir = path.join(outDir, "make", "zip", "darwin", arch);
+  fs.rmSync(makeDir, { recursive: true, force: true });
+  return makeDir;
+}
+
 function buildForgeMakeZipArgs({
   arch,
   cwd = process.cwd(),
@@ -115,6 +121,24 @@ function buildForgeMakeZipArgs({
   }
   args.push("--platform", "darwin", "--arch", arch, "--targets", "zip");
   return args;
+}
+
+function assertSingleCurrentVersionZip({ makeDir, packageVersion }) {
+  const zipFiles = fs
+    .readdirSync(makeDir)
+    .filter((name) => name.endsWith(".zip"))
+    .sort();
+  const expectedSuffix = `-${packageVersion}.zip`;
+  const matchingZipFiles = zipFiles.filter((name) =>
+    name.endsWith(expectedSuffix),
+  );
+
+  if (matchingZipFiles.length !== 1 || zipFiles.length !== 1) {
+    throw new Error(
+      `Forge ZIP make must generate exactly one current ${packageVersion} zip under ${makeDir}; found ${zipFiles.join(", ") || "(none)"}`,
+    );
+  }
+  return matchingZipFiles.map((name) => path.join(makeDir, name));
 }
 
 function createLocalReleasesServer({ feedPath, releasesManifest }) {
@@ -185,11 +209,18 @@ async function makeZipWithLocalFeed({
   const feedLabel = feedLabelForDarwinArch(normalizedArch);
   const feedPath = `/lime/stable/${feedLabel}`;
   const releasesManifest = readReleasesManifest(existingReleases);
+  const packageVersion = JSON.parse(
+    fs.readFileSync(path.join(cwd, "package.json"), "utf8"),
+  ).version;
   const packageLink = prepareIsolatedPackageDir({
     arch: normalizedArch,
     cwd,
     outDir: resolvedOutDir,
     packageRoot: resolvedPackageRoot,
+  });
+  const makeDir = prepareIsolatedMakeDir({
+    arch: normalizedArch,
+    outDir: resolvedOutDir,
   });
   const server = createLocalReleasesServer({
     feedPath,
@@ -220,24 +251,14 @@ async function makeZipWithLocalFeed({
       },
     );
     await waitForChild(child);
-    const makeDir = path.join(
-      resolvedOutDir,
-      "make",
-      "zip",
-      "darwin",
-      normalizedArch,
-    );
     const releasesPath = path.join(makeDir, "RELEASES.json");
     if (!fs.existsSync(releasesPath)) {
       throw new Error(`Forge ZIP make did not generate ${releasesPath}`);
     }
-    const zipFiles = fs
-      .readdirSync(makeDir)
-      .filter((name) => name.endsWith(".zip"))
-      .sort();
-    if (zipFiles.length === 0) {
-      throw new Error(`Forge ZIP make did not generate zip under ${makeDir}`);
-    }
+    const zipFiles = assertSingleCurrentVersionZip({
+      makeDir,
+      packageVersion,
+    });
 
     return {
       arch: normalizedArch,
@@ -245,7 +266,7 @@ async function makeZipWithLocalFeed({
       outDir: resolvedOutDir,
       packageLink,
       releasesPath,
-      zipFiles: zipFiles.map((name) => path.join(makeDir, name)),
+      zipFiles,
     };
   } finally {
     await close(server);
@@ -285,6 +306,7 @@ if (isCli) {
 }
 
 export {
+  assertSingleCurrentVersionZip,
   buildForgeMakeZipArgs,
   createLocalReleasesServer,
   defaultOutDir,
@@ -294,5 +316,6 @@ export {
   normalizeDarwinArch,
   parseArgs,
   prepareIsolatedPackageDir,
+  prepareIsolatedMakeDir,
   readReleasesManifest,
 };

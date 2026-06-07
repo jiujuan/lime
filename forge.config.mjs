@@ -16,6 +16,7 @@ const PACKAGE_VERSION = JSON.parse(
   readFileSync("package.json", "utf8"),
 ).version;
 const DEFAULT_UPDATE_BASE_URL = "https://updates.limecloud.com";
+const MACOS_APP_ENTITLEMENTS = "lime-rs/entitlements.plist";
 
 const retainedPackageRoots = new Set(["dist", "node_modules", "package.json"]);
 const retainedPackageDirectories = new Set([
@@ -55,6 +56,11 @@ function ignorePackagerInput(filePath) {
   return true;
 }
 
+function isTopLevelAppBundle(filePath) {
+  const normalized = String(filePath || "").replace(/\\/g, "/");
+  return normalized.endsWith(".app") && !normalized.includes(".app/");
+}
+
 function macSignOptions({
   env = process.env,
   platform = process.platform,
@@ -67,9 +73,21 @@ function macSignOptions({
   }
 
   const options = {
-    hardenedRuntime: true,
-    entitlements: "lime-rs/entitlements.plist",
-    "entitlements-inherit": "lime-rs/entitlements.plist",
+    continueOnError: false,
+    identityValidation: true,
+    preAutoEntitlements: false,
+    preEmbedProvisioningProfile: false,
+    optionsForFile: (filePath) => {
+      if (!isTopLevelAppBundle(filePath)) {
+        return null;
+      }
+      return {
+        entitlements: MACOS_APP_ENTITLEMENTS,
+        hardenedRuntime: true,
+        signatureFlags: ["runtime"],
+      };
+    },
+    strictVerify: true,
   };
   if (env.APPLE_SIGNING_IDENTITY) {
     options.identity = env.APPLE_SIGNING_IDENTITY;
@@ -218,15 +236,21 @@ export default {
       ProductName: PRODUCT_NAME,
       InternalName: PRODUCT_NAME,
     },
-    afterComplete: [
-      async (buildPath, _electronVersion, platform) => {
+    afterCopyExtraResources: [
+      (buildPath, _electronVersion, platform, _arch, done) => {
         if (platform !== "darwin") {
+          done();
           return;
         }
-        brandMacHelperApps({
-          appOutDir: buildPath,
-          productName: PRODUCT_NAME,
-        });
+        try {
+          brandMacHelperApps({
+            appOutDir: buildPath,
+            productName: PRODUCT_NAME,
+          });
+          done();
+        } catch (error) {
+          done(error);
+        }
       },
     ],
     ignore: ignorePackagerInput,

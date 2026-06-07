@@ -225,6 +225,12 @@ jobs:
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          existing_keychains=()
+          while IFS= read -r keychain; do
+            [ -n "$keychain" ] || continue
+            existing_keychains+=("$keychain")
+          done < <(security list-keychains -d user | tr -d '"')
+          security list-keychains -d user -s "$KEYCHAIN_PATH" "${existing_keychains[@]}"
           security import "$CERTIFICATE_PATH" \
             -P "$APPLE_CERTIFICATE_PASSWORD" \
             -A \
@@ -236,6 +242,8 @@ jobs:
             -s \
             -k "$KEYCHAIN_PASSWORD" \
             "$KEYCHAIN_PATH"
+          echo "Available macOS signing identities in release keychain:"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
           echo "LIME_MACOS_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
       - name: Prepare Electron Windows signing certificate
@@ -278,10 +286,49 @@ jobs:
         run: |
           set -euxo pipefail
           npm run electron:build
+          npx electron-forge package \
+            --platform "${{ matrix.host_platform }}" \
+            --arch "${{ matrix.arch }}"
+          set +e
           npx electron-forge make \
+            --skip-package \
             --platform "${{ matrix.host_platform }}" \
             --arch "${{ matrix.arch }}" \
             --targets "${{ matrix.forge_targets }}"
+          forge_status=$?
+          set -e
+          echo "Electron Forge output files:"
+          if [ -d release-electron ]; then
+            find release-electron -type f | sort
+          else
+            echo "release-electron output directory is missing"
+          fi
+          if [ "${{ matrix.host_platform }}" = "darwin" ]; then
+            APP_PATH="release-electron/Lime-darwin-${{ matrix.arch }}/Lime.app"
+            if [ -d "$APP_PATH" ]; then
+              codesign --display --verbose=4 "$APP_PATH" || true
+              codesign --verify --deep --strict --verbose=4 "$APP_PATH" || true
+            else
+              find release-electron -name "*.app" -type d -print 2>/dev/null || true
+            fi
+          fi
+          if [ "$forge_status" -ne 0 ]; then
+            exit "$forge_status"
+          fi
+          make_assets=()
+          if [ -d release-electron/make ]; then
+            while IFS= read -r asset; do
+              [ -n "$asset" ] || continue
+              make_assets+=("$asset")
+            done < <(find release-electron/make -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.nupkg" -o -name "RELEASES" -o -name "RELEASES.json" \) | sort)
+          fi
+          if [ "${#make_assets[@]}" -eq 0 ]; then
+            echo "Electron Forge make produced no release assets" >&2
+            find release-electron -maxdepth 5 -type f | sort
+            exit 1
+          fi
+          printf 'Electron Forge make assets:\n'
+          printf ' - %s\n' "${make_assets[@]}"
 
       - name: Verify Electron package resources
         shell: bash

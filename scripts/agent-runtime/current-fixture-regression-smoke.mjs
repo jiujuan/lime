@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -21,6 +22,38 @@ function runVitest(label, args) {
       LIME_REAL_API_TEST: "0",
     },
   });
+}
+
+function runNodeSmoke(label, args) {
+  const startedAt = Date.now();
+
+  console.log(`\n[${LOG_PREFIX}] > ${label}`);
+  const result = spawnSync(process.execPath, args, {
+    cwd: rootDir,
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      LIME_ALLOW_LIVE_PROVIDER_SMOKE: "0",
+      LIME_REAL_API_TEST: "0",
+    },
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  if (typeof result.status === "number" && result.status !== 0) {
+    const error = new Error(`[${LOG_PREFIX}] ${label} 失败`);
+    error.exitCode = result.status;
+    throw error;
+  }
+
+  return {
+    label,
+    status: "pass",
+    durationMs: Date.now() - startedAt,
+    args,
+  };
 }
 
 function main() {
@@ -48,8 +81,18 @@ function main() {
     "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs",
   ]);
 
+  runNodeSmoke("Claw 停止后同会话继续输出 Electron fixture", [
+    "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
+    "--scenario",
+    "cancel-then-continue",
+    "--prefix",
+    "claw-chat-current-fixture-cancel-then-continue-regression",
+    "--timeout-ms",
+    "180000",
+  ]);
+
   console.log(
-    `[${LOG_PREFIX}] summary: current Agent Runtime fixture regression 已覆盖 history/cache hydration、final_done 工具收尾、failed read model、Claw 终态 UI、Electron fixture guard、Claw GUI current fixture guard；liveProviderUsed=false`,
+    `[${LOG_PREFIX}] summary: current Agent Runtime fixture regression 已覆盖 history/cache hydration、final_done 工具收尾、failed read model、Claw 终态 UI、Electron fixture guard、Claw GUI current fixture guard、停止后同会话继续输出 Electron fixture；liveProviderUsed=false`,
   );
   console.log(`\n[${LOG_PREFIX}] 通过`);
 }
