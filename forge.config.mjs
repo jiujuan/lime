@@ -92,8 +92,7 @@ function macNotarizeOptions({
   }
 
   const appleId = env.APPLE_ID;
-  const appleIdPassword =
-    env.APPLE_APP_SPECIFIC_PASSWORD || env.APPLE_PASSWORD;
+  const appleIdPassword = env.APPLE_APP_SPECIFIC_PASSWORD || env.APPLE_PASSWORD;
   const teamId = env.APPLE_TEAM_ID;
   if (!appleId || !appleIdPassword || !teamId) {
     return undefined;

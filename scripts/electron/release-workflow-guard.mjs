@@ -373,8 +373,8 @@ function assertForgeConfig(forgeConfigPath = DEFAULT_FORGE_CONFIG_PATH) {
     '["darwin"]',
     '["win32"]',
     "macUpdateManifestBaseUrl",
-    'updateFeedUrl("darwin", arch)',
-    'updateFeedUrl("win32", arch)',
+    'updateFeedUrl("darwin", arch',
+    'updateFeedUrl("win32", arch',
     "RELEASE_OUTPUT_DIR",
     "LIME_ELECTRON_FORGE_OUT_DIR",
     "dist-electron/app-server.release.json",
@@ -413,7 +413,7 @@ function assertForgeConfig(forgeConfigPath = DEFAULT_FORGE_CONFIG_PATH) {
     "Setup.exe",
     "setupIcon",
     "lime-rs/icons/icon.ico",
-    "...windowsSigningOptions()",
+    "...windowsSigningOptions(options)",
   ]) {
     assertIncludes(forgeConfig, required, "Forge Windows Squirrel config");
   }
