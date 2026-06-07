@@ -117,15 +117,15 @@ macOS 发布签名 / 公证由 release workflow 显式启用：
 
 `.github/workflows/release.yml` 在 macOS matrix 中先校验这些 secret，缺失时直接失败，不等到打包或公证中途才暴露问题。
 
-Windows 发布签名同样由 release workflow 显式启用，并交给 Forge Squirrel maker：
+Windows 发布签名由 release workflow 按“可选但成对”规则启用，并交给 Forge Squirrel maker：
 
-| GitHub secret                          | Forge / Squirrel env                             | 用途                              |
-| -------------------------------------- | ------------------------------------------------ | --------------------------------- |
-| `WINDOWS_SIGNING_CERTIFICATE`          | 写入临时 `LIME_WINDOWS_SIGNING_CERTIFICATE_FILE` | Authenticode PFX 证书             |
-| `WINDOWS_SIGNING_CERTIFICATE_PASSWORD` | `LIME_WINDOWS_SIGNING_CERTIFICATE_PASSWORD`      | Squirrel signing certificate 密码 |
-| release workflow                       | `LIME_ELECTRON_SIGN=1`                           | 显式打开 Windows installer 签名   |
+| GitHub secret                          | Forge / Squirrel env                             | 用途                                                                                 |
+| -------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `WINDOWS_SIGNING_CERTIFICATE`          | 写入临时 `LIME_WINDOWS_SIGNING_CERTIFICATE_FILE` | Authenticode PFX 证书                                                                |
+| `WINDOWS_SIGNING_CERTIFICATE_PASSWORD` | `LIME_WINDOWS_SIGNING_CERTIFICATE_PASSWORD`      | Squirrel signing certificate 密码                                                    |
+| release workflow                       | `LIME_ELECTRON_SIGN=1`                           | Windows 构建允许签名；只有两项 Windows secret 都存在时才传入 Squirrel signing config |
 
-Windows 当前通过 `npx electron-forge make --platform win32 --arch x64 --targets squirrel` 生成 Squirrel installer；`forge.config.mjs` 将 `certificateFile` / `certificatePassword` 传给 `@electron-forge/maker-squirrel`。
+Windows 当前通过 `npx electron-forge make --platform win32 --arch x64 --targets squirrel` 生成 Squirrel installer；两项 Windows signing secret 都存在时，`forge.config.mjs` 将 `certificateFile` / `certificatePassword` 传给 `@electron-forge/maker-squirrel`。如果两项 secret 都未配置，release workflow 继续生成 unsigned Forge Squirrel installer；如果只配置其中一项，则 fail-fast，避免半配置签名在 make 阶段才失败。
 
 macOS ZIP / `RELEASES.json` 的本地确定性验证使用：
 

@@ -194,12 +194,21 @@ jobs:
         run: |
           set -euo pipefail
           missing=()
-          [ -n "${WINDOWS_SIGNING_CERTIFICATE:-}" ] || missing+=("WINDOWS_SIGNING_CERTIFICATE")
-          [ -n "${WINDOWS_SIGNING_CERTIFICATE_PASSWORD:-}" ] || missing+=("WINDOWS_SIGNING_CERTIFICATE_PASSWORD")
+          has_certificate=0
+          has_password=0
+          [ -z "${WINDOWS_SIGNING_CERTIFICATE:-}" ] || has_certificate=1
+          [ -z "${WINDOWS_SIGNING_CERTIFICATE_PASSWORD:-}" ] || has_password=1
+          if [ "$has_certificate" -eq 0 ] && [ "$has_password" -eq 0 ]; then
+            echo "Electron Windows signing secrets are not configured; Forge Squirrel will produce unsigned installer assets."
+            exit 0
+          fi
+          [ "$has_certificate" -eq 1 ] || missing+=("WINDOWS_SIGNING_CERTIFICATE")
+          [ "$has_password" -eq 1 ] || missing+=("WINDOWS_SIGNING_CERTIFICATE_PASSWORD")
           if [ "${#missing[@]}" -gt 0 ]; then
-            printf 'Missing Electron Windows signing secrets: %s\n' "${missing[*]}" >&2
+            printf 'Incomplete Electron Windows signing secrets: %s\n' "${missing[*]}" >&2
             exit 1
           fi
+          echo "Electron Windows signing secrets detected; Forge Squirrel signing will be enabled."
 
       - name: Import Electron macOS signing certificate
         if: startsWith(matrix.platform, 'macos')
@@ -237,6 +246,10 @@ jobs:
           WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
         run: |
           set -euo pipefail
+          if [ -z "${WINDOWS_SIGNING_CERTIFICATE:-}" ] && [ -z "${WINDOWS_SIGNING_CERTIFICATE_PASSWORD:-}" ]; then
+            echo "Skipping Electron Windows signing certificate preparation; no Windows signing secrets are configured."
+            exit 0
+          fi
           CERTIFICATE_PATH="$RUNNER_TEMP/lime-electron-signing.pfx"
           WINDOWS_SIGNING_CERTIFICATE_PATH="$CERTIFICATE_PATH" node - <<'NODE'
           const fs = require("node:fs");

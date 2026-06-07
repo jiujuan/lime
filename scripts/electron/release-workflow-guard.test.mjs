@@ -60,17 +60,17 @@ describe("Electron release workflow guard", () => {
     );
   });
 
-  it("rejects missing Windows Squirrel signing env wiring in the Forge make step", () => {
+  it("rejects mandatory Windows Squirrel signing secrets in release workflow", () => {
     const current = fs.readFileSync(".github/workflows/release.yml", "utf8");
     const workflowPath = tempWorkflowPath(
       current.replace(
-        "LIME_ELECTRON_SIGN: ${{ (startsWith(matrix.platform, 'macos') || matrix.host_platform == 'win32') && '1' || '' }}",
-        "LIME_ELECTRON_SIGN: ${{ startsWith(matrix.platform, 'macos') && '1' || '' }}",
+        "Electron Windows signing secrets are not configured; Forge Squirrel will produce unsigned installer assets.",
+        "Missing Electron Windows signing secrets",
       ),
     );
 
     expect(() => validateReleaseWorkflow({ workflowPath })).toThrow(
-      /Electron build env LIME_ELECTRON_SIGN must include matrix\.host_platform == 'win32'/,
+      /Windows signing secret preflight/,
     );
   });
 

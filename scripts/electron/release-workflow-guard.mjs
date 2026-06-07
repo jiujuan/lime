@@ -206,11 +206,28 @@ function assertBuildSteps(buildJob) {
     );
   }
   const winSecretRun = winSecretStep?.run || "";
-  for (const secret of [
+  for (const required of [
     "WINDOWS_SIGNING_CERTIFICATE",
     "WINDOWS_SIGNING_CERTIFICATE_PASSWORD",
+    "Forge Squirrel will produce unsigned installer assets",
+    "Incomplete Electron Windows signing secrets",
+    "Forge Squirrel signing will be enabled",
+    "has_certificate",
+    "has_password",
   ]) {
-    assertIncludes(winSecretRun, secret, "Windows signing secret preflight");
+    assertIncludes(winSecretRun, required, "Windows signing secret preflight");
+  }
+
+  for (const forbidden of [
+    "Missing Electron Windows signing secrets",
+    '[ -n "${WINDOWS_SIGNING_CERTIFICATE:-}" ] || missing+=("WINDOWS_SIGNING_CERTIFICATE")',
+    '[ -n "${WINDOWS_SIGNING_CERTIFICATE_PASSWORD:-}" ] || missing+=("WINDOWS_SIGNING_CERTIFICATE_PASSWORD")',
+  ]) {
+    if (winSecretRun.includes(forbidden)) {
+      throw new Error(
+        `Windows signing secret preflight must not require optional Squirrel signing input: ${forbidden}`,
+      );
+    }
   }
 
   const winImportStep = stepByName(
@@ -233,6 +250,7 @@ function assertBuildSteps(buildJob) {
   for (const required of [
     "WINDOWS_SIGNING_CERTIFICATE_PATH",
     'Buffer.from(certificate, "base64")',
+    "Skipping Electron Windows signing certificate preparation",
     "LIME_WINDOWS_SIGNING_CERTIFICATE_FILE",
     "LIME_WINDOWS_SIGNING_CERTIFICATE_PASSWORD",
     '>> "$GITHUB_ENV"',
