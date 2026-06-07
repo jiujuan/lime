@@ -53,7 +53,6 @@ pub mod skill_error;
 pub mod skill_exec_cmd;
 pub mod telegram_remote_cmd;
 pub mod telemetry_cmd;
-pub mod theme_context_cmd;
 pub mod tray_cmd;
 pub mod unified_memory_cmd;
 pub mod update_cmd;

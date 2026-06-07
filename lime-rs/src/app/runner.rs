@@ -1352,7 +1352,6 @@ pub fn run() {
             commands::aster_agent_cmd::action_runtime::agent_runtime_delete_session,
             commands::aster_agent_cmd::action_runtime::agent_runtime_respond_action,
             commands::aster_agent_cmd::tool_runtime::social_tools::social_generate_cover_image_cmd,
-            commands::theme_context_cmd::aster_agent_theme_context_search,
             // Models config commands
             commands::models_cmd::get_models_config,
             commands::models_cmd::save_models_config,

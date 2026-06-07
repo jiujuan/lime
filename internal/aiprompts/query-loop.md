@@ -247,12 +247,17 @@
 - `internal/roadmap/lime-aster-codex-alignment-roadmap.md`
 - `lime-rs/src/commands/agent_cmd.rs::agent_generate_title`
 - `lime-rs/src/commands/persona_cmd.rs::generate_persona`
-- `lime-rs/src/commands/theme_context_cmd.rs::aster_agent_theme_context_search`
 
 这份历史档案与专用命令仍可保留各自职责，但不再承担 Query Loop 唯一事实源职责。
-这三条命令属于专用一次性会话能力：允许显式拼自己的临时 `SessionConfig`，但不能参与 submit turn、runtime queue 或 evidence 真相定义。
+这两条命令属于专用一次性会话能力：允许显式拼自己的临时 `SessionConfig`，但不能参与 submit turn、runtime queue 或 evidence 真相定义。
 它们允许为本地 auxiliary session 附带最小 `lime_runtime` metadata，用于记录 `task_profile / routing_decision / cost_state` 一类辅助任务分类事实；必要时也可以把该 auxiliary session 的 `execution_runtime` 诊断快照回传到命令结果，但这份快照只服务该一次性会话自己的诊断与可观测性，不进入 current Query Loop 的 thread / turn 真相。
-当前命令层允许保留的原始执行面只剩这 4 处：`action_runtime` 属于 current 恢复链，`agent_generate_title`、`persona_cmd` 与 `theme_context_cmd` 属于受控 compat 一次性命令。
+当前命令层允许保留的原始执行面只剩这 3 处：`action_runtime` 属于 current 恢复链，`agent_generate_title` 与 `persona_cmd` 属于受控 compat 一次性命令。旧 `aster_agent_theme_context_search` 已下线，主题上下文搜索 current 事实源是 `src/lib/api/themeContextSearch.ts -> App Server agentSession/start + agentSession/turn/start + agentSession/read`。
+
+### `dead`
+
+- `lime-rs/src/commands/theme_context_cmd.rs::aster_agent_theme_context_search`
+
+旧主题上下文搜索 Tauri 命令不得重新注册到 legacy desktop facade；如果后续继续增强主题上下文搜索，只能扩展 App Server current session turn 网关与 RuntimeCore/backend。
 
 ### `deprecated`
 

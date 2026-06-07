@@ -2322,9 +2322,9 @@ async function main() {
     summary.liveWebTurn = liveWebCompleted.turn;
     summary.liveWebTurnStatus = liveWebCompleted.turn?.status || null;
     summary.liveWebToolEvidence = liveWebCompleted.toolEvidence;
-    if (!summary.liveWebToolEvidence?.allRequiredCompletedForTurn) {
+    if (!summary.liveWebToolEvidence?.allRequiredOutputPresentForTurn) {
       const settledToolEvidence = await waitForCondition(
-        "等待 read model 出现 live WebSearch/WebFetch 工具事实",
+        "等待 read model 出现 live WebSearch/WebFetch 工具输出事实",
         async () => {
           const session = await readAppServerSession(
             options,
@@ -2338,7 +2338,7 @@ async function main() {
             passed: false,
             latest: toolEvidence,
           };
-          return toolEvidence.allRequiredCompletedForTurn
+          return toolEvidence.allRequiredOutputPresentForTurn
             ? { session, toolEvidence }
             : null;
         },

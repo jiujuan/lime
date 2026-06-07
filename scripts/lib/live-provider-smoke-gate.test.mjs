@@ -164,6 +164,10 @@ describe("live-provider-smoke-gate", () => {
     expect(content).toContain("liveWebToolEvidenceFromSession");
     expect(content).toContain("turnId: liveWebTurnId");
     expect(content).toContain("allRequiredCompletedForTurn");
+    expect(content).toContain("allRequiredOutputPresentForTurn");
+    expect(content).toContain(
+      "等待 read model 出现 live WebSearch/WebFetch 工具输出事实",
+    );
     expect(content).toContain("summary.assertions.liveWebSearchCompleted");
     expect(content).toContain("summary.assertions.liveWebFetchCompleted");
     expect(content).toContain(

@@ -4054,6 +4054,21 @@
       "allowedPaths": []
     },
     {
+      "id": "rust-theme-context-search-legacy-command",
+      "classification": "dead",
+      "description": "旧主题上下文搜索 Tauri 命令已下线；current 事实源是 App Server agentSession current turn 网关",
+      "patterns": [
+        "pub mod theme_context_cmd;",
+        "commands::theme_context_cmd::",
+        "aster_agent_theme_context_search"
+      ],
+      "includePathPrefixes": [
+        "lime-rs/src",
+        "lime-rs/crates"
+      ],
+      "allowedPaths": []
+    },
+    {
       "id": "rust-general-chat-dao",
       "classification": "dead-candidate",
       "description": "已零引用的 Rust 业务层 direct GeneralChatDao 依赖",

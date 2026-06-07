@@ -8083,7 +8083,6 @@ mod tests {
             "src/commands/aster_agent_cmd/action_runtime.rs",
             "src/commands/agent_cmd.rs",
             "src/commands/persona_cmd.rs",
-            "src/commands/theme_context_cmd.rs",
         ]
         .into_iter()
         .map(ToString::to_string)
